@@ -20,7 +20,10 @@ its builds under `cpp/build/` and the R package. R build helpers belong to
 Public maintainer knowledge lives under `project/`; research working notes
 are maintained independently and are not build or test dependencies. External
 textbook and paper collections share `external/`; tests retain frozen fixture
-snapshots. Benchmarks and experiments retain their existing dependency roles.
+snapshots. Experiments are grouped by purpose under `experiments/{showcases,replications,
+research,engineering}/`; `_archive/` and `_support/` remain at collection level.
+Each numbered study remains an independent leaf, including within a category.
+Benchmarks and experiments retain their existing dependency roles.
 Experiments 56 (marker-chart sanity) and 83 (PSD optimization defaults) are
 archived under `experiments/_archive/` as of 2026-09-24; their recorded findings
 remain historical evidence, with sources and local results preserved.
@@ -464,7 +467,7 @@ deferred. Inference at fitted covariance boundaries remains out
 of scope. PSD two-level ML and native FC-SEM are not part of the supported
 covariance-honest extension.
 
-Experiment 78 (`experiments/78-psd-estimator-stress/`) now supplies the common
+Experiment 78 (`experiments/engineering/78-psd-estimator-stress/`) now supplies the common
 cross-estimator validation harness. Its first smoke profile covers continuous
 ML/ULS/GLS/fixed-WLS/fitted-weight GMM, FIML, all five ML2S Stage-2 policies,
 ordinal and mixed delta/theta LS, CatML, a near-residual-boundary geometry, and
@@ -567,7 +570,7 @@ complete scan: same-fit covariance reallocation, a materially different
 constrained optimum, a negative structural disturbance, and a joint-indefinite
 covariance whose individual variances are positive.
 
-Experiment 76 (`experiments/76-psd-ml-repair-risk/`) turns those four
+Experiment 76 (`experiments/research/76-psd-ml-repair-risk/`) turns those four
 geometries into a compact repair-anatomy panel and adds a controlled
 near-boundary risk path. The Gaussian DGP fixes three unit-loading,
 single-indicator residual variances at 0.2 and varies the eigenvalues of the
@@ -585,7 +588,7 @@ they support the explicit audit/refit policy and show why fitted boundary rank
 must remain descriptive rather than being treated as automatic rank selection.
 
 The paired small-sample convergence benchmark
-`experiments/74-psd-ml-small-n-convergence/` uses the six-indicator SEM and
+`experiments/research/74-psd-ml-small-n-convergence/` uses the six-indicator SEM and
 sample-size grid shared by De Jonckere--Rosseel and Ernst et al. In the
 1,000-replication run, audit convergence at \(N=10\) was 54.1% for ordinary
 L-BFGS NTML and 96.8% for direct PSD-ML. Against ordinary SLSQP on the same
@@ -898,7 +901,7 @@ an unconstrained gradient test to constrained solutions.
   Theory in
   the guttman-inference paper's derivation notes
   (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by
-  `experiments/52-noniterative-cfa-tests` (empirical Gamma calibrated across
+  `experiments/research/52-noniterative-cfa-tests` (empirical Gamma calibrated across
   normal / independent-component / ordinal-as-continuous generators and across a
   0.3-0.7 reliability sweep, NT Gamma asymptotically miscalibrated on non-normal
   data, GOF power near 1; Guttman's efficiency gap vs ML is small at high
@@ -922,7 +925,7 @@ an unconstrained gradient test to constrained solutions.
   choices in its restricted analytic-first Jacobian and grouped inference;
   AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
-  LS systems. `experiments/55-guttman-communality-estimators` times the package
+  LS systems. `experiments/research/55-guttman-communality-estimators` times the package
   implementation directly.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
@@ -955,7 +958,7 @@ an unconstrained gradient test to constrained solutions.
   scalar}_impl`.
   Theory in the guttman-inference paper's constrained-CFA note
   (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated by
-  `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT on
+  `experiments/research/54-noniterative-invariance` (metric Wald tracks the ML LRT on
   normal data with matched power; on non-normal data the NT-Gamma metric Wald
   over-rejects and the empirical Gamma restores the level, mirroring the ML
   NT-vs-robust split; the scalar Wald is exactly nominal on normal data, far more
@@ -1999,8 +2002,8 @@ an unconstrained gradient test to constrained solutions.
   moments, leaving a 1-3% trace gap to robust.two.stage that grew with
   non-normality; the unstructured weight - the convention lavaan two-stage forces
   and FIML FMG already used - closed it exactly.) Calibration evidence is in
-  `experiments/24-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
-  `experiments/79-savalei-falk-2014-test-map` establishes that these modern
+  `experiments/research/24-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
+  `experiments/replications/79-savalei-falk-2014-test-map` establishes that these modern
   defaults are **not** the finite-sample configurations used by Savalei and Falk
   (2014): their EQS runs selected analytic observed information (`SE=EXACT`) and
   structured-model residual projections for robust FIML, with the corresponding
@@ -2112,7 +2115,7 @@ an unconstrained gradient test to constrained solutions.
   (configural -> metric -> scalar: cross-group loading/intercept equality plus
   mean structure), for both the GOF spectrum and the nested restriction map, by
   C++ algebra cases in `cpp/tests/unit/fiml_test.cpp` and by
-  `experiments/21-fiml-measurement-invariance-fmg`, whose `--lavaan-parity` run
+  `experiments/showcases/21-fiml-measurement-invariance-fmg`, whose `--lavaan-parity` run
   reproduces lavaan's FIML LRT chi-square (~1e-7) and, on complete data, the full
   unstructured UGamma eigenvalue spectrum (~1e-5) across all three invariance
   levels and normal / heavy-tailed / MCAR cells. That audit also found and fixed
@@ -2198,7 +2201,7 @@ an unconstrained gradient test to constrained solutions.
   meat.
   Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
   coverage lives in `cpp/tests/unit/ordinal_test.cpp`; the advisory calibration
-  probe is `experiments/26-ordinal-pd-gamma`.
+  probe is `experiments/research/26-ordinal-pd-gamma`.
 
 ### Two-level (multilevel) ML
 
@@ -2980,7 +2983,7 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   more sensitive to the same LS-weight gap. Configural→thresholds is explicitly
   recorded as a df=0 equivalence (same χ²/df; lavaan cannot form a positive-df
   `lavTestLRT` there). The Mplus Demo WLSMV DIFFTEST probe
-  (`experiments/33-mplus-demo-wlsmv-difftest`) now gates the same shared
+  (`experiments/research/33-mplus-demo-wlsmv-difftest`) now gates the same shared
   released-delta moment Jacobian for the explicit 38-parameter scalar model
   under pairwise missing ordinal data: overlap-Gamma magmaan gives scaled-shifted
   Δχ² `22.365850` / Δdf 22 / p `0.438242`, matching Mplus Demo DIFFTEST
@@ -3100,7 +3103,7 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   `robust_ordinal_ij` (including DWLS/WLS estimated-weight influence). This is
   the canonical DWLS ordinal-omega proving slice; it is exposed in R through
   `magmaan_core$measures_reliability_ordinal_observed_omega` and has a smoke
-  calibration probe in `experiments/46-ordinal-observed-omega-dwls`. Multi-group
+  calibration probe in `experiments/engineering/46-ordinal-observed-omega-dwls`. Multi-group
   pooling semantics and small-sample/profile-LR corrections remain separate
   follow-ups.
   Complete mixed ordinal/polyserial fixed-weight ULS now has

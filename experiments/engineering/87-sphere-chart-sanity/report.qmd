@@ -1,0 +1,278 @@
+---
+title: "87 · Sphere chart sanity checks"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+res <- file.path("results", "full")
+need <- c("recovery", "population", "population_reidentify", "invariance",
+          "invariance_reidentify", "coverage")
+paths <- file.path(res, paste0(need, ".csv"))
+if (!all(file.exists(paths))) {
+  stop("results missing: run `Rscript run_experiment.R --full` first")
+}
+rd <- function(n) read.csv(file.path(res, paste0(n, ".csv")), stringsAsFactors = FALSE)
+rec <- rd("recovery")
+pop <- rd("population")
+preid <- rd("population_reidentify")
+inv <- rd("invariance")
+ireid <- rd("invariance_reidentify")
+cov <- rd("coverage")
+sci <- function(x, d = 1) formatC(x, format = "e", digits = d)
+preid$ok <- ifelse(preid$target_holds,
+                   preid$translated & !is.na(preid$err_rel) & preid$err_rel < 1e-5,
+                   !preid$translated)
+ok_n <- function(route) {
+  d <- preid[preid$route == route, ]
+  paste(sum(d$ok), "of", nrow(d))
+}
+mx <- function(x) { x <- x[is.finite(x)]; if (length(x)) max(x) else NA_real_ }
+inv_by_case <- tapply(inv$d_sphere_point_vs_marker, inv$case, max)
+```
+
+## Question
+
+Before the sphere chart can become magmaan's default, it has to return the
+standard answer everywhere the standard answer exists, across the model syntax
+people actually write. Does it? And where a model's own identification cannot
+hold the solution, does it say so instead of returning a wrong answer?
+
+## Short answer
+
+**Yes, on every deterministic check.** Across `r length(unique(rec$case))`
+models and `r nrow(rec)` fits, the sphere route returned the ordinary result.
+The models cover every identification convention, the measurement-invariance
+ladder, equality and constraint syntax, and structural features, fitted by ML,
+ULS, GLS, WLS, FIML and PSD-ML. The objectives agreed to
+`r sci(mx(rec$d_fmin))` and the ML estimates to
+`r sci(mx(rec$d_est[rec$estimator == "ML"]))`. Standard errors, robust
+standard errors, the standardized solution, fit measures, modification indices
+and defined parameters followed. Both routes were equally close to lavaan.
+Each model's latents split between the sphere and the user's own
+identification exactly as the design predicts, and every latent kept off the
+sphere came with the stated reason.
+
+**Known populations are recovered in every identification that contains
+them, and the others are flagged.** The populations include a zero marker
+loading, loadings that sum to zero, a zero or negative latent residual
+variance, and one population that neither the marker, std.lv nor
+effect-coding identification can hold.
+
+- **Sphere ML:** recovered the population in all 24 (population,
+  identification) cells whose identification contains it. It reported the
+  other 8 as outside that identification, with a solution that re-expresses
+  exactly in any identification that does contain it.
+- **Ordinary ML:** recovered 20 of the 24, with three wrong points and one
+  error. In the 8 cells that cannot hold the population, it three times
+  reported convergence to a point that is not the optimum.
+- **Least squares:** sphere ULS and GLS also recovered all 24 cells and
+  flagged the other 8.
+
+**The answer does not depend on how the user identified the model.** The
+sphere route starts from a point computed on the model with its scale fixes
+removed, which is the same whichever identification the user wrote. Four data
+sets, each fitted under four identifications, gave the same sphere solution
+within each data set: to `r sci(max(inv_by_case[names(inv_by_case) != "pd_free"]))`
+on three of them, and to `r sci(inv_by_case[["pd_free"]])` on the flat
+PoliticalDemocracy objective, whose objective values agree to
+`r sci(max(inv$d_fmin_vs_marker))`. In
+all 48 translations between identifications, the translated result matched a
+direct ordinary fit to `r sci(mx(ireid$d_vs_ordinary))`. Ordinal data, ML2S,
+two-level models and PSD for non-ML estimators are refused with a clear error.
+
+The checks found one sphere bug, fixed before this run, and one design gap,
+also fixed. A latent whose
+variance is fixed by std.lv was not tolerance-checked against its pole. At a
+population with a vanishing residual variance, the fit reported convergence
+with a regression slope near 37,000 instead of flagging the identification.
+The design gap was the start. In a first run, the sphere took its starting
+values from the user's identification, and in 2 of 64 least-squares cells one
+identification's start led to a non-global stationary point where the other
+three recovered the population. A start computed without reference to the
+identification removed both, with least-squares fits starting from the sphere
+ML fit. The checks
+also surfaced three pre-existing magmaan gaps unrelated to the sphere (see
+Caveats).
+
+## Evidence
+
+### Standard results through the sphere
+
+```{r recovery}
+agg <- do.call(rbind, lapply(split(rec, rec$estimator), function(b) data.frame(
+  Estimator = b$estimator[1], Fits = nrow(b),
+  `Max Δ objective` = sci(mx(b$d_fmin)),
+  `Max Δ estimate` = sci(mx(b$d_est)),
+  `Max rel. Δ SE` = sci(mx(c(b$d_se, b$d_se_robust))),
+  `Max rel. Δ fit measures` = sci(mx(b$d_fit_measures)),
+  `Max Δ vs lavaan, ordinary` = sci(mx(b$lav_d_ord)),
+  `Max Δ vs lavaan, sphere` = sci(mx(b$lav_d_sph)),
+  check.names = FALSE)))
+agg <- agg[match(c("ML", "FIML", "ULS", "GLS", "WLS", "PSD"), agg$Estimator), ]
+agg[is.na(agg)] <- "-"
+knitr::kable(agg, row.names = FALSE, align = "lrrrrrrr")
+```
+
+Differences are sphere minus ordinary. The largest estimate differences come
+from flat objectives (FIML, and ULS on the N = 75 PoliticalDemocracy data),
+where both routes stop within optimizer tolerance of each other and of
+lavaan. PSD-ML has no lavaan counterpart. The per-fit table, including
+standardized solutions, modification indices and defined parameters, is
+`results/full/recovery.csv`.
+
+### Which latents run on the sphere
+
+```{r gauge}
+first <- rec[!duplicated(rec$case), ]
+reasons <- unlist(strsplit(first$pass_reasons[nzchar(first$pass_reasons) &
+                                                !is.na(first$pass_reasons)], "; "))
+fam <- aggregate(cbind(n_units, n_pass) ~ family, data = first, sum)
+fam$models <- as.integer(table(first$family)[fam$family])
+fam$matched <- as.integer(tapply(first$gauge_ok, first$family, sum)[fam$family])
+knitr::kable(data.frame(
+  Family = c(constraints = "Equality and constraint syntax",
+             identification = "Identification conventions",
+             invariance = "Measurement invariance",
+             structure = "Structure")[fam$family],
+  Models = fam$models, `On the sphere` = fam$n_units,
+  `Kept in the user's identification` = fam$n_pass,
+  `Classification as predicted` = paste0(fam$matched, "/", fam$models),
+  check.names = FALSE), row.names = FALSE)
+```
+
+Counts are latents, with a latent tied across groups counted once. The
+reasons for keeping a latent off the sphere were:
+`r paste(sort(unique(reasons)), collapse = "; ")`.
+Equal loadings within a factor, fixed non-unit markers, loading ratios and
+inhomogeneous loading sums (`a + b == 1.2`) all stay on the sphere, as do
+full metric, scalar and strict invariance.
+
+### Known populations
+
+```{r population}
+lab <- function(d) {
+  d$Cell <- ifelse(d$chart_holds, "identification holds the population",
+                   "identification cannot hold it")
+  d
+}
+p <- lab(pop)
+p$route <- factor(p$route, c("sphere_ML", "sphere_PSD", "sphere_ULS", "sphere_GLS",
+                             "ordinary_ML"))
+tab <- function(d) {
+  f <- function(x) sum(d$outcome %in% x)
+  data.frame(Recovered = f("recovered"), `Flagged outside` = f("outside chart"),
+             `Wrong point` = f("wrong point"),
+             `Converged outside, not flagged` = f("returned outside chart"),
+             `Error or not converged` = f(c("error", "not converged")),
+             check.names = FALSE)
+}
+out <- do.call(rbind, lapply(split(p, list(p$route, p$Cell), drop = TRUE), function(d)
+  cbind(Route = sub("_", " ", as.character(d$route[1])), Cell = d$Cell[1], tab(d))))
+out <- out[order(out$Route, out$Cell, decreasing = c(FALSE, TRUE), method = "radix"), ]
+knitr::kable(out, row.names = FALSE)
+```
+
+- **Populations.** A regular population, and populations with:
+  - a marker loading of 0.02;
+  - a marker loading of 0;
+  - loadings summing to zero;
+  - a zero endogenous residual variance;
+  - a negative endogenous residual variance;
+  - a latent outside the marker, std.lv and effect-coding identifications at
+    once;
+  - a two-group metric-invariance population with a zero marker loading.
+- **Identifications:** the marker on the first or second indicator, std.lv,
+  and effect coding.
+- **PSD-ML** skips the population with a negative variance, which lies
+  outside its domain.
+- **Recovery** means every parameter within 1e-5 of the population value,
+  relative to the largest parameter. The worst recovered case is
+  `r sci(mx(pop$err_rel[pop$outcome == "recovered"]))`. The standardized
+  solution matches too (`r sci(mx(pop$err_std[pop$outcome == "recovered"]))`).
+- **Translation between identifications:** translating each sphere result
+  into the other three identifications succeeded, or was refused, exactly as
+  the population dictates:
+  - ML: `r ok_n("sphere_ML")` translations correct;
+  - PSD-ML: `r ok_n("sphere_PSD")`;
+  - ULS: `r ok_n("sphere_ULS")`;
+  - GLS: `r ok_n("sphere_GLS")`.
+
+### The same answer under every identification
+
+```{r invariance}
+iv <- do.call(rbind, lapply(split(inv, inv$case), function(d) {
+  r <- ireid[ireid$case == d$case[1], ]
+  data.frame(Model = d$label[1],
+             `Max Δ objective across identifications` = sci(mx(d$d_fmin_vs_marker)),
+             `Max Δ sphere solution` = sci(mx(d$d_sphere_point_vs_marker)),
+             `Translations matching the direct fit` = paste0(sum(r$translated), "/", nrow(r)),
+             `Max Δ translated vs direct` = sci(mx(r$d_vs_ordinary)),
+             check.names = FALSE)
+}))
+knitr::kable(iv, row.names = FALSE)
+```
+
+The sphere solution is compared up to the sign of each latent.
+
+### What the sphere route refuses
+
+```{r coverage}
+knitr::kable(data.frame(Input = cov$feature,
+                        `Ordinary route` = ifelse(cov$ordinary == "fits", "fits", "error"),
+                        `Sphere route` = ifelse(cov$sphere == "fits", "fits", "clear error"),
+                        check.names = FALSE), row.names = FALSE)
+```
+
+Composite (`<~`) syntax fails inside `magmaan()` on both routes. Composites
+fit through the separate `magmaan_fcsem()` route, which has no sphere version.
+Inequality constraints are unsupported everywhere.
+
+## Caveats
+
+- **Scope.** These are deterministic checks: fixed data sets and exact
+  population moments, one fit each. They show the machinery is right. They
+  say nothing about how often the sphere helps on sampled data. That is the
+  next experiment (Ernst-type small-sample designs across estimators).
+- **Least squares.** The sphere does not make least squares convex. On the
+  sphere every indicator is equally reachable, including points where a
+  factor collapses onto one indicator, which least squares (unlike ML) does
+  not penalize. Starting least squares from the sphere ML fit avoided both
+  first-run misses here. How often sphere and
+  ordinary fits land in different basins on sampled data is for the next
+  experiment.
+- **Bounds.** `bounds = "standard"` bounds every loading, which keeps every
+  latent off the sphere. A bounded fit therefore runs entirely in the user's
+  identification.
+- **lavaan comparisons.** ULS, GLS and WLS use the n - 1 covariance (lavaan's
+  convention for them). WLS uses lavaan's own weight matrix.
+- **Pre-existing magmaan gaps, unrelated to the sphere.** Both routes share
+  these, so the comparisons work around them:
+  - **Latent means under equal intercepts.** `group_equal = c("loadings",
+    "intercepts")` leaves the group-2 latent means fixed at zero where lavaan
+    frees them (df 63 against lavaan's 60). The scalar-type models here free
+    them explicitly (`f ~ c(0, NA)*1`), which reproduces lavaan exactly.
+  - **Effect coding with a mean structure.** `effect_coding = TRUE` codes the
+    loadings only. lavaan's `effect.coding = TRUE` also codes the intercepts.
+    The fit is identical but the mean parameters differ, so the comparison
+    uses lavaan's `effect.coding = "loadings"`.
+  - **Composites.** `magmaan()` fails on composite syntax with an optimizer
+    error instead of pointing to `magmaan_fcsem()`.
+
+## Reproduce
+
+```sh
+just r-dev                                  # install the current R package
+cd experiments/engineering/87-sphere-chart-sanity
+Rscript run_experiment.R --full             # about 10 seconds
+quarto render report.qmd
+```
+
+`--smoke` runs a subset. `--sections` and `--cases` select parts, and `--help`
+lists everything.

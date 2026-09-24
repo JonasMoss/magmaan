@@ -27,8 +27,8 @@ See [`cpp/tests/fixtures/DATASETS.md`](../../cpp/tests/fixtures/DATASETS.md).
 - **Fixture regeneration**: the maintainer-only regenerators under
   `cpp/tests/tools/` (`build_*_corpus.R`, `regen_*_corpus*.R`,
   `regen_little_newsom_fixtures.R`, `regen_textbook_case_fixtures.R`, etc.).
-- **Research experiments**: `experiments/00-lavaan-parity/` and
-  `experiments/01-complete-data-estimator-speed/`. These entry points detect
+- **Research experiments**: `experiments/showcases/00-lavaan-parity/` and
+  `experiments/engineering/01-complete-data-estimator-speed/`. These entry points detect
   the corpus via `experiments/_support/R/helpers.R::corpus_available()` and skip
   (or fail with a clear message) when it is absent.
 
@@ -37,6 +37,6 @@ See [`cpp/tests/fixtures/DATASETS.md`](../../cpp/tests/fixtures/DATASETS.md).
 Mount the corpus at `external/textbook-corpus/` (a working copy, symlink, or git
 checkout). It is gitignored so it is never committed to this repository.
 Expected layout: a top-level `manifest.csv` plus `cases/<book>/<case_id>/` and
-`raw/<book>/` trees, as consumed by `experiments/00-lavaan-parity/R/corpus.R`.
+`raw/<book>/` trees, as consumed by `experiments/showcases/00-lavaan-parity/R/corpus.R`.
 `raw/<book>/` keeps each book's original downloads with SHA-256 sums
 (`archives.json`, `SHA256SUMS`).

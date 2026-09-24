@@ -9,7 +9,7 @@ For the current implementation state and architecture see
 [project/architecture/roadmap.md](../architecture/roadmap.md); for the remaining-work backlog see
 [project/backlog/todo.md](../backlog/todo.md); for the magmaan-vs-lavaan speed
 comparison on these models see
-[experiments/05-lavaan-speed-bench](../../experiments/05-lavaan-speed-bench/).
+[experiments/showcases/05-lavaan-speed-bench](../../experiments/showcases/05-lavaan-speed-bench/).
 
 ## Scope
 

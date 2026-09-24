@@ -47,7 +47,7 @@ refusal.
 
 **Alternative already available.** The explicit refusal
 (`detail::symmetric_inverse_pd_gated`, returning dim/rank/rcond/λmin) plus the
-advisory `conditioned_adf_weight()` telemetry in `experiments/00-lavaan-parity`.
+advisory `conditioned_adf_weight()` telemetry in `experiments/showcases/00-lavaan-parity`.
 Convention documented in
 [project/design/numerical-conventions.md](../design/numerical-conventions.md).
 
@@ -85,7 +85,7 @@ SE remain speculative.
 **Alternative already available.** Covariance-space conditioning already covers
 the convergence case: `data::frontier` covariance shrinkage (`S_a = (1-λ)S + λT`),
 `estimate::frontier::fit_ml_ridge_continuation()` (warm-started continuation to
-α=0), and the `experiments/04-near-singular-ml-continuation` target/λ grid. Hard
+α=0), and the `experiments/engineering/04-near-singular-ml-continuation` target/λ grid. Hard
 parameter bounds are De Jonckere & Rosseel (2022) bounded estimation (the hard
 sibling of the log-barrier); Bayesian priors on θ are the MAP version. lavaan
 bounded estimation and `regsem` cover the practical case on a refit.
@@ -404,7 +404,7 @@ df (inert for a plain functional). Reference set and the keystone derivation in
 (KC 2001, Bell-McCaffrey 2002, Imbens-Kolesar 2016, Yuan-Bentler 1997/1998,
 Satterthwaite 1946).
 
-**Proof of concept landed.** `experiments/44-alpha-kc-coverage` runs the 2x2
+**Proof of concept landed.** `experiments/research/44-alpha-kc-coverage` runs the 2x2
 {raw, transform} x {Wald z, KC eff-df t} on Cronbach's alpha (congeneric p=6,
 logit transform) and the Pearson correlation swept over rho (Fisher-z transform),
 under normal and contaminated-normal data. The rho sweep separates **two
@@ -772,7 +772,7 @@ settle the Bell-style misspecification bias study, omega_ho/maximal-reliability 
 extensions, multi-group target definition, direct Green-Yang/Flora coefficient
 implementation, or small-sample/profile-LR corrections. R exposure landed immediately
 after as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
-`experiments/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
+`experiments/engineering/46-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
 The no-integration latent-response/polychoric sibling is also exposed in R as
 `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it applies
 `omega_multidim` to `stats$R[[group]]` and reuses the ordinal `NACOV` correlation
@@ -848,7 +848,7 @@ OLC, ~1000 for an OLSC, to reach 0.8) and carry pervasive negative weights, so t
 practical deliverable is a *model diagnostic*, not a scoring tool; ship the
 coefficient, not interpretive cutoffs.
 
-**Inference is the open part, and `experiments/43-li-savalei-2026-maximal-reliability-ci`
+**Inference is the open part, and `experiments/research/43-li-savalei-2026-maximal-reliability-ci`
 now scopes it.** The SEs/CIs the paper flags as future work are not free: over a
 1000-rep sweep of the correct orthogonal bifactor by ML, the textbook delta-method
 Wald CI is badly miscalibrated at realistic N (general-factor coverage falls to
@@ -891,7 +891,7 @@ conditional on an admissible (non-Heywood) fit.
 **Name: funLR (Functional profile-LR CI).** The engine is generic over any scalar
 functional `g(theta)`; reliability is the flagship application, not the scope. Use
 "funLR" as the short handle for this lane in commits, notes, and discussion.
-`experiments/45-profile-lr-reliability-ci` is its home.
+`experiments/research/45-profile-lr-reliability-ci` is its home.
 
 The likelihood-ratio (test-inversion) sibling of the Kauermann-Carroll Wald lane
 above: rather than widen a Wald interval's df, build the interval by inverting a
@@ -1011,7 +1011,7 @@ misspecified regimes. Concrete decisions:
   why it is the completeness tier and not the MVP. The Bartlett/small-sample correction
   composes on top of each tier.
 
-**Progress (2026-07-01): NT generic engine validated.** `experiments/45-profile-lr-reliability-ci`
+**Progress (2026-07-01): NT generic engine validated.** `experiments/research/45-profile-lr-reliability-ci`
 lands the generic-`g` profile-LR engine (a functional closure + `nloptr` constrained
 fit, zero core change, exactly the R-prototype path above) and checks it against
 `semlbci` (Wu-Neale). Wherever `semlbci` converges the engine reproduces its
@@ -1214,7 +1214,7 @@ targets remain open.
 
 **Progress (2026-07-02): R-facing parameter probe.** The complete-data ML parameter
 special case is exposed as `magmaan_core$frontier_profile_lrt_parameter_ml()`,
-with experiment 47 (`experiments/47-ml-parameter-profile-lrt`) as the small-N
+with experiment 47 (`experiments/research/47-ml-parameter-profile-lrt`) as the small-N
 interior-parameter calibration check. At 200 reps over `N in {30,50,100,500}`,
 the ordinary `chi^2_1` reference is stable for the free loading baseline
 (`type1_05` 0.050-0.055, zero constrained-solve failures). This remains only
@@ -1262,7 +1262,7 @@ taxonomy. Working note `ordinal_profile_lrt_finite_sample_calibration.tex`
 defines the ordinal DWLS/WLS problem as a decomposition into LR inflation,
 reference-scale error, sparse-threshold/NACOV instability, omega point bias, and
 boundary/feasibility mass. Experiment 53
-(`experiments/53-ordinal-profile-lrt-calibration`) is the first taxonomy run:
+(`experiments/research/53-ordinal-profile-lrt-calibration`) is the first taxonomy run:
 all-ordinal one-factor probit data, polychoric/latent-response omega target,
 DWLS ordinary / robust-scaled / misspec-mixture profile tests, and the fit-free
 ordinal polychoric omega Wald interval as the baseline. The WLS robust-scaled
@@ -1460,7 +1460,7 @@ remaining committed work is the h-weighted polyserial item in
 
 ### Rhemtulla 2012 replication: nonnormal y* and asymmetric thresholds
 
-`experiments/15-rhemtulla-2012` v1 covers only the symmetric-threshold,
+`experiments/replications/15-rhemtulla-2012` v1 covers only the symmetric-threshold,
 underlying-normal conditions (categories 2–7 × N). Deferred paper conditions:
 (1) nonnormal underlying `y*` (skew 2, kurtosis 7 in the paper's convention) —
 the C++ cubic Fleishman / Vale-Maurelli primitive covers it but the wiring

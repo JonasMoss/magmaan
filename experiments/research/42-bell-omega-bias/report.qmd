@@ -1,0 +1,400 @@
+---
+title: "Bell-Style Omega Bias at Population Moments"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  results_dir: "results"
+---
+
+```{r}
+res_dir <- params$results_dir
+needed <- file.path(res_dir, c("omega_bias.csv", "population_targets.csv",
+                               "cfa_reliability.csv",
+                               "cfa_sensitivity_summary.csv",
+                               "congeneric_diagnostics.csv",
+                               "metadata.csv"))
+if (!all(file.exists(needed))) {
+  stop("Missing result files. Run: Rscript experiments/research/42-bell-omega-bias/run_experiment.R",
+       call. = FALSE)
+}
+bias <- read.csv(file.path(res_dir, "omega_bias.csv"))
+targets <- read.csv(file.path(res_dir, "population_targets.csv"))
+cfa <- read.csv(file.path(res_dir, "cfa_reliability.csv"))
+cfa_summary <- read.csv(file.path(res_dir, "cfa_sensitivity_summary.csv"))
+congeneric <- read.csv(file.path(res_dir, "congeneric_diagnostics.csv"))
+metadata <- read.csv(file.path(res_dir, "metadata.csv"))
+meta <- setNames(metadata$value, metadata$key)
+fmt <- function(x, digits = 3) {
+  ifelse(is.na(x), "", format(round(x, digits), nsmall = digits))
+}
+pct <- function(x) {
+  ifelse(is.na(x), "", sprintf("%+.1f%%", 100 * x))
+}
+label_est <- c(ML = "ML", ULS = "ULS", GLS = "GLS",
+               closed_form = "Spearman-Guttman")
+label_denom <- c(model_implied = "Model-implied",
+                 observed_total = "Observed total")
+focus <- bias[bias$omega_variant %in%
+                c("omega_u_model_implied",
+                  "omega_u_observed_total",
+                  "spearman_guttman_covariance_omega"), ]
+focus$Estimator <- unname(label_est[focus$estimator])
+focus$Estimator[is.na(focus$Estimator)] <- focus$estimator[is.na(focus$Estimator)]
+focus$Denominator <- unname(label_denom[focus$denominator])
+focus$Denominator[is.na(focus$Denominator)] <- focus$denominator[is.na(focus$Denominator)]
+focus$Reliability <- tools::toTitleCase(focus$reliability_level)
+focus$Population <- focus$population_label
+
+display <- focus[focus$reliability_level == "low", ]
+display <- display[order(display$population, display$Estimator,
+                         display$Denominator), ]
+tab <- data.frame(
+  Population = display$Population,
+  p = display$p,
+  Estimator = display$Estimator,
+  Denominator = display$Denominator,
+  Omega = fmt(display$estimate),
+  Target = fmt(display$true_reliability),
+  Bias = fmt(display$bias),
+  `Relative Bias` = pct(display$relative_bias),
+  `F` = fmt(display$population_discrepancy),
+  `RMSEA-like` = fmt(display$rmsea_like),
+  check.names = FALSE
+)
+
+ml_simple <- bias[bias$estimator == "ML" &
+                    bias$denominator == "model_implied" &
+                    bias$omega_variant == "omega_u_model_implied", ]
+sg <- bias[bias$estimator == "closed_form", ]
+fit_only <- focus[is.finite(focus$rmsea_like) &
+                    focus$denominator == "model_implied", ]
+worst_ml <- ml_simple[which.max(abs(ml_simple$bias)), ]
+worst_sg <- sg[which.max(abs(sg$bias)), ]
+worst_fit <- fit_only[which.max(fit_only$rmsea_like), ]
+one_factor_ml <- ml_simple[ml_simple$population == "one_factor", ]
+max_well_spec <- max(abs(one_factor_ml$bias), na.rm = TRUE)
+cfa_summary$Reliability <- tools::toTitleCase(cfa_summary$reliability_level)
+cfa_summary$Population <- cfa_summary$population_label
+cfa_low <- cfa_summary[cfa_summary$reliability_level == "low", ]
+cfa_low <- cfa_low[order(cfa_low$population), ]
+cfa_tab <- data.frame(
+  Population = cfa_low$Population,
+  p = cfa_low$p,
+  Target = fmt(cfa_low$true_reliability),
+  `One-factor bias` = fmt(cfa_low$one_factor_bias),
+  `One-factor RMSEA-like` = fmt(cfa_low$one_factor_rmsea_like),
+  `Omega range` = fmt(cfa_low$omega_range),
+  `Best CFA model` = cfa_low$best_cfa_model,
+  `Best abs. bias` = fmt(cfa_low$min_abs_bias),
+  check.names = FALSE
+)
+cfa_correct <- cfa_summary[cfa_summary$population == "one_factor", ]
+cfa_misspec <- cfa_summary[cfa_summary$population != "one_factor", ]
+max_cfa_range_correct <- max(cfa_correct$omega_range, na.rm = TRUE)
+min_cfa_range_misspec <- min(cfa_misspec$omega_range, na.rm = TRUE)
+max_cfa_range_misspec <- max(cfa_misspec$omega_range, na.rm = TRUE)
+best_cfa <- cfa_summary[which.min(cfa_summary$min_abs_bias), ]
+cong_low <- congeneric[congeneric$reliability_level == "low", ]
+cong_low <- cong_low[order(cong_low$population), ]
+cong_low <- merge(
+  cong_low,
+  cfa_summary[, c("population", "reliability_level",
+                  "one_factor_rmsea_like", "one_factor_bias")],
+  by = c("population", "reliability_level"),
+  all.x = TRUE,
+  sort = FALSE
+)
+cong_low <- cong_low[order(cong_low$population), ]
+cong_tab <- data.frame(
+  Population = cong_low$population_label,
+  p = cong_low$p,
+  Target = fmt(cong_low$true_reliability),
+  `One-factor bias` = fmt(cong_low$one_factor_bias),
+  `One-factor RMSEA-like` = fmt(cong_low$one_factor_rmsea_like),
+  `Tetrad*` = fmt(cong_low$tetrad_unit),
+  `h*` = fmt(cong_low$h_unit),
+  `SG-off*` = fmt(cong_low$sg_offdiag_unit),
+  `SG - alpha` = fmt(cong_low$sg_minus_alpha),
+  check.names = FALSE
+)
+cong_correct <- congeneric[congeneric$population == "one_factor", ]
+cong_misspec <- congeneric[congeneric$population != "one_factor", ]
+max_h_unit_correct <- max(cong_correct$h_unit, na.rm = TRUE)
+min_h_unit_misspec <- min(cong_misspec$h_unit, na.rm = TRUE)
+max_h_unit_misspec <- max(cong_misspec$h_unit, na.rm = TRUE)
+max_tetrad_unit_correct <- max(cong_correct$tetrad_unit, na.rm = TRUE)
+min_tetrad_unit_misspec <- min(cong_misspec$tetrad_unit, na.rm = TRUE)
+max_tetrad_unit_misspec <- max(cong_misspec$tetrad_unit, na.rm = TRUE)
+min_sg_off_unit_misspec <- min(cong_misspec$sg_offdiag_unit, na.rm = TRUE)
+max_sg_off_unit_misspec <- max(cong_misspec$sg_offdiag_unit, na.rm = TRUE)
+max_sg_alpha_correct <- max(abs(cong_correct$sg_minus_alpha), na.rm = TRUE)
+```
+
+## Question
+
+Bell et al. define bias as the omega estimate minus the population reliability:
+the total-score variance due to the data-generating factor common to all items,
+divided by total-score variance. What happens if we evaluate ordinary one-factor
+omega directly at those population covariance matrices, and swap ML for ULS/GLS
+or the Spearman-Guttman closed form?
+
+## Short Answer
+
+At population moments, the ordinary one-factor omega functional is essentially
+unbiased in the correctly specified one-factor cells: the largest absolute ML
+model-implied bias there is `r fmt(max_well_spec, 4)`. Under Bell-style
+misspecification, the same functional can be badly biased against Bell's target:
+the largest displayed ML/model-implied bias is `r fmt(worst_ml$bias)` in the
+`r worst_ml$population_label` / `r worst_ml$reliability_level` cell.
+
+Changing the denominator from model-implied to observed total variance is a small
+correction, not a cure. The Spearman-Guttman covariance omega follows the same
+logic: exact on the one-factor manifold, but its largest absolute bias here is
+`r fmt(worst_sg$bias)` in the `r worst_sg$population_label` /
+`r worst_sg$reliability_level` cell.
+
+The fit diagnostics tell the same broad story but should not be read as a clean
+ML-versus-ULS-versus-GLS ranking: the largest model-implied RMSEA-like value is
+`r fmt(worst_fit$rmsea_like)` for `r worst_fit$Estimator` in the
+`r worst_fit$population_label` / `r worst_fit$reliability_level` cell, using that
+estimator's own discrepancy scale.
+
+The CFA model-set check is more directly about reliability than ordinary
+fit. The omega range across candidate CFA specifications is at most
+`r fmt(max_cfa_range_correct, 4)` in the correctly specified one-factor cells,
+but ranges from `r fmt(min_cfa_range_misspec)` to
+`r fmt(max_cfa_range_misspec)` in the misspecified cells. When the candidate set
+contains a model that isolates the generating main factor, the best CFA bias is
+numerically zero; the low-reliability correlated-errors cell is the exception in
+this first implementation, with best absolute bias
+`r fmt(cfa_summary$min_abs_bias[cfa_summary$population == "correlated_errors" &
+                                cfa_summary$reliability_level == "low"])`.
+
+The cleaner diagnostic is to test the congeneric identities themselves. The
+unitized diagnostics are zero up to numerical noise in the correctly specified
+one-factor cells: max $h^\star$ is `r fmt(max_h_unit_correct, 4)` and max
+tetrad* is `r fmt(max_tetrad_unit_correct, 4)`. In the misspecified cells,
+$h^\star$ ranges from `r fmt(min_h_unit_misspec)` to
+`r fmt(max_h_unit_misspec)`, tetrad* from
+`r fmt(min_tetrad_unit_misspec)` to `r fmt(max_tetrad_unit_misspec)`, and
+SG-off* from `r fmt(min_sg_off_unit_misspec)` to
+`r fmt(max_sg_off_unit_misspec)`. The gap between Spearman/Guttman omega and
+alpha is not a congeneric diagnostic: it is already as large as
+`r fmt(max_sg_alpha_correct)` in the correctly specified congeneric cells
+because alpha is sensitive to unequal loadings.
+
+## Congeneric Diagnostics
+
+A one-factor congeneric correlation model with independent errors has
+
+$$
+R = aa^\top + \Psi,\qquad \Psi\ \text{diagonal},
+$$
+
+so every off-diagonal correlation satisfies $r_{ij}=a_i a_j$. This gives
+diagnostics that do not require Bell's generating reliability target.
+
+First, every tetrad must vanish. For each quadruple $i,j,\ell,m$, the three
+off-diagonal products $r_{ij}r_{\ell m}$, $r_{i\ell}r_{jm}$, and
+$r_{im}r_{j\ell}$ must be equal. The report uses their root-mean-square
+difference, $D_\tau$, on the correlation scale.
+
+For display, this is divided by the algebraic product-difference bound
+$\sqrt{8/3}$:
+
+$$
+D_\tau^\star = \frac{D_\tau}{\sqrt{8/3}}.
+$$
+
+Since every product is in $[-1,1]$, this puts $D_\tau^\star$ in $[0,1]$. The
+bound is algebraic; a positive definite correlation matrix may not attain one.
+
+Second, the Spearman/Guttman communality for item $i$ should not depend on
+which two other items are used as anchors. Define
+$\mathcal P_i=\{\{j,\ell\}: j<\ell,\ j\ne i,\ \ell\ne i\}$, where
+$|\mathcal P_i|={p-1\choose 2}$, and
+
+$$
+h_{i;j\ell} = \frac{r_{ij}r_{i\ell}}{r_{j\ell}}.
+$$
+
+Under the congeneric model, $h_{i;j\ell}=a_i^2$ for every
+$\{j,\ell\}\in\mathcal P_i$. Let
+
+$$
+\bar h_i =
+\frac{1}{|\mathcal P_i|}
+\sum_{\{j,\ell\}\in\mathcal P_i} h_{i;j\ell}.
+$$
+
+The $h$-dispersion diagnostic is
+
+$$
+D_h =
+\left[
+\frac{\sum_i\sum_{\{j,\ell\}\in\mathcal P_i}
+(h_{i;j\ell}-\bar h_i)^2}
+{\sum_i |\mathcal P_i|\,\bar h_i^2}
+\right]^{1/2}.
+$$
+
+Unlike the tetrad RMS, $D_h$ has no finite worst case, because anchor
+correlations in the denominator can approach zero. The unitized version is
+
+$$
+D_h^\star =
+\left[
+\frac{\sum_i\sum_{\{j,\ell\}\in\mathcal P_i}
+(h_{i;j\ell}-\bar h_i)^2}
+{\sum_i\sum_{\{j,\ell\}\in\mathcal P_i}
+(h_{i;j\ell}-\bar h_i)^2
++ \sum_i |\mathcal P_i|\,\bar h_i^2}
+\right]^{1/2}
+=
+\frac{D_h}{\sqrt{1+D_h^2}}.
+$$
+
+This maps exact congeneric agreement to zero and arbitrarily bad anchor
+instability to one as a limit.
+
+This is the Guttman-derived check that seems most useful here: the old
+Spearman/Guttman omega averages the $h_{i;j\ell}$'s, while $D_h$ asks
+whether those anchor-specific values agree enough for a congeneric
+interpretation.
+
+Finally, define $\tilde a_i=\operatorname{sign}(\sum_{j\ne i} r_{ij})
+\sqrt{\max(\bar h_i,0)}$. The normalized Spearman/Guttman rank-one
+off-diagonal error is
+
+$$
+D_{\text{SG-off}} =
+\frac{\sum_{i<j}|r_{ij}-\tilde a_i\tilde a_j|}
+{\sum_{i<j}|r_{ij}|}.
+$$
+
+Its unitized version is
+
+$$
+D_{\text{SG-off}}^\star =
+\frac{\sum_{i<j}|r_{ij}-\tilde a_i\tilde a_j|}
+{\sum_{i<j}|r_{ij}-\tilde a_i\tilde a_j|+\sum_{i<j}|r_{ij}|}.
+$$
+
+This is less fundamental than tetrads or $h$-dispersion, but it puts the
+violation on an inter-item-correlation scale.
+
+## CFA Reliability Functional
+
+Let $S$ be the population covariance matrix used as sample covariance in this
+experiment and let $w = \mathbf 1_p$ form the unit-weighted total score. For a
+candidate CFA model $M$, fit the model at $S$ and let
+$\hat\theta_M = \arg\min_{\theta \in M} F_{\text{ML}}(S, \Sigma(\theta))$.
+Write $C_g(\hat\theta_M)$ for the covariance contribution of the declared
+main factor $g$. The CFA-specific reliability coefficient used here is
+
+$$
+\omega_g^{\text{obs}}(M)
+  =
+  \frac{w^\top C_g(\hat\theta_M) w}{w^\top S w}.
+$$
+
+For the one-factor and bifactor candidates,
+$C_g(\hat\theta_M)=\lambda_g\lambda_g^\top$, because the main factor is
+standardized. For the higher-order candidate, the item coefficients on the
+higher-order factor are indirect: if $\Lambda$ contains item loadings on the
+first-order factors and $\gamma$ contains first-order loadings on the
+higher-order factor, then
+$C_g(\hat\theta_M)=(\Lambda\gamma)(\Lambda\gamma)^\top$.
+
+Against Bell et al.'s target reliability
+$\omega_{\text{Bell}} = w^\top C_{\text{gen}} w / w^\top S w$, the
+population bias for candidate $M$ is
+
+$$
+b_g(M) = \omega_g^{\text{obs}}(M) - \omega_{\text{Bell}}.
+$$
+
+The model-set sensitivity diagnostic is just the range of that coefficient over
+a small CFA set $\mathcal M$:
+
+$$
+R_\omega(\mathcal M)
+  =
+  \max_{M \in \mathcal M}\omega_g^{\text{obs}}(M)
+  -
+  \min_{M \in \mathcal M}\omega_g^{\text{obs}}(M).
+$$
+
+This is not a new fit index. It asks whether plausible CFA ways of protecting a
+declared main factor produce materially different main-factor reliability
+claims.
+
+## Evidence
+
+The table shows the low-reliability cells, where Bell et al. also report the
+largest misspecification effects. Bias is estimate minus Bell's target. `F` is
+the fitted discrepancy at population moments (`2 * fmin`), and `RMSEA-like` is
+`sqrt(F / df)`. Those two fit columns are within-discrepancy diagnostics, not
+cross-discrepancy evidence.
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+The next table uses the CFA functional above. `Omega range` is
+$R_\omega(\mathcal M)$ over the candidate set: one factor, one factor with
+within-block residual covariances, bifactor blocks, and for p=12 also
+higher-order blocks.
+
+```{r}
+knitr::kable(cfa_tab, row.names = FALSE)
+```
+
+The next table uses the unitized congeneric diagnostics. `Tetrad*` is
+$D_\tau^\star$, `h*` is $D_h^\star$, and `SG-off*` is
+$D_{\text{SG-off}}^\star$.
+
+```{r}
+knitr::kable(cong_tab, row.names = FALSE)
+```
+
+The full population-moment tables, including high-reliability cells, are in
+`r file.path(res_dir, "omega_bias.csv")`,
+`r file.path(res_dir, "cfa_reliability.csv")`, and
+`r file.path(res_dir, "congeneric_diagnostics.csv")`.
+
+## Caveats
+
+This is not a finite-sample replication. There is no $N$, no convergence
+replacement loop, no standard errors, and no coverage. The experiment asks only
+what Bell's bias definition becomes after sample noise is removed.
+
+The population values are Bell-inspired p=8 cells plus the p=12 higher-order
+cell from their loading table.
+
+The CFA sensitivity section is not an identified bias estimator. It depends on
+the candidate model set and on which factor is declared to be the main factor.
+The residual-block model is deliberately flexible: in these toy populations it
+can reproduce some bifactor or higher-order nuisance covariance while preserving
+the total-score contribution attributed to the main factor. That is useful as a
+diagnostic, but it is not proof that the fitted model has recovered the
+substantive factor.
+
+The congeneric diagnostics are also descriptive, not sampling-calibrated tests.
+They use the sample or population correlation matrix directly. They say how
+strongly the covariance structure violates one-factor congeneric identities, not
+how large the resulting reliability bias must be for a particular substantive
+target.
+
+## Reproduce
+
+```sh
+Rscript experiments/research/42-bell-omega-bias/run_experiment.R
+quarto render experiments/research/42-bell-omega-bias/report.qmd
+```

@@ -1,7 +1,7 @@
 # Parameterization geometry: what a latent scaling convention can and cannot buy
 
 **Status:** findings recorded 2026-09-19. Measured by
-`experiments/82-latent-metric-geometry`, which supersedes
+`experiments/research/82-latent-metric-geometry`, which supersedes
 `experiments/_archive/02-latent-metric-identification`.
 
 **Scope correction (2026-09-19):** the original conclusions below are exploratory

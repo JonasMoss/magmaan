@@ -1,0 +1,977 @@
+---
+title: "Which matrix choices are most similar to the Savalei–Falk robust tests?"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
+roots <- c(if (nzchar(override)) override else character(),
+           file.path("results", c("replication", "pilot", "smoke")))
+available <- roots[vapply(roots, function(path)
+  file.exists(file.path(path, "metadata.csv")), logical(1))]
+if (!length(available)) {
+  stop("missing results; run `Rscript run_experiment.R --smoke`")
+}
+root <- available[[1L]]
+read_result <- function(name) read.csv(
+  file.path(root, name), stringsAsFactors = FALSE, check.names = FALSE)
+summary <- read_result("summary.csv")
+design <- read_result("design.csv")
+audit_frame <- read_result("audit.csv")
+audit <- setNames(audit_frame$value, audit_frame$key)
+dgp_roots <- read_result("dgp_roots.csv")
+meta_frame <- read_result("metadata.csv")
+meta <- setNames(meta_frame$value, meta_frame$key)
+reps <- as.integer(meta[["reps_per_cell"]])
+profile <- meta[["profile"]]
+
+fingerprint_override <- Sys.getenv(
+  "MAGMAAN_EXPERIMENT_FINGERPRINT_RESULTS", unset = "")
+fingerprint_root <- if (nzchar(fingerprint_override)) {
+  fingerprint_override
+} else file.path("results", "fingerprint")
+if (!file.exists(file.path(fingerprint_root, "metadata.csv"))) {
+  stop(paste(
+    "missing fingerprint results; run",
+    "`Rscript run_experiment.R --fingerprint --cores 8 --resume`"))
+}
+read_fingerprint <- function(name) read.csv(
+  file.path(fingerprint_root, name), stringsAsFactors = FALSE,
+  check.names = FALSE)
+fingerprint_summary <- read_fingerprint("summary.csv")
+fingerprint_design <- read_fingerprint("design.csv")
+fingerprint_audit_frame <- read_fingerprint("audit.csv")
+fingerprint_audit <- setNames(
+  fingerprint_audit_frame$value, fingerprint_audit_frame$key)
+k7 <- summary[summary$cell_id == "paper-mar-l-k7", , drop = FALSE]
+
+one <- function(x, label) {
+  if (nrow(x) != 1L) stop("expected one summary row for ", label)
+  x
+}
+ml2s_default <- one(k7[
+  k7$method == "ml2s" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated" &
+    k7$stage2_information == "saturated_expected", ], "ML2S default")
+ml2s_source <- one(k7[
+  k7$method == "ml2s" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated" &
+    k7$stage2_information == "structured_observed", ], "ML2S source row")
+fiml_default <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_observed_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "saturated", ], "FIML H1 default")
+fiml_literal <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "structured_observed_h1" &
+    k7$omega_bread_point == "structured" &
+    k7$omega_bread_kind == "observed" &
+    k7$omega_meat_point == "structured", ], "literal FIML equations row")
+
+targets <- c(ml2s = .100, fiml = .633)
+closest <- lapply(names(targets), function(method) {
+  z <- k7[k7$method == method, , drop = FALSE]
+  z[which.min(abs(z$rejection_rate - targets[[method]])), , drop = FALSE]
+})
+names(closest) <- names(targets)
+ml2s_target_se <- sqrt(.1 * .9 / 1000)
+fiml_target_se <- sqrt(.633 * .367 / 1000)
+ml2s_z <- abs(ml2s_source$rejection_rate_n_minus_1 - .1) /
+  sqrt(ml2s_source$rejection_se_n_minus_1^2 + ml2s_target_se^2)
+fiml_closest <- closest$fiml
+fiml_expected <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_expected_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "expected" &
+    k7$omega_meat_point == "saturated", ], "FIML closest row")
+stopifnot(identical(fiml_closest$information, fiml_expected$information))
+fiml_z <- abs(fiml_closest$rejection_rate - .633) /
+  sqrt(fiml_closest$rejection_se^2 + fiml_target_se^2)
+fiml_observed_residual <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "saturated_observed_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "expected" &
+    k7$omega_meat_point == "saturated", ], "FIML observed-residual alternative")
+fiml_mlr <- one(k7[k7$method == "fiml_mlr", ], "named FIML MLR")
+mlr_z <- abs(fiml_mlr$rejection_rate - .633) /
+  sqrt(fiml_mlr$rejection_se^2 + fiml_target_se^2)
+
+fingerprint_fiml <- function(residual, bread_point, bread_kind, meat_point,
+                             label) {
+  z <- fingerprint_summary[
+    fingerprint_summary$method == "fiml" &
+      fingerprint_summary$residual_information == residual &
+      fingerprint_summary$omega_bread_point == bread_point &
+      fingerprint_summary$omega_bread_kind == bread_kind &
+      fingerprint_summary$omega_meat_point == meat_point, , drop = FALSE]
+  if (nrow(z) != nrow(fingerprint_design)) {
+    stop("incomplete FIML fingerprint route: ", label)
+  }
+  z
+}
+fingerprint_ml2s <- function(stage2_information, label) {
+  z <- fingerprint_summary[
+    fingerprint_summary$method == "ml2s" &
+      fingerprint_summary$omega_bread_point == "saturated" &
+      fingerprint_summary$omega_bread_kind == "observed" &
+      fingerprint_summary$omega_meat_point == "saturated" &
+      fingerprint_summary$stage2_information == stage2_information,
+    , drop = FALSE]
+  if (nrow(z) != nrow(fingerprint_design)) {
+    stop("incomplete ML2S fingerprint route: ", label)
+  }
+  z
+}
+rate_by_cell <- function(z, column = "rejection_rate") {
+  unname(setNames(z[[column]], z$cell_id)[fingerprint_design$cell_id])
+}
+rmse_points <- function(estimate, target) {
+  100 * sqrt(mean((estimate - target)^2))
+}
+mae_points <- function(estimate, target) {
+  100 * mean(abs(estimate - target))
+}
+
+yb_fiml <- fingerprint_fiml(
+  "structured_expected_h1", "saturated", "expected", "saturated",
+  "Yuan-Bentler expected route")
+all_h1_expected_fiml <- fingerprint_fiml(
+  "saturated_expected_h1", "saturated", "expected", "saturated",
+  "all-H1 expected route")
+literal_fiml_fingerprint <- fingerprint_fiml(
+  "structured_observed_h1", "structured", "observed", "structured",
+  "paper-literal route")
+source_ml2s_fingerprint <- fingerprint_ml2s(
+  "structured_observed", "source-form analogue")
+
+published_fiml <- fingerprint_design$paper_fiml_rejection
+published_ml2s <- fingerprint_design$paper_ts_rejection
+yb_fiml_rate <- rate_by_cell(yb_fiml)
+all_h1_expected_rate <- rate_by_cell(all_h1_expected_fiml)
+literal_fiml_rate <- rate_by_cell(literal_fiml_fingerprint)
+ml2s_n_rate <- rate_by_cell(source_ml2s_fingerprint)
+ml2s_n_minus_1_rate <- rate_by_cell(
+  source_ml2s_fingerprint, "rejection_rate_n_minus_1")
+
+fingerprint_table <- data.frame(
+  N = fingerprint_design$n,
+  Kurtosis = fingerprint_design$kurtosis,
+  `Published FIML` = 100 * published_fiml,
+  `YB expected FIML` = 100 * yb_fiml_rate,
+  `All-H1 expected FIML` = 100 * all_h1_expected_rate,
+  `Literal FIML` = 100 * literal_fiml_rate,
+  `Published 2S` = 100 * published_ml2s,
+  `2S (n-1)F/c` = 100 * ml2s_n_minus_1_rate,
+  `2S nF/c` = 100 * ml2s_n_rate,
+  check.names = FALSE)
+
+fingerprint_metrics <- data.frame(
+  Route = c("FIML: YB expected", "FIML: all-H1 expected",
+            "FIML: literal structured observed",
+            "2S: (n-1)F/c", "2S: nF/c"),
+  RMSE = c(
+    rmse_points(yb_fiml_rate, published_fiml),
+    rmse_points(all_h1_expected_rate, published_fiml),
+    rmse_points(literal_fiml_rate, published_fiml),
+    rmse_points(ml2s_n_minus_1_rate, published_ml2s),
+    rmse_points(ml2s_n_rate, published_ml2s)),
+  MAE = c(
+    mae_points(yb_fiml_rate, published_fiml),
+    mae_points(all_h1_expected_rate, published_fiml),
+    mae_points(literal_fiml_rate, published_fiml),
+    mae_points(ml2s_n_minus_1_rate, published_ml2s),
+    mae_points(ml2s_n_rate, published_ml2s)))
+
+yb_mar <- one(k7[
+  k7$method == "fiml" &
+    k7$residual_information == "structured_expected_h1" &
+    k7$omega_bread_point == "saturated" &
+    k7$omega_bread_kind == "expected" &
+    k7$omega_meat_point == "saturated", ], "YB expected MAR row")
+seven_fiml_targets <- c(published_fiml, .633)
+seven_yb_rmse <- rmse_points(
+  c(yb_fiml_rate, yb_mar$rejection_rate), seven_fiml_targets)
+seven_all_h1_rmse <- rmse_points(
+  c(all_h1_expected_rate, fiml_expected$rejection_rate),
+  seven_fiml_targets)
+
+evidence <- rbind(ml2s_source, ml2s_default, fiml_closest,
+                  fiml_observed_residual, fiml_literal, fiml_default,
+                  fiml_mlr)
+evidence$Choice <- c("Source-form analogue", "Current magmaan default",
+                     "Closest MAR-L row: saturated expected throughout",
+                     "Observed residual, expected sandwich",
+                     "Literal all-structured observed equations",
+                     "Current magmaan H1 metric",
+                     "Named MLR: Yuan-Bentler/Mplus")
+evidence$Method <- c("Two-stage", "Two-stage", rep("Direct FIML", 5L))
+evidence$Published <- c(10.0, NA, 63.3, 63.3, 63.3, NA, 63.3)
+evidence$Usable <- 100 * evidence$replications / reps
+evidence$Rejection <- 100 * evidence$rejection_rate
+evidence$MC_SE <- 100 * evidence$rejection_se
+evidence$Rejection[[1L]] <- 100 * ml2s_source$rejection_rate_n_minus_1
+evidence$MC_SE[[1L]] <- 100 * ml2s_source$rejection_se_n_minus_1
+evidence$Scale <- evidence$mean_scaling_factor
+
+eligible <- 100 * design$theoretical_eligible_proportion[
+  design$cell_id == "paper-mar-l-k7"]
+identity_error <- audit[["saturated_identity_max_abs"]]
+default_error <- audit[["default_scale_max_abs"]]
+
+point_labels <- c(saturated = "H₁", structured = "H₀")
+kind_labels <- c(expected = "Expected (E)", observed = "Observed (O)")
+residual_outer_point <- c(
+  saturated_expected_h1 = "H₁",
+  saturated_observed_h1 = "H₁",
+  structured_expected_h1 = "H₀",
+  structured_observed_h1 = "H₀",
+  structured_observed_hessian = "H₀",
+  mixed_saturated_observed_hessian = "H₁")
+residual_outer_kind <- c(
+  saturated_expected_h1 = "Expected (E)",
+  saturated_observed_h1 = "Observed (O)",
+  structured_expected_h1 = "Expected (E)",
+  structured_observed_h1 = "Observed (O)",
+  structured_observed_hessian = "Observed (O)",
+  mixed_saturated_observed_hessian = "Observed (O)")
+residual_theta_block <- c(
+  saturated_expected_h1 = "Δ′AΔ",
+  saturated_observed_h1 = "Δ′AΔ",
+  structured_expected_h1 = "Δ′AΔ",
+  structured_observed_h1 = "Δ′AΔ",
+  structured_observed_hessian = "Full observed Hθθ(H₀)",
+  mixed_saturated_observed_hessian = "Full observed Hθθ(H₀)")
+
+fiml_options <- k7[k7$method == "fiml", , drop = FALSE]
+fiml_options$Role <- ""
+fiml_options$Role[
+  fiml_options$residual_information == "structured_expected_h1" &
+    fiml_options$omega_bread_point == "saturated" &
+    fiml_options$omega_bread_kind == "expected" &
+    fiml_options$omega_meat_point == "saturated"] <- "YB expected"
+fiml_options$Role[
+  fiml_options$residual_information == "saturated_expected_h1" &
+    fiml_options$omega_bread_point == "saturated" &
+    fiml_options$omega_bread_kind == "expected" &
+    fiml_options$omega_meat_point == "saturated"] <- "Closest"
+fiml_options$Role[
+  fiml_options$residual_information == "structured_observed_h1" &
+    fiml_options$omega_bread_point == "structured" &
+    fiml_options$omega_bread_kind == "observed" &
+    fiml_options$omega_meat_point == "structured"] <- "Paper-literal"
+fiml_options$Role[
+  fiml_options$residual_information == "saturated_observed_h1" &
+    fiml_options$omega_bread_point == "saturated" &
+    fiml_options$omega_bread_kind == "observed" &
+    fiml_options$omega_meat_point == "saturated"] <- "magmaan default"
+fiml_options$U_A_point <- unname(residual_outer_point[
+  fiml_options$residual_information])
+fiml_options$U_A_kind <- unname(residual_outer_kind[
+  fiml_options$residual_information])
+fiml_options$U_theta <- unname(residual_theta_block[
+  fiml_options$residual_information])
+fiml_options$Omega_A_point <- unname(point_labels[
+  fiml_options$omega_bread_point])
+fiml_options$Omega_A_kind <- unname(kind_labels[
+  fiml_options$omega_bread_kind])
+fiml_options$Omega_B_point <- unname(point_labels[
+  fiml_options$omega_meat_point])
+fiml_options$Invalid <- reps - fiml_options$replications
+fiml_options$Reject <- 100 * fiml_options$rejection_rate
+fiml_options$Gap <- fiml_options$Reject - 63.3
+fiml_options$Scale <- fiml_options$mean_scaling_factor
+fiml_options <- fiml_options[order(
+  match(fiml_options$Role,
+        c("Paper-literal", "YB expected", "Closest", "magmaan default", "")),
+  match(fiml_options$U_A_point, c("H₁", "H₀")),
+  match(fiml_options$U_A_kind, c("Observed (O)", "Expected (E)")),
+  match(fiml_options$U_theta, c("Δ′AΔ", "Full observed Hθθ(H₀)")),
+  match(fiml_options$omega_bread_point, c("saturated", "structured")),
+  match(fiml_options$omega_bread_kind, c("observed", "expected")),
+  match(fiml_options$omega_meat_point, c("saturated", "structured"))), ]
+
+ml2s_options <- k7[k7$method == "ml2s", , drop = FALSE]
+ml2s_options$Role <- ""
+ml2s_options$Role[
+  ml2s_options$omega_bread_point == "saturated" &
+    ml2s_options$omega_bread_kind == "observed" &
+    ml2s_options$omega_meat_point == "saturated" &
+    ml2s_options$stage2_information == "structured_observed"] <-
+  "Source-form analogue"
+ml2s_options$Role[
+  ml2s_options$omega_bread_point == "saturated" &
+    ml2s_options$omega_bread_kind == "observed" &
+    ml2s_options$omega_meat_point == "saturated" &
+    ml2s_options$stage2_information == "saturated_expected"] <-
+  "magmaan default"
+ml2s_options$Omega_A_point <- unname(point_labels[
+  ml2s_options$omega_bread_point])
+ml2s_options$Omega_A_kind <- unname(kind_labels[
+  ml2s_options$omega_bread_kind])
+ml2s_options$Omega_B_point <- unname(point_labels[
+  ml2s_options$omega_meat_point])
+ml2s_options$U_H_point <- unname(point_labels[
+  sub("_.*", "", ml2s_options$stage2_information)])
+ml2s_options$U_H_kind <- unname(kind_labels[
+  sub(".*_", "", ml2s_options$stage2_information)])
+ml2s_options$Invalid <- reps - ml2s_options$replications
+ml2s_options$Reject_n_minus_1 <-
+  100 * ml2s_options$rejection_rate_n_minus_1
+ml2s_options$Gap_n_minus_1 <- ml2s_options$Reject_n_minus_1 - 10.0
+ml2s_options$Reject_n <- 100 * ml2s_options$rejection_rate
+ml2s_options$Gap_n <- ml2s_options$Reject_n - 10.0
+ml2s_options$Scale <- ml2s_options$mean_scaling_factor
+ml2s_options <- ml2s_options[order(
+  match(ml2s_options$Role,
+        c("Source-form analogue", "magmaan default", "")),
+  match(ml2s_options$omega_bread_point, c("saturated", "structured")),
+  match(ml2s_options$omega_bread_kind, c("observed", "expected")),
+  match(ml2s_options$omega_meat_point, c("saturated", "structured")),
+  match(ml2s_options$stage2_information,
+        c("saturated_observed", "structured_observed",
+          "saturated_expected", "structured_expected"))), ]
+
+normal <- summary[summary$cell_id == "normal-mar-l-k0", , drop = FALSE]
+normal_rows <- rbind(
+  one(normal[
+    normal$method == "fiml" &
+      normal$residual_information == "structured_observed_h1" &
+      normal$omega_bread_point == "structured" &
+      normal$omega_bread_kind == "observed" &
+      normal$omega_meat_point == "structured", ], "normal paper-literal FIML"),
+  one(normal[normal$method == "fiml_mlr", ], "normal MLR"),
+  one(normal[
+    normal$method == "fiml" &
+      normal$residual_information == "saturated_expected_h1" &
+      normal$omega_bread_point == "saturated" &
+      normal$omega_bread_kind == "expected" &
+      normal$omega_meat_point == "saturated", ], "normal closest FIML"),
+  one(normal[
+    normal$method == "ml2s" &
+      normal$omega_bread_point == "saturated" &
+      normal$omega_bread_kind == "observed" &
+      normal$omega_meat_point == "saturated" &
+      normal$stage2_information == "structured_observed", ],
+      "normal source-form ML2S"),
+  one(normal[
+    normal$method == "ml2s" &
+      normal$omega_bread_point == "saturated" &
+      normal$omega_bread_kind == "observed" &
+      normal$omega_meat_point == "saturated" &
+      normal$stage2_information == "saturated_expected", ],
+      "normal default ML2S"))
+normal_rows$Route <- c(
+  "Direct FIML: paper-literal", "Direct FIML: named MLR",
+  "Direct FIML: all-H₁ expected", "ML2S: source-form analogue",
+  "ML2S: magmaan default")
+normal_rows$Usable <- normal_rows$replications
+normal_rows$Reject <- 100 * normal_rows$rejection_rate
+normal_rows$MC_SE <- 100 * normal_rows$rejection_se
+normal_rows$Scale <- normal_rows$mean_scaling_factor
+
+mcar <- summary[summary$cell_id == "diagnostic-mcar-k7", , drop = FALSE]
+mcar_rows <- rbind(
+  one(mcar[
+    mcar$method == "fiml" &
+      mcar$residual_information == "structured_expected_h1" &
+      mcar$omega_bread_point == "saturated" &
+      mcar$omega_bread_kind == "expected" &
+      mcar$omega_meat_point == "saturated", ],
+      "MCAR YB structured-U expected FIML"),
+  one(mcar[
+    mcar$method == "fiml" &
+      mcar$residual_information == "saturated_expected_h1" &
+      mcar$omega_bread_point == "saturated" &
+      mcar$omega_bread_kind == "expected" &
+      mcar$omega_meat_point == "saturated", ], "MCAR all-H1 expected FIML"),
+  one(mcar[
+    mcar$method == "fiml" &
+      mcar$residual_information == "saturated_observed_h1" &
+      mcar$omega_bread_point == "saturated" &
+      mcar$omega_bread_kind == "expected" &
+      mcar$omega_meat_point == "saturated", ],
+      "MCAR observed-residual FIML"),
+  one(mcar[
+    mcar$method == "fiml" &
+      mcar$residual_information == "structured_observed_h1" &
+      mcar$omega_bread_point == "structured" &
+      mcar$omega_bread_kind == "observed" &
+      mcar$omega_meat_point == "structured", ], "MCAR literal FIML"),
+  one(mcar[mcar$method == "fiml_mlr", ], "MCAR named MLR"),
+  one(mcar[
+    mcar$method == "ml2s" &
+      mcar$omega_bread_point == "saturated" &
+      mcar$omega_bread_kind == "observed" &
+      mcar$omega_meat_point == "saturated" &
+      mcar$stage2_information == "structured_observed", ],
+      "MCAR source-form ML2S"),
+  one(mcar[
+    mcar$method == "ml2s" &
+      mcar$omega_bread_point == "saturated" &
+      mcar$omega_bread_kind == "observed" &
+      mcar$omega_meat_point == "saturated" &
+      mcar$stage2_information == "saturated_expected", ],
+      "MCAR default ML2S"))
+mcar_rows$Route <- c(
+  "Direct FIML: YB structured-U expected",
+  "Direct FIML: all-H1 expected",
+  "Direct FIML: observed residual, expected sandwich",
+  "Direct FIML: paper-literal",
+  "Direct FIML: named MLR",
+  "ML2S: source-form analogue",
+  "ML2S: magmaan default")
+mcar_rows$Published <- c(rep(45, 5L), rep(12, 2L))
+mcar_rows$Usable <- mcar_rows$replications
+mcar_rows$Reject <- 100 * mcar_rows$rejection_rate
+mcar_rows$MC_SE <- 100 * mcar_rows$rejection_se
+mcar_rows$Reject[[6L]] <- 100 * mcar_rows$rejection_rate_n_minus_1[[6L]]
+mcar_rows$MC_SE[[6L]] <- 100 * mcar_rows$rejection_se_n_minus_1[[6L]]
+mcar_rows$Scale <- mcar_rows$mean_scaling_factor
+
+mcar_design <- design[design$cell_id == "diagnostic-mcar-k7", , drop = FALSE]
+stopifnot(nrow(mcar_design) == 1L)
+mcar_mean_patterns <- mcar_design$mean_realized_patterns
+mcar_mean_missing <- mcar_design$mean_realized_missing_rate
+
+dgp_roots$Branch <- ifelse(
+  dgp_roots$same_joint_law_as_selected,
+  "Selected law", "Alternative law")
+dgp_roots$Monotonicity <- ifelse(
+  dgp_roots$monotone_increasing, "Increasing",
+  ifelse(dgp_roots$monotone_decreasing, "Decreasing", "Nonmonotone"))
+dgp_roots$Solvable <- ifelse(
+  dgp_roots$target_correlations_solvable, "Yes", "No")
+dgp_roots$Selected <- ifelse(dgp_roots$selected, "Yes", "No")
+```
+
+## Question
+
+Which choices of residual information, sandwich bread, and score meat give
+rejection behavior similar to the robust FIML and robust two-stage tests
+reported by Savalei and Falk (2014)? The exact EQS 6.1 implementation could not
+be recovered, so the result can identify useful analogues but not a replication.
+
+**Goal.** Compare plausible finite-sample Yuan--Bentler routes against a
+six-cell MCAR fingerprint rather than one rejection rate; determine whether the
+two-stage numerator was $nF$ or $(n-1)F$; enumerate all nearby matrix choices;
+and choose a clearly labeled analogue for Experiment 77 without claiming that
+it reconstructs EQS.
+
+## Short answer
+
+```{r short-answer, results='asis'}
+if (reps >= 1000) {
+  cat(sprintf(
+    paste0(
+      "We did **not reproduce or uniquely identify** the Savalei--Falk/EQS ",
+      "statistic. Across the six graph-digitized **MCAR** cells, the closest ",
+      "studied direct-FIML analogue is a Yuan--Bentler expected-information ",
+      "hybrid: ",
+      "$U$ uses expected information evaluated at the structured fit, while ",
+      "$\\Omega$ uses the saturated estimator's expected bread and saturated ",
+      "scores. Its rejection-rate RMSE is **%.1f points**, versus %.1f for ",
+      "expected information everywhere at $H_1$ and %.1f for the literal ",
+      "all-structured observed construction. The one exact MAR-L cell pulls ",
+      "toward all-$H_1$ expected (%.1f%% versus %.1f%% for the hybrid, target ",
+      "63.3%%), leaving the two expected routes essentially tied across all ",
+      "seven cells (RMSE %.1f versus %.1f points).\n\n"),
+    fingerprint_metrics$RMSE[[1L]], fingerprint_metrics$RMSE[[2L]],
+    fingerprint_metrics$RMSE[[3L]],
+    100 * fiml_expected$rejection_rate, 100 * yb_mar$rejection_rate,
+    seven_yb_rmse, seven_all_h1_rmse))
+  cat(sprintf(
+    paste0(
+      "For **two-stage FIML**, saturated observed Stage-1 bread, saturated ",
+      "score meat, and structured observed Stage-2 information remains the ",
+      "source-form analogue. Using the paper's $(n-1)F/c$ numerator improves ",
+      "its six-cell RMSE from %.1f to **%.1f points**. This is a modest but ",
+      "consistent finite-sample improvement, not a new asymptotic method.\n\n"),
+    fingerprint_metrics$RMSE[[5L]], fingerprint_metrics$RMSE[[4L]]))
+  cat(paste0(
+    "One plausible historical reading is that Savalei and Falk ",
+    "requested EQS's named Yuan--Bentler correction and reported what EQS 6.1 ",
+    "returned. Their prose and syntax explicitly request analytic observed ",
+    "information, yet the rejection fingerprint looks like an expected-",
+    "information code path. That does **not** establish an execution mistake ",
+    "by the authors: it may be a version-specific EQS convention or an ",
+    "undocumented separation between the information used by the statistic ",
+    "and by standard errors. Experiment 77 should use the structured-expected ",
+    "Yuan--Bentler route only as a **similar, explicitly non-replicating ",
+    "analogue**, while retaining the all-$H_1$ expected route as a sensitivity ",
+    "comparison.\n"))
+} else {
+  cat(sprintf(
+    paste0("The %s run (%d samples per cell) validates all 80 crossed matrix ",
+           "constructions plus named MLR, but is too small to compare them reliably with ",
+           "the paper's 10.0%% two-stage and 63.3%% FIML targets.\n"),
+    profile, reps))
+}
+```
+
+## Evidence
+
+The primary fingerprint uses Savalei--Falk Model 2, MCAR, many missingness
+patterns, 30% deletion within each missing-variable set, skewness 2, and both
+paper kurtoses at $N=200,400,600$. The published values are approximate
+readings of Figures 8--10; every simulation cell contains 1,000 samples.
+
+```{r fingerprint-table}
+knitr::kable(
+  fingerprint_table,
+  digits = c(0, 0, rep(1, 7)), row.names = FALSE,
+  caption = paste(
+    "Six-cell MCAR rejection-rate fingerprint. Published values are",
+    "graph-digitized approximations; all entries after kurtosis are percentages."))
+```
+
+The six-cell RMSEs are 3.0 points for structured-$U$ expected FIML, 3.9
+for all-$H_1$ expected FIML, and 8.5 for the literal structured-observed
+route. For two-stage they are 1.8 points with $(n-1)F/c$ and 2.3 with $nF/c$.
+
+The focused run had one numerically anomalous ML2S replication in the
+$N=200$, kurtosis-15 cell. Its 32 ML2S matrix rows were excluded together; the
+direct-FIML result from the same sample was retained.
+
+```{r fingerprint-audit-text, results='asis'}
+cat(sprintf(
+  paste0(
+    "The other 5,999 ML2S fits satisfy the saturated expected/observed ",
+    "identity to %.3g and reproduce the fitted default scale to %.3g.\n"),
+  fingerprint_audit[["saturated_identity_max_abs"]],
+  fingerprint_audit[["default_scale_max_abs"]]))
+```
+
+### Exact MAR-L diagnostic
+
+The earlier exact target cell uses Model 2, $N=200$, MAR-L, many missingness
+patterns, 30% missingness, skewness 2, and kurtosis 7. Each method is fitted
+once to a sample and every matrix choice is evaluated on that same fit. The
+two-stage candidate below uses the paper's $(n-1)F/c$ convention.
+
+```{r evidence-table}
+knitr::kable(
+  evidence[, c("Method", "Choice", "Published", "Usable", "Rejection",
+                 "MC_SE", "Scale")],
+  digits = c(NA, NA, 1, 1, 1, 1, 3), row.names = FALSE,
+  col.names = c("Method", "Matrix choice", "Published (%)", "Usable (%)",
+                "Reject (%)", "MC SE (points)", "Mean scale"),
+  caption = "Published targets and reconstructed/default matrix choices in the diagnostic cell.")
+```
+
+```{r geometry-text, results='asis'}
+cat(sprintf(
+  paste0(
+    "The literal direct-FIML residual matrix is indefinite in %.1f%% of its ",
+    "usable samples, and %d of %d scales are nonpositive. The two-stage ",
+    "structured observed residual matrix is indefinite in %.1f%%, yet its ",
+    "trace remains positive in every sample. Indefiniteness is expected ",
+    "finite-sample geometry because neither structured matrix is evaluated ",
+    "at an unrestricted moment-model optimum.\n\n"),
+  100 * fiml_literal$projection_indefinite_rate,
+  reps - fiml_literal$replications, reps,
+  100 * ml2s_source$projection_indefinite_rate))
+cat(sprintf(
+  paste0(
+    "The complete-data saturated expected/observed identity holds to %.3g, ",
+    "and the enumerated ML2S default reproduces magmaan's fitted scale to ",
+    "%.3g.\n"),
+  identity_error, default_error))
+```
+
+## Caveats
+
+```{r caveat-text, results='asis'}
+cat(sprintf(
+  paste0(
+    "This is a targeted implementation-identification experiment, not a ",
+    "replication of all 192 published cells. It combines a six-cell MCAR ",
+    "fingerprint with two exact nonnormal MAR-L cells, a normal control, and ",
+    "the original single MCAR diagnostic. The original EQS random stream is ",
+    "not available. The MCAR targets were read from plots and each published ",
+    "percentage is based on 1,000 samples, so exact equality is neither ",
+    "expected nor meaningful. The matrix-level EQS comparison remains the ",
+    "decisive verification because the two expected-information FIML routes ",
+    "are nearly tied across the seven target cells.\n\n")))
+cat(sprintf(
+  paste0(
+    "The generator uses the monotone-increasing Fleishman root and treats the ",
+    "stated kurtoses as excess kurtosis. In the moderate cell it yields %.1f%% ",
+    "theoretically MAR-L-eligible observations, matching the paper's ",
+    "approximately 38%%. The missingness routine enforces exactly 30%% ",
+    "deletion within every published variable set and regenerates samples ",
+    "that cannot meet that conditional instruction. The tracked CSV is a ",
+    "compact summary; raw replication rows and per-cell checkpoints remain ",
+    "generated local output.\n"),
+  eligible))
+```
+
+## Reproduce
+
+```{=html}
+<pre><code class="literal-code">cd experiments/replications/80-savalei-falk-2014-ml2s-information
+
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --replication --cores 8 --resume
+Rscript run_experiment.R --fingerprint --cores 8 --resume
+quarto render report.qmd</code></pre>
+```
+
+## What EQS and the papers actually specify
+
+There are two different sample-size conventions, and they should not be
+silently unified.
+
+- Savalei and Falk's Equation (4) defines the two-stage statistic as
+  $d(n-1)F_{ML}(\widetilde\theta)/\operatorname{tr}(\widehat\Omega_1U_2)$.
+- Their direct-FIML Equation (6), and EQS Manual Equations (12.6)--(12.7),
+  scale the raw likelihood ratio
+  $T_{ML}=-2\{\ell(\widehat\theta)-\ell(\widehat\beta)\}$ directly. There is
+  no extra $n-1$ multiplier to substitute in this route.
+
+The public EQS 6 manual predates the study's two-stage implementation: it says
+that this missing-data two-stage method was not then available, whereas the
+article used EQS 6.1 with `MISSING=TS`. Consequently, the public manual cannot
+independently confirm the 6.1 two-stage numerator. Equation (4) and the supplied
+6.1 syntax are the relevant evidence; our $(n-1)$ result is also empirically
+closer. For direct FIML, by contrast, the public manual documents the named
+Yuan--Bentler route in detail.
+
+For direct FIML, the [EQS 6 program manual](https://www.mvsoft.com/wp-content/uploads/2021/04/EQS_6_Prog_Manual_422pp.pdf)
+calls the output a Yuan--Bentler correction and writes
+
+$$
+T_{YB}=\frac{T_{ML}}{c},\qquad
+c=\frac{\operatorname{tr}(U_\beta V_\beta)}{d},
+$$
+
+with $V_\beta=A_\beta^{-1}B_\beta A_\beta^{-1}$ explicitly described as the
+asymptotic covariance of the **saturated** estimator. Its Equation (12.11)
+uses the simpler projected residual matrix
+
+$$
+U_\beta=A_\beta-A_\beta\Delta
+  (\Delta^\top A_\beta\Delta)^{-1}\Delta^\top A_\beta,
+$$
+
+not the full structured-parameter observed Hessian. The manual says observed
+information is the default finite-sample estimate of $A_\beta$, replaceable by
+Fisher expected information on request. It does not say clearly whether the
+$A_\beta$ inside $U_\beta$ and the breads inside saturated $V_\beta$ must be
+evaluated at the same finite-sample point.
+
+That omission is where the empirically closest hybrid in our grid lives:
+
+$$
+U_\beta=U\{A^E_\beta(\widehat\beta_0)\},\qquad
+V_\beta=
+  A^E_\beta(\widehat\beta)^{-1}B_\beta(\widehat\beta)
+  A^E_\beta(\widehat\beta)^{-1}.
+$$
+
+Savalei and Falk's Appendix B requests `SE=EXACT`, which they explain as an
+analytic observed-information calculation, and the article says observed
+information was used throughout. Thus the expected-information fingerprint is
+a real implementation discrepancy, not something licensed by their written
+method. The defensible conclusion is limited: the named EQS statistic appears
+to have followed an expected-information-like path in this simulation, but
+without EQS 6.1 output or source we cannot tell whether that path was selected
+by the command, hard-coded for the statistic, or merely mimicked by another
+finite-sample difference.
+
+## Named MLR check
+
+Magmaan's named Yuan--Bentler/Mplus MLR statistic is not a forty-ninth setting
+of the crossed direct-FIML grid. It computes a scalar difference of traces,
+
+$$
+c_{\mathrm{MLR}}
+=\frac{\frac{1}{2}\mathrm{tr}(H_1^{-1}J_1)
+      -\frac{1}{2}\mathrm{tr}(H_0^{-1}J_0)}{d},
+$$
+
+using its separately fitted saturated $H_1$ blocks and the full observed
+structured-parameter Hessian under $H_0$. In incomplete data this is not
+identical to the superficially similar mixed moment-space row in the 48-choice
+grid.
+
+```{r mlr-text, results='asis'}
+cat(sprintf(
+  paste0(
+    "In the 1,000-replication target cell, named MLR rejects **%.1f%%** ",
+    "with mean scale %.3f. This is %.1f percentage points above the paper's ",
+    "63.3%% and %.1f combined Monte Carlo SE away. It is therefore not the ",
+    "missing Savalei--Falk implementation.\n"),
+  100 * fiml_mlr$rejection_rate, fiml_mlr$mean_scaling_factor,
+  100 * (fiml_mlr$rejection_rate - .633), mlr_z))
+```
+
+## Data-generating-process checks
+
+The article used the Fleishman (1978) and Vale--Maurelli (1983) transformation
+as implemented in EQS 6.1, with skewness 2 and kurtosis 7 or 15. It did **not**
+include a normal population or a second nonnormal generator. The authors also
+identified dependence on the nonnormal generator as a limitation. The normal
+cell below is therefore a diagnostic control, not a published replication
+cell.
+
+```{r normal-control-table}
+knitr::kable(
+  normal_rows[, c("Route", "Usable", "Reject", "MC_SE", "Scale")],
+  digits = c(NA, 0, 1, 1, 3), row.names = FALSE,
+  col.names = c("Route", "Usable N", "Reject (%)", "MC SE (points)",
+                "Mean c"),
+  caption = "Normal-population diagnostic under the same N=200, MAR-L, many-pattern, 30%-missing design.")
+```
+
+Named MLR and the all-$H_1$ expected construction nearly coincide under
+normality (26.2% and 26.3%, respectively), as they should when the information
+identities become approximately valid. Their nonnominal rejection reflects the
+very difficult $p=21$, $d=186$, $N=200$ incomplete-data setting; it does not
+identify a VM branch. The source-form ML2S analogue remains appreciably better
+at 10.8%.
+
+### MCAR mechanism check
+
+To remove the thresholding and eligibility logic of MAR-L, the added MCAR cell
+retains Model 2, $N=200$, MP, 30% missingness, and $s2k7$. For each of the six
+missing-variable sets in Table 1, exactly 60 rows are sampled uniformly without
+reference to any data value. Figure 8 supplies only plotted values; its matched
+points are approximately 45% for direct FIML and 12% for TS, so they should be
+treated as graph-digitized targets rather than exact tabulated percentages.
+
+```{r mcar-control-table}
+knitr::kable(
+  mcar_rows[, c("Route", "Published", "Usable", "Reject", "MC_SE", "Scale")],
+  digits = c(NA, 0, 0, 1, 1, 3), row.names = FALSE,
+  col.names = c("Route", "Figure 8 (%)", "Usable N", "Reject (%)",
+                "MC SE (points)", "Mean c"),
+  caption = "Matched MCAR diagnostic; Figure 8 targets are approximate readings from the graph.")
+```
+
+The structured-$U$ expected direct-FIML construction gives 46.6%, closest to
+the approximately 45% point. All-$H_1$ expected gives 41.8%. The competing
+observed-residual, expected-sandwich construction that was near the MAR-L
+target gives only 28.4%, so MCAR sharply discriminates against it. The
+paper-literal route gives 33.5% among 947 usable tests, and named MLR gives
+71.3%; neither explains the graph. For ML2S, the source-form analogue with the
+$n-1$ numerator gives 15.2% versus approximately 12%, whereas magmaan's
+current default gives 43.3%.
+
+```{r mcar-text, results='asis'}
+cat(sprintf(
+  paste0(
+    "The simulation realizes an average of %.1f missingness patterns, ",
+    "compared with the article's reported average of about 50 for ",
+    "$N=200$, MP, and 30%% missingness. Its overall elementwise missing ",
+    "rate is %.4f, exactly the expected $(12/21)\\times0.30$. These checks ",
+    "substantially reduce the chance that the remaining result is an ",
+    "artifact of our missingness implementation.\n"),
+  mcar_mean_patterns, mcar_mean_missing))
+```
+
+The Fleishman moment equations themselves do have four real coefficient roots
+for each nonnormal target. The table distinguishes algebraic roots from distinct
+joint distributions and checks whether each branch can reproduce every target
+correlation while retaining a positive-definite latent-normal correlation
+matrix.
+
+```{r dgp-root-table}
+knitr::kable(
+  dgp_roots[, c("excess_kurtosis", "Selected", "Branch", "Monotonicity",
+                  "a", "b", "c", "d", "Solvable",
+                  "intermediate_min_eigenvalue")],
+  digits = c(0, NA, NA, NA, 6, 6, 6, 6, NA, 3), row.names = FALSE,
+  col.names = c("Kurtosis", "Chosen", "Joint-law branch", "Map",
+                "a", "b", "c", "d", "All correlations?",
+                "Latent min eigenvalue"),
+  caption = "All real Fleishman roots for skewness 2 and the two paper kurtoses.")
+```
+
+For kurtosis 7, the decreasing root in the selected branch is just the global
+latent reflection $T(-Z)$ and generates the same joint distribution. The only
+genuinely different, nonmonotone branch cannot reproduce all of Model 2's
+negative correlations. Thus root nonuniqueness cannot explain the critical
+63.3% discrepancy. For kurtosis 15, the alternative nonmonotone branch is
+feasible and should be treated as a separate generator-sensitivity condition
+if that cell is expanded, but it cannot explain the kurtosis-7 target.
+
+## Complete option enumeration
+
+These tables enumerate the full crossed grid, not merely the selected rows
+above. `Invalid` counts samples with a nonpositive scaling factor, for which the
+scaled chi-square is undefined. Rejection rates and mean scales use the
+remaining usable samples. `Gap` is the rejection rate minus the corresponding
+published rate, in percentage points.
+
+The column notation separates decisions that the earlier labels accidentally
+ran together:
+
+- **Point** is where a matrix is evaluated: $H_1$ is the unrestricted saturated
+  FIML estimate and $H_0$ is the fitted structured SEM. These labels do not
+  change the null hypothesis being tested; every row tests the same SEM.
+- **Type** applies to curvature matrices only: expected (E) means expected
+  Hessian and observed (O) means the sample Hessian. “Expected” does not mean
+  imputed or unobserved data. Under incomplete-data FIML, E and O need not agree
+  in a finite sample.
+- **B scores** is always an empirical score outer product, so it has an
+  evaluation point but no expected/observed choice.
+- **U: θ block** distinguishes the projected block $Delta^\top A\Delta$ from
+  the full observed structured-parameter Hessian
+  $H_{\theta\theta}^{O}(H_0)$, which additionally contains the second-derivative
+  terms of the moment map.
+
+### Direct FIML: all 48 choices
+
+Each row independently chooses the $A$ used to construct $U$, the inner
+$\theta$-curvature used inside $U$, the $A$ used as the sandwich bread, and the
+point used for the empirical score meat $B$. The six $U$ constructions are
+crossed with four sandwich breads and two score points.
+
+The **paper-literal row is indeed observed**, as expected: $U$ uses $A^O(H_0)$
+with inner block $\Delta^\top A\Delta$, while $\Omega$ uses $A^O(H_0)$ and
+$B(H_0)$. The expected rows are diagnostic alternatives, not alternative
+claims about the paper. They are retained because the paper-literal row misses
+the rejection fingerprint badly. The structured-$U$ expected route is the best
+six-cell MCAR match; all-$H_1$ expected is better in the exact MAR-L cell and
+is nearly tied when all seven targets are combined.
+
+```{r fiml-option-table}
+knitr::kable(
+  fiml_options[, c("Role", "U_A_point", "U_A_kind", "U_theta",
+                     "Omega_A_point", "Omega_A_kind", "Omega_B_point",
+                     "replications", "Invalid", "Reject", "Gap", "Scale")],
+  digits = c(NA, NA, NA, NA, NA, NA, NA, 0, 0, 1, 1, 3),
+  row.names = FALSE,
+  col.names = c("Role", "U: A point", "U: A type", "U: θ block",
+                "Ω: A point", "Ω: A type", "Ω: B scores", "Usable N",
+                "Invalid", "Reject (%)", "Gap (points)", "Mean c"),
+  caption = "All direct-FIML matrix choices, Model 2 moderate diagnostic cell.")
+```
+
+### Two-stage FIML: all 32 choices
+
+The same split notation makes the two-stage table parallel. The four
+incomplete-data Stage-1 breads and two score points are crossed with the four
+complete-data Stage-2 information matrices. The source-form analogue is $H_1$
+observed Stage-1 bread, $H_1$ score meat, and $H_0$ observed Stage-2
+information.
+
+```{r ml2s-option-table}
+knitr::kable(
+  ml2s_options[, c("Role", "Omega_A_point", "Omega_A_kind",
+                     "Omega_B_point", "U_H_point", "U_H_kind",
+                     "replications", "Invalid", "Reject_n_minus_1",
+                     "Gap_n_minus_1", "Reject_n", "Gap_n", "Scale")],
+  digits = c(NA, NA, NA, NA, NA, NA, 0, 0, 1, 1, 1, 1, 3),
+  row.names = FALSE,
+  col.names = c("Role", "Ω₁: A point", "Ω₁: A type", "Ω₁: B scores",
+                "U₂: H point", "U₂: H type", "Usable N", "Invalid",
+                "Reject, (n−1)F (%)", "Gap, (n−1)F",
+                "Reject, nF (%)", "Gap, nF", "Mean c"),
+  caption = "All two-stage matrix choices, Model 2 moderate diagnostic cell.")
+```
+
+## Matrix grid
+
+Let $\widehat\beta$ denote the unrestricted saturated FIML estimate of the
+means and covariances, let
+$\widehat\beta_0=\beta(\widehat\theta)$ denote the moments implied by the
+direct-FIML fit, and let
+$\widetilde\beta_0=\beta(\widetilde\theta)$ denote the moments implied by the
+second-stage fit. Write
+
+$
+A_\beta^{r,k}=-E_k\!\left[\frac{1}{n}
+  \frac{\partial^2\ell(\beta)}
+       {\partial\beta\partial\beta^\top}\right]_{\beta=\beta_r},
+\qquad
+B_\beta^r=\frac{1}{n}\sum_{i=1}^n
+  s_i(\beta_r)s_i(\beta_r)^\top ,
+$
+
+where $r\in\{H1,0\}$ selects saturated or structured moments and
+$k\in\{E,O\}$ selects expected or observed information. Following the
+paper's score-outer-product definition, $B$ is not sample-centered. The
+sandwich is
+
+$
+\Omega(A,B)=A^{-1}BA^{-1}.
+$
+
+For direct FIML, four residual matrices use the H1-form projection
+
+$
+U(A)=A-A\Delta(\Delta^\top A\Delta)^{-1}\Delta^\top A,
+\qquad
+\Delta=\frac{\partial\beta(\theta)}{\partial\theta^\top},
+$
+
+with
+$A\in\{A_\beta^{H1,E},A_\beta^{H1,O},
+A_\beta^{0,E},A_\beta^{0,O}\}$. Two further choices replace
+$\Delta^\top A\Delta$ by the full observed structured-parameter Hessian,
+using either structured or saturated observed outer information. Each of those
+six $U$ choices is crossed with four sandwich breads
+$A_\beta^{H1,E},A_\beta^{H1,O},A_\beta^{0,E},A_\beta^{0,O}$ and two meats
+$B_\beta^{H1},B_\beta^0$, giving $6\times4\times2=48$ tests. A literal
+reading of Savalei and Falk's Equations (5)–(6) selects
+
+$
+U(A_\beta^{0,O}),\qquad
+\Omega=\Omega(A_\beta^{0,O},B_\beta^0).
+$
+
+For two-stage FIML, the Stage-1 asymptotic covariance is independently crossed
+over the same four incomplete-data breads and two meat points,
+
+$
+\Omega_1=\Omega(A_\beta^{r,k},B_\beta^m),
+\qquad r,m\in\{H1,0\},\quad k\in\{E,O\}.
+$
+
+The second-stage residual matrix uses complete-data saturated-moment
+information $H$, evaluated at either $\widehat\beta$ or
+$\widetilde\beta_0$, with expected or observed curvature:
+
+$
+U(H)=H-H\widetilde\Delta
+ (\widetilde\Delta^\top H\widetilde\Delta)^{-1}
+ \widetilde\Delta^\top H.
+$
+
+This gives $4\times2\times4=32$ tests. Equation (2), Equation (4), and
+SE=EXACT select saturated observed Stage-1 bread, saturated meat, and structured
+observed $H$. Magmaan's current ML2S instead uses the same Stage-1 sandwich
+with saturated expected $H$. Every row finally uses
+
+$
+c=\frac{\operatorname{tr}(U\Omega)}{d},
+\qquad T_{\mathrm{scaled}}=\frac{T}{c},
+\qquad d=186.
+$
+
+For direct FIML, $T$ is the raw saturated-versus-structured likelihood ratio
+$T_{ML}$. For two-stage FIML the report records both $T=nF_{ML}$, magmaan's
+generic convention, and $T=(n-1)F_{ML}$, the explicit Savalei--Falk
+two-stage convention. Fingerprint comparisons use the latter.
+
+The six direct-FIML residual choices follow the Equation-37 taxonomy in
+Savalei and Rosseel (2022); the historical selections follow Savalei and Falk
+(2014), especially Equations (2), (4)–(6), and Appendix B.

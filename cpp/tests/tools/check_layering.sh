@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Dependency-layering checker. The repo is a layered DAG; leaves are sinks.
-# Leaves: each papers/<name>/, each experiments/<NN>-*/, benchmarks/, cpp/tests/.
+# Leaves: each papers/<name>/, each experiments/<category>/<NN>-*/, benchmarks/, cpp/tests/.
 # A leaf consumes only lower tiers (core = cpp/include/ cpp/src/ r-package/, plus the
 # shared experiments/_support and build artifacts) and never references a
 # sibling leaf. Core never references any leaf. Retired experiments live frozen
@@ -47,7 +47,7 @@ DENY_RE="$(deny_list | grep -vix magmaan | sort -u | paste -sd'|' -)"
 # Tokens that denote a leaf reference. Path forms catch source()/file.path()/
 # #include/sys.source; the quoted-"papers" form catches indirection like
 # repo_path("papers", ...); the pkg:: form catches paper namespaces.
-TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/[A-Za-z0-9._-]+|[\"'](papers|private)[\"']|benchmarks/|cpp/tests/|(${DENY_RE}):::?"
+TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/(showcases|replications|research|engineering)/[A-Za-z0-9._-]+|experiments/[A-Za-z0-9._-]+|[\"'](papers|private)[\"']|benchmarks/|cpp/tests/|(${DENY_RE}):::?"
 
 # --- classify a file into a zone (sets Z and SELF) ----------------------------
 classify_zone() {
@@ -57,6 +57,8 @@ classify_zone() {
     justfile|cpp/CMakeLists.txt|cpp/cmake/*)     Z=ORCH ;;
     experiments/_support/*)              Z=SUPPORT ;;
     experiments/_archive/*)              Z=EXP; SELF="experiments/_archive" ;;
+    experiments/showcases/*|experiments/replications/*|experiments/research/*|experiments/engineering/*)
+      Z=EXP; SELF="$(printf '%s' "$1" | cut -d/ -f1-3)" ;;
     experiments/*) Z=EXP;   SELF="experiments/$(printf '%s' "$1" | cut -d/ -f2)" ;;
     papers/_archive/*)                  Z=ARCHIVE ;;
     papers/*)      Z=PAPER; SELF="papers/$(printf '%s' "$1" | cut -d/ -f2)" ;;

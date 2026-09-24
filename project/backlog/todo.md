@@ -5,7 +5,9 @@ maintainer material under `project/`, R build tools alongside the package, and
 external source collections under `external/`. **Deferred:** regenerate the
 paper corpus from its sources, validate derived cases and exports in its own
 repository, then refresh magmaan fixture snapshots and run parity checks.
-The reorganization deliberately preserves existing fixture contents.
+The reorganization deliberately preserves existing fixture contents. Experiment
+classification and category-folder moves are complete; deeper cleanup and
+further archive decisions remain deferred (see `experiments/README.md`).
 
 Remaining-work backlog. Current state, architecture, and contracts live in
 [project/architecture/roadmap.md](../architecture/roadmap.md); this file only tracks
@@ -819,7 +821,7 @@ when they next change.
   R consumer. The runner is `cpp/tests/checks/psd_ml_corpus/`; the decision record
   is `psd_ml_corpus_audit.tex`.
   The De Jonckere--Rosseel / Ernst small-\(N\) benchmark now supplies the
-  convergence stress evidence (`experiments/74-psd-ml-small-n-convergence/`):
+  convergence stress evidence (`experiments/research/74-psd-ml-small-n-convergence/`):
   at \(N=10\), direct PSD-ML audit-converged in 96.8% of 1,000 replications
   versus 54.1% for ordinary L-BFGS NTML. The same-SLSQP comparison still
   strongly favors PSD-ML, ruling out a backend-only explanation. Do not
@@ -873,7 +875,7 @@ when they next change.
      exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
      telemetry are secondary follow-ups.
   4. **Completed 2026-07-30.** Experiment 75
-     (`experiments/75-psd-ml-basin-audit/`) implements the self-contained
+     (`experiments/engineering/75-psd-ml-basin-audit/`) implements the self-contained
      multistart audit on the \(N=10,20,50\) stress cells. The pilot screened
      1,000 datasets per cell and replayed the prespecified 100-dataset random
      core plus default failures and extreme estimates with at most 13 starts.
@@ -890,7 +892,7 @@ when they next change.
      proof that the best attained member is global. Small-\(N\) convergence
      reports must therefore separate return/KKT success from basin hit.
   5. **Completed 2026-07-31.** Experiment 76
-     (`experiments/76-psd-ml-repair-risk/`) supplies a four-case repair-anatomy
+     (`experiments/research/76-psd-ml-repair-risk/`) supplies a four-case repair-anatomy
      panel and a controlled primitive-boundary risk path without extending to
      another estimator. Its 4,000-dataset pilot keeps the observed covariance
      safely PD while varying the smallest latent-covariance eigenvalue over
@@ -1094,7 +1096,7 @@ when they next change.
   fit until an explicit boundary-aware policy is available.
 
 - **L — execute the broader covariance-honest point-estimation stress track.**
-  The independent `experiments/78-psd-estimator-stress/` leaf now owns the
+  The independent `experiments/engineering/78-psd-estimator-stress/` leaf now owns the
   common structural geometries, paired ordinary/PSD fits, selective restart
   logic, and result schema. Its first two-replication smoke completed 128 fit
   attempts across eight registered families: all 125 returned fits matched an
@@ -1679,7 +1681,7 @@ when they next change.
   different choices in estimating the bread, the meat and the saturated-H1
   reference, and magmaan's defaults line up with neither lavaan variant
   consistently. Two-factor CFA, `N = 500`, 10% MCAR
-  (`experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R --with-fiml`):
+  (`experiments/research/81-score-vs-lrt/diagnose_trace_sb_nested.R --with-fiml`):
   `fmg_tests(tests = "sb_ml")` sits 1.5e-04 from lavaan's `yuan.bentler.mplus`
   (the `estimator = "MLR"` test) but 9.2e-02 from `yuan.bentler` at `p = 20`,
   and 5.6e-03 from *both* at `p = 10`. So it is not simply "magmaan targets the
@@ -2106,7 +2108,7 @@ Remaining work, tiered:
   `case_rerun()` / `modification_indices_lrt()`. (`robust_nested_lrt()` takes
   two fits and never refits.)
 - **Done 2026-09-23.** Deterministic sanity experiment
-  (`experiments/87-sphere-chart-sanity`):
+  (`experiments/engineering/87-sphere-chart-sanity`):
   - **Recovery.** 37 models / 68 fits across ML, ULS, GLS, WLS, FIML and
     PSD-ML reproduce the ordinary fit, including SEs, robust SEs, the
     standardized solution, fit measures, MIs and `:=`. Both routes are equally
@@ -2288,7 +2290,7 @@ Remaining work, tiered:
       - for PSD, whether a face-aware start is feasible (a research
         question).
 - **Done 2026-09-23 — experiment 88, small version**
-  (`experiments/88-sphere-local-convergence`, about 70 s).
+  (`experiments/engineering/88-sphere-local-convergence`, about 70 s).
   - **Setup.** ML and PSD-ML; the Ernst, weak-marker and high-R² populations;
     N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
     marker and std.lv.
@@ -2668,7 +2670,7 @@ Remaining work, tiered:
     `magmaan_core$data_mixed_ordinal_stats_hybrid_fiml_from_raw/_from_df`,
     with observed-pairwise companions and `robust_mixed_ordinal_ij`. Gated by
     C++ MCAR smoke tests and an R smoke. MCAR/MAR efficiency validated
-    2026-06-23 by `experiments/37-mixed-fiml-pairwise-efficiency`: the hybrid
+    2026-06-23 by `experiments/research/37-mixed-fiml-pairwise-efficiency`: the hybrid
     leaves the ordinal block bit-for-bit identical, modestly reduces continuous
     sampling variance under MCAR (grows with the missing rate), and removes the
     pairwise continuous-moment bias under MAR (worst continuous-parameter |bias|
@@ -2991,7 +2993,7 @@ Remaining work, tiered:
       `fiml_test.cpp` gates raw/precomputed parity for single-model RMSEA and
       nested LRT.
     - **Done 2026-06-22 (finite-sample calibration experiment).**
-      `experiments/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
+      `experiments/research/36-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
       On the exact C4 binary pseudo-null it shows the standard fixed-weight
       DWLS nested test (Satorra-2000) is anti-conservative under fixed
       misspecification of the larger model — rising to 10.5% rejection at a
@@ -3214,7 +3216,7 @@ oracle from `cpp/tests/tools/regen_robust_score.R`, and the advisory
   normal-theory / WLS explicit) and taking `bread`/`moments`/`cov` plus the raw
   fitting data for the empirical meat. The `bread/moments/cov` -> `InferenceSpec`
   parsers moved to the shared `r-package/src/internal.hpp`. Concrete consumer:
-  `experiments/22-robust-score-modification-indices` (ordinal DWLS + continuous
+  `experiments/engineering/22-robust-score-modification-indices` (ordinal DWLS + continuous
   GLS misspecification demo, with the exact `c -> 1` reductions as correctness
   gates). Still open / only-when-needed: a C++ `api::frontier` entry point taking
   `api::Fit` for the LS tiers (the api `Fit`'s `EstimatorSpec.weight` is empty for
@@ -3589,7 +3591,7 @@ continuous-whitening entry above.
   scaling applied in R (the `sb_from_moments` helper copied across experiments
   07/15/16/19). It is exact, not an approximation: on complete-data continuous
   ML it reproduces `fmg_tests(tests = "sb_ml")` to 7e-16..1e-14
-  (`experiments/81-score-vs-lrt/diagnose_trace_sb_nested.R`), because the
+  (`experiments/research/81-score-vs-lrt/diagnose_trace_sb_nested.R`), because the
   reduced `M = BᵀΓ̂B` is exactly `df × df` so `Σλ = tr(M) = tr(UΓ̂)`.
   The problem is purely discoverability. Today the only pointer is a three-line
   comment in `r-package/R/zzz_core.R:266-268` referring to "the Maydeu
@@ -3618,7 +3620,7 @@ continuous-whitening entry above.
   `magmaan_fit`, and post-fit wrapper surface is otherwise sufficient for the
   next R exploration pass.
 - **S/M, experiment-motivated.** Decide whether the Deng-Chan reliability-
-  difference test (`experiments/20-deng-chan-2017-alpha-omega`) earns a home in
+  difference test (`experiments/research/20-deng-chan-2017-alpha-omega`) earns a home in
   core. The experiment already runs against the current surface (ML fits plus
   `infer_gamma_nt`/`infer_empirical_gamma`; Cronbach's alpha falls out as the
   omega of a ULS tau-equivalent fit) and diagnoses a genuine non-regularity:
@@ -3632,7 +3634,7 @@ continuous-whitening entry above.
   alpha, Guttman's lambda6, and Spearman-Guttman covariance omega with
   delta-method SEs, plus the exploratory R primitive
   `magmaan_core$measures_reliability_cov` and
-  `experiments/41-reliability-lambda6`. The non-regular joint
+  `experiments/research/41-reliability-lambda6`. The non-regular joint
   `omega - alpha` test and Imhof calibration remain unpromoted. Not required.
   Prior-art oracle for the Spearman-Guttman covariance omega is Hancock & An
   (2020) (closed-form single-factor omega; see
@@ -3684,7 +3686,7 @@ continuous-whitening entry above.
   statistic for the documented `(n_g−1)/n_g` LS-weight gap), and
   configural→thresholds recorded as a df=0 χ²-equivalence because lavaan cannot
   form a positive-df `lavTestLRT` there. The explicit Mplus-style delta scalar
-  probe in `experiments/33-mplus-demo-wlsmv-difftest` also now passes: with
+  probe in `experiments/research/33-mplus-demo-wlsmv-difftest` also now passes: with
   overlap pairwise Gamma, magmaan's scaled-shifted restriction-map statistic is
   22.365850 on 22 df (p = 0.438242), matching Mplus Demo DIFFTEST 22.366000 on
   22 df (p = 0.438200). The remaining paper work is its own item below.
@@ -3791,7 +3793,7 @@ continuous-whitening entry above.
   `lr_test_satorra2000/2001_fiml_from_data` take an optional `sm_precomputed` and
   `infer_fiml_lr_test_satorra2000` reuses a fit's `$stage1`, and
   `fit_ml2s(stage1=)` skips the rung-independent Stage-1 EM; this is what
-  `experiments/25-fiml-invariance-fmg-power` uses to build one saturated EM per
+  `experiments/research/25-fiml-invariance-fmg-power` uses to build one saturated EM per
   masked dataset and thread it through both estimators, all four ladder rungs,
   every FMG battery, and every nested test (kills the ~72s-at-p=30 FIML-nested
   rebuild and the 4x ML2S Stage-1 redundancy; bit-identical, verified). Deferred
@@ -4072,9 +4074,9 @@ work lives in [`speculative.md`](speculative.md). Open work:
   and `benchmarks/inference_reuse.R` (mean-of-15 over `proc.time()`/`system.time()`,
   whose ~0.5 ms quantisation is a quarter of the ~2 ms workloads they time),
   `benchmarks/r/bench_mi_lrt.R` (3 reps, no warmup), `benchmarks/r/run_benchmark.R`
-  (`bench::mark`, whole-fit only), `experiments/05-lavaan-speed-bench`,
-  `experiments/73-psd-ml-timing` (the best of the R set: batch calibration plus
-  `--repeats/--warmups`), `experiments/28-ordinal-stage2-pairwise`, and
+  (`bench::mark`, whole-fit only), `experiments/showcases/05-lavaan-speed-bench`,
+  `experiments/engineering/73-psd-ml-timing` (the best of the R set: batch calibration plus
+  `--repeats/--warmups`), `experiments/research/28-ordinal-stage2-pairwise`, and
   `private/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (outside this repository; the
   best overall: `Sys.time()`, arm rotation, artifact hashing). Convert the C++
   benches to include `timing/timing.hpp` first — that is mechanical. The R
@@ -4099,7 +4101,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (`estimate::fiml::saturated_em_moments` / `estimate_saturated_em_moments`) and
   Stage 2 (`estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`)
   have landed and feed the MSE comparator in
-  `experiments/08-pairwise-gls-efficiency/`. The packaged ML2S path has also
+  `experiments/research/08-pairwise-gls-efficiency/`. The packaged ML2S path has also
   landed: `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` run Stage-2 ML on
   the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
   scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The C++ post-fit
@@ -4119,7 +4121,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   (normal-theory ACOV) scaling, which collapses under non-normality; the base
   matches both. `trace(UGamma) = E[T]` (normal-data ncp ~ 0) is an independent
   first-principles check. Calibration study + lavaan parity oracle:
-  `experiments/24-fiml-twostage-fmg-chisq`; unit gate:
+  `experiments/research/24-fiml-twostage-fmg-chisq`; unit gate:
   `two_stage_em_ml_inference` self-consistency in `cpp/tests/unit/fiml_test.cpp` and
   the `ml2s_*` rows of `cpp/tests/golden/fiml_golden_test.cpp`.
   - **Done 2026-06-28 — lavaan-like H1 edge behavior.** The saturated H1 EM now
@@ -4150,7 +4152,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
     derivative, residual-projector, trace, scale, statistic, and df before any
     Monte Carlo comparison. Add explicitly named paper-era post-fit routes only
     after those same-data gates pass, preserving current MLR, FIML FMG, and ML2S
-    semantics. `experiments/79-savalei-falk-2014-test-map` records the source map,
+    semantics. `experiments/replications/79-savalei-falk-2014-test-map` records the source map,
     deterministic routing witness, and staged replication plan. Experiment 80
     now supplies the exhaustive diagnostic surface: 48 direct-FIML and 32 ML2S
     matrix-estimation combinations are evaluated on identical generated
@@ -4172,7 +4174,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   remaining pairwise μ ACOV and pairwise Browne-unbiased items live in
   [`speculative.md`](speculative.md).
 - **M.** Extend the near-singular ML continuation experiment
-  (`experiments/04-near-singular-ml-continuation`) beyond the first
+  (`experiments/engineering/04-near-singular-ml-continuation`) beyond the first
   diagonal-ridge path: the first target/profile grid compares diagonal,
   scaled-identity, and raw-identity targets over several fixed lambda sequences;
   remaining work is direct ML vs ULS/GLS-start ladders and explicit
@@ -4502,7 +4504,7 @@ findings and next steps stay in `speculative.md`; nothing here is scheduled core
 work until a concrete downstream consumer appears.
 
 - **funLR — Functional profile-LR CI** (small-sample reliability CIs, JASA-target;
-  `experiments/45-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
+  `experiments/research/45-profile-lr-reliability-ci`). Generic-`g` profile-LR (test-inversion)
   engine validated vs `semlbci`; coverage + Bartlett characterized (omega near-nominal,
   bifactor maximal reliability `rho*` collapses to 0.61 @ N=50). **Key finding:** the
   small-sample factor must be a stable model-level **constant** — an analytic Lawley
@@ -4529,7 +4531,7 @@ work until a concrete downstream consumer appears.
   `noniterative_cfa_tests` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`) and the shared
   `guttman_cfa_asymptotics.tex`).
-  **Validated** by `experiments/52-noniterative-cfa-tests` (SE coverage + GOF /
+  **Validated** by `experiments/research/52-noniterative-cfa-tests` (SE coverage + GOF /
   difference-test Type-I / power vs magmaan ML across normal / independent-
   component / ordinal-as-continuous generators, Dhaene-Rosseel 2024 style): the
   headline is that the empirical Gamma is calibrated everywhere while the
@@ -4559,7 +4561,7 @@ work until a concrete downstream consumer appears.
   returning `h2`, `diag(H)`, and the filled `H`. `extended_triad_ls` is the
   identity-weighted extended anchor-triad rule: one anchor stays in the target
   indicator's block, while the other may be cross-block.
-  `experiments/55-guttman-communality-estimators` now benchmarks the package
+  `experiments/research/55-guttman-communality-estimators` now benchmarks the package
   implementation directly. The promoted point-estimator lane landed as
   `guttman_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
@@ -4575,7 +4577,7 @@ work until a concrete downstream consumer appears.
   production default and is bit-for-bit behavior preserving; clamp derivatives
   are included in analytic SEs, and R fits record tuning values and per-block
   activation counts. Run and interpret
-  `experiments/60-guttman-admissibility-clamp` before changing the production
+  `experiments/engineering/60-guttman-admissibility-clamp` before changing the production
   default or choosing `(margin, beta0, rate)`. Making the configural and
   restricted Raw-path improper-split guards consistent remains a separate,
   announced behavior change.
@@ -4773,7 +4775,7 @@ work until a concrete downstream consumer appears.
   constrained,scalar}_impl`;
   note `constrained_noniterative_cfa` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`); validated by
-  `experiments/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
+  `experiments/research/54-noniterative-invariance` (metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
   `experiments/_archive/56-noniterative-constraint-charts` adds the marker-chart sanity
@@ -4931,7 +4933,7 @@ work until a concrete downstream consumer appears.
 - **S. Test whether per-chart start values explain the std_lv optimizer-work
   advantage beyond chart geometry.** Findings and framework in
   [project/design/parameterization-geometry.md](../design/parameterization-geometry.md);
-  measured by `experiments/82-latent-metric-geometry`, which supersedes
+  measured by `experiments/research/82-latent-metric-geometry`, which supersedes
   `experiments/_archive/02-latent-metric-identification`.
 
   exp 82's cost arm has `std_lv` at roughly a third of `marker`'s `f_evals`, and
@@ -4973,7 +4975,7 @@ work until a concrete downstream consumer appears.
     (weak loadings, tiny ψ, n≈50) is the cheap way to put both results on one grid.
 - **S. exp 58 has an unexploited `equal`/`unequal` indicator-scale slice.** The
   `standardized` composite in the Guttman/omega recipe is pinned as a fixed
-  setting in `experiments/58-guttman-rmse-coverage/results/paper-full`, with no
+  setting in `experiments/research/58-guttman-rmse-coverage/results/paper-full`, with no
   composite-vs-composite arm anywhere at evidence-grade reps (exp 55 map probe is
   `reps=8`, exp 59 is `reps=5`), and `Remark 2` of `guttman-inference.tex` concedes
   the choice is a declaration. The `scale` factor already in the 2592-row grid is

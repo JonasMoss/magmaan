@@ -31,6 +31,12 @@ kind, lifecycle, and the one-line question. Adding an experiment means adding a
 row. This collection-level index is the one allowed exception to the "no README"
 rule below, which still holds for individual `NN-` folders.
 
+Store experiments under the matching purpose folder: `showcases/`,
+`replications/` (including reference studies), `research/`, or `engineering/`.
+`_archive/` holds retired studies and `_support/` remains the shared harness.
+The numbered experiment is the dependency leaf, not its category directory;
+two studies in the same category may not reference each other.
+
 Group the index by primary purpose: **showcase**, **replication/reference study**,
 **research**, or **engineering check**. This is navigation metadata, independent
 of lifecycle and of the existing kind tags. A published design can support either
@@ -48,8 +54,8 @@ Also retain these two axes in the index:
 
 Archive an experiment only when it is an engineering `probe` whose answer is now
 baked into the core library and that nobody will rerun. Durable replications and
-reusable benchmarks stay flat (tagged `complete`) even when finished, and anything
-the active backlog still points at as pending evidence stays flat. Archived
+reusable benchmarks stay in their purpose category (tagged `complete`) even when finished, and anything
+the active backlog still points at as pending evidence stays in its purpose category. Archived
 experiments move to `experiments/_archive/NN-slug/` and keep their number; numbers
 are permanent IDs, so never renumber and always take the next free number even when
 earlier ones are archived. When archiving, repoint the report's Reproduce commands
@@ -62,7 +68,7 @@ Use the next numeric prefix and a short kebab-case slug (literature replications
 
 ```text
 experiments/
-  NN-topic-slug/
+  <category>/NN-topic-slug/
     report.qmd
     run_experiment.R
     .gitignore
