@@ -203,7 +203,15 @@ semantics · **XL** statistical design/research track before implementation.
   retry during integration, without claiming a validated adaptive policy.
   Earlier structural PSD cost findings were different. Ordinary and
   lifted-PSD scaling remain distinct methods.
-  Remaining immediate jobs: expose an opt-in interior diagnostic in core,
+  **Done 2026-09-24:** the opt-in interior diagnostic is in core,
+  `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy()`,
+  ported from the prototype and the covariance paper's bridge. On 86 Ernst
+  fits (ordinary and PSD, N = 20 to 200) it matches the bridge's status in
+  every case and its distance to 1.3e-8 relative. `tests/unit/
+  newton_accuracy_test.cpp` covers the quadratic identities, an exact
+  solution, perturbations with and without equalities, a boundary block and
+  nonlinear constraints (unsupported). Multi-group fits are computed but not
+  yet tested. Remaining immediate job:
   complete effective-control/stopping-reason reporting now that explicit
   NLopt step/tolg/vector-storage controls are available. Preserve terminal
   candidates independently of raw status.

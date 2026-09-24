@@ -104,6 +104,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/psd_ml_corpus_test.cpp
   unit/multiinfo_penalty_test.cpp
   unit/gauge_test.cpp
+  unit/newton_accuracy_test.cpp
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp

@@ -58,6 +58,14 @@ and constraint tolerance 1e-8. Generic controls and explicit unscaled policies
 remain available. Search scaling is reported and terminal diagnostics are
 recomputed in original coordinates. This does not deploy the Newton accuracy
 verdict or add a PSD recovery policy; see the optimizer-controls reference.
+The Newton accuracy check is available as an opt-in post-fit diagnostic,
+`estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`:
+d = sqrt(G' I^-1 G) from the total score and observed information after
+linear-equality reduction, with the accepted budget d <= .01, equilibrated
+condition <= 1e12 and relative solve residual <= 1e-10. It reports whether
+every Psi and Theta block is positive definite, since at a PSD-boundary
+solution the cone stationarity audit applies instead. It is not part of the
+fit verdict.
 
 ### Admissible covariance-model contract
 

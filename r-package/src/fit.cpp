@@ -23,6 +23,7 @@
 #include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -7007,6 +7008,32 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
   auto r = magmaan::inference::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
+}
+
+// frontier_newton_accuracy_impl() — opt-in local accuracy diagnostic for a
+// complete-data ML fit (estimate::frontier::newton_accuracy_ml). Never errors
+// on numerical failure: the status field says why no distance is available.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::estimate::frontier::NewtonAccuracyOptions opts;
+  opts.budget = budget;
+  const auto a = magmaan::estimate::frontier::newton_accuracy_ml(
+      ctx.pt, ctx.rep, ctx.samp, est, opts);
+  auto num = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
+  return Rcpp::List::create(
+      Rcpp::_["status"] = std::string(magmaan::estimate::frontier::to_string(a.status)),
+      Rcpp::_["distance"] = num(a.distance),
+      Rcpp::_["passed"] = a.passed,
+      Rcpp::_["budget"] = a.budget,
+      Rcpp::_["covariance_interior"] = a.covariance_interior,
+      Rcpp::_["predicted_gain"] = num(a.predicted_gain),
+      Rcpp::_["max_step"] = num(a.max_step),
+      Rcpp::_["condition"] = num(a.condition),
+      Rcpp::_["solve_residual"] = num(a.solve_residual),
+      Rcpp::_["n_reduced"] = a.n_reduced);
 }
 
 // infer_information_cross_products() — mirrors information_cross_products(...).
