@@ -2273,6 +2273,40 @@ Remaining work, tiered:
       from the same data.
   - **Cost.** Estimate from a `--smoke` timing trial before choosing reps,
     with Modal or Saga if the grid needs it.
+- **Idea (author, 2026-09-24): name the cause of a failed fit.** Within the
+  closedness theorem's scope (simple structure, free latent covariance, S
+  positive definite) the PSD sphere fit always has a minimum to find. A fit
+  that fails in the user's identification can then be explained rather than
+  retried. Compare the ordinary fit with the sphere fits:
+  - **Sphere fits, marker fit fails.** The marker's loading is about zero at
+    the optimum. Choose another marker, or the item barely measures the
+    factor.
+  - **Sphere fits, std.lv fit fails in a regression.** The endogenous
+    factor's disturbance variance is about zero. The factor is perfectly
+    predicted, so the two factors are not distinct (discriminant validity).
+  - **PSD fit on a singular face.** An exact Heywood case. Name the zero
+    variance, or the factor correlation at ±1.
+  - **Sphere ML fails, sphere PSD fits.** No unconstrained estimate exists.
+    The likelihood keeps improving toward an improper solution.
+  - **Sphere PSD fails.** Outside the theorem (structural cases such as the
+    mediation chain), or a genuine optimizer failure.
+  - **Evidence (experiment 88).** Refitting in the other ordinary
+    identification is not a complete remedy. In 26 of 2400 PSD draws (weak
+    marker and high R²) neither the ordinary marker nor the ordinary std.lv
+    fit succeeds, while the sphere does.
+  - **Caveat.** At small N a near-zero marker loading is often sampling
+    noise: the Ernst marker's true loading is 1. The message is "these data
+    cannot set the scale through that item", not "wrong item".
+  - **v1, M (after D1).** Report the cause on failed or flagged fits. The
+    `magmaan_user_chart_singular` condition already names the unit that left
+    the identification. Add the cause and the parameter at the boundary.
+    Decide whether this lives in `fit$gauge` or a separate diagnostic call.
+  - **Paper.** A selling point for the sphere paper: a fit that explains its
+    own failures. Check prior art before claiming novelty. "Try std.lv or
+    another marker" is common advice, the reference-indicator literature
+    concerns invariance testing, and empirical underidentification
+    (Rindskopf 1984) covers the weak-marker case. It is not known to be
+    systematized as a diagnostic.
 - **Literature scope.** PSD LS/FIML siblings, ML2S, multi-information penalty,
   two-level slots, higher-order loadings when the lower-order factor is itself
   a unit, units spanning several latents tied within a group (longitudinal
