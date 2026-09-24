@@ -907,10 +907,12 @@ when they next change.
      - Warm-restart probe (2026-09-24, covariance paper
        `work/probes/stall_restart_probe.R`): first fit with 50,000
        evaluations, then up to five SLSQP restarts from the returned point.
-       18 of the 28 pass the certificate, nearly all at an unchanged
-       objective, so the restart only closes the tolerance. The other 10
-       do not pass, and one restart moved to a worse KKT point (0.657 to
-       1.109). Not a principled fix, and no default changed.
+       16 of the 28 pass the certificate. 13 of them keep an unchanged
+       objective, so the restart only closes the tolerance. The other 3
+       pass at clearly worse KKT points (for example 0.174 to 0.467),
+       because the restart re-projects the start and SLSQP lands
+       elsewhere. 12 never pass. Not a principled fix, and no default
+       changed.
      - Next: characterize the stalled lift points (which L diagonals are
        near zero, and their multipliers). Decide whether a stall should
        trigger a refit in another identification or in the sphere.
