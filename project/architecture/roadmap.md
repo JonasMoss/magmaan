@@ -338,6 +338,26 @@ chi-square and Wald calibration at `N = 50`, and that the originally proposed
 `lambda = 1` over-shrinks high-R2 equations and correlations near one. SNLLS,
 LS/ordinal paths, and two-level models are out of scope.
 
+The same machinery carries a second target, `PenaltyTarget::Determinacy` (R
+`target = "determinacy"`): the latent-determinacy barrier `lambda * log det Q`,
+with `Q = Var(eta_L | y)` standardized by `Var(eta_L)` over the genuine latents
+`L`. Phantom ov.y / ov.x slots and zero-error single-indicator latents count as
+observed; an error-free indicator of several latents is rejected at layout
+time. It is the joint barrier with the observed margin conditioned out,
+`log det Corr(eta_L, y) = log det Q + log det Corr(Sigma)`, and equals
+`-2 [TC(eta_L) + I(eta_L; y)]`. It is exactly zero on models without genuine
+latents, which cannot be improper where `Sigma` is positive definite. The
+Cholesky factorization of `C_JJ` (`J` = observed plus `L`) is the domain check:
+with `Sigma` positive definite it succeeds exactly when every residual
+covariance block is positive definite (inertia identity
+`n_-(Var(eta | y)) = n_-(Psi)`). The report gives per-latent
+`log(1 - rho_j^2)` (factor-score determinacy), `log det Corr(V)`, `TC`, and
+`I`, and the decomposition is exact for nonrecursive `B`. Vanishing latents are
+not faces of this barrier, so in charts that represent negative latent
+variances (marker, sphere) the domain check, not the barrier value, keeps
+estimates proper. The default target stays `joint` until the paper experiments
+(`papers/sem-barrier`) settle it.
+
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
 chart the optimizer walks in, not the estimator. `analyze_gauge` reads the

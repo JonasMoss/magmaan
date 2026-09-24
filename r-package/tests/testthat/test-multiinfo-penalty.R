@@ -88,3 +88,66 @@ test_that("nonrecursive models warn but fit", {
   expect_false(fit$penalty$recursive)
   expect_lte(fit$penalty$value, 0)
 })
+
+test_that("determinacy penalty pulls a Heywood case inside and reports its parts", {
+  model <- model_spec("f =~ x1 + x2 + x3")
+  fit <- frontier_fit_ml_multiinfo(model, heywood_stats(), target = "determinacy")
+  expect_true(fit$converged)
+  expect_true(fit$diagnostics$admissibility$admissible)
+  expect_gt(row_est(fit, "x1", "~~", "x1"), 0)
+  expect_equal(fit$penalty$type, "determinacy")
+  expect_lte(fit$penalty$value, 0)
+  terms <- fit$penalty$terms
+  expect_equal(terms$variable, "f")
+  expect_equal(sum(terms$log_one_minus_rho2) + fit$penalty$residual_log_det_corr,
+               fit$penalty$value, tolerance = 1e-10)
+  expect_equal(-2 * (fit$penalty$total_correlation + fit$penalty$mutual_information),
+               fit$penalty$block_value, tolerance = 1e-10)
+  # One factor: log det Q = log(1 - rho^2) = -log(1 + sum lambda^2 phi / theta).
+  pt <- fit$partable
+  lam <- pt$est[pt$op == "=~"]
+  th <- sapply(c("x1", "x2", "x3"), function(v) row_est(fit, v, "~~", v))
+  phi <- row_est(fit, "f", "~~", "f")
+  expect_equal(fit$penalty$value, -log1p(phi * sum(lam^2 / th)), tolerance = 1e-8)
+})
+
+test_that("determinacy penalty leaves manifest models at ordinary ML", {
+  set.seed(11)
+  n <- 120
+  x1 <- rnorm(n)
+  x2 <- rnorm(n)
+  dat <- data.frame(y = 0.6 * x1 + 0.3 * x2 + rnorm(n, sd = 0.5), x1, x2)
+  fit <- frontier_fit_ml_multiinfo("y ~ x1 + x2", dat, target = "determinacy")
+  ml <- magmaan_core$fit_ml(model_spec("y ~ x1 + x2"), df_to_data(dat, model_spec("y ~ x1 + x2")))
+  expect_true(fit$converged)
+  expect_equal(fit$penalty$value, 0)
+  expect_equal(nrow(fit$penalty$terms), 0L)
+  expect_equal(fit$theta, ml$theta, tolerance = 1e-6)
+})
+
+test_that("determinacy penalty: marker and std.lv agree, FIML equals ML", {
+  set.seed(12)
+  n <- 150
+  f <- rnorm(n)
+  g <- 0.5 * f + rnorm(n, sd = 0.8)
+  dat <- data.frame(x1 = 0.8 * f + rnorm(n, sd = 0.6),
+                    x2 = 0.7 * f + rnorm(n, sd = 0.7),
+                    x3 = 0.6 * f + rnorm(n, sd = 0.8),
+                    x4 = 0.8 * g + rnorm(n, sd = 0.6),
+                    x5 = 0.7 * g + rnorm(n, sd = 0.7),
+                    x6 = 0.6 * g + rnorm(n, sd = 0.8))
+  syntax <- "f =~ x1 + x2 + x3\ng =~ x4 + x5 + x6"
+  marker <- frontier_fit_ml_multiinfo(syntax, dat, target = "determinacy")
+  stdlv <- frontier_fit_ml_multiinfo(model_spec(syntax, std_lv = TRUE), dat,
+                                     target = "determinacy")
+  expect_equal(marker$penalty$value, stdlv$penalty$value, tolerance = 1e-6)
+  expect_equal(marker$fmin, stdlv$fmin, tolerance = 1e-8)
+  model <- model_spec(syntax, meanstructure = TRUE)
+  ml <- frontier_fit_ml_multiinfo(model, dat, target = "determinacy")
+  fiml <- frontier_fit_fiml_multiinfo(model, dat, target = "determinacy")
+  expect_true(fiml$converged)
+  expect_equal(fiml$penalty$value, ml$penalty$value, tolerance = 1e-5)
+  expect_equal(fiml$theta, ml$theta, tolerance = 1e-4)
+  joint <- frontier_fit_ml_multiinfo(syntax, dat)
+  expect_equal(joint$penalty$type, "multiinfo")
+})

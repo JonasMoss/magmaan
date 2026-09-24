@@ -25,14 +25,15 @@ FitError penalty_err(std::string detail) {
 using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
 
 struct FreeCells {
-  BoolMatrix psi, theta, beta;
+  BoolMatrix psi, theta, beta, lambda;
 };
 
 FreeCells free_cells(const std::vector<model::ParamLocation>& locations,
                      std::size_t block, Eigen::Index m, Eigen::Index p) {
   FreeCells out{BoolMatrix::Constant(m, m, false),
                 BoolMatrix::Constant(p, p, false),
-                BoolMatrix::Constant(m, m, false)};
+                BoolMatrix::Constant(m, m, false),
+                BoolMatrix::Constant(p, m, false)};
   for (const auto& loc : locations) {
     if (static_cast<std::size_t>(loc.block) != block) continue;
     switch (loc.mat) {
@@ -44,6 +45,9 @@ FreeCells free_cells(const std::vector<model::ParamLocation>& locations,
         break;
       case MatId::Beta:
         out.beta(loc.row, loc.col) = true;
+        break;
+      case MatId::Lambda:
+        out.lambda(loc.row, loc.col) = true;
         break;
       default:
         break;
@@ -186,11 +190,106 @@ fit_expected<double> block_penalty(const MultiInfoPenaltyBlock& layout,
   return value;
 }
 
+// Determinacy block. J is ordered (observed y, genuine latents L), so the
+// Cholesky factor of C_JJ carries chol(Σ) in its leading block and chol(V),
+// V = Var(η_L | y), in its trailing block.
+//   P_b = 2 Σ log diag(chol V) − Σ_{j∈L} log C_jj,
+//   dP = tr(M dC),  M = pad(C_JJ⁻¹) − pad(Σ⁻¹) − Σ_{j∈L} e_j e_jᵀ / C_jj.
+struct DeterminacyParts {
+  Eigen::MatrixXd chol_v;  // trailing Cholesky block, V = chol_v chol_vᵀ
+  Eigen::VectorXd d;       // C_jj over L
+};
+
+fit_expected<double> block_determinacy(const MultiInfoPenaltyBlock& layout,
+                                       const CompleteData& cd,
+                                       std::size_t block, BlockGradient* grad,
+                                       DeterminacyParts* parts) {
+  const Eigen::Index n = cd.C.rows();
+  if (layout.keep.empty()) {
+    if (grad) {
+      grad->S = Eigen::MatrixXd::Zero(n, n);
+      grad->A = Eigen::MatrixXd::Zero(n, n);
+    }
+    return 0.0;
+  }
+  if (!cd.C.allFinite()) {
+    return std::unexpected(penalty_err(
+        "non-finite complete-data covariance in block " +
+        std::to_string(block)));
+  }
+  const Eigen::Index m = layout.m;
+  const Eigen::Index p = layout.p;
+  const Eigen::Index l = static_cast<Eigen::Index>(layout.keep.size());
+  std::vector<std::int32_t> order;
+  order.reserve(static_cast<std::size_t>(p + l));
+  for (Eigen::Index i = 0; i < p; ++i) {
+    order.push_back(static_cast<std::int32_t>(m + i));
+  }
+  for (const std::int32_t j : layout.keep) order.push_back(j);
+  const Eigen::MatrixXd C_JJ = principal(cd.C, order);
+  const Eigen::VectorXd d = C_JJ.diagonal().tail(l);
+  if ((d.array() <= 0.0).any()) {
+    return std::unexpected(penalty_err(
+        "non-positive latent variance in block " + std::to_string(block)));
+  }
+  Eigen::LLT<Eigen::MatrixXd> llt(C_JJ);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(penalty_err(
+        "latent and observed covariance C_JJ not positive definite in block " +
+        std::to_string(block)));
+  }
+  const Eigen::MatrixXd L = llt.matrixL();
+  if ((L.diagonal().array() <= 0.0).any()) {
+    return std::unexpected(penalty_err(
+        "latent and observed covariance C_JJ singular in block " +
+        std::to_string(block)));
+  }
+  const double value = 2.0 * L.diagonal().tail(l).array().log().sum() -
+                       d.array().log().sum();
+  if (!std::isfinite(value)) {
+    return std::unexpected(penalty_err(
+        "non-finite penalty in block " + std::to_string(block)));
+  }
+  if (parts) {
+    parts->chol_v = L.bottomRightCorner(l, l);
+    parts->d = d;
+  }
+  if (grad) {
+    Eigen::MatrixXd inner =
+        llt.solve(Eigen::MatrixXd::Identity(p + l, p + l));
+    const Eigen::MatrixXd chol_sigma_inv =
+        L.topLeftCorner(p, p).triangularView<Eigen::Lower>().solve(
+            Eigen::MatrixXd::Identity(p, p));
+    inner.topLeftCorner(p, p) -= chol_sigma_inv.transpose() * chol_sigma_inv;
+    inner.diagonal().tail(l) -= d.cwiseInverse();
+    Eigen::MatrixXd M = Eigen::MatrixXd::Zero(n, n);
+    for (Eigen::Index a = 0; a < p + l; ++a) {
+      for (Eigen::Index c = 0; c < p + l; ++c) {
+        M(order[static_cast<std::size_t>(a)],
+          order[static_cast<std::size_t>(c)]) = inner(a, c);
+      }
+    }
+    const Eigen::MatrixXd EtM = cd.E.transpose() * M;
+    grad->S = EtM * cd.E;
+    grad->A = 2.0 * EtM * cd.C;
+  }
+  return value;
+}
+
+fit_expected<double> block_value(const MultiInfoPenaltyLayout& layout,
+                                 const CompleteData& cd, std::size_t block,
+                                 BlockGradient* grad) {
+  const auto& blk = layout.blocks[block];
+  return layout.target == PenaltyTarget::Determinacy
+             ? block_determinacy(blk, cd, block, grad, nullptr)
+             : block_penalty(blk, cd, block, grad);
+}
+
 }  // namespace
 
 fit_expected<MultiInfoPenaltyLayout>
 multiinfo_penalty_layout(const model::ModelEvaluator& ev,
-                         const Eigen::VectorXd& theta) {
+                         const Eigen::VectorXd& theta, PenaltyTarget target) {
   auto assembled = ev.assembled(theta);
   if (!assembled.has_value()) {
     return std::unexpected(penalty_err(
@@ -205,6 +304,7 @@ multiinfo_penalty_layout(const model::ModelEvaluator& ev,
   }
 
   MultiInfoPenaltyLayout out;
+  out.target = target;
   out.locations = ev.param_locations();
   for (std::size_t b = 0; b < assembled->blocks.size(); ++b) {
     const model::BlockMatrices& bm = assembled->blocks[b];
@@ -247,9 +347,41 @@ multiinfo_penalty_layout(const model::ModelEvaluator& ev,
         }
       }
     }
-    for (Eigen::Index i = 0; i < m + p; ++i) {
-      if (in_k[static_cast<std::size_t>(i)]) {
-        blk.keep.push_back(static_cast<std::int32_t>(i));
+    if (target == PenaltyTarget::Determinacy) {
+      // A latent that an error-free indicator reproduces exactly (phantom
+      // ov.y / ov.x slots, zero-error single indicators) is observed data.
+      std::vector<bool> exact(static_cast<std::size_t>(m), false);
+      for (Eigen::Index i = 0; i < p; ++i) {
+        if (free.theta(i, i) || bm.Theta(i, i) != 0.0) continue;
+        Eigen::Index count = 0;
+        Eigen::Index col = -1;
+        for (Eigen::Index j = 0; j < m; ++j) {
+          if (free.lambda(i, j) || bm.Lambda(i, j) != 0.0) {
+            ++count;
+            col = j;
+          }
+        }
+        if (count == 1) {
+          exact[static_cast<std::size_t>(col)] = true;
+        } else if (count > 1) {
+          return std::unexpected(penalty_err(
+              "observed " + std::to_string(i) + " in block " +
+              std::to_string(b) +
+              " is an error-free indicator of several latents: Var(eta | y) "
+              "is singular for every parameter value"));
+        }
+      }
+      for (Eigen::Index j = 0; j < m; ++j) {
+        if (in_k[static_cast<std::size_t>(j)] &&
+            !exact[static_cast<std::size_t>(j)]) {
+          blk.keep.push_back(static_cast<std::int32_t>(j));
+        }
+      }
+    } else {
+      for (Eigen::Index i = 0; i < m + p; ++i) {
+        if (in_k[static_cast<std::size_t>(i)]) {
+          blk.keep.push_back(static_cast<std::int32_t>(i));
+        }
       }
     }
     if (m > 0) {
@@ -283,7 +415,7 @@ multiinfo_penalty(const MultiInfoPenaltyLayout& layout,
   for (std::size_t b = 0; b < layout.blocks.size(); ++b) {
     const auto& blk = layout.blocks[b];
     const CompleteData cd = complete_data(assembled->blocks[b], blk.m, blk.p);
-    auto v = block_penalty(blk, cd, b, with_gradient ? &grads[b] : nullptr);
+    auto v = block_value(layout, cd, b, with_gradient ? &grads[b] : nullptr);
     if (!v.has_value()) return std::unexpected(v.error());
     out.value += *v;
   }
@@ -329,15 +461,59 @@ multiinfo_penalty_report(const MultiInfoPenaltyLayout& layout,
         "cannot assemble model matrices: " + assembled.error().detail));
   }
   MultiInfoPenaltyReport out;
+  out.target = layout.target;
   out.recursive = layout.recursive();
   const double nan = std::numeric_limits<double>::quiet_NaN();
   for (std::size_t b = 0; b < layout.blocks.size(); ++b) {
     const auto& blk = layout.blocks[b];
     const CompleteData cd = complete_data(assembled->blocks[b], blk.m, blk.p);
+
+    if (layout.target == PenaltyTarget::Determinacy) {
+      DeterminacyParts parts;
+      auto v = block_determinacy(blk, cd, b, nullptr, &parts);
+      if (!v.has_value()) return std::unexpected(v.error());
+      out.value += *v;
+      out.block_value.push_back(*v);
+      if (blk.keep.empty()) {
+        out.residual_log_det_corr.push_back(0.0);
+        out.total_correlation.push_back(0.0);
+        out.mutual_information.push_back(0.0);
+        continue;
+      }
+      const Eigen::VectorXd v_diag =
+          (parts.chol_v * parts.chol_v.transpose()).diagonal();
+      const double log_det_v =
+          2.0 * parts.chol_v.diagonal().array().log().sum();
+      out.residual_log_det_corr.push_back(log_det_v -
+                                          v_diag.array().log().sum());
+      const Eigen::MatrixXd C_LL = principal(cd.C, blk.keep);
+      Eigen::LLT<Eigen::MatrixXd> llt(C_LL);
+      double log_det_phi = nan;
+      if (llt.info() == Eigen::Success) {
+        const Eigen::MatrixXd L = llt.matrixL();
+        log_det_phi = 2.0 * L.diagonal().array().log().sum();
+      }
+      out.total_correlation.push_back(
+          -0.5 * (log_det_phi - parts.d.array().log().sum()));
+      out.mutual_information.push_back(0.5 * (log_det_phi - log_det_v));
+      for (std::size_t a = 0; a < blk.keep.size(); ++a) {
+        MultiInfoPenaltyTerm term;
+        term.block = static_cast<std::int16_t>(b);
+        term.latent = true;
+        term.index = static_cast<std::int16_t>(blk.keep[a]);
+        const auto ai = static_cast<Eigen::Index>(a);
+        term.log_one_minus_r2 = std::log(v_diag(ai) / parts.d(ai));
+        out.terms.push_back(term);
+      }
+      continue;
+    }
+
     auto v = block_penalty(blk, cd, b, nullptr);
     if (!v.has_value()) return std::unexpected(v.error());
     out.value += *v;
     out.block_value.push_back(*v);
+    out.total_correlation.push_back(nan);
+    out.mutual_information.push_back(nan);
 
     double residual = nan;
     if (!blk.keep.empty()) {

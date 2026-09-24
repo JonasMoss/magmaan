@@ -2922,9 +2922,17 @@ Rcpp::List frontier_reidentify_impl(SEXP from_partable, SEXP to_partable,
 namespace {
 
 magmaan::estimate::frontier::MultiInfoPenaltyOptions multiinfo_options_from(
-    double eta, Rcpp::Nullable<Rcpp::NumericVector> weight) {
+    double eta, Rcpp::Nullable<Rcpp::NumericVector> weight,
+    const std::string& target) {
   magmaan::estimate::frontier::MultiInfoPenaltyOptions out;
   out.eta = eta;
+  if (target == "joint") {
+    out.target = magmaan::estimate::frontier::PenaltyTarget::Joint;
+  } else if (target == "determinacy") {
+    out.target = magmaan::estimate::frontier::PenaltyTarget::Determinacy;
+  } else {
+    Rcpp::stop("magmaan: `target` must be \"joint\" or \"determinacy\"");
+  }
   if (weight.isNotNull()) {
     Rcpp::NumericVector w(weight.get());
     if (w.size() != 1) Rcpp::stop("magmaan: `weight` must be NULL or a single number");
@@ -2933,11 +2941,15 @@ magmaan::estimate::frontier::MultiInfoPenaltyOptions multiinfo_options_from(
   return out;
 }
 
-// Per-variable log(1 − R²_i) terms keyed by the extended latent / observed
-// names, plus the scalar pieces of the penalized fit.
+// Per-variable terms keyed by the extended latent / observed names, plus the
+// scalar pieces of the penalized fit. Joint: log(1 − R²_i) per equation.
+// Determinacy: log(1 − ρ²_j) per genuine latent, ρ²_j its factor-score
+// determinacy, plus per-block TC(η) and I(η; y).
 Rcpp::List multiinfo_penalty_to_r(
     const Ctx& ctx, const magmaan::estimate::frontier::PenalizedFit& fit) {
   const auto& report = fit.penalty;
+  const bool determinacy =
+      report.target == magmaan::estimate::frontier::PenaltyTarget::Determinacy;
   const R_xlen_t nt = static_cast<R_xlen_t>(report.terms.size());
   Rcpp::IntegerVector block(nt);
   Rcpp::CharacterVector kind(nt), variable(nt);
@@ -2953,8 +2965,14 @@ Rcpp::List multiinfo_penalty_to_r(
     log_term[i] = t.log_one_minus_r2;
     r2[i] = 1.0 - std::exp(t.log_one_minus_r2);
   }
-  return Rcpp::List::create(
-      Rcpp::_["type"] = "multiinfo",
+  Rcpp::DataFrame terms = Rcpp::DataFrame::create(
+      Rcpp::_["block"] = block, Rcpp::_["kind"] = kind,
+      Rcpp::_["variable"] = variable,
+      Rcpp::_[determinacy ? "log_one_minus_rho2" : "log_one_minus_r2"] = log_term,
+      Rcpp::_[determinacy ? "rho2" : "r2"] = r2,
+      Rcpp::_["stringsAsFactors"] = false);
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["type"] = determinacy ? "determinacy" : "multiinfo",
       Rcpp::_["weight"] = fit.weight,
       Rcpp::_["value"] = report.value,
       Rcpp::_["penalized_fmin"] = fit.penalized_fmin,
@@ -2963,11 +2981,12 @@ Rcpp::List multiinfo_penalty_to_r(
       Rcpp::_["start_repaired"] = fit.start_repaired,
       Rcpp::_["block_value"] = Rcpp::wrap(report.block_value),
       Rcpp::_["residual_log_det_corr"] = Rcpp::wrap(report.residual_log_det_corr),
-      Rcpp::_["terms"] = Rcpp::DataFrame::create(
-          Rcpp::_["block"] = block, Rcpp::_["kind"] = kind,
-          Rcpp::_["variable"] = variable,
-          Rcpp::_["log_one_minus_r2"] = log_term, Rcpp::_["r2"] = r2,
-          Rcpp::_["stringsAsFactors"] = false));
+      Rcpp::_["terms"] = terms);
+  if (determinacy) {
+    out["total_correlation"] = Rcpp::wrap(report.total_correlation);
+    out["mutual_information"] = Rcpp::wrap(report.mutual_information);
+  }
+  return out;
 }
 
 }  // namespace
@@ -2982,7 +3001,8 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
     Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+    std::string target = "joint") {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_ml_multiinfo");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -2998,7 +3018,7 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto r = magmaan::estimate::frontier::fit_ml_multiinfo(
-      ctx.pt, ctx.rep, ctx.samp, x0, multiinfo_options_from(eta, weight),
+      ctx.pt, ctx.rep, ctx.samp, x0, multiinfo_options_from(eta, weight, target),
       bounds_from_nullable(bounds), backend,
       optim_opts_from(control, magmaan::estimate::ml_optim_options()));
   if (!r.has_value()) stop_fit(r.error());
@@ -5802,7 +5822,8 @@ Rcpp::List frontier_fit_fiml_multiinfo_impl(
     Rcpp::Nullable<Rcpp::NumericVector> weight = R_NilValue,
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+    std::string target = "joint") {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_fiml_multiinfo");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -5834,7 +5855,8 @@ Rcpp::List frontier_fit_fiml_multiinfo_impl(
           ? magmaan::estimate::Backend::NloptLbfgs
           : fiml_backend_from_optimizer_arg(optimizer);
   auto r = magmaan::estimate::fiml::frontier::fit_fiml_multiinfo(
-      ctx.pt, ctx.rep, raw, x0, *pack_or, multiinfo_options_from(eta, weight),
+      ctx.pt, ctx.rep, raw, x0, *pack_or,
+      multiinfo_options_from(eta, weight, target),
       bounds_from_nullable(bounds), backend, optim_opts_from(control));
   if (!r.has_value()) stop_fit(r.error());
   Rcpp::List out = fiml_fit_result(ctx, raw, r->estimates, &starts);

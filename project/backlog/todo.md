@@ -1004,25 +1004,23 @@ when they next change.
   2. Inference at the penalized estimate. Compare the current ordinary
      information SEs with a penalized-Hessian sandwich, `(H + lambda P'')^-1`
      bread, when `lambda / N` is not negligible (N <= 100 near the boundary).
-  3. Weight selection. Experiment research/48 benchmarks the barrier against the
-     Jeffreys posterior over admissible solutions (4 Metropolis chains per
-     dataset, Jeffreys by reweighting). No single `lambda` tracks it:
-     `lambda = 1` reproduces the posterior mean on indicator residual
-     variances, `lambda ~ 0.5` on factor correlations. The Jeffreys posterior
-     median was the most accurate estimator on every design at N = 50, at about
-     13 s per dataset in R against 2 ms for a barrier fit. Next: a two-weight
-     barrier (one weight on the observed-indicator `log(1 - R^2)` terms, one on
-     the latent and residual-dependence layers), which keeps scale invariance
-     and the barrier; see `multiinfo_barrier_family.md` for
-     the layer identity, the admissible splits, and the wider family. Score
-     variants against experiment research/48's stored posterior summaries (no MCMC);
-     `scripts/determinacy.R` does this for the latent-determinacy barrier
-     `log det Var(eta | y)` (standardized latents: same barrier, slightly less
-     correlation shrinkage, same variance/correlation weight tension) and for
-     the two-weight barrier (the best tracker of the posterior mean). The path
-     design (latent R^2) cells of experiment research/48 are still to run
-     (`run_experiment.R --full --resume`). Generalization to larger p,
-     multi-group, and FIML with MAR missingness remains open.
+  3. Latent-determinacy target. Landed 2026-09-24 as
+     `PenaltyTarget::Determinacy` (R `target = "determinacy"`), with
+     brute-force, identity, gradient, domain, manifest, exact-latent,
+     invariance, and FIML gates. The research notes derive it from five
+     requirements (distribution-only, gauge invariance, chain rule,
+     complementarity to the likelihood, barrier at the reachable faces) and
+     calibrate `lambda` by a local limit at a face: matching the posterior
+     median gives `lambda` in [0.10, 0.43] for populations 3 to 0 standard
+     errors inside the face, and `lambda = 0.25` is optimal at 1.6. Layer
+     weights are not supported by that calibration, which replaces the
+     two-weight direction. Remaining, for `papers/sem-barrier`: rerun the
+     experiment research/47 designs with the new target against ML, PSD-ML, and
+     the joint barrier; score it on the research/48 posterior bank; test the
+     calibration by binning datasets by the unconstrained estimate's distance
+     to the face in standard-error units; run the research/48 path cells; then
+     decide the default target. Experiment research/48's Jeffreys posterior
+     median remained the most accurate estimator on every design at N = 50.
   4. Scope. LS/ordinal paths need a discrepancy-specific scaling in place of
      `l = -N * fmin`. Nonrecursive models have a proved barrier only when the
      zero-residual variables are sinks. The characterization in the header

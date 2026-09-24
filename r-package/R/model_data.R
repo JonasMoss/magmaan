@@ -1357,19 +1357,35 @@ frontier_fit_ml_psd_fallback <- function(
   out
 }
 
-# Frontier complete-data ML plus the multi-information penalty
-# lambda * log det Corr(v_K), where v_K stacks the latent and observed variables
-# with a non-structurally-zero residual variance and lambda = eta - 1 (or
-# `weight`; default lambda = 0.25, see experiment research/47). The penalty is scale invariant, bounded above by zero, and for
-# recursive models equals sum log(1 - R^2) over structural equations plus the
-# residual log-determinant of correlation, so it is a log barrier on every
-# improper direction. `fit$fmin` is the UNPENALIZED criterion at the penalized
-# estimate (chi-square and fit indices read from it); `fit$penalty` carries the
-# weight, P(theta), the penalized criterion, and per-variable log(1 - R^2).
+# Frontier complete-data ML plus a scale-invariant log barrier against
+# improper solutions, weight lambda = eta - 1 (or `weight`; default 0.25, see
+# experiment research/47).
+#
+# target = "joint": the multi-information penalty lambda * log det Corr(v_K),
+# where v_K stacks the latent and observed variables with a
+# non-structurally-zero residual variance. For recursive models it equals
+# sum log(1 - R^2) over structural equations plus the residual log-determinant
+# of correlation.
+#
+# target = "determinacy": the latent-determinacy penalty lambda * log det Q,
+# Q = Var(eta | y) standardized by Var(eta), over the genuine latents (phantom
+# and zero-error single-indicator latents count as observed). It is the joint
+# penalty with the observed margin conditioned out: log det Corr(v) =
+# log det Q + log det Corr(Sigma). It is zero for models without latent
+# variables, and -2 * [TC(eta) + I(eta; y)] in general.
+#
+# Both are bounded above by zero and are log barriers on every improper
+# direction. `fit$fmin` is the UNPENALIZED criterion at the penalized estimate
+# (chi-square and fit indices read from it); `fit$penalty` carries the weight,
+# P(theta), the penalized criterion, and per-variable terms: log(1 - R^2) per
+# equation (joint) or log(1 - rho^2) per latent with rho^2 its factor-score
+# determinacy (determinacy, plus total_correlation and mutual_information).
 frontier_fit_ml_multiinfo <- function(
     model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
-    control = NULL, bounds = NULL, missing = c("listwise", "error")) {
+    control = NULL, bounds = NULL, missing = c("listwise", "error"),
+    target = c("joint", "determinacy")) {
   missing <- match.arg(missing)
+  target <- match.arg(target)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model)
   }
@@ -1377,7 +1393,7 @@ frontier_fit_ml_multiinfo <- function(
   b <- bounds_arg(bounds, model, data, "frontier_fit_ml_multiinfo")
   fit <- frontier_fit_ml_multiinfo_impl(
     partable_arg(model), sample_stats_arg(data), eta = eta, weight = weight,
-    optimizer = optimizer, control = control, bounds = b
+    optimizer = optimizer, control = control, bounds = b, target = target
   )
   .warn_nonrecursive_multiinfo(fit, "frontier_fit_ml_multiinfo")
   attach_complete_raw_data(fit, data)
@@ -1526,7 +1542,9 @@ frontier_reidentify <- function(fit, model, ..., pole_tol = 1e-6) {
 }
 
 .warn_nonrecursive_multiinfo <- function(fit, caller) {
-  if (!isTRUE(fit$penalty$recursive)) {
+  # The determinacy decomposition is exact for every B.
+  if (!isTRUE(fit$penalty$recursive) &&
+      !identical(fit$penalty$type, "determinacy")) {
     warning(caller, "(): nonrecursive model; the multi-information penalty ",
             "is still <= 0 but its barrier characterization is unproven here",
             call. = FALSE)
@@ -1821,11 +1839,13 @@ frontier_fit_fiml_psd <- function(
   )
 }
 
-# Frontier casewise FIML plus the multi-information penalty; see
-# frontier_fit_ml_multiinfo(). N in the penalty scaling is the number of cases.
+# Frontier casewise FIML plus the multi-information or latent-determinacy
+# penalty; see frontier_fit_ml_multiinfo(). N in the penalty scaling is the
+# number of cases.
 frontier_fit_fiml_multiinfo <- function(
     model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
-    control = NULL, bounds = NULL) {
+    control = NULL, bounds = NULL, target = c("joint", "determinacy")) {
+  target <- match.arg(target)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model, meanstructure = TRUE)
   } else if (inherits(model, "magmaan_model_spec") &&
@@ -1839,7 +1859,7 @@ frontier_fit_fiml_multiinfo <- function(
   b <- bounds_arg(bounds, model, NULL, "frontier_fit_fiml_multiinfo")
   fit <- frontier_fit_fiml_multiinfo_impl(
     partable_arg(model), fiml_data_arg(data), eta = eta, weight = weight,
-    optimizer = optimizer, control = control, bounds = b
+    optimizer = optimizer, control = control, bounds = b, target = target
   )
   .warn_nonrecursive_multiinfo(fit, "frontier_fit_fiml_multiinfo")
 }

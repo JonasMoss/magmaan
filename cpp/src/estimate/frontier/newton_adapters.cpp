@@ -361,7 +361,7 @@ fit_expected<NewtonAudit> audit_newton_penalized_ml(
   if (!ev) return std::unexpected(ev.error());
   auto base = ml_objective(*ev, sample);
   if (!base) return std::unexpected(base.error());
-  auto layout = multiinfo_penalty_layout(*ev, theta);
+  auto layout = multiinfo_penalty_layout(*ev, theta, penalty.target);
   if (!layout) return std::unexpected(layout.error());
   auto weight = multiinfo_penalty_weight(penalty);
   if (!weight) return std::unexpected(weight.error());
@@ -381,7 +381,7 @@ fit_expected<NewtonAudit> audit_newton_penalized_fiml(
   auto ev = evaluator(pt, rep);
   if (!ev) return std::unexpected(ev.error());
   auto base = fiml_scalar(*ev, raw, pack);
-  auto layout = multiinfo_penalty_layout(*ev, theta);
+  auto layout = multiinfo_penalty_layout(*ev, theta, penalty.target);
   if (!layout) return std::unexpected(layout.error());
   auto weight = multiinfo_penalty_weight(penalty);
   if (!weight) return std::unexpected(weight.error());

@@ -61,8 +61,8 @@ frontier_reidentify_impl <- function(from_partable, to_partable, pole_tol = 1e-6
     .Call(`_magmaan_frontier_reidentify_impl`, from_partable, to_partable, pole_tol)
 }
 
-frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaan_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds)
+frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, target = "joint") {
+    .Call(`_magmaan_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds, target)
 }
 
 frontier_fit_uls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
@@ -217,8 +217,8 @@ frontier_fit_fiml_psd_impl <- function(partable, raw_data, optimizer = NULL, con
     .Call(`_magmaan_frontier_fit_fiml_psd_impl`, partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol)
 }
 
-frontier_fit_fiml_multiinfo_impl <- function(partable, raw_data, eta = 1.25, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaan_frontier_fit_fiml_multiinfo_impl`, partable, raw_data, eta, weight, optimizer, control, bounds)
+frontier_fit_fiml_multiinfo_impl <- function(partable, raw_data, eta = 1.25, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, target = "joint") {
+    .Call(`_magmaan_frontier_fit_fiml_multiinfo_impl`, partable, raw_data, eta, weight, optimizer, control, bounds, target)
 }
 
 saturated_em_moments_impl <- function(raw_data, h_step = 1e-4, control = NULL) {

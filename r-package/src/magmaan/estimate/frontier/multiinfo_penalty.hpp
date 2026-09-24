@@ -26,6 +26,26 @@
 // density on each Corr(v_K)); on the optimizer's ½F scale, with ℓ = −N·fmin,
 // the minimized objective is fmin(θ) − (λ/N)·P(θ). λ is O(1), so the estimate
 // differs from ML by O_p(1/N) at interior points.
+//
+// Determinacy target (latent-determinacy barrier). Let L be the genuine
+// latents of a block: latents in K that no error-free indicator reproduces
+// exactly (phantom ov.y / ov.x slots and single indicators with Θ ≡ 0 are
+// observed data, not latent). With V = Var(η_L | y) = C_LL − C_Ly Σ⁻¹ C_yL,
+//
+//   Q_b = D_L^{-1/2} V D_L^{-1/2},   D_L = diag(C_LL),
+//   P_b = log det Q_b = log det C_JJ − log det Σ − Σ_{j∈L} log C_jj   (J = y ∪ L)
+//       = log det Corr(C_LL) + log det Var(y | η_L) − log det Σ
+//       = −2 [TC(η_L) + I(η_L; y)] ≤ 0.
+//
+// P is the joint penalty with the observed margin conditioned out: it is zero
+// for models without genuine latents, depends on the observed block only
+// through Σ (which the likelihood already keeps positive definite), and tends
+// to −∞ exactly where Var(η_L | y) loses rank with Σ positive definite, i.e.
+// at the improper faces the likelihood does not guard. With Σ ≻ 0, C_JJ ≻ 0
+// holds exactly when every residual (co)variance matrix is positive definite,
+// so the Cholesky factorization of C_JJ is the domain check. The value is
+// invariant to rescaling any latent or observed variable. Vanishing latents
+// (C_jj → 0) are not faces of this barrier.
 
 #include <cstdint>
 #include <limits>
@@ -51,9 +71,15 @@ namespace magmaan::estimate::frontier {
 // λ = 0.25 (a near-flat LKJ(1.25)) keeps the barrier while leaving χ² and Wald
 // calibration at the ordinary/PSD-ML level in experiment research/47's N = 50..400 grid;
 // λ = 1 (η = 2) over-shrinks high-R² equations and correlations near 1 there.
+// Which barrier the penalty reads (see the header comment).
+//   Joint:       log det Corr(v_K), the multi-information barrier.
+//   Determinacy: log det Q, the joint barrier conditioned on the observed block.
+enum class PenaltyTarget : std::uint8_t { Joint, Determinacy };
+
 struct MultiInfoPenaltyOptions {
   double eta = 1.25;
   double weight = std::numeric_limits<double>::quiet_NaN();
+  PenaltyTarget target = PenaltyTarget::Joint;
 };
 
 // Per-block structure, resolved once from the evaluator at a layout point.
@@ -61,11 +87,14 @@ struct MultiInfoPenaltyOptions {
 struct MultiInfoPenaltyBlock {
   std::int16_t m = 0;
   std::int16_t p = 0;
-  std::vector<std::int32_t> keep;  // K, ascending
+  // Joint: K, ascending. Determinacy: L (genuine latents, ascending, all < m);
+  // the conditioning block is always the p observed variables.
+  std::vector<std::int32_t> keep;
   bool recursive = true;           // B has an acyclic nonzero pattern
 };
 
 struct MultiInfoPenaltyLayout {
+  PenaltyTarget target = PenaltyTarget::Joint;
   std::vector<MultiInfoPenaltyBlock> blocks;
   std::vector<model::ParamLocation> locations;  // one per free θ entry
 
@@ -79,10 +108,13 @@ struct MultiInfoPenaltyLayout {
 
 // Fixed cells are read at `theta`; any admissible θ gives the same layout.
 // Fails when a variable outside K carries a covariance (free, or fixed nonzero)
-// with another variable: such an S cannot be positive semidefinite.
+// with another variable: such an S cannot be positive semidefinite. The
+// Determinacy target also fails when an error-free indicator loads on more
+// than one latent, since Var(η | y) is then singular for every θ.
 fit_expected<MultiInfoPenaltyLayout>
 multiinfo_penalty_layout(const model::ModelEvaluator& ev,
-                         const Eigen::VectorXd& theta);
+                         const Eigen::VectorXd& theta,
+                         PenaltyTarget target = PenaltyTarget::Joint);
 
 struct MultiInfoPenaltyValue {
   double value = 0.0;
@@ -97,22 +129,30 @@ multiinfo_penalty(const MultiInfoPenaltyLayout& layout,
                   const model::ModelEvaluator& ev,
                   const Eigen::VectorXd& theta, bool with_gradient);
 
-// One term per complete-data variable in K.
+// Joint: one term per complete-data variable in K, log(1 − R²_i) =
+// log(S_ii / C_ii). Determinacy: one term per genuine latent, log(1 − ρ²_j) =
+// log(V_jj / C_jj), with ρ²_j the factor-score determinacy of η_j.
 struct MultiInfoPenaltyTerm {
   std::int16_t block = 0;
   bool latent = false;
   std::int16_t index = 0;             // row of Ψ (latent) or Θ (observed)
-  double log_one_minus_r2 = 0.0;      // log(S_ii / C_ii)
+  double log_one_minus_r2 = 0.0;
 };
 
-// For recursive blocks, block_value = Σ terms + residual_log_det_corr exactly.
-// For nonrecursive blocks the remainder is 2 log|det E_KK|.
+// Joint: for recursive blocks, block_value = Σ terms + residual_log_det_corr
+// exactly, with residual log det Corr(S_KK); for nonrecursive blocks the
+// remainder is 2 log|det E_KK|. Determinacy: block_value = Σ terms +
+// residual_log_det_corr exactly for every B, with residual log det Corr(V),
+// and block_value = −2 (total_correlation + mutual_information).
 struct MultiInfoPenaltyReport {
+  PenaltyTarget target = PenaltyTarget::Joint;
   double value = 0.0;
   bool recursive = true;
   std::vector<double> block_value;
-  std::vector<double> residual_log_det_corr;  // log det Corr(S_KK); NaN if S_KK not PD
+  std::vector<double> residual_log_det_corr;  // NaN if the matrix is not PD
   std::vector<MultiInfoPenaltyTerm> terms;
+  std::vector<double> total_correlation;      // TC(η_L); Determinacy only, else NaN
+  std::vector<double> mutual_information;     // I(η_L; y); Determinacy only, else NaN
 };
 
 fit_expected<MultiInfoPenaltyReport>

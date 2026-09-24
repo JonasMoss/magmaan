@@ -2661,7 +2661,7 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
   auto base_or = estimate::ml_objective(pre->ev, samp);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
   const optim::ScalarProblem base = std::move(*base_or);
-  auto layout = multiinfo_penalty_layout(pre->ev, x0);
+  auto layout = multiinfo_penalty_layout(pre->ev, x0, options.target);
   if (!layout.has_value()) return std::unexpected(layout.error());
   const optim::ScalarProblem prob = multiinfo_penalized_problem(
       base, *layout, pre->ev, *weight, n_total);
@@ -2700,7 +2700,8 @@ fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
   }
   const optim::ScalarProblem base =
       full_fiml_problem(pre->ev, raw, pack.cache, fiml::FIML{});
-  auto layout = estimate::frontier::multiinfo_penalty_layout(pre->ev, x0);
+  auto layout = estimate::frontier::multiinfo_penalty_layout(pre->ev, x0,
+                                                             options.target);
   if (!layout.has_value()) return std::unexpected(layout.error());
   const optim::ScalarProblem prob = estimate::frontier::multiinfo_penalized_problem(
       base, *layout, pre->ev, *weight, n_total);
