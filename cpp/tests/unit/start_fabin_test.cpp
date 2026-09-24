@@ -181,3 +181,48 @@ TEST_CASE("FABIN keeps a user hint on a free loading") {
   REQUIRE(x0.has_value());
   CHECK((*x0)(x3_loading) == doctest::Approx(0.123));
 }
+
+TEST_CASE("Start values preserve observed measurement semantics in reduced models") {
+  for (bool std_lv : {false, true}) {
+    auto make = [&](const char* syntax) {
+      auto parsed = Parser::parse(syntax); REQUIRE(parsed);
+      magmaan::spec::BuildOptions options;
+      options.fixed_x = false; options.meanstructure = true; options.std_lv = std_lv;
+      auto pt = magmaan::spec::build(*parsed, options); REQUIRE(pt);
+      auto rep = build_matrix_rep(*pt); REQUIRE(rep);
+      return Built{*pt, *rep};
+    };
+    auto cfa = make("f =~ x1 + x2 + x3\ng =~ y1 + y2 + y3\nf ~~ g");
+    // A fixed-zero latent regression changes the evaluation representation,
+    // but not the measurement model or its parameter meanings.
+    auto sem = make("f =~ x1 + x2 + x3\ng =~ y1 + y2 + y3\nf ~~ g\ng ~ 0*f");
+    REQUIRE(cfa.rep.form == magmaan::model::RepForm::PureCFA);
+    REQUIRE(sem.rep.form == magmaan::model::RepForm::Reduced);
+    Eigen::Vector3d loading(1., 4., .6);
+    SampleStats sample;
+    Eigen::MatrixXd S = Eigen::MatrixXd::Zero(6,6);
+    S.topLeftCorner(3,3) = one_factor_cov(loading, 1.5, .3);
+    S.bottomRightCorner(3,3) = one_factor_cov(loading, 1.5, .3);
+    sample.S = {S};
+    sample.mean = {Eigen::VectorXd::LinSpaced(6, 2., 9.)}; sample.n_obs = {500};
+    for (bool fabin : {false, true}) {
+      auto a = fabin ? fabin_start_values(cfa.pt,cfa.rep,sample)
+                     : simple_start_values(cfa.pt,cfa.rep,sample);
+      auto b = fabin ? fabin_start_values(sem.pt,sem.rep,sample)
+                     : simple_start_values(sem.pt,sem.rep,sample);
+      REQUIRE(a); REQUIRE(b);
+      int compared = 0;
+      for (std::size_t i=0; i<cfa.pt.size(); ++i) {
+        if (cfa.pt.free[i] <= 0) continue;
+        for (std::size_t j=0; j<sem.pt.size(); ++j) {
+          if (sem.pt.free[j] <= 0 || cfa.pt.op[i]!=sem.pt.op[j] ||
+              cfa.pt.lhs_var[i]!=sem.pt.lhs_var[j] ||
+              cfa.pt.rhs_var[i]!=sem.pt.rhs_var[j]) continue;
+          CHECK((*a)(cfa.pt.free[i]-1) == doctest::Approx((*b)(sem.pt.free[j]-1)).epsilon(1e-12));
+          ++compared;
+        }
+      }
+      CHECK(compared == cfa.pt.n_free());
+    }
+  }
+}

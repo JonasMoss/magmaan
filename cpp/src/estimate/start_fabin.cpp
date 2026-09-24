@@ -1,4 +1,5 @@
 #include "magmaan/estimate/start_values.hpp"
+#include "detail_start_cell.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -199,7 +200,7 @@ fabin_start_values(const spec::LatentStructure& pt,
     facs[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), FactorInfo{});
   }
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    const auto& c = rep.cell_for_row[i];
+    const auto c = detail::start_cell(pt, rep, i);
     if (!c.used) continue;
     const std::size_t b = static_cast<std::size_t>(c.block);
     if (b >= facs.size()) continue;

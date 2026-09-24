@@ -1,4 +1,5 @@
 #include "magmaan/estimate/start_values.hpp"
+#include "detail_start_cell.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -64,7 +65,6 @@ simple_start_values(const spec::LatentStructure& pt,
   // own variance (≈ lavaan's `sqrt(0.5 · var_indicator)`) rather than the
   // marker-world 0.7. Built once up front by a single sweep over the rows.
   std::vector<std::vector<bool>> lv_var_fixed(rep.dims.size());
-  std::vector<std::vector<std::int16_t>> phantom_ov_for_lv(rep.dims.size());
   // Marker indicator per latent: the observed row whose loading on that latent
   // is fixed to 1 via a user `=~` marker. Markers are partable rows, so this
   // is read from `cell_for_row` (not `structural_cells`, which holds only
@@ -73,20 +73,10 @@ simple_start_values(const spec::LatentStructure& pt,
   std::vector<std::vector<std::int16_t>> marker_for_lv(rep.dims.size());
   for (std::size_t b = 0; b < rep.dims.size(); ++b) {
     lv_var_fixed[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), false);
-    phantom_ov_for_lv[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), -1);
     marker_for_lv[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), -1);
   }
-  for (const auto& sc : rep.structural_cells) {
-    if (sc.mat != model::MatId::Lambda || sc.value != 1.0) continue;
-    const std::size_t b = static_cast<std::size_t>(sc.block);
-    if (b < phantom_ov_for_lv.size() &&
-        sc.col >= 0 &&
-        static_cast<std::size_t>(sc.col) < phantom_ov_for_lv[b].size()) {
-      phantom_ov_for_lv[b][static_cast<std::size_t>(sc.col)] = sc.row;
-    }
-  }
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    const auto& c = rep.cell_for_row[i];
+    const auto c = detail::start_cell(pt, rep, i);
     if (!c.used || pt.free[i] != 0) continue;  // estimated → neither fact holds
     const std::size_t b = static_cast<std::size_t>(c.block);
     // std.lv: a fixed latent variance.
@@ -117,7 +107,7 @@ simple_start_values(const spec::LatentStructure& pt,
     }
 
     // 2) infer by cell.
-    const auto& c = rep.cell_for_row[i];
+    const auto c = detail::start_cell(pt, rep, i);
     if (!c.used) {
       start(k) = 0.0;
       continue;
@@ -175,16 +165,7 @@ simple_start_values(const spec::LatentStructure& pt,
         break;
       case model::MatId::Psi:
         if (c.row == c.col) {
-          const bool is_phantom_ov =
-              b < phantom_ov_for_lv.size() &&
-              static_cast<std::size_t>(c.row) < phantom_ov_for_lv[b].size() &&
-              phantom_ov_for_lv[b][static_cast<std::size_t>(c.row)] >= 0;
-          if (is_phantom_ov) {
-            const auto ov = phantom_ov_for_lv[b][static_cast<std::size_t>(c.row)];
-            start(k) = ov < S.rows() ? S(ov, ov) : 0.05;
-          } else {
-            start(k) = 0.05;
-          }
+          start(k) = 0.05;
         } else {
           start(k) = 0.0;
         }

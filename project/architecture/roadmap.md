@@ -73,6 +73,12 @@ stopping-code reporting across fitted results remains backlog work.
 Complete-data ML now defaults to the validated NLopt profile (5000 evaluations,
 relative objective/step tolerances 1e-12/1e-10). High-level ML uses transported
 std.lv FABIN starts where safe, with native fallback and user-hint preservation.
+Simple and FABIN starts interpret observed loadings, residual variances and
+intercepts by their model meaning even when Reduced LISREL stores them in
+Beta/Psi/Alpha phantom-state cells. This fixes skipped FABIN loadings,
+full-variance residual starts and zero intercept starts in structural models;
+the Geiser latent-path marker default then passes ordinary L-BFGS/SLSQP and
+PSD-SLSQP without oracle starts or optimizer changes.
 Ordinary L-BFGS/SLSQP ML uses sample-derived equality-reduced scaling on
 supported constraints; PSD ML defaults to existing lifted information scaling
 and constraint tolerance 1e-8. Generic controls and explicit unscaled policies

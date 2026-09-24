@@ -1,5 +1,9 @@
 # Source audit of six corpus accuracy rejections
 
+**Update:** the Geiser marker default-start failure described below was traced
+to Reduced-representation start construction and repaired. See the final
+section; the earlier diagnostics remain a record of the pre-fix behavior.
+
 Audited 2026-09-24 against original companion inputs, not just lavaan output
 from the translated syntax. Fitting probes used magmaan `99c5d6dbc07a`,
 R 4.6.1 and lavaan 0.7-2. This is an input-fidelity audit; it does not alter
@@ -153,3 +157,37 @@ ordinary SLSQP (406 evaluations), but L-BFGS still fails. This does not yet
 establish whether initialization alone can resolve L-BFGS's scale sensitivity.
 The comparison uses the same model, explicit starts, and existing coordinate
 scaling; no oracle estimates are supplied in this diagnostic.
+
+## Resolution: Reduced representation bypassed measurement start heuristics
+
+The numerical evaluator correctly lowers observed measurement loadings into
+Beta, observed residual variances into Psi, and observed intercepts into Alpha
+when building the Reduced representation. The start producers were still
+looking for those quantities in Lambda, Theta and Nu respectively. Consequently
+FABIN skipped the loadings, residual variances used full sample variances, and
+observed intercepts used zero instead of sample means.
+
+The correction gives simple/FABIN start construction a semantic view of these
+cells without changing the evaluator, parameterization, optimizer or objective.
+A regression property checks identical parameter starts for a CFA model and
+the equivalent model with a fixed-zero latent regression, under both marker
+and std.lv identification and with nonzero means and unequal observed scales.
+
+On the source-verified Geiser fixture, the corrected marker starting vector
+matches lavaan's *initial* values exactly (not its final estimates). With
+single-threaded numerical libraries, default ordinary L-BFGS, ordinary SLSQP
+and direct PSD-SLSQP all pass at f=.00167144309659, in 199, 187 and 93 objective
+evaluations. The ordinary-first policy can accept the ordinary fit.
+
+A controlled ablation retains the original optimizer settings and changes
+only three groups of initial values. Repairing residual variances and observed
+means together already recovers all three routes (172/200/92 evaluations);
+repairing all groups gives the native corrected result above. Fixing loadings
+alone does not rescue L-BFGS or direct PSD. This is a start-vector defect,
+not evidence that PSD itself necessarily causes the earlier failure.
+
+The reduction of observed loadings into Beta dates to commit `0547187b`
+(2026-05-25); the mismatch is not demonstrated to be a regression introduced
+in the last few days. Recent default/policy changes and reliance on different
+start routes can expose it. This diagnosis does not settle every historical
+performance difference or the separate std.lv L-BFGS difficulty.

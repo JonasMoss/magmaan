@@ -37,11 +37,11 @@ semantics · **XL** statistical design/research track before implementation.
   investigate default-start failures on corrected Figure 3b and Geiser's
   structurally correct latent-path model. See
   [source audit](../validation/textbook-translation-audit.md).
-  Geiser's ordinary L-BFGS and SLSQP both fail on original units but pass after
-  observed-variable standardization; shared `scaled-fabin` currently falls back
-  to simple-equivalent starts on this structural representation. Audit start
-  transport/representation coverage and the R `start="default"` versus omitted
-  control mismatch before claiming uniform ML initialization.
+  Geiser's marker default-start failures are resolved by correcting Reduced
+  representation handling in simple/FABIN starts. Remaining: std.lv L-BFGS
+  robustness, transported-start coverage for structural models, and the R
+  `start="default"` versus omitted-control mismatch. Do not conflate these
+  remaining issues with the repaired observed-parameter start mapping.
 
 The remaining explicit convergence-audit extensions are deferred to
 [speculative.md](speculative.md#convergence-audit-extensions). The implemented
