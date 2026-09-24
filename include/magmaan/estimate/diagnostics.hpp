@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 #include <Eigen/Core>
@@ -127,10 +128,63 @@ struct GeometricStationarityDiagnostics {
   std::int32_t cone_projection_iterations = 0;
 };
 
+// Local accuracy of a returned complete-data ML fit (Layer 2). With G the
+// total score and I the total observed information, both reduced by the
+// linear-equality basis, the Newton distance is d = sqrt(G' I^{-1} G): under
+// the local quadratic approximation, the largest predicted Newton correction
+// of any linear contrast in its information-based standard errors. The
+// accepted budget is d <= .01 (docs/research/interior-newton-audit.md). It is
+// a local accuracy approximation, not a bound on the distance to an optimum.
+// Computed by `frontier::newton_accuracy_ml`; complete-data ML fit paths
+// attach it (`checked`), and `common_fit_verdict` uses it at regular interior
+// points. The conditioning and solve guards are numerical safeguards, not
+// identification tests.
+enum class NewtonAccuracyStatus : std::uint8_t {
+  Available,             // d computed
+  Unavailable,           // objective, gradient, constraints or information failed
+  Unsupported,           // nonlinear equality constraints (needs the Lagrangian)
+  NonpositiveCurvature,  // reduced observed information not positive definite
+  IllConditioned,        // equilibrated condition number above max_condition
+  SolveUnreliable,       // relative linear-solve residual above max_solve_residual
+};
+
+std::string_view to_string(NewtonAccuracyStatus s) noexcept;
+
+struct NewtonAccuracyOptions {
+  double budget = 0.01;
+  double max_condition = 1e12;
+  double max_solve_residual = 1e-10;
+  // A primitive covariance block counts as interior when its smallest
+  // eigenvalue exceeds this multiple of its largest absolute eigenvalue.
+  double interior_eigen_tol = 1e-8;
+};
+
+struct NewtonAccuracyDiagnostics {
+  // False on fit paths that do not compute the diagnostic (non-ML
+  // discrepancies, FIML, ordinal, two-level, penalized fits).
+  bool checked = false;
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  double distance = std::numeric_limits<double>::quiet_NaN();
+  // d^2 / 2: predicted remaining decrease of the total negative log likelihood.
+  double predicted_gain = std::numeric_limits<double>::quiet_NaN();
+  // Largest absolute predicted Newton correction in reduced coordinates.
+  double max_step = std::numeric_limits<double>::quiet_NaN();
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double solve_residual = std::numeric_limits<double>::quiet_NaN();
+  double budget = 0.01;
+  bool passed = false;  // status == Available && distance <= budget
+  bool covariance_interior = false;
+  std::int32_t n_reduced = 0;
+};
+
 // The domain is declared by the fit entry point, never selected by which
 // residual happens to pass. Backend status is not an input to this verdict.
 enum class FitCheck { Unchecked, Passed, Failed };
 enum class StationarityDomain { Ambient, Psd };
+// Which check decided `FitVerdict::stationarity`. `Newton` is the accuracy
+// check at a regular interior point of the fitting domain; `FirstOrder` is the
+// metric-dual residual (ambient, or cone at a PSD boundary).
+enum class StationarityCriterion { FirstOrder, Newton };
 
 struct ObjectiveDiagnostics {
   bool checked = false;
@@ -149,6 +203,7 @@ struct FitVerdict {
   FitCheck objective = FitCheck::Unchecked;
   FitCheck stationarity = FitCheck::Unchecked;
   StationarityDomain domain = StationarityDomain::Ambient;
+  StationarityCriterion criterion = StationarityCriterion::FirstOrder;
 };
 
 struct FitDiagnostics {
@@ -182,6 +237,9 @@ struct FitDiagnostics {
   // unchecked on fit paths that have not supplied an ordinary full-θ
   // objective gradient; `fit$audit` is never overwritten.
   GeometricStationarityDiagnostics geometric_stationarity;
+
+  // Interior accuracy check for complete-data ML fits; unchecked elsewhere.
+  NewtonAccuracyDiagnostics newton_accuracy;
 
   // SNLLS-only: did the gp expand take the affine fallback `θ₀ + K_β·β`
   // because `profiled(β)` returned an error? v1 leaves this `false` —
@@ -224,6 +282,16 @@ struct GeometricStationarityOptions {
 // Authoritative numerical verdict. Admissibility remains separate for ambient
 // fits; PSD feasibility participates in the PSD stationarity check. Missing
 // checks are never replaced by optimizer status or driven-coordinate audits.
+//
+// Stationarity is decided by the Newton accuracy check when the fit carries
+// one and the point is a regular interior point of its fitting domain: every
+// ambient fit (improper estimates included, since they are interior to the
+// ambient domain) and every PSD fit with no singular primitive covariance
+// block. The fit passes when d <= budget; a nonpositive-curvature,
+// ill-conditioned or unreliable solve fails it, because no accuracy statement
+// is then available. The first-order check decides at PSD-boundary points,
+// at active box bounds, under nonlinear equality constraints (Newton
+// unsupported), and on fit paths without the Newton diagnostic.
 FitVerdict common_fit_verdict(const FitDiagnostics& diagnostics);
 
 // Record the original half-discrepancy and its full-coordinate gradient. The

@@ -20,6 +20,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
@@ -2115,6 +2116,25 @@ static void attach_geometric_stationarity(
                        pt, pre.ev, pre.con, pre.nl, bounds, domain);
 }
 
+// Complete-data ML fits carry the interior Newton accuracy check, which the
+// common verdict uses at regular interior points (diagnostics.hpp). Penalized
+// and non-ML fits do not: their stationarity concerns another objective.
+static void attach_newton_accuracy(Estimates& est,
+                                   const spec::LatentStructure& pt,
+                                   const model::MatrixRep& rep,
+                                   const SampleStats& samp) {
+  est.diagnostics.newton_accuracy =
+      frontier::newton_accuracy_ml(pt, rep, samp, est);
+}
+
+static fit_expected<Estimates>
+with_newton_accuracy(fit_expected<Estimates> est,
+                     const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep, const SampleStats& samp) {
+  if (est.has_value()) attach_newton_accuracy(*est, pt, rep, samp);
+  return est;
+}
+
 static void attach_gmm_geometric_stationarity(
     Estimates& est,
     const spec::LatentStructure& pt,
@@ -2530,6 +2550,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  attach_newton_accuracy(*est, pt, rep, samp);
   return est;
 }
 
@@ -2782,6 +2803,7 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   attach_diagnostics(*est, pt, *pre, bounds);
   if (!extra.active()) {
     attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+    attach_newton_accuracy(*est, pt, rep, samp);
   }
   return est;
 }
@@ -2824,6 +2846,7 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
         *est, pt, *pre, Bounds{}, *full_problem, StationarityDomain::Psd);
   }
   est->diagnostics.stationarity_domain = StationarityDomain::Psd;
+  attach_newton_accuracy(*est, pt, rep, samp);
   return est;
 }
 
@@ -4527,8 +4550,10 @@ fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
               Bounds bounds, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
-                           FisherStepKind::Full);
+  return with_newton_accuracy(
+      compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
+                        FisherStepKind::Full),
+      pt, rep, samp);
 }
 
 fit_expected<Estimates>
@@ -4537,8 +4562,10 @@ fit_ml_fisher_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
                     Bounds bounds, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher_snlls");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
-                           FisherStepKind::SchurSnlls);
+  return with_newton_accuracy(
+      compose_fisher_ml(pt, *pre, samp, x0, bounds, opts,
+                        FisherStepKind::SchurSnlls),
+      pt, rep, samp);
 }
 
 fit_expected<Estimates>
@@ -5498,8 +5525,10 @@ fit_ml_irls(spec::LatentStructure pt, const model::MatrixRep& rep,
             Backend backend, OptimOptions opts, IrlsOptions irls_opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_irls");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
-                            irls_opts, IrlsInner::FullGls);
+  return with_newton_accuracy(
+      compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
+                         irls_opts, IrlsInner::FullGls),
+      pt, rep, samp);
 }
 
 fit_expected<Estimates>
@@ -5509,8 +5538,10 @@ fit_ml_irls_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
                   IrlsOptions irls_opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_irls_snlls");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
-                            irls_opts, IrlsInner::SnllsGls);
+  return with_newton_accuracy(
+      compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
+                         irls_opts, IrlsInner::SnllsGls),
+      pt, rep, samp);
 }
 
 fit_expected<Estimates>

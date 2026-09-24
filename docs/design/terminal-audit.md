@@ -30,6 +30,20 @@ The required checks are:
    and threshold coordinates. Check the declared constraints and the existing
    model-Frobenius metric-dual L2 stationarity residual at tolerance `1e-3`.
    This change does not recalibrate tolerances or assert global optimality.
+3. For complete-data ML (2026-09-24), stationarity at a regular interior
+   point of the fitting domain is decided by the Newton accuracy check
+   instead: `d = sqrt(G' I^{-1} G) <= .01` from the total score and observed
+   information after linear-equality reduction, with the conditioning and
+   solve guards of `newton_accuracy_ml`. Every ambient fit is interior to its
+   domain, improper estimates included. A PSD fit is interior when no
+   primitive covariance block is singular (`covariance_nullity == 0`).
+   Nonpositive curvature, ill conditioning or an unreliable solve fail the
+   check, because no accuracy statement is available there. PSD-boundary
+   points, active box bounds and nonlinear equalities keep the first-order
+   check of item 2, and so does every path without the Newton diagnostic
+   (LS, FIML, ordinal, two-level, penalized). The interior first-order
+   residual is retained as telemetry, not as an extra veto. The verdict's
+   `criterion` records which check decided.
 
 The fit entry point declares `Ambient` or `Psd` before the verdict is selected.
 Ordinary fits use equality/bound normals; explicitly PSD-constrained fits
@@ -598,10 +612,10 @@ singular fits; its procedure is not a drop-in PSD-boundary audit.
 
 The advisory C++ prototype in `tests/checks/interior_newton/` uses the
 canonical observed information and original ML gradient after linear-equality
-reduction. Proposed accuracy budget: Newton distance
+reduction. Accuracy budget: Newton distance
 `d=sqrt(N*g' H^{-1}g) <= .01`, equivalently total-negative-log-likelihood
-EDM <=5e-5. This is a local accuracy approximation, not a new authoritative
-verdict. Ineligible boundary/improper points and unreliable curvature remain
+EDM <=5e-5. This is a local accuracy approximation. It became part of the
+authoritative verdict for complete-data ML on 2026-09-24 (item 3 above). Ineligible boundary/improper points and unreliable curvature remain
 separate outcomes. The prototype's numerical conditioning/solve guards are
 provisional and do not establish identification.
 

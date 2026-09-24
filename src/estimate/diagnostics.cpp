@@ -498,17 +498,34 @@ FitVerdict common_fit_verdict(const FitDiagnostics& d) {
         ? FitCheck::Passed : FitCheck::Failed;
   }
   const auto& g = d.geometric_stationarity;
+  const auto& newton = d.newton_accuracy;
   if (g.checked) {
     const bool psd = out.domain == StationarityDomain::Psd;
-    const bool projected = psd ? g.cone_projection_converged
-                              : g.ambient_projection_converged;
-    const bool stationary = psd ? g.cone_stationary : g.ambient_stationary;
+    // Regular interior point of the fitting domain: the Newton step is
+    // feasible, so its length is an accuracy statement. At a PSD boundary or
+    // an active box bound it is not, and the first-order check decides.
+    const bool interior = !d.active_bounds_full.any_active() &&
+        !(psd && g.covariance_nullity > 0);
+    const bool use_newton = newton.checked && interior &&
+        newton.status != NewtonAccuracyStatus::Unsupported;
     if (!g.gradient_finite) {
       out.stationarity = FitCheck::Failed;
-    } else if (projected) {
-      out.stationarity = stationary ? FitCheck::Passed : FitCheck::Failed;
+    } else if (use_newton) {
+      out.criterion = StationarityCriterion::Newton;
+      const bool feasible = d.sigma_pd_all && d.lin_eq_satisfied &&
+          d.nl_eq_satisfied && (!psd || g.feasible);
+      out.stationarity = feasible && newton.passed ? FitCheck::Passed
+                                                   : FitCheck::Failed;
+    } else {
+      const bool projected = psd ? g.cone_projection_converged
+                                : g.ambient_projection_converged;
+      const bool stationary = psd ? g.cone_stationary : g.ambient_stationary;
+      if (projected) {
+        out.stationarity = stationary ? FitCheck::Passed : FitCheck::Failed;
+      }
+      // An unfinished normal-cone projection is not evidence of
+      // nonstationarity.
     }
-    // An unfinished normal-cone projection is not evidence of nonstationarity.
   }
   if (out.objective == FitCheck::Failed ||
       out.stationarity == FitCheck::Failed) {

@@ -226,8 +226,18 @@ semantics · **XL** statistical design/research track before implementation.
   compare standardized parameter/moment changes, and freeze targets before
   held-out model/unit/rank validation. Neither the existing two-model pilot
   nor this prioritization establishes a production convergence policy.
-- **High priority / M — make the Newton check part of the default
-  convergence verdict (author, 2026-09-24).** `common_fit_verdict` still
+- **Done 2026-09-24 — make the Newton check part of the default
+  convergence verdict (author, 2026-09-24).** Landed as specified below:
+  complete-data ML paths (ordinary, equality-constrained, PSD, Fisher
+  scoring, IRLS) attach `FitDiagnostics::newton_accuracy`, and
+  `common_fit_verdict` decides interior stationarity by d <= .01.
+  Nonpositive curvature, ill conditioning and an unreliable solve fail;
+  Unsupported (nonlinear equalities), PSD-boundary points and active box
+  bounds keep the first-order check. The verdict reports its `criterion`.
+  Tests: `newton_accuracy_test.cpp` (verdict routing, PSD interior and
+  boundary, multi-group distance against the information metric). Remaining:
+  time it on the largest corpus models; the LS/FIML/ordinal/two-level
+  curvature analogues below stay open. Original item: `common_fit_verdict` still
   passes a fit on the first-order residual alone: the metric-dual L2 residual
   at most 1e-3, ambient for ordinary fits and cone for PSD fits. The
   author's validated policy is Newton accuracy at regular interiors and the
@@ -894,6 +904,13 @@ when they next change.
      - Std.lv has the opposite weakness. It fails, or certifies a drifting
        point with |beta| of 340 to 13,554, whenever the optimum has a zero
        latent residual variance: 14.6% of N = 10 draws.
+     - Warm-restart probe (2026-09-24, covariance paper
+       `work/probes/stall_restart_probe.R`): first fit with 50,000
+       evaluations, then up to five SLSQP restarts from the returned point.
+       18 of the 28 pass the certificate, nearly all at an unchanged
+       objective, so the restart only closes the tolerance. The other 10
+       do not pass, and one restart moved to a worse KKT point (0.657 to
+       1.109). Not a principled fix, and no default changed.
      - Next: characterize the stalled lift points (which L diagonals are
        near zero, and their multipliers). Decide whether a stall should
        trigger a refit in another identification or in the sphere.

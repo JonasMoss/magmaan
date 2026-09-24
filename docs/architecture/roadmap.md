@@ -56,16 +56,23 @@ Ordinary L-BFGS/SLSQP ML uses sample-derived equality-reduced scaling on
 supported constraints; PSD ML defaults to existing lifted information scaling
 and constraint tolerance 1e-8. Generic controls and explicit unscaled policies
 remain available. Search scaling is reported and terminal diagnostics are
-recomputed in original coordinates. This does not deploy the Newton accuracy
-verdict or add a PSD recovery policy; see the optimizer-controls reference.
-The Newton accuracy check is available as an opt-in post-fit diagnostic,
-`estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`:
+recomputed in original coordinates. No PSD recovery policy is added; see the
+optimizer-controls reference.
+Complete-data ML fits (ordinary, equality-constrained, PSD, Fisher scoring
+and IRLS; not penalized fits) carry the Newton accuracy check in
+`FitDiagnostics::newton_accuracy` (R `fit$diagnostics$newton_accuracy`):
 d = sqrt(G' I^-1 G) from the total score and observed information after
 linear-equality reduction, with the accepted budget d <= .01, equilibrated
-condition <= 1e12 and relative solve residual <= 1e-10. It reports whether
-every Psi and Theta block is positive definite, since at a PSD-boundary
-solution the cone stationarity audit applies instead. It is not part of the
-fit verdict.
+condition <= 1e12 and relative solve residual <= 1e-10. Since 2026-09-24 the
+common verdict uses it at regular interior points of the fitting domain:
+every ambient fit, improper estimates included, and every PSD fit without a
+singular primitive covariance block. There d <= .01 passes, and
+nonpositive curvature, ill conditioning or an unreliable solve fail. The
+first-order check still decides at PSD boundaries (cone residual), at active
+box bounds, under nonlinear equalities, and on every non-ML path.
+`fit$diagnostics$verdict$criterion` says which check decided. The standalone
+`estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
+recompute it with other options.
 
 ### Admissible covariance-model contract
 

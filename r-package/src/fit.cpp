@@ -381,6 +381,9 @@ Rcpp::List common_verdict_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["stationarity"] = fit_check_to_r(v.stationarity),
       Rcpp::_["domain"] = v.domain == magmaan::estimate::StationarityDomain::Psd
           ? "psd" : "ambient",
+      Rcpp::_["criterion"] =
+          v.criterion == magmaan::estimate::StationarityCriterion::Newton
+          ? "newton" : "first_order",
       Rcpp::_["objective_multiplier"] = o.multiplier,
       Rcpp::_["objective_recomputed"] = o.recomputed,
       Rcpp::_["objective_reported"] = o.reported,
@@ -1144,6 +1147,23 @@ Rcpp::List geometric_stationarity_to_r(
           d.cone_projection_iterations);
 }
 
+Rcpp::List newton_accuracy_to_r(
+    const magmaan::estimate::NewtonAccuracyDiagnostics& a) {
+  auto num = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
+  return Rcpp::List::create(
+      Rcpp::_["checked"] = a.checked,
+      Rcpp::_["status"] = std::string(magmaan::estimate::to_string(a.status)),
+      Rcpp::_["distance"] = num(a.distance),
+      Rcpp::_["passed"] = a.passed,
+      Rcpp::_["budget"] = a.budget,
+      Rcpp::_["covariance_interior"] = a.covariance_interior,
+      Rcpp::_["predicted_gain"] = num(a.predicted_gain),
+      Rcpp::_["max_step"] = num(a.max_step),
+      Rcpp::_["condition"] = num(a.condition),
+      Rcpp::_["solve_residual"] = num(a.solve_residual),
+      Rcpp::_["n_reduced"] = a.n_reduced);
+}
+
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
   Rcpp::LogicalVector sigma_pd(static_cast<R_xlen_t>(d.sigma_pd_per_block.size()));
   for (std::size_t b = 0; b < d.sigma_pd_per_block.size(); ++b)
@@ -1169,6 +1189,7 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["admissibility"]          = admissibility_to_r(d.admissibility),
       Rcpp::_["geometric_stationarity"] =
           geometric_stationarity_to_r(d.geometric_stationarity),
+      Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.newton_accuracy),
       Rcpp::_["verdict"] = common_verdict_to_r(d),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
 }
@@ -7022,18 +7043,7 @@ Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget) {
   opts.budget = budget;
   const auto a = magmaan::estimate::frontier::newton_accuracy_ml(
       ctx.pt, ctx.rep, ctx.samp, est, opts);
-  auto num = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
-  return Rcpp::List::create(
-      Rcpp::_["status"] = std::string(magmaan::estimate::frontier::to_string(a.status)),
-      Rcpp::_["distance"] = num(a.distance),
-      Rcpp::_["passed"] = a.passed,
-      Rcpp::_["budget"] = a.budget,
-      Rcpp::_["covariance_interior"] = a.covariance_interior,
-      Rcpp::_["predicted_gain"] = num(a.predicted_gain),
-      Rcpp::_["max_step"] = num(a.max_step),
-      Rcpp::_["condition"] = num(a.condition),
-      Rcpp::_["solve_residual"] = num(a.solve_residual),
-      Rcpp::_["n_reduced"] = a.n_reduced);
+  return newton_accuracy_to_r(a);
 }
 
 // infer_information_cross_products() — mirrors information_cross_products(...).

@@ -12,7 +12,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::estimate::frontier {
+namespace magmaan::estimate {
 
 std::string_view to_string(NewtonAccuracyStatus s) noexcept {
   switch (s) {
@@ -26,10 +26,15 @@ std::string_view to_string(NewtonAccuracyStatus s) noexcept {
   return "unavailable";
 }
 
+}  // namespace magmaan::estimate
+
+namespace magmaan::estimate::frontier {
+
 NewtonAccuracyDiagnostics
 newton_accuracy_from(const Eigen::VectorXd& G, const Eigen::MatrixXd& I,
                      NewtonAccuracyOptions opts) {
   NewtonAccuracyDiagnostics a;
+  a.checked = true;
   a.budget = opts.budget;
   a.n_reduced = static_cast<std::int32_t>(G.size());
   if (I.rows() != G.size() || I.cols() != G.size() || !G.allFinite() ||
@@ -113,6 +118,7 @@ newton_accuracy_ml(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                    const SampleStats& samp, const Estimates& est,
                    NewtonAccuracyOptions opts) {
   NewtonAccuracyDiagnostics fail;
+  fail.checked = true;
   fail.budget = opts.budget;
   if (build_nl_constraints(pt).active()) {
     fail.status = NewtonAccuracyStatus::Unsupported;
