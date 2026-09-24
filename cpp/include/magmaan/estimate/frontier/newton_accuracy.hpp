@@ -1,6 +1,8 @@
 #pragma once
 
 #include <limits>
+#include <string>
+#include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
@@ -48,9 +50,17 @@ using estimate::NewtonAccuracyOptions;
 using estimate::NewtonAccuracyStatus;
 using estimate::to_string;
 
-// Owning artifacts for complete-data ML, evaluated at theta in full free-
-// parameter order. gradient and hessian are on the TOTAL negative-log-
-// likelihood scale; objective is the per-observation half discrepancy.
+enum class NewtonObjectiveKind {
+  CompleteDataMl, LeastSquares, Fiml, OrdinalLeastSquares,
+  MixedOrdinalLeastSquares, CatMl, TwoLevelMl, PenalizedMl,
+  PenalizedFiml, Supplied
+};
+enum class NewtonCurvatureKind { AnalyticObserved, GradientDifference, GaussNewton, Supplied };
+
+// Owning artifacts evaluated at theta in full free-parameter order.
+// gradient and hessian are on the TOTAL objective scale; objective is the
+// per-observation objective. Only likelihood adapters yield observed information.
+// LS and penalized curvature must not be interpreted as sampling information.
 // Retain these independently of an audit. Reuse requires the same model,
 // sample, parameter ordering and evaluation point; dimension equality alone
 // does not establish compatibility. No optimizer approximation is substituted.
@@ -61,6 +71,22 @@ struct NewtonDerivatives {
   double n_obs = 0.0;
   Eigen::VectorXd gradient;
   Eigen::MatrixXd hessian;
+  NewtonObjectiveKind objective_kind = NewtonObjectiveKind::Supplied;
+  NewtonCurvatureKind curvature_kind = NewtonCurvatureKind::Supplied;
+  double native_to_total = 1.0;
+  double penalty_weight = 0.0; // effective lambda, penalized adapters only
+  double difference_relative_step = 0.0;
+  double difference_relative_tolerance = 0.0;
+  int difference_max_shrink = 0;
+  double hessian_relative_error = 0.0; // h versus h/2, numerical Hessians only
+  Eigen::VectorXd difference_steps;  // retained fine steps, full coordinates
+  std::string detail;
+  // LS-native whitening, including group weights; gradient = N J' r.
+  Eigen::VectorXd whitened_residual;
+  Eigen::MatrixXd whitened_jacobian;
+  // Coordinates absent from the objective, explicitly held fixed by its
+  // adapter (CatML's Stage-1 thresholds). Never inferred from Hessian rank.
+  std::vector<Eigen::Index> fixed_coordinates;
 };
 
 // theta increments = equality_basis * tangent_basis * reduced increments.
@@ -124,6 +150,8 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
 // only its small diagnostics record; callers wanting reuse own this result.
 struct NewtonAudit {
   NewtonAccuracyOptions options;  // effective preparation and assessment settings
+  Bounds bounds;
+  double active_bound_tol = 1e-6;
   NewtonDerivatives derivatives;
   NewtonGeometry geometry;
   NewtonSystem system;
@@ -138,6 +166,15 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
     const NewtonAudit& audit, NewtonAccuracyOptions opts);
 // With no override, use the settings retained by the original audit.
 NewtonAccuracyDiagnostics assess_newton_accuracy(const NewtonAudit& audit);
+
+// Compose retained derivatives with model geometry and the reusable solve.
+// Bounds are explicit: active box bounds currently make Newton Unsupported.
+NewtonAudit audit_newton_derivatives(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    NewtonDerivatives derivatives,
+    StationarityDomain domain = StationarityDomain::Ambient,
+    NewtonAccuracyOptions opts = {}, const Bounds& bounds = {},
+    double active_bound_tol = 1e-6);
 
 NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,

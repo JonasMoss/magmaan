@@ -2998,6 +2998,16 @@ fit_ordinal_psd(spec::LatentStructure pt,
   return result;
 }
 
+fit_expected<optim::ScalarProblem>
+catml_objective(const model::ModelEvaluator& ev, const data::OrdinalStats& stats) {
+  SampleStats sample;
+  sample.S = stats.R;
+  sample.n_obs = stats.n_obs;
+  auto cache = ml_prepare(sample);
+  if (!cache) return std::unexpected(cache.error());
+  return catml_problem(ev, sample, std::move(*cache), "catml_objective");
+}
+
 fit_expected<Estimates>
 fit_catml(spec::LatentStructure pt,
           const model::MatrixRep& rep,

@@ -149,8 +149,79 @@ auto reassessed = assess_newton_accuracy(audit, stricter);
 Existing `newton_accuracy_from`, `newton_accuracy_ml` and
 `newton_accuracy_ml_psd` remain summary convenience functions over these stages.
 This separates computation from assessment without changing the prescribed
-fit-level convergence criteria. General convergence-report composition and
-non-ML curvature adapters remain backlog work.
+fit-level convergence criteria. General convergence-report composition remains backlog work; the estimator
+adapters described below reuse these stages.
+
+## Newton adapter coverage and curvature provenance
+
+`estimate/frontier/newton_adapters.hpp` provides explicit post-fit adapters;
+none runs an optimizer or changes a stored fit verdict. Each returns
+`fit_expected<NewtonAudit>`: invalid problem construction is an error, while
+unavailable numerical curvature remains an inspectable result with a status
+and detail. These are local curvature audits; objective consistency, primal
+feasibility, admissibility and first-order evidence remain separate checks.
+
+| Objective | Entry point | Retained curvature |
+| --- | --- | --- |
+| ULS | `audit_newton_uls` | Gradient differences; optional Gauss-Newton |
+| GLS | `audit_newton_gls` | Same, using the sample-based NT weight |
+| WLS/DWLS/GMM | `audit_newton_wls` / `audit_newton_gmm` | Same, with the supplied fixed weight |
+| Ordinary LS-SNLLS | `audit_newton_snlls` | Full expanded LS objective, including eliminated coordinates |
+| GLS-SNLLS | `audit_newton_gls` at expanded theta | Full GLS objective |
+| FIML | `audit_newton_fiml` | Analytic observed information, using the supplied FIMLPack |
+| Ordinal / mixed LS | `audit_newton_ordinal` / `audit_newton_mixed_ordinal` | Full moment objective, delta or theta; gradient differences or explicit GN |
+| CatML | `audit_newton_catml` | Correlation-objective gradient differences; Stage-1 thresholds held fixed |
+| Two-level ML | `audit_newton_twolevel` | Total-likelihood gradient differences |
+| Multi-information penalized ML / FIML | `audit_newton_penalized_ml` / `audit_newton_penalized_fiml` | Gradient differences including the actual penalty |
+| Other supplied smooth objectives | `audit_newton_objective` | Gradient differences of the supplied original full-theta objective |
+
+For fitted-weight GMM, supply the final frozen estimation weight: differentiating
+an updating weight would audit another objective. CatML does not reuse the raw
+covariance-ML Hessian: its gradient includes the covariance-to-correlation map.
+Only its explicitly Stage-1 threshold coordinates are removed from the solve;
+unidentified model directions are never dropped based on the Hessian spectrum.
+Nonlinear equalities remain unsupported, as do active box bounds. Pass the
+actual bounds and domain explicitly; no variance bounds are inferred.
+
+Derivatives retain the objective kind, curvature source, native-to-total
+multiplier, N, theta and full Hessian. LS also retains native whitened residuals
+and Jacobians. Numerical curvature uses central differences at h and h/2,
+checks their discrepancy and pre-symmetrization asymmetry, and retains the fine
+steps and effective difference controls. Probes can shrink to stay evaluable;
+failed probes or failed reliability checks report unavailable and never switch
+to one-sided differences or Gauss-Newton. Callers can instead provide their own
+Hessian through `audit_newton_derivatives` and retain its independent provenance.
+
+The total-objective convention is N times the native per-observation objective
+for LS, ordinal, CatML, FIML and penalized fits. Two-level's native scalar
+objective already equals total negative log likelihood, so its multiplier is
+one, not N or one half. The recorded `objective` is total/N in every adapter.
+A numerical Hessian costs up to four gradient probes per parameter, plus the
+point evaluation (more when steps shrink). It is requested explicitly after
+fitting, not imposed on every optimization run.
+
+The returned distance and predicted gain use this declared objective curvature.
+For LS, limited-information CatML and penalized fits they are not automatically
+sampling-standard-error or likelihood-ratio accuracy claims. Gauss-Newton is
+labelled as an approximation and may differ from the actual Hessian away from
+zero residuals. The inherited .01 budget is configurable; its ML interpretation
+does not establish a cross-estimator calibration. Existing non-ML fit-time
+first-order verdicts and R's summary-only Newton helper are unchanged.
+
+```cpp
+namespace nf = magmaan::estimate::frontier;
+nf::NewtonAdapterOptions request;
+request.accuracy.budget = 0.005;
+request.differences.relative_step = 1e-4;
+request.bounds = actual_bounds;
+auto audit = nf::audit_newton_gmm(pt, rep, sample, fit.theta, weight, request);
+if (audit && audit->derivatives.status == nf::NewtonAccuracyStatus::Available) {
+  const auto& H = audit->derivatives.hessian; // original full-coordinate matrix
+  auto policy = audit->options;
+  policy.budget = 0.001;
+  auto revised = nf::assess_newton_accuracy(*audit, policy); // no recomputation
+}
+```
 
 ## Context
 

@@ -124,6 +124,7 @@ add_library(magmaan STATIC
   src/estimate/frontier/gauge.cpp
   src/estimate/frontier/multiinfo_penalty.cpp
   src/estimate/frontier/newton_accuracy.cpp
+  src/estimate/frontier/newton_adapters.cpp
   src/estimate/frontier/noniterative_cfa.cpp
   src/estimate/frontier/sphere.cpp
   src/estimate/cfa_utils.cpp

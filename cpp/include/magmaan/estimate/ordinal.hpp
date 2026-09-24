@@ -497,6 +497,11 @@ fit_ordinal_psd(spec::LatentStructure pt,
                     OrdinalParameterization::Delta,
                 PsdFitOptions psd_opts = {});
 
+// Original full-theta cML objective, shared by fitting and post-fit audits.
+// Borrows ev; stats supplies Stage-1 correlations and sample sizes.
+fit_expected<optim::ScalarProblem>
+catml_objective(const model::ModelEvaluator& ev, const data::OrdinalStats& stats);
+
 // Categorical ML (cML): fit the SEM correlation structure with the ordinary
 // normal-theory ML discrepancy, using the Stage-1 polychoric correlation
 // matrix as input. Thresholds are saturated Stage-1 quantities and therefore

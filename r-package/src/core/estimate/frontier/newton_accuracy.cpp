@@ -172,6 +172,8 @@ NewtonDerivatives evaluate_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta) {
   NewtonDerivatives out;
+  out.objective_kind = NewtonObjectiveKind::CompleteDataMl;
+  out.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
   out.theta = theta;
   if (theta.size() != pt.n_free() || !theta.allFinite()) return out;
   auto ev = model::ModelEvaluator::build(pt, rep);
@@ -182,6 +184,7 @@ NewtonDerivatives evaluate_newton_ml(
   if (!(out.n_obs > 0.0) || !std::isfinite(out.n_obs)) return out;
   out.objective = obj->f(theta, out.gradient);
   out.gradient *= out.n_obs;
+  out.native_to_total = out.n_obs;
   if (!std::isfinite(out.objective) || !out.gradient.allFinite()) return out;
   Estimates est;
   est.theta = theta;
@@ -197,11 +200,35 @@ NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta,
     StationarityDomain domain, NewtonAccuracyOptions opts) {
+  return audit_newton_derivatives(pt, rep,
+      evaluate_newton_ml(pt, rep, samp, theta), domain, opts);
+}
+
+NewtonAudit audit_newton_derivatives(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    NewtonDerivatives derivatives, StationarityDomain domain,
+    NewtonAccuracyOptions opts, const Bounds& bounds, double active_bound_tol) {
   NewtonAudit out;
   out.options = opts;
-  out.derivatives = evaluate_newton_ml(pt, rep, samp, theta);
+  out.bounds = bounds;
+  out.active_bound_tol = active_bound_tol;
+  out.derivatives = std::move(derivatives);
   out.geometry = prepare_newton_geometry(pt, rep, out.derivatives, domain,
                                          opts.interior_eigen_tol);
+  if (!bounds.empty()) {
+    const auto& theta = out.derivatives.theta;
+    if (bounds.lower.size() != theta.size() || bounds.upper.size() != theta.size() ||
+        !std::isfinite(active_bound_tol) || active_bound_tol < 0 ||
+        bounds.lower.array().isNaN().any() || bounds.upper.array().isNaN().any() ||
+        (bounds.lower.array() > bounds.upper.array()).any()) {
+      out.geometry.status = NewtonAccuracyStatus::Unavailable;
+      out.derivatives.detail = "Newton audit: invalid bounds or active-bound tolerance";
+    } else if ((theta.array() <= bounds.lower.array() + active_bound_tol).any() ||
+               (theta.array() >= bounds.upper.array() - active_bound_tol).any()) {
+      out.geometry.status = NewtonAccuracyStatus::Unsupported;
+      out.derivatives.detail = "Newton audit: active or violated box bounds require constrained curvature";
+    }
+  }
   if (out.geometry.status == NewtonAccuracyStatus::Available) {
     out.system = prepare_newton_system(out.geometry.reduced_hessian);
     out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient);
@@ -346,8 +373,21 @@ NewtonGeometry prepare_newton_geometry(
   if (!con || !ev) return fail;
   const auto& theta = derivatives.theta;
   const Eigen::Index npar = theta.size();
-  const Eigen::MatrixXd K = con->K();
-  const Eigen::VectorXd G = con->reduce_gradient(derivatives.gradient);
+  Eigen::MatrixXd K = con->K();
+  if (!derivatives.fixed_coordinates.empty()) {
+    Eigen::MatrixXd A(derivatives.fixed_coordinates.size(), K.cols());
+    for (std::size_t j = 0; j < derivatives.fixed_coordinates.size(); ++j) {
+      const Eigen::Index k = derivatives.fixed_coordinates[j];
+      if (k < 0 || k >= npar) return fail;
+      A.row(static_cast<Eigen::Index>(j)) = K.row(k);
+    }
+    if (K.cols() > 0) {
+      Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullV);
+      const Eigen::Index rank = svd.rank();
+      K = (K * svd.matrixV().rightCols(K.cols() - rank)).eval();
+    }
+  }
+  const Eigen::VectorXd G = K.transpose() * derivatives.gradient;
   const Eigen::MatrixXd I = K.transpose() * derivatives.hessian * K;
   NewtonGeometry out = fail;
   out.equality_basis = K;

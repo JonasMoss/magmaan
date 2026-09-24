@@ -101,20 +101,37 @@ a divergent path (no attained maximum), where the remaining gain is tiny.
 `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
 recompute it with other options.
 
-Newton audit computations are also available as owning, reusable C++ artifacts
-under `estimate::frontier`: `evaluate_newton_ml` retains the full total-gradient
-and observed Hessian at a supplied theta; `prepare_newton_geometry` retains
-linear-equality and PSD tangent bases, the separate full-coordinate curvature
-correction and reduced system; `prepare_newton_system` retains equilibration and
-an LLT factorization; `solve_newton_system` returns the signed Newton correction.
-`assess_newton_accuracy` applies runtime accuracy and numerical-reliability
-budgets without recomputation. `audit_newton_ml` composes and retains every
-stage and its effective options; the existing summary-only wrappers use this
-same implementation. The full observed Hessian remains suitable as input to
-existing information-based post-fit primitives; PSD-adjusted reduced curvature
-is explicitly separate. Artifact reuse requires the same evaluation point,
-model, data, normalization and parameter ordering. R still exposes the small
-Newton diagnostics record, not these C++ owning artifacts.
+Newton computations are available as owning, reusable C++ artifacts under
+`estimate::frontier`. `evaluate_newton_ml` retains the full total-gradient and
+analytic observed Hessian; geometry preparation retains equality and PSD
+tangent bases, the separate curvature correction and reduced system; numerical
+preparation retains equilibration and an LLT factorization; solving returns the
+signed Newton correction. `assess_newton_accuracy` changes runtime acceptance
+budgets without recomputation. `audit_newton_ml` and `audit_newton_derivatives`
+compose those stages. Existing ML summary wrappers use the same implementation.
+
+`estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
+ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
+all-ordinal and mixed-ordinal LS, CatML, two-level ML, and multi-information
+penalized complete-data ML/FIML. Fitted-weight GMM consumes the final frozen
+weight explicitly. FIML uses its analytic observed information; LS defaults to
+checked central differences of the full objective gradient, with an explicit
+Gauss-Newton option; CatML, two-level and penalized adapters differentiate their
+actual gradients. Numerical Hessians retain step sizes and h-versus-h/2 and
+symmetry diagnostics, with runtime controls and no silent approximation fallback.
+LS artifacts also retain their whitened residuals and Jacobians. CatML holds
+its Stage-1 threshold coordinates fixed by explicit geometry, rather than
+removing numerical Hessian null directions. Nonlinear equalities and active
+box bounds leave Newton unsupported, with computed derivatives still inspectable.
+
+Every adapter labels its objective family, curvature source and native-to-total
+normalization. Two-level uses its native total negative log likelihood; the
+other adapters multiply their per-observation objective by N. The full original
+Hessian remains separate from PSD-adjusted curvature. LS and penalized curvature
+is not sampling information, and the default .01 distance budget is not a
+cross-estimator standard-error calibration. These adapters do not change
+non-ML fit-time convergence policy or the R summary interface. Artifact reuse
+requires the same model, point, data, weights, objective and parameter order.
 
 ### Admissible covariance-model contract
 

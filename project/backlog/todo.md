@@ -29,18 +29,20 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-- **M — unify explicit post-fit convergence audits across estimator families.**
-  The Newton computation now has retainable derivative, geometry, factorization,
-  solution and assessment stages (see roadmap). Extend this composition pattern
-  to the common convergence report, with an explicit objective/domain context,
-  runtime check requests and acceptance policy. Inventory every iterative path;
-  require fit-time/post-fit agreement for the same problem and point. In
-  particular `evaluate_at(ML)` still lacks the fit-time Newton diagnostic and
-  its legacy `audit_options` do not configure the common verdict. Missing
-  required evidence must remain unresolved instead of silently choosing a
-  weaker criterion. Add thin R access to retained artifacts when the common
-  post-fit interface is exposed. Curvature extensions to other objectives
-  require their own mathematical interpretation and validation.
+- **M — unify explicit post-fit convergence reports and acceptance policy.**
+  Retained Newton adapters now cover continuous LS/GMM and full-coordinate
+  SNLLS, FIML, ordinal/mixed LS, CatML, two-level ML and multi-information
+  penalized ML/FIML (see roadmap). Remaining: compose these with feasibility,
+  objective-consistency and first-order evidence into one common report and
+  explicit required-check policy. Require fit-time/post-fit agreement under
+  the same requested checks. `evaluate_at(ML)` still lacks the fit-time Newton
+  diagnostic; its legacy `audit_options` do not configure the common verdict.
+  Missing required evidence must remain unresolved instead of silently choosing
+  a weaker criterion. Add thin R access to retained artifacts. Numerical
+  curvature and Gauss-Newton are labelled, but non-ML statistical accuracy
+  calibration and any default fit-verdict migration remain separate work.
+  Newton curvature under active boxes/nonlinear equalities and extra callback
+  constraints remains unsupported; FCSEM still needs an estimator adapter.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
