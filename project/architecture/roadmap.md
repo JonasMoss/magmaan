@@ -158,6 +158,22 @@ can both be reassessed. Focused tests verify fit/post-fit parity, missing checks
 policy differences, domain feasibility and reassessment without recomputation.
 The detailed contract and example are in `project/design/terminal-audit.md`.
 
+`estimate/frontier/ml2s_audit.hpp` adds standalone saturated-likelihood endpoint
+reports and composed ML2S reports for all five Stage-2 weight policies. Stage 1
+retains structured per-block EM stopping/repair telemetry in `FIMLH1` and
+`SaturatedMoments`; the latter now preserves `raw_H` and total `raw_gradient`
+separately from its potentially repaired inference `H`, with repair metadata.
+Endpoint audits reuse labelled analytic raw derivatives or evaluate them at the
+supplied moments, without EM. Original moments and optional transformed Stage-2
+inputs remain separate; transformations clear stale raw derivative slots.
+Composed assessment uses independent stage policies and a handoff comparison
+against an optional caller-retained fit-input record. Missing handoff evidence
+stays unchecked by default; solver-stop evidence can be required separately.
+Existing fitting/repair defaults are unchanged. Tests cover missing-data groups,
+all five weights, early stops, raw negative curvature versus repaired information,
+handoff mismatches and transformed inputs. R report bindings and automatically
+captured fit-input records remain pending; the design document specifies limits.
+
 ### Admissible covariance-model contract
 
 For each group, the continuous complete-data model uses the reduced-LISREL

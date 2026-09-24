@@ -230,67 +230,91 @@ required versus optional checks, objective mismatch, feasibility, unsupported
 bounds, nonpositive curvature, guard reassessment without callback evaluations,
 ambient versus PSD domains, LS artifact composition, and fit/post-fit ML parity.
 
-## Two-stage convergence composition: next implementation
+## Two-stage convergence composition
 
-ML2S is the next coverage priority; native FCSEM and implicit RBM adapters can
-wait. This section specifies planned work, not an implemented two-stage report.
-Stage-2 Newton adapters already cover NT/ULS/DWLS/ADF/DLS.
+`estimate/frontier/ml2s_audit.hpp` provides `audit_saturated_endpoint`,
+`audit_ml2s`, and separate assessment overloads. The owning two-stage report
+contains the saturated endpoint audit, original Stage-1 inference ingredients,
+the optional transformation and its diagnostics, the actual supplied Stage-2
+input, an optional recorded fitting-input snapshot, and the Stage-2 report.
+No optimizer or EM iteration runs during auditing.
 
-The proposed owning two-stage report contains three independently inspectable
-pieces: a Stage-1 saturated observed-data likelihood audit, a handoff record,
-and the Stage-2 convergence report. Assessment accepts separate stage policies.
-All required pieces must pass; a known required failure fails the composition;
-otherwise missing required evidence leaves it unchecked. Preserve the component
-reasons. This is a composition of convergence decisions, not a sum of Newton
-distances or a calibrated bound on final structural-parameter error.
+`FIMLH1` and `SaturatedMoments` now retain effective EM options and structured
+per-block stopping evidence: direct solution versus parameter-tolerance stop
+versus iteration limit, iteration count, final parameter/objective changes,
+and covariance-repair count/magnitude. Complete-data direct solutions have zero
+EM iterations. Existing `error_on_nonconvergence` behavior is unchanged; set it
+false when an early-stopped endpoint should be returned for inspection.
 
-Stage 1 needs both solver telemetry and an independent endpoint audit:
+The saturated endpoint audit checks covariance positive definiteness, the
+observed-pattern objective, the total negative-log-likelihood gradient and,
+when requested, the unmodified analytic Hessian. Its open positive-definite
+covariance domain has no active cone-face calculation. Non-PD endpoints fail
+feasibility; a covariance floor inside EM does not become an implicitly declared
+constraint in the audit. First-order stationarity uses total/N gradients in the
+product Frobenius metric (off-diagonal covariance coordinates have weight two).
+Stage-1 Newton evidence is independent of the EM stopping flag.
 
-- Retain effective `FIMLH1Options`, per-block EM iteration count, final parameter
-  and objective changes, stopping reason, covariance-repair count and magnitude.
-  `H1EMResult` already computes these privately; `FIMLH1` currently retains only
-  moments, objective and warning strings. Complete-data moment solutions should
-  be labelled direct solves rather than assigned fictitious EM iterations.
-- Evaluate the original observed-pattern likelihood, its saturated score and
-  unmodified observed Hessian at the supplied final moments, without rerunning
-  EM. Public saturated score/information helpers already support supplied
-  moments. Preserve the ordering and normalization explicitly: the public
-  helpers use block-stacked covariance vechs followed by block-stacked means,
-  while `SaturatedMoments` uses blockwise `[mean; vech(cov)]`. Deviance scores
-  require the one-half conversion to total negative-log-likelihood gradient.
-- Keep EM stopping telemetry separate from endpoint acceptance. An iteration cap
-  is an algorithmic stop, not by itself an independent stationarity verdict;
-  externally supplied moments can still receive an endpoint audit without an
-  invented EM history. Runtime policy can additionally require solver evidence.
-- Preserve raw curvature separately from repaired inference matrices.
-  `saturated_em_moments_impl` may regularize `SaturatedMoments::H` before inversion
-  and sandwich construction. That matrix cannot silently stand in for the raw
-  likelihood Hessian in a convergence certificate. The public
-  `fiml_saturated_observed_information` returns unmodified analytic curvature at
-  supplied moments and can underpin the independent audit.
+`SaturatedMoments::raw_H` and `raw_gradient` preserve derivatives at the original
+endpoint in blockwise `[mean; vech(cov)]` order. `H` retains its existing
+inference behavior and may be repaired before inversion; the repair flag,
+minimum eigenvalue and ridge are retained separately. The endpoint audit uses
+only raw curvature. Its coordinate order is all group covariance vechs followed
+by all group means; retained derivatives are explicitly permuted. Analytic raw
+curvature can be reused after exact endpoint/count checks. Legacy objects and
+diagnostic finite-difference Hessians use the public analytic evaluator instead.
+The caller must supply the same raw data/pack that produced retained derivatives;
+there is no automatic data fingerprint.
 
-The handoff must record the moments/counts and, where used, ACOV that actually
-feed Stage 2, together with the weight kind and DLS mixing value. A new composed
-fit can retain that input directly; arbitrary legacy fits lack proof of what
-was consumed. Recomputing their Stage-2 audit establishes convergence against
-supplied inputs, not historical provenance. Report an unverified handoff when
-that evidence is absent rather than infer it from successful stage verdicts.
+`audit_ml2s` constructs Stage-1 inference ingredients once, or reuses a supplied
+`retained_stage1` object; it then audits Stage 2 under NT/ULS/DWLS/ADF/DLS using
+the existing adapters. Raw moments stay in `source`. An explicitly requested
+`regularize_saturated_stage1` transformation supplies separate Stage-2 moments
+and transformed ACOV. Transformed objects clear raw derivative slots, since those
+derivatives do not describe the transformed endpoint. Original `H`/`J` and
+solver telemetry still describe the source calculation, not a new likelihood
+fit to the transformed moments.
 
-If `regularize_saturated_stage1` transforms moments/ACOV, retain the raw Stage-1
-solution, the transformation and its diagnostics, and the transformed Stage-2
-input separately. Do not test transformed moments for stationarity under the
-unmodified Stage-1 likelihood. A covariance floor inside EM also needs recorded
-repair evidence; do not silently reinterpret it as an explicitly constrained
-likelihood optimum. The endpoint audit should state the objective/domain it can
-actually establish.
+Handoff evidence compares means, covariances, counts, weight kind, DLS mixing
+value when relevant, and ACOV for DWLS/ADF/DLS against an optional
+`Ml2sStage2Input` snapshot retained by the caller when fitting. Equality is exact;
+serialized/rounded inputs are not silently treated as identical. A match means
+“matches supplied fit-input record”, not proof of historical causality. Without
+a record the handoff is unchecked. Existing fit entry points do not automatically
+retain this new snapshot. Stage-2 auditing alone establishes convergence against
+the supplied inputs, independently of historical provenance.
 
-The first implementation should retain Stage-1 telemetry and raw curvature,
-expose the standalone saturated endpoint audit, then compose it with the existing
-Stage-2 report and explicit handoff evidence. Regression cases should include
-complete data, multiple groups with missingness, deliberately early-stopped EM,
-wrong Stage-2 inputs, information/covariance repair, and transformed Stage-1
-inputs. Propagating Stage-1 numerical error into final parameter accuracy is a
-separate extension; it is not required for the initial composed verdict.
+Assessment accepts separate stage policies, defaults to requiring the handoff,
+and optionally requires the Stage-1 solver stopping condition. A known required
+failure fails the composition; otherwise missing required evidence leaves it
+unchecked. All required pieces must pass. Solver-history absence does not block
+an independent endpoint audit unless explicitly required. Newton distances are
+not summed, and this is not a bound on propagated structural-parameter error.
+Invalid inputs or inability to construct Stage-2 inference ingredients return
+expected errors; the standalone endpoint audit remains independently callable.
+
+```cpp
+namespace audit = magmaan::estimate::frontier;
+// Retain alongside the Stage-2 fit made with these exact inputs:
+audit::Ml2sStage2Input fit_input{stage1_moments, weight_kind, dls};
+auto report = audit::audit_ml2s(
+    pt, rep, raw, pack, h1, fit.theta, weight_kind, dls, {},
+    fit_input, fit.fmin, &stage1_moments);
+if (!report) return std::unexpected(report.error());
+audit::Ml2sConvergencePolicy policy;
+policy.stage1 = audit::newton_convergence_policy();
+policy.stage2 = audit::newton_convergence_policy();
+policy.stage1.require_objective_consistency = true;
+policy.stage2.require_objective_consistency = true;
+auto verdict = audit::assess_convergence(*report, policy);
+```
+
+`ml2s_audit_test.cpp` covers complete data, unequal groups with missingness,
+analytic/retained derivative agreement and normalization, early EM termination,
+raw negative curvature despite repaired inference information, all Stage-2
+weight policies, missing/mismatched handoff records, separate solver-stop policy,
+and transformed inputs. R bindings, automatically captured fit-input records,
+propagated numerical accuracy and outer fitted-weight iterations remain follow-ups.
 
 ## Coverage by applicable check
 
@@ -305,7 +329,7 @@ the explicit report composes these checks independently of fit finalization.
 | Fixed LS/GMM, GLS, expanded SNLLS | Yes | Numerical or requested GN | Broader constraint/domain regression combinations |
 | Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
 | FIML | Yes | Analytic | Broader missingness/group combinations |
-| ML2S | Yes, Stage 2 | All five Stage-2 policies | Stage-1 EM convergence is separate |
+| ML2S | Yes, Stage 2; explicit Stage-1 endpoint and composed report | Analytic Stage 1; all five Stage-2 policies | Automatic fit-input capture and R reports |
 | Ordinal/mixed LS, including profiled fits | Yes, full coordinates | Delta/theta; numerical or GN | Broader group/profile combinations |
 | CatML | Yes, correlation objective | Numerical; thresholds held | Stage-1 threshold estimation is separate |
 | Two-level ML | Yes | Numerical | Broader between/within constraint combinations |

@@ -80,6 +80,18 @@ struct FIMLH1Options {
   bool   error_on_nonconvergence = true;
 };
 
+enum class H1StopReason { Direct, ParameterTolerance, IterationLimit };
+struct H1BlockDiagnostics {
+  H1StopReason stop = H1StopReason::Direct;
+  int iterations = 0;
+  double parameter_change = 0.0;
+  double objective_change = 0.0;
+  bool objective_converged = false;
+  int covariance_repairs = 0;
+  double max_covariance_ridge = 0.0;
+  double min_covariance_eigen = std::numeric_limits<double>::quiet_NaN();
+};
+
 // Saturated (H1) EM moments plus the converged H1 objective value, computed
 // by one EM run per block via `fiml_h1_moments` and shared by every post-fit
 // consumer (likelihood accounting, SRMR, robust traces, saturated
@@ -91,6 +103,9 @@ struct FIMLH1 {
   std::vector<Eigen::MatrixXd> sigma;
   std::vector<std::string> warnings;
   double value = 0.0;
+  bool solver_recorded = false;
+  FIMLH1Options solver_options;
+  std::vector<H1BlockDiagnostics> solver_blocks;
 };
 
 struct FIMLValueGradient {
@@ -135,6 +150,17 @@ struct SaturatedMoments {
   Eigen::MatrixXd              H;      // block-diagonal saturated information
   Eigen::MatrixXd              J;      // block-diagonal saturated score covariance
   Eigen::MatrixXd              acov;   // sandwich ACOV(η̂_S) = H⁻¹ J H⁻¹
+  // Original observed information before the inversion safeguard modifies H.
+  // Same blockwise [mean; vech(cov)] order and total-likelihood units as H.
+  Eigen::MatrixXd raw_H;
+  bool raw_hessian_analytic = false;
+  Eigen::VectorXd raw_gradient; // total negative-log-likelihood gradient, same order
+  bool information_repaired = false;
+  double information_ridge = 0.0;
+  double information_min_eigen = std::numeric_limits<double>::quiet_NaN();
+  bool solver_recorded = false;
+  FIMLH1Options solver_options;
+  std::vector<H1BlockDiagnostics> solver_blocks;
 };
 
 enum class Stage1RegularizationTarget : std::uint8_t {

@@ -2664,6 +2664,9 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
   }
 
   FIMLH1 out;
+  out.solver_recorded = true;
+  out.solver_options = options;
+  out.solver_blocks.resize(B);
   out.mu.resize(B);
   out.sigma.resize(B);
 
@@ -2692,6 +2695,11 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
     auto em_or = h1_em_iterate_block(cache, b, mu, Sigma, options);
     if (!em_or.has_value()) return std::unexpected(em_or.error());
     const H1EMResult& em = *em_or;
+    out.solver_blocks[b] = {
+        em.converged ? H1StopReason::ParameterTolerance : H1StopReason::IterationLimit,
+        em.iterations, em.parameter_change, em.objective_change,
+        em.objective_converged, em.covariance_repairs, em.max_covariance_ridge,
+        em.min_covariance_eigen};
     if (!em.converged) {
       if (options.error_on_nonconvergence) {
         FitError err = make_fit_err(FitError::Kind::OptimizerNonConvergence,
@@ -4519,7 +4527,11 @@ saturated_em_moments_impl(const RawData& raw,
   out.cov.resize(B);
   out.n_obs.resize(B);
   out.warnings = h1.warnings;
+  out.solver_recorded = h1.solver_recorded;
+  out.solver_options = h1.solver_options;
+  out.solver_blocks = h1.solver_blocks;
   out.H = Eigen::MatrixXd::Zero(Q, Q);
+  out.raw_gradient = Eigen::VectorXd::Zero(Q);
   out.J = Eigen::MatrixXd::Zero(Q, Q);
 
   for (std::size_t b = 0; b < B; ++b) {
@@ -4547,6 +4559,7 @@ saturated_em_moments_impl(const RawData& raw,
     const Eigen::Index q = q_b[b];
     const Eigen::Index off = off_b[b];
     out.H.block(off, off, q, q) = (n_b / 2.0) * H_dev_mean;
+    out.raw_gradient.segment(off, q) = 0.5 * scores_dev.colwise().sum().transpose();
     out.J.block(off, off, q, q) =
         0.25 * (scores_dev.transpose() * scores_dev);
 
@@ -4555,10 +4568,15 @@ saturated_em_moments_impl(const RawData& raw,
     out.n_obs[b] = static_cast<std::int64_t>(raw.X[b].rows());
   }
 
+  out.raw_H = out.H;
+  out.raw_hessian_analytic = hessian_kind == SaturatedHessianKind::Analytic;
   auto H_repair = floor_symmetric_post(
       out.H, /*absolute_floor=*/0.0, saturated_info_rel_floor,
       std::string(caller) + ": aggregated saturated information");
   if (!H_repair.has_value()) return std::unexpected(H_repair.error());
+  out.information_repaired = H_repair->applied;
+  out.information_ridge = H_repair->ridge;
+  out.information_min_eigen = H_repair->min_eigen_before;
   if (H_repair->applied) {
     add_unique_warning(out.warnings,
         std::string(caller) +
@@ -5028,6 +5046,10 @@ regularize_saturated_stage1(const SaturatedMoments& sm,
   }
 
   if (any_applied) {
+    // Raw likelihood derivatives describe the untransformed endpoint only.
+    out.moments.raw_H.resize(0, 0);
+    out.moments.raw_hessian_analytic = false;
+    out.moments.raw_gradient.resize(0);
     out.moments.acov = D * sm.acov * D.transpose();
     out.moments.acov =
         (0.5 * (out.moments.acov + out.moments.acov.transpose())).eval();
