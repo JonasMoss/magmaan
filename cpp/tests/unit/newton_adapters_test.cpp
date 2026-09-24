@@ -294,3 +294,92 @@ TEST_CASE("Newton adapters: a profiled LS fit is audited in full coordinates") {
       a->derivatives.whitened_residual).norm() < 1e-10);
   CHECK(a->diagnostics.passed);
 }
+
+TEST_CASE("Newton adapters: fitted weight is frozen at the audit point") {
+  auto m = model_for("x1 ~~ x1 + x2 + x3\nx2 ~~ x2 + x3\nx3 ~~ x3");
+  auto s = sample3();
+  auto theta = estimate::simple_start_values(m.pt, m.rep, s, {});
+  REQUIRE(theta.has_value());
+  auto ev = model::ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto w = estimate::gmm::expected_information_weight(*ev, s, *theta);
+  REQUIRE(w.has_value());
+  auto a = nf::audit_newton_gmm_fitted_weight(m.pt, m.rep, s, *theta);
+  auto direct = nf::audit_newton_gmm(m.pt, m.rep, s, *theta, *w);
+  REQUIRE(a.has_value()); REQUIRE(direct.has_value());
+  check_artifacts(*a);
+  CHECK(a->derivatives.hessian.isApprox(direct->derivatives.hessian, 1e-12));
+  // The saturated model is linear: the frozen-weight Hessian is exactly J'J
+  // even away from the optimum. Differentiating the weight would violate this.
+  CHECK(a->derivatives.hessian.isApprox(400 *
+      a->derivatives.whitened_jacobian.transpose() * a->derivatives.whitened_jacobian, 1e-8));
+  CHECK(a->derivatives.gradient.norm() > 1);
+  CHECK_FALSE(nf::audit_newton_gmm_fitted_weight(m.pt, m.rep, s, *theta,
+      static_cast<nf::GmmFittedWeightKind>(99)).has_value());
+}
+
+TEST_CASE("Newton adapters: ML2S reuses moments for all five Stage-2 policies") {
+  auto m = model_for("x1 ~~ x1 + x2\nx2 ~~ x2", true);
+  data::SampleStats s;
+  Eigen::Matrix2d S; S << 1.2, .3, .3, 1.1;
+  s.S = {S}; s.mean = {Eigen::Vector2d(.2, -.1)}; s.n_obs = {200};
+  estimate::fiml::SaturatedMoments sm;
+  sm.cov = s.S; sm.mean = s.mean; sm.n_obs = s.n_obs;
+  sm.acov = Eigen::MatrixXd::Identity(5, 5) / 200;
+  auto theta = estimate::simple_start_values(m.pt, m.rep, s, {});
+  REQUIRE(theta.has_value());
+  using Kind = estimate::fiml::TwoStageWeight;
+  for (auto kind : {Kind::Nt, Kind::Uls, Kind::Dwls, Kind::Adf, Kind::Dls}) {
+    CAPTURE(static_cast<int>(kind));
+    auto a = nf::audit_newton_ml2s(m.pt, m.rep, sm, *theta, kind);
+    REQUIRE(a.has_value()); check_artifacts(*a);
+    if (kind == Kind::Nt) {
+      auto direct = nf::audit_newton_ml(m.pt, m.rep, s, *theta);
+      CHECK(a->derivatives.hessian.isApprox(direct.derivatives.hessian));
+      CHECK(a->derivatives.objective == doctest::Approx(direct.derivatives.objective));
+      CHECK(a->derivatives.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
+    } else {
+      auto w = estimate::fiml::two_stage_stage2_weight_structured(sm, kind);
+      REQUIRE(w.has_value());
+      auto direct = nf::audit_newton_gmm(m.pt, m.rep, s, *theta, *w);
+      REQUIRE(direct.has_value());
+      CHECK(a->derivatives.hessian.isApprox(direct->derivatives.hessian));
+      CHECK(a->derivatives.objective == doctest::Approx(direct->derivatives.objective));
+      CHECK(a->derivatives.hessian.isApprox(200 *
+          a->derivatives.whitened_jacobian.transpose() * a->derivatives.whitened_jacobian, 1e-8));
+    }
+  }
+  nf::NewtonAdapterOptions gn; gn.gauss_newton = true;
+  CHECK_FALSE(nf::audit_newton_ml2s(m.pt, m.rep, sm, *theta, Kind::Nt, {}, gn).has_value());
+  estimate::fiml::TwoStageDlsOptions bad; bad.a = 2;
+  CHECK_FALSE(nf::audit_newton_ml2s(m.pt, m.rep, sm, *theta, Kind::Dls, bad).has_value());
+  sm.mean.clear();
+  CHECK_FALSE(nf::audit_newton_ml2s(m.pt, m.rep, sm, *theta).has_value());
+}
+
+TEST_CASE("Newton adapters: unequal groups preserve total LS curvature") {
+  auto parsed = parse::Parser::parse("x1 ~~ x1 + x2\nx2 ~~ x2");
+  REQUIRE(parsed.has_value());
+  spec::BuildOptions opts; opts.fixed_x = false; opts.n_groups = 2;
+  auto pt = spec::build(*parsed, opts);
+  REQUIRE(pt.has_value());
+  auto rep = model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  data::SampleStats s;
+  Eigen::Matrix2d S; S << 1.2, .3, .3, 1.1;
+  s.S = {S, 2 * S}; s.n_obs = {100, 300};
+  auto theta = estimate::simple_start_values(*pt, *rep, s, {});
+  REQUIRE(theta.has_value());
+  auto a = nf::audit_newton_uls(*pt, *rep, s, *theta);
+  REQUIRE(a.has_value()); check_artifacts(*a);
+  const Eigen::MatrixXd H = 400 * a->derivatives.whitened_jacobian.transpose() *
+      a->derivatives.whitened_jacobian;
+  CHECK(a->derivatives.hessian.isApprox(H, 1e-8));
+  CHECK(a->derivatives.gradient.isApprox(400 *
+      a->derivatives.whitened_jacobian.transpose() * a->derivatives.whitened_residual, 1e-8));
+  // Each free covariance appears once in vech, with its own group's n.
+  for (std::size_t r = 0; r < pt->op.size(); ++r)
+    if (pt->free[r] > 0)
+      CHECK(H(pt->free[r] - 1, pt->free[r] - 1) ==
+          doctest::Approx(s.n_obs[static_cast<std::size_t>(pt->group[r] - 1)]));
+}

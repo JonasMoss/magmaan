@@ -42,7 +42,11 @@ semantics · **XL** statistical design/research track before implementation.
   curvature and Gauss-Newton are labelled, but non-ML statistical accuracy
   calibration and any default fit-verdict migration remain separate work.
   Newton curvature under active boxes/nonlinear equalities and extra callback
-  constraints remains unsupported; FCSEM still needs an estimator adapter.
+  constraints remains unsupported; FCSEM and implicit RBM still need estimator
+  adapters. ML2S Stage-2 and fitted-weight GMM convenience adapters are available;
+  separate Stage-1/outer-iteration checks remain open. Expand representative
+  adapter tests across group/constraint/domain combinations using the coverage
+  matrix in `project/design/terminal-audit.md`.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 

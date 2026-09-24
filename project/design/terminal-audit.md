@@ -152,6 +152,44 @@ This separates computation from assessment without changing the prescribed
 fit-level convergence criteria. General convergence-report composition remains backlog work; the estimator
 adapters described below reuse these stages.
 
+## Coverage by applicable check
+
+This matrix distinguishes existing fit finalization from explicit, reusable
+post-fit Newton artifacts. “Fit checks” means the original-objective,
+feasibility and first-order checks at the documented common finalization seam;
+it does not mean these are already composed into a configurable post-fit report.
+
+| Fit path | Common fit checks | Explicit retained Newton | Remaining coverage |
+| --- | --- | --- | --- |
+| Complete-data ML, Fisher/IRLS | Yes | Analytic | Reconcile `evaluate_at` with fit-time Newton evidence |
+| Fixed LS/GMM, GLS, expanded SNLLS | Yes | Numerical or requested GN | Broader constraint/domain regression combinations |
+| Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
+| FIML | Yes | Analytic | Broader missingness/group combinations |
+| ML2S | Yes, Stage 2 | All five Stage-2 policies | Stage-1 EM convergence is separate |
+| Ordinal/mixed LS, including profiled fits | Yes, full coordinates | Delta/theta; numerical or GN | Broader group/profile combinations |
+| CatML | Yes, correlation objective | Numerical; thresholds held | Stage-1 threshold estimation is separate |
+| Two-level ML | Yes | Numerical | Broader between/within constraint combinations |
+| Multi-information penalized ML/FIML | No shared report asserted here | Numerical, includes penalty | Common report integration |
+| Native FCSEM | Specialized path | No dedicated adapter | Native parameter/geometry integration |
+| Implicit RBM | Specialized path | No dedicated adapter | Actual penalized-objective integration |
+| Additional callback constraints / specialized chart objectives | Not uniformly covered | No general adapter | Objective lifting and constraint geometry |
+
+For supported model representations, linear equalities and PSD geometry are
+shared by the Newton adapters. Active box bounds and nonlinear equalities
+currently retain derivatives but report Newton unsupported; their first-order
+checks remain applicable. A failed numerical curvature probe reports unavailable,
+not mathematical inapplicability. Closed-form non-optimization estimators do not
+need an invented optimization convergence test.
+
+Validation anchors are `cpp/tests/unit/newton_accuracy_test.cpp` (quadratic
+identities, equality reduction, PSD face curvature, multi-group ML, retained
+factorization) and `cpp/tests/unit/newton_adapters_test.cpp` (each listed adapter,
+all five ML2S policies, frozen fitted weights away from an optimum, unequal-group
+LS normalization, delta/theta mixed LS, and unsupported/unavailable cases).
+These are representative checks, not an exhaustive Cartesian product of model,
+constraint, domain and estimator choices. Thin R access to the full retained
+artifacts and the common configurable post-fit report remain backlog work.
+
 ## Newton adapter coverage and curvature provenance
 
 `estimate/frontier/newton_adapters.hpp` provides explicit post-fit adapters;
@@ -163,6 +201,9 @@ feasibility, admissibility and first-order evidence remain separate checks.
 
 | Objective | Entry point | Retained curvature |
 | --- | --- | --- |
+| Complete-data ML | `audit_newton_ml` | Analytic observed information |
+| ML2S Stage 2 | `audit_newton_ml2s` | NT uses analytic ML; ULS/DWLS/ADF/DLS use fixed-weight LS |
+| Fitted-weight GMM | `audit_newton_gmm_fitted_weight` | Final expected-information weight reconstructed once and frozen |
 | ULS | `audit_newton_uls` | Gradient differences; optional Gauss-Newton |
 | GLS | `audit_newton_gls` | Same, using the sample-based NT weight |
 | WLS/DWLS/GMM | `audit_newton_wls` / `audit_newton_gmm` | Same, with the supplied fixed weight |
@@ -175,8 +216,12 @@ feasibility, admissibility and first-order evidence remain separate checks.
 | Multi-information penalized ML / FIML | `audit_newton_penalized_ml` / `audit_newton_penalized_fiml` | Gradient differences including the actual penalty |
 | Other supplied smooth objectives | `audit_newton_objective` | Gradient differences of the supplied original full-theta objective |
 
-For fitted-weight GMM, supply the final frozen estimation weight: differentiating
-an updating weight would audit another objective. CatML does not reuse the raw
+For fitted-weight GMM, supply the final frozen estimation weight to
+`audit_newton_gmm`, or reconstruct it at the supplied final theta with
+`audit_newton_gmm_fitted_weight`. Differentiating an updating weight would audit
+another objective. `audit_newton_ml2s` consumes the already computed
+`SaturatedMoments`, including ACOV for DWLS/ADF/DLS, with the original Stage-2
+weight kind and fixed DLS mixing parameter. It never reruns Stage 1. CatML does not reuse the raw
 covariance-ML Hessian: its gradient includes the covariance-to-correlation map.
 Only its explicitly Stage-1 threshold coordinates are removed from the solve;
 unidentified model directions are never dropped based on the Hessian spectrum.

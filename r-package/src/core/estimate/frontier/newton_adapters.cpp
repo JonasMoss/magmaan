@@ -202,6 +202,55 @@ fit_expected<NewtonAudit> audit_newton_gmm(
   return finish(pt, rep, ls_derivatives(*problem, theta, total_n(sample.n_obs),
       NewtonObjectiveKind::LeastSquares, opts), opts);
 }
+fit_expected<NewtonAudit> audit_newton_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep, const SampleStats& sample,
+    const Eigen::VectorXd& theta, GmmFittedWeightKind kind, NewtonAdapterOptions opts) {
+  if (auto ok = validate(pt, theta, opts, true); !ok) return std::unexpected(ok.error());
+  if (kind != GmmFittedWeightKind::ExpectedInformation)
+    return std::unexpected(error("unknown fitted-weight kind"));
+  if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok) return std::unexpected(ok.error());
+  auto ev = evaluator(pt, rep);
+  if (!ev) return std::unexpected(ev.error());
+  auto weight = gmm::expected_information_weight(*ev, sample, theta);
+  if (!weight) return std::unexpected(weight.error());
+  return audit_newton_gmm(std::move(pt), rep, sample, theta, *weight, std::move(opts));
+}
+
+fit_expected<NewtonAudit> audit_newton_ml2s(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const fiml::SaturatedMoments& stage1, const Eigen::VectorXd& theta,
+    fiml::TwoStageWeight kind, fiml::TwoStageDlsOptions dls, NewtonAdapterOptions opts) {
+  if (auto ok = validate(pt, theta, opts, kind != fiml::TwoStageWeight::Nt); !ok)
+    return std::unexpected(ok.error());
+  switch (kind) {
+    case fiml::TwoStageWeight::Nt:
+    case fiml::TwoStageWeight::Uls:
+    case fiml::TwoStageWeight::Dwls:
+    case fiml::TwoStageWeight::Adf:
+    case fiml::TwoStageWeight::Dls: break;
+    default: return std::unexpected(error("unknown Stage-2 weight kind"));
+  }
+  const auto blocks = stage1.cov.size();
+  if (blocks == 0 || stage1.mean.size() != blocks || stage1.n_obs.size() != blocks)
+    return std::unexpected(error("inconsistent Stage-1 block counts"));
+  for (std::size_t b = 0; b < blocks; ++b) {
+    const auto p = stage1.cov[b].rows();
+    if (p == 0 || stage1.cov[b].cols() != p || stage1.mean[b].size() != p ||
+        stage1.n_obs[b] <= 0 || !stage1.cov[b].allFinite() || !stage1.mean[b].allFinite())
+      return std::unexpected(error("invalid Stage-1 moments"));
+  }
+  SampleStats sample;
+  sample.S = stage1.cov;
+  sample.mean = stage1.mean;
+  sample.n_obs = stage1.n_obs;
+  if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok) return std::unexpected(ok.error());
+  if (kind == fiml::TwoStageWeight::Nt)
+    return finish(pt, rep, evaluate_newton_ml(pt, rep, sample, theta), opts);
+  auto weight = fiml::two_stage_stage2_weight_structured(stage1, kind, dls);
+  if (!weight) return std::unexpected(error(weight.error().detail));
+  return audit_newton_gmm(std::move(pt), rep, sample, theta, *weight, std::move(opts));
+}
+
 fit_expected<NewtonAudit> audit_newton_uls(
     spec::LatentStructure pt, const model::MatrixRep& rep, const SampleStats& sample,
     const Eigen::VectorXd& theta, NewtonAdapterOptions opts) {

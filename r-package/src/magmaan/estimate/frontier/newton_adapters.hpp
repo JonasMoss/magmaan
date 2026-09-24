@@ -53,6 +53,23 @@ fit_expected<NewtonAudit> audit_newton_gmm(
     spec::LatentStructure pt, const model::MatrixRep& rep,
     const SampleStats& sample, const Eigen::VectorXd& theta,
     const gmm::Weight& weight = {}, NewtonAdapterOptions options = {});
+// Reconstruct the final expected-information weight once, then hold it fixed
+// throughout differentiation. This does not audit the outer weight iteration.
+fit_expected<NewtonAudit> audit_newton_gmm_fitted_weight(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& sample, const Eigen::VectorXd& theta,
+    GmmFittedWeightKind kind = GmmFittedWeightKind::ExpectedInformation,
+    NewtonAdapterOptions options = {});
+
+// Reuse supplied Stage-1 moments without running EM. Nt audits Stage-2 ML;
+// all other kinds audit the corresponding fixed-weight moment quadratic.
+// This does not establish Stage-1 convergence or sampling accuracy.
+fit_expected<NewtonAudit> audit_newton_ml2s(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const fiml::SaturatedMoments& stage1, const Eigen::VectorXd& theta,
+    fiml::TwoStageWeight kind = fiml::TwoStageWeight::Nt,
+    fiml::TwoStageDlsOptions dls = {}, NewtonAdapterOptions options = {});
+
 fit_expected<NewtonAudit> audit_newton_uls(
     spec::LatentStructure pt, const model::MatrixRep& rep,
     const SampleStats& sample, const Eigen::VectorXd& theta,

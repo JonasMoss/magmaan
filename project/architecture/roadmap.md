@@ -114,8 +114,14 @@ compose those stages. Existing ML summary wrappers use the same implementation.
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
 all-ordinal and mixed-ordinal LS, CatML, two-level ML, and multi-information
 penalized complete-data ML/FIML. Fitted-weight GMM consumes the final frozen
-weight explicitly. FIML uses its analytic observed information; LS defaults to
-checked central differences of the full objective gradient, with an explicit
+weight explicitly, or reconstructs the expected-information weight once at the
+final theta via `audit_newton_gmm_fitted_weight`. `audit_newton_ml2s` reuses
+retained Stage-1 moments for NT Stage-2 ML and ULS/DWLS/ADF/DLS Stage-2 LS;
+neither adapter certifies the outer iteration or Stage-1 convergence. Focused
+tests cover all five policies, frozen weights away from an optimum and
+unequal-group LS normalization. The check-by-path coverage matrix lives in
+`project/design/terminal-audit.md`. FIML uses its analytic observed information;
+LS defaults to checked central differences of the full objective gradient, with an explicit
 Gauss-Newton option; CatML, two-level and penalized adapters differentiate their
 actual gradients. Numerical Hessians retain step sizes and h-versus-h/2 and
 symmetry diagnostics, with runtime controls and no silent approximation fallback.
