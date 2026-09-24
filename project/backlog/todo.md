@@ -38,8 +38,12 @@ semantics · **XL** statistical design/research track before implementation.
   report collectors beyond ML and generic scalar/retained-adapter composition;
   automatic model/data provenance fingerprints; non-ML statistical accuracy
   calibration and any deliberate default fit-verdict migration. Existing fits
-  continue to use the compatibility policy. Active boxes/nonlinear equalities
-  and extra callback constraints still lack Newton geometry; FCSEM and implicit
+  continue to use the compatibility policy. Explicit box Newton audits now
+  support positive-definite reduced quadratics, linear equalities/fixed
+  coordinates, and redundant PSD variance bounds. Remaining boundary work:
+  joint multiplier/curvature geometry for nonredundant boxes on singular PSD
+  faces, nonconvex constrained second-order tests, nonlinear equalities and extra
+  callback constraints. FCSEM and implicit
   RBM still need dedicated adapters. ML2S endpoint/composed audits, structured
   Stage-1 solver evidence, raw curvature retention and optional transformations
   are implemented; see `project/design/terminal-audit.md`. Remaining ML2S work:

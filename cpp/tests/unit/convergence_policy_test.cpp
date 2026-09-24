@@ -86,7 +86,7 @@ TEST_CASE("Convergence report: reassessment retains computations and separates c
   CHECK(inconsistent.status == estimate::FitCheck::Failed);
 }
 
-TEST_CASE("Convergence report: feasibility and unsupported curvature remain distinct") {
+TEST_CASE("Convergence report: box feasibility and constrained curvature remain distinct") {
   auto m = scalar_model(); int calls = 0; auto p = quadratic(calls);
   cf::ConvergenceRequest request; request.newton = true;
   request.bounds.lower = Eigen::VectorXd::Ones(1);
@@ -96,8 +96,8 @@ TEST_CASE("Convergence report: feasibility and unsupported curvature remain dist
   REQUIRE(boundary.has_value());
   auto second = cf::assess_convergence(*boundary, cf::newton_convergence_policy());
   CHECK(second.feasibility.status == estimate::FitCheck::Passed);
-  CHECK(second.newton.status == estimate::FitCheck::Unchecked);
-  CHECK(second.status == estimate::FitCheck::Unchecked);
+  CHECK(second.newton.status == estimate::FitCheck::Passed);
+  CHECK(second.status == estimate::FitCheck::Passed);
   CHECK(cf::assess_convergence(*boundary).status == estimate::FitCheck::Passed);
   auto outside = cf::audit_convergence(m.pt, m.rep, p,
       Eigen::VectorXd::Constant(1, .9), 10, 10, request);

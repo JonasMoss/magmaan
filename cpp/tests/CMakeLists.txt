@@ -105,6 +105,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/multiinfo_penalty_test.cpp
   unit/gauge_test.cpp
   unit/newton_accuracy_test.cpp
+  unit/newton_box_test.cpp
   unit/newton_adapters_test.cpp
   unit/convergence_policy_test.cpp
   unit/ml2s_audit_test.cpp

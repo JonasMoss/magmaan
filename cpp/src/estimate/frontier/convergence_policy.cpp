@@ -94,7 +94,8 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
       g.gradient_finite && std::isfinite(residual) && residual >= 0 && residual <= p.stationarity_tol,
       "gradient or normal-cone projection unavailable", "first-order residual exceeds tolerance or gradient is nonfinite");
   const bool domain_matches = n.psd_domain == psd;
-  const bool usable = n.checked && domain_matches && !d.active_bounds_full.any_active() &&
+  const bool usable = n.checked && domain_matches &&
+      (!d.active_bounds_full.any_active() || n.box_constrained) &&
       n.status != NewtonAccuracyStatus::Unsupported && n.status != NewtonAccuracyStatus::Unavailable;
   const bool solved = n.status == NewtonAccuracyStatus::Available ||
       n.status == NewtonAccuracyStatus::IllConditioned || n.status == NewtonAccuracyStatus::SolveUnreliable;

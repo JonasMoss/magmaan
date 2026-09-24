@@ -212,25 +212,93 @@ NewtonAudit audit_newton_derivatives(
   out.bounds = bounds;
   out.active_bound_tol = active_bound_tol;
   out.derivatives = std::move(derivatives);
-  out.geometry = prepare_newton_geometry(pt, rep, out.derivatives, domain,
-                                         opts.interior_eigen_tol);
+  bool valid_bounds = bounds.lower.size() == bounds.upper.size() &&
+      std::isfinite(active_bound_tol) && active_bound_tol >= 0;
+  bool has_bounds = false;
+  std::vector<Eigen::Index> fixed_bounds;
+  std::vector<bool> psd_diagonal(static_cast<std::size_t>(out.derivatives.theta.size()), false);
+  if (domain == StationarityDomain::Psd) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.free[i] <= 0 || pt.free[i] > out.derivatives.theta.size()) continue;
+      const auto& c = rep.cell_for_row[i];
+      if (c.used && c.row == c.col && (c.mat == model::MatId::Theta || c.mat == model::MatId::Psi))
+        psd_diagonal[static_cast<std::size_t>(pt.free[i] - 1)] = true;
+    }
+  }
   if (!bounds.empty()) {
     const auto& theta = out.derivatives.theta;
-    if (bounds.lower.size() != theta.size() || bounds.upper.size() != theta.size() ||
-        !std::isfinite(active_bound_tol) || active_bound_tol < 0 ||
-        bounds.lower.array().isNaN().any() || bounds.upper.array().isNaN().any() ||
-        (bounds.lower.array() > bounds.upper.array()).any()) {
-      out.geometry.status = NewtonAccuracyStatus::Unavailable;
-      out.derivatives.detail = "Newton audit: invalid bounds or active-bound tolerance";
-    } else if ((theta.array() <= bounds.lower.array() + active_bound_tol).any() ||
-               (theta.array() >= bounds.upper.array() - active_bound_tol).any()) {
-      out.geometry.status = NewtonAccuracyStatus::Unsupported;
-      out.derivatives.detail = "Newton audit: active or violated box bounds require constrained curvature";
+    valid_bounds = valid_bounds && bounds.lower.size() == theta.size() &&
+        !bounds.lower.array().isNaN().any() && !bounds.upper.array().isNaN().any();
+    if (valid_bounds) {
+      valid_bounds = !(bounds.lower.array() > bounds.upper.array()).any() &&
+          !(theta.array() < bounds.lower.array()).any() && !(theta.array() > bounds.upper.array()).any();
+      for (Eigen::Index i = 0; i < theta.size(); ++i) {
+        has_bounds = has_bounds || std::isfinite(bounds.lower[i]) || std::isfinite(bounds.upper[i]);
+        if (std::isfinite(bounds.lower[i]) && bounds.lower[i] == bounds.upper[i])
+          fixed_bounds.push_back(i);
+      }
     }
+  }
+  if (fixed_bounds.empty()) {
+    out.geometry = prepare_newton_geometry(pt, rep, out.derivatives, domain, opts.interior_eigen_tol);
+  } else {
+    auto prepared = out.derivatives;
+    prepared.fixed_coordinates.insert(prepared.fixed_coordinates.end(), fixed_bounds.begin(), fixed_bounds.end());
+    out.geometry = prepare_newton_geometry(pt, rep, prepared, domain, opts.interior_eigen_tol);
+  }
+  if (!valid_bounds) {
+    out.geometry.status = NewtonAccuracyStatus::Unavailable;
+    out.derivatives.detail = "Newton audit: invalid bounds or point outside the supplied box";
   }
   if (out.geometry.status == NewtonAccuracyStatus::Available) {
     out.system = prepare_newton_system(out.geometry.reduced_hessian);
-    out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient);
+    if (!has_bounds) {
+      out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient);
+    } else {
+      const Eigen::MatrixXd B = out.geometry.equality_basis * out.geometry.tangent_basis;
+      std::vector<Eigen::VectorXd> rows;
+      std::vector<double> rhs;
+      bool active_nonredundant = false;
+      const auto& theta = out.derivatives.theta;
+      for (Eigen::Index i = 0; i < theta.size(); ++i) {
+        const bool redundant_lower = domain == StationarityDomain::Psd &&
+            psd_diagonal[static_cast<std::size_t>(i)] && bounds.lower[i] <= 0;
+        const bool fixed = bounds.lower[i] == bounds.upper[i];
+        if (fixed) active_nonredundant = true;
+        if (std::isfinite(bounds.lower[i]) && !redundant_lower && !fixed) {
+          rows.emplace_back(B.row(i).transpose()); rhs.push_back(bounds.lower[i] - theta[i]);
+          active_nonredundant = active_nonredundant || theta[i] - bounds.lower[i] <= active_bound_tol;
+        }
+        if (std::isfinite(bounds.upper[i]) && !fixed) {
+          rows.emplace_back(-B.row(i).transpose()); rhs.push_back(theta[i] - bounds.upper[i]);
+          active_nonredundant = active_nonredundant || bounds.upper[i] - theta[i] <= active_bound_tol;
+        }
+      }
+      Eigen::MatrixXd A(static_cast<Eigen::Index>(rows.size()), B.cols());
+      Eigen::VectorXd b(static_cast<Eigen::Index>(rhs.size()));
+      for (std::size_t j = 0; j < rows.size(); ++j) {
+        A.row(static_cast<Eigen::Index>(j)) = rows[j].transpose();
+        b[static_cast<Eigen::Index>(j)] = rhs[j];
+      }
+      const bool psd_face = domain == StationarityDomain::Psd && !out.geometry.covariance_interior;
+      if (psd_face) {
+        auto candidate = solve_newton_system(out.system, out.geometry.reduced_gradient);
+        const bool feasible_step = candidate.status == NewtonAccuracyStatus::Available &&
+            ((A * candidate.step - b).array() >= 0).all();
+        if (active_nonredundant || (candidate.status == NewtonAccuracyStatus::Available && !feasible_step)) {
+          out.geometry.status = NewtonAccuracyStatus::Unsupported;
+          out.solution.status = NewtonAccuracyStatus::Unsupported;
+          out.derivatives.detail = "Newton audit: interacting box and singular PSD constraints need joint multiplier geometry";
+        } else {
+          out.box.applied = true; out.box.normals = A; out.box.lower = b;
+          out.box.multipliers = Eigen::VectorXd::Zero(b.size());
+          out.box.solution = candidate; out.solution = std::move(candidate);
+        }
+      } else {
+        out.box = solve_newton_box(out.system, out.geometry.reduced_gradient, A, b, opts);
+        out.solution = out.box.solution;
+      }
+    }
   } else {
     out.solution.status = out.geometry.status;
   }
@@ -247,6 +315,7 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
   auto out = assess_newton_accuracy(audit.solution, opts);
   out.n_reduced = static_cast<std::int32_t>(audit.geometry.reduced_gradient.size());
   out.psd_domain = audit.geometry.domain == StationarityDomain::Psd;
+  out.box_constrained = audit.box.applied;
   out.covariance_interior = audit.geometry.covariance_interior;
   out.null_directions = audit.geometry.null_directions;
   out.constrained_directions = audit.geometry.constrained_directions;

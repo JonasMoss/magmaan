@@ -161,6 +161,9 @@ struct NewtonAccuracyOptions {
   // A primitive covariance block counts as interior when its smallest
   // eigenvalue exceeds this multiple of its largest absolute eigenvalue.
   double interior_eigen_tol = 1e-8;
+  // Preparation controls for a convex box-constrained quadratic correction.
+  int box_max_iter = 2000;
+  double box_tolerance = 1e-12;
 };
 
 struct NewtonAccuracyDiagnostics {
@@ -187,6 +190,7 @@ struct NewtonAccuracyDiagnostics {
   // directions with a zero or negative multiplier stay free. Without null
   // directions this is the interior check.
   bool psd_domain = false;
+  bool box_constrained = false; // correction respected the supplied box domain
   std::int32_t null_directions = 0;         // numerical nullity, structural zeros excluded
   std::int32_t constrained_directions = 0;  // null directions held on the face
   // Smallest multiplier eigenvalue over null directions, on the total

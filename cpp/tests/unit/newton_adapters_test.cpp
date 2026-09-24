@@ -121,7 +121,8 @@ TEST_CASE("Newton adapters: ULS GLS WLS and expanded SNLLS use the original obje
   gn.bounds.upper = Eigen::VectorXd::Constant(theta.size(), std::numeric_limits<double>::infinity());
   auto bounded = nf::audit_newton_gmm(m.pt, m.rep, s, theta, {}, gn);
   REQUIRE(bounded.has_value());
-  CHECK(bounded->diagnostics.status == estimate::NewtonAccuracyStatus::Unsupported);
+  CHECK(bounded->diagnostics.status == estimate::NewtonAccuracyStatus::Available);
+  CHECK(bounded->diagnostics.box_constrained);
   CHECK(bounded->derivatives.status == estimate::NewtonAccuracyStatus::Available);
 }
 

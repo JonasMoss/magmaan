@@ -153,6 +153,62 @@ This separates computation from assessment without changing the prescribed
 fit-level convergence criteria. General convergence-report composition remains backlog work; the estimator
 adapters described below reuse these stages.
 
+## Box-constrained Newton corrections
+
+Explicit Newton audits now respect finite box bounds through a convex quadratic
+correction in equality-reduced coordinates. `solve_newton_box` is independently
+callable with an already prepared `NewtonSystem`; `audit_newton_derivatives`
+composes it automatically when bounds are supplied. It minimizes
+`g' s + s' H s / 2` subject to `lower - theta <= B s <= upper - theta`, where
+`B` maps reduced increments into full coordinates. Equal lower/upper bounds are
+held as fixed coordinates before preparing the Hessian. The original full
+Hessian remains unchanged and retained.
+
+The reduced Hessian must be positive definite. A feasible active-set solve
+reuses its equilibrated factorization; blocking bounds can enter and bounds
+with wrong-sign multipliers can leave. Merely sitting at a bound does not freeze
+that coordinate: an inward improving direction remains available. Weakly active
+bounds require no arbitrary positive-multiplier cutoff. Bounds that the
+unconstrained correction would cross also participate, even if initially inactive.
+The zero correction must be feasible; out-of-box inputs are not silently snapped.
+
+The retained `NewtonAudit::box` contains the inequality normals/offsets,
+multipliers, final working set, iteration count and normalized primal, dual and
+complementarity residuals. `box_max_iter` and `box_tolerance` are runtime
+preparation controls in `NewtonAccuracyOptions`; changing them requires solving
+again. Iteration exhaustion or a singular working set returns unavailable
+evidence, never a weaker acceptance test. The usual condition and solve-residual
+guards apply during assessment. The standard quadratic-program stationarity,
+feasibility and complementarity conditions are described in the
+[CVXOPT mathematical documentation](https://cvxopt.org/userguide/coneprog.html#quadratic-programming);
+this implementation uses its own feasible active-set solver.
+
+For constrained corrections, `predicted_gain = -g's - s'Hs/2` and
+`distance = sqrt(2*predicted_gain)`. This agrees with the existing Newton distance
+when the unconstrained minimizer is feasible, but at a binding inequality it is
+an objective-gain budget, not an interior sampling-standard-error interpretation.
+A boundary optimum can have a nonzero raw gradient and zero feasible gain.
+Nonpositive reduced curvature fails this convex-quadratic criterion even when a
+more general constrained second-order test might establish local optimality.
+
+PSD geometry remains separate. In the PSD interior the box solve is available;
+the existing local PSD geometry is not a guarantee that a full finite correction
+remains covariance-admissible. No globalization or line search is performed.
+At singular PSD faces, lower bounds at or below zero on primitive covariance
+diagonal parameters are redundant with PSD and can use the existing cone
+geometry. Other inactive bounds are supported if the existing PSD correction
+stays within them. A nonredundant active box or a PSD correction that crosses a
+box boundary remains unsupported: treating these requires joint box/cone
+multipliers and curvature. Nonlinear constraints likewise remain unsupported.
+
+Explicit convergence policies recognize `box_constrained` evidence at active
+bounds. The compatibility policy and existing fit-time routing are unchanged:
+they continue to use first-order stationarity at active bounds. Regression tests
+in `newton_box_test.cpp` cover inward/outward and weakly active boundaries,
+coupled corrections, equality and fixed-coordinate reduction, redundant and
+interacting PSD constraints, numerical exhaustion, and exhaustive two-dimensional
+box minima under parameter rescaling.
+
 ## Explicit evidence and acceptance contract
 
 `estimate/frontier/convergence.hpp` collects owning `ConvergenceReport` objects;
@@ -339,9 +395,10 @@ the explicit report composes these checks independently of fit finalization.
 | Additional callback constraints / specialized chart objectives | Not uniformly covered | No general adapter | Objective lifting and constraint geometry |
 
 For supported model representations, linear equalities and PSD geometry are
-shared by the Newton adapters. Active box bounds and nonlinear equalities
-currently retain derivatives but report Newton unsupported; their first-order
-checks remain applicable. A failed numerical curvature probe reports unavailable,
+shared by the Newton adapters. Box-constrained quadratic corrections are
+available with positive-definite reduced curvature. Nonlinear equalities and
+genuinely interacting boxes on singular PSD faces still retain derivatives but
+report Newton unsupported; their first-order checks remain applicable. A failed numerical curvature probe reports unavailable,
 not mathematical inapplicability. Closed-form non-optimization estimators do not
 need an invented optimization convergence test.
 
@@ -389,8 +446,8 @@ weight kind and fixed DLS mixing parameter. It never reruns Stage 1. CatML does 
 covariance-ML Hessian: its gradient includes the covariance-to-correlation map.
 Only its explicitly Stage-1 threshold coordinates are removed from the solve;
 unidentified model directions are never dropped based on the Hessian spectrum.
-Nonlinear equalities remain unsupported, as do active box bounds. Pass the
-actual bounds and domain explicitly; no variance bounds are inferred.
+Nonlinear equalities and interacting box/singular-PSD geometry remain unsupported.
+Pass actual bounds and domain explicitly; no variance bounds are inferred.
 
 Derivatives retain the objective kind, curvature source, native-to-total
 multiplier, N, theta and full Hessian. LS also retains native whitened residuals

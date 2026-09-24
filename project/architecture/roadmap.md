@@ -127,8 +127,18 @@ actual gradients. Numerical Hessians retain step sizes and h-versus-h/2 and
 symmetry diagnostics, with runtime controls and no silent approximation fallback.
 LS artifacts also retain their whitened residuals and Jacobians. CatML holds
 its Stage-1 threshold coordinates fixed by explicit geometry, rather than
-removing numerical Hessian null directions. Nonlinear equalities and active
-box bounds leave Newton unsupported, with computed derivatives still inspectable.
+removing numerical Hessian null directions. Explicit box-bound audits now solve
+an equality-reduced convex quadratic, retaining the feasible correction,
+multipliers, working set and KKT residuals. Fixed coordinates are reduced first;
+active bounds may release inward directions. The distance is sqrt(2*predicted
+gain), an objective-gain budget at binding inequalities. The reduced Hessian
+must be positive definite; iteration limits and singular working sets leave
+evidence unavailable. Explicit policies accept this box-aware evidence while
+compatibility fit routing remains unchanged. PSD-interior boxes and redundant
+nonnegative-variance bounds share existing geometry; genuinely interacting boxes
+on singular PSD faces and nonlinear equalities remain unsupported. Exhaustive
+two-dimensional face minima, rescaling, equality and boundary tests validate the
+new solver; see `project/design/terminal-audit.md`.
 
 Every adapter labels its objective family, curvature source and native-to-total
 normalization. Two-level uses its native total negative log likelihood; the

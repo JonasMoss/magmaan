@@ -31,12 +31,12 @@
 // optimality. The accepted budget is d <= .01 (project/validation/interior-newton-
 // audit.md): one hundredth of a standard error in every linear contrast.
 //
-// The diagnostic applies at regular interior points of the fitting domain.
-// Ordinary fits with improper estimates are eligible, since they are interior
-// to the ambient domain. At a PSD-boundary solution of a PSD fit the Newton
-// step is infeasible and d is not an accuracy statement. `covariance_interior`
-// reports whether every primitive Psi and Theta block is positive definite, so
-// callers can route boundary fits to the cone stationarity check instead.
+// PSD-domain artifacts retain face curvature separately. Box-domain artifacts
+// solve a feasible quadratic correction and report distance = sqrt(2*gain),
+// an objective-gain measure rather than an interior standard-error statement.
+// Their Hessian must be positive definite after equality/fixed-coordinate
+// reduction. Nonlinear constraints and nonredundant boxes on singular PSD
+// faces remain unsupported.
 //
 // The conditioning and solve guards are numerical safeguards, not
 // identification tests. This function never errors: failures are statuses.
@@ -128,6 +128,27 @@ struct NewtonSolution {
   double solve_residual = std::numeric_limits<double>::quiet_NaN();
 };
 
+// Convex reduced quadratic: min g's + s'Hs/2 subject to normals*s >= lower.
+// Zero must be feasible. The base Hessian must be positive definite. Retains
+// normalized KKT residuals and multipliers for the original supplied rows.
+struct NewtonBoxSolution {
+  bool applied = false;
+  NewtonSolution solution;
+  Eigen::MatrixXd normals;
+  Eigen::VectorXd lower;
+  Eigen::VectorXd multipliers;
+  std::vector<Eigen::Index> working_set;
+  int iterations = 0;
+  double primal_residual = 0;
+  double dual_residual = 0;
+  double complementarity_residual = 0;
+  std::string detail;
+};
+NewtonBoxSolution solve_newton_box(
+    const NewtonSystem& system, const Eigen::VectorXd& gradient,
+    const Eigen::MatrixXd& normals, const Eigen::VectorXd& lower,
+    NewtonAccuracyOptions options = {});
+
 NewtonDerivatives evaluate_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta);
@@ -156,6 +177,7 @@ struct NewtonAudit {
   NewtonGeometry geometry;
   NewtonSystem system;
   NewtonSolution solution;
+  NewtonBoxSolution box;
   NewtonAccuracyDiagnostics diagnostics;
 };
 
@@ -168,7 +190,9 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
 NewtonAccuracyDiagnostics assess_newton_accuracy(const NewtonAudit& audit);
 
 // Compose retained derivatives with model geometry and the reusable solve.
-// Bounds are explicit: active box bounds currently make Newton Unsupported.
+// Bounds are explicit. A positive-definite reduced quadratic is minimized
+// within the box; equal lower/upper bounds are reduced as fixed coordinates.
+// Nonredundant boxes at singular PSD faces still require joint geometry.
 NewtonAudit audit_newton_derivatives(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     NewtonDerivatives derivatives,
