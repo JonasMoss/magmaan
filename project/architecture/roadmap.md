@@ -182,7 +182,9 @@ stays unchecked by default; solver-stop evidence can be required separately.
 Existing fitting/repair defaults are unchanged. Tests cover missing-data groups,
 all five weights, early stops, raw negative curvature versus repaired information,
 handoff mismatches and transformed inputs. R report bindings and automatically
-captured fit-input records remain pending; the design document specifies limits.
+captured fit-input records are deferred with the other remaining audit extensions
+to [the speculative backlog](../backlog/speculative.md#convergence-audit-extensions);
+the design document specifies limits.
 
 ### Admissible covariance-model contract
 

@@ -9,6 +9,43 @@ failure) appears.
 
 ## Estimation / inference
 
+### Convergence-audit extensions
+
+**Gap.** The modular C++ audit surface covers the main iterative estimator
+families, composed ML2S stages, and convex box corrections with linear
+equalities and fixed coordinates. Remaining extensions are deferred:
+
+- Joint multiplier/curvature geometry for nonredundant box bounds interacting
+  with singular PSD faces; nonconvex constrained second-order tests; nonlinear
+  equalities and extra callback constraints.
+- Dedicated native FCSEM and implicit RBM adapters, and certification of outer
+  fitted-weight iterations beyond the frozen final-weight objective.
+- Thin R report/artifact bindings, additional estimator-specific convenience
+  collectors, and automatic model/data provenance fingerprints.
+- Automatic ML2S fit-input snapshot capture (currently caller supplied),
+  raw-data fingerprints, and propagated numerical-accuracy analysis across
+  stages and optional input transformations.
+- Non-ML statistical accuracy calibration, broader group/constraint/domain
+  validation, and any deliberate migration of default fit acceptance away from
+  the compatibility policy.
+
+**Alternative already available.** Explicit C++ reports compose generic scalar
+or estimator-specific retained Newton artifacts with runtime policies. They
+preserve original Hessians, constrained corrections and numerical evidence;
+unsupported geometry or missing required evidence stays unresolved. Existing
+box audits require positive-definite reduced curvature and cover PSD-interior
+boxes and redundant variance bounds. ML2S reports independently assess both
+stages and compare their handoff against a caller-retained input record.
+Existing fits retain compatibility acceptance. See the coverage matrix and
+contracts in [terminal-audit.md](../design/terminal-audit.md).
+
+**Build if.** A concrete methods workflow needs one of the unsupported
+constraint/estimator combinations, an R consumer needs owning audit artifacts,
+or a reproducibility workflow cannot reliably retain its own provenance and
+ML2S handoff record. Promote only that required slice. Statistical calibration,
+propagated accuracy and default acceptance changes require a named study with
+validation criteria; broader coverage alone is not a reason to build them.
+
 ### SEM PSD optimization beyond the engineering baseline
 
 **Gap.** A first-order PSD-cone audit at a singular parameter representation

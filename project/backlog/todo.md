@@ -29,29 +29,10 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-- **M — extend explicit convergence report integration.**
-  Owning reports and separate runtime policies now compose objective,
-  feasibility, first-order and retained Newton evidence. Compatibility
-  assessment is shared with fit-time verdicts; `evaluate_at(ML)` now includes
-  Newton evidence. Explicit policies leave missing required evidence unresolved.
-  Remaining: thin R access to reports/artifacts; estimator-specific convenience
-  report collectors beyond ML and generic scalar/retained-adapter composition;
-  automatic model/data provenance fingerprints; non-ML statistical accuracy
-  calibration and any deliberate default fit-verdict migration. Existing fits
-  continue to use the compatibility policy. Explicit box Newton audits now
-  support positive-definite reduced quadratics, linear equalities/fixed
-  coordinates, and redundant PSD variance bounds. Remaining boundary work:
-  joint multiplier/curvature geometry for nonredundant boxes on singular PSD
-  faces, nonconvex constrained second-order tests, nonlinear equalities and extra
-  callback constraints. FCSEM and implicit
-  RBM still need dedicated adapters. ML2S endpoint/composed audits, structured
-  Stage-1 solver evidence, raw curvature retention and optional transformations
-  are implemented; see `project/design/terminal-audit.md`. Remaining ML2S work:
-  R report bindings, automatic fit-input snapshot capture (currently caller
-  supplied), raw-data fingerprints and propagated numerical-accuracy analysis.
-  Outer fitted-weight iterations remain separate. Expand representative
-  group/constraint/domain combinations
-  using the coverage matrix in `project/design/terminal-audit.md`.
+The remaining explicit convergence-audit extensions are deferred to
+[speculative.md](speculative.md#convergence-audit-extensions). The implemented
+coverage and contracts live in [terminal-audit.md](../design/terminal-audit.md);
+there is no scheduled expansion of this surface.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
@@ -4317,9 +4298,9 @@ work lives in [`speculative.md`](speculative.md). Open work:
   plus common full-model stationarity, with explicitly selected ambient/PSD
   geometry. Legacy/backend flags are not vetoes. Remaining:
   preserve evaluable terminal candidates uniformly across soft backend exits;
-  include `ExtraNonlinearEqConstraints` normals; wire specialized residual,
-  FCSEM and other currently unchecked fit paths; migrate active research
-  consumers that still gate on driven audits/backend statuses. Do not convert
+  migrate active research consumers that still gate on driven audits/backend
+  statuses. Additional constraint and specialized-estimator audit coverage is
+  deferred to [speculative.md](speculative.md#convergence-audit-extensions). Do not convert
   failed/unchecked returned fits into hard errors. Retain rank/conditioning
   and fallback diagnostics alongside the common verdict, and use stress/corpus
   comparisons to validate each coverage extension. The frozen SNLLS handoff's
