@@ -31,7 +31,13 @@ kind, lifecycle, and the one-line question. Adding an experiment means adding a
 row. This collection-level index is the one allowed exception to the "no README"
 rule below, which still holds for individual `NN-` folders.
 
-Classify each experiment on two axes, recorded in the index:
+Group the index by primary purpose: **showcase**, **replication/reference study**,
+**research**, or **engineering check**. This is navigation metadata, independent
+of lifecycle and of the existing kind tags. A published design can support either
+a showcase or research; classify by the report's main question. Keep uncertain
+cases explicit. Classification alone does not authorize an archive move.
+
+Also retain these two axes in the index:
 
 - **Kind** - `parity` (audits magmaan against lavaan), `replication` (reproduces a
   published author-year simulation), `paper-sim` (a pipeline a paper's results
