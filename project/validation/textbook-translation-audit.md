@@ -111,3 +111,45 @@ timing or reliability claims. Preserve old results as records of their actual
 inputs; new scientific claims require a new pinned run. Investigate Geiser and
 corrected Little 3b as start/solver regressions without substituting oracle
 starts into a default-start performance comparison.
+
+## Follow-up: ordinary optimizers and initialization
+
+On the Geiser fixture statistics, both ordinary optimizers fail with omitted
+start controls: L-BFGS reports a line-search failure after 779 evaluations;
+SLSQP exhausts 5000 evaluations near f=.0515458. Neither is a PSD-specific
+failure. With covariance and means rescaled to unit observed variances, both
+return accurate, proper fits at f=.001671443: L-BFGS uses 243 evaluations and
+SLSQP 118. This is a diagnostic on an equivalent rescaled model, not a new
+accepted timing run.
+
+The initialization/scaling policy is partly shared but not uniform in effect:
+
+- R complete-data `fit_ml`, direct PSD and ordinary-first PSD all request
+  `scaled-fabin` when start controls are omitted. C++ `api::ml()` also selects
+  `ml_starts()`. Low-level fitting functions instead take an explicit vector.
+- `ml_start_values()` attempts FABIN in a unit-latent-variance representation
+  and transports it to the original marker identification when its eligibility
+  checks pass; otherwise it returns native FABIN. This is not the same as
+  standardizing observed data before deriving starts.
+- Geiser takes the `native-fabin-fallback` branch. Inspection through
+  `fit_start_values` shows identical starts for `scaled-fabin`, `fabin3` and
+  `simple`: free loadings .7; structural slopes zero; observed residual
+  variances equal to sample variances; latent variances .05; free intercepts
+  zero. Alternative named loading-start methods also give the same observed
+  fit failures. The structural representation prevents the intended FABIN
+  improvement from reaching this case; investigate its matrix-coordinate
+  eligibility rather than treating the label as evidence of scaled starts.
+- Ordinary L-BFGS and SLSQP both enable sample-based coordinate scaling in
+  `ml_optim_options()` and `drive_ml_scalar`. Scaling optimizer coordinates
+  does not replace the initial point with a scale-equivariant initialization.
+  PSD uses a separate information-based diagonal preconditioner.
+- R's explicit `start="default"` currently resolves to `fabin3`, unlike an
+  omitted ML start control. `fit_start_values()` itself defaults to `simple`.
+  The helper's comment describing ordinary defaults as FABIN3 is stale.
+
+As a narrower diagnostic, computing starts on standardized statistics and
+transporting only those parameter values back to original units rescues
+ordinary SLSQP (406 evaluations), but L-BFGS still fails. This does not yet
+establish whether initialization alone can resolve L-BFGS's scale sensitivity.
+The comparison uses the same model, explicit starts, and existing coordinate
+scaling; no oracle estimates are supplied in this diagnostic.
