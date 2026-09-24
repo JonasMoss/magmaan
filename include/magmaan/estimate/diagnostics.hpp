@@ -175,6 +175,20 @@ struct NewtonAccuracyDiagnostics {
   bool passed = false;  // status == Available && distance <= budget
   bool covariance_interior = false;
   std::int32_t n_reduced = 0;
+  // Covariance-domain version (`newton_accuracy_ml_psd`): the Newton step is
+  // restricted to the face of the PSD cone that the estimate lies on. Null
+  // directions of the primitive blocks whose multiplier is positive stay
+  // null (U' dC U = 0), the face's curvature 2 tr(M dC C^+ dC) is added to
+  // the observed information, and d is computed on the tangent space. Null
+  // directions with a zero or negative multiplier stay free. Without null
+  // directions this is the interior check.
+  bool psd_domain = false;
+  std::int32_t null_directions = 0;         // numerical nullity, structural zeros excluded
+  std::int32_t constrained_directions = 0;  // null directions held on the face
+  // Smallest multiplier eigenvalue over null directions, on the total
+  // negative-log-likelihood scale per unit of covariance. NaN without null
+  // directions.
+  double min_multiplier = std::numeric_limits<double>::quiet_NaN();
 };
 
 // The domain is declared by the fit entry point, never selected by which

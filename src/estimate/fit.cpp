@@ -2127,6 +2127,14 @@ static void attach_newton_accuracy(Estimates& est,
       frontier::newton_accuracy_ml(pt, rep, samp, est);
 }
 
+static void attach_newton_accuracy_psd(Estimates& est,
+                                       const spec::LatentStructure& pt,
+                                       const model::MatrixRep& rep,
+                                       const SampleStats& samp) {
+  est.diagnostics.newton_accuracy =
+      frontier::newton_accuracy_ml_psd(pt, rep, samp, est);
+}
+
 static fit_expected<Estimates>
 with_newton_accuracy(fit_expected<Estimates> est,
                      const spec::LatentStructure& pt,
@@ -2846,7 +2854,7 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
         *est, pt, *pre, Bounds{}, *full_problem, StationarityDomain::Psd);
   }
   est->diagnostics.stationarity_domain = StationarityDomain::Psd;
-  attach_newton_accuracy(*est, pt, rep, samp);
+  attach_newton_accuracy_psd(*est, pt, rep, samp);
   return est;
 }
 

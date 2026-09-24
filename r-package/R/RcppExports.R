@@ -377,8 +377,8 @@ infer_information_observed_analytic <- function(fit) {
     .Call(`_magmaan_infer_information_observed_analytic`, fit)
 }
 
-frontier_newton_accuracy_impl <- function(fit, budget) {
-    .Call(`_magmaan_frontier_newton_accuracy_impl`, fit, budget)
+frontier_newton_accuracy_impl <- function(fit, budget, psd) {
+    .Call(`_magmaan_frontier_newton_accuracy_impl`, fit, budget, psd)
 }
 
 infer_information_cross_products <- function(fit, raw_data) {

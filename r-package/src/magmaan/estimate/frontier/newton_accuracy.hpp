@@ -61,4 +61,27 @@ newton_accuracy_ml(const spec::LatentStructure& pt,
                    const Estimates& est,
                    NewtonAccuracyOptions opts = {});
 
+// Covariance-domain version for PSD-constrained ML fits. At a point where a
+// primitive covariance block (a connected component of a Psi or Theta block)
+// is singular, with null basis U and multiplier matrix Lambda estimated from
+// the gradient (least squares on the face constraints), the null directions
+// with positive multipliers are held on the face: U_c' dC U_c = 0. The
+// reduced Hessian adds the curvature of the rank-constrained set,
+// 2 tr(M dC C^+ dC) with M = U_c Lambda_c U_c' (Shapiro 1997's sigma term);
+// Psi and Theta are linear in theta, so the Lagrangian adds no other term.
+// d = sqrt(g_T' H_T^{-1} g_T) on the tangent space then has the interior
+// check's meaning within the face: the predicted Newton correction of any
+// linear contrast along the face in its standard errors, with d^2/2 the
+// predicted remaining gain. Null directions with a zero or negative
+// multiplier stay free, so the step may move into the interior there. The
+// numerical null tolerance is the admissibility audit's, 1e-8 times the
+// block's largest absolute entry (at least 1). Structurally zero rows are
+// excluded. Returns the interior check when no block is singular.
+NewtonAccuracyDiagnostics
+newton_accuracy_ml_psd(const spec::LatentStructure& pt,
+                       const model::MatrixRep& rep,
+                       const SampleStats& samp,
+                       const Estimates& est,
+                       NewtonAccuracyOptions opts = {});
+
 }  // namespace magmaan::estimate::frontier

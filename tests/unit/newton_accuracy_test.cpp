@@ -11,6 +11,7 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -270,7 +271,7 @@ TEST_CASE("Newton accuracy: ML fits attach it and the common verdict uses it") {
   CHECK(verdict.status == FitCheck::Passed);
 }
 
-TEST_CASE("Newton accuracy: a PSD boundary solution keeps the cone check") {
+TEST_CASE("Newton accuracy: a PSD boundary solution is checked on its face") {
   using magmaan::estimate::fit_verdict;
   using magmaan::estimate::FitCheck;
   using magmaan::estimate::StationarityCriterion;
@@ -292,8 +293,144 @@ TEST_CASE("Newton accuracy: a PSD boundary solution keeps the cone check") {
   auto psd = magmaan::estimate::frontier::fit_ml_psd(m.pt, m.rep, m.samp, m.theta0);
   REQUIRE(psd.has_value());
   CHECK(psd->diagnostics.geometric_stationarity.covariance_nullity > 0);
-  CHECK_FALSE(psd->diagnostics.newton_accuracy.covariance_interior);
+  const auto& na = psd->diagnostics.newton_accuracy;
+  CHECK(na.psd_domain);
+  CHECK_FALSE(na.covariance_interior);
+  CHECK(na.null_directions == 1);
+  CHECK(na.constrained_directions == 1);
+  CHECK(na.min_multiplier > 0.0);
+  REQUIRE(na.status == NewtonAccuracyStatus::Available);
   verdict = fit_verdict(*psd);
-  CHECK(verdict.criterion == StationarityCriterion::FirstOrder);
+  CHECK(verdict.criterion == StationarityCriterion::Newton);
   CHECK(verdict.status == FitCheck::Passed);
+}
+
+namespace {
+
+// Two correlated factors whose population correlation is 1.1: the ordinary
+// fit reproduces it, the PSD fit has a singular factor covariance matrix.
+Model correlated_factors_above_one(std::int64_t n = 400) {
+  Model m;
+  auto flat = magmaan::parse::Parser::parse("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6");
+  REQUIRE(flat.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.fixed_x = false;
+  auto pt = magmaan::spec::build(*flat, opts);
+  REQUIRE(pt.has_value());
+  m.pt = std::move(*pt);
+  auto rep = magmaan::model::build_matrix_rep(m.pt);
+  REQUIRE(rep.has_value());
+  m.rep = std::move(*rep);
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(6, 2);
+  L.col(0).head(3) << 1.0, 0.8, 0.7;
+  L.col(1).tail(3) << 1.0, 0.9, 0.6;
+  Eigen::Matrix2d Phi;
+  Phi << 1.0, 1.1, 1.1, 1.0;
+  Eigen::MatrixXd Sigma = L * Phi * L.transpose();
+  Sigma.diagonal().array() += 0.6;
+  m.samp.S = {Sigma};
+  m.samp.n_obs = {n};
+  auto x0 = magmaan::estimate::simple_start_values(m.pt, m.rep, m.samp, {});
+  REQUIRE(x0.has_value());
+  m.theta0 = *x0;
+  return m;
+}
+
+double total_objective(const Model& m, const Eigen::VectorXd& theta) {
+  auto ev = ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto obj = magmaan::estimate::ml_objective(*ev, m.samp);
+  REQUIRE(obj.has_value());
+  Eigen::VectorXd g;
+  return static_cast<double>(m.samp.n_obs[0]) * obj->f(theta, g);
+}
+
+}  // namespace
+
+TEST_CASE("Newton accuracy: the PSD check equals the interior check at an interior point") {
+  Model m = exact_model("f =~ x1 + x2 + x3 + x4", 300);
+  Eigen::VectorXd theta = m.theta0;
+  theta.array() += 1e-3;
+  const auto a = newton_accuracy_ml(m.pt, m.rep, m.samp, at(theta));
+  const auto b = magmaan::estimate::frontier::newton_accuracy_ml_psd(
+      m.pt, m.rep, m.samp, at(theta));
+  REQUIRE(a.status == NewtonAccuracyStatus::Available);
+  REQUIRE(b.status == NewtonAccuracyStatus::Available);
+  CHECK(b.psd_domain);
+  CHECK(b.null_directions == 0);
+  CHECK(std::abs(a.distance - b.distance) <= 1e-12 * (1.0 + a.distance));
+}
+
+TEST_CASE("Newton accuracy: predicted gain matches the objective along a face") {
+  Model m = correlated_factors_above_one();
+  auto tight = magmaan::estimate::frontier::ml_psd_optim_options();
+  tight.max_iter = 20000;
+  tight.nlopt.max_eval = 20000;
+  tight.nlopt.ftol_rel = 1e-15;
+  tight.nlopt.xtol_rel = 1e-13;
+  auto psd = magmaan::estimate::frontier::fit_ml_psd(
+      m.pt, m.rep, m.samp, m.theta0, magmaan::estimate::Backend::NloptSlsqp, tight);
+  REQUIRE(psd.has_value());
+  const Eigen::VectorXd th = psd->theta;
+  const auto at_fit = magmaan::estimate::frontier::newton_accuracy_ml_psd(
+      m.pt, m.rep, m.samp, *psd);
+  REQUIRE(at_fit.status == NewtonAccuracyStatus::Available);
+  CHECK(at_fit.null_directions == 1);
+  CHECK(at_fit.constrained_directions == 1);
+  CHECK(at_fit.distance < 1e-3);
+
+  // Locate the factor covariance parameters and the rank-one factor of Psi.
+  Eigen::Index v1 = -1, v2 = -1, c12 = -1;
+  for (std::size_t r = 0; r < m.pt.size(); ++r) {
+    if (m.pt.free[r] <= 0 || m.pt.op[r] != magmaan::parse::Op::Covariance) continue;
+    const auto a = m.pt.lhs_var[r], b = m.pt.rhs_var[r];
+    if (m.pt.ov_pos[static_cast<std::size_t>(a)] >= 0) continue;
+    const Eigen::Index k = m.pt.free[r] - 1;
+    if (a != b) c12 = k;
+    else if (v1 < 0) v1 = k;
+    else v2 = k;
+  }
+  REQUIRE(v1 >= 0);
+  REQUIRE(v2 >= 0);
+  REQUIRE(c12 >= 0);
+  Eigen::Matrix2d Psi;
+  Psi << th(v1), th(c12), th(c12), th(v2);
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> es(Psi);
+  REQUIRE(es.eigenvalues()(0) < 1e-7 * es.eigenvalues()(1));
+  const Eigen::Vector2d f0 = std::sqrt(es.eigenvalues()(1)) * es.eigenvectors().col(1);
+
+  // A curve inside the rank-one face: Psi(t) = F(t) F(t)', other
+  // parameters linear in t. The face curves, so the predicted gain is right
+  // only with the face's curvature term.
+  const Eigen::Vector2d df(0.3, -0.5);
+  Eigen::VectorXd eta = Eigen::VectorXd::LinSpaced(th.size(), 0.5, -0.4);
+  eta(v1) = eta(v2) = eta(c12) = 0.0;
+  const double f_hat = total_objective(m, th);
+  auto ratio = [&](double t) {
+    Eigen::VectorXd x = th + t * eta;
+    const Eigen::Vector2d F = f0 + t * df;
+    x(v1) = F(0) * F(0);
+    x(v2) = F(1) * F(1);
+    x(c12) = F(0) * F(1);
+    const auto a = magmaan::estimate::frontier::newton_accuracy_ml_psd(
+        m.pt, m.rep, m.samp, at(x));
+    REQUIRE(a.status == NewtonAccuracyStatus::Available);
+    CHECK(a.constrained_directions == 1);
+    return a.predicted_gain / (total_objective(m, x) - f_hat);
+  };
+  const double r1 = ratio(2e-3), r2 = ratio(1e-3);
+  CAPTURE(r1);
+  CAPTURE(r2);
+  CHECK(std::abs(r2 - 1.0) < 0.02);
+  CHECK(std::abs(r2 - 1.0) < std::abs(r1 - 1.0) + 1e-3);
+}
+
+TEST_CASE("Newton accuracy: a fixed zero variance holds its row on the face") {
+  Model m = exact_model("f =~ x1 + x2 + x3 + x4\nx4 ~~ 0*x4", 300);
+  auto psd = magmaan::estimate::frontier::fit_ml_psd(m.pt, m.rep, m.samp, m.theta0);
+  REQUIRE(psd.has_value());
+  const auto& na = psd->diagnostics.newton_accuracy;
+  CHECK(na.checked);
+  CHECK(na.psd_domain);
+  CHECK(na.status == NewtonAccuracyStatus::Available);
 }

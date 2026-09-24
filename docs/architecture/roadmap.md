@@ -67,9 +67,15 @@ condition <= 1e12 and relative solve residual <= 1e-10. Since 2026-09-24 the
 common verdict uses it at regular interior points of the fitting domain:
 every ambient fit, improper estimates included, and every PSD fit without a
 singular primitive covariance block. There d <= .01 passes, and
-nonpositive curvature, ill conditioning or an unreliable solve fail. The
-first-order check still decides at PSD boundaries (cone residual), at active
-box bounds, under nonlinear equalities, and on every non-ML path.
+nonpositive curvature, ill conditioning or an unreliable solve fail. PSD ML
+fits carry the covariance-domain version (`newton_accuracy_ml_psd`): at a
+boundary point the Newton step is restricted to the face of the PSD cone the
+estimate lies on (null directions with positive multipliers held, the face's
+curvature 2 tr(M dC C^+ dC) added), so PSD fits are judged by d <= .01
+everywhere. The first-order check still decides at active box bounds, under
+nonlinear equalities, and on every non-ML path, and it remains telemetry
+elsewhere. Like any local check, the Newton check can pass a point far along
+a divergent path (no attained maximum), where the remaining gain is tiny.
 `fit$diagnostics$verdict$criterion` says which check decided. The standalone
 `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
 recompute it with other options.

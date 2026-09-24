@@ -217,13 +217,18 @@ semantics · **XL** statistical design/research track before implementation.
   candidates independently of raw status.
   Deferred PSD work: dimensionless primal/dual/complementarity assessment,
   active-eigenvalue sensitivity, and metric projected-gradient alternatives.
-  The boundary verdict is still first-order only (cone residual <= 1e-3,
-  uncalibrated, no accuracy statement). A second-order analogue: fix the
-  numerical rank of each singular primitive block, compute the Newton
-  distance within that face (reduced Hessian of the Lagrangian on the face's
-  tangent space), and require the cone multipliers to have the right sign.
-  That would give boundary fits the same d <= .01 meaning as interior ones.
-  It changes the verdict, so papers pinning it would need a rerun.
+  **Done 2026-09-24:** the boundary verdict is second order.
+  `newton_accuracy_ml_psd` restricts the Newton step to the face of the PSD
+  cone (positive-multiplier null directions held, sigma-term curvature), and
+  PSD ML fits use it at every point. Tests: equality with the interior check
+  at interior points, a Heywood boundary, and a curve inside the rank-one
+  face of a correlated-factor model where predicted gain / actual gain is
+  0.99978, 0.99989, 0.99994 at steps 2e-3, 1e-3, 5e-4. On the covariance
+  paper's designs (2,400 small-sample fits, 80 bullying fits with a singular
+  6 x 6 block) it agrees with the old cone rule at every boundary point
+  except 28 std.lv drift fits (|beta| up to 9,500), which it passes and the
+  unit-dependent cone residual happened to reject. Refitted bullying
+  boundary fits gained what d^2/2 predicted (.153 against .154).
   A bounded refined-reference smoke is now complete: 84 eligible natural
   endpoints and 56 local probes, all with reference d<=1e-8. At nominal .01,
   measured/predicted lengths agree within .42%, with tiny hard-threshold

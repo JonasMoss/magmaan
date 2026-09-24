@@ -502,11 +502,13 @@ FitVerdict common_fit_verdict(const FitDiagnostics& d) {
   const auto& newton = d.newton_accuracy;
   if (g.checked) {
     const bool psd = out.domain == StationarityDomain::Psd;
-    // Regular interior point of the fitting domain: the Newton step is
-    // feasible, so its length is an accuracy statement. At a PSD boundary or
-    // an active box bound it is not, and the first-order check decides.
+    // The Newton check decides wherever its step is meaningful: every
+    // ambient fit, and every PSD fit whose diagnostic is the covariance-domain
+    // version (restricted to the face of the PSD cone at a boundary). An
+    // interior-only diagnostic cannot judge a PSD boundary point, and no
+    // version judges an active box bound; the first-order check decides there.
     const bool interior = !d.active_bounds_full.any_active() &&
-        !(psd && g.covariance_nullity > 0);
+        (!psd || newton.psd_domain || g.covariance_nullity == 0);
     const bool use_newton = newton.checked && interior &&
         newton.status != NewtonAccuracyStatus::Unsupported;
     if (!g.gradient_finite) {

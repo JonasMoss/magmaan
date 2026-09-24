@@ -1161,7 +1161,11 @@ Rcpp::List newton_accuracy_to_r(
       Rcpp::_["max_step"] = num(a.max_step),
       Rcpp::_["condition"] = num(a.condition),
       Rcpp::_["solve_residual"] = num(a.solve_residual),
-      Rcpp::_["n_reduced"] = a.n_reduced);
+      Rcpp::_["n_reduced"] = a.n_reduced,
+      Rcpp::_["psd_domain"] = a.psd_domain,
+      Rcpp::_["null_directions"] = a.null_directions,
+      Rcpp::_["constrained_directions"] = a.constrained_directions,
+      Rcpp::_["min_multiplier"] = num(a.min_multiplier));
 }
 
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
@@ -7036,13 +7040,17 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
 // on numerical failure: the status field says why no distance is available.
 //
 // [[Rcpp::export]]
-Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget) {
+Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget,
+                                        bool psd) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::estimate::frontier::NewtonAccuracyOptions opts;
   opts.budget = budget;
-  const auto a = magmaan::estimate::frontier::newton_accuracy_ml(
-      ctx.pt, ctx.rep, ctx.samp, est, opts);
+  const auto a = psd
+      ? magmaan::estimate::frontier::newton_accuracy_ml_psd(
+            ctx.pt, ctx.rep, ctx.samp, est, opts)
+      : magmaan::estimate::frontier::newton_accuracy_ml(
+            ctx.pt, ctx.rep, ctx.samp, est, opts);
   return newton_accuracy_to_r(a);
 }
 

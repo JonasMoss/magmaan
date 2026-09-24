@@ -11,18 +11,22 @@
 # default .01 is one hundredth of a standard error.
 #
 # This is an approximation, not a bound on the distance to an optimum, and it
-# says nothing about global optimality. It applies at regular interior points.
-# Ordinary fits with improper estimates are eligible (they are interior to the
-# ambient domain). For a PSD fit whose solution is on the covariance boundary
-# (`covariance_interior` FALSE), the Newton step is infeasible and the cone
-# stationarity audit in fit$diagnostics$geometric_stationarity applies instead.
+# says nothing about global optimality. Ordinary fits with improper estimates
+# are eligible (they are interior to the ambient domain). With `psd = TRUE`
+# (the default for frontier_fit_ml_psd() fits) the covariance-domain version
+# is computed: at a solution on the covariance boundary the Newton step is
+# restricted to the face of the PSD cone the solution lies on, with the face's
+# curvature added. `null_directions` counts the singular directions of the
+# primitive blocks, `constrained_directions` those held on the face (positive
+# multiplier), and `min_multiplier` is the smallest multiplier. Complete-data
+# ML fits carry the same diagnostic in fit$diagnostics$newton_accuracy.
 #
 # `status` is "available", or explains why no distance is reported:
 # "nonpositive_curvature", "ill_conditioned" (equilibrated condition number
 # above 1e12), "solve_unreliable", "unsupported" (nonlinear equality
 # constraints) or "unavailable". Works on ordinary ML fits and on
 # frontier_fit_ml_psd() fits; FIML, least-squares and ordinal fits are refused.
-frontier_newton_accuracy <- function(fit, budget = 0.01) {
+frontier_newton_accuracy <- function(fit, budget = 0.01, psd = NULL) {
   if (!is.list(fit) || is.null(fit$theta)) {
     stop("frontier_newton_accuracy(): `fit` must be a fitted magmaan model")
   }
@@ -41,5 +45,11 @@ frontier_newton_accuracy <- function(fit, budget = 0.01) {
   if (length(fit$ordered)) {
     stop("frontier_newton_accuracy(): ordinal fits are not supported")
   }
-  frontier_newton_accuracy_impl(fit, budget)
+  if (is.null(psd)) {
+    psd <- identical(fit$diagnostics$verdict$domain, "psd")
+  }
+  if (!is.logical(psd) || length(psd) != 1L || is.na(psd)) {
+    stop("frontier_newton_accuracy(): `psd` must be TRUE, FALSE or NULL")
+  }
+  frontier_newton_accuracy_impl(fit, budget, psd)
 }

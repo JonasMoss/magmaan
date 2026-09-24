@@ -38,10 +38,18 @@ The required checks are:
    domain, improper estimates included. A PSD fit is interior when no
    primitive covariance block is singular (`covariance_nullity == 0`).
    Nonpositive curvature, ill conditioning or an unreliable solve fail the
-   check, because no accuracy statement is available there. PSD-boundary
-   points, active box bounds and nonlinear equalities keep the first-order
-   check of item 2, and so does every path without the Newton diagnostic
-   (LS, FIML, ordinal, two-level, penalized). The interior first-order
+   check, because no accuracy statement is available there. PSD ML fits use
+   the covariance-domain version at every point, boundaries included
+   (2026-09-24): for each singular connected component of a primitive block,
+   with null basis U and multipliers from least squares on the face
+   constraints, null directions with positive multipliers are held
+   (U_c' dC U_c = 0), the reduced Hessian adds the rank-constrained set's
+   curvature 2 tr(M dC C^+ dC) (Shapiro's sigma term; the blocks are linear
+   in theta), and d is computed on the tangent space. Directions with zero
+   or negative multipliers stay free. Fixed-zero variances hold their rows.
+   Active box bounds and nonlinear equalities keep the first-order check of
+   item 2, and so does every path without the Newton diagnostic (LS, FIML,
+   ordinal, two-level, penalized). The interior first-order
    residual is retained as telemetry, not as an extra veto. The verdict's
    `criterion` records which check decided.
 

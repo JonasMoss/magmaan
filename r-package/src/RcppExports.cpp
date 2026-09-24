@@ -1553,14 +1553,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_newton_accuracy_impl
-Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget);
-RcppExport SEXP _magmaan_frontier_newton_accuracy_impl(SEXP fitSEXP, SEXP budgetSEXP) {
+Rcpp::List frontier_newton_accuracy_impl(Rcpp::List fit, double budget, bool psd);
+RcppExport SEXP _magmaan_frontier_newton_accuracy_impl(SEXP fitSEXP, SEXP budgetSEXP, SEXP psdSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< double >::type budget(budgetSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_newton_accuracy_impl(fit, budget));
+    Rcpp::traits::input_parameter< bool >::type psd(psdSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_newton_accuracy_impl(fit, budget, psd));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4408,7 +4409,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_information_expected", (DL_FUNC) &_magmaan_infer_information_expected, 1},
     {"_magmaan_infer_information_observed_fd", (DL_FUNC) &_magmaan_infer_information_observed_fd, 2},
     {"_magmaan_infer_information_observed_analytic", (DL_FUNC) &_magmaan_infer_information_observed_analytic, 1},
-    {"_magmaan_frontier_newton_accuracy_impl", (DL_FUNC) &_magmaan_frontier_newton_accuracy_impl, 2},
+    {"_magmaan_frontier_newton_accuracy_impl", (DL_FUNC) &_magmaan_frontier_newton_accuracy_impl, 3},
     {"_magmaan_infer_information_cross_products", (DL_FUNC) &_magmaan_infer_information_cross_products, 2},
     {"_magmaan_infer_vcov", (DL_FUNC) &_magmaan_infer_vcov, 2},
     {"_magmaan_infer_vcov_partable", (DL_FUNC) &_magmaan_infer_vcov_partable, 2},
