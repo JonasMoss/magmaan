@@ -235,9 +235,10 @@ semantics · **XL** statistical design/research track before implementation.
   Unsupported (nonlinear equalities), PSD-boundary points and active box
   bounds keep the first-order check. The verdict reports its `criterion`.
   Tests: `newton_accuracy_test.cpp` (verdict routing, PSD interior and
-  boundary, multi-group distance against the information metric). Remaining:
-  time it on the largest corpus models; the LS/FIML/ordinal/two-level
-  curvature analogues below stay open. Original item: `common_fit_verdict` still
+  boundary, multi-group distance against the information metric). Cost:
+  0.03 s per check on Little's polynomial bullying model (30 variables with
+  means, 192 free parameters), against 0.49 s for its SLSQP fit. Remaining:
+  the LS/FIML/ordinal/two-level curvature analogues below. Original item: `common_fit_verdict` still
   passes a fit on the first-order residual alone: the metric-dual L2 residual
   at most 1e-3, ambient for ordinary fits and cone for PSD fits. The
   author's validated policy is Newton accuracy at regular interiors and the
