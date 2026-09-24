@@ -4249,7 +4249,12 @@ work lives in [`speculative.md`](speculative.md). Open work:
   paper-corpus fixture surface. `external/paper-corpus` owns scouting, minimal
   derived lavaan cases, validation, and magmaan JSON exports; magmaan consumes
   copied snapshots under `cpp/tests/fixtures/paper_corpus/`. `zxqvn` is promoted as a
-  core complete-data ML point-estimate fixture. Remaining: promote `hwkem`,
+  core complete-data ML point-estimate fixture. **Added 2026-09-24:** 14
+  aggregate-only examples now gate ordinal DWLS fits and MI/EPC/equality
+  releases, continuous/FIML fits, and a controlled missingness variant through
+  the lavaan partable boundary. Fixed-row ordinal MI double counting is fixed.
+  Raw categorical moment estimation and casewise robust FIML inference are not
+  covered by this aggregate batch. Remaining: promote `hwkem`,
   document license/data-handling for that richer source, extract supported lavaan
   model/data pairs, classify RI-CLPM pieces outside the core parity surface, and
   decide whether clustered-SE handling should become a later paper-corpus

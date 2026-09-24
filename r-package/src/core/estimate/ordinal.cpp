@@ -5378,13 +5378,12 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
                          eval->J_mu, *factors, theta);
     if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
 
-    const bool generated_absent = row >= work->original_rows;
-    // lavaan scores generated all-ordinal absent rows on the single-counted
-    // moment scale; explicit fixed partable rows retain the fixed-row scale.
+    // All-ordinal moments are single-counted, including explicit fixed rows.
+    // Doubling score and information for those rows doubles their MI (but
+    // leaves EPC unchanged); fixed latent variances in the paper corpus expose
+    // this even when the absent-row and equality-release results agree.
     const double moment_scale =
-        (generated_absent && std::is_same_v<Stats, data::OrdinalStats>)
-            ? 1.0
-            : 2.0;
+        std::is_same_v<Stats, data::OrdinalStats> ? 1.0 : 2.0;
     const Eigen::VectorXd score =
         -moment_scale * n_total * (J->transpose() * *r);
     Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);
@@ -5477,7 +5476,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
 // {Δ_b, W_b, Γ̂_b = NACOV_b, n_b} blocks `robust_ordinal` assembles — and hand
 // the per-direction scaling to `inference::frontier::score_for_direction_robust`.
 // The sandwich uses the unwhitened estimation weight; c carries no
-// `moment_scale` factor, so `mi_scaled` inherits the row-type scale convention
+// `moment_scale` factor, so `mi_scaled` inherits the estimator-family scale convention
 // of the ordinary `mi` and reduces to it exactly under WLS (W = Γ̂⁻¹).
 
 Eigen::Index ordinal_sandwich_block_rows(const data::OrdinalStats& stats,
@@ -5684,13 +5683,12 @@ ordinal_modification_indices_robust_impl(
     }();
     if (!sw.has_value()) return std::unexpected(sw.error());
 
-    const bool generated_absent = row >= work->original_rows;
-    // lavaan scores generated all-ordinal absent rows on the single-counted
-    // moment scale; explicit fixed partable rows retain the fixed-row scale.
+    // All-ordinal moments are single-counted, including explicit fixed rows.
+    // Doubling score and information for those rows doubles their MI (but
+    // leaves EPC unchanged); fixed latent variances in the paper corpus expose
+    // this even when the absent-row and equality-release results agree.
     const double moment_scale =
-        (generated_absent && std::is_same_v<Stats, data::OrdinalStats>)
-            ? 1.0
-            : 2.0;
+        std::is_same_v<Stats, data::OrdinalStats> ? 1.0 : 2.0;
     const Eigen::VectorXd score =
         -moment_scale * n_total * (J->transpose() * *r);
     Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);

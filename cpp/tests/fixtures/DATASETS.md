@@ -93,3 +93,11 @@ If you redistribute this repository, keep this file with it.
   the original files live in the optional corpus mount (see
   [`project/reference/textbook-corpus.md`](../../project/reference/textbook-corpus.md)), not in this repository.
   `paper_corpus/` is derived from a public OSF project.
+
+### Additional paper examples (aggregate inputs only)
+
+`paper_corpus/examples/` holds derived ordinal moments and missing-pattern
+sufficient statistics from four public paper/tutorial repositories, not raw
+participant data or author analysis code. See [paper_corpus/README.md](paper_corpus/README.md)
+for source links, the constructed missingness variant, validation boundaries,
+and regeneration instructions. Downloads remain in the ignored external corpus.

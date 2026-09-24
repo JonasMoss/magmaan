@@ -191,6 +191,7 @@ magmaan_add_test_target(magmaan_test_parity parity
   golden/geiser_golden_test.cpp
   golden/mplus_sem_golden_test.cpp
   golden/paper_corpus_golden_test.cpp
+  golden/paper_examples_golden_test.cpp
   golden/textbook_corpus_golden_test.cpp)
 
 # Sphere-chart route (frontier estimate/frontier/sphere.hpp): the same

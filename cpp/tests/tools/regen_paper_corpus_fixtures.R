@@ -45,3 +45,24 @@ for (item in exports) {
   cat("Copied ", source_path, " to cpp/tests/fixtures/paper_corpus/", item$name,
       "\n", sep = "")
 }
+
+# The discovery batch contains aggregate inputs, never participant-level rows.
+example_ids <- c(
+  'boivin_hierarchical', 'boivin_two_factor', 'boivin_crossloadings',
+  'boivin_equal_crossloadings', 'boivin_equal_primary_crossloading',
+  'pregnancy_mediation', 'kievit_ulcs', 'kievit_milcs', 'kievit_blcs',
+  'kievit_bdcs', 'kievit_mg_ulcs', 'kievit_milcs_missing',
+  'jiwani_dass_1f_cfa', 'jiwani_dass_3f_cfa')
+example_dir <- file.path(out_dir, 'examples')
+dir.create(example_dir, showWarnings = FALSE)
+for (id in example_ids) {
+  source_path <- file.path(export_root, 'examples', paste0(id, '.json'))
+  if (!file.exists(source_path)) stop('Missing ', source_path,
+    '; run external/paper-corpus/scripts/export_examples.R first.')
+  payload <- fromJSON(source_path, simplifyVector = FALSE)
+  stopifnot(identical(payload$id, id),
+    identical(payload$`_meta`$corpus_id, 'magmaan_paper_examples_v1'),
+    isTRUE(payload$`_meta`$aggregate_only))
+  stopifnot(file.copy(source_path, file.path(example_dir, paste0(id, '.json')), overwrite = TRUE))
+}
+cat('Copied 14 aggregate paper examples\n')

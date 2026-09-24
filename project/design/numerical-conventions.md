@@ -105,6 +105,15 @@ genuinely the unbiased quantity (the sample-covariance divisor is `N−1`).
    fixture 0013, where the goldens carry a documented 1.5e-4 θ /
    1.5e-2 scaled-shifted exception). Single-group and cross-group-uncoupled
    fits have identical minimizers.
+   The single-group ordinal MI/equality-release fixture adapter also accounts
+   for this convention: lavaan's gradient is `(N−1)/N` times the moment gradient,
+   but expected information remains `Delta' W Delta`. Its ordinary score/MI is
+   therefore `((N−1)/N)^2` times the N-weight score, and its EPC has one factor
+   `(N−1)/N`. The paper-corpus exporter verifies both gradient and information
+   identities against the fitted lavaan object. This is separate from the
+   fixed-row MI bug caught by that corpus: all-ordinal explicit fixed rows,
+   like generated absent rows, use a single-counted moment metric; doubling
+   their score and information doubled MI while leaving EPC unchanged.
 
 ## Implications for callers
 

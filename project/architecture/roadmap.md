@@ -2712,6 +2712,16 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   correction, distinct from the two-level ML decomposition above) is catalogued
   outside the current core parity surface. The next promotion candidate is the
   richer `hwkem` measurement-invariance tutorial.
+  A second batch now adds 14 aggregate-only paper/tutorial fixtures: five
+  Boivin WLSMV models, empirical pregnancy FIML mediation, five Kievit
+  latent-change models plus a labelled missingness variant, and two DASS
+  factor models (one intentionally inadmissible). The parity target checks
+  imported partables, estimation from initial values, df, implied moments,
+  ordinal MI/EPC and equality releases. It uses ordinal moments/weights and
+  FIML pattern sufficient statistics, not participant rows. The new fixed-row
+  MI checks exposed and fixed double counting of all-ordinal explicit fixed
+  parameters in both ordinary and robust MI; the single-group categorical
+  gradient scaling remains an explicit test-side convention.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family

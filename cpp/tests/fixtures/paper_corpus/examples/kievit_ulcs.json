@@ -1,0 +1,186 @@
+{
+  "_meta": {
+    "corpus_id": "magmaan_paper_examples_v1",
+    "lavaan_version": "0.7.2",
+    "source_url": "https://osf.io/4bpmq/",
+    "source_md5": {
+      "script": "45f2fc6aa7e203c2bc4d93f2b4d3d9b0",
+      "data": "5a388fa91ae714aadcad54de6b9ad402"
+    },
+    "kind": "simulated_tutorial",
+    "note": "Use the deposited CSV, not fresh simulation. FIML is requested in the source, but complete data do not exercise missing-pattern likelihoods.",
+    "aggregate_only": true
+  },
+  "id": "kievit_ulcs",
+  "kind": "fiml",
+  "admissible": true,
+  "observed_variables": ["COG_T2", "COG_T1"],
+  "partable": [
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p1."
+    },
+    {
+      "id": 2,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "=~",
+      "rhs": "COG_T2",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p2."
+    },
+    {
+      "id": 3,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p3."
+    },
+    {
+      "id": 4,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~~",
+      "rhs": "COG_T2",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p4."
+    },
+    {
+      "id": 5,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 1,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p5."
+    },
+    {
+      "id": 6,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 2,
+      "exo": 0,
+      "ustart": 50.061338371361607,
+      "label": "",
+      "plabel": ".p6."
+    },
+    {
+      "id": 7,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~~",
+      "rhs": "dCOG1",
+      "block": 1,
+      "group": 1,
+      "free": 3,
+      "exo": 0,
+      "ustart": 0.050000000000000003,
+      "label": "",
+      "plabel": ".p7."
+    },
+    {
+      "id": 8,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 4,
+      "exo": 0,
+      "ustart": 4.4147755694921456,
+      "label": "",
+      "plabel": ".p8."
+    },
+    {
+      "id": 9,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 5,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p9."
+    }
+  ],
+  "theta": [9.6578299926236149, 50.061338371864515, 4.4101382772010274, 8.829551224401893, -0.095425720796487548],
+  "start": [0, 50.061338371361607, 0.050000000000000003, 4.4147755694921456, 0],
+  "blocks": [
+    {
+      "n": 500,
+      "mean": [54.942029064731585, 50.061338371361607],
+      "cov": [
+        [11.634959357735577, 7.9869848506391996],
+        [7.9869848506391996, 8.8295511389842893]
+      ],
+      "patterns": [
+        {
+          "observed": [0, 1],
+          "n": 500,
+          "mean": [54.942029064731585, 50.061338371361607],
+          "cov": [
+            [11.634959357735573, 7.9869848506392023],
+            [7.9869848506392023, 8.8295511389842893]
+          ]
+        }
+      ]
+    }
+  ],
+  "implied": [
+    {
+      "cov": [
+        [11.634959417339145, 7.9869849345038331],
+        [7.9869849345038331, 8.829551224401893]
+      ],
+      "mean": [54.942029066316096, 50.061338371864515]
+    }
+  ],
+  "fit": {
+    "chisq": 0,
+    "df": 0,
+    "logl": -2334.4410904717106,
+    "fmin": 0
+  },
+  "modindices": [],
+  "score_tests": []
+}

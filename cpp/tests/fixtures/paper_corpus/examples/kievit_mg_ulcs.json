@@ -1,0 +1,338 @@
+{
+  "_meta": {
+    "corpus_id": "magmaan_paper_examples_v1",
+    "lavaan_version": "0.7.2",
+    "source_url": "https://osf.io/4bpmq/",
+    "source_md5": {
+      "script": "02096d8e86f7dee781c5f79586d4e3cc",
+      "data": "08eb5cfd948e08b58893b0db638b7264"
+    },
+    "kind": "simulated_tutorial",
+    "note": "Use the deposited CSV, not fresh simulation. FIML is requested in the source, but complete data do not exercise missing-pattern likelihoods.",
+    "aggregate_only": true
+  },
+  "id": "kievit_mg_ulcs",
+  "kind": "fiml",
+  "admissible": true,
+  "observed_variables": ["COG_T2", "COG_T1"],
+  "partable": [
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p1."
+    },
+    {
+      "id": 2,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "=~",
+      "rhs": "COG_T2",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p2."
+    },
+    {
+      "id": 3,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p3."
+    },
+    {
+      "id": 4,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~~",
+      "rhs": "COG_T2",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p4."
+    },
+    {
+      "id": 5,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 1,
+      "exo": 0,
+      "ustart": 50.002528023426287,
+      "label": "",
+      "plabel": ".p5."
+    },
+    {
+      "id": 6,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~~",
+      "rhs": "dCOG1",
+      "block": 1,
+      "group": 1,
+      "free": 2,
+      "exo": 0,
+      "ustart": 0.050000000000000003,
+      "label": "",
+      "plabel": ".p6."
+    },
+    {
+      "id": 7,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 3,
+      "exo": 0,
+      "ustart": 4.1375408911095315,
+      "label": "",
+      "plabel": ".p7."
+    },
+    {
+      "id": 8,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 1,
+      "group": 1,
+      "free": 4,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p8."
+    },
+    {
+      "id": 9,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "group": 1,
+      "free": 5,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p9."
+    },
+    {
+      "id": 10,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 2,
+      "group": 2,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p10."
+    },
+    {
+      "id": 11,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "=~",
+      "rhs": "COG_T2",
+      "block": 2,
+      "group": 2,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p11."
+    },
+    {
+      "id": 12,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~1",
+      "rhs": "",
+      "block": 2,
+      "group": 2,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p12."
+    },
+    {
+      "id": 13,
+      "user": 1,
+      "lhs": "COG_T2",
+      "op": "~~",
+      "rhs": "COG_T2",
+      "block": 2,
+      "group": 2,
+      "free": 0,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p13."
+    },
+    {
+      "id": 14,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~1",
+      "rhs": "",
+      "block": 2,
+      "group": 2,
+      "free": 6,
+      "exo": 0,
+      "ustart": 50.231507191245548,
+      "label": "",
+      "plabel": ".p14."
+    },
+    {
+      "id": 15,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~~",
+      "rhs": "dCOG1",
+      "block": 2,
+      "group": 2,
+      "free": 7,
+      "exo": 0,
+      "ustart": 0.050000000000000003,
+      "label": "",
+      "plabel": ".p15."
+    },
+    {
+      "id": 16,
+      "user": 1,
+      "lhs": "COG_T1",
+      "op": "~~",
+      "rhs": "COG_T1",
+      "block": 2,
+      "group": 2,
+      "free": 8,
+      "exo": 0,
+      "ustart": 3.6324743890581783,
+      "label": "",
+      "plabel": ".p16."
+    },
+    {
+      "id": 17,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~",
+      "rhs": "COG_T1",
+      "block": 2,
+      "group": 2,
+      "free": 9,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p17."
+    },
+    {
+      "id": 18,
+      "user": 1,
+      "lhs": "dCOG1",
+      "op": "~1",
+      "rhs": "",
+      "block": 2,
+      "group": 2,
+      "free": 10,
+      "exo": 0,
+      "ustart": 0,
+      "label": "",
+      "plabel": ".p18."
+    }
+  ],
+  "theta": [50.002528028643574, 4.4104154971309439, 8.2750817427109489, -0.062768730574842196, 4.6559046937400472, 50.231507196482312, 1.8424545597982978, 7.2649488100619948, -0.082926575524742266, 9.6342341722465488],
+  "start": [50.002528023426287, 0.050000000000000003, 4.1375408911095315, 0, 0, 50.231507191245548, 0.050000000000000003, 3.6324743890581783, 0, 0],
+  "blocks": [
+    {
+      "n": 250,
+      "mean": [51.519837466129722, 50.002528023426287],
+      "cov": [
+        [11.679267706662745, 7.7556654104351646],
+        [7.7556654104351646, 8.2750817822190612]
+      ],
+      "patterns": [
+        {
+          "observed": [0, 1],
+          "n": 250,
+          "mean": [51.519837466129722, 50.002528023426287],
+          "cov": [
+            [11.679267706662745, 7.7556654104351628],
+            [7.7556654104351628, 8.2750817822190612]
+          ]
+        }
+      ]
+    },
+    {
+      "n": 250,
+      "mean": [55.700214483108063, 50.231507191245541],
+      "cov": [
+        [7.9524485172505717, 6.66249153251362],
+        [6.66249153251362, 7.2649487781163566]
+      ],
+      "patterns": [
+        {
+          "observed": [0, 1],
+          "n": 250,
+          "mean": [55.700214483108063, 50.231507191245541],
+          "cov": [
+            [7.9524485172505726, 6.6624915325136183],
+            [6.6624915325136183, 7.2649487781163549]
+          ]
+        }
+      ]
+    }
+  ],
+  "implied": [
+    {
+      "cov": [
+        [11.679267593641828, 7.7556653663179294],
+        [7.7556653663179294, 8.2750817427109489]
+      ],
+      "mean": [51.5198375124927, 50.002528028643574]
+    },
+    {
+      "cov": [
+        [7.9524484404582898, 6.6624914838810021],
+        [6.6624914838810021, 7.2649488100619948]
+      ],
+      "mean": [55.700214493478136, 50.231507196482312]
+    }
+  ],
+  "fit": {
+    "chisq": 0,
+    "df": 0,
+    "logl": -2192.8607368007192,
+    "fmin": 0
+  },
+  "modindices": [],
+  "score_tests": []
+}
