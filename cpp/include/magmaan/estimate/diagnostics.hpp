@@ -99,6 +99,9 @@ struct AdmissibilityDiagnostics {
 struct GeometricStationarityDiagnostics {
   bool checked = false;
   bool gradient_finite = false;
+  // Recorded independently of whether the stationarity residual passes.
+  bool feasibility_checked = false;
+  bool ambient_feasible = false;
   bool feasible = false;
   bool covariance_feasible = false;
 
@@ -204,6 +207,7 @@ struct ObjectiveDiagnostics {
   bool checked = false;
   bool finite = false;
   bool consistent = false;
+  bool reported_available = true; // legacy finalizers always supply a reported value
   double recomputed = std::numeric_limits<double>::quiet_NaN();
   double reported = std::numeric_limits<double>::quiet_NaN();
   double consistency_tolerance = std::numeric_limits<double>::quiet_NaN();
@@ -293,19 +297,12 @@ struct GeometricStationarityOptions {
   std::int32_t projection_max_iter = 20000;
 };
 
-// Authoritative numerical verdict. Admissibility remains separate for ambient
-// fits; PSD feasibility participates in the PSD stationarity check. Missing
-// checks are never replaced by optimizer status or driven-coordinate audits.
-//
-// Stationarity is decided by the Newton accuracy check when the fit carries
-// one and the point is a regular interior point of its fitting domain: every
-// ambient fit (improper estimates included, since they are interior to the
-// ambient domain) and every PSD fit with no singular primitive covariance
-// block. The fit passes when d <= budget; a nonpositive-curvature,
-// ill-conditioned or unreliable solve fails it, because no accuracy statement
-// is then available. The first-order check decides at PSD-boundary points,
-// at active box bounds, under nonlinear equality constraints (Newton
-// unsupported), and on fit paths without the Newton diagnostic.
+// Historical fit-verdict projection through the named compatibility policy
+// in frontier/convergence_policy.hpp. Admissibility stays separate for ambient
+// fits. Newton decides when attached and supported for the fitting domain;
+// first-order decides otherwise. This selection preserves existing fit-time
+// behavior. Use an explicit convergence policy to require named checks without
+// evidence-dependent fallback. Optimizer status is never an acceptance input.
 FitVerdict common_fit_verdict(const FitDiagnostics& diagnostics);
 
 // Record the original half-discrepancy and its full-coordinate gradient. The

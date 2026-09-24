@@ -1,4 +1,5 @@
 #include "magmaan/estimate/evaluate.hpp"
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
 
 #include <string>
 #include <utility>
@@ -103,7 +104,8 @@ fit_expected<Estimates>
 evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
             const SampleStats& samp, const Eigen::VectorXd& theta_full,
             Estimator estimator, const gmm::Weight& weight,
-            Bounds bounds, optim::TerminalAuditOptions audit_opts) {
+            Bounds bounds, optim::TerminalAuditOptions audit_opts,
+            StationarityDomain domain) {
   // Up-front contract: theta_full lives in the full-θ space.
   if (theta_full.size() != static_cast<Eigen::Index>(pt.n_free())) {
     return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
@@ -156,7 +158,7 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
       /*snlls_profile_fallback_flag=*/false);
 
   audit_full_model_fit(diagnostics, theta_full, grad, f_at, f_at,
-                       pt, prelude.ev, prelude.con, prelude.nl, bounds);
+                       pt, prelude.ev, prelude.con, prelude.nl, bounds, domain);
 
   // `iterations = 0`, `f_evals = 1`, `g_evals = 1` are the documented
   // "no outer optimizer ran" defaults from fit.hpp, with `f_evals`/`g_evals`
@@ -173,6 +175,11 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.grad_inf_norm    = audit.grad_inf_norm;
   out.audit            = std::move(audit);
   out.diagnostics      = std::move(diagnostics);
+  if (estimator == Estimator::ML) {
+    out.diagnostics.newton_accuracy = domain == StationarityDomain::Psd
+        ? frontier::newton_accuracy_ml_psd(pt, rep, samp, out)
+        : frontier::newton_accuracy_ml(pt, rep, samp, out);
+  }
   return out;
 }
 

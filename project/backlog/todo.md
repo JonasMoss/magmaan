@@ -29,24 +29,20 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-- **M — unify explicit post-fit convergence reports and acceptance policy.**
-  Retained Newton adapters now cover continuous LS/GMM and full-coordinate
-  SNLLS, FIML, ordinal/mixed LS, CatML, two-level ML and multi-information
-  penalized ML/FIML (see roadmap). Remaining: compose these with feasibility,
-  objective-consistency and first-order evidence into one common report and
-  explicit required-check policy. Require fit-time/post-fit agreement under
-  the same requested checks. `evaluate_at(ML)` still lacks the fit-time Newton
-  diagnostic; its legacy `audit_options` do not configure the common verdict.
-  Missing required evidence must remain unresolved instead of silently choosing
-  a weaker criterion. Add thin R access to retained artifacts. Numerical
-  curvature and Gauss-Newton are labelled, but non-ML statistical accuracy
-  calibration and any default fit-verdict migration remain separate work.
-  Newton curvature under active boxes/nonlinear equalities and extra callback
-  constraints remains unsupported; FCSEM and implicit RBM still need estimator
-  adapters. ML2S Stage-2 and fitted-weight GMM convenience adapters are available;
-  separate Stage-1/outer-iteration checks remain open. Expand representative
-  adapter tests across group/constraint/domain combinations using the coverage
-  matrix in `project/design/terminal-audit.md`.
+- **M — extend explicit convergence report integration.**
+  Owning reports and separate runtime policies now compose objective,
+  feasibility, first-order and retained Newton evidence. Compatibility
+  assessment is shared with fit-time verdicts; `evaluate_at(ML)` now includes
+  Newton evidence. Explicit policies leave missing required evidence unresolved.
+  Remaining: thin R access to reports/artifacts; estimator-specific convenience
+  report collectors beyond ML and generic scalar/retained-adapter composition;
+  automatic model/data provenance fingerprints; non-ML statistical accuracy
+  calibration and any deliberate default fit-verdict migration. Existing fits
+  continue to use the compatibility policy. Active boxes/nonlinear equalities
+  and extra callback constraints still lack Newton geometry; FCSEM and implicit
+  RBM still need dedicated adapters. ML2S Stage-1/outer weight-iteration checks
+  remain separate. Expand representative group/constraint/domain combinations
+  using the coverage matrix in `project/design/terminal-audit.md`.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 

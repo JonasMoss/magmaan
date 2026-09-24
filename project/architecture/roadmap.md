@@ -139,6 +139,25 @@ cross-estimator standard-error calibration. These adapters do not change
 non-ML fit-time convergence policy or the R summary interface. Artifact reuse
 requires the same model, point, data, weights, objective and parameter order.
 
+`estimate/frontier/convergence.hpp` now provides owning evidence reports and
+`convergence_policy.hpp` provides separate runtime assessment. Explicit policies
+require objective finiteness, declared-domain feasibility, and first-order,
+Newton, or both checks; reported-objective consistency is independently
+requestable. Missing required evidence stays unchecked, without a weaker
+fallback. Threshold changes reuse measurements and the Newton solve; geometry
+changes require recollection. Generic scalar and analytic ML collectors are
+available, and existing retained estimator adapters compose without objective
+or Hessian reevaluation. Reports retain the point, effective request and full
+computations; source data/model fingerprints are not yet recorded.
+`common_fit_verdict` delegates to the named compatibility policy, preserving
+existing fit-time acceptance. `evaluate_at(ML)` now attaches matching Newton
+evidence and accepts an explicit domain. Its legacy default variance bounds
+remain; the new report API uses only explicit bounds. Newton distance, step
+and gain survive numerical guard rejection so summaries and owning reports
+can both be reassessed. Focused tests verify fit/post-fit parity, missing checks,
+policy differences, domain feasibility and reassessment without recomputation.
+The detailed contract and example are in `project/design/terminal-audit.md`.
+
 ### Admissible covariance-model contract
 
 For each group, the continuous complete-data model uses the reduced-LISREL

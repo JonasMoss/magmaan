@@ -1,4 +1,5 @@
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/frontier/convergence_policy.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -491,52 +492,8 @@ finalize_fit_diagnostics_impl(const Eigen::VectorXd&        theta_full,
 }  // namespace
 
 FitVerdict common_fit_verdict(const FitDiagnostics& d) {
-  FitVerdict out;
-  out.domain = d.stationarity_domain;
-  if (d.objective.checked) {
-    out.objective = d.objective.finite && d.objective.consistent
-        ? FitCheck::Passed : FitCheck::Failed;
-  }
-  const auto& g = d.geometric_stationarity;
-  const auto& newton = d.newton_accuracy;
-  if (g.checked) {
-    const bool psd = out.domain == StationarityDomain::Psd;
-    // The Newton check decides wherever its step is meaningful: every
-    // ambient fit, and every PSD fit whose diagnostic is the covariance-domain
-    // version (restricted to the face of the PSD cone at a boundary). An
-    // interior-only diagnostic cannot judge a PSD boundary point, and no
-    // version judges an active box bound; the first-order check decides there.
-    const bool interior = !d.active_bounds_full.any_active() &&
-        (!psd || newton.psd_domain || g.covariance_nullity == 0);
-    const bool use_newton = newton.checked && interior &&
-        newton.status != NewtonAccuracyStatus::Unsupported;
-    if (!g.gradient_finite) {
-      out.stationarity = FitCheck::Failed;
-    } else if (use_newton) {
-      out.criterion = StationarityCriterion::Newton;
-      const bool feasible = d.sigma_pd_all && d.lin_eq_satisfied &&
-          d.nl_eq_satisfied && (!psd || g.feasible);
-      out.stationarity = feasible && newton.passed ? FitCheck::Passed
-                                                   : FitCheck::Failed;
-    } else {
-      const bool projected = psd ? g.cone_projection_converged
-                                : g.ambient_projection_converged;
-      const bool stationary = psd ? g.cone_stationary : g.ambient_stationary;
-      if (projected) {
-        out.stationarity = stationary ? FitCheck::Passed : FitCheck::Failed;
-      }
-      // An unfinished normal-cone projection is not evidence of
-      // nonstationarity.
-    }
-  }
-  if (out.objective == FitCheck::Failed ||
-      out.stationarity == FitCheck::Failed) {
-    out.status = FitCheck::Failed;
-  } else if (out.objective == FitCheck::Passed &&
-             out.stationarity == FitCheck::Passed) {
-    out.status = FitCheck::Passed;
-  }
-  return out;
+  return frontier::assess_convergence(
+      d, frontier::compatibility_convergence_policy()).compatibility_verdict;
 }
 
 void audit_full_model_fit(
@@ -694,6 +651,8 @@ audit_geometric_stationarity(
     inspect_block(matrices->blocks[b].Psi, model::MatId::Psi);
   }
 
+  out.feasibility_checked = true;
+  out.ambient_feasible = equality_feasible && box_feasible;
   out.feasible = equality_feasible && box_feasible &&
       out.covariance_feasible;
   out.ambient_stationary = equality_feasible && box_feasible &&

@@ -45,6 +45,9 @@ enum class Estimator {
   ML,     // F(θ) = ½·[log|Σ| + tr(SΣ⁻¹) − log|S| − p] (+ mean term)
 };
 
+// ML includes the same Newton evidence as fit-time finalization. `domain`
+// declares the fitting domain; it is never inferred from the point. Runtime
+// policy assessment and owning artifacts are available in frontier/convergence.hpp.
 // Run the standard L1 + L2 audit on `theta_full` against the chosen moment
 // objective, without invoking an outer optimizer.
 //
@@ -70,6 +73,7 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
             Estimator estimator,
             const gmm::Weight& weight = {},
             Bounds bounds = {},
-            optim::TerminalAuditOptions audit_opts = {});
+            optim::TerminalAuditOptions audit_opts = {},
+            StationarityDomain domain = StationarityDomain::Ambient);
 
 }  // namespace magmaan::estimate

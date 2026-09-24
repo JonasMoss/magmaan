@@ -69,9 +69,10 @@ R exposes `fit$verdict` and `fit$diagnostics$verdict`; `fit$converged` is the
 logical projection: TRUE for passed, FALSE for failed, NA for unchecked.
 `optimizer_status` and `fit$audit` remain diagnostic. Consumers should use
 `isTRUE(fit$converged)` when they require a certified numerical fit and must
-not turn missing/NA verdicts into success. `evaluate_at()` still exposes
-`audit_options` for its legacy L1 record; these do not alter the common
-verdict's metric or default tolerances. Closed-form estimators that are not
+not turn missing/NA verdicts into success. `evaluate_at(ML)` now supplies the same Newton evidence as ML fit finalization,
+and accepts an explicit ambient/PSD domain. Its `audit_options` still govern
+only the legacy L1 record; explicit common-policy controls are provided by
+`frontier::assess_convergence`. Closed-form estimators that are not
 objective minimizers report numerical convergence as not applicable rather
 than inventing a stationary objective.
 
@@ -152,16 +153,93 @@ This separates computation from assessment without changing the prescribed
 fit-level convergence criteria. General convergence-report composition remains backlog work; the estimator
 adapters described below reuse these stages.
 
+## Explicit evidence and acceptance contract
+
+`estimate/frontier/convergence.hpp` collects owning `ConvergenceReport` objects;
+`convergence_policy.hpp` assesses them or existing `FitDiagnostics` summaries.
+No optimizer status is an acceptance input. Collection and assessment are
+independent calls, with explicit runtime options and no global option lookup.
+
+The contract is: the same objective, point, model representation, data, weights,
+penalty, fitting domain and collection settings produce the same evidence;
+the same evidence and policy produce the same decision. `common_fit_verdict`
+now delegates to the named compatibility policy, preserving existing fit-time
+acceptance. `evaluate_at(ML)` supplies the previously missing Newton evidence.
+Its historical default variance bounds remain; pass actual bounds and domain
+when comparing it with a fit. Empty bounds in the new report API mean unbounded.
+
+Explicit policies require a finite objective and feasibility in the declared
+domain, plus first-order stationarity, Newton accuracy, or both. First-order
+uses the retained metric-dual residual and completed normal-cone projection;
+Newton uses the declared-domain distance and curvature/solve guards. Ambient
+feasibility does not require covariance admissibility. PSD feasibility does.
+Neither implies global optimality or validates statistical inference.
+
+Every check returns its status, whether it was required, and a reason.
+A known required failure makes the assessment `Failed`; otherwise missing or
+unsupported required evidence leaves it `Unchecked`; all required checks must
+pass for `Passed`. A missing Newton computation never selects first-order
+instead. Nonpositive curvature and failed numerical solve/condition guards are
+failures of the Newton policy; unavailable derivative probes or unsupported
+constraint geometry are unresolved. Optional checks remain visible without
+vetoing acceptance. Compatibility is explicitly the old evidence-dependent
+selection rule and does not acquire the semantics of an explicit policy.
+
+A supplied reported objective is checked independently from the recomputed
+value. Omitting it leaves consistency unchecked; it is not manufactured by
+comparing the recomputed value with itself. Policies can require consistency.
+The compatibility policy requires a reported value. All report objectives and
+first-order gradients use total/N units; generic scalar inputs declare the
+native-to-total multiplier, and their reported value is supplied in native units.
+
+```cpp
+namespace audit = magmaan::estimate::frontier;
+audit::ConvergenceRequest request;
+request.newton = true;
+request.bounds = actual_fit_bounds;
+request.domain = actual_fit_domain;
+auto report = audit::audit_convergence_ml(
+    pt, rep, sample, fit.theta, request, fit.fmin);
+if (!report) return std::unexpected(report.error());
+auto policy = audit::newton_convergence_policy();
+policy.require_objective_consistency = true;
+auto verdict = audit::assess_convergence(*report, policy);
+policy.newton.budget = 0.005;
+auto stricter = audit::assess_convergence(*report, policy);
+```
+
+Reassessment performs no objective evaluations or Hessian factorizations.
+Numeric Newton distance/step/gain survive guard rejection in both the full
+artifact and its summary, so changing acceptance guards gives matching results.
+Geometry tolerances, active sets, covariance-face preparation and differentiation
+controls belong to collection; changing them requires recollection. The
+`interior_eigen_tol` member of policy Newton options is not an assessment control.
+
+The generic scalar collector optionally differentiates the original gradient;
+the ML collector uses analytic observed information. Any existing retained
+Newton adapter can be composed with `audit_convergence(pt, rep, std::move(audit))`
+without reevaluating its objective or Hessian. This requires the exact prepared
+model used by that adapter, including fixed.x and ordinal parameterization.
+The adapter's explicitly held coordinates also constrain the first-order audit.
+Reports own their computations and retain the effective request; they do not
+own the source data or provide automatic model/data fingerprints. Do not attach
+independently computed summaries from other points or objectives.
+
+Regression tests in `convergence_policy_test.cpp` cover missing evidence,
+required versus optional checks, objective mismatch, feasibility, unsupported
+bounds, nonpositive curvature, guard reassessment without callback evaluations,
+ambient versus PSD domains, LS artifact composition, and fit/post-fit ML parity.
+
 ## Coverage by applicable check
 
 This matrix distinguishes existing fit finalization from explicit, reusable
 post-fit Newton artifacts. “Fit checks” means the original-objective,
 feasibility and first-order checks at the documented common finalization seam;
-it does not mean these are already composed into a configurable post-fit report.
+the explicit report composes these checks independently of fit finalization.
 
 | Fit path | Common fit checks | Explicit retained Newton | Remaining coverage |
 | --- | --- | --- | --- |
-| Complete-data ML, Fisher/IRLS | Yes | Analytic | Reconcile `evaluate_at` with fit-time Newton evidence |
+| Complete-data ML, Fisher/IRLS | Yes | Analytic | Fit/post-fit ML parity tested |
 | Fixed LS/GMM, GLS, expanded SNLLS | Yes | Numerical or requested GN | Broader constraint/domain regression combinations |
 | Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
 | FIML | Yes | Analytic | Broader missingness/group combinations |
@@ -169,7 +247,7 @@ it does not mean these are already composed into a configurable post-fit report.
 | Ordinal/mixed LS, including profiled fits | Yes, full coordinates | Delta/theta; numerical or GN | Broader group/profile combinations |
 | CatML | Yes, correlation objective | Numerical; thresholds held | Stage-1 threshold estimation is separate |
 | Two-level ML | Yes | Numerical | Broader between/within constraint combinations |
-| Multi-information penalized ML/FIML | No shared report asserted here | Numerical, includes penalty | Common report integration |
+| Multi-information penalized ML/FIML | Explicit report composition | Numerical, includes penalty | Dedicated fit-time policy migration |
 | Native FCSEM | Specialized path | No dedicated adapter | Native parameter/geometry integration |
 | Implicit RBM | Specialized path | No dedicated adapter | Actual penalized-objective integration |
 | Additional callback constraints / specialized chart objectives | Not uniformly covered | No general adapter | Objective lifting and constraint geometry |
@@ -188,7 +266,7 @@ all five ML2S policies, frozen fitted weights away from an optimum, unequal-grou
 LS normalization, delta/theta mixed LS, and unsupported/unavailable cases).
 These are representative checks, not an exhaustive Cartesian product of model,
 constraint, domain and estimator choices. Thin R access to the full retained
-artifacts and the common configurable post-fit report remain backlog work.
+artifacts and report remains backlog work.
 
 ## Newton adapter coverage and curvature provenance
 

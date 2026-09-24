@@ -119,6 +119,9 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
     a.status = NewtonAccuracyStatus::Unavailable;
     return a;
   }
+  a.distance = solution.distance;
+  a.predicted_gain = solution.predicted_gain;
+  a.max_step = solution.step.size() ? solution.step.cwiseAbs().maxCoeff() : 0.0;
   if (a.condition > opts.max_condition) {
     a.status = NewtonAccuracyStatus::IllConditioned;
     return a;
@@ -127,9 +130,6 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
     a.status = NewtonAccuracyStatus::SolveUnreliable;
     return a;
   }
-  a.distance = solution.distance;
-  a.predicted_gain = solution.predicted_gain;
-  a.max_step = solution.step.size() ? solution.step.cwiseAbs().maxCoeff() : 0.0;
   a.passed = a.distance <= opts.budget;
   return a;
 }
