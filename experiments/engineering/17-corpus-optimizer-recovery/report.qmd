@@ -56,7 +56,11 @@ insufficient.** The Little phantom model reaches a much worse stationary point f
 ordinary starts under all three main optimizers. The curvature audit rejects
 that point; a verified-solution restart recovers the lower objective and passes. A separate scalar probe shows that bounded SLSQP can report
 success far from the known optimum; its independent terminal audit rejects it.
-No default is changed on the basis of this study.
+A focused start experiment recovers 10 of the 12 rejected ML cases in both
+PORT and lavaan by changing free, zero-valued latent paths to 0.5. Lavaan's own
+defaults also fail to recover many of these reference solutions. This implicates
+start construction; it does not establish that the diagnostic 0.5 rule is a
+suitable general policy. No default is changed on the basis of this study.
 
 ## Evidence
 
@@ -185,6 +189,68 @@ The old “12 failures” came from a smaller lower-level test with simple start
 and generic controls. This larger current-interface run is a new baseline,
 not a direct rerun of that exact test protocol.
 
+### Crossing starting values and engines
+
+The follow-up targets the 19 audit-rejected PORT fits plus its two non-finite
+ML errors: 14 ML and seven GLS cases. All 21 capped jobs completed. Counts below
+require each engine's convergence flag and an objective at least as good as the
+**earlier** reference, within the same comparison tolerance. Lavaan's flag is
+not equivalent to magmaan's curvature/feasibility audit.
+
+```{r}
+sx <- r("starts/summary")
+sx$policy <- paste(sx$engine,sx$start)
+policies <- c("PORT current","PORT simple","PORT lavaan_default",
+              "PORT nonzero_latent_paths","PORT reference_solution",
+              "lavaan lavaan_default","lavaan current","lavaan nonzero_latent_paths")
+labels <- c("PORT: current starts","PORT: simple starts","PORT: lavaan starts",
+            "PORT: nonzero latent paths","PORT: reference solution",
+            "lavaan: own defaults","lavaan: our current starts","lavaan: nonzero latent paths")
+z <- data.frame(Policy=labels)
+for(est in c("ML","GLS")) {
+  x <- sx[sx$estimator==est,]; x<-x[match(policies,x$policy),]
+  z[[est]] <- paste(x$at_least_reference,x$attempts,sep=" / ")
+}
+knitr::kable(z,col.names=c("Engine and Start","ML Recovered / Attempts","GLS Recovered / Attempts"))
+```
+
+The diagnostic changes only free latent-to-latent regression coefficients
+whose supplied start is zero to 0.5. It preserves model specification and fixed
+parameters; it is not a new production default. Both engines recover ten of the
+twelve ML curvature cases. The two bullying ALT models instead reach the same
+slightly worse ML objective (0.547575 versus 0.543219) in both engines. The two
+invalid-start models remain failures in both. PORT succeeds on all 21 cases
+when initialized at the converged reference solution.
+
+The phantom CFA is particularly informative: current, simple, and lavaan starts
+all set the two phantom paths to zero. Both engines then reach objective
+0.893810, which lavaan accepts but magmaan rejects for curvature. Setting the
+paths to 0.5 lets both reach 0.011198. A zero scale path can eliminate first-order
+sensitivity to its variance contribution, since that contribution is quadratic
+in the path. This is a concrete start-induced degeneracy to investigate.
+
+The reference's provenance matters. Little's original LISREL input explicitly
+starts these paths at 0.7. The corpus records verification of a lavaan refit
+from the original input's ST/VA/MA values against the supplied LISREL output,
+and stores the verified solution in `start_values.csv`. Our reference run then
+uses that solution as a start for a fresh lavaan fit. This is evidence for a
+known attainable solution, not evidence that LISREL has a superior optimizer
+or a certificate of global optimality.
+
+GLS separates from the ML story. Lavaan reaches or improves on the old target in
+all seven cases from its own defaults, and from our supplied current starts.
+PORT still exhausts its budget on Geiser's cross-lagged model, Kline's Sabatelli
+model and Worland Step 2b under the nonzero-path start. These retain an
+optimizer/scaling/control question. The two bullying ALT GLS cases reach
+0.501215, below the earlier 0.501320 reference, in lavaan and in PORT with the
+nonzero-path start. The earlier reference is therefore explicitly not a global
+optimum; historical sweep counts are retained, rather than silently redefined.
+
+`results/full/starts/comparison.csv` retains all endpoints, and the per-case
+`__vectors.csv` files retain the supplied parameter starts. Corpus solution
+files are used only for the reference-solution arm; ordinary lavaan runs retain
+syntax hints but do not receive those files.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -261,6 +327,8 @@ Rscript R/validate_inputs.R ../../../external/textbook-corpus results/full
 Rscript R/summarize.R results/full
 Rscript R/inspect_endpoints.R ../../../external/textbook-corpus results/full
 Rscript R/inspect_port.R ../../../external/textbook-corpus results/full
+Rscript R/compare_starts.R ../../../external/textbook-corpus results/full
+Rscript R/summarize_starts.R results/full/starts
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

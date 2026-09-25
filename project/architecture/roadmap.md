@@ -46,6 +46,11 @@ reproduce on the corrected inputs; evaluator cancellation remains an unproven
 explanation, not an established defect. Early scale-sensitive L-BFGS domain
 failures still reproduce in a scalar probe and corpus models. The Little phantom
 poor stationary point fails the curvature audit; a verified-start restart passes.
+A targeted start cross-check recovers 10 of 12 ML curvature cases in both PORT
+and lavaan by replacing zero free latent-path starts with 0.5. This is diagnostic
+evidence for start-policy work, not a new default. Lavaan also stalls at the
+phantom CFA's zero-path start; the original LISREL input supplies nonzero starts.
+Three GLS cases retain a PORT recovery gap even with starts shared with lavaan.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under

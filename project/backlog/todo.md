@@ -135,7 +135,16 @@ design, starting-point inventory and validation rules are in
   do not substitute its counts for this historical test. At the current phantom
   endpoint, L-BFGS, PORT and SLSQP have small gradients but nonpositive curvature;
   the fit audit rejects it. A verified-solution restart passes at the lower
-  objective. Investigate starts and escape from poor stationary points before
+  objective. The focused start cross-check recovers 10 of 12 ML curvature
+  rejections in both PORT and lavaan by setting free, zero-start latent paths to
+  0.5; lavaan defaults also miss many reference solutions. For the phantom CFA,
+  the original LISREL input supplies 0.7 on those paths. Investigate a principled
+  nondegenerate phantom/latent-path start policy, respecting explicit hints,
+  equality constraints, identification and units; do not adopt blanket 0.5
+  starts from this diagnostic. Two ALT ML models still reach worse solutions;
+  two invalid-start models remain unresolved. Three GLS cases still separate
+  PORT from successful lavaan fits at the same supplied starts. Investigate
+  starts and escape from poor stationary points before
   unskipping the low-level golden. Geiser's marker default-start failures are
   resolved by correcting Reduced representation handling in simple/FABIN
   starts. Remaining: std.lv L-BFGS robustness and transported-start coverage
