@@ -29,6 +29,19 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
+- **M — finish uniform start-policy coverage.** The continuous-data/FIML slice
+  shares constructor/transport selection and retained supplied-vector reports;
+  see the roadmap and [optimizer controls](../reference/optimizer-controls.md).
+  Next: ordinal/mixed LS and CatML preparation (thresholds and parameterization),
+  two-level summaries, ML2S Stage-1 initialization versus Stage-2 starts, and
+  native FCSEM/spherical routes. Route supported selections through the common
+  policy and reject unsupported selections instead of silently ignoring them.
+  Retain per-block/factor constructor fallback evidence (including FABIN3 to
+  FABIN2 and simple-baseline substitutions), user-hint overrides, and separately
+  report fit-time projection/PSD repair/profiling. The current retained vector
+  is the input supplied to fit, not a claim about the first optimizer iterate.
+  Validate group/constraint/identification combinations before changing defaults.
+
 - **M, corpus fidelity.** Repair the Little LISREL translation before renewed
   corpus performance claims: multiple references per `VA`, leading-dot numeric
   values, residual `EQ` constraints, and `TY`/`AL` mean structure are currently

@@ -20,6 +20,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -238,12 +239,18 @@ enum class StartKind : std::uint8_t {
   Bentler1982,
   JamesStein,
   Explicit,
+  Policy,
 };
 
 struct StartSpec {
   StartKind kind = StartKind::Simple;
   Eigen::VectorXd theta;
+  estimate::StartPolicy policy{};
 };
+
+inline StartSpec start_policy(estimate::StartPolicy policy) {
+  return StartSpec{StartKind::Policy, {}, policy};
+}
 
 inline StartSpec ml_starts() { return StartSpec{StartKind::MlScaled, {}}; }
 inline StartSpec simple_starts() { return StartSpec{StartKind::Simple, {}}; }
@@ -383,6 +390,7 @@ public:
   const Model &model() const noexcept { return *model_; }
   const Data &data() const noexcept { return *data_; }
   const estimate::Estimates &estimates() const noexcept { return estimates_; }
+  const std::optional<estimate::StartValues>& starts() const noexcept { return starts_; }
   EstimatorKind estimator() const noexcept { return estimator_.kind; }
   const EstimatorSpec &estimator_spec() const noexcept { return estimator_; }
 
@@ -413,6 +421,7 @@ private:
   std::shared_ptr<const Data> data_;
   estimate::Estimates estimates_;
   EstimatorSpec estimator_;
+  std::optional<estimate::StartValues> starts_;
   std::shared_ptr<const estimate::fiml::FIMLPack> fiml_pack_;
   std::shared_ptr<const estimate::fiml::FIMLH1> fiml_h1_;
 };

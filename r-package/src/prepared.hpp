@@ -295,7 +295,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     if (!e) stop_fit(e.error());
     return mixed_ordinal_fit_result(ctx, s, *e, &m.starts, method.c_str(), m.parameterization.c_str());
   }
-  const auto x0 = start_values_or_stop(ctx, m.starts);
+  const auto x0 = start_values_or_stop(ctx, m.starts, "fabin3", nullptr, nullptr, control);
   if (d.kind == "raw") {
     if (method != "FIML" || bounds.isNotNull()) Rcpp::stop("magmaan: raw data supports FIML without bounds");
     e = estimate::fit_fiml(ctx.pt, ctx.rep, d.raw, x0, *d.pack,

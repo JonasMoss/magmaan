@@ -7,7 +7,7 @@ namespace magmaan::estimate {
 enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStein };
 enum class StartTransport { Native, AutoStdLv, RequireStdLv };
 enum class StartTransportIssue {
-  None, EqualityConstraints, FixedValues, MarkerLayout, SourceModel,
+  None, ConstructorRequiresMarker, EqualityConstraints, FixedValues, MarkerLayout, SourceModel,
   SourceStarts, InvalidScale, NonfiniteValues, FixedValueMismatch, InvalidVector
 };
 const char* start_transport_reason(StartTransportIssue);
@@ -31,11 +31,18 @@ struct StartPolicy {
 };
 enum class StartBranch { Native, TransportedStdLv, NativeFabin = Native };
 struct StartValues {
+  // Supplied fit input, before any fitter repair/projection/profiling.
   Eigen::VectorXd theta;
   StartBranch branch = StartBranch::Native;
   StartTransportIssue fallback_reason = StartTransportIssue::None;
+  // Requested constructor; internal per-factor substitutions remain possible.
   StartMethod method = StartMethod::Fabin3;
+  StartTransport requested_transport = StartTransport::Native;
+  bool explicit_vector = false;
 };
+
+fit_expected<StartValues> explicit_start_values(
+    const spec::LatentStructure&, const Eigen::VectorXd&);
 
 fit_expected<Eigen::VectorXd> construct_start_values(
     const spec::LatentStructure&, const model::MatrixRep&,
@@ -43,6 +50,7 @@ fit_expected<Eigen::VectorXd> construct_start_values(
 
 // Compose constructor -> optional transport -> target-coordinate hints. Auto
 // falls back to the same native constructor; RequireStdLv returns an error.
+// Marker-only constructors cannot be composed with std.lv source construction.
 // Finite values are required, but PSD feasibility belongs to the fitter.
 fit_expected<StartValues> start_values(
     const spec::LatentStructure&, const model::MatrixRep&,

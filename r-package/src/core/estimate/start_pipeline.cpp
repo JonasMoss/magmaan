@@ -12,6 +12,7 @@ std::size_t index(auto value) { return static_cast<std::size_t>(value); }
 
 const char* start_transport_reason(StartTransportIssue issue) {
   switch (issue) {
+    case StartTransportIssue::ConstructorRequiresMarker: return "constructor-requires-marker";
     case StartTransportIssue::None: return "none";
     case StartTransportIssue::EqualityConstraints: return "equality-constraints-unsupported";
     case StartTransportIssue::FixedValues: return "fixed-values-unsupported";
@@ -127,12 +128,28 @@ fit_expected<Eigen::VectorXd> construct_start_values(
   return out;
 }
 
+fit_expected<StartValues> explicit_start_values(
+    const spec::LatentStructure& pt, const Eigen::VectorXd& theta) {
+  if (theta.size() != pt.n_free() || !theta.allFinite())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "Explicit start vector must be finite and match model n_free", 0, 0});
+  StartValues out;
+  out.theta = theta;
+  out.explicit_vector = true;
+  return out;
+}
+
 fit_expected<StartValues> start_values(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const data::SampleStats& samp, const StartPolicy& policy, const spec::Starts& hints) {
   StartTransportIssue reason = StartTransportIssue::None;
   if (policy.transport != StartTransport::Native) {
-    auto plan = prepare_std_lv_transport(pt, rep);
+    const bool needs_marker = policy.method == StartMethod::Guttman ||
+        policy.method == StartMethod::Bentler1982 || policy.method == StartMethod::JamesStein;
+    auto plan = needs_marker
+        ? std::expected<StdLvStartTransport, StartTransportIssue>(
+            std::unexpected(StartTransportIssue::ConstructorRequiresMarker))
+        : prepare_std_lv_transport(pt, rep);
     if (!plan) reason = plan.error();
     else {
       auto source = construct_start_values(plan->source, plan->source_rep, samp, policy.method);
@@ -145,7 +162,7 @@ fit_expected<StartValues> start_values(
             if (index(k) < hints.hint.size() && std::isfinite(hints.hint[index(k)]))
               (*candidate)(k) = hints.hint[index(k)];
           return StartValues{std::move(*candidate), StartBranch::TransportedStdLv,
-                          StartTransportIssue::None, policy.method};
+                          StartTransportIssue::None, policy.method, policy.transport};
         }
       }
     }
@@ -155,7 +172,7 @@ fit_expected<StartValues> start_values(
   }
   auto native = construct_start_values(pt, rep, samp, policy.method, hints);
   if (!native) return std::unexpected(native.error());
-  return StartValues{std::move(*native), StartBranch::Native, reason, policy.method};
+  return StartValues{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
 }
 
 } // namespace magmaan::estimate

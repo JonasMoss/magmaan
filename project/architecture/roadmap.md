@@ -129,6 +129,16 @@ a divergent path (no attained maximum), where the remaining gain is tiny.
 `fit$diagnostics$verdict$criterion` says which check decided. The standalone
 `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
 recompute it with other options.
+Continuous and FIML interfaces now share explicit constructor/transport controls:
+R uses `control$start` / `control$start_transport` and retains `fit$start`;
+the friendly C++ API accepts `api::start_policy` and retains `Fit::starts()`.
+Explicit vectors are validated for size and finiteness. Existing defaults are
+preserved per entry point. Marker-only CFA constructors fall back to their
+native method with a reason under automatic transport, and reject required
+transport. Retained vectors precede fitter projection/PSD repair/profiling;
+per-factor constructor fallback evidence and specialized start adapters remain
+in the active backlog. See the start-policy section of
+[optimizer controls](../reference/optimizer-controls.md).
 
 Newton computations are available as owning, reusable C++ artifacts under
 `estimate::frontier`. `evaluate_newton_ml` retains the full total-gradient and

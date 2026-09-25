@@ -1202,3 +1202,38 @@ TEST_CASE("ML optimizer selection inherits controls only when omitted") {
   CHECK_FALSE(gls.optimizer_spec.options.ml_sample_scaling);
   CHECK_FALSE(gls.optimizer_spec.options.nlopt.max_eval.has_value());
 }
+
+TEST_CASE("api continuous and FIML fits retain the shared explicit start policy") {
+  namespace api = magmaan::api;
+  namespace es = magmaan::estimate;
+  api::ModelOptions options; options.build.meanstructure = true;
+  auto model = api::model_from_lavaan("f =~ x1 + x2 + x3 + x4", options);
+  REQUIRE(model);
+  auto raw = fiml_interior_raw();
+  auto stats = magmaan::data::sample_stats_from_raw(raw); REQUIRE(stats);
+  auto data = api::data_from_sample_stats(*model, *stats); REQUIRE(data);
+  auto missing_data = api::data_from_raw(*model, raw); REQUIRE(missing_data);
+  es::StartPolicy policy{es::StartMethod::Fabin2, es::StartTransport::AutoStdLv};
+  auto expected = es::start_values(model->structure(), model->matrix_rep(), *stats,
+                                  policy, model->starts()); REQUIRE(expected);
+  es::gmm::Weight weight{es::gmm::BlockWeight::identity(14)};
+  for (auto estimator : {api::ml(), api::uls(), api::gls(), api::wls(weight), api::fiml()}) {
+    const bool fiml = estimator.kind == api::EstimatorKind::FIML;
+    auto fit = api::fit(*model, fiml ? *missing_data : *data,
+        estimator.starts(api::start_policy(policy)).optimizer(api::nlopt_slsqp()));
+    REQUIRE(fit); REQUIRE(fit->starts());
+    CHECK(fit->starts()->method == es::StartMethod::Fabin2);
+    CHECK(fit->starts()->requested_transport == es::StartTransport::AutoStdLv);
+    if (!fiml) CHECK(fit->starts()->theta.isApprox(expected->theta));
+    else {
+      auto fiml_expected = es::start_values(model->structure(), model->matrix_rep(),
+          fit->fiml_pack()->start_stats, policy, model->starts()); REQUIRE(fiml_expected);
+      CHECK(fit->starts()->theta.isApprox(fiml_expected->theta));
+    }
+    auto explicit_fit = api::fit(*model, fiml ? *missing_data : *data,
+        estimator.starts(api::explicit_starts(fit->estimates().theta)).optimizer(api::nlopt_slsqp()));
+    REQUIRE(explicit_fit); REQUIRE(explicit_fit->starts());
+    CHECK(explicit_fit->starts()->explicit_vector);
+    CHECK(explicit_fit->starts()->theta.isApprox(fit->estimates().theta));
+  }
+}

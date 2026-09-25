@@ -25,6 +25,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
 #include "magmaan/estimate/gmm/weight.hpp"       // BlockWeight / Weight / dense_weight
 #include "magmaan/estimate/fiml.hpp"             // SaturatedMoments
@@ -558,6 +559,7 @@ fiml_backend_from_optimizer_arg(Rcpp::Nullable<Rcpp::String> optimizer) {
 // ---- model context ----------------------------------------------------------
 
 struct Ctx {
+  std::optional<magmaan::estimate::StartValues> start_values;
   magmaan::spec::LatentStructure     pt;
   magmaan::spec::LatentNames         names;
   lvm::MatrixRep           rep;
@@ -908,6 +910,8 @@ inline Rcpp::List cache_fit_context(Rcpp::List fit, const Ctx& ctx) {
       fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue);
   Rcpp::XPtr<FitContextSnapshot> ptr(new FitContextSnapshot{ctx},true,
       Rf_install("magmaan_fit_context"));
+  // Construction evidence belongs to this fit, not a later post-fit refit.
+  ptr->ctx.start_values.reset();
   R_SetExternalPtrProtected(ptr,fields);
   out.attr("magmaan_context") = ptr;
   return out;

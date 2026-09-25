@@ -113,23 +113,59 @@ adapter that transforms parameters and derivatives. PSD information scaling
 remains part of its lifted optimizer. Neither operation is implemented by
 multiplying a start vector alone. Their existing defaults are unchanged.
 
-In R, omitted starts and `start="default"` now mean the same thing within each
-entry point. Complete-data ML and `magmaan_core$estimate_start_values()` use
-`scaled-fabin` by default. Explicit `simple`, `fabin2`, `fabin3` (also `lavaan`)
-and other method names retain native construction. The start-vector helper
-also accepts an independent `transport="auto"`, `"native"` or `"required"`:
+Continuous-data and FIML R fit entry points accept the same controls:
 
 ```r
-x0 <- magmaan_core$estimate_start_values(
-    model$partable, stats, start = "simple", transport = "auto")
+control = list(start = "fabin2", start_transport = "auto")
+# Or supply a finite vector in target free-parameter order:
+control = list(start = x0)
 ```
 
-The helper returns a numeric vector with `start_method`, `start_transport`
-and `start_fallback_reason` attributes. ML fit results retain `ml_start_policy`
-and add `ml_start_fallback_reason`; optimizer scaling is reported separately.
-The helper's former implicit `simple` default is an intentional interface
-change: request `start="simple"` explicitly to reproduce it. Other estimators'
-omitted defaults are unchanged.
+`start_transport` is `"native"`, `"auto"`, or `"required"`. An explicit vector
+must have exactly `n_free` finite entries; it supersedes partable start hints
+and cannot request nonnative transport. Omission and `start="default"` preserve
+each entry point's existing default: the ordinary/PSD/multi-information
+complete-data ML wrappers use auto-transported FABIN3; ordinary LS, SNLLS,
+FIML and prepared wrappers retain native FABIN3. Explicit method names retain
+native construction unless transport is selected separately. `scaled-fabin`
+remains an alias for FABIN3 with automatic transport.
+
+Each participating fit returns `fit$start`, containing `theta`, `method`,
+`requested_transport`, applied `transport`, and `fallback_reason`. `theta` is
+the vector supplied to the fitter, before any bound projection, PSD repair or
+SNLLS profiling. `method` names the requested constructor (or `explicit`);
+within-constructor substitutions are not yet reported per factor/block.
+Existing `ml_start_policy` and `ml_start_fallback_reason` fields remain for
+compatibility. An ordinary-to-PSD retry reports its actual warm-start input
+separately from the original construction.
+
+Marker-only Guttman, Bentler-1982 and James–Stein constructors cannot run in
+the auxiliary std.lv model. Automatic transport therefore runs the requested
+native constructor and reports `constructor-requires-marker`; required
+transport fails. It no longer reports a successful transported method after
+silently constructing simple starts.
+
+The standalone `magmaan_core$estimate_start_values()` helper defaults to
+auto-transported FABIN3 and accepts separate `start` and `transport` arguments.
+It returns a numeric vector with `start_method`, `start_transport` and
+`start_fallback_reason` attributes. Its former implicit simple default was
+changed by the original pipeline commit; request `start="simple"` explicitly
+when that is required.
+
+The friendly C++ API accepts
+`estimator.starts(api::start_policy({StartMethod::Fabin2, StartTransport::AutoStdLv}))`.
+Continuous and FIML `api::Fit::starts()` retains the owning `StartValues`,
+including the supplied vector and requested transport. Existing convenience
+start selectors route through the same pipeline and keep their defaults.
+Low-level C++ fitters still take explicit vectors and do not construct starts.
+Ordinal, two-level and native FCSEM adapters remain separate; the new generic
+policy is rejected where unsupported. Spherical initialization and per-stage
+ML2S policy selection remain separate follow-ups.
+
+Validation: constructor/transport fallback regressions, continuous/FIML C++
+policy integration, and `r-package/examples/start_policy.R` exercise direct,
+PSD, penalized, least-squares, SNLLS and prepared routes. The existing ML
+numerical-default example checks compatibility behavior.
 
 ## NLopt: L-BFGS, SLSQP, VAR2, TNEWTON and BOBYQA
 

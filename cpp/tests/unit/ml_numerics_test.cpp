@@ -195,3 +195,24 @@ TEST_CASE("Start transport preserves implied means and signed marker scales") {
   CHECK((a->moments.sigma[0] - b->moments.sigma[0]).norm() < 1e-12);
   CHECK((a->moments.mu[0] - b->moments.mu[0]).norm() < 1e-12);
 }
+
+TEST_CASE("Start policy preserves marker-only constructors when transport is requested") {
+  auto c = example();
+  using M = estimate::StartMethod;
+  using T = estimate::StartTransport;
+  for (auto method : {M::Guttman, M::Bentler1982, M::JamesStein}) {
+    auto native = estimate::construct_start_values(c.pt, c.rep, c.sample, method);
+    auto automatic = estimate::start_values(c.pt, c.rep, c.sample, {method, T::AutoStdLv});
+    REQUIRE(native); REQUIRE(automatic);
+    CHECK(automatic->theta.isApprox(*native));
+    CHECK(automatic->branch == estimate::StartBranch::Native);
+    CHECK(automatic->fallback_reason == estimate::StartTransportIssue::ConstructorRequiresMarker);
+    CHECK(automatic->requested_transport == T::AutoStdLv);
+    CHECK_FALSE(estimate::start_values(c.pt, c.rep, c.sample, {method, T::RequireStdLv}));
+  }
+  auto invalid = Eigen::VectorXd::Zero(c.pt.n_free()).eval();
+  CHECK(estimate::explicit_start_values(c.pt, invalid));
+  invalid[0] = std::numeric_limits<double>::quiet_NaN();
+  CHECK_FALSE(estimate::explicit_start_values(c.pt, invalid));
+  CHECK_FALSE(estimate::explicit_start_values(c.pt, Eigen::VectorXd::Zero(1)));
+}

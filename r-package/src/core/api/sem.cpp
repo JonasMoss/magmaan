@@ -14,49 +14,27 @@ namespace magmaan::api {
 
 namespace {
 
-Result<Eigen::VectorXd> start_values(const spec::LatentStructure &pt,
-                                     const model::MatrixRep &rep,
-                                     const data::SampleStats &stats,
-                                     const spec::Starts &starts,
-                                     const StartSpec &spec) {
-  if (spec.kind == StartKind::Explicit) {
-    if (spec.theta.size() != pt.n_free()) {
-      return std::unexpected(make_error(
-          ErrorStage::Fit,
-          "explicit start vector length does not match model n_free"));
-    }
-    return spec.theta;
-  }
-
-  fit_expected<Eigen::VectorXd> out;
+Result<estimate::StartValues> start_values(const spec::LatentStructure &pt,
+    const model::MatrixRep &rep, const data::SampleStats &stats,
+    const spec::Starts &starts, const StartSpec &spec) {
+  using M = estimate::StartMethod;
+  using T = estimate::StartTransport;
+  estimate::StartPolicy policy{M::Simple, T::Native};
   switch (spec.kind) {
-  case StartKind::MlScaled: {
-    auto value = estimate::ml_start_values(pt, rep, stats, starts);
-    if (!value) return std::unexpected(make_error(ErrorStage::Fit, value.error()));
-    return std::move(value->theta);
+    case StartKind::Policy: policy = spec.policy; break;
+    case StartKind::MlScaled: policy = {M::Fabin3, T::AutoStdLv}; break;
+    case StartKind::Simple: break;
+    case StartKind::Fabin: policy.method = M::Fabin3; break;
+    case StartKind::Guttman: policy.method = M::Guttman; break;
+    case StartKind::Bentler1982: policy.method = M::Bentler1982; break;
+    case StartKind::JamesStein: policy.method = M::JamesStein; break;
+    case StartKind::Explicit: break;
   }
-  case StartKind::Simple:
-    out = estimate::simple_start_values(pt, rep, stats, starts);
-    break;
-  case StartKind::Fabin:
-    out = estimate::fabin_start_values(pt, rep, stats, starts);
-    break;
-  case StartKind::Guttman:
-    out = estimate::guttman_start_values(pt, rep, stats, starts);
-    break;
-  case StartKind::Bentler1982:
-    out = estimate::bentler1982_start_values(pt, rep, stats, starts);
-    break;
-  case StartKind::JamesStein:
-    out = estimate::jamesstein_start_values(pt, rep, stats, starts);
-    break;
-  case StartKind::Explicit:
-    break;
-  }
-  if (!out) {
-    return std::unexpected(make_error(ErrorStage::Fit, out.error()));
-  }
-  return *out;
+  auto out = spec.kind == StartKind::Explicit
+      ? estimate::explicit_start_values(pt, spec.theta)
+      : estimate::start_values(pt, rep, stats, policy, starts);
+  if (!out) return std::unexpected(make_error(ErrorStage::Fit, out.error()));
+  return std::move(*out);
 }
 
 Result<Eigen::VectorXd> ordinal_start_values(const Model &model,
@@ -65,6 +43,9 @@ Result<Eigen::VectorXd> ordinal_start_values(const Model &model,
   if (spec.start_spec.kind == StartKind::Explicit) {
     return spec.start_spec.theta;
   }
+  if (spec.start_spec.kind == StartKind::Policy)
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "StartPolicy is not yet supported for ordinal starts"));
   auto x0 = estimate::ordinal_start_values(
       model.structure(), model.matrix_rep(), stats, model.starts());
   if (!x0) {
@@ -79,6 +60,9 @@ Result<Eigen::VectorXd> mixed_ordinal_start_values(
   if (spec.start_spec.kind == StartKind::Explicit) {
     return spec.start_spec.theta;
   }
+  if (spec.start_spec.kind == StartKind::Policy)
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "StartPolicy is not yet supported for ordinal starts"));
   auto x0 = estimate::mixed_ordinal_start_values(
       model.structure(), model.matrix_rep(), stats, model.starts());
   if (!x0) {
@@ -721,6 +705,9 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     if (estimator.start_spec.kind == StartKind::Explicit) {
       x0 = estimator.start_spec.theta;
     } else {
+      if (estimator.start_spec.kind == StartKind::Policy)
+        return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+            "StartPolicy is not yet supported for two-level starts"));
       auto starts = estimate::twolevel::twolevel_start_values(
           pt, rep, *cs, model->starts());
       if (!starts) {
@@ -781,7 +768,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
 
     auto est = estimate::fiml::fit_fiml(
-        pt, rep, *raw, *x0, *pack, backend_from(estimator.optimizer_spec),
+        pt, rep, *raw, x0->theta, *pack, backend_from(estimator.optimizer_spec),
         estimator.optimizer_spec.options);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
@@ -798,6 +785,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
     Fit out(std::move(model), std::move(data), std::move(*est),
             std::move(estimator));
+    out.starts_ = std::move(*x0);
     out.fiml_pack_ = std::move(pack_ptr);
     out.fiml_h1_ = std::move(h1_ptr);
     return out;
@@ -893,17 +881,17 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
           make_error(ErrorStage::UnsupportedCombination,
                      "ML currently supports only NLopt L-BFGS, NLopt L-BFGS with SLSQP fallback, NLopt SLSQP, or IPOPT"));
     }
-    est = estimate::fit_ml(pt, rep, *stats, *x0, *bounds,
+    est = estimate::fit_ml(pt, rep, *stats, x0->theta, *bounds,
                            backend_from(estimator.optimizer_spec),
                            estimator.optimizer_spec.options);
     break;
   case EstimatorKind::ULS:
-    est = estimate::fit_gmm(pt, rep, *stats, *x0, {}, *bounds,
+    est = estimate::fit_gmm(pt, rep, *stats, x0->theta, {}, *bounds,
                             backend_from(estimator.optimizer_spec),
                             estimator.optimizer_spec.options);
     break;
   case EstimatorKind::GLS:
-    est = estimate::fit_gls(pt, rep, *stats, *x0, *bounds,
+    est = estimate::fit_gls(pt, rep, *stats, x0->theta, *bounds,
                             backend_from(estimator.optimizer_spec),
                             estimator.optimizer_spec.options);
     break;
@@ -913,7 +901,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
           make_error(ErrorStage::UnsupportedCombination,
                      "continuous WLS requires an explicit weight matrix"));
     }
-    est = estimate::fit_gmm(pt, rep, *stats, *x0, estimator.weight, *bounds,
+    est = estimate::fit_gmm(pt, rep, *stats, x0->theta, estimator.weight, *bounds,
                             backend_from(estimator.optimizer_spec),
                             estimator.optimizer_spec.options);
     break;
@@ -928,8 +916,9 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   if (!est) {
     return std::unexpected(make_error(ErrorStage::Fit, est.error()));
   }
-  return Fit(std::move(model), std::move(data), std::move(*est),
-             std::move(estimator));
+  Fit out(std::move(model), std::move(data), std::move(*est), std::move(estimator));
+  out.starts_ = std::move(*x0);
+  return out;
 }
 
 Result<Fit> fit(const Model &model, const Data &data,
