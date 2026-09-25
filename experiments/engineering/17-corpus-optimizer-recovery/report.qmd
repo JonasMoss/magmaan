@@ -251,6 +251,34 @@ optimum; historical sweep counts are retained, rather than silently redefined.
 files are used only for the reference-solution arm; ordinary lavaan runs retain
 syntax hints but do not receive those files.
 
+### General start-policy gap: structure versus spelling
+
+A controlled equivalent-model probe confirms a syntax-dependent start choice.
+The phantom paths written as latent regressions receive simple starts of zero;
+written as free higher-order loadings they receive 0.7. The free/fixed row pattern
+matches after reversing the loading notation, and objectives agree at shared
+zero and nonzero parameter vectors. The models are equivalent; their current
+start heuristics are not. `results/full/start_semantics.csv` records the check.
+
+The current loading constructors leave structural paths at the simple baseline.
+The missing capability is therefore an explicit structural initialization pass:
+recognize variance-carrying latent paths and initialize them together with the
+measurement block's scale and residual variance. Ordinary regressions need not
+all receive nonzero starts. A narrowly supported single-parent block can use an
+estimated target variance for its child to initialize the magnitude of a scale
+path; multiple-parent, cyclic, constrained, and sign-ambiguous blocks need their
+own handling or an explicit fallback. Fixed innovation variances must not be
+confused with total latent variances.
+
+A production candidate should preserve explicit hints and fixed values, respect
+cross-group constraints, and check the resulting implied covariance and the
+sensitivity of affected blocks. It should compose with the existing constructors
+and identification transport as a separately callable operation. Its validation
+must include equivalent loading/regression spellings, marker and unit-variance
+identification, changes of observed units, sign conventions, explicit zero hints,
+and the full corpus including cases that already work. The observed 0.5 rescue
+is motivation for this general work, not its implementation.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -329,6 +357,7 @@ Rscript R/inspect_endpoints.R ../../../external/textbook-corpus results/full
 Rscript R/inspect_port.R ../../../external/textbook-corpus results/full
 Rscript R/compare_starts.R ../../../external/textbook-corpus results/full
 Rscript R/summarize_starts.R results/full/starts
+Rscript R/probe_start_semantics.R ../../../external/textbook-corpus results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

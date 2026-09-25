@@ -121,6 +121,19 @@ design, starting-point inventory and validation rules are in
   report fit-time projection/PSD repair/profiling. The current retained vector
   is the input supplied to fit, not a claim about the first optimizer iterate.
   Validate group/constraint/identification combinations before changing defaults.
+  Prioritize **structural start initialization**: the current simple producer
+  initializes the same latent path to 0 as a regression and 0.7 as a higher-order
+  loading; the equivalent-model probe in `engineering/17-corpus-optimizer-recovery`
+  confirms identical objectives at shared vectors but different supplied starts.
+  FABIN changes observed loadings only and cannot repair this difference.
+  Recognize variance-carrying scale paths from model structure, estimate their
+  magnitudes jointly with measurement/latent variance starts, and distinguish
+  fixed innovation variance from total latent variance. Keep this a composable,
+  separately callable pass with explicit applicability/fallback diagnostics;
+  retain the simple/parity constructor as a selectable baseline. Start with
+  supported acyclic single-parent blocks, preserve user hints (including zero),
+  fixed values and equalities, and validate equivalent syntax, identification,
+  signs, unit changes, finite objectives and existing successful corpus cases.
 
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the

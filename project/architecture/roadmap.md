@@ -51,6 +51,10 @@ and lavaan by replacing zero free latent-path starts with 0.5. This is diagnosti
 evidence for start-policy work, not a new default. Lavaan also stalls at the
 phantom CFA's zero-path start; the original LISREL input supplies nonzero starts.
 Three GLS cases retain a PORT recovery gap even with starts shared with lavaan.
+An equivalent-model probe confirms that latent regressions and higher-order
+loadings currently receive different simple starts despite representing the same
+scale paths. Structural initialization beyond the loading constructors remains
+an explicit gap; no blanket nonzero-regression policy has been adopted.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under
