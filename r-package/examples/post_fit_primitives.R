@@ -1,5 +1,5 @@
 utils::data("HolzingerSwineford1939", package = "lavaan")
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 df <- HolzingerSwineford1939
 X <- as.matrix(df[paste0("x", 1:9)])
 
@@ -7,7 +7,7 @@ model <- "visual  =~ x1 + x2 + x3
           textual =~ x4 + x5 + x6
           speed   =~ x7 + x8 + x9"
 
-fit <- magmaan::magmaan(model, df, estimator = "ML")
+fit <- magmaanlab::fit_model(model, df, estimator = "ML")
 ss <- core$fit_sample_stats(fit)
 info <- core$inference_information_expected(fit)
 implied <- core$model_implied(fit)
@@ -60,12 +60,12 @@ fs_bar <- core$measures_factor_scores(fit, X, method = "bartlett")
 stopifnot(nrow(fs_reg$scores[[1]]) == nrow(X))
 stopifnot(ncol(fs_reg$scores[[1]]) == 3L)
 stopifnot(identical(dim(fs_bar$scores[[1]]), dim(fs_reg$scores[[1]])))
-fs_friendly <- magmaan::factor_scores(fit, df, method = "regression")
+fs_friendly <- magmaanlab::factor_scores(fit, df, method = "regression")
 stopifnot(close(fs_friendly$scores[[1]], fs_reg$scores[[1]]))
 
-std_friendly <- magmaan::standardized(fit, vc_parts, type = "all")
+std_friendly <- magmaanlab::standardized(fit, vc_parts, type = "all")
 stopifnot(length(std_friendly$theta) == length(fit$theta))
-mi_friendly <- magmaan::modification_indices(fit)
+mi_friendly <- magmaanlab::modification_indices(fit)
 stopifnot(is.data.frame(mi_friendly))
 
 uf_fit <- core$robust_build_u_factor_fit(fit)

@@ -30,15 +30,17 @@ semantics · **XL** statistical design/research track before implementation.
 ## Two-package R interface
 
 Adopted 2026-09-25: an opinionated pure-R `magmaan` package (one call,
-automatic inference) over the compiled `magmaanlab` package. The design,
-starting-point inventory and validation rules are in
+automatic inference, `r-magmaan/`) over the compiled `magmaanlab` package
+(`r-package/`). The split and the `magmaan` scaffold landed the same day; the
+design, starting-point inventory and validation rules are in
 [r-interface-vision.md](../design/r-interface-vision.md). Items in order:
 
 - **M — C++ policy composer for complete-data ML.** Observed-bread sandwich
   covariance with empirical score covariance; Wald SEs, z-tests, intervals and
   delta-method defined parameters; global score and likelihood-ratio tests,
   each with SB and PEBA4, from retained data and geometry. Place it under
-  `api::`. Gate the covariance against the existing lavaan `robust.huber.white`
+  `api::` and call it from `magmaan::infer()`, which currently records every
+  component as `not_implemented`; add `anova()` for nested fits with it. Gate the covariance against the existing lavaan `robust.huber.white`
   fixtures and the whole composition against explicit lab primitives. Builds on
   the observed-bread item under "Score/inference adapter follow-ups".
 - **M — least-squares estimators under the policy.** For fixed-weight GLS, ULS,
@@ -64,23 +66,32 @@ starting-point inventory and validation rules are in
   effective (nuisance-projected) score; `score_components_from_matrices()` and
   `project_scores()` already carry the projection. The policy default cites
   the result.
-- **S — listwise deletion on every estimator path, recorded.** Listwise is the
-  default. The data constructors delete rows but do not record how many; store
-  rows used and deleted per group in the fit for the summary. List any estimator
-  path that cannot delete listwise as its own item here.
-- **M — rename and scaffold.** Rename the compiled package to `magmaanlab`,
-  remove its estimate-only `magmaan()` in favor of `estimate()`, and create the
-  pure-R `magmaan` package: `magmaan()`, `infer()`, `as_lab_fit()`, `print`,
-  `summary`, `coef`, `vcov`, `confint`, `parameters()` and `anova()`. Decide the
-  directory layout and update `check_tracked_files.sh`, the layering checker,
-  the justfile and AGENTS.md together.
+- **S — record listwise deletion in the lab fit.** `magmaan()` reports rows
+  used and deleted per group from the input data frame and the fit's `nobs`.
+  Store the deleted-row count, per group and per reason, in the lab fit
+  instead, so every entry point reports it. List any estimator path that
+  cannot delete listwise as its own item here.
+- **S — continuous WLS (ADF) in `fit_model()`.** It requires an explicit `W`;
+  default it to the empirical-Gamma weight the prepared path already builds
+  (`prepare_weight(data, "WLS")`). `magmaan()` refuses continuous WLS until
+  then.
+- **S — ordinal delta-parameterization residual variances.** Lab fits report
+  the fixed residual-variance rows of ordered indicators as 1, whereas lavaan
+  reports the derived value (1 minus the explained variance). Fix it in the
+  result reconstruction; `magmaan::parameters()` shows these rows.
+- **S — move the lavaan `meanstructure` default into the lab.** `magmaan()`
+  applies lavaan's rule (multiple groups, ordered variables, FIML/ML2S, syntax
+  intercepts); with it the lab matches lavaan's rows. It is lavaanify
+  semantics and belongs in `model_spec()`.
 - **L — extend the policy to FIML, ML2S, ordinal/mixed and two-level fits,**
   with a component-level capability table. Unimplemented components report a
   typed reason; the fit is never refused for missing inference.
-- **S — migrate callers.** Experiments, examples, vendoring scripts and the
-  cluster install notes move to the two package names. Time preparation,
-  estimation and inference separately.
-- Deferred until after the first release: `fit_measures()` (which statistic
+- **S — finish migrating callers.** In-repo experiments, benchmarks,
+  examples, fixture tools and CI use `magmaanlab` and `fit_model()`. Left: the
+  `experiments/showcases/` renumbering that was in flight during the rename
+  (`06-speed-attribution/`), and the nested paper and private repositories,
+  which still load `magmaan` and call `magmaan()`.
+- Deferred until after the first release: `ordered = TRUE`, `fit_measures()` (which statistic
   feeds CFI and RMSEA), modification indices under the policy, `predict()`
   factor scores, a `control` option and summary-statistic input.
 
@@ -565,13 +576,13 @@ Remaining, both **memory-only now that the flops exponent is at its floor**:
 
 ### Naive ordinal path builds and inverts a full NACOV it never uses — PARTLY FIXED
 
-Found 2026-09-17 while re-measuring the above. `magmaan(model, data, estimator =
+Found 2026-09-17 while re-measuring the above. `fit_model(model, data, estimator =
 "DWLS", ordered = ...)` reached `data_ordinal_stats_from_df` without passing
 `full_wls_weight`, so it took the default `TRUE` from the signature at
 `model_data.R:313`. That builds the dense mdim x mdim NACOV **and inverts it**
 to form the full WLS weight, for an estimator that needs only the diagonal.
 
-The ordinal branch of `magmaan()` now passes
+The ordinal branch of `fit_model()` now passes
 `full_wls_weight = identical(estimator, "WLS")`. Naive DWLS at p=50, N=1000 went
 from 1396 ms to 541 ms. All ordinal R examples still pass, including
 `ordinal_dwls_wls.R` (which exercises the WLS branch that does need the full
@@ -586,7 +597,7 @@ At p=50, N=1000, three-factor CFA:
 
 So the naive call wasted 769 ms on the unused inverse, and a further ~420 ms
 building a dense Gamma that the diagonal materialization plan avoids. Total
-naive `magmaan()` was 1396 ms against 178 ms for the staged path doing the same
+naive `fit_model()` was 1396 ms against 178 ms for the staged path doing the same
 work. This is why the *naive* ordinal speedup decayed (8.8x at p=12 to 1.2x at
 p=50) while the pipeline speedup is flat.
 
@@ -596,7 +607,7 @@ FALSE)` still costs 501.9 ms at p=50 against 81.3 ms for `prepare_data` +
 (`NACOV = n * B_inv * INNER * B_inv'` at `cpp/src/data/ordinal.cpp:4075`) where DWLS
 needs only its diagonal.
 
-**Rerouting `magmaan()` through the staged handles was tried on 2026-09-17 and
+**Rerouting `fit_model()` through the staged handles was tried on 2026-09-17 and
 rejected.** It works and it is a large win at high p, but it is a regression at
 the sizes most models actually have, and it is not behaviour-preserving:
 
@@ -617,7 +628,7 @@ of extra object plumbing. Two further blockers, both verified:
   but it is an observable reporting change — and it reflects a **pre-existing
   inconsistency between `estimate()` and `fit_dwls_ordinal()` that is worth
   fixing on its own terms**.
-- `estimate()` rejects string bounds presets, while `magmaan(..., bounds =
+- `estimate()` rejects string bounds presets, while `fit_model(..., bounds =
   "pos.var")` works today through `bounds_arg`. Resolving a preset needs the
   augmented partable and, for `bounds_standard`, the sample statistics the fast
   path deliberately does not build. A fallback would leave two routes with
@@ -2231,7 +2242,7 @@ Remaining work:
 - **Done 2026-07-03.** R bindings / developer surface: expose a thin
   `magmaan_core$frontier_sam()` wrapper over the C++ SAM entry, plus exported
   `sam()` helper that parses/lavaanifies and builds `RawData` when robust SEs
-  are requested. SAM stays out of `magmaan(estimator = ...)`; SE/test/fit-
+  are requested. SAM stays out of `fit_model(estimator = ...)`; SE/test/fit-
   measure calls remain explicit.
 - **L/XL.** Robustify SAM beyond lavaan `twostep.robust`: derive and implement
   a misspecification-robust / estimated-weight sandwich with observed-Hessian
@@ -2987,7 +2998,7 @@ Remaining work, tiered:
     - **Done 2026-06-25 (continuous WLS LRT MI — family complete).** Continuous WLS
       is now wired too: `modification_indices_lrt()` gains a `weight=` argument (the
       fitting W, which is not retained on the fit), threaded through the candidate
-      sweep, the augmented refit (`magmaan(..., W=)`), and the profile-LRT binding.
+      sweep, the augmented refit (`fit_model(..., W=)`), and the profile-LRT binding.
       A WLS fit without `weight=` errors clearly. Pure-R change (the
       `infer_continuous_ls_profile_lrt` binding already accepted `weight=`). The
       `lrt_p_obs` dispatch now covers **every** estimator magmaan fits: ML, ordinal
@@ -3575,6 +3586,11 @@ is now its Gram. Remaining:
 
 ## Local hardening and validation tooling
 
+- **S — two R examples fail on their own assertions.** `r-package/examples/ml_psd_fallback.R`
+  stops at `!e$converged` and `score_flip_test.R` at
+  `a$mean_variance_relative_shift == 0`. Both fail identically on the package
+  built before the 2026-09-25 package rename, so the cause predates it.
+
 Local-first safety tooling for an AI-assisted repo. Design note:
 [project/validation/local_hardening.md](../validation/local_hardening.md). The test
 ledger, risk map, regression-note convention, and JUnit/health recipes have
@@ -3711,7 +3727,7 @@ nothing in the type system says so.
 **Why this is not a C++-only change.** The R side is where the drift actually
 bites: five independent `estimator=` validation schemes, two disagreeing
 allow-lists (`model_data.R:2022` has `ML2S`, `prepared.R:162` does not),
-`evaluate_at()` defaulting to **ULS** while `magmaan()` defaults to **ML**, and
+`evaluate_at()` defaulting to **ULS** while `fit_model()` defaults to **ML**, and
 the label stored twice (`fit$estimator` vs `fit$options$estimator`) with
 downstream readers picking inconsistently — some read one, some read `%||%`
 both. Continuous `DWLS` is reachable via `estimate()` but rejected by every
@@ -3859,7 +3875,7 @@ continuous-whitening entry above.
   mixed deterministic regression; mixed pairwise missing remains deferred until
   mixed pairwise NACOV construction exists. Only the paper remains.
   - **R surface — LANDED 2026-06-15, lavaan-gated.** `model_spec()` /
-    `magmaan(...)` take `group_equal` / `group_partial` (snake_case, lavaan
+    `fit_model(...)` take `group_equal` / `group_partial` (snake_case, lavaan
     family strings); Rcpp `lavaan_lavaanify` maps strings → `GroupEqual` and ties
     the families at build (`RcppExports` regenerated). The build round-trip drops
     `LatentStructure::group_equal` (a lavaan partable has no such column), so
@@ -3945,7 +3961,7 @@ continuous-whitening entry above.
   fits need explicit start/convergence care, and pairwise-data FMG remains
   deferred. Nonlinear equality tangent-space support for the single-model FIML
   UGamma spectrum and nested FIML restriction-map route landed 2026-06. The
-  high-level `magmaan(estimator = "FIML")` path now auto-enables mean structure
+  high-level `fit_model(estimator = "FIML")` path now auto-enables mean structure
   for syntax-backed models and rejects explicit `meanstructure = FALSE`.
   Saturated-EM reuse extended to the FIML nested path (2026-06):
   `lr_test_satorra2000/2001_fiml_from_data` take an optional `sm_precomputed` and
@@ -4260,7 +4276,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   Stage 2 (`estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`)
   have landed and feed the MSE comparator in
   `experiments/research/01-pairwise-gls-efficiency/`. The packaged ML2S path has also
-  landed: `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` run Stage-2 ML on
+  landed: `fit_ml2s()` / `fit_model(..., estimator = "ML2S")` run Stage-2 ML on
   the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
   scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The C++ post-fit
   layer also exposes lavaan's `robust.two.stage` scaled/robust CFI/TLI/RMSEA
@@ -4601,8 +4617,8 @@ Remaining:
   R frontier slices stay green and only if lavaan handles them cleanly, including
   `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
-- **S — `magmaan()` with `<~` fails opaquely.** Composite syntax passed to
-  `magmaan()` (and so to `frontier_fit_sphere()`) ends in a non-finite
+- **S — `fit_model()` with `<~` fails opaquely.** Composite syntax passed to
+  `fit_model()` (and so to `frontier_fit_sphere()`) ends in a non-finite
   objective from the optimizer. It should route to, or point at,
   `magmaan_fcsem()` (found by experiment engineering/14).
 

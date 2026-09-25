@@ -51,9 +51,9 @@ satorra_tau_test <- function(d) {
                  "\n f ~~ 1*f")
   m_h0 <- paste0("f =~ ", paste0("a*", ov, collapse = " + "), "\n f ~~ 1*f")
   out <- tryCatch({
-    fit_h1 <- magmaan::magmaan(m_h1, d, estimator = "ML", auto_fix_first = FALSE)
-    fit_h0 <- magmaan::magmaan(m_h0, d, estimator = "ML", auto_fix_first = FALSE)
-    nt <- magmaan::nestedTest(fit_h1, fit_h0, d,
+    fit_h1 <- magmaanlab::fit_model(m_h1, d, estimator = "ML", auto_fix_first = FALSE)
+    fit_h0 <- magmaanlab::fit_model(m_h0, d, estimator = "ML", auto_fix_first = FALSE)
+    nt <- magmaanlab::nestedTest(fit_h1, fit_h0, d,
                               method = "satorra.2000", gamma = "empirical")
     list(p_scaled = nt$p_scaled, p_mixture = nt$p_mixture, df = nt$df_diff,
          converged = isTRUE(fit_h1$converged) && isTRUE(fit_h0$converged))

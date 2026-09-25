@@ -5,13 +5,13 @@
 # the code covariance directly; no polychoric statistics enter the Guttman,
 # NTML, or ULS arms.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])
 source(file.path(dirname(script_file), "..", "..", "_support", "R", "helpers.R"))
 
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 usage <- function() {
   cat(
@@ -19,7 +19,7 @@ usage <- function() {
     "RMSE/coverage comparison of the chosen raw Guttman recipe (extended_triad_ls\n",
     "communality + standardized composite) against the legacy Guttman map, NTML,\n",
     "and ULS. Ordinal cells simulate category-score data with\n",
-    "magmaan::sim_ordcorr_calibrate(metric = 'pearson_codes') and fit the\n",
+    "magmaanlab::sim_ordcorr_calibrate(metric = 'pearson_codes') and fit the\n",
     "observed code covariance directly; no polychoric inputs are used.\n\n",
     "Options:\n",
     "  --probe              Tiny timing probe. Default if neither --smoke nor --full.\n",
@@ -477,11 +477,11 @@ draws_for_condition <- function(pop, generator, n, reps, seed_base) {
     key <- cache_key("ordinal", pop, paste(vapply(pop$marginals, paste, "", collapse = ":"), collapse = ";"))
     if (!exists(key, envir = calibration_cache, inherits = FALSE)) {
       marginals <- stats::setNames(pop$marginals, pop$vars)
-      cal <- magmaan::sim_ordcorr_calibrate(
+      cal <- magmaanlab::sim_ordcorr_calibrate(
         pop$R, marginals, metric = "pearson_codes", matrix_repair = "none")
       assign(key, cal, envir = calibration_cache)
     }
-    sim <- magmaan::sim_ordcorr_draw(get(key, envir = calibration_cache),
+    sim <- magmaanlab::sim_ordcorr_draw(get(key, envir = calibration_cache),
                                      n = n, reps = reps, seed_base = seed_base)
     return(lapply(sim$draws, function(d) {
       x <- draw_matrix(d)
@@ -655,17 +655,17 @@ fit_diagnostics <- function(cond, rep_id, stage, estimator, fit_ok, fit = NULL,
 # arm (constrained partable) run through the restricted-map entry -- a bit-exact,
 # fast proxy for the aligned map with a selectable communality (matches exp research/30).
 guttman_fit <- function(pt, ss) {
-  magmaan::fit_noniterative_cfa_restricted(
+  magmaanlab::fit_noniterative_cfa_restricted(
     pt, ss, estimator = "guttman_aligned",
     communality = "extended_triad_ls", composite = "standardized")
 }
 
 legacy_guttman_fit <- function(pt, ss) {
-  magmaan::fit_noniterative_cfa(pt, ss, estimator = "guttman_lavaan", composite = "auto")
+  magmaanlab::fit_noniterative_cfa(pt, ss, estimator = "guttman_lavaan", composite = "auto")
 }
 
 guttman_se <- function(fit, X) {
-  magmaan::noniterative_cfa_se(fit, gamma = "empirical", data = X)$se
+  magmaanlab::noniterative_cfa_se(fit, gamma = "empirical", data = X)$se
 }
 
 ml_fit <- function(pt, ss) core$fit_ml(pt, ss, control = fit_control)
@@ -1005,7 +1005,7 @@ write_metadata(
     ml_max_iter = opts$ml_max_iter,
     categorical_metric = "observed Pearson-code covariance; no polychoric inputs"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 cat(sprintf("Running %d cells x %d reps (mode=%s, cores=%d)\n",

@@ -17,10 +17,10 @@ sbd_methods <- c(
   if (distribution == "normal")
     return(list(distribution = "normal", L = chol(Sigma), Sigma = Sigma))
   cal <- switch(distribution,
-    vm = magmaan:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt),
-    ig = magmaan:::sim_ig_calibrate_impl(Sigma, skew, exkurt, root = "symmetric",
+    vm = magmaanlab:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt),
+    ig = magmaanlab:::sim_ig_calibrate_impl(Sigma, skew, exkurt, root = "symmetric",
       generator_family = "pearson", quadrature_points = 81L),
-    pl = magmaan:::sim_plsim_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt,
+    pl = magmaanlab:::sim_plsim_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt,
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L),
     stop("unknown distribution: ", distribution, call. = FALSE))
@@ -43,10 +43,10 @@ sbd_calibrate_sampler <- function(Sigma_list, distribution, skew, exkurt) {
   p <- ncol(state$Sigma); dist <- state$distribution
   if (dist == "normal") { set.seed(seed + 1L); return(matrix(stats::rnorm(n * p), n, p) %*% state$L) }
   batch <- switch(dist,
-    vm = magmaan:::sim_vm_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed),
-    ig = magmaan:::sim_ig_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed,
+    vm = magmaanlab:::sim_vm_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed),
+    ig = magmaanlab:::sim_ig_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed,
       quadrature_points = 81L),
-    pl = magmaan:::sim_plsim_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed))
+    pl = magmaanlab:::sim_plsim_draw_impl(state$calibration, n = n, reps = 1L, seed_base = seed))
   X <- batch$draws[[1L]]
   if (dist %in% c("vm", "pl")) X <- sweep(X, 2L, sqrt(diag(state$Sigma)), "*")
   X
@@ -91,11 +91,11 @@ sbd_specs <- function(G, p, q_tested) {
   labels <- paste0("g", seq_len(G))
   args <- list(syntax = paste0("f =~ ", paste0("x", seq_len(p), collapse = " + ")),
                std_lv = FALSE, meanstructure = FALSE, group = "group", group_labels = labels)
-  h1 <- do.call(magmaan::model_spec, args)
+  h1 <- do.call(magmaanlab::model_spec, args)
   tested <- paste0("x", 2:(q_tested + 1)); released <- setdiff(paste0("x", 2:p), tested)
   h0a <- c(args, list(group_equal = "loadings"))
   if (length(released)) h0a$group_partial <- paste("f =~", released)  # VECTOR: one per released loading
-  list(H1 = h1, H0 = do.call(magmaan::model_spec, h0a), df = q_tested * (G - 1))
+  list(H1 = h1, H0 = do.call(magmaanlab::model_spec, h0a), df = q_tested * (G - 1))
 }
 
 # ---- one replication -> named p-values + spectrum summaries --------------------
@@ -104,16 +104,16 @@ sbd_empty <- function() stats::setNames(rep(NA_real_, length(sbd_methods)), sbd_
 sbd_one_rep <- function(specs, sampler, group_sizes, dgp_seed, flip_seed, flips) {
   samp <- tryCatch(sbd_draw(sampler, group_sizes, dgp_seed), error = function(e) e)
   if (inherits(samp, "error")) return(NULL)
-  fits <- tryCatch(lapply(list(H1 = specs$H1, H0 = specs$H0), function(sp) magmaan::magmaan(
+  fits <- tryCatch(lapply(list(H1 = specs$H1, H0 = specs$H0), function(sp) magmaanlab::fit_model(
     sp, samp$data, estimator = "ML", optimizer = "nlopt-lbfgs-slsqp-fallback",
     se = "none", test = "none")), error = function(e) e)
   if (inherits(fits, "error")) return(NULL)
   if (!all(vapply(fits, function(x) isTRUE(x$converged), logical(1)))) return(NULL)
-  flip <- tryCatch(magmaan::score_flip_test(fits$H1, fits$H0, samp$blocks,
+  flip <- tryCatch(magmaanlab::score_flip_test(fits$H1, fits$H0, samp$blocks,
     n_flips = flips, seed = flip_seed), error = function(e) e)
   if (inherits(flip, "error")) return(NULL)
   ev <- flip$eigenvalues
-  pk <- function(md, pm = 4) tryCatch(magmaan:::infer_fmg_test(
+  pk <- function(md, pm = 4) tryCatch(magmaanlab:::infer_fmg_test(
     flip$statistic_effective, flip$df, ev, method = md, param = pm)$p_value,
     error = function(e) NA_real_)
   v <- sbd_empty()

@@ -4,7 +4,7 @@
 ## `devtools::load_all("r-package")`):
 ##     Rscript r-package/examples/staged_workflow.R
 ##
-## magmaan deliberately keeps every statistical choice separate. `magmaan()` is
+## magmaan deliberately keeps every statistical choice separate. `fit_model()` is
 ## estimate-only: `se = "none"` and `test = "none"` are the only values it
 ## accepts, and it never folds inference into the fit. *Every* post-fit quantity
 ## — standard errors, robust test statistics, fit measures, defined parameters,
@@ -15,7 +15,7 @@
 ## This example walks that whole staircase on one model — the 3-factor
 ## Holzinger-Swineford 1939 CFA — each step cross-checked against lavaan:
 ##
-##   1. estimate            magmaan(..., se = "none", test = "none")
+##   1. estimate            fit_model(..., se = "none", test = "none")
 ##   2. SEs + z tests       inference_information_expected -> inference_vcov -> inference_se
 ##   3. robust test         the UГ-eigenvalue / Satorra-Bentler scaled chi-square
 ##   4. fit measures        measures_baseline -> measures_fit (CFI/TLI/RMSEA/SRMR)
@@ -26,7 +26,7 @@
 ## `:=` row; step 6 then tests the same restriction (L5 == L6) by LR.
 
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 mok <- function(a, b, tol = 1e-4)
   if (isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)),
@@ -47,9 +47,9 @@ model <- "
 lav <- lavaan::cfa(model, data = df)           # the oracle, fitted once
 
 ## ===========================================================================
-## 1. Estimate — magmaan() is estimate-only
+## 1. Estimate — fit_model() is estimate-only
 ## ===========================================================================
-fit <- magmaan::magmaan(model, df, estimator = "ML", se = "none", test = "none")
+fit <- magmaanlab::fit_model(model, df, estimator = "ML", se = "none", test = "none")
 
 cat("=== 1. estimate (magmaan, estimate-only) ===\n")
 cat(sprintf("  estimator = %s, npar = %d, converged = %s\n",
@@ -127,7 +127,7 @@ stopifnot(mok(c(fm$cfi, fm$tli, fm$rmsea, fm$srmr, fm$aic, fm$bic),
 ## ===========================================================================
 ## `ld_gap := L5 - L6` is the difference between the two free textual loadings;
 ## compute_defined() evaluates it and propagates a delta-method SE from `vcov`.
-defs <- magmaan::compute_defined(model, fit, vcov)
+defs <- magmaanlab::compute_defined(model, fit, vcov)
 
 cat("=== 5. defined parameters (:=) ===\n")
 print(defs, row.names = FALSE, digits = 5)
@@ -150,7 +150,7 @@ model_h0 <- "
   textual =~ x4 + Lt*x5 + Lt*x6
   speed   =~ x7 + x8 + x9
 "
-fit_h0 <- magmaan::magmaan(model_h0, df, estimator = "ML", se = "none", test = "none")
+fit_h0 <- magmaanlab::fit_model(model_h0, df, estimator = "ML", se = "none", test = "none")
 chi2_h0 <- core$inference_chi2_stat(
   core$fit_sample_stats(fit_h0), fit_h0$fmin)
 df_h0   <- core$inference_df_stat(

@@ -197,7 +197,7 @@ magmaan_row <- function(route, target_relation, base, corrected, df, scale,
                         trace = NA_real_, p_value) {
   data.frame(
     route = route,
-    implementation = paste0("magmaan ", as.character(utils::packageVersion("magmaan"))),
+    implementation = paste0("magmaan ", as.character(utils::packageVersion("magmaanlab"))),
     target_relation = target_relation,
     base_statistic = as.numeric(base),
     corrected_statistic = as.numeric(corrected),
@@ -211,8 +211,8 @@ magmaan_row <- function(route, target_relation, base, corrected, df, scale,
 
 run_probe <- function(seed) {
   require_pkg("lavaan", "install lavaan to run the configuration probe")
-  require_pkg("magmaan", "install the current R package first")
-  suppressPackageStartupMessages(library(magmaan))
+  require_pkg("magmaanlab", "install the current R package first")
+  suppressPackageStartupMessages(library(magmaanlab))
   dat <- make_probe_data(seed)
   model <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
 
@@ -237,16 +237,16 @@ run_probe <- function(seed) {
     stop("one or more lavaan probe fits did not converge", call. = FALSE)
   }
 
-  fit_fiml <- magmaan::magmaan(
+  fit_fiml <- magmaanlab::fit_model(
     model, dat, estimator = "FIML", meanstructure = TRUE,
     se = "none", test = "none"
   )
-  fit_ml2s <- magmaan::magmaan(
+  fit_ml2s <- magmaanlab::fit_model(
     model, dat, estimator = "ML2S", meanstructure = TRUE,
     se = "none", test = "none"
   )
-  mlr <- magmaan::magmaan_core$estimate_fiml_robust_mlr(fit_fiml)
-  fmg <- magmaan::fmg_tests(fit_fiml, tests = "SB")
+  mlr <- magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit_fiml)
+  fmg <- magmaanlab::fmg_tests(fit_fiml, tests = "SB")
 
   rows <- list(
     lavaan_test_row(
@@ -317,7 +317,7 @@ write_metadata(
     git_head = git_scalar(c("rev-parse", "HEAD")),
     git_dirty = git_dirty()
   ),
-  packages = c("magmaan", "lavaan")
+  packages = c("magmaanlab", "lavaan")
 )
 
 lav_mlr <- subset(probe, implementation == paste0("lavaan ",

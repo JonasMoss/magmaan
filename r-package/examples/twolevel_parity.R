@@ -1,10 +1,10 @@
 # Two-level ML: magmaan vs lavaan parity smoke (R end-to-end).
 # Exercises the exported two-level surface -- fit_twolevel() and the
-# magmaan(cluster = ) one-call entry -- against lavaan::sem(..., cluster = ),
+# fit_model(cluster = ) one-call entry -- against lavaan::sem(..., cluster = ),
 # comparing theta-hat, SE, chi-square, and df. The exhaustive checks (including
 # the non-saturated and multi-group cases) live in cpp/tests/testthat/test-twolevel.R.
 suppressMessages({
-  library(magmaan)
+  library(magmaanlab)
   library(lavaan)
 })
 
@@ -26,8 +26,8 @@ lav_df    <- as.integer(unname(fitMeasures(fit_lav, "df")))
 # Exported wrapper: model syntax + data.frame + cluster column name.
 fm <- fit_twolevel(model, d, cluster = "cluster")
 
-# One-call entry: magmaan(..., cluster = ) must reproduce the same fit.
-fm1 <- magmaan(model, d, estimator = "ML", cluster = "cluster")
+# One-call entry: fit_model(..., cluster = ) must reproduce the same fit.
+fm1 <- fit_model(model, d, estimator = "ML", cluster = "cluster")
 stopifnot(isTRUE(all.equal(fm$theta, fm1$theta, tolerance = 1e-8)),
           isTRUE(all.equal(fm$chisq, fm1$chisq, tolerance = 1e-8)))
 

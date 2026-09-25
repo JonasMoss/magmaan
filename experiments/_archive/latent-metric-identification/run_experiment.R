@@ -168,7 +168,7 @@ build_spec <- function(case, parameterization) {
   } else {
     stop("unknown parameterization: ", parameterization, call. = FALSE)
   }
-  magmaan::model_spec(
+  magmaanlab::model_spec(
     case$model,
     auto_fix_first = auto_fix_first,
     std_lv = std_lv,
@@ -275,7 +275,7 @@ fit_case_once <- function(case, data, backend, parameterization, rep, control,
 
   fit_start <- Sys.time()
   fit <- tryCatch({
-    magmaan::magmaan_core$fit_ml(
+    magmaanlab::magmaan_core$fit_ml(
       spec, data, optimizer = backend, control = control
     )
   }, error = identity)
@@ -297,7 +297,7 @@ fit_case_once <- function(case, data, backend, parameterization, rep, control,
     backconvert_sec <- as.numeric(difftime(Sys.time(), bc_start, units = "secs"))
   }
 
-  implied <- tryCatch(magmaan::magmaan_core$model_implied(fit), error = identity)
+  implied <- tryCatch(magmaanlab::magmaan_core$model_implied(fit), error = identity)
   if (inherits(implied, "error")) {
     return(list(
       row = new_fit_row(case, backend, parameterization, rep, "ERROR",
@@ -428,7 +428,7 @@ summarize_pairs <- function(pairs) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 require_pkg("jsonlite")
-require_pkg("magmaan")
+require_pkg("magmaanlab")
 
 repo_dir <- repo_root()
 fixtures_dir <- file.path(repo_dir, "tests", "fixtures")
@@ -522,7 +522,7 @@ write_metadata(
     n_pair_rows = nrow(pairs_df),
     fixtures_dir = fixtures_dir
   ),
-  packages = c("jsonlite", "magmaan")
+  packages = c("jsonlite", "magmaanlab")
 )
 
 cat(sprintf(

@@ -18,7 +18,7 @@
 ## For per-group / measurement-invariance + robust, see holzinger_invariance.R
 ## and holzinger_2group_satorra_bentler.R.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 

@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 stopifnot(requireNamespace("jsonlite", quietly = TRUE))
 
 # Frontier auto-identification primitives: marker <-> std_lv swap with a
@@ -21,7 +21,7 @@ stopifnot(requireNamespace("jsonlite", quietly = TRUE))
 # geiser::cfa_three_factor — 3 latents with 2 indicators each, validated as
 # admissible in the latent_metric_identification experiment.
 ref_path <- system.file("..", "..", "tests", "fixtures", "geiser",
-                        "gls_reference.json", package = "magmaan")
+                        "gls_reference.json", package = "magmaanlab")
 if (!file.exists(ref_path)) {
   # Running from the repo (the more common case during package development).
   ref_path <- file.path("cpp", "tests", "fixtures", "geiser", "gls_reference.json")

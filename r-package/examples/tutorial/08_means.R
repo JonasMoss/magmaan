@@ -4,7 +4,7 @@
 ## (and latent means where free). magmaan adds the ν / α rows just as lavaan
 ## does; here the 3-factor CFA is fit with a mean structure and cross-checked.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -27,7 +27,7 @@ model <- "
   speed   =~ x7 + x8 + x9
 "
 hs  <- HolzingerSwineford1939
-fit <- magmaan(model, hs, estimator = "ML", meanstructure = TRUE,
+fit <- fit_model(model, hs, estimator = "ML", meanstructure = TRUE,
                se = "none", test = "none")
 lav <- cfa(model, data = hs, meanstructure = TRUE)
 

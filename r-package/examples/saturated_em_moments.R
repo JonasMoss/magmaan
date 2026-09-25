@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 library(lavaan)
 
 # Stage-1 of Savalei & Bentler (2009) "A two-stage approach to missing data":

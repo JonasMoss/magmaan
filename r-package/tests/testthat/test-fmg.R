@@ -21,7 +21,7 @@ test_that("ML2S weighted fits use the cached ML2S FMG spectrum", {
         n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals)
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   raw <- structure(list(), class = "magmaan_fiml_data")
@@ -63,7 +63,7 @@ test_that("continuous least-squares fits use the C++ robust spectrum", {
         lambdas_reference = eigvals
       )
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   fit <- list(
@@ -107,7 +107,7 @@ test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
         lambdas_reference = eigvals
       )
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   stats <- structure(list(marker = TRUE),
@@ -144,7 +144,7 @@ test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
         lambdas_reference = eigvals
       )
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
   fit <- list(estimator = "ULS")
   res <- fmg_nested(fit, fit, data = matrix(1:8, ncol = 2), tests = "SB")
@@ -180,7 +180,7 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
         lambdas_reference = eigvals
       )
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
   fit <- list(estimator = "ML")
   res <- fmg_nested(

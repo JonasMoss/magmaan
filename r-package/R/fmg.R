@@ -866,10 +866,10 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #'
 #' Computes FMG p-values and diagnostics for a complete-data ML or continuous
 #' ULS/GLS/WLS fit, or a FIML (missing-data) fit. Complete-data fits must carry
-#' complete raw data, as fits from `magmaan(..., data.frame)` do, or callers can
+#' complete raw data, as fits from `fit_model(..., data.frame)` do, or callers can
 #' pass complete raw `data` explicitly.
 #'
-#' FIML fits (`fit_fiml()` / `magmaan(..., estimator = "FIML")`, single- or
+#' FIML fits (`fit_fiml()` / `fit_model(..., estimator = "FIML")`, single- or
 #' multi-group) are supported: the missing-data UGamma spectrum is computed
 #' first-principles from the saturated-model EM ACOV and either saturated or
 #' model-implied H1 information, with the FIML LRT as the base statistic. Under
@@ -877,7 +877,7 @@ fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
 #' `_rls` are rejected (an unsuffixed base resolves to ML). This is a principled
 #' construction, not a port of semTests' (unsound) FIML handling.
 #'
-#' Two-stage ML (ML2S) fits (`fit_ml2s()` / `magmaan(..., estimator = "ML2S")`)
+#' Two-stage ML (ML2S) fits (`fit_ml2s()` / `fit_model(..., estimator = "ML2S")`)
 #' are supported the same way: the df-dimensional UGamma spectrum and the
 #' Stage-2 ML base chi-square are taken from the two-stage inference already
 #' attached to the fit (`fit$ml2s`). Unsuffixed tests use that ML base; an

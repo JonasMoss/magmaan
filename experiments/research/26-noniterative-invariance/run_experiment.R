@@ -24,13 +24,13 @@
 #   scalar_viol -- equal loadings, one group-2 intercept shifted OUTSIDE
 #                  col(Lambda). The scalar test should reject; metric holds.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
   "..", "..", "_support", "R", "helpers.R"
 ))
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 # ---------------------------------------------------------------------------
 # Arguments
@@ -239,9 +239,9 @@ worker <- function(idx, s1, s2, grp) {
   if (opts$with_ml) {
     dat <- data.frame(rbind(X1, X2), group = rep(c("g1", "g2"), c(nrow(X1), nrow(X2))))
     ml <- tryCatch({
-      fit_conf <- suppressMessages(magmaan::magmaan(model, dat, estimator = "ML",
+      fit_conf <- suppressMessages(magmaanlab::fit_model(model, dat, estimator = "ML",
                                                     groups = "group", meanstructure = TRUE))
-      fit_metr <- suppressMessages(magmaan::magmaan(model, dat, estimator = "ML",
+      fit_metr <- suppressMessages(magmaanlab::fit_model(model, dat, estimator = "ML",
                                                     groups = "group", meanstructure = TRUE,
                                                     group_equal = "loadings"))
       list(conf = fit_conf, metr = fit_metr)
@@ -249,7 +249,7 @@ worker <- function(idx, s1, s2, grp) {
     out["conv_ml"] <- as.numeric(!is.null(ml))
     if (!is.null(ml)) {
       # Multi-group nested LRT takes per-group matrices, not the stacked frame.
-      lm <- tryCatch(magmaan::robust_nested_lrt(ml$conf, ml$metr, data = list(X1, X2)),
+      lm <- tryCatch(magmaanlab::robust_nested_lrt(ml$conf, ml$metr, data = list(X1, X2)),
                      error = function(e) NULL)
       if (!is.null(lm)) {
         out["rej_ml_metric_nt"]  <- reject(tryCatch(as.numeric(lm$p_unscaled), error = function(e) NA_real_))
@@ -328,7 +328,7 @@ write_metadata(
     n = paste(opts$n, collapse = ","), generators = paste(opts$generators, collapse = ","),
     scenarios = paste(opts$scenarios, collapse = ","), alpha = opts$alpha,
     with_ml = opts$with_ml, seed_base = opts$seed_base, cores = opts$cores),
-  packages = c("magmaan"))
+  packages = c("magmaanlab"))
 
 message("\nWrote:\n  ", results_csv, "\n  ", file.path(results_path, "metadata.csv"))
 print(results, row.names = FALSE)

@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 core <- magmaan_core
 
@@ -14,7 +14,7 @@ dat <- data.frame(
 X <- as.matrix(dat)
 
 model <- "f =~ x1 + x2 + x3 + x4"
-fit <- magmaan(model, dat, estimator = "ULS")
+fit <- fit_model(model, dat, estimator = "ULS")
 loading_row <- which(fit$partable$op == "=~" & fit$partable$rhs == "x2")
 free_id <- fit$partable$free[loading_row]
 stopifnot(length(free_id) == 1L, free_id > 0L)
@@ -57,7 +57,7 @@ ci_fitw_robust <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
   raw_data = X, robust = TRUE
 )
 
-fit_gls <- magmaan(model, dat, estimator = "GLS")
+fit_gls <- fit_model(model, dat, estimator = "GLS")
 free_gls <- fit_gls$partable$free[loading_row]
 target_gls <- 0.95 * fit_gls$theta[free_gls]
 lrt_gls_robust <- core$frontier_profile_lrt_parameter_gmm(
@@ -74,7 +74,7 @@ ci_gls_estw <- core$frontier_profile_lrt_ci_parameter_gmm(
 )
 
 W_adf <- solve(core$robust_empirical_gamma(X))
-fit_wls <- magmaan(model, dat, estimator = "WLS", W = W_adf)
+fit_wls <- fit_model(model, dat, estimator = "WLS", W = W_adf)
 free_wls <- fit_wls$partable$free[loading_row]
 target_wls <- 0.95 * fit_wls$theta[free_wls]
 lrt_wls_robust <- core$frontier_profile_lrt_parameter_gmm(
@@ -87,7 +87,7 @@ lrt_wls_estw <- core$frontier_profile_lrt_parameter_gmm(
 
 Gamma_adf <- core$robust_empirical_gamma(X)
 W_dwls <- diag(1 / diag(Gamma_adf), nrow = nrow(Gamma_adf))
-fit_dwls <- magmaan(model, dat, estimator = "WLS", W = W_dwls)
+fit_dwls <- fit_model(model, dat, estimator = "WLS", W = W_dwls)
 free_dwls <- fit_dwls$partable$free[loading_row]
 target_dwls <- 0.95 * fit_dwls$theta[free_dwls]
 lrt_dwls_estw <- core$frontier_profile_lrt_parameter_gmm(
@@ -97,7 +97,7 @@ lrt_dwls_estw <- core$frontier_profile_lrt_parameter_gmm(
 
 dls_a <- 0.35
 W_dls <- core$frontier_dls_weight(fit, X, dls_a = dls_a)
-fit_dls <- magmaan(model, dat, estimator = "WLS", W = W_dls)
+fit_dls <- fit_model(model, dat, estimator = "WLS", W = W_dls)
 free_dls <- fit_dls$partable$free[loading_row]
 target_dls <- 0.95 * fit_dls$theta[free_dls]
 lrt_dls_estw <- core$frontier_profile_lrt_parameter_gmm(

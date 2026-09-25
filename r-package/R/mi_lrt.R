@@ -10,7 +10,7 @@
 #     for each cross-group EQUALITY tie, refit the released model and run the
 #     nested Satorra-2000 difference test (with the robust reference-law family).
 #
-# Both are thin compositions of magmaan() and the existing nested tests; they
+# Both are thin compositions of fit_model() and the existing nested tests; they
 # carry no SEM logic of their own. The refit isolates each release exactly even
 # under structural misspecification elsewhere, where a one-step score statistic
 # leaks. See lrt_modification_indices.tex.
@@ -29,7 +29,7 @@ modification_indices_lrt <- function(fit, data,
   }
   if (is.null(fit$model) || is.null(fit$model$syntax)) {
     stop("modification_indices_lrt(): `fit` is missing its model spec; fit with ",
-         "magmaan() so the augmented models can be reconstructed.", call. = FALSE)
+         "fit_model() so the augmented models can be reconstructed.", call. = FALSE)
   }
   # FIML / ML2S use an incomplete-data baseline: the model-vs-saturated chi-square
   # is not 2N*fmin, so the plain lrt/lrt_p come from the profile-LRT's own T_diff /
@@ -276,7 +276,7 @@ score_tests_lrt <- function(fit, data,
   model <- fit$model
   if (is.null(model) || is.null(model$syntax)) {
     stop("score_tests_lrt(): `fit` is missing its model spec; fit the anchor ",
-         "with magmaan() so the released models can be reconstructed.",
+         "with fit_model() so the released models can be reconstructed.",
          call. = FALSE)
   }
   group_var   <- fit$group_var
@@ -413,7 +413,7 @@ print.magmaan_score_lrt <- function(x, ...) {
       if (!is.null(weight)) list(W = weight),
       mo)))
   }
-  do.call(magmaan, c(
+  do.call(fit_model, c(
     list(model = syntax, data = data,
          estimator = toupper(fit$estimator %||% "ML"),
          groups = fit$group_var,

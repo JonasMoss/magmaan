@@ -6,7 +6,7 @@
 ## parameters group-specific) and a metric-invariance model (loadings tied
 ## across groups by label).
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -28,7 +28,7 @@ model <- "
 hs <- HolzingerSwineford1939
 
 ## --- configural: every parameter free in each group -----------------------
-f_cfg <- magmaan(model, hs, estimator = "ML", groups = "school",
+f_cfg <- fit_model(model, hs, estimator = "ML", groups = "school",
                  se = "none", test = "none")
 ## lavaan auto-enables a meanstructure for multigroup fits; magmaan does not
 ## unless asked, so compare the covariance-only configural model.
@@ -45,7 +45,7 @@ model_metric <- "
   textual =~ x4 + L5*x5 + L6*x6
   speed   =~ x7 + L8*x8 + L9*x9
 "
-f_met <- magmaan(model_metric, hs, estimator = "ML", groups = "school",
+f_met <- fit_model(model_metric, hs, estimator = "ML", groups = "school",
                  se = "none", test = "none")
 ## bare shared labels tie loadings across groups in both tools (lavaan just
 ## says so out loud) — that is exactly the metric-invariance intent.

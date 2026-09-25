@@ -26,7 +26,7 @@ stopifnot(is.finite(o$reps),o$reps>=0,o$reps==as.integer(o$reps),
 source(file.path(repo,'experiments/_support/R/helpers.R')); set_single_threaded_math()
 source(file.path(here,'R/charts.R')); source(file.path(here,'R/models.R'))
 source(file.path(here,'R/precondition.R'))
-if(!requireNamespace('magmaan',quietly=TRUE)) stop('Install magmaan for the PSD reference')
+if(!requireNamespace('magmaanlab',quietly=TRUE)) stop('Install magmaan for the PSD reference')
 dir.create(o$results_dir,recursive=TRUE,showWarnings=FALSE)
 unlink(file.path(o$results_dir,c('fits.csv','references.csv','selection.csv','validation.csv','routing.csv','metadata.csv')))
 t0<-Sys.time(); elapsed<-function() as.numeric(difftime(Sys.time(),t0,units='secs'))
@@ -79,7 +79,7 @@ from_partable<-function(pt) {
 }
 objective<-function(Sigma,S) as.numeric(determinant(Sigma,logarithm=TRUE)$modulus)+
   sum(solve(Sigma)*S)-as.numeric(determinant(S,logarithm=TRUE)$modulus)-nrow(S)
-spec<-magmaan::model_spec(syntax,fixed_x=FALSE)
+spec<-magmaanlab::model_spec(syntax,fixed_x=FALSE)
 warm<-spec; marker_start<-maps$marker_none$unpack(maps$marker_none$pack(start))$m
 warm$partable$ustart<-vapply(seq_len(nrow(warm$partable)),function(k) {
   p<-warm$partable[k,];row_value(marker_start,p$lhs,p$op,p$rhs)
@@ -103,7 +103,7 @@ for(r in 0:o$reps) {
   for(st in c('common','native')) {
     if(elapsed()>o$budget_sec) {exhausted<-TRUE;break}
     tt<-elapsed()
-    pf<-tryCatch(magmaan::frontier_fit_ml_psd(if(st=='common') warm else spec,
+    pf<-tryCatch(magmaanlab::frontier_fit_ml_psd(if(st=='common') warm else spec,
       list(S=list(S),mean=list(rep(0,nrow(S))),nobs=case$n),
       control=list(max_iter=1000L,gtol=1e-8,ftol=1e-12)),error=function(e)e)
     err<-inherits(pf,'error'); u<-if(err) NULL else from_partable(pf$partable)
@@ -189,6 +189,6 @@ write_metadata(file.path(o$results_dir,'metadata.csv'),values=c(o,list(complete=
   git_head=git_scalar(c('rev-parse','HEAD'),root=repo),
   source_md5=paste(tools::md5sum(c(script,file.path(here,'R/precondition.R'),
     file.path(here,'R/charts.R'),file.path(here,'R/models.R'))),collapse=','))),
-  packages=c('magmaan','lavaan'))
+  packages=c('magmaanlab','lavaan'))
 cat('Results: ',o$results_dir,'\n',sep='')
 if(exhausted) quit(status=2L)

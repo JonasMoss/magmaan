@@ -113,8 +113,8 @@ results_dir <- ensure_results_dir()
 
 set_single_threaded_math()
 
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
 
 # ── Thresholds (Li 2021, pp. 2198-2199; hardcoded, exact) ────────────────────
 # K-1 cutpoints on a standard normal. `discretize()` codes categories 1..K.
@@ -291,10 +291,10 @@ build_sem <- function() {
 # (exogenous factor variances fixed to 1), and we standardize the solution
 # before comparing to Li's standardized population values.
 attach_specs <- function(mod) {
-  mod$spec_ord <- magmaan::model_spec(
+  mod$spec_ord <- magmaanlab::model_spec(
     mod$syntax, ordered = mod$cat_names,
     parameterization = "delta", meanstructure = TRUE, std_lv = TRUE)
-  mod$spec_cont <- magmaan::model_spec(mod$syntax, std_lv = TRUE)
+  mod$spec_cont <- magmaanlab::model_spec(mod$syntax, std_lv = TRUE)
   mod
 }
 
@@ -589,7 +589,7 @@ utils::write.csv(cell_grid, file.path(results_dir, "cells.csv"),
                  row.names = FALSE)
 
 cat(sprintf("li-2021-mixed: magmaan %s, %s, reps=%d, models={%s}, cells=%d%s\n",
-            as.character(utils::packageVersion("magmaan")),
+            as.character(utils::packageVersion("magmaanlab")),
             R.version.string, args$reps, paste(models, collapse = ","),
             nrow(cell_grid), if (isTRUE(args$smoke)) " (smoke)" else ""))
 
@@ -729,7 +729,7 @@ meta <- metadata_frame(
     n_param_rows = if (is.null(params_long)) 0L else nrow(params_long),
     n_chi2_rows = if (is.null(chi2_long)) 0L else nrow(chi2_long),
     total_seconds = sprintf("%.2f", t_global1 - t_global0)),
-  packages = "magmaan")
+  packages = "magmaanlab")
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — wrote results to %s\n",
             t_global1 - t_global0, results_dir))

@@ -10,7 +10,7 @@ pss_population <- function() {
 }
 
 pss_model_spec <- function(p = 5L) {
-  magmaan::model_spec(
+  magmaanlab::model_spec(
     paste0("f =~ ", paste0("x", seq_len(p), collapse = " + ")),
     std_lv = FALSE, meanstructure = FALSE)
 }
@@ -20,7 +20,7 @@ pss_calibrate_samplers <- function(pop, skew = 2, exkurt = 7) {
     normal = list(kind = "normal", L = chol(pop$Sigma), sds = sqrt(diag(pop$Sigma))),
     vm = list(
       kind = "vm",
-      calibration = magmaan:::sim_vm_calibrate_impl(
+      calibration = magmaanlab:::sim_vm_calibrate_impl(
         stats::cov2cor(pop$Sigma),
         rep(skew, pop$p), rep(exkurt, pop$p)),
       sds = sqrt(diag(pop$Sigma))))
@@ -31,7 +31,7 @@ pss_draw <- function(sampler, n, seed) {
     set.seed(as.integer(seed))
     X <- matrix(stats::rnorm(n * ncol(sampler$L)), nrow = n) %*% sampler$L
   } else {
-    batch <- magmaan:::sim_vm_draw_impl(
+    batch <- magmaanlab:::sim_vm_draw_impl(
       sampler$calibration, n = as.integer(n), reps = 1L,
       seed_base = as.integer(seed))
     X <- sweep(batch$draws[[1L]], 2L, sampler$sds, "*")
@@ -42,7 +42,7 @@ pss_draw <- function(sampler, n, seed) {
 }
 
 pss_fit <- function(spec, X) {
-  magmaan::magmaan(
+  magmaanlab::fit_model(
     spec, as.data.frame(X), estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none")
 }
@@ -51,7 +51,7 @@ pss_fit <- function(spec, X) {
 # residual basis. Their unstudentized quadratic is magmaan's structured-weight
 # RLS GOF statistic; their centered covariance supplies the robust score meat.
 pss_projected_scores <- function(fit, X) {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   uf <- core$infer_build_u_factor(
     fit, bread = "expected", moments = "structured")
   if (!identical(uf$kind, "ProjectionExpected") ||
@@ -333,7 +333,7 @@ pss_one_rep <- function(cell, rep_id, spec, sampler, reference_shapes,
   if (run_fmg) {
     fmg_begin <- proc.time()[["elapsed"]]
     fmg <- tryCatch(
-      magmaan::fmg_tests(
+      magmaanlab::fmg_tests(
         fit, tests = c("sb_rls", "mv_rls", "peba4_rls"), data = X),
       error = function(e) e)
     base$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin

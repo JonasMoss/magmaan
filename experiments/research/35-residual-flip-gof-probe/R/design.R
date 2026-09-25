@@ -18,7 +18,7 @@ gof_population <- function(p, truth = c("null", "power"), rho = .25) {
 }
 
 gof_model_spec <- function(p) {
-  magmaan::model_spec(
+  magmaanlab::model_spec(
     paste0("f =~ ", paste0("x", seq_len(p), collapse = " + ")),
     std_lv = FALSE, meanstructure = FALSE)
 }
@@ -59,11 +59,11 @@ gof_make_sampler <- function(pop, n_max, reps, distribution, seed_base) {
     })
     calibration <- NULL
   } else if (distribution == "pl") {
-    calibration <- magmaan:::sim_plsim_calibrate_impl(
+    calibration <- magmaanlab:::sim_plsim_calibrate_impl(
       stats::cov2cor(pop$Sigma), rep(3, p), rep(21, p),
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L)
-    batch <- magmaan:::sim_plsim_draw_impl(
+    batch <- magmaanlab:::sim_plsim_draw_impl(
       calibration, n = n_max, reps = reps, seed_base = seed_base)
     sds <- sqrt(diag(pop$Sigma))
     draws <- lapply(batch$draws, function(X) sweep(X, 2L, sds, "*"))

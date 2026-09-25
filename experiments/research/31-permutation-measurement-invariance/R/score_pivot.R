@@ -45,10 +45,10 @@ score_pivot_specs <- function(q, p = 9L) {
     group = "group", group_labels = c("g1", "g2"),
     std_lv = FALSE, meanstructure = FALSE)
   h1 <- do.call(
-    magmaan::model_spec,
+    magmaanlab::model_spec,
     c(list(syntax = score_pivot_syntax(p, q = 0L)), group_options))
   h0 <- do.call(
-    magmaan::model_spec,
+    magmaanlab::model_spec,
     c(list(syntax = score_pivot_syntax(p, q = q)), group_options))
   list(H1 = h1, H0 = h0, q = as.integer(q), p = as.integer(p))
 }
@@ -64,7 +64,7 @@ score_pivot_calibrate_samplers <- function(pop, skew = 2, exkurt = 7) {
     regime = "heterogeneous_vm",
     kind = "vm",
     calibration = lapply(seq_len(2L), function(g) {
-      magmaan:::sim_vm_calibrate_impl(
+      magmaanlab:::sim_vm_calibrate_impl(
         stats::cov2cor(pop$Sigma[[g]]), vm_skew[[g]], vm_exkurt[[g]])
     }),
     sds = lapply(pop$Sigma, function(Sigma) sqrt(diag(Sigma)))
@@ -88,7 +88,7 @@ score_pivot_draw <- function(sampler, group_sizes, seed, ov) {
         stats::rnorm(n_group * length(ov)), nrow = n_group) %*%
         sampler$L[[g]]
     } else {
-      draw <- magmaan:::sim_vm_draw_impl(
+      draw <- magmaanlab:::sim_vm_draw_impl(
         sampler$calibration[[g]], n = n_group, reps = 1L,
         seed_base = block_seed)
       X <- sweep(draw$draws[[1L]], 2L, sampler$sds[[g]], "*")
@@ -109,7 +109,7 @@ score_pivot_stack <- function(X1, X2) {
 }
 
 score_pivot_fit <- function(spec, X1, X2) {
-  fit <- magmaan::magmaan(
+  fit <- magmaanlab::fit_model(
     spec, score_pivot_stack(X1, X2), estimator = "ML", groups = "group",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 1000L, ftol = 1e-10, gtol = 1e-7),
@@ -158,14 +158,14 @@ score_pivot_statistic <- function(X1, X2, specs, include_wald = TRUE) {
   score_started <- proc.time()[["elapsed"]]
   score <- tryCatch({
     fit0 <- score_pivot_fit(specs$H0, X1, X2)
-    test <- magmaan::nested_score_test(
+    test <- magmaanlab::nested_score_test(
       specs$H1, fit0, data = list(X1, X2))
     if (!isTRUE(test$sandwich_available) ||
         !identical(as.integer(test$df), specs$q)) {
       stop("sandwich score unavailable or rank mismatch", call. = FALSE)
     }
     p_fmg <- function(method, param = 4) {
-      magmaan:::infer_fmg_test(
+      magmaanlab:::infer_fmg_test(
         test$statistic_effective, test$df, test$eigenvalues,
         method = method, param = param)$p_value
     }
@@ -200,10 +200,10 @@ score_pivot_statistic <- function(X1, X2, specs, include_wald = TRUE) {
     wald <- tryCatch({
       fit1 <- score_pivot_fit(specs$H1, X1, X2)
       R <- score_pivot_contrast(fit1, specs$q)
-      vcov <- magmaan::magmaan_core$infer_robust_se_raw_fit(
+      vcov <- magmaanlab::magmaan_core$infer_robust_se_raw_fit(
         fit1, list(X1, X2), bread = "expected", moments = "structured",
         cov = "empirical")$vcov
-      statistic <- magmaan::magmaan_core$infer_wald_test_fit(
+      statistic <- magmaanlab::magmaan_core$infer_wald_test_fit(
         fit1, R, vcov)$chi2
       list(
         ok = is.finite(statistic), error = "", statistic = statistic,

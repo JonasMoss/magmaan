@@ -78,13 +78,13 @@ parse_args <- function(a) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan"); require_pkg("nloptr")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab"); require_pkg("nloptr")
+suppressPackageStartupMessages(library(magmaanlab))
 res_dir <- file.path(exp_dir, "results")
 dir.create(res_dir, showWarnings = FALSE, recursive = TRUE)
 
 pop <- bifactor_population(per = 6L, gen = 0.6, grp = c(0.5, 0.4, 0.45))   # p18
-spec <- magmaan::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE)
+spec <- magmaanlab::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE)
 ml <- make_lr_ml(pop)
 q1 <- stats::qchisq(0.95, 1)
 tgt <- c(gen = pop$rho_gen, grp = pop$rho_grp1)
@@ -94,7 +94,7 @@ tgt <- c(gen = pop$rho_gen, grp = pop$rho_grp1)
 # marginal skewness/excess-kurtosis targets.
 cell_draws <- function(pop, n, dist, seed0, reps) {
   if (dist == "ig") {
-    batch <- magmaan::magmaan_core$sim_ig_batch(
+    batch <- magmaanlab::magmaan_core$sim_ig_batch(
       pop$Sigma, rep(cfg$ig_skew, pop$p), rep(cfg$ig_exk, pop$p),
       n = n, reps = reps, seed_base = seed0,
       root = "cholesky", generator_family = cfg$ig_family)
@@ -111,10 +111,10 @@ cell_draws <- function(pop, n, dist, seed0, reps) {
 }
 
 observed_bread_vcov <- function(fit) {
-  info <- tryCatch(magmaan::magmaan_core$inference_information_observed_analytic(fit),
+  info <- tryCatch(magmaanlab::magmaan_core$inference_information_observed_analytic(fit),
                    error = function(e) NULL)
   if (!is.matrix(info)) {
-    info <- tryCatch(magmaan::magmaan_core$inference_information_observed_fd(fit),
+    info <- tryCatch(magmaanlab::magmaan_core$inference_information_observed_fd(fit),
                      error = function(e) NULL)
   }
   if (!is.matrix(info)) return(NULL)
@@ -127,7 +127,7 @@ observed_bread_vcov <- function(fit) {
 lr_rep <- function(dat, n) {
   S <- stats::cov(dat) * (n - 1) / n
   logdetS <- as.numeric(determinant(S, logarithm = TRUE)$modulus)
-  fit <- tryCatch(magmaan::magmaan(spec, dat, estimator = "ML"), error = function(e) NULL)
+  fit <- tryCatch(magmaanlab::fit_model(spec, dat, estimator = "ML"), error = function(e) NULL)
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
   pt <- fit$partable
   rebuild <- make_rebuilder(pt, pop)

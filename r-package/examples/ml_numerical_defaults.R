@@ -1,4 +1,4 @@
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(20260922)
 f <- rnorm(300)
 x <- as.data.frame(sapply(c(1, .8, 1.2, .7), function(a) a*f+rnorm(300)))

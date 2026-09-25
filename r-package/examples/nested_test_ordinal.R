@@ -12,8 +12,8 @@
 ## mean/variance-adjusted statistic (`T_adjusted`, `d0`), not magmaan's
 ## integer-rank mean-scaled `T_scaled` row.
 
-suppressMessages({ library(magmaan); library(lavaan) })
-core <- magmaan::magmaan_core
+suppressMessages({ library(magmaanlab); library(lavaan) })
+core <- magmaanlab::magmaan_core
 
 make_ord_cfa <- function(n, lambda, cuts, seed) {
   set.seed(seed)
@@ -34,8 +34,8 @@ fit_mg_pair <- function(df, h1_model, h0_model, ordered, group = NULL,
     spec_args$group <- group
     spec_args$group_labels <- group_labels
   }
-  spec_H1 <- do.call(magmaan::model_spec, c(list(syntax = h1_model), spec_args))
-  spec_H0 <- do.call(magmaan::model_spec, c(list(syntax = h0_model), spec_args))
+  spec_H1 <- do.call(magmaanlab::model_spec, c(list(syntax = h1_model), spec_args))
+  spec_H0 <- do.call(magmaanlab::model_spec, c(list(syntax = h0_model), spec_args))
   stats <- core$data_ordinal_stats_from_df(df, spec_H1)
   fit_H1 <- core$fit_dwls_ordinal(
     spec_H1, stats, control = list(max_iter = 4000, ftol = 1e-13,
@@ -49,7 +49,7 @@ fit_mg_pair <- function(df, h1_model, h0_model, ordered, group = NULL,
 check_lrt <- function(label, mg, lav_H1, lav_H0,
                       stat_tol = 8e-2, shape_tol = 2e-3,
                       p_tol = 1e-2) {
-  res <- magmaan::nestedTest(
+  res <- magmaanlab::nestedTest(
     mg$fit_H1, mg$fit_H0, data = mg$stats, method = "satorra.2000",
     A.method = "exact", weight = "DWLS")
   lav <- lavaan::lavTestLRT(

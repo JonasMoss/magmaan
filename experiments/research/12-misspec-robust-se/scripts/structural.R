@@ -52,8 +52,8 @@ parse_args <- function(a) {
 }
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan"); suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab"); suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 res_dir <- {
   a <- commandArgs(trailingOnly = FALSE); fa <- grep("^--file=", a, value = TRUE)
   sp <- if (length(fa)) normalizePath(sub("^--file=", "", fa[[1L]]))
@@ -66,7 +66,7 @@ ov <- paste0("y", 1:6); thr <- c(-0.8, 0, 0.8); loading <- 0.7
 # Structural model: f2 ~ f1. The DGP gives y4 a cross-loading on f1 (omitted in
 # the fit), contaminating the f2 measurement and so distorting the focal path
 # f2~f1 -- a Stage-2 structural misspecification; measurement model correct.
-spec <- magmaan::model_spec(
+spec <- magmaanlab::model_spec(
   "f1 =~ y1 + y2 + y3\nf2 =~ y4 + y5 + y6\nf2 ~ f1",
   ordered = ov, parameterization = "delta")
 focrow <- function(fit) {
@@ -182,7 +182,7 @@ write_metadata(file.path(res_dir, "structural_metadata.csv"),
                 headline = "r_jack_obs = mean per-rep se_jack/se_obs (tail-robust weight-term magnitude)",
                 model = "two-factor + f2~f1; y4 cross-loads on f1 in DGP, omitted in fit",
                 smoke = cfg$smoke),
-  packages = "magmaan")
+  packages = "magmaanlab")
 print(summary[, c("estimator", "n", "cell", "reps", "dropped",
                   "r_jack_obs", "ratio_obs", "ratio_jack", "r_obs_model")],
       row.names = FALSE, digits = 4)

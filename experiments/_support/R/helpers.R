@@ -188,7 +188,7 @@ git_dirty <- function(root = repo_root()) {
   length(out) > 0L && is.null(attr(out, "status"))
 }
 
-magmaan_cache_ref <- function(root = repo_root(), package = "magmaan") {
+magmaan_cache_ref <- function(root = repo_root(), package = "magmaanlab") {
   version <- if (requireNamespace(package, quietly = TRUE)) {
     as.character(utils::packageVersion(package))
   } else {

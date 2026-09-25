@@ -10,7 +10,7 @@
 ## group_partial baseline on the anchor gives conditional localization for free.
 ## See lrt_modification_indices.tex.
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 
 ## Two-group one-factor CFA, loadings 0.6, with x3 non-invariant in the smaller
 ## group so there is a real release for the sweep to localize.
@@ -25,7 +25,7 @@ dB <- gen(800, rep(.6, 6));                dB$g <- "B"
 dat <- rbind(dA, dB)
 syntax <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
 
-anchor <- magmaan(syntax, dat, estimator = "ML", groups = "g",
+anchor <- fit_model(syntax, dat, estimator = "ML", groups = "g",
                   group_equal = "loadings")
 st <- score_tests_lrt(anchor, dat)
 
@@ -38,7 +38,7 @@ stopifnot(st$rhs[1] == "x3",
 ov <- paste0("x", 1:6)
 data_list <- lapply(c("A", "B"),
                     function(g) as.matrix(dat[dat$g == g, ov, drop = FALSE]))
-rel <- magmaan(syntax, dat, estimator = "ML", groups = "g",
+rel <- fit_model(syntax, dat, estimator = "ML", groups = "g",
                group_equal = "loadings", group_partial = "f=~x3")
 ref <- robust_nested_lrt(rel, anchor, data = data_list, method = "restriction_map")
 stopifnot(abs(st$lrt[st$rhs == "x3"] - ref$T_diff) < 1e-7,
@@ -55,7 +55,7 @@ print(st[, c("lhs", "op", "rhs", "df", "lrt", "p_mixture", "epc_range")],
 ## Conditional localization: an anchor that already frees x5 (a group_partial
 ## baseline) carries that into every refit, so x5 drops out of the candidate set
 ## and the rest are tested conditional on it.
-anchor_c <- magmaan(syntax, dat, estimator = "ML", groups = "g",
+anchor_c <- fit_model(syntax, dat, estimator = "ML", groups = "g",
                     group_equal = "loadings", group_partial = "f=~x5")
 st_c <- score_tests_lrt(anchor_c, dat)
 stopifnot(!("x5" %in% st_c$rhs),

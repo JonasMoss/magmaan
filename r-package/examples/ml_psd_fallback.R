@@ -1,4 +1,4 @@
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 
 model <- model_spec('f =~ x1 + x2 + x3')
 interior <- list(S = list(matrix(c(1, .5, .4, .5, 1, .32, .4, .32, 1), 3)),

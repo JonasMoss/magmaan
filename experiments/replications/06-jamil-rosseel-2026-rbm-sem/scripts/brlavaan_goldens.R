@@ -85,7 +85,7 @@ if (!requireNamespace("brlavaan", quietly = TRUE)) {
   message(msg)
   quit(status = 0)
 }
-if (!requireNamespace("magmaan", quietly = TRUE)) {
+if (!requireNamespace("magmaanlab", quietly = TRUE)) {
   stop("magmaan is not installed; run just r-dev first.", call. = FALSE)
 }
 
@@ -129,18 +129,18 @@ fit_brlavaan <- function(model, data, truth, method, bounds) {
 }
 
 fit_magmaan <- function(model, data, method, bounds) {
-  spec <- magmaan::model_spec(model, meanstructure = FALSE)
-  d <- magmaan::df_to_data(data, spec)
+  spec <- magmaanlab::model_spec(model, meanstructure = FALSE)
+  d <- magmaanlab::df_to_data(data, spec)
   b <- NULL
   if (!identical(tolower(bounds), "none")) {
     if (!identical(tolower(bounds), "standard")) {
       stop("magmaan oracle check currently supports bounds = 'standard' or 'none'", call. = FALSE)
     }
-    b <- magmaan::magmaan_core$estimate_bounds_standard(spec, d)
+    b <- magmaanlab::magmaan_core$estimate_bounds_standard(spec, d)
   }
-  fit <- magmaan::magmaan_core$fit_ml(spec, d, bounds = b)
+  fit <- magmaanlab::magmaan_core$fit_ml(spec, d, bounds = b)
   if (identical(method, "ML")) return(free_estimates(fit))
-  rb <- magmaan::magmaan_core$frontier_rbm(
+  rb <- magmaanlab::magmaan_core$frontier_rbm(
     fit,
     raw_data = d,
     method = switch(method, eRBM = "explicit", iRBM = "implicit"),
@@ -194,7 +194,7 @@ write.csv(out, golden_path, row.names = FALSE)
 metadata <- data.frame(
   run_time = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
   brlavaan_version = as.character(utils::packageVersion("brlavaan")),
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   n = opts$n,
   rel = opts$rel,
   seed = opts$seed,

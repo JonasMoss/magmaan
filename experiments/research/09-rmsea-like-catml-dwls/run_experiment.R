@@ -107,11 +107,11 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- ensure_results_dir()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 ov <- paste0("y", 1:6)
 model <- paste0("f =~ ", paste(ov, collapse = " + "))
 spec <- model_spec(model, ordered = ov, parameterization = "delta")
@@ -286,7 +286,7 @@ write_metadata(
     smoke = cfg$smoke,
     population = "six ordinal indicators from two correlated Gaussian factors; one-factor DWLS fit"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 cat("wrote results under ", res_dir, "\n", sep = "")

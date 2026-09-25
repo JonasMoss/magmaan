@@ -1,9 +1,10 @@
 # magmaan vision: an opinionated package over a research lab
 
-Status: adopted direction, 2026-09-25. Implementation has not started; the
-current R package is still the single estimate-only package described in the
-[roadmap](../architecture/roadmap.md). The work is tracked in
-[todo.md](../backlog/todo.md#two-package-r-interface).
+Status: adopted direction, 2026-09-25. The package split has landed: the
+compiled package is `magmaanlab` in `r-package/`, and the pure-R `magmaan`
+package is a scaffold in `r-magmaan/` whose inference components report
+`not_implemented` until the C++ policy composer exists. The remaining work is
+tracked in [todo.md](../backlog/todo.md#two-package-r-interface).
 
 ## Intention
 
@@ -30,19 +31,25 @@ second SEM implementation.
 | Package | Audience | Contents | Promise |
 | --- | --- | --- | --- |
 | `magmaan` | Ordinary users | Pure R. `magmaan()`, its result class and a few methods | Small and stable |
-| `magmaanlab` | Power users | The current compiled package, renamed: all bindings, primitives and frontier methods | Changes freely, like `frontier` |
+| `magmaanlab` | Power users | The compiled package in `r-package/`: all bindings, primitives and frontier methods | Changes freely, like `frontier` |
 
 - `magmaan` imports `magmaanlab` and has no compiled code, so the package
   boundary enforces the no-SEM-logic rule.
 - Power users attach both, so no name may be exported by both with different
-  meanings. The lab's current estimate-only `magmaan()` is removed; the lab's
-  `estimate()` covers it.
-- An ordinary fit converts to a lab fit (proposed name `as_lab_fit()`), so any
+  meanings. The lab's estimate-only convenience is `fit_model(model, data,
+  estimator, ...)`, formerly `magmaan()`, and it now takes `psd = TRUE` to
+  dispatch to the PSD-constrained fitters. The prepared `estimate()` path does
+  not replace it: it needs prepared objects and has no ML2S or two-level route.
+- An ordinary fit converts to a lab fit with `as_lab_fit()`, so any
   alternative inference runs in the lab without refitting.
 - The policy composer lives in C++ under `api::`, so C++ callers get the same
   opinionated call and the R package calls one lab binding.
-- Directory layout is decided at implementation time. A new top-level folder
-  must be added to `check_tracked_files.sh` and AGENTS.md deliberately.
+- Layout: `r-package/` holds `magmaanlab` (unchanged path, so vendoring, the
+  fast dev loop and cluster installs are unaffected) and `r-magmaan/` holds
+  `magmaan`. Both are T2 in the layering rules.
+- `meanstructure = "default"` follows lavaan: a mean structure for multiple
+  groups, ordered variables, FIML and ML2S, and syntax with an intercept. With
+  that rule the lab reproduces lavaan's parameter rows in each case.
 
 ## The ordinary-user call
 
@@ -62,8 +69,9 @@ magmaan(model, data,
 
 Naming rule: use lavaan's name where the concept is identical, and a new name
 only where lavaan's name is poor or magmaan's meaning differs. A lavaan user's
-`group = "school", group.equal = "loadings", ordered = TRUE` then works as
-typed. This makes the ordinary package dot-case while the lab stays snake_case,
+`group = "school", group.equal = "loadings", ordered = c("y1", "y2")` then
+works as typed. lavaan's `ordered = TRUE` (every endogenous observed variable)
+is deferred; the scaffold asks for the names. This makes the ordinary package dot-case while the lab stays snake_case,
 a deliberate trade for users moving from lavaan.
 
 ### Estimators
@@ -219,7 +227,7 @@ Checked against the source on 2026-09-25.
 
 | Surface | Today | Consequence |
 | --- | --- | --- |
-| `magmaan()` in `model_data.R` | Estimate-only; `se` and `test` must be `"none"`; many estimator-specific controls | Becomes the lab's `estimate()` path; the ordinary `magmaan()` is new |
+| `magmaan()` in `model_data.R` | Estimate-only; `se` and `test` must be `"none"`; many estimator-specific controls | Renamed to the lab's `fit_model()`; the ordinary `magmaan()` is new |
 | S3 methods on `magmaan_fit` | `print`, `residuals` and `vcov` only | `summary`, `coef`, `confint`, `anova` and `parameters()` are new |
 | `vcov.magmaan_fit()` in `context.R` | `regime = "model"` means inverse observed information for FIML but an expected-bread sandwich with empirical meat for complete ML; continuous fits stop without `data` although fits retain `fit$raw_data` | Retained data already exists; the regime naming is inconsistent across estimators |
 | `prepare_inference()` in `scores.R` | ML, FIML and fixed-NT ML2S; rejects active bounds | The ordinary policy needs every listed estimator |
@@ -232,7 +240,8 @@ Checked against the source on 2026-09-25.
 
 ## Deferred
 
-These are decided later and are not part of the first release: `fit_measures()`
+These are decided later and are not part of the first release: `ordered =
+TRUE`, `fit_measures()`
 (including which statistic feeds CFI and RMSEA; PEBA4 has no index analogue),
 modification indices under the policy, factor scores through `predict()`,
 a `control` option for non-converging fits, and summary-statistic input.
@@ -248,7 +257,8 @@ a `control` option for non-converging fits, and summary-statistic input.
 4. Rename the compiled package to `magmaanlab`, remove its `magmaan()`, and
    create the pure-R `magmaan` package with `magmaan()`, `infer()`,
    `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint`,
-   `parameters()` and `anova()`.
+   `parameters()` and `anova()`. Done on 2026-09-25 except `anova()`, which
+   waits for the composer.
 5. Extend the policy to FIML, ML2S, ordinal and mixed, and two-level fits,
    with a component-level capability table.
 6. Migrate experiments, examples, the vendoring scripts and the cluster install

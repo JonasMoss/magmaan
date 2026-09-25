@@ -11,8 +11,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "engine.R"))
 source(experiment_path("R", "summaries.R"))
@@ -140,7 +140,7 @@ write_or_validate_manifest <- function(grid, cfg, results) {
     seed_base = cfg$seed_base,
     lavaan_parity = cfg$lavaan_parity,
     lavaan_max_cells = cfg$lavaan_max_cells,
-    magmaan_version = as.character(packageVersion("magmaan")),
+    magmaan_version = as.character(packageVersion("magmaanlab")),
     code_hash = paste(unname(tools::md5sum(code_files)), collapse = ":"),
     stringsAsFactors = FALSE
   )
@@ -362,7 +362,7 @@ write_metadata(
       "continuous two-factor CFA; normal/t5; correct/omitted cross-loading;",
       "complete/MCAR30/MAR30; N=150/300/600/1200")
   ),
-  packages = c("magmaan", if (cfg$lavaan_parity) "lavaan"))
+  packages = c("magmaanlab", if (cfg$lavaan_parity) "lavaan"))
 
 cat(sprintf(
   "Completed %d replications: %d fit failures, %d information failures.\n",

@@ -12,7 +12,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "engine.R"))
 
@@ -207,7 +207,7 @@ write_metadata(
     note = paste(
       "correctly specified single-group covariance-only one-factor models;",
       "Hotelling is a finite-sample reference for the centered pivotal score")),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "wrote %s (%.1f seconds, %d failure rows)\n",

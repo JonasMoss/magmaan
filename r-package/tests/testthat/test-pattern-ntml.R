@@ -19,7 +19,7 @@ test_that("frontier pattern NTML reduces to FIML on complete normal data", {
   model <- model_spec(syntax, meanstructure = TRUE)
 
   pntml <- frontier_fit_pattern_ntml(syntax, dat)
-  fiml <- magmaan(model, dat, estimator = "FIML")
+  fiml <- fit_model(model, dat, estimator = "FIML")
 
   expect_true(pntml$converged)
   expect_equal(pntml$theta, fiml$theta, tolerance = 2e-5)

@@ -87,10 +87,10 @@ parse_args <- function(args) {
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
 require_pkg("lavaan")
-require_pkg("magmaan")
+require_pkg("magmaanlab")
 suppressPackageStartupMessages({
   library(lavaan)
-  library(magmaan)
+  library(magmaanlab)
 })
 
 res_dir <- ensure_results_dir()
@@ -414,18 +414,18 @@ lavaan_diff <- rbind(
   lavaan_lrt_row(fit_lav_h1, fit_lav_scalar_mplus, "scalar_mplus", "exact")
 )
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 moment_count <- 2L * (length(ov) * (length(thresholds)) + choose(length(ov), 2L))
-spec_h1 <- magmaan::model_spec(
+spec_h1 <- magmaanlab::model_spec(
   model, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta")
-spec_metric <- magmaan::model_spec(
+spec_metric <- magmaanlab::model_spec(
   model, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta", group_equal = "loadings")
-spec_scalar <- magmaan::model_spec(
+spec_scalar <- magmaanlab::model_spec(
   model, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta", group_equal = c("loadings", "thresholds"))
-spec_scalar_mplus <- magmaan::model_spec(
+spec_scalar_mplus <- magmaanlab::model_spec(
   paste(model, scalar_mplus_extra, sep = "\n"),
   ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta", group_equal = c("loadings", "thresholds"))
@@ -494,10 +494,10 @@ for (pd_gamma in c("nominal", "overlap")) {
   stats <- core$data_ordinal_stats_from_df(
     dat_lav, spec_h1, ordered = ov, group = "group", missing = "pairwise",
     pd_gamma = pd_gamma, full_wls_weight = FALSE)
-  fit_h1 <- magmaan::magmaan(spec_h1, stats, estimator = "DWLS")
-  fit_metric <- magmaan::magmaan(spec_metric, stats, estimator = "DWLS")
-  fit_scalar <- magmaan::magmaan(spec_scalar, stats, estimator = "DWLS")
-  fit_scalar_mplus <- magmaan::magmaan(spec_scalar_mplus, stats,
+  fit_h1 <- magmaanlab::fit_model(spec_h1, stats, estimator = "DWLS")
+  fit_metric <- magmaanlab::fit_model(spec_metric, stats, estimator = "DWLS")
+  fit_scalar <- magmaanlab::fit_model(spec_scalar, stats, estimator = "DWLS")
+  fit_scalar_mplus <- magmaanlab::fit_model(spec_scalar_mplus, stats,
                                        estimator = "DWLS")
   magmaan_fit_rows <- c(magmaan_fit_rows, list(
     magmaan_fit_row(fit_h1, "configural", pd_gamma),
@@ -506,7 +506,7 @@ for (pd_gamma in c("nominal", "overlap")) {
     magmaan_fit_row(fit_scalar_mplus, "scalar_mplus", pd_gamma)
   ))
   metric_nt <- tryCatch(
-    magmaan::robust_nested_lrt(
+    magmaanlab::robust_nested_lrt(
       fit_h1, fit_metric, data = stats, method = "restriction_map",
       A.method = "delta", weight = "DWLS"),
     error = identity)
@@ -519,7 +519,7 @@ for (pd_gamma in c("nominal", "overlap")) {
                                                     pd_gamma)))
   }
   scalar_nt <- tryCatch(
-    magmaan::robust_nested_lrt(
+    magmaanlab::robust_nested_lrt(
       fit_h1, fit_scalar, data = stats, method = "restriction_map",
       A.method = "delta", weight = "DWLS"),
     error = identity)
@@ -534,7 +534,7 @@ for (pd_gamma in c("nominal", "overlap")) {
                                                     pd_gamma)))
   }
   scalar_mplus_nt <- tryCatch(
-    magmaan::robust_nested_lrt(
+    magmaanlab::robust_nested_lrt(
       fit_h1, fit_scalar_mplus, data = stats, method = "restriction_map",
       A.method = "delta", weight = "DWLS"),
     error = identity)
@@ -572,7 +572,7 @@ metadata <- metadata_frame(
     auxiliary_note =
       "aux drives rank-dependent missingness but is not used by WLSMV; Mplus rejects AUXILIARY=aux (m) with categorical variables"
   ),
-  packages = c("lavaan", "magmaan")
+  packages = c("lavaan", "magmaanlab")
 )
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 

@@ -24,8 +24,8 @@ require_pkg("bench")
 require_pkg("jsonlite")
 ## magmaan is attached (not just loaded) so its exported post-fit primitives
 ## -- magmaan_core$lavaan_compare_partable(), infer_*() -- resolve as bare names.
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 ## Single-thread BLAS/OpenMP for comparable timings (best effort: env vars are
 ## only honored if set before the BLAS loads; recorded in the result anyway).
@@ -69,7 +69,7 @@ lavaan_fit_case <- function(case, model, data, report = c("estimate", "standard"
 ## magmaan fit, mirroring lavaan cfa/sem/growth defaults as far as the exposed
 ## lavaanify flags allow (auto.cov.y = TRUE is a cfa/sem/growth default).
 magmaan_fit_case <- function(case, model, data) {
-  magmaan::magmaan(model, data,
+  magmaanlab::fit_model(model, data,
                    estimator = case$magmaan_estimator %||% case$estimator %||% "ML",
                    meanstructure = isTRUE(case$meanstructure),
                    auto_cov_y = TRUE,
@@ -302,7 +302,7 @@ run_case <- function(id) {
 }
 
 cat(sprintf("magmaan benchmark smoke -- magmaan %s, lavaan %s, %s\n",
-            as.character(magmaan::version()),
+            as.character(magmaanlab::version()),
             as.character(utils::packageVersion("lavaan")),
             R.version.string))
 cat(sprintf("workload: estimate-only by case | default est tol %.0e | %d cases\n\n",
@@ -331,7 +331,7 @@ rows <- lapply(ids, function(id) {
 
 payload <- list(
   generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
-  magmaan_version = as.character(magmaan::version()),
+  magmaan_version = as.character(magmaanlab::version()),
   lavaan_version = as.character(utils::packageVersion("lavaan")),
   r_version = R.version.string,
   blas = unname(extSoftVersion()["BLAS"]),

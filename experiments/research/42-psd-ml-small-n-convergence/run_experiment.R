@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first")
+suppressPackageStartupMessages(library(magmaanlab))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
@@ -430,7 +430,7 @@ main <- function() {
       ordinary_start = "current FABIN3 default",
       psd_start = "same start, covariance blocks projected to the PSD cone"
     ),
-    packages = "magmaan"
+    packages = "magmaanlab"
   )
 
   expected <- length(args$n_values) * args$reps * length(args$methods)

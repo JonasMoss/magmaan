@@ -25,13 +25,13 @@ study2_calibrate_sampler <- function(population, distribution) {
   calibration <- switch(
     kind,
     normal = NULL,
-    vm = magmaan:::sim_vm_calibrate_impl(
+    vm = magmaanlab:::sim_vm_calibrate_impl(
       stats::cov2cor(Sigma), moments$skew, moments$exkurt),
-    ig = magmaan:::sim_ig_calibrate_impl(
+    ig = magmaanlab:::sim_ig_calibrate_impl(
       Sigma, moments$skew, moments$exkurt,
       root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L),
-    pl = magmaan:::sim_plsim_calibrate_impl(
+    pl = magmaanlab:::sim_plsim_calibrate_impl(
       stats::cov2cor(Sigma), moments$skew, moments$exkurt,
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L),
@@ -57,12 +57,12 @@ study2_draw_group <- function(sampler, n, seed) {
   }
   batch <- switch(
     sampler$kind,
-    vm = magmaan:::sim_vm_draw_impl(
+    vm = magmaanlab:::sim_vm_draw_impl(
       sampler$calibration, n = n, reps = 1L, seed_base = seed),
-    ig = magmaan:::sim_ig_draw_impl(
+    ig = magmaanlab:::sim_ig_draw_impl(
       sampler$calibration, n = n, reps = 1L, seed_base = seed,
       quadrature_points = 81L),
-    pl = magmaan:::sim_plsim_draw_impl(
+    pl = magmaanlab:::sim_plsim_draw_impl(
       sampler$calibration, n = n, reps = 1L, seed_base = seed),
     stop("unknown sampler kind: ", sampler$kind, call. = FALSE)
   )
@@ -226,7 +226,7 @@ study2_one_rep <- function(cell, rep_id, sampler, specs, seed,
 
   fit_begin <- proc.time()[["elapsed"]]
   fits <- tryCatch(study2_capture(lapply(specs, function(spec) {
-    magmaan(
+    fit_model(
       spec, sample$data, estimator = "ML",
       optimizer = "nlopt-lbfgs-slsqp-fallback",
       se = "none", test = "none"

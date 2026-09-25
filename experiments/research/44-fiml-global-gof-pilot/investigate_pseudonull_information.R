@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -135,7 +135,7 @@ geometries <- data.frame(
   stringsAsFactors = FALSE)
 
 fmg_peba4 <- function(score) {
-  magmaan:::infer_fmg_test(
+  magmaanlab:::infer_fmg_test(
     score$statistic_effective, score$df, score$eigenvalues,
     method = "peba", param = 4, truncate_negative = TRUE)$p_value
 }
@@ -151,7 +151,7 @@ large_sample_check <- do.call(rbind, lapply(seq_along(opts$beta), function(k) {
   jointly_missing <- stats::runif(opts$population_n) <
     stats::plogis(intercept + beta * X[, 1L])
   X[jointly_missing, 2:4] <- NA_real_
-  fit <- magmaan(
+  fit <- fit_model(
     model, as.data.frame(X), estimator = "FIML",
     optimizer = "nlopt-lbfgs-slsqp-fallback")
   if (!isTRUE(fit$converged)) {
@@ -180,7 +180,7 @@ one_rep <- function(n, beta, intercept, rep_id, cell_id) {
   X[jointly_missing, 2:4] <- NA_real_
 
   fit <- tryCatch(
-    magmaan(
+    fit_model(
       model, as.data.frame(X), estimator = "FIML",
       optimizer = "nlopt-lbfgs-slsqp-fallback"),
     error = function(e) e)

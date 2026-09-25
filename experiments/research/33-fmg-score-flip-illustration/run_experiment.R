@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -73,7 +73,7 @@ one_rep <- function(cell, rep_id, sampler, specs) {
   draw_seconds <- proc.time()[["elapsed"]] - draw_begin
 
   fit_begin <- proc.time()[["elapsed"]]
-  fits <- tryCatch(lapply(specs, function(spec) magmaan(
+  fits <- tryCatch(lapply(specs, function(spec) fit_model(
     spec, sample$data, estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none")),
     error = function(e) e)
@@ -118,7 +118,7 @@ one_rep <- function(cell, rep_id, sampler, specs) {
     stopifnot(flip$df == cell$df)
     base$flip_ok <- TRUE
     score_fmg <- function(method, param = 4) tryCatch(
-      magmaan:::infer_fmg_test(
+      magmaanlab:::infer_fmg_test(
         flip$statistic_effective, flip$df, flip$eigenvalues,
         method = method, param = param)$p_value,
       error = function(e) NA_real_)
@@ -379,7 +379,7 @@ metadata <- data.frame(
           "elapsed_seconds", "magmaan_version", "R_version",
           "paper_doi", "osf"),
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
-            opts$seed_base, elapsed, as.character(packageVersion("magmaan")),
+            opts$seed_base, elapsed, as.character(packageVersion("magmaanlab")),
             R.version.string, "10.3758/s13428-026-02968-4",
             "https://osf.io/h2y3n/"))
 write.csv(metadata, file.path(results_dir, "metadata.csv"), row.names = FALSE)

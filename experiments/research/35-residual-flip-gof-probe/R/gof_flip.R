@@ -86,7 +86,7 @@ residual_flip_gof <- function(fit, X, n_flips = 199L, seed = 1L) {
     stop("residual_flip_gof(): complete finite raw data are required.",
          call. = FALSE)
   }
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   setup_begin <- proc.time()[["elapsed"]]
   uf <- core$infer_build_u_factor(fit, bread = "expected",
                                   moments = "structured")

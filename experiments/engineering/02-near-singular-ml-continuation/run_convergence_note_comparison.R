@@ -147,10 +147,10 @@ fit_one <- function(method, spec, dat, optimizer, control, alphas, target) {
   fit <- withCallingHandlers(
     try(
       if (identical(method, "baseline_ml")) {
-        magmaan::magmaan_core$fit_ml(spec, dat, optimizer = optimizer,
+        magmaanlab::magmaan_core$fit_ml(spec, dat, optimizer = optimizer,
                                      control = control)
       } else {
-        magmaan::magmaan_core$frontier_fit_ml_ridge_continuation(
+        magmaanlab::magmaan_core$frontier_fit_ml_ridge_continuation(
           spec, dat, optimizer = optimizer, control = control,
           alphas = alphas, target = target)
       },
@@ -334,9 +334,9 @@ main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
   ensure_results_dir()
 
-  require_pkg("magmaan", "Install the local R package first, e.g. `just r-install`")
+  require_pkg("magmaanlab", "Install the local R package first, e.g. `just r-install`")
 
-  catalog <- magmaan::convergence_sim_catalog()
+  catalog <- magmaanlab::convergence_sim_catalog()
   unknown <- setdiff(args$designs, catalog$design)
   if (length(unknown)) {
     stop("Unknown convergence-sim design(s): ", paste(unknown, collapse = ", "),
@@ -354,9 +354,9 @@ main <- function() {
         message("design=", design, " rep=", rep, "/", args$reps)
       }
       seed <- args$seed + match(design, catalog$design) * 100000L + rep
-      sim <- magmaan::convergence_sim(design, seed = seed)
-      spec <- magmaan::model_spec(sim$analysis_syntax)
-      dat <- magmaan::df_to_data(sim$data, spec)
+      sim <- magmaanlab::convergence_sim(design, seed = seed)
+      spec <- magmaanlab::model_spec(sim$analysis_syntax)
+      dat <- magmaanlab::df_to_data(sim$data, spec)
       sample_diag <- safe_condition(dat$S[[1L]])
       rows[[pos]] <- fit_row(design, rep, seed, sim, "baseline_ml", "none",
                              "none", spec, dat, args$optimizer, control,
@@ -395,7 +395,7 @@ main <- function() {
       alphas = args$alphas,
       n_fit_rows = nrow(rows)
     ),
-    packages = "magmaan"
+    packages = "magmaanlab"
   )
 
   print(summary, row.names = FALSE)

@@ -109,8 +109,8 @@ parse_cells_filter <- function(s) {
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 results_dir <- ensure_results_dir()
 set_single_threaded_math()
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
 
 # Marginal moments per distribution label (moderate = *1: skew 2, kurt 7;
 # severe = *2: skew 3, kurt 21). Passed to the sampler for the IG/PL families
@@ -149,7 +149,7 @@ get_ctx <- function(p) {
   key <- as.character(p)
   if (!is.null(.spec_cache[[key]])) return(.spec_cache[[key]])
   ctx <- list(pop = build_population_2factor(p),
-              spec = magmaan::model_spec(build_2factor_syntax(p)),
+              spec = magmaanlab::model_spec(build_2factor_syntax(p)),
               syntax = build_2factor_syntax(p),
               varnames = paste0("x", seq_len(p)))
   .spec_cache[[key]] <- ctx
@@ -168,11 +168,11 @@ get_fl <- function(dist) {
 
 fit_magmaan <- function(ctx, X) {
   df_X <- as.data.frame(X)
-  fit <- tryCatch(magmaan::magmaan(ctx$syntax, df_X, estimator = "ML"),
+  fit <- tryCatch(magmaanlab::fit_model(ctx$syntax, df_X, estimator = "ML"),
                   error = function(e) e)
   if (inherits(fit, "error")) return(list(ok = FALSE, error = conditionMessage(fit)))
   if (!isTRUE(fit$converged)) return(list(ok = FALSE, error = "not converged"))
-  pv <- tryCatch(magmaan::fmg_pvalues(fit, df_X, tests = TESTS),
+  pv <- tryCatch(magmaanlab::fmg_pvalues(fit, df_X, tests = TESTS),
                  error = function(e) e)
   if (inherits(pv, "error")) return(list(ok = FALSE, error = conditionMessage(pv)))
   list(ok = TRUE, fit = fit, pvalues = pv, data = df_X)
@@ -180,7 +180,7 @@ fit_magmaan <- function(ctx, X) {
 
 # ── Run ─────────────────────────────────────────────────────────────────────
 cat(sprintf("foldnes-moss-gronneberg-2024: magmaan %s, %s\n",
-            as.character(utils::packageVersion("magmaan")), R.version.string))
+            as.character(utils::packageVersion("magmaanlab")), R.version.string))
 cat(sprintf("  reps=%d, cells=%d%s\n", args$reps, nrow(cell_grid),
             if (isTRUE(args$semtests_parity)) ", semTests parity ON" else ""))
 
@@ -293,6 +293,6 @@ write_csv(metadata_frame(
                 semtests_parity = isTRUE(args$semtests_parity),
                 n_cells = nrow(cell_grid),
                 total_seconds = sprintf("%.2f", t1 - t0)),
-  packages = c("magmaan", "lavaan", "semTests")),
+  packages = c("magmaanlab", "lavaan", "semTests")),
   file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — results in %s\n", t1 - t0, results_dir))

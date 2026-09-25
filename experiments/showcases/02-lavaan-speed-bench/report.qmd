@@ -188,7 +188,7 @@ DWLS row, and free-parameter-count drift for the mixed row.
 
 ## Methodology
 
-- **Estimate-only**: magmaan via `magmaan::magmaan()`; lavaan with
+- **Estimate-only**: magmaan via `magmaanlab::fit_model()`; lavaan with
   `se = "none"`, `test = "none"`. The post-fit machinery (standard errors,
   test statistics, fit indices) is excluded — both libraries are timed on the
   *core fit loop* in the headline and zoo slices only.

@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -98,7 +98,7 @@ one_rep <- function(cell, rep_id) {
     colnames(m) <- ov; m })
   dat <- data.frame(rbind(blocks[[1]], blocks[[2]]),
                     school = rep(c("A", "B"), sizes), check.names = FALSE)
-  fit <- tryCatch(lapply(pair, magmaan, data = dat, estimator = "ML",
+  fit <- tryCatch(lapply(pair, fit_model, data = dat, estimator = "ML",
                          optimizer = "nlopt-lbfgs-slsqp-fallback"), error = function(e) e)
   if (inherits(fit, "error")) return(empty_rep(rep_id, conditionMessage(fit)))
   flip <- tryCatch(score_flip_test(fit$configural, fit$restricted, dat,
@@ -107,7 +107,7 @@ one_rep <- function(cell, rep_id) {
                    error = function(e) e)
   if (inherits(flip, "error")) return(empty_rep(rep_id, conditionMessage(flip)))
 
-  score_fmg <- function(k) tryCatch(magmaan:::infer_fmg_test(
+  score_fmg <- function(k) tryCatch(magmaanlab:::infer_fmg_test(
     flip$statistic_effective, flip$df, flip$eigenvalues,
     method = score_methods[[k]], param = score_param[[k]])$p_value,
     error = function(e) NA_real_)
@@ -191,7 +191,7 @@ metadata <- data.frame(
           "elapsed_seconds", "magmaan_version", "R_version"),
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
             opts$seed_base, proc.time()[["elapsed"]] - t0,
-            as.character(packageVersion("magmaan")), R.version.string))
+            as.character(packageVersion("magmaanlab")), R.version.string))
 write.csv(metadata, file.path(results_dir, paste0(output_stem, "_metadata.csv")),
           row.names = FALSE)
 cat(sprintf("wrote dimension results to %s (%.1fs)\n", results_dir,

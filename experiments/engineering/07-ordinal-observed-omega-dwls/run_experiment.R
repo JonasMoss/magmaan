@@ -44,8 +44,8 @@ opt$seed_base <- as.integer(take("--seed-base", opt$seed_base))
 stopifnot(opt$reps > 0L, opt$n > 0L, opt$n_pop > 1000L)
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 
 loadings <- c(0.85, 0.78, 0.70, 0.62)
 model <- "f =~ x1 + x2 + x3 + x4"
@@ -81,7 +81,7 @@ target_for <- function(cuts, seed) {
 fit_once <- function(regime, cuts, rep_id) {
   seed <- opt$seed_base + match(regime, names(regimes)) * 100000L + rep_id
   dat <- simulate_ord(opt$n, cuts, seed)
-  spec <- magmaan::model_spec(model, ordered = ordered_vars, parameterization = "delta")
+  spec <- magmaanlab::model_spec(model, ordered = ordered_vars, parameterization = "delta")
   stats <- core$data_ordinal_stats_from_df(dat, spec)
   fit <- tryCatch(
     core$fit_dwls_ordinal(
@@ -152,7 +152,7 @@ write.csv(data.frame(
   n = opt$n,
   n_pop = opt$n_pop,
   seed_base = opt$seed_base,
-  magmaan_version = as.character(utils::packageVersion("magmaan"))),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab"))),
   "results/metadata.csv", row.names = FALSE)
 message("wrote results/simulation_raw.csv")
 message("wrote results/simulation_summary.csv")

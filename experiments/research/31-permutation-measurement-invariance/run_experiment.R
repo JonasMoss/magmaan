@@ -13,7 +13,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "main_study.R"))
 source(experiment_path("R", "simulation.R"))
@@ -363,7 +363,7 @@ run_study <- function(study, cfg) {
                     "not applicable: null-only sensitivity profile" else if (study == "reference")
                     "pilot defaults unless overridden or supplied by calibration file" else
                     "Chen--Chao metric/scalar values plus strict proportional extension"),
-    packages = "magmaan")
+    packages = "magmaanlab")
   message(sprintf("%s complete: %d/%d cells summarized in %s (%.2f min)",
                   study, nrow(summary), nrow(manifest_cells), path,
                   as.numeric(difftime(Sys.time(), started, units = "mins"))))

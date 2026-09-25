@@ -377,7 +377,7 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #' compatibility difference-test approximations.
 #'
 #' @param fit_H1 Less-restricted fitted magmaan model, ordinarily returned by
-#'   [magmaan()].
+#'   [fit_model()].
 #' @param fit_H0 More-restricted fit (same lavaanified partable shape,
 #'   differing only in constraint rows / shared labels).
 #' @param data Raw complete data for complete-data fits: either a data.frame

@@ -3,14 +3,14 @@
 # Compare the standardized, GLS-aligned non-iterative CFA map against iterative
 # ML and ULS on a Holzinger-Swineford-shaped three-factor CFA.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])
 source(file.path(dirname(script_file), "..", "..", "_support", "R", "helpers.R"))
 
 require_pkg("lavaan", "needed only for the HolzingerSwineford1939 data set")
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 usage <- function() {
   cat(
@@ -157,7 +157,7 @@ draw_mvn <- function(n, Sigma, seed) {
 ml_fit <- function(pt, ss) core$fit_ml(pt, ss, control = fit_control)
 uls_fit <- function(pt, ss) core$fit_uls(pt, ss, control = fit_control)
 guttman_fit <- function(pt, ss) {
-  magmaan::fit_noniterative_cfa(
+  magmaanlab::fit_noniterative_cfa(
     pt, ss, estimator = "guttman_gls_aligned", composite = "standardized")
 }
 
@@ -178,12 +178,12 @@ uls_gof <- function(fit, ss) {
 }
 
 guttman_inf <- function(fit, X, discrepancy) {
-  magmaan::noniterative_cfa_inference(
+  magmaanlab::noniterative_cfa_inference(
     fit, discrepancy = discrepancy, gamma = "empirical", data = X)
 }
 
 guttman_lrt <- function(fit_h1, fit_h0, X, discrepancy) {
-  magmaan::noniterative_cfa_pseudo_lrt(
+  magmaanlab::noniterative_cfa_pseudo_lrt(
     fit_h1, fit_h0, discrepancy = discrepancy, gamma = "empirical", data = X)
 }
 
@@ -788,7 +788,7 @@ write_metadata(
     ml_max_iter = opts$ml_max_iter,
     population_source = "magmaan ML fit to lavaan::HolzingerSwineford1939"
   ),
-  packages = c("magmaan", "lavaan")
+  packages = c("magmaanlab", "lavaan")
 )
 
 cat("Wrote:\n")

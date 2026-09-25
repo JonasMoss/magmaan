@@ -10,7 +10,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "engine.R"))
@@ -185,7 +185,7 @@ write_or_validate_manifest <- function(grid, cfg, results) {
     shard_count = cfg$shard_count,
     semtests_parity = cfg$semtests_parity,
     semtests_max_cells = cfg$semtests_max_cells,
-    magmaan_version = as.character(packageVersion("magmaan")),
+    magmaan_version = as.character(packageVersion("magmaanlab")),
     code_hash = paste(unname(tools::md5sum(code_files)), collapse = ":"),
     stringsAsFactors = FALSE
   )
@@ -588,7 +588,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   target_excess_kurtosis_severe = 21,
   paper_doi = "10.3758/s13428-026-02968-4",
   paper_osf = "https://osf.io/h2y3n/"
-), packages = c("magmaan", "lavaan", "semTests"))
+), packages = c("magmaanlab", "lavaan", "semTests"))
 
 if (cfg$profile == "smoke") {
   stopifnot(

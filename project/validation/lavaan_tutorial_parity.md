@@ -40,7 +40,7 @@ Each section is assessed across the three layers the project ships:
 
 - **core** — the C++ numeric library (`cpp/include/magmaan`, `src`).
 - **api** — the staged C++ facade `magmaan::api` (`cpp/include/magmaan/api`).
-- **R** — the R package (`r-package/`): `magmaan()`, `model_spec()`,
+- **R** — the R package `magmaanlab` (`r-package/`): `fit_model()`, `model_spec()`,
   `compute_defined()`, `nestedTest()`, and the `magmaan_core` primitive
   environment. The R package is a methods-developer interface and exposes a
   *subset* of the C++ api: estimation, information / vcov / SE / z / Wald /
@@ -76,7 +76,7 @@ standardized=TRUE)`.
 - **Test:** parity `hs_3factor_cfa` (real-data ML, n=301), corpus `0001`/`0002`,
   `inference_golden_test`, `fit_measures_golden_test`, `standardized_golden_test`.
 - **Gap:** no `cfa()` wrapper and no `summary()` — by design. The example is
-  reproduced with `magmaan()` + explicit post-fit calls.
+  reproduced with `fit_model()` + explicit post-fit calls.
 
 ### §6 — A SEM example
 
@@ -178,7 +178,7 @@ correlations, `parameterization=`, mixed continuous/ordinal.
 
 - **core ✓ / api ✓ / R ✓.** Sample statistics are magmaan's *default* fit
   input; `data::SampleStats` drives every complete-data estimator. R accepts
-  `magmaan(model, data = list(S = , nobs = , mean = ))`.
+  `fit_model(model, data = list(S = , nobs = , mean = ))`.
 - **Test:** exercised indirectly everywhere; no dedicated tutorial-shaped test.
   *Phase 2 adds one (`12_cov_input.R`).*
 - **Gap:** none functionally.
@@ -288,6 +288,6 @@ tutorial reproduction for the in-scope sections except where noted.
 
 Each in-scope section has a runnable script under
 `r-package/examples/tutorial/` that reproduces the tutorial example end-to-end
-on the `magmaan()` + explicit-post-fit API and cross-checks against live
+on the `fit_model()` + explicit-post-fit API and cross-checks against live
 `lavaan`. See `r-package/examples/tutorial/README.md`. These are informal
 verification; formal property/boundary tests are separate later work.

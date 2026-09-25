@@ -4,13 +4,13 @@
 # opt-in score-covariance conditioning map. Raw, hard, and smooth score repairs
 # are crossed with the four communality-clamp finalists and compared with NTML.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])
 source(file.path(dirname(script_file), "..", "..", "_support", "R", "helpers.R"))
 
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 usage <- function() {
   cat(
@@ -463,11 +463,11 @@ draws_for_condition <- function(pop, generator, n, reps, seed_base) {
     key <- cache_key("ordinal", pop, paste(vapply(pop$marginals, paste, "", collapse = ":"), collapse = ";"))
     if (!exists(key, envir = calibration_cache, inherits = FALSE)) {
       marginals <- stats::setNames(pop$marginals, pop$vars)
-      cal <- magmaan::sim_ordcorr_calibrate(
+      cal <- magmaanlab::sim_ordcorr_calibrate(
         pop$R, marginals, metric = "pearson_codes", matrix_repair = "none")
       assign(key, cal, envir = calibration_cache)
     }
-    sim <- magmaan::sim_ordcorr_draw(get(key, envir = calibration_cache),
+    sim <- magmaanlab::sim_ordcorr_draw(get(key, envir = calibration_cache),
                                      n = n, reps = reps, seed_base = seed_base)
     return(lapply(sim$draws, function(d) {
       x <- draw_matrix(d)
@@ -774,7 +774,7 @@ make_h_feasibility_specs <- function() {
 }
 
 guttman_fit <- function(pt, ss, spec) {
-  magmaan::fit_noniterative_cfa_restricted(
+  magmaanlab::fit_noniterative_cfa_restricted(
     pt, ss, estimator = "guttman_aligned",
     communality = "extended_triad_ls", composite = "standardized",
     admissibility = spec$policy, margin = spec$margin,
@@ -786,7 +786,7 @@ guttman_fit <- function(pt, ss, spec) {
 }
 
 guttman_se <- function(fit, X) {
-  magmaan::noniterative_cfa_se(fit, gamma = "empirical", data = X)$se
+  magmaanlab::noniterative_cfa_se(fit, gamma = "empirical", data = X)$se
 }
 
 ml_fit <- function(pt, ss) core$fit_ml(pt, ss, control = fit_control)
@@ -1276,7 +1276,7 @@ write_metadata(
     production_score_conditioning = "raw",
     categorical_metric = "observed Pearson-code covariance; no polychoric inputs"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 cat(sprintf("Running %d cells x %d reps (mode=%s, cores=%d)\n",

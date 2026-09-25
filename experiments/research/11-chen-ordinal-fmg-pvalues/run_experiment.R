@@ -136,8 +136,8 @@ threshold_values <- function(shape) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- ensure_results_dir()
 ov <- paste0("v", 1:10)
@@ -148,10 +148,10 @@ scalar_extra <- paste(
   collapse = "\n")
 model_scalar <- paste(model, scalar_extra, sep = "\n")
 
-spec_h1 <- magmaan::model_spec(
+spec_h1 <- magmaanlab::model_spec(
   model, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta")
-spec_h0 <- magmaan::model_spec(
+spec_h0 <- magmaanlab::model_spec(
   model_scalar, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta", group_equal = c("loadings", "thresholds"))
 
@@ -221,7 +221,7 @@ fmg_methods <- function() {
 }
 
 fmg_pvalue <- function(chisq, df, eigvals, method, param = NA_real_) {
-  out <- magmaan::magmaan_core$robust_fmg_test(
+  out <- magmaanlab::magmaan_core$robust_fmg_test(
     chisq, as.integer(df), as.numeric(eigvals), method = method,
     param = if (is.finite(param)) param else 4)
   out$p_value
@@ -258,15 +258,15 @@ fmg_rows <- function(nt) {
 
 fit_rep <- function(dat, pd_gamma) {
   tryCatch({
-    stats <- magmaan::magmaan_core$data_ordinal_stats_from_df(
+    stats <- magmaanlab::magmaan_core$data_ordinal_stats_from_df(
       dat, spec_h1, ordered = ov, group = "group", missing = "pairwise",
       pd_gamma = pd_gamma, full_wls_weight = FALSE)
-    fit_h1 <- magmaan::magmaan(spec_h1, stats, estimator = "DWLS")
-    fit_h0 <- magmaan::magmaan(spec_h0, stats, estimator = "DWLS")
+    fit_h1 <- magmaanlab::fit_model(spec_h1, stats, estimator = "DWLS")
+    fit_h0 <- magmaanlab::fit_model(spec_h0, stats, estimator = "DWLS")
     if (!isTRUE(fit_h1$converged) || !isTRUE(fit_h0$converged)) {
       stop("DWLS fit did not converge", call. = FALSE)
     }
-    nt <- magmaan::robust_nested_lrt(
+    nt <- magmaanlab::robust_nested_lrt(
       fit_h1, fit_h0, data = stats, method = "restriction_map",
       A.method = "delta", weight = "DWLS")
     rows <- rbind(standard_rows(nt), fmg_rows(nt))
@@ -404,7 +404,7 @@ write_metadata(
     model = "chen_one_factor_10_indicator_configural_to_mplus_style_scalar",
     analysis = "magmaan DWLS pairwise ordinal, robust nested LRT plus FMG full-spectrum p-values",
     smoke = cfg$smoke),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 print(summary[, c("n_total", "thresholds", "missing_rate", "missing_mechanism",
                   "pd_gamma", "method", "rejection_rate", "mean_statistic",

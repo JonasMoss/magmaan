@@ -83,7 +83,7 @@ in its own git repository, outside magmaan's history.
   (`.rds`, `.RData`), office documents, and rendered reports stay untracked.
 - **Stage explicit paths.** Never `git add -A` or `git add .`; name the files
   you changed. Before committing a new file outside `cpp/src/`, `cpp/include/`,
-  `cpp/tests/`, or `r-package/`, check that it belongs here.
+  `cpp/tests/`, `r-package/`, or `r-magmaan/`, check that it belongs here.
 - **Enforced.** `cpp/tests/tools/check_tracked_files.sh` (`just check-tracked`,
   part of `just check` and CI) fails on unexpected top-level entries, anything
   tracked inside `papers/`, `private/`, `external/`, archives and
@@ -134,7 +134,11 @@ in its own git repository, outside magmaan's history.
   and any local patches. Currently: `cpp/third_party/port/` (PORT optimizer
   routines, AMPL/ASL + Fermi-LAT, BSD-3) — wired into the build via
   `cpp/cmake/PortVendor.cmake`.
-- `r-package/` - exploratory R bindings (Rcpp). Self-contained and portable:
+- `r-magmaan/` - the pure-R ordinary-user package `magmaan` (no compiled code;
+  imports `magmaanlab`). Install with `just r-magmaan`; test with
+  `just r-magmaan-test`.
+- `r-package/` - the compiled R package `magmaanlab` (Rcpp), the
+  methods-development surface. Self-contained and portable:
   the C++ core (plus `cpp/third_party/port` + `cpp/third_party/quadpack`) is **vendored**
   into `r-package/src/{core,magmaan,third_party}/` by `r-package/tools/vendor-cpp.sh`
   (`just vendor`) so `R CMD INSTALL` / `remotes::install_github` builds it with
@@ -154,7 +158,8 @@ only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
 
 - **T0 inputs**: `cpp/third_party/` (built), `external/` (ignored source collections and reference material).
 - **T1 core**: `cpp/include/`, `cpp/src/` - depend on T0 only.
-- **T2**: `r-package/` (depends on core only); `experiments/_support/` (the
+- **T2**: `r-package/` (depends on core only); `r-magmaan/` (depends on
+  `r-package/` only); `experiments/_support/` (the
   `magmaan.experiments` harness package: depends on core/r-package only, carries
   **no SEM logic** and **no paper/experiment-specific references**); `benchmarks/`
   (shared benchmark harness that experiments may consume).
@@ -168,7 +173,7 @@ only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
 Invariants (enforced by `cpp/tests/tools/check_layering.sh`, run via
 `just check-layering`, folded into `just check`, and a hard-failing CI job):
 
-1. **Core never reaches up**: nothing in `cpp/include/`, `cpp/src/`, or `r-package/`
+1. **Core never reaches up**: nothing in `cpp/include/`, `cpp/src/`, `r-package/`, or `r-magmaan/`
    references `papers/`, `experiments/`, `benchmarks/`, or `cpp/tests/`.
 2. **Papers are private**: `papers/A/**` is referenced only from within
    `papers/A/` (each paper is its own nested git repo, gitignored by the outer
@@ -220,7 +225,8 @@ There's a `justfile` at the repo root wrapping the common loops: `just build`,
 `libmagmaan.a`), `just vendor` (refresh the vendored C++ in `r-package/src/`),
 `just r-install` (the portable self-contained build, as `install_github`/Saga
 would do — slower), `just r-check` (reinstall via `r-dev` plus run
-`r-package/examples/*.R` vs lavaan), `just regen-oracle`, and `just check`
+`r-package/examples/*.R` vs lavaan, then install and test `r-magmaan/`),
+`just regen-oracle`, and `just check`
 (everything). `just` with no recipe lists them. For the iterative
 loop, `just test-area <area>` builds and runs a single test executable
 (`smoke`, `spec`, `estimate`, `inference`, `ordinal`, or `parity`) — with an
@@ -237,28 +243,30 @@ install on a cluster, see [r-package/tools/saga/README.md](r-package/tools/saga/
 
 ## R Package Direction
 
-Two R packages sit over the C++ core. The split is adopted but not yet built;
+Two R packages sit over the C++ core;
 [project/design/r-interface-vision.md](project/design/r-interface-vision.md) is
 the design.
 
-- **`magmaan`** (ordinary users, new, pure R): `magmaan(model, data,
+- **`magmaan`** (ordinary users, `r-magmaan/`, pure R): `magmaan(model, data,
   estimator, ...)` estimates and, by default, computes inference under one
   documented policy; `inference = FALSE` estimates only and `infer(fit)` adds
   inference later. Few options, lavaan's names where the concept is identical,
   and no compatibility conventions (MLR, WLSMV, information/SE/test switches).
-- **`magmaanlab`** (power users): the current compiled package, renamed. A
+- **`magmaanlab`** (power users, `r-package/`): the compiled package. A
   methods-developer interface with thin exported R wrappers around one C++
   entry point, C++ argument structure kept visible, every convention available,
-  and inference as explicit post-fit calls.
+  and inference as explicit post-fit calls. Its estimate-only convenience is
+  `fit_model(model, data, estimator, ...)`.
 
 Neither package is a second implementation. Small R helpers are fine when they
 compose existing wrappers, validate R-shaped inputs, or preserve names/groups
 for inspection; they should not contain parallel SEM logic. The ordinary-user
 policy is composed in C++, not in R.
 
-Until the split lands, `r-package/` plays the lab role under the name
-`magmaan`, and its `magmaan()` stays estimate-only. Do not grow that function's
-option list; new ordinary-user behavior belongs in the new package.
+The ordinary package is a scaffold: estimation and its options work, and every
+inference component reports `not_implemented` until the C++ policy composer
+lands. No name may be exported by both packages with different meanings, since
+power users attach both.
 
 Partables exposed from R are compatibility/projection objects. When a model is
 built with the R helpers, the partable returned from a fitted magmaan object

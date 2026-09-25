@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 library(lavaan)
 
 # Pairwise GLS, two variants:

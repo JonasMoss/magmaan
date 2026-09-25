@@ -13,11 +13,11 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first (just r-dev)")
+require_pkg("magmaanlab", "install the current R package first (just r-dev)")
 require_pkg("lavaan")
 require_pkg("MASS")
 suppressPackageStartupMessages({
-  library(magmaan)
+  library(magmaanlab)
   library(lavaan)
 })
 
@@ -95,7 +95,7 @@ main <- function() {
   written <- character()
   t0 <- proc.time()[["elapsed"]]
   cat(sprintf("magmaan %s, lavaan %s | profile %s\n",
-              as.character(utils::packageVersion("magmaan")),
+              as.character(utils::packageVersion("magmaanlab")),
               as.character(utils::packageVersion("lavaan")), opts$profile))
 
   if ("recovery" %in% opts$sections) {
@@ -159,7 +159,7 @@ main <- function() {
     profile = opts$profile, sections = opts$sections,
     cases = opts$cases %||% "", magmaan_git_head = ref$git_head,
     magmaan_git_dirty = ref$git_dirty),
-    packages = c("magmaan", "lavaan"))
+    packages = c("magmaanlab", "lavaan"))
   written <- c(written, path("metadata"))
   cat(sprintf("done in %.1fs. Wrote:\n", proc.time()[["elapsed"]] - t0))
   cat(paste0("  ", written, "\n"), sep = "")

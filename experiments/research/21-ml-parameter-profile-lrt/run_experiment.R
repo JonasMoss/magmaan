@@ -18,8 +18,8 @@ ci_df <- as.numeric(arg_value("--ci-df", "5"))
 seed_base <- as.integer(arg_value("--seed-base", "20260702"))
 out_dir <- arg_value("--out-dir", "results")
 
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 
 model <- "f =~ x1 + x2 + x3 + x4"
 lambda <- c(1.0, 0.8, 0.7, 0.6)
@@ -175,14 +175,14 @@ fit_ci_model <- function(estimator, dat, X) {
     W <- tryCatch(solve(core$robust_empirical_gamma(X)), error = function(e) e)
     if (inherits(W, "error")) return(list(error = conditionMessage(W)))
     fit <- tryCatch(
-      magmaan::magmaan(model, dat, estimator = "WLS", W = W),
+      magmaanlab::fit_model(model, dat, estimator = "WLS", W = W),
       error = function(e) e
     )
     if (inherits(fit, "error")) return(list(error = conditionMessage(fit)))
     return(list(fit = fit, weight = W))
   }
   fit <- tryCatch(
-    magmaan::magmaan(model, dat, estimator = estimator),
+    magmaanlab::fit_model(model, dat, estimator = estimator),
     error = function(e) e
   )
   if (inherits(fit, "error")) return(list(error = conditionMessage(fit)))

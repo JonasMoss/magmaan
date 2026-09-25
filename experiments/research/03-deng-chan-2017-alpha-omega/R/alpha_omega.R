@@ -20,8 +20,8 @@
 # hand-built 2 D^+ (S (x) S) D^+').
 
 # magmaan's Gamma builders are internal Rcpp bindings (not exported).
-.gamma_nt  <- magmaan:::infer_gamma_nt        # normal-theory Gamma at a Sigma
-.gamma_adf <- magmaan:::infer_empirical_gamma  # ADF Gamma from a raw data matrix
+.gamma_nt  <- magmaanlab:::infer_gamma_nt        # normal-theory Gamma at a Sigma
+.gamma_adf <- magmaanlab:::infer_empirical_gamma  # ADF Gamma from a raw data matrix
 
 vech <- function(M) M[lower.tri(M, diag = TRUE)]
 
@@ -85,7 +85,7 @@ fit_congeneric <- function(d, estimator = "ML") {
   ov <- colnames(d)
   m <- paste0("f =~ NA*", ov[1L], " + ", paste(ov[-1L], collapse = " + "),
               "\n f ~~ 1*f")
-  fit <- magmaan::magmaan(m, as.data.frame(d), estimator = estimator)
+  fit <- magmaanlab::fit_model(m, as.data.frame(d), estimator = estimator)
   .lp_from_fit(fit)
 }
 
@@ -95,7 +95,7 @@ fit_congeneric <- function(d, estimator = "ML") {
 fit_tau <- function(d, estimator = "ML") {
   ov <- colnames(d)
   m <- paste0("f =~ ", paste0("a*", ov, collapse = " + "), "\n f ~~ 1*f")
-  fit <- magmaan::magmaan(m, as.data.frame(d), estimator = estimator,
+  fit <- magmaanlab::fit_model(m, as.data.frame(d), estimator = estimator,
                           auto_fix_first = FALSE)
   .lp_from_fit(fit)
 }
@@ -188,10 +188,10 @@ make_congeneric_fitter <- function(d) {
   d <- as.data.frame(d); ov <- colnames(d)
   m <- paste0("f =~ NA*", ov[1L], " + ", paste(ov[-1L], collapse = " + "),
               "\n f ~~ 1*f")
-  base <- magmaan::df_to_data(d, magmaan::model_spec(m))
+  base <- magmaanlab::df_to_data(d, magmaanlab::model_spec(m))
   function(S) {
     dat <- base; dat$S <- list(S)
-    fit <- tryCatch(magmaan::magmaan(m, dat, estimator = "ML"),
+    fit <- tryCatch(magmaanlab::fit_model(m, dat, estimator = "ML"),
                     error = function(e) NULL)
     if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
     pt <- fit$partable

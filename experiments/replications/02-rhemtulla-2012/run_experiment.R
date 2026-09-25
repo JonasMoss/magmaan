@@ -82,8 +82,8 @@ results_dir <- ensure_results_dir()
 
 set_single_threaded_math()
 
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
 
 # ── Population model ─────────────────────────────────────────────────────────
 # Rhemtulla Model 1: two-factor CFA, five indicators per factor, loadings
@@ -107,9 +107,9 @@ build_population <- function() {
 }
 
 # Model specs are fixed across cells; build once.
-spec_ord  <- magmaan::model_spec(SYNTAX, ordered = VARNAMES,
+spec_ord  <- magmaanlab::model_spec(SYNTAX, ordered = VARNAMES,
                                  parameterization = "delta", std_lv = TRUE)
-spec_cont <- magmaan::model_spec(SYNTAX, std_lv = TRUE)
+spec_cont <- magmaanlab::model_spec(SYNTAX, std_lv = TRUE)
 
 # ── Thresholds (symmetric, analytic) ─────────────────────────────────────────
 # K-1 thresholds evenly dividing [-2.5, 2.5] into K categories (paper Method /
@@ -428,7 +428,7 @@ pop <- build_population()
 
 cat(sprintf(
   "rhemtulla-2012: magmaan %s, %s, reps=%d, cells=%d%s\n",
-  as.character(utils::packageVersion("magmaan")),
+  as.character(utils::packageVersion("magmaanlab")),
   R.version.string, args$reps, nrow(cell_grid),
   if (isTRUE(args$smoke)) " (smoke)" else ""))
 
@@ -560,7 +560,7 @@ meta <- metadata_frame(
     n_chi2_rows = if (is.null(chi2_long)) 0L else nrow(chi2_long),
     total_seconds = sprintf("%.2f", t_global1 - t_global0)
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — wrote results to %s\n",

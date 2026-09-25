@@ -11,7 +11,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "score_pivot.R",
                        script = dirname(script_path())))
@@ -353,7 +353,7 @@ write_metadata(
       as.numeric(difftime(Sys.time(), started, units = "mins")), 3),
     score_hotelling_permutation_identity =
       "rank-equivalent; asserted within 1e-15"),
-  packages = "magmaan")
+  packages = "magmaanlab")
 message("Wrote:\n  ", paste(
   c(replication_path, file.path(path, c(
     "summary.csv", "manifest.csv", "run_config.csv",

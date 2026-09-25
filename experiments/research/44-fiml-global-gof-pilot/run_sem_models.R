@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -331,11 +331,11 @@ one_rep <- function(cell, rep_id) {
   }
   realized_missing <- mean(is.na(X[, -1L, drop = FALSE]))
   control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
-  fd <- tryCatch(magmaan::df_to_fiml_data(as.data.frame(X), model$spec),
+  fd <- tryCatch(magmaanlab::df_to_fiml_data(as.data.frame(X), model$spec),
                  error = function(e) e)
   em_begin <- proc.time()[["elapsed"]]
   em <- if (inherits(fd, "error")) fd else tryCatch(
-    magmaan::magmaan_core$estimate_saturated_em_moments(fd, control = control),
+    magmaanlab::magmaan_core$estimate_saturated_em_moments(fd, control = control),
     error = function(e) e)
   em_seconds <- proc.time()[["elapsed"]] - em_begin
 
@@ -353,13 +353,13 @@ one_rep <- function(cell, rep_id) {
     fit_begin <- proc.time()[["elapsed"]]
     fit <- tryCatch({
       if (estimator == "FIML") {
-        value <- magmaan::magmaan_core$fit_fiml(
+        value <- magmaanlab::magmaan_core$fit_fiml(
           model$spec, fd, optimizer = "nlopt-lbfgs-slsqp-fallback",
           control = control)
         value$stage1 <- em
         value
       } else {
-        magmaan::magmaan_core$fit_ml2s(
+        magmaanlab::magmaan_core$fit_ml2s(
           model$spec, fd, optimizer = "nlopt-lbfgs-slsqp-fallback",
           control = control, stage1 = em)
       }
@@ -377,7 +377,7 @@ one_rep <- function(cell, rep_id) {
 
     fmg_begin <- proc.time()[["elapsed"]]
     fmg <- tryCatch(
-      magmaan::fmg_tests(fit, tests = c("SB", "SS", "pEBA4", "all")),
+      magmaanlab::fmg_tests(fit, tests = c("SB", "SS", "pEBA4", "all")),
       error = function(e) e)
     out$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin
     if (inherits(fmg, "error")) {
@@ -400,7 +400,7 @@ one_rep <- function(cell, rep_id) {
 
     mlr_begin <- proc.time()[["elapsed"]]
     scalar <- if (estimator == "FIML") tryCatch(
-      magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
+      magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit),
       error = function(e) e) else fit$ml2s
     out$mlr_seconds <- proc.time()[["elapsed"]] - mlr_begin
     if (inherits(scalar, "error") || is.null(scalar)) {
@@ -415,7 +415,7 @@ one_rep <- function(cell, rep_id) {
 
     flip_begin <- proc.time()[["elapsed"]]
     flip <- tryCatch(
-      magmaan::global_score_flip_test(
+      magmaanlab::global_score_flip_test(
         fit, n_flips = opts$flips, seed = seed + 900001L,
         multiplier = "rademacher"),
       error = function(e) e)
@@ -425,7 +425,7 @@ one_rep <- function(cell, rep_id) {
     } else {
       out$p_flip_effective <- flip$p_effective
       score_fmg <- function(method, param = 4) tryCatch(
-        magmaan:::infer_fmg_test(
+        magmaanlab:::infer_fmg_test(
           flip$statistic_effective, flip$df, flip$eigenvalues,
           method = method, param = param)$p_value,
         error = function(e) NA_real_)
@@ -462,7 +462,7 @@ one_rep <- function(cell, rep_id) {
     if (estimator == "FIML") {
       expected_mammen_begin <- proc.time()[["elapsed"]]
       expected_mammen <- tryCatch(
-        magmaan::global_score_flip_test(
+        magmaanlab::global_score_flip_test(
           fit, n_flips = opts$flips, seed = seed + 900001L,
           multiplier = "mammen", sensitivity = "expected"),
         error = function(e) e)
@@ -482,7 +482,7 @@ one_rep <- function(cell, rep_id) {
 
       corrected_begin <- proc.time()[["elapsed"]]
       corrected <- tryCatch(
-        magmaan::global_score_flip_test(
+        magmaanlab::global_score_flip_test(
           fit, n_flips = opts$flips, seed = seed + 900001L,
           multiplier = "mammen", sensitivity = "observed"),
         error = function(e) e)
@@ -493,7 +493,7 @@ one_rep <- function(cell, rep_id) {
       } else {
         out$p_flip_corrected <- corrected$p_effective
         corrected_score_fmg <- function(method, param = 4) tryCatch(
-          magmaan:::infer_fmg_test(
+          magmaanlab:::infer_fmg_test(
             corrected$statistic_effective, corrected$df,
             corrected$eigenvalues, method = method, param = param)$p_value,
           error = function(e) NA_real_)
@@ -554,7 +554,7 @@ one_rep <- function(cell, rep_id) {
         light = "observed-shrink-light", sqrt = "observed-shrink-sqrt")
       for (variant in names(sensitivity_variants)) {
         variant_score <- tryCatch(
-          magmaan::global_score_flip_test(
+          magmaanlab::global_score_flip_test(
             fit, n_flips = 1L, seed = seed + 900001L,
             multiplier = "mammen",
             sensitivity = sensitivity_variants[[variant]]),
@@ -577,7 +577,7 @@ one_rep <- function(cell, rep_id) {
 
       observed_metric_begin <- proc.time()[["elapsed"]]
       observed_metric <- tryCatch(
-        magmaan::global_score_flip_test(
+        magmaanlab::global_score_flip_test(
           fit, n_flips = 1L, seed = seed + 900001L,
           multiplier = "rademacher", sensitivity = "observed",
           metric = "observed"),
@@ -588,7 +588,7 @@ one_rep <- function(cell, rep_id) {
         out$score_observed_metric_error <- conditionMessage(observed_metric)
       } else {
         observed_metric_fmg <- function(method, param = 4) tryCatch(
-          magmaan:::infer_fmg_test(
+          magmaanlab:::infer_fmg_test(
             observed_metric$statistic_effective, observed_metric$df,
             observed_metric$eigenvalues,
             method = method, param = param)$p_value,
@@ -765,7 +765,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
       !raw$flip_corrected_nominal_geometry),
   score_observed_metric_failures = sum(
     raw$estimator == "FIML" & !raw$score_observed_metric_ok)),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "setup=%.1fs runtime_wall=%.1fs observed_speedup=%.2fx failures=%d/%d\n",

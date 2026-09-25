@@ -1,4 +1,4 @@
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 target_g1 <- matrix(c(
   1.00, 0.25, 0.30,

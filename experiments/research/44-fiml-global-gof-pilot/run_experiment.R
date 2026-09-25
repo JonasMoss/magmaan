@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -125,7 +125,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   lrt_failures = sum(raw$fit_h0_ok & !raw$lrt_ok),
   score_failures = sum(raw$fit_h0_ok & !raw$score_ok),
   wald_failures = sum(raw$fit_h1_ok & !raw$wald_ok)
-), packages = "magmaan")
+), packages = "magmaanlab")
 
 pooled <- aggregate(
   cbind(valid, rejected) ~ truth + method,

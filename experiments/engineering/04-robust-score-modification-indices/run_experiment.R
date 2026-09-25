@@ -77,7 +77,7 @@ parse_args <- function(args) {
 }
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 set_single_threaded_math()
 res_dir <- ensure_results_dir()
 
@@ -140,10 +140,10 @@ col <- function(row, nm) {
 }
 
 fit_continuous <- function(df, estimator = "GLS") {
-  magmaan(cfa_model, df, estimator = estimator, se = "none", test = "none")
+  fit_model(cfa_model, df, estimator = estimator, se = "none", test = "none")
 }
 fit_ordinal <- function(df, estimator = "DWLS") {
-  magmaan(cfa_model, df, estimator = estimator, ordered = ov,
+  fit_model(cfa_model, df, estimator = estimator, ordered = ov,
           se = "none", test = "none")
 }
 
@@ -194,7 +194,7 @@ for (r in seq_len(nrow(demo))) {
 cfa_eq <- "f =~ x1 + L*x2 + L*x3 + x4 + x5 + x6"
 df_sc <- gen_ordinal(cfg$n)
 score_rows <- lapply(c("WLS", "DWLS"), function(est) {
-  f <- magmaan(cfa_eq, df_sc, estimator = est, ordered = ov,
+  f <- fit_model(cfa_eq, df_sc, estimator = est, ordered = ov,
                se = "none", test = "none")
   sn <- score_tests(f)[1L, ]
   sr <- score_tests_robust(f)[1L, ]
@@ -306,6 +306,6 @@ write_metadata(
   file.path(res_dir, "metadata.csv"),
   values = list(reps = cfg$reps, n = cfg$n, seed_base = cfg$seed_base,
                 do_sim = cfg$do_sim, smoke = cfg$smoke),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat("done. results in", res_dir, "\n")

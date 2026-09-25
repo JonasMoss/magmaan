@@ -2,7 +2,7 @@
 
 suppressPackageStartupMessages({
   library(jsonlite)
-  library(magmaan)
+  library(magmaanlab)
 })
 
 script_path <- function() {
@@ -283,7 +283,7 @@ write_json(
         "cpp/tests/fixtures/geiser/gls_reference.json",
         "cpp/tests/fixtures/psd_ml/corpus_geometries.json (frozen synthetic entries)"
       ),
-      magmaan_version = as.character(packageVersion("magmaan"))
+      magmaan_version = as.character(packageVersion("magmaanlab"))
     ),
     cases = cases
   ),

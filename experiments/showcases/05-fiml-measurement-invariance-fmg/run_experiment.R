@@ -82,8 +82,8 @@ parse_args <- function(args) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
 pop  <- build_invariance_population()
 levels_all <- invariance_levels()
 pairs_all  <- nested_pairs()
@@ -95,10 +95,10 @@ CTRL_ML   <- list(max_iter = 10000L, ftol = 1e-13, gtol = 1e-9)
 # Fit one invariance level under FIML; returns NULL on failure.
 fit_fiml_level <- function(level, df) {
   syntax <- invariance_syntax(level)
-  spec <- magmaan::model_spec(syntax, group = "school",
+  spec <- magmaanlab::model_spec(syntax, group = "school",
                               group_labels = c("A", "B"), meanstructure = TRUE)
   tryCatch({
-    fit <- core$fit_fiml(spec, magmaan::df_to_fiml_data(df, spec, group = "school"),
+    fit <- core$fit_fiml(spec, magmaanlab::df_to_fiml_data(df, spec, group = "school"),
                          control = CTRL_FIML)
     if (!isTRUE(fit$converged)) return(NULL)
     fit
@@ -106,10 +106,10 @@ fit_fiml_level <- function(level, df) {
 }
 fit_ml_level <- function(level, df) {
   syntax <- invariance_syntax(level)
-  spec <- magmaan::model_spec(syntax, group = "school",
+  spec <- magmaanlab::model_spec(syntax, group = "school",
                               group_labels = c("A", "B"), meanstructure = TRUE)
   tryCatch({
-    fit <- core$fit_ml(spec, magmaan::df_to_data(df, spec, group = "school"),
+    fit <- core$fit_ml(spec, magmaanlab::df_to_data(df, spec, group = "school"),
                        control = CTRL_ML)
     if (!isTRUE(fit$converged)) return(NULL)
     fit
@@ -147,9 +147,9 @@ for (ci in seq_len(nrow(cells))) {
     # ---- GOF FMG at each level -------------------------------------------
     gof_tests <- c("pEBA4", "pEBA2", "pEBA6", "SB", "SS", "pall", "all")
     for (lev in levels_all) {
-      tab <- tryCatch(magmaan::fmg_tests(fits[[lev]], tests = gof_tests),
+      tab <- tryCatch(magmaanlab::fmg_tests(fits[[lev]], tests = gof_tests),
                       error = function(e) NULL)
-      sp  <- tryCatch(magmaan:::infer_fiml_fmg_spectrum(fits[[lev]]),
+      sp  <- tryCatch(magmaanlab:::infer_fiml_fmg_spectrum(fits[[lev]]),
                       error = function(e) NULL)
       if (is.null(tab) || is.null(sp)) next
       for (r in seq_len(nrow(tab))) {
@@ -168,7 +168,7 @@ for (ci in seq_len(nrow(cells))) {
     # ---- Nested FMG for each adjacent ladder pair -------------------------
     for (pr in pairs_all) {
       h1 <- fits[[pr[["h1"]]]]; h0 <- fits[[pr[["h0"]]]]
-      nt <- tryCatch(magmaan::nestedTest(h1, h0, method = "satorra.2000",
+      nt <- tryCatch(magmaanlab::nestedTest(h1, h0, method = "satorra.2000",
                                          A.method = "exact"),
                      error = function(e) NULL)
       if (is.null(nt)) next
@@ -188,7 +188,7 @@ for (ci in seq_len(nrow(cells))) {
     # ---- Parity + invariants on rep 1 only --------------------------------
     if (rep == 1L && have_lav) {
       for (lev in levels_all) {
-        sp <- tryCatch(magmaan:::infer_fiml_fmg_spectrum(fits[[lev]]),
+        sp <- tryCatch(magmaanlab:::infer_fiml_fmg_spectrum(fits[[lev]]),
                        error = function(e) NULL)
         if (is.null(sp)) next
         miss_lav <- if (cell$miss > 0) "fiml" else "listwise"
@@ -229,7 +229,7 @@ for (ci in seq_len(nrow(cells))) {
                               meanstructure = TRUE, h1.information = "structured"),
                             error = function(e) NULL)
           if (!is.null(fml) && !is.null(lav_s)) {
-            ml_tab <- tryCatch(magmaan::fmg_tests(fml, tests = "pEBA4_RLS"),
+            ml_tab <- tryCatch(magmaanlab::fmg_tests(fml, tests = "pEBA4_RLS"),
                                error = function(e) NULL)
             lus <- lavaan_ugamma(lav_s)
             if (!is.null(ml_tab) && !is.null(lus$eigenvalues)) {
@@ -250,7 +250,7 @@ for (ci in seq_len(nrow(cells))) {
       # Internal invariants (complete H0 cells): trace identity + group-permute.
       if (cell$miss == 0 && cell$condition == "H0") {
         for (lev in levels_all) {
-          sp <- tryCatch(magmaan:::infer_fiml_fmg_spectrum(fits[[lev]]),
+          sp <- tryCatch(magmaanlab:::infer_fiml_fmg_spectrum(fits[[lev]]),
                          error = function(e) NULL)
           if (is.null(sp)) next
           ik <- ik + 1L
@@ -264,10 +264,10 @@ for (ci in seq_len(nrow(cells))) {
         df_swap <- df
         df_swap$school <- ifelse(df$school == "A", "B", "A")
         f_swap <- fit_fiml_level("metric", df_swap)
-        sp0 <- tryCatch(magmaan:::infer_fiml_fmg_spectrum(fits[["metric"]]),
+        sp0 <- tryCatch(magmaanlab:::infer_fiml_fmg_spectrum(fits[["metric"]]),
                         error = function(e) NULL)
         sp1 <- if (!is.null(f_swap))
-          tryCatch(magmaan:::infer_fiml_fmg_spectrum(f_swap), error = function(e) NULL)
+          tryCatch(magmaanlab:::infer_fiml_fmg_spectrum(f_swap), error = function(e) NULL)
         else NULL
         if (!is.null(sp0) && !is.null(sp1)) {
           ik <- ik + 1L
@@ -333,7 +333,7 @@ write_metadata(
                 seed_base = args$seed_base,
                 conditions = args$conditions, dists = args$dists, miss = args$miss,
                 lavaan_parity = have_lav, elapsed_sec = round(elapsed, 1)),
-  packages = c("magmaan", "lavaan"))
+  packages = c("magmaanlab", "lavaan"))
 
 cat(sprintf("\nDone in %.1fs. Wrote:\n", elapsed))
 for (f in c("cells.csv", "gof_fits.csv", "nested_fits.csv", "lavaan_parity.csv",

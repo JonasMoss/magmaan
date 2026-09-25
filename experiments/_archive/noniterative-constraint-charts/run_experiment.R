@@ -7,7 +7,7 @@
 # because the metric map estimates a common standardized loading shape and only
 # then converts to the partable's marker chart.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
@@ -15,7 +15,7 @@ source(file.path(
 ))
 
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 usage <- function() {
   cat(
@@ -326,7 +326,7 @@ write_csv(metadata_frame(
     scenarios = opts$scenarios,
     seed_base = opts$seed_base
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 ), file.path(opts$results_dir, "metadata.csv"))
 
 cat("Wrote:\n")

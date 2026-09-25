@@ -137,7 +137,7 @@ model_syntax <- function(pop) {
 }
 
 model_spec_for <- function(pop) {
-  magmaan::model_spec(model_syntax(pop), ordered = pop$ord,
+  magmaanlab::model_spec(model_syntax(pop), ordered = pop$ord,
                       parameterization = "delta", meanstructure = TRUE)
 }
 
@@ -330,8 +330,8 @@ summarize_efficiency <- function(per_param) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 res_dir <- ensure_results_dir()
 ctrl <- list(max_iter = 4000L, ftol = 1e-12, gtol = 1e-8)
 
@@ -415,7 +415,7 @@ metadata <- metadata_frame(
     estimators = "pp=pairwise x pairwise; pf=pairwise x FIML continuous",
     question = "mixed first-stage efficiency: pairwise continuous vs FIML continuous"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 

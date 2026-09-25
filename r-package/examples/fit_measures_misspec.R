@@ -11,7 +11,7 @@
 # invariant to whether the weight is treated as estimated or fixed (the
 # Monte-Carlo finding), unlike RMSEA.
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 ## --- a clearly misspecified all-ordinal DWLS fit ----------------------------
 # Congeneric one-factor population (unequal loadings) fit with a tau-equivalent
@@ -27,7 +27,7 @@ df <- data.frame(lapply(seq_len(p), function(j)
   ordered(cut(z[, j], c(-Inf, -0.4, 0.7, Inf), labels = FALSE))))
 names(df) <- paste0("x", seq_len(p))
 
-m <- magmaan::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
+m <- magmaanlab::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
                          ordered = paste0("x", seq_len(p)),
                          parameterization = "delta")
 d <- core$data_ordinal_stats_from_df(df, m)
@@ -36,7 +36,7 @@ fit <- core$fit_dwls_ordinal(
 stopifnot(isTRUE(fit$ordinal), identical(fit$estimator, "DWLS"))
 
 ## --- the consolidated table runs end to end ---------------------------------
-fm <- magmaan::fit_measures_misspec(fit, d)
+fm <- magmaanlab::fit_measures_misspec(fit, d)
 expected <- c("rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "rmsea.pvalue",
               "crmr", "crmr.ci.lower", "crmr.ci.upper", "crmr.pvalue",
               "srmr", "srmr.ci.lower", "srmr.ci.upper",
@@ -73,7 +73,7 @@ stopifnot(isTRUE(all.equal(fm$srmr.ci.lower, fm$crmr.ci.lower * scale, tolerance
 # The gamma channel is large for RMSEA but small for CFI (it sits at the CRMR end
 # of the spectrum), so the estimated- and fixed-weight CFI intervals nearly
 # coincide while RMSEA's move more.
-fx <- magmaan::fit_measures_misspec(fit, d, estimated_weight = FALSE)
+fx <- magmaanlab::fit_measures_misspec(fit, d, estimated_weight = FALSE)
 stopifnot(isFALSE(fx$estimated.weight))
 stopifnot(abs(fx$cfi - fm$cfi) < 0.01)                    # CFI ~ weight-invariant
 stopifnot(is.finite(fx$rmsea), is.finite(fx$tli))
@@ -81,7 +81,7 @@ stopifnot(is.finite(fx$rmsea), is.finite(fx$tli))
 ## --- ordinal_stats must be supplied explicitly ------------------------------
 # A fitted object does not retain the integer data the estimated-weight
 # inference needs, so the stats are passed explicitly (like robust_ordinal()).
-err <- tryCatch(magmaan::fit_measures_misspec(fit),
+err <- tryCatch(magmaanlab::fit_measures_misspec(fit),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("ordinal_stats", err, fixed = TRUE))
 
@@ -99,13 +99,13 @@ g2_make <- function(n, seed) {
 ga <- g2_make(700L, 21L); gb <- g2_make(500L, 22L)
 ga$grp <- "a"; gb$grp <- "b"
 dfg <- rbind(ga, gb)
-mg <- magmaan::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
+mg <- magmaanlab::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
                           ordered = paste0("x", seq_len(p)), group = "grp",
                           group_labels = c("a", "b"), parameterization = "delta")
 dg <- core$data_ordinal_stats_from_df(dfg, mg)
 fitg <- core$fit_dwls_ordinal(
   mg, dg, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-fmg <- magmaan::fit_measures_misspec(fitg, dg)
+fmg <- magmaanlab::fit_measures_misspec(fitg, dg)
 stopifnot(fmg$baseline.df == 12L)                         # 2 groups * 6 off-diag
 stopifnot(fmg$cfi >= 0, fmg$cfi <= 1,
           fmg$rmsea.ci.lower <= fmg$rmsea.ci.upper,

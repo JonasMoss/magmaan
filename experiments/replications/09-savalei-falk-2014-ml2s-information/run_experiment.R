@@ -11,8 +11,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--replication|--fingerprint] [options]\n\n",
@@ -336,7 +336,7 @@ fit_one <- function(X, model, rep_id, cell_id, mechanism, skewness, kurtosis,
   dat <- as.data.frame(miss$data)
   colnames(dat) <- paste0("V", seq_len(ncol(dat)))
   fits <- lapply(c(ml2s = "ML2S", fiml = "FIML"), function(estimator)
-    tryCatch(magmaan::magmaan(
+    tryCatch(magmaanlab::fit_model(
       model, dat, estimator = estimator, se = "none", test = "none"),
       error = identity))
   if (any(vapply(fits, inherits, logical(1), what = "error"))) {
@@ -352,13 +352,13 @@ fit_one <- function(X, model, rep_id, cell_id, mechanism, skewness, kurtosis,
   }
   audits <- list(
     ml2s = tryCatch(
-      magmaan::magmaan_core$frontier_ml2s_information_choices(fits$ml2s),
+      magmaanlab::magmaan_core$frontier_ml2s_information_choices(fits$ml2s),
       error = identity),
     fiml = tryCatch(
-      magmaan::magmaan_core$frontier_fiml_information_choices(fits$fiml),
+      magmaanlab::magmaan_core$frontier_fiml_information_choices(fits$fiml),
       error = identity),
     fiml_mlr = tryCatch(
-      magmaan::magmaan_core$estimate_fiml_robust_mlr(fits$fiml),
+      magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fits$fiml),
       error = identity))
   if (any(vapply(audits, inherits, logical(1), what = "error"))) {
     return(do.call(rbind, lapply(names(audits), function(method)
@@ -575,7 +575,7 @@ args <- parse_args(commandArgs(trailingOnly = TRUE))
 out_dir <- args$results_dir %||% experiment_path("results", args$profile)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 pop <- model_2_population()
-model <- magmaan::model_spec(pop$syntax, meanstructure = TRUE)
+model <- magmaanlab::model_spec(pop$syntax, meanstructure = TRUE)
 design <- make_design(args$profile)
 design <- transform(design,
   fleishman_a = NA_real_, fleishman_b = NA_real_,
@@ -600,7 +600,7 @@ for (cell in seq_len(nrow(design))) {
   n <- design$n[[cell]]
   cat(sprintf("[%s] calibrating VM skewness %g, excess kurtosis %d...\n",
               cell_id, s, k))
-  cal <- magmaan::magmaan_core$sim_vm_calibrate(
+  cal <- magmaanlab::magmaan_core$sim_vm_calibrate(
     pop$Sigma, rep(s, 21L), rep(k, 21L))
   coef <- unname(cal$coefficients[1L, ])
   design[cell, c("fleishman_a", "fleishman_b", "fleishman_c",
@@ -621,7 +621,7 @@ for (cell in seq_len(nrow(design))) {
   candidate_n <- if (mechanism == "MAR-L") {
     as.integer(ceiling(1.15 * args$reps) + 12L)
   } else args$reps
-  candidate_draws <- magmaan::magmaan_core$sim_vm_draw(
+  candidate_draws <- magmaanlab::magmaan_core$sim_vm_draw(
     cal, n = n, reps = candidate_n,
     seed_base = args$seed_base + k * 1000000 + (n - 200) * 10000)$draws
   feasible <- if (mechanism == "MAR-L") {
@@ -781,5 +781,5 @@ write_metadata(
     kurtosis_convention = "Fleishman excess kurtosis, matching the EQS/SEM convention",
     git_head = git_scalar(c("rev-parse", "HEAD")),
     git_dirty = git_dirty()),
-  packages = "magmaan")
+  packages = "magmaanlab")
 cat("Wrote results to ", out_dir, "\n", sep = "")

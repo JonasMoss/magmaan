@@ -50,7 +50,7 @@ run_invariance_case <- function(id, ic, data) {
   d <- data[[ic$data]]
   specs <- lapply(setNames(charts, charts), function(ch) inv_spec(ic, ch, d))
   dd <- lapply(specs, function(sp) df_to_data(d, sp, group = ic$groups))
-  ord <- lapply(charts, function(ch) timed(magmaan(specs[[ch]], dd[[ch]])))
+  ord <- lapply(charts, function(ch) timed(fit_model(specs[[ch]], dd[[ch]])))
   sph <- lapply(charts, function(ch) timed(frontier_fit_sphere(specs[[ch]], dd[[ch]])))
   names(ord) <- names(sph) <- charts
   ref <- sph$marker$value

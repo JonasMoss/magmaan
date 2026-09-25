@@ -17,7 +17,7 @@
 #'   require full-information estimation.
 #' @param group_labels Optional group ordering. Defaults to data order (or the
 #'   supplied model spec's ordering).
-#' @param optimizer,control,bounds Fitting controls forwarded to [magmaan()].
+#' @param optimizer,control,bounds Fitting controls forwarded to [fit_model()].
 #'
 #' @return A `magmaan_continuous_invariance` list with fitted models, robust
 #'   nested tests, and the constructed specifications.
@@ -139,7 +139,7 @@ continuous_invariance <- function(model, data, group = NULL,
   if (any(steps %in% c("metric", "scalar"))) requested <- c(requested, "metric")
   if ("scalar" %in% steps) requested <- c(requested, "scalar")
   fit_one <- function(spec) {
-    magmaan(spec, data, estimator = estimator, optimizer = optimizer,
+    fit_model(spec, data, estimator = estimator, optimizer = optimizer,
             control = control, bounds = bounds)
   }
   fits <- lapply(specs[requested], fit_one)

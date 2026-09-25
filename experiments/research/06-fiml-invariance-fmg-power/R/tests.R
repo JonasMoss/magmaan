@@ -35,16 +35,16 @@ fit_level <- function(level, df, pop, estimator = c("FIML", "ML2S"),
                       control = NULL, em = NULL) {
   estimator <- match.arg(estimator)
   control <- control %||% fiml_control()
-  spec <- magmaan::model_spec(invariance_syntax(level, pop$ov),
+  spec <- magmaanlab::model_spec(invariance_syntax(level, pop$ov),
                               group = "school", group_labels = c("A", "B"),
                               meanstructure = TRUE)
   tryCatch({
-    fd <- magmaan::df_to_fiml_data(df, spec)
+    fd <- magmaanlab::df_to_fiml_data(df, spec)
     if (estimator == "FIML") {
-      fit <- magmaan::magmaan_core$fit_fiml(spec, fd, control = control)
+      fit <- magmaanlab::magmaan_core$fit_fiml(spec, fd, control = control)
       if (!is.null(em) && !is.null(fit)) fit$stage1 <- em
     } else {
-      fit <- magmaan::magmaan_core$fit_ml2s(spec, fd, control = control,
+      fit <- magmaanlab::magmaan_core$fit_ml2s(spec, fd, control = control,
                                             stage1 = em)
     }
     if (!isTRUE(fit$converged)) return(NULL)
@@ -62,7 +62,7 @@ fmg_methods <- function() {
 
 # MLR / Yuan-Bentler scaled FIML test (FIML only; the applied default).
 mlr_p <- function(fit) {
-  m <- tryCatch(magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
+  m <- tryCatch(magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit),
                 error = function(e) NULL)
   if (is.null(m) || !is.finite(m$chisq_scaled) || m$df <= 0L) return(NULL)
   stats::pchisq(m$chisq_scaled, m$df, lower.tail = FALSE)
@@ -71,7 +71,7 @@ mlr_p <- function(fit) {
 # GOF p-values for one fit -> long rows (one per method). `mlr` adds the MLR row.
 gof_rows <- function(fit, estimator, rung, h1 = "saturated", add_mlr = FALSE) {
   methods <- fmg_methods()
-  tab <- tryCatch(magmaan::fmg_tests(fit, tests = names(methods),
+  tab <- tryCatch(magmaanlab::fmg_tests(fit, tests = names(methods),
                                      h1_information = h1),
                   error = function(e) NULL)
   if (is.null(tab) || !nrow(tab)) return(NULL)
@@ -106,7 +106,7 @@ gof_rows <- function(fit, estimator, rung, h1 = "saturated", add_mlr = FALSE) {
 nested_rows <- function(fit_h1, fit_h0, estimator, step) {
   acc <- list(); spec <- NULL
   # (1) SB-family difference test (naive / mean-scaled / mean-var / mixture).
-  nt <- tryCatch(magmaan::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
+  nt <- tryCatch(magmaanlab::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
                                      A.method = "exact"),
                  error = function(e) NULL)
   if (!is.null(nt)) {
@@ -125,7 +125,7 @@ nested_rows <- function(fit_h1, fit_h0, estimator, step) {
   # keep method labels unique. Tolerant: a failure (e.g. the metric->scalar
   # non-nesting step) just yields no spectrum rows for that step.
   methods <- fmg_methods()[setdiff(names(fmg_methods()), "SB")]
-  ft <- tryCatch(magmaan::fmg_nested(fit_h1, fit_h0, tests = names(methods),
+  ft <- tryCatch(magmaanlab::fmg_nested(fit_h1, fit_h0, tests = names(methods),
                                      A.method = "exact"),
                  error = function(e) NULL)
   if (!is.null(ft) && nrow(ft)) {
@@ -174,11 +174,11 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed,
   # share pop$ov order and the group structure, so one EM is valid for all; a
   # build failure leaves em = NULL and each fit falls back to its own rebuild.
   em <- tryCatch({
-    spec0 <- magmaan::model_spec(invariance_syntax("configural", pop$ov),
+    spec0 <- magmaanlab::model_spec(invariance_syntax("configural", pop$ov),
                                  group = "school", group_labels = c("A", "B"),
                                  meanstructure = TRUE)
-    magmaan::magmaan_core$estimate_saturated_em_moments(
-      magmaan::df_to_fiml_data(df, spec0))
+    magmaanlab::magmaan_core$estimate_saturated_em_moments(
+      magmaanlab::df_to_fiml_data(df, spec0))
   }, error = function(e) NULL)
   pairs <- ladder_pairs()
   all_rows <- list()

@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first (just r-dev)")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first (just r-dev)")
+suppressPackageStartupMessages(library(magmaanlab))
 
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "structure.R"))
@@ -212,7 +212,7 @@ main <- function() {
   }
   total <- nrow(cells) * opts$reps
   cat(sprintf("magmaan %s | %d cells x %d reps | %d cores\n",
-              as.character(utils::packageVersion("magmaan")), nrow(cells), opts$reps, opts$cores))
+              as.character(utils::packageVersion("magmaanlab")), nrow(cells), opts$reps, opts$cores))
   t_start <- proc.time()[["elapsed"]]
   done <- 0L
   for (ci in seq_len(nrow(cells))) {
@@ -246,7 +246,7 @@ main <- function() {
     boundary_tol = boundary_tol,
     magmaan_git_head = magmaan_cache_ref()$git_head,
     magmaan_git_dirty = magmaan_cache_ref()$git_dirty),
-    packages = "magmaan")
+    packages = "magmaanlab")
   cat("Wrote:\n", paste0("  ", unlist(paths), "\n"), sep = "")
 }
 

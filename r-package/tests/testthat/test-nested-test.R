@@ -15,7 +15,7 @@ test_that("ML2S weighted fits use the ML2S nested-test branch", {
     infer_fiml_lr_test_satorra2000 = function(...) {
       stop("wrong FIML branch")
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   raw <- structure(list(), class = "magmaan_fiml_data")
@@ -47,7 +47,7 @@ test_that("ML2S stage2 weight can be inferred from estimator labels", {
     infer_fiml_lr_test_satorra2000 = function(...) {
       stop("wrong FIML branch")
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   raw <- structure(list(), class = "magmaan_fiml_data")

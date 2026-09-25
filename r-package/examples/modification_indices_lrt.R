@@ -9,7 +9,7 @@
 ## "modern MI" decision layer: BH multiplicity + a significant x substantial
 ## verdict. See lrt_modification_indices.tex.
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 
 ## Single-factor CFA with an omitted x1-x2 residual doublet (shared nuisance u):
 ## the 1-factor model leaves a strong, unambiguous x1~~x2 modification index.
@@ -21,7 +21,7 @@ mk <- function(load, extra = 0)
 dat <- data.frame(x1 = mk(.7, .5), x2 = mk(.7, .5), x3 = mk(.7),
                   x4 = mk(.7), x5 = mk(.7), x6 = mk(.7))
 syntax <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
-fit <- magmaan(syntax, dat, estimator = "ML")
+fit <- fit_model(syntax, dat, estimator = "ML")
 
 mi <- modification_indices_lrt(fit, dat)
 stopifnot(inherits(mi, "magmaan_mi_lrt"),
@@ -34,7 +34,7 @@ stopifnot(mi$op[1] == "~~", setequal(c(mi$lhs[1], mi$rhs[1]), c("x1", "x2")))
 ## lrt_p_obs is the model-misspecification-robust reference law (observed-Hessian
 ## profile-LRT exact mixture); it matches a direct ml_profile_lrt() call.
 top <- mi[1, ]
-rel <- magmaan(paste0(syntax, "\n", top$lhs, " ", top$op, " ", top$rhs),
+rel <- fit_model(paste0(syntax, "\n", top$lhs, " ", top$op, " ", top$rhs),
                dat, estimator = "ML")
 ov <- if (is.list(fit$ov_names)) fit$ov_names[[1]] else fit$ov_names
 pr <- magmaan_core$ml_profile_lrt(rel, fit, list(as.matrix(dat[, ov])))
@@ -85,7 +85,7 @@ odat <- data.frame(x1 = cut3(mko(.7, .5)), x2 = cut3(mko(.7, .5)),
                    x3 = cut3(mko(.7)), x4 = cut3(mko(.7)),
                    x5 = cut3(mko(.7)), x6 = cut3(mko(.7)))
 ovo  <- paste0("x", 1:6)
-ofit <- magmaan(syntax, odat, estimator = "DWLS", ordered = ovo)
+ofit <- fit_model(syntax, odat, estimator = "DWLS", ordered = ovo)
 
 omi <- modification_indices_lrt(ofit, odat)
 stopifnot(inherits(omi, "magmaan_mi_lrt"),
@@ -102,7 +102,7 @@ stopifnot(length(odoub) == 1L, odoub == 1L, is.finite(omi$lrt_p_obs[1]))
 ## lrt_p_obs matches a direct ordinal_profile_lrt() call on the released fit,
 ## sharing the anchor's polychoric stage (fit$ordinal_stats).
 otop <- omi[1, ]
-orel <- magmaan(paste0(syntax, "\n", otop$lhs, " ", otop$op, " ", otop$rhs),
+orel <- fit_model(paste0(syntax, "\n", otop$lhs, " ", otop$op, " ", otop$rhs),
                 odat, estimator = "DWLS", ordered = ovo)
 opr  <- magmaan_core$ordinal_profile_lrt(orel, ofit, ofit$ordinal_stats)
 stopifnot(abs(omi$lrt_p_obs[1] - opr$p_mixture) < 1e-9)
@@ -119,7 +119,7 @@ cat("ordinal modern MI: ok\n")
 ## x1-x3 ordinal, x4-x6 continuous; the doublet x1~~x2 sits in the ordinal block.
 mdat <- data.frame(x1 = cut3(mko(.7, .5)), x2 = cut3(mko(.7, .5)),
                    x3 = cut3(mko(.7)), x4 = mko(.7), x5 = mko(.7), x6 = mko(.7))
-mfit <- magmaan(syntax, mdat, estimator = "DWLS", ordered = c("x1", "x2", "x3"),
+mfit <- fit_model(syntax, mdat, estimator = "DWLS", ordered = c("x1", "x2", "x3"),
                 meanstructure = TRUE)
 stopifnot(isTRUE(mfit$mixed_ordinal))
 mmi <- modification_indices_lrt(mfit, mdat)
@@ -129,7 +129,7 @@ mrow <- which(mmi$op == "~~" &
 stopifnot(length(mrow) == 1L, is.finite(mmi$lrt_p_obs[mrow]))
 ## Matches a direct mixed_ordinal_profile_lrt() call on the released fit.
 mtop <- mmi[mrow, ]
-mrel <- magmaan(paste0(syntax, "\n", mtop$lhs, " ", mtop$op, " ", mtop$rhs),
+mrel <- fit_model(paste0(syntax, "\n", mtop$lhs, " ", mtop$op, " ", mtop$rhs),
                 mdat, estimator = "DWLS", ordered = c("x1", "x2", "x3"),
                 meanstructure = TRUE)
 mpr  <- magmaan_core$mixed_ordinal_profile_lrt(mrel, mfit, mfit$mixed_ordinal_stats)
@@ -141,7 +141,7 @@ cat("mixed modern MI: ok\n")
 ## --- Continuous GLS / ULS: the same table via the continuous-LS profile-LRT --
 ## For ULS/GLS lrt_p_obs routes to the continuous moment-quadratic profile-LRT
 ## (one shared weight built at the anchor, empirical Gamma from the raw data).
-gfit <- magmaan(syntax, dat, estimator = "GLS")
+gfit <- fit_model(syntax, dat, estimator = "GLS")
 gmi  <- modification_indices_lrt(gfit, dat)
 gdoub <- which(gmi$op == "~~" &
                  mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
@@ -150,14 +150,14 @@ stopifnot(inherits(gmi, "magmaan_mi_lrt"), length(gdoub) == 1L,
           is.finite(gmi$lrt_p_obs[gdoub]))
 ## lrt_p_obs matches a direct continuous_ls_profile_lrt() call on the released fit.
 gtop <- gmi[gdoub, ]
-grel <- magmaan(paste0(syntax, "\n", gtop$lhs, " ", gtop$op, " ", gtop$rhs),
+grel <- fit_model(paste0(syntax, "\n", gtop$lhs, " ", gtop$op, " ", gtop$rhs),
                 dat, estimator = "GLS")
 gov  <- if (is.list(gfit$ov_names)) gfit$ov_names[[1]] else gfit$ov_names
 gpr  <- magmaan_core$continuous_ls_profile_lrt(grel, gfit,
                                                list(as.matrix(dat[, gov])))
 stopifnot(abs(gmi$lrt_p_obs[gdoub] - gpr$p_mixture) < 1e-9)
 ## ULS (empty-weight branch) also dispatches a finite robust p for the doublet.
-ufit <- magmaan(syntax, dat, estimator = "ULS")
+ufit <- fit_model(syntax, dat, estimator = "ULS")
 umi  <- modification_indices_lrt(ufit, dat)
 udoub <- which(umi$op == "~~" &
                  mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
@@ -175,7 +175,7 @@ cat("continuous LS modern MI: ok\n")
 set.seed(3)
 fdat <- dat
 fdat[matrix(runif(prod(dim(fdat))) < 0.08, nrow(fdat))] <- NA  # ~8% MCAR
-ffit <- magmaan(syntax, fdat, estimator = "FIML")
+ffit <- fit_model(syntax, fdat, estimator = "FIML")
 fmi  <- modification_indices_lrt(ffit, fdat)
 fdoub <- which(fmi$op == "~~" &
                  mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
@@ -186,7 +186,7 @@ stopifnot(inherits(fmi, "magmaan_mi_lrt"), length(fdoub) == 1L,
 ## and lrt_p_obs (p_mixture) come from one fiml_profile_lrt() call on the released
 ## fit -- the table surfaces exactly those binding outputs.
 ftop <- fmi[fdoub, ]
-frel <- magmaan(paste0(syntax, "\n", ftop$lhs, " ", ftop$op, " ", ftop$rhs),
+frel <- fit_model(paste0(syntax, "\n", ftop$lhs, " ", ftop$op, " ", ftop$rhs),
                 fdat, estimator = "FIML")
 fpr  <- magmaan_core$fiml_profile_lrt(frel, ffit)
 stopifnot(fpr$T_diff > 0,
@@ -203,7 +203,7 @@ cat("FIML modern MI: ok\n")
 ## ML2S now enumerates candidates (one-step ML score MI on the Stage-1 EM moments)
 ## and dispatches lrt_p_obs to the two-stage NT profile-LRT; lrt/lrt_p are its
 ## T_diff/p_unscaled.
-sfit <- magmaan(syntax, fdat, estimator = "ML2S")
+sfit <- fit_model(syntax, fdat, estimator = "ML2S")
 smi  <- modification_indices_lrt(sfit, fdat)
 sdoub <- which(smi$op == "~~" &
                  mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
@@ -211,7 +211,7 @@ sdoub <- which(smi$op == "~~" &
 stopifnot(inherits(smi, "magmaan_mi_lrt"), length(sdoub) == 1L,
           is.finite(smi$lrt[sdoub]), is.finite(smi$lrt_p_obs[sdoub]))
 srow <- smi[sdoub, ]
-srel <- magmaan(paste0(syntax, "\n", srow$lhs, " ", srow$op, " ", srow$rhs),
+srel <- fit_model(paste0(syntax, "\n", srow$lhs, " ", srow$op, " ", srow$rhs),
                 fdat, estimator = "ML2S")
 spr  <- magmaan_core$two_stage_nt_profile_lrt(srel, sfit)
 stopifnot(spr$T_diff > 0,
@@ -227,7 +227,7 @@ cat("ML2S modern MI: ok\n")
 ## (the W matrix) and threads it through the refit and the profile-LRT.
 ov6  <- paste0("x", 1:6)
 Wadf <- solve(magmaan_core$robust_empirical_gamma(as.matrix(dat[, ov6])))
-wfit <- magmaan(syntax, dat, estimator = "WLS", W = Wadf)
+wfit <- fit_model(syntax, dat, estimator = "WLS", W = Wadf)
 wmi  <- modification_indices_lrt(wfit, dat, weight = Wadf)
 wdoub <- which(wmi$op == "~~" &
                  mapply(function(l, r) setequal(c(l, r), c("x1", "x2")),
@@ -236,7 +236,7 @@ stopifnot(inherits(wmi, "magmaan_mi_lrt"), length(wdoub) == 1L,
           is.finite(wmi$lrt_p_obs[wdoub]))
 ## lrt_p_obs matches a direct continuous_ls_profile_lrt() call with the same W.
 wtop <- wmi[wdoub, ]
-wrel <- magmaan(paste0(syntax, "\n", wtop$lhs, " ", wtop$op, " ", wtop$rhs),
+wrel <- fit_model(paste0(syntax, "\n", wtop$lhs, " ", wtop$op, " ", wtop$rhs),
                 dat, estimator = "WLS", W = Wadf)
 wpr  <- magmaan_core$continuous_ls_profile_lrt(wrel, wfit,
                                                list(as.matrix(dat[, ov6])),

@@ -93,8 +93,8 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- if (startsWith(cfg$results_dir, "/")) {
   cfg$results_dir
@@ -154,17 +154,17 @@ sample_stats_from_cov <- function(Sigma, n = 1000000L) {
 }
 
 defined_omega <- function(fit, vcov) {
-  d <- magmaan::compute_defined(omega_model, fit, vcov)
+  d <- magmaanlab::compute_defined(omega_model, fit, vcov)
   as.numeric(d$est[d$lhs == "omega" & d$op == ":="][1L])
 }
 
 defined_omega_se <- function(fit, vcov) {
-  d <- magmaan::compute_defined(omega_model, fit, vcov)
+  d <- magmaanlab::compute_defined(omega_model, fit, vcov)
   as.numeric(d$se[d$lhs == "omega" & d$op == ":="][1L])
 }
 
 population_omega_target <- function(Sigma) {
-  fit <- magmaan::magmaan(omega_model, sample_stats_from_cov(Sigma),
+  fit <- magmaanlab::fit_model(omega_model, sample_stats_from_cov(Sigma),
                           estimator = "ML", std_lv = TRUE)
   if (!isTRUE(fit$converged)) {
     stop("population one-factor omega target did not converge", call. = FALSE)
@@ -222,7 +222,7 @@ reliability_rows <- function(X) {
 omega_rows <- function(X) {
   d <- as.data.frame(X)
   fit <- tryCatch(
-    magmaan::magmaan(omega_model, d, estimator = "ML", std_lv = TRUE),
+    magmaanlab::fit_model(omega_model, d, estimator = "ML", std_lv = TRUE),
     error = function(e) e
   )
   empty <- function(method, interval) data.frame(
@@ -367,7 +367,7 @@ write_metadata(
     fitted_omega = "one-factor normal-theory ML; model SE and observed-bread empirical sandwich SE",
     results_dir = res_dir
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 
 cat("\nwrote results to: ", res_dir, "\n", sep = "")

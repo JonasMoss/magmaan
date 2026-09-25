@@ -2,7 +2,7 @@
 script <- normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))
 base <- dirname(script)
 source(file.path(base,'R','design.R'))
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 rows <- list()
 check <- function(name,actual,expected,tol) {
   delta <- max(abs(actual-expected));ok <- is.finite(delta)&&delta<=tol
@@ -24,17 +24,17 @@ for(p in c(10,20)) for(distribution in c('normal','vm2')) {
   check(paste0(key,'_score_RLS'),sc$statistic_effective,
     lr$base_statistic[lr$label=='std_rls'],1e-5)
   # Independent Gaussian covariance-score quadratic at the fitted null.
-  imp <- magmaan:::model_implied(f)
+  imp <- magmaanlab:::model_implied(f)
   sigma <- imp$sigma[[1L]]
   sm <- cov(d)*(nrow(d)-1)/nrow(d)
   resid <- solve(sigma,sm)-diag(p)
   check(paste0(key,'_score_trace'),sc$statistic_effective,nrow(d)/2*sum(diag(resid%*%resid)),1e-5)
-  sb <- magmaan:::infer_fmg_test(sc$statistic_effective,sc$df,sc$eigenvalues,method='sb')
+  sb <- magmaanlab:::infer_fmg_test(sc$statistic_effective,sc$df,sc$eigenvalues,method='sb')
   check(paste0(key,'_score_SB'),sb$p_value,sc$p_mean_scaled,1e-10)
   # Under the regular normal-theory limit the spectrum is all ones;
   # finite-sample empirical spectra need not equal this limit.
   for(method in c('sb','peba')) {
-    nt <- magmaan:::infer_fmg_test(sc$statistic_effective,sc$df,rep(1,sc$df),
+    nt <- magmaanlab:::infer_fmg_test(sc$statistic_effective,sc$df,rep(1,sc$df),
       method=method,param=4)
     check(paste0(key,'_normal_spectrum_',method),nt$p_value,
       pchisq(sc$statistic_effective,sc$df,lower.tail=FALSE),1e-7)

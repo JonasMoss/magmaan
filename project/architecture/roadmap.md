@@ -437,7 +437,7 @@ The `sphere_route` and `sphere_route_parity` test executables compile the
 lavaan goldens with `MAGMAAN_TEST_SPHERE_ROUTE`, which routes the
 `cpp/tests/test_fit.hpp` seam through the sphere. Every case matches lavaan.
 R exposes `frontier_fit_sphere(model, data, estimator, groups, ..., psd)` for
-ML, ULS, GLS, WLS and FIML (psd = TRUE for ML). It shares `magmaan()`'s model
+ML, ULS, GLS, WLS and FIML (psd = TRUE for ML). It shares `fit_model()`'s model
 and data preparation (`.magmaan_prepare_spec`), returns a finalized
 `magmaan_fit` with `fit$gauge` (units, pass-through reasons, the sphere-chart
 partable) and `fit$options$chart = "sphere"`. It signals a classed
@@ -2032,7 +2032,7 @@ an unconstrained gradient test to constrained solutions.
     `Γ_NT`/`Γ_FIML` mix) that route the single-model GOF/SE path
     through `robust_continuous_ls` and the ML2S Satorra-2000/2001 difference
     tests through the same eigen-cores (a `(V, Γ)` swap, no new test machinery).
-    R: `magmaan(estimator = "ML2S", stage2_weight =, dls_a =)`. Opt-in
+    R: `fit_model(estimator = "ML2S", stage2_weight =, dls_a =)`. Opt-in
     Stage-1 covariance conditioning is also exposed as
     `stage1_regularization = TRUE` / `list(...)`: it regularizes the saturated
     EM covariance before Stage 2 with a diagonal/scaled-identity/identity target,
@@ -2090,7 +2090,7 @@ an unconstrained gradient test to constrained solutions.
   diagnostic, truncation count, and UGamma/lambda spectra; `fit_measures(...,
   fmg = ...)` attaches the same table to the ordinary fit-measure path, while
   the legacy `fmg_pvalues()` remains a named-vector compatibility view. Fits
-  built from `magmaan(..., data.frame, estimator = "ML")` or
+  built from `fit_model(..., data.frame, estimator = "ML")` or
   `fit_ml(model, df_to_data(...))` retain listwise-complete raw blocks in
   `fit$raw_data`, so FMG no longer requires a separate raw-data argument in the
   normal fit workflow. Continuous LS composes the existing
@@ -2102,7 +2102,7 @@ an unconstrained gradient test to constrained solutions.
   complete-data single- and multi-group ML, including mean structures.
   FIML/missing-data fits
   are also supported (`fmg_tests()` accepts a `fit_fiml()` /
-  `magmaan(..., estimator = "FIML")` fit, single- or multi-group): the
+  `fit_model(..., estimator = "FIML")` fit, single- or multi-group): the
   missing-data UGamma spectrum is built first-principles by
   `estimate::fiml::fiml_ugamma_spectrum` from the saturated-moment ACOV
   `Gamma_mis = H^-1 J H^-1` (`saturated_em_moments`, with analytic observed-row
@@ -2125,7 +2125,7 @@ an unconstrained gradient test to constrained solutions.
   deliberately NOT matched. Under FIML only the biased Gamma-hat and the ML base
   are defined; `_ug` and `_rls` are rejected.
   Two-stage ML (`ML2S`) fits are supported the same way: `fmg_tests()` accepts a
-  `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` fit and applies the
+  `fit_ml2s()` / `fit_model(..., estimator = "ML2S")` fit and applies the
   eigenvalue-tail transforms to the df-dimensional two-stage UGamma spectrum and
   Stage-2 ML base chi-square already attached as `fit$ml2s` (`eigvals`, `chisq`,
   `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the
@@ -2374,7 +2374,7 @@ an unconstrained gradient test to constrained solutions.
   independent check against lavaan's `lavInspect(fit, "sampstat")`.
 - Optional stabilizer bounds are supported on the two-level path. Explicit
   `Bounds` flow through the C++ facade; the R `fit_twolevel()` /
-  `magmaan(..., cluster=)` `bounds =` presets reuse the ordinary
+  `fit_model(..., cluster=)` `bounds =` presets reuse the ordinary
   lavaan-compatible bound builders after projecting the two-level H1
   within/between moments into per-block `SampleStats`, so `bounds = "standard"`
   uses level-specific observed variances rather than a pooled covariance.
@@ -2668,7 +2668,7 @@ an unconstrained gradient test to constrained solutions.
 ### Optimizer backends
 
 User-facing the optimizer is selected by a single kebab-case `optimizer = "..."`
-string threaded through `magmaan()` and the underlying `fit_ml/fit_uls/fit_gls/
+string threaded through `fit_model()` and the underlying `fit_ml/fit_uls/fit_gls/
 fit_wls/fit_*_snlls/fit_*_ordinal` entries; the table lives in
 `cpp/include/magmaan/estimate/backend_strings.hpp` and parses into the C++
 `Backend` enum. Accepted strings: `"ceres"`, `"ceres-bfgs"`,
@@ -2682,7 +2682,7 @@ gtol, history)` argument.
 The R complete-data ML and LS helpers also expose box constraints through
 `bounds = list(lower, upper)` or the named bound builders
 `bounds_variance()` / `bounds_pos_var()`, `bounds_standard()`,
-`bounds_wide()`, and `bounds_loading()`. The high-level `magmaan()` ML, ULS,
+`bounds_wide()`, and `bounds_loading()`. The high-level `fit_model()` ML, ULS,
 GLS, WLS, and ordinal LS paths thread the same bounds object into the C++
 fit layer; FIML remains unbounded at the R surface.
 
@@ -3686,7 +3686,7 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   diverged from lavaan for models with observed exogenous predictors; they now
   match to machine precision. A no-op for fits without exogenous variables.
 - **Multiple-group order follows lavaan** (2026-06-23). The R group helpers
-  (`magmaan()`, `df_to_data`, `df_to_fiml_data`, the ordinal/mixed data builders)
+  (`fit_model()`, `df_to_data`, `df_to_fiml_data`, the ordinal/mixed data builders)
   derive group labels by data-appearance order (`unique(as.character(g))`),
   matching lavaan, instead of factor `levels()`. Previously a factor group
   column whose level order differed from its appearance order made magmaan and
@@ -3774,8 +3774,9 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   remains covered as evaluator/unit-test machinery rather than as a public
   fixture contract; the R bridge is still a methods-developer frontier surface,
   not a lavaan replacement interface.
-- `magmaan(model, data, estimator, groups)` is the high-level estimate-only
-  R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
+- `fit_model(model, data, estimator, groups)` (named `magmaan()` before the
+  2026-09-25 package split) is the high-level estimate-only
+  convenience of the compiled R package `magmaanlab`. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
   ML/ULS/GLS/WLS, FIML, ML2S, and ordinal/mixed DWLS/WLS where the lower-level
   inputs are available. For FIML and ML2S syntax calls it auto-enables a mean
@@ -3787,10 +3788,19 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   fit fields plus the source `model_spec`, syntax, estimator options,
   ordered-variable metadata, parameterization, and grouping metadata. Its print
   method reports only point-fit status and directs users to explicit post-fit
-  primitives. The two-package direction adopted 2026-09-25
-  ([r-interface-vision.md](../design/r-interface-vision.md)) replaces this with
-  an opinionated `magmaan()` in a new pure-R package; this estimate-only path
-  becomes the lab's `estimate()`. Not yet implemented.
+  primitives. `psd = TRUE` dispatches every estimator branch except two-level
+  to its PSD-constrained frontier fitter and records `options$psd`.
+- The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
+  `magmaanlab`) is a scaffold of the two-package design
+  ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`
+  takes lavaan-named options, rejects estimator-plus-correction names such as
+  MLR and WLSMV, applies lavaan's `meanstructure` default, reports rows used
+  and deleted listwise, and fits through `fit_model()`. `infer()` records each
+  inference component (covariance, global score, global LR) as
+  `not_implemented` until the C++ policy composer lands; `vcov()` and
+  `confint()` then raise a typed `magmaan_inference_unavailable` condition.
+  Its tests check parameter rows and free estimates against lavaan for ML,
+  `std.lv`, multi-group `group.equal`, syntax intercepts and ordinal DWLS.
 - `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted
@@ -3860,7 +3870,7 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,
   fit measures, defined parameters, and nested tests remain explicit post-fit
-  calls outside `magmaan()`.
+  calls outside `fit_model()`.
 - Primary public declarations and internal implementation now live in the
   target namespaces: `parse`, `spec`, `model`, `data`, `estimate`,
   `inference`, `robust`, `measures`, `sim`, `optim`, and `compat::lavaan`. Repository

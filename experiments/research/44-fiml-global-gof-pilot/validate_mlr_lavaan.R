@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 suppressWarnings(suppressMessages(library(lavaan)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
@@ -56,14 +56,14 @@ one_rep <- function(cell, rep_id) {
   }
   seed <- opts$seed_base + cell$cell_id * 100003L + rep_id
   data <- pilot_draw(cell, seed)
-  fit_magmaan <- magmaan::magmaan(
+  fit_magmaan <- magmaanlab::fit_model(
     specs$H0, data, estimator = "FIML", se = "none", test = "none",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8))
   if (!isTRUE(fit_magmaan$converged)) {
     stop("magmaan FIML fit did not converge", call. = FALSE)
   }
-  mag <- magmaan::magmaan_core$estimate_fiml_robust_mlr(fit_magmaan)
+  mag <- magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit_magmaan)
 
   missing <- if (identical(cell$missingness, "complete")) "listwise" else "ml"
   fit_lavaan <- lavaan::sem(
@@ -176,7 +176,7 @@ write_csv(summary, file.path(results, "mlr_lavaan_parity_summary.csv"))
 write_metadata(file.path(results, "mlr_lavaan_parity_metadata.csv"), list(
   reps_per_cell = opts$reps, cells = nrow(grid), n = opts$n, p = opts$p,
   seed_base = opts$seed_base, wall_seconds = wall_seconds
-), packages = c("magmaan", "lavaan"))
+), packages = c("magmaanlab", "lavaan"))
 
 print(summary, row.names = FALSE, digits = 4)
 if (any(rows$magmaan_df != rows$lavaan_df) || any(rows$decision_mismatch) ||

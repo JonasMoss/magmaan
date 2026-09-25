@@ -387,7 +387,7 @@ ml2s_objective_function <- function(stage1, weight, dls_a = 0.5) {
   if (identical(weight, "nt")) {
     return(function(fit) ml_objective(stats, magmaan_core$model_implied(fit)))
   }
-  weights <- magmaan:::two_stage_stage2_weight_blocks_impl(
+  weights <- magmaanlab:::two_stage_stage2_weight_blocks_impl(
     stage1, stage2_weight = weight, dls_a = dls_a
   )
   function(fit) quadratic_objective(

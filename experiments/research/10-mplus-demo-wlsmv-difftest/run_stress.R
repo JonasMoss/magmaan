@@ -113,10 +113,10 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
+require_pkg("magmaanlab")
 if (isTRUE(cfg$lavaan)) require_pkg("lavaan")
 suppressPackageStartupMessages({
-  library(magmaan)
+  library(magmaanlab)
   if (isTRUE(cfg$lavaan)) library(lavaan)
 })
 
@@ -333,13 +333,13 @@ run_mplus_case <- function(dat, rep_id, seed, missing_rate) {
     stringsAsFactors = FALSE)
 }
 
-spec_h1 <- magmaan::model_spec(
+spec_h1 <- magmaanlab::model_spec(
   model, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta")
-spec_scalar_mplus <- magmaan::model_spec(
+spec_scalar_mplus <- magmaanlab::model_spec(
   model_scalar_mplus, ordered = ov, group = "group", group_labels = c("A", "B"),
   parameterization = "delta", group_equal = c("loadings", "thresholds"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 run_magmaan_case <- function(dat, rep_id, seed, missing_rate) {
   dat2 <- dat
@@ -348,9 +348,9 @@ run_magmaan_case <- function(dat, rep_id, seed, missing_rate) {
     stats <- core$data_ordinal_stats_from_df(
       dat2, spec_h1, ordered = ov, group = "group", missing = "pairwise",
       pd_gamma = "overlap", full_wls_weight = FALSE)
-    fit_h1 <- magmaan::magmaan(spec_h1, stats, estimator = "DWLS")
-    fit_h0 <- magmaan::magmaan(spec_scalar_mplus, stats, estimator = "DWLS")
-    nt <- magmaan::robust_nested_lrt(
+    fit_h1 <- magmaanlab::fit_model(spec_h1, stats, estimator = "DWLS")
+    fit_h0 <- magmaanlab::fit_model(spec_scalar_mplus, stats, estimator = "DWLS")
+    nt <- magmaanlab::robust_nested_lrt(
       fit_h1, fit_h0, data = stats, method = "restriction_map",
       A.method = "delta", weight = "DWLS")
     data.frame(
@@ -523,7 +523,7 @@ write_metadata(
     loading = loading,
     mplus_command = cfg$mplus_command,
     stress_work_dir = stress_dir),
-  packages = c("lavaan", "magmaan"))
+  packages = c("lavaan", "magmaanlab"))
 
 print(summary, row.names = FALSE)
 if (nrow(parity_summary)) {

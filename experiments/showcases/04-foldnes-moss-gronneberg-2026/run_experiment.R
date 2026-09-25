@@ -119,9 +119,9 @@ if (!isTRUE(args$lavaan_parity)) {
   unlink(file.path(results_dir, "semtests_parity.csv"))
 }
 set_single_threaded_math()
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
-fmg_spectra <- get("infer_fmg_ugamma_spectra", envir = asNamespace("magmaan"))
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
+fmg_spectra <- get("infer_fmg_ugamma_spectra", envir = asNamespace("magmaanlab"))
 
 # ── Distribution targets (paper: VM1 = moderate, VM2 = severe) ───────────────
 dist_moments <- list(
@@ -136,7 +136,7 @@ dist_moments <- list(
 get_spec <- function(p, per_factor) {
   key <- as.character(p)
   if (!is.null(.spec_cache[[key]])) return(.spec_cache[[key]])
-  spec <- magmaan::model_spec(build_5factor_syntax(p, per_factor))
+  spec <- magmaanlab::model_spec(build_5factor_syntax(p, per_factor))
   .spec_cache[[key]] <- spec
   spec
 }
@@ -289,7 +289,7 @@ utils::write.csv(cell_grid, file.path(results_dir, "cells.csv"),
                  row.names = FALSE)
 
 cat(sprintf("foldnes-moss-gronneberg-2026 Study 1: magmaan %s, %s\n",
-            as.character(utils::packageVersion("magmaan")), R.version.string))
+            as.character(utils::packageVersion("magmaanlab")), R.version.string))
 cat(sprintf("  reps=%d, cells=%d%s\n", args$reps, nrow(cell_grid),
             if (isTRUE(args$lavaan_parity)) ", lavaan parity ON" else ""))
 
@@ -492,6 +492,6 @@ meta <- metadata_frame(
                 parity_seconds = if (is.finite(parity_t0) && is.finite(parity_t1))
                   sprintf("%.2f", parity_t1 - parity_t0) else "",
                 total_seconds = sprintf("%.2f", total_t1 - t0)),
-  packages = c("magmaan", "lavaan", "semTests"))
+  packages = c("magmaanlab", "lavaan", "semTests"))
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — results in %s\n", total_t1 - t0, results_dir))

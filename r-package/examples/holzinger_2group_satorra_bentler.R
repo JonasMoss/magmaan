@@ -26,7 +26,7 @@
 ## `cfa(..., se = "robust.sem")`. χ² / df / the SB scaling factor are group-order
 ## invariant, so the `split(...)`-vs-lavaan group ordering is irrelevant for them.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok <- function(a, b, tol = 1e-2) if (isTRUE(all.equal(unname(a), unname(as.numeric(b)), tolerance = tol))) "ok" else "MISMATCH"
 

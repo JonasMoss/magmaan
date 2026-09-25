@@ -90,11 +90,11 @@ frontier_model_specs <- function(p) {
   labels <- paste0("g", seq_len(frontier_groups))
   args <- list(syntax = frontier_model_syntax(p), std_lv = FALSE,
                meanstructure = FALSE, group = "group", group_labels = labels)
-  h1 <- do.call(magmaan::model_spec, args)
+  h1 <- do.call(magmaanlab::model_spec, args)
   partial <- if (p > 5L) paste("f =~", paste0("x", 6:p)) else character()
   h0_args <- c(args, list(group_equal = "loadings"))
   if (length(partial)) h0_args$group_partial <- partial
-  list(H1 = h1, H0 = do.call(magmaan::model_spec, h0_args))
+  list(H1 = h1, H0 = do.call(magmaanlab::model_spec, h0_args))
 }
 
 frontier_read_power_calibration <- function(path = NULL) {

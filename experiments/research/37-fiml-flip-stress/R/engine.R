@@ -32,14 +32,14 @@ stress_empty_p <- function() {
     return(list(distribution = distribution, L = chol(Sigma), Sigma = Sigma))
   }
   if (distribution == "vm") {
-    calibration <- magmaan:::sim_vm_calibrate_impl(
+    calibration <- magmaanlab:::sim_vm_calibrate_impl(
       stats::cov2cor(Sigma), skew, exkurt)
   } else if (distribution == "ig") {
-    calibration <- magmaan:::sim_ig_calibrate_impl(
+    calibration <- magmaanlab:::sim_ig_calibrate_impl(
       Sigma, skew, exkurt, root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L)
   } else if (distribution == "pl") {
-    calibration <- magmaan:::sim_plsim_calibrate_impl(
+    calibration <- magmaanlab:::sim_plsim_calibrate_impl(
       stats::cov2cor(Sigma), skew, exkurt,
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L)
@@ -64,14 +64,14 @@ stress_calibrate_sampler <- function(pop, distribution) {
     return(matrix(stats::rnorm(n * p), n, p) %*% state$L)
   }
   if (state$distribution == "vm") {
-    batch <- magmaan:::sim_vm_draw_impl(
+    batch <- magmaanlab:::sim_vm_draw_impl(
       state$calibration, n = n, reps = 1L, seed_base = seed)
   } else if (state$distribution == "ig") {
-    batch <- magmaan:::sim_ig_draw_impl(
+    batch <- magmaanlab:::sim_ig_draw_impl(
       state$calibration, n = n, reps = 1L, seed_base = seed,
       quadrature_points = 81L)
   } else {
-    batch <- magmaan:::sim_plsim_draw_impl(
+    batch <- magmaanlab:::sim_plsim_draw_impl(
       state$calibration, n = n, reps = 1L, seed_base = seed)
   }
   X <- batch$draws[[1L]]
@@ -168,7 +168,7 @@ stress_apply_missingness <- function(data, ov, mechanism, seed) {
 }
 
 stress_fit <- function(spec, data) {
-  magmaan::magmaan(
+  magmaanlab::fit_model(
     spec, data, estimator = "FIML",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9),
@@ -204,7 +204,7 @@ stress_empty_replication <- function(cell, rep_id, error = "") {
     stop("score-flip rank was ", flip$df, ", expected ", cell$df,
          call. = FALSE)
   }
-  peba4 <- tryCatch(magmaan:::infer_fmg_test(
+  peba4 <- tryCatch(magmaanlab:::infer_fmg_test(
     flip$statistic_effective, flip$df, flip$eigenvalues,
     method = "peba", param = 4)$p_value, error = function(e) NA_real_)
   out[c("p_flip_basic", "p_flip_effective", "p_flip_standardized",
@@ -307,7 +307,7 @@ stress_one_rep <- function(base, cells, rep_id, sampler, specs, flips,
     out$fit_ok <- TRUE
 
     flip_begin <- proc.time()[["elapsed"]]
-    flip <- tryCatch(magmaan::score_flip_test(
+    flip <- tryCatch(magmaanlab::score_flip_test(
       H1, H0, n_flips = flips,
       seed = flip_seed + cell$cell_id * 1009), error = function(e) e)
     out$flip_seconds <- proc.time()[["elapsed"]] - flip_begin
@@ -315,7 +315,7 @@ stress_one_rep <- function(base, cells, rep_id, sampler, specs, flips,
     else out <- .stress_add_flip(out, flip, cell)
 
     nested_begin <- proc.time()[["elapsed"]]
-    nested <- tryCatch(magmaan::fmg_nested(
+    nested <- tryCatch(magmaanlab::fmg_nested(
       H1, H0, tests = stress_nested_tests, A.method = "exact"),
       error = function(e) e)
     out$nested_seconds <- proc.time()[["elapsed"]] - nested_begin

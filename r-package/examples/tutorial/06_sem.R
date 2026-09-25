@@ -2,9 +2,9 @@
 ##
 ## Bollen's industrialization / political-democracy model: three latent
 ## variables, latent regressions, and a set of correlated residuals. lavaan
-## fits it with sem(); magmaan with magmaan(estimator = "ML").
+## fits it with sem(); magmaan with fit_model(estimator = "ML").
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -36,7 +36,7 @@ model <- "
   y4 ~~ y8
   y6 ~~ y8
 "
-fit <- magmaan(model, PoliticalDemocracy, estimator = "ML",
+fit <- fit_model(model, PoliticalDemocracy, estimator = "ML",
                se = "none", test = "none")
 lav <- sem(model, data = PoliticalDemocracy)
 

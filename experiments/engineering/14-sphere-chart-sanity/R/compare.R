@@ -59,7 +59,7 @@ fit_ordinary <- function(case, estimator, inp, W = NULL) {
   args <- c(list(model = inp$model, data = inp$data, estimator = estimator,
                  groups = inp$groups, optimizer = case$optimizer,
                  bounds = case$opts$bounds, W = W), inp$opts)
-  do.call(magmaan, args)
+  do.call(fit_model, args)
 }
 
 fit_sphere <- function(case, estimator, inp, W = NULL) {

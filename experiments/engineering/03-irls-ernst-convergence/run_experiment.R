@@ -102,7 +102,7 @@ parse_args <- function(args) {
 }
 
 fit_once <- function(method, spec, dat, control) {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   switch(method,
     `ml-lbfgs` = core$fit_ml(spec, dat, optimizer = "nlopt-lbfgs",
                              control = control),
@@ -122,7 +122,7 @@ fit_once <- function(method, spec, dat, control) {
 
 main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
-  require_pkg("magmaan", "Install the local R package first, e.g. `just r-install`")
+  require_pkg("magmaanlab", "Install the local R package first, e.g. `just r-install`")
   ensure_results_dir()
 
   raw_dir <- experiment_path("results", "raw")
@@ -135,7 +135,7 @@ main <- function() {
   #              "ml-irls", "ml-irls-snlls")
   methods <- c("ml-lbfgs", "ml-fisher", "ml-fisher-snlls")
   grid <- ernst_design_grid(args$n_values, reps = args$reps, beta = args$beta)
-  spec <- magmaan::model_spec(ernst_model())
+  spec <- magmaanlab::model_spec(ernst_model())
 
   message("Ernst IRLS convergence: N cells = ", nrow(grid),
           ", reps = ", args$reps,
@@ -151,7 +151,7 @@ main <- function() {
       x <- ernst_data(n = as.integer(condition$n), beta = args$beta,
                       seed = rep_seed)
       kappa_s <- kappa(stats::cov(x), exact = TRUE)
-      dat <- magmaan::df_to_data(x, spec, scaling = "n-1")
+      dat <- magmaanlab::df_to_data(x, spec, scaling = "n-1")
       for (method in methods) {
         t0 <- proc.time()[["elapsed"]]
         fit <- tryCatch(fit_once(method, spec, dat, control), error = identity)
@@ -288,7 +288,7 @@ main <- function() {
       n_fit_rows = nrow(raw),
       elapsed_sec = elapsed
     ),
-    packages = "magmaan"
+    packages = "magmaanlab"
   )
 
   message("Wrote ", file.path(raw_dir, "irls_ernst_convergence_raw.csv"))

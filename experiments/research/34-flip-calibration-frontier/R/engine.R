@@ -32,13 +32,13 @@ frontier_empty_p <- function() {
     return(list(distribution = distribution, L = chol(Sigma), Sigma = Sigma))
   }
   if (distribution == "vm") {
-    cal <- magmaan:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt)
+    cal <- magmaanlab:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt)
   } else if (distribution == "ig") {
-    cal <- magmaan:::sim_ig_calibrate_impl(
+    cal <- magmaanlab:::sim_ig_calibrate_impl(
       Sigma, skew, exkurt, root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L)
   } else if (distribution == "pl") {
-    cal <- magmaan:::sim_plsim_calibrate_impl(
+    cal <- magmaanlab:::sim_plsim_calibrate_impl(
       stats::cov2cor(Sigma), skew, exkurt,
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L)
@@ -72,14 +72,14 @@ frontier_calibrate_sampler <- function(pop, distribution) {
     return(matrix(stats::rnorm(n * p), n, p) %*% state$L)
   }
   if (distribution == "vm") {
-    batch <- magmaan:::sim_vm_draw_impl(state$calibration, n = n, reps = 1L,
+    batch <- magmaanlab:::sim_vm_draw_impl(state$calibration, n = n, reps = 1L,
                                         seed_base = seed)
   } else if (distribution == "ig") {
-    batch <- magmaan:::sim_ig_draw_impl(
+    batch <- magmaanlab:::sim_ig_draw_impl(
       state$calibration, n = n, reps = 1L, seed_base = seed,
       quadrature_points = 81L)
   } else {
-    batch <- magmaan:::sim_plsim_draw_impl(
+    batch <- magmaanlab:::sim_plsim_draw_impl(
       state$calibration, n = n, reps = 1L, seed_base = seed)
   }
   X <- batch$draws[[1L]]
@@ -141,7 +141,7 @@ frontier_one_rep <- function(cell, rep_id, sampler, specs, group_sizes,
   }
 
   fit_begin <- proc.time()[["elapsed"]]
-  fits <- tryCatch(lapply(specs, function(spec) magmaan::magmaan(
+  fits <- tryCatch(lapply(specs, function(spec) magmaanlab::fit_model(
     spec, sample$data, estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none")),
     error = function(e) e)
@@ -163,7 +163,7 @@ frontier_one_rep <- function(cell, rep_id, sampler, specs, group_sizes,
   out$fit_ok <- TRUE
 
   flip_begin <- proc.time()[["elapsed"]]
-  flip <- tryCatch(magmaan::score_flip_test(
+  flip <- tryCatch(magmaanlab::score_flip_test(
     fits$H1, fits$H0, sample$blocks, n_flips = flips, seed = flip_seed),
     error = function(e) e)
   out$flip_seconds <- proc.time()[["elapsed"]] - flip_begin
@@ -176,7 +176,7 @@ frontier_one_rep <- function(cell, rep_id, sampler, specs, group_sizes,
     }
     out$flip_ok <- TRUE
     infer_score <- function(method, param = 4) tryCatch(
-      magmaan:::infer_fmg_test(
+      magmaanlab:::infer_fmg_test(
         flip$statistic_effective, flip$df, flip$eigenvalues,
         method = method, param = param)$p_value,
       error = function(e) NA_real_)
@@ -212,7 +212,7 @@ frontier_one_rep <- function(cell, rep_id, sampler, specs, group_sizes,
   }
 
   nested_begin <- proc.time()[["elapsed"]]
-  nested <- tryCatch(magmaan::fmg_nested(
+  nested <- tryCatch(magmaanlab::fmg_nested(
     fits$H1, fits$H0, data = sample$blocks, tests = frontier_nested_tests,
     A.method = "exact"), error = function(e) e)
   out$nested_seconds <- proc.time()[["elapsed"]] - nested_begin

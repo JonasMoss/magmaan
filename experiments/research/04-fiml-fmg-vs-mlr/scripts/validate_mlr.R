@@ -23,8 +23,8 @@ exp_root <- dirname(dirname(normalizePath(
 for (f in c("population", "generators", "tests", "oracle")) {
   source(file.path(exp_root, "R", paste0(f, ".R")))
 }
-suppressMessages(library(magmaan)); set_single_threaded_math()
-core <- magmaan::magmaan_core
+suppressMessages(library(magmaanlab)); set_single_threaded_math()
+core <- magmaanlab::magmaan_core
 
 a <- commandArgs(trailingOnly = TRUE)
 getarg <- function(flag, default) {

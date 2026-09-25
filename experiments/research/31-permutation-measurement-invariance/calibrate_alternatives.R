@@ -13,7 +13,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "main_study.R"))
 source(experiment_path("R", "simulation.R"))

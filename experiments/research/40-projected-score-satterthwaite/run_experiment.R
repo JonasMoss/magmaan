@@ -12,7 +12,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "engine.R"))
 
@@ -231,7 +231,7 @@ write_metadata(
     note = paste(
       "true five-indicator one-factor model;",
       "oracle means DGP-specific fixed score shape, not a feasible method")),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "wrote %s (%.1f seconds, %d failure rows)\n",

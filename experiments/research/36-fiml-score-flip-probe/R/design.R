@@ -28,9 +28,9 @@ fiml_flip_specs <- function() {
   args <- list(group = "school", group_labels = c("A", "B"),
                meanstructure = TRUE)
   list(
-    H1 = do.call(magmaan::model_spec,
+    H1 = do.call(magmaanlab::model_spec,
                  c(list(syntax = fiml_flip_syntax("configural")), args)),
-    H0 = do.call(magmaan::model_spec,
+    H0 = do.call(magmaanlab::model_spec,
                  c(list(syntax = fiml_flip_syntax("metric")), args)))
 }
 

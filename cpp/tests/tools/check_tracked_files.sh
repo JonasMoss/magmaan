@@ -22,7 +22,7 @@ cd "$ROOT" || { echo "check_tracked_files: cannot cd to repo root" >&2; exit 2; 
 
 DOC="see AGENTS.md 'What belongs in this repository'"
 
-TOP_ALLOWED=" .github .gitignore AGENTS.md CLAUDE.md LICENSE README.md THIRD_PARTY_NOTICES.md benchmarks cpp experiments external justfile papers private project r-package "
+TOP_ALLOWED=" .github .gitignore AGENTS.md CLAUDE.md LICENSE README.md THIRD_PARTY_NOTICES.md benchmarks cpp experiments external justfile papers private project r-magmaan r-package "
 
 # Tracked convention files inside otherwise-ignored mount points.
 MOUNT_ALLOWED=" papers/AGENTS.md papers/CLAUDE.md papers/STYLE.md \

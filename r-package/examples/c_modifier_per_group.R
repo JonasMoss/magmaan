@@ -10,7 +10,7 @@
 ## live on the partable (as the `magmaan.group_var` / `magmaan.group_labels`
 ## attributes; on a fit object as `$group_var` / `$group_labels`).
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 

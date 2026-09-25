@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first (just r-dev)")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first (just r-dev)")
+suppressPackageStartupMessages(library(magmaanlab))
 
 source(experiment_path("R", "designs.R"))
 source(experiment_path("R", "fit.R"))
@@ -80,7 +80,7 @@ main <- function() {
   grid$seed <- opts$seed_base + 1000000L * match(grid$design, names(designs_all())) +
     1000L * grid$n + grid$rep
   cat(sprintf("magmaan %s | profile %s | %d draws x 8 fits | %d cores\n",
-              as.character(utils::packageVersion("magmaan")), opts$profile,
+              as.character(utils::packageVersion("magmaanlab")), opts$profile,
               nrow(grid), opts$cores))
   t0 <- proc.time()[["elapsed"]]
   cells <- split(seq_len(nrow(grid)), paste(grid$design, grid$n))
@@ -102,7 +102,7 @@ main <- function() {
     profile = opts$profile, reps = opts$reps, ns = opts$ns, designs = opts$designs,
     seed_base = opts$seed_base, cores = opts$cores,
     magmaan_git_head = ref$git_head, magmaan_git_dirty = ref$git_dirty),
-    packages = "magmaan")
+    packages = "magmaanlab")
   cat(sprintf("done in %.1fs. Wrote:\n  %s\n  %s\n", proc.time()[["elapsed"]] - t0,
               path("fits"), path("metadata")))
 }

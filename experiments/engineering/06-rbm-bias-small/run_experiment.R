@@ -133,9 +133,9 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 res_dir <- if (grepl("^/", cfg$results_dir)) {
   cfg$results_dir
 } else {
@@ -236,18 +236,18 @@ data_for_estimator <- function(estimator, n, seed) {
 
 fit_standard <- function(estimator, data) {
   if (estimator == "ml") {
-    return(magmaan::magmaan(model, data, estimator = "ML",
+    return(magmaanlab::fit_model(model, data, estimator = "ML",
                             control = control_fit))
   }
   if (estimator == "gls") {
-    return(magmaan::magmaan(model, data, estimator = "GLS",
+    return(magmaanlab::fit_model(model, data, estimator = "GLS",
                             control = control_fit))
   }
   if (estimator == "fiml") {
-    return(magmaan::magmaan(model, data, estimator = "FIML",
+    return(magmaanlab::fit_model(model, data, estimator = "FIML",
                             control = control_fit))
   }
-  magmaan::magmaan(model, data, estimator = "DWLS", ordered = ov,
+  magmaanlab::fit_model(model, data, estimator = "DWLS", ordered = ov,
                    control = control_fit)
 }
 
@@ -574,7 +574,7 @@ write_metadata(
     thresholds = thresholds,
     missing_rates = paste(names(missing_rate), missing_rate, sep = "=")
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 
 cat("Wrote:\n")

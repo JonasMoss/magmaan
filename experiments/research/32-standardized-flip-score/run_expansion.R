@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -143,7 +143,7 @@ one_rep <- function(cell, rep_id) {
   pair <- specs[[as.character(cell$df)]]
   fit_begin <- proc.time()[["elapsed"]]
   fit <- tryCatch(lapply(
-    pair, magmaan, data = dat, estimator = "ML",
+    pair, fit_model, data = dat, estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback"),
                   error = function(e) e)
   fit_seconds <- proc.time()[["elapsed"]] - fit_begin
@@ -163,7 +163,7 @@ one_rep <- function(cell, rep_id) {
   # these add the SS/MV/SF/EBA/pEBA/pOLS members so the full FMG family runs on
   # the score base statistic, not only on the Satorra-2000 LR construction.
   score_fmg <- function(method, param = 4) tryCatch(
-    magmaan:::infer_fmg_test(flip$statistic_effective, flip$df,
+    magmaanlab:::infer_fmg_test(flip$statistic_effective, flip$df,
                              flip$eigenvalues, method = method,
                              param = param)$p_value,
     error = function(e) NA_real_)
@@ -346,7 +346,7 @@ metadata <- data.frame(
           "elapsed_seconds", "magmaan_version", "R_version"),
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
             opts$seed_base, proc.time()[["elapsed"]] - t0,
-            as.character(packageVersion("magmaan")), R.version.string))
+            as.character(packageVersion("magmaanlab")), R.version.string))
 write.csv(metadata, file.path(results_dir, paste0(output_prefix, "_metadata.csv")),
           row.names = FALSE)
 cat(sprintf("wrote %s results to %s (%.1fs)\n", output_prefix, results_dir,

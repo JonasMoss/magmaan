@@ -35,7 +35,7 @@ cat(sprintf('%d settings, %d planned fits, %.0fs soft budget\n',nrow(grid),plann
 if (o$plan) quit()
 source(file.path(repo,'experiments/_support/R/helpers.R')); set_single_threaded_math()
 source(file.path(here,'R/charts.R')); source(file.path(here,'R/models.R'))
-stopifnot('preconditioning' %in% names(formals(magmaan::frontier_fit_ml_psd)))
+stopifnot('preconditioning' %in% names(formals(magmaanlab::frontier_fit_ml_psd)))
 dir.create(o$results_dir,recursive=TRUE,showWarnings=FALSE)
 unlink(file.path(o$results_dir,c('fits.csv','pairs.csv','validation.csv','metadata.csv','discrepancies.rds','restarts.csv','restart_metadata.csv')))
 t0 <- Sys.time(); elapsed <- function() as.numeric(difftime(Sys.time(),t0,units='secs'))
@@ -58,7 +58,7 @@ for (cell in seq_len(nrow(grid))) {
     dimnames(case$m$beta) <- dimnames(case$m$psi) <- list(lv,lv)
     dimnames(case$m$theta) <- list(ov,ov); dimnames(case$S) <- list(ov,ov)
   }
-  spec <- magmaan::model_spec(syntax,fixed_x=FALSE,auto_cov_lv_x=(setting == 'observed'))
+  spec <- magmaanlab::model_spec(syntax,fixed_x=FALSE,auto_cov_lv_x=(setting == 'observed'))
   # Validate the syntax and matrix-to-partable mapping at known model moments.
   map <- chart_map(case$m,case$mask,'marker'); m <- map$unpack(map$pack(case$m))$m
   pt <- spec$partable
@@ -74,7 +74,7 @@ for (cell in seq_len(nrow(grid))) {
   population <- implied(case$m)$Sigma
   dimnames(population) <- dimnames(case$S)
   stats <- function(S) list(S=list(S),mean=list(rep(0,nrow(S))),nobs=case$n)
-  check <- magmaan::magmaan_core$evaluate_at(spec,stats(population),theta,estimator='ULS')
+  check <- magmaanlab::magmaan_core$evaluate_at(spec,stats(population),theta,estimator='ULS')
   stopifnot(is.finite(check$fmin),abs(check$fmin)<1e-18)
   validations[[cell]] <- data.frame(case=id,setting=setting,p=nrow(population),
     free_parameters=length(theta),population_uls=check$fmin)
@@ -88,7 +88,7 @@ for (cell in seq_len(nrow(grid))) {
     for (method in if ((r+cell) %% 2 == 0) c('none','diagonal') else c('diagonal','none')) {
       if (elapsed() > o$budget_sec) { exhausted <- TRUE; break }
       tick <- elapsed()
-      f <- tryCatch(magmaan::frontier_fit_ml_psd(spec,stats(S),preconditioning=method,
+      f <- tryCatch(magmaanlab::frontier_fit_ml_psd(spec,stats(S),preconditioning=method,
         control=list(max_iter=1000L,gtol=1e-8,ftol=1e-12)),error=function(e)e)
       seconds <- elapsed()-tick; err <- inherits(f,'error')
       fitted[[method]] <- f
@@ -129,6 +129,6 @@ write_metadata(file.path(o$results_dir,'metadata.csv'),values=c(o,list(
   complete=!exhausted,elapsed_seconds=elapsed(),planned_fits=planned,completed_fits=length(rows),
   git_head=git_scalar(c('rev-parse','HEAD'),root=repo),
   source_md5=paste(tools::md5sum(c(script,file.path(here,'R/charts.R'),file.path(here,'R/models.R'))),collapse=','))),
-  packages=c('magmaan','lavaan'))
+  packages=c('magmaanlab','lavaan'))
 cat('Results: ',o$results_dir,'\n',sep='')
 if (exhausted) quit(status=2L)

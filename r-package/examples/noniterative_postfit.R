@@ -10,8 +10,8 @@
 ## Run from the repo root (after `R CMD INSTALL r-package` / `just r-dev`):
 ##     Rscript r-package/examples/noniterative_postfit.R
 
-suppressMessages({ library(magmaan); library(lavaan) })
-core <- magmaan::magmaan_core
+suppressMessages({ library(magmaanlab); library(lavaan) })
+core <- magmaanlab::magmaan_core
 
 hs <- lavaan::HolzingerSwineford1939
 X  <- as.matrix(hs[paste0("x", 1:9)])

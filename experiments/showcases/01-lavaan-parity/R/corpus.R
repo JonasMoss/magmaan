@@ -132,8 +132,8 @@ corpus_prepare <- function(case_dir, meta = NULL) {
   # Single-group raw: subset to the observed variables magmaan needs so a
   # downstream ADF fourth-moment weight lines up with the moment vector.
   spec_args <- c(list(syntax = syntax), .corpus_meta_spec_args(meta))
-  spec <- do.call(magmaan::model_spec, spec_args)
-  mdat <- magmaan::df_to_data(raw, spec, scaling = "n-1")
+  spec <- do.call(magmaanlab::model_spec, spec_args)
+  mdat <- magmaanlab::df_to_data(raw, spec, scaling = "n-1")
   data <- as.data.frame(mdat$X[[1L]], check.names = FALSE)
   list(kind = "raw", syntax = syntax, data = data, nobs = nrow(data),
        group_var = "", group_labels = character(),

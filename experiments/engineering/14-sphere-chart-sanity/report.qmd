@@ -230,7 +230,7 @@ knitr::kable(data.frame(Input = cov$feature,
                         check.names = FALSE), row.names = FALSE)
 ```
 
-Composite (`<~`) syntax fails inside `magmaan()` on both routes. Composites
+Composite (`<~`) syntax fails inside `fit_model()` on both routes. Composites
 fit through the separate `magmaan_fcsem()` route, which has no sphere version.
 Inequality constraints are unsupported everywhere.
 
@@ -262,7 +262,7 @@ Inequality constraints are unsupported everywhere.
     loadings only. lavaan's `effect.coding = TRUE` also codes the intercepts.
     The fit is identical but the mean parameters differ, so the comparison
     uses lavaan's `effect.coding = "loadings"`.
-  - **Composites.** `magmaan()` fails on composite syntax with an optimizer
+  - **Composites.** `fit_model()` fails on composite syntax with an optimizer
     error instead of pointing to `magmaan_fcsem()`.
 
 ## Reproduce

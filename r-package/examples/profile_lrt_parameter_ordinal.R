@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 core <- magmaan_core
 

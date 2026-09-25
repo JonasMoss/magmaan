@@ -18,7 +18,7 @@
 ## parameter-nesting check. Use `A.method = "delta"` explicitly to request the
 ## lavaan-style moment-Jacobian construction. See project/validation/satorra2000_parity.md.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 
@@ -47,9 +47,9 @@ fit_met <- magmaan_core$fit_fit(pt_met, ssg)     # H0  (additional cross-group `
 ## Multi-group: pass per-group raw data as a list (same block order as
 ## fit_cfg$S — which is the order `magmaan_core$data_sample_stats_from_raw()` consumed
 ## above).
-res <- magmaan::robust_nested_lrt(fit_H1 = fit_cfg, fit_H0 = fit_met,
+res <- magmaanlab::robust_nested_lrt(fit_H1 = fit_cfg, fit_H0 = fit_met,
                                   data = Xg, A.method = "exact")
-cat("\n=== magmaan::robust_nested_lrt(fit_cfg, fit_met, A.method = 'exact') ===\n")
+cat("\n=== magmaanlab::robust_nested_lrt(fit_cfg, fit_met, A.method = 'exact') ===\n")
 print(res)
 
 ## ---- lavaan, for reference -------------------------------------------------
@@ -114,7 +114,7 @@ pt_met_m <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L,
 fit_cfg_m <- magmaan_core$fit_fit(pt_cfg_m, ssg)     # H1
 fit_met_m <- magmaan_core$fit_fit(pt_met_m, ssg)     # H0
 
-res_m <- magmaan::robust_nested_lrt(fit_H1 = fit_cfg_m, fit_H0 = fit_met_m,
+res_m <- magmaanlab::robust_nested_lrt(fit_H1 = fit_cfg_m, fit_H0 = fit_met_m,
                                     data = Xg, A.method = "exact")
 cat("\n=== meanstructure=TRUE: robust_nested_lrt(cfg, met, A.method='exact') ===\n")
 print(res_m)
@@ -169,7 +169,7 @@ pt_it  <- magmaan_core$lavaan_lavaanify(m_int_tied, n_groups = 2L,
 fit_if <- magmaan_core$fit_fit(pt_if, ssg)   # H1
 fit_it <- magmaan_core$fit_fit(pt_it, ssg)   # H0
 
-res_i <- magmaan::robust_nested_lrt(fit_H1 = fit_if, fit_H0 = fit_it,
+res_i <- magmaanlab::robust_nested_lrt(fit_H1 = fit_if, fit_H0 = fit_it,
                                     data = Xg, A.method = "exact")
 cat("\n=== intercept invariance: robust_nested_lrt(free, tied, A.method='exact') ===\n")
 print(res_i)

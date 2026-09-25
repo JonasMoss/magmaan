@@ -56,8 +56,8 @@ parse_args <- function(a) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 res_dir <- file.path(exp_dir, "results")
 dir.create(res_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -66,7 +66,7 @@ pops_all <- list(
   p18 = bifactor_population(per = 6L, gen = 0.6, grp = c(0.5, 0.4, 0.45)))
 pops <- pops_all[cfg$pkeys]
 specs <- lapply(pops, function(pop)
-  magmaan::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE))
+  magmaanlab::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE))
 dists <- c("normal", "chisq")
 methods <- c("wald_uncorr", "wald_corr", "cf")
 clamp01 <- function(x, eps = 1e-4) pmin(1 - eps, pmax(eps, x))
@@ -77,7 +77,7 @@ ci_logit_pt <- function(point, se) {
 
 # Per coefficient: the three intervals plus g1 / nonmono. NULL on a failed fit.
 one_rep <- function(spec, dat, pop) {
-  fit <- tryCatch(magmaan::magmaan(spec, dat, estimator = "ML"),
+  fit <- tryCatch(magmaanlab::fit_model(spec, dat, estimator = "ML"),
                   error = function(e) NULL)
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
   pt <- fit$partable; rebuild <- make_rebuilder(pt, pop)
@@ -153,7 +153,7 @@ write_metadata(
                 methods = "wald_uncorr, wald_corr (second-order point), cf (Cornish-Fisher, logit)",
                 cf = "pivot q(z)=b*+z+(g1/6)(z^2-1), g1 analytic via Hessian-vector product",
                 smoke = cfg$smoke),
-  packages = "magmaan")
+  packages = "magmaanlab")
 cat("\nCoverage by interval method (nominal 0.95):\n")
 print(all_rows[order(all_rows$coef, all_rows$p, all_rows$dist, all_rows$n,
                      match(all_rows$method, methods)),

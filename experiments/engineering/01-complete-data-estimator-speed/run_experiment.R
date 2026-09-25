@@ -410,12 +410,12 @@ build_spec <- function(case) {
   if (!is.null(case$group_labels) && length(case$group_labels)) {
     args$group_labels <- case$group_labels
   }
-  do.call(magmaan::model_spec, args)
+  do.call(magmaanlab::model_spec, args)
 }
 
 build_data <- function(case, spec) {
   if (!is.null(case$raw)) {
-    return(magmaan::df_to_data(
+    return(magmaanlab::df_to_data(
       case$raw,
       spec,
       group = case$group_var,
@@ -428,22 +428,22 @@ build_data <- function(case, spec) {
 
 fit_function <- function(estimator) {
   switch(estimator,
-         NT = magmaan::magmaan_core$fit_ml,
-         ULS = magmaan::magmaan_core$fit_uls,
-         GLS = magmaan::magmaan_core$fit_gls,
+         NT = magmaanlab::magmaan_core$fit_ml,
+         ULS = magmaanlab::magmaan_core$fit_uls,
+         GLS = magmaanlab::magmaan_core$fit_gls,
          stop("unknown estimator: ", estimator, call. = FALSE))
 }
 
 safe_chisq <- function(data, fit) {
   tryCatch(
-    as.numeric(magmaan::magmaan_core$infer_chi2_stat(data, fit$fmin)),
+    as.numeric(magmaanlab::magmaan_core$infer_chi2_stat(data, fit$fmin)),
     error = function(e) NA_real_
   )
 }
 
 safe_df <- function(data, fit) {
   tryCatch(
-    as.integer(magmaan::magmaan_core$infer_df_stat(fit$partable, data)),
+    as.integer(magmaanlab::magmaan_core$infer_df_stat(fit$partable, data)),
     error = function(e) NA_integer_
   )
 }
@@ -465,7 +465,7 @@ fit_case_once <- function(case, spec, data, estimator, rep, backend, control) {
       implied = NULL
     ))
   }
-  implied <- tryCatch(magmaan::magmaan_core$model_implied(fit), error = identity)
+  implied <- tryCatch(magmaanlab::magmaan_core$model_implied(fit), error = identity)
   if (inherits(implied, "error")) {
     return(list(
       row = new_fit_row(case, estimator, rep, "ERROR",
@@ -755,7 +755,7 @@ group_summary <- function(pairs) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 require_pkg("jsonlite")
-require_pkg("magmaan")
+require_pkg("magmaanlab")
 
 repo_dir <- repo_root()
 results_dir <- ensure_results_dir()
@@ -864,7 +864,7 @@ write_metadata(
     n_fit_rows = nrow(fits_df),
     n_pair_rows = nrow(pairs_df)
   ),
-  packages = c("jsonlite", "magmaan")
+  packages = c("jsonlite", "magmaanlab")
 )
 
 cat(sprintf(

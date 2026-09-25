@@ -56,7 +56,7 @@ fit_lav <- lavaan::sem(
   baseline = FALSE, h1 = FALSE)
 
 X <- as.matrix(case$data)
-Gamma <- magmaan::magmaan_core$robust_empirical_gamma_with_means(X)
+Gamma <- magmaanlab::magmaan_core$robust_empirical_gamma_with_means(X)
 gamma_eigen <- eigen(Gamma, symmetric = TRUE, only.values = TRUE)$values
 gamma_condition <- max(abs(gamma_eigen)) / max(min(abs(gamma_eigen)), 1e-300)
 
@@ -73,14 +73,14 @@ matched <- merge(free_pt[, c("row_idx", "lhs", "op", "rhs", "group")],
                  est_lav, by = c("lhs", "op", "rhs", "group"), sort = FALSE)
 prob$spec$partable$ustart[matched$row_idx] <- matched$est
 
-ss <- magmaan:::sample_stats_arg(prob$dat)
-pt_for_starts <- magmaan:::partable_arg(prob$spec)
-theta_full <- magmaan::magmaan_core$fit_start_values(pt_for_starts, ss)
-ev <- magmaan::magmaan_core$evaluate_at(
+ss <- magmaanlab:::sample_stats_arg(prob$dat)
+pt_for_starts <- magmaanlab:::partable_arg(prob$spec)
+theta_full <- magmaanlab::magmaan_core$fit_start_values(pt_for_starts, ss)
+ev <- magmaanlab::magmaan_core$evaluate_at(
   prob$spec, prob$dat, as.numeric(theta_full),
   estimator = "WLS", W = prob$W)
 
-im <- magmaan::magmaan_core$model_implied(ev)
+im <- magmaanlab::magmaan_core$model_implied(ev)
 sigma_mag <- as.matrix(im$sigma[[1]])
 mu_mag <- as.numeric(im$mu[[1]])
 imp_lav <- lavaan::lavInspect(fit_lav, "implied")

@@ -1,4 +1,4 @@
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 # Vale-Maurelli / Fleishman: non-normal continuous draws with a target
 # correlation matrix and per-margin (skewness, excess kurtosis). The two-stage

@@ -269,7 +269,7 @@ magmaan_fit_row <- function(case, sim, optimizer, identification, bounds) {
   started <- proc.time()[["elapsed"]]
   id_opts <- identification_options(identification)
   fit <- try(
-    magmaan::magmaan(sim$analysis_syntax, sim$data, estimator = "ML",
+    magmaanlab::fit_model(sim$analysis_syntax, sim$data, estimator = "ML",
                      std_lv = id_opts$std_lv,
                      auto_fix_first = id_opts$auto_fix_first,
                      bounds = bounds,
@@ -452,7 +452,7 @@ compare_lavaan_magmaan <- function(lavaan_summary, magmaan_summary) {
 
 main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
-  require_pkg("magmaan")
+  require_pkg("magmaanlab")
   require_pkg("lavaan")
 
   ensure_results_dir()
@@ -466,7 +466,7 @@ main <- function() {
   for (i in seq_len(nrow(cases))) {
     case <- cases[i, , drop = FALSE]
     message(case$case_key, " ", i, "/", nrow(cases))
-    sim <- magmaan::convergence_sim(case$design, n = case$n, seed = case$seed)
+    sim <- magmaanlab::convergence_sim(case$design, n = case$n, seed = case$seed)
 
     for (identification in args$identifications) {
       for (bounds in args$bounds) {
@@ -499,9 +499,9 @@ main <- function() {
   write_csv(comparison, experiment_path("results", "engine_comparison.csv"))
 
   surface_gap <- data.frame(
-    component = c("magmaan::magmaan(... estimator='ML', bounds=)",
-                  "magmaan::fit_ml()",
-                  "magmaan::bounds_*()",
+    component = c("magmaanlab::fit_model(... estimator='ML', bounds=)",
+                  "magmaanlab::fit_ml()",
+                  "magmaanlab::bounds_*()",
                   "C++ estimate::fit_ml(...)"),
     bounds_threaded = c(TRUE, TRUE, TRUE, TRUE),
     note = c("high-level ML branch forwards bounds to fit_ml()",
@@ -523,7 +523,7 @@ main <- function() {
       n_lavaan_rows = nrow(lavaan_out),
       n_magmaan_rows = nrow(magmaan_out)
     ),
-    packages = c("magmaan", "lavaan")
+    packages = c("magmaanlab", "lavaan")
   )
 
   cat("\nHeadline summary\n")

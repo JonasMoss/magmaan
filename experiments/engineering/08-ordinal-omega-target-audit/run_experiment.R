@@ -36,8 +36,8 @@ opt <- list(
 stopifnot(is.finite(opt$tol), opt$tol > 0)
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 
 loading_patterns <- list(
   tau_equal = rep(0.75, 4),
@@ -224,7 +224,7 @@ write.csv(data.frame(
   n_cells = nrow(grid),
   integration_tol = opt$tol,
   seed_base = opt$seed_base,
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   stringsAsFactors = FALSE
 ), "results/metadata.csv", row.names = FALSE)
 message("wrote results/target_summary.csv")

@@ -2,7 +2,7 @@
 #
 # Dependency-layering checker. The repo is a layered DAG; leaves are sinks.
 # Leaves: each papers/<name>/, each experiments/<category>/<NN>-*/, benchmarks/, cpp/tests/.
-# A leaf consumes only lower tiers (core = cpp/include/ cpp/src/ r-package/, plus the
+# A leaf consumes only lower tiers (core = cpp/include/ cpp/src/ r-package/ r-magmaan/, plus the
 # shared experiments/_support and build artifacts) and never references a
 # sibling leaf. Core never references any leaf. Retired experiments live frozen
 # under experiments/_archive/<slug>/ and are treated as one archive zone (a path
@@ -53,7 +53,7 @@ TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/(showcases|
 classify_zone() {
   SELF=""
   case "$1" in
-    cpp/include/*|cpp/src/*|r-package/*)         Z=CORE ;;
+    cpp/include/*|cpp/src/*|r-package/*|r-magmaan/*) Z=CORE ;;
     justfile|cpp/CMakeLists.txt|cpp/cmake/*)     Z=ORCH ;;
     experiments/_support/*)              Z=SUPPORT ;;
     experiments/_archive/*)              Z=EXP; SELF="experiments/_archive" ;;

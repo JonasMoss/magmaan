@@ -16,7 +16,7 @@
   file.path(dirname(dirname(script)), "..", "_support", "R", "helpers.R")
 }
 source(.support_helpers()); rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "engine.R"))
 
@@ -138,7 +138,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   reps = reps, flips = flips, seed_base = opt$seed_base,
   elapsed_seconds = round(proc.time()[["elapsed"]] - t0, 1),
   alpha = "p <= 0.05", note = "loadings equal across groups => equality null true"),
-  packages = c("magmaan"))
+  packages = c("magmaanlab"))
 
 cat(sprintf("\nwrote %s\n", results))
 for (f in c("df_sweep.csv", "structure.csv", "all_cells.csv", "metadata.csv"))

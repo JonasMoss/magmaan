@@ -5,7 +5,7 @@
 ## growth defaults via model_spec(model_type = "growth") — observed-variable
 ## intercepts fixed at 0, latent growth-factor means freely estimated.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -27,7 +27,7 @@ model <- "
   s =~ 0*t1 + 1*t2 + 2*t3 + 3*t4
 "
 spec <- model_spec(model, model_type = "growth")
-fit  <- magmaan(spec, Demo.growth, estimator = "ML", se = "none", test = "none")
+fit  <- fit_model(spec, Demo.growth, estimator = "ML", se = "none", test = "none")
 lav  <- growth(model, data = Demo.growth)
 
 ss   <- magmaan_core$fit_sample_stats(fit)

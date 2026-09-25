@@ -30,11 +30,11 @@ apply_missingness <- function(df, ov, mechanism, rate, seed = NULL) {
 # Fit one invariance level under FIML. Returns the fit, or NULL on any failure.
 fit_fiml_level <- function(level, df, control = NULL) {
   control <- control %||% list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9)
-  spec <- magmaan::model_spec(invariance_syntax(level), group = "school",
+  spec <- magmaanlab::model_spec(invariance_syntax(level), group = "school",
                               group_labels = c("A", "B"), meanstructure = TRUE)
   tryCatch({
-    fit <- magmaan::magmaan_core$fit_fiml(
-      spec, magmaan::df_to_fiml_data(df, spec, group = "school"),
+    fit <- magmaanlab::magmaan_core$fit_fiml(
+      spec, magmaanlab::df_to_fiml_data(df, spec, group = "school"),
       control = control)
     if (!isTRUE(fit$converged)) return(NULL)
     fit
@@ -43,7 +43,7 @@ fit_fiml_level <- function(level, df, control = NULL) {
 
 # MLR / Yuan-Bentler scaled FIML test -- the dominant applied default.
 mlr_test <- function(fit) {
-  m <- tryCatch(magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
+  m <- tryCatch(magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit),
                 error = function(e) NULL)
   if (is.null(m) || !is.finite(m$chisq_scaled) || m$df <= 0L) return(NULL)
   list(chisq_scaled = m$chisq_scaled, df = m$df,
@@ -69,7 +69,7 @@ fmg_gof_methods <- function() {
 # UGamma spectrum (the sufficient statistic for every eigenvalue transform), and
 # its trace. NULL on failure.
 fmg_gof <- function(fit, methods = fmg_gof_methods()) {
-  tab <- tryCatch(magmaan::fmg_tests(fit, tests = names(methods)),
+  tab <- tryCatch(magmaanlab::fmg_tests(fit, tests = names(methods)),
                   error = function(e) NULL)
   if (is.null(tab) || !nrow(tab)) return(NULL)
   base <- tab$base_statistic[1L]
@@ -90,7 +90,7 @@ fmg_gof <- function(fit, methods = fmg_gof_methods()) {
 # p-values: naive / SB-scaled / mean-var-adjusted / exact-mixture, plus the
 # difference spectrum (stored for later nested-FMG work). NULL on fail.
 fmg_nested <- function(fit_h1, fit_h0) {
-  nt <- tryCatch(magmaan::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
+  nt <- tryCatch(magmaanlab::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
                                      A.method = "exact"),
                  error = function(e) NULL)
   if (is.null(nt)) return(NULL)

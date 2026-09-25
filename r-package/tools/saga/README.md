@@ -69,11 +69,15 @@ default**:
 remotes::install_local("~/magmaan/r-package", Ncpus = 16)   # or install_github(...)
 ```
 
+This installs the compiled package `magmaanlab`. The ordinary-user package
+`magmaan` is pure R on top of it and installs in seconds:
+`R CMD INSTALL r-magmaan` (after `magmaanlab`).
+
 ### Install once, reuse across jobs
 
 `R CMD INSTALL` recompiles the whole core every time and installs into a single
 library path. Do it **once** in a setup step, then let array/sim jobs just
-`library(magmaan)`. Do **not** reinstall from every array task: concurrent
+`library(magmaanlab)`. Do **not** reinstall from every array task: concurrent
 installs into the same library race on the in-place `r-package/src/*.o` objects
 and fail with spurious `cannot find ….o` link errors. Rebuild only when the C++
 changes or you move to a different `-march` partition.

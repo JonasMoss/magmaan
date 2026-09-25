@@ -1,4 +1,4 @@
 library(testthat)
-library(magmaan)
+library(magmaanlab)
 
-test_check("magmaan")
+test_check("magmaanlab")

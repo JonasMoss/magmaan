@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -114,7 +114,7 @@ failed_rep <- function(rep_id, error) data.frame(
 
 one_rep <- function(cell, rep_id) {
   dat <- draw_data(cell, rep_id)
-  fit <- tryCatch(lapply(specs, magmaan, data = dat, estimator = "ML"),
+  fit <- tryCatch(lapply(specs, fit_model, data = dat, estimator = "ML"),
                   error = function(e) e)
   if (inherits(fit, "error")) {
     return(failed_rep(rep_id, conditionMessage(fit)))
@@ -204,7 +204,7 @@ metadata <- data.frame(
   key = c("mode", "reps", "flips", "cores", "seed_base", "elapsed_seconds",
           "magmaan_version", "R_version"),
   value = c(opts$mode, opts$reps, opts$flips, opts$cores, opts$seed_base,
-            proc.time()[["elapsed"]] - t0, as.character(packageVersion("magmaan")),
+            proc.time()[["elapsed"]] - t0, as.character(packageVersion("magmaanlab")),
             R.version.string))
 write.csv(metadata, file.path(results_dir, "metadata.csv"), row.names = FALSE)
 cat(sprintf("wrote results to %s (%.1fs)\n", results_dir,

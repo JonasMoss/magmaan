@@ -110,7 +110,7 @@ ordinal_model <- "f =~ x1 + x2 + x3 + x4"
 ordinal_names <- paste0("x", 1:4)
 
 pipeline_ugamma_magmaan <- function() {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   X <- as.matrix(load_hs()[paste0("x", 1:9)])
   pt <- core$lavaan_lavaanify(hs_model)
   ss <- core$data_sample_stats_from_raw(X)
@@ -138,11 +138,11 @@ pipeline_ugamma_lavaan <- function() {
 }
 
 pipeline_ordinal_magmaan <- function() {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   df <- make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
                               c(-0.85, 0.20), c(-0.45, 0.75)),
                     seed = 11L)
-  spec <- magmaan::model_spec(ordinal_model, ordered = ordinal_names,
+  spec <- magmaanlab::model_spec(ordinal_model, ordered = ordinal_names,
                               parameterization = "delta")
   stats <- core$data_ordinal_stats_from_df(df, spec)
   fit <- core$fit_dwls_ordinal(
@@ -165,9 +165,9 @@ pipeline_ordinal_lavaan <- function() {
 }
 
 pipeline_mixed_magmaan <- function() {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   df <- make_mixed_df()
-  spec <- magmaan::model_spec(ordinal_model, ordered = c("x1", "x2"),
+  spec <- magmaanlab::model_spec(ordinal_model, ordered = c("x1", "x2"),
                               parameterization = "delta", meanstructure = TRUE)
   stats <- core$data_mixed_ordinal_stats_from_df(df, spec)
   fit <- core$fit_dwls_mixed_ordinal(
@@ -277,8 +277,8 @@ read_model_abs <- function(case_id) {
 set_single_threaded_math()
 
 require_pkg("lavaan")
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 EST_TOL <- 1e-3
 
@@ -324,7 +324,7 @@ magmaan_fit_case <- function(case, model, data) {
   if (identical(case$lavaan_function %||% "sem", "growth")) {
     args$model_type <- "growth"
   }
-  do.call(magmaan::magmaan, args)
+  do.call(magmaanlab::fit_model, args)
 }
 
 est_max_abs_diff <- function(m_pt, l_pt) {
@@ -380,7 +380,7 @@ time_case <- function(case_id, iters) {
 
 cat(sprintf(
   "lavaan-speed-bench: magmaan %s, lavaan %s, %s, iters=%d\n",
-  as.character(magmaan::version()),
+  as.character(magmaanlab::version()),
   as.character(utils::packageVersion("lavaan")),
   R.version.string, args$iters
 ))
@@ -444,6 +444,6 @@ write_metadata(
     geiser_source = if (file.exists(geiser_src)) geiser_src else "",
     single_threaded_math = TRUE
   ),
-  packages = c("lavaan", "magmaan")
+  packages = c("lavaan", "magmaanlab")
 )
 cat(sprintf("wrote %s\n", file.path(experiment_results_dir, "metadata.csv")))

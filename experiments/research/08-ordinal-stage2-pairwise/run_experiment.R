@@ -269,7 +269,7 @@ timing_row <- function(tag, estimator, stage, elapsed_ms, ok = TRUE, error = "")
 }
 
 fmg_pvalue <- function(chisq, df, eigvals, method, param = 4) {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   out <- core$robust_fmg_test(chisq, as.integer(df), as.numeric(eigvals),
                               method = method, param = param)
   out$p_value
@@ -377,7 +377,7 @@ failure_p_rows <- function(tag, estimator, error) {
 }
 
 run_estimator <- function(tag, def, specs, stats, est_spec, control) {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   estimator <- est_spec$estimator
   timings <- list()
 
@@ -499,8 +499,8 @@ summarize_se <- function(se) {
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 est_grid <- estimator_specs(cfg$estimators)
 set_single_threaded_math()
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 res_dir <- ensure_results_dir()
 control <- list(max_iter = 2500L, ftol = 1e-10, gtol = 1e-8)
 
@@ -633,7 +633,7 @@ metadata <- metadata_frame(
     smoke = cfg$smoke,
     question = "ordinal pairwise stage-two estimator p-values and timing"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 

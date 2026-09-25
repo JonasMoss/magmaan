@@ -61,8 +61,8 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 res_dir <- ensure_results_dir()
 
 ov <- paste0("y", 1:6)
@@ -116,15 +116,15 @@ one_rep <- function(estimator, n, cross, seed) {
   z <- gen_z(n, cross)
   if (estimator == "ML") {
     d <- as_continuous(z)
-    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "ML"),
+    fit <- tryCatch(magmaanlab::fit_model(model, d, estimator = "ML"),
                     error = function(e) NULL)
   } else if (estimator == "FIML") {
     d <- as_missing_continuous(z)
-    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "FIML"),
+    fit <- tryCatch(magmaanlab::fit_model(model, d, estimator = "FIML"),
                     error = function(e) NULL)
   } else {
     d <- as_ordinal(z)
-    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "DWLS", ordered = ov),
+    fit <- tryCatch(magmaanlab::fit_model(model, d, estimator = "DWLS", ordered = ov),
                     error = function(e) NULL)
   }
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
@@ -134,8 +134,8 @@ one_rep <- function(estimator, n, cross, seed) {
   Vm <- tryCatch(vcov(fit, regime = "model", data = data_arg), error = function(e) NULL)
   Vr <- tryCatch(vcov(fit, regime = "robust", data = data_arg), error = function(e) NULL)
   if (is.null(Vm) || is.null(Vr)) return(NULL)
-  sm <- tryCatch(magmaan::standardized(fit, Vm, type = "all"), error = function(e) NULL)
-  sr <- tryCatch(magmaan::standardized(fit, Vr, type = "all"), error = function(e) NULL)
+  sm <- tryCatch(magmaanlab::standardized(fit, Vm, type = "all"), error = function(e) NULL)
+  sr <- tryCatch(magmaanlab::standardized(fit, Vr, type = "all"), error = function(e) NULL)
   if (is.null(sm) || is.null(sr)) return(NULL)
   fi <- fx$free
   out <- data.frame(
@@ -180,7 +180,7 @@ write_metadata(
     focal = "f2=~y5 loading (free; on the misspecification-distorted factor) and its std.all counterpart",
     regimes = "ML/DWLS: model=expected/Gauss-Newton bread, robust=observed-Hessian bread with same empirical meat; FIML: model=inverse observed information, robust=observed-Hessian MLR sandwich",
     smoke = cfg$smoke),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 print(summary[, c("estimator", "cell", "param_kind", "reps", "emp_sd",
                   "se_model", "se_robust", "ratio_model", "ratio_robust")],

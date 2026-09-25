@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 library(lavaan)
 
 match_est <- function(mag_pt, lav_pt) {
@@ -38,7 +38,7 @@ stopifnot(typeof(fit$fiml_h1) == "externalptr")
 stopifnot(inherits(fit$fiml_pack, "magmaan_fiml_pack"))
 stopifnot(inherits(fit$fiml_h1, "magmaan_fiml_h1"))
 
-fit_s3 <- magmaan(
+fit_s3 <- fit_model(
   model, data = df, estimator = "FIML",
   control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
 )
@@ -71,7 +71,7 @@ model_ml2s <- "
 visual =~ x1 + x2 + x3
 textual =~ x4 + x5 + x6
 "
-fit_fiml_ns <- magmaan(
+fit_fiml_ns <- fit_model(
   model_ml2s, data = df, estimator = "FIML",
   control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
 )
@@ -96,7 +96,7 @@ fm_diff_fiml <- unlist(fm_fiml_ns[fm_keys_fiml]) -
   as.numeric(fitMeasures(lav_fiml_ns)[fm_keys_fiml])
 stopifnot(max(abs(fm_diff_fiml), na.rm = TRUE) < 5e-4)
 
-fit_ml2s <- magmaan(
+fit_ml2s <- fit_model(
   model_ml2s, data = df, estimator = "ML2S",
   control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
 )

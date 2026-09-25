@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 set.seed(2026)
 Sigma <- matrix(c(2.6, 1.7, 1.4,

@@ -44,7 +44,7 @@ calibrate_cell_sampler <- function(pop, cell) {
   generator <- cell$generator[[1L]]
   if (generator == "normal") {
     calibration <- lapply(pop$moments, function(m) {
-      magmaan::sim_ordcorr_calibrate(
+      magmaanlab::sim_ordcorr_calibrate(
         stats::cov2cor(m$Sigma), rep(list(NULL), pop$p), metric = "polychoric",
         matrix_repair = "none")
     })
@@ -53,7 +53,7 @@ calibrate_cell_sampler <- function(pop, cell) {
   if (startsWith(generator, "ig")) {
     target <- if (generator == "ig1") c(2, 7) else c(3, 21)
     calibration <- lapply(pop$moments, function(m) {
-      magmaan::magmaan_core$sim_ig_calibrate(
+      magmaanlab::magmaan_core$sim_ig_calibrate(
         m$Sigma, target_skewness = rep(target[[1L]], pop$p),
         target_excess_kurtosis = rep(target[[2L]], pop$p),
         root = "symmetric", generator_family = "pearson",
@@ -64,7 +64,7 @@ calibrate_cell_sampler <- function(pop, cell) {
   if (startsWith(generator, "ordinal_")) {
     marginals <- ordinal_group_marginals(pop, cell)
     calibration <- lapply(seq_len(2L), function(g) {
-      magmaan::sim_ordcorr_calibrate(
+      magmaanlab::sim_ordcorr_calibrate(
         stats::cov2cor(pop$moments[[g]]$Sigma), marginals[[g]],
         metric = "polychoric", matrix_repair = "none")
     })
@@ -86,13 +86,13 @@ draw_cell_replication <- function(sampler, n, seed) {
   blocks <- lapply(seq_len(2L), function(g) {
     block_seed <- as.numeric(seed + g * 1000003)
     if (sampler$kind == "ig") {
-      draw <- magmaan::magmaan_core$sim_ig_draw(
+      draw <- magmaanlab::magmaan_core$sim_ig_draw(
         sampler$calibration[[g]], n = as.integer(n[[g]]), reps = 1L,
         seed_base = block_seed, quadrature_points = 81L)$draws[[1L]]
       X <- draw_matrix(draw)
       X <- sweep(X, 2L, sampler$pop$moments[[g]]$mean, "+")
     } else {
-      draw <- magmaan::sim_ordcorr_draw(
+      draw <- magmaanlab::sim_ordcorr_draw(
         sampler$calibration[[g]], n = as.integer(n[[g]]), reps = 1L,
         seed_base = block_seed)$draws[[1L]]
       X <- draw_matrix(draw)

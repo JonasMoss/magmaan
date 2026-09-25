@@ -30,9 +30,9 @@ pilot_model_syntax <- function(p = 5L, restricted = FALSE) {
 
 pilot_specs <- function(p = 5L) {
   list(
-    H1 = magmaan::model_spec(
+    H1 = magmaanlab::model_spec(
       pilot_model_syntax(p, restricted = FALSE), meanstructure = TRUE),
-    H0 = magmaan::model_spec(
+    H0 = magmaanlab::model_spec(
       pilot_model_syntax(p, restricted = TRUE), meanstructure = TRUE)
   )
 }
@@ -277,7 +277,7 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
   )
 
   h0_begin <- proc.time()[["elapsed"]]
-  fit_h0 <- tryCatch(magmaan::magmaan(
+  fit_h0 <- tryCatch(magmaanlab::fit_model(
     specs$H0, data, estimator = "FIML", se = "none", test = "none",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)),
@@ -293,9 +293,9 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
 
   lrt_begin <- proc.time()[["elapsed"]]
   lrt <- tryCatch({
-    fmg <- magmaan::fmg_tests(
+    fmg <- magmaanlab::fmg_tests(
       fit_h0, tests = c("SB", "SS", "pEBA4", "all"))
-    mlr <- magmaan::magmaan_core$estimate_fiml_robust_mlr(fit_h0)
+    mlr <- magmaanlab::magmaan_core$estimate_fiml_robust_mlr(fit_h0)
     list(fmg = fmg, mlr = mlr)
   }, error = function(e) e)
   base$lrt_seconds <- proc.time()[["elapsed"]] - lrt_begin
@@ -315,17 +315,17 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
   }
 
   score_begin <- proc.time()[["elapsed"]]
-  score <- tryCatch(magmaan::score_flip_test(
+  score <- tryCatch(magmaanlab::score_flip_test(
     specs$H1, fit_h0, n_flips = flips, seed = seed + 70000001L,
     calibration = "effective"), error = function(e) e)
   base$score_seconds <- proc.time()[["elapsed"]] - score_begin
   if (inherits(score, "error")) {
     base$error_score <- conditionMessage(score)
   } else {
-    score_ss <- magmaan::magmaan_core$robust_fmg_test(
+    score_ss <- magmaanlab::magmaan_core$robust_fmg_test(
       score$statistic_effective, score$df, score$eigenvalues,
       method = "ss", param = 4, truncate_negative = TRUE)
-    score_peba4 <- magmaan::magmaan_core$robust_fmg_test(
+    score_peba4 <- magmaanlab::magmaan_core$robust_fmg_test(
       score$statistic_effective, score$df, score$eigenvalues,
       method = "peba", param = 4, truncate_negative = TRUE)
     p_values[c("p_score_chisq", "p_score_sb", "p_score_ss",
@@ -344,7 +344,7 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
   }
 
   h1_begin <- proc.time()[["elapsed"]]
-  fit_h1 <- tryCatch(magmaan::magmaan(
+  fit_h1 <- tryCatch(magmaanlab::fit_model(
     specs$H1, data, estimator = "FIML", se = "none", test = "none",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)),
@@ -361,9 +361,9 @@ pilot_one_rep <- function(cell, rep_id, specs, flips, seed_base) {
       model_vcov <- stats::vcov(fit_h1, regime = "model")
       robust_vcov <- stats::vcov(fit_h1, regime = "robust")
       list(
-        model = magmaan::magmaan_core$inference_wald_test(
+        model = magmaanlab::magmaan_core$inference_wald_test(
           fit_h1, R, model_vcov),
-        robust = magmaan::magmaan_core$inference_wald_test(
+        robust = magmaanlab::magmaan_core$inference_wald_test(
           fit_h1, R, robust_vcov)
       )
     }, error = function(e) e)

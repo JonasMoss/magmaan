@@ -93,11 +93,11 @@ flip_expansion_draw_block <- function(n, mu, Sigma, distribution) {
     ek <- rep(flip_expansion_severe_excess_kurtosis, p)
     seed_base <- sample.int(.Machine$integer.max, 1L)
     draws <- if (distribution == "vm") {
-      cal <- magmaan:::sim_vm_calibrate_impl(corr, sk, ek)
-      magmaan:::sim_vm_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
+      cal <- magmaanlab:::sim_vm_calibrate_impl(corr, sk, ek)
+      magmaanlab:::sim_vm_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
     } else {
-      cal <- magmaan:::sim_plsim_calibrate_impl(corr, sk, ek)
-      magmaan:::sim_plsim_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
+      cal <- magmaanlab:::sim_plsim_calibrate_impl(corr, sk, ek)
+      magmaanlab:::sim_plsim_draw_impl(cal, n = n, reps = 1L, seed_base = seed_base)
     }
     z <- sweep(draws$draws[[1L]], 2, sqrt(diag(Sigma)), "*")
     return(sweep(z, 2, mu, "+"))

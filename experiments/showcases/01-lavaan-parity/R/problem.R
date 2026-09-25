@@ -4,13 +4,13 @@
 
 make_problem <- function(case, scaling = "n-1") {
   args <- c(list(syntax = case$model), case$model_spec_args)
-  spec <- do.call(magmaan::model_spec, args)
+  spec <- do.call(magmaanlab::model_spec, args)
   dat <- if (!is.null(case$sample_stats)) {
     case$sample_stats
   } else {
     # case$group_var is NULL for single-group cases, which df_to_data() reads
     # as a single group; multi-group corpus cases carry the grouping column.
-    magmaan::df_to_data(case$data, spec, group = case$group_var,
+    magmaanlab::df_to_data(case$data, spec, group = case$group_var,
                         scaling = scaling)
   }
   problem <- list(case = case, spec = spec, dat = dat)
@@ -37,9 +37,9 @@ adf_weight <- function(data, include_means = FALSE) {
   }
   X <- as.matrix(data)
   if (include_means) {
-    gamma_full <- magmaan::magmaan_core$robust_empirical_gamma_with_means(X)
+    gamma_full <- magmaanlab::magmaan_core$robust_empirical_gamma_with_means(X)
     return(chol2inv(chol(gamma_full)))
   }
-  gamma <- magmaan::magmaan_core$robust_empirical_gamma(X)
+  gamma <- magmaanlab::magmaan_core$robust_empirical_gamma(X)
   chol2inv(chol(gamma))
 }

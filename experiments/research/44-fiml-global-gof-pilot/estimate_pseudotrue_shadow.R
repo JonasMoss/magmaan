@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -68,10 +68,10 @@ model <- sem_model_catalog()[["one_factor_6"]]
 control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
 
 fit_fiml_with_stage1 <- function(X) {
-  fd <- magmaan::df_to_fiml_data(as.data.frame(X), model$spec)
-  em <- magmaan::magmaan_core$estimate_saturated_em_moments(
+  fd <- magmaanlab::df_to_fiml_data(as.data.frame(X), model$spec)
+  em <- magmaanlab::magmaan_core$estimate_saturated_em_moments(
     fd, control = control)
-  fit <- magmaan::magmaan_core$fit_fiml(
+  fit <- magmaanlab::magmaan_core$fit_fiml(
     model$spec, fd,
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = control)
@@ -109,8 +109,8 @@ for (index in seq_along(opts$distributions)) {
   fitted <- fit_fiml_with_stage1(X)
   fit <- fitted$fit
   em <- fitted$em
-  implied <- magmaan:::model_implied(fit)
-  fmg <- magmaan::fmg_tests(fit, tests = c("SB", "pEBA4", "all"))
+  implied <- magmaanlab:::model_implied(fit)
+  fmg <- magmaanlab::fmg_tests(fit, tests = c("SB", "pEBA4", "all"))
   target <- list(
     distribution = distribution,
     theta = fit$theta,
@@ -267,7 +267,7 @@ one_rep <- function(cell, rep_id) {
     X <- sem_apply_missingness(X, "mar_30")
     fitted <- fit_fiml_with_stage1(X)
     fit <- fitted$fit
-    fmg <- magmaan::fmg_tests(fit, tests = c("SB", "pEBA4", "all"))
+    fmg <- magmaanlab::fmg_tests(fit, tests = c("SB", "pEBA4", "all"))
     key <- sub("_ml$", "", fmg$label)
     p <- stats::setNames(fmg$p_value, key)
     list(
@@ -350,7 +350,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   seed_base = opts$seed_base,
   failures = sum(!raw$ok),
   shadow_runtime_wall_seconds = proc.time()[["elapsed"]] - begin),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat("\nPseudo-target summary\n")
 print(target_summary, row.names = FALSE, digits = 5)

@@ -4,7 +4,7 @@
 ## simple equality constraints, the equal() modifier, orthogonal = TRUE, and
 ## nonlinear equality constraints. Each is fit and cross-checked against lavaan.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -27,23 +27,23 @@ cat("=== Model syntax 2 ===\n")
 ## --- fixing a loading, freeing the marker (NA*), starting values -----------
 m_fix <- "visual =~ NA*x1 + 0.7*x2 + x3
           visual ~~ 1*visual"
-f_fix <- magmaan(m_fix, hs, estimator = "ML", se = "none", test = "none")
+f_fix <- fit_model(m_fix, hs, estimator = "ML", se = "none", test = "none")
 l_fix <- cfa(m_fix, data = hs)
 ok(f_fix$converged && est_match(f_fix, l_fix), "fixed loading + NA* free marker")
 
 m_start <- "visual =~ x1 + start(0.7)*x2 + start(1.2)*x3"
-f_start <- magmaan(m_start, hs, estimator = "ML", se = "none", test = "none")
+f_start <- fit_model(m_start, hs, estimator = "ML", se = "none", test = "none")
 l_start <- cfa(m_start, data = hs)
 ok(f_start$converged && est_match(f_start, l_start), "start() starting values")
 
 ## --- simple equality via a shared label, and the equal() modifier ----------
 m_lab <- "visual =~ x1 + v*x2 + v*x3"
-f_lab <- magmaan(m_lab, hs, estimator = "ML", se = "none", test = "none")
+f_lab <- fit_model(m_lab, hs, estimator = "ML", se = "none", test = "none")
 l_lab <- cfa(m_lab, data = hs)
 ok(f_lab$converged && est_match(f_lab, l_lab), "shared-label equality (v*x2 + v*x3)")
 
 m_eq <- "visual =~ x1 + x2 + equal(\"visual=~x2\")*x3"
-f_eq <- magmaan(m_eq, hs, estimator = "ML", se = "none", test = "none")
+f_eq <- fit_model(m_eq, hs, estimator = "ML", se = "none", test = "none")
 l_eq <- cfa(m_eq, data = hs)
 ok(f_eq$converged && near(magmaan_core$infer_chi2_stat(
        magmaan_core$fit_sample_stats(f_eq), f_eq$fmin),
@@ -53,7 +53,7 @@ ok(f_eq$converged && near(magmaan_core$infer_chi2_stat(
 m_orth <- "visual =~ x1+x2+x3
            textual =~ x4+x5+x6
            speed =~ x7+x8+x9"
-f_orth <- magmaan(model_spec(m_orth, orthogonal = TRUE), hs,
+f_orth <- fit_model(model_spec(m_orth, orthogonal = TRUE), hs,
                   estimator = "ML", se = "none", test = "none")
 l_orth <- cfa(m_orth, data = hs, orthogonal = TRUE)
 ok(f_orth$converged && est_match(f_orth, l_orth), "orthogonal = TRUE")
@@ -62,7 +62,7 @@ ok(f_orth$converged && est_match(f_orth, l_orth), "orthogonal = TRUE")
 m_nl <- "visual =~ x1 + a*x2 + b*x3
          a == b^2"
 f_nl <- tryCatch(
-  magmaan(m_nl, hs[, c("x1","x2","x3")], estimator = "ML",
+  fit_model(m_nl, hs[, c("x1","x2","x3")], estimator = "ML",
           optimizer = "ipopt", se = "none", test = "none"),
   error = function(e) e)
 if (inherits(f_nl, "error") && grepl("IPOPT|ipopt", conditionMessage(f_nl))) {

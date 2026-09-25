@@ -84,7 +84,7 @@ parse_args <- function(args) {
 }
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 require_pkg("CompQuadForm", "install.packages('CompQuadForm')")
 set_single_threaded_math()
 res_dir <- ensure_results_dir()
@@ -228,7 +228,7 @@ write_metadata(
     cells_filter = cfg$cells_filter %||% "",
     nonnormal = "centred-scaled chi-square(5) components"
   ),
-  packages = c("magmaan", "lavaan", "CompQuadForm")
+  packages = c("magmaanlab", "lavaan", "CompQuadForm")
 )
 
 cat("\nwrote results to:", res_dir, "\n")

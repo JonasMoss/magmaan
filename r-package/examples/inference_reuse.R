@@ -1,4 +1,4 @@
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(903)
 x <- as.data.frame(matrix(rt(360*6,8),360,6) + rnorm(360))
 names(x) <- paste0('x',1:6)
@@ -9,8 +9,8 @@ reject <- function(expr, pattern) {
   e <- tryCatch({force(expr);NULL},error=identity)
   stopifnot(inherits(e,'error'),grepl(pattern,conditionMessage(e)))
 }
-f1 <- magmaan(syntax,x,meanstructure=TRUE,control=control)
-f0 <- magmaan(paste(syntax,'a == b',sep='\n'),x,meanstructure=TRUE,control=control)
+f1 <- fit_model(syntax,x,meanstructure=TRUE,control=control)
+f0 <- fit_model(paste(syntax,'a == b',sep='\n'),x,meanstructure=TRUE,control=control)
 d <- prepare_inference_data(f1,x)
 g1 <- prepare_inference(f1,d); g0 <- prepare_inference(f0,d)
 h <- prepare_hypothesis(g0,g1)
@@ -25,9 +25,9 @@ for (g in list(g0,g1)) {
   close(calibrate_quadratic(lr,c('sb','peba4'))$p_value,gof$p_value)
   close(fmg_tests(g,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value,
         fmg_tests(fresh,x,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value)
-  close(inference_information(g),magmaan:::infer_information_expected(fresh))
+  close(inference_information(g),magmaanlab:::infer_information_expected(fresh))
   close(inference_covariance(g),parameter_covariance(g,inference_information(g)))
-  close(inference_covariance(g,TRUE),magmaan:::infer_robust_se_raw(fresh,as.matrix(x))$vcov)
+  close(inference_covariance(g,TRUE),magmaanlab:::infer_robust_se_raw(fresh,as.matrix(x))$vcov)
   V <- inference_covariance(g,TRUE)
   R <- diag(length(g$theta))[1,,drop=FALSE]
   close(wald_test(g,R,V)$chi2,drop(crossprod(R%*%g$theta,solve(R%*%V%*%t(R),R%*%g$theta))))
@@ -65,13 +65,13 @@ reject(inference_quadratic(unserialize(serialize(g1,NULL))),'prepare it again')
 reject(wald_test(g0,diag(length(g0$theta))[1,,drop=FALSE],inference_covariance(g1)), 'another fit snapshot')
 # Edited extracted fits must not silently reuse stale geometry.
 changed <- g1$fit; changed$theta[1] <- changed$theta[1]*1.01
-cached <- magmaan:::infer_fmg_ugamma_spectra(changed,as.matrix(x))
+cached <- magmaanlab:::infer_fmg_ugamma_spectra(changed,as.matrix(x))
 attr(changed,'magmaan_ntml') <- NULL
-close(cached$biased,magmaan:::infer_fmg_ugamma_spectra(changed,as.matrix(x))$biased)
+close(cached$biased,magmaanlab:::infer_fmg_ugamma_spectra(changed,as.matrix(x))$biased)
 y <- x; y$x1[1] <- y$x1[1]+1
-reject(magmaan:::infer_fmg_ugamma_spectra(g1$fit,as.matrix(y)),'observations differ')
+reject(magmaanlab:::infer_fmg_ugamma_spectra(g1$fit,as.matrix(y)),'observations differ')
 # A restricted mean needs the fitted-mean correction, not centered GOF rows.
-fm <- magmaan(paste(syntax,'x1 ~ 0*1',sep='\n'),transform(x,x1=x1+1),meanstructure=TRUE,control=control)
+fm <- fit_model(paste(syntax,'x1 ~ 0*1',sep='\n'),transform(x,x1=x1+1),meanstructure=TRUE,control=control)
 gm <- prepare_inference(fm,transform(x,x1=x1+1))
 qm <- inference_quadratic(gm,'score'); om <- project_scores(score_components(gm))
 close(qm$statistic,om$statistic)

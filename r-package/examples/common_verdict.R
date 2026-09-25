@@ -1,5 +1,5 @@
 # Run against the installed package: Rscript r-package/examples/common_verdict.R
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(20260912)
 n <- 1000L
 z <- rnorm(n)

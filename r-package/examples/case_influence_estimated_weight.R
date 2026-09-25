@@ -19,7 +19,7 @@ if (!requireNamespace("lavaan", quietly = TRUE)) {
   message("case_influence_estimated_weight.R: lavaan not installed; skipping.")
   quit(save = "no", status = 0)
 }
-suppressMessages({library(magmaan); library(lavaan)})
+suppressMessages({library(magmaanlab); library(lavaan)})
 
 hs <- lavaan::HolzingerSwineford1939
 sse <- function(a, b) sum((a - b)^2)
@@ -27,18 +27,18 @@ rmse <- function(a, b) sqrt(sse(a, b) / length(a))
 
 # One-step (complete + naive) vs the exact GLS leave-one-out refit.
 probe <- function(label, model) {
-  fit <- magmaan::magmaan(model, data = hs, estimator = "GLS")
-  fm <- magmaan::fit_measures(fit)
+  fit <- magmaanlab::fit_model(model, data = hs, estimator = "GLS")
+  fm <- magmaanlab::fit_measures(fit)
 
-  ew    <- magmaan::est_change_raw_approx(fit, type = "estimated.weight")
+  ew    <- magmaanlab::est_change_raw_approx(fit, type = "estimated.weight")
   naive <- attr(ew, "naive")
   wdiag <- attr(ew, "weight_diagnostic")
   stopifnot(is.matrix(naive), is.matrix(wdiag),
             isTRUE(all.equal(unclass(ew) - naive, wdiag, check.attributes = FALSE)))
 
   # Exact LOO is the ground truth: refit GLS per drop, re-estimating the weight.
-  rerun <- magmaan::case_rerun(fit)
-  exact <- magmaan::est_change_raw(rerun)
+  rerun <- magmaanlab::case_rerun(fit)
+  exact <- magmaanlab::est_change_raw(rerun)
 
   cn <- intersect(colnames(exact), colnames(ew))
   stopifnot(length(cn) == ncol(ew))
@@ -84,7 +84,7 @@ cat(sprintf("\nnaive error grows %.1fx with misfit; complete error ~flat (%.2fx)
 # 4. crossprod(influence) is the estimated-weight ("complete-sandwich") IJ vcov
 #    by construction (the C++ self-check pins it to the SE path at 1e-9). Here we
 #    confirm it is a well-formed SPD covariance and reproduces the reported SEs.
-fit <- magmaan::magmaan(
+fit <- magmaanlab::fit_model(
   "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
   data = hs, estimator = "GLS")
 X <- fit$raw_data$X[[1L]]
@@ -96,33 +96,33 @@ cat("complete-sandwich IJ vcov is SPD; npar =", fit$npar, "\n")
 
 # 5. est_change_approx(type = "estimated.weight") returns DFTHETAS + gcd in the
 #    estimated-weight metric.
-ec <- magmaan::est_change_approx(fit, type = "estimated.weight")
+ec <- magmaanlab::est_change_approx(fit, type = "estimated.weight")
 stopifnot(is.matrix(ec), "gcd_approx" %in% colnames(ec),
           nrow(ec) == nrow(X), all(is.finite(ec)), all(ec[, "gcd_approx"] >= 0))
 
 # 6. ULS has a fixed weight: the complete and naive one-steps must coincide
 #    exactly (no IF(W_hat) correction).
-fit_uls <- magmaan::magmaan(
+fit_uls <- magmaanlab::fit_model(
   "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
   data = hs, estimator = "ULS")
-ew_uls <- magmaan::est_change_raw_approx(fit_uls, type = "estimated.weight")
+ew_uls <- magmaanlab::est_change_raw_approx(fit_uls, type = "estimated.weight")
 stopifnot(max(abs(attr(ew_uls, "weight_diagnostic"))) < 1e-9)
 cat("ULS: complete == naive (correction-free)\n")
 
 # 7. ML has no estimated second-stage weight, so the regime is rejected.
-fit_ml <- magmaan::magmaan(
+fit_ml <- magmaanlab::fit_model(
   "visual =~ x1 + x2 + x3", data = hs, estimator = "ML")
-err <- tryCatch(magmaan::est_change_raw_approx(fit_ml, type = "estimated.weight"),
+err <- tryCatch(magmaanlab::est_change_raw_approx(fit_ml, type = "estimated.weight"),
                 error = function(e) conditionMessage(e))
 stopifnot(is.character(err), grepl("estimated", err))
 
 # 8. Multiple groups: the one-step engine block-stacks the per-group cases
 #    (g{b}_{row} ids, group-suffixed columns) and the IJ covariance is the
 #    full-theta block-diagonal complete sandwich.
-fit_mg <- magmaan::magmaan(
+fit_mg <- magmaanlab::fit_model(
   "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
   data = hs, estimator = "GLS", groups = "school")
-ew_mg <- magmaan::est_change_raw_approx(fit_mg, type = "estimated.weight")
+ew_mg <- magmaanlab::est_change_raw_approx(fit_mg, type = "estimated.weight")
 stopifnot(nrow(ew_mg) == nrow(hs), ncol(ew_mg) == fit_mg$npar,
           all(is.finite(ew_mg)),
           all(grepl("^g\\d+_", rownames(ew_mg))),
@@ -140,15 +140,15 @@ ord <- hs
 for (v in c("x1", "x2", "x3", "x4")) {
   ord[[v]] <- as.integer(cut(hs[[v]], 3))
 }
-fit_ord <- magmaan::magmaan("f =~ x1 + x2 + x3 + x4", data = ord,
+fit_ord <- magmaanlab::fit_model("f =~ x1 + x2 + x3 + x4", data = ord,
                             estimator = "DWLS",
                             ordered = c("x1", "x2", "x3", "x4"))
 stopifnot(isTRUE(fit_ord$ordinal))
-ew_ord <- magmaan::est_change_raw_approx(fit_ord, type = "estimated.weight")
+ew_ord <- magmaanlab::est_change_raw_approx(fit_ord, type = "estimated.weight")
 stopifnot(nrow(ew_ord) == nrow(ord), ncol(ew_ord) == fit_ord$npar,
           all(is.finite(ew_ord)),
           max(abs(attr(ew_ord, "weight_diagnostic"))) > 1e-8)  # weight term live
-ec_ord <- magmaan::est_change_approx(fit_ord, type = "estimated.weight")
+ec_ord <- magmaanlab::est_change_approx(fit_ord, type = "estimated.weight")
 stopifnot("gcd_approx" %in% colnames(ec_ord), all(ec_ord[, "gcd_approx"] >= 0))
 V_ord <- crossprod(
   magmaan_core$infer_ordinal_casewise_influence_ij_fit(fit_ord, fit_ord$ordinal_stats)$influence)
@@ -168,16 +168,16 @@ for (v in c("x1", "x2", "x3", "x4", "x5", "x6")) {
 }
 model_ml2s <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"  # misspecified 1-factor
 
-fit_nt <- magmaan::magmaan(model_ml2s, data = df_miss, estimator = "ML2S")
+fit_nt <- magmaanlab::fit_model(model_ml2s, data = df_miss, estimator = "ML2S")
 stopifnot(identical(fit_nt$estimator, "ML2S"))
-ew_nt <- magmaan::est_change_raw_approx(fit_nt, type = "estimated.weight")
+ew_nt <- magmaanlab::est_change_raw_approx(fit_nt, type = "estimated.weight")
 stopifnot(nrow(ew_nt) == nrow(hs), all(is.finite(ew_nt)),
           max(abs(attr(ew_nt, "weight_diagnostic"))) < 1e-9)  # NT: weight fixed
 
-fit_dwls <- magmaan::magmaan(model_ml2s, data = df_miss, estimator = "ML2S",
+fit_dwls <- magmaanlab::fit_model(model_ml2s, data = df_miss, estimator = "ML2S",
                              stage2_weight = "dwls")
 stopifnot(identical(fit_dwls$estimator, "ML2S_DWLS"))
-ew_dwls <- magmaan::est_change_raw_approx(fit_dwls, type = "estimated.weight")
+ew_dwls <- magmaanlab::est_change_raw_approx(fit_dwls, type = "estimated.weight")
 stopifnot(nrow(ew_dwls) == nrow(hs), all(is.finite(ew_dwls)),
           max(abs(attr(ew_dwls, "weight_diagnostic"))) > 1e-3)  # weight term live
 V_ml2s <- crossprod(magmaan_core$infer_ml2s_casewise_influence_ij_fit(

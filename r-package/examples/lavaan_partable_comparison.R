@@ -3,7 +3,7 @@
 ## Run from the repo root after installing the package:
 ##     Rscript r-package/examples/lavaan_partable_comparison.R
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 check_partable <- function(label, fit, lav, tol = 2e-4) {
   cmp <- magmaan_core$lavaan_compare_partable(fit, lavaan::parTable(lav), est_tolerance = tol)

@@ -4,9 +4,9 @@ args<-commandArgs(TRUE)
 if('--help'%in%args){cat('Usage: Rscript diagnose_calibration_cost.R [--smoke] [--legacy-and-wrappers]\nSix cases, three warmed batches per phase; --smoke uses one short batch.\n');quit(status=0)}
 script<-normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))
 base<-dirname(script);source(file.path(base,'R','design.R'))
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 outdir<-file.path(base,'results',if('--legacy-and-wrappers'%in%args)'calibration-wrapper-audit' else 'calibration-audit');dir.create(outdir,recursive=TRUE,showWarnings=FALSE)
-files<-unlist(lapply(c('magmaan','lavaan',if('--legacy-and-wrappers'%in%args)'semTests'),function(pkg)list.files(find.package(pkg),pattern='\\.(so|rdb|rdx)$|^DESCRIPTION$',recursive=TRUE,full.names=TRUE)))
+files<-unlist(lapply(c('magmaanlab','lavaan',if('--legacy-and-wrappers'%in%args)'semTests'),function(pkg)list.files(find.package(pkg),pattern='\\.(so|rdb|rdx)$|^DESCRIPTION$',recursive=TRUE,full.names=TRUE)))
 hashes<-tools::md5sum(files)
 started<-Sys.time()
 cases<-data.frame(case=c('old_6','old_9','old_12','score_10','score_20','score_20_small_skew'),
@@ -38,10 +38,10 @@ for(j in seq_len(nrow(cases))){
   slotOptions=x@Options,slotParTable=x@ParTable,slotSampleStats=x@SampleStats,
   slotData=x@Data,slotModel=x@Model,slotCache=x@Cache))}
  f<-magfit();lf<-lavfit('peba');stopifnot(f$converged,lavaan::lavInspect(lf,'converged'))
- ic<-prepare_inference(f);snapshot<-magmaan:::.inference_fit(ic)
+ ic<-prepare_inference(f);snapshot<-magmaanlab:::.inference_fit(ic)
  X<-as.matrix(d);fm<-fmg_tests(ic,tests=c('sb_ml','peba4_ml'))
  pscore<-project_scores(score_components(ic));sscore<-score_spectrum(pscore)
- ev<-magmaan:::infer_fmg_ugamma_spectra(snapshot,X,FALSE)$biased
+ ev<-magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,FALSE)$biased
  df<-fm$df[1];T<-fm$base_statistic[1];eig<-sort(pmax(ev,0),decreasing=TRUE)
  ug<-lavaan:::lav_test_fmg_ugamma(lavobject=lf)
  u<-core$robust_build_u_factor_fit(snapshot)
@@ -50,7 +50,7 @@ for(j in seq_len(nrow(cases))){
  if(c$meanstructure)Z<-cbind(scale(X,center=TRUE,scale=FALSE),Z)
  M<-crossprod(Z%*%u$B)/c$n
  stopifnot(max(abs(sort(core$robust_ugamma_eigenvalues(M))-sort(ev)))<1e-7)
- magcal<-function(method)magmaan:::infer_fmg_test(T,df,eig,method=method,param=4)$p_value
+ magcal<-function(method)magmaanlab:::infer_fmg_test(T,df,eig,method=method,param=4)$p_value
  lavcal<-function(method)if(method=='sb')lavaan:::lav_test_fmg_sb(T,eig) else lavaan:::lav_test_fmg_peba(T,eig,j=4L)
  ls<-lavfit('sb')
  checks[[j]]<-data.frame(c,df=df,
@@ -70,7 +70,7 @@ for(j in seq_len(nrow(cases))){
   mag_postfit_sb=function()fmg_tests(ic,tests='sb_ml'),
   mag_postfit_peba=function()fmg_tests(ic,tests='peba4_ml'),
   lav_postfit_peba=function()lavaan:::lav_test_fmg(lavobject=lf,test='peba4_ml'),
-  mag_spectra=function()magmaan:::infer_fmg_ugamma_spectra(snapshot,X,FALSE),
+  mag_spectra=function()magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,FALSE),
   mag_eigen_only=function()core$robust_ugamma_eigenvalues(M),
   lav_ugamma=function()lavaan:::lav_test_fmg_ugamma(lavobject=lf),
   lav_eigen_only=function()lavaan:::lav_test_fmg_ugamma_eigenvalues(ug,df),
@@ -81,11 +81,11 @@ for(j in seq_len(nrow(cases))){
   mag_score_spectrum=function()score_spectrum(pscore),
   mag_score_cal_peba=function()calibrate_quadratic(sscore,'peba4'),
   # Tiny native call, same wrapper family: an empirical lower bound on call overhead.
-  mag_native_chisq_call=function()magmaan:::infer_chi2_pvalue(T,as.integer(df))
+  mag_native_chisq_call=function()magmaanlab:::infer_chi2_pvalue(T,as.integer(df))
  )
  if('--legacy-and-wrappers'%in%args){
-  ss<-magmaan:::fit_sample_stats(snapshot);implied<-magmaan:::model_implied(snapshot)
-  res<-magmaan:::infer_fmg_test(T,df,eig,method='peba',param=4)
+  ss<-magmaanlab:::fit_sample_stats(snapshot);implied<-magmaanlab:::model_implied(snapshot)
+  res<-magmaanlab:::infer_fmg_test(T,df,eig,method='peba',param=4)
   row<-list(input='peba4_ml',label='peba4_ml',p_value=res$p_value,df=res$df,
     base='ml',base_statistic=res$chi2_source,method=res$method,param=res$param,
     ug=FALSE,chi2_equiv=res$chi2_equiv,n_truncated=res$n_truncated,
@@ -100,14 +100,14 @@ for(j in seq_len(nrow(cases))){
    lav_fit_peba_semtests_legacy=function(){z<-lavfit('standard');semTests::pvalues(z,tests='peba4_ml')},
    semtests_peba_postfit_legacy=function()semTests::pvalues(oldref,tests='peba4_ml'),
    mag_postfit_peba=phases$mag_postfit_peba,
-   mag_postfit_sample_extract=function()magmaan:::fit_sample_stats(snapshot),
-   mag_postfit_df=function()magmaan:::infer_df_stat(snapshot$partable,ss),
-   mag_postfit_implied=function()magmaan:::model_implied(snapshot),
-   mag_postfit_unused_rls=function()magmaan:::infer_rls_chi2_fit(snapshot,implied),
-   mag_postfit_test_parse=function()magmaan:::.fmg_parse_test('peba4_ml'),
-   mag_postfit_result_frame=function()magmaan:::.fmg_rows_to_df(list(row)),
-   mag_postfit_raw_extract=function()magmaan:::.fmg_raw_from_fit_or_data(snapshot,NULL),
-   mag_postfit_raw_check=function()magmaan:::.fmg_validate_complete_raw(snapshot,X),
+   mag_postfit_sample_extract=function()magmaanlab:::fit_sample_stats(snapshot),
+   mag_postfit_df=function()magmaanlab:::infer_df_stat(snapshot$partable,ss),
+   mag_postfit_implied=function()magmaanlab:::model_implied(snapshot),
+   mag_postfit_unused_rls=function()magmaanlab:::infer_rls_chi2_fit(snapshot,implied),
+   mag_postfit_test_parse=function()magmaanlab:::.fmg_parse_test('peba4_ml'),
+   mag_postfit_result_frame=function()magmaanlab:::.fmg_rows_to_df(list(row)),
+   mag_postfit_raw_extract=function()magmaanlab:::.fmg_raw_from_fit_or_data(snapshot,NULL),
+   mag_postfit_raw_check=function()magmaanlab:::.fmg_validate_complete_raw(snapshot,X),
    mag_spectra=phases$mag_spectra,mag_cal_peba=phases$mag_cal_peba
   )
  }

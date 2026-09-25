@@ -16,7 +16,7 @@ test_that("FIML fit_measures uses the FIML-specific bridge", {
     measures_fit = function(...) {
       stop("wrong complete-data fit-measure path")
     },
-    .package = "magmaan"
+    .package = "magmaanlab"
   )
 
   raw <- structure(list(), class = "magmaan_fiml_data")
@@ -41,8 +41,8 @@ test_that("FIML fit_measures exposes robust baseline CFI and RMSEA fields", {
   )
   model <- "f =~ x1 + x2 + x3 + x4"
 
-  fit_fiml <- magmaan(model, dat, estimator = "FIML")
-  fit_ml <- magmaan(model, dat, estimator = "ML")
+  fit_fiml <- fit_model(model, dat, estimator = "FIML")
+  fit_ml <- fit_model(model, dat, estimator = "ML")
   fm <- fit_measures(fit_fiml, robust = TRUE)
   fm_ml <- fit_measures(fit_ml)
 

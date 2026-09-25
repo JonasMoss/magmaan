@@ -1,5 +1,5 @@
 # Reusable score objects and covariance/Wald composition; no simulation run.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(731)
 x <- matrix(rnorm(400 * 6), 400, 6) + rnorm(400)
 colnames(x) <- paste0('x', 1:6)
@@ -59,13 +59,13 @@ stopifnot(max(abs(score_components(prepare_inference(fit, data))$score - score_c
 y <- x; y$x1 <- y$x1 + .2
 reject(prepare_inference(fit, y), 'match the fitted sample')
 missing <- x; missing[seq(1,400,5),2] <- NA; missing[seq(3,400,7),5] <- NA
-ff <- magmaan(syntax, missing, estimator = 'FIML', control = control)
+ff <- fit_model(syntax, missing, estimator = 'FIML', control = control)
 check_score(ff)
-f2 <- magmaan(syntax, missing, estimator = 'ML2S', control = control)
+f2 <- fit_model(syntax, missing, estimator = 'ML2S', control = control)
 check_score(f2)
 
 # The nested score uses an H1 model only, without an H1 fit.
-h0 <- magmaan(paste(syntax, 'a == b', sep = '\n'), x, meanstructure = TRUE, control = control)
+h0 <- fit_model(paste(syntax, 'a == b', sep = '\n'), x, meanstructure = TRUE, control = control)
 h1 <- model_spec(syntax, meanstructure = TRUE)
 nc <- prepare_inference(h0, x)
 np <- project_scores(score_components(nc, H1 = h1), retain_rows = TRUE)
@@ -101,9 +101,9 @@ stopifnot(abs(calibrate_quadratic(nref,'sb')$p_value -
 # A modified extracted fit must invalidate cached structure/sample context.
 changed <- context$fit
 changed$nobs <- changed$nobs * 2
-cached <- magmaan:::infer_information_expected(changed)
+cached <- magmaanlab:::infer_information_expected(changed)
 attr(changed,'magmaan_context') <- NULL
-fresh <- magmaan:::infer_information_expected(changed)
+fresh <- magmaanlab:::infer_information_expected(changed)
 stopifnot(max(abs(cached-fresh)) < 1e-8)
 cat('Prepared GOF/LR compatibility and invalidation checks passed.\n')
 

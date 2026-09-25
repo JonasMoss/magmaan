@@ -29,12 +29,12 @@ base <- dirname(script)
 source(file.path(base,'..','..', '_support','R','helpers.R'))
 source(file.path(base,'R','design.R'))
 set_single_threaded_math()
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 outdir <- file.path(base,'results',opts$output)
 if(dir.exists(outdir)) stop('Output already exists; choose another --output')
 dir.create(outdir,recursive=TRUE)
 write_out <- function(x,name) write.csv(x,file.path(outdir,name),row.names=FALSE,na='')
-package_files <- list.files(find.package('magmaan'),pattern='\\.(so|rdb|rdx)$|^DESCRIPTION$',recursive=TRUE,full.names=TRUE)
+package_files <- list.files(find.package('magmaanlab'),pattern='\\.(so|rdb|rdx)$|^DESCRIPTION$',recursive=TRUE,full.names=TRUE)
 package_hashes <- tools::md5sum(package_files)
 started <- Sys.time(); start <- clock_seconds()
 power <- function() {
@@ -131,12 +131,12 @@ write_out(data.frame(phase=c('setup','warmup','simulation_loop','total_runner'),
  workers=opts$workers,blas_threads=1,run_id=opts$output),'score_lrt_timing.csv')
 stopifnot(identical(package_hashes,tools::md5sum(package_files)))
 write_out(data.frame(path=names(package_hashes),md5=unname(package_hashes)),'package_fingerprints.csv')
-dll <- getLoadedDLLs()[['magmaan']][['path']]
+dll <- getLoadedDLLs()[['magmaanlab']][['path']]
 meta <- c(started_utc=format(started,tz='UTC',usetz=TRUE),finished_utc=format(Sys.time(),tz='UTC',usetz=TRUE),
  power_start=power_start,power_end=power(),command=paste(commandArgs(),collapse=' '),
  seed_base=opts$seed_base,reps=opts$reps,workers=opts$workers,blas_threads=1,git_head=head,
- package_path=find.package('magmaan'),package_version=as.character(packageVersion('magmaan')),
- dll_md5=version_hash(dll),r_database_md5=version_hash(file.path(find.package('magmaan'),'R','magmaan.rdb')),
+ package_path=find.package('magmaanlab'),package_version=as.character(packageVersion('magmaanlab')),
+ dll_md5=version_hash(dll),r_database_md5=version_hash(file.path(find.package('magmaanlab'),'R','magmaan.rdb')),
  cpu=paste(unique(sub('.*: ','',grep('model name',readLines('/proc/cpuinfo'),value=TRUE))),collapse='; '),
  active_researcher_seconds=NA,question_to_report_seconds=NA)
 write_out(data.frame(key=names(meta),value=unname(meta)),'metadata.csv')

@@ -7,7 +7,7 @@ if('--help' %in% args) {
 }
 script <- normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))
 base <- dirname(script); source(file.path(base,'R','design.R'))
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 # Diagnostic composition for single-group complete-data covariance models only.
 # One U-factor and one reduced empirical meat; retain the uncentered score correction.
 shared_primary <- function(f, d) {
@@ -22,7 +22,7 @@ shared_primary <- function(f, d) {
  # Match the existing calibrators' treatment of roundoff at zero eigenvalues.
  stopifnot(min(lr_ev)>-1e-8,min(sc_ev)>-1e-8)
  lr_ev <- pmax(lr_ev,0); sc_ev <- pmax(sc_ev,0)
- t_lr <- magmaan:::infer_chi2_stat(magmaan:::fit_sample_stats(f),f$fmin)
+ t_lr <- magmaanlab:::infer_chi2_stat(magmaanlab:::fit_sample_stats(f),f$fmin)
  list(lr=calibrate_quadratic(quadratic_reference(t_lr,u$df,lr_ev),c('sb','peba4')),
       score=calibrate_quadratic(quadratic_reference(sum(v*v),u$df,sc_ev),c('sb','peba4')),
       lr_ev=lr_ev,score_ev=sc_ev,statistic=sum(v*v))
@@ -47,12 +47,12 @@ for(j in seq_len(nrow(grid))) {
  f <- fit_sample(ctx,d)
  fp <- estimate(model,prepared_data,control=control)
  stopifnot(f$converged,fp$converged,max(abs(f$theta-fp$theta))<1e-5)
- context <- prepare_inference(f,d);snapshot <- magmaan:::.inference_fit(context)
+ context <- prepare_inference(f,d);snapshot <- magmaanlab:::.inference_fit(context)
  components <- score_components(context);projected <- project_scores(components)
  spectrum <- score_spectrum(projected)
  centered <- score_spectrum(project_scores(components,center=TRUE))
  X <- as.matrix(d)
- ev <- magmaan:::infer_fmg_ugamma_spectra(snapshot,X,FALSE)
+ ev <- magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,FALSE)
  lr <- fmg_tests(context,tests=lr_tests)
  primary <- function(context) {
    a <- fmg_tests(context,tests=c('sb_ml','peba4_ml'))
@@ -84,8 +84,8 @@ for(j in seq_len(nrow(grid))) {
    lr_eight_tests=function()fmg_tests(context,tests=lr_tests),
    lr_primary_two=function()fmg_tests(context,tests=c('sb_ml','peba4_ml')),
    lr_sb_only=function()fmg_tests(context,tests='sb_ml'),
-   lr_spectra_biased=function()magmaan:::infer_fmg_ugamma_spectra(snapshot,X,FALSE),
-   lr_spectra_both=function()magmaan:::infer_fmg_ugamma_spectra(snapshot,X,TRUE),
+   lr_spectra_biased=function()magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,FALSE),
+   lr_spectra_both=function()magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,TRUE),
    score_components=function()score_components(context),
    score_projection=function()project_scores(components),
    score_spectrum=function()score_spectrum(projected),

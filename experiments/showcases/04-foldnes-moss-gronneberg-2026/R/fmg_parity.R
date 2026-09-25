@@ -11,9 +11,9 @@
 # Accessor: prefer the core wrapper if the R package has wired it, else the
 # exported Rcpp binding.
 fmg_test_fn <- function() {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   if ("robust_fmg_test" %in% ls(core)) return(core$robust_fmg_test)
-  get("infer_fmg_test", envir = asNamespace("magmaan"))
+  get("infer_fmg_test", envir = asNamespace("magmaanlab"))
 }
 
 # Parse a semTests test name into magmaan's (method, param, chisq, unbiased),

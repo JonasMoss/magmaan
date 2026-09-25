@@ -1,5 +1,5 @@
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 utils::data("HolzingerSwineford1939", package = "lavaan")
 df <- HolzingerSwineford1939
@@ -15,10 +15,10 @@ lavaan_model <- "visual =~ x1 + a*x2 + b*x3
                  sum_ab := ab + a
                  fixed_plus := 1 + a"
 
-fit <- magmaan::magmaan(model, df, estimator = "ML")
+fit <- magmaanlab::fit_model(model, df, estimator = "ML")
 info <- core$inference_information_expected(fit)
 vc <- core$inference_vcov_partable(info, fit$partable)
-defs <- magmaan::compute_defined(model, fit, vc)
+defs <- magmaanlab::compute_defined(model, fit, vc)
 
 lav <- lavaan::cfa(lavaan_model, data = df)
 lav_defs <- lavaan::parameterEstimates(lav)

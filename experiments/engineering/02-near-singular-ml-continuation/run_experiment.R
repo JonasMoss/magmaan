@@ -114,10 +114,10 @@ fit_one <- function(method, spec, dat, optimizer, control, alphas, target) {
   fit <- withCallingHandlers(
     try(
       if (identical(method, "baseline_ml")) {
-        magmaan::magmaan_core$fit_ml(spec, dat, optimizer = optimizer,
+        magmaanlab::magmaan_core$fit_ml(spec, dat, optimizer = optimizer,
                                      control = control)
       } else {
-        magmaan::magmaan_core$frontier_fit_ml_ridge_continuation(
+        magmaanlab::magmaan_core$frontier_fit_ml_ridge_continuation(
           spec, dat, optimizer = optimizer, control = control,
           alphas = alphas, target = target)
       },
@@ -245,9 +245,9 @@ main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
   ensure_results_dir()
 
-  require_pkg("magmaan", "Install the local R package first, e.g. `just r-install`")
+  require_pkg("magmaanlab", "Install the local R package first, e.g. `just r-install`")
 
-  spec <- magmaan::model_spec(model_syntax(args$p))
+  spec <- magmaanlab::model_spec(model_syntax(args$p))
   control <- list(max_iter = args$max_iter)
   rows <- vector("list", args$reps * 2L)
   pos <- 1L
@@ -255,7 +255,7 @@ main <- function() {
   for (r in seq_len(args$reps)) {
     seed <- args$seed + r - 1L
     df <- simulate_case(args$n, args$p, args$loading, args$residual, seed)
-    dat <- magmaan::df_to_data(df, spec)
+    dat <- magmaanlab::df_to_data(df, spec)
     sample_diag <- safe_condition(dat$S[[1L]])
     rows[[pos]] <- fit_row(r, seed, "baseline_ml", spec, dat, args$optimizer,
                            control, args$alphas, args$target, sample_diag)
@@ -285,7 +285,7 @@ main <- function() {
       alphas = args$alphas,
       n_fit_rows = nrow(rows)
     ),
-    packages = "magmaan"
+    packages = "magmaanlab"
   )
 
   print(summary, row.names = FALSE)

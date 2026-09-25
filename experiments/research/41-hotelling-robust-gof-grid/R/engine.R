@@ -14,7 +14,7 @@ hrg_population <- function(p) {
 }
 
 hrg_model_spec <- function(p) {
-  magmaan::model_spec(
+  magmaanlab::model_spec(
     paste0("f =~ ", paste0("x", seq_len(p), collapse = " + ")),
     std_lv = FALSE, meanstructure = FALSE)
 }
@@ -29,7 +29,7 @@ hrg_calibrate_sampler <- function(pop, distribution,
   }
   list(
     kind = "vm",
-    calibration = magmaan:::sim_vm_calibrate_impl(
+    calibration = magmaanlab:::sim_vm_calibrate_impl(
       stats::cov2cor(pop$Sigma),
       rep(skew, pop$p), rep(exkurt, pop$p)),
     sds = sqrt(diag(pop$Sigma)))
@@ -41,7 +41,7 @@ hrg_draw <- function(sampler, n, seed) {
     X <- matrix(
       stats::rnorm(n * ncol(sampler$L)), nrow = n) %*% sampler$L
   } else {
-    batch <- magmaan:::sim_vm_draw_impl(
+    batch <- magmaanlab:::sim_vm_draw_impl(
       sampler$calibration, n = as.integer(n), reps = 1L,
       seed_base = as.integer(seed))
     X <- sweep(batch$draws[[1L]], 2L, sampler$sds, "*")
@@ -52,7 +52,7 @@ hrg_draw <- function(sampler, n, seed) {
 }
 
 hrg_fit <- function(spec, X) {
-  magmaan::magmaan(
+  magmaanlab::fit_model(
     spec, as.data.frame(X), estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     se = "none", test = "none")
@@ -61,7 +61,7 @@ hrg_fit <- function(spec, X) {
 # Model-centred saturated covariance contributions, projected onto the
 # expected-information complement of the fitted model tangent.
 hrg_projected_scores <- function(fit, X) {
-  core <- magmaan::magmaan_core
+  core <- magmaanlab::magmaan_core
   uf <- core$infer_build_u_factor(
     fit, bread = "expected", moments = "structured")
   if (!identical(uf$kind, "ProjectionExpected") ||
@@ -214,7 +214,7 @@ hrg_one_rep <- function(cell, rep_id, spec, sampler, seed_base) {
 
   fmg_begin <- proc.time()[["elapsed"]]
   fmg <- tryCatch(
-    magmaan::fmg_tests(
+    magmaanlab::fmg_tests(
       fit, tests = c("sb_rls", "mv_rls", "peba4_rls"), data = X),
     error = function(e) e)
   out$fmg_seconds <- proc.time()[["elapsed"]] - fmg_begin

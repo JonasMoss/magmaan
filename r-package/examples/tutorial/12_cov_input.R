@@ -5,7 +5,7 @@
 ## list(S = , nobs = ) in place of a data frame. The fit must match the
 ## raw-data fit of the same model.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -34,7 +34,7 @@ nobs <- nrow(hs)
 ## fit exactly the same moments.
 S <- cov(hs) * (nobs - 1) / nobs
 
-fit <- magmaan(model, list(S = S, nobs = nobs), estimator = "ML",
+fit <- fit_model(model, list(S = S, nobs = nobs), estimator = "ML",
                se = "none", test = "none")
 lav <- cfa(model, sample.cov = S, sample.nobs = nobs,
            sample.cov.rescale = FALSE)

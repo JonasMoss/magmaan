@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -102,7 +102,7 @@ for (model_id in names(models)) {
 }
 
 fmg_p <- function(statistic, df, eigenvalues) {
-  magmaan:::infer_fmg_test(
+  magmaanlab:::infer_fmg_test(
     statistic, df, eigenvalues,
     method = "peba", param = 4,
     truncate_negative = TRUE)$p_value
@@ -141,19 +141,19 @@ one_rep <- function(cell, rep_id) {
     X <- sem_draw(model, sampler, opts$n, seed)
     set.seed(seed + 700001L)
     X <- sem_apply_missingness(X, cell$missingness)
-    fd <- magmaan::df_to_fiml_data(as.data.frame(X), model$spec)
+    fd <- magmaanlab::df_to_fiml_data(as.data.frame(X), model$spec)
     control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
-    em <- magmaan::magmaan_core$estimate_saturated_em_moments(
+    em <- magmaanlab::magmaan_core$estimate_saturated_em_moments(
       fd, control = control)
-    fit <- magmaan::magmaan_core$fit_fiml(
+    fit <- magmaanlab::magmaan_core$fit_fiml(
       model$spec, fd,
       optimizer = "nlopt-lbfgs-slsqp-fallback",
       control = control)
     fit$stage1 <- em
     if (!isTRUE(fit$converged)) stop("FIML fit did not converge")
 
-    lrt <- magmaan::fmg_tests(fit, tests = "all")
-    score <- magmaan::global_score_flip_test(
+    lrt <- magmaanlab::fmg_tests(fit, tests = "all")
+    score <- magmaanlab::global_score_flip_test(
       fit,
       n_flips = 1L,
       seed = seed + 900001L,
@@ -254,7 +254,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   seed_base = opts$seed_base,
   failures = sum(!raw$ok),
   runtime_wall_seconds = proc.time()[["elapsed"]] - begin),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "runtime_wall=%.1fs failures=%d/%d\n\n",

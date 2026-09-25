@@ -89,7 +89,7 @@
 # which are then validated against magmaan's `model_implied` at the population
 # point, and the run aborts if they disagree.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
@@ -359,9 +359,9 @@ validate_chart_map <- function(p, chart, theta, pop) {
     effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
   S <- pop$Sigma; dimnames(S) <- list(ov(p), ov(p))
   dfr <- exact_cov_data(S, max(50L * p, 500L))
-  fit <- tryCatch(magmaan:::fit_ml(spec, df_to_data(dfr, spec)), error = function(e) NULL)
+  fit <- tryCatch(magmaanlab:::fit_ml(spec, df_to_data(dfr, spec)), error = function(e) NULL)
   if (is.null(fit)) return(c(own = own, magmaan = NA_real_))
-  imp <- tryCatch(unlist(magmaan:::model_implied(fit)), error = function(e) NULL)
+  imp <- tryCatch(unlist(magmaanlab:::model_implied(fit)), error = function(e) NULL)
   if (is.null(imp)) return(c(own = own, magmaan = NA_real_))
   c(own = own, magmaan = max(abs(as.numeric(imp) - as.numeric(pop$Sigma))))
 }
@@ -422,7 +422,7 @@ run_cost <- function(opts) {
           effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
         dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
         if (is.null(dd)) next
-        fit <- tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
+        fit <- tryCatch(magmaanlab:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
         if (is.null(fit)) next
         # Batched, so these are real microsecond measurements rather than 1 ms
         # quantisation noise. `spec` timing includes df_to_data because that is
@@ -432,7 +432,7 @@ run_cost <- function(opts) {
                 std_lv = model_spec(syn, std_lv = TRUE),
                 effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
               df_to_data(dfr, s) })
-        tf <- time_per_call(function() magmaan:::fit_ml(spec, dd, optimizer = be))
+        tf <- time_per_call(function() magmaanlab:::fit_ml(spec, dd, optimizer = be))
         tb <- time_per_call(function() backconvert_to_marker(fit$theta, p, ch))
         rows[[length(rows) + 1L]] <- data.frame(
           p = p, lambda1 = l1, chart = ch, backend = be, replicate = r,
@@ -501,10 +501,10 @@ run_structural <- function(opts) {
     dfr0 <- exact_cov_data(pop$Sigma, 2000L)
     for (ch in charts) {
       spec <- if (ch == "marker") model_spec(syn) else model_spec(syn, std_lv = TRUE)
-      f <- tryCatch(magmaan:::fit_ml(spec, df_to_data(dfr0, spec)), error = function(e) NULL)
+      f <- tryCatch(magmaanlab:::fit_ml(spec, df_to_data(dfr0, spec)), error = function(e) NULL)
       if (is.null(f)) next
       V <- tryCatch({
-        core <- magmaan::magmaan_core
+        core <- magmaanlab::magmaan_core
         as.matrix(core$inference_vcov_fit(core$inference_information_expected(f), f))
       }, error = function(e) NULL)
       if (!is.null(V)) cond[[ch]] <- pcond_of(V)
@@ -522,7 +522,7 @@ run_structural <- function(opts) {
           spec <- if (ch == "marker") model_spec(syn) else model_spec(syn, std_lv = TRUE)
           dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
           f <- if (is.null(dd)) NULL else
-            tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
+            tryCatch(magmaanlab:::fit_ml(spec, dd, optimizer = be), error = function(e) NULL)
           got[[ch]] <- f
         }
         fm <- vapply(charts, function(ch) {
@@ -593,9 +593,9 @@ run_backconvert <- function(opts) {
     colnames(X) <- ov(p); dfr <- as.data.frame(X)
 
     sp_m <- model_spec(syn)
-    fm <- tryCatch(magmaan:::fit_ml(sp_m, df_to_data(dfr, sp_m)), error = function(e) NULL)
+    fm <- tryCatch(magmaanlab:::fit_ml(sp_m, df_to_data(dfr, sp_m)), error = function(e) NULL)
     if (is.null(fm)) next
-    Sig_marker <- tryCatch(matrix(as.numeric(unlist(magmaan:::model_implied(fm))), p, p),
+    Sig_marker <- tryCatch(matrix(as.numeric(unlist(magmaanlab:::model_implied(fm))), p, p),
                            error = function(e) NULL)
 
     for (ch in setdiff(opts$charts, "marker")) {
@@ -604,7 +604,7 @@ run_backconvert <- function(opts) {
         effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
       dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
       if (is.null(dd)) next
-      fit <- tryCatch(magmaan:::fit_ml(spec, dd), error = function(e) NULL)
+      fit <- tryCatch(magmaanlab:::fit_ml(spec, dd), error = function(e) NULL)
       if (is.null(fit)) next
 
       # Accuracy first: this is the disqualifying check. Back-convert the fitted
@@ -620,7 +620,7 @@ run_backconvert <- function(opts) {
 
       t_point <- time_per_call(function() backconvert_to_marker(th_own, p, ch))
       # vcov transform, timed on magmaan's own expected information at the fit.
-      core <- magmaan::magmaan_core
+      core <- magmaanlab::magmaan_core
       V <- tryCatch({
         info <- core$inference_information_expected(fit)
         as.matrix(core$inference_vcov_fit(info, fit))
@@ -639,7 +639,7 @@ run_backconvert <- function(opts) {
         tv <- time_per_call(function() J %*% V %*% t(J))
         t_vcov <- tv[["median"]]; vdim <- nrow(V)
       }
-      t_fit <- time_per_call(function() magmaan:::fit_ml(spec, dd))
+      t_fit <- time_per_call(function() magmaanlab:::fit_ml(spec, dd))
       rows[[length(rows) + 1L]] <- data.frame(
         p = p, lambda1 = l1, chart = ch, n = opts$n,
         roundtrip_max_abs_sigma = roundtrip,
@@ -682,7 +682,7 @@ run_convergence <- function(opts) {
           effect = model_spec(syn, effect_coding = TRUE, auto_fix_first = FALSE))
         dd <- tryCatch(df_to_data(dfr, spec), error = function(e) NULL)
         if (is.null(dd)) { errored <- TRUE; fit <- NULL } else {
-          fit <- tryCatch(magmaan:::fit_ml(spec, dd, optimizer = be),
+          fit <- tryCatch(magmaanlab:::fit_ml(spec, dd, optimizer = be),
                           error = function(e) NULL)
         }
         vars <- if (is.null(fit)) numeric(0) else {
@@ -731,9 +731,9 @@ run_inference <- function(opts) {
           marker = model_spec(s),
           std_lv = model_spec(s, std_lv = TRUE),
           effect = model_spec(s, effect_coding = TRUE, auto_fix_first = FALSE))
-        f1 <- tryCatch({ sp <- mk(syn_h1); magmaan:::fit_ml(sp, df_to_data(dfr, sp)) },
+        f1 <- tryCatch({ sp <- mk(syn_h1); magmaanlab:::fit_ml(sp, df_to_data(dfr, sp)) },
                        error = function(e) NULL)
-        f0 <- tryCatch({ sp <- mk(syn_h0); magmaan:::fit_ml(sp, df_to_data(dfr, sp)) },
+        f0 <- tryCatch({ sp <- mk(syn_h0); magmaanlab:::fit_ml(sp, df_to_data(dfr, sp)) },
                        error = function(e) NULL)
         if (is.null(f1) || is.null(f0)) next
         m1 <- tryCatch(fit_measures(f1), error = function(e) NULL)
@@ -849,5 +849,5 @@ write_metadata(file.path(res_dir, "metadata.csv"),
                 # AGENTS.md forbids an experiment leaf referencing a sibling
                 # experiment from code, and a metadata string value is code.
                 supersedes = "archived experiment _archive/latent-metric-identification (latent metric identification)"),
-  packages = c("magmaan", "MASS"))
+  packages = c("magmaanlab", "MASS"))
 cat("metadata -> metadata.csv\n")

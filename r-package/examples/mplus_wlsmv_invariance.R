@@ -8,7 +8,7 @@
 ## exercises the same helper and the mixed ordinal restriction-map bridge on a
 ## deterministic listwise mixed continuous/ordinal model.
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 ctrl <- list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8)
 
 fixture <- function(name) {

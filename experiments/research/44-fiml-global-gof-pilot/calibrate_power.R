@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -60,6 +60,6 @@ write_metadata(sub("\\.csv$", "_metadata.csv", opts$output), list(
   reference = "population normal-theory ML chi-square",
   noncentrality = "(n-1) times population FML",
   alternatives = sem_power_alternatives,
-  models = names(models)), packages = "magmaan")
+  models = names(models)), packages = "magmaanlab")
 print(calibration, row.names = FALSE, digits = 5)
 cat("wrote ", opts$output, "\n", sep = "")

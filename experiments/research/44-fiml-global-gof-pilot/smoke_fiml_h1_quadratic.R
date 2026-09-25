@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -187,7 +187,7 @@ stack_h1_displacement <- function(stage1, implied) {
 }
 
 fmg_p <- function(statistic, df, eigenvalues, method) {
-  magmaan:::infer_fmg_test(
+  magmaanlab:::infer_fmg_test(
     statistic, df, eigenvalues,
     method = method, param = 4,
     truncate_negative = TRUE)$p_value
@@ -239,18 +239,18 @@ one_rep <- function(cell, rep_id) {
     X <- sem_apply_missingness(X, cell$missingness)
     realized_missing <- mean(is.na(X))
     data_frame <- as.data.frame(X)
-    fd <- magmaan::df_to_fiml_data(data_frame, model$spec)
+    fd <- magmaanlab::df_to_fiml_data(data_frame, model$spec)
     control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
-    stage1 <- magmaan::magmaan_core$estimate_saturated_em_moments(
+    stage1 <- magmaanlab::magmaan_core$estimate_saturated_em_moments(
       fd, control = control)
-    fit <- magmaan::magmaan_core$fit_fiml(
+    fit <- magmaanlab::magmaan_core$fit_fiml(
       model$spec, fd,
       optimizer = "nlopt-lbfgs-slsqp-fallback",
       control = control)
     fit$stage1 <- stage1
     if (!isTRUE(fit$converged)) stop("FIML fit did not converge")
 
-    implied <- magmaan:::model_implied(fit)
+    implied <- magmaanlab:::model_implied(fit)
     displacement <- stack_h1_displacement(stage1, implied)
     if (length(displacement) != nrow(stage1$H)) {
       stop("moment displacement and H1 information disagree")
@@ -278,11 +278,11 @@ one_rep <- function(cell, rep_id) {
     statistic_h0_expected <- drop(crossprod(
       displacement, H0_expected %*% displacement))
 
-    lrt <- magmaan::fmg_tests(fit, tests = "all")
+    lrt <- magmaanlab::fmg_tests(fit, tests = "all")
     statistic_lrt <- lrt$base_statistic[[1L]]
     df <- as.integer(lrt$df[[1L]])
     eigenvalues <- lrt$eigenvalues[[1L]]
-    score <- magmaan::global_score_flip_test(
+    score <- magmaanlab::global_score_flip_test(
       fit,
       n_flips = 1L,
       seed = seed + 900001L,
@@ -292,12 +292,12 @@ one_rep <- function(cell, rep_id) {
 
     statistic_rls <- NA_real_
     if (identical(cell$missingness, "complete")) {
-      fit_ml <- magmaan::magmaan(
+      fit_ml <- magmaanlab::fit_model(
         model$spec, data_frame, estimator = "ML",
         optimizer = "nlopt-lbfgs-slsqp-fallback")
       if (!isTRUE(fit_ml$converged)) stop("complete-data ML fit did not converge")
-      statistic_rls <- magmaan:::infer_rls_chi2_fit(
-        fit_ml, magmaan:::model_implied(fit_ml))$statistic
+      statistic_rls <- magmaanlab:::infer_rls_chi2_fit(
+        fit_ml, magmaanlab:::model_implied(fit_ml))$statistic
     }
 
     list(
@@ -439,7 +439,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   quadratics = paste(
     "(eta_H1-eta_H0)' H (eta_H1-eta_H0), with H equal to",
     "H1 observed, H0 observed, or H0 working-normal expected curvature")),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "runtime_wall=%.1fs failures=%d/%d\n\n",

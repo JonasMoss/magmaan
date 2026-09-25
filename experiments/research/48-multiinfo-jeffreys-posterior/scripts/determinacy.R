@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first (just r-dev)")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first (just r-dev)")
+suppressPackageStartupMessages(library(magmaanlab))
 
 exp_dir <- dirname(dirname(normalizePath(sub("^--file=", "", grep("^--file=",
   commandArgs(trailingOnly = FALSE), value = TRUE)[[1L]]))))

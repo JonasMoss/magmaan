@@ -10,7 +10,7 @@
 suppressPackageStartupMessages({
   library(jsonlite)
   library(lavaan)
-  library(magmaan)
+  library(magmaanlab)
 })
 
 args <- commandArgs(FALSE)
@@ -72,7 +72,7 @@ as_plain_vector <- function(x, names_ref = NULL) {
 
 align_magmaan_free <- function(model, lavaan_free, meanstructure,
                                model_type = "sem") {
-  mspec <- magmaan::model_spec(model, model_type = model_type,
+  mspec <- magmaanlab::model_spec(model, model_type = model_type,
                                meanstructure = meanstructure)
   mfree <- mspec$partable[mspec$partable$free > 0, , drop = FALSE]
   mfree <- mfree[order(mfree$free), , drop = FALSE]

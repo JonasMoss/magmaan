@@ -35,7 +35,7 @@ stress_model_specs <- function(ranks = stress_ranks) {
   args <- list(group = "school", group_labels = c("A", "B"),
                meanstructure = TRUE)
   make <- function(rank) do.call(
-    magmaan::model_spec,
+    magmaanlab::model_spec,
     c(list(syntax = stress_syntax(rank)), args))
   list(H1 = make(0L), H0 = stats::setNames(lapply(ranks, make), ranks))
 }

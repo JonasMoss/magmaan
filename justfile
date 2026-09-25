@@ -224,8 +224,17 @@ r-examples:
         Rscript "$f"
     done
 
-# Fast dev install + the example smoke tests.
-r-check: r-dev r-examples
+# Install the pure-R ordinary-user package `magmaan` from r-magmaan/. It imports
+# magmaanlab, so install that first (`just r-dev` or `just r-install`).
+r-magmaan:
+    R CMD INSTALL --no-byte-compile --no-docs --no-help r-magmaan
+
+# Install and test the ordinary-user package against the installed magmaanlab.
+r-magmaan-test: r-magmaan
+    Rscript -e 'testthat::test_dir("r-magmaan/tests/testthat", package = "magmaan", load_package = "installed", stop_on_failure = TRUE)'
+
+# Fast dev install + the example smoke tests + the ordinary-user package tests.
+r-check: r-dev r-examples r-magmaan-test
 
 # Force-clean the in-tree R build artifacts + the dev mirror.
 r-clean:

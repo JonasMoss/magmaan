@@ -2,7 +2,7 @@
 ## The scalar helper adds `f ~ c(0, NA)*1` before it constrains observed
 ## intercepts, matching the latent-mean identification required by lavaan.
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 
 set.seed(601)
 n <- c(180L, 220L)

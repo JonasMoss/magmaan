@@ -6,7 +6,7 @@
 ## continuous indicators are coarsened into 3-category ordinal variables and
 ## a one-factor model is fit with DWLS.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-2)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -31,7 +31,7 @@ ord <- data.frame(x4 = cut3(hs$x4), x5 = cut3(hs$x5), x6 = cut3(hs$x6))
 
 model <- "textual =~ x4 + x5 + x6"
 ordv  <- c("x4", "x5", "x6")
-fit <- magmaan(model, ord, estimator = "DWLS", ordered = ordv)
+fit <- fit_model(model, ord, estimator = "DWLS", ordered = ordv)
 lav <- cfa(model, data = ord, ordered = ordv)
 
 cat("=== categorical data: ordinal DWLS ===\n")

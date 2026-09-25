@@ -66,8 +66,8 @@ parse_args <- function(a) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 res_dir <- ensure_results_dir()
 
 # Two model sizes: 3 and 6 indicators per subscale, 3 orthogonal subscales. The
@@ -77,7 +77,7 @@ pops <- list(
   p9  = bifactor_population(per = 3L, gen = 0.6, grp = c(0.5, 0.4, 0.45)),
   p18 = bifactor_population(per = 6L, gen = 0.6, grp = c(0.5, 0.4, 0.45)))
 specs <- lapply(pops, function(pop)
-  magmaan::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE))
+  magmaanlab::model_spec(pop$syntax, orthogonal = TRUE, std_lv = TRUE))
 
 dists <- c("normal", "chisq")
 methods <- c("wald_model", "wald_robust", "logit_model", "logit_robust")
@@ -155,7 +155,7 @@ write_metadata(
     methods = paste(methods, collapse = ","),
     distributions = "normal; chisq (standardized chi-square_1 factors+errors, same Sigma)",
     note = "bootstrap percentile reference in scripts/bootstrap.R"),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat("\nGeneral factor (rho*_pop):\n")
 print(all_rows[all_rows$coef == "gen",

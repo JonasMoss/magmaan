@@ -17,8 +17,8 @@
 ## magmaan's LS chi-square is on the 2N*fmin scale; lavaan rescales by (N-G)/N,
 ## so the scaled difference is compared after that rescaling.
 
-suppressMessages({ library(magmaan); library(lavaan) })
-core <- magmaan::magmaan_core
+suppressMessages({ library(magmaanlab); library(lavaan) })
+core <- magmaanlab::magmaan_core
 ctrl <- list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8)
 
 make_ord_df_scaled <- function(n, cuts_by_var, seed = 1L,
@@ -50,12 +50,12 @@ ge_metric <- c("thresholds", "loadings")
 ge_scalar <- c("thresholds", "loadings", "intercepts")
 
 ## ---- ordinal DWLS-theta fits (one shared stats object) ---------------------
-spec_cfg <- magmaan::model_spec(model, ordered = ordered, parameterization = "theta",
+spec_cfg <- magmaanlab::model_spec(model, ordered = ordered, parameterization = "theta",
                                 group = "school", group_labels = glabels)
-spec_met <- magmaan::model_spec(model, ordered = ordered, parameterization = "theta",
+spec_met <- magmaanlab::model_spec(model, ordered = ordered, parameterization = "theta",
                                 group = "school", group_labels = glabels,
                                 group_equal = ge_metric)
-spec_sca <- magmaan::model_spec(model, ordered = ordered, parameterization = "theta",
+spec_sca <- magmaanlab::model_spec(model, ordered = ordered, parameterization = "theta",
                                 group = "school", group_labels = glabels,
                                 group_equal = ge_scalar)
 stats   <- core$data_ordinal_stats_from_df(df, spec_cfg)
@@ -72,7 +72,7 @@ lavaan_fit <- function(ge) {
 }
 
 check_nested <- function(label, fit_h1, fit_h0, ge_h1, ge_h0, scaled_tol = 5e-3) {
-  res <- magmaan::nestedTest(fit_h1, fit_h0, data = stats,
+  res <- magmaanlab::nestedTest(fit_h1, fit_h0, data = stats,
                              method = "satorra.2000", A.method = "delta",
                              weight = "DWLS")
   N <- fit_h1$ntotal; G <- fit_h1$ngroups
@@ -98,7 +98,7 @@ check_nested <- function(label, fit_h1, fit_h0, ge_h1, ge_h0, scaled_tol = 5e-3)
   stopifnot(abs(res$p_scaled - lav_p) < 5e-3)
 
   ## ---- FMG eigenvalue-tail diagnostics on the difference spectrum ----------
-  fr <- magmaan::fmg_nested_ordinal(fit_h1, fit_h0, stats, A.method = "delta")
+  fr <- magmaanlab::fmg_nested_ordinal(fit_h1, fit_h0, stats, A.method = "delta")
   cat("\n== fmg_nested_ordinal (default tests) ==\n")
   print(fr[, c("label", "base_statistic", "df", "p_value", "chi2_equiv")])
 
@@ -163,10 +163,10 @@ model_delta_scalar <- paste(
   "f ~ c(0, NA)*1",
   paste(sprintf("%s ~ c(0, 0)*1", ov_delta), collapse = "\n"),
   sep = "\n")
-spec_delta_h1 <- magmaan::model_spec(
+spec_delta_h1 <- magmaanlab::model_spec(
   model_delta, ordered = ov_delta, parameterization = "delta",
   group = "grp", group_labels = c("A", "B"))
-spec_delta_h0 <- magmaan::model_spec(
+spec_delta_h0 <- magmaanlab::model_spec(
   model_delta_scalar, ordered = ov_delta, parameterization = "delta",
   group = "grp", group_labels = c("A", "B"),
   group_equal = c("loadings", "thresholds"))
@@ -177,7 +177,7 @@ fit_delta_h1 <- core$fit_dwls_ordinal(spec_delta_h1, stats_delta,
                                       control = ctrl)
 fit_delta_h0 <- core$fit_dwls_ordinal(spec_delta_h0, stats_delta,
                                       control = ctrl)
-res_delta <- magmaan::nestedTest(fit_delta_h1, fit_delta_h0, data = stats_delta,
+res_delta <- magmaanlab::nestedTest(fit_delta_h1, fit_delta_h0, data = stats_delta,
                                  method = "satorra.2000", A.method = "delta",
                                  weight = "DWLS")
 stopifnot(identical(as.integer(res_delta$df_diff), 22L))

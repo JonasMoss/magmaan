@@ -26,7 +26,7 @@ ernst <- "X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X"
 
 test_that("sphere ML reproduces the ordinary ML fit", {
   dat <- ernst_sim()
-  ord <- magmaan(ernst, dat)
+  ord <- fit_model(ernst, dat)
   sph <- frontier_fit_sphere(ernst, dat)
   expect_s3_class(sph, "magmaan_fit")
   expect_true(sph$converged)
@@ -40,7 +40,7 @@ test_that("sphere ML reproduces the ordinary ML fit", {
 
 test_that("std.lv and multi-group metric invariance round-trip", {
   dat <- ernst_sim()
-  ord <- magmaan(ernst, dat, std_lv = TRUE)
+  ord <- fit_model(ernst, dat, std_lv = TRUE)
   sph <- frontier_fit_sphere(ernst, dat, std_lv = TRUE)
   expect_equal(sph$gauge$units$kind, c("linear", "linear"))
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
@@ -49,7 +49,7 @@ test_that("std.lv and multi-group metric invariance round-trip", {
              cbind(sphere_sim(seed = 2L, loadings = c(1, 0.8, 0.6, 0.7) * 1.2),
                    g = "b"))
   m <- "f =~ x1 + x2 + x3 + x4"
-  ord <- magmaan(m, g, groups = "g", group_equal = "loadings")
+  ord <- fit_model(m, g, groups = "g", group_equal = "loadings")
   sph <- frontier_fit_sphere(m, g, groups = "g", group_equal = "loadings")
   expect_equal(sph$gauge$units$blocks, "1,2")
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
@@ -58,14 +58,14 @@ test_that("std.lv and multi-group metric invariance round-trip", {
 test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
   dat <- ernst_sim()
   for (est in c("ULS", "GLS")) {
-    ord <- magmaan(ernst, dat, estimator = est)
+    ord <- fit_model(ernst, dat, estimator = est)
     sph <- frontier_fit_sphere(ernst, dat, estimator = est)
     expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
   }
   miss <- dat
   miss$x2[seq(3, nrow(miss), by = 7)] <- NA
   miss$y3[seq(5, nrow(miss), by = 11)] <- NA
-  ord <- magmaan(ernst, miss, estimator = "FIML")
+  ord <- fit_model(ernst, miss, estimator = "FIML")
   sph <- frontier_fit_sphere(ernst, miss, estimator = "FIML")
   expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-4)
@@ -97,9 +97,9 @@ test_that("a marker at a pole signals a classed condition with the sphere soluti
 
 test_that("frontier_reidentify moves a fit between identifications", {
   dat <- ernst_sim()
-  ord <- magmaan(ernst, dat)
+  ord <- fit_model(ernst, dat)
   std <- frontier_reidentify(ord, ernst, std_lv = TRUE)
-  direct <- magmaan(ernst, dat, std_lv = TRUE)
+  direct <- fit_model(ernst, dat, std_lv = TRUE)
   expect_equal(std$partable$est, direct$partable$est, tolerance = 1e-5)
   expect_error(frontier_reidentify(ord, "X =~ x1 + 0.5*x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X"),
                "different models")
@@ -107,7 +107,7 @@ test_that("frontier_reidentify moves a fit between identifications", {
 
 test_that("refitting helpers refit a sphere fit through the sphere", {
   dat <- ernst_sim(n = 120L)
-  ord <- magmaan(ernst, dat)
+  ord <- fit_model(ernst, dat)
   sph <- frontier_fit_sphere(ernst, dat)
   cr_s <- case_rerun(sph, dat, to_rerun = 1:3)
   cr_o <- case_rerun(ord, dat, to_rerun = 1:3)

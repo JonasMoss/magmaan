@@ -9,7 +9,7 @@
 ## GLS/WLS) and is leading-order only under misspecification.
 
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 ## Misspecified ordinal data: one factor plus an omitted x1-x2 residual
 ## association, so the single-factor model leaves real misfit for the MI to find.
@@ -26,16 +26,16 @@ df <- data.frame(x1 = mk(1), x2 = mk(2), x3 = mk(3), x4 = mk(4))
 
 model <- "f =~ x1 + x2 + x3 + x4"
 ordered <- paste0("x", 1:4)
-m <- magmaan::model_spec(model, ordered = ordered, parameterization = "delta")
+m <- magmaanlab::model_spec(model, ordered = ordered, parameterization = "delta")
 d <- core$data_ordinal_stats_from_df(df, m)
 fit <- core$fit_dwls_ordinal(m, d, control = list(max_iter = 4000, ftol = 1e-13))
 stopifnot(isTRUE(fit$ordinal), identical(fit$estimator, "DWLS"), fit$converged)
 
 ## Fixed-weight robust MI (the existing Satorra-Bentler-style sandwich) ...
-fixed <- magmaan::modification_indices_robust(fit, candidates = "all",
+fixed <- magmaanlab::modification_indices_robust(fit, candidates = "all",
                                               estimated_weight = FALSE)
 ## ... vs the complete (estimated-weight) sandwich.
-ew <- magmaan::modification_indices_robust(fit, candidates = "all",
+ew <- magmaanlab::modification_indices_robust(fit, candidates = "all",
                                            estimated_weight = TRUE)
 
 stopifnot(nrow(fixed) == nrow(ew), nrow(ew) > 1L)
@@ -53,10 +53,10 @@ print(head(ew[order(ew$mi.scaled, decreasing = TRUE),
 
 ## ML carries no estimated second-stage weight: the flag is rejected, not ignored.
 hs <- lavaan::HolzingerSwineford1939
-fit_ml <- magmaan::magmaan("f =~ x1 + x2 + x3", hs, estimator = "ML",
+fit_ml <- magmaanlab::fit_model("f =~ x1 + x2 + x3", hs, estimator = "ML",
                            se = "none", test = "none")
 err <- tryCatch(
-  magmaan::modification_indices_robust(fit_ml, data = hs,
+  magmaanlab::modification_indices_robust(fit_ml, data = hs,
                                        estimated_weight = TRUE),
   error = function(e) conditionMessage(e))
 stopifnot(is.character(err), grepl("estimated_weight", err))

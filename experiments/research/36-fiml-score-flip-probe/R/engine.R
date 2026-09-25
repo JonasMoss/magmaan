@@ -31,7 +31,7 @@ fiml_flip_make_sampler <- function(pop, distribution, n_values, reps,
   } else {
     lapply(pop$Sigma, function(Sigma) list(
       Sigma = Sigma,
-      calibration = magmaan::magmaan_core$sim_plsim_calibrate(
+      calibration = magmaanlab::magmaan_core$sim_plsim_calibrate(
         stats::cov2cor(Sigma), rep(3, 6), rep(21, 6),
         method = "hermite_then_rectangle", num_segments = 12L,
         quadrature_points = 31L, hermite_order = 24L)))
@@ -50,7 +50,7 @@ fiml_flip_make_sampler <- function(pop, distribution, n_values, reps,
             states[[g]]$L
         })
       } else {
-        batch <- magmaan::magmaan_core$sim_plsim_draw(
+        batch <- magmaanlab::magmaan_core$sim_plsim_draw(
           states[[g]]$calibration, n = sizes[[g]], reps = reps,
           seed_base = seed)
         scale <- sqrt(diag(states[[g]]$Sigma))
@@ -85,7 +85,7 @@ fiml_flip_apply_mcar <- function(data, ov, rate, seed) {
 }
 
 fiml_flip_fit_pair <- function(data, specs) {
-  fits <- lapply(specs, function(spec) magmaan::magmaan(
+  fits <- lapply(specs, function(spec) magmaanlab::fit_model(
     spec, data, estimator = "FIML",
     optimizer = "nlopt-lbfgs-slsqp-fallback",
     control = list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9),
@@ -142,7 +142,7 @@ fiml_flip_one_rep <- function(cell, rep_id, complete_data, specs, flips,
   values <- fiml_flip_empty_p()
 
   flip_begin <- proc.time()[["elapsed"]]
-  flip <- tryCatch(magmaan::score_flip_test(
+  flip <- tryCatch(magmaanlab::score_flip_test(
     fits$H1, fits$H0, n_flips = flips,
     seed = seed_base + cell$cell_id * 1000003L + rep_id),
     error = function(e) e)
@@ -155,7 +155,7 @@ fiml_flip_one_rep <- function(cell, rep_id, complete_data, specs, flips,
            call. = FALSE)
     }
     infer_score <- function(method, param = 4) tryCatch(
-      magmaan:::infer_fmg_test(
+      magmaanlab:::infer_fmg_test(
         flip$statistic_effective, flip$df, flip$eigenvalues,
         method = method, param = param)$p_value,
       error = function(e) NA_real_)
@@ -188,7 +188,7 @@ fiml_flip_one_rep <- function(cell, rep_id, complete_data, specs, flips,
   }
 
   nested_begin <- proc.time()[["elapsed"]]
-  nested <- tryCatch(magmaan::fmg_nested(
+  nested <- tryCatch(magmaanlab::fmg_nested(
     fits$H1, fits$H0, tests = fiml_flip_nested_tests, A.method = "exact"),
     error = function(e) e)
   out$nested_seconds <- proc.time()[["elapsed"]] - nested_begin

@@ -13,14 +13,14 @@ population <- function(p) {
 }
 prepare <- function(p, distribution) {
   pop <- population(p)
-  pop$cal <- if(distribution == 'vm2') magmaan::magmaan_core$sim_vm_calibrate(
+  pop$cal <- if(distribution == 'vm2') magmaanlab::magmaan_core$sim_vm_calibrate(
     pop$sigma, rep(3,p), rep(21,p)) else NULL
   pop
 }
 draw_sample <- function(ctx, n, distribution, seed) {
   p <- nrow(ctx$sigma)
   if(distribution == 'vm2') {
-    X <- magmaan::magmaan_core$sim_vm_draw(ctx$cal,n=n,reps=1L,seed_base=seed)$draws[[1L]]
+    X <- magmaanlab::magmaan_core$sim_vm_draw(ctx$cal,n=n,reps=1L,seed_base=seed)$draws[[1L]]
   } else {
     set.seed(seed)
     X <- matrix(rnorm(n*p),n,p) %*% ctx$root
@@ -40,7 +40,7 @@ measure <- function(expr) {
                   error=function(e)e)
   list(value=ans, seconds=clock_seconds()-start)
 }
-fit_sample <- function(ctx, d) magmaan::magmaan(ctx$syntax,d,estimator='ML',
+fit_sample <- function(ctx, d) magmaanlab::fit_model(ctx$syntax,d,estimator='ML',
   control=list(max_iter=4000L,ftol=1e-12,gtol=1e-8))
 one_rep <- function(cell, rep_id, ctx, seed_base) {
   seed <- seed_base + cell$cell_id*100000L + rep_id
@@ -65,8 +65,8 @@ one_rep <- function(cell, rep_id, ctx, seed_base) {
   if(!out$admissible[1]) {out$error <- 'fit covariance inadmissible';return(finish())}
   # Snapshot preparation is included in total_rep_seconds / simulation wall
   # time, but excluded from the historical per-method pipeline_seconds field.
-  context <- magmaan::prepare_inference(f, gen$value)
-  lr <- measure(magmaan::fmg_tests(context,tests=lr_tests))
+  context <- magmaanlab::prepare_inference(f, gen$value)
+  lr <- measure(magmaanlab::fmg_tests(context,tests=lr_tests))
   ix <- seq_along(lr_tests)
   out$postfit_batch_seconds[ix] <- lr$seconds
   if(inherits(lr$value,'error')) out$error[ix] <- conditionMessage(lr$value) else {
@@ -76,9 +76,9 @@ one_rep <- function(cell, rep_id, ctx, seed_base) {
   # Explicit asymptotic primitives: no multiplier draws or exact-mixture tail.
   # Projection/spectrum are shared by the requested score calibrations.
   sc <- measure({
-    projected <- magmaan::project_scores(magmaan::score_components(context,
+    projected <- magmaanlab::project_scores(magmaanlab::score_components(context,
       sensitivity='expected',metric='expected'))
-    reference <- magmaan::score_spectrum(projected)
+    reference <- magmaanlab::score_spectrum(projected)
     list(projected=projected, reference=reference,
          statistic_effective=projected$statistic)
   })
@@ -89,13 +89,13 @@ one_rep <- function(cell, rep_id, ctx, seed_base) {
     out$score_rank <- sum(z$eigenvalues > 1e-10 * max(z$eigenvalues))
     out$df[ix] <- z$df;out$statistic[ix] <- z$statistic
     for(k in 1:3) {
-      tr <- measure(magmaan::calibrate_quadratic(z,c('sb','peba2','peba4')[k]))
+      tr <- measure(magmaanlab::calibrate_quadratic(z,c('sb','peba2','peba4')[k]))
       out$postfit_seconds[ix[k]] <- sc$seconds + tr$seconds
       if(inherits(tr$value,'error')) out$error[ix[k]] <- conditionMessage(tr$value) else
         out$p_value[ix[k]] <- tr$value$p_value
     }
-    sandwich <- measure(magmaan::calibrate_quadratic(
-      magmaan::score_sandwich(sc$value$projected),'std'))
+    sandwich <- measure(magmaanlab::calibrate_quadratic(
+      magmaanlab::score_sandwich(sc$value$projected),'std'))
     out$postfit_seconds[ix[4]] <- sc$seconds + sandwich$seconds
     if(inherits(sandwich$value,'error')) out$error[ix[4]] <- conditionMessage(sandwich$value) else {
       out$statistic[ix[4]] <- sandwich$value$statistic

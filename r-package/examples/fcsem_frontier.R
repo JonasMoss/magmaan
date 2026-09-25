@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 set.seed(20260522)
 n <- 300L
@@ -64,7 +64,7 @@ err <- tryCatch(magmaan_core$inference_information_expected(fit),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("native FC-SEM fits", err, fixed = TRUE))
 
-err <- tryCatch(magmaan(spec, dat),
+err <- tryCatch(fit_model(spec, dat),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("magmaan_fcsem", err, fixed = TRUE))
 

@@ -20,8 +20,8 @@ X <- matrix(rnorm(n * length(ov)), n, length(ov)) %*% chol(Sigma)
 colnames(X) <- ov
 dat <- as.data.frame(X)
 
-fit_ts <- magmaan::sam(model, dat, se = "twostep")
-fit_rb <- magmaan::sam(model, dat, se = "twostep.robust")
+fit_ts <- magmaanlab::sam(model, dat, se = "twostep")
+fit_rb <- magmaanlab::sam(model, dat, se = "twostep.robust")
 
 stopifnot(inherits(fit_ts, "magmaan_sam_fit"))
 stopifnot(inherits(fit_rb, "magmaan_sam_fit"))

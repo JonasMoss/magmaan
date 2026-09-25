@@ -124,7 +124,7 @@ run_cell <- function(cell, reps, seed_base, raw_dir) {
   vio <- violate_of(cell$cond, cell$delta, cell$k)
   sampler <- build_cell_sampler(pop, cell$dist, vio, ns, reps = reps,
                                 seed_base = seed_base,
-                                core = magmaan::magmaan_core,
+                                core = magmaanlab::magmaan_core,
                                 knobs = default_gen_knobs())
   acc <- list(); ok <- 0L
   for (r in seq_len(reps)) {
@@ -158,17 +158,17 @@ run_cell <- function(cell, reps, seed_base, raw_dir) {
 smoke_stage_timing <- function() {
   pop <- build_population(6L)
   sampler <- build_cell_sampler(pop, "norm", NULL, c(50L, 50L), reps = 2,
-                                seed_base = 1L, core = magmaan::magmaan_core,
+                                seed_base = 1L, core = magmaanlab::magmaan_core,
                                 knobs = default_gen_knobs())
   df <- sampler$draw(1L)
   df <- apply_missingness(df, pop$ov, "MCAR", 0.30, seed = 7L)$df
   tm <- function(e) { t <- proc.time()[["elapsed"]]; force(e)
                       1000 * (proc.time()[["elapsed"]] - t) }
-  spec0 <- magmaan::model_spec(invariance_syntax("configural", pop$ov),
+  spec0 <- magmaanlab::model_spec(invariance_syntax("configural", pop$ov),
                                group = "school", group_labels = c("A", "B"),
                                meanstructure = TRUE)
-  em <- magmaan::magmaan_core$estimate_saturated_em_moments(
-    magmaan::df_to_fiml_data(df, spec0))
+  em <- magmaanlab::magmaan_core$estimate_saturated_em_moments(
+    magmaanlab::df_to_fiml_data(df, spec0))
   message("per-replicate stage timing (p=6, 50/group, one shared EM):")
   for (est in c("FIML", "ML2S")) {
     t_fit <- tm(fits <- lapply(c("configural", "metric", "scalar", "strict"),
@@ -189,7 +189,7 @@ smoke_stage_timing <- function() {
 
 # ---- main --------------------------------------------------------------------
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 if (exists("set_single_threaded_math")) set_single_threaded_math()
 
 # The smoke writes to an isolated throwaway dir so it neither rescans the (large)

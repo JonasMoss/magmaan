@@ -1,5 +1,5 @@
 # Bounded local timings, no simulation rerun. Run after just r-dev.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(392)
 time_ms <- function(f,n=15L) {
   f()
@@ -11,8 +11,8 @@ for (p in c(10L,20L)) {
   names(x) <- paste0('x',seq_len(p))
   syntax <- paste('f =~',paste(c('x1','a*x2','b*x3',paste0('x',4:p)),collapse=' + '))
   opts <- list(max_iter=3000L,ftol=1e-12,gtol=1e-8)
-  f1 <- magmaan(syntax,x,meanstructure=TRUE,control=opts)
-  f0 <- magmaan(paste(syntax,'a == b',sep='\n'),x,meanstructure=TRUE,control=opts)
+  f1 <- fit_model(syntax,x,meanstructure=TRUE,control=opts)
+  f0 <- fit_model(paste(syntax,'a == b',sep='\n'),x,meanstructure=TRUE,control=opts)
   old_global <- function() {
     old_context <- prepare_inference(f0,x)
     calibrate_quadratic(project_scores(score_components(old_context)),c('sb','peba4'))

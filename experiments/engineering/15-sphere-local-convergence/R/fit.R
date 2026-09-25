@@ -17,7 +17,7 @@ fit_route <- function(route, ident, data, optimizer = NULL, psd = FALSE) {
   }
   args <- c(list(model_syntax, data), identifications[[ident]])
   if (!is.null(optimizer)) args$optimizer <- optimizer
-  do.call(magmaan, args)
+  do.call(fit_model, args)
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x

@@ -13,7 +13,7 @@ if (!requireNamespace("semfindr", quietly = TRUE) ||
   quit(save = "no", status = 0)
 }
 
-suppressMessages({library(magmaan); library(lavaan); library(semfindr)})
+suppressMessages({library(magmaanlab); library(lavaan); library(semfindr)})
 
 # Compare two case-keyed matrices on their shared rows/cols.
 agree <- function(tag, m, s, tol) {
@@ -35,27 +35,27 @@ check_model <- function(label, mod, dat, estimator = "ML",
                          cases = 1:25) {
   cat("\n##", label, "(n =", nrow(dat), ")\n")
   lfit <- lavaan::sem(mod, dat)
-  mfit <- magmaan::magmaan(mod, dat, estimator = estimator)
+  mfit <- magmaanlab::fit_model(mod, dat, estimator = estimator)
 
   rr <- semfindr::lavaan_rerun(lfit, to_rerun = cases)
-  cr <- magmaan::case_rerun(mfit, to_rerun = cases)
+  cr <- magmaanlab::case_rerun(mfit, to_rerun = cases)
   stopifnot(sum(cr$converged) == length(cases))
 
-  agree("est_change_raw", magmaan::est_change_raw(cr),
+  agree("est_change_raw", magmaanlab::est_change_raw(cr),
         semfindr::est_change_raw(rr), tol = 1e-4)
-  agree("est_change (DFTHETAS+gcd)", magmaan::est_change(cr),
+  agree("est_change (DFTHETAS+gcd)", magmaanlab::est_change(cr),
         semfindr::est_change(rr), tol = 1e-3)
   agree("fit_measures_change",
-        magmaan::fit_measures_change(cr, fit_measures = fm_measures),
+        magmaanlab::fit_measures_change(cr, fit_measures = fm_measures),
         semfindr::fit_measures_change(rr, fit_measures = fm_measures), tol = 1e-3)
 
   s_md <- as.matrix(semfindr::mahalanobis_rerun(lfit))
-  m_md <- magmaan::mahalanobis_rerun(mfit)
+  m_md <- magmaanlab::mahalanobis_rerun(mfit)
   colnames(s_md) <- colnames(m_md)            # semfindr labels it differently
   agree("mahalanobis_rerun", m_md, s_md, tol = 1e-6)
 
   # Approximate one-step engine (no refit; all cases).
-  agree("est_change_raw_approx", magmaan::est_change_raw_approx(mfit),
+  agree("est_change_raw_approx", magmaanlab::est_change_raw_approx(mfit),
         semfindr::est_change_raw_approx(lfit), tol = 1e-6)
 
   # est_change_approx: magmaan uses the CORRECT finite-sample scaling, which
@@ -64,7 +64,7 @@ check_model <- function(label, mod, dat, estimator = "ML",
   # parity up to those documented factors (machine precision), which both
   # confirms the implementation and pins the upstream discrepancy.
   n <- nrow(dat)
-  m_ap <- magmaan::est_change_approx(mfit)
+  m_ap <- magmaanlab::est_change_approx(mfit)
   s_ap <- semfindr::est_change_approx(lfit)
   dft_cols <- setdiff(colnames(m_ap), "gcd_approx")
   s_corr <- s_ap
@@ -86,12 +86,12 @@ check_model("CFA / HolzingerSwineford1939", mod_cfa,
 ## only the covariance differs.
 cat("\n## Robust-SE est_change (CFA / HolzingerSwineford1939)\n")
 r_dat <- lavaan::HolzingerSwineford1939[, paste0("x", 1:6)]
-r_cr <- magmaan::case_rerun(magmaan::magmaan(mod_cfa, r_dat, estimator = "ML"),
+r_cr <- magmaanlab::case_rerun(magmaanlab::fit_model(mod_cfa, r_dat, estimator = "ML"),
                             to_rerun = 1:25)
 for (se in c("robust.sem", "robust.huber.white")) {
   lr <- lavaan::cfa(mod_cfa, r_dat, se = se)
   agree(paste0("est_change se=", se),
-        magmaan::est_change(r_cr, se = se),
+        magmaanlab::est_change(r_cr, se = se),
         semfindr::est_change(semfindr::lavaan_rerun(lr, to_rerun = 1:25)),
         tol = 1e-4)
 }
@@ -112,10 +112,10 @@ check_model("Path / pa_dat", mod_pa, semfindr::pa_dat)
 ## are relabelled to the same (param).<label> key for the comparison.
 cat("\n## Multigroup CFA / HolzingerSwineford1939 by school\n")
 mg_dat <- lavaan::HolzingerSwineford1939[, c("school", paste0("x", 1:6))]
-m_mg <- magmaan::magmaan(mod_cfa, mg_dat, estimator = "ML", groups = "school")
+m_mg <- magmaanlab::fit_model(mod_cfa, mg_dat, estimator = "ML", groups = "school")
 l_mg <- lavaan::cfa(mod_cfa, mg_dat, group = "school", meanstructure = FALSE)
 cases <- 1:20
-cr <- magmaan::case_rerun(m_mg, data = mg_dat, to_rerun = cases)
+cr <- magmaanlab::case_rerun(m_mg, data = mg_dat, to_rerun = cases)
 rr <- semfindr::lavaan_rerun(l_mg, to_rerun = cases)
 stopifnot(sum(cr$converged) == length(cases))
 ## relabel semfindr columns by (param).<group label>, in coef() order
@@ -123,13 +123,13 @@ glab <- lavaan::lavInspect(l_mg, "group.label")
 pt <- lavaan::parameterTable(l_mg); pt <- pt[pt$free > 0, ]; pt <- pt[order(pt$free), ]
 skey <- paste0(pt$lhs, pt$op, pt$rhs, ".", glab[pt$group])
 relabel <- function(s, extra = character()) { colnames(s) <- c(skey, extra); s }
-agree("est_change_raw", magmaan::est_change_raw(cr),
+agree("est_change_raw", magmaanlab::est_change_raw(cr),
       relabel(semfindr::est_change_raw(rr)), tol = 1e-4)
-agree("est_change (DFTHETAS+gcd)", magmaan::est_change(cr),
+agree("est_change (DFTHETAS+gcd)", magmaanlab::est_change(cr),
       relabel(semfindr::est_change(rr), "gcd"), tol = 1e-3)
-agree("fit_measures_change", magmaan::fit_measures_change(cr),
+agree("fit_measures_change", magmaanlab::fit_measures_change(cr),
       semfindr::fit_measures_change(rr), tol = 1e-3)
-mg_md_m <- magmaan::mahalanobis_rerun(m_mg, data = mg_dat)
+mg_md_m <- magmaanlab::mahalanobis_rerun(m_mg, data = mg_dat)
 mg_md_s <- as.matrix(semfindr::mahalanobis_rerun(l_mg)); colnames(mg_md_s) <- colnames(mg_md_m)
 agree("mahalanobis_rerun (per group)", mg_md_m, mg_md_s, tol = 1e-6)
 

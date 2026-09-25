@@ -6,7 +6,7 @@
 ## accessors still missing from the R package are noted at the end.
 
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -31,7 +31,7 @@ model <- "
 "
 utils::data("HolzingerSwineford1939", package = "lavaan")
 hs <- HolzingerSwineford1939
-fit <- magmaan::magmaan(model, hs, estimator = "ML", se = "none", test = "none")
+fit <- magmaanlab::fit_model(model, hs, estimator = "ML", se = "none", test = "none")
 lav <- lavaan::cfa(model, data = hs)
 
 ## coef()  — the free parameter estimates
@@ -49,7 +49,7 @@ fm   <- core$measures_fit(fit, chi2, dfm, core$measures_baseline(ss))
 ## fitted()  — the model-implied covariance matrix
 implied <- core$model_implied(fit)
 res <- stats::residuals(fit)
-std <- magmaan::standardized(fit, vc, type = "all")
+std <- magmaanlab::standardized(fit, vc, type = "all")
 
 cat("=== extracting information ===\n")
 ok(near(free$est, lavaan::coef(lav)),          "coef() — point estimates vs lavaan")

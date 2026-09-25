@@ -10,7 +10,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(support_path("R", "missingness.R"))
 source(experiment_path("R", "design.R"))
@@ -128,7 +128,7 @@ write_or_validate_manifest <- function(grid, cfg, path) {
     schema_version = 1L, profile = cfg$profile, reps = cfg$reps,
     flips = cfg$flips, chunk_size = cfg$chunk_size, seed_base = cfg$seed_base,
     shard_index = cfg$shard_index, shard_count = cfg$shard_count,
-    magmaan_version = as.character(utils::packageVersion("magmaan")),
+    magmaan_version = as.character(utils::packageVersion("magmaanlab")),
     experiment_code_hash = code_hash, stringsAsFactors = FALSE)
   if (file.exists(manifest_path) || file.exists(config_path)) {
     if (!file.exists(manifest_path) || !file.exists(config_path))
@@ -331,7 +331,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
   missing_rate_denominator = "eligible variables x3:x6",
   paper_mar = "calibrated Savalei-Bentler 2005 rules; x1/x2 observed",
   strong_mar = "item-specific logistic selection on observed x1/x2; calibrated to 30%"),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 if (cfg$profile == "smoke") {
   stopifnot(nrow(raw) == expected, all(raw$fit_ok), all(raw$flip_ok),

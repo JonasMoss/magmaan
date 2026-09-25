@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first")
+suppressPackageStartupMessages(library(magmaanlab))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]\n\n",
@@ -955,7 +955,7 @@ main <- function() {
       magmaan_git_head = ref$git_head,
       magmaan_git_dirty = ref$git_dirty
     ),
-    packages = "magmaan"
+    packages = "magmaanlab"
   )
 
   cat("\nRandom-core basin audit:\n")

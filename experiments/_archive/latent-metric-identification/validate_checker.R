@@ -31,10 +31,10 @@ if (!file.exists(pairs_path))
 # Reuse case-loading + spec-build helpers from run_experiment.R without
 # triggering the runner's main loop. We strip out the entry-point block.
 # The admissibility checker now lives in the magmaan package
-# (magmaan::magmaan_core$frontier_is_std_lv_admissible); the local
+# (magmaanlab::magmaan_core$frontier_is_std_lv_admissible); the local
 # admissibility.R kept for historical reference.
 is_std_lv_admissible <- function(marker_spec, std_lv_spec = NULL) {
-  magmaan::magmaan_core$frontier_is_std_lv_admissible(marker_spec, std_lv_spec)
+  magmaanlab::magmaan_core$frontier_is_std_lv_admissible(marker_spec, std_lv_spec)
 }
 
 # Pull only the helper definitions out of run_experiment.R (everything before
@@ -45,7 +45,7 @@ helpers_env <- new.env(parent = globalenv())
 eval(parse(text = runner_src[seq_len(entry_line - 1L)]), envir = helpers_env)
 
 require_pkg("jsonlite")
-require_pkg("magmaan")
+require_pkg("magmaanlab")
 
 pairs <- utils::read.csv(pairs_path, check.names = FALSE)
 cases <- helpers_env$load_experiment_cases(fixtures_dir)

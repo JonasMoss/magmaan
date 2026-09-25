@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
@@ -556,7 +556,7 @@ write_metadata(
     timer_batch_target_seconds = 0.05,
     timer_batch_max = 1024L
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 
 policies <- c("ordinary", "psd_direct", "audit_then_psd")

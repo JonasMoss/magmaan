@@ -10,7 +10,7 @@ sem_model_one_factor <- function() {
     ov = paste0("x", seq_len(p)),
     mu = rep(0, p),
     Sigma = tcrossprod(lambda) + diag(theta),
-    spec = magmaan::model_spec(
+    spec = magmaanlab::model_spec(
       paste0("f =~ ", paste0("x", seq_len(p), collapse = " + ")),
       meanstructure = TRUE, fixed_x = FALSE)
   )
@@ -33,7 +33,7 @@ sem_model_two_factor_fmg <- function() {
     ov = paste0("x", seq_len(p)),
     mu = rep(0, p),
     Sigma = Lambda %*% Phi %*% t(Lambda) + diag(residual),
-    spec = magmaan::model_spec(paste(
+    spec = magmaanlab::model_spec(paste(
       "f1 =~ x1 + x2 + x3 + x4 + x5",
       "f2 =~ x6 + x7 + x8 + x9 + x10", sep = "\n"),
       meanstructure = TRUE, fixed_x = FALSE)
@@ -66,7 +66,7 @@ sem_model_bifactor <- function() {
     ov = ov,
     mu = rep(0, p),
     Sigma = tcrossprod(Lambda) + diag(residual),
-    spec = magmaan::model_spec(
+    spec = magmaanlab::model_spec(
       syntax, orthogonal = TRUE, std_lv = TRUE,
       meanstructure = TRUE, fixed_x = FALSE)
   )
@@ -100,7 +100,7 @@ sem_model_three_factor_15 <- function() {
     ov = ov,
     mu = rep(0, p),
     Sigma = Lambda %*% Phi %*% t(Lambda) + diag(residual),
-    spec = magmaan::model_spec(
+    spec = magmaanlab::model_spec(
       syntax, std_lv = TRUE, meanstructure = TRUE, fixed_x = FALSE)
   )
 }
@@ -124,7 +124,7 @@ sem_model_growth <- function() {
     ov = ov,
     mu = as.vector(Lambda %*% alpha),
     Sigma = Lambda %*% Phi %*% t(Lambda) + diag(0.50, p),
-    spec = magmaan::model_spec(
+    spec = magmaanlab::model_spec(
       syntax, model_type = "growth", fixed_x = FALSE)
   )
 }
@@ -167,9 +167,9 @@ sem_calibrate_sampler <- function(model, distribution,
   sds <- sqrt(diag(Sigma))
   calibration <- switch(kind,
     normal = NULL,
-    vm = magmaan::magmaan_core$sim_vm_calibrate(
+    vm = magmaanlab::magmaan_core$sim_vm_calibrate(
       stats::cov2cor(Sigma), moments$skew, moments$exkurt),
-    ig = magmaan::magmaan_core$sim_ig_calibrate(
+    ig = magmaanlab::magmaan_core$sim_ig_calibrate(
       Sigma, moments$skew, moments$exkurt,
       root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L),
@@ -197,9 +197,9 @@ sem_draw <- function(model, sampler, n, seed) {
     X <- matrix(stats::rnorm(n * sampler$p), nrow = n) %*% sampler$chol
   } else {
     batch <- switch(sampler$kind,
-      vm = magmaan::magmaan_core$sim_vm_draw(
+      vm = magmaanlab::magmaan_core$sim_vm_draw(
         sampler$calibration, n = n, reps = 1L, seed_base = seed),
-      ig = magmaan::magmaan_core$sim_ig_draw(
+      ig = magmaanlab::magmaan_core$sim_ig_draw(
         sampler$calibration, n = n, reps = 1L, seed_base = seed,
         quadrature_points = 81L))
     X <- sweep(batch$draws[[1L]], 2L, sampler$scale, "*")

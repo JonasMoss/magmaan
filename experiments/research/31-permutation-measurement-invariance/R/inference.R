@@ -8,7 +8,7 @@ stack_groups <- function(X1, X2) {
 }
 
 fit_level <- function(X1, X2, pop, level) {
-  fit <- magmaan::magmaan(
+  fit <- magmaanlab::fit_model(
     invariance_syntax(pop, level), stack_groups(X1, X2), estimator = "ML",
     groups = "group",
     control = list(max_iter = 1000L, ftol = 1e-10, gtol = 1e-7))
@@ -61,14 +61,14 @@ wald_statistics <- function(X1, X2, pop, step) {
   fit <- fit_level(X1, X2, pop, levels[["h1"]])
   R <- invariance_contrast(fit, pop, step)
   model_vcov <- {
-    info <- magmaan::magmaan_core$inference_information_expected(fit)
-    magmaan::magmaan_core$inference_vcov_fit(info, fit)
+    info <- magmaanlab::magmaan_core$inference_information_expected(fit)
+    magmaanlab::magmaan_core$inference_vcov_fit(info, fit)
   }
-  sandwich_vcov <- magmaan::magmaan_core$infer_robust_se_raw_fit(
+  sandwich_vcov <- magmaanlab::magmaan_core$infer_robust_se_raw_fit(
     fit, list(X1, X2), bread = "expected", moments = "structured",
     cov = "empirical")$vcov
-  w_model <- magmaan::magmaan_core$infer_wald_test_fit(fit, R, model_vcov)$chi2
-  w_sandwich <- magmaan::magmaan_core$infer_wald_test_fit(
+  w_model <- magmaanlab::magmaan_core$infer_wald_test_fit(fit, R, model_vcov)$chi2
+  w_sandwich <- magmaanlab::magmaan_core$infer_wald_test_fit(
     fit, R, sandwich_vcov)$chi2
   d <- drop(R %*% fit$theta)
   if (!all(is.finite(c(w_model, w_sandwich, d)))) {
@@ -87,7 +87,7 @@ observed_statistics <- function(X1, X2, pop, step) {
   t_diff <- max(0, 2 * n_total * (fit0$fmin - out$fit$fmin))
   out$lrt <- t_diff
   out$lrt_p <- stats::pchisq(t_diff, df = out$df, lower.tail = FALSE)
-  robust <- magmaan::robust_nested_lrt(
+  robust <- magmaanlab::robust_nested_lrt(
     out$fit, fit0, data = list(X1, X2), gamma = "empirical",
     method = "restriction_map")
   out$robust_lrt_p <- robust$p_scaled

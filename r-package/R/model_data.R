@@ -133,7 +133,7 @@ as_magmaan_model_spec <- function(model) {
 }
 
 .rebuild_model_spec <- function(spec, group = NULL, group_labels = NULL,
-                                overrides = list(), caller = "magmaan") {
+                                overrides = list(), caller = "fit_model") {
   if (is.null(spec$syntax)) {
     stop(caller, "(): cannot rebuild a lavaan partable without source syntax.",
          call. = FALSE)
@@ -2247,12 +2247,12 @@ frontier_fit_mixed_ordinal_psd <- function(
   )
 }
 
-# Shared front half of magmaan() and frontier_fit_sphere(): resolve the
+# Shared front half of fit_model() and frontier_fit_sphere(): resolve the
 # grouping column, build (or validate) the model spec, and force a mean
 # structure for FIML/ML2S. Messages are prefixed with `caller`.
 .magmaan_prepare_spec <- function(model, data, estimator, groups, dots,
                                   ordered, parameterization,
-                                  caller = "magmaan") {
+                                  caller = "fit_model") {
   caller_prefix <- paste0(caller, "(): ")
   group_var <- if (is.null(groups)) NULL else as.character(groups)[1L]
   group_labels <- NULL
@@ -2328,7 +2328,7 @@ frontier_fit_mixed_ordinal_psd <- function(
   list(spec = spec, group_var = group_var)
 }
 
-magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
+fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                     cluster = NULL,
                     ordered = NULL, parameterization = "delta",
                     missing = c("listwise", "error", "pairwise"),
@@ -2336,52 +2336,67 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     se = "none", test = "none",
                     W = NULL, optimizer = NULL, control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5,
-                    stage1_regularization = NULL) {
+                    stage1_regularization = NULL, psd = FALSE) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
   require_none_arg(test, "test", "test statistics")
   estimator <- toupper(as.character(estimator)[1L])
   if (!length(estimator) || is.na(estimator)) {
-    stop("magmaan(): `estimator` must be a non-missing string")
+    stop("fit_model(): `estimator` must be a non-missing string")
   }
   if (estimator %in% c("MLM", "MLR")) {
-    stop("magmaan(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
+    stop("fit_model(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
   }
   allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS")
   if (!estimator %in% allowed) {
-    stop("magmaan(): unsupported estimator '", estimator, "'")
+    stop("fit_model(): unsupported estimator '", estimator, "'")
   }
   if (!identical(estimator, "ML2S") && !is.null(stage1_regularization)) {
-    stop("magmaan(): `stage1_regularization` is only available for estimator = 'ML2S'")
+    stop("fit_model(): `stage1_regularization` is only available for estimator = 'ML2S'")
   }
+  if (!is.logical(psd) || length(psd) != 1L || is.na(psd)) {
+    stop("fit_model(): `psd` must be TRUE or FALSE")
+  }
+  if (psd && !bounds_is_none(bounds)) {
+    stop("fit_model(): `psd = TRUE` replaces `bounds`; supply only one of them")
+  }
+  # The PSD fitters are constrained problems; their frontier default optimizer
+  # handles the eigenvalue constraints, the ordinary default does not.
+  psd_optimizer <- optimizer %||% "nlopt-slsqp"
   if (inherits(model, "magmaan_fcsem_model_spec") ||
       inherits(data, "magmaan_fcsem_data")) {
-    stop("magmaan(): native FC-SEM model/data objects require magmaan_fcsem()")
+    stop("fit_model(): native FC-SEM model/data objects require magmaan_fcsem()")
   }
 
   dots <- list(...)
   prep <- .magmaan_prepare_spec(model, data, estimator, groups, dots,
-                                ordered, parameterization, caller = "magmaan")
+                                ordered, parameterization, caller = "fit_model")
   spec <- prep$spec
   group_var <- prep$group_var
+  done <- function(fit) {
+    fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
+    fit$options$psd <- psd
+    fit
+  }
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")
 
   if (!is.null(cluster)) {
     if (!identical(estimator, "ML")) {
-      stop("magmaan(): two-level (cluster = ) fits are normal-theory ML only in ",
+      stop("fit_model(): two-level (cluster = ) fits are normal-theory ML only in ",
            "v1; set estimator = 'ML'")
     }
     if (ordinal_requested) {
-      stop("magmaan(): two-level (cluster = ) does not support ordinal data in v1")
+      stop("fit_model(): two-level (cluster = ) does not support ordinal data in v1")
     }
+    if (psd) stop("fit_model(): `psd = TRUE` is not available for two-level fits")
     if (!is.data.frame(data)) {
-      stop("magmaan(): two-level (cluster = ) requires a data.frame `data`")
+      stop("fit_model(): two-level (cluster = ) requires a data.frame `data`")
     }
     tl_missing <- if (identical(missing, "pairwise")) {
-      stop("magmaan(): two-level (cluster = ) supports missing = \"listwise\" or ",
+      stop("fit_model(): two-level (cluster = ) supports missing = \"listwise\" or ",
            "\"error\" only")
     } else missing
     return(fit_twolevel(spec, data, cluster = cluster, group = group_var,
@@ -2392,23 +2407,33 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
 
   if (identical(estimator, "FIML")) {
     if (!bounds_is_none(bounds)) {
-      stop("magmaan(): `bounds` are not currently supported for estimator = 'FIML'")
+      stop("fit_model(): `bounds` are not currently supported for estimator = 'FIML'")
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
-    fit <- fit_fiml(spec, data, optimizer = optimizer, control = control)
-    return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
+    fit <- if (psd) {
+      frontier_fit_fiml_psd(spec, data, optimizer = psd_optimizer, control = control)
+    } else {
+      fit_fiml(spec, data, optimizer = optimizer, control = control)
+    }
+    return(done(fit))
   }
 
   if (identical(estimator, "ML2S")) {
     if (ordinal_requested) {
-      stop("magmaan(): estimator = 'ML2S' currently supports continuous raw data only")
+      stop("fit_model(): estimator = 'ML2S' currently supports continuous raw data only")
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
-    fit <- fit_ml2s(spec, data, optimizer = optimizer, control = control,
-                    bounds = bounds,
-                    stage1_regularization = stage1_regularization,
-                    stage2_weight = stage2_weight, dls_a = dls_a)
-    return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
+    fit <- if (psd) {
+      frontier_fit_ml2s_psd(spec, data, optimizer = psd_optimizer, control = control,
+                            stage1_regularization = stage1_regularization,
+                            stage2_weight = stage2_weight, dls_a = dls_a)
+    } else {
+      fit_ml2s(spec, data, optimizer = optimizer, control = control,
+               bounds = bounds,
+               stage1_regularization = stage1_regularization,
+               stage2_weight = stage2_weight, dls_a = dls_a)
+    }
+    return(done(fit))
   }
 
   if (ordinal_requested && estimator %in% c("DWLS", "WLS", "ULS")) {
@@ -2432,13 +2457,18 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                                    full_wls_weight = want_full_wls)
       } else {
         if (missing == "pairwise") {
-          stop("magmaan(): missing = \"pairwise\" is currently implemented for all-ordinal data only")
+          stop("fit_model(): missing = \"pairwise\" is currently implemented for all-ordinal data only")
         }
         data_mixed_ordinal_stats_from_df(data, spec, group = group_var, missing = missing,
                                          full_wls_weight = want_full_wls)
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
+      if (psd) {
+        return(done(frontier_fit_ordinal_psd(spec, data, estimator = estimator,
+                                             optimizer = psd_optimizer,
+                                             control = control)))
+      }
       fit <- switch(estimator,
                     DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer,
                                             control = control, bounds = bounds),
@@ -2446,11 +2476,16 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                                            control = control, bounds = bounds),
                     ULS  = fit_uls_ordinal(spec, data, optimizer = optimizer,
                                            control = control, bounds = bounds))
-      return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
+      return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
       if (identical(estimator, "ULS")) {
-        stop("magmaan(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
+        stop("fit_model(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
+      }
+      if (psd) {
+        return(done(frontier_fit_mixed_ordinal_psd(spec, data, estimator = estimator,
+                                                   optimizer = psd_optimizer,
+                                                   control = control)))
       }
       fit <- if (identical(estimator, "DWLS")) {
         fit_dwls_mixed_ordinal(spec, data, optimizer = optimizer,
@@ -2459,16 +2494,31 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
         fit_wls_mixed_ordinal(spec, data, optimizer = optimizer,
                               control = control, bounds = bounds)
       }
-      return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
+      return(done(fit))
     }
-    stop("magmaan(): ordinal estimators require a data.frame, magmaan_ordinal_data, or magmaan_mixed_ordinal_data")
+    stop("fit_model(): ordinal estimators require a data.frame, magmaan_ordinal_data, or magmaan_mixed_ordinal_data")
   }
 
   if (identical(estimator, "DWLS")) {
-    stop("magmaan(): DWLS requires ordered variables; pass `ordered =` or a categorical data object")
+    stop("fit_model(): DWLS requires ordered variables; pass `ordered =` or a categorical data object")
   }
 
   if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
+  if (identical(estimator, "WLS") && is.null(W)) {
+    stop("fit_model(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
+  }
+  if (psd) {
+    fit <- switch(estimator,
+                  ML = frontier_fit_ml_psd(spec, data, optimizer = psd_optimizer,
+                                           control = control),
+                  ULS = frontier_fit_uls_psd(spec, data, optimizer = psd_optimizer,
+                                             control = control),
+                  GLS = frontier_fit_gls_psd(spec, data, optimizer = psd_optimizer,
+                                             control = control),
+                  WLS = frontier_fit_wls_psd(spec, data, W = W, optimizer = psd_optimizer,
+                                             control = control))
+    return(done(fit))
+  }
   fit <- switch(estimator,
                 ML = fit_ml(spec, data, optimizer = optimizer,
                             control = control, bounds = bounds),
@@ -2476,14 +2526,9 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                               control = control, bounds = bounds),
                 GLS = fit_gls(spec, data, optimizer = optimizer,
                               control = control, bounds = bounds),
-                WLS = {
-                  if (is.null(W)) {
-                    stop("magmaan(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
-                  }
-                  fit_wls(spec, data, W = W, optimizer = optimizer,
-                          control = control, bounds = bounds)
-                })
-  finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
+                WLS = fit_wls(spec, data, W = W, optimizer = optimizer,
+                              control = control, bounds = bounds))
+  done(fit)
 }
 
 finalize_fcsem_fit <- function(fit, spec, missing) {
@@ -2738,7 +2783,7 @@ require_none_arg <- function(value, arg, what) {
   if (is.null(value)) value <- "none"
   value <- tolower(as.character(value))
   if (length(value) != 1L || is.na(value) || !identical(value, "none")) {
-    stop("magmaan(): `", arg, "` is estimate-only and currently accepts only \"none\"; ",
+    stop("fit_model(): `", arg, "` is estimate-only and currently accepts only \"none\"; ",
          what, " remain explicit post-fit calls")
   }
   invisible(NULL)

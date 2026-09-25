@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
   dirname(normalizePath(sub("^--file=", "", script_arg[[1L]])))
@@ -12,7 +12,7 @@ set.seed(6501)
 pop <- gof_population(5L, "null")
 X <- matrix(stats::rnorm(80L * 5L), 80L, 5L) %*% chol(pop$Sigma)
 colnames(X) <- paste0("x", seq_len(5L))
-fit <- magmaan(gof_model_spec(5L), as.data.frame(X), estimator = "ML",
+fit <- fit_model(gof_model_spec(5L), as.data.frame(X), estimator = "ML",
                se = "none", test = "none")
 stopifnot(isTRUE(fit$converged))
 
@@ -24,7 +24,7 @@ stopifnot(
   flip$p_effective >= 1 / 64, flip$p_effective <= 1,
   isTRUE(flip$standardization_available))
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 uf <- core$infer_build_u_factor(fit, "expected", "structured")
 zc <- core$infer_casewise_contributions(fit$partable, X)
 resid <- uf$blocks[[1L]]$S - uf$blocks[[1L]]$Sigma_hat

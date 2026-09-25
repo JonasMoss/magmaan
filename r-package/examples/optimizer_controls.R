@@ -1,5 +1,5 @@
 # Named controls must reach the same backend settings as the legacy spelling.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(20260921)
 z <- rnorm(500)
 x <- as.data.frame(sapply(1:4, function(j) z + rnorm(500)))

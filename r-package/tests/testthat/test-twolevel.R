@@ -1,5 +1,5 @@
 # Two-level (multilevel) normal-theory ML parity, exercising the exported
-# fit_twolevel() wrapper and the magmaan(cluster = ) one-call entry point against
+# fit_twolevel() wrapper and the fit_model(cluster = ) one-call entry point against
 # lavaan sem(..., cluster = ). Promoted from examples/twolevel_parity.R.
 
 # Match free parameters by (lhs, op, rhs, block). For a two-level partable the
@@ -56,7 +56,7 @@ test_that("single-group two-level ML matches lavaan (saturated CFA)", {
   expect_lt(max(abs(cmp$se.m  - cmp$se.l)),  5e-3)
 })
 
-test_that("magmaan(cluster = ) one-call entry reproduces fit_twolevel()", {
+test_that("fit_model(cluster = ) one-call entry reproduces fit_twolevel()", {
   skip_if_not_installed("lavaan")
   d <- .tl_demo()
   model <- "
@@ -65,7 +65,7 @@ test_that("magmaan(cluster = ) one-call entry reproduces fit_twolevel()", {
     level: 2
       fb =~ y1 + y2 + y3
   "
-  fit_one <- magmaan(model, d, estimator = "ML", cluster = "cluster")
+  fit_one <- fit_model(model, d, estimator = "ML", cluster = "cluster")
   fit_two <- fit_twolevel(model, d, cluster = "cluster")
 
   expect_s3_class(fit_one, "magmaan_fit")
@@ -74,7 +74,7 @@ test_that("magmaan(cluster = ) one-call entry reproduces fit_twolevel()", {
   expect_equal(fit_one$df, fit_two$df)
 
   # cluster = requires ML; robust corrections stay post-fit.
-  expect_error(magmaan(model, d, estimator = "MLR", cluster = "cluster"))
+  expect_error(fit_model(model, d, estimator = "MLR", cluster = "cluster"))
 })
 
 test_that("single-group two-level ML matches lavaan on a non-saturated model", {
@@ -148,7 +148,7 @@ test_that("two-level standard bounds stabilize a weak six-indicator between fact
   expect_lt(max(abs(cmp$est.m - cmp$est.l)), 1e-3)
   expect_lt(max(abs(cmp$se.m  - cmp$se.l)),  1e-3)
 
-  fit_one <- magmaan(model, d, estimator = "ML", cluster = "cluster",
+  fit_one <- fit_model(model, d, estimator = "ML", cluster = "cluster",
                      bounds = "standard")
   expect_equal(fit_one$theta, fit$theta, tolerance = 1e-8)
   expect_equal(fit_one$chisq, fit$chisq, tolerance = 1e-8)

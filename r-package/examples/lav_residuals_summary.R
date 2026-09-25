@@ -8,7 +8,7 @@
 ## lavaan parity; the underlying residual ACOV is the same projection lavaan
 ## uses, rescaled into the correlation metric.
 
-suppressMessages({library(lavaan); library(magmaan)})
+suppressMessages({library(lavaan); library(magmaanlab)})
 
 HS.model <- "visual  =~ x1 + x2 + x3
              textual =~ x4 + x5 + x6
@@ -31,7 +31,7 @@ compare_summary <- function(mag, lav, tol = 1e-4) {
 
 ## --- single group, no mean structure -----------------------------------------
 f1 <- cfa(HS.model, data = HolzingerSwineford1939)
-m1 <- magmaan(HS.model, HolzingerSwineford1939, estimator = "ML")
+m1 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML")
 s1 <- lav_residuals(m1)$summary[[1]]
 compare_summary(s1, lavResiduals(f1)$summary)
 stopifnot(identical(colnames(s1), "cov"))
@@ -41,7 +41,7 @@ print(round(s1$cov, 5))
 
 ## --- single group, with mean structure (cov / mean / total) ------------------
 f2 <- cfa(HS.model, data = HolzingerSwineford1939, meanstructure = TRUE)
-m2 <- magmaan(HS.model, HolzingerSwineford1939, estimator = "ML",
+m2 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML",
               meanstructure = TRUE)
 s2 <- lav_residuals(m2)$summary[[1]]
 compare_summary(s2, lavResiduals(f2)$summary)
@@ -50,7 +50,7 @@ stopifnot(identical(colnames(s2), c("cov", "mean", "total")))
 ## --- two groups (configural) with mean structure -----------------------------
 f3 <- cfa(HS.model, data = HolzingerSwineford1939, group = "school",
           meanstructure = TRUE)
-m3 <- magmaan(HS.model, HolzingerSwineford1939, estimator = "ML",
+m3 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML",
               groups = "school", meanstructure = TRUE)
 s3 <- lav_residuals(m3)$summary
 ## magmaan and lavaan may order groups differently; align by label.

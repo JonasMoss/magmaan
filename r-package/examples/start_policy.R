@@ -1,5 +1,5 @@
 # Shared constructor/transport contract over continuous and missing-data fitters.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(20260925)
 x <- as.data.frame(matrix(rnorm(1200), 300, 4) + rnorm(300))
 names(x) <- paste0('x', 1:4)

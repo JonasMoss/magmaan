@@ -69,8 +69,8 @@ ridge<-do.call(rbind,lapply(c(-3,-1,0,.5,1,2,3),function(slope) {
  v<-m$L[,2]+slope*m$L[,3];score<-drop(t(v)%*%G%*%v)
  h<-1e-6*m$C[2,2];zz<-z;zz[q2]<-h
  fd<-(objective(zz)-objective(z))/h
- native<-magmaan::magmaan_core$evaluate_at(d$spec,d$stats,z,estimator='ML')
- opened<-magmaan::magmaan_core$evaluate_at(d$spec,d$stats,zz,estimator='ML')
+ native<-magmaanlab::magmaan_core$evaluate_at(d$spec,d$stats,z,estimator='ML')
+ opened<-magmaanlab::magmaan_core$evaluate_at(d$spec,d$stats,zz,estimator='ML')
  stopifnot(max(abs(mat(z)$Sigma-m$Sigma))<1e-12,abs(fd-score)<1e-4,
   abs(2*native$fmin-objective(z))<1e-10,abs(2*opened$fmin-objective(zz))<1e-10)
  data.frame(slope=slope,objective=objective(z),covariance_gap=max(abs(mat(z)$Sigma-m$Sigma)),
@@ -120,7 +120,7 @@ for(endpoint in c('none','diagonal')) {
   # Explicit starts in the same SEM; the PSD solver retains all constraints.
   spec<-d$spec;k<-spec$partable$free;free<-k>0;spec$partable$ustart[free]<-z[k[free]]
   tick<-elapsed()
-  f<-tryCatch(magmaan::frontier_fit_ml_psd(spec,d$stats,preconditioning=method,
+  f<-tryCatch(magmaanlab::frontier_fit_ml_psd(spec,d$stats,preconditioning=method,
    control=list(max_iter=1000L,gtol=1e-8,ftol=1e-12)),error=function(e)e)
   seconds<-elapsed()-tick;err<-inherits(f,'error');g<-if(err)NULL else f$diagnostics$geometric_stationarity
   rows[[length(rows)+1L]]<-data.frame(endpoint=endpoint,policy=policy,preconditioning=method,
@@ -139,5 +139,5 @@ for(endpoint in c('none','diagonal')) {
 write_metadata(file.path(o$results_dir,'metadata.csv'),values=c(o,list(complete=!exhausted,
  elapsed_seconds=elapsed(),planned_fits=planned,completed_fits=length(rows),
  git_head=git_scalar(c('rev-parse','HEAD'),root=repo),input_md5=unname(tools::md5sum(input)),
- source_md5=unname(tools::md5sum(script)))),packages='magmaan')
+ source_md5=unname(tools::md5sum(script)))),packages='magmaanlab')
 cat('Results: ',o$results_dir,'\n',sep='');if(exhausted)quit(status=2L)

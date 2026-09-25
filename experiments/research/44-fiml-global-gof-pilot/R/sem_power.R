@@ -68,7 +68,7 @@ sem_power_target_ncp <- function(df, target_power = 0.50, alpha = 0.05) {
 sem_power_population_fml <- function(model, Sigma, mu = model$mu) {
   sample_stats <- list(
     S = list(Sigma), mean = list(mu), nobs = 1000000L)
-  fit <- magmaan::magmaan(
+  fit <- magmaanlab::fit_model(
     model$spec, sample_stats, estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none")
   if (!isTRUE(fit$converged) || !is.finite(fit$fmin)) {

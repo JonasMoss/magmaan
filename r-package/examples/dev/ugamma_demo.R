@@ -1,4 +1,4 @@
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 # §0  setup — Holzinger-Swineford 3-factor CFA, single- and two-group
 m <- "visual  =~ x1 + x2 + x3

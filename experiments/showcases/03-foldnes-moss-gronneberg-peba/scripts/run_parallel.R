@@ -14,7 +14,7 @@
 #                                  [--seed-base S] [--cells FILTER]
 # Defaults: reps=100, cores=4, chunk=250.
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 suppressWarnings(suppressMessages(library(parallel)))
 
 .support_helpers <- function() {
@@ -58,7 +58,7 @@ parse <- function(args) {
 }
 args <- parse(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 # Full 42-statistic battery (paper's 43 minus Bollen-Stine), mirroring run_experiment.R.
 fmg_battery <- function() {
@@ -89,7 +89,7 @@ spec_cache <- new.env(parent = emptyenv())
 get_spec <- function(p) {
   k <- as.character(p)
   if (is.null(spec_cache[[k]])) spec_cache[[k]] <-
-    list(spec = magmaan::model_spec(build_2factor_syntax(p)),
+    list(spec = magmaanlab::model_spec(build_2factor_syntax(p)),
          syntax = build_2factor_syntax(p), vn = paste0("x", seq_len(p)))
   spec_cache[[k]]
 }
@@ -116,9 +116,9 @@ run_cell <- function(cell, ci) {
       X <- tryCatch(samp$draw(i), error = function(e) e)
       if (inherits(X, "error")) { fail <- fail + 1L; next }
       colnames(X) <- ctx$vn; df <- as.data.frame(X)
-      fit <- tryCatch(magmaan::magmaan(ctx$syntax, df, estimator = "ML"), error = function(e) e)
+      fit <- tryCatch(magmaanlab::fit_model(ctx$syntax, df, estimator = "ML"), error = function(e) e)
       if (inherits(fit, "error") || !isTRUE(fit$converged)) { fail <- fail + 1L; next }
-      pv <- tryCatch(magmaan::fmg_pvalues(fit, df, tests = TESTS), error = function(e) e)
+      pv <- tryCatch(magmaanlab::fmg_pvalues(fit, df, tests = TESTS), error = function(e) e)
       if (inherits(pv, "error")) { fail <- fail + 1L; next }
       reject <- reject + (as.numeric(pv) < 0.05); ok <- ok + 1L
     }
@@ -129,7 +129,7 @@ run_cell <- function(cell, ci) {
 }
 
 cat(sprintf("parallel FMG-2024: magmaan %s | cells=%d reps=%d cores=%d chunk=%d\n",
-            as.character(utils::packageVersion("magmaan")), length(cells),
+            as.character(utils::packageVersion("magmaanlab")), length(cells),
             args$reps, args$cores, args$chunk))
 wall0 <- proc.time()[["elapsed"]]
 res <- mclapply(seq_along(cells), function(j) run_cell(cells[[j]], j),
@@ -155,7 +155,7 @@ write_csv(metadata_frame(
                 wall_seconds = sprintf("%.1f", wall),
                 cpu_seconds = sprintf("%.1f", sum(meta$seconds)),
                 speedup = sprintf("%.2f", sum(meta$seconds) / wall)),
-  packages = c("magmaan")), file.path(results_out, "metadata.csv"))
+  packages = c("magmaanlab")), file.path(results_out, "metadata.csv"))
 
 cat(sprintf("done: wall=%.1fs  cpu=%.1fs  speedup=%.2fx  total ok=%d fail=%d\n",
             wall, sum(meta$seconds), sum(meta$seconds) / wall,

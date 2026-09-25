@@ -364,12 +364,12 @@ true_theta <- function(partable, design) {
 # diagnostic the story turns on. Returns NA estimates for any path that
 # errored (e.g. ML when Ŝ_pw is non-PD).
 fit_triple <- function(X, mask, partable, n_par) {
-  pw <- magmaan::magmaan_core$data_pairwise_sample_stats(X, mask)
+  pw <- magmaanlab::magmaan_core$data_pairwise_sample_stats(X, mask)
   sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
 
   S_pw <- pw$S[[1L]]
-  G_sigma <- magmaan::magmaan_core$robust_gamma_nt(S_pw)
-  G_pw    <- magmaan::magmaan_core$data_gamma_nt_pairwise(X, mask)[[1L]]
+  G_sigma <- magmaanlab::magmaan_core$robust_gamma_nt(S_pw)
+  G_pw    <- magmaanlab::magmaan_core$data_gamma_nt_pairwise(X, mask)[[1L]]
   cond_of <- function(M) {
     e <- eigen(M, symmetric = TRUE, only.values = TRUE)$values
     max(e) / max(min(e), .Machine$double.eps)
@@ -385,24 +385,24 @@ fit_triple <- function(X, mask, partable, n_par) {
 
   t1 <- Sys.time()
   sigma_or <- tryCatch(pull_theta(
-    magmaan::magmaan_core$estimate_gls(partable, sample_pw)),
+    magmaanlab::magmaan_core$estimate_gls(partable, sample_pw)),
     error = function(e) na_theta)
   t2 <- Sys.time()
   gamma_or <- tryCatch(pull_theta(
-    magmaan::magmaan_core$estimate_gls_pairwise(partable, X, mask)),
+    magmaanlab::magmaan_core$estimate_gls_pairwise(partable, X, mask)),
     error = function(e) na_theta)
   t3 <- Sys.time()
   ml_or <- tryCatch(pull_theta(
-    magmaan::magmaan_core$estimate_ml(partable, sample_pw)),
+    magmaanlab::magmaan_core$estimate_ml(partable, sample_pw)),
     error = function(e) na_theta)
   t4 <- Sys.time()
   ts_ml_or <- tryCatch(pull_theta(
-    magmaan::magmaan_core$estimate_two_stage_em(partable,
+    magmaanlab::magmaan_core$estimate_two_stage_em(partable,
       list(X = X, mask = mask), kind = "ml")),
     error = function(e) na_theta)
   t5 <- Sys.time()
   fiml_or <- tryCatch(pull_theta(
-    magmaan::magmaan_core$estimate_fiml(partable, list(X = X, mask = mask))),
+    magmaanlab::magmaan_core$estimate_fiml(partable, list(X = X, mask = mask))),
     error = function(e) na_theta)
   t6 <- Sys.time()
 
@@ -423,7 +423,7 @@ fit_triple <- function(X, mask, partable, n_par) {
 
 main <- function() {
   opts <- parse_args(commandArgs(trailingOnly = TRUE))
-  require_pkg("magmaan")
+  require_pkg("magmaanlab")
   require_pkg("lavaan")
 
   ensure_results_dir()
@@ -638,7 +638,7 @@ main <- function() {
                                         names(n_par_per), n_par_per),
                                 collapse = ",")
     ),
-    packages = c("magmaan", "lavaan")
+    packages = c("magmaanlab", "lavaan")
   )
   cat(sprintf("\nWrote: %s\n       %s\n       %s\n",
               fits_path, summary_path, meta_path))

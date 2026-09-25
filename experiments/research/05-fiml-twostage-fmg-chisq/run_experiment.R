@@ -126,16 +126,16 @@ apply_cells_filter <- function(grid, filter) {
   grid
 }
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 have_lav <- cfg$lavaan_parity && requireNamespace("lavaan", quietly = TRUE)
 if (cfg$lavaan_parity && !have_lav) {
   message("note: --lavaan-parity requested but lavaan is not installed; skipping the oracle.")
 }
 
 pop <- build_population()
-spec <- magmaan::model_spec(model_syntax(), meanstructure = TRUE)
+spec <- magmaanlab::model_spec(model_syntax(), meanstructure = TRUE)
 alpha <- 0.05
 
 mc <- miss_conditions(cfg$mechs, cfg$rates)
@@ -277,6 +277,6 @@ write_metadata(
                 statistics = paste(fmg_battery_tests(), collapse = ","),
                 model = "single-group 1-factor 6-indicator CFA (correct), df=9",
                 alpha = alpha, elapsed_seconds = round(elapsed, 1)),
-  packages = c("magmaan", if (have_lav) "lavaan"))
+  packages = c("magmaanlab", if (have_lav) "lavaan"))
 
 cat(sprintf("done in %.1fs; wrote results to %s\n", elapsed, results_dir()))

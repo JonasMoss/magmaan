@@ -53,7 +53,7 @@ if ("--help" %in% args) {
 
 script <- script_path()
 set_single_threaded_math()
-require_pkg("magmaan", "run `just r-dev` from the repository root first")
+require_pkg("magmaanlab", "run `just r-dev` from the repository root first")
 
 smoke <- "--smoke" %in% args
 budget_min <- as.numeric(arg_value(args, "budget-min", "30"))
@@ -91,7 +91,7 @@ cores <- if (identical(cores_arg, "auto")) {
 cores <- max(1L, cores)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 ov_names <- c(paste0("x", 1:4), paste0("y", 1:4))
 model <- "
   f1 =~ x1 + x2 + x3 + x4
@@ -173,7 +173,7 @@ focal_from_fit <- function(fit, vc = NULL) {
 
 fit_one <- function(X, estimator, compute_se = TRUE) {
   if (identical(estimator, "SAM")) {
-    fit <- magmaan::sam(
+    fit <- magmaanlab::sam(
       model, X,
       method = "local",
       mapping = "ml",
@@ -181,7 +181,7 @@ fit_one <- function(X, estimator, compute_se = TRUE) {
     )
     return(focal_from_fit(fit))
   }
-  fit <- magmaan::magmaan(model, X, estimator = "ML",
+  fit <- magmaanlab::fit_model(model, X, estimator = "ML",
                           se = "none", test = "none")
   vc <- if (compute_se) stats::vcov(fit, data = X, regime = "model") else NULL
   focal_from_fit(fit, vc)
@@ -341,7 +341,7 @@ write_metadata(
     ref_n = ref_n,
     completed_reps = nrow(rep_df)
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 message("Wrote:")

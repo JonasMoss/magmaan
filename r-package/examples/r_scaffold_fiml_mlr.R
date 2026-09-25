@@ -14,9 +14,9 @@ df$x2[seq(7L, n, by = 11L)] <- NA_real_
 df$x4[seq(5L, n, by = 13L)] <- NA_real_
 
 model <- "f =~ x1 + x2 + x3 + x4"
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
-fit <- magmaan::magmaan(
+fit <- magmaanlab::fit_model(
   model, df,
   estimator = "FIML",
   meanstructure = TRUE,

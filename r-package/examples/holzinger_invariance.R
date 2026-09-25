@@ -13,7 +13,7 @@
 ## bundle (Xg a list of per-group raw matrices) straight in. See
 ## holzinger_2group_satorra_bentler.R for more on the SB pipeline.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 mok <- function(a, b, tol = 1e-2) if (isTRUE(all.equal(unname(a), unname(as.numeric(b)), tolerance = tol))) "ok" else "MISMATCH"

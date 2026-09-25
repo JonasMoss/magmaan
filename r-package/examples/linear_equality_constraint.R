@@ -7,7 +7,7 @@
 ## Run from the repo root (after `R CMD INSTALL r-package`):
 ##     Rscript r-package/examples/linear_equality_constraint.R
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 ok  <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 mok <- function(a, b, tol = 1e-3)

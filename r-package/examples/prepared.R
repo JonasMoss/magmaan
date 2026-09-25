@@ -1,5 +1,5 @@
 # Reusable preparation: parity, changed datasets, inference and invalidation.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 ctrl <- list(max_iter = 3000, ftol = 1e-12, gtol = 1e-8)
 syntax <- 'f =~ x1 + x2 + x3 + x4'
 make_data <- function(seed, n = 400, shift = 0) {
@@ -27,16 +27,16 @@ for (seed in 1:2) {
   d <- prepare_data(m, x)
   for (method in c('ML', 'ULS', 'GLS')) {
     a <- estimate(m, d, method, control = ctrl)
-    b <- magmaan(spec, x, estimator = method, control = ctrl)
+    b <- fit_model(spec, x, estimator = method, control = ctrl)
     close_fit(a, b)
   }
   W <- diag(10)
   w <- prepare_weight(d, 'WLS', W = W)
   close_fit(estimate(m, d, weight = w, control = ctrl),
-            magmaan:::fit_wls(spec, df_to_data(x, spec), W, control = ctrl))
+            magmaanlab:::fit_wls(spec, df_to_data(x, spec), W, control = ctrl))
   reject(estimate(m, prepare_data(m, x), weight = w), 'another dataset')
   a <- estimate(m, d, control = ctrl)
-  stopifnot(max(abs(vcov(a, data = x) - vcov(magmaan(spec, x, control = ctrl), data = x))) < 1e-7)
+  stopifnot(max(abs(vcov(a, data = x) - vcov(fit_model(spec, x, control = ctrl), data = x))) < 1e-7)
 }
 reject({m$kind <- 'raw'}, 'locked')
 reject(estimate(unserialize(serialize(m, NULL)), d), 'prepare it again')
@@ -49,7 +49,7 @@ for (seed in 3:4) {
   x[seq(seed, nrow(x), 7), 2] <- NA
   d <- prepare_data(mf, x, 'raw')
   a <- estimate(mf, d, control = ctrl)
-  b <- magmaan:::fit_fiml(mf$spec, x, control = ctrl)
+  b <- magmaanlab:::fit_fiml(mf$spec, x, control = ctrl)
   close_fit(a, b)
   stopifnot(is.null(a$fiml_h1), !is.null(a$fiml_pack))
 }
@@ -68,12 +68,12 @@ for (parameterization in c('delta', 'theta')) {
   for (seed in 21:22) {
     x <- ordinal_data(seed, (seed - 20) / 4)
     d <- prepare_data(mo, x)
-    stats <- magmaan:::data_ordinal_stats_from_df(x, original)
+    stats <- magmaanlab:::data_ordinal_stats_from_df(x, original)
     for (method in c('ULS', 'DWLS', 'WLS')) {
       a <- estimate(mo, d, method, control = ctrl)
-      b <- switch(method, ULS = magmaan:::fit_uls_ordinal(original, stats, control = ctrl),
-                  DWLS = magmaan:::fit_dwls_ordinal(original, stats, control = ctrl),
-                  WLS = magmaan:::fit_wls_ordinal(original, stats, control = ctrl))
+      b <- switch(method, ULS = magmaanlab:::fit_uls_ordinal(original, stats, control = ctrl),
+                  DWLS = magmaanlab:::fit_dwls_ordinal(original, stats, control = ctrl),
+                  WLS = magmaanlab:::fit_wls_ordinal(original, stats, control = ctrl))
       close_fit(a, b, 1e-6)
       if (method == 'DWLS') {
         w <- prepare_weight(d, 'DWLS', full = FALSE)
@@ -93,7 +93,7 @@ mm <- prepare_model(syntax, meanstructure = TRUE, ordered = 'x1', prototype = x)
 dm <- prepare_data(mm, x)
 for (method in c('DWLS', 'WLS')) {
   a <- estimate(mm, dm, method, control = ctrl)
-  b <- magmaan(syntax, x, meanstructure = TRUE, ordered = 'x1', estimator = method, control = ctrl)
+  b <- fit_model(syntax, x, meanstructure = TRUE, ordered = 'x1', estimator = method, control = ctrl)
   close_fit(a, b, 1e-6)
 }
 cat('Prepared interface checks passed.\n')
@@ -108,7 +108,7 @@ for (method in c('DWLS', 'WLS')) {
   w <- prepare_weight(d, method)
   stopifnot(length(w$W) == 1L, all(dim(w$W[[1]]) == c(10L, 10L)))
   close_fit(estimate(m, d, weight = w, control = ctrl),
-            magmaan:::fit_wls(spec, ss, W = w$W, control = ctrl))
+            magmaanlab:::fit_wls(spec, ss, W = w$W, control = ctrl))
 }
 reject(prepare_weight(d, 'WLS', W = diag(-1, 10)), 'positive definite')
 reject(prepare_weight(d, 'WLS', W = diag(9)), 'moment dimensions')
@@ -134,19 +134,19 @@ for (seed in 61:62) {
     mg <- prepare_model(sg, prototype = xg)
   }
   a <- estimate(mg, prepare_data(mg, xg), control = ctrl)
-  b <- magmaan(sg, xg, estimator = 'DWLS', control = ctrl)
+  b <- fit_model(sg, xg, estimator = 'DWLS', control = ctrl)
   close_fit(a, b, 2e-6)
 }
 # Prepared fitting cannot fall back to any R model/ordinal construction path.
 for (fn in c('model_matrix_rep', 'augment_ordinal_partable', 'augment_mixed_ordinal_partable'))
   trace(fn, tracer = quote(stop('unexpected repeated model preparation')),
-        where = asNamespace('magmaan'), print = FALSE)
+        where = asNamespace('magmaanlab'), print = FALSE)
 tryCatch({
   close_fit(estimate(mo, do, weight = wu, control = ctrl), u_full, 1e-6)
-  close_fit(estimate(m, d, control = ctrl), magmaan:::prepared_estimate_impl(
+  close_fit(estimate(m, d, control = ctrl), magmaanlab:::prepared_estimate_impl(
     m$native, d$native, NULL, 'ML', NULL, ctrl, NULL))
 }, finally = {
   for (fn in c('model_matrix_rep', 'augment_ordinal_partable', 'augment_mixed_ordinal_partable'))
-    untrace(fn, where = asNamespace('magmaan'))
+    untrace(fn, where = asNamespace('magmaanlab'))
 })
 cat('Prepared schema, weight and construction checks passed.\n')

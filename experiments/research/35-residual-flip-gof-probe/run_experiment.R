@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -79,7 +79,7 @@ one_rep <- function(cell, rep_id, sampler, spec) {
     stringsAsFactors = FALSE)
 
   fit_begin <- proc.time()[["elapsed"]]
-  fit <- tryCatch(magmaan(
+  fit <- tryCatch(fit_model(
     spec, as.data.frame(X), estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none"),
     error = function(e) e)
@@ -359,7 +359,7 @@ metadata <- data.frame(
           "elapsed_seconds", "magmaan_version", "R_version", "dgp_source",
           "alternative"),
   value = c(opts$mode, nrow(grid), opts$reps, opts$flips, opts$cores,
-            opts$seed_base, elapsed, as.character(packageVersion("magmaan")),
+            opts$seed_base, elapsed, as.character(packageVersion("magmaanlab")),
             R.version.string, "Foldnes-Moss-Gronneberg marginal targets",
             "one omitted residual covariance rho=.25"))
 write.csv(metadata, file.path(results_dir, "metadata.csv"), row.names = FALSE)

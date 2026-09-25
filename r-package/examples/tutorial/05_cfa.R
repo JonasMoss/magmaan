@@ -1,11 +1,11 @@
 ## lavaan tutorial — A CFA example   https://lavaan.ugent.be/tutorial/cfa.html
 ##
 ## The 3-factor Holzinger-Swineford 1939 CFA. lavaan does it with cfa() +
-## summary(fit, fit.measures = TRUE); magmaan estimates with magmaan() and
+## summary(fit, fit.measures = TRUE); magmaan estimates with fit_model() and
 ## then asks for SEs and fit measures explicitly. Everything is cross-checked
 ## against lavaan::cfa().
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -38,7 +38,7 @@ model <- "
   speed   =~ x7 + x8 + x9
 "
 hs  <- HolzingerSwineford1939
-fit <- magmaan(model, hs, estimator = "ML", se = "none", test = "none")
+fit <- fit_model(model, hs, estimator = "ML", se = "none", test = "none")
 lav <- cfa(model, data = hs)
 
 ## SEs from the expected information; fit measures from the baseline model.

@@ -25,7 +25,7 @@ stopifnot(is.finite(o$reps), o$reps >= 0, o$reps == as.integer(o$reps),
           is.finite(o$budget_sec), o$budget_sec > 0)
 source(file.path(repo, 'experiments/_support/R/helpers.R')); set_single_threaded_math()
 source(file.path(here, 'R/charts.R')); source(file.path(here, 'R/models.R'))
-if (!'preconditioning' %in% names(formals(magmaan::frontier_fit_ml_psd)))
+if (!'preconditioning' %in% names(formals(magmaanlab::frontier_fit_ml_psd)))
   stop('Reinstall magmaan with just r-dev; native preconditioning is missing')
 dir.create(o$results_dir, recursive=TRUE, showWarnings=FALSE)
 unlink(file.path(o$results_dir, c('fits.csv', 'metadata.csv')))
@@ -35,7 +35,7 @@ seed <- 20260919L + 60000L; start <- common_start(case, seed)
 map <- chart_map(case$m, case$mask, 'marker')
 m <- map$unpack(map$pack(start))$m
 syntax <- paste(readLines(file.path(repo, 'benchmarks/cases/bollen_democracy_sem/model.lav')), collapse='\n')
-spec <- magmaan::model_spec(syntax, fixed_x=FALSE); warm <- spec
+spec <- magmaanlab::model_spec(syntax, fixed_x=FALSE); warm <- spec
 warm$partable$ustart <- vapply(seq_len(nrow(warm$partable)), function(k) {
   p <- warm$partable[k, ]
   if (p$op == '=~') return(m$lambda[p$rhs, p$lhs])
@@ -52,7 +52,7 @@ for (r in 0:o$reps) {
   for (st in c('common', 'native')) for (method in if (r %% 2 == 0) c('none','diagonal') else c('diagonal','none')) {
     if (elapsed() > o$budget_sec) { exhausted <- TRUE; break }
     tick <- elapsed()
-    f <- tryCatch(magmaan::frontier_fit_ml_psd(if (st == 'common') warm else spec,
+    f <- tryCatch(magmaanlab::frontier_fit_ml_psd(if (st == 'common') warm else spec,
       list(S=list(S), mean=list(rep(0,nrow(S))), nobs=case$n),
       preconditioning=method, control=list(max_iter=1000L, gtol=1e-8, ftol=1e-12)),
       error=function(e)e)
@@ -77,6 +77,6 @@ write_metadata(file.path(o$results_dir,'metadata.csv'), values=c(o,list(
   planned_fits=4*(o$reps+1), completed_fits=length(rows),
   git_head=git_scalar(c('rev-parse','HEAD'),root=repo),
   source_md5=paste(tools::md5sum(c(script,file.path(here,'R/charts.R'),file.path(here,'R/models.R'))),collapse=','))),
-  packages=c('magmaan','lavaan'))
+  packages=c('magmaanlab','lavaan'))
 cat('Results: ',o$results_dir,'\n',sep='')
 if(exhausted) quit(status=2L)

@@ -131,8 +131,8 @@ size adjustment. We add:
 
 **Estimators (expensive axis, refit per cell):**
 
-- **FIML** -- `magmaan::magmaan_core$fit_fiml` (lavaan `missing = "ml"` analogue).
-- **ML2S** -- `magmaan::magmaan_core$fit_ml2s`, two-stage ML (saturated EM stage
+- **FIML** -- `magmaanlab::magmaan_core$fit_fiml` (lavaan `missing = "ml"` analogue).
+- **ML2S** -- `magmaanlab::magmaan_core$fit_ml2s`, two-stage ML (saturated EM stage
   1, structured stage 2; lavaan `missing = "two.stage"`). Cheaper per ladder
   than FIML (stage-1 saturated fit + its ACOV are shared across all four rungs)
   and Savalei & Falk's winner under incomplete non-normal data.

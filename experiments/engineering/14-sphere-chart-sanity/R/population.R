@@ -194,7 +194,7 @@ pop_routes <- function(pop) {
 
 run_route <- function(route, spec, dd) {
   switch(route,
-    ordinary_ML = magmaan(spec, dd),
+    ordinary_ML = fit_model(spec, dd),
     sphere_ML = frontier_fit_sphere(spec, dd),
     sphere_ULS = frontier_fit_sphere(spec, dd, estimator = "ULS"),
     sphere_GLS = frontier_fit_sphere(spec, dd, estimator = "GLS"),

@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 core <- magmaan_core
 
@@ -60,7 +60,7 @@ dat$x3[seq(5L, n, by = 19L)] <- NA_real_
 model <- "f =~ x1 + x2 + x3 + x4"
 control <- list(max_iter = 2500, ftol = 1e-11, gtol = 1e-8)
 
-fit_fiml <- magmaan(model, dat, estimator = "FIML", control = control)
+fit_fiml <- fit_model(model, dat, estimator = "FIML", control = control)
 free_fiml <- loading_free_id(fit_fiml, "x2")
 target_fiml <- 0.97 * fit_fiml$theta[free_fiml]
 lrt_fiml <- core$frontier_profile_lrt_parameter_fiml(
@@ -81,7 +81,7 @@ check_misspec(lrt_fiml_misspec)
 check_ci(ci_fiml)
 stopifnot(isTRUE(lrt_fiml$constrained$fiml))
 
-fit_ml2s <- magmaan(model, dat, estimator = "ML2S", control = control)
+fit_ml2s <- fit_model(model, dat, estimator = "ML2S", control = control)
 free_ml2s <- loading_free_id(fit_ml2s, "x2")
 target_ml2s <- 0.97 * fit_ml2s$theta[free_ml2s]
 lrt_ml2s <- core$frontier_profile_lrt_parameter_ml2s_nt(
@@ -102,7 +102,7 @@ check_misspec(lrt_ml2s_misspec)
 check_ci(ci_ml2s)
 stopifnot(identical(lrt_ml2s$constrained$stage2_weight, "nt"))
 
-fit_ml2s_dls <- magmaan(
+fit_ml2s_dls <- fit_model(
   model, dat, estimator = "ML2S", control = control,
   stage2_weight = "dls", dls_a = 0.35
 )
@@ -134,7 +134,7 @@ dat_mixed <- data.frame(
   x3 = x3,
   x4 = x4
 )
-fit_mixed <- magmaan(
+fit_mixed <- fit_model(
   model, dat_mixed, estimator = "DWLS", ordered = c("x1", "x2"),
   meanstructure = TRUE, control = control)
 free_mixed <- loading_free_id(fit_mixed, "x2")

@@ -40,13 +40,13 @@
 # the inference stays calibrated, and graceful degradation (Heywood / improper
 # rate and convergence: the closed form cannot fail to converge, unlike ML).
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
   "..", "..", "_support", "R", "helpers.R"
 ))
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 # ---------------------------------------------------------------------------
 # Arguments
@@ -401,7 +401,7 @@ worker <- function(i, sampler, target, spec) {
   }
 
   ## ML reference (magmaan's own iterative fit)
-  mlfit <- tryCatch(suppressMessages(magmaan::magmaan(model_h1, Xdf, estimator = "ML")),
+  mlfit <- tryCatch(suppressMessages(magmaanlab::fit_model(model_h1, Xdf, estimator = "ML")),
                     error = function(e) NULL)
   ok_ml <- !is.null(mlfit) && isTRUE(mlfit$converged)
   out["conv_ml"] <- as.numeric(ok_ml)
@@ -421,9 +421,9 @@ worker <- function(i, sampler, target, spec) {
       gr <- group_reduce((est_m - target)^2)
       for (g in group_levels) out[paste0("mse_ml_", g)] <- gr[[g]]
     }
-    fm <- tryCatch(magmaan::fit_measures(mlfit), error = function(e) NULL)
+    fm <- tryCatch(magmaanlab::fit_measures(mlfit), error = function(e) NULL)
     if (!is.null(fm)) out["rej_ml_nt"] <- as.numeric(fm[["pvalue"]] < opts$alpha)
-    ft <- tryCatch(magmaan::fmg_tests(mlfit, data = Xdf, tests = c("sb", "mv", "ss")),
+    ft <- tryCatch(magmaanlab::fmg_tests(mlfit, data = Xdf, tests = c("sb", "mv", "ss")),
                    error = function(e) NULL)
     if (!is.null(ft)) {
       pget <- function(pre) {
@@ -456,7 +456,7 @@ local({
          call. = FALSE)
   }
   X <- matrix(stats::rnorm(500 * 9), 500, 9) %*% chol(pop$Sigma); colnames(X) <- ov
-  mlfit <- suppressMessages(magmaan::magmaan(model_h1, as.data.frame(X), estimator = "ML"))
+  mlfit <- suppressMessages(magmaanlab::fit_model(model_h1, as.data.frame(X), estimator = "ML"))
   if (!identical(as.integer(mlfit$partable$free), as.integer(pt_h1$free))) {
     stop("ML partable free-index layout differs from lavaanify(model_h1)", call. = FALSE)
   }
@@ -575,7 +575,7 @@ meta <- metadata_frame(
     reps = opts$reps, n = opts$n, generators = opts$generators, specs = opts$specs,
     ref_n = opts$ref_n, alpha = opts$alpha, seed_base = opts$seed_base,
     cores = opts$cores, regimes = opts$regimes, cross_frac = cross_frac),
-  packages = "magmaan")
+  packages = "magmaanlab")
 meta_path <- file.path(opts$results_dir, "metadata.csv")
 write_csv(meta, meta_path)
 

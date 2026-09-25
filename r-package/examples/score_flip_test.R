@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 set.seed(20260712)
 lambda <- c(1, 0.8, 0.7, 0.9)
@@ -7,9 +7,9 @@ X <- matrix(rnorm(240 * 4), 240, 4) %*% chol(Sigma)
 dat <- as.data.frame(X)
 names(dat) <- paste0("x", 1:4)
 
-h1 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4", dat,
+h1 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4", dat,
               estimator = "ML", se = "none", test = "none")
-h0 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat,
+h0 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat,
               estimator = "ML", se = "none", test = "none")
 
 a <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17)
@@ -76,9 +76,9 @@ stopifnot(
 dat_mis <- dat
 dat_mis$x3[seq(1, nrow(dat_mis), by = 4)] <- NA_real_
 dat_mis$x4[seq(2, nrow(dat_mis), by = 5)] <- NA_real_
-f1 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
+f1 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
               estimator = "FIML", se = "none", test = "none")
-f0 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat_mis,
+f0 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat_mis,
               estimator = "FIML", se = "none", test = "none")
 fa <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
 fb <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
@@ -90,7 +90,7 @@ fg <- global_score_flip_test(f1, n_flips = 63, seed = 29)
 fg_observed <- global_score_flip_test(
   f1, n_flips = 63, seed = 29,
   sensitivity = "observed", metric = "observed")
-m2 <- magmaan("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
+m2 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
               estimator = "ML2S", se = "none", test = "none")
 mg_a <- global_score_flip_test(m2, n_flips = 63, seed = 31)
 mg_b <- global_score_flip_test(m2, n_flips = 63, seed = 31)

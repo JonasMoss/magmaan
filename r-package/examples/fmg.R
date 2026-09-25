@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 
 utils::data("HolzingerSwineford1939", package = "lavaan")
 
@@ -7,7 +7,7 @@ model <- "visual  =~ x1 + x2 + x3
           textual =~ x4 + x5 + x6
           speed   =~ x7 + x8 + x9"
 
-fit <- magmaan(model, df, estimator = "ML", se = "none", test = "none")
+fit <- fit_model(model, df, estimator = "ML", se = "none", test = "none")
 stopifnot(inherits(fit$raw_data, "magmaan_complete_data"))
 
 types <- c("std", "sb", "ss", "mv", "sf", "all", "pall",
@@ -51,7 +51,7 @@ stopifnot(is.finite(fm$cfi), is.finite(fm$rmsea))
 stopifnot(inherits(fm$fmg, "magmaan_fmg_tests"))
 stopifnot(identical(fm$fmg$label, c("sb_rls", "peba4_rls")))
 
-fit_group <- magmaan(model, df, estimator = "ML", groups = "school",
+fit_group <- fit_model(model, df, estimator = "ML", groups = "school",
                      meanstructure = TRUE, se = "none", test = "none")
 group_tests <- c("sb_ug_rls", "peba2_ug_rls", "peba4_rls", "pols2_rls")
 tab_group <- fmg_tests(fit_group, tests = group_tests)
@@ -85,17 +85,17 @@ stopifnot(grepl("FIML/missing-data", err_fiml, fixed = TRUE))
 model_h0_complete <- "visual  =~ x1 + a*x2 + a*x3
                       textual =~ x4 + x5 + x6
                       speed   =~ x7 + x8 + x9"
-fit_h0_complete <- magmaan(model_h0_complete, df, estimator = "ML",
+fit_h0_complete <- fit_model(model_h0_complete, df, estimator = "ML",
                            se = "none", test = "none")
 nested_tests <- c("std_ml", "std_rls", "sb_ml", "sb_ug_ml", "ss_rls",
                   "peba4_rls", "peba4_ug_rls", "pall_ml", "all_ml")
 tab_nested <- fmg_nested(fit, fit_h0_complete, data = df,
                          tests = nested_tests)
 rls_manual <-
-  magmaan:::infer_rls_chi2_fit(
-    fit_h0_complete, magmaan:::model_implied(fit_h0_complete))$statistic -
-  magmaan:::infer_rls_chi2_fit(
-    fit, magmaan:::model_implied(fit))$statistic
+  magmaanlab:::infer_rls_chi2_fit(
+    fit_h0_complete, magmaanlab:::model_implied(fit_h0_complete))$statistic -
+  magmaanlab:::infer_rls_chi2_fit(
+    fit, magmaanlab:::model_implied(fit))$statistic
 stopifnot(inherits(tab_nested, "magmaan_fmg_tests"))
 stopifnot(identical(tab_nested$label, nested_tests))
 stopifnot(identical(tab_nested$base,
@@ -129,11 +129,11 @@ for (estimator in c("ULS", "GLS", "WLS")) {
   spec_h1_ls <- model_spec(model)
   spec_h0_ls <- model_spec(model_h0_complete)
   weight_ls <- if (identical(estimator, "WLS")) W_adf else NULL
-  fit_h1_ls <- magmaan(
+  fit_h1_ls <- fit_model(
     spec_h1_ls, df_to_data(df, spec_h1_ls, scaling = "n-1"),
     estimator = estimator, W = weight_ls, se = "none", test = "none"
   )
-  fit_h0_ls <- magmaan(
+  fit_h0_ls <- fit_model(
     spec_h0_ls, df_to_data(df, spec_h0_ls, scaling = "n-1"),
     estimator = estimator, W = weight_ls, se = "none", test = "none"
   )
@@ -176,7 +176,7 @@ if (requireNamespace("lavaan", quietly = TRUE)) {
   # that magmaan computes as sum(FIML FMG eigenvalues). This is distinct from
   # lavaan's default MLR/Mplus trace and from lavInspect("UGamma"), which follows
   # the older SB accessor path.
-  sp_f <- magmaan:::infer_fiml_fmg_spectrum(fit_fiml)
+  sp_f <- magmaanlab:::infer_fiml_fmg_spectrum(fit_fiml)
   lav_yb <- lavaan::cfa(model, df_na, missing = "fiml", estimator = "MLR",
                         test = "yuan.bentler",
                         h1.information = "unstructured",
@@ -192,7 +192,7 @@ if (requireNamespace("lavaan", quietly = TRUE)) {
   # and the FIML LRT base must match lavaan's chisq.
   fit_fc <- magmaan_core$fit_fiml(spec_f, df_to_fiml_data(df, spec_f),
               control = list(max_iter = 10000, ftol = 1e-13, gtol = 1e-9))
-  sp_c <- magmaan:::infer_fiml_fmg_spectrum(fit_fc)
+  sp_c <- magmaanlab:::infer_fiml_fmg_spectrum(fit_fc)
   lav_u <- lavaan::cfa(model, df, estimator = "ML", test = "satorra.bentler",
                        meanstructure = TRUE, h1.information = "unstructured")
   ev_l <- sort(Re(eigen(lavaan::lavInspect(lav_u, "UGamma"),
@@ -227,7 +227,7 @@ cat("FIML FMG (single + multi-group) workflow: ok\n")
 # triple. Under ML2S, as under FIML, only the biased Gamma-hat is defined.
 # Unsuffixed tests use ML; an explicit _rls uses the full fitted-moment
 # residual quadratic (means plus covariances) with the same spectrum.
-fit_2s <- magmaan(model, df_na, estimator = "ML2S")
+fit_2s <- fit_model(model, df_na, estimator = "ML2S")
 stopifnot(identical(fit_2s$estimator, "ML2S"), !is.null(fit_2s$ml2s),
           length(fit_2s$ml2s$eigvals) == fit_2s$ml2s$df)
 tab_2s <- fmg_tests(fit_2s, tests = c("std", "sb", "ss", "mv", "sf", "all",
@@ -258,8 +258,8 @@ cat("ML2S (two-stage) FMG workflow: ok\n")
 model_h0 <- "visual  =~ x1 + a*x2 + a*x3
              textual =~ x4 + x5 + x6
              speed   =~ x7 + x8 + x9"
-fit_nf_h1 <- magmaan(model, df_na, estimator = "FIML")
-fit_nf_h0 <- magmaan(model_h0, df_na, estimator = "FIML")
+fit_nf_h1 <- fit_model(model, df_na, estimator = "FIML")
+fit_nf_h0 <- fit_model(model_h0, df_na, estimator = "FIML")
 nt_f <- nestedTest(fit_nf_h1, fit_nf_h0, method = "restriction_map")
 tab_nf <- fmg_nested(fit_nf_h1, fit_nf_h0)
 stopifnot(identical(nt_f$computation, "fiml_eta"))
@@ -270,7 +270,7 @@ stopifnot(grepl("complete-data ML", tryCatch(
   fmg_nested(fit_nf_h1, fit_nf_h0, tests = "peba4_rls"),
   error = conditionMessage)))
 
-fit_n2s_h0 <- magmaan(model_h0, df_na, estimator = "ML2S")
+fit_n2s_h0 <- fit_model(model_h0, df_na, estimator = "ML2S")
 nt_2s <- nestedTest(fit_2s, fit_n2s_h0, method = "restriction_map")
 tab_n2s <- fmg_nested(fit_2s, fit_n2s_h0)
 stopifnot(identical(nt_2s$computation, "ml2s_eta"))
@@ -323,7 +323,7 @@ if (requireNamespace("semTests", quietly = TRUE) &&
                       x1 ~~ d*x1
                       x2 ~~ d*x2
                       x3 ~~ d*x3"
-  fit_h0_parity <- magmaan(model_h0_parity, df, estimator = "ML",
+  fit_h0_parity <- fit_model(model_h0_parity, df, estimator = "ML",
                            se = "none", test = "none")
   lav_h1 <- lavaan::sem(model, df, estimator = "MLM",
                         meanstructure = FALSE)

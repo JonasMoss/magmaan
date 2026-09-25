@@ -121,7 +121,7 @@ fiml_one_replication <- function(cell, rep, seed_base) {
   started <- proc.time()[["elapsed"]]
   fit <- tryCatch(
     withCallingHandlers(
-      magmaan::magmaan(
+      magmaanlab::fit_model(
         fiml_information_model, data = data, estimator = "FIML",
         control = list(max_iter = 2000L, ftol = 1e-10, gtol = 1e-7)
       ),
@@ -154,7 +154,7 @@ fiml_one_replication <- function(cell, rep, seed_base) {
 
   started <- proc.time()[["elapsed"]]
   comparison <- tryCatch(
-    magmaan::magmaan_core$inference_fiml_information_vcov(fit),
+    magmaanlab::magmaan_core$inference_fiml_information_vcov(fit),
     error = function(e) e
   )
   inference_seconds <- proc.time()[["elapsed"]] - started
@@ -246,10 +246,10 @@ fiml_lavaan_parity <- function(grid, seed_base, max_cells = 3L,
     cell <- selected[i, , drop = FALSE]
     seed <- as.integer(seed_base + cell$cell_id * 100000 + 1L)
     data <- fiml_generate_cell(cell, seed)
-    mag_fit <- magmaan::magmaan(
+    mag_fit <- magmaanlab::fit_model(
       fiml_information_model, data = data, estimator = "FIML",
       control = list(max_iter = 4000L, ftol = 1e-12, gtol = 1e-8))
-    mag <- magmaan::magmaan_core$inference_fiml_information_vcov(mag_fit)
+    mag <- magmaanlab::magmaan_core$inference_fiml_information_vcov(mag_fit)
     mag_parameters <- fiml_parameter_rows(mag_fit)
 
     for (m in seq_len(nrow(fiml_information_methods))) {

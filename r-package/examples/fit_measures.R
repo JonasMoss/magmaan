@@ -16,7 +16,7 @@
 ## Swineford 1939 data twice: the well-specified 3-factor CFA, and a misspecified
 ## single-factor CFA. Watch CFI/TLI fall and RMSEA rise between them.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 mok <- function(a, b, tol = 1e-3)
   if (isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)),
@@ -33,7 +33,7 @@ model_1f <- "g =~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9"
 ## measures_fit() needs the model chi-square, its df, and the baseline fit.
 ## Each is one explicit primitive away from the estimate-only fit.
 measures_of <- function(model) {
-  fit  <- magmaan(model, df, estimator = "ML", se = "none", test = "none")
+  fit  <- fit_model(model, df, estimator = "ML", se = "none", test = "none")
   ss   <- magmaan_core$fit_sample_stats(fit)
   chi2 <- magmaan_core$infer_chi2_stat(ss, fit$fmin)
   dfm  <- magmaan_core$infer_df_stat(fit$partable, ss)

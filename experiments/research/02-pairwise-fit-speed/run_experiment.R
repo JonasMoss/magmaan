@@ -128,7 +128,7 @@ apply_missingness <- function(X, mechanism, rate, seed) {
 
 main <- function() {
   opts <- parse_args(commandArgs(trailingOnly = TRUE))
-  require_pkg("magmaan")
+  require_pkg("magmaanlab")
   require_pkg("lavaan")
   require_pkg("microbenchmark")
   ensure_results_dir()
@@ -152,15 +152,15 @@ main <- function() {
       Xk <- miss$X[keep, , drop = FALSE]
       mk <- mask[keep, , drop = FALSE]; storage.mode(mk) <- "logical"
 
-      pw <- magmaan::magmaan_core$data_pairwise_sample_stats(Xk, mk)
+      pw <- magmaanlab::magmaan_core$data_pairwise_sample_stats(Xk, mk)
       sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
 
       cat(sprintf("[exp09] %s + %s: timing %d reps × 3 estimators\n",
                   m$name, toupper(mech), opts$times))
       bench <- microbenchmark::microbenchmark(
-        sigma = magmaan::magmaan_core$estimate_gls(partable, sample_pw),
-        ml    = magmaan::magmaan_core$estimate_ml(partable, sample_pw),
-        gamma = magmaan::magmaan_core$estimate_gls_pairwise(partable, Xk, mk),
+        sigma = magmaanlab::magmaan_core$estimate_gls(partable, sample_pw),
+        ml    = magmaanlab::magmaan_core$estimate_ml(partable, sample_pw),
+        gamma = magmaanlab::magmaan_core$estimate_gls_pairwise(partable, Xk, mk),
         times = opts$times, unit = "ms"
       )
       # microbenchmark returns nanoseconds in $time; convert to milliseconds.
@@ -212,7 +212,7 @@ main <- function() {
       models     = paste(sapply(models, `[[`, "name"), collapse = ","),
       mechanisms = paste(mechanisms, collapse = ",")
     ),
-    packages = c("magmaan", "lavaan", "microbenchmark")
+    packages = c("magmaanlab", "lavaan", "microbenchmark")
   )
   cat(sprintf("\nWrote: %s\n       %s\n       %s\n",
               fits_path, summary_path, meta_path))

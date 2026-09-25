@@ -14,8 +14,8 @@ source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
 require_pkg("jsonlite")
-require_pkg("magmaan", "install the current R package first")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first")
+suppressPackageStartupMessages(library(magmaanlab))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
@@ -628,7 +628,7 @@ main <- function() {
       psd_method = "warm PSD-ML refit, NLopt SLSQP",
       lr_scale_note = "2*N*objective difference; descriptive, not a test"
     ),
-    packages = c("magmaan", "jsonlite"))
+    packages = c("magmaanlab", "jsonlite"))
 
   expected_pairs <- length(args$n_values) * length(args$lambda_values) *
     args$reps

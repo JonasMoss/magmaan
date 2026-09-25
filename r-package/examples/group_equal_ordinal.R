@@ -22,8 +22,8 @@
 ## the estimates matched by op|lhs|rhs|group (robust to plabel numbering), plus
 ## the structural release count. The data mirror the gated fixtures.
 
-suppressMessages({ library(magmaan); library(lavaan) })
-core <- magmaan::magmaan_core
+suppressMessages({ library(magmaanlab); library(lavaan) })
+core <- magmaanlab::magmaan_core
 ctrl <- list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8)
 
 make_ord_df_scaled <- function(n, cuts_by_var, seed = 1L,
@@ -67,7 +67,7 @@ est_by_key <- function(pt) {
 }
 
 fit_and_check <- function(label, ge, est_tol = 5e-3, chisq_tol = 5e-2) {
-  spec  <- magmaan::model_spec(model, ordered = ordered,
+  spec  <- magmaanlab::model_spec(model, ordered = ordered,
                                parameterization = "theta",
                                group = "school", group_labels = glabels,
                                group_equal = ge)

@@ -67,9 +67,9 @@ study2_model_specs <- function(p, groups) {
     group_labels = labels
   )
   list(
-    H1 = do.call(magmaan::model_spec, args),
+    H1 = do.call(magmaanlab::model_spec, args),
     H0 = do.call(
-      magmaan::model_spec,
+      magmaanlab::model_spec,
       c(args, list(group_equal = "loadings"))
     )
   )

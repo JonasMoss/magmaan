@@ -77,8 +77,8 @@ results_dir <- ensure_results_dir()
 
 set_single_threaded_math()
 
-require_pkg("magmaan")
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab")
+core <- magmaanlab::magmaan_core
 
 # ── Population covariance ───────────────────────────────────────────────────
 # Two-factor CFA. Loadings cycle through {0.5, 0.6, 0.7, 0.8}, n_items/2 per
@@ -108,7 +108,7 @@ build_population <- function(n_items, rho) {
 get_spec <- function(n_items) {
   key <- as.character(n_items)
   if (!is.null(.spec_cache[[key]])) return(.spec_cache[[key]])
-  spec <- magmaan::model_spec(build_unidim_syntax(n_items))
+  spec <- magmaanlab::model_spec(build_unidim_syntax(n_items))
   .spec_cache[[key]] <- spec
   spec
 }
@@ -137,7 +137,7 @@ population_rmsea <- function(Sigma_pop, n_items) {
   colnames(y) <- paste0("x", seq_len(n_items))
   df <- as.data.frame(y)
   syntax <- build_unidim_syntax(n_items)
-  fit <- tryCatch(magmaan::magmaan(syntax, df, estimator = "ML"),
+  fit <- tryCatch(magmaanlab::fit_model(syntax, df, estimator = "ML"),
                   error = function(e) e)
   if (inherits(fit, "error") || !isTRUE(fit$converged)) return(NA_real_)
   fmin <- as.numeric(fit$fmin)
@@ -474,7 +474,7 @@ threshold_sets <- setNames(lapply(unique(cell_grid$dist), function(nm) {
 # ── Run ─────────────────────────────────────────────────────────────────────
 cat(sprintf(
   "maydeu-olivares-2017: magmaan %s, %s, reps=%d, cells=%d, robust_track=%s\n",
-  as.character(utils::packageVersion("magmaan")),
+  as.character(utils::packageVersion("magmaanlab")),
   R.version.string, args$reps, nrow(cell_grid), args$robust_track
 ))
 
@@ -648,7 +648,7 @@ meta <- metadata_frame(
     n_chi2_rows = nrow(chi2_long),
     total_seconds = sprintf("%.2f", t_global1 - t_global0)
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — wrote results to %s\n",

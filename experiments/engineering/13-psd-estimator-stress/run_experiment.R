@@ -13,8 +13,8 @@
 source(.support_helpers())
 rm(.support_helpers)
 set_single_threaded_math()
-require_pkg("magmaan", "install the current R package first")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab", "install the current R package first")
+suppressPackageStartupMessages(library(magmaanlab))
 
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "objectives.R"))
@@ -216,7 +216,7 @@ write_metadata(
     git_head = git_scalar(c("rev-parse", "HEAD")),
     git_dirty = git_dirty()
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 message("Wrote:")

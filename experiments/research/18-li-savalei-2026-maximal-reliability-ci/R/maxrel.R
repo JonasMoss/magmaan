@@ -208,7 +208,7 @@ cf_logit_interval <- function(theta, pt, rebuild, pop, which, V, alpha = 0.05) {
 # normal-theory and sandwich delta-method SEs, or NULL on a non-converged /
 # improper fit (negative residual variance = Heywood). `spec` is prebuilt once.
 fit_coefficients <- function(spec, dat, pop) {
-  fit <- tryCatch(magmaan::magmaan(spec, dat, estimator = "ML"),
+  fit <- tryCatch(magmaanlab::fit_model(spec, dat, estimator = "ML"),
                   error = function(e) NULL)
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
   pt <- fit$partable

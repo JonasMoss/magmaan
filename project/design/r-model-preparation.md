@@ -68,7 +68,7 @@ it does not infer their runtime from those older installed-package measurements.
 | Mixed ordinal DWLS / WLS and PSD | Model spec + mixed statistics | Parallel R augmentation and native preparation; uniform staging must not imply support for currently rejected estimator/parameterization combinations |
 | Two-level ML | Model spec + data/cluster IDs | Matrix representation and cluster summaries; wrapper also computes observed-information SEs and H1/fit statistics |
 | Native FC-SEM ML | Separate FC-SEM spec and sample data | Syntax passed back to C++; reparsing/building the native FC-SEM structure |
-| SAM / noniterative CFA | Specs or partables plus sample moments, dedicated entry points | Separate orchestration rather than the main `magmaan()` dispatcher; SAM defaults to two-step SEs |
+| SAM / noniterative CFA | Specs or partables plus sample moments, dedicated entry points | Separate orchestration rather than the main `fit_model()` dispatcher; SAM defaults to two-step SEs |
 
 Evidence entry points:
 
@@ -87,7 +87,7 @@ Evidence entry points:
   This is a foundation, not proof that all R variants can already be bound
   through one C++ dispatcher unchanged.
 
-The high-level `magmaan()` accepts an existing model spec, but may rebuild it
+The high-level `fit_model()` accepts an existing model spec, but may rebuild it
 when group metadata changes or FIML/ML2S requires adding a mean structure.
 The `magmaan_core$estimate_*` aliases can bypass R augmentation when given an
 already augmented partable; they still reconstruct native objects.

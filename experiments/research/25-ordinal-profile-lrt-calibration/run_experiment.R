@@ -91,14 +91,14 @@ ci_references <- vapply(
 
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 
 loadings <- c(0.85, 0.80, 0.75, 0.70, 0.65, 0.60)
 ordered_vars <- paste0("x", seq_along(loadings))
 block <- rep(1L, length(loadings))
 model <- paste("f =~", paste(ordered_vars, collapse = " + "))
-spec <- magmaan::model_spec(model, ordered = ordered_vars, parameterization = "delta")
+spec <- magmaanlab::model_spec(model, ordered = ordered_vars, parameterization = "delta")
 fit_control <- list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
 q95 <- stats::qchisq(0.95, df = 1)
 ci_initial_step <- 0.02
@@ -573,7 +573,7 @@ write.csv(data.frame(
   dgps = paste(dgp_grid, collapse = ","),
   cut_regimes = paste(cut_grid, collapse = ","),
   arms = paste(unique(raw$arm), collapse = ","),
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   stringsAsFactors = FALSE
 ), "results/metadata.csv", row.names = FALSE)
 message("wrote results/pseudo_targets.csv")

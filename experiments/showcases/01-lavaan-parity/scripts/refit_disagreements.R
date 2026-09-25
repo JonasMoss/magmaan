@@ -99,10 +99,10 @@ audit_one <- function(case) {
                    sort = FALSE)
   prob$spec$partable$ustart[matched$row_idx] <- matched$est
 
-  ss <- magmaan:::sample_stats_arg(prob$dat)
-  pt_for_starts <- magmaan:::partable_arg(prob$spec)
+  ss <- magmaanlab:::sample_stats_arg(prob$dat)
+  pt_for_starts <- magmaanlab:::partable_arg(prob$spec)
   theta_full <- tryCatch(
-    magmaan::magmaan_core$fit_start_values(pt_for_starts, ss),
+    magmaanlab::magmaan_core$fit_start_values(pt_for_starts, ss),
     error = function(e) structure(list(error = conditionMessage(e)),
                                   class = "audit_parity_magmaan_error"))
   if (inherits(theta_full, "audit_parity_magmaan_error")) {
@@ -118,7 +118,7 @@ audit_one <- function(case) {
   estimator <- toupper(case$estimator)
   if (identical(estimator, "ADF")) estimator <- "WLS"
   ev <- tryCatch(
-    magmaan::magmaan_core$evaluate_at(
+    magmaanlab::magmaan_core$evaluate_at(
       prob$spec, prob$dat, as.numeric(theta_full),
       estimator = estimator,
       W = if (estimator == "WLS") prob$W else NULL),

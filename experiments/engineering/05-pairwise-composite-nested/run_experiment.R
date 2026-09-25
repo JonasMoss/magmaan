@@ -94,7 +94,7 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- ensure_results_dir()
 ov <- paste0("y", 1:4)
@@ -254,7 +254,7 @@ metadata <- data.frame(
   model = "two_factor_ordinal_metric_invariance",
   estimator = "frontier pairwise ordinal composite",
   battery = "nested LR: unscaled, scaled, adjusted, mixture",
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   stringsAsFactors = FALSE)
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 

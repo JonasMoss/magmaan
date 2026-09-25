@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 library(lavaan)
 
 # Van Praag pairwise covariance + casewise influence functions Ψ̂ for

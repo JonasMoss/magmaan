@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -235,7 +235,7 @@ one_rep <- function(cell, rep_id) {
     alternative = cell$alternative, effect = cell$effect)
   fit_started <- proc.time()[["elapsed"]]
   fit0 <- tryCatch(
-    magmaan(
+    fit_model(
       specs$restricted, data = dat, estimator = "ML",
       optimizer = "nlopt-lbfgs-slsqp-fallback"),
     error = function(e) e)
@@ -276,7 +276,7 @@ one_rep <- function(cell, rep_id) {
 
   reference <- tests[[1L]]
   p_peba4 <- tryCatch(
-    magmaan:::infer_fmg_test(
+    magmaanlab:::infer_fmg_test(
       reference$statistic_effective, reference$df,
       reference$eigenvalues, method = "peba", param = 4)$p_value,
     error = function(e) NA_real_)
@@ -400,7 +400,7 @@ metadata <- data.frame(
     paste(arm_specs$arm, collapse = ","), opts$cores, opts$seed_base,
     unique(grid$alternative), unique(grid$effect),
     proc.time()[["elapsed"]] - started,
-    as.character(packageVersion("magmaan")), R.version.string))
+    as.character(packageVersion("magmaanlab")), R.version.string))
 write.csv(
   metadata, file.path(results_dir, paste0(prefix, "_metadata.csv")),
   row.names = FALSE)

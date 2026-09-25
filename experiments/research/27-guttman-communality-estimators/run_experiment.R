@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 source(file.path(
   dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])),
   "..", "..", "_support", "R", "helpers.R"
 ))
 
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 canonical_method <- function(method) {
   out <- method
@@ -278,7 +278,7 @@ make_Z <- function(blocks) {
 }
 
 estimate_guttman_h <- function(s, blocks, method) {
-  magmaan::guttman_h(s, blocks, method = guttman_backend_method(method))
+  magmaanlab::guttman_h(s, blocks, method = guttman_backend_method(method))
 }
 
 sym_power <- function(x, power, label, tol = 1e-10) {
@@ -642,10 +642,10 @@ draws_for_condition <- function(design, generator, n, reps, seed_base) {
     return(draws)
   }
   marginals <- stats::setNames(rep(list(ordinal_prob), nrow(design$sigma)), design$vars)
-  cal <- magmaan::sim_ordcorr_calibrate(
+  cal <- magmaanlab::sim_ordcorr_calibrate(
     design$sigma, marginals, metric = "pearson_codes",
     matrix_repair = "none")
-  sim <- magmaan::sim_ordcorr_draw(cal, n = n, reps = reps, seed_base = seed_base)
+  sim <- magmaanlab::sim_ordcorr_draw(cal, n = n, reps = reps, seed_base = seed_base)
   lapply(sim$draws, function(d) {
     x <- d$X
     colnames(x) <- design$vars
@@ -844,7 +844,7 @@ run_timing_study <- function(grid, opts, ml_control) {
   for (cc in seq_len(nrow(grid))) {
     g <- grid[cc, ]
     design <- make_design(g$factors, g$indicators, g$rho, g$loading)
-    spec <- magmaan::model_spec(model_syntax(design$q, design$m))
+    spec <- magmaanlab::model_spec(model_syntax(design$q, design$m))
     n_draws <- opts$timing_warmup + opts$timing_reps
     seed <- opts$seed_base + 700000000L + cc * 100000L
     draws <- draws_for_condition(design, g$generator, g$n, n_draws, seed)
@@ -901,7 +901,7 @@ row_i <- 0L
 for (cc in seq_len(nrow(grid))) {
   g <- grid[cc, ]
   design <- make_design(g$factors, g$indicators, g$rho, g$loading)
-  spec <- magmaan::model_spec(model_syntax(design$q, design$m))
+  spec <- magmaanlab::model_spec(model_syntax(design$q, design$m))
   target <- target_for_generator(design, g$generator)
   seed <- opts$seed_base + cc * 100000L
   draws <- draws_for_condition(design, g$generator, g$n, opts$reps, seed)
@@ -961,7 +961,7 @@ metadata <- metadata_frame(
     ),
     guttman_reconstruction = "traditional incidence-composite map H Z (Z' H Z)^-1 Z' H"
   ),
-  packages = c("magmaan")
+  packages = c("magmaanlab")
 )
 
 write_all(replicates, summary, complexity, metadata,

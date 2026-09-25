@@ -9,7 +9,7 @@
 ## The point residuals are unchanged; only their sampling ACOV (hence SE/z and
 ## the close-fit interval) reflects the estimated weight.
 
-suppressMessages({library(lavaan); library(magmaan)})
+suppressMessages({library(lavaan); library(magmaanlab)})
 
 ## Heavy-tailed (t_6) 4-indicator data with one true residual covariance the
 ## one-factor model cannot reproduce, so there is real, non-normal misfit.
@@ -29,7 +29,7 @@ colnames(X) <- paste0("x", 1:4)
 dat <- as.data.frame(X)
 
 model <- "f =~ x1 + x2 + x3 + x4"
-fit <- magmaan(model, dat, estimator = "GLS")
+fit <- fit_model(model, dat, estimator = "GLS")
 stopifnot(identical(fit$estimator, "GLS"), isTRUE(fit$converged))
 
 nt <- lav_residuals(fit)                                       # NT projection
@@ -57,7 +57,7 @@ cat("usrmr close-fit CI  est.:",
 ## Guards: needs raw data; the second-stage weight must be estimated.
 stopifnot(is.character(tryCatch(
   lav_residuals(fit, estimated_weight = TRUE), error = conditionMessage)))
-fit_ml <- magmaan(model, dat, estimator = "ML")
+fit_ml <- fit_model(model, dat, estimator = "ML")
 stopifnot(is.character(tryCatch(
   lav_residuals(fit_ml, estimated_weight = TRUE, data = dat),
   error = conditionMessage)))

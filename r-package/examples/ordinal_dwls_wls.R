@@ -1,5 +1,5 @@
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 make_ord_df <- function(n, cuts_by_var, seed = 1L) {
   set.seed(seed)
@@ -23,7 +23,7 @@ df <- make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
                             c(-0.85, 0.20), c(-0.45, 0.75)),
                   seed = 11L)
 
-m <- magmaan::model_spec(model, ordered = ordered, parameterization = "delta")
+m <- magmaanlab::model_spec(model, ordered = ordered, parameterization = "delta")
 d <- core$data_ordinal_stats_from_df(df, m)
 d_h <- core$data_ordinal_stats_from_df(
   df, m, robust = "h_weighted", h_kind = "wma_hard_cap", h_k = 1.25)
@@ -116,15 +116,15 @@ stopifnot(abs(omega_poly$se - omega_poly_fit$se) < 1e-12)
 stopifnot(abs(omega_poly$value - omega_poly_direct$value) < 1e-12)
 stopifnot(abs(omega_poly$se - omega_poly_direct$se) < 1e-12)
 
-mi_dwls <- magmaan::modification_indices(fit_dwls)
-mi_dwls_explicit <- magmaan::modification_indices(fit_dwls, d)
+mi_dwls <- magmaanlab::modification_indices(fit_dwls)
+mi_dwls_explicit <- magmaanlab::modification_indices(fit_dwls, d)
 model_score <- "f =~ x1 + L*x2 + L*x3 + x4"
-m_score <- magmaan::model_spec(model_score, ordered = ordered,
+m_score <- magmaanlab::model_spec(model_score, ordered = ordered,
                                parameterization = "delta")
 fit_score <- core$fit_dwls_ordinal(
   m_score, d, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-st_dwls <- magmaan::score_tests(fit_score)
-st_dwls_explicit <- magmaan::score_tests(fit_score, d)
+st_dwls <- magmaanlab::score_tests(fit_score)
+st_dwls_explicit <- magmaanlab::score_tests(fit_score, d)
 stopifnot(nrow(mi_dwls) > 0L, nrow(st_dwls) > 0L)
 stopifnot(identical(mi_dwls$lhs, mi_dwls_explicit$lhs),
           identical(mi_dwls$rhs, mi_dwls_explicit$rhs),
@@ -157,19 +157,19 @@ for (call in c("measures_standardize_all", "measures_standardize_lv")) {
 # continuous-only. EAP is available for this one-factor fit, but the installed
 # lavaan oracle exposes only EBM/ML for categorical lavPredict().
 fs_msg <- tryCatch(
-  magmaan::factor_scores(fit_dwls, df, method = "regression"),
+  magmaanlab::factor_scores(fit_dwls, df, method = "regression"),
   error = function(e) conditionMessage(e))
 stopifnot(is.character(fs_msg), grepl("continuous-only", fs_msg))
-fs_ebm <- magmaan::factor_scores(fit_dwls, df, method = "EBM")$scores[[1]][, 1]
-fs_default <- magmaan::factor_scores(fit_dwls, df)$scores[[1]][, 1]
+fs_ebm <- magmaanlab::factor_scores(fit_dwls, df, method = "EBM")$scores[[1]][, 1]
+fs_default <- magmaanlab::factor_scores(fit_dwls, df)$scores[[1]][, 1]
 lv_ebm <- as.numeric(lavaan::lavPredict(lavaan_dwls, type = "lv",
                                         method = "EBM"))
 stopifnot(max(abs(fs_ebm - lv_ebm)) < 5e-4,
           max(abs(fs_default - fs_ebm)) < 1e-12)
-fs_eap <- magmaan::factor_scores(fit_dwls, df, method = "EAP")$scores[[1]]
+fs_eap <- magmaanlab::factor_scores(fit_dwls, df, method = "EAP")$scores[[1]]
 stopifnot(nrow(fs_eap) == nrow(df), ncol(fs_eap) == 1L,
           all(is.finite(fs_eap)))
-fs_prec <- magmaan::factor_score_precision(fit_dwls, df)
+fs_prec <- magmaanlab::factor_score_precision(fit_dwls, df)
 fs_var <- fs_prec$posterior_variance[[1]][, 1]
 fs_se <- fs_prec$posterior_se[[1]][, 1]
 prmse <- (mean(fs_eap[, 1]^2) - mean(fs_eap[, 1])^2) /
@@ -187,13 +187,13 @@ stopifnot(max(abs(fs_prec$scores[[1]] - fs_eap)) < 1e-10,
 # and delta-method SE are a parameterization-agnostic transform of the fit (no
 # ordinal guard), evaluated over the prepared partable.
 model_def <- "f =~ x1 + L2*x2 + L3*x3 + x4\nlprod := L2*L3"
-m_def <- magmaan::model_spec(model_def, ordered = ordered,
+m_def <- magmaanlab::model_spec(model_def, ordered = ordered,
                              parameterization = "delta")
 d_def <- core$data_ordinal_stats_from_df(df, m_def)
 fit_def <- core$fit_dwls_ordinal(
   m_def, d_def, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 rob_def <- core$robust_ordinal(fit_def, d_def)
-mg_def <- magmaan::compute_defined(model_def, fit_def, rob_def$vcov)
+mg_def <- magmaanlab::compute_defined(model_def, fit_def, rob_def$vcov)
 lav_def <- lavaan::cfa(model_def, data = df, ordered = ordered,
                        estimator = "DWLS", parameterization = "delta")
 lav_lp <- lavaan::parameterEstimates(lav_def)
@@ -217,21 +217,21 @@ make_mixed_df <- function(n, cuts, seed = 11L) {
     x3 = z[, 3], x4 = z[, 4])
 }
 df_mx <- make_mixed_df(500, list(c(-0.7, 0.4), c(-0.5, 0.6)))
-m_mx <- magmaan::model_spec(model, ordered = c("x1", "x2"),
+m_mx <- magmaanlab::model_spec(model, ordered = c("x1", "x2"),
                             parameterization = "delta", meanstructure = TRUE)
 d_mx <- core$data_mixed_ordinal_stats_from_df(df_mx, m_mx)
 fit_mx <- core$fit_dwls_mixed_ordinal(
   m_mx, d_mx, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 rob_mx <- core$robust_mixed_ordinal(fit_mx, d_mx)
-mi_mx <- magmaan::modification_indices(fit_mx)
+mi_mx <- magmaanlab::modification_indices(fit_mx)
 model_mx_score <- "f =~ x1 + L*x2 + L*x3 + x4"
-m_mx_score <- magmaan::model_spec(model_mx_score, ordered = c("x1", "x2"),
+m_mx_score <- magmaanlab::model_spec(model_mx_score, ordered = c("x1", "x2"),
                                   parameterization = "delta",
                                   meanstructure = TRUE)
 fit_mx_score <- core$fit_dwls_mixed_ordinal(
   m_mx_score, d_mx,
   control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-st_mx <- magmaan::score_tests(fit_mx_score, d_mx)
+st_mx <- magmaanlab::score_tests(fit_mx_score, d_mx)
 stopifnot(isTRUE(fit_mx$mixed_ordinal))
 stopifnot(inherits(fit_mx$mixed_ordinal_stats, "magmaan_mixed_ordinal_data"))
 stopifnot(nrow(mi_mx) > 0L, nrow(st_mx) > 0L)
@@ -254,7 +254,7 @@ set.seed(22L)
 eta <- rnorm(nrow(df_mixed))
 df_mixed$x3 <- 0.8 * eta + 0.6 * rnorm(nrow(df_mixed))
 df_mixed$x4 <- 0.7 * eta + 0.7 * rnorm(nrow(df_mixed))
-m_mixed <- magmaan::model_spec(model, ordered = c("x1", "x2"),
+m_mixed <- magmaanlab::model_spec(model, ordered = c("x1", "x2"),
                                parameterization = "delta", meanstructure = TRUE)
 d_mixed <- core$data_mixed_ordinal_stats_from_df(df_mixed, m_mixed)
 d_mixed_dpd <- core$data_mixed_ordinal_stats_from_df(

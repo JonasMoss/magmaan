@@ -27,7 +27,7 @@
 
 suppressMessages({
   library(lavaan)
-  library(magmaan)
+  library(magmaanlab)
   library(jsonlite)
 })
 
@@ -89,7 +89,7 @@ align_magmaan_free <- function(model, lavaan_free, meanstructure,
                                auto_cov_y = TRUE, model_type = "sem",
                                group = NULL,
                                group_labels = NULL) {
-  mspec <- magmaan::model_spec(model, auto_cov_y = auto_cov_y,
+  mspec <- magmaanlab::model_spec(model, auto_cov_y = auto_cov_y,
                                model_type = model_type,
                                meanstructure = meanstructure,
                                group = group, group_labels = group_labels)

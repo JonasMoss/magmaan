@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -274,7 +274,7 @@ metadata <- data.frame(
             paste(opts$distributions, collapse = ","),
             paste(opts$truths, collapse = ","),
             "Savalei-Bentler MCAR; x1/x2 intact", round(wall_seconds, 3),
-            as.character(utils::packageVersion("magmaan")),
+            as.character(utils::packageVersion("magmaanlab")),
             cache_ref_string), stringsAsFactors = FALSE)
 write.csv(metadata, file.path(results_dir, "metadata.csv"), row.names = FALSE)
 

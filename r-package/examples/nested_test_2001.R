@@ -34,7 +34,7 @@
 ## is about power, not correctness, so prefer `ud_method = "2000"` when both
 ## apply.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 
 set.seed(11); n_g <- 300
@@ -48,15 +48,15 @@ cfg_syntax <- "f =~ x1 + x2 + x3 + x4 + x5 + x6"
 met_syntax <- "f =~ x1 + L2*x2 + L3*x3 + L4*x4 + L5*x5 + L6*x6"
 
 ## ---- magmaan FIML fits + nested tests --------------------------------------
-s_cfg <- magmaan::model_spec(cfg_syntax, group = "school", group_labels = c("A","B"), meanstructure = TRUE)
-s_met <- magmaan::model_spec(met_syntax, group = "school", group_labels = c("A","B"), meanstructure = TRUE)
-cfg <- magmaan::magmaan_core$fit_fiml(s_cfg, magmaan::df_to_fiml_data(df, s_cfg, group = "school"))
-met <- magmaan::magmaan_core$fit_fiml(s_met, magmaan::df_to_fiml_data(df, s_met, group = "school"))
+s_cfg <- magmaanlab::model_spec(cfg_syntax, group = "school", group_labels = c("A","B"), meanstructure = TRUE)
+s_met <- magmaanlab::model_spec(met_syntax, group = "school", group_labels = c("A","B"), meanstructure = TRUE)
+cfg <- magmaanlab::magmaan_core$fit_fiml(s_cfg, magmaanlab::df_to_fiml_data(df, s_cfg, group = "school"))
+met <- magmaanlab::magmaan_core$fit_fiml(s_met, magmaanlab::df_to_fiml_data(df, s_met, group = "school"))
 
-r2000 <- magmaan::nestedTest(cfg, met, method = "satorra.2000", ud_method = "2000")
-r2001 <- magmaan::nestedTest(cfg, met, method = "satorra.2000", ud_method = "2001")
-sb01  <- magmaan::nestedTest(cfg, met, method = "satorra.bentler.2001")
-sb10  <- magmaan::nestedTest(cfg, met, method = "satorra.bentler.2010")
+r2000 <- magmaanlab::nestedTest(cfg, met, method = "satorra.2000", ud_method = "2000")
+r2001 <- magmaanlab::nestedTest(cfg, met, method = "satorra.2000", ud_method = "2001")
+sb01  <- magmaanlab::nestedTest(cfg, met, method = "satorra.bentler.2001")
+sb10  <- magmaanlab::nestedTest(cfg, met, method = "satorra.bentler.2010")
 
 cat("\n=== FIML configural vs metric (2 groups), T_diff =",
     sprintf("%.3f", r2001$T_diff), "df =", r2001$df_diff, "===\n")

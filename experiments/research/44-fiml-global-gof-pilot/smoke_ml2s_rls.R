@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -104,7 +104,7 @@ samplers <- setNames(lapply(opts$distributions, function(distribution) {
 }), opts$distributions)
 
 fmg_p <- function(statistic, df, eigenvalues, method, param = 4) {
-  magmaan:::infer_fmg_test(
+  magmaanlab:::infer_fmg_test(
     statistic, df, eigenvalues,
     method = method, param = param,
     truncate_negative = TRUE)$p_value
@@ -156,11 +156,11 @@ one_rep <- function(cell, rep_id) {
     set.seed(seed + 700001L)
     X <- sem_apply_missingness(X, cell$missingness)
     realized_missing <- mean(is.na(X))
-    fd <- magmaan::df_to_fiml_data(as.data.frame(X), model$spec)
+    fd <- magmaanlab::df_to_fiml_data(as.data.frame(X), model$spec)
     control <- list(max_iter = 8000L, ftol = 1e-11, gtol = 1e-8)
-    stage1 <- magmaan::magmaan_core$estimate_saturated_em_moments(
+    stage1 <- magmaanlab::magmaan_core$estimate_saturated_em_moments(
       fd, control = control)
-    fit <- magmaan::magmaan_core$fit_ml2s(
+    fit <- magmaanlab::magmaan_core$fit_ml2s(
       model$spec, fd,
       optimizer = "nlopt-lbfgs-slsqp-fallback",
       control = control,
@@ -169,14 +169,14 @@ one_rep <- function(cell, rep_id) {
     if (is.null(fit$ml2s$eigvals)) stop("ML2S spectrum is unavailable")
 
     statistic_ml <- as.numeric(fit$ml2s$chisq)
-    implied <- magmaan:::model_implied(fit)
+    implied <- magmaanlab:::model_implied(fit)
     # Primary RLS base: lavaan's browne.residual.nt.model, evaluated at the
     # Stage-2 fit against the Stage-1 saturated-EM moments.
-    statistic_rls <- magmaan:::infer_rls_chi2_fit(fit, implied)$statistic
+    statistic_rls <- magmaanlab:::infer_rls_chi2_fit(fit, implied)$statistic
     # Diagnostic only: the unprojected moment quadratic. With free intercepts
     # the mean structure is saturated, the projection term vanishes, and this
     # must equal statistic_rls. A nonzero gap means the means are restricted.
-    rls_q <- magmaan:::infer_nt_moment_quadratic_fit(fit, implied)
+    rls_q <- magmaanlab:::infer_nt_moment_quadratic_fit(fit, implied)
     df <- as.integer(fit$ml2s$df)
     eigenvalues <- as.numeric(fit$ml2s$eigvals)
     if (length(eigenvalues) != df) stop("ML2S spectrum and df disagree")
@@ -185,7 +185,7 @@ one_rep <- function(cell, rep_id) {
     p_score <- NA_real_
     statistic_score <- NA_real_
     if (opts$flips > 0L) {
-      score <- magmaan::global_score_flip_test(
+      score <- magmaanlab::global_score_flip_test(
         fit,
         n_flips = opts$flips,
         seed = seed + 900001L,
@@ -327,7 +327,7 @@ write_metadata(file.path(results, "metadata.csv"), list(
                           "RLS (lavaan browne.residual.nt.model);",
                           "global score-flip test"),
   reference_spectrum = "common ML2S UGamma spectrum (ML and RLS bases)"),
-  packages = "magmaan")
+  packages = "magmaanlab")
 
 cat(sprintf(
   "runtime_wall=%.1fs failures=%d/%d\n\n",

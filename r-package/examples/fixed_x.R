@@ -11,7 +11,7 @@
 ## moments part of the model, so they appear in theta and in the free rows of
 ## the partable.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 mok <- function(a, b, tol = 1e-4)
   if (isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)),
@@ -21,9 +21,9 @@ hs <- lavaan::HolzingerSwineford1939
 df <- as.data.frame(hs[c("x1", "x2", "x3")])
 model <- "x1 ~ x2 + x3"
 
-fit_fixed <- magmaan(model, df, estimator = "ML",
+fit_fixed <- fit_model(model, df, estimator = "ML",
                      fixed_x = TRUE, se = "none", test = "none")
-fit_random <- magmaan(model, df, estimator = "ML",
+fit_random <- fit_model(model, df, estimator = "ML",
                       fixed_x = FALSE, se = "none", test = "none")
 
 lav_fixed <- sem(model, data = df, fixed.x = TRUE)

@@ -5,7 +5,7 @@
 ## magmaan evaluates them with compute_defined(), propagating a delta-method
 ## standard error. Cross-checked against lavaan::sem().
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-4)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -27,7 +27,7 @@ model <- "
   ab    := a*b       # indirect effect
   total := c + a*b   # total effect
 "
-fit <- magmaan(model, Data, estimator = "ML", se = "none", test = "none")
+fit <- fit_model(model, Data, estimator = "ML", se = "none", test = "none")
 lav <- sem(model, data = Data)
 
 ## defined parameters need the parameter covariance for the delta-method SE.

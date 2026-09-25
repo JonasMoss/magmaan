@@ -39,14 +39,14 @@ stopifnot(reps > 0L, all(n_grid > 2L), is.finite(seed_base))
 
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
-suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 
 loadings <- c(0.85, 0.78, 0.70, 0.62)
 ordered_vars <- paste0("x", seq_along(loadings))
 block <- rep(1L, length(loadings))
 model <- paste("f =~", paste(ordered_vars, collapse = " + "))
-spec <- magmaan::model_spec(model, ordered = ordered_vars, parameterization = "delta")
+spec <- magmaanlab::model_spec(model, ordered = ordered_vars, parameterization = "delta")
 regimes <- list(
   balanced = rep(list(c(-0.65, 0.45)), length(loadings)),
   threshold_extreme = rep(list(c(-1.35, 0.95)), length(loadings))
@@ -178,7 +178,7 @@ write.csv(data.frame(
   target = target,
   loadings = paste(loadings, collapse = ","),
   regimes = paste(names(regimes), collapse = ","),
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   stringsAsFactors = FALSE
 ), "results/metadata.csv", row.names = FALSE)
 message("wrote results/simulation_raw.csv")

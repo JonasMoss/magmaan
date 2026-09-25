@@ -135,9 +135,9 @@ apply_cells_filter <- function(grid, filter) {
   grid
 }
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 set_single_threaded_math()
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 have_lav <- cfg$lavaan_parity && requireNamespace("lavaan", quietly = TRUE)
 if (cfg$lavaan_parity && !have_lav) {
   message("note: --lavaan-parity requested but lavaan is not installed; skipping the oracle.")
@@ -318,7 +318,7 @@ write_metadata(
                   "naive,MLR/YB_mplus,YB_exact,SB,SS,SF,EBA2/4/6,",
                   "pEBA2/4/6,pall,pOLS,all"),
                 elapsed_sec = round(elapsed, 1)),
-  packages = c("magmaan", "lavaan"))
+  packages = c("magmaanlab", "lavaan"))
 
 cat(sprintf("\nDone in %.1fs. Wrote results to: %s\n", elapsed, results_dir()))
 if (nrow(parity_df)) {

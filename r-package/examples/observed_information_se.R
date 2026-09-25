@@ -26,7 +26,7 @@
 ## structure only) and lays the three SE vectors side by side.
 
 suppressMessages(requireNamespace("lavaan"))
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 mok <- function(a, b, tol = 1e-5)
   if (isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)),
@@ -40,7 +40,7 @@ model <- "visual  =~ x1 + x2 + x3
           textual =~ x4 + x5 + x6
           speed   =~ x7 + x8 + x9"
 
-fit <- magmaan::magmaan(model, df, estimator = "ML", se = "none", test = "none")
+fit <- magmaanlab::fit_model(model, df, estimator = "ML", se = "none", test = "none")
 
 ## SE = sqrt(diag(vcov)); vcov = inverse information (with constraint projection
 ## applied from the partable). Same pipeline three times — only the information

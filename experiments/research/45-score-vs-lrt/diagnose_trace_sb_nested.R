@@ -38,7 +38,7 @@ with_fiml <- '--with-fiml' %in% args
 script <- normalizePath(sub('^--file=', '', grep('^--file=', commandArgs(FALSE), value = TRUE)[1]))
 base <- dirname(script)
 source(file.path(base, 'R', 'design.R'))
-suppressPackageStartupMessages({library(magmaan); library(lavaan)})
+suppressPackageStartupMessages({library(magmaanlab); library(lavaan)})
 core <- magmaan_core
 outdir <- file.path(base, 'results', 'trace-sb-nested')
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
@@ -46,7 +46,7 @@ dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 # Package fingerprints before and after, so a mid-run reinstall cannot be
 # mistaken for a timing effect. A parallel `just r-dev` did exactly that once.
 fingerprint <- function() {
-  f <- unlist(lapply(c('magmaan', 'lavaan'), function(p)
+  f <- unlist(lapply(c('magmaanlab', 'lavaan'), function(p)
     list.files(find.package(p), pattern = '\\.so$|^DESCRIPTION$',
                recursive = TRUE, full.names = TRUE)))
   tools::md5sum(f)
@@ -129,8 +129,8 @@ for (j in seq_len(nrow(cases))) {
   ctrl <- list(max_iter = 4000L, ftol = 1e-12, gtol = 1e-8)
   est <- if (is_fiml) 'FIML' else 'ML'
 
-  f1 <- magmaan(s1, d, estimator = est, control = ctrl)
-  f0 <- magmaan(s0, d, estimator = est, control = ctrl)
+  f1 <- fit_model(s1, d, estimator = est, control = ctrl)
+  f0 <- fit_model(s0, d, estimator = est, control = ctrl)
   l1 <- cfa(s1, d, missing = if (is_fiml) 'ml' else 'listwise')
   l0 <- cfa(s0, d, missing = if (is_fiml) 'ml' else 'listwise')
   stopifnot(f1$converged, f0$converged,
@@ -263,7 +263,7 @@ write.csv(nested, file.path(outdir, 'nested.csv'), row.names = FALSE)
 write.csv(checks, file.path(outdir, 'checks.csv'), row.names = FALSE)
 write.csv(data.frame(args = paste(args, collapse = ' '), smoke = smoke,
   timed = do_time, started = format(started), finished = format(Sys.time()),
-  magmaan = as.character(packageVersion('magmaan')),
+  magmaan = as.character(packageVersion('magmaanlab')),
   lavaan = as.character(packageVersion('lavaan')),
   R = paste(R.version$major, R.version$minor, sep = '.'),
   blas_threads = Sys.getenv('OPENBLAS_NUM_THREADS', 'unset')),

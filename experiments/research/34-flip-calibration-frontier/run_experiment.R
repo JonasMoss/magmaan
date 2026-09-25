@@ -10,7 +10,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "engine.R"))
@@ -136,7 +136,7 @@ write_or_validate_manifest <- function(grid, cfg, path, calibration) {
     shard_index = cfg$shard_index, shard_count = cfg$shard_count,
     calibration_5 = unname(calibration[["5"]]),
     calibration_20 = unname(calibration[["20"]]),
-    magmaan_version = as.character(utils::packageVersion("magmaan")),
+    magmaan_version = as.character(utils::packageVersion("magmaanlab")),
     experiment_code_hash = code_hash, stringsAsFactors = FALSE)
   if (file.exists(manifest_path) || file.exists(config_path)) {
     if (!file.exists(manifest_path) || !file.exists(config_path))
@@ -302,6 +302,6 @@ write_metadata(file.path(results, "metadata.csv"), list(
   alpha_convention = "p <= 0.05", strict_sensitivity = "p < 0.05",
   target_skewness = 3, target_excess_kurtosis = 21,
   paper_doi = "10.3758/s13428-026-02968-4",
-  paper_osf = "https://osf.io/h2y3n/"), packages = "magmaan")
+  paper_osf = "https://osf.io/h2y3n/"), packages = "magmaanlab")
 cat(sprintf("wrote %s in %.1fs (%d pipeline failures)\n",
             results, elapsed, nrow(failures)))

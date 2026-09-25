@@ -6,7 +6,7 @@
 ## CFA with ML, ULS and GLS, and reproduces the scaled chi-square that lavaan
 ## reports under estimator = "MLM".
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -33,7 +33,7 @@ opt <- list(max_iter = 3000, ftol = 1e-12, gtol = 1e-9)
 
 cat("=== estimators ===\n")
 for (est in c("ML", "ULS", "GLS")) {
-  fit <- magmaan(model, hs, estimator = est, control = opt,
+  fit <- fit_model(model, hs, estimator = est, control = opt,
                  se = "none", test = "none")
   lav <- cfa(model, data = hs, estimator = est)
   ok(fit$converged && est_match(fit, lav, tol = 1e-2),
@@ -42,7 +42,7 @@ for (est in c("ML", "ULS", "GLS")) {
 
 ## robust scaled chi-square: estimate with ML, then the explicit
 ## Satorra-Bentler post-fit chain (U-factor -> reduced Gamma -> eigenvalues).
-fit  <- magmaan(model, hs, estimator = "ML", se = "none", test = "none")
+fit  <- fit_model(model, hs, estimator = "ML", se = "none", test = "none")
 X    <- as.matrix(hs[paste0("x", 1:9)])
 ss   <- magmaan_core$fit_sample_stats(fit)
 chi2 <- magmaan_core$infer_chi2_stat(ss, fit$fmin)

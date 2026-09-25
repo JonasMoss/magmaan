@@ -1,4 +1,4 @@
-library(magmaan)
+library(magmaanlab)
 library(lavaan)
 
 # Demonstrates the 2x2 grid of pairwise-data sandwich SE configurations:

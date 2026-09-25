@@ -133,7 +133,7 @@ mplus_wlsmv_invariance <- function(model, data, ordered, group,
   requested <- unique(c("configural", steps))
 
   fit_one <- function(spec) {
-    magmaan(spec, data_obj, estimator = fit_estimator, missing = missing,
+    fit_model(spec, data_obj, estimator = fit_estimator, missing = missing,
             optimizer = optimizer, control = control, bounds = bounds)
   }
   fits <- lapply(specs[requested], fit_one)

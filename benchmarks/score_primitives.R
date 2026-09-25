@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Bounded before/after inference timings. No population simulation is run.
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 set.seed(20260918)
 measure <- function(fun, calls = 15L) {
   invisible(fun())
@@ -19,7 +19,7 @@ for (p in c(10L,20L)) {
   for (estimator in c('ML','FIML','ML2S')) {
     data <- X
     if (estimator != 'ML') data[matrix(runif(n*p)<.1,n,p)] <- NA
-    fit <- magmaan(syntax,as.data.frame(data),estimator=estimator,meanstructure=TRUE,
+    fit <- fit_model(syntax,as.data.frame(data),estimator=estimator,meanstructure=TRUE,
                    control=list(max_iter=3000L,ftol=1e-12,gtol=1e-8))
     raw <- if(estimator=='ML') data else NULL
     context <- prepare_inference(fit,raw)

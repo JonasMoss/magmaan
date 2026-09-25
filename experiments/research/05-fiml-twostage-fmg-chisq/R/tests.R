@@ -42,8 +42,8 @@ fiml_control <- function() list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9)
 fit_fiml_model <- function(spec, df, control = NULL) {
   control <- control %||% fiml_control()
   tryCatch({
-    fit <- magmaan::magmaan_core$fit_fiml(
-      spec, magmaan::df_to_fiml_data(df, spec), control = control)
+    fit <- magmaanlab::magmaan_core$fit_fiml(
+      spec, magmaanlab::df_to_fiml_data(df, spec), control = control)
     if (!isTRUE(fit$converged)) return(NULL)
     fit
   }, error = function(e) NULL)
@@ -52,8 +52,8 @@ fit_fiml_model <- function(spec, df, control = NULL) {
 fit_ml2s_model <- function(spec, df, control = NULL) {
   control <- control %||% fiml_control()
   tryCatch({
-    fit <- magmaan::magmaan_core$fit_ml2s(
-      spec, magmaan::df_to_fiml_data(df, spec), control = control)
+    fit <- magmaanlab::magmaan_core$fit_ml2s(
+      spec, magmaanlab::df_to_fiml_data(df, spec), control = control)
     if (!isTRUE(fit$converged)) return(NULL)
     fit
   }, error = function(e) NULL)
@@ -65,7 +65,7 @@ fit_ml2s_model <- function(spec, df, control = NULL) {
 # every method, so its sum (the reference-law mean = the consistency anchor) and
 # the spectrum itself are recorded once.
 fmg_battery <- function(fit, tests = fmg_battery_tests()) {
-  tab <- tryCatch(magmaan::fmg_tests(fit, tests = tests),
+  tab <- tryCatch(magmaanlab::fmg_tests(fit, tests = tests),
                   error = function(e) NULL)
   if (is.null(tab) || !nrow(tab)) return(NULL)
   spectrum <- tryCatch(as.numeric(tab$eigenvalues[[1L]]), error = function(e) NULL)

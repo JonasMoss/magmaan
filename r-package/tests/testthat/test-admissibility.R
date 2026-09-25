@@ -8,7 +8,7 @@ test_that("complete-data fits expose structured covariance admissibility", {
     x3 = 0.7 * eta + rnorm(n, sd = 0.8)
   )
 
-  fit <- expect_no_warning(magmaan("f =~ x1 + x2 + x3", dat,
+  fit <- expect_no_warning(fit_model("f =~ x1 + x2 + x3", dat,
                                    estimator = "ML"))
   a <- fit$diagnostics$admissibility
 
@@ -48,7 +48,7 @@ test_that("Heywood solution warns once without changing convergence", {
 
   fit <- NULL
   expect_warning(
-    fit <- magmaan("f =~ x1 + x2 + x3", dat, estimator = "ML"),
+    fit <- fit_model("f =~ x1 + x2 + x3", dat, estimator = "ML"),
     "not covariance-admissible"
   )
 
@@ -316,7 +316,7 @@ test_that("FIML fits run the same covariance admissibility audit", {
   )
   dat$x2[seq(5L, n, by = 11L)] <- NA_real_
 
-  fit <- expect_no_warning(magmaan("f =~ x1 + x2 + x3", dat,
+  fit <- expect_no_warning(fit_model("f =~ x1 + x2 + x3", dat,
                                    estimator = "FIML"))
   expect_true(fit$diagnostics$admissibility$checked)
   expect_true(fit$diagnostics$admissibility$admissible)

@@ -2,7 +2,7 @@
 
 One script per in-scope section of the [lavaan tutorial](https://lavaan.ugent.be/tutorial/).
 Each reproduces that section's example end-to-end on magmaan's R surface
-(`magmaan()` for estimation, the explicit `magmaan_core` primitives for
+(`fit_model()` for estimation, the explicit `magmaan_core` primitives for
 post-fit inference) and cross-checks the numbers against live `lavaan`. They
 are *informal* verification — runnable, self-checking, eyeball-friendly — not
 the formal C++ golden/parity suite.

@@ -47,8 +47,8 @@ parse_args <- function(a) {
 }
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan"); suppressPackageStartupMessages(library(magmaan))
-core <- magmaan::magmaan_core
+require_pkg("magmaanlab"); suppressPackageStartupMessages(library(magmaanlab))
+core <- magmaanlab::magmaan_core
 res_dir <- {
   a <- commandArgs(trailingOnly = FALSE); fa <- grep("^--file=", a, value = TRUE)
   sp <- if (length(fa)) normalizePath(sub("^--file=", "", fa[[1L]]))
@@ -58,7 +58,7 @@ res_dir <- {
 }
 
 ov <- paste0("y",1:6); thr <- c(-0.8,0,0.8); loading <- 0.7; fcor <- 0.3
-spec <- magmaan::model_spec("f1 =~ y1 + y2 + y3\nf2 =~ y4 + y5 + y6",
+spec <- magmaanlab::model_spec("f1 =~ y1 + y2 + y3\nf2 =~ y4 + y5 + y6",
                             ordered = ov, parameterization = "delta")
 focrow <- function(fit){ pt<-fit$partable; which(pt$lhs=="f2"&pt$op=="=~"&pt$rhs=="y5") }
 
@@ -148,6 +148,6 @@ write_metadata(file.path(res_dir, "bootstrap_metadata.csv"),
                 theta_star_null=theta_star_null, theta_star_misspec=theta_star_mis,
                 estimator="DWLS_ordinal", focal="f2=~y5 raw loading",
                 target="coverage of pseudo-true theta* (nominal 0.95)", smoke=cfg$smoke),
-  packages="magmaan")
+  packages="magmaanlab")
 print(summary, row.names=FALSE, digits=4)
 cat("\nWrote results to ", res_dir, "\n", sep="")

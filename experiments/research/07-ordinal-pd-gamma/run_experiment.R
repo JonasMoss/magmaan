@@ -99,7 +99,7 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- ensure_results_dir()
 ov <- paste0("y", 1:8)
@@ -173,8 +173,8 @@ fit_models <- function(dat, pd_gamma) {
   stats <- magmaan_core$data_ordinal_stats_from_df(
     dat, spec_h1, ordered = ov, group = "group",
     missing = "pairwise", pd_gamma = pd_gamma, full_wls_weight = FALSE)
-  fit_h1 <- magmaan(spec_h1, stats, estimator = "DWLS")
-  fit_h0 <- magmaan(spec_h0, stats, estimator = "DWLS")
+  fit_h1 <- fit_model(spec_h1, stats, estimator = "DWLS")
+  fit_h0 <- fit_model(spec_h0, stats, estimator = "DWLS")
   if (!isTRUE(fit_h1$converged) || !isTRUE(fit_h0$converged)) {
     stop("DWLS fit did not converge", call. = FALSE)
   }
@@ -183,7 +183,7 @@ fit_models <- function(dat, pd_gamma) {
 
 gof_battery <- function(fit, stats) {
   methods <- gof_methods()
-  tab <- magmaan::fmg_tests_ordinal(fit, stats, tests = names(methods),
+  tab <- magmaanlab::fmg_tests_ordinal(fit, stats, tests = names(methods),
                                     weight = "DWLS")
   p_fmg <- extract_fmg(tab, methods)
   base <- tab$base_statistic[1L]
@@ -214,7 +214,7 @@ nested_battery <- function(fit_h1, fit_h0, stats) {
     scaling_factor = nt$scale_c %||% NA_real_,
     stringsAsFactors = FALSE)
   methods <- gof_methods()
-  tab <- magmaan::fmg_nested_ordinal(
+  tab <- magmaanlab::fmg_nested_ordinal(
     fit_h1, fit_h0, stats, tests = setdiff(names(methods), "SB"),
     weight = "DWLS", A.method = "delta")
   extra <- data.frame(
@@ -323,7 +323,7 @@ metadata <- data.frame(
   smoke = cfg$smoke,
   model = "two_factor_ordinal_metric_invariance",
   battery = "naive,SB,SS,SF,EBA2/4/6,pEBA2/4/6,pall,pOLS,all; nested adjusted/mixture",
-  magmaan_version = as.character(utils::packageVersion("magmaan")),
+  magmaan_version = as.character(utils::packageVersion("magmaanlab")),
   stringsAsFactors = FALSE)
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 

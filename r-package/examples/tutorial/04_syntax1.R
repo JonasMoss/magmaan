@@ -5,7 +5,7 @@
 ## lavaan model syntax; this fits one model that exercises all four and
 ## cross-checks the estimates against lavaan.
 
-suppressMessages({ library(magmaan); library(lavaan) })
+suppressMessages({ library(magmaanlab); library(lavaan) })
 
 near <- function(a, b, tol = 1e-3)
   isTRUE(all.equal(unname(as.numeric(a)), unname(as.numeric(b)), tolerance = tol))
@@ -33,7 +33,7 @@ model <- "
   y1 ~~ y2
 "
 
-fit <- magmaan(model, PoliticalDemocracy, estimator = "ML",
+fit <- fit_model(model, PoliticalDemocracy, estimator = "ML",
                se = "none", test = "none")
 lav <- sem(model, data = PoliticalDemocracy)
 

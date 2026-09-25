@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_dir <- if (length(script_arg)) {
@@ -36,7 +36,7 @@ scenarios <- data.frame(
 warm_data <- flip_expansion_draw_data(
   60L, "1:1", "homogeneous", "normal", opts$seed_base - 1L)
 warm_pair <- flip_expansion_specs(1L)
-invisible(lapply(warm_pair, magmaan, data = warm_data, estimator = "ML",
+invisible(lapply(warm_pair, fit_model, data = warm_data, estimator = "ML",
                  optimizer = "nlopt-lbfgs-slsqp-fallback"))
 
 rows <- list(); row_id <- 1L
@@ -48,7 +48,7 @@ for (s in seq_len(nrow(scenarios))) {
   for (df in c(1L, 4L, 8L)) {
     pair <- flip_expansion_specs(df)
     fit_begin <- proc.time()[["elapsed"]]
-    fit <- lapply(pair, magmaan, data = dat, estimator = "ML",
+    fit <- lapply(pair, fit_model, data = dat, estimator = "ML",
                   optimizer = "nlopt-lbfgs-slsqp-fallback")
     fit_seconds <- proc.time()[["elapsed"]] - fit_begin
     invisible(score_flip_test(fit$configural, fit$restricted, dat,

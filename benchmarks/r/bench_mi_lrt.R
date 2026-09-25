@@ -9,7 +9,7 @@
 # multiplier statistic at the constrained fit in a single fit. We time both
 # across model size (n_items -> npar, #candidates) and sample size.
 #
-# This R harness measures the COLD-START refit cost (magmaan() computes its own
+# This R harness measures the COLD-START refit cost (fit_model() computes its own
 # start values). The warm-started refit (start each released fit from the
 # constrained MLE) is the C++-core optimization whose speed-up this baseline is
 # meant to quantify against, once that path exists.
@@ -18,7 +18,7 @@
 #   Rscript benchmarks/r/bench_mi_lrt.R              # default grid
 #   Rscript benchmarks/r/bench_mi_lrt.R 6,9,12 1000  # items grid, n_total
 
-suppressMessages(library(magmaan))
+suppressMessages(library(magmaanlab))
 source(file.path(dirname(sub("^--file=", "",
   grep("^--file=", commandArgs(FALSE), value = TRUE)[1])), "common.R"))
 
@@ -61,7 +61,7 @@ bench_cell <- function(n_items, n_total, reps = 3L) {
   syn <- cfa_syntax(n_items)
 
   fit_anchor <- function()
-    magmaan(syn, dat, estimator = "ML", groups = "g", group_equal = "loadings")
+    fit_model(syn, dat, estimator = "ML", groups = "g", group_equal = "loadings")
   anchor <- fit_anchor()
 
   ov <- if (is.list(anchor$ov_names)) anchor$ov_names[[1]] else anchor$ov_names
@@ -79,7 +79,7 @@ bench_cell <- function(n_items, n_total, reps = 3L) {
   refit_fevals <- numeric(0)
   lrt_once <- function() {
     for (tok in cand_items) {
-      rel <- magmaan(syn, dat, estimator = "ML", groups = "g",
+      rel <- fit_model(syn, dat, estimator = "ML", groups = "g",
                      group_equal = "loadings", group_partial = tok)
       robust_nested_lrt(rel, anchor, data = data_list, method = "restriction_map")
     }
@@ -88,7 +88,7 @@ bench_cell <- function(n_items, n_total, reps = 3L) {
 
   # one extra pass to record optimizer work per released refit
   for (tok in cand_items) {
-    rel <- magmaan(syn, dat, estimator = "ML", groups = "g",
+    rel <- fit_model(syn, dat, estimator = "ML", groups = "g",
                    group_equal = "loadings", group_partial = tok)
     refit_fevals <- c(refit_fevals, rel$f_evals %||% NA_real_)
   }
@@ -134,7 +134,7 @@ result <- list(
   start       = "cold",
   n_total     = n_total,
   created_at  = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
-  magmaan_version = safe_package_version("magmaan"),
+  magmaan_version = safe_package_version("magmaanlab"),
   cells       = rows
 )
 out_path <- file.path(bench_root(), "results",

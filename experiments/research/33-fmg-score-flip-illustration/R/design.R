@@ -78,8 +78,8 @@ fmg_model_specs <- function(p, groups) {
   args <- list(syntax = fmg_analysis_syntax(p), std_lv = FALSE,
                meanstructure = FALSE, group = "group", group_labels = labels)
   list(
-    H1 = do.call(magmaan::model_spec, args),
-    H0 = do.call(magmaan::model_spec, c(args, list(group_equal = "loadings"))))
+    H1 = do.call(magmaanlab::model_spec, args),
+    H0 = do.call(magmaanlab::model_spec, c(args, list(group_equal = "loadings"))))
 }
 
 fmg_design_grid <- function() {
@@ -137,24 +137,24 @@ fmg_validate_design <- function() {
   skew <- rep(3, p)
   exkurt <- rep(21, p)
   if (distribution == "vm") {
-    cal <- magmaan:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt)
-    batch <- magmaan:::sim_vm_draw_impl(cal, n = n, reps = reps,
+    cal <- magmaanlab:::sim_vm_calibrate_impl(stats::cov2cor(Sigma), skew, exkurt)
+    batch <- magmaanlab:::sim_vm_draw_impl(cal, n = n, reps = reps,
                                         seed_base = seed_base)
     sds <- sqrt(diag(Sigma))
     batch$draws <- lapply(batch$draws, function(X) sweep(X, 2L, sds, "*"))
   } else if (distribution == "ig") {
-    cal <- magmaan:::sim_ig_calibrate_impl(
+    cal <- magmaanlab:::sim_ig_calibrate_impl(
       Sigma, skew, exkurt, root = "symmetric", generator_family = "pearson",
       quadrature_points = 81L)
-    batch <- magmaan:::sim_ig_draw_impl(
+    batch <- magmaanlab:::sim_ig_draw_impl(
       cal, n = n, reps = reps, seed_base = seed_base,
       quadrature_points = 81L)
   } else if (distribution == "pl") {
-    cal <- magmaan:::sim_plsim_calibrate_impl(
+    cal <- magmaanlab:::sim_plsim_calibrate_impl(
       stats::cov2cor(Sigma), skew, exkurt,
       method = "hermite_then_rectangle", num_segments = 12L,
       quadrature_points = 31L, hermite_order = 24L)
-    batch <- magmaan:::sim_plsim_draw_impl(
+    batch <- magmaanlab:::sim_plsim_draw_impl(
       cal, n = n, reps = reps, seed_base = seed_base)
     sds <- sqrt(diag(Sigma))
     batch$draws <- lapply(batch$draws, function(X) sweep(X, 2L, sds, "*"))

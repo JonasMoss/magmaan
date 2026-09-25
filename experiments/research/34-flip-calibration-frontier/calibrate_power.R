@@ -10,7 +10,7 @@
 }
 source(.support_helpers())
 rm(.support_helpers)
-suppressWarnings(suppressMessages(library(magmaan)))
+suppressWarnings(suppressMessages(library(magmaanlab)))
 set_single_threaded_math()
 source(experiment_path("R", "design.R"))
 source(experiment_path("R", "engine.R"))
@@ -66,7 +66,7 @@ code_hash <- paste(unname(tools::md5sum(code_files)), collapse = ":")
 calibration_rep <- function(p, multiplier, rep_id, sampler, specs) {
   seed <- opts$seed_base + p * 1000003 + rep_id * 1009
   sample <- frontier_draw_replication(sampler, rep(100L, frontier_groups), seed)
-  fits <- tryCatch(lapply(specs, function(spec) magmaan::magmaan(
+  fits <- tryCatch(lapply(specs, function(spec) magmaanlab::fit_model(
     spec, sample$data, estimator = "ML",
     optimizer = "nlopt-lbfgs-slsqp-fallback", se = "none", test = "none")),
     error = function(e) e)
@@ -75,7 +75,7 @@ calibration_rep <- function(p, multiplier, rep_id, sampler, specs) {
     return(NA_real_)
   }
   names(fits) <- names(specs)
-  flip <- tryCatch(magmaan::score_flip_test(
+  flip <- tryCatch(magmaanlab::score_flip_test(
     fits$H1, fits$H0, sample$blocks, n_flips = opts$flips,
     seed = seed + 700000001), error = function(e) e)
   if (inherits(flip, "error") || flip$df != 28L) NA_real_ else flip$p_effective
@@ -158,5 +158,5 @@ write_metadata(sub("\\.csv$", "_metadata.csv", opts$output), list(
   design = "G8 n_avg100 homogeneous balanced normal",
   tested_items = "x2:x5", df = 28L, reps = opts$reps, flips = opts$flips,
   target = opts$target, seed_base = opts$seed_base,
-  selection = "closest evaluated effective-flip power"), packages = "magmaan")
+  selection = "closest evaluated effective-flip power"), packages = "magmaanlab")
 cat("wrote ", opts$output, "\n", sep = "")

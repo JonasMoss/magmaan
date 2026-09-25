@@ -1,8 +1,12 @@
-# magmaan R bindings
+# magmaanlab: methods-development R bindings
 
-These bindings keep the exported user namespace intentionally small. The
-friendly helpers compose a staged SEM workflow, while C++-shaped primitives are
-available through the `magmaan_core` object for interactive methods work.
+`magmaanlab` is the compiled R package over the magmaan C++ core, for methods
+development and research. The opinionated one-call package for ordinary users
+is `magmaan` in [`../r-magmaan/`](../r-magmaan/), which builds on this one; see
+[the two-package vision](../project/design/r-interface-vision.md).
+
+The friendly helpers compose a staged SEM workflow, while C++-shaped primitives
+are available through the `magmaan_core` object for interactive methods work.
 
 Convenience helpers are limited to R-side composition:
 
@@ -11,7 +15,7 @@ Convenience helpers are limited to R-side composition:
   growth defaults.
 - `df_to_data()` selects model variables from a data frame, handles optional
   grouping, and calls the C++ raw-data sample-statistics wrapper.
-- `magmaan(model, data, estimator, groups)` is the high-level estimate-only
+- `fit_model(model, data, estimator, groups)` is the high-level estimate-only
   convenience. It parses/lavaanifies syntax strings, builds sample statistics
   or FIML raw-data objects from data frames, and dispatches to the matching
   point-estimation wrapper. It returns a `magmaan_fit` list with the raw
@@ -147,7 +151,7 @@ reading serialized objects. Reusing data across models requires identical
 observable order, category/group schema and mean-structure convention. A weight
 is tied to its dataset and cannot silently be reused for another replication.
 
-Existing `model_spec()`, `magmaan()`, `fit_*` and `magmaan_core$estimate_*` calls
+Existing `model_spec()`, `fit_model()`, `fit_*` and `magmaan_core$estimate_*` calls
 remain supported without deprecation warnings. `model_spec()` alone retains an R
 partable, not a compiled native model. Specialized ML2S, two-level, FC-SEM, SAM
 and frontier paths still use their existing entry points. Deprecation and removal
@@ -189,7 +193,7 @@ family:
   exact FMG tests.
 - `fmg_pvalues(fit, data = NULL, tests = ...)` remains as the compatibility
   named-vector view over `fmg_tests()`.
-- Fits built from `magmaan(..., data.frame, estimator = "ML")` or
+- Fits built from `fit_model(..., data.frame, estimator = "ML")` or
   `fit_ml(model, df_to_data(...))` retain the listwise-complete raw blocks in
   `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
   Sample-stat-only fits can still pass complete raw `data =` explicitly.
@@ -285,7 +289,7 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   `magmaan_core$fit_dwls_mixed_ordinal()` or
   `magmaan_core$fit_wls_mixed_ordinal()`. These are point-estimate and
   standard chi-square statistic workflows.
-- The high-level `magmaan()` helper dispatches to the same all-ordinal or
+- The high-level `fit_model()` helper dispatches to the same all-ordinal or
   mixed path for `estimator = "DWLS"` / `"WLS"` when `ordered =` is supplied
   with a data frame.
 - Complete-data covariance-honest ML uses `frontier_fit_ml_psd(model, data)`.
@@ -315,7 +319,7 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   `result$ordinary` and `result$psd` retain each attempt's `fit` or structured
   `error`; `psd` is NULL if skipped. Parsing/data/start-construction errors
   still raise ordinary R errors before the policy can run. This explicit
-  policy leaves `magmaan()` and ordinary ML defaults unchanged, and does not
+  policy leaves `fit_model()` and ordinary ML defaults unchanged, and does not
   add automatic post-fit inference.
 - Covariance-honest research fits are explicit. Use
   `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a

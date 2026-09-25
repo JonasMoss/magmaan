@@ -62,8 +62,8 @@ parse_args <- function(args) {
 
 cfg <- parse_args(commandArgs(trailingOnly = TRUE))
 set_single_threaded_math()
-require_pkg("magmaan")
-suppressPackageStartupMessages(library(magmaan))
+require_pkg("magmaanlab")
+suppressPackageStartupMessages(library(magmaanlab))
 
 res_dir <- if (startsWith(cfg$results_dir, "/")) {
   cfg$results_dir
@@ -282,7 +282,7 @@ fit_omega_rows <- function(pop) {
   idx <- 1L
   for (estimator in c("ML", "ULS", "GLS")) {
     fit <- tryCatch(
-      magmaan::magmaan(model, sample_stats, estimator = estimator,
+      magmaanlab::fit_model(model, sample_stats, estimator = estimator,
                        std_lv = TRUE),
       error = function(e) e
     )
@@ -524,7 +524,7 @@ cfa_sensitivity_rows <- function(pop) {
   sample_stats <- sample_stats_from_cov(pop$Sigma)
   out <- lapply(cfa_candidates(pop), function(candidate) {
     fit <- tryCatch(
-      magmaan::magmaan(candidate$syntax, sample_stats, estimator = "ML",
+      magmaanlab::fit_model(candidate$syntax, sample_stats, estimator = "ML",
                        std_lv = TRUE),
       error = function(e) e
     )
@@ -698,7 +698,7 @@ write_metadata(
     smoke = cfg$smoke,
     results_dir = res_dir
   ),
-  packages = "magmaan"
+  packages = "magmaanlab"
 )
 
 cat("wrote results to: ", res_dir, "\n", sep = "")
