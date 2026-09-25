@@ -163,6 +163,8 @@ everywhere. The first-order check still decides at active box bounds, under
 nonlinear equalities, and on every non-ML path, and it remains telemetry
 elsewhere. Like any local check, the Newton check can pass a point far along
 a divergent path (no attained maximum), where the remaining gain is tiny.
+General escape/nonattainment diagnostics are deferred to the
+[speculative backlog](../backlog/speculative.md#runaway-estimates-and-nonattainment-diagnostics).
 `fit$diagnostics$verdict$criterion` says which check decided. The standalone
 `estimate::frontier::newton_accuracy_ml` and R `frontier_newton_accuracy(fit)`
 recompute it with other options.

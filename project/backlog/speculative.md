@@ -46,6 +46,40 @@ ML2S handoff record. Promote only that required slice. Statistical calibration,
 propagated accuracy and default acceptance changes require a named study with
 validation criteria; broader coverage alone is not a reason to build them.
 
+### Runaway estimates and nonattainment diagnostics
+
+**Gap.** A local stationarity/accuracy certificate does not establish that a
+finite optimum exists. For the illustrative objective f(t) = f_inf + 1/t,
+t > 0, the squared Newton distance g²/H = 1/(2t) tends to zero while the
+Newton displacement t/2 diverges. The existing verdict can therefore pass
+far along an escape path without certifying attainment.
+
+The 2026-09-24 Emmett five-factor investigation found one of 16 L-BFGS
+starts passing at d = .008 with communality 33; three more stopped at
+.014–.018. Experiment engineering/15 also found accepted fits with a
+standardized loading, residual ratio or factor correlation above 10,
+typically 30–1000: 31.5% of ordinary std.lv Ernst draws and 44.5–54% of
+weak-marker draws, with fewer on the sphere and ordinary marker routes.
+These observations motivate investigation; large coefficients alone do not
+prove nonattainment or justify a universal cutoff.
+
+**Alternative already available.** Retain the local verdict, covariance
+admissibility, Newton artifacts and inspectable parameter estimates. Use
+explicit model constraints when substantively intended. The bounded fix to
+check driven optimizer status before raising a sphere chart-singularity
+condition remains in [the active backlog](todo.md); it does not require a
+general nonexistence detector. Bounds or penalties change the estimator and
+are not an implicit recovery rule.
+
+**Build if.** A concrete consumer needs an automatic distinction between
+stationarity and parameter escape, and a named validation study can separate
+genuine nonattainment from finite improper optima, weak identification and
+chart boundaries with finite optima. Start with a separate diagnostic using
+retained Newton displacement, standardized quantities or trajectory evidence;
+validate across units and identification choices before changing acceptance.
+Do not promote a general detector solely because a large-coefficient cutoff
+separates one simulation's draws.
+
 ### SEM PSD optimization beyond the engineering baseline
 
 **Gap.** A first-order PSD-cone audit at a singular parameter representation
