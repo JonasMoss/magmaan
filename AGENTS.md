@@ -4,9 +4,12 @@ Working rules for coding agents in the magmaan repo.
 
 ## What magmaan is
 
-A C++23 library that ports lavaan's behavior for **linear SEM under
-complete-data normal-theory estimators**. The audience is methods developers,
-not end users. [project/architecture/roadmap.md](project/architecture/roadmap.md) is the current state and
+A C++23 library for **linear SEM**, checked component by component against
+lavaan, with two audiences (direction adopted 2026-09-25, see
+[project/design/r-interface-vision.md](project/design/r-interface-vision.md)):
+ordinary users get one opinionated call that estimates and does inference under
+a single justified policy, and methods developers get the full composable
+surface, including frontier methods. [project/architecture/roadmap.md](project/architecture/roadmap.md) is the current state and
 architecture summary; [project/backlog/todo.md](project/backlog/todo.md) is the active backlog of
 remaining SEM/parser/estimation work; [project/backlog/simulation.md](project/backlog/simulation.md)
 is the simulation-specific backlog and decision log. Read the roadmap and the
@@ -37,7 +40,9 @@ historical archaeology, not current guidance.
   magmaan bug, not an oracle defect; clear the high bar in that file before
   claiming otherwise. This is mostly relevant for less-popular features
   (multi-group categorical scores, exotic test/SE combinations) where the oracle
-  is least exercised.
+  is least exercised. Parity gates components. The ordinary-user package's
+  inference policy deliberately differs from every lavaan default; each of its
+  choices must cite recorded evidence (an experiment or paper), not parity.
 - **The lavaanified model is the contract.** Held in memory as a triple:
   `LatentStructure` (what to estimate, name-free, modulo estimator and
   identification convention), `LatentNames` (the verbal model: variable names,
@@ -232,19 +237,28 @@ install on a cluster, see [r-package/tools/saga/README.md](r-package/tools/saga/
 
 ## R Package Direction
 
-The R package is a methods-developer interface over the C++ library, not a
-second implementation and not a lavaan replacement UI. Prefer thin exported R
-wrappers around one C++ entry point, with C++ argument structure kept visible.
-Small R helpers are fine when they compose existing wrappers, validate R-shaped
-inputs, or preserve names/groups for inspection; they should not contain
-parallel SEM logic.
+Two R packages sit over the C++ core. The split is adopted but not yet built;
+[project/design/r-interface-vision.md](project/design/r-interface-vision.md) is
+the design.
 
-The intended high-level convenience is `magmaan(model, data, estimator,
-groups)`: parse/lavaanify, build sample statistics, and estimate parameters in
-one call. That function should do estimation only. Standard errors,
-information matrices, Wald/z tests, robust corrections such as MLM and
-Satorra-Bentler, fit measures, defined parameters, and nested tests remain
-explicit post-fit calls so methods work can choose and inspect each step.
+- **`magmaan`** (ordinary users, new, pure R): `magmaan(model, data,
+  estimator, ...)` estimates and, by default, computes inference under one
+  documented policy; `inference = FALSE` estimates only and `infer(fit)` adds
+  inference later. Few options, lavaan's names where the concept is identical,
+  and no compatibility conventions (MLR, WLSMV, information/SE/test switches).
+- **`magmaanlab`** (power users): the current compiled package, renamed. A
+  methods-developer interface with thin exported R wrappers around one C++
+  entry point, C++ argument structure kept visible, every convention available,
+  and inference as explicit post-fit calls.
+
+Neither package is a second implementation. Small R helpers are fine when they
+compose existing wrappers, validate R-shaped inputs, or preserve names/groups
+for inspection; they should not contain parallel SEM logic. The ordinary-user
+policy is composed in C++, not in R.
+
+Until the split lands, `r-package/` plays the lab role under the name
+`magmaan`, and its `magmaan()` stays estimate-only. Do not grow that function's
+option list; new ordinary-user behavior belongs in the new package.
 
 Partables exposed from R are compatibility/projection objects. When a model is
 built with the R helpers, the partable returned from a fitted magmaan object

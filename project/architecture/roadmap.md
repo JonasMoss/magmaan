@@ -3787,7 +3787,10 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   fit fields plus the source `model_spec`, syntax, estimator options,
   ordered-variable metadata, parameterization, and grouping metadata. Its print
   method reports only point-fit status and directs users to explicit post-fit
-  primitives.
+  primitives. The two-package direction adopted 2026-09-25
+  ([r-interface-vision.md](../design/r-interface-vision.md)) replaces this with
+  an opinionated `magmaan()` in a new pure-R package; this estimate-only path
+  becomes the lab's `estimate()`. Not yet implemented.
 - `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted

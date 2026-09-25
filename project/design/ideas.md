@@ -199,16 +199,12 @@ hand-maintained prose — SciPy's lesson is that the explicit list *is* the
 contract, and Stan's is that an ungenerated support list drifts. Likely home:
 `project/support.md`, or a table generated from YAML.
 
-## User-Facing API (Unsettled)
+## User-Facing API
 
-The 2026-09-25 discussion now has a concrete
-[R estimation and inference interface draft](r-interface-vision.md). It proposes
-an automatic-inference convenience layer over explicit methods primitives and
-inventories the current implementation. The older discussion below is historical
-context; running defaults remain unchanged pending that design pass.
-
-**This section records an in-progress discussion. None of it is decided.** It
-is written down so the reasoning survives until the thread resumes.
+Decided 2026-09-25 in the [two-package vision](r-interface-vision.md): an
+opinionated pure-R `magmaan` package with automatic inference over the compiled
+`magmaanlab` package of explicit primitives. The discussion below is historical
+context for that decision.
 
 Motivation: avoid lavaan's monster fitted object — a god-object of precomputed
 slots plus a stringly-typed `lavInspect(fit, "…")`. That object is bad for

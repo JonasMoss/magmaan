@@ -1,156 +1,246 @@
-# R interface vision: estimation and inference
+# magmaan vision: an opinionated package over a research lab
 
-Status: discussion draft, 2026-09-25. This records the requested direction and
-an implementation inventory, not a change to running defaults. The older
-estimate-only rule for `magmaan()` is to be reconsidered; explicit estimation
-remains the contract of the methods-development layer. Names below marked
-proposed are illustrative, not callable API promises.
+Status: adopted direction, 2026-09-25. Implementation has not started; the
+current R package is still the single estimate-only package described in the
+[roadmap](../architecture/roadmap.md). The work is tracked in
+[todo.md](../backlog/todo.md#two-package-r-interface).
 
-## Direction
+## Intention
 
-Provide two interfaces over the same C++ computations:
+magmaan serves two audiences over one C++ core.
 
-- A composable methods interface, closely reflecting the C++ domain objects
-  and free functions. Preparation, estimation, information, covariance,
-  hypotheses, statistics and calibration are individually usable. Compatibility
-  conventions and alternative statistical choices live here.
-- A small opinionated interface that selects a documented policy and composes
-  those operations. `magmaan()` performs estimation and inference by default;
-  `inference = FALSE` requests estimation alone. Routine use should not require
-  choosing information matrices, Gamma conventions or correction algorithms.
+- **Ordinary users** write one call. It estimates the model and computes
+  inference under a single policy that magmaan chooses and justifies. The
+  package has a few familiar options and no compatibility conventions:
+  no MLR, no WLSMV, no switches for information matrices, standard-error types
+  or test corrections. Choosing well is magmaan's job, not the user's.
+- **Power users** (methods developers, including magmaan's authors) get the
+  full composable surface: every estimator path, every information and Gamma
+  convention, compatibility routes such as lavaan's MLR, and the frontier
+  methods the research depends on.
 
-Explicitness means that the selected policy and computed artifacts can be
-inspected and reused. It need not require every applied user to assemble the
-same sequence manually. R owns argument handling and presentation; C++ owns
-statistical computations. Do not create a second SEM implementation in R.
+This supersedes two earlier rules: that `magmaan()` performs estimation only,
+and that the audience is methods developers rather than end users. It keeps the
+rule that R owns argument handling and presentation while C++ owns the
+statistics, including the ordinary-user policy itself. Neither package holds a
+second SEM implementation.
 
-## What exists today
+## Two packages
 
-Inventory of the working tree on 2026-09-25; concurrent start-policy work was
-already present and was not changed by this review.
+| Package | Audience | Contents | Promise |
+| --- | --- | --- | --- |
+| `magmaan` | Ordinary users | Pure R. `magmaan()`, its result class and a few methods | Small and stable |
+| `magmaanlab` | Power users | The current compiled package, renamed: all bindings, primitives and frontier methods | Changes freely, like `frontier` |
 
-| Surface | Current behavior | Consequence |
-| --- | --- | --- |
-| `magmaan()` in `r-package/R/model_data.R` | Estimate-only; `se` and `test` must be `"none"`; many estimator-specific controls | Neither automatic inference nor a small applied interface yet |
-| `prepare_model/data/weight()` and `estimate()` in `prepared.R` | Explicit preparation and estimation for several estimator families | Useful foundation for the methods interface |
-| `magmaan_core` in `zzz_core.R` | Large collection of domain-prefixed bindings and aliases | Broad coverage, but not yet a curated, uniformly documented C++-shaped interface |
-| `vcov.magmaan_fit()` in `context.R` | Defaults to `regime = "model"`; complete continuous path uses empirical meat with expected bread; robust selects observed bread | Existing names do not transparently describe the statistical contract |
-| `standardized()` | Requires caller-supplied covariance | Appropriate primitive; simple interface can supply its retained covariance |
-| `prepare_inference()` in `scores.R` | Immutable snapshots for ML, FIML and fixed-NT ML2S; rejects active bounds | Reuse exists, but support is narrower than estimation |
-| `inference_information()` / `parameter_covariance()` | Explicit information and covariance composition; expected information is the former's default | Observed construction exists, but is not the default policy |
-| Shared `inference_quadratic()` / `inference_covariance()` | Reusable NTML score/LR and covariance geometry; currently structured expected information | Cannot implement the requested observed policy merely by renaming this composer |
-| `score_components()` | Separate sensitivity and metric, including observed options | The distinctions needed for a precise test policy already exist |
-| `calibrate_quadratic()` | SB, PEBA4 and other calibrations from reusable reference artifacts | Reuse this machinery; do not duplicate corrections in the convenience wrapper |
-| `fmg_tests()` | Multiple defaults including RLS-based tests and different orders | Not the proposed fixed score/LR bundle |
-| `score_tests_robust()` | Expected bread, structured moments, empirical covariance, estimated-weight correction off by default | Calling an existing “robust” helper is not sufficient to establish the new policy |
-| `nestedTest()` / `robust_nested_lrt()` / `fmg_nested()` | Overlapping comparison surfaces with many conventions | Consolidate routine comparison while preserving explicit primitives |
+- `magmaan` imports `magmaanlab` and has no compiled code, so the package
+  boundary enforces the no-SEM-logic rule.
+- Power users attach both, so no name may be exported by both with different
+  meanings. The lab's current estimate-only `magmaan()` is removed; the lab's
+  `estimate()` covers it.
+- An ordinary fit converts to a lab fit (proposed name `as_lab_fit()`), so any
+  alternative inference runs in the lab without refitting.
+- The policy composer lives in C++ under `api::`, so C++ callers get the same
+  opinionated call and the R package calls one lab binding.
+- Directory layout is decided at implementation time. A new top-level folder
+  must be added to `check_tracked_files.sh` and AGENTS.md deliberately.
 
-See also `r-package/man/inference_reuse.Rd` for the shared geometry's scope.
-The existing backlog records automatic FIML H1, two-level inference and SAM
-work that does not yet follow a uniform estimate-only ownership contract.
-
-## Proposed applied surface
-
-Illustrative target:
+## The ordinary-user call
 
 ```r
-fit <- magmaan(model, data)
-summary(fit)
-coef(fit)
-vcov(fit)
-confint(fit)
-
-fit_only <- magmaan(model, data, inference = FALSE)
-fit <- infer(fit_only)                 # proposed policy composer
-compare(null_fit, alternative_fit)     # proposed nested comparison
+magmaan(model, data,
+        estimator = "ML",
+        ordered = NULL,
+        group = NULL, group.equal = NULL, group.partial = NULL,
+        cluster = NULL,
+        identification = "marker",
+        parameterization = "delta",
+        meanstructure = "default", fixed.x = TRUE,
+        missing = "listwise",
+        psd = FALSE,
+        inference = TRUE)
 ```
 
-Retain necessary modeling choices such as groups, identification and estimator.
-Start with a documented marker default. Expert optimizer, weight and information
-choices belong in prepared estimation/inference calls rather than an expanding
-set of arguments to the simple wrapper. The default PSD estimation policy is a
-separate decision from automatic inference; this draft does not change it.
+Naming rule: use lavaan's name where the concept is identical, and a new name
+only where lavaan's name is poor or magmaan's meaning differs. A lavaan user's
+`group = "school", group.equal = "loadings", ordered = TRUE` then works as
+typed. This makes the ordinary package dot-case while the lab stays snake_case,
+a deliberate trade for users moving from lavaan.
 
-`infer()` should be the same composer used internally by `magmaan()`, with no
-refit. Store enough input ownership to avoid asking for raw data again. Repeated
-`summary()`, `vcov()` and `confint()` should read retained results, not repeat
-estimation, H1 fitting, casewise score construction or eigendecomposition.
+### Estimators
 
-## Proposed statistical contract
+`estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
+ULS and WLS. Variables declared in `ordered`: DWLS, WLS and ULS. The data type
+is declared by `ordered`, never inferred from the estimator. Normal-theory ML
+on Likert items means not declaring them ordered. Invalid pairs error with a
+message naming the valid alternatives.
 
-The requested policy is observed information with misspecification adjustment
-enabled. The applied interface should not expose compatibility switches for
-expected information or software-specific conventions. The methods interface
-retains those choices. Do not encode this as one ambiguous `robust` flag.
+lavaan names that bundle an estimator with a correction (MLM, MLR, MLMV, WLSM,
+WLSMV, ULSM, ULSMV) are rejected with a pointer to the plain estimator, since
+inference is automatic. This matches the backlog item on decomposing
+`EstimatorSpec` into its actual axes.
 
-For regular complete-data ML, specify parameter covariance as the sandwich
-formed from observed likelihood curvature and empirical score covariance, with
-documented normalization and equality reduction. Report ordinary symmetric
-Wald intervals from that covariance. “Ordinary Wald” describes the interval
-construction, not inverse-information model-based standard errors.
+### Options kept, renamed and dropped
 
-For tests, separately specify nuisance sensitivity, quadratic metric, H0/H1
-evaluation point, moment covariance, centering and normalization. “Observed”
-alone does not decide those items. Do not mechanically replace every matrix by
-an observed Hessian. Existing observed score components and expected NTML reuse
-must be reconciled against an explicit mathematical contract first.
+| lavaan or current option | Ordinary package | Reason |
+| --- | --- | --- |
+| `missing = "ml"` | `estimator = "FIML"` | It is an estimator |
+| `missing = "two.stage"` | `estimator = "ML2S"` | Same |
+| `missing = "listwise"` | Default, stated in the output | Every estimator is defined under listwise deletion |
+| `missing = "pairwise"` | Kept where supported (ordinal) | |
+| `std.lv = TRUE` | `identification = "std.lv"` | One option with room for more conventions |
+| `groups` (current magmaan) | `group` | lavaan spelling |
+| MLM, MLR, MLMV, WLSM, WLSMV, ULSM, ULSMV | Rejected | Estimator plus correction in one name |
+| `se`, `test`, `information`, `h1.information`, `observed.information`, `likelihood`, `bootstrap` | Dropped | Set by the policy |
+| `bounds` | `psd` | The principled replacement |
+| `optimizer`, `control`, `start`, `W`, `stage2_weight`, `dls_a`, `stage1_regularization`, `pd_gamma` | Lab only | Expert tuning |
+| `orthogonal`, `auto.*`, `int.ov.free` and similar | Lab only | Expressible in model syntax or `model_spec()` |
+| `sample.cov`, `sample.nobs` | Lab only | The policy needs raw data |
 
-Proposed automatic output:
+Missing data: listwise deletion is automatic for every estimator not designed
+for missing data. The fit records the rows used and deleted per group, and the
+summary reports both. An estimator path that cannot yet delete listwise is a
+backlog gap, not a reason to change the default.
 
-- Parameter estimates, standard errors, Wald intervals and Wald tests against
-  zero, including supported defined parameters via the same covariance.
-- Global score and likelihood-ratio tests against the saturated alternative,
-  each with SB and PEBA4 calibration. Label the statistic and calibration
-  separately; retain the spectrum or trace and numerical diagnostics.
-- Fit acceptance and inference availability, independently recorded.
+Raw data only: the sandwich covariance and the SB and PEBA4 calibrations need
+casewise contributions. Covariance-matrix input stays in the lab, where the
+user chooses what replaces the missing empirical moments.
 
-Nested comparisons require an explicit second model. `compare()` should check
-data, objective and nesting compatibility and produce the analogous supported
-test bundle. Modification-index searches, arbitrary hypothesis enumeration,
-bootstrap/profile intervals and automatic independence-model fitting are not
-implied by this default bundle.
+## Inference policy
 
-Misspecification-robust parameter uncertainty and an exact-fit test answer
-different questions. The latter still tests a null model; the misspecification
-policy must not be described as making that null true. For estimated-weight
-estimators, observed curvature alone is insufficient: the weight-estimation
-influence must be included where required. Extend estimator support only after
-its corresponding contract is checked.
+`inference = TRUE` is the default. With `inference = FALSE`, the call only
+estimates; `infer(fit)` later runs the same composer without refitting, reusing
+retained data and geometry. Repeated `summary()`, `vcov()` and `confint()`
+read retained results.
 
-## Availability and PSD fits
+Parameter uncertainty:
 
-The first implementation target should be regular complete-data ML. Maintain a
-component-level capability table for FIML, ML2S, ordinal/mixed, multilevel and
-frontier fits. A successful fit must survive unavailable inference; retain a
-typed reason per unavailable component and show it in the summary. No silent
-substitution of expected information, a different correction or a different
-estimator. Covariance-only inputs need an explicit source of empirical score
-covariance for the proposed sandwich; do not silently assume normal theory.
+- Covariance: the sandwich with observed-information bread and empirical score
+  covariance, H^-1 J H^-1 / n. It is consistent for the pseudo-true parameter
+  under misspecification; an expected-information bread is not. For estimators
+  whose weight is estimated from the data (GLS, WLS, DWLS), the covariance
+  includes the weight-estimation influence, which vanishes under a correct
+  model but not under misspecification.
+- Standard errors, Wald z-tests and symmetric Wald intervals from that
+  covariance, and defined parameters by the delta method.
 
-Interior PSD fits and singular PSD fits must be distinguished. Boundary-aware
-optimization auditing does not establish boundary-aware sampling inference.
-Before claiming the simple interface covers PSD fitting, specify which Wald,
-score and LR components are valid and implemented on each domain. Until then,
-unavailable boundary components are reported as such. This is also necessary
-for trustworthy downstream research code.
+Global tests against the saturated model:
 
-## Implementation sequence after discussion
+- The score test and the likelihood-ratio test, each calibrated with SB and
+  PEBA4. The likelihood-ratio statistic and its df are reported because
+  classical readers look for them; the normal-theory p-value is not shown.
+- For fixed-weight estimators (GLS, ULS, WLS, DWLS) the objective is exactly
+  quadratic in the saturated moments, so the global score statistic equals the
+  fit-function statistic n F. It is reported once, labelled as the fit-function
+  statistic, since it is not a likelihood ratio.
+- Statistic and calibration are labelled separately; the spectrum or trace
+  and numerical diagnostics are retained.
 
-1. Agree on the applied output and the precise observed test geometry. Preserve
-   explicit choices in the methods layer; settle names after the contracts.
-2. Audit estimation/inference capabilities and ownership, including fit-time H1
-   work and boundary support. Identify computations already retained by fitting.
-3. Compose one observed/misspecification inference policy in core, extending
-   reusable artifacts where needed. Gate against explicit primitive composition,
-   analytic identities and independent references for the chosen policy.
-4. Add the small R composer, result accessors and summary. Verify that automatic
-   and explicit workflows give identical results and reuse computations; verify
-   that `inference = FALSE` avoids optional inference work.
-5. Migrate examples and downstream callers only after the policy is validated.
-   Time preparation, estimation and inference separately. Preserve compatibility
-   wrappers through a documented transition rather than globally changing every
-   low-level default.
+Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
+report the analogous score and likelihood-ratio (or fit-function difference)
+tests with SB and PEBA4. The comparison checks that data, estimator and nesting
+agree.
 
-This is a design proposal, not a claim that observed choices universally dominate
-all alternatives or that the complete bundle already exists. No estimator,
-inference default or production result was changed in this pass.
+Where observed information matters: under the global null the observed and
+expected Hessians differ by O_p(n^-1/2), so the global tests have the same
+asymptotic law either way and the choice is a finite-sample one. For parameter
+covariance under misspecification, and for nested tests whose larger model is
+misspecified (the usual invariance-testing case), the choice is first order.
+The nested geometry must therefore be specified component by component before
+implementation: nuisance sensitivity, quadratic metric, evaluation point,
+moment covariance, centering and normalization. Do not mechanically replace
+every matrix by an observed Hessian.
+
+A misspecification-robust covariance and an exact-fit test answer different
+questions. The global tests still test the null model; the robust covariance
+does not make that null true.
+
+### Availability
+
+- A successful fit survives unavailable inference. Each unavailable component
+  carries a typed reason that the summary shows.
+- No silent substitution of expected information, a different correction or a
+  different estimator.
+- Structural gaps (an estimator path whose policy is not yet implemented) are
+  reported as unavailable, not refused, so the estimates remain usable.
+- With `psd = TRUE`, interior solutions get full inference. Boundary solutions
+  report inference unavailable until a boundary-aware policy exists;
+  boundary-aware optimization does not establish boundary-aware sampling
+  inference. The default stays `psd = FALSE` pending the separate decision on
+  the default PSD estimation policy.
+
+## Validation
+
+The ordinary package's output as a whole matches no lavaan call, by design.
+Correctness rests on three kinds of evidence:
+
+1. **Checked components.** Where lavaan computes the same quantity, the C++
+   golden tests keep gating it: the observed-bread sandwich is lavaan's
+   `robust.huber.white` covariance, SB on expected information is lavaan's
+   `satorra.bentler`, and the fit-function statistics are lavaan's standard
+   tests. Users never see those lavaan names.
+2. **Identical composition.** The automatic policy and the equivalent explicit
+   composition of lab primitives agree exactly, and `inference = FALSE`
+   followed by `infer()` equals the default call.
+3. **Evidence for each policy choice.** Every default cites the experiment or
+   paper that supports it. For example, SB and PEBA4 replace lavaan's MLR
+   Yuan-Bentler-Mplus test because they are better calibrated; the FIML
+   comparison is `experiments/research/04-fiml-fmg-vs-mlr/`.
+
+## Frontier methods in the ordinary package
+
+A research method enters `magmaan` when all three hold:
+
+1. A paper or experiment in this repository backs it.
+2. It fits as a value of an existing argument or as one post-fit function.
+3. Its inference availability is defined.
+
+Otherwise it stays in the lab.
+
+- **In now:** `psd = TRUE` (PSD fits exist for ML, FIML, ML2S, ULS, GLS, WLS,
+  ordinal and mixed data) and PEBA4, which is part of the policy.
+- **Candidates:** `identification = "sphere"`, the closed-form CFA estimator
+  and catML (currently only a PSD frontier fit).
+- **Lab only:** the multi-information penalty, robust ordinal estimation,
+  FC-SEM, flip tests and simulation.
+
+## Starting point
+
+Checked against the source on 2026-09-25.
+
+| Surface | Today | Consequence |
+| --- | --- | --- |
+| `magmaan()` in `model_data.R` | Estimate-only; `se` and `test` must be `"none"`; many estimator-specific controls | Becomes the lab's `estimate()` path; the ordinary `magmaan()` is new |
+| S3 methods on `magmaan_fit` | `print`, `residuals` and `vcov` only | `summary`, `coef`, `confint`, `anova` and `parameters()` are new |
+| `vcov.magmaan_fit()` in `context.R` | `regime = "model"` means inverse observed information for FIML but an expected-bread sandwich with empirical meat for complete ML; continuous fits stop without `data` although fits retain `fit$raw_data` | Retained data already exists; the regime naming is inconsistent across estimators |
+| `prepare_inference()` in `scores.R` | ML, FIML and fixed-NT ML2S; rejects active bounds | The ordinary policy needs every listed estimator |
+| `inference_quadratic()`, `inference_covariance()`, `calibrate_quadratic()` | Score and LR, each with SB and PEBA4, plus the robust covariance, on structured expected-information geometry (`man/inference_reuse.Rd`) | The bundle's composer exists; the geometry changes |
+| `score_components()` | Separate sensitivity and metric, including observed options | Supplies the distinctions the nested geometry needs |
+| `robust_se()` in C++ with observed bread | Gated against lavaan's `robust.huber.white` in `inference_golden_test.cpp` | The complete-data ML covariance is already checked |
+| `nested_score_test()` / `score_flip_test()` | ML and FIML only | The nested score test for the least-squares estimators is new work |
+| `fmg_tests()` | Fit-function statistic with SB and PEBA4 for ML, FIML, ML2S, continuous LS and ordinal fits, with several default test sets | Supplies the least-squares global tests |
+| Listwise deletion in the data constructors | Applied, but the count of deleted rows is not recorded | Recording is new work |
+
+## Deferred
+
+These are decided later and are not part of the first release: `fit_measures()`
+(including which statistic feeds CFI and RMSEA; PEBA4 has no index analogue),
+modification indices under the policy, factor scores through `predict()`,
+a `control` option for non-converging fits, and summary-statistic input.
+
+## Implementation sequence
+
+1. Build the C++ policy composer for complete-data ML: observed sandwich,
+   global score and likelihood-ratio tests, SB and PEBA4. Gate it against lab
+   primitives and the lavaan components above.
+2. Extend it to the least-squares estimators: the global fit-function identity,
+   the weight-influence covariance, and the new nested least-squares score test.
+3. Make listwise deletion available and recorded on every estimator path.
+4. Rename the compiled package to `magmaanlab`, remove its `magmaan()`, and
+   create the pure-R `magmaan` package with `magmaan()`, `infer()`,
+   `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint`,
+   `parameters()` and `anova()`.
+5. Extend the policy to FIML, ML2S, ordinal and mixed, and two-level fits,
+   with a component-level capability table.
+6. Migrate experiments, examples, the vendoring scripts and the cluster install
+   notes to the two package names, timing preparation, estimation and inference
+   separately.

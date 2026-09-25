@@ -27,6 +27,54 @@ Effort tags: **S** bounded project/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
 semantics · **XL** statistical design/research track before implementation.
 
+## Two-package R interface
+
+Adopted 2026-09-25: an opinionated pure-R `magmaan` package (one call,
+automatic inference) over the compiled `magmaanlab` package. The design,
+starting-point inventory and validation rules are in
+[r-interface-vision.md](../design/r-interface-vision.md). Items in order:
+
+- **M — C++ policy composer for complete-data ML.** Observed-bread sandwich
+  covariance with empirical score covariance; Wald SEs, z-tests, intervals and
+  delta-method defined parameters; global score and likelihood-ratio tests,
+  each with SB and PEBA4, from retained data and geometry. Place it under
+  `api::`. Gate the covariance against the existing lavaan `robust.huber.white`
+  fixtures and the whole composition against explicit lab primitives. Builds on
+  the observed-bread item under "Score/inference adapter follow-ups".
+- **M — least-squares estimators under the policy.** For fixed-weight GLS, ULS,
+  WLS and DWLS the global score statistic against the saturated model equals the
+  fit-function statistic; report it once with SB and PEBA4 from the policy
+  geometry. Include the weight-estimation influence in the covariance for
+  GLS, WLS and DWLS. The machinery exists (C++
+  `robust::robust_weighted_moment_ij`; R `robust_ordinal_ij` and
+  `robust_mixed_ordinal_ij`); wire it into the policy for each estimator.
+- **L — nested score test for the least-squares estimators.** `score_flip_test()`
+  and `nested_score_test()` accept ML and FIML only. Construct the test from
+  the larger model's gradient at the embedded smaller-model estimate, with the
+  nuisance projection and the restriction spectrum for SB and PEBA4, for
+  continuous and ordinal/mixed fits. Specify the nested geometry (sensitivity,
+  metric, evaluation point, moment covariance, centering, normalization) before
+  coding, including the misspecified-larger-model case.
+- **S — listwise deletion on every estimator path, recorded.** Listwise is the
+  default. The data constructors delete rows but do not record how many; store
+  rows used and deleted per group in the fit for the summary. List any estimator
+  path that cannot delete listwise as its own item here.
+- **M — rename and scaffold.** Rename the compiled package to `magmaanlab`,
+  remove its estimate-only `magmaan()` in favor of `estimate()`, and create the
+  pure-R `magmaan` package: `magmaan()`, `infer()`, `as_lab_fit()`, `print`,
+  `summary`, `coef`, `vcov`, `confint`, `parameters()` and `anova()`. Decide the
+  directory layout and update `check_tracked_files.sh`, the layering checker,
+  the justfile and AGENTS.md together.
+- **L — extend the policy to FIML, ML2S, ordinal/mixed and two-level fits,**
+  with a component-level capability table. Unimplemented components report a
+  typed reason; the fit is never refused for missing inference.
+- **S — migrate callers.** Experiments, examples, vendoring scripts and the
+  cluster install notes move to the two package names. Time preparation,
+  estimation and inference separately.
+- Deferred until after the first release: `fit_measures()` (which statistic
+  feeds CFI and RMSEA), modification indices under the policy, `predict()`
+  factor scores, a `control` option and summary-statistic input.
+
 ## Estimation and inference follow-ups
 
 - **M — finish uniform start-policy coverage.** The continuous-data/FIML slice
