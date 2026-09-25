@@ -1187,11 +1187,11 @@ when they next change.
      downward-biased functional, now replaced by the residual variance of x1.
      Against PSD-ML it wins with the truth inside and loses on the face by the
      predicted RMSE factor `sqrt(1 + 2 lambda)`; the local limit `t(u)` matches
-     the simulated estimates within 0.19 SE at `lambda = 0.25`. Engineering:
-     0.08% of barrier fits fail in L-BFGS line search, mostly when the
-     pseudo-true value is well outside (7.6% at `lambda = 0.1`, N = 400);
-     a log-distance parametrization or Newton steps near the face should fix
-     it. Remaining, for `papers/sem-barrier`: score it on the research/48
+     the simulated estimates within 0.19 SE at `lambda = 0.25`. Engineering
+     (resolved 2026-09-25): the barrier fits that failed in NLopt L-BFGS line
+     search converge under PORT, now the barrier default (experiment
+     engineering/18). The failures shared by every optimizer are Ernst
+     marker-chart fits near a marker pole. Remaining, for `papers/sem-barrier`: score it on the research/48
      posterior bank; run the research/48 path cells; then decide the default
      target. Experiment research/48's Jeffreys posterior
      median remained the most accurate estimator on every design at N = 50.

@@ -407,6 +407,9 @@ Nonrecursive models are fitted and flagged (`penalty$recursive`). The fit return
 the unpenalized half-discrepancy as `fmin`, so chi-square and fit measures read
 the ordinary criterion at the penalized estimate. Standard errors are ordinary
 information SEs at that point. The default is `lambda = 0.25` (`eta = 1.25`).
+Both wrappers default to the PORT optimizer: NLopt L-BFGS stalls in its line
+search where the optimum hugs a face, and PORT's trust region does not
+(experiment engineering/18).
 Experiment research/47 found that any `lambda > 0` removes all improper, boundary, and
 failed fits, that `lambda = 0.25` matches or beats PSD-ML accuracy with near-PSD-ML
 chi-square and Wald calibration at `N = 50`, and that the originally proposed
