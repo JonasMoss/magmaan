@@ -54,8 +54,10 @@ The required checks are:
    `criterion` records which check decided.
    Decision 2026-09-25: every iterative estimator gets this check at fit
    time, with the Newton step measured in standard-error units
-   ([convergence-engineering.md](convergence-engineering.md)); until each
-   path is migrated, the first-order check above still decides there.
+   ([newton-verdict-plan.md](newton-verdict-plan.md)); until each path is
+   migrated, the first-order check above still decides there. Once `checked`
+   is true, an `Unavailable` curvature fails the verdict, like nonpositive
+   curvature.
 
 The fit entry point declares `Ambient` or `Psd` before the verdict is selected.
 Ordinary fits use equality/bound normals; explicitly PSD-constrained fits

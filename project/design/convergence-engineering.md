@@ -292,11 +292,8 @@ Experiments may not depend on each other, so the shared parts sit below them:
 ### Build now (v1)
 
 0. The Newton metric in the default verdict of every iterative estimator,
-   as above. First FIML, two-level ML and the barriers (likelihood
-   objectives, the ML calibration applies as is), then GLS, then the
-   least-squares and ordinal families with the sandwich metric. Analytic
-   Hessians where magmaan has them, since a numerical Hessian costs up to four
-   gradient evaluations per parameter.
+   as above, with analytic Hessians. Plan:
+   [newton-verdict-plan.md](newton-verdict-plan.md).
 1. The register, filled from existing evidence as in the table above, with
    provisional and open entries marked honestly.
 2. Benchmark set v0 from problems that already exist: the corpus cases of
@@ -342,7 +339,3 @@ Experiments may not depend on each other, so the shared parts sit below them:
 - Whether the register is one file or one file per entry.
 - How strict "attainable" must be: a witness solution is enough for v1, but
   corpus solutions come from other software and are starts, not proofs.
-- Whether the least-squares families measure the Newton step with the
-  normal-theory sandwich (deterministic, cheap) or the one the fit reports
-  for its standard errors (matches inference, but depends on the data's
-  fourth moments).

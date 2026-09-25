@@ -252,21 +252,15 @@ there is no scheduled expansion of this surface.
   success criteria. Under discussion; the decision studies below would become
   its first consumers.
 - **High — the Newton check in every iterative estimator's default verdict
-  (decided 2026-09-25).** Only complete-data ML uses it at fit time; FIML,
-  GLS/ULS/WLS/DWLS, ordinal, two-level, ML2S and the barrier fitters keep the
-  first-order check, although post-fit Newton adapters exist for all of them.
-  The gap is not neutral: of engineering/17's twelve Little models where ML
-  rejects a PORT endpoint for nonpositive curvature, nine are accepted under
-  GLS at a worse objective. Measure the Newton step of the fitted objective
-  (`delta = H^{-1} g`, `H` positive definite as the curvature check) in
-  standard-error units, `d^2 = N delta' V^{-1} delta`: the information for
-  likelihood objectives and normal-theory GLS (so the ML budget `d <= .01`
-  carries over), the sandwich for least-squares and ordinal objectives, the ML
-  information for penalized fits. Order: FIML, two-level ML, barriers; GLS;
-  then LS and ordinal. Prefer analytic Hessians (a numerical one costs up to
-  four gradients per parameter). Validate on the corpus and the existing
-  goldens, and record every fit whose `converged` flips. Design:
-  [convergence-engineering.md](../design/convergence-engineering.md).
+  (decided 2026-09-25).** Only complete-data ML uses it at fit time; the other
+  families decide with the first-order check and cannot reject non-minima (of
+  engineering/17's twelve Little models that ML rejects for nonpositive
+  curvature, nine are accepted under GLS at a worse objective). Exact analytic
+  Hessians already exist for ML, FIML, continuous LS and ordinal/mixed LS
+  (built for robust sandwiches, the latter two private and reduced); two-level,
+  CatML and the barrier penalties need theirs. Curvature from the objective's
+  Hessian, step measured in standard-error units. Phased plan, dry run and
+  affected tests: [newton-verdict-plan.md](../design/newton-verdict-plan.md).
 - **M — finish optimizer-control reporting and specialized-path inventory.**
   Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
   BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy
