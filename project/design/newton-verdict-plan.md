@@ -91,10 +91,14 @@ coordinates.
 
 For GLS, and WLS with `W = Gamma^{-1}`, `Omega = J'WJ`, which matches the
 information, so the ML budget carries over. For ULS and DWLS the sandwich
-makes `d` free of units. `Gamma` is the one the estimator's default standard
-errors use: normal theory for continuous ULS and GLS, the estimated asymptotic
-covariance for DWLS, WLS and ordinal fits. The convergence metric then follows
-the inference the user sees, and adds no new choice.
+makes `d` free of units. `Gamma` is normal theory for continuous ULS and GLS,
+and the estimated asymptotic covariance that defines the weight for DWLS, WLS
+and ordinal fits. The metric is a numerical yardstick fixed at fit time, not
+the reported standard errors. The ordinary-user policy reports the
+misspecification-robust sandwich (exact-Hessian bread, empirical meat), whose
+standard errors typically differ from the model-based ones by a modest
+factor, which the `.01` budget absorbs. Making the check depend on the data's
+fourth moments would buy nothing.
 
 ### Only analytic curvature decides a default verdict
 
@@ -123,7 +127,11 @@ records every fit whose `converged` changes.
 - Move the continuous LS, ordinal and mixed analytic Hessians into a shared
   detail header, with full-`theta` variants on the total scale. The existing
   reduced callers keep their results.
-- Switch the adapters to the analytic Hessians where they exist.
+- Switch the adapters to the analytic Hessians where they exist. The same
+  exposed Hessians are the bread of the misspecification-robust sandwich that
+  the ordinary-user policy uses for ML and will use for the least-squares and
+  ordinal estimators (backlog: least-squares estimators under the policy), so
+  convergence and inference share one implementation per estimator.
 - Finite-difference cross-checks of every analytic Hessian at random interior
   points, covering means, several groups, equality constraints, thresholds,
   delta and theta, missing-data patterns and a nonrecursive `B`. Confirm or
