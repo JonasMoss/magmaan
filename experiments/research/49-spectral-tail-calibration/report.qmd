@@ -3,6 +3,7 @@ title: "Can spectral estimation improve score and LRT calibration?"
 format:
   html:
     toc: true
+    embed-resources: true
 execute:
   echo: false
   warning: false
