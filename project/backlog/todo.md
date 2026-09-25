@@ -35,14 +35,11 @@ automatic inference, `r-magmaan/`) over the compiled `magmaanlab` package
 design, starting-point inventory and validation rules are in
 [r-interface-vision.md](../design/r-interface-vision.md). Items in order:
 
-- **M — C++ policy composer for complete-data ML.** Observed-bread sandwich
-  covariance with empirical score covariance; Wald SEs, z-tests, intervals and
-  delta-method defined parameters; global score and likelihood-ratio tests,
-  each with SB and PEBA4, from retained data and geometry. Place it under
-  `api::` and call it from `magmaan::infer()`, which currently records every
-  component as `not_implemented`; add `anova()` for nested fits with it. Gate the covariance against the existing lavaan `robust.huber.white`
-  fixtures and the whole composition against explicit lab primitives. Builds on
-  the observed-bread item under "Score/inference adapter follow-ups".
+- **M — nested comparisons: `anova(fit0, fit1)`.** The policy composer for
+  complete-data ML landed (see the roadmap). Nested score and LR tests with SB
+  and PEBA4 exist on the shared expected geometry (`prepare_ntml_hypothesis`);
+  specify the nested geometry for a misspecified larger model (observed
+  sensitivity) before wiring `anova()` into `magmaan`.
 - **M — least-squares estimators under the policy.** For fixed-weight GLS, ULS,
   WLS and DWLS the global score statistic against the saturated model equals the
   fit-function statistic; report it once with SB and PEBA4 from the policy
@@ -64,8 +61,9 @@ design, starting-point inventory and validation rules are in
   misspecified populations. With a weight other than the estimator's, the
   nuisance score does not vanish at the estimate, so every arm must use the
   effective (nuisance-projected) score; `score_components_from_matrices()` and
-  `project_scores()` already carry the projection. The policy default cites
-  the result.
+  `project_scores()` already carry the projection. Include the
+  observed-information U for the global tests as an arm. The policy default
+  cites the result.
 - **S — record listwise deletion in the lab fit.** `magmaan()` reports rows
   used and deleted per group from the input data frame and the fit's `nobs`.
   Store the deleted-row count, per group and per reason, in the lab fit
@@ -86,6 +84,18 @@ design, starting-point inventory and validation rules are in
 - **L — extend the policy to FIML, ML2S, ordinal/mixed and two-level fits,**
   with a component-level capability table. Unimplemented components report a
   typed reason; the fit is never refused for missing inference.
+- **M — fixed-x models in the policy composer.** The shared NTML geometry
+  (`prepare_ntml_fit()`) requires random X, but `magmaan()` defaults to lavaan's
+  `fixed.x = TRUE`, so models with exogenous observed covariates get no policy
+  inference. Extend the geometry to conditional-on-x moments, or state the
+  random-x policy for them.
+- **S — lab `vcov()` ergonomics.** `vcov.magmaan_fit()` stops without `data`
+  for continuous fits although fits retain `fit$raw_data` (as
+  `prepare_inference()` already uses), and `regime = "model"` means inverse
+  observed information for FIML but an expected-bread sandwich with empirical
+  meat for complete ML. Default to the retained data and name the regimes by
+  their contract. `raw_data_arg()`'s missing-variable error also names
+  `factor_scores()` whatever the caller.
 - **S — finish migrating callers.** In-repo experiments, benchmarks,
   examples, fixture tools and CI use `magmaanlab` and `fit_model()`. Left: the
   `experiments/showcases/` renumbering that was in flight during the rename

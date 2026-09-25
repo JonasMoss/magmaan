@@ -81,6 +81,13 @@ parameters <- function(fit, level = 0.95) {
     se_free <- sqrt(pmax(diag(V), 0))
     out$se[out$free] <- se_free[pt$free[out$free]]
   }
+  defined <- fit$inference$defined
+  is_def <- out$op == ":="
+  if (!is.null(defined) && any(is_def)) {
+    idx <- match(out$lhs[is_def], defined$lhs)
+    out$est[is_def] <- defined$est[idx]
+    out$se[is_def] <- defined$se[idx]
+  }
   z <- stats::qnorm(1 - (1 - level) / 2)
   out$z <- out$est / out$se
   out$pvalue <- 2 * stats::pnorm(-abs(out$z))
@@ -127,7 +134,7 @@ print.magmaan <- function(x, ...) {
 #' @export
 summary.magmaan <- function(object, level = 0.95, ...) {
   structure(list(fit = object, parameters = parameters(object, level = level),
-                 level = level),
+                 tests = .global_tests(object), level = level),
             class = "summary.magmaan")
 }
 
@@ -144,12 +151,21 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   num <- vapply(p, is.numeric, logical(1))
   p[num] <- lapply(p[num], function(v) round(v, digits))
   print(p, row.names = FALSE)
+  if (!is.null(x$tests)) {
+    cat("\nGlobal tests against the saturated model\n")
+    t <- x$tests
+    num <- vapply(t, is.numeric, logical(1))
+    t[num] <- lapply(t[num], function(v) round(v, digits))
+    print(t, row.names = FALSE)
+  }
   inf <- fit$inference
   if (!is.null(inf) && !all(inf$status$available)) {
     cat("\nUnavailable inference\n")
-    s <- inf$status[!inf$status$available, c("component", "reason")]
-    print(s, row.names = FALSE)
-    cat("  ", inf$detail, "\n", sep = "")
+    s <- inf$status[!inf$status$available, , drop = FALSE]
+    for (i in seq_len(nrow(s))) {
+      cat("  ", s$component[i], ": ", s$reason[i],
+          if (nzchar(s$detail[i])) paste0(" (", s$detail[i], ")"), "\n", sep = "")
+    }
   }
   invisible(x)
 }

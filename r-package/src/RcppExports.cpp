@@ -2852,6 +2852,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_inference_impl
+Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary);
+RcppExport SEXP _magmaanlab_policy_inference_impl(SEXP contextSEXP, SEXP convergedSEXP, SEXP psd_boundarySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    Rcpp::traits::input_parameter< bool >::type converged(convergedSEXP);
+    Rcpp::traits::input_parameter< bool >::type psd_boundary(psd_boundarySEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_inference_impl(context, converged, psd_boundary));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_reuse_impl
 Rcpp::List inference_reuse_impl(SEXP context);
 RcppExport SEXP _magmaanlab_inference_reuse_impl(SEXP contextSEXP) {
@@ -4524,6 +4537,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_ntml_quadratic_impl", (DL_FUNC) &_magmaanlab_ntml_quadratic_impl, 3},
     {"_magmaanlab_ntml_reference_impl", (DL_FUNC) &_magmaanlab_ntml_reference_impl, 2},
     {"_magmaanlab_ntml_covariance_impl", (DL_FUNC) &_magmaanlab_ntml_covariance_impl, 2},
+    {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 3},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_infer_lr_test_satorra2000", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra2000, 10},
     {"_magmaanlab_infer_continuous_ls_lr_test_satorra2000", (DL_FUNC) &_magmaanlab_infer_continuous_ls_lr_test_satorra2000, 10},

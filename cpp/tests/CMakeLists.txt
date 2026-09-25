@@ -59,6 +59,7 @@ magmaan_add_test_target(magmaan_test_smoke smoke
 
 magmaan_add_test_target(magmaan_test_spec spec
   unit/lexer_test.cpp
+  unit/group_equal_means_test.cpp
   unit/parser_test.cpp
   unit/lavaanify_test.cpp
   unit/composite_expand_test.cpp
@@ -136,6 +137,7 @@ magmaan_add_test_target(magmaan_test_estimate estimate
 
 magmaan_add_test_target(magmaan_test_inference inference
   unit/inference_test.cpp
+  unit/policy_test.cpp
   unit/expected_info_whitened_test.cpp
   unit/distribution_math_test.cpp
   unit/score_test.cpp

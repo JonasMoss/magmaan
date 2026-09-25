@@ -1258,6 +1258,21 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
         }
       }
     }
+    // Equal indicator intercepts identify the latent means, so lavaan frees
+    // them in groups 2+ unless `means` is equal too. Only the auto-added
+    // zero means are released; a user-fixed mean stays fixed, and
+    // `group.partial` does not change the release.
+    if (has_family(GroupEqual::Intercepts) && !has_family(GroupEqual::Means)) {
+      for (std::size_t i = n_per; i < rows.size(); ++i) {
+        PendingRow& r = rows[i];
+        if (r.op == parse::Op::Intercept && v.lv.contains(r.lhs) && r.user == 0 &&
+            r.user_fixed_value && r.fixed_value == 0.0) {
+          r.user_fixed_value = false;
+          r.fixed_value = kNaN;
+          r.user_explicit = false;
+        }
+      }
+    }
   }
 
   // Step 9: constraint rows. First the `effect.coding` rows synthesized below,

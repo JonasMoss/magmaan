@@ -255,6 +255,31 @@ post_expected<const Eigen::MatrixXd*> ntml_covariance(NTMLFit& fit, bool robust)
   }
   return &*fit.robust_covariance;
 }
+post_expected<const Eigen::MatrixXd*> ntml_observed_covariance(NTMLFit& fit) {
+  if (!fit.observed_covariance) {
+    auto H = inference::information_observed_analytic(fit.pt,fit.rep,fit.data->sample,fit.estimates);
+    if (!H) return std::unexpected(H.error());
+    auto V = inference::vcov(*H,fit.pt,fit.estimates.theta);
+    if (!V) return std::unexpected(V.error());
+    fit.observed_covariance = std::move(*V);
+  }
+  return &*fit.observed_covariance;
+}
+post_expected<const Eigen::MatrixXd*> ntml_score_sandwich(NTMLFit& fit, Information bread) {
+  auto& slot = bread == Information::Expected ? fit.score_sandwich_expected : fit.score_sandwich_observed;
+  if (slot) return &*slot;
+  auto g = ntml_geometry(fit); if (!g) return std::unexpected(g.error());
+  auto wd = weighted_delta(fit); if (!wd) return std::unexpected(wd.error());
+  auto V = bread == Information::Expected ? ntml_covariance(fit) : ntml_observed_covariance(fit);
+  if (!V) return std::unexpected(V.error());
+  const Eigen::MatrixXd directions = **wd * **V;
+  auto rows = project(*fit.data,(*g)->base,directions);
+  if (!rows) return std::unexpected(rows.error());
+  likelihood_rows(fit,(*g)->base,directions,*rows);
+  if (!rows->allFinite()) return std::unexpected(invalid("NTML score sandwich: non-finite casewise scores"));
+  slot = rows->transpose()* *rows;
+  return &*slot;
+}
 namespace {
 bool same_ambient(const NTMLFit& a, const NTMLFit& b) {
   if (a.rep.ov_names != b.rep.ov_names || a.rep.lv_names != b.rep.lv_names ||

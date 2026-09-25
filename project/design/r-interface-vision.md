@@ -2,9 +2,10 @@
 
 Status: adopted direction, 2026-09-25. The package split has landed: the
 compiled package is `magmaanlab` in `r-package/`, and the pure-R `magmaan`
-package is a scaffold in `r-magmaan/` whose inference components report
-`not_implemented` until the C++ policy composer exists. The remaining work is
-tracked in [todo.md](../backlog/todo.md#two-package-r-interface).
+package is in `r-magmaan/`. The policy composer (`api::policy_inference_ml`)
+covers single-level complete-data ML; other estimators fit but report their
+inference as `unsupported_model`. The remaining work is tracked in
+[todo.md](../backlog/todo.md#two-package-r-interface).
 
 ## Intention
 
@@ -152,6 +153,11 @@ Global tests against the saturated model:
   experiment (see the backlog).
 - Statistic and calibration are labelled separately; the spectrum or trace
   and numerical diagnostics are retained.
+- Geometry of the global tests (decided 2026-09-25 for complete-data ML): the
+  shared expected-information geometry, with the empirical Gamma. That is the
+  geometry the SB and PEBA4 evidence covers, and under the global null the
+  observed alternative differs only at O_p(n^-1/2). The observed-information
+  U enters as an arm of the score-weight experiment rather than as the default.
 
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)

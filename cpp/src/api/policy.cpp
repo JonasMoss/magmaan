@@ -1,0 +1,115 @@
+#include "magmaan/api/policy.hpp"
+
+#include <utility>
+
+#include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/inference/inference.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
+
+namespace magmaan::api {
+
+std::string_view reason_name(InferenceReason reason) noexcept {
+  switch (reason) {
+    case InferenceReason::Available:        return "available";
+    case InferenceReason::NotConverged:     return "not_converged";
+    case InferenceReason::PsdBoundary:      return "psd_boundary";
+    case InferenceReason::Saturated:        return "saturated";
+    case InferenceReason::UnsupportedModel: return "unsupported_model";
+    case InferenceReason::NumericFailure:   return "numeric_failure";
+  }
+  return "unknown";
+}
+
+PolicyFitState policy_fit_state(const estimate::Estimates& estimates) {
+  const auto& diagnostics = estimates.diagnostics;
+  const auto verdict = estimate::common_fit_verdict(diagnostics);
+  PolicyFitState state;
+  state.converged = verdict.status != estimate::FitCheck::Failed;
+  state.psd_boundary = verdict.domain == estimate::StationarityDomain::Psd &&
+                       diagnostics.newton_accuracy.checked &&
+                       !diagnostics.newton_accuracy.covariance_interior;
+  return state;
+}
+
+PolicyInference policy_unavailable(InferenceReason reason, std::string detail) {
+  PolicyInference out;
+  out.covariance_reason = reason;
+  out.covariance_detail = detail;
+  out.score.reason = out.lr.reason = reason;
+  out.score.detail = out.lr.detail = std::move(detail);
+  return out;
+}
+
+namespace {
+
+void global_test(robust::frontier::NTMLFit& fit, bool score, PolicyGlobalTest& out) {
+  auto q = robust::frontier::ntml_quadratic(fit, score);
+  if (!q) {
+    out.reason = InferenceReason::NumericFailure;
+    out.detail = q.error().detail;
+    return;
+  }
+  auto spectrum = robust::frontier::ntml_spectrum(**q);
+  if (!spectrum) {
+    out.reason = InferenceReason::NumericFailure;
+    out.detail = spectrum.error().detail;
+    return;
+  }
+  out.statistic = (*q)->statistic;
+  out.df = (*q)->df;
+  out.eigenvalues = **spectrum;
+  using robust::frontier::FmgMethod;
+  const auto sb = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
+                                             {FmgMethod::SatorraBentler, 0.0, true});
+  out.p_sb = sb.p_value;
+  out.sb_scale = sb.lambdas.sum() / static_cast<double>(out.df);
+  out.p_peba4 = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
+                                           {FmgMethod::Peba, 4.0, true}).p_value;
+}
+
+}  // namespace
+
+PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
+                                    const PolicyFitState& state) {
+  if (!state.converged) {
+    return policy_unavailable(InferenceReason::NotConverged,
+                              "the fit did not pass its convergence verdict");
+  }
+  if (state.psd_boundary) {
+    return policy_unavailable(
+        InferenceReason::PsdBoundary,
+        "the PSD-constrained estimate lies on the cone boundary, where regular "
+        "Wald, score and likelihood-ratio theory does not apply");
+  }
+
+  PolicyInference out;
+  auto covariance = robust::frontier::ntml_score_sandwich(fit, robust::Information::Observed);
+  if (covariance) {
+    out.covariance = **covariance;
+  } else {
+    out.covariance_reason = InferenceReason::NumericFailure;
+    out.covariance_detail = covariance.error().detail;
+  }
+
+  // df_stat counts mean moments whenever the sample carries means; the NTML
+  // sample always does, so drop them for a covariance-only fit.
+  data::SampleStats sample = fit.data->sample;
+  if (!fit.data->has_means) sample.mean.clear();
+  auto df = inference::df_stat(fit.pt, sample, fit.estimates.theta);
+  if (!df) {
+    out.score.reason = out.lr.reason = InferenceReason::NumericFailure;
+    out.score.detail = out.lr.detail = df.error().detail;
+    return out;
+  }
+  if (*df <= 0) {
+    out.score.reason = out.lr.reason = InferenceReason::Saturated;
+    out.score.detail = out.lr.detail =
+        "the model has zero degrees of freedom, so there is no global test";
+    return out;
+  }
+  global_test(fit, true, out.score);
+  global_test(fit, false, out.lr);
+  return out;
+}
+
+}  // namespace magmaan::api

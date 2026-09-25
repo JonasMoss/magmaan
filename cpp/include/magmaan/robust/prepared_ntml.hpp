@@ -34,6 +34,8 @@ struct NTMLFit {
   std::optional<NTMLGeometry> geometry;
   std::optional<UFactor> expected, observed;
   std::optional<Eigen::MatrixXd> weighted_delta, information, covariance, robust_covariance;
+  std::optional<Eigen::MatrixXd> observed_covariance;
+  std::optional<Eigen::MatrixXd> score_sandwich_expected, score_sandwich_observed;
   std::optional<Eigen::MatrixXd> projected_rows;
   std::shared_ptr<NTMLQuadratic> score, lr;
   std::optional<Eigen::VectorXd> unbiased_spectrum;
@@ -60,4 +62,14 @@ post_expected<const Eigen::VectorXd*> ntml_unbiased_spectrum(NTMLFit& fit);
 post_expected<const Eigen::VectorXd*> ntml_spectrum(NTMLQuadratic& quadratic);
 post_expected<const Eigen::MatrixXd*> ntml_covariance(NTMLFit& fit, bool robust = false);
 post_expected<const Eigen::MatrixXd*> ntml_information(NTMLFit& fit);
+// Inverse observed information (closed-form ML Hessian), reduced through the
+// equality constraints.
+post_expected<const Eigen::MatrixXd*> ntml_observed_covariance(NTMLFit& fit);
+// Sandwich covariance V (sum_i s_i s_i') V of the free parameters, where s_i
+// are the exact casewise likelihood scores at the fitted point and V is the
+// inverse expected or observed information. Unlike ntml_covariance(fit, true),
+// the scores use the fitted mean, not the sample mean; the two differ at
+// leading order when a structured mean is misspecified.
+post_expected<const Eigen::MatrixXd*> ntml_score_sandwich(
+    NTMLFit& fit, Information bread = Information::Observed);
 } // namespace magmaan::robust::frontier

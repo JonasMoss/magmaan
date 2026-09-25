@@ -18,11 +18,12 @@ This package is pure R. Every computation happens in
 magmaan C++ core, which also offers every alternative convention.
 `as_lab_fit(fit)` returns the underlying magmaanlab fit.
 
-Status: scaffold. Estimation, the option set, listwise accounting and PSD
-fitting work. The inference policy (observed-information sandwich, global score
-and likelihood-ratio tests with SB and PEBA4) is not implemented yet, so every
-inference component reports `not_implemented`, and `vcov()` and `confint()`
-raise a `magmaan_inference_unavailable` condition. The design is
+Status: for single-level complete-data ML, `magmaan()` computes the full
+inference policy: the observed-information sandwich covariance (standard
+errors, Wald tests, intervals, defined parameters) and the global score and
+likelihood-ratio tests, each calibrated with SB and PEBA4. The other estimators
+fit, but their inference components report `unsupported_model`, and `vcov()`
+and `confint()` raise a `magmaan_inference_unavailable` condition. The design is
 [`project/design/r-interface-vision.md`](../project/design/r-interface-vision.md).
 
 Install `magmaanlab` first (`just r-dev` or `just r-install`), then this

@@ -1,8 +1,8 @@
 # Inference under magmaan's policy (project/design/r-interface-vision.md):
 # the observed-information sandwich for parameter uncertainty, and global
 # score and likelihood-ratio tests, each calibrated with SB and PEBA4. The
-# composer lives in C++; until it lands every component reports a typed
-# reason instead of a substitute result.
+# policy is composed in C++ (magmaanlab::policy_inference()); a component it
+# cannot compute carries a reason instead of a substitute result.
 
 .inference_components <- c("covariance", "global_score", "global_lr")
 
@@ -22,14 +22,28 @@ infer <- function(fit) {
 }
 
 .policy_inference <- function(fit) {
+  lab <- fit$lab
+  res <- magmaanlab::policy_inference(lab)
   status <- data.frame(
     component = .inference_components,
-    available = FALSE,
-    reason = "not_implemented",
+    available = c(res$covariance_available, res$score$available, res$lr$available),
+    reason = c(res$covariance_reason, res$score$reason, res$lr$reason),
+    detail = c(res$covariance_detail, res$score$detail, res$lr$detail),
     stringsAsFactors = FALSE
   )
-  list(status = status,
-       detail = "the inference policy composer is not implemented yet")
+  out <- list(status = status)
+  if (isTRUE(res$covariance_available)) {
+    V <- res$covariance
+    nm <- names(coef(fit))
+    dimnames(V) <- list(nm, nm)
+    out$covariance <- V
+    if (any(lab$partable$op == ":=")) {
+      out$defined <- magmaanlab::compute_defined(lab$syntax, lab, res$covariance)
+    }
+  }
+  if (isTRUE(res$score$available)) out$global_score <- res$score
+  if (isTRUE(res$lr$available)) out$global_lr <- res$lr
+  out
 }
 
 # Condition raised when a caller asks for an inference result that does not
@@ -51,7 +65,8 @@ infer <- function(fit) {
   }
   row <- inf$status[inf$status$component == component, , drop = FALSE]
   if (!nrow(row) || !isTRUE(row$available)) {
-    stop(.inference_condition(caller, component, row$reason %||% "unknown", inf$detail))
+    stop(.inference_condition(caller, component, row$reason %||% "unknown",
+                              row$detail %||% ""))
   }
   inf[[component]]
 }
@@ -59,10 +74,32 @@ infer <- function(fit) {
 .inference_label <- function(fit) {
   inf <- fit$inference
   if (is.null(inf)) return("not computed; call infer(fit)")
-  if (all(inf$status$available)) return("computed")
-  if (!any(inf$status$available)) return(paste("unavailable:", inf$detail))
-  paste("partly available:", paste(inf$status$component[!inf$status$available],
-                                   collapse = ", "), "missing")
+  s <- inf$status
+  if (all(s$available)) return("computed")
+  if (!any(s$available)) {
+    reasons <- unique(s$reason)
+    if (length(reasons) == 1L) return(paste0("unavailable (", reasons, ")"))
+    return("unavailable")
+  }
+  paste0("partly available; missing ",
+         paste0(s$component[!s$available], " (", s$reason[!s$available], ")",
+                collapse = ", "))
+}
+
+.global_tests <- function(fit) {
+  inf <- fit$inference
+  if (is.null(inf)) return(NULL)
+  rows <- lapply(c("global_score", "global_lr"), function(component) {
+    t <- inf[[component]]
+    if (is.null(t)) return(NULL)
+    data.frame(test = if (component == "global_score") "score" else "likelihood ratio",
+               statistic = t$statistic, df = t$df, p.sb = t$p_sb,
+               p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
+               stringsAsFactors = FALSE)
+  })
+  rows <- Filter(Negate(is.null), rows)
+  if (!length(rows)) return(NULL)
+  do.call(rbind, rows)
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x

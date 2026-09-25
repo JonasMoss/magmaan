@@ -40,6 +40,21 @@ reason the test exists; unresolved work still belongs in the backlog.
 The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
 write-ups live in the commits that introduced each guard.
 
+**`group.equal = "intercepts"` kept the latent means fixed.**
+Regression: `spec::build` tied indicator intercepts across groups but left the
+auto-added latent means fixed at 0 in every group, whereas lavaan frees them in
+groups 2+ unless `means` is also equal. Keyword scalar invariance therefore
+fitted a more restricted model than lavaan (HS 1939 by school: fmin .163
+against lavaan's .106). The R invariance helpers wrote `f ~ c(0, NA)*1`
+explicitly and were unaffected; the ordinary-user package's lavaan-MLR
+standard-error gate exposed it.
+Guard: `cpp/tests/unit/group_equal_means_test.cpp` (release, `means`, user-fixed
+means, `group.partial`, read from lavaan 0.7.2); `r-magmaan/tests/testthat/test-magmaan.R`
+matches lavaan's MLR standard errors under `group.equal = c("loadings",
+"intercepts")`.
+Scope: the closed-form (Guttman) grouped path still rejects free latent means;
+its intercept-equality test now requests `means` explicitly.
+
 **Convergence was returned without covariance admissibility.**
 Regression: complete-data ML/LS checked the final implied observed `Sigma`
 only, FIML did not run the shared L2 finalizer, and R exposed no structured

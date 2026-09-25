@@ -11072,6 +11072,49 @@ Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
   auto v=magmaan::robust::frontier::ntml_covariance(*c.ntml,robust);
   if (!v) stop_post(v.error()); return Rcpp::wrap(**v);
 }
+#include "magmaan/api/policy.hpp"
+
+namespace {
+Rcpp::List policy_test_list(const magmaan::api::PolicyGlobalTest& t) {
+  return Rcpp::List::create(
+      Rcpp::_["available"] = t.reason == magmaan::api::InferenceReason::Available,
+      Rcpp::_["reason"] = std::string(magmaan::api::reason_name(t.reason)),
+      Rcpp::_["detail"] = t.detail,
+      Rcpp::_["statistic"] = t.statistic, Rcpp::_["df"] = t.df,
+      Rcpp::_["sb_scale"] = t.sb_scale, Rcpp::_["p_sb"] = t.p_sb,
+      Rcpp::_["p_peba4"] = t.p_peba4,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(t.eigenvalues));
+}
+}  // namespace
+
+// policy_inference_impl() — mirrors api::policy_inference_ml() on a prepared
+// inference context. The fit state comes from the R fit because the context
+// rebuilds estimates without their convergence diagnostics.
+//
+// [[Rcpp::export]]
+Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary) {
+  auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
+  using magmaan::api::InferenceReason;
+  magmaan::api::PolicyInference out;
+  if (c.estimator != "ML") {
+    out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
+        "the inference policy covers complete-data ML so far");
+  } else if (!c.ntml) {
+    out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
+        "the inference policy requires random x, affine equality constraints and no active bounds");
+  } else {
+    out = magmaan::api::policy_inference_ml(*c.ntml, {converged, psd_boundary});
+  }
+  const bool has_cov = out.covariance_reason == InferenceReason::Available;
+  return Rcpp::List::create(
+      Rcpp::_["covariance"] = has_cov ? Rcpp::RObject(Rcpp::wrap(out.covariance)) : Rcpp::RObject(R_NilValue),
+      Rcpp::_["covariance_available"] = has_cov,
+      Rcpp::_["covariance_reason"] = std::string(magmaan::api::reason_name(out.covariance_reason)),
+      Rcpp::_["covariance_detail"] = out.covariance_detail,
+      Rcpp::_["score"] = policy_test_list(out.score),
+      Rcpp::_["lr"] = policy_test_list(out.lr));
+}
+
 // [[Rcpp::export]]
 Rcpp::List inference_reuse_impl(SEXP context) {
   auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");

@@ -3119,7 +3119,9 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   `BuildOptions::group_equal`/`group_partial` ties the requested families across
   groups (synthetic shared labels feeding the same `compute_eq_groups` merge as
   explicit labels; the fixed marker is left untied) and `build` forces a mean
-  structure when `Thresholds` is equated so the indicator-intercept rows exist;
+  structure when `Thresholds` is equated so the indicator-intercept rows exist.
+  As in lavaan, equating `Intercepts` without `Means` frees the auto-added
+  latent means in groups 2+ (user-fixed means stay fixed);
   `prepare_ordinal_*_partable` then applies the Wu-Estabrook (2016) release —
   free group-2+ residual variances (the released latent-response scale,
   binary-vetoed at `nth==1`) and indicator intercepts, marker/`f~1` left as is.
@@ -3795,12 +3797,30 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`
   takes lavaan-named options, rejects estimator-plus-correction names such as
   MLR and WLSMV, applies lavaan's `meanstructure` default, reports rows used
-  and deleted listwise, and fits through `fit_model()`. `infer()` records each
-  inference component (covariance, global score, global LR) as
-  `not_implemented` until the C++ policy composer lands; `vcov()` and
-  `confint()` then raise a typed `magmaan_inference_unavailable` condition.
+  and deleted listwise, and fits through `fit_model()`. `infer()` runs the
+  inference policy (next entry) and records each component (covariance,
+  global score, global LR) as available or with a typed reason; for an
+  unavailable component `vcov()` and `confint()` raise a
+  `magmaan_inference_unavailable` condition carrying that reason.
   Its tests check parameter rows and free estimates against lavaan for ML,
   `std.lv`, multi-group `group.equal`, syntax intercepts and ordinal DWLS.
+- The inference policy for single-level complete-data ML is
+  `api::policy_inference_ml()` (`api/policy.hpp`), exposed as
+  `magmaanlab::policy_inference(fit)` and run by `magmaan::infer()`. The
+  parameter covariance is `robust::frontier::ntml_score_sandwich()`: the
+  observed-information sandwich of exact casewise likelihood scores at the
+  fitted point, so a misspecified structured mean does not bias the meat (the
+  centered-moment `ntml_covariance(fit, true)` and `casewise_scores()` use the
+  sample mean). The global score and likelihood-ratio tests come from the
+  shared expected-information NTML geometry, each calibrated with SB and PEBA4.
+  Components carry typed reasons (`not_converged`, `psd_boundary` for a PSD fit
+  whose covariance blocks are singular, `saturated`, `unsupported_model`,
+  `numeric_failure`) instead of substitute results. C++ unit tests check the
+  covariance against finite-difference casewise scores, including two-group
+  scalar invariance with misfitting means; the R tests match lavaan's MLR
+  standard errors (single- and multi-group with structured means), its
+  Satorra-Bentler statistic, scaling factor and p-value, and its delta-method
+  standard errors for defined parameters.
 - `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted

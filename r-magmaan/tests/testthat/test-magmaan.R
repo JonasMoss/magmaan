@@ -18,6 +18,18 @@ expect_lavaan_estimates <- function(fit, lav, tolerance = 1e-4) {
   expect_equal(ours$est[idx], theirs$est, tolerance = tolerance)
 }
 
+# Standard errors of every lavaan free row, aligned by (lhs, op, rhs, group).
+expect_lavaan_se <- function(fit, lav, tolerance = 1e-4) {
+  p <- parameters(fit)
+  theirs <- lavaan::parTable(lav)
+  theirs <- theirs[theirs$free > 0L, , drop = FALSE]
+  group <- if (is.null(p$group)) 1L else p$group
+  idx <- match(paste(theirs$lhs, theirs$op, theirs$rhs, theirs$group),
+               paste(p$lhs, p$op, p$rhs, group))
+  expect_false(anyNA(idx))
+  expect_equal(p$se[idx], theirs$se, tolerance = tolerance)
+}
+
 test_that("ML estimates come from magmaanlab and match lavaan", {
   d <- hs()
   fit <- magmaan(cfa, d)
@@ -71,21 +83,31 @@ test_that("rows with missing values are deleted listwise and reported", {
   expect_equal(fiml$rows$used, 301L)
 })
 
-test_that("unavailable inference is typed and never substituted", {
+test_that("inference = FALSE defers the same policy to infer()", {
   d <- hs()
   later <- magmaan(cfa, d, inference = FALSE)
   expect_null(later$inference)
   err <- tryCatch(vcov(later), magmaan_inference_unavailable = function(e) e)
   expect_equal(err$reason, "not_computed")
   now <- infer(later)
-  expect_equal(now$inference$status$component,
-               c("covariance", "global_score", "global_lr"))
-  err <- tryCatch(confint(now), magmaan_inference_unavailable = function(e) e)
-  expect_equal(err$reason, "not_implemented")
+  direct <- magmaan(cfa, d)
+  expect_equal(vcov(now), vcov(direct))
+  expect_equal(now$inference$global_lr, direct$inference$global_lr)
   expect_equal(unname(coef(now)), unname(coef(later)))
-  p <- parameters(now)
-  expect_true(all(is.na(p$se)))
-  expect_output(print(summary(now)), "Unavailable inference")
+})
+
+test_that("unsupported estimators keep their estimates and give a reason", {
+  d <- hs()
+  for (v in paste0("x", 1:6)) {
+    d[[v]] <- cut(d[[v]], breaks = stats::quantile(d[[v]], c(0, 1 / 3, 2 / 3, 1)),
+                  include.lowest = TRUE, labels = FALSE)
+  }
+  fit <- magmaan(cfa, d, estimator = "DWLS", ordered = paste0("x", 1:6))
+  expect_true(all(fit$inference$status$reason == "unsupported_model"))
+  err <- tryCatch(confint(fit), magmaan_inference_unavailable = function(e) e)
+  expect_equal(err$reason, "unsupported_model")
+  expect_true(all(is.na(parameters(fit)$se)))
+  expect_output(print(summary(fit)), "Unavailable inference")
 })
 
 test_that("ordered variables use the categorical estimators", {
@@ -108,4 +130,69 @@ test_that("psd = TRUE fits through the PSD-constrained estimator", {
   expect_true(isTRUE(as_lab_fit(fit)$options$psd))
   expect_equal(unname(coef(fit)), unname(coef(magmaan(cfa, d))), tolerance = 1e-4)
   expect_output(print(fit), "PSD-constrained")
+})
+
+test_that("ML covariance is lavaan's observed-information sandwich", {
+  d <- hs()
+  fit <- magmaan(cfa, d)
+  expect_equal(fit$inference$status$available, c(TRUE, TRUE, TRUE))
+  lav <- lavaan::cfa(cfa, d, estimator = "MLR")
+  expect_lavaan_se(fit, lav)
+  p <- parameters(fit)
+  pt <- fit$lab$partable
+  free <- pt$free[pt$free > 0L & !pt$op %in% c("==", "<", ">")]
+  expect_equal(p$se[p$free], unname(sqrt(diag(vcov(fit))))[free])
+  ci <- confint(fit)
+  expect_equal(unname(ci[, 2] - ci[, 1]), unname(2 * stats::qnorm(0.975) * sqrt(diag(vcov(fit)))))
+})
+
+test_that("the sandwich uses the fitted means, as lavaan's MLR does", {
+  # Scalar invariance: the fitted means differ from the sample means.
+  d <- hs()
+  eq <- c("loadings", "intercepts")
+  fit <- magmaan(cfa, d, group = "school", group.equal = eq)
+  lav <- lavaan::cfa(cfa, d, group = "school", group.equal = eq, estimator = "MLR")
+  expect_lavaan_se(fit, lav)
+})
+
+test_that("the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentler", {
+  d <- hs()
+  lr <- magmaan(cfa, d)$inference$global_lr
+  fm <- lavaan::fitMeasures(lavaan::cfa(cfa, d, test = "satorra.bentler"),
+                            c("chisq", "df", "chisq.scaling.factor", "pvalue.scaled"))
+  expect_equal(lr$statistic, unname(fm["chisq"]), tolerance = 1e-6)
+  expect_equal(lr$df, unname(fm["df"]))
+  expect_equal(lr$sb_scale, unname(fm["chisq.scaling.factor"]), tolerance = 1e-5)
+  expect_equal(lr$p_sb, unname(fm["pvalue.scaled"]), tolerance = 1e-5)
+  score <- magmaan(cfa, d)$inference$global_score
+  expect_true(is.finite(score$p_peba4) && is.finite(lr$p_peba4))
+  expect_output(print(summary(magmaan(cfa, d))), "Global tests against the saturated model")
+})
+
+test_that("defined parameters use the policy covariance", {
+  d <- hs()
+  m <- "visual =~ x1 + a*x2 + b*x3\ntextual =~ x4 + x5 + x6\nab := a*b"
+  p <- parameters(magmaan(m, d))
+  lav <- lavaan::parameterEstimates(lavaan::cfa(m, d, estimator = "MLR"))
+  expect_equal(p$est[p$op == ":="], lav$est[lav$op == ":="], tolerance = 1e-5)
+  expect_equal(p$se[p$op == ":="], lav$se[lav$op == ":="], tolerance = 1e-4)
+})
+
+test_that("saturated models have a covariance but no global test", {
+  fit <- magmaan("visual =~ x1 + x2 + x3", hs())
+  expect_equal(fit$inference$status$reason, c("available", "saturated", "saturated"))
+  expect_equal(dim(vcov(fit)), c(6L, 6L))
+})
+
+test_that("PSD fits on the cone boundary get no inference", {
+  set.seed(3)
+  n <- 150
+  f <- stats::rnorm(n)
+  d <- data.frame(y1 = f + stats::rnorm(n, 0, 0.01), y2 = 0.5 * f + stats::rnorm(n),
+                  y3 = 0.4 * f + stats::rnorm(n), y4 = 0.6 * f + stats::rnorm(n))
+  m <- "F =~ y1 + y2 + y3 + y4"
+  boundary <- suppressWarnings(magmaan(m, d, psd = TRUE))
+  expect_true(all(boundary$inference$status$reason == "psd_boundary"))
+  interior <- magmaan(cfa, hs(), psd = TRUE)
+  expect_true(all(interior$inference$status$available))
 })

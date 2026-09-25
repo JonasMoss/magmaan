@@ -230,3 +230,32 @@ inference_reuse <- function(context) {
   stopifnot(inherits(context,"magmaan_inference"))
   inference_reuse_impl(context$native)
 }
+
+# magmaan's default inference policy for one fit, as applied by the
+# ordinary-user package: the observed-information sandwich covariance and the
+# global score and likelihood-ratio tests, each with SB and PEBA4. Components
+# outside the policy's scope come back unavailable with a reason, never
+# computed under another convention.
+policy_inference <- function(fit, data = NULL) {
+  if (!inherits(fit, "magmaan_fit")) stop("policy_inference(): supply a fitted magmaan model")
+  estimator <- toupper(fit$estimator %||% "")
+  if (!identical(estimator, "ML") || !is.null(fit$nclusters)) {
+    return(.policy_unavailable("unsupported_model",
+      "the inference policy covers single-level complete-data ML so far"))
+  }
+  context <- tryCatch(prepare_inference(fit, data), error = function(e) e)
+  if (inherits(context, "error")) {
+    return(.policy_unavailable("unsupported_model", conditionMessage(context)))
+  }
+  psd_boundary <- identical(fit$verdict$domain, "psd") &&
+    identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE)
+  policy_inference_impl(context$native, isTRUE(fit$converged), psd_boundary)
+}
+
+.policy_unavailable <- function(reason, detail) {
+  test <- list(available = FALSE, reason = reason, detail = detail,
+               statistic = NA_real_, df = 0L, sb_scale = NA_real_,
+               p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric())
+  list(covariance = NULL, covariance_available = FALSE, covariance_reason = reason,
+       covariance_detail = detail, score = test, lr = test)
+}

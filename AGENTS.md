@@ -263,10 +263,11 @@ compose existing wrappers, validate R-shaped inputs, or preserve names/groups
 for inspection; they should not contain parallel SEM logic. The ordinary-user
 policy is composed in C++, not in R.
 
-The ordinary package is a scaffold: estimation and its options work, and every
-inference component reports `not_implemented` until the C++ policy composer
-lands. No name may be exported by both packages with different meanings, since
-power users attach both.
+For single-level complete-data ML, `magmaan()` runs the full inference policy
+(`api::policy_inference_ml`, exposed as `magmaanlab::policy_inference()`);
+other estimators fit and report their inference as `unsupported_model` until
+the policy covers them. No name may be exported by both packages with
+different meanings, since power users attach both.
 
 Partables exposed from R are compatibility/projection objects. When a model is
 built with the R helpers, the partable returned from a fitted magmaan object

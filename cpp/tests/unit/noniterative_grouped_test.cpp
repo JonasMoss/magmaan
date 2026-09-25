@@ -888,10 +888,13 @@ TEST_CASE("mean structure: intercept SE is the analytic saturated-mean SE") {
 }
 
 TEST_CASE("mean structure: intercept-equality projection (alpha = 0)") {
-  // Equal loadings AND equal intercepts across groups. group.equal ties both;
-  // latent means stay fixed at 0, so this is the exact-χ² intercept-equality
-  // intermediate (not lavaan's free-α scalar, which is Phase C).
-  auto b = build_mg(kTwoFactor, 2, {GroupEqual::Loadings, GroupEqual::Intercepts},
+  // Equal loadings AND equal intercepts across groups, with the latent means
+  // held at 0 in every group: the exact-χ² intercept-equality intermediate.
+  // As in lavaan, equal intercepts alone free the latent means in group 2
+  // (the free-α scalar model, Phase C for the Guttman map); equal means keep
+  // them at 0.
+  auto b = build_mg(kTwoFactor, 2,
+                    {GroupEqual::Loadings, GroupEqual::Intercepts, GroupEqual::Means},
                     /*means=*/true);
   auto ev = ModelEvaluator::build(b.pt, b.rep);
   REQUIRE(ev.has_value());
