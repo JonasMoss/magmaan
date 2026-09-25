@@ -30,9 +30,11 @@ convention.
 ## What the repository carries instead
 
 The C++ golden tests read **checked-in JSON fixtures** built from the corpus:
-`cpp/tests/fixtures/{little,newsom,geiser,mplus_sem,textbook_corpus}/`.
+`cpp/tests/fixtures/{little,newsom,geiser,mplus_sem,textbook_corpus,textbook_ordinal}/`.
 They hold model syntax, *derived summary statistics* (`sample_cov`,
-`sample_mean`, `n_obs`) and lavaan's fitted results, never raw casewise rows.
+`sample_mean`, `n_obs`; for `textbook_ordinal/`, thresholds, polychorics,
+NACOV and the DWLS weight) and lavaan's fitted results, never raw casewise
+rows.
 See [`cpp/tests/fixtures/DATASETS.md`](../../cpp/tests/fixtures/DATASETS.md).
 
 ## What depends on the mount

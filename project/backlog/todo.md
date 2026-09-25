@@ -141,6 +141,28 @@ design, starting-point inventory and validation rules are in
   mistranslated corpus. Rerun it pinned on the corrected fixtures; the
   corrected 102-case PSD audit has two inadmissible ordinary fits (both
   Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
+- **M, ordinal partable semantics (textbook WLSMV lane).**
+  `textbook_ordinal_golden_test.cpp` reproduces 9 of 14 textbook categorical
+  models exactly. The other five expose three gaps in how
+  `prepare_ordinal_partable` treats an imported lavaan partable:
+  1. **Theta.** Ordinal residual variances are forced to 1. Mplus ex6.5 frees
+     them at later occasions (so the free count changes), and Newsom ex3.3a
+     fixes them at 0 (an equivalent fit, rescaled by √2).
+  2. **Delta.** Free scale factors (`~*~`) are forced to 1.
+  3. **Mean structure.** Latent means and intercepts do not enter the implied
+     thresholds (τ − ν − Λα). This breaks categorical growth (ex6.4, ex6.15)
+     and Newsom's ex9.2 latent change model.
+
+  lavaan honors all three, and Mplus defaults to them for longitudinal and
+  multi-group categorical models. The cases sit in `kKnownGaps`.
+  Related gaps found on the same models:
+  - The grammar allows only `exp`/`log` calls in `:=`, and lavaan also takes
+    `sqrt` (Mplus ex5.21/5.22 `:=` rows).
+  - `magmaanlab::fit_model()` with `ordered` and a model written in
+    `group:` blocks stops in `data_ordinal_stats_from_df()` ("model/data
+    group count mismatch"; UG ex5.19).
+  - Covariates in categorical models (lavaan `conditional.x`, 7 textbook
+    cases) have no magmaan path.
 - **S, corpus coverage follow-ups.** Corpus v3.1.0 (2026-09-25) recovered
   the dropped cases that lacked only options or translator scope:
   - 14 WLSMV Mplus User's Guide cases and 1 Muthén case;
