@@ -201,6 +201,12 @@ contract, and Stan's is that an ungenerated support list drifts. Likely home:
 
 ## User-Facing API (Unsettled)
 
+The 2026-09-25 discussion now has a concrete
+[R estimation and inference interface draft](r-interface-vision.md). It proposes
+an automatic-inference convenience layer over explicit methods primitives and
+inventories the current implementation. The older discussion below is historical
+context; running defaults remain unchanged pending that design pass.
+
 **This section records an in-progress discussion. None of it is decided.** It
 is written down so the reasoning survives until the thread resumes.
 
