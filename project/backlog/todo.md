@@ -3957,24 +3957,19 @@ continuous-whitening entry above.
     above, not through lavaan's degenerate delta `group.equal` convention. The
     paper's arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
-  - **M/L — continuous scalar `group.equal` release.** Continuous
-    `group.equal = "loadings"` already ties at the npar level and its free
-    estimates match lavaan (only magmaan's synthetic `.eqg` labels versus
-    lavaan's `.pN.` differ cosmetically). Complete the semantic macro for
-    `group.equal = c("loadings", "intercepts")`: when indicator intercepts
-    are equated, `build` must release the latent means in group 2+ under the
-    reference-group convention. Today it only adds equality ties, yielding
-    npar 60 versus lavaan's 63 and an overconstrained mean block.
-
-    This belongs in lavaanification, not the FIML/optimizer path: `group.equal`
-    must lower both its equality labels and identification changes into the
-    lavaanified model triple. Define the precedence for explicit latent-mean
-    syntax, `group.partial`, growth models, and identification options; do not
-    silently duplicate or override a user mean row. Gate the resulting
-    partable, free/fixed mean rows, ML/FIML estimates, and scalar nested test
-    against lavaan. `continuous_invariance()` is the current R-layer workaround:
-    it explicitly appends `f ~ c(0, NA, ...)*1` and uses the delta restriction
-    map for metric-to-scalar because that pair is not strict parameter nesting.
+  - **S/M — broaden continuous scalar-invariance regression coverage.**
+    The latent-mean release landed in `854d4adf`: equal indicator intercepts
+    release auto-added zero latent means in groups 2+ unless `means` is also
+    equal. Explicit user means remain authoritative; `group.partial` does not
+    suppress the release. See the roadmap and test ledger for existing guards.
+    Remaining: durable ML/FIML partable, estimate and scalar nested-test gates
+    across marker/std.lv identification, growth models and three or more groups.
+    Review `continuous_invariance()`'s explicit mean-syntax insertion now that
+    the core supplies the release, preserving explicit user mean specifications
+    and the metric-to-scalar delta restriction map. A local HS school check
+    (2026-09-25, lavaan 0.7.2) matched fitted parameters within 9e-6 for marker,
+    std.lv, partial intercept invariance, explicit fixed means, equal means and
+    deterministic FIML missingness; this is not a replacement for those gates.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the

@@ -58,6 +58,16 @@ The lavaanified model contract is the triple:
 from `LavaanParTable`, which is the compatibility format used by R bindings and
 golden `parTable()` fixtures.
 
+Continuous multi-group `group.equal = "intercepts"` releases auto-added zero
+latent means in groups 2+ unless `means` is also equal. Explicit user mean
+rows remain authoritative, and `group.partial` does not suppress the release.
+This identification change lives in `spec::build`, alongside the equality
+labels, so keyword scalar invariance no longer requires explicit latent-mean
+syntax. Unit guards cover release, equal means, fixed user means and partial
+intercept invariance; the ordinary R package also gates scalar-invariance MLR
+standard errors against lavaan. Broader ML/FIML and identification coverage
+remains in the backlog.
+
 ### Optimizer control semantics
 
 `OptimOptions` exposes optional backend blocks for NLopt, PORT, IPOPT and
