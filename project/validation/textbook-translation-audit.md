@@ -300,3 +300,24 @@ statistic.
 Two-level models remain open (see `project/backlog/todo.md`). Their H0 models
 reproduce, but both programs under-converge the saturated model at default
 settings, and Mplus's two-level MLR scaling is not reproduced.
+
+## Newsom second edition (corpus v3.2.0, 2026-09-25)
+
+The second edition's R scripts became their own book, `newsom_2024`. All 125
+fits reproduce the author's calls. Seven needed documented patches for script
+defects, and the extractor now keeps FIML fits whose listwise covariance is
+singular.
+
+The book stores only the 49 fits that differ from every `newsom_2015` case:
+- same N, df, free parameters, objective and estimates counts as a repeat;
+- labels, start values and `:=` rows are ignored.
+
+The comparison exposed a first-edition case at a local optimum. The second
+edition's ex8.5b is the same model with start values, and it reaches fmin
+0.084 where the first-edition call stops at 0.372. `newsom_2015_ex8_5b` now
+carries those starts.
+
+The second edition adds seven all-ordinal cases to the WLSMV lane:
+- four longitudinal invariance models match exactly;
+- two latent-mean models hit the known mean-structure gap;
+- one saturated theta model stalls in L-BFGS from lavaan's starts.

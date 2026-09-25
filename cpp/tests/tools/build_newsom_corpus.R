@@ -87,7 +87,44 @@ SOURCE_PATCHES <- list(
        why = paste("script names and fits `health1` but reads socex1.dat;",
                    "the 37 health.dat column names follow, and the",
                    "second-edition ex5-5b.R fits the same model to",
-                   "health.dat"))
+                   "health.dat")),
+  # Second edition (lsem2r.zip): defects in the scripts as shipped.
+  list(edition = "2", script = "ex3-4a.R",
+       from = "socex1.1$w1posaff=(w1happy+w1enjoy",
+       to = "attach(socex1.1); socex1.1$w1posaff=(w1happy+w1enjoy",
+       why = paste("scale scores are computed from bare item names without",
+                   "attach(socex1.1), as the first-edition ex3-4c/d.R do")),
+  list(edition = "2", script = "ex3-4c.R",
+       from = "socex1.1$w1posaff=(w1happy + w1enjoy",
+       to = "attach(socex1.1); socex1.1$w1posaff=(w1happy + w1enjoy",
+       why = paste("scale scores are computed from bare item names without",
+                   "attach(socex1.1), as the first-edition ex3-4c.R does")),
+  list(edition = "2", script = "ex3-4d.R",
+       from = "socex1.1$w1posaff <- (w1happy + w1enjoy",
+       to = "attach(socex1.1); socex1.1$w1posaff <- (w1happy + w1enjoy",
+       why = paste("scale scores are computed from bare item names without",
+                   "attach(socex1.1), as the first-edition ex3-4d.R does")),
+  list(edition = "2", script = "ex5-2b.R",
+       from = "names(socex1.1) = c(",
+       to = "socex1.1 <- read.table (\"socex1.dat\", header=FALSE); names(socex1.1) = c(",
+       why = paste("the script names and fits socex1.1 but never reads it;",
+                   "the read is the first-edition ex5-2b.R's")),
+  list(edition = "2", script = "ex7-6c.R",
+       from = "names(health1) = c(",
+       to = "health1 <- read.table (\"health.dat\", header=FALSE); names(health1) = c(",
+       why = paste("the script names and fits health1 but never reads it;",
+                   "the read is the first-edition ex7-6c.R's")),
+  list(edition = "2", script = "ex5-2c.R",
+       from = "(lambda2)*w1enjoy + (", to = "(lambda2)*w1enjoy + ",
+       why = paste("the label (lambda3) is split across two lines, which",
+                   "lavaan rejects; the w2posaff line has it whole")),
+  list(edition = "2", script = "ex5-2c.R",
+       from = "   lambda3)*w1satis", to = "   (lambda3)*w1satis",
+       why = "second half of the split (lambda3) label"),
+  list(edition = "2", script = "ex9-2.R",
+       from = "estimator=\"wlsmv\",estimator= \"WLSMV\"",
+       to = "estimator= \"WLSMV\"",
+       why = "estimator is passed twice, which lavaan 0.7 rejects")
 )
 
 patched_script <- function(path) {
@@ -356,6 +393,7 @@ empty_row <- function(id, name, source_rel, status, note, extra = list()) {
     generated_data = "", generated_model = "", generated_script = "",
     group_var = "", group_levels = "", n_groups = NA_integer_, n_obs = "",
     ordered = "", parameterization = "", group_equal = "", group_partial = "",
+    listwise_cov_pd = NA,
     lavaan_function = "", estimator = "",
     meanstructure = NA, fixed_x = NA, missing = "",
     source_converged = NA, strict_parity = FALSE, status = status,
@@ -470,7 +508,10 @@ for (path in script_paths) {
                drop = FALSE]
     cov_pd <- length(cov_ov) >= 1L && nrow(cc) > length(cov_ov) &&
       tryCatch({ chol(stats::cov(cc)); TRUE }, error = function(e) FALSE)
-    if (!cov_pd) {
+    extra$listwise_cov_pd <- cov_pd
+    # FIML fits never use the listwise covariance; only fits that do are
+    # out of scope when it is degenerate.
+    if (!cov_pd && !identical(missing, "fiml")) {
       rows[[length(rows) + 1L]] <- empty_row(
         id, name, source_rel, "degenerate_covariance",
         paste(c(paste("listwise complete-data covariance not positive",

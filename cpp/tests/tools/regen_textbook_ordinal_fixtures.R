@@ -33,7 +33,7 @@ corpus <- file.path(repo_root, "external", "textbook-corpus")
 out_dir <- file.path(repo_root, "cpp", "tests", "fixtures", "textbook_ordinal")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-# All-ordinal, covariate-free WLSMV cases of corpus v3.1.0. Cases with
+# All-ordinal, covariate-free WLSMV cases of corpus v3.2.0. Cases with
 # exogenous covariates (lavaan conditional.x) or continuous indicators are
 # not exported: magmaan's ordinal estimators take neither.
 case_ids <- c(
@@ -50,7 +50,14 @@ case_ids <- c(
   "newsom_2015_ex3_3b",
   "newsom_2015_ex3_3c",
   "newsom_2015_ex7_2b",
-  "newsom_2015_ex9_2"
+  "newsom_2015_ex9_2",
+  "newsom_2024_ex1_3c",
+  "newsom_2024_ex6_4a",
+  "newsom_2024_ex6_4b",
+  "newsom_2024_ex6_4c",
+  "newsom_2024_ex6_4d",
+  "newsom_2024_ex7_2a",
+  "newsom_2024_ex9_2"
 )
 
 `%||%` <- function(x, y) if (is.null(x)) y else x

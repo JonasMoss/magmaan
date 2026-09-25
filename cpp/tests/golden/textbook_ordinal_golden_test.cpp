@@ -48,7 +48,11 @@ const std::vector<std::string> kCases = {
     "mplus_users_guide_v8_ch6_ex6_15", "newsom_2015_ex2_4a",
     "newsom_2015_ex2_8a",              "newsom_2015_ex3_3a",
     "newsom_2015_ex3_3b",              "newsom_2015_ex3_3c",
-    "newsom_2015_ex7_2b",              "newsom_2015_ex9_2"};
+    "newsom_2015_ex7_2b",              "newsom_2015_ex9_2",
+    "newsom_2024_ex1_3c",              "newsom_2024_ex6_4a",
+    "newsom_2024_ex6_4b",              "newsom_2024_ex6_4c",
+    "newsom_2024_ex6_4d",              "newsom_2024_ex7_2a",
+    "newsom_2024_ex9_2"};
 
 struct KnownGap {
   std::string id;
@@ -67,6 +71,15 @@ const std::vector<KnownGap> kKnownGaps = {
      "theta residual variances forced to 1 where the model fixes them at 0 "
      "(an equivalent fit in a rescaled parameterization)"},
     {"newsom_2015_ex9_2",
+     "delta scale factors forced to 1 and latent means not in the threshold "
+     "structure (latent change model)"},
+    {"newsom_2024_ex1_3c",
+     "optimizer: from lavaan's starts L-BFGS stops on a flat ridge of this "
+     "saturated theta model (fmin 5.8e-9); from lavaan's estimates magmaan "
+     "stays at lavaan's solution"},
+    {"newsom_2024_ex7_2a",
+     "latent means not in the threshold structure (categorical growth)"},
+    {"newsom_2024_ex9_2",
      "delta scale factors forced to 1 and latent means not in the threshold "
      "structure (latent change model)"}};
 
@@ -261,6 +274,17 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
                << ") max|dtheta| " << d_theta
                << std::string(reflected ? " (reflected loadings)" : "")
                << " implied " << d_cor);
+    // Separate optimizer trouble from model semantics: refit from lavaan's
+    // estimates. If magmaan stays there at lavaan's objective, its model
+    // agrees and only the path from lavaan's starts differs.
+    if (!why.str().empty()) {
+      auto refit = estimate::fit_ordinal_bounded(
+          pt, *rep, stats, {}, estimate::OrdinalWeightKind::DWLS, theta,
+          estimate::Backend::NloptLbfgs, opts, param);
+      if (refit.has_value())
+        why << " | from lavaan's theta: fmin " << refit->fmin << ", max|dtheta| "
+            << (refit->theta - theta).cwiseAbs().maxCoeff();
+    }
     const auto* gap = known_gap(id);
     if (gap) {
       if (why.str().empty())

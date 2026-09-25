@@ -25,7 +25,10 @@ cannot pass a field to its fit must skip the case rather than fit a different
 model. The lavaan-parity showcase does this, and the regenerators pick cases
 through explicit lists. v3.1.0 also adds categorical (WLSMV) Mplus cases,
 which carry `lavaan_options.information.expected.mplus`, the Mplus WLSMV test
-convention.
+convention. v3.2.0 adds `newsom_2024`, the second edition's fits that differ
+from every `newsom_2015` case. It is built with `NEWSOM_EDITION=2` and
+`ingest/build_newsom.R --edition 2`, and the dropped repeats are listed in the
+corpus's `docs/audit/newsom_2024_duplicates.csv`.
 
 ## What the repository carries instead
 

@@ -3,7 +3,7 @@
     "format_version": 1,
     "fixture_kind": "newsom.observed",
     "tool": "cpp/tests/tools/regen_little_newsom_fixtures.R",
-    "generated": "2026-09-25 12:07:38 +0200",
+    "generated": "2026-09-25 17:08:27 +0200",
     "lavaan_version": "0.7.2"
   },
   "cases": [
@@ -105,6 +105,7 @@
       "parameterization": "",
       "group_equal": "",
       "group_partial": null,
+      "listwise_cov_pd": true,
       "lavaan_function": "sem",
       "estimator": "ML",
       "meanstructure": true,
@@ -139,6 +140,7 @@
       "parameterization": "",
       "group_equal": "",
       "group_partial": null,
+      "listwise_cov_pd": true,
       "lavaan_function": "sem",
       "estimator": "ML",
       "meanstructure": true,
@@ -173,6 +175,7 @@
       "parameterization": "",
       "group_equal": "",
       "group_partial": null,
+      "listwise_cov_pd": true,
       "lavaan_function": "sem",
       "estimator": "ML",
       "meanstructure": false,

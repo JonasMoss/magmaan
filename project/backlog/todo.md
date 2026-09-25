@@ -179,19 +179,29 @@ design, starting-point inventory and validation rules are in
   corrected 102-case PSD audit has two inadmissible ordinary fits (both
   Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
 - **M, ordinal partable semantics (textbook WLSMV lane).**
-  `textbook_ordinal_golden_test.cpp` reproduces 9 of 14 textbook categorical
-  models exactly. The other five expose three gaps in how
+  `textbook_ordinal_golden_test.cpp` reproduces 13 of 21 textbook categorical
+  models exactly. Seven of the eight known gaps come from how
   `prepare_ordinal_partable` treats an imported lavaan partable:
   1. **Theta.** Ordinal residual variances are forced to 1. Mplus ex6.5 frees
      them at later occasions (so the free count changes), and Newsom ex3.3a
      fixes them at 0 (an equivalent fit, rescaled by √2).
   2. **Delta.** Free scale factors (`~*~`) are forced to 1.
   3. **Mean structure.** Latent means and intercepts do not enter the implied
-     thresholds (τ − ν − Λα). This breaks categorical growth (ex6.4, ex6.15)
-     and Newsom's ex9.2 latent change model.
+     thresholds (τ − ν − Λα). This breaks categorical growth (ex6.4, ex6.15,
+     Newsom 2024 ex7.2a) and Newsom's ex9.2 latent change models (both
+     editions). At lavaan's estimates, magmaan's objective is far from
+     lavaan's.
 
   lavaan honors all three, and Mplus defaults to them for longitudinal and
-  multi-group categorical models. The cases sit in `kKnownGaps`.
+  multi-group categorical models.
+
+  The eighth gap is an optimizer issue. On Newsom 2024 ex1.3c (a saturated
+  theta model with a factor variance near 85), L-BFGS from lavaan's starts
+  stops on a flat ridge at fmin 5.8e-9. From lavaan's estimates it stays at
+  lavaan's solution.
+
+  All eight cases sit in `kKnownGaps`. For each failing case the test refits
+  from lavaan's θ, which tells optimizer trouble from model semantics.
   Related gaps found on the same models:
   - The grammar allows only `exp`/`log` calls in `:=`, and lavaan also takes
     `sqrt` (Mplus ex5.21/5.22 `:=` rows).
@@ -224,11 +234,13 @@ design, starting-point inventory and validation rules are in
 
     Needs `%WITHIN%`/`%BETWEEN%` translation, the reserved `data.cluster`
     field, and a verification standard for these statistics.
-  - **Second editions as separate books.** `newsom_2024`, via
-    `NEWSOM_EDITION=2`. `little_2024` from the archives' Mplus material:
-    - 15 CH3 inputs, the same models as the first edition;
-    - 41 CH5 inputs, about 26 of them new CarpThesis models;
-    - 19 ch9 inputs without `.out`.
+  - **Second editions.** `newsom_2024` is built (corpus v3.2.0): 49 fits
+    that differ from every first-edition case. Little's second-edition Mplus
+    material is not built:
+    - 15 CH3 inputs and 16 of the CH5 inputs repeat first-edition models.
+    - 25 CH5 CarpThesis inputs are new data but the same model families.
+    - The 19 ch9 CLPM/RI-CLPM inputs have no `.out`; they need the second
+      edition's printed tables.
   - **Fixture scope.** Little's 21 multi-group and 37 wider or bounded
     verified cases are corpus-only: the Little/Newsom fixture format is
     single-group and the file limit is 1 MB.
