@@ -3957,19 +3957,27 @@ continuous-whitening entry above.
     above, not through lavaan's degenerate delta `group.equal` convention. The
     paper's arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
-  - **S/M — broaden continuous scalar-invariance regression coverage.**
-    The latent-mean release landed in `854d4adf`: equal indicator intercepts
-    release auto-added zero latent means in groups 2+ unless `means` is also
-    equal. Explicit user means remain authoritative; `group.partial` does not
-    suppress the release. See the roadmap and test ledger for existing guards.
-    Remaining: durable ML/FIML partable, estimate and scalar nested-test gates
-    across marker/std.lv identification, growth models and three or more groups.
-    Review `continuous_invariance()`'s explicit mean-syntax insertion now that
-    the core supplies the release, preserving explicit user mean specifications
-    and the metric-to-scalar delta restriction map. A local HS school check
-    (2026-09-25, lavaan 0.7.2) matched fitted parameters within 9e-6 for marker,
-    std.lv, partial intercept invariance, explicit fixed means, equal means and
-    deterministic FIML missingness; this is not a replacement for those gates.
+  - **M — resolve FIML scalar nested scaled-test parity.** The new
+    `r-package/tests/testthat/test-scalar-invariance.R` gates ML/FIML parameter
+    rows, free/fixed status, estimates, df and chi-square, plus three-group
+    marker/std.lv CFA and growth identification. Complete-data scalar nested
+    tests match lavaan MLM with the delta restriction map. The FIML unscaled
+    difference and df match, but the scaled difference does not: on the
+    six-indicator HS school CFA, setting every seventh `x2` value missing gives
+    22.13388 from `robust_nested_lrt(A.method="delta", convention="lavaan")`
+    versus 22.81168 from lavaan 0.7.2 MLR + `lavTestLRT(method="satorra.2000",
+    A.method="delta", scaled.shifted=FALSE)`. Expected-information FIML gives
+    23.29597, so switching expected/observed alone does not explain the gap.
+    This is an open bug/convention investigation, not an oracle exemption or
+    evidence of calibration. The scaled FIML assertion is explicitly skipped
+    by default; set `MAGMAAN_CHECK_FIML_SCALAR_PARITY=true` when running that
+    test file to reproduce the failure. Do not loosen its 5e-3 absolute gate.
+    Check the restriction geometry and missing-data reference/meat conventions
+    before broadening calibration work; see the FIML robust-convention item.
+  - **S — review `continuous_invariance()`'s explicit mean-syntax insertion**
+    now that `spec::build` supplies the release. Preserve explicit user mean
+    specifications and the metric-to-scalar delta restriction map. The core
+    release and regression coverage are recorded in the roadmap/test ledger.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the

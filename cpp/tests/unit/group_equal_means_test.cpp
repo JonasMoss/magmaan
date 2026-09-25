@@ -27,12 +27,16 @@ namespace {
 constexpr std::string_view kCfa = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6";
 
 LavaanParTable build_pt(std::string_view syntax, std::vector<GroupEqual> equal,
-                        std::vector<std::string> partial = {}) {
+                        std::vector<std::string> partial = {}, int groups = 2,
+                        bool std_lv = false, bool growth = false) {
   auto parsed = Parser::parse(syntax);
   REQUIRE(parsed.has_value());
   BuildOptions opts;
   opts.meanstructure = true;
-  opts.n_groups = 2;
+  opts.n_groups = groups;
+  opts.std_lv = std_lv;
+  opts.int_ov_free = !growth;
+  opts.int_lv_free = growth;
   opts.group_equal = std::move(equal);
   opts.group_partial = std::move(partial);
   Starts starts;
@@ -82,4 +86,50 @@ TEST_CASE("group.partial on an intercept does not change the mean release") {
   auto pt = build_pt(kCfa, {GroupEqual::Loadings, GroupEqual::Intercepts}, {"x1~1"});
   CHECK(lv_mean(pt, "visual", 2) == "free");
   CHECK(lv_mean(pt, "textual", 2) == "free");
+}
+
+TEST_CASE("scalar invariance releases all later groups under marker and std.lv") {
+  for (bool std_lv : {false, true}) {
+    CAPTURE(std_lv);
+    auto pt = build_pt(kCfa, {GroupEqual::Loadings, GroupEqual::Intercepts},
+                       {}, 3, std_lv);
+    for (const auto& lv : {"visual", "textual"}) {
+      CHECK(lv_mean(pt, lv, 1) == "fixed");
+      CHECK(lv_mean(pt, lv, 2) == "free");
+      CHECK(lv_mean(pt, lv, 3) == "free");
+    }
+  }
+  auto single = build_pt(kCfa, {GroupEqual::Intercepts}, {}, 1);
+  CHECK(lv_mean(single, "visual", 1) == "fixed");
+}
+
+TEST_CASE("scalar invariance preserves per-group explicit latent means") {
+  auto pt = build_pt(std::string(kCfa) + "\nvisual ~ c(0, NA, 0.25)*1",
+                     {GroupEqual::Loadings, GroupEqual::Intercepts}, {}, 3);
+  CHECK(lv_mean(pt, "visual", 1) == "fixed");
+  CHECK(lv_mean(pt, "visual", 2) == "free");
+  CHECK(lv_mean(pt, "visual", 3) == "fixed");
+  CHECK(lv_mean(pt, "textual", 3) == "free");
+  int explicit_rows = 0;
+  for (std::size_t i = 0; i < pt.lhs.size(); ++i) {
+    if (pt.op[i] == Op::Intercept && pt.lhs[i] == "visual") {
+      ++explicit_rows;
+      if (pt.group[i] == 3) CHECK(pt.ustart[i] == doctest::Approx(0.25));
+    }
+  }
+  CHECK(explicit_rows == 3);
+}
+
+TEST_CASE("scalar invariance preserves growth mean identification") {
+  constexpr std::string_view growth =
+      "i =~ 1*t1 + 1*t2 + 1*t3 + 1*t4\n"
+      "s =~ 0*t1 + 1*t2 + 2*t3 + 3*t4";
+  auto pt = build_pt(growth, {GroupEqual::Loadings, GroupEqual::Intercepts},
+                     {}, 3, false, true);
+  for (int group = 1; group <= 3; ++group) {
+    CHECK(lv_mean(pt, "i", group) == "free");
+    CHECK(lv_mean(pt, "s", group) == "free");
+    for (const auto& ov : {"t1", "t2", "t3", "t4"})
+      CHECK(lv_mean(pt, ov, group) == "fixed");
+  }
 }

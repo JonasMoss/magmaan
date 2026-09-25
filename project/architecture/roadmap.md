@@ -64,9 +64,13 @@ rows remain authoritative, and `group.partial` does not suppress the release.
 This identification change lives in `spec::build`, alongside the equality
 labels, so keyword scalar invariance no longer requires explicit latent-mean
 syntax. Unit guards cover release, equal means, fixed user means and partial
-intercept invariance; the ordinary R package also gates scalar-invariance MLR
-standard errors against lavaan. Broader ML/FIML and identification coverage
-remains in the backlog.
+intercept invariance, three-group marker/std.lv models, per-group explicit
+means and growth identification. The R scalar-invariance suite gates ML/FIML
+parameter rows, estimates, df and chi-square, three-group CFA and growth fits,
+and complete-data scalar nested tests against lavaan. The ordinary R package
+also gates scalar-invariance MLR standard errors. FIML scalar nested unscaled
+statistics agree, but scaled parity remains an explicit skipped assertion and
+open backlog investigation; no calibration claim follows from these gates.
 
 ### Optimizer control semantics
 
