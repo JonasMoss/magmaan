@@ -25,8 +25,24 @@ method_table <- function() {
       fit = function(spec, dat) frontier_fit_ml_multiinfo(spec, dat, weight = 1)),
     pen_l200 = list(
       label = "Penalized (lambda = 2)",
-      fit = function(spec, dat) frontier_fit_ml_multiinfo(spec, dat, weight = 2))
+      fit = function(spec, dat) frontier_fit_ml_multiinfo(spec, dat, weight = 2)),
+    det_l010 = det_method(0.1),
+    det_l025 = det_method(0.25),
+    det_l050 = det_method(0.5),
+    det_l100 = det_method(1),
+    det_l200 = det_method(2)
   )
+}
+
+# The latent-determinacy barrier: lambda log det Q, with Q the standardized
+# covariance of the latents given the observed variables.
+det_method <- function(weight) {
+  force(weight)
+  list(
+    label = sprintf("Determinacy barrier (lambda = %g)", weight),
+    fit = function(spec, dat) {
+      frontier_fit_ml_multiinfo(spec, dat, weight = weight, target = "determinacy")
+    })
 }
 
 param_label <- function(pt) paste(pt$lhs, pt$op, pt$rhs)

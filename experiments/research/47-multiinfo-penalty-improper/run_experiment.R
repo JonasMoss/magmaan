@@ -21,10 +21,10 @@ source(experiment_path("R", "fitters.R"))
 
 usage <- function() cat(
   "Usage: Rscript run_experiment.R [--smoke|--pilot|--full] [options]\n\n",
-  "Compare unbounded ML, variance-bounded ML, PSD-constrained ML, and the\n",
-  "multi-information penalized ML (lambda = eta - 1 = 0.1 ... 2) on paired\n",
-  "small-sample data from near-improper one-factor, two-factor, and\n",
-  "recursive path populations.\n\n",
+  "Compare unbounded ML, variance-bounded ML, PSD-constrained ML, the\n",
+  "multi-information penalized ML (lambda = eta - 1 = 0.1 ... 2), and the\n",
+  "latent-determinacy barrier (same weights) on paired small-sample data\n",
+  "from near-improper one-factor, two-factor, and recursive path populations.\n\n",
   "Profiles:\n",
   "  --smoke   N = 50, 200; 20 replications (default)\n",
   "  --pilot   N = 50, 100, 200, 400; 200 replications\n",
@@ -33,7 +33,8 @@ usage <- function() cat(
   "  --reps N --n-values 50,100 --designs f1_p3,f2_r97 --methods ml,pen_l025\n",
   "  --seed-base N --cores N --results-dir PATH\n\n",
   "Designs: f1_p3, f1_p5, f2_r90, f2_r97, path_r2_90\n",
-  "Methods: ml, ml_bounded, psd, pen_l010, pen_l025, pen_l050, pen_l100, pen_l200\n",
+  "Methods: ml, ml_bounded, psd, pen_l010, pen_l025, pen_l050, pen_l100, pen_l200,\n",
+  "         det_l010, det_l025, det_l050, det_l100, det_l200\n",
   "Writes results/<profile>/{fits,params,metadata}.csv.\n",
   sep = "")
 

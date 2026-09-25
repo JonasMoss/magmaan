@@ -1015,9 +1015,14 @@ when they next change.
      median gives `lambda` in [0.10, 0.43] for populations 3 to 0 standard
      errors inside the face, and `lambda = 0.25` is optimal at 1.6. Layer
      weights are not supported by that calibration, which replaces the
-     two-weight direction. Remaining, for `papers/sem-barrier`: rerun the
-     experiment research/47 designs with the new target against ML, PSD-ML, and
-     the joint barrier; score it on the research/48 posterior bank; test the
+     two-weight direction. Experiment research/47 now carries the new target
+     at the joint barrier's five weights on the same datasets (2026-09-25):
+     no improper, boundary, or failed fit in 100,000; at `lambda = 0.25` it
+     tracks the joint barrier (largest paired key difference 0.011); at
+     `lambda >= 0.5` it shrinks correlations and R-squared less and keeps
+     chi-square and coverage closer to PSD-ML; the joint barrier stays
+     slightly ahead on the Heywood designs. Remaining, for
+     `papers/sem-barrier`: score it on the research/48 posterior bank; test the
      calibration by binning datasets by the unconstrained estimate's distance
      to the face in standard-error units; run the research/48 path cells; then
      decide the default target. Experiment research/48's Jeffreys posterior
