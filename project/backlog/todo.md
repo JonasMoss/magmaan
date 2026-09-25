@@ -234,6 +234,14 @@ there is no scheduled expansion of this surface.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
+- **Vision, not yet adopted — one machinery for numerical defaults.**
+  [convergence-engineering.md](../design/convergence-engineering.md) proposes a
+  shared benchmark set (corpus, simulated families, constructed problems, with
+  unit/identification/spelling/start transforms and problem classes), one judge
+  (the fit verdict, with failure attribution), and a defaults register, so that
+  start, optimizer and option decisions stop defining their own problems and
+  success criteria. Under discussion; the decision studies below would become
+  its first consumers.
 - **M — finish optimizer-control reporting and specialized-path inventory.**
   Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
   BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy
