@@ -60,7 +60,10 @@ A focused start experiment recovers 10 of the 12 rejected ML cases in both
 PORT and lavaan by changing free, zero-valued latent paths to 0.5. Lavaan's own
 defaults also fail to recover many of these reference solutions. This implicates
 start construction; it does not establish that the diagnostic 0.5 rule is a
-suitable general policy. No default is changed on the basis of this study.
+suitable general policy. A narrower sample-based initializer recovers three ML
+cases and one GLS case with each optimizer, but fails unit-invariance checks
+when composed with the existing loading starts. It is not ready for promotion.
+No default is changed on the basis of this study.
 
 ## Evidence
 
@@ -279,6 +282,56 @@ identification, changes of observed units, sign conventions, explicit zero hints
 and the full corpus including cases that already work. The observed 0.5 rescue
 is motivation for this general work, not its implementation.
 
+### Testing a sample-based structural initializer
+
+The first prototype targets measured latent variables with zero innovation
+variance and exactly one latent parent. It estimates the child's total variance
+from off-diagonal indicator moments, conditional on the supplied loading starts,
+and initializes the path magnitude relative to the parent's implied variance.
+It excludes cross-loaded blocks and free correlated-residual pairs, preserves
+explicit hints, and projects proposals onto the applicable affine constraints.
+Unsupported, degenerate or non-finite proposals leave the original start intact.
+This is experiment-local R code, not a package implementation or default.
+
+The scan covered all 608 prepared case/estimator pairs. Six models changed under
+each estimator; both optimizers were refitted, giving 24 new fits. Unchanged
+vectors reuse their frozen baseline outcomes. Every job completed.
+
+```{r}
+t <- r("structural/comparison")
+z <- aggregate(cbind(baseline_good,good,rescued,lost)~estimator+arm,t,sum)
+z$arm <- ifelse(z$arm=="port_default","PORT","L-BFGS")
+knitr::kable(z,col.names=c("Estimator","Optimizer","Baseline Recovered","Prototype Recovered","Gains","Losses"))
+```
+
+The recovered ML models are the phantom CFA and Little Table 7.8's pruned
+initial and partial models. The phantom CFA is also recovered under GLS.
+Previously successful cases retain their old starts. The three Table 7.6 models
+improve in objective but still miss the target; Figure 7.10 and Table 7.8's
+variance-test model fall back after degenerate constrained proposals. The
+broader 0.5 diagnostic recovered ten of the twelve ML curvature cases, whereas
+this restricted moment rule recovers three. It is therefore a limited proof of
+useful sample-based initialization, not yet a general replacement.
+
+**Property tests prevent promotion despite those gains.** Twenty-five of 28
+constructor/property combinations pass. Equivalent syntax, explicit hints
+(including zero and negative hints), parent-variance rescaling, effect-coding
+equalities and ordinary-regression preservation pass. End-to-end observed-unit
+rescaling fails with both the simple and FABIN3 baselines; a reverse-keyed
+indicator example also falls back under simple starts. The moment rule itself
+passes the unit and sign checks when measurement starts are transformed
+consistently. The inherited loading constructors treat a fixed zero innovation
+variance as though it fixed the factor's total scale. That changes loading
+starts with observed units even when a marker loading remains fixed, and the
+simple branch also bypasses marker-based signs in this situation.
+
+The next change must coordinate measurement and structural scale initialization,
+separating innovation variance from total latent variance. It should then revisit
+constraint-coupled blocks and unsupported higher-order/growth structures. Keep
+the failed property checks as explicit promotion blockers. The full policy
+comparison and fallback reasons are in `results/full/structural/comparison.csv`;
+`structural_properties.csv` records both passing and failing checks.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -358,6 +411,8 @@ Rscript R/inspect_port.R ../../../external/textbook-corpus results/full
 Rscript R/compare_starts.R ../../../external/textbook-corpus results/full
 Rscript R/summarize_starts.R results/full/starts
 Rscript R/probe_start_semantics.R ../../../external/textbook-corpus results/full
+Rscript R/check_structural_starts.R results/full
+Rscript R/test_structural_starts.R ../../../external/textbook-corpus results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

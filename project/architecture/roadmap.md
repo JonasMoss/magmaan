@@ -55,6 +55,11 @@ An equivalent-model probe confirms that latent regressions and higher-order
 loadings currently receive different simple starts despite representing the same
 scale paths. Structural initialization beyond the loading constructors remains
 an explicit gap; no blanket nonzero-regression policy has been adopted.
+An experiment-local moment-based prototype for deterministic single-parent
+measurement blocks adds three ML and one GLS recoveries per optimizer on the
+608-pair scan. It is not promoted: composition with current loading starts fails
+observed-unit equivariance, and simple starts fail a sign check. Fixed innovation
+variance versus total latent scale is the next identified constructor issue.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under

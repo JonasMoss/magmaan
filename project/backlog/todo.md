@@ -134,6 +134,15 @@ design, starting-point inventory and validation rules are in
   supported acyclic single-parent blocks, preserve user hints (including zero),
   fixed values and equalities, and validate equivalent syntax, identification,
   signs, unit changes, finite objectives and existing successful corpus cases.
+  The experiment-local single-parent/zero-innovation prototype scans all 608
+  ML/GLS pairs, changes six models and gains three ML/one GLS recoveries per
+  optimizer; previously good fits are unchanged. Do not promote yet: observed
+  unit equivariance fails with both simple and FABIN3 loading starts, and the
+  simple constructor loses the marker sign on a reverse-keyed example. Both
+  treat fixed zero innovation variance as fixed total latent scale. Fix this
+  distinction and coordinate loading/path scaling before extending the prototype
+  to constraint-coupled, noisy higher-order or growth blocks. Preserve the
+  experiment's failed property checks as promotion gates (25/28 currently pass).
 
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the
