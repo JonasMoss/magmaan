@@ -31,15 +31,23 @@ repo_root <- function(start = dirname(script_path())) {
   }
 }
 
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
 root <- repo_root()
 output <- file.path(
   root, "cpp", "tests", "fixtures", "psd_ml", "corpus_geometries.json")
 
+# The two "synthetic" geometries are non-textbook specifications on Little's
+# (2013) Chapter 8 NegAFF data: the pre-2026-09-25 corpus mistranslated
+# Figures 3a and 4c into them (the level factor loads only NegT1). They keep
+# useful PSD-ML geometries but are not Little's models; the source-faithful
+# Little fixtures have no inadmissible ordinary solutions. Their entries are
+# frozen in the output file and copied unchanged (the C++ test refits them).
 targets <- data.frame(
-  set = c("little", "little", "geiser", "geiser"),
+  set = c("synthetic", "synthetic", "geiser", "geiser"),
   id = c(
-    "ch8_fig3a_unconstrained_4wave_negaff",
-    "ch8_fig4c_gc_linear_4wave_negaff",
+    "negaff_level_single_indicator",
+    "negaff_centered_slope_single_level",
     "cfa_second_order",
     "growth_quadratic"
   ),
@@ -63,10 +71,14 @@ source_path <- function(set) {
   )
 }
 
+source_sets <- setdiff(unique(targets$set), "synthetic")
 source_cases <- lapply(
-  unique(targets$set),
+  source_sets,
   function(set) read_json(source_path(set), simplifyVector = FALSE)$cases)
-names(source_cases) <- unique(targets$set)
+names(source_cases) <- source_sets
+source_cases$synthetic <- Filter(
+  function(x) identical(x$set, "synthetic"),
+  read_json(output, simplifyVector = FALSE)$cases)
 
 scalar <- function(x, default = NULL) {
   if (is.null(x) || !length(x)) default else
@@ -127,10 +139,24 @@ block_min <- function(blocks) {
   min(vapply(blocks, function(x) x$min_eigenvalue, numeric(1)))
 }
 
+frozen_case <- function(id) {
+  x <- find_case("synthetic", id)
+  x$provenance <- paste(
+    "Non-textbook specification on Little (2013) Chapter 8 NegAFF data; the",
+    "pre-2026-09-25 corpus mistranslated", scalar(x$formerly %||%
+                                                    x$provenance_figure, ""),
+    "into it")
+  x$formerly <- scalar(x$formerly %||% x$provenance_figure, "")
+  x$provenance_figure <- NULL
+  x
+}
+
 fit_case <- function(set, id, geometry) {
+  if (identical(set, "synthetic")) return(frozen_case(id))
   x <- find_case(set, id)
   S <- matrix_rows(x$sample_cov)
-  ov_names <- as.character(unlist(x$ov_names, use.names = FALSE))
+  ov_names <- as.character(unlist(x$ov_names %||% x$observed_names,
+                                  use.names = FALSE))
   dimnames(S) <- list(ov_names, ov_names)
   mean <- as.numeric(unlist(x$sample_mean, use.names = FALSE))
   if (!length(mean) || all(!is.finite(mean))) {
@@ -209,6 +235,7 @@ fit_case <- function(set, id, geometry) {
     set = set,
     id = id,
     geometry = geometry,
+    provenance = "Geiser (2013) companion model, source-verified",
     model = as.character(x$model),
     fixed_x = isTRUE(x$fixed_x),
     meanstructure = isTRUE(x$meanstructure),
@@ -248,12 +275,13 @@ write_json(
       schema = "magmaan.psd_ml_corpus_geometries/1",
       description = paste(
         "Compact deterministic model/data and ordinary/PSD-ML regression",
-        "summaries extracted from the advisory 97-case corpus audit."
+        "summaries from the advisory corpus audit: two source-verified Geiser",
+        "cases and two frozen synthetic NegAFF specifications."
       ),
       generated_by = "cpp/tests/tools/regen_psd_ml_corpus_geometries.R",
       source_fixtures = c(
-        "cpp/tests/fixtures/little/continuous_reference.json",
-        "cpp/tests/fixtures/geiser/gls_reference.json"
+        "cpp/tests/fixtures/geiser/gls_reference.json",
+        "cpp/tests/fixtures/psd_ml/corpus_geometries.json (frozen synthetic entries)"
       ),
       magmaan_version = as.character(packageVersion("magmaan"))
     ),

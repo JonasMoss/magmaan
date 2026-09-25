@@ -7,6 +7,17 @@ datasets are publicly downloadable from the books' companion sites. The corpus
 is kept out of this repository because it holds those original files as
 distributed; the repository carries only what is derived from them.
 
+## Fidelity
+
+Every corpus case is the book's own model. Since the 2026-09-25 source audit
+(corpus v3.0.0) each translation or extraction reproduces the book software's
+output (LISREL `.OUT`, Mplus `.out`) or the author's own lavaan call; the
+per-book evidence is in the corpus's `docs/audit/` and the summary in
+[`textbook-translation-audit.md`](../validation/textbook-translation-audit.md).
+Little's LISREL inputs are translated and verified by magmaan's
+`cpp/tests/tools/lisrel_translate.R`. The corpus is its own local git
+repository, so corrections are reviewable diffs.
+
 ## What the repository carries instead
 
 The C++ golden tests read **checked-in JSON fixtures** built from the corpus:

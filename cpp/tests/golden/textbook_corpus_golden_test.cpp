@@ -27,6 +27,12 @@
 
 namespace {
 
+// lavaan's sem(), cfa() and growth() front ends all set auto.cov.y = TRUE;
+// only the bare lavaan() leaves it off.
+bool front_end_sets_auto_cov_y(const std::string &fn) {
+  return fn == "sem" || fn == "cfa" || fn == "growth";
+}
+
 using magmaan::test::matrix_from_json;
 
 using magmaan::test::vector_from_json;
@@ -155,7 +161,7 @@ handles_from_export_case(const nlohmann::json &c,
   opts.n_groups = c["data"].value("n_groups", 1);
   opts.meanstructure = c["model_options"].value("meanstructure", false);
   opts.fixed_x = c["model_options"].value("fixed_x", true);
-  opts.auto_cov_y = c.value("lavaan_function", std::string{}) == "sem";
+  opts.auto_cov_y = front_end_sets_auto_cov_y(c.value("lavaan_function", std::string{}));
   if (c.value("lavaan_function", std::string{}) == "growth") {
     opts.meanstructure = true;
     opts.int_ov_free = false;
@@ -325,7 +331,7 @@ void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = meta["model_options"].value("meanstructure", false);
   opts.fixed_x = meta["model_options"].value("fixed_x", true);
-  opts.auto_cov_y = meta.value("lavaan_function", std::string{}) == "sem";
+  opts.auto_cov_y = front_end_sets_auto_cov_y(meta.value("lavaan_function", std::string{}));
   auto pt = magmaan::spec::build(*flat, opts);
   REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
                                           << pt.error().detail);
@@ -369,7 +375,7 @@ void check_little_single_indicator_case_at_lavaan_theta() {
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = meta["model_options"].value("meanstructure", false);
   opts.fixed_x = meta["model_options"].value("fixed_x", true);
-  opts.auto_cov_y = meta.value("lavaan_function", std::string{}) == "sem";
+  opts.auto_cov_y = front_end_sets_auto_cov_y(meta.value("lavaan_function", std::string{}));
   auto pt = magmaan::spec::build(*flat, opts);
   REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
                                           << pt.error().detail);
@@ -391,10 +397,13 @@ void check_little_single_indicator_case_at_lavaan_theta() {
       max_abs_diff(im->sigma[0], matrix_from_json(ref["implied"]["sigma"]));
   CHECK_MESSAGE(d_sigma < 1e-8,
                 case_id << ": max|Sigma - lavaan| = " << d_sigma);
-  REQUIRE(!im->mu.empty());
-  const double d_mu =
-      max_abs_diff(im->mu[0], vector_from_json(ref["implied"]["mu"]));
-  CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
+  // Little's input has no mean structure (no TY/AL on MO).
+  if (opts.meanstructure) {
+    REQUIRE(!im->mu.empty());
+    const double d_mu =
+        max_abs_diff(im->mu[0], vector_from_json(ref["implied"]["mu"]));
+    CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
+  }
 }
 
 } // namespace

@@ -1,8 +1,15 @@
 # Source audit of six corpus accuracy rejections
 
 **Update:** the Geiser marker default-start failure described below was traced
-to Reduced-representation start construction and repaired. See the final
-section; the earlier diagnostics remain a record of the pre-fix behavior.
+to Reduced-representation start construction and repaired. See the
+"Resolution" section; the earlier diagnostics remain a record of the pre-fix
+behavior.
+
+**Update (2026-09-25):** the whole textbook corpus has since been
+source-audited and rebuilt; the Little translation was replaced and every
+Little case is verified against LISREL's own output. See
+[Full corpus source-fidelity pass](#full-corpus-source-fidelity-pass-2026-09-25).
+The sections before it describe the corpus as it was on 2026-09-24.
 
 Audited 2026-09-24 against original companion inputs, not just lavaan output
 from the translated syntax. Fitting probes used magmaan `99c5d6dbc07a`,
@@ -191,3 +198,76 @@ The reduction of observed loadings into Beta dates to commit `0547187b`
 in the last few days. Recent default/policy changes and reliance on different
 start routes can expose it. This diagnosis does not settle every historical
 performance difference or the separate std.lv L-BFGS difficulty.
+
+## Full corpus source-fidelity pass (2026-09-25)
+
+Every book in the optional corpus (`external/textbook-corpus`, now v3.0.0 and
+its own local git repository) was checked against the book software's own
+output or the author's own lavaan call, not against lavaan run on our
+translation. Per-case evidence lives in the corpus's `docs/audit/`. A case
+is retained only if it reproduces its source.
+
+| Book | Before | After | Evidence |
+|---|---|---|---|
+| Little 2013 (LISREL) | 38 cases, none exact | 106 `book_verified` | the `.OUT` LISREL wrote for each input |
+| Newsom 2015 (lavaan R scripts) | 137, 117 from the 2024 2nd edition | 88 first-edition cases | the author's own lavaan call, rerun in a sandbox |
+| Kline 2023 (lavaan R scripts) | 37 | 37 (34 `book_verified`) | the author's call and companion `.out` transcripts |
+| Geiser 2013 (Mplus) | 28 | 28 `book_verified` | companion `.out` files |
+| Brown 2015 (Mplus) | 19 | 19 `book_verified` | the book's printed output, Mplus Demo reruns |
+| Mplus User's Guide v8 | 29 | 26 `book_verified` | shipped `.out` files |
+| Muthén et al. 2017 (Mplus) | 9 | 19 (18 `book_verified`) | shipped `.out` files |
+
+**Little.** `cpp/tests/tools/lisrel_translate.R` interprets the full LISREL 8
+command stream (sequential FR/FI/VA/ST/MA, EQ with LISREL's leader rule, CO,
+IR, vector ranges, `FI=` data streams, PRELIS system files, multi-group
+IN/PS/SP inheritance including replicated within-group ties and detachment of
+IN elements). Each translation is verified against the `.OUT`: the free, fixed,
+equality and `Constr'd` pattern, every printed estimate (fixed values
+included), df, the minimum-fit-function chi-square, N and the input moments,
+refitting with `likelihood = "wishart"` because LISREL uses divisor N-1. 106 of
+108 inputs verify; the two others ship fatal-error outputs. The old converter
+produced no exact case: it lost every `CO` effects-coding constraint and every
+`EQ` invariance constraint (the "weak"/"strong" cases were configural), read
+only the first `VA` element and no leading-dot values, ignored `TY`/`AL`, and
+stored the correlation matrix for `MA=CM` inputs that supply `KM` and `SD`.
+
+**The other books.** Their corrections were substantive too: Newsom's
+extractor let second-edition scripts overwrite first-edition ones and dropped
+`meanstructure`, `missing`, `group` and `theta` options; Kline's lost
+`sample.cov.rescale = FALSE` and `:=` rows; Geiser's Chapter 3 lacked mean
+structures and listwise samples and three growth fixtures had free intercepts
+with zero growth means; Brown had two misidentified models and a wrongly fixed
+formative loading; the shared Mplus translator fitted censored/count outcomes
+as normal, freed x variables, missed growth defaults and ignored MISSING codes
+and MLR.
+
+**Fixtures regenerated.** `little/` now holds the 48 verified single-group
+cases with at most 18 observed variables (the 1 MB file limit); 21 multi-group
+and 37 wider or bounded cases are verified in the corpus and listed as
+retained-not-tested. `newsom/`, `mplus_sem/`, `geiser/` (by the new
+`regen_geiser_fixtures.R`), `textbook_corpus/` and `psd_ml/corpus_geometries.json`
+were regenerated; the overlap graph now links cluster members by a spanning
+star so it grows linearly. The `mplus_sem` golden now resolves fixed-x moments
+before its implied-moment check and fails on theta/df/implied mismatches that
+were previously only messaged.
+
+**Consequences for earlier claims.**
+
+- The advisory PSD-ML corpus audit, rerun on the corrected fixtures (102
+  continuous cases), finds ordinary ML inadmissible in two cases, both Geiser
+  (`cfa_second_order`, `growth_quadratic`). The four "inadmissible Little
+  cases" of the earlier 97-case audit were artifacts of the mistranslations.
+  `psd_ml/corpus_geometries.json` keeps its two Little-data geometries as
+  explicitly labelled synthetic specifications (`set = "synthetic"`), not as
+  Little's models.
+- The sem-psd supplement's corpus timing bank used the mistranslated inputs
+  and needs a new pinned run on the corrected corpus.
+- magmaan's default ordinary fit (NLopt L-BFGS from default starts, the
+  skipped Little/Newsom continuous golden run with `--no-skip`) fails with a
+  generic solver failure on 12 corrected Little cases (the 2-by-3 invariance
+  models, the Chapter 6 card-sorting simplex and Figure 3b) and stops at a
+  worse local optimum on the Chapter 3.11 phantom model. lavaan's default
+  starts also miss the printed optimum on 14 Little inputs, which carry the
+  verified solution as `start_values`. These are solver/start findings on
+  faithful models, not translation defects.
+

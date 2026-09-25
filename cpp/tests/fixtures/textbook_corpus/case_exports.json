@@ -3,9 +3,9 @@
     "format_version": 1,
     "fixture_kind": "textbook_corpus.case_export",
     "corpus_id": "magmaan_textbook_corpus_v1",
-    "tool": "tests/tools/regen_textbook_case_fixtures.R",
-    "generated": "2026-06-09 22:31:09 +0200",
-    "source_root": "corpus/textbook-corpus",
+    "tool": "cpp/tests/tools/regen_textbook_case_fixtures.R",
+    "generated": "2026-09-25 07:20:35 +0200",
+    "source_root": "external/textbook-corpus",
     "selection": "kline_guo_measurement_invariance_ml"
   },
   "counts": {
@@ -24,13 +24,14 @@
       "tags": [
         "cfa",
         "invariance",
+        "multigroup",
         "meanstructure",
         "summary-stats"
       ],
       "estimator": "ML",
       "lavaan_status": "ok",
-      "lavaan_version": "0.6.22.2560",
-      "lavaan_function": "sem",
+      "lavaan_version": "0.7.2",
+      "lavaan_function": "cfa",
       "model_options": {
         "meanstructure": true,
         "fixed_x": false,
@@ -128,13 +129,14 @@
       "tags": [
         "cfa",
         "invariance",
+        "multigroup",
         "meanstructure",
         "summary-stats"
       ],
       "estimator": "ML",
       "lavaan_status": "ok",
-      "lavaan_version": "0.6.22.2560",
-      "lavaan_function": "sem",
+      "lavaan_version": "0.7.2",
+      "lavaan_function": "cfa",
       "model_options": {
         "meanstructure": true,
         "fixed_x": false,
@@ -232,13 +234,14 @@
       "tags": [
         "cfa",
         "invariance",
+        "multigroup",
         "meanstructure",
         "summary-stats"
       ],
       "estimator": "ML",
       "lavaan_status": "ok",
-      "lavaan_version": "0.6.22.2560",
-      "lavaan_function": "sem",
+      "lavaan_version": "0.7.2",
+      "lavaan_function": "cfa",
       "model_options": {
         "meanstructure": true,
         "fixed_x": false,
@@ -336,13 +339,14 @@
       "tags": [
         "cfa",
         "invariance",
+        "multigroup",
         "meanstructure",
         "summary-stats"
       ],
       "estimator": "ML",
       "lavaan_status": "ok",
-      "lavaan_version": "0.6.22.2560",
-      "lavaan_function": "sem",
+      "lavaan_version": "0.7.2",
+      "lavaan_function": "cfa",
       "model_options": {
         "meanstructure": true,
         "fixed_x": false,

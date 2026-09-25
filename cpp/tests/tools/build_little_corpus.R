@@ -1,379 +1,288 @@
 #!/usr/bin/env Rscript
 
-# Build the ignored external/textbook-corpus/raw/little corpus from Little's RAR
-# archives.
+# Build the ignored external/textbook-corpus/raw/little corpus from Little's
+# (2013) LISREL companion files.
 #
-# The source material is LISREL 8 syntax plus LISREL output. We preserve every
-# .LS8 model, extract embedded summary statistics when present, and emit a
-# lavaan translation for simple LY measurement models whose mapping is
-# unambiguous. More complex LISREL models stay catalogued as source-only.
+# Every unique .LS8 input under source/ is translated to lavaan syntax by
+# lisrel_translate.R and verified against the .OUT file LISREL 8.80 wrote
+# for it: the free/fixed/equality/CO pattern, every printed estimate, the
+# input moments, df and the minimum-fit-function chi-square. Only verified
+# translations are retained. Inputs that fail translation or verification
+# stay source-only, with the reason in manifest.csv.
+#
+# Outputs under raw/little/: models/<id>.lav, models_lisrel/<id>.{LS8,OUT},
+# data/ (LISREL's analysed moments or selected raw columns), verification/
+# <id>.json (the evidence), manifest.csv (every input) and catalogue.csv
+# (retained inputs).
+#
+# Usage: Rscript cpp/tests/tools/build_little_corpus.R [id-regex]
+
+suppressPackageStartupMessages({
+  library(jsonlite)
+  library(lavaan)
+})
 
 args <- commandArgs(FALSE)
 script_arg <- args[grepl("^--file=", args)][1]
 if (is.na(script_arg)) stop("Run this script with Rscript.", call. = FALSE)
-repo_root <- normalizePath(file.path(dirname(normalizePath(
-  sub("^--file=", "", script_arg))), "..", "..", ".."))
+script_dir <- dirname(normalizePath(sub("^--file=", "", script_arg)))
+repo_root <- normalizePath(file.path(script_dir, "..", "..", ".."))
+source(file.path(script_dir, "lisrel_translate.R"))
 
 root <- Sys.getenv("LITTLE_ROOT", unset = "")
 if (!nzchar(root)) {
   root <- file.path(repo_root, "external", "textbook-corpus", "raw", "little")
 }
 root <- normalizePath(root, mustWork = TRUE)
-
 source_dir <- file.path(root, "source")
-for (d in c(source_dir, file.path(root, "models"), file.path(root, "models_lisrel"),
-            file.path(root, "data"), file.path(root, "scripts"),
-            file.path(root, "goldens"), file.path(root, "results"))) {
-  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+if (!dir.exists(source_dir)) {
+  stop("expected the extracted archives under ", source_dir,
+       " (see raw/little/README.md)", call. = FALSE)
 }
+only <- commandArgs(trailingOnly = TRUE)
 
-archives <- list.files(root, "\\.rar$", full.names = TRUE, ignore.case = TRUE)
-for (rar in archives) {
-  status <- system2("unar", c("-q", "-force-overwrite", "-o", source_dir, rar))
-  if (!identical(status, 0L)) stop("unar failed for ", rar, call. = FALSE)
-}
+# Documented per-input corrections. LISREL reads variables by position; a
+# label override only renames a column.
+label_overrides <- list(
+  # LA repeats NegAFF1; column 14 of 14.AffGrade6.dat is NegAFF2 in every
+  # other input that reads that file.
+  ch10_fig13_pseudohigher_order = c(`14` = "NegAFF2")
+)
 
 sanitize_id <- function(x) {
-  x <- tolower(gsub("\\.[Ll][Ss]8$", "", basename(x)))
+  x <- tolower(sub("\\.[Ll][Ss]8$", "", basename(x)))
   x <- gsub("[^a-z0-9]+", "_", x)
   gsub("^_|_$", "", x)
 }
 
-strip_comments <- function(lines) sub("!.*$", "", lines)
+sha256 <- function(path) digest::digest(file = path, algo = "sha256")
 
-numbers_in <- function(x) {
-  vals <- regmatches(paste(x, collapse = " "),
-                     gregexpr("-?[0-9]+(?:[.][0-9]+)?(?:[Ee][+-]?[0-9]+)?",
-                              paste(x, collapse = " "), perl = TRUE))[[1L]]
-  as.numeric(vals)
+# The archives repeat whole chapter folders; duplicates must be identical.
+paths <- list.files(source_dir, "\\.[Ll][Ss]8$", recursive = TRUE,
+                    full.names = TRUE)
+paths <- paths[order(nchar(paths), paths)]
+ids <- vapply(paths, sanitize_id, character(1L), USE.NAMES = FALSE)
+for (id in unique(ids[duplicated(ids)])) {
+  h <- unique(vapply(paths[ids == id], sha256, character(1L)))
+  if (length(h) != 1L) stop("differing inputs share the id ", id, call. = FALSE)
+}
+keep <- !duplicated(ids)
+paths <- paths[keep]
+ids <- ids[keep]
+o <- order(ids)
+paths <- paths[o]
+ids <- ids[o]
+if (length(only)) {
+  sel <- grepl(only[[1L]], ids)
+  paths <- paths[sel]
+  ids <- ids[sel]
 }
 
-param_value <- function(txt, key) {
-  m <- regexec(paste0("\\b", key, "\\s*=\\s*([^\\s]+)"), txt,
-               ignore.case = TRUE, perl = TRUE)
-  mm <- regmatches(txt, m)[[1L]]
-  if (length(mm)) mm[[2L]] else ""
+out_dirs <- c("models", "models_lisrel", "data", "verification")
+for (d in out_dirs) dir.create(file.path(root, d), showWarnings = FALSE)
+if (!length(only)) {
+  # A full build replaces every generated file, so nothing stale survives.
+  for (d in out_dirs) unlink(list.files(file.path(root, d), full.names = TRUE))
 }
 
-command <- function(line) {
-  x <- toupper(trimws(line))
-  sub("\\s.*$", "", x)
-}
-
-section_lines <- function(lines, start_cmd) {
-  starts <- which(command(lines) == start_cmd)
-  if (!length(starts)) return(character())
-  i <- starts[[1L]] + 1L
-  known <- c("DA", "ME", "SD", "KM", "CM", "LA", "MO", "FR", "FI", "VA",
-             "CO", "LE", "OU", "EQ", "PA", "SE")
-  out <- character()
-  while (i <= length(lines)) {
-    if (command(lines[[i]]) %in% known) break
-    out <- c(out, lines[[i]])
-    i <- i + 1L
-  }
-  out
-}
-
-names_section <- function(lines, start_cmd) {
-  toks <- unlist(strsplit(paste(section_lines(lines, start_cmd), collapse = " "),
-                          "\\s+"))
-  toks[nzchar(toks)]
-}
-
-# LISREL SE (select) command: the observed-variable subset for the analysis,
-# given by name or by 1-based index into the LA labels and terminated by "/".
-# Returns indices into `obs` (NA for any token that does not resolve), or an
-# empty vector when the model has no SE command.
-select_indices <- function(lines, obs) {
-  starts <- which(vapply(lines, command, character(1L)) == "SE")
-  if (!length(starts)) return(integer())
-  inline <- sub("(?i)^\\s*SE\\b", "", lines[[starts[[1L]]]], perl = TRUE)
-  rest <- paste(c(inline, section_lines(lines, "SE")), collapse = " ")
-  rest <- sub("/.*$", "", rest)
-  toks <- unlist(strsplit(trimws(rest), "\\s+"))
-  toks <- toks[nzchar(toks)]
-  if (!length(toks)) return(integer())
-  vapply(toks, function(t) {
-    if (grepl("^[0-9]+$", t)) {
-      k <- as.integer(t)
-      if (k >= 1L && k <= length(obs)) k else NA_integer_
-    } else {
-      m <- match(toupper(t), toupper(obs))
-      if (is.na(m)) NA_integer_ else m
-    }
-  }, integer(1L), USE.NAMES = FALSE)
-}
-
-# LISREL RA (raw data) command: read the external free-format data file it
-# names, label the columns from LA, and return the data frame. Returns NULL
-# when there is no RA command, when the model is multi-group (NG>1 / stacked
-# DA blocks -- deferred), or when the file is missing or its column count
-# disagrees with NI/LA.
-read_ra_data <- function(lines, obs_all, source_dir) {
-  ra <- grep("(?i)^\\s*RA\\b", lines, value = TRUE, perl = TRUE)
-  if (!length(ra)) return(NULL)
-  da <- grep("(?i)^\\s*DA\\b", lines, value = TRUE, perl = TRUE)
-  ng <- regmatches(paste(da, collapse = " "),
-                   regexpr("(?i)\\bNG\\s*=\\s*[0-9]+",
-                           paste(da, collapse = " "), perl = TRUE))
-  ngroups <- if (length(ng)) as.integer(sub("(?i).*=", "", ng)) else length(da)
-  if (ngroups > 1L) return(NULL)
-  fi <- regmatches(ra[[1L]], regexpr("(?i)FI\\s*=\\s*\\S+", ra[[1L]],
-                                     perl = TRUE))
-  if (!length(fi)) return(NULL)
-  fname <- basename(sub("(?i)FI\\s*=\\s*", "", fi))
-  hits <- list.files(source_dir, pattern = paste0("^", fname, "$"),
-                     recursive = TRUE, full.names = TRUE, ignore.case = TRUE)
-  if (!length(hits)) return(NULL)
-  d <- tryCatch(utils::read.table(hits[[1L]], header = FALSE),
-                error = function(e) NULL)
-  if (is.null(d) || ncol(d) != length(obs_all)) return(NULL)
-  names(d) <- obs_all
-  d
-}
-
-lower_matrix <- function(vals, n) {
-  if (length(vals) < n * (n + 1L) / 2L) return(NULL)
-  m <- matrix(0, n, n)
-  k <- 1L
-  for (i in seq_len(n)) {
-    for (j in seq_len(i)) {
-      m[i, j] <- vals[[k]]
-      m[j, i] <- vals[[k]]
-      k <- k + 1L
-    }
-  }
-  m
-}
-
-matrix_refs <- function(txt, mat) {
-  pat <- paste0("\\b", mat, "\\(([0-9]+),([0-9]+)\\)")
-  mm <- gregexpr(pat, txt, ignore.case = TRUE, perl = TRUE)
-  hits <- regmatches(txt, mm)[[1L]]
-  if (!length(hits)) return(matrix(integer(), ncol = 2L))
-  do.call(rbind, lapply(hits, function(h) {
-    m <- regexec(pat, h, ignore.case = TRUE, perl = TRUE)
-    as.integer(regmatches(h, m)[[1L]][2:3])
-  }))
-}
-
-fixed_values <- function(txt, mat) {
-  pat <- paste0("\\bVA\\s+(-?[0-9]+(?:[.][0-9]+)?)\\s+", mat,
-                "\\(([0-9]+),([0-9]+)\\)")
-  mm <- gregexpr(pat, txt, ignore.case = TRUE, perl = TRUE)
-  starts <- regmatches(txt, mm)[[1L]]
-  if (!length(starts)) return(data.frame(row = integer(), col = integer(),
-                                         value = numeric()))
-  out <- lapply(starts, function(h) {
-    m <- regexec(pat, h, ignore.case = TRUE, perl = TRUE)
-    g <- regmatches(h, m)[[1L]]
-    data.frame(row = as.integer(g[[3L]]), col = as.integer(g[[4L]]),
-               value = as.numeric(g[[2L]]))
-  })
-  do.call(rbind, out)
-}
-
-write_named_vector <- function(x, path) {
-  utils::write.csv(data.frame(name = names(x), value = as.numeric(x)),
-                   path, row.names = FALSE, quote = TRUE)
-}
-
-write_matrix <- function(m, names, path) {
-  rownames(m) <- names
-  colnames(m) <- names
+write_matrix <- function(m, path) {
   utils::write.csv(m, path, quote = FALSE)
 }
+write_vector <- function(x, path) {
+  utils::write.csv(data.frame(name = names(x), value = unname(x)), path,
+                   row.names = FALSE, quote = TRUE)
+}
 
-lavaan_from_lisrel <- function(lines, id, obs, lat) {
-  txt <- paste(strip_comments(lines), collapse = "\n")
-  mo <- paste(grep("^\\s*MO\\b", lines, ignore.case = TRUE, value = TRUE),
-              collapse = " ")
-  if (!grepl("\\bLY\\b", mo, ignore.case = TRUE)) {
-    return(list(model = "", status = "source_only",
-                note = "no LY measurement matrix found"))
+# Groups are named after their data files when those differ (Female/Male,
+# Subj1..Subj5); otherwise G1, G2, ...
+group_labels <- function(parsed) {
+  src <- vapply(parsed$groups, function(g) {
+    tools::file_path_sans_ext(g$files[1L] %||% "")
+  }, character(1L))
+  if (length(unique(src)) == length(src) && all(nzchar(src))) src
+  else paste0("G", seq_along(parsed$groups))
+}
+
+family_of <- function(model) {
+  be <- model$st[[1L]]$BE
+  if (any(be$free) || any(be$val != 0)) "latent structural"
+  else "latent measurement"
+}
+
+rows <- list()
+for (k in seq_along(paths)) {
+  path <- paths[[k]]
+  id <- ids[[k]]
+  message("little: ", id)
+  rel_src <- sub(paste0("^", root, .Platform$file.sep), "", path)
+  file.copy(path, file.path(root, "models_lisrel", paste0(id, ".LS8")),
+            overwrite = TRUE)
+  out_path <- {
+    cand <- list.files(dirname(path), full.names = TRUE)
+    hit <- cand[tolower(basename(cand)) ==
+                  tolower(sub("\\.[Ll][Ss]8$", ".OUT", basename(path)))]
+    if (length(hit)) hit[[1L]] else NA_character_
   }
-  if (grepl("\\b(BE|GA|PH)\\b", mo, ignore.case = TRUE) ||
-      grepl("^\\s*CO\\b", txt, ignore.case = TRUE, perl = TRUE)) {
-    return(list(model = "", status = "source_only",
-                note = "complex LISREL matrices or constraints require manual conversion"))
+  if (!is.na(out_path)) {
+    file.copy(out_path, file.path(root, "models_lisrel", paste0(id, ".OUT")),
+              overwrite = TRUE)
   }
-  fr_ly <- matrix_refs(paste(grep("^\\s*FR\\b", lines, ignore.case = TRUE,
-                                  value = TRUE), collapse = "\n"), "LY")
-  va_ly <- fixed_values(txt, "LY")
-  if (!nrow(fr_ly) && !nrow(va_ly)) {
-    return(list(model = "", status = "source_only",
-                note = "no free or fixed LY entries found"))
+  res <- tryCatch(lis_translate(path, labels = label_overrides[[id]]),
+                  error = function(e) e)
+  row <- list(
+    id = id, name = gsub("_", " ", id), family = "latent measurement",
+    provenance = "Little LISREL examples", source_input = rel_src,
+    source_output = if (is.na(out_path)) "" else
+      sub(paste0("^", root, .Platform$file.sep), "", out_path),
+    source_data = "", data_kind = "source", measurement_kind = "continuous",
+    observed_only = FALSE, generated_data = "", generated_model = "",
+    generated_lisrel_model = file.path("models_lisrel", paste0(id, ".LS8")),
+    generated_output = if (is.na(out_path)) "" else
+      file.path("models_lisrel", paste0(id, ".OUT")),
+    generated_script = "", generated_verification = "",
+    group_var = "", group_labels = "", n_groups = NA_integer_,
+    ordered = "", lavaan_function = "sem", estimator = "ML",
+    meanstructure = FALSE, fixed_x = FALSE, nobs = "",
+    lisrel_df = NA_integer_, lisrel_chisq = NA_real_,
+    verified = FALSE, verification_start = "", strict_parity = FALSE,
+    status = "source_only", note = "")
+  if (inherits(res, "error")) {
+    row$note <- paste("translation failed:", conditionMessage(res))
+    rows[[length(rows) + 1L]] <- row
+    next
   }
-  rows <- character()
-  for (j in seq_along(lat)) {
-    fixed <- va_ly[va_ly$col == j, , drop = FALSE]
-    free <- if (nrow(fr_ly)) {
-      fr_ly[fr_ly[, 2L] == j, , drop = FALSE]
-    } else {
-      matrix(integer(), ncol = 2L)
-    }
-    idx <- sort(unique(c(fixed$row, if (length(free)) free[, 1L] else integer())))
-    idx <- idx[idx >= 1L & idx <= length(obs)]
-    if (!length(idx)) next
-    terms <- character()
-    for (r in idx) {
-      fv <- fixed[fixed$row == r, , drop = FALSE]
-      if (nrow(fv)) {
-        terms <- c(terms, paste0(format(fv$value[[1L]], scientific = FALSE),
-                                 "*", obs[[r]]))
-      } else {
-        terms <- c(terms, obs[[r]])
+  v <- res$verify
+  G <- res$model$G
+  labels <- group_labels(res$parsed)
+  row$family <- family_of(res$model)
+  row$n_groups <- G
+  row$meanstructure <- res$model$meanstructure
+  row$nobs <- paste(res$ns, collapse = ";")
+  row$group_labels <- if (G > 1L) paste(labels, collapse = ";") else ""
+
+  model_rel <- file.path("models", paste0(id, ".lav"))
+  writeLines(res$syntax, file.path(root, model_rel), useBytes = TRUE)
+  row$generated_model <- model_rel
+
+  kinds <- vapply(res$data, `[[`, "", "kind")
+  if (all(kinds == "raw")) {
+    x <- lapply(seq_len(G), function(g) {
+      d <- as.data.frame(res$data[[g]]$raw)
+      names(d) <- res$tr$obs
+      if (G > 1L) d$group <- labels[[g]]
+      d
+    })
+    data_rel <- file.path("data", paste0(id, ".csv"))
+    utils::write.csv(do.call(rbind, x), file.path(root, data_rel),
+                     row.names = FALSE)
+    row$data_kind <- "raw"
+    row$group_var <- if (G > 1L) "group" else ""
+  } else {
+    stem <- if (G == 1L) id else paste0(id, "_g", seq_len(G))
+    for (g in seq_len(G)) {
+      write_matrix(res$covs[[g]],
+                   file.path(root, "data", paste0(stem[[g]], "_cov.csv")))
+      if (res$model$meanstructure) {
+        write_vector(res$means[[g]],
+                     file.path(root, "data", paste0(stem[[g]], "_mean.csv")))
       }
     }
-    rows <- c(rows, paste(lat[[j]], "=~", paste(terms, collapse = " + ")))
+    data_rel <- paste(file.path("data", paste0(stem, "_cov.csv")),
+                      collapse = ";")
+    row$data_kind <- "summary"
   }
-  va_te <- fixed_values(txt, "TE")
-  if (nrow(va_te)) {
-    diag_te <- va_te[va_te$row == va_te$col & va_te$row <= length(obs), ,
-                     drop = FALSE]
-    rows <- c(rows, sprintf("%s ~~ %s*%s", obs[diag_te$row],
-                            format(diag_te$value, scientific = FALSE),
-                            obs[diag_te$row]))
-  }
-  va_ps <- fixed_values(txt, "PS")
-  if (nrow(va_ps)) {
-    diag_ps <- va_ps[va_ps$row == va_ps$col & va_ps$row <= length(lat), ,
-                     drop = FALSE]
-    rows <- c(rows, sprintf("%s ~~ %s*%s", lat[diag_ps$row],
-                            format(diag_ps$value, scientific = FALSE),
-                            lat[diag_ps$row]))
-  }
-  fr_te <- matrix_refs(paste(grep("^\\s*FR\\b", lines, ignore.case = TRUE,
-                                  value = TRUE), collapse = "\n"), "TE")
-  if (nrow(fr_te)) {
-    off <- fr_te[fr_te[, 1L] != fr_te[, 2L] &
-                   fr_te[, 1L] <= length(obs) & fr_te[, 2L] <= length(obs),
-                 , drop = FALSE]
-    if (nrow(off)) {
-      rows <- c(rows, sprintf("%s ~~ %s", obs[off[, 1L]], obs[off[, 2L]]))
-    }
-  }
-  if (!length(rows)) {
-    return(list(model = "", status = "source_only",
-                note = "no lavaan rows generated"))
-  }
-  list(model = paste(rows, collapse = "\n"), status = "retained",
-       note = "auto-converted simple LISREL LY measurement model")
-}
+  row$generated_data <- data_rel
+  row$source_data <- paste(unique(unlist(lapply(res$parsed$groups,
+                                                  `[[`, "files"))),
+                           collapse = ";")
 
-ls8_paths <- list.files(source_dir, "\\.[Ll][Ss]8$", recursive = TRUE,
-                        full.names = TRUE)
-rows <- list()
-for (path in ls8_paths) {
-  message("little: ", basename(path))
-  raw <- readLines(path, warn = FALSE)
-  lines <- strip_comments(raw)
-  da <- paste(grep("^\\s*DA\\b", lines, ignore.case = TRUE, value = TRUE),
-              collapse = " ")
-  ni <- suppressWarnings(as.integer(param_value(da, "NI")))
-  no <- suppressWarnings(as.integer(param_value(da, "NO")))
-  if (is.na(ni)) ni <- length(names_section(lines, "LA"))
-  id <- sanitize_id(path)
-  obs <- names_section(lines, "LA")
-  if (!length(obs) && !is.na(ni)) obs <- paste0("y", seq_len(ni))
-  lat <- names_section(lines, "LE")
-  if (!length(lat)) {
-    ne <- suppressWarnings(as.integer(param_value(paste(lines, collapse = " "), "NE")))
-    if (!is.na(ne) && ne > 0L) lat <- paste0("eta", seq_len(ne))
+  if (is.null(v)) {
+    row$note <- "no LISREL output file to verify against"
+    rows[[length(rows) + 1L]] <- row
+    next
   }
-  cov <- lower_matrix(numbers_in(section_lines(lines, "KM")), length(obs))
-  mean <- numbers_in(section_lines(lines, "ME"))
-  if (length(mean) < length(obs)) mean <- rep(NA_real_, length(obs))
-  names(mean) <- obs
-  raw_data <- read_ra_data(lines, obs, source_dir)
-
-  # Apply the LISREL SE (select) command before anything downstream: it picks
-  # a subset of the input variables in a given order, and the MODEL matrices
-  # are indexed over that selection, so obs/cov/mean/raw_data must be subset.
-  # A selection naming a variable we cannot resolve leaves the case source-only.
-  se_idx <- select_indices(lines, obs)
-  se_ok <- !length(se_idx) || !anyNA(se_idx)
-  if (length(se_idx) && se_ok) {
-    obs <- obs[se_idx]
-    if (!is.null(cov)) cov <- cov[se_idx, se_idx, drop = FALSE]
-    if (!is.null(raw_data)) raw_data <- raw_data[se_idx]
-    mean <- mean[se_idx]
-    names(mean) <- obs
-  }
-
-  lisrel_rel <- file.path("models_lisrel", paste0(id, ".LS8"))
-  writeLines(raw, file.path(root, lisrel_rel), useBytes = TRUE)
-  data_rel <- ""
-  data_kind_val <- "source"
-  if (!is.null(cov)) {
-    data_rel <- file.path("data", paste0(id, "_cov.csv"))
-    write_matrix(cov, obs, file.path(root, data_rel))
-    data_kind_val <- "summary"
-    if (!all(is.na(mean))) {
-      write_named_vector(mean, file.path(root, "data", paste0(id, "_mean.csv")))
-    }
-  } else if (!is.null(raw_data)) {
-    data_rel <- file.path("data", paste0(id, ".csv"))
-    utils::write.csv(raw_data, file.path(root, data_rel), row.names = FALSE,
-                     na = "")
-    data_kind_val <- "raw"
-  }
-  conv <- if (!se_ok) {
-    list(model = "", status = "source_only",
-         note = "SE selection references an unrecognized variable")
-  } else {
-    lavaan_from_lisrel(raw, id, obs, lat)
-  }
-  model_rel <- ""
-  if (nzchar(conv$model)) {
-    model_rel <- file.path("models", paste0(id, ".lav"))
-    writeLines(conv$model, file.path(root, model_rel), useBytes = TRUE)
-  }
-  rows[[length(rows) + 1L]] <- data.frame(
+  pe <- lavaan::parTable(res$fit)
+  ver <- list(
     id = id,
-    name = gsub("_", " ", id),
-    family = if (length(lat)) "latent measurement" else "unknown",
-    provenance = "Little LISREL examples",
-    source_input = sub(paste0("^", root, .Platform$file.sep), "", path),
-    source_data = "",
-    data_kind = data_kind_val,
-    measurement_kind = "continuous",
-    observed_only = FALSE,
-    generated_data = data_rel,
-    generated_model = model_rel,
-    generated_lisrel_model = lisrel_rel,
-    generated_script = "",
-    group_var = "",
-    ordered = "",
-    lavaan_function = "sem",
-    estimator = "ML",
-    meanstructure = !all(is.na(mean)),
-    fixed_x = FALSE,
-    nobs = ifelse(is.na(no), NA_integer_, no),
-    strict_parity = identical(conv$status, "retained") && nzchar(data_rel) &&
-      length(obs) >= 2L,
-    status = conv$status,
-    note = conv$note,
-    stringsAsFactors = FALSE)
+    source_input = rel_src,
+    source_input_sha256 = sha256(path),
+    source_output = row$source_output,
+    source_output_sha256 = sha256(out_path),
+    verified = v$ok,
+    issues = as.list(v$issues),
+    likelihood = "wishart",
+    convention = paste(
+      "LISREL 8.80 analyses S with divisor N-1 and reports the minimum",
+      "fit function chi-square (N-1)F_ML; the check refits the lavaan",
+      "translation with likelihood = \"wishart\" on LISREL's analysed",
+      "moments."),
+    n_groups = G,
+    n_obs = as.list(res$ns),
+    printed_decimals = res$nd,
+    df = v$df, lisrel_df = v$lisrel_df,
+    chisq = v$chisq, lisrel_chisq = v$lisrel_chisq,
+    max_abs_estimate_diff = v$max_est_diff,
+    max_abs_moment_diff = v$max_moment_diff,
+    n_free = v$n_free,
+    unprinted_elements = v$unprinted,
+    start = v$start,
+    skipped_start_files = as.list(res$model$skipped_ma),
+    ignored_lines = as.list(unlist(lapply(res$parsed$groups, `[[`, "ignored"))),
+    label_overrides = as.list(label_overrides[[id]]),
+    lisrel_warnings = as.list(v$lisrel_warnings),
+    lisrel_estimates = if (is.null(v$printed)) list() else
+      lapply(seq_len(nrow(v$printed)), function(i) as.list(v$printed[i, ])),
+    wishart_estimates = lapply(which(pe$free > 0L), function(i) {
+      list(lhs = pe$lhs[[i]], op = pe$op[[i]], rhs = pe$rhs[[i]],
+           group = pe$group[[i]], label = pe$label[[i]], est = pe$est[[i]])
+    })
+  )
+  ver_rel <- file.path("verification", paste0(id, ".json"))
+  jsonlite::write_json(ver, file.path(root, ver_rel), auto_unbox = TRUE,
+                       pretty = TRUE, digits = NA, null = "null")
+  row$generated_verification <- ver_rel
+  row$lisrel_df <- v$lisrel_df
+  row$lisrel_chisq <- v$lisrel_chisq
+  row$verified <- v$ok
+  row$verification_start <- v$start
+  if (v$ok) {
+    row$status <- "retained"
+    # magmaan has neither bound syntax nor inequality-constrained fits. The
+    # parity fixture keeps models with at most 18 observed variables so it
+    # stays under the repository's 1 MB file limit; wider models are verified
+    # here and snapshotted in the corpus.
+    has_bound <- length(res$model$ir) > 0L
+    wide <- length(res$tr$obs) > 18L
+    row$strict_parity <- G == 1L && !has_bound && !wide
+    row$note <- paste0(
+      "verified against LISREL output: pattern, ", v$n_free,
+      " free parameters, all printed estimates, df and chi-square",
+      if (v$start != "default") paste0(" (lavaan default start failed; ",
+                                         "reached from ", v$start, ")") else "",
+      if (G > 1L) "; multi-group, not in the single-group parity fixtures"
+      else "",
+      if (has_bound) paste0("; LISREL IR restriction written as a lavaan ",
+                            "bound, which magmaan cannot parse") else "",
+      if (wide && G == 1L) paste0("; ", length(res$tr$obs), " observed ",
+                                  "variables, above the parity-fixture cap") else "")
+  } else {
+    row$status <- "unverified"
+    row$note <- paste("verification failed:", paste(v$issues, collapse = "; "))
+  }
+  rows[[length(rows) + 1L]] <- row
 }
 
-manifest <- if (length(rows)) do.call(rbind, rows) else data.frame()
+manifest <- do.call(rbind, lapply(rows, as.data.frame, stringsAsFactors = FALSE))
+if (length(only)) {
+  message("partial build (", only[[1L]], "): manifest not written")
+  print(manifest[, c("id", "status", "lisrel_df", "lisrel_chisq",
+                     "verification_start")])
+  quit(save = "no")
+}
 utils::write.csv(manifest, file.path(root, "manifest.csv"), row.names = FALSE,
                  na = "")
-
-# The catalogue is the harness-runnable subset: rows with both a converted
-# lavaan model and extracted summary data. Complex LISREL models kept as
-# source-only (BE/GA/PH structural matrices, selection or constraint commands)
-# carry no usable model/data pair and stay in the manifest only.
-catalogue <- if (nrow(manifest)) {
-  manifest[manifest$status == "retained" &
-             nzchar(manifest$generated_model) &
-             nzchar(manifest$generated_data), , drop = FALSE]
-} else {
-  manifest
-}
+catalogue <- manifest[manifest$status == "retained", , drop = FALSE]
 utils::write.csv(catalogue, file.path(root, "catalogue.csv"), row.names = FALSE,
                  na = "")
-message("Wrote ", nrow(catalogue), " runnable Little catalogue rows (",
-        nrow(manifest), " total in manifest) to ", root)
+message("Wrote ", nrow(catalogue), " verified Little cases (", nrow(manifest),
+        " inputs) to ", root)

@@ -1,5 +1,10 @@
 # Newsom corpus: survey failure classes
 
+**Case ids** refer to the corpus before 2026-09-25, which mixed Newsom's
+first-edition (2015) and second-edition (2024) scripts. The rebuilt
+`newsom_2015` corpus is first-edition only, so `ex12_*` and some other ids now
+exist only in the second edition. The numerical findings are unaffected.
+
 Found when the cross-corpus speed survey
 (`papers/snlls-constrained/scripts/run_corpus_speed_survey.R`) ran the Newsom
 corpus under fixed-weight GLS. None of the failures are separability

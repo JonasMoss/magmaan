@@ -17,7 +17,8 @@ fixed cost of that solve loses to ordinary L-BFGS hitting convergence
 on its start-point gradient check
 (e.g. `newsom_2015_ex3_1c`: Full/SNLLS ≈ 0.23). On larger / harder
 problems the closed-form crushes Full
-(`newsom_2015_ex12_1a`: 25–31×).
+(`newsom_2015_ex12_1a`, a second-edition Newsom script no longer in the
+first-edition corpus: 25–31×).
 
 Before this change the inner α-solve at
 `cpp/src/estimate/gmm/gp.cpp::profile_at()` was unconditionally a

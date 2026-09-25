@@ -17,6 +17,7 @@
 #include "../oracle.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -110,13 +111,23 @@ magmaan::optim::OptimOptions mplus_opts() {
   };
 }
 
+// The fit_* functions resolve fixed.x covariate moments on their own copy of
+// the partable; the implied-moment check needs the same resolution, or the
+// exogenous block of Sigma/mu is not the sample's.
 void check_implied(const std::string& label,
                    const magmaan::spec::LatentStructure& pt,
                    const magmaan::model::MatrixRep& rep,
                    const magmaan::estimate::Estimates& est,
+                   const magmaan::data::SampleStats& samp,
                    const nlohmann::json& fit,
                    std::vector<std::string>& failures) {
-  auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
+  magmaan::spec::LatentStructure resolved = pt;
+  auto rx = magmaan::estimate::resolve_fixed_x_from_sample(resolved, rep, samp);
+  if (!rx.has_value()) {
+    failures.push_back(label + ": resolve_fixed_x - " + rx.error().detail);
+    return;
+  }
+  auto ev = magmaan::model::ModelEvaluator::build(resolved, rep);
   if (!ev.has_value()) {
     failures.push_back(label + ": ModelEvaluator - " + ev.error().detail);
     return;
@@ -140,7 +151,8 @@ void check_implied(const std::string& label,
   }
 }
 
-void check_common_fit(const std::string& label,
+// Returns false when the fit disagrees with lavaan (failures are recorded).
+bool check_common_fit(const std::string& label,
                       const magmaan::spec::LatentStructure& pt,
                       const magmaan::model::MatrixRep& rep,
                       const magmaan::estimate::Estimates& est,
@@ -148,9 +160,10 @@ void check_common_fit(const std::string& label,
                       const nlohmann::json& fit,
                       double theta_tol,
                       std::vector<std::string>& failures) {
+  const std::size_t before = failures.size();
   if (!est.theta.allFinite() || !std::isfinite(est.fmin)) {
     failures.push_back(label + ": non-finite fit result");
-    return;
+    return false;
   }
   const Eigen::VectorXd lavaan_theta = vector_from_json(fit["theta_hat"]);
   const double d_theta = max_abs_diff(est.theta, lavaan_theta);
@@ -165,7 +178,8 @@ void check_common_fit(const std::string& label,
     failures.push_back(label + ": df = " + std::to_string(*df_or) +
                        ", lavaan = " + std::to_string(fit["df"].get<int>()));
   }
-  check_implied(label, pt, rep, est, fit, failures);
+  check_implied(label, pt, rep, est, samp, fit, failures);
+  return failures.size() == before;
 }
 
 }  // namespace
@@ -218,8 +232,10 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
           failures.push_back(label + ": fit - " + est_or.error().detail);
           continue;
         }
-        check_common_fit(label, handles->pt, handles->rep, *est_or, samp, fit,
-                         1e-3, failures);
+        if (!check_common_fit(label, handles->pt, handles->rep, *est_or, samp,
+                              fit, 1e-3, failures)) {
+          continue;
+        }
         const double lavaan_f = fit["fmin"].get<double>();
         if (!close(est_or->fmin, lavaan_f, 2e-4)) {
           failures.push_back(label + ": fmin = " + std::to_string(est_or->fmin) +
@@ -264,8 +280,10 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
           failures.push_back(label + ": fit - " + est_or.error().detail);
           continue;
         }
-        check_common_fit(label, handles->pt, handles->rep, *est_or, samp, fit,
-                         3e-3, failures);
+        if (!check_common_fit(label, handles->pt, handles->rep, *est_or, samp,
+                              fit, 3e-3, failures)) {
+          continue;
+        }
 
         if (estimator == "GLS") {
           auto ev = magmaan::model::ModelEvaluator::build(handles->pt, handles->rep);

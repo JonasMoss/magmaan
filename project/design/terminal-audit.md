@@ -867,7 +867,8 @@ classification of `ex5_4` / `ex5_4c` as **non-stationary** points to the
 right next investigation (evaluator accuracy, re-parameterization), rather
 than masking the problem with a looser tolerance.
 
-`ex12_3` is a separate mechanism — NLopt L-BFGS gets stuck early at
+`ex12_3` (a second-edition Newsom script, no longer in the first-edition
+corpus) is a separate mechanism — NLopt L-BFGS gets stuck early at
 `f = 982` (true optimum `3.06`); PORT and SNLLS both converge it. The audit
 correctly reports non-stationary at `f = 982` (large gradient there). Not
 fixed by tolerance tuning.

@@ -346,7 +346,10 @@ shape reappears if the shim is dropped.
 Scope: only the lavaan-version-dependent `regen_oracle.R` streams were
 realigned; the real-data `parity` stream and the little/newsom/mplus/paper
 corpora stay at `0.6-22.2560` (their regen needs data packages, e.g.
-`psychTools`, absent in this environment) and pass within tolerance.
+`psychTools`, absent in this environment) and pass within tolerance. The
+little/newsom/mplus_sem/geiser/textbook_corpus fixtures were regenerated
+under 0.7-2 on 2026-09-25 with the source-verified corpus (see
+[textbook-translation-audit.md](textbook-translation-audit.md)).
 
 **Multi-group ordinal robust score tests used to be blocked by a stale guard.**
 Regression: the ordinal/mixed-ordinal robust MI and score-test implementations

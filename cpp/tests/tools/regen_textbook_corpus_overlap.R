@@ -368,7 +368,10 @@ cluster_edges <- function(clusters) {
     if (is.null(policy)) next
     ids <- cluster$case_ids
     if (length(ids) > policy$max_size) next
-    pairs <- utils::combn(ids, 2L, simplify = FALSE)
+    # Every cluster is an equivalence class (one shared fingerprint), so a
+    # spanning star carries the same information as all pairs while growing
+    # linearly with cluster size; the cluster keeps the full membership.
+    pairs <- lapply(ids[-1L], function(id) c(ids[[1L]], id))
     for (pair in pairs) {
       edges[[idx]] <- list(
         id = sprintf("edge_%05d", idx),

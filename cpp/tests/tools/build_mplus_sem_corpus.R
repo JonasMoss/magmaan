@@ -1,16 +1,33 @@
 #!/usr/bin/env Rscript
 
 # Build the ignored external/textbook-corpus/raw/mplus_sem corpus from raw Mplus
-# zip archives.
+# zip archives (Mplus User's Guide chapters and Muthén, Muthén & Asparouhov
+# 2017 chapters mixed in external/textbook-corpus/raw/MPLUS).
 #
-# This script is a maintainer convenience: it extracts the raw .inp examples,
-# deduplicates by input-file content, classifies scope, translates the MODEL
-# block to lavaan syntax, and writes a stable per-case folder. The resulting
-# raw/mplus_sem tree is intentionally not tracked; checked-in tests consume
-# only derived fixtures generated from it.
+# Translation, data preparation and verification come from the textbook
+# corpus's shared Mplus translator, external/textbook-corpus/ingest/
+# _mplus_helpers.R, so this bundle and the corpus's mplus_users_guide_v8 /
+# muthen_2017 books cannot drift apart. A case is retained only when
+#   * it is expressible as a linear normal-theory lavaan model (no mixtures,
+#     multilevel/complex data, categorical or count outcomes, ESEM rotation,
+#     random slopes, Bayes, imputation, data-dependent constraints, ...), and
+#   * lavaan's fit of the translation reproduces the shipped Mplus .out:
+#     analysed N, free parameters, df, chi-square, H0 log-likelihood and every
+#     printed MODEL RESULTS estimate.
+# Everything else is kept in manifest.csv with its exclusion reason.
+#
+# Each retained case directory holds the Mplus source (.inp/.out), the lavaan
+# translation (model.lav), the analysed data exactly as Mplus analysed it
+# (data.csv after MISSING, USEOBSERVATIONS, DEFINE and case exclusion; or
+# sample_cov.csv/sample_mean.csv for summary-data inputs) and case.yml with
+# the lavaan options. The raw/mplus_sem tree is intentionally not tracked;
+# checked-in tests consume only derived fixtures generated from it by
+# regen_mplus_sem_fixtures.R.
 
 suppressPackageStartupMessages({
   library(lavaan)
+  library(digest)
+  library(jsonlite)
 })
 
 args <- commandArgs(FALSE)
@@ -19,109 +36,53 @@ if (is.na(script_arg)) stop("Run this script with Rscript.", call. = FALSE)
 repo_root <- normalizePath(file.path(dirname(normalizePath(
   sub("^--file=", "", script_arg))), "..", "..", ".."))
 
-zip_root <- Sys.getenv("MPLUS_SEM_ZIP_ROOT", unset = "")
-if (!nzchar(zip_root)) {
-  zip_root <- file.path(repo_root, "external", "textbook-corpus", "raw", "MPLUS")
+corpus_root <- file.path(repo_root, "external", "textbook-corpus")
+helper <- file.path(corpus_root, "ingest", "_mplus_helpers.R")
+if (!file.exists(helper)) {
+  stop("The Mplus translator is part of the optional textbook corpus; mount it at ",
+       corpus_root, " (see project/reference/textbook-corpus.md).", call. = FALSE)
 }
+source(helper)
+
+zip_root <- Sys.getenv("MPLUS_SEM_ZIP_ROOT", unset = "")
+if (!nzchar(zip_root)) zip_root <- file.path(corpus_root, "raw", "MPLUS")
 zip_root <- normalizePath(zip_root, mustWork = TRUE)
 
 out_root <- Sys.getenv("MPLUS_SEM_ROOT", unset = "")
-if (!nzchar(out_root)) {
-  out_root <- file.path(repo_root, "external", "textbook-corpus", "raw", "mplus_sem")
-}
+if (!nzchar(out_root)) out_root <- file.path(corpus_root, "raw", "mplus_sem")
 
-zips <- sort(Sys.glob(file.path(zip_root, "*.zip")))
-if (!length(zips)) stop("No .zip archives found under ", zip_root, call. = FALSE)
+# Documented per-case translation overrides, pinned to the md5 of the
+# newline-normalised .inp. Only MODEL CONSTRAINT blocks whose NEW parameters
+# are free parameters of the Mplus model need one; the constraint is
+# inverted algebraically into the same parameter space. Mirrors the
+# corpus's ingest/build_mplus_users_guide.R table.
+OVERRIDES <- list(
+  "ex6.17.inp" = list(
+    md5 = "b219964157f3a80a95e330dc968e5bf9",
+    why = paste("the NEW autocorrelation parameter scales the lag-1, lag-2 and lag-3",
+                "residual covariances by its first to third power; expressing it as",
+                "p1/resvar removes the free NEW parameter without changing the parameter space."),
+    constraint_lines = c("p2 == p1^2/resvar", "p3 == p1^3/resvar^2", "corr := p1/resvar"))
+)
 
-unlink(out_root, recursive = TRUE, force = TRUE)
-dir.create(file.path(out_root, "cases"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(out_root, "scripts"), recursive = TRUE, showWarnings = FALSE)
+# Documented differences a retained case may show against the Mplus .out
+# (none in this bundle).
+ACCEPTED <- list()
 
-tmp_root <- tempfile("mplus-sem-raw-")
-dir.create(tmp_root)
-on.exit(unlink(tmp_root, recursive = TRUE, force = TRUE), add = TRUE)
-for (z in zips) utils::unzip(z, exdir = tmp_root)
+# Corpus books that carry the same example, for overlap bookkeeping.
+CORPUS_BOOKS <- c(
+  "chapter4.zip" = "mplus_users_guide_v8", "chapter6.zip" = "mplus_users_guide_v8",
+  "chapter7.zip" = "mplus_users_guide_v8", "chapter8.zip" = "mplus_users_guide_v8",
+  "chapter9.zip" = "mplus_users_guide_v8", "chapter10.zip" = "mplus_users_guide_v8",
+  "chapter11.zip" = "mplus_users_guide_v8",
+  "chapter2.zip" = "muthen_2017", "chapter2_.zip" = "muthen_2017",
+  "chapter3.zip" = "muthen_2017", "chapter3_.zip" = "muthen_2017",
+  "chapter5.zip" = "muthen_2017", "chapter8_.zip" = "muthen_2017",
+  "chapter10_.zip" = "muthen_2017")
 
-read_zip_text <- function(zip, name) {
-  x <- readLines(unz(zip, name), warn = FALSE)
-  x <- iconv(x, from = "", to = "UTF-8", sub = "byte")
-  paste(x, collapse = "\n")
-}
-
-md5_text <- function(x) {
-  path <- tempfile()
-  on.exit(unlink(path, force = TRUE), add = TRUE)
-  writeLines(x, path, useBytes = TRUE)
-  unname(tools::md5sum(path))
-}
-
-strip_comments <- function(x) {
-  lines <- strsplit(x, "\n", fixed = TRUE)[[1L]]
-  lines <- sub("!.*$", "", lines)
-  paste(lines, collapse = "\n")
-}
-
-section_map <- function(x) {
-  lines <- strsplit(strip_comments(x), "\n", fixed = TRUE)[[1L]]
-  sections <- list()
-  current <- NULL
-  for (line in lines) {
-    m <- regexec("^\\s*([A-Za-z][A-Za-z0-9 _-]*)\\s*:(.*)$", line,
-                 perl = TRUE)
-    mm <- regmatches(line, m)[[1L]]
-    if (length(mm)) {
-      current <- tolower(gsub("\\s+", " ", trimws(mm[[2L]])))
-      rest <- trimws(mm[[3L]])
-      if (is.null(sections[[current]])) sections[[current]] <- character()
-      if (nzchar(rest)) sections[[current]] <- c(sections[[current]], rest)
-    } else if (!is.null(current)) {
-      sections[[current]] <- c(sections[[current]], line)
-    }
-  }
-  lapply(sections, function(v) paste(v, collapse = "\n"))
-}
-
-section_value <- function(block, key) {
-  if (is.null(block) || !nzchar(block)) return("")
-  pat <- paste0("(?is)\\b", key, "\\b\\s*(?:are\\s+|is\\s+)?",
-                "(?:=\\s*)?([^;]+)")
-  m <- regexec(pat, block, perl = TRUE)
-  mm <- regmatches(block, m)[[1L]]
-  if (!length(mm)) "" else trimws(gsub("\\s+", " ", mm[[2L]]))
-}
-
-expand_names <- function(x) {
-  if (!nzchar(x)) return(character())
-  x <- gsub("[(),]", " ", x)
-  toks <- unlist(strsplit(trimws(x), "\\s+"))
-  toks <- toks[nzchar(toks)]
-  out <- character()
-  for (tok in toks) {
-    m <- regexec("^([A-Za-z_.]+)([0-9]+)-(?:(?:([A-Za-z_.]+))?([0-9]+))$",
-                 tok, perl = TRUE)
-    mm <- regmatches(tok, m)[[1L]]
-    if (length(mm)) {
-      lhs <- mm[[2L]]
-      a <- as.integer(mm[[3L]])
-      rhs <- if (nzchar(mm[[4L]])) mm[[4L]] else lhs
-      b <- as.integer(mm[[5L]])
-      if (identical(lhs, rhs) && !is.na(a) && !is.na(b)) {
-        rng <- if (a <= b) seq.int(a, b) else seq.int(a, b)
-        out <- c(out, paste0(lhs, rng))
-        next
-      }
-    }
-    out <- c(out, tok)
-  }
-  unique(out)
-}
-
-source_file_ref <- function(sections) {
-  data <- sections[["data"]]
-  if (is.null(data)) return("")
-  ref <- section_value(data, "file")
-  ref <- sub("^['\"]", "", sub("['\"]$", "", ref))
-  ref
+book_of <- function(zip) {
+  b <- unname(CORPUS_BOOKS[basename(zip)])
+  if (is.na(b)) "" else b
 }
 
 canonical_id <- function(zip, name) {
@@ -133,74 +94,29 @@ canonical_id <- function(zip, name) {
   gsub("^_|_$", "", id)
 }
 
-find_extracted <- function(path_in_zip) {
-  direct <- file.path(tmp_root, path_in_zip)
-  if (file.exists(direct)) return(direct)
-  hits <- list.files(tmp_root, pattern = paste0("^", basename(path_in_zip), "$"),
-                     recursive = TRUE, full.names = TRUE, ignore.case = TRUE)
-  if (length(hits)) hits[[1L]] else ""
+corpus_case_id <- function(zip, name) {
+  book <- book_of(zip)
+  if (!nzchar(book)) return("")
+  id <- default_case_id(book, zip, name)
+  if (dir.exists(file.path(corpus_root, "cases", book, id))) id else ""
 }
 
-find_related <- function(source_name, ref) {
-  if (!nzchar(ref)) return("")
-  candidates <- c(
-    file.path(dirname(file.path(tmp_root, source_name)), ref),
-    file.path(tmp_root, ref)
-  )
-  hit <- candidates[file.exists(candidates)][1L]
-  if (!is.na(hit)) return(hit)
-  hits <- list.files(tmp_root, pattern = paste0("^", basename(ref), "$"),
-                     recursive = TRUE, full.names = TRUE, ignore.case = TRUE)
-  if (length(hits)) hits[[1L]] else ""
+measurement_kind <- function(inp) {
+  usev <- tryCatch(analysis_variables(inp), error = function(e) character())
+  cat_vars <- expand_varlist(inp$variable$categorical %||% "", inp$names)
+  used <- intersect(cat_vars, usev)
+  if (!length(used)) "continuous" else if (length(setdiff(usev, used))) "mixed" else "ordinal"
 }
 
-copy_related <- function(source_name, case_dir, ext, dest) {
-  stem <- sub("[.][^.]+$", "", basename(source_name))
-  rel <- file.path(dirname(source_name), paste0(stem, ext))
-  hit <- find_extracted(rel)
-  if (nzchar(hit)) {
-    file.copy(hit, file.path(case_dir, dest), overwrite = TRUE)
-    return(TRUE)
-  }
-  FALSE
+model_kind_of <- function(res) {
+  r <- res$built$roles
+  pt <- res$built$pt
+  if (length(r$growth_factors)) return("growth")
+  has_meas <- any(pt$op == "=~")
+  has_reg <- any(pt$op == "~")
+  if (has_meas && has_reg) "latent_sem" else if (has_meas) "cfa" else
+    if (has_reg) "observed_path" else "other"
 }
-
-translate_model <- function(model_block) {
-  if (is.null(model_block) || !nzchar(trimws(model_block))) return("")
-  out <- tryCatch(lavaan::lav_mplus_syntax_model(model_block),
-                  error = function(e) structure(conditionMessage(e),
-                                                class = "mplus_translate_error"))
-  if (inherits(out, "mplus_translate_error")) return("")
-  out <- gsub("[ \t]+$", "", out)
-  paste(Filter(nzchar, strsplit(out, "\n", fixed = TRUE)[[1L]]),
-        collapse = "\n")
-}
-
-contains <- function(x, pat) grepl(pat, x, ignore.case = TRUE, perl = TRUE)
-
-classify_exclusion <- function(raw, sections) {
-  low <- tolower(raw)
-  model <- sections[["model"]] %||% ""
-  reasons <- character()
-  if (is.null(sections[["model"]])) reasons <- c(reasons, "no_model")
-  if (contains(low, "(^|\\n)\\s*montecarlo\\s*:")) reasons <- c(reasons, "monte_carlo")
-  if (contains(low, "\\bclasses\\s*=|\\btype\\s*=\\s*[^;]*mixture")) reasons <- c(reasons, "mixture")
-  if (contains(low, "\\btype\\s*=\\s*[^;]*(twolevel|complex)|\\bcluster\\s*=|\\bwithin\\s*=|\\bbetween\\s*=")) {
-    reasons <- c(reasons, "multilevel_or_clustered")
-  }
-  if (contains(low, "\\btype\\s*=\\s*efa|\\befa\\b")) reasons <- c(reasons, "efa")
-  if (contains(model, "\\|[^;\\n]*\\bon\\b")) reasons <- c(reasons, "random_effect")
-  if (contains(low, "\\bimputation\\b")) reasons <- c(reasons, "imputation")
-  if (contains(low, "\\bbayes\\b")) reasons <- c(reasons, "bayes")
-  if (contains(low, "\\bnominal\\s*=")) reasons <- c(reasons, "nominal")
-  if (contains(low, "\\bcount\\s*=")) reasons <- c(reasons, "count")
-  if (contains(low, "\\bcensored\\s*=")) reasons <- c(reasons, "censored")
-  if (contains(low, "\\bsurvival\\b|\\btimecensored\\b")) reasons <- c(reasons, "survival")
-  if (contains(low, "\\btwopart\\b|\\bdata\\s+twopart\\s*:")) reasons <- c(reasons, "two_part")
-  unique(reasons)
-}
-
-`%||%` <- function(x, y) if (is.null(x)) y else x
 
 yaml_quote <- function(x) {
   if (is.null(x) || length(x) == 0L || is.na(x)) x <- ""
@@ -210,151 +126,128 @@ yaml_quote <- function(x) {
 }
 
 write_case_yml <- function(path, row) {
-  lines <- c(
-    paste("case_id:", yaml_quote(row$case_id)),
-    paste("status:", yaml_quote(row$status)),
-    paste("title:", yaml_quote(row$title)),
-    paste("source_zip:", yaml_quote(row$source_zip)),
-    paste("source_input:", yaml_quote(row$source_input)),
-    paste("source_data:", yaml_quote(row$source_data)),
-    paste("data_kind:", yaml_quote(row$data_kind)),
-    paste("model_kind:", yaml_quote(row$model_kind)),
-    paste("test_candidate:", tolower(as.character(row$test_candidate))),
-    paste("snlls_candidate:", tolower(as.character(row$snlls_candidate))),
-    paste("exclude_reason:", yaml_quote(row$exclude_reason)),
-    paste("notes:", yaml_quote(row$note))
-  )
+  keys <- c("case_id", "status", "title", "source_zip", "source_input", "source_data",
+            "data_kind", "model_kind", "estimator", "meanstructure", "fixed_x", "missing",
+            "n_groups", "group_var", "n_obs", "test_candidate", "snlls_candidate",
+            "verified", "verification", "corpus_case_id", "note")
+  lines <- vapply(keys, function(k) {
+    v <- row[[k]]
+    if (is.logical(v)) paste0(k, ": ", tolower(as.character(v)))
+    else if (is.numeric(v)) paste0(k, ": ", v)
+    else paste0(k, ": ", yaml_quote(v))
+  }, character(1L))
   writeLines(lines, path, useBytes = TRUE)
 }
 
-raw_inputs <- list()
-for (z in zips) {
-  names <- utils::unzip(z, list = TRUE)$Name
-  inps <- names[grepl("[.]inp$", names, ignore.case = TRUE)]
-  for (nm in inps) {
-    txt <- read_zip_text(z, nm)
-    hash <- md5_text(gsub("\r\n?", "\n", txt))
-    raw_inputs[[length(raw_inputs) + 1L]] <- list(zip = z, name = nm,
-                                                  text = txt, hash = hash)
-  }
-}
+unlink(out_root, recursive = TRUE, force = TRUE)
+dir.create(file.path(out_root, "cases"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(out_root, "scripts"), recursive = TRUE, showWarnings = FALSE)
 
+items <- discover_inputs(zip_root)
 seen <- character()
 used_case_ids <- character()
 rows <- list()
-retained <- 0L
-for (item in raw_inputs) {
-  if (item$hash %in% seen) next
-  seen <- c(seen, item$hash)
-
-  sections <- section_map(item$text)
-  vars <- expand_names(section_value(sections[["variable"]] %||% "", "names"))
-  usev <- expand_names(section_value(sections[["variable"]] %||% "", "usevariables"))
-  if (!length(usev)) usev <- expand_names(section_value(sections[["variable"]] %||% "", "usev"))
-  if (!length(usev)) usev <- vars
-  categorical <- expand_names(section_value(sections[["variable"]] %||% "", "categorical"))
-  ordered_used <- intersect(categorical, usev)
-
-  reasons <- classify_exclusion(item$text, sections)
-  data_ref <- source_file_ref(sections)
-  data_path <- find_related(item$name, data_ref)
-  lav <- ""
-  if (!length(reasons)) lav <- translate_model(sections[["model"]])
-  if (!length(reasons) && !nzchar(lav)) reasons <- c(reasons, "translation_failed")
-
-  data_kind <- "continuous"
-  if (length(ordered_used) > 0L) {
-    data_kind <- if (length(setdiff(usev, ordered_used)) == 0L) "ordinal" else "mixed"
-  }
-
-  has_regression <- contains(lav, "(^|\\n)\\s*[^\\n~]+\\s+~\\s+[^~]")
-  has_measurement <- contains(lav, "=~")
-  model_kind <- if (contains(sections[["model"]] %||% "", "\\|")) {
-    "growth"
-  } else if (has_measurement && has_regression) {
-    "latent_sem"
-  } else if (has_measurement) {
-    "cfa"
-  } else if (has_regression) {
-    "observed_path"
-  } else {
-    "other"
-  }
-
-  has_define <- !is.null(sections[["define"]]) && nzchar(trimws(sections[["define"]]))
-  has_weight <- contains(sections[["variable"]] %||% "", "\\b(freqweight|weight)\\b")
-  has_useobs <- contains(sections[["variable"]] %||% "", "\\buseobservations\\b|\\buseobs\\b")
-  test_candidate <- !length(reasons) && identical(data_kind, "continuous") &&
-    nzchar(data_path) && !has_define && !has_weight && !has_useobs
-  snlls_candidate <- test_candidate && model_kind %in% c("cfa", "latent_sem", "growth")
-
-  status <- if (length(reasons)) "excluded" else "retained"
-  case_id <- canonical_id(item$zip, item$name)
+for (it in items) {
+  if (it$hash %in% seen) next
+  seen <- c(seen, it$hash)
+  inp <- mplus_parse_input(it$text)
+  case_id <- canonical_id(it$zip, it$name)
   if (case_id %in% used_case_ids) {
-    base_id <- case_id
-    suffix <- 2L
+    base_id <- case_id; suffix <- 2L
     while (paste0(base_id, "_", suffix) %in% used_case_ids) suffix <- suffix + 1L
     case_id <- paste0(base_id, "_", suffix)
   }
   used_case_ids <- c(used_case_ids, case_id)
-  title <- trimws(strsplit(sections[["title"]] %||% "", "\n", fixed = TRUE)[[1L]][1L] %||% "")
-
-  case_dir <- ""
-  if (identical(status, "retained")) {
-    retained <- retained + 1L
-    case_dir <- file.path("cases", case_id)
-    abs_case_dir <- file.path(out_root, case_dir)
-    dir.create(abs_case_dir, recursive = TRUE, showWarnings = FALSE)
-    writeLines(item$text, file.path(abs_case_dir, "source.inp"), useBytes = TRUE)
-    writeLines(lav, file.path(abs_case_dir, "model.lav"), useBytes = TRUE)
-    if (nzchar(data_path)) file.copy(data_path, file.path(abs_case_dir, "data.dat"), overwrite = TRUE)
-    copy_related(item$name, abs_case_dir, ".out", "source.out")
+  # Our own label, not the Mplus TITLE text (tracked fixtures carry no input text).
+  src_book <- book_of(it$zip)
+  title <- paste(if (identical(src_book, "muthen_2017")) "Muthen et al. (2017)" else
+                   "Mplus User's Guide", sub("[.]inp$", "", basename(it$name), ignore.case = TRUE))
+  dat <- mplus_find_data(it, inp, zip_root)
+  on <- companion_in_zip(it$zip, it$name, ".out")
+  out_txt <- if (nzchar(on)) read_zip_text(it$zip, on) else ""
+  ov <- mplus_lookup(OVERRIDES, it)
+  acc <- mplus_lookup(ACCEPTED, it)
+  res <- tryCatch(mplus_translate_case(it$text, dat$text, out_txt, overrides = ov),
+                  error = function(e) list(status = "excluded",
+                                           reasons = paste0("translator_error: ", conditionMessage(e))))
+  row <- list(case_id = case_id, title = title, status = "excluded",
+              source_zip = basename(it$zip), source_input = it$name,
+              source_data = sub("^['\"]|['\"]$", "", inp$data$file %||% ""),
+              case_dir = "", has_data = nzchar(dat$text),
+              data_kind = measurement_kind(inp), model_kind = "", estimator = "",
+              meanstructure = NA, fixed_x = NA, missing = "", n_groups = NA_integer_,
+              group_var = "", n_obs = NA_integer_, has_define = nzchar(trimws(inp$define)),
+              has_constraints = FALSE, verified = FALSE, verification = "",
+              snlls_candidate = FALSE, test_candidate = FALSE,
+              corpus_case_id = corpus_case_id(it$zip, it$name),
+              exclude_reason = "", note = "")
+  if (res$status != "translated") {
+    row$exclude_reason <- paste(res$reasons, collapse = ";")
+  } else if (is.null(res$cmp) || is.null(res$cmp$summary)) {
+    row$exclude_reason <- if (!nzchar(out_txt)) "unverifiable: no Mplus .out" else
+      paste0("unverifiable: ", res$cmp$message %||% "no MODEL RESULTS")
+  } else {
+    failed <- names(res$cmp$checks)[!res$cmp$checks]
+    accepted <- length(failed) && !is.null(acc) && all(failed %in% acc$allow)
+    row$model_kind <- model_kind_of(res)
+    row$verification <- mplus_verification_text(res)
+    if (length(failed) && !accepted) {
+      row$exclude_reason <- paste0("unverified: ", paste(failed, collapse = ","))
+    } else {
+      row$status <- "retained"
+      row$verified <- !length(failed)
+      row$estimator <- res$opts$estimator
+      row$meanstructure <- isTRUE(res$opts$meanstructure)
+      row$fixed_x <- TRUE
+      row$missing <- res$prep$missing %||% "none"
+      row$n_groups <- length(res$built$groups)
+      row$group_var <- res$prep$group_var %||% ""
+      row$n_obs <- if (is.null(res$prep$data)) as.integer(res$prep$n) else nrow(res$prep$data)
+      row$has_constraints <- length(res$constraint_lines) > 0L
+      row$note <- paste(c(res$notes, if (accepted) paste0("Accepted difference: ", acc$why)),
+                        collapse = " | ")
+      row$test_candidate <- identical(row$missing, "none") && row$n_groups == 1L &&
+        !row$has_constraints && res$opts$estimator %in% c("ML", "MLR")
+      row$snlls_candidate <- row$test_candidate && row$model_kind %in% c("cfa", "latent_sem", "growth")
+      row$case_dir <- file.path("cases", case_id)
+      cdir <- file.path(out_root, row$case_dir)
+      dir.create(cdir, recursive = TRUE, showWarnings = FALSE)
+      writeLines(gsub("\r\n?", "\n", it$text), file.path(cdir, "source.inp"), useBytes = TRUE)
+      if (nzchar(out_txt)) writeLines(gsub("\r\n?", "\n", out_txt), file.path(cdir, "source.out"),
+                                      useBytes = TRUE)
+      writeLines(res$syntax, file.path(cdir, "model.lav"), useBytes = TRUE)
+      if (!is.null(res$prep$data)) {
+        utils::write.csv(res$prep$data, file.path(cdir, "data.csv"), row.names = FALSE)
+      } else {
+        utils::write.csv(res$prep$cov, file.path(cdir, "sample_cov.csv"))
+        if (!is.null(res$prep$mean))
+          utils::write.csv(data.frame(mean = res$prep$mean, row.names = names(res$prep$mean)),
+                           file.path(cdir, "sample_mean.csv"))
+      }
+      write_case_yml(file.path(cdir, "case.yml"), row)
+    }
   }
-
-  row <- data.frame(
-    case_id = case_id,
-    title = title,
-    status = status,
-    source_zip = basename(item$zip),
-    source_input = item$name,
-    source_data = data_ref,
-    case_dir = case_dir,
-    has_data = nzchar(data_path),
-    data_kind = data_kind,
-    model_kind = model_kind,
-    snlls_candidate = snlls_candidate,
-    test_candidate = test_candidate,
-    has_define = has_define,
-    has_constraints = any(!vapply(c("model indirect", "model constraint", "model test"),
-                                  function(k) is.null(sections[[k]]), logical(1L))),
-    exclude_reason = if (length(reasons)) paste(reasons, collapse = ";") else "",
-    note = if (length(reasons)) "excluded by automated first-pass screen"
-           else "retained first-pass lavaan translation",
-    stringsAsFactors = FALSE
-  )
-  rows[[length(rows) + 1L]] <- row
-  if (identical(status, "retained")) {
-    write_case_yml(file.path(out_root, case_dir, "case.yml"), row)
-  }
+  if (!nzchar(row$note))
+    row$note <- if (identical(row$status, "retained")) "verified lavaan translation" else
+      "excluded by the source-fidelity screen"
+  rows[[length(rows) + 1L]] <- as.data.frame(row, stringsAsFactors = FALSE)
 }
 
 manifest <- do.call(rbind, rows)
 manifest <- manifest[order(manifest$status, manifest$case_id), ]
 utils::write.csv(manifest, file.path(out_root, "manifest.csv"), row.names = FALSE)
 
-# A retained case is only a usable catalogue entry when its referenced data
-# file was actually found and copied; otherwise it lives in the manifest only.
-catalogue <- manifest[manifest$status == "retained" & manifest$has_data,
-                      , drop = FALSE]
+catalogue <- manifest[manifest$status == "retained", , drop = FALSE]
 if (nrow(catalogue)) {
   catalogue <- transform(
     catalogue,
     id = case_id,
     name = ifelse(nzchar(title), title, case_id),
     family = model_kind,
-    provenance = "Mplus User's Guide zip examples",
+    provenance = "Mplus User's Guide / Muthen et al. (2017) zip examples",
     generated_model = file.path(case_dir, "model.lav"),
-    generated_data = file.path(case_dir, "data.dat"),
+    generated_data = ifelse(file.exists(file.path(out_root, case_dir, "data.csv")),
+                            file.path(case_dir, "data.csv"), file.path(case_dir, "sample_cov.csv")),
     generated_script = "",
     data_kind = ifelse(data_kind == "continuous", "raw", data_kind)
   )
@@ -362,48 +255,42 @@ if (nrow(catalogue)) {
             "source_data", "data_kind", "generated_data", "generated_model",
             "generated_script", "status", "note", "test_candidate",
             "snlls_candidate", "model_kind")
-  utils::write.csv(catalogue[, keep], file.path(out_root, "catalogue.csv"),
-                   row.names = FALSE)
+  utils::write.csv(catalogue[, keep], file.path(out_root, "catalogue.csv"), row.names = FALSE)
 }
 
 readme <- c(
   "# Mplus SEM corpus",
   "",
-  "Ignored local corpus built from raw `external/textbook-corpus/raw/MPLUS/*.zip` archives.",
-  "The checked-in test suite does not commit Mplus raw data; it commits only",
-  "derived sample statistics and lavaan oracle outputs under",
+  "Ignored local corpus built from raw `external/textbook-corpus/raw/MPLUS/*.zip` archives",
+  "by `cpp/tests/tools/build_mplus_sem_corpus.R`, using the textbook corpus's shared",
+  "translator `external/textbook-corpus/ingest/_mplus_helpers.R`. The checked-in test",
+  "suite commits only derived sample statistics and lavaan oracle outputs under",
   "`cpp/tests/fixtures/mplus_sem/`.",
   "",
-  "## Inclusion screen",
+  "## Retention",
   "",
-  "The first pass keeps translated lavaan SEM/path/growth examples and excludes",
-  "Monte Carlo, mixture, multilevel/clustered, EFA, random-effect, imputation,",
-  "Bayes, nominal, count, censored, survival, and two-part models. `MODEL",
-  "INDIRECT`, `MODEL CONSTRAINT`, and `MODEL TEST` sections are not translated",
-  "for v1 fixtures.",
+  "A case is retained only if it is expressible as a linear normal-theory lavaan model",
+  "and lavaan's fit of the translation reproduces the shipped Mplus `.out` (N, free",
+  "parameters, df, chi-square, H0 log-likelihood, every printed estimate). Exclusion",
+  "reasons are listed in `manifest.csv`.",
   "",
   "## Files",
   "",
-  "- `manifest.csv`: every unique `.inp`, retained or excluded.",
+  "- `manifest.csv`: every unique `.inp`, retained or excluded, with the verification line.",
   "- `catalogue.csv`: retained cases in the paper-corpus loader shape.",
-  "- `cases/<case_id>/source.inp`: original Mplus input.",
-  "- `cases/<case_id>/model.lav`: translated lavaan model block.",
-  "- `cases/<case_id>/data.dat`: local raw data when the source input needs it.",
-  "- `cases/<case_id>/source.out`: source output when present.",
-  "- `cases/<case_id>/case.yml`: per-case classification metadata."
+  "- `cases/<case_id>/source.inp`, `source.out`: original Mplus input and output.",
+  "- `cases/<case_id>/model.lav`: lavaan translation (fit with `lavaan::sem`).",
+  "- `cases/<case_id>/data.csv`: Mplus's analysis sample (or `sample_cov.csv`/`sample_mean.csv`).",
+  "- `cases/<case_id>/case.yml`: lavaan options and classification metadata."
 )
 writeLines(readme, file.path(out_root, "README.md"), useBytes = TRUE)
-
-script_copy <- file.path(out_root, "scripts", "build_corpus.R")
 invisible(file.copy(normalizePath(sub("^--file=", "", script_arg)),
-                    script_copy, overwrite = TRUE))
+                    file.path(out_root, "scripts", "build_corpus.R"), overwrite = TRUE))
 
 cat("Mplus SEM corpus built at ", out_root, "\n", sep = "")
-cat("raw .inp files: ", length(raw_inputs), "\n", sep = "")
-cat("unique .inp files: ", length(seen), "\n", sep = "")
+cat("unique .inp files: ", nrow(manifest), "\n", sep = "")
 cat("retained: ", sum(manifest$status == "retained"), "\n", sep = "")
 cat("excluded: ", sum(manifest$status == "excluded"), "\n", sep = "")
 cat("test candidates: ", sum(manifest$test_candidate), "\n", sep = "")
 cat("SNLLS candidates: ", sum(manifest$snlls_candidate), "\n", sep = "")
-print(table(manifest$data_kind, manifest$status))
-print(table(manifest$model_kind, manifest$status))
+print(table(manifest$model_kind[manifest$status == "retained"]))

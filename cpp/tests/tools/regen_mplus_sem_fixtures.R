@@ -39,94 +39,29 @@ lavaan_version <- as.character(utils::packageVersion("lavaan"))
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
-strip_comments <- function(x) {
-  lines <- strsplit(x, "\n", fixed = TRUE)[[1L]]
-  lines <- sub("!.*$", "", lines)
-  paste(lines, collapse = "\n")
-}
-
-section_map <- function(x) {
-  lines <- strsplit(strip_comments(x), "\n", fixed = TRUE)[[1L]]
-  sections <- list()
-  current <- NULL
-  for (line in lines) {
-    m <- regexec("^\\s*([A-Za-z][A-Za-z0-9 _-]*)\\s*:(.*)$", line,
-                 perl = TRUE)
-    mm <- regmatches(line, m)[[1L]]
-    if (length(mm)) {
-      current <- tolower(gsub("\\s+", " ", trimws(mm[[2L]])))
-      rest <- trimws(mm[[3L]])
-      if (is.null(sections[[current]])) sections[[current]] <- character()
-      if (nzchar(rest)) sections[[current]] <- c(sections[[current]], rest)
-    } else if (!is.null(current)) {
-      sections[[current]] <- c(sections[[current]], line)
-    }
-  }
-  lapply(sections, function(v) paste(v, collapse = "\n"))
-}
-
-section_value <- function(block, key) {
-  if (is.null(block) || !nzchar(block)) return("")
-  pat <- paste0("(?is)\\b", key, "\\b\\s*(?:are\\s+|is\\s+)?",
-                "(?:=\\s*)?([^;]+)")
-  m <- regexec(pat, block, perl = TRUE)
-  mm <- regmatches(block, m)[[1L]]
-  if (!length(mm)) "" else trimws(gsub("\\s+", " ", mm[[2L]]))
-}
-
-expand_names <- function(x) {
-  if (!nzchar(x)) return(character())
-  x <- gsub("[(),]", " ", x)
-  toks <- unlist(strsplit(trimws(x), "\\s+"))
-  toks <- toks[nzchar(toks)]
-  out <- character()
-  for (tok in toks) {
-    m <- regexec("^([A-Za-z_.]+)([0-9]+)-(?:(?:([A-Za-z_.]+))?([0-9]+))$",
-                 tok, perl = TRUE)
-    mm <- regmatches(tok, m)[[1L]]
-    if (length(mm)) {
-      lhs <- mm[[2L]]
-      a <- as.integer(mm[[3L]])
-      rhs <- if (nzchar(mm[[4L]])) mm[[4L]] else lhs
-      b <- as.integer(mm[[5L]])
-      if (identical(lhs, rhs) && !is.na(a) && !is.na(b)) {
-        out <- c(out, paste0(lhs, seq.int(a, b)))
-        next
-      }
-    }
-    out <- c(out, tok)
-  }
-  unique(out)
-}
-
-missing_codes <- function(sections) {
-  txt <- section_value(sections[["variable"]] %||% "", "missing")
-  vals <- regmatches(txt, gregexpr("-?[0-9]+(?:[.][0-9]+)?", txt, perl = TRUE))[[1L]]
-  if (!length(vals)) character() else vals
-}
-
 case_paths <- function(row) {
   root <- file.path(corpus_root, row$case_dir)
   list(root = root,
-       source = file.path(root, "source.inp"),
        model = file.path(root, "model.lav"),
-       data = file.path(root, "data.dat"))
+       data = file.path(root, "data.csv"),
+       sample_cov = file.path(root, "sample_cov.csv"),
+       sample_mean = file.path(root, "sample_mean.csv"))
 }
 
-case_data <- function(row, sections) {
+# The builder stores Mplus's analysis sample (after MISSING, USEOBSERVATIONS,
+# DEFINE and case exclusion) or the summary statistics of summary-data inputs.
+case_data <- function(row) {
   p <- case_paths(row)
-  vars <- expand_names(section_value(sections[["variable"]] %||% "", "names"))
-  if (!length(vars)) stop("no VARIABLE:NAMES found", call. = FALSE)
-  miss <- missing_codes(sections)
-  dat <- utils::read.table(p$data, header = FALSE, col.names = vars,
-                           na.strings = miss, check.names = FALSE)
-  usev <- expand_names(section_value(sections[["variable"]] %||% "", "usevariables"))
-  if (!length(usev)) usev <- expand_names(section_value(sections[["variable"]] %||% "", "usev"))
-  if (length(usev)) {
-    keep <- intersect(usev, names(dat))
-    dat <- dat[, keep, drop = FALSE]
+  if (file.exists(p$data)) {
+    return(list(data = utils::read.csv(p$data, check.names = FALSE)))
   }
-  as.data.frame(dat, check.names = FALSE)
+  S <- as.matrix(utils::read.csv(p$sample_cov, row.names = 1, check.names = FALSE))
+  out <- list(sample.cov = S, sample.nobs = as.integer(row$n_obs))
+  if (file.exists(p$sample_mean)) {
+    m <- utils::read.csv(p$sample_mean, row.names = 1, check.names = FALSE)
+    out$sample.mean <- setNames(m[[1L]], rownames(m))
+  }
+  out
 }
 
 as_plain_matrix <- function(x) unname(as.matrix(x))
@@ -147,17 +82,16 @@ align_magmaan_free <- function(model, lavaan_free, meanstructure,
        aligned = nrow(mfree) == nrow(lavaan_free) && !anyNA(idx))
 }
 
-fit_function <- function(model_kind) {
-  if (identical(model_kind, "growth")) lavaan::growth else lavaan::sem
-}
+# The translation is explicit about every Mplus default (growth intercepts,
+# latent means, x variables as fixed covariates), so every case is fit with
+# lavaan::sem under the options recorded by the builder.
+fit_function <- function(model_kind) lavaan::sem
 
 fit_args <- function(row, model, data, estimator) {
-  meanstructure <- identical(row$model_kind, "growth") ||
-    grepl("(^|\\n)\\s*[^\\n]+~\\s*1\\b", model, perl = TRUE)
-  args <- list(model = model, data = data, estimator = estimator,
-               meanstructure = meanstructure, fixed.x = TRUE, warn = FALSE,
-               missing = "listwise")
-  if (identical(row$model_kind, "growth")) args$fixed.x <- FALSE
+  args <- c(list(model = model, estimator = estimator,
+                 meanstructure = isTRUE(row$meanstructure),
+                 fixed.x = isTRUE(row$fixed_x), warn = FALSE), data)
+  if (!is.na(row$missing) && !identical(row$missing, "none")) args$missing <- row$missing
   args
 }
 
@@ -192,10 +126,7 @@ continuous_fit_payload <- function(row, model, data, estimator, align = NULL) {
   pt <- lavaan::parTable(fit)
   free <- pt[pt$free > 0L, , drop = FALSE]
   free <- free[order(free$free), , drop = FALSE]
-  meanstructure <- identical(row$model_kind, "growth") ||
-    grepl("(^|\\n)\\s*[^\\n]+~\\s*1\\b", model, perl = TRUE)
-  model_type <- if (identical(row$model_kind, "growth")) "growth" else "sem"
-  if (is.null(align)) align <- align_magmaan_free(model, free, meanstructure, model_type)
+  if (is.null(align)) align <- align_magmaan_free(model, free, isTRUE(row$meanstructure), "sem")
   if (!isTRUE(align$aligned)) {
     stop("magmaan/lavaan free-parameter sets do not align", call. = FALSE)
   }
@@ -232,10 +163,8 @@ continuous_fit_payload <- function(row, model, data, estimator, align = NULL) {
 
 emit_continuous_case <- function(row) {
   paths <- case_paths(row)
-  source <- paste(readLines(paths$source, warn = FALSE), collapse = "\n")
-  sections <- section_map(source)
   model <- paste(readLines(paths$model, warn = FALSE), collapse = "\n")
-  data <- case_data(row, sections)
+  data <- case_data(row)
 
   estimators <- "ML"
   if (isTRUE(row$snlls_candidate)) estimators <- c(estimators, "ULS", "GLS", "WLS")
@@ -252,10 +181,7 @@ emit_continuous_case <- function(row) {
       free <- lavaan::parTable(fit)
       free <- free[free$free > 0L, , drop = FALSE]
       free <- free[order(free$free), , drop = FALSE]
-      meanstructure <- identical(row$model_kind, "growth") ||
-        grepl("(^|\\n)\\s*[^\\n]+~\\s*1\\b", model, perl = TRUE)
-      model_type <- if (identical(row$model_kind, "growth")) "growth" else "sem"
-      align <- align_magmaan_free(model, free, meanstructure, model_type)
+      align <- align_magmaan_free(model, free, isTRUE(row$meanstructure), "sem")
     }
     fits[[est]] <- payload
   }
@@ -269,10 +195,12 @@ emit_continuous_case <- function(row) {
     data_kind = row$data_kind,
     model_kind = row$model_kind,
     snlls_candidate = isTRUE(row$snlls_candidate),
-    lavaan_function = if (identical(row$model_kind, "growth")) "growth" else "sem",
-    meanstructure = identical(row$model_kind, "growth") ||
-      grepl("(^|\\n)\\s*[^\\n]+~\\s*1\\b", model, perl = TRUE),
-    fixed_x = !identical(row$model_kind, "growth"),
+    lavaan_function = "sem",
+    meanstructure = isTRUE(row$meanstructure),
+    fixed_x = isTRUE(row$fixed_x),
+    mplus_estimator = row$estimator,
+    mplus_verification = row$verification,
+    corpus_case_id = row$corpus_case_id,
     model = model,
     ov_names = lavaan::lavNames(suppressWarnings(do.call(
       fit_function(row$model_kind), fit_args(row, model, data, "ML"))), type = "ov"),
@@ -352,7 +280,7 @@ write_empty_categorical <- function(kind) {
                    tool = "cpp/tests/tools/regen_mplus_sem_fixtures.R",
                    generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
                    lavaan_version = lavaan_version,
-                   note = "No v1 test candidates: retained categorical Mplus examples are observed-response models or require features outside magmaan's ordinal LS surface."),
+                   note = "No retained categorical cases: the source-fidelity screen keeps only examples lavaan reproduces as linear normal-theory models verified against the Mplus output; categorical examples are listed with their exclusion reason in manifest.json."),
     cases = list(),
     retained_not_tested = lapply(seq_len(nrow(rows)), function(i) {
       as.list(rows[i, , drop = FALSE])

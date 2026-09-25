@@ -42,20 +42,34 @@ semantics · **XL** statistical design/research track before implementation.
   is the input supplied to fit, not a claim about the first optimizer iterate.
   Validate group/constraint/identification combinations before changing defaults.
 
-- **M, corpus fidelity.** Repair the Little LISREL translation before renewed
-  corpus performance claims: multiple references per `VA`, leading-dot numeric
-  values, residual `EQ` constraints, and `TY`/`AL` mean structure are currently
-  lost. Five Chapter 8 fixtures are demonstrably mistranslated. Audit affected
-  retained cases upstream, regenerate fixtures/dependent geometries, and
-  investigate default-start failures on corrected Figure 3b and Geiser's
-  structurally correct latent-path model. See
-  [source audit](../validation/textbook-translation-audit.md).
-  Geiser's marker default-start failures are resolved by correcting Reduced
-  representation handling in simple/FABIN starts. Remaining: std.lv L-BFGS
-  robustness and transported-start coverage for structural models. The start
-  pipeline now separates constructor/transport/scaling and reports fallback
-  reasons; R `start="default"` agrees with omission. Do not conflate these
-  remaining issues with the repaired observed-parameter start mapping.
+- **M, default ordinary fits on the corrected textbook corpus.** The corpus is
+  now source-verified (every case reproduces its book's output; see the
+  [translation audit](../validation/textbook-translation-audit.md)). On the
+  faithful Little models, magmaan's default ordinary fit (NLopt L-BFGS, default
+  starts; the skipped Little/Newsom continuous golden with `--no-skip`) fails
+  with a generic solver failure on 12 cases (the 2-by-3 invariance models, the
+  Chapter 6 card-sorting simplex, Figure 3b) and stops at a worse local optimum
+  on the Chapter 3.11 phantom model. Investigate with the start-policy work
+  before unskipping that golden. Geiser's marker default-start failures are
+  resolved by correcting Reduced representation handling in simple/FABIN
+  starts. Remaining: std.lv L-BFGS robustness and transported-start coverage
+  for structural models. The start pipeline now separates
+  constructor/transport/scaling and reports fallback reasons; R
+  `start="default"` agrees with omission. Do not conflate these remaining
+  issues with the repaired observed-parameter start mapping.
+- **M, sem-psd corpus timings.** The supplement's accepted timing bank used the
+  mistranslated corpus. Rerun it pinned on the corrected fixtures; the
+  corrected 102-case PSD audit has two inadmissible ordinary fits (both
+  Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
+- **S, corpus coverage follow-ups.** Optional `model_options` fields for
+  `parameterization`, `group.equal`/`group.partial` and `sample.cov.rescale`
+  would restore 11 dropped Newsom and 4 Kline fits and replace Kline's rescaled
+  covariance workaround; `mimic = "Mplus"` would let Brown tab9.4 match Mplus's
+  MLM statistic. Little's 21 multi-group and 37 wider or bounded verified cases
+  are corpus-only because the Little/Newsom fixture format is single-group and
+  the file limit is 1 MB. Newsom's second edition (2024) could become its own
+  book. lavaan and magmaan both report ULS chi-square near zero for Mplus
+  `chapter6_ex6_10` while lavaan's ULS test statistic is 38.3; unexplained.
 
 The remaining explicit convergence-audit extensions are deferred to
 [speculative.md](speculative.md#convergence-audit-extensions). The implemented
@@ -861,8 +875,10 @@ when they next change.
   Audit-first remains the practical policy. If more speed is needed, the next
   target is analytical elimination of duplicate original covariance coordinates
   and their links when no fixed/shared/general-equality semantics require them.
-  The advisory continuous-corpus audit now covers 97 checked-in Little, Newsom,
-  Geiser, Mplus, Kline/Guo, and paper model/data summaries. Ordinary NTML was
+  The advisory continuous-corpus audit covered 97 checked-in Little, Newsom,
+  Geiser, Mplus, Kline/Guo, and paper model/data summaries (before the
+  2026-09-25 source-fidelity rebuild; on the corrected 102 fixtures only the
+  two Geiser cases are inadmissible). Ordinary NTML was
   covariance-inadmissible in six: four Little and two Geiser cases. All 97
   PSD-ML refits converged and were admissible; the 91 interior cases agreed with
   ordinary NTML to \(3.21\times 10^{-6}\) in the parameters and
@@ -902,11 +918,13 @@ when they next change.
      cover each geometry in `cpp/tests/unit/psd_ml_test.cpp`.
   2. **Completed 2026-07-30.** The 10.8 KB
      `cpp/tests/fixtures/psd_ml/corpus_geometries.json` slice and
-     `cpp/tests/unit/psd_ml_corpus_test.cpp` now gate the Little same-fit
-     level/residual reallocation, the materially changed Little linear-growth
-     fit, the Geiser second-order negative disturbance, and the Geiser
-     joint-indefinite quadratic growth covariance. The full 97-case scan
-     remains advisory and outside default CI.
+     `cpp/tests/unit/psd_ml_corpus_test.cpp` now gate the same-fit
+     level/residual reallocation and the materially changed linear-growth fit
+     (since 2026-09-25 labelled synthetic: they were mistranslations of
+     Little's NegAFF growth models), the Geiser second-order negative
+     disturbance, and the Geiser joint-indefinite quadratic growth covariance
+     (regenerated from the corrected Geiser model). The full scan remains
+     advisory and outside default CI.
   3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments engineering/11
      and research/42 compare the same lifted model across backends. In the
      30-repetition deterministic panel, SLSQP and IPOPT reached the same
@@ -4261,24 +4279,23 @@ work lives in [`speculative.md`](speculative.md). Open work:
   corpus. The order-free chisq/df parity is gated; per-parameter parity needs a
   lavaan→magmaan free-parameter-order map (the submodule oracle stores
   `theta`/`se` in lavaan's free-parameter order).
-- **S/M.** Extend the Mplus SEM corpus beyond the v1 strict growth tranche.
-  `external/textbook-corpus/raw/mplus_sem` retains 80 first-pass translations and
-  the tracked fixtures gate six continuous growth cases across ML/ULS/GLS/WLS.
-  Remaining: repair or hand-translate the skipped growth/CFA cases whose
-  automatic Mplus-to-lavaan conversion is malformed, decide how to test
+- **S/M.** Extend the Mplus SEM corpus beyond the strict growth tranche.
+  `external/textbook-corpus/raw/mplus_sem` retains 26 examples verified against
+  their Mplus `.out` (28 more lack a data file in the archives), and the tracked
+  fixtures gate seven continuous growth cases across ML/ULS/GLS/WLS.
+  Remaining: extend the translator to the out-of-scope Mplus features recorded
+  in the corpus audit (WLSMV categorical growth, ESEM, MODEL INDIRECT), decide how to test
   observed-only path models without exercising the saturated observed-path abort,
   and add categorical fixtures only for models that match magmaan's ordinal/mixed
   LS surface rather than Mplus logistic/probit response models.
-- **S/M.** Extend the Little/Newsom textbook corpora beyond the initial strict
-  tranche. The builders extract 108 Little LISREL models and 142 Newsom lavaan
-  fit calls, with grouped tracked manifests and strict lavaan-backed C++ parity
-  for the supported continuous subset; the consolidated
+- **S/M.** Extend the Little/Newsom tracked fixtures. The builders verify 106
+  of 108 Little LISREL inputs against LISREL's output and retain 101 Newsom
+  first-edition fit calls that reproduce the author's script; the consolidated
   `magmaan_textbook_corpus_v1` manifest indexes these alongside Geiser and Mplus
-  SEM, with an advisory overlap graph for future paper mining. Remaining:
-  implement real LISREL `SE` selection and more complex matrix/constraint
-  conversion for Little, promote the Newsom cases that now parse/lavaanify
-  cleanly, and add ordinal/mixed parity checks once the categorical oracle
-  surface is settled.
+  SEM, with an advisory overlap graph for future paper mining. Remaining: a
+  multi-group fixture format for Little's 21 multi-group cases, a split or
+  compact format for the wider models above the 1 MB file limit, and
+  ordinal/mixed parity checks once the categorical oracle surface is settled.
 - **S/M.** Promote the remaining first paper-corpus seed and broaden the
   paper-corpus fixture surface. `external/paper-corpus` owns scouting, minimal
   derived lavaan cases, validation, and magmaan JSON exports; magmaan consumes
@@ -4423,8 +4440,10 @@ work lives in [`speculative.md`](speculative.md). Open work:
   remaining defaults.
 - **S/M, newsom corpus.** The Little/Newsom continuous golden
   (`cpp/tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
-  NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`. Same
-  family as the documented `ex12_3` case in
+  NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`, and
+  now also fails on 12 corrected Little cases (see the default-fit item above).
+  Same family as the documented `ex12_3` case (a second-edition Newsom script,
+  no longer in the first-edition corpus) in
   [newsom-corpus-failures.md](newsom-corpus-failures.md): NLopt stalling early on
   a structurally awkward ML objective. Unskip once the starting-value path or a
   harness-level cross-backend fallback handles it.

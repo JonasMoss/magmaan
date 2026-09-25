@@ -51,6 +51,23 @@ fit_fun <- function(name) {
   switch(tolower(name), cfa = lavaan::cfa, growth = lavaan::growth, lavaan::sem)
 }
 
+verified_start <- function(root, row, fun, args) {
+  rel <- if ("generated_verification" %in% names(row)) {
+    row$generated_verification
+  } else ""
+  if (is.na(rel) || !nzchar(rel)) return(NULL)
+  ver <- jsonlite::fromJSON(file.path(root, rel), simplifyVector = FALSE)
+  pt <- lavaan::parTable(suppressWarnings(do.call(fun, c(args,
+                                                         list(do.fit = FALSE)))))
+  pt$est <- pt$start
+  for (e in ver$wishart_estimates) {
+    hit <- which(pt$lhs == e$lhs & pt$op == e$op & pt$rhs == e$rhs &
+                   pt$group == e$group & pt$free > 0L)
+    if (length(hit) == 1L) pt$est[hit] <- e$est
+  }
+  pt
+}
+
 fit_case <- function(root, row) {
   model_path <- file.path(root, row$generated_model)
   if (!file.exists(model_path)) stop("missing model file", call. = FALSE)
@@ -59,32 +76,44 @@ fit_case <- function(root, row) {
   meanstructure <- row_bool(row, "meanstructure", TRUE)
   fixed_x <- row_bool(row, "fixed_x", TRUE)
 
+  args <- list(model = model, estimator = "ML", meanstructure = meanstructure,
+               fixed.x = fixed_x, warn = FALSE)
   if (identical(row$data_kind, "raw")) {
     data_path <- file.path(root, row$generated_data)
     if (!file.exists(data_path)) stop("missing data file", call. = FALSE)
-    data <- utils::read.csv(data_path, check.names = FALSE)
-    fit <- suppressWarnings(fun(model = model, data = data, estimator = "ML",
-                                meanstructure = meanstructure,
-                                fixed.x = fixed_x, missing = "listwise",
-                                warn = FALSE))
+    args$data <- utils::read.csv(data_path, check.names = FALSE)
+    args$missing <- "listwise"
   } else if (identical(row$data_kind, "summary")) {
     cov_path <- file.path(root, row$generated_data)
     if (!file.exists(cov_path)) stop("missing covariance file", call. = FALSE)
     sample_cov <- read_cov(cov_path)
     mean_path <- sub("_cov\\.csv$", "_mean.csv", cov_path)
-    sample_mean <- if (file.exists(mean_path)) {
+    args$sample.cov <- sample_cov
+    args$sample.mean <- if (file.exists(mean_path)) {
       read_named_vector(mean_path)[colnames(sample_cov)]
     } else {
       NULL
     }
-    fit <- suppressWarnings(fun(model = model, sample.cov = sample_cov,
-                                sample.mean = sample_mean,
-                                sample.nobs = row_int(row, "nobs", 100L),
-                                estimator = "ML",
-                                meanstructure = meanstructure,
-                                fixed.x = fixed_x, warn = FALSE))
+    args$sample.nobs <- row_int(row, "nobs", 100L)
   } else {
     stop("no lavaan data for row", call. = FALSE)
+  }
+  fit <- suppressWarnings(do.call(fun, args))
+  start_used <- "default"
+  # Little rows carry the translation's verified LISREL solution (a Wishart
+  # fit). lavaan's default starts can stop at a worse local optimum, so the
+  # oracle is the better of the two fits.
+  ver <- verified_start(root, row, fun, args)
+  if (!is.null(ver)) {
+    alt <- suppressWarnings(do.call(fun, c(args, list(start = ver))))
+    better <- isTRUE(lavaan::lavInspect(alt, "converged")) &&
+      (!isTRUE(lavaan::lavInspect(fit, "converged")) ||
+         lavaan::fitMeasures(alt, "fmin") <
+           lavaan::fitMeasures(fit, "fmin") - 1e-10)
+    if (better) {
+      fit <- alt
+      start_used <- "lisrel_verified_solution"
+    }
   }
   if (!isTRUE(lavaan::lavInspect(fit, "converged"))) {
     stop("lavaan did not converge", call. = FALSE)
@@ -121,6 +150,7 @@ fit_case <- function(root, row) {
     sample_mean = as_plain_vector(mean, ov),
     lavaan = list(
       version = lavaan_version,
+      start = start_used,
       fmin = as.numeric(fm["fmin"]),
       chisq = as.numeric(fm["chisq"]),
       df = as.integer(fm["df"]),
@@ -235,6 +265,13 @@ build_payloads <- function(corpus) {
   write_json_file(observed_payload, file.path(out_dir, "observed_reference.json"))
 }
 
-build_payloads("newsom")
-build_payloads("little")
-cat("Wrote Little/Newsom fixtures under ", out_base, "\n", sep = "")
+selected <- commandArgs(trailingOnly = TRUE)
+if (!length(selected)) selected <- c("newsom", "little")
+unknown <- setdiff(selected, c("newsom", "little"))
+if (length(unknown)) {
+  stop("unknown corpus: ", paste(unknown, collapse = ", "),
+       " (expected newsom and/or little)", call. = FALSE)
+}
+for (corpus in selected) build_payloads(corpus)
+cat("Wrote ", paste(selected, collapse = "/"), " fixtures under ", out_base,
+    "\n", sep = "")
