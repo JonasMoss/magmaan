@@ -94,13 +94,15 @@ test_that("growth identification retains free reference-group means", {
   }
 })
 
-for (estimator in c("ML", "FIML")) test_that(paste(estimator,
+for (std_lv in c(FALSE, TRUE)) for (estimator in c("ML", "FIML")) test_that(paste(estimator,
+  if (std_lv) "std.lv" else "marker",
   "keyword scalar nested tests use the delta restriction map"), {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   if (estimator == "FIML") d$x2[seq(1L, nrow(d), 7L)] <- NA_real_
-  metric <- scalar_pair(d, equal = "loadings", estimator = estimator)
-  scalar <- scalar_pair(d, estimator = estimator)
+  if (estimator == "FIML" && std_lv) d$x5[seq(2L, nrow(d), 11L)] <- NA_real_
+  metric <- scalar_pair(d, equal = "loadings", estimator = estimator, std_lv = std_lv)
+  scalar <- scalar_pair(d, estimator = estimator, std_lv = std_lv)
   raw <- if (estimator == "ML") lapply(unique(as.character(d$school)), function(g) {
     as.matrix(d[d$school == g, paste0("x", 1:6)])
   }) else NULL
@@ -110,9 +112,11 @@ for (estimator in c("ML", "FIML")) test_that(paste(estimator,
   # FIML uses MLR; requesting MLM would silently select listwise deletion.
   oracle_estimator <- if (estimator == "ML") "MLM" else "MLR"
   lav_metric <- lavaan::cfa(scalar_syntax, d, group = "school",
+    std.lv = std_lv,
     group.equal = "loadings", meanstructure = TRUE, estimator = oracle_estimator,
     missing = if (estimator == "FIML") "ml" else "listwise")
   lav_scalar <- lavaan::cfa(scalar_syntax, d, group = "school",
+    std.lv = std_lv,
     group.equal = c("loadings", "intercepts"), meanstructure = TRUE,
     estimator = oracle_estimator, missing = if (estimator == "FIML") "ml" else "listwise")
   lr <- lavaan::lavTestLRT(lav_metric, lav_scalar, method = "satorra.2000",
@@ -121,12 +125,7 @@ for (estimator in c("ML", "FIML")) test_that(paste(estimator,
   delta <- lavaan::fitMeasures(lav_scalar, "chisq") -
     lavaan::fitMeasures(lav_metric, "chisq")
   expect_lt(abs(nt$T_diff - unname(delta)), 1e-4)
-  # Open bug/convention investigation, not an accepted numerical exemption.
-  # Run MAGMAAN_CHECK_FIML_SCALAR_PARITY=true to exercise the failing gate.
-  if (estimator == "FIML" &&
-      Sys.getenv("MAGMAAN_CHECK_FIML_SCALAR_PARITY") != "true") {
-    skip(paste("FIML scalar scaled-LR parity unresolved: 22.13388 vs 22.81168;",
-               "see project/backlog/todo.md, scalar-invariance coverage"))
-  }
   expect_lt(abs(nt$T_scaled - lr[2, "Chisq diff"]), 5e-3)
+  expect_lt(abs(nt$scale_c - unname(delta) / lr[2, "Chisq diff"]), 1e-4)
+  expect_lt(abs(nt$p_scaled - lr[2, "Pr(>Chisq)"]), 1e-5)
 })

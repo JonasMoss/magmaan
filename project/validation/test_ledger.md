@@ -53,16 +53,36 @@ means, `group.partial`, three-group marker/std.lv release, per-group fixed/free
 means and growth identification, read from lavaan 0.7.2);
 `r-package/tests/testthat/test-scalar-invariance.R` gates ML/FIML parameter-row
 identity, free/fixed status, estimates, df and chi-square; three-group CFA and
-growth fits; and complete-data scalar nested tests with the delta map. The
-FIML nested unscaled statistic and df agree, but its scaled statistic exposes
-an unresolved divergence (22.13388 vs 22.81168); the default suite explicitly
-skips that assertion, enabled by `MAGMAAN_CHECK_FIML_SCALAR_PARITY=true`, and
-tracks the investigation in the backlog. This is not an accepted exemption.
+growth fits; and ML/FIML scalar nested tests with the delta map. FIML coverage
+includes marker/std.lv identification and overlapping missingness patterns.
 `r-magmaan/tests/testthat/test-magmaan.R`
 matches lavaan's MLR standard errors under `group.equal = c("loadings",
 "intercepts")`.
 Scope: the closed-form (Guttman) grouped path still rejects free latent means;
 its intercept-equality test now requests `means` explicitly.
+
+**FIML lavaan-convention nested test used the wrong moment reference.**
+Regression: with HS school metric/scalar fits and every seventh `x2` missing,
+`convention="lavaan"` returned scaled difference 22.13388 versus lavaan MLR's
+22.81168. Estimates and the unscaled difference agreed; substituting lavaan's
+estimates did not remove the discrepancy. Independent matrix reconstruction
+from public lavaan outputs isolated two ingredients: its expected moment weight
+uses the fitted larger-model covariance, while Gamma is the saturated EM
+sandwich (observed saturated Hessian and saturated casewise scores). The former
+implementation instead used the saturated covariance in the weight and zeroed
+missing raw-moment residuals in Gamma. The compatibility path now uses
+`Gamma_g = n_g * acov_g`, retaining observed parameter bread and the delta
+restriction map. Native defaults and ML2S are unchanged.
+Guard: `cpp/tests/golden/fiml_golden_test.cpp` reads the frozen
+`fiml/scalar_invariance_hs_nested.json` fixture at oracle estimates and compares
+streaming/materialized/dense results (scale 1e-5, statistic 1e-4 absolute).
+Regenerate through `regen_oracle.R` or its `regen_oracle_fiml_nested.R` slice.
+The R scalar-invariance suite also compares fitted marker/std.lv pairs, df,
+unscaled/scaled differences, scale and p-value; the former skip is removed.
+Scope: direct-FIML empirical-Gamma Satorra-2000 compatibility with lavaan MLR's
+default observed/structured information settings. The opt-in covariance
+regularizer now affects the saturated ACOV through its existing delta-method
+transformation; its calibration remains separate backlog work.
 
 **Convergence was returned without covariance admissibility.**
 Regression: complete-data ML/LS checked the final implied observed `Sigma`

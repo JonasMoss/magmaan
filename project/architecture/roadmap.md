@@ -68,9 +68,12 @@ intercept invariance, three-group marker/std.lv models, per-group explicit
 means and growth identification. The R scalar-invariance suite gates ML/FIML
 parameter rows, estimates, df and chi-square, three-group CFA and growth fits,
 and complete-data scalar nested tests against lavaan. The ordinary R package
-also gates scalar-invariance MLR standard errors. FIML scalar nested unscaled
-statistics agree, but scaled parity remains an explicit skipped assertion and
-open backlog investigation; no calibration claim follows from these gates.
+also gates scalar-invariance MLR standard errors. FIML scalar nested scaled
+statistics now match lavaan MLR under the explicit lavaan convention, including
+marker/std.lv identification and overlapping missingness patterns. An offline
+HS school fixture freezes both fits' parameters and gates all three computation
+modes independently of optimization. These are value-parity, not calibration,
+gates.
 
 ### Optimizer control semantics
 
@@ -2187,10 +2190,15 @@ an unconstrained gradient test to constrained solutions.
   (`V = SaturatedMoments::H`, `Gamma_mis = SaturatedMoments::acov`). The
   `convention = "lavaan"` compatibility mode instead mirrors
   `lavTestLRT(method = "satorra.2000")`: parameter bread is the per-observation
-  observed FIML information, `WLS.V` is the per-group expected H1 information
-  over observed missingness patterns using the saturated H1 covariance, and
-  `Gamma` is the model-based raw-moment Gamma centered at the H1 model-implied
-  moments. The R wrapper defaults `A.method` to `"delta"` when
+  observed FIML information, `WLS.V` is the per-group expected information
+  over observed missingness patterns at the fitted larger model covariance,
+  and `Gamma_g = n_g * SaturatedMoments::acov_g` is the saturated EM sandwich
+  covariance. Its bread is the saturated observed Hessian and its meat is the
+  saturated casewise score crossproduct. This matches lavaan MLR's default
+  observed/structured information settings. The correction on 2026-09-25
+  replaces the former masked raw-residual Gamma and saturated-covariance weight;
+  native defaults and the ML2S compatibility convention remain unchanged. The R
+  wrapper defaults `A.method` to `"delta"` when
   `convention = "lavaan"` is requested. Both conventions report the existing
   unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
   shape. `GammaSource::NT` intentionally keeps the saturated eta-space bread so
@@ -2201,8 +2209,10 @@ an unconstrained gradient test to constrained solutions.
   Frontier reference regularization is opt-in through
   `h1_reference_regularization` on `robust_nested_lrt()` / `nestedTest()` for
   direct-FIML restriction-map tests. Defaults remain raw/lavaan-parity. In the
-  lavaan convention, the option regularizes the saturated H1 covariance before
-  constructing the lavaan-style `WLS.V`; in the native eta-space convention it
+  lavaan convention, the option transforms the saturated covariance and
+  propagates that transformation into its ACOV by the delta method; the weight
+  remains evaluated at the fitted larger model. In the native eta-space
+  convention it
   floors saturated H1 information blocks before inversion and recomputes the
   coherent H1 reference Gamma. The returned nested-test list includes
   `$h1_reference_regularization` diagnostics when the option is enabled. ML2S
@@ -3986,9 +3996,11 @@ need, and no more. The current C++ core mostly follows this:
   full-Gamma reference mode, or in a dense full-`UΓ` diagnostic mode for
   benchmarks. The same computation flag is honored by the FIML lavaan-
   convention restriction-map path: streaming projects through the lavaan-style
-  expected `WLS.V` columns before casewise crossproducts, while materialized
-  keeps the legacy sandwich and dense eigendecomposes the full raw-moment
-  product. The numeric kernels fail closed on non-finite or singular pencils:
+  expected `WLS.V` columns at the fitted larger model before contracting the
+  retained saturated EM ACOV, without materializing another full Gamma.
+  Materialized builds each `n_g * acov_g` block and dense eigendecomposes the
+  full moment-space product. The numeric kernels fail closed on non-finite or
+  singular pencils:
   model-implied covariance blocks, the pooled expected-information `P`, and
   restriction companion `C` are finite/SPD-gated; reduced meats are
   finite/PSD-gated; the FIML sandwich route allows finite nonsingular observed

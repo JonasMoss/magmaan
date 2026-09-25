@@ -2840,3 +2840,4 @@ cat("regenerated", length(regenerated_composite),
 # Self-contained section: its own model catalogue + Demo.twolevel data, not the
 # single-level corpus. `fixtures` is already defined above, so it reuses it.
 source(file.path(repo_root, "cpp", "tests", "tools", "regen_oracle_twolevel.R"))
+source(file.path(repo_root, "cpp", "tests", "tools", "regen_oracle_fiml_nested.R"))

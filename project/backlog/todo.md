@@ -1921,8 +1921,9 @@ when they next change.
   restriction-map tests. Defaults remain raw/lavaan-parity. When enabled,
   `TRUE` uses `condition_max = 1e6`; explicit lists can set `condition_max`,
   `min_eigenvalue`, and covariance/information sub-options. The lavaan
-  convention regularizes the saturated H1 covariance before building the
-  lavaan-style `WLS.V`; the native eta-space and `ud_method = "2001"` FIML paths
+  convention transforms the saturated H1 covariance and propagates the
+  transformation into its sandwich ACOV (the weight uses the fitted larger
+  model covariance); the native eta-space and `ud_method = "2001"` FIML paths
   floor the saturated H1 information before inversion and form
   `Gamma_reg = H_reg^-1 J H_reg^-1` (or `H_reg^-1` for NT Gamma). ML2S remains
   controlled by fit-time `stage1_regularization`, not this nested-test option.
@@ -3962,23 +3963,6 @@ continuous-whitening entry above.
     above, not through lavaan's degenerate delta `group.equal` convention. The
     paper's arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
-  - **M — resolve FIML scalar nested scaled-test parity.** The new
-    `r-package/tests/testthat/test-scalar-invariance.R` gates ML/FIML parameter
-    rows, free/fixed status, estimates, df and chi-square, plus three-group
-    marker/std.lv CFA and growth identification. Complete-data scalar nested
-    tests match lavaan MLM with the delta restriction map. The FIML unscaled
-    difference and df match, but the scaled difference does not: on the
-    six-indicator HS school CFA, setting every seventh `x2` value missing gives
-    22.13388 from `robust_nested_lrt(A.method="delta", convention="lavaan")`
-    versus 22.81168 from lavaan 0.7.2 MLR + `lavTestLRT(method="satorra.2000",
-    A.method="delta", scaled.shifted=FALSE)`. Expected-information FIML gives
-    23.29597, so switching expected/observed alone does not explain the gap.
-    This is an open bug/convention investigation, not an oracle exemption or
-    evidence of calibration. The scaled FIML assertion is explicitly skipped
-    by default; set `MAGMAAN_CHECK_FIML_SCALAR_PARITY=true` when running that
-    test file to reproduce the failure. Do not loosen its 5e-3 absolute gate.
-    Check the restriction geometry and missing-data reference/meat conventions
-    before broadening calibration work; see the FIML robust-convention item.
   - **S — review `continuous_invariance()`'s explicit mean-syntax insertion**
     now that `spec::build` supplies the release. Preserve explicit user mean
     specifications and the metric-to-scalar delta restriction map. The core

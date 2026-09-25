@@ -20,6 +20,8 @@
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 
 namespace {
 
@@ -76,6 +78,77 @@ Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
 }
 
 }  // namespace
+
+TEST_CASE("FIML scalar nested correction matches lavaan's saturated sandwich") {
+  auto text = magmaan::test::read_fixture(
+      magmaan::test::fixtures_dir() + "/fiml/scalar_invariance_hs_nested.json");
+  REQUIRE(text.has_value());
+  auto oracle = nlohmann::json::parse(*text, nullptr, false);
+  REQUIRE_FALSE(oracle.is_discarded());
+  auto parsed = magmaan::parse::Parser::parse(oracle["input"].get<std::string>());
+  REQUIRE(parsed.has_value());
+  const auto raw = magmaan::test::raw_from_fixture(oracle);
+  std::vector<magmaan::spec::LatentStructure> models;
+  std::vector<magmaan::model::MatrixRep> reps;
+  std::vector<Eigen::VectorXd> theta;
+  std::vector<magmaan::estimate::EqConstraints> constraints;
+  for (const auto& name : {"metric", "scalar"}) {
+    magmaan::spec::BuildOptions opts;
+    opts.n_groups = 2;
+    opts.meanstructure = true;
+    opts.group_equal = {magmaan::spec::GroupEqual::Loadings};
+    if (std::string_view(name) == "scalar")
+      opts.group_equal.push_back(magmaan::spec::GroupEqual::Intercepts);
+    magmaan::spec::LatentNames names;
+    magmaan::spec::Starts starts;
+    auto model = magmaan::spec::build(*parsed, opts, &starts, &names);
+    REQUIRE(model.has_value());
+    const auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
+    Eigen::VectorXd at = Eigen::VectorXd::Constant(
+        static_cast<Eigen::Index>(model->n_free()),
+        std::numeric_limits<double>::quiet_NaN());
+    for (std::size_t i = 0; i < pt.free.size(); ++i) {
+      if (pt.free[i] == 0) continue;
+      int matches = 0;
+      for (const auto& row : oracle[name]["rows"]) {
+        if (row["lhs"] == pt.lhs[i] && row["rhs"] == pt.rhs[i] &&
+            row["op"] == magmaan::parse::to_string(pt.op[i]) &&
+            row["group"] == pt.group[i]) {
+          at(pt.free[i] - 1) = row["est"].get<double>();
+          ++matches;
+        }
+      }
+      REQUIRE(matches == 1);
+    }
+    REQUIRE(at.allFinite());
+    auto rep = magmaan::model::build_matrix_rep(*model);
+    auto K = magmaan::estimate::build_eq_constraints(*model);
+    REQUIRE(rep.has_value());
+    REQUIRE(K.has_value());
+    models.push_back(std::move(*model));
+    reps.push_back(std::move(*rep));
+    theta.push_back(std::move(at));
+    constraints.push_back(std::move(*K));
+  }
+  // Freeze estimates to isolate the correction from optimization error. CI
+  // reads this fixture and never invokes lavaan.
+  for (auto mode : {magmaan::robust::GammaComputation::Streaming,
+                    magmaan::robust::GammaComputation::Materialized,
+                    magmaan::robust::GammaComputation::Dense}) {
+    CAPTURE(static_cast<int>(mode));
+    auto result = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+        models[0], reps[0], theta[0], constraints[0],
+        models[1], reps[1], theta[1], constraints[1], raw,
+        oracle["scalar"]["chisq"].get<double>(), oracle["metric"]["chisq"].get<double>(),
+        oracle["scalar"]["df"].get<int>(), oracle["metric"]["df"].get<int>(),
+        magmaan::robust::GammaSource::Empirical, magmaan::robust::SatorraAMethod::Delta,
+        1e-4, nullptr, magmaan::robust::SatorraMomentConvention::Lavaan, {}, mode);
+    REQUIRE_MESSAGE(result.has_value(), (result ? "" : result.error().detail));
+    CHECK(result->df_diff == oracle["df_diff"].get<int>());
+    CHECK(std::abs(result->scale_c - oracle["scale_c"].get<double>()) < 1e-5);
+    CHECK(std::abs(result->T_scaled - oracle["T_scaled"].get<double>()) < 1e-4);
+  }
+}
 
 TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
   const std::string dir = magmaan::test::fixtures_dir() + "/fiml";

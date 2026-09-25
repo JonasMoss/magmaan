@@ -404,14 +404,19 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   full empirical Gamma block before reducing), or `"dense"` (forms the full
 #'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
 #'   standard SEM software does). FIML lavaan-convention tests use the same
-#'   choices after projecting through lavaan-style `WLS.V`; `"materialized"`
-#'   keeps the legacy sandwich path and `"dense"` is a diagnostic oracle.
+#'   choices with the retained saturated EM covariance: `"streaming"` applies
+#'   `WLS.V` to restriction columns and contracts that covariance without an
+#'   additional full Gamma; `"materialized"` forms Gamma explicitly and
+#'   `"dense"` is a diagnostic oracle.
 #' @param convention `"magmaan"` (default) keeps magmaan's estimator-specific
 #'   Satorra-2000 moment convention. `"lavaan"` uses lavaan's public
 #'   `lavTestLRT(method = "satorra.2000")` convention for FIML/ML2S missing-data
-#'   pairs: model-based raw-moment `Gamma`, lavaan-style per-group `WLS.V`
-#'   weighting, and `"delta"` as the default `A.method` when the caller does not
-#'   specify one.
+#'   pairs. For FIML with empirical Gamma, it combines the saturated EM
+#'   sandwich covariance, expected `WLS.V` at the fitted larger model, and
+#'   observed parameter information, matching lavaan MLR with its default
+#'   information settings. ML2S retains its Stage-2 weight and raw-moment
+#'   Gamma convention. Both use `"delta"` as the default `A.method` when the
+#'   caller does not specify one.
 #' @param ud_method Estimator of the U_D difference matrix whose `U_D * Gamma`
 #'   eigenvalues drive the scaled statistic: `"2000"` (default, Satorra 2000
 #'   restriction map from the H1 fit) or `"2001"` (Satorra-Bentler 2001
