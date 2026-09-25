@@ -18,6 +18,15 @@ Little's LISREL inputs are translated and verified by magmaan's
 `cpp/tests/tools/lisrel_translate.R`. The corpus is its own local git
 repository, so corrections are reviewable diffs.
 
+Every `model_options` field is part of the model contract. v3.1.0 adds
+`parameterization`, `group_equal`, `group_partial`, `sample_cov_rescale` and
+`mimic`, and reserves `data.cluster` for two-level models. A consumer that
+cannot pass a field to its fit must skip the case rather than fit a different
+model. The lavaan-parity showcase does this, and the regenerators pick cases
+through explicit lists. v3.1.0 also adds categorical (WLSMV) Mplus cases,
+which carry `lavaan_options.information.expected.mplus`, the Mplus WLSMV test
+convention.
+
 ## What the repository carries instead
 
 The C++ golden tests read **checked-in JSON fixtures** built from the corpus:

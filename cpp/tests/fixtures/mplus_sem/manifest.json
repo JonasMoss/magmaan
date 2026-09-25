@@ -3,16 +3,16 @@
     "format_version": 1,
     "fixture_kind": "mplus_sem.manifest",
     "tool": "cpp/tests/tools/regen_mplus_sem_fixtures.R",
-    "generated": "2026-09-24 22:29:01 +0200",
+    "generated": "2026-09-25 12:07:33 +0200",
     "mplus_sem_root": "external/textbook-corpus/raw/mplus_sem",
     "lavaan_version": "0.7.2"
   },
   "counts": {
     "total": 412,
-    "retained": 26,
-    "excluded": 386,
+    "retained": 29,
+    "excluded": 383,
     "continuous_retained": 26,
-    "ordinal_retained": 0,
+    "ordinal_retained": 3,
     "mixed_retained": 0,
     "prescreen_test_candidates": 14,
     "prescreen_snlls_candidates": 7
@@ -155,7 +155,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -211,7 +211,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -267,7 +267,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -1163,7 +1163,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -1387,7 +1387,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;numerical_integration;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -1415,7 +1415,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -1471,7 +1471,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "mixture;multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -2143,7 +2143,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;imputation;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted;imputation",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -2171,7 +2171,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;imputation;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted;imputation",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3039,7 +3039,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "no_model;efa;categorical",
+      "exclude_reason": "no_model;efa",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3067,7 +3067,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "no_model;efa;count;censored;categorical",
+      "exclude_reason": "no_model;efa;count;censored",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3151,7 +3151,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "no_model;multilevel;complex_survey_or_weighted;efa;categorical",
+      "exclude_reason": "no_model;multilevel;complex_survey_or_weighted;efa",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3431,7 +3431,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical_ml",
+      "exclude_reason": "categorical_ml",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3459,7 +3459,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical_ml",
+      "exclude_reason": "categorical_ml",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3487,7 +3487,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical_ml",
+      "exclude_reason": "categorical_ml",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3515,7 +3515,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical_ml",
+      "exclude_reason": "categorical_ml",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3627,7 +3627,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical_ml",
+      "exclude_reason": "categorical_ml",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3656,34 +3656,6 @@
       "test_candidate": false,
       "corpus_case_id": "",
       "exclude_reason": "random_slope;individual_time_scores",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
-      "case_id": "chapter6_ex6_15",
-      "title": "Mplus User's Guide ex6.15",
-      "status": "excluded",
-      "source_zip": "chapter6.zip",
-      "source_input": "chapter6/ex6.15.inp",
-      "source_data": "ex6.15.dat",
-      "case_dir": "",
-      "has_data": true,
-      "data_kind": "ordinal",
-      "model_kind": "",
-      "estimator": "",
-      "meanstructure": null,
-      "fixed_x": null,
-      "missing": "",
-      "n_groups": null,
-      "group_var": "",
-      "n_obs": null,
-      "has_define": false,
-      "has_constraints": false,
-      "verified": false,
-      "verification": "",
-      "snlls_candidate": false,
-      "test_candidate": false,
-      "corpus_case_id": "",
-      "exclude_reason": "categorical;scale_factors",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -3851,7 +3823,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "survival;numerical_integration;categorical",
+      "exclude_reason": "survival;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -4104,62 +4076,6 @@
       "test_candidate": false,
       "corpus_case_id": "",
       "exclude_reason": "censored",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
-      "case_id": "chapter6_ex6_4",
-      "title": "Mplus User's Guide ex6.4",
-      "status": "excluded",
-      "source_zip": "chapter6.zip",
-      "source_input": "chapter6/ex6.4.inp",
-      "source_data": "ex6.4.dat",
-      "case_dir": "",
-      "has_data": true,
-      "data_kind": "ordinal",
-      "model_kind": "",
-      "estimator": "",
-      "meanstructure": null,
-      "fixed_x": null,
-      "missing": "",
-      "n_groups": null,
-      "group_var": "",
-      "n_obs": null,
-      "has_define": false,
-      "has_constraints": false,
-      "verified": false,
-      "verification": "",
-      "snlls_candidate": false,
-      "test_candidate": false,
-      "corpus_case_id": "",
-      "exclude_reason": "categorical",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
-      "case_id": "chapter6_ex6_5",
-      "title": "Mplus User's Guide ex6.5",
-      "status": "excluded",
-      "source_zip": "chapter6.zip",
-      "source_input": "chapter6/ex6.5.inp",
-      "source_data": "ex6.5.dat",
-      "case_dir": "",
-      "has_data": true,
-      "data_kind": "ordinal",
-      "model_kind": "",
-      "estimator": "",
-      "meanstructure": null,
-      "fixed_x": null,
-      "missing": "",
-      "n_groups": null,
-      "group_var": "",
-      "n_obs": null,
-      "has_define": false,
-      "has_constraints": false,
-      "verified": false,
-      "verification": "",
-      "snlls_candidate": false,
-      "test_candidate": false,
-      "corpus_case_id": "",
-      "exclude_reason": "categorical",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5111,7 +5027,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;nominal;count;censored;categorical",
+      "exclude_reason": "mixture;nominal;count;censored",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5139,7 +5055,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5167,7 +5083,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5195,7 +5111,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5223,7 +5139,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;frequency_weights;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5251,7 +5167,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5307,7 +5223,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;numerical_integration;categorical",
+      "exclude_reason": "mixture;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5335,7 +5251,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;numerical_integration;categorical",
+      "exclude_reason": "mixture;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5475,7 +5391,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5559,7 +5475,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;numerical_integration;categorical",
+      "exclude_reason": "mixture;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5615,7 +5531,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;numerical_integration;categorical",
+      "exclude_reason": "mixture;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5643,7 +5559,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "no_model;mixture;categorical",
+      "exclude_reason": "no_model;mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5671,7 +5587,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;survival;categorical",
+      "exclude_reason": "mixture;survival",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5699,7 +5615,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5727,7 +5643,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -5755,7 +5671,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6707,7 +6623,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6791,7 +6707,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6819,7 +6735,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6847,7 +6763,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6903,7 +6819,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6959,7 +6875,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -6987,7 +6903,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7015,7 +6931,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;survival;categorical",
+      "exclude_reason": "mixture;survival",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7168,7 +7084,7 @@
       "case_dir": "",
       "has_data": true,
       "data_kind": "mixed",
-      "model_kind": "",
+      "model_kind": "observed_path",
       "estimator": "",
       "meanstructure": null,
       "fixed_x": null,
@@ -7179,11 +7095,11 @@
       "has_define": false,
       "has_constraints": false,
       "verified": false,
-      "verification": "",
+      "verification": "Verified against the Mplus .out: N 864/864; free parameters 7/7; df 0/0; chi-square 0.000/0.000 (WLSMV scaled); H0 loglik NA/NA; 7 printed parameters, max |lavaan - Mplus| = 0.0010 (lavaan/Mplus).",
       "snlls_candidate": false,
       "test_candidate": false,
-      "corpus_case_id": "",
-      "exclude_reason": "frequency_weights;categorical",
+      "corpus_case_id": "muthen_2017_ch8_ex8_29_2",
+      "exclude_reason": "unverified: params",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7239,7 +7155,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "bayes;frequency_weights;categorical",
+      "exclude_reason": "bayes;categorical",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7351,7 +7267,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;numerical_integration;categorical",
+      "exclude_reason": "mixture;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7575,7 +7491,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -7715,7 +7631,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "mixture;categorical",
+      "exclude_reason": "mixture",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -8303,7 +8219,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -8359,7 +8275,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -8975,7 +8891,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;numerical_integration;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted;numerical_integration",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -9423,7 +9339,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -9563,7 +9479,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -9619,7 +9535,7 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "",
-      "exclude_reason": "multilevel;complex_survey_or_weighted;categorical",
+      "exclude_reason": "multilevel;complex_survey_or_weighted",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -11387,6 +11303,34 @@
       "note": "verified lavaan translation"
     },
     {
+      "case_id": "chapter6_ex6_15",
+      "title": "Mplus User's Guide ex6.15",
+      "status": "retained",
+      "source_zip": "chapter6.zip",
+      "source_input": "chapter6/ex6.15.inp",
+      "source_data": "ex6.15.dat",
+      "case_dir": "cases/chapter6_ex6_15",
+      "has_data": true,
+      "data_kind": "ordinal",
+      "model_kind": "growth",
+      "estimator": "WLSMV",
+      "meanstructure": true,
+      "fixed_x": true,
+      "missing": "none",
+      "n_groups": 1,
+      "group_var": "",
+      "n_obs": 500,
+      "has_define": false,
+      "has_constraints": false,
+      "verified": true,
+      "verification": "Verified against the Mplus .out: N 500/500; free parameters 18/18; df 27/27; chi-square 69.699/69.699 (WLSMV scaled); H0 loglik NA/NA; 44 printed parameters, max |lavaan - Mplus| = 0.0005 (lavaan/Mplus).",
+      "snlls_candidate": false,
+      "test_candidate": false,
+      "corpus_case_id": "mplus_users_guide_v8_ch6_ex6_15",
+      "exclude_reason": "",
+      "note": "verified lavaan translation"
+    },
+    {
       "case_id": "chapter6_ex6_17",
       "title": "Mplus User's Guide ex6.17",
       "status": "retained",
@@ -11439,6 +11383,62 @@
       "snlls_candidate": false,
       "test_candidate": false,
       "corpus_case_id": "mplus_users_guide_v8_ch6_ex6_18",
+      "exclude_reason": "",
+      "note": "verified lavaan translation"
+    },
+    {
+      "case_id": "chapter6_ex6_4",
+      "title": "Mplus User's Guide ex6.4",
+      "status": "retained",
+      "source_zip": "chapter6.zip",
+      "source_input": "chapter6/ex6.4.inp",
+      "source_data": "ex6.4.dat",
+      "case_dir": "cases/chapter6_ex6_4",
+      "has_data": true,
+      "data_kind": "ordinal",
+      "model_kind": "growth",
+      "estimator": "WLSMV",
+      "meanstructure": true,
+      "fixed_x": true,
+      "missing": "none",
+      "n_groups": 1,
+      "group_var": "",
+      "n_obs": 500,
+      "has_define": false,
+      "has_constraints": false,
+      "verified": true,
+      "verification": "Verified against the Mplus .out: N 500/500; free parameters 8/8; df 2/2; chi-square 1.214/1.214 (WLSMV scaled); H0 loglik NA/NA; 21 printed parameters, max |lavaan - Mplus| = 0.0005 (lavaan/Mplus).",
+      "snlls_candidate": false,
+      "test_candidate": false,
+      "corpus_case_id": "mplus_users_guide_v8_ch6_ex6_4",
+      "exclude_reason": "",
+      "note": "verified lavaan translation"
+    },
+    {
+      "case_id": "chapter6_ex6_5",
+      "title": "Mplus User's Guide ex6.5",
+      "status": "retained",
+      "source_zip": "chapter6.zip",
+      "source_input": "chapter6/ex6.5.inp",
+      "source_data": "ex6.5.dat",
+      "case_dir": "cases/chapter6_ex6_5",
+      "has_data": true,
+      "data_kind": "ordinal",
+      "model_kind": "growth",
+      "estimator": "WLSMV",
+      "meanstructure": true,
+      "fixed_x": true,
+      "missing": "none",
+      "n_groups": 1,
+      "group_var": "",
+      "n_obs": 500,
+      "has_define": false,
+      "has_constraints": false,
+      "verified": true,
+      "verification": "Verified against the Mplus .out: N 500/500; free parameters 10/10; df 8/8; chi-square 12.014/12.014 (WLSMV scaled); H0 loglik NA/NA; 29 printed parameters, max |lavaan - Mplus| = 0.0006 (lavaan/Mplus).",
+      "snlls_candidate": false,
+      "test_candidate": false,
+      "corpus_case_id": "mplus_users_guide_v8_ch6_ex6_5",
       "exclude_reason": "",
       "note": "verified lavaan translation"
     },

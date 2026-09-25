@@ -53,6 +53,18 @@
   spec_args
 }
 
+# Model-changing model_options this loader does not pass to either engine.
+# The corpus schema requires a consumer to skip such cases rather than fit a
+# different model. (sample_cov_rescale needs no handling: lavaan does not
+# rescale summary covariances for the GLS/ULS weights run here.)
+.corpus_unhonored_options <- function(meta) {
+  mo <- meta$model_options %||% list()
+  default <- list(parameterization = "delta", mimic = "lavaan")
+  keys <- c("group_equal", "group_partial", "parameterization", "mimic")
+  keys[vapply(keys, function(k) length(mo[[k]]) > 0L &&
+                !identical(mo[[k]], default[[k]]), logical(1L))]
+}
+
 # ---- per-case prep --------------------------------------------------------
 
 corpus_prepare <- function(case_dir, meta = NULL) {
@@ -226,6 +238,17 @@ corpus_cases <- function(root = corpus_root(),
                        NULL
                      })
     if (is.null(meta)) next
+    unhonored <- .corpus_unhonored_options(meta)
+    if (length(unhonored)) {
+      for (w in weights) {
+        skipped[[length(skipped) + 1L]] <- data.frame(
+          case_id = case_id, weight = w,
+          reason = paste("model_options not passed by this loader:",
+                         paste(unhonored, collapse = ", ")),
+          stringsAsFactors = FALSE)
+      }
+      next
+    }
     prep <- tryCatch(corpus_prepare(case_dir, meta),
                      error = function(e) {
                        for (w in weights) {

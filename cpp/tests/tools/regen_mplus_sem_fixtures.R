@@ -280,7 +280,11 @@ write_empty_categorical <- function(kind) {
                    tool = "cpp/tests/tools/regen_mplus_sem_fixtures.R",
                    generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
                    lavaan_version = lavaan_version,
-                   note = "No retained categorical cases: the source-fidelity screen keeps only examples lavaan reproduces as linear normal-theory models verified against the Mplus output; categorical examples are listed with their exclusion reason in manifest.json."),
+                   note = if (nrow(rows)) paste(
+                     "Retained categorical (WLSMV) examples are verified against the Mplus",
+                     "output in the textbook corpus but are not exported as magmaan fixtures",
+                     "here; they are listed under retained_not_tested.") else
+                     "No retained examples of this kind; see manifest.json for exclusion reasons."),
     cases = list(),
     retained_not_tested = lapply(seq_len(nrow(rows)), function(i) {
       as.list(rows[i, , drop = FALSE])

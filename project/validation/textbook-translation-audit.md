@@ -271,3 +271,32 @@ were previously only messaged.
   verified solution as `start_values`. These are solver/start findings on
   faithful models, not translation defects.
 
+
+## Recovered cases (corpus v3.1.0, 2026-09-25)
+
+A review of the cases v3.0.0 dropped found that most lacked only a corpus
+option or translator scope. Four groups were recovered.
+
+**Categorical Mplus models.** The shared Mplus translator now writes out
+Mplus's categorical (WLSMV) defaults: thresholds, scale factors or theta
+residual variances, threshold invariance, and the categorical growth
+conventions. It reproduces the WLSMV test with lavaan's
+`information.expected.mplus`, not `mimic = "Mplus"`, because that mimic also
+imposes `group.equal` in categorical multi-group models. This added 14 User's
+Guide cases and 1 Muthén case. Two are `book_partial`, each with a proof that
+the difference is Mplus precision: ex5.17's theta run stops short of the
+optimum on the same data as the exact-matching delta ex5.16, and ex8.29_A2's
+first stage is off the probit MLE.
+
+**Newsom theta and group.equal fits.** The 11 fits were retained through new
+`model_options` fields, and all 99 Newsom cases reproduce the author's fits.
+
+**Kline's rescale.** Kline's `sample.cov.rescale = FALSE` cases now store the
+matrix verbatim.
+
+**Brown tab9.4.** The case declares `mimic = "Mplus"` for the book's MLM
+statistic.
+
+Two-level models remain open (see `project/backlog/todo.md`). Their H0 models
+reproduce, but both programs under-converge the saturated model at default
+settings, and Mplus's two-level MLR scaling is not reproduced.

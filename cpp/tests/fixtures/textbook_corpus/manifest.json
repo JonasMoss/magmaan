@@ -4,18 +4,18 @@
     "fixture_kind": "textbook_corpus.manifest",
     "corpus_id": "magmaan_textbook_corpus_v1",
     "tool": "cpp/tests/tools/regen_textbook_corpus_manifest.R",
-    "generated": "2026-09-25 07:24:27 +0200",
+    "generated": "2026-09-25 12:07:55 +0200",
     "lavaan_versions": ["0.7-2", "0.7.2"]
   },
   "counts": {
     "sources": 4,
     "total": 647,
-    "retained": 248,
+    "retained": 262,
     "strict_parity": 91,
     "continuous": 544,
     "ordinal": 30,
     "mixed": 71,
-    "observed_only": 24
+    "observed_only": 25
   },
   "sources": [
     {
@@ -40,12 +40,12 @@
       "fixture_files": ["mplus_sem/manifest.json", "mplus_sem/continuous_reference.json", "mplus_sem/ordinal_reference.json", "mplus_sem/mixed_reference.json"],
       "counts": {
         "total": 412,
-        "retained": 26,
+        "retained": 29,
         "strict_parity": 7,
         "continuous": 321,
         "ordinal": 23,
         "mixed": 68,
-        "observed_only": 15
+        "observed_only": 16
       }
     },
     {
@@ -70,7 +70,7 @@
       "fixture_files": ["newsom/manifest.json", "newsom/continuous_reference.json", "newsom/ordinal_reference.json", "newsom/mixed_reference.json", "newsom/observed_reference.json"],
       "counts": {
         "total": 101,
-        "retained": 88,
+        "retained": 99,
         "strict_parity": 14,
         "continuous": 89,
         "ordinal": 7,
@@ -2451,21 +2451,6 @@
       "note": "excluded by the source-fidelity screen"
     },
     {
-      "id": "mplus_sem::chapter6_ex6_15",
-      "source": "mplus_sem",
-      "source_case_id": "chapter6_ex6_15",
-      "label": "Mplus User's Guide ex6.15",
-      "family": "",
-      "data_kind": "ordinal",
-      "measurement_kind": "ordinal",
-      "observed_only": false,
-      "status": "excluded",
-      "strict_parity": false,
-      "oracle_files": "mplus_sem/manifest.json",
-      "source_input": "chapter6/ex6.15.inp",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
       "id": "mplus_sem::chapter6_ex6_16",
       "source": "mplus_sem",
       "source_case_id": "chapter6_ex6_16",
@@ -2688,36 +2673,6 @@
       "strict_parity": false,
       "oracle_files": "mplus_sem/manifest.json",
       "source_input": "chapter6/ex6.3.inp",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
-      "id": "mplus_sem::chapter6_ex6_4",
-      "source": "mplus_sem",
-      "source_case_id": "chapter6_ex6_4",
-      "label": "Mplus User's Guide ex6.4",
-      "family": "",
-      "data_kind": "ordinal",
-      "measurement_kind": "ordinal",
-      "observed_only": false,
-      "status": "excluded",
-      "strict_parity": false,
-      "oracle_files": "mplus_sem/manifest.json",
-      "source_input": "chapter6/ex6.4.inp",
-      "note": "excluded by the source-fidelity screen"
-    },
-    {
-      "id": "mplus_sem::chapter6_ex6_5",
-      "source": "mplus_sem",
-      "source_case_id": "chapter6_ex6_5",
-      "label": "Mplus User's Guide ex6.5",
-      "family": "",
-      "data_kind": "ordinal",
-      "measurement_kind": "ordinal",
-      "observed_only": false,
-      "status": "excluded",
-      "strict_parity": false,
-      "oracle_files": "mplus_sem/manifest.json",
-      "source_input": "chapter6/ex6.5.inp",
       "note": "excluded by the source-fidelity screen"
     },
     {
@@ -4330,10 +4285,10 @@
       "source": "mplus_sem",
       "source_case_id": "chapter8_ex8_29_a2",
       "label": "Muthen et al. (2017) ex8.29_A2",
-      "family": "",
+      "family": "observed_path",
       "data_kind": "mixed",
       "measurement_kind": "mixed",
-      "observed_only": false,
+      "observed_only": true,
       "status": "excluded",
       "strict_parity": false,
       "oracle_files": "mplus_sem/manifest.json",
@@ -6591,6 +6546,21 @@
       "note": "verified lavaan translation"
     },
     {
+      "id": "mplus_sem::chapter6_ex6_15",
+      "source": "mplus_sem",
+      "source_case_id": "chapter6_ex6_15",
+      "label": "Mplus User's Guide ex6.15",
+      "family": "growth",
+      "data_kind": "ordinal",
+      "measurement_kind": "ordinal",
+      "observed_only": false,
+      "status": "retained",
+      "strict_parity": false,
+      "oracle_files": "mplus_sem/manifest.json",
+      "source_input": "chapter6/ex6.15.inp",
+      "note": "verified lavaan translation"
+    },
+    {
       "id": "mplus_sem::chapter6_ex6_17",
       "source": "mplus_sem",
       "source_case_id": "chapter6_ex6_17",
@@ -6618,6 +6588,36 @@
       "strict_parity": false,
       "oracle_files": "mplus_sem/manifest.json",
       "source_input": "chapter6/ex6.18.inp",
+      "note": "verified lavaan translation"
+    },
+    {
+      "id": "mplus_sem::chapter6_ex6_4",
+      "source": "mplus_sem",
+      "source_case_id": "chapter6_ex6_4",
+      "label": "Mplus User's Guide ex6.4",
+      "family": "growth",
+      "data_kind": "ordinal",
+      "measurement_kind": "ordinal",
+      "observed_only": false,
+      "status": "retained",
+      "strict_parity": false,
+      "oracle_files": "mplus_sem/manifest.json",
+      "source_input": "chapter6/ex6.4.inp",
+      "note": "verified lavaan translation"
+    },
+    {
+      "id": "mplus_sem::chapter6_ex6_5",
+      "source": "mplus_sem",
+      "source_case_id": "chapter6_ex6_5",
+      "label": "Mplus User's Guide ex6.5",
+      "family": "growth",
+      "data_kind": "ordinal",
+      "measurement_kind": "ordinal",
+      "observed_only": false,
+      "status": "retained",
+      "strict_parity": false,
+      "oracle_files": "mplus_sem/manifest.json",
+      "source_input": "chapter6/ex6.5.inp",
       "note": "verified lavaan translation"
     },
     {
@@ -8564,11 +8564,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex2-4a.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex2_5a",
@@ -8639,11 +8639,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex2-8a.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex2_9",
@@ -8744,11 +8744,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex3-3a.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta); parTable differs"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex3_3b",
@@ -8759,11 +8759,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex3-3b.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex3_3c",
@@ -8774,11 +8774,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex3-3c.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex3_4b",
@@ -8939,11 +8939,11 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex3-7c.R",
-      "note": "corpus call cannot reproduce the author's fit: group.equal=intercepts/loadings   (corpus call gives ); author's call also sets SE/test options the corpus loader does not pass (information=observed/observed); estimates and chi-square are unaffected, snapshot SEs use lavaan's default"
+      "note": "extracted from the author's lavaan fit call; author's call also sets SE/test options the corpus loader does not pass (information=observed/observed); estimates and chi-square are unaffected, snapshot SEs use lavaan's default"
     },
     {
       "id": "newsom::ex3_7d",
@@ -8954,11 +8954,11 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex3-7d.R",
-      "note": "corpus call cannot reproduce the author's fit: group.equal=intercepts/loadings   (corpus call gives ); author's call also sets SE/test options the corpus loader does not pass (information=observed/observed); estimates and chi-square are unaffected, snapshot SEs use lavaan's default"
+      "note": "extracted from the author's lavaan fit call; author's call also sets SE/test options the corpus loader does not pass (information=observed/observed); estimates and chi-square are unaffected, snapshot SEs use lavaan's default"
     },
     {
       "id": "newsom::ex3_7e",
@@ -9119,11 +9119,11 @@
       "data_kind": "raw",
       "measurement_kind": "mixed",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex5-3a.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta); objective differs (0.07444482368 vs 0.07774681552)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex5_3b",
@@ -9134,11 +9134,11 @@
       "data_kind": "raw",
       "measurement_kind": "mixed",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex5-3b.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta); objective differs (0.1455561811 vs 0.1503850076)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex5_4",
@@ -9404,11 +9404,11 @@
       "data_kind": "raw",
       "measurement_kind": "ordinal",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex7-2b.R",
-      "note": "corpus call cannot reproduce the author's fit: parameterization=theta (corpus call gives delta); objective differs (0.009722897936 vs 0.02275018143)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex7_3b",
@@ -9434,11 +9434,11 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "status": "unrepresentable",
+      "status": "retained",
       "strict_parity": false,
       "oracle_files": "newsom/manifest.json",
       "source_input": "source/lsemr/ex7-3c.R",
-      "note": "corpus call cannot reproduce the author's fit: group.equal=lv.variances (corpus call gives ); parTable differs; objective differs (0.05935805023 vs 0.05916999188)"
+      "note": "extracted from the author's lavaan fit call"
     },
     {
       "id": "newsom::ex7_4b",

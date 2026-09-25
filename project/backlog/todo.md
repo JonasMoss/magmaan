@@ -141,44 +141,41 @@ design, starting-point inventory and validation rules are in
   mistranslated corpus. Rerun it pinned on the corrected fixtures; the
   corrected 102-case PSD audit has two inadmissible ordinary fits (both
   Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
-- **S, corpus coverage follow-ups.** Optional `model_options` fields for
-  `parameterization`, `group.equal`/`group.partial` and `sample.cov.rescale`
-  would restore 11 dropped Newsom and 4 Kline fits and replace Kline's rescaled
-  covariance workaround; `mimic = "Mplus"` would let Brown tab9.4 match Mplus's
-  MLM statistic. Little's 21 multi-group and 37 wider or bounded verified cases
-  are corpus-only because the Little/Newsom fixture format is single-group and
-  the file limit is 1 MB. Newsom's second edition (2024) could become its own
-  book. lavaan and magmaan both report ULS chi-square near zero for Mplus
-  `chapter6_ex6_10` while lavaan's ULS test statistic is 38.3; unexplained.
-  Dropped-case review (2026-09-25) found more recoverable material:
-  - 39 excluded Mplus User's Guide inputs are expressible in lavaan: 12 ESEM,
-    14 WLSMV categorical, 6 continuous two-level, and 3 single-reason others
-    (weights, a data-dependent constraint).
-    - UG ex4.1 ESEM reproduces the `.out` exactly with `rotation = "geomin"`,
-      `geomin.epsilon = 0.01` (Mplus uses 0.01 for four or more factors) and
-      `std.ov = TRUE`. lavaan counts 78 parameters where Mplus counts 66
-      because Mplus subtracts the rotation constraints; df and chi-square
-      agree.
-    - UG ex6.4 categorical growth matches with Mplus's implicit defaults
-      written out: equal thresholds, intercept-factor mean 0, first scale
-      factor 1 and the rest free. Chi-square matches only with
-      `mimic = "Mplus"` (1.214; lavaan's default gives 1.212).
-  - Little ch9 Homcov and Omit (and Means, which has no `.ls8`) fail only
-    because their start-value files `4wMed.start.si.*` are StrongFI's output
-    (`OU LY=...`), and the 2013 rerun ran them before StrongFI. They can be
-    rebuilt from the verified StrongFI solution, but only the book's Table 9.2
-    could verify them.
-  - The Little archives also contain second-edition Mplus material the pass
-    never read:
-    - 15 CH3 inputs and 41 CH5 inputs with `.out`. The CH3 models equal the
-      first-edition ones (chi-square 18.432 = LISREL 18.410 x 823/822). CH5
-      adds about 26 new CarpThesis models.
-    - 19 Osborne & Little ch9 inputs (invariance, CLPM, RI-CLPM) with no
-      `.out`.
-    - 46 ch12 mixture inputs, out of scope.
-  - Model-changing options (parameterization, group.equal, rotation, mimic,
-    rescale) need first-class `model_options` fields. `lavaan_options` is
-    numerical-only by contract.
+- **S, corpus coverage follow-ups.** Corpus v3.1.0 (2026-09-25) recovered
+  the dropped cases that lacked only options or translator scope:
+  - 14 WLSMV Mplus User's Guide cases and 1 Muthén case;
+  - 11 Newsom theta/`group.equal` fits;
+  - Kline's `sample_cov_rescale`;
+  - Brown tab9.4's MLM statistic.
+
+  The details are in the corpus `docs/audit/`. ESEM is out of scope by
+  decision. The Muthén (2017) inputs without data and the Little ch9 Table 9.2
+  runs wait on source material. What remains:
+  - **Two-level Mplus models** (UG ex9.1a, 9.1b, 9.6, 9.11, 9.12). They are
+    expressible, and hand translations reproduce the H0 model. The printed
+    statistics are harder:
+    - Both programs under-converge the saturated two-level model at their
+      default EM tolerance (Mplus Demo sweep: H1 −3502.966 at the default
+      1e-4, −3502.914 at 1e-7; lavaan −3502.941 by default, −3502.912 at
+      1e-8).
+    - ex9.12 has an unexplained ~0.03 log-likelihood offset despite matching
+      estimates.
+    - Mplus's two-level MLR scaling (0.760 for ex9.6) is not reproduced
+      (lavaan 0.96–1.06).
+
+    Needs `%WITHIN%`/`%BETWEEN%` translation, the reserved `data.cluster`
+    field, and a verification standard for these statistics.
+  - **Second editions as separate books.** `newsom_2024`, via
+    `NEWSOM_EDITION=2`. `little_2024` from the archives' Mplus material:
+    - 15 CH3 inputs, the same models as the first edition;
+    - 41 CH5 inputs, about 26 of them new CarpThesis models;
+    - 19 ch9 inputs without `.out`.
+  - **Fixture scope.** Little's 21 multi-group and 37 wider or bounded
+    verified cases are corpus-only: the Little/Newsom fixture format is
+    single-group and the file limit is 1 MB.
+  - **ULS statistic.** lavaan and magmaan both report ULS chi-square near
+    zero for Mplus `chapter6_ex6_10`, while lavaan's ULS test statistic is
+    38.3; unexplained.
 
 The remaining explicit convergence-audit extensions are deferred to
 [speculative.md](speculative.md#convergence-audit-extensions). The implemented

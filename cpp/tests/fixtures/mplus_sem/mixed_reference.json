@@ -3,9 +3,9 @@
     "format_version": 1,
     "fixture_kind": "mplus_sem.mixed",
     "tool": "cpp/tests/tools/regen_mplus_sem_fixtures.R",
-    "generated": "2026-09-24 22:29:08 +0200",
+    "generated": "2026-09-25 12:07:36 +0200",
     "lavaan_version": "0.7.2",
-    "note": "No retained categorical cases: the source-fidelity screen keeps only examples lavaan reproduces as linear normal-theory models verified against the Mplus output; categorical examples are listed with their exclusion reason in manifest.json."
+    "note": "No retained examples of this kind; see manifest.json for exclusion reasons."
   },
   "cases": [],
   "retained_not_tested": []
