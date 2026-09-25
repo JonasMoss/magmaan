@@ -16,66 +16,87 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
   magmaan_core$measures_standardize_lv(fit, vcov)
 }
 
-# Parameter covariance under an explicit SE regime. `regime = "model"` uses the
-# expected / Gauss-Newton bread (efficient when the model is correct; the
-# robust.sem / WLSMV-style default); `regime = "robust"` uses the observed-Hessian
-# bread. FIML is already an observed-information estimator, so `regime = "model"`
-# returns the inverse observed FIML information and `regime = "robust"` returns
-# the observed-bread MLR sandwich. For ordinal DWLS this is the fixed-weight
-# observed-bread sandwich; the estimated-weight infinitesimal jackknife is
-# exposed explicitly as `magmaan_core$robust_ordinal_ij()` for all-ordinal fits.
-# Feed the covariance into standardized(fit, vcov) to carry the regime choice
-# into SE(beta).
-vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
-                             data = NULL, ...) {
-  regime <- match.arg(regime)
-  bread <- if (identical(regime, "robust")) "observed" else "expected"
+# Explicit names identify the formula, independently of the estimator.
+# NULL preserves historical numerical defaults; model/robust are legacy aliases.
+vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   fit <- object
-  if (inherits(fit, "magmaan_sam_fit")) {
+  sam <- inherits(fit, "magmaan_sam_fit")
+  noniterative <- .is_noniterative(fit)
+  estimator <- toupper(fit$estimator %||% "")
+  fiml <- isTRUE(fit$fiml) || identical(estimator, "FIML")
+  categorical <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
+  default <- if (sam) "stored" else if (noniterative) "delta_nt" else if (fiml) {
+    "information_observed"
+  } else "sandwich_expected"
+  if (is.null(regime)) regime <- default
+  regime <- match.arg(regime, c("information_expected", "information_observed",
+    "sandwich_expected", "sandwich_observed", "delta_nt", "delta_empirical",
+    "stored", "model", "robust"))
+  if (identical(regime, "model")) regime <- default
+  if (identical(regime, "robust")) {
+    regime <- if (sam) "stored" else if (noniterative) "delta_empirical" else "sandwich_observed"
+  }
+  unsupported <- function() {
+    stop("vcov(): regime = '", regime, "' is not supported for this fit", call. = FALSE)
+  }
+  if (sam) {
+    if (!identical(regime, "stored")) unsupported()
     if (is.null(fit$vcov)) {
       stop("vcov(): SAM fit does not carry a covariance matrix; refit with se != 'none'")
     }
     return(fit$vcov)
   }
-  if (.is_noniterative(fit)) {
-    # Delta-method covariance of the closed-form map. regime "model" -> the
-    # normal-theory Gamma (model-correct); regime "robust" -> the empirical /
-    # distribution-free Gamma (needs raw data), which exp research/24 found calibrated
-    # under non-normality where the NT Gamma is asymptotically wrong.
-    gamma <- if (identical(regime, "robust")) "empirical" else "nt"
+  if (noniterative) {
+    if (!regime %in% c("delta_nt", "delta_empirical")) unsupported()
+    data <- data %||% fit$raw_data
+    gamma <- if (identical(regime, "delta_empirical")) "empirical" else "nt"
     if (identical(gamma, "empirical") && is.null(data)) {
-      stop("vcov(regime = 'robust'): non-iterative fits need `data` (raw ",
-           "observations) for the empirical-Gamma sandwich", call. = FALSE)
+      stop("vcov(): delta_empirical needs raw observations; supply `data` or refit with raw data",
+           call. = FALSE)
     }
     return(noniterative_cfa_se(fit, gamma = gamma, data = data)$vcov)
   }
-  if (isTRUE(fit$ordinal)) {
-    stats <- fit$ordinal_stats
-    if (is.null(stats)) {
-      stop("vcov(): ordinal fit does not carry $ordinal_stats")
+  sandwich <- regime %in% c("sandwich_expected", "sandwich_observed")
+  information <- regime %in% c("information_expected", "information_observed")
+  bread <- if (regime %in% c("sandwich_observed", "information_observed")) "observed" else "expected"
+  if (categorical) {
+    if (!sandwich) unsupported()
+    if (isTRUE(fit$ordinal)) {
+      if (is.null(fit$ordinal_stats)) stop("vcov(): ordinal fit does not carry $ordinal_stats")
+      return(magmaan_core$robust_ordinal(fit, fit$ordinal_stats, "", bread)$vcov)
     }
-    return(magmaan_core$robust_ordinal(fit, stats, "", bread)$vcov)
+    if (is.null(fit$mixed_ordinal_stats)) stop("vcov(): mixed fit does not carry $mixed_ordinal_stats")
+    return(magmaan_core$robust_mixed_ordinal(fit, fit$mixed_ordinal_stats, "", bread)$vcov)
   }
-  if (isTRUE(fit$mixed_ordinal)) {
-    stats <- fit$mixed_ordinal_stats
-    if (is.null(stats)) {
-      stop("vcov(): mixed fit does not carry $mixed_ordinal_stats")
-    }
-    return(magmaan_core$robust_mixed_ordinal(fit, stats, "", bread)$vcov)
-  }
-  estimator <- if (is.null(fit$estimator)) "" else toupper(as.character(fit$estimator))
-  if (isTRUE(fit$fiml) || identical(estimator, "FIML")) {
-    if (identical(regime, "robust")) {
+  if (fiml) {
+    if (!sandwich && !information) unsupported()
+    if (!is.null(data)) stop("vcov(): FIML uses the fit's retained data; omit `data`", call. = FALSE)
+    if (identical(regime, "sandwich_observed")) {
       return(magmaan_core$estimate_fiml_robust_mlr(fit)$vcov)
     }
-    return(magmaan_core$fiml_observed_vcov(fit)$vcov)
+    if (identical(regime, "information_observed")) {
+      return(magmaan_core$fiml_observed_vcov(fit)$vcov)
+    }
+    expected <- magmaan_core$inference_fiml_information_vcov(fit)$expected
+    if (!isTRUE(expected$ok)) stop("vcov(): ", expected$error, call. = FALSE)
+    return(if (sandwich) expected$vcov_sandwich else expected$vcov_model)
   }
+  if (information) {
+    if (!identical(estimator, "ML")) unsupported()
+    info <- if (identical(bread, "observed")) {
+      magmaan_core$inference_information_observed_analytic(fit)
+    } else magmaan_core$inference_information_expected(fit)
+    return(magmaan_core$inference_vcov(info, fit))
+  }
+  if (!sandwich) unsupported()
+  data <- data %||% fit$raw_data
   if (is.null(data)) {
-    stop("vcov(): continuous fits need `data` (raw observations) for the ",
-         "empirical-meat sandwich")
+    stop("vcov(): empirical-meat sandwiches need raw observations; supply `data` or refit with raw data",
+         call. = FALSE)
   }
-  magmaan_core$robust_se_raw_fit(fit, raw_data_arg(fit, data),
-                                 bread = bread)$vcov
+  raw <- raw_data_arg(fit, data, caller = "vcov")
+  if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  magmaan_core$robust_se_raw_fit(fit, raw, bread = bread)$vcov
 }
 
 composite_weights <- function(fit, vcov) {
@@ -218,7 +239,7 @@ score_tests_robust <- function(fit, data = NULL, weight = NULL,
     estimated_weight = estimated_weight)
 }
 
-raw_data_arg <- function(fit, data) {
+raw_data_arg <- function(fit, data, caller = "raw_data_arg") {
   if (!is.data.frame(data)) return(data)
 
   rep <- magmaan_core$model_matrix_rep(fit$partable)
@@ -230,7 +251,7 @@ raw_data_arg <- function(fit, data) {
   make_block <- function(rows, ov) {
     missing <- setdiff(ov, names(data))
     if (length(missing)) {
-      stop("factor_scores(): `data` is missing observed variables: ",
+      stop(caller, "(): `data` is missing observed variables: ",
            paste(missing, collapse = ", "))
     }
     block <- data[rows, ov, drop = FALSE]
@@ -249,14 +270,14 @@ raw_data_arg <- function(fit, data) {
     return(make_block(rep(TRUE, nrow(data)), ov_by_group[[1L]]))
   }
   if (!nzchar(group_var) || !group_var %in% names(data)) {
-    stop("factor_scores(): grouped fits require `data` with grouping column `",
+    stop(caller, "(): grouped fits require `data` with grouping column `",
          group_var, "` or an explicit list of raw matrices")
   }
   if (!length(group_labels)) {
     group_labels <- unique(as.character(data[[group_var]]))
   }
   if (length(group_labels) != length(ov_by_group)) {
-    stop("factor_scores(): fit has ", length(ov_by_group),
+    stop(caller, "(): fit has ", length(ov_by_group),
          " group block(s), but ", length(group_labels), " group label(s)")
   }
   g <- as.character(data[[group_var]])

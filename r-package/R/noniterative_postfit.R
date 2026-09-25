@@ -53,7 +53,7 @@
 #'
 #' @param fit A fitted magmaan model.
 #' @param vcov Free-parameter covariance (`npar x npar`), e.g.
-#'   `vcov(fit, regime = "model")` or `noniterative_cfa_se(fit)$vcov`.
+#'   `vcov(fit, regime = "delta_nt")` or `noniterative_cfa_se(fit)$vcov`.
 #' @param level Confidence level for the Wald CI columns.
 #' @return A data frame with `lhs`, `op`, `rhs`, `group`, `est`, `se`, `z`,
 #'   `pvalue`, `ci.lower`, `ci.upper`.

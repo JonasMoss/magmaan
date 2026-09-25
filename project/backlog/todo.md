@@ -91,13 +91,13 @@ design, starting-point inventory and validation rules are in
   `fixed.x = TRUE`, so models with exogenous observed covariates get no policy
   inference. Extend the geometry to conditional-on-x moments, or state the
   random-x policy for them.
-- **S — lab `vcov()` ergonomics.** `vcov.magmaan_fit()` stops without `data`
-  for continuous fits although fits retain `fit$raw_data` (as
-  `prepare_inference()` already uses), and `regime = "model"` means inverse
-  observed information for FIML but an expected-bread sandwich with empirical
-  meat for complete ML. Default to the retained data and name the regimes by
-  their contract. `raw_data_arg()`'s missing-variable error also names
-  `factor_scores()` whatever the caller.
+- **Done 2026-09-25 — lab `vcov()` contracts and retained data.** Explicit
+  information, sandwich, delta-method and stored covariance regimes name their
+  formula. Existing defaults and legacy aliases preserve numerical behavior.
+  Empirical covariances use retained observations when available, grouped raw
+  wrappers are unpacked, and errors identify the data helper or `vcov()` caller.
+  FIML rejects replacement data instead of silently ignoring it. Focused R
+  tests cover ML oracle parity, FIML conventions and estimator-specific guards.
 - **S — finish migrating callers.** In-repo experiments, benchmarks,
   examples, fixture tools and CI use `magmaanlab` and `fit_model()`. Left: the
   `experiments/showcases/` renumbering that was in flight during the rename

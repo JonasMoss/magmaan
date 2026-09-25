@@ -53,12 +53,24 @@ Convenience helpers are limited to R-side composition:
   reliability `1 - mean(Var(Z | y)) / Var(Z)`.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
+- `vcov(fit, regime = ...)` names the covariance formula explicitly:
+  `information_expected` / `information_observed` are inverse information
+  matrices (ML and FIML), while `sandwich_expected` / `sandwich_observed`
+  use empirical meat with the named bread. Sandwiches use retained raw data
+  when `data` is omitted; categorical fits use retained categorical statistics.
+  FIML uses its own retained data and rejects replacement data. Non-iterative
+  CFA uses `delta_nt` / `delta_empirical`; SAM exposes `stored` covariance.
+  Unsupported combinations error. Omitting `regime` preserves the old defaults:
+  expected-bread sandwich for continuous/categorical iterative fits, observed
+  inverse information for FIML, normal-theory delta for non-iterative CFA, and
+  stored covariance for SAM. Legacy `model` and `robust` aliases retain their
+  old estimator-dependent meanings; prefer the explicit names.
 - FIML methods work can compare all three lavaan information conventions with
   `magmaan_core$inference_fiml_information_vcov(fit)`. It returns expected
   Fisher, observed-H1, and full observed-Hessian information; each carries a
   model-based covariance and an empirical-score sandwich covariance built
-  from the same meat. This is a diagnostic primitive and does not change
-  `vcov(fit, regime = "model" | "robust")` defaults.
+  from the same meat. `vcov()`'s observed regimes use the full Hessian;
+  observed-H1 remains available through this diagnostic primitive.
 
 Low-level functions such as `compat_lavaan_lavaanify()`,
 `model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,

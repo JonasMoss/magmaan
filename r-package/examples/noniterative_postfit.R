@@ -35,13 +35,13 @@ stopifnot(inherits(m_g, "magmaan_fit"), isTRUE(m_g$noniterative))
 print(m_g)
 
 ## 2. vcov() dispatches: model (NT) and robust (empirical, needs data) -------
-V  <- vcov(m_g, regime = "model")
-Vr <- vcov(m_g, regime = "robust", data = X)
+V  <- vcov(m_g, regime = "delta_nt")
+Vr <- vcov(m_g, regime = "delta_empirical", data = X)
 stopifnot(is.matrix(V), nrow(V) == m_g$npar, ncol(V) == m_g$npar,
           isTRUE(all.equal(V, t(V))), all(is.finite(diag(V))),
           nrow(Vr) == m_g$npar, all(is.finite(diag(Vr))))
-## regime = "robust" without data must error clearly.
-stopifnot(inherits(try(vcov(m_g, regime = "robust"), silent = TRUE), "try-error"))
+## regime = "delta_empirical" without supplied or retained data must error clearly.
+stopifnot(inherits(try(vcov(m_g, regime = "delta_empirical"), silent = TRUE), "try-error"))
 
 ## 3. standardized solution --------------------------------------------------
 ## std.all puts loadings/correlations in [-1,1] and standardized residual

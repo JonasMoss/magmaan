@@ -3872,6 +3872,14 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   method reports only point-fit status and directs users to explicit post-fit
   primitives. `psd = TRUE` dispatches every estimator branch except two-level
   to its PSD-constrained frontier fitter and records `options$psd`.
+- Lab `vcov()` exposes formula-named regimes: expected/observed inverse
+  information (ML/FIML), expected/observed-bread empirical sandwiches,
+  normal-theory/empirical delta covariances (non-iterative CFA), and stored SAM
+  covariance. Unsupported combinations error. Omission and legacy aliases
+  preserve the existing estimator-specific defaults. Raw-data methods use
+  retained observations when available; FIML requires its own retained data.
+  These wrappers compose existing C++ inference primitives and do not change
+  the ordinary-user inference policy.
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`
