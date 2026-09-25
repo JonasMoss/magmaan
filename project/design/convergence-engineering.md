@@ -201,12 +201,12 @@ optimizer, start, options (budget or tolerance), problem (no configuration
 succeeds), or unexplained. engineering/17's crossed starts and optimizers are
 this protocol done by hand.
 
-**Every iterative estimator uses the Newton metric (decided 2026-09-25).**
-Today the Newton check, which also rejects stationary points with nonpositive
-curvature, is part of the default verdict only for complete-data ML. The other
-families have explicit post-fit Newton adapters
-([terminal-audit.md](terminal-audit.md)) but keep the first-order check at fit
-time. engineering/17 shows the cost: of the twelve Little models where ML's
+**Every iterative estimator uses the Newton metric (decided and landed
+2026-09-25, except two-level; CatML stays first-order).** Until then the
+Newton check, which also rejects stationary points with nonpositive curvature,
+was part of the default verdict only for complete-data ML
+([newton-verdict-plan.md](newton-verdict-plan.md), engineering/19).
+engineering/17 showed the cost: of the twelve Little models where ML's
 check rejects a PORT endpoint for nonpositive curvature, nine are accepted
 under GLS at a worse objective. A judge that differs by estimator makes
 convergence rates incomparable across estimators, so a uniform judge is a

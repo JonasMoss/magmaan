@@ -115,6 +115,16 @@ multiinfo_penalty_layout(const model::ModelEvaluator& ev,
                          const Eigen::VectorXd& theta,
                          PenaltyTarget target = PenaltyTarget::Joint);
 
+// ∇²P(θ), analytic, over free θ. P is a signed sum of log determinants of
+// principal submatrices of the complete-data covariance C = E S Eᵀ minus log
+// diagonal entries, and S and the RAM A are linear in θ, so every ∂C/∂θ_a is
+// a symmetric rank-two matrix and the Hessian needs no finite differences.
+// Fails like multiinfo_penalty at infeasible points.
+fit_expected<Eigen::MatrixXd>
+multiinfo_penalty_hessian(const MultiInfoPenaltyLayout& layout,
+                          const model::ModelEvaluator& ev,
+                          const Eigen::VectorXd& theta);
+
 struct MultiInfoPenaltyValue {
   double value = 0.0;
   Eigen::VectorXd gradient;  // ∂P/∂θ over free θ; empty unless requested

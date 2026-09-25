@@ -1,23 +1,46 @@
 # The Newton check in every default verdict: plan (2026-09-25)
 
-Status (2026-09-25): phases 1 and 2 landed, with the metric, provenance and
-the exact least-squares Hessian from phase 0; the dry run is experiment
-engineering/19. Remaining: the ordinal and mixed Hessians (phase 0 and 3), the
-barrier Hessian (phase 4), and the stopping-control decision below. CatML is
-out of scope (decided 2026-09-25): its inference is not worth a Hessian. When a
-phase lands, fold its contract into [terminal-audit.md](terminal-audit.md) and
-shorten this file.
+Status (2026-09-25): phases 0 to 4 landed the same day, except two-level
+(deferred) and CatML (out of scope, decided 2026-09-25: its inference is not
+worth a Hessian). The dry run is experiment engineering/19. Choices made while
+building:
 
-Dry-run result for FIML, GLS and ULS on the textbook corpus: 42 of 669 fits
-change from accepted to rejected. 29 are stationary points that are not
-minima (the Little models of engineering/17 under GLS and ULS, and FIML fits
-that stopped far from the optimum), 2 are ill-conditioned, 5 stopped far from
-the optimum with a small gradient (Newton steps of 2.6 to 8.7 standard
-errors), and 6 are near misses (0.011 to 0.054). A refit under complete-data
-ML's stopping controls converges on 4 of the near misses and on 4 of the 5
-FIML non-minima. Next decision: adopt ML's stopping controls
-(`ftol_rel` 1e-12, `xtol_rel` 1e-10, 5000 evaluations) for FIML and the
-least-squares fitters, after a corpus run shows no new failures. Part of the
+- Ordinal and mixed fits measure the step with the Gauss-Newton sandwich
+  `sum_b n_b Delta_b' W_b Delta_b` (the moment ACOV taken as `W^{-1}`, exact
+  for WLS), because the full moment ACOV is not always computed at fit time
+  and ordinal moments are unit-free.
+- The barrier fitters use the penalized Hessian `N grad^2 fmin - lambda
+  grad^2 P` as metric; the penalty is O(1) against an O(N) likelihood.
+- The finite-difference cross-check found that the all-ordinal observed bread
+  and the frontier robust ordinal paths (misspecification and IJ sandwiches,
+  RBM parts, casewise influence, profile references) built the moment
+  Jacobian without its mean columns, wrong whenever latent means or
+  intercepts are free. Fixed; the default (lavaan-parity) ordinal standard
+  errors already passed them.
+
+Remaining: the stopping-control decision below, two-level. When a phase lands,
+fold its contract into [terminal-audit.md](terminal-audit.md) and shorten this
+file.
+
+Dry-run result on the textbook corpus (398 cases, final build): 56 of 833
+FIML, GLS, ULS and DWLS fits change from accepted to rejected, 3 from rejected
+to accepted.
+- FIML, GLS, ULS (47 rejections): 32 stationary points that are not minima
+  (the Little models of engineering/17 under GLS and ULS, and FIML fits that
+  stopped far from the optimum), 3 ill-conditioned, 5 stops far from the
+  optimum with a small gradient (Newton steps of 2.6 to 8.7 standard errors),
+  and 7 near misses (0.011 to 0.056). A refit under complete-data ML's
+  stopping controls converges on 5 of the near misses and on 6 of the 9 FIML
+  rejections.
+- DWLS (9 of 28 single-group categorical fits): all non-minima far above
+  lavaan's objective (for example 0.93 where lavaan's is 0 for a
+  just-identified probit regression), which points at the categorical fit
+  path's model setup or starts.
+- The barrier fitters under PORT fail no research/47, fold or corpus problem
+  and 2.5 to 5% of Ernst marker-chart fits, as before (engineering/18 smoke).
+Next decision: adopt ML's stopping controls (`ftol_rel` 1e-12, `xtol_rel`
+1e-10, 5000 evaluations) for FIML and the least-squares fitters, after a
+corpus run shows no new failures. Part of the
 [convergence-engineering vision](convergence-engineering.md), whose judge must
 be the same for every estimator.
 

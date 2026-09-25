@@ -205,12 +205,16 @@ information, the least-squares fits with the normal-theory sandwich
 (`d^2 = G' Omega^{-1} G`, Omega the variance of the total gradient), which
 makes `d` free of units. The verdict requires a positive-definite implied
 Sigma only for likelihood objectives. On the textbook corpus the change
-rejects 42 of 669 FIML/GLS/ULS fits the first-order check accepted, each a
+rejects 56 of 833 FIML/GLS/ULS/DWLS fits the first-order check accepted, each a
 stationary point that is not a minimum, a stop far from the optimum, or a
-near miss of the budget (experiment engineering/19). The first-order check
-still decides at active box bounds, under nonlinear equalities, and on the
-ordinal, CatML, two-level and penalized paths, and it remains telemetry
-elsewhere. Like any local check, the Newton check can pass a point far along
+near miss of the budget (experiment engineering/19). The ordinal and mixed
+least-squares fits (bounded, SNLLS, full-threshold, PSD) carry it too, with
+their exact Hessian and the Gauss-Newton sandwich metric
+`sum_b n_b Delta_b' W_b Delta_b`, and so do the multi-information barrier
+fitters (ML and FIML), whose Hessian `N grad^2 fmin - lambda grad^2 P` uses the
+new analytic `frontier::multiinfo_penalty_hessian`. The first-order check still
+decides at active box bounds, under nonlinear equalities, and on the CatML and
+two-level paths, and it remains telemetry elsewhere. Like any local check, the Newton check can pass a point far along
 a divergent path (no attained maximum), where the remaining gain is tiny.
 General escape/nonattainment diagnostics are deferred to the
 [speculative backlog](../backlog/speculative.md#runaway-estimates-and-nonattainment-diagnostics).
@@ -251,8 +255,14 @@ unequal-group LS normalization. The check-by-path coverage matrix lives in
 the moment-quadratic LS adapters use the exact analytic Hessian
 (`gmm::moment_quadratic_hessian`) with the normal-theory sandwich metric
 (`gmm::moment_quadratic_nt_gradient_variance`), with an explicit Gauss-Newton
-option; ordinal, CatML, two-level and penalized adapters differentiate their
-actual gradients. Numerical Hessians retain step sizes and h-versus-h/2 and
+option; the ordinal, mixed and penalized adapters use their exact analytic
+Hessians, and the CatML and two-level adapters differentiate their actual
+gradients. The all-ordinal observed bread and the frontier robust ordinal
+paths (misspecification and IJ sandwiches, RBM parts, casewise influence,
+profile references) now include the mean columns of the moment Jacobian,
+which they omitted whenever latent means or intercepts were free, and skip the
+closed-form second-derivative term for free parameters without a model-matrix
+cell. Numerical Hessians retain step sizes and h-versus-h/2 and
 symmetry diagnostics, with runtime controls and no silent approximation fallback.
 LS artifacts also retain their whitened residuals and Jacobians. CatML holds
 its Stage-1 threshold coordinates fixed by explicit geometry, rather than

@@ -36,9 +36,9 @@ n_est <- function(e) sum(ok$estimator == e)
 
 Complete-data ML decides convergence with a Newton check that rejects stationary
 points that are not minima and measures the remaining Newton step in standard
-errors. FIML and the least-squares fitters (GLS, ULS) decided with a
-first-order check only. What does moving them to the Newton check change on the
-textbook corpus, and are the changed verdicts right?
+errors. FIML, the least-squares fitters (GLS, ULS) and the categorical DWLS
+fitter decided with a first-order check only. What does moving them to the
+Newton check change on the textbook corpus, and are the changed verdicts right?
 
 ## Short answer
 
@@ -79,15 +79,15 @@ if (nrow(r)) knitr::kable(as.data.frame.matrix(table(r$cause, r$estimator))) els
 ### Every rejected fit, checked
 
 For each newly rejected fit: the objective lavaan reaches with the same
-estimator from its own starts (comparable for GLS and ULS, not for FIML, whose
-constant differs), and a refit by magmaan under complete-data ML's tighter
+estimator from its own starts (comparable for GLS and ULS; not for FIML, whose
+constant differs, and only roughly for DWLS against lavaan's WLSMV), and a refit by magmaan under complete-data ML's tighter
 stopping controls (relative objective tolerance $10^{-12}$, relative step
 tolerance $10^{-10}$, 5000 evaluations), with its verdict and Newton distance.
 
 ```{r rejected}
 v <- read.csv(file.path(res, "rejections.csv"), stringsAsFactors = FALSE)
 v <- v[order(v$status, v$estimator, v$case), ]
-lower <- with(v, estimator != "FIML" & !is.na(lavaan_f) & lavaan_f < f - 1e-6 * (1 + abs(f)))
+lower <- with(v, estimator %in% c("GLS", "ULS") & !is.na(lavaan_f) & lavaan_f < f - 1e-6 * (1 + abs(f)))
 rescued <- v$tight_conv %in% TRUE
 knitr::kable(data.frame(Case = v$case, Estimator = v$estimator, Status = v$status,
                         d = v$d, Objective = v$f, `lavaan objective` = v$lavaan_f,
@@ -101,7 +101,7 @@ big <- lower & gap > 1e-3
 ```
 
 Of the `r nrow(v)` rejections, lavaan reaches a lower objective on
-`r sum(lower)` of the `r sum(v$estimator != "FIML" & !is.na(v$lavaan_f))` GLS
+`r sum(lower)` of the `r sum(v$estimator %in% c("GLS", "ULS") & !is.na(v$lavaan_f))` GLS
 and ULS fits it could fit, by more than a thousandth of the objective on
 `r sum(big)`. The small gaps remain where magmaan's own tight refit converges,
 so they reflect a difference between the two programs' objectives or basins,
@@ -112,6 +112,21 @@ from the optimum). The remaining curvature rejections are the Little models on
 which ordinary starts lead every optimizer to the same non-minimum, a start
 problem, and the far-off budget rejections (Brown, Sabatelli, Geiser, Robbins)
 where lavaan reaches a much lower objective.
+
+```{r dwls}
+w <- v[v$estimator == "DWLS", ]
+```
+
+The `r nrow(w)` DWLS rejections are the largest gaps of all: magmaan's
+categorical fits from raw data end at objectives of
+`r signif(min(w$f), 2)` to `r signif(max(w$f), 2)` where lavaan's WLSMV reaches
+at most `r signif(max(w$lavaan_f, na.rm = TRUE), 2)` (a just-identified probit
+regression, Mplus example 3.4, sits at `r signif(w$f[w$case == "mplus_users_guide_v8_ch3_ex3_4"], 2)`),
+the tight refit stays there, and the exact Hessian says the point is not a
+minimum of magmaan's own objective. The first-order check accepted all of
+them. The size of the gaps points at the categorical fit path's model setup or
+starts (probit regressions on covariates, growth models with released scales),
+not at the verdict.
 
 ### Newton distance of the fits accepted under both checks
 
@@ -140,10 +155,14 @@ quarto render experiments/engineering/19-newton-verdict-migration/report.qmd
 ## Decision record
 
 - Current default: the Newton check decides the verdict of complete-data ML,
-  FIML (ordinary and PSD) and every moment-quadratic fit (GLS, ULS, WLS, DWLS,
-  GMM, SNLLS), with an analytic Hessian of the fitted objective; FIML uses the
-  observed information as metric and the least-squares fits the
-  normal-theory sandwich.
+  FIML (ordinary and PSD), every moment-quadratic fit (GLS, ULS, WLS, DWLS,
+  GMM, SNLLS), the ordinal and mixed least-squares fits, and the barrier
+  fitters, with an analytic Hessian of the fitted objective. FIML and the
+  barriers use their own Hessian as metric, the continuous least-squares fits
+  the normal-theory sandwich, and the ordinal fits the Gauss-Newton sandwich.
+- Multi-group categorical cases are excluded here: the R interface's data
+  conversion rejects them (group count mismatch), which is unrelated to the
+  verdict.
 - Acceptance: every fit that changes verdict is explained, and no fit changes
   from accepted to rejected at a point that is a genuine local minimum with a
   step inside the budget.

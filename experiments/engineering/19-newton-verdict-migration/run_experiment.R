@@ -4,7 +4,8 @@ here <- dirname(script)
 if ("--help" %in% commandArgs(TRUE)) {
   cat("Newton check in the default verdict of FIML and least-squares fits.\n",
       "Fits every continuous textbook-corpus case with the default GLS and ULS\n",
-      "fitters (sample moments) and FIML (single-group raw data), and records the\n",
+      "fitters (sample moments) and FIML (single-group raw data), every categorical\n",
+      "case with DWLS (raw data), and records the\n",
       "fit verdict next to the first-order verdict it replaces.\n\n",
       "Usage: Rscript run_experiment.R [--cases id,id] [--workers N] [--timeout SEC]\n",
       "  --corpus PATH   textbook-corpus mount (default: the support helper's)\n",
@@ -54,11 +55,19 @@ worker <- function(id) {
     add("none", empty, conditionMessage(case))
   } else {
     fitters <- list()
-    if (!case$missing_data) {
+    if (identical(case$kind, "ordinal")) {
+      fitters$DWLS <- function() {
+        args <- list(model = case$syntax, data = case$raw, estimator = "DWLS",
+                     ordered = case$ordered, parameterization = case$parameterization)
+        if (!is.null(case$groups)) args$groups <- case$groups
+        if (!is.null(case$group_equal)) args$group_equal <- case$group_equal
+        do.call(fit_model, args)
+      }
+    } else if (!case$missing_data) {
       fitters$GLS <- function() magmaan_core$fit_gls(case$model, case$sample)
       fitters$ULS <- function() magmaan_core$fit_uls(case$model, case$sample)
     }
-    if (!is.null(case$raw)) {
+    if (!identical(case$kind, "ordinal") && !is.null(case$raw)) {
       fitters$FIML <- function()
         magmaan_core$fit_fiml(case$model, df_to_fiml_data(case$raw, case$model))
     }
@@ -70,6 +79,7 @@ worker <- function(id) {
       else add(est, record(fit), "", sec)
     }
   }
+  if (!length(rows)) add("none", empty, "excluded: no applicable estimator")
   df <- do.call(rbind, lapply(rows, as.data.frame, stringsAsFactors = FALSE))
   utils::write.csv(df, path, row.names = FALSE)
 }
@@ -95,8 +105,12 @@ status <- parallel::mclapply(seq_along(ids), function(i) {
 }, mc.cores = workers, mc.preschedule = FALSE)
 status <- do.call(rbind, status)
 files <- file.path(case_out, paste0(ids, ".csv"))
-fits <- do.call(rbind, lapply(files[file.exists(files)], utils::read.csv, stringsAsFactors = FALSE))
-timed_out <- status$case[status$exit != 0]
+read_case_file <- function(f) tryCatch(utils::read.csv(f, stringsAsFactors = FALSE),
+                                       error = function(e) NULL)
+parts <- lapply(files[file.exists(files)], read_case_file)
+fits <- do.call(rbind, parts[!vapply(parts, is.null, logical(1))])
+done <- unique(fits$case)
+timed_out <- union(status$case[status$exit != 0], setdiff(ids, done))
 if (length(timed_out)) {
   fits <- rbind(fits, do.call(rbind, lapply(timed_out, function(id)
     as.data.frame(c(list(case = id, estimator = "none", message = "timeout or crash",

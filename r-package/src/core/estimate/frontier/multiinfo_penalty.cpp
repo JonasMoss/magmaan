@@ -398,6 +398,189 @@ multiinfo_penalty_layout(const model::ModelEvaluator& ev,
   return out;
 }
 
+namespace {
+
+// One signed log-determinant term, sign * log det C_T, of a block penalty.
+struct LogDetTerm {
+  double sign = 1.0;
+  std::vector<std::int32_t> idx;
+};
+
+// Joint: log det C_KK − Σ_K log C_ii. Determinacy: log det C_JJ − log det Σ −
+// Σ_L log C_jj with J = (observed y, genuine latents L).
+void penalty_terms(PenaltyTarget target, const MultiInfoPenaltyBlock& blk,
+                   std::vector<LogDetTerm>& logdets,
+                   std::vector<std::int32_t>& diag) {
+  logdets.clear();
+  diag = blk.keep;
+  if (target == PenaltyTarget::Joint) {
+    logdets.push_back({1.0, blk.keep});
+    return;
+  }
+  LogDetTerm joint{1.0, {}};
+  LogDetTerm observed{-1.0, {}};
+  for (Eigen::Index i = 0; i < blk.p; ++i) {
+    const auto v = static_cast<std::int32_t>(blk.m + i);
+    joint.idx.push_back(v);
+    observed.idx.push_back(v);
+  }
+  for (const std::int32_t j : blk.keep) joint.idx.push_back(j);
+  logdets.push_back(std::move(joint));
+  logdets.push_back(std::move(observed));
+}
+
+// A free parameter as a cell of the RAM matrices: S (symmetric) or A.
+struct RamCell {
+  bool in_s = true;
+  Eigen::Index r = 0;
+  Eigen::Index c = 0;
+};
+
+}  // namespace
+
+fit_expected<Eigen::MatrixXd>
+multiinfo_penalty_hessian(const MultiInfoPenaltyLayout& layout,
+                          const model::ModelEvaluator& ev,
+                          const Eigen::VectorXd& theta) {
+  auto assembled = ev.assembled(theta);
+  if (!assembled.has_value()) {
+    return std::unexpected(penalty_err(
+        "cannot assemble model matrices: " + assembled.error().detail));
+  }
+  if (assembled->blocks.size() != layout.blocks.size() ||
+      layout.locations.size() != static_cast<std::size_t>(theta.size())) {
+    return std::unexpected(penalty_err("layout/evaluator mismatch"));
+  }
+  const Eigen::Index q = theta.size();
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  std::vector<LogDetTerm> logdets;
+  std::vector<std::int32_t> diag;
+  for (std::size_t b = 0; b < layout.blocks.size(); ++b) {
+    const auto& blk = layout.blocks[b];
+    if (blk.keep.empty()) continue;
+    const Eigen::Index m = blk.m;
+    const CompleteData cd = complete_data(assembled->blocks[b], m, blk.p);
+    const Eigen::Index n = cd.C.rows();
+    if (!cd.C.allFinite()) {
+      return std::unexpected(penalty_err(
+          "non-finite complete-data covariance in block " + std::to_string(b)));
+    }
+    penalty_terms(layout.target, blk, logdets, diag);
+
+    // dP = tr(M dC); the inverses G_t of every log-det term.
+    Eigen::MatrixXd M = Eigen::MatrixXd::Zero(n, n);
+    std::vector<Eigen::MatrixXd> G;
+    for (const auto& t : logdets) {
+      const Eigen::MatrixXd Ct = principal(cd.C, t.idx);
+      Eigen::LLT<Eigen::MatrixXd> llt(Ct);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(penalty_err(
+            "penalty covariance not positive definite in block " + std::to_string(b)));
+      }
+      G.push_back(llt.solve(Eigen::MatrixXd::Identity(Ct.rows(), Ct.rows())));
+      for (std::size_t a = 0; a < t.idx.size(); ++a)
+        for (std::size_t c = 0; c < t.idx.size(); ++c)
+          M(t.idx[a], t.idx[c]) += t.sign * G.back()(static_cast<Eigen::Index>(a),
+                                                     static_cast<Eigen::Index>(c));
+    }
+    for (const std::int32_t i : diag) {
+      if (!(cd.C(i, i) > 0.0)) {
+        return std::unexpected(penalty_err(
+            "non-positive complete-data variance in block " + std::to_string(b)));
+      }
+      M(i, i) -= 1.0 / cd.C(i, i);
+    }
+
+    // Free parameters of this block and their rank-two dC = x yᵀ + y xᵀ.
+    std::vector<Eigen::Index> ks;
+    std::vector<RamCell> cells;
+    for (Eigen::Index k = 0; k < q; ++k) {
+      const auto& loc = layout.locations[static_cast<std::size_t>(k)];
+      if (static_cast<std::size_t>(loc.block) != b) continue;
+      RamCell cell;
+      switch (loc.mat) {
+        case MatId::Psi: cell = {true, loc.row, loc.col}; break;
+        case MatId::Theta: cell = {true, m + loc.row, m + loc.col}; break;
+        case MatId::Beta: cell = {false, loc.row, loc.col}; break;
+        case MatId::Lambda: cell = {false, m + loc.row, loc.col}; break;
+        case MatId::Nu:
+        case MatId::Alpha: continue;
+      }
+      ks.push_back(k);
+      cells.push_back(cell);
+    }
+    const Eigen::Index qb = static_cast<Eigen::Index>(ks.size());
+    if (qb == 0) continue;
+    Eigen::MatrixXd X(n, qb), Y(n, qb);
+    for (Eigen::Index a = 0; a < qb; ++a) {
+      const auto& cell = cells[static_cast<std::size_t>(a)];
+      if (cell.in_s) {
+        X.col(a) = cd.E.col(cell.r);
+        Y.col(a) = cell.r == cell.c ? Eigen::VectorXd(0.5 * cd.E.col(cell.r))
+                                    : Eigen::VectorXd(cd.E.col(cell.c));
+      } else {
+        X.col(a) = cd.E.col(cell.r);
+        Y.col(a) = cd.C.col(cell.c);
+      }
+    }
+    Eigen::MatrixXd Hb = Eigen::MatrixXd::Zero(qb, qb);
+    // −Σ_t sign_t tr(G_t dC_a G_t dC_b) on each term's principal block.
+    for (std::size_t t = 0; t < logdets.size(); ++t) {
+      const auto& idx = logdets[t].idx;
+      Eigen::MatrixXd Xt(static_cast<Eigen::Index>(idx.size()), qb);
+      Eigen::MatrixXd Yt(static_cast<Eigen::Index>(idx.size()), qb);
+      for (std::size_t i = 0; i < idx.size(); ++i) {
+        Xt.row(static_cast<Eigen::Index>(i)) = X.row(idx[i]);
+        Yt.row(static_cast<Eigen::Index>(i)) = Y.row(idx[i]);
+      }
+      const Eigen::MatrixXd GX = G[t] * Xt;
+      const Eigen::MatrixXd GY = G[t] * Yt;
+      const Eigen::MatrixXd Pxx = Xt.transpose() * GX;
+      const Eigen::MatrixXd Pxy = Xt.transpose() * GY;
+      const Eigen::MatrixXd Pyy = Yt.transpose() * GY;
+      Hb.array() -= logdets[t].sign * 2.0 *
+          (Pxy.array() * Pxy.transpose().array() + Pxx.array() * Pyy.array());
+    }
+    // Σ_D (dC_ii)_a (dC_ii)_b / C_ii², with dC_ii = 2 x_i y_i.
+    for (const std::int32_t i : diag) {
+      const Eigen::VectorXd z = 2.0 * X.row(i).transpose().cwiseProduct(Y.row(i).transpose());
+      Hb.noalias() += (z * z.transpose()) / (cd.C(i, i) * cd.C(i, i));
+    }
+    // tr(M d²C): S is linear and so is A, so only pairs with an A cell remain.
+    const Eigen::MatrixXd N = cd.E.transpose() * M * cd.E;
+    const Eigen::MatrixXd P = cd.C * M * cd.E;
+    const auto& E = cd.E;
+    const auto& C = cd.C;
+    auto mixed_term = [&](const RamCell& a, const RamCell& s) {  // a in A, s in S
+      if (s.r == s.c) return 2.0 * E(a.c, s.r) * N(s.r, a.r);
+      return 2.0 * (E(a.c, s.r) * N(s.c, a.r) + E(a.c, s.c) * N(s.r, a.r));
+    };
+    for (Eigen::Index a = 0; a < qb; ++a) {
+      const auto& ca = cells[static_cast<std::size_t>(a)];
+      for (Eigen::Index c = a; c < qb; ++c) {
+        const auto& cc = cells[static_cast<std::size_t>(c)];
+        double v = 0.0;
+        if (!ca.in_s && !cc.in_s) {
+          v = 2.0 * (P(ca.c, cc.r) * E(cc.c, ca.r) + P(cc.c, ca.r) * E(ca.c, cc.r) +
+                     N(cc.r, ca.r) * C(ca.c, cc.c));
+        } else if (!ca.in_s) {
+          v = mixed_term(ca, cc);
+        } else if (!cc.in_s) {
+          v = mixed_term(cc, ca);
+        }
+        Hb(a, c) += v;
+        if (a != c) Hb(c, a) += v;
+      }
+    }
+    for (Eigen::Index a = 0; a < qb; ++a)
+      for (Eigen::Index c = 0; c < qb; ++c)
+        H(ks[static_cast<std::size_t>(a)], ks[static_cast<std::size_t>(c)]) += Hb(a, c);
+  }
+  H = (0.5 * (H + H.transpose())).eval();
+  if (!H.allFinite()) return std::unexpected(penalty_err("non-finite penalty Hessian"));
+  return H;
+}
+
 fit_expected<MultiInfoPenaltyValue>
 multiinfo_penalty(const MultiInfoPenaltyLayout& layout,
                   const model::ModelEvaluator& ev,

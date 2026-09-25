@@ -58,11 +58,12 @@ The required checks are:
    for FIML (ordinary, pattern NTML, PSD; observed-information metric) and
    every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM,
    SNLLS, their PSD versions; exact Hessian, normal-theory sandwich metric
-   `d^2 = (H s)' Omega^{-1} (H s)`). The diagnostic records its objective,
-   curvature source and metric. A positive-definite implied Sigma is required
-   only for likelihood objectives. Until the remaining paths (ordinal,
-   CatML, two-level, penalized) are migrated, the first-order check above
-   still decides there. Once `checked` is true, an `Unavailable` curvature
+   `d^2 = (H s)' Omega^{-1} (H s)`), then for the ordinal and mixed
+   least-squares fits (exact Hessian, Gauss-Newton sandwich metric) and the
+   barrier fitters (penalized Hessian as metric). The diagnostic records its
+   objective, curvature source and metric. A positive-definite implied Sigma
+   is required only for likelihood objectives. CatML stays on the first-order
+   check by decision, two-level until it has an analytic Hessian. Once `checked` is true, an `Unavailable` curvature
    fails the verdict, like nonpositive curvature; a free parameter outside
    the closed-form second derivatives reports `Unsupported` and leaves the
    first-order check deciding.
@@ -400,10 +401,10 @@ the explicit report composes these checks independently of fit finalization.
 | Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
 | FIML | Yes, Newton at fit time (2026-09-25) | Analytic | Broader missingness/group combinations |
 | ML2S | Yes, Stage 2; explicit Stage-1 endpoint and composed report | Analytic Stage 1; all five Stage-2 policies | Automatic fit-input capture and R reports |
-| Ordinal/mixed LS, including profiled fits | Yes, full coordinates | Delta/theta; numerical or GN | Broader group/profile combinations |
+| Ordinal/mixed LS, including profiled fits | Yes, full coordinates; Newton at fit time (2026-09-25) | Delta/theta; analytic exact, Gauss-Newton sandwich metric; requested GN | Broader group/profile combinations |
 | CatML | Yes, correlation objective | Numerical; thresholds held | Stage-1 threshold estimation is separate |
 | Two-level ML | Yes | Numerical | Broader between/within constraint combinations |
-| Multi-information penalized ML/FIML | Explicit report composition | Numerical, includes penalty | Dedicated fit-time policy migration |
+| Multi-information penalized ML/FIML | Yes, Newton at fit time (2026-09-25) | Analytic, includes the penalty Hessian | None |
 | Native FCSEM | Specialized path | No dedicated adapter | Native parameter/geometry integration |
 | Implicit RBM | Specialized path | No dedicated adapter | Actual penalized-objective integration |
 | Additional callback constraints / specialized chart objectives | Not uniformly covered | No general adapter | Objective lifting and constraint geometry |

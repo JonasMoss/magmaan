@@ -32,7 +32,9 @@
 
 #include "../oracle.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/optim/optimizers.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 namespace {
@@ -301,4 +303,49 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
           << " pass (" << kKnownGaps.size() << " known gaps reported above)");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == expected);
+}
+
+// The fit-time Newton check differentiates the DWLS objective analytically.
+// Every textbook categorical model, at lavaan's solution: the analytic
+// Hessian must match central differences of the analytic gradient.
+TEST_CASE("Textbook categorical models: the analytic DWLS Hessian matches gradient differences") {
+  namespace nf = estimate::frontier;
+  for (const auto& id : kCases) {
+    CAPTURE(id);
+    auto raw = test::read_fixture(test::fixtures_dir() + "/textbook_ordinal/" + id + ".json");
+    REQUIRE(raw.has_value());
+    auto j = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(j.is_discarded());
+    auto h = model_from_json(j);
+    auto& pt = h.structure;
+    auto stats = ordinal_from_json(j);
+    const auto param = j["parameterization"].get<std::string>() == "theta"
+                           ? estimate::OrdinalParameterization::Theta
+                           : estimate::OrdinalParameterization::Delta;
+    Eigen::VectorXd theta = vector_from_json(j["theta"]);
+    if (theta.size() != pt.n_free()) continue;
+    const auto old_free = pt.free;
+    if (!estimate::prepare_ordinal_partable(pt, stats, param).has_value() ||
+        theta.size() != pt.n_free()) continue;
+    Eigen::VectorXd x(pt.n_free());
+    for (std::size_t r = 0; r < pt.size(); ++r)
+      if (pt.free[r] > 0) x(pt.free[r] - 1) = theta(old_free[r] - 1);
+    auto rep = model::build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    auto parts = nf::ordinal_ls_newton_parts_prepared(
+        pt, *rep, stats, x, estimate::OrdinalWeightKind::DWLS, param);
+    const std::string detail = parts.has_value() ? std::string() : parts.error().detail;
+    INFO(detail);
+    REQUIRE(parts.has_value());
+    estimate::Estimates at;
+    at.theta = x;
+    auto original = nf::ordinal_ls_objective(pt, *rep, stats, at,
+                                             estimate::OrdinalWeightKind::DWLS, param);
+    REQUIRE(original.has_value());
+    double n = 0.0;
+    for (auto nb : stats.n_obs) n += static_cast<double>(nb);
+    auto fd = nf::evaluate_newton_objective(optim::scalarize(original->problem), x, n, n);
+    REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
+    CHECK((parts->hessian - fd.hessian).norm() <= 1e-6 * (1.0 + fd.hessian.norm()));
+  }
 }

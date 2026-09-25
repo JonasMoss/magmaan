@@ -6,7 +6,7 @@ read_case <- function(root, dir) {
   mo <- meta$model_options
   skip <- function(why) stop("excluded: ", why, call. = FALSE)
   if (isTRUE(meta$out_of_scope)) skip("out of scope")
-  if (length(mo$ordered)) skip("categorical")
+  if (length(mo$ordered)) return(read_ordinal_case(root, dir, meta))
   if (length(mo$mimic) && mo$mimic != "lavaan") skip("non-lavaan mimic")
   syntax <- paste(readLines(file.path(root, dir, "model.lav"), warn = FALSE), collapse = "\n")
   if (grepl("<~|level:", syntax)) skip("composite or multilevel")
@@ -69,4 +69,20 @@ read_case <- function(root, dir) {
        sample = list(S = lapply(ss, `[[`, "cov"), nobs = as.integer(lavaan::lavInspect(pre, "nobs")),
                      mean = if (isTRUE(mo$meanstructure)) lapply(ss, `[[`, "mean") else NULL),
        raw = if (!is.null(raw) && ng == 1L) raw[, lavaan::lavNames(pre, "ov"), drop = FALSE] else NULL)
+}
+
+# A categorical case, fitted by magmaanlab's DWLS (the WLSMV estimator) from
+# raw data with the case's ordered variables, parameterization and groups.
+read_ordinal_case <- function(root, dir, meta) {
+  mo <- meta$model_options
+  if (!identical(meta$data$kind, "raw")) stop("excluded: categorical without raw data", call. = FALSE)
+  syntax <- paste(readLines(file.path(root, dir, "model.lav"), warn = FALSE), collapse = "\n")
+  if (grepl("<~|level:", syntax)) stop("excluded: composite or multilevel", call. = FALSE)
+  if (length(meta$data$group_var)) stop("excluded: multi-group categorical", call. = FALSE)
+  raw <- utils::read.csv(file.path(root, dir, meta$data$files$raw), check.names = FALSE)
+  list(kind = "ordinal", syntax = syntax, raw = raw, ordered = unlist(mo$ordered),
+       parameterization = mo$parameterization %||% "delta",
+       groups = if (length(meta$data$group_var)) meta$data$group_var else NULL,
+       group_equal = if (length(mo$group_equal)) unlist(mo$group_equal) else NULL,
+       missing_data = FALSE)
 }

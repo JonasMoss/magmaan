@@ -291,17 +291,27 @@ there is no scheduled expansion of this surface.
   success criteria. Under discussion; the decision studies below would become
   its first consumers.
 - **High — the Newton check in every iterative estimator's default verdict
-  (decided 2026-09-25).** Landed for FIML (ordinary, pattern NTML, PSD) and
-  every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, SNLLS, PSD versions),
-  with exact analytic Hessians; on the corpus it rejects 42 of 669 fits the
-  first-order check accepted, all bad endpoints or near misses
-  (engineering/19). Remaining, in order: (1) adopt complete-data ML's
-  stopping controls for FIML and the least-squares fitters after a corpus run
-  (they rescue 4 of 6 near misses and 4 of 5 FIML non-minima); (2) the
-  ordinal and mixed exact Hessians, with the estimated-ACOV sandwich metric,
-  and confirm or clear the mean-Jacobian suspicion in the all-ordinal bread;
-  (3) the barrier-penalty Hessian; (4) two-level (deferred). CatML stays on
-  the first-order check. Plan: [newton-verdict-plan.md](../design/newton-verdict-plan.md).
+  (decided and landed 2026-09-25).** FIML, every moment-quadratic fit, the
+  ordinal and mixed least-squares fits and the barrier fitters now decide
+  with exact analytic Hessians (engineering/19). Remaining: (1) adopt
+  complete-data ML's stopping controls for FIML and the least-squares
+  fitters after a corpus run (on the corpus they rescue 4 of 6 near misses
+  and 4 of 5 FIML non-minima); (2) an analytic two-level Hessian, which would
+  also replace the finite differences behind two-level observed standard
+  errors. CatML stays on the first-order check. Plan:
+  [newton-verdict-plan.md](../design/newton-verdict-plan.md).
+- **High — categorical fits from raw data end at saddles on 9 of 28
+  single-group corpus cases.** Found by the Newton check (engineering/19):
+  `fit_model(..., estimator = "DWLS", ordered = ...)` ends at objectives of 0.19
+  to 2.6 where lavaan's WLSMV reaches at most 0.055, including 0.93 against 0
+  on the just-identified probit regression of Mplus example 3.4; a
+  tight-control refit stays there, and the exact Hessian is not positive
+  definite. The first-order check had accepted all nine. Cases: Mplus
+  examples 3.4, 3.12, 3.13, 3.14, 6.4, 6.15; Newsom 2015 ex9_2, 2024 ex7_2a and
+  ex9_2 (probit regressions on covariates, growth with released scales).
+  The C++ textbook categorical golden fits the same models from lavaan's
+  partable and matches lavaan, so compare the R path's model setup
+  (`fixed.x`, conditional covariates, released scales) and starts against it.
 - **M — finish optimizer-control reporting and specialized-path inventory.**
   Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
   BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy

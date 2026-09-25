@@ -552,3 +552,145 @@ TEST_CASE("Newton adapters: the exact LS Hessian rejects a saddle that Gauss-New
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> gauss(approx->derivatives.hessian);
   CHECK(gauss.eigenvalues().minCoeff() > -1e-10);
 }
+
+namespace {
+// Integer ordinal data (three categories per item) from one smooth factor.
+Eigen::MatrixXd ordinal_items(Eigen::Index n, int items, double shift) {
+  Eigen::MatrixXd X(n, items);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double t = static_cast<double>(i + 1) + shift;
+    const double eta = std::sin(.17 * t) + std::cos(.31 * t);
+    for (int j = 0; j < items; ++j) {
+      const double y = (.6 + .05 * j) * eta + std::sin((1.3 + .41 * j) * t);
+      X(i, j) = 1.0 + (y > -.5 + .1 * j) + (y > .5 - .05 * j);
+    }
+  }
+  return X;
+}
+void check_ordinal_hessian(const Model& m, const data::OrdinalStats& s,
+                           estimate::OrdinalWeightKind w,
+                           estimate::OrdinalParameterization param) {
+  auto start = estimate::ordinal_start_values(m.pt, m.rep, s, {});
+  const std::string why = start.has_value() ? std::string() : start.error().detail;
+  INFO(why);
+  REQUIRE(start.has_value());
+  Eigen::VectorXd x = *start;
+  for (Eigen::Index k = 0; k < x.size(); ++k) x(k) += 0.03 * std::sin(2.0 * static_cast<double>(k) + 0.5);
+  auto parts = nf::ordinal_ls_newton_parts(m.pt, m.rep, s, x, w, param);
+  const std::string detail = parts.has_value() ? std::string() : parts.error().detail;
+  INFO(detail);
+  REQUIRE(parts.has_value());
+  estimate::Estimates at; at.theta = x;
+  auto original = nf::ordinal_ls_objective(m.pt, m.rep, s, at, w, param);
+  REQUIRE(original.has_value());
+  double n = 0; for (auto nb : s.n_obs) n += static_cast<double>(nb);
+  auto fd = nf::evaluate_newton_objective(optim::scalarize(original->problem), x, n, n);
+  REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
+  CHECK((parts->hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
+  CHECK(parts->gradient_variance.allFinite());
+}
+} // namespace
+
+TEST_CASE("Newton adapters: the analytic ordinal Hessian matches gradient differences") {
+  auto s = data::ordinal_stats_from_integer_data({ordinal_items(400, 4, 0.0)}, true);
+  REQUIRE(s.has_value());
+  const auto delta = model_with("f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\n"
+                                "x3 | t1 + t2\nx4 | t1 + t2", false, false);
+  // Two groups with equal thresholds free the second group's latent mean and
+  // response scales, which exercises the mean Jacobian of the implied
+  // thresholds and the standardization terms.
+  auto s2 = data::ordinal_stats_from_integer_data(
+      {ordinal_items(400, 4, 0.0), ordinal_items(300, 4, 7.0)}, true);
+  REQUIRE(s2.has_value());
+  auto parsed = parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n");
+  REQUIRE(parsed.has_value());
+  spec::BuildOptions two;
+  two.n_groups = 2;
+  two.meanstructure = true;
+  auto pt2 = spec::build(*parsed, two);
+  REQUIRE(pt2.has_value());
+  pt2->group_equal = {spec::GroupEqual::Thresholds};
+  auto rep2 = model::build_matrix_rep(*pt2);
+  REQUIRE(rep2.has_value());
+  const Model mean{std::move(*pt2), std::move(*rep2)};
+  for (auto w : {estimate::OrdinalWeightKind::ULS, estimate::OrdinalWeightKind::DWLS,
+                 estimate::OrdinalWeightKind::WLS}) {
+    for (auto param : {estimate::OrdinalParameterization::Delta,
+                       estimate::OrdinalParameterization::Theta}) {
+      CAPTURE(static_cast<int>(w)); CAPTURE(static_cast<int>(param));
+      check_ordinal_hessian(delta, *s, w, param);
+    }
+  }
+  auto moments2 = data::ordinal_moments_from_stats(*s2);
+  auto start2 = estimate::ordinal_start_values(mean.pt, mean.rep, moments2, {});
+  const std::string why2 = start2.has_value() ? std::string() : start2.error().detail;
+  INFO("two-group start: " << why2);
+  REQUIRE(start2.has_value());
+  for (auto w : {estimate::OrdinalWeightKind::ULS, estimate::OrdinalWeightKind::DWLS,
+                 estimate::OrdinalWeightKind::WLS}) {
+    CAPTURE(static_cast<int>(w));
+    Eigen::VectorXd x = *start2;
+    for (Eigen::Index k = 0; k < x.size(); ++k) x(k) += 0.03 * std::sin(2.0 * static_cast<double>(k) + 0.5);
+    auto parts = nf::ordinal_ls_newton_parts(mean.pt, mean.rep, *s2, x, w);
+    const std::string detail = parts.has_value() ? std::string() : parts.error().detail;
+    INFO(detail);
+    REQUIRE(parts.has_value());
+    // The prepared model frees the second group's latent mean and scales.
+    int free_means = 0;
+    for (std::size_t r = 0; r < parts->pt.size(); ++r)
+      free_means += parts->pt.op[r] == parse::Op::Intercept && parts->pt.free[r] > 0;
+    CHECK(free_means > 0);
+    estimate::Estimates at; at.theta = x;
+    auto original = nf::ordinal_ls_objective(mean.pt, mean.rep, *s2, at, w);
+    REQUIRE(original.has_value());
+    auto fd = nf::evaluate_newton_objective(optim::scalarize(original->problem), x, 700, 700);
+    REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
+    CHECK((parts->hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
+  }
+  // The audit uses the analytic parts with the estimated-ACOV sandwich metric.
+  auto start = estimate::ordinal_start_values(delta.pt, delta.rep, *s, {});
+  REQUIRE(start.has_value());
+  auto a = nf::audit_newton_ordinal(delta.pt, delta.rep, *s, *start);
+  REQUIRE(a.has_value()); check_artifacts(*a);
+  CHECK(a->derivatives.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
+  CHECK(a->diagnostics.metric == estimate::NewtonMetricKind::Sandwich);
+}
+
+TEST_CASE("Newton adapters: the analytic multi-information penalty Hessian matches gradient differences") {
+  const auto cfa = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nx1 ~~ x4", false, false);
+  const auto sem = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9\n"
+                              "f2 ~ f1\nf3 ~ f1 + f2", false, false);
+  const auto groups = model_with("f =~ x1 + x2 + x3 + x4", false, true, 2);
+  const auto s6 = pd_sample(6, 1, 0.3);
+  const auto s9 = pd_sample(9, 1, 0.5);
+  const auto s4 = pd_sample(4, 2, 0.2);
+  for (const auto* c : {&cfa, &sem, &groups}) {
+    const auto& s = c == &cfa ? s6 : c == &sem ? s9 : s4;
+    auto ev = model::ModelEvaluator::build(c->pt, c->rep);
+    REQUIRE(ev.has_value());
+    auto theta = estimate::simple_start_values(c->pt, c->rep, s, {});
+    REQUIRE(theta.has_value());
+    Eigen::VectorXd x = *theta;
+    for (Eigen::Index k = 0; k < x.size(); ++k) x(k) += 0.05 * std::sin(1.7 * static_cast<double>(k) + 0.3);
+    for (auto target : {nf::PenaltyTarget::Joint, nf::PenaltyTarget::Determinacy}) {
+      CAPTURE(static_cast<int>(target));
+      auto layout = nf::multiinfo_penalty_layout(*ev, x, target);
+      REQUIRE(layout.has_value());
+      optim::ScalarProblem p;
+      p.n_param = x.size();
+      p.f = [&](const Eigen::VectorXd& t, Eigen::VectorXd& g) {
+        auto v = nf::multiinfo_penalty(*layout, *ev, t, true);
+        if (!v) return std::numeric_limits<double>::infinity();
+        g = v->gradient;
+        return v->value;
+      };
+      auto fd = nf::evaluate_newton_objective(p, x, 1, 1);
+      REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
+      auto H = nf::multiinfo_penalty_hessian(*layout, *ev, x);
+      REQUIRE(H.has_value());
+      CHECK((*H - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
+    }
+  }
+}

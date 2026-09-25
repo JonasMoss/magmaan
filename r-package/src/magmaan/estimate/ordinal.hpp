@@ -669,6 +669,55 @@ mixed_ordinal_ls_objective(spec::LatentStructure pt,
                            OrdinalParameterization parameterization =
                                OrdinalParameterization::Delta);
 
+// Newton-check ingredients of the (mixed) ordinal least-squares objective
+// F = Σ_b (n_b/N) ½ r_bᵀ W_b r_b at theta: its exact Hessian (Gauss–Newton
+// plus the residual term, including the standardization and mean terms of
+// both parameterizations) and the metric Σ_b n_b Δ_bᵀ W_b Δ_b, the sandwich
+// with the moment ACOV taken as W⁻¹ (exact for WLS; ordinal moments are
+// unit-free, so it is a unit-free standard-error scale for every weight and
+// needs no NACOV at fit time). `gradient_variance` holds that metric. Both in
+// full theta on the total scale. `pt` is returned prepared, as by
+// ordinal_ls_objective.
+struct OrdinalNewtonParts {
+  spec::LatentStructure pt;
+  Eigen::MatrixXd hessian;
+  Eigen::MatrixXd gradient_variance;
+};
+
+fit_expected<OrdinalNewtonParts>
+ordinal_ls_newton_parts(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const data::OrdinalStats& stats,
+                        const Eigen::VectorXd& theta,
+                        OrdinalWeightKind weights,
+                        OrdinalParameterization parameterization =
+                            OrdinalParameterization::Delta);
+
+// As above for a partable already prepared by the fit (no preparation).
+fit_expected<OrdinalNewtonParts>
+ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
+                                 const model::MatrixRep& rep,
+                                 const data::OrdinalStats& stats,
+                                 const Eigen::VectorXd& theta,
+                                 OrdinalWeightKind weights,
+                                 OrdinalParameterization parameterization);
+fit_expected<OrdinalNewtonParts>
+mixed_ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
+                                       const model::MatrixRep& rep,
+                                       const data::MixedOrdinalStats& stats,
+                                       const Eigen::VectorXd& theta,
+                                       OrdinalWeightKind weights,
+                                       OrdinalParameterization parameterization);
+
+fit_expected<OrdinalNewtonParts>
+mixed_ordinal_ls_newton_parts(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const data::MixedOrdinalStats& stats,
+                              const Eigen::VectorXd& theta,
+                              OrdinalWeightKind weights,
+                              OrdinalParameterization parameterization =
+                                  OrdinalParameterization::Delta);
+
 fit_expected<Estimates>
 fit_mixed_ordinal_constrained(
     spec::LatentStructure pt,

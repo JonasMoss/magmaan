@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "magmaan/estimate/nt.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/optim/optimizers.hpp"
 
@@ -355,14 +356,51 @@ fit_expected<NewtonAudit> audit_newton_fiml(
   }
   return finish(pt, rep, std::move(d), opts);
 }
+namespace {
+NewtonDerivatives ordinal_derivatives(const OrdinalLsObjective& original,
+                                      const fit_expected<OrdinalNewtonParts>& parts,
+                                      const Eigen::VectorXd& theta, double n,
+                                      NewtonObjectiveKind kind) {
+  auto d = point(optim::scalarize(original.problem), theta, n, n, kind);
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  d.metric_kind = NewtonMetricKind::Sandwich;
+  if (d.status != NewtonAccuracyStatus::Available) return d;
+  d.status = NewtonAccuracyStatus::Unavailable;
+  if (!parts) {
+    d.detail = parts.error().detail;
+    return d;
+  }
+  auto r = original.problem.r(theta);
+  auto J = original.problem.J(theta);
+  if (!r || !J || J->cols() != theta.size() || J->rows() != r->size() ||
+      parts->hessian.rows() != theta.size() || !parts->hessian.allFinite() ||
+      parts->gradient_variance.rows() != theta.size() ||
+      !parts->gradient_variance.allFinite()) {
+    d.detail = "ordinal Hessian, gradient variance, residual or Jacobian unavailable";
+    return d;
+  }
+  d.whitened_residual = std::move(*r);
+  d.whitened_jacobian = std::move(*J);
+  d.hessian = parts->hessian;
+  d.metric = parts->gradient_variance;
+  d.status = NewtonAccuracyStatus::Available;
+  return d;
+}
+}  // namespace
+
 fit_expected<NewtonAudit> audit_newton_ordinal(
     spec::LatentStructure pt, const model::MatrixRep& rep, const data::OrdinalStats& stats,
     const Eigen::VectorXd& theta, OrdinalWeightKind weights,
     OrdinalParameterization parameterization, NewtonAdapterOptions opts) {
   Estimates at; at.theta = theta;
-  auto original = ordinal_ls_objective(std::move(pt), rep, stats, at, weights, parameterization);
+  auto original = ordinal_ls_objective(pt, rep, stats, at, weights, parameterization);
   if (!original) return std::unexpected(original.error());
   if (auto ok = validate(original->pt, theta, opts, true); !ok) return std::unexpected(ok.error());
+  if (!opts.gauss_newton) {
+    auto parts = ordinal_ls_newton_parts(std::move(pt), rep, stats, theta, weights, parameterization);
+    return finish(original->pt, rep, ordinal_derivatives(*original, parts, theta,
+        total_n(stats.n_obs), NewtonObjectiveKind::OrdinalLeastSquares), opts);
+  }
   return finish(original->pt, rep, ls_derivatives(original->problem, theta, total_n(stats.n_obs),
       NewtonObjectiveKind::OrdinalLeastSquares, opts), opts);
 }
@@ -371,9 +409,14 @@ fit_expected<NewtonAudit> audit_newton_mixed_ordinal(
     const Eigen::VectorXd& theta, OrdinalWeightKind weights,
     OrdinalParameterization parameterization, NewtonAdapterOptions opts) {
   Estimates at; at.theta = theta;
-  auto original = mixed_ordinal_ls_objective(std::move(pt), rep, stats, at, weights, parameterization);
+  auto original = mixed_ordinal_ls_objective(pt, rep, stats, at, weights, parameterization);
   if (!original) return std::unexpected(original.error());
   if (auto ok = validate(original->pt, theta, opts, true); !ok) return std::unexpected(ok.error());
+  if (!opts.gauss_newton) {
+    auto parts = mixed_ordinal_ls_newton_parts(std::move(pt), rep, stats, theta, weights, parameterization);
+    return finish(original->pt, rep, ordinal_derivatives(*original, parts, theta,
+        total_n(stats.n_obs), NewtonObjectiveKind::MixedOrdinalLeastSquares), opts);
+  }
   return finish(original->pt, rep, ls_derivatives(original->problem, theta, total_n(stats.n_obs),
       NewtonObjectiveKind::MixedOrdinalLeastSquares, opts), opts);
 }
@@ -422,9 +465,21 @@ fit_expected<NewtonAudit> audit_newton_penalized_ml(
   if (!weight) return std::unexpected(weight.error());
   const double n = total_n(sample.n_obs);
   auto problem = multiinfo_penalized_problem(*base, *layout, *ev, *weight, n);
-  auto d = evaluate_newton_objective(problem, theta, n, n,
-      NewtonObjectiveKind::PenalizedMl, opts.differences);
+  auto d = point(problem, theta, n, n, NewtonObjectiveKind::PenalizedMl);
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
   d.penalty_weight = *weight;
+  if (d.status == NewtonAccuracyStatus::Available) {
+    Estimates at; at.theta = theta;
+    auto info = inference::information_observed_analytic(pt, rep, sample, at);
+    auto curvature = multiinfo_penalty_hessian(*layout, *ev, theta);
+    if (info && curvature && info->rows() == theta.size()) {
+      d.hessian = *info - *weight * (*curvature);
+    } else {
+      d.status = NewtonAccuracyStatus::Unavailable;
+      d.detail = !info ? info.error().detail : curvature ? "Hessian dimension mismatch"
+                                                         : curvature.error().detail;
+    }
+  }
   return finish(pt, rep, std::move(d), opts);
 }
 fit_expected<NewtonAudit> audit_newton_penalized_fiml(
@@ -442,9 +497,21 @@ fit_expected<NewtonAudit> audit_newton_penalized_fiml(
   if (!weight) return std::unexpected(weight.error());
   const double n = static_cast<double>(pack.cache.n_total);
   auto problem = multiinfo_penalized_problem(base, *layout, *ev, *weight, n);
-  auto d = evaluate_newton_objective(problem, theta, n, n,
-      NewtonObjectiveKind::PenalizedFiml, opts.differences);
+  auto d = point(problem, theta, n, n, NewtonObjectiveKind::PenalizedFiml);
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
   d.penalty_weight = *weight;
+  if (d.status == NewtonAccuracyStatus::Available) {
+    Estimates at; at.theta = theta;
+    auto info = fiml::fiml_observed_information(pt, rep, raw, at, pack);
+    auto curvature = multiinfo_penalty_hessian(*layout, *ev, theta);
+    if (info && curvature && info->rows() == theta.size()) {
+      d.hessian = *info - *weight * (*curvature);
+    } else {
+      d.status = NewtonAccuracyStatus::Unavailable;
+      d.detail = !info ? info.error().detail : curvature ? "Hessian dimension mismatch"
+                                                         : curvature.error().detail;
+    }
+  }
   return finish(pt, rep, std::move(d), opts);
 }
 

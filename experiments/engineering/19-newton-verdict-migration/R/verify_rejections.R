@@ -24,6 +24,24 @@ for (i in seq_len(nrow(r))) {
   meta <- jsonlite::fromJSON(file.path(root, dir, "meta.json"))
   case <- read_case(root, dir)
   syn <- paste(readLines(file.path(root, dir, "model.lav")), collapse = "\n")
+  if (identical(case$kind, "ordinal")) {
+    fun <- getExportedValue("lavaan", meta$lavaan_function %||% "sem")
+    lf <- tryCatch(suppressWarnings(fun(syn, data = case$raw, ordered = case$ordered,
+                                        estimator = "WLSMV", parameterization = case$parameterization,
+                                        se = "none", test = "standard")), error = function(e) NULL)
+    lav_f <- if (is.null(lf) || !lavInspect(lf, "converged")) NA else
+      tryCatch(unname(fitMeasures(lf, "fmin")), error = function(e) NA)
+    refit <- tryCatch(suppressWarnings(fit_model(case$syntax, case$raw, estimator = "DWLS",
+      ordered = case$ordered, parameterization = case$parameterization, control = tight)),
+      error = function(e) NULL)
+    out[[i]] <- data.frame(case = id, estimator = est, status = r$newton_status[i],
+      d = signif(r$distance[i], 3), f = signif(r$fmin[i], 6), lavaan_f = signif(lav_f, 6),
+      lav_conv = if (is.null(lf)) NA else lavInspect(lf, "converged"),
+      tight_f = if (is.null(refit)) NA else signif(refit$fmin, 6),
+      tight_conv = if (is.null(refit)) NA else isTRUE(refit$converged),
+      tight_d = if (is.null(refit)) NA else signif(refit$diagnostics$newton_accuracy$distance %||% NA, 3))
+    next
+  }
   largs <- list(model = syn, estimator = if (est == "FIML") "ML" else est,
                 meanstructure = isTRUE(meta$model_options$meanstructure), fixed.x = isTRUE(meta$model_options$fixed_x),
                 se = "none", test = "standard")

@@ -2193,6 +2193,37 @@ static void attach_newton_accuracy_fiml(
       frontier::audit_newton_derivatives(pt, rep, std::move(d), domain).diagnostics;
 }
 
+// Ordinal Newton check at a PSD fit: exact Hessian, Gauss-Newton sandwich
+// metric (estimate/ordinal.hpp), judged on the face of the PSD cone.
+static void attach_newton_accuracy_ordinal(
+    Estimates& est, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const optim::ScalarProblem& full_problem,
+    const fit_expected<frontier::OrdinalNewtonParts>& parts,
+    NewtonObjectiveKind kind, const std::vector<std::int64_t>& n_obs) {
+  frontier::NewtonDerivatives d;
+  d.theta = est.theta;
+  d.objective_kind = kind;
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  d.metric_kind = NewtonMetricKind::Sandwich;
+  double n = 0.0;
+  for (auto nb : n_obs) n += static_cast<double>(nb);
+  d.n_obs = n;
+  d.native_to_total = n;
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  d.objective = full_problem.f(est.theta, gradient);
+  d.gradient = n * gradient;
+  if (!parts.has_value()) {
+    d.detail = parts.error().detail;
+  } else if (std::isfinite(d.objective) && d.gradient.allFinite() && n > 0 &&
+             parts->hessian.allFinite() && parts->gradient_variance.allFinite()) {
+    d.hessian = parts->hessian;
+    d.metric = parts->gradient_variance;
+    d.status = NewtonAccuracyStatus::Available;
+  }
+  est.diagnostics.newton_accuracy = frontier::audit_newton_derivatives(
+      pt, rep, std::move(d), StationarityDomain::Psd).diagnostics;
+}
+
 static void attach_gmm_geometric_stationarity(
     Estimates& est,
     const spec::LatentStructure& pt,
@@ -2669,6 +2700,42 @@ multiinfo_start(const optim::ScalarProblem& prob,
       "domain (complete-data covariance not positive definite)"));
 }
 
+// Newton check of a penalized fit: the Hessian of the penalized objective,
+// N ∇²fmin − λ ∇²P (the likelihood's observed information minus the penalty
+// curvature), all analytic, with that Hessian as metric. The penalty is O(1)
+// against an O(N) likelihood, so the metric is the information to O(1/N).
+void attach_newton_accuracy_penalized(
+    Estimates& est, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const optim::ScalarProblem& penalized,
+    const frontier::MultiInfoPenaltyLayout& layout,
+    const model::ModelEvaluator& ev, double weight, double n_total,
+    const post_expected<Eigen::MatrixXd>& base_hessian, NewtonObjectiveKind kind) {
+  frontier::NewtonDerivatives d;
+  d.theta = est.theta;
+  d.objective_kind = kind;
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  d.n_obs = n_total;
+  d.native_to_total = n_total;
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  d.objective = penalized.f(est.theta, gradient);
+  d.gradient = n_total * gradient;
+  d.penalty_weight = weight;
+  if (!base_hessian.has_value()) {
+    d.detail = base_hessian.error().detail;
+  } else if (std::isfinite(d.objective) && d.gradient.allFinite()) {
+    auto penalty = frontier::multiinfo_penalty_hessian(layout, ev, est.theta);
+    if (penalty.has_value() && base_hessian->rows() == est.theta.size()) {
+      d.hessian = *base_hessian - weight * (*penalty);
+      d.status = d.hessian.allFinite() ? NewtonAccuracyStatus::Available
+                                       : NewtonAccuracyStatus::Unavailable;
+    } else if (!penalty.has_value()) {
+      d.detail = penalty.error().detail;
+    }
+  }
+  est.diagnostics.newton_accuracy = frontier::audit_newton_derivatives(
+      pt, rep, std::move(d), StationarityDomain::Ambient).diagnostics;
+}
+
 // Swap the penalized optimum value for the unpenalized ½F so χ² and fit
 // measures read the ordinary criterion at θ̃, and attach the penalty report.
 fit_expected<frontier::PenalizedFit>
@@ -2729,6 +2796,10 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
   if (!est.has_value()) return std::unexpected(est.error());
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  attach_newton_accuracy_penalized(
+      *est, pt, rep, prob, *layout, pre->ev, *weight, n_total,
+      inference::information_observed_analytic(pt, rep, samp, *est),
+      NewtonObjectiveKind::PenalizedMl);
   return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *weight,
                           n_total, start->repaired, who);
 }
@@ -2770,6 +2841,10 @@ fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
   if (!est.has_value()) return std::unexpected(est.error());
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+  attach_newton_accuracy_penalized(
+      *est, pt, rep, prob, *layout, pre->ev, *weight, n_total,
+      fiml::fiml_observed_information(pt, rep, raw, *est, pack),
+      NewtonObjectiveKind::PenalizedFiml);
   return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *weight,
                           n_total, start->repaired, who);
 }
@@ -3048,9 +3123,14 @@ fit_ordinal_psd(spec::LatentStructure pt,
   auto full_problem = full_ordinal_problem(
       *pre, pt, rep, stats, result->theta, weights, parameterization);
   if (full_problem.has_value()) {
+    const optim::ScalarProblem full_scalar = optim::scalarize(*full_problem);
     attach_geometric_stationarity(
-        *result, pt, *pre, bounds, optim::scalarize(*full_problem),
-        StationarityDomain::Psd);
+        *result, pt, *pre, bounds, full_scalar, StationarityDomain::Psd);
+    attach_newton_accuracy_ordinal(
+        *result, pt, rep, full_scalar,
+        frontier::ordinal_ls_newton_parts_prepared(pt, rep, stats, result->theta,
+                                                   weights, parameterization),
+        NewtonObjectiveKind::OrdinalLeastSquares, stats.n_obs);
   }
   result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
@@ -3256,9 +3336,14 @@ fit_mixed_ordinal_psd(
   auto full_problem = full_mixed_ordinal_problem(
       *pre, pt, rep, stats, result->theta, weights, parameterization);
   if (full_problem.has_value()) {
+    const optim::ScalarProblem full_scalar = optim::scalarize(*full_problem);
     attach_geometric_stationarity(
-        *result, pt, *pre, bounds, optim::scalarize(*full_problem),
-        StationarityDomain::Psd);
+        *result, pt, *pre, bounds, full_scalar, StationarityDomain::Psd);
+    attach_newton_accuracy_ordinal(
+        *result, pt, rep, full_scalar,
+        frontier::mixed_ordinal_ls_newton_parts_prepared(
+            pt, rep, stats, result->theta, weights, parameterization),
+        NewtonObjectiveKind::MixedOrdinalLeastSquares, stats.n_obs);
   }
   result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
