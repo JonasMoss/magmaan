@@ -127,6 +127,35 @@ starting-point inventory and validation rules are in
   the file limit is 1 MB. Newsom's second edition (2024) could become its own
   book. lavaan and magmaan both report ULS chi-square near zero for Mplus
   `chapter6_ex6_10` while lavaan's ULS test statistic is 38.3; unexplained.
+  Dropped-case review (2026-09-25) found more recoverable material:
+  - 39 excluded Mplus User's Guide inputs are expressible in lavaan: 12 ESEM,
+    14 WLSMV categorical, 6 continuous two-level, and 3 single-reason others
+    (weights, a data-dependent constraint).
+    - UG ex4.1 ESEM reproduces the `.out` exactly with `rotation = "geomin"`,
+      `geomin.epsilon = 0.01` (Mplus uses 0.01 for four or more factors) and
+      `std.ov = TRUE`. lavaan counts 78 parameters where Mplus counts 66
+      because Mplus subtracts the rotation constraints; df and chi-square
+      agree.
+    - UG ex6.4 categorical growth matches with Mplus's implicit defaults
+      written out: equal thresholds, intercept-factor mean 0, first scale
+      factor 1 and the rest free. Chi-square matches only with
+      `mimic = "Mplus"` (1.214; lavaan's default gives 1.212).
+  - Little ch9 Homcov and Omit (and Means, which has no `.ls8`) fail only
+    because their start-value files `4wMed.start.si.*` are StrongFI's output
+    (`OU LY=...`), and the 2013 rerun ran them before StrongFI. They can be
+    rebuilt from the verified StrongFI solution, but only the book's Table 9.2
+    could verify them.
+  - The Little archives also contain second-edition Mplus material the pass
+    never read:
+    - 15 CH3 inputs and 41 CH5 inputs with `.out`. The CH3 models equal the
+      first-edition ones (chi-square 18.432 = LISREL 18.410 x 823/822). CH5
+      adds about 26 new CarpThesis models.
+    - 19 Osborne & Little ch9 inputs (invariance, CLPM, RI-CLPM) with no
+      `.out`.
+    - 46 ch12 mixture inputs, out of scope.
+  - Model-changing options (parameterization, group.equal, rotation, mimic,
+    rescale) need first-class `model_options` fields. `lavaan_options` is
+    numerical-only by contract.
 
 The remaining explicit convergence-audit extensions are deferred to
 [speculative.md](speculative.md#convergence-audit-extensions). The implemented
