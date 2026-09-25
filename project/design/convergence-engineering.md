@@ -201,15 +201,27 @@ optimizer, start, options (budget or tolerance), problem (no configuration
 succeeds), or unexplained. engineering/17's crossed starts and optimizers are
 this protocol done by hand.
 
-**The judge is not equally strong across estimators.** The Newton check,
-which rejects stationary points with nonpositive curvature, runs only for
-complete-data ML. GLS, ULS, WLS, FIML, ordinal and two-level fits keep the
-first-order check. engineering/17 shows why this matters: of the twelve
-Little models where ML's check rejects a PORT endpoint for nonpositive
-curvature, nine are accepted under GLS at a worse objective. That suggests the
-first-order check accepts the same degenerate points. Convergence rates under
-it may overstate success and are not comparable with ML's. Reports state which
-checks applied.
+**Every iterative estimator uses the Newton metric (decided 2026-09-25).**
+Today the Newton check, which also rejects stationary points with nonpositive
+curvature, is part of the default verdict only for complete-data ML. The other
+families have explicit post-fit Newton adapters
+([terminal-audit.md](terminal-audit.md)) but keep the first-order check at fit
+time. engineering/17 shows the cost: of the twelve Little models where ML's
+check rejects a PORT endpoint for nonpositive curvature, nine are accepted
+under GLS at a worse objective. A judge that differs by estimator makes
+convergence rates incomparable across estimators, so a uniform judge is a
+prerequisite for everything else here.
+
+The principle that makes one budget serve every estimator: take the Newton
+step of the fitted objective, `delta = H^{-1} g` with `H` that objective's
+Hessian (whose positive definiteness is the curvature check), and measure it
+in standard-error units, `d^2 = N delta' V^{-1} delta`, where `V` is the
+estimator's asymptotic covariance. For likelihood estimators (ML, FIML,
+two-level ML) and for normal-theory GLS, `V^{-1}` is the information and `H`
+estimates it, so `d` is exactly the current ML check and the `d <= .01` budget
+carries over. For least-squares estimators (ULS, DWLS, WLS, ordinal) `V` is
+the sandwich, which makes `d` free of units. For penalized fits (the
+barriers), `H` includes the penalty and `V` is the ML information.
 
 ### 4. The defaults register
 
@@ -279,6 +291,12 @@ Experiments may not depend on each other, so the shared parts sit below them:
 
 ### Build now (v1)
 
+0. The Newton metric in the default verdict of every iterative estimator,
+   as above. First FIML, two-level ML and the barriers (likelihood
+   objectives, the ML calibration applies as is), then GLS, then the
+   least-squares and ordinal families with the sandwich metric. Analytic
+   Hessians where magmaan has them, since a numerical Hessian costs up to four
+   gradient evaluations per parameter.
 1. The register, filled from existing evidence as in the table above, with
    provisional and open entries marked honestly.
 2. Benchmark set v0 from problems that already exist: the corpus cases of
@@ -301,10 +319,6 @@ Experiments may not depend on each other, so the shared parts sit below them:
 ### Deferred, methods known
 
 - Performance and data profiles in the report template.
-- Extending the Newton check to GLS, ULS, WLS and FIML, with per-estimator
-  tolerance calibration ([terminal-audit.md](terminal-audit.md) records the
-  calibration work). Until then the harness records curvature as a diagnostic
-  on those paths.
 - Safeguarded backtracking or domain-aware line search for NLopt L-BFGS
   (the high-priority backlog item on domain recovery).
 - A fallback that triggers on the verdict, not on backend status.
@@ -328,4 +342,7 @@ Experiments may not depend on each other, so the shared parts sit below them:
 - Whether the register is one file or one file per entry.
 - How strict "attainable" must be: a witness solution is enough for v1, but
   corpus solutions come from other software and are starts, not proofs.
-- Whether GLS and FIML join v1 or wait for the stronger judge.
+- Whether the least-squares families measure the Newton step with the
+  normal-theory sandwich (deterministic, cheap) or the one the fit reports
+  for its standard errors (matches inference, but depends on the data's
+  fourth moments).

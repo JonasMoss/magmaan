@@ -25,9 +25,9 @@ equalities and fixed coordinates. Remaining extensions are deferred:
 - Automatic ML2S fit-input snapshot capture (currently caller supplied),
   raw-data fingerprints, and propagated numerical-accuracy analysis across
   stages and optional input transformations.
-- Non-ML statistical accuracy calibration, broader group/constraint/domain
-  validation, and any deliberate migration of default fit acceptance away from
-  the compatibility policy.
+- Broader group/constraint/domain validation. (The Newton check in every
+  iterative estimator's default verdict was promoted to the active backlog on
+  2026-09-25.)
 
 **Alternative already available.** Explicit C++ reports compose generic scalar
 or estimator-specific retained Newton artifacts with runtime policies. They
