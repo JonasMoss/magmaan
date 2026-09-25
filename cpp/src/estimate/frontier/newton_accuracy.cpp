@@ -31,6 +31,51 @@ std::string_view to_string(NewtonAccuracyStatus s) noexcept {
   return "unavailable";
 }
 
+std::string_view to_string(NewtonObjectiveKind k) noexcept {
+  switch (k) {
+    case NewtonObjectiveKind::CompleteDataMl: return "complete_data_ml";
+    case NewtonObjectiveKind::LeastSquares: return "least_squares";
+    case NewtonObjectiveKind::Fiml: return "fiml";
+    case NewtonObjectiveKind::OrdinalLeastSquares: return "ordinal_least_squares";
+    case NewtonObjectiveKind::MixedOrdinalLeastSquares: return "mixed_ordinal_least_squares";
+    case NewtonObjectiveKind::CatMl: return "catml";
+    case NewtonObjectiveKind::TwoLevelMl: return "twolevel_ml";
+    case NewtonObjectiveKind::PenalizedMl: return "penalized_ml";
+    case NewtonObjectiveKind::PenalizedFiml: return "penalized_fiml";
+    case NewtonObjectiveKind::Supplied: return "supplied";
+  }
+  return "supplied";
+}
+
+std::string_view to_string(NewtonCurvatureKind k) noexcept {
+  switch (k) {
+    case NewtonCurvatureKind::AnalyticObserved: return "analytic";
+    case NewtonCurvatureKind::GradientDifference: return "gradient_difference";
+    case NewtonCurvatureKind::GaussNewton: return "gauss_newton";
+    case NewtonCurvatureKind::Supplied: return "supplied";
+  }
+  return "supplied";
+}
+
+std::string_view to_string(NewtonMetricKind k) noexcept {
+  switch (k) {
+    case NewtonMetricKind::Hessian: return "hessian";
+    case NewtonMetricKind::Sandwich: return "sandwich";
+  }
+  return "hessian";
+}
+
+bool newton_objective_requires_pd_sigma(NewtonObjectiveKind k) noexcept {
+  switch (k) {
+    case NewtonObjectiveKind::LeastSquares:
+    case NewtonObjectiveKind::OrdinalLeastSquares:
+    case NewtonObjectiveKind::MixedOrdinalLeastSquares:
+      return false;
+    default:
+      return true;
+  }
+}
+
 }  // namespace magmaan::estimate
 
 namespace magmaan::estimate::frontier {
@@ -302,6 +347,26 @@ NewtonAudit audit_newton_derivatives(
   } else {
     out.solution.status = out.geometry.status;
   }
+  // Sandwich metric: measure the step s by d^2 = (H s)' Omega^{-1} (H s). For
+  // an unconstrained step H s = -G exactly; a box step keeps its own H s. The
+  // Hessian still decides curvature. A singular gradient variance leaves no
+  // standard-error scale, which fails like an ill-conditioned Hessian.
+  if (out.derivatives.metric_kind == NewtonMetricKind::Sandwich &&
+      out.solution.status == NewtonAccuracyStatus::Available) {
+    const Eigen::VectorXd y = out.box.applied
+        ? Eigen::VectorXd(out.geometry.reduced_hessian * out.solution.step)
+        : Eigen::VectorXd(-out.geometry.reduced_gradient);
+    out.metric_system = prepare_newton_system(out.geometry.reduced_metric);
+    const auto m = solve_newton_system(out.metric_system, y);
+    if (m.status != NewtonAccuracyStatus::Available) {
+      out.solution.status = NewtonAccuracyStatus::IllConditioned;
+    } else {
+      out.solution.distance = m.distance;
+      out.solution.condition = std::max(out.solution.condition, m.condition);
+      out.solution.solve_residual =
+          std::max(out.solution.solve_residual, m.solve_residual);
+    }
+  }
   out.diagnostics = assess_newton_accuracy(out, opts);
   return out;
 }
@@ -313,6 +378,9 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(const NewtonAudit& audit) {
 NewtonAccuracyDiagnostics assess_newton_accuracy(
     const NewtonAudit& audit, NewtonAccuracyOptions opts) {
   auto out = assess_newton_accuracy(audit.solution, opts);
+  out.objective = audit.derivatives.objective_kind;
+  out.curvature = audit.derivatives.curvature_kind;
+  out.metric = audit.derivatives.metric_kind;
   out.n_reduced = static_cast<std::int32_t>(audit.geometry.reduced_gradient.size());
   out.psd_domain = audit.geometry.domain == StationarityDomain::Psd;
   out.box_constrained = audit.box.applied;
@@ -436,6 +504,10 @@ NewtonGeometry prepare_newton_geometry(
       !derivatives.theta.allFinite() || !derivatives.gradient.allFinite() ||
       !derivatives.hessian.allFinite() || !std::isfinite(interior_eigen_tol) ||
       interior_eigen_tol < 0.0) return fail;
+  const bool sandwich = derivatives.metric_kind == NewtonMetricKind::Sandwich;
+  if (sandwich && (derivatives.metric.rows() != pt.n_free() ||
+                   derivatives.metric.cols() != pt.n_free() ||
+                   !derivatives.metric.allFinite())) return fail;
   auto con = build_eq_constraints(pt);
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!con || !ev) return fail;
@@ -464,6 +536,7 @@ NewtonGeometry prepare_newton_geometry(
   if (domain == StationarityDomain::Ambient) {
     out.reduced_gradient = G;
     out.reduced_hessian = I;
+    if (sandwich) out.reduced_metric = K.transpose() * derivatives.metric * K;
     out.covariance_interior = covariance_blocks_interior(*ev, theta, interior_eigen_tol);
     out.status = NewtonAccuracyStatus::Available;
     return out;
@@ -647,6 +720,9 @@ NewtonGeometry prepare_newton_geometry(
   }
   out.reduced_gradient = Z.transpose() * G;
   out.reduced_hessian = Z.transpose() * H * Z;
+  if (sandwich) {
+    out.reduced_metric = Z.transpose() * (K.transpose() * derivatives.metric * K) * Z;
+  }
   out.tangent_basis = std::move(Z);
   out.curvature_correction = std::move(Q);
   out.status = NewtonAccuracyStatus::Available;

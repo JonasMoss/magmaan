@@ -115,6 +115,49 @@ fit_expected<void> prepare_fiml(spec::LatentStructure& pt, const model::MatrixRe
 }
 } // namespace
 
+NewtonDerivatives evaluate_newton_moment_quadratic(
+    const model::ModelEvaluator& ev, const SampleStats& sample,
+    const Eigen::VectorXd& theta, const gmm::Weight& weight) {
+  NewtonDerivatives d;
+  d.theta = theta;
+  d.objective_kind = NewtonObjectiveKind::LeastSquares;
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  d.metric_kind = NewtonMetricKind::Sandwich;
+  auto problem = gmm::residuals(ev, sample, theta, weight);
+  if (!problem) {
+    d.detail = problem.error().detail;
+    return d;
+  }
+  const double n = total_n(sample.n_obs);
+  d = point(optim::scalarize(*problem), theta, n, n, NewtonObjectiveKind::LeastSquares);
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  d.metric_kind = NewtonMetricKind::Sandwich;
+  if (d.status != NewtonAccuracyStatus::Available) return d;
+  d.status = NewtonAccuracyStatus::Unavailable;
+  auto H = gmm::moment_quadratic_hessian(ev, sample, theta, weight);
+  if (!H) {
+    d.detail = H.error().detail;
+    return d;
+  }
+  auto Omega = gmm::moment_quadratic_nt_gradient_variance(ev, sample, theta, weight);
+  if (!Omega) {
+    d.detail = Omega.error().detail;
+    return d;
+  }
+  auto r = problem->r(theta);
+  auto J = problem->J(theta);
+  if (!r || !J || J->cols() != theta.size() || J->rows() != r->size()) {
+    d.detail = "LS residual or Jacobian unavailable";
+    return d;
+  }
+  d.whitened_residual = std::move(*r);
+  d.whitened_jacobian = std::move(*J);
+  d.hessian = std::move(*H);
+  d.metric = std::move(*Omega);
+  d.status = NewtonAccuracyStatus::Available;
+  return d;
+}
+
 NewtonDerivatives evaluate_newton_objective(
     const optim::ScalarProblem& problem, const Eigen::VectorXd& theta,
     double n, double multiplier, NewtonObjectiveKind kind, NewtonDifferenceOptions opts) {
@@ -196,6 +239,8 @@ fit_expected<NewtonAudit> audit_newton_gmm(
   if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok) return std::unexpected(ok.error());
   auto ev = evaluator(pt, rep);
   if (!ev) return std::unexpected(ev.error());
+  if (!opts.gauss_newton)
+    return finish(pt, rep, evaluate_newton_moment_quadratic(*ev, sample, theta, weight), opts);
   auto problem = gmm::residuals(*ev, sample, theta, weight);
   if (!problem) return std::unexpected(problem.error());
   return finish(pt, rep, ls_derivatives(*problem, theta, total_n(sample.n_obs),

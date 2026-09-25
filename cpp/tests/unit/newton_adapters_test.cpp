@@ -384,3 +384,171 @@ TEST_CASE("Newton adapters: unequal groups preserve total LS curvature") {
       CHECK(H(pt->free[r] - 1, pt->free[r] - 1) ==
           doctest::Approx(s.n_obs[static_cast<std::size_t>(pt->group[r] - 1)]));
 }
+
+namespace {
+Model model_with(std::string_view syntax, bool means, bool std_lv, int groups = 1) {
+  auto parsed = parse::Parser::parse(syntax);
+  REQUIRE(parsed.has_value());
+  spec::BuildOptions opts;
+  opts.fixed_x = false;
+  opts.meanstructure = means;
+  opts.std_lv = std_lv;
+  opts.n_groups = groups;
+  auto pt = spec::build(*parsed, opts);
+  REQUIRE(pt.has_value());
+  auto rep = model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return {std::move(*pt), std::move(*rep)};
+}
+// A positive-definite sample with means, reproducible across platforms.
+data::SampleStats pd_sample(Eigen::Index p, int groups, double shift) {
+  data::SampleStats s;
+  for (int g = 0; g < groups; ++g) {
+    Eigen::MatrixXd A(p, p);
+    for (Eigen::Index i = 0; i < p; ++i)
+      for (Eigen::Index j = 0; j < p; ++j)
+        A(i, j) = std::sin(1.3 * static_cast<double>(i + 1) + 0.7 * static_cast<double>(j + 1) + shift * (g + 1));
+    Eigen::MatrixXd S = A * A.transpose() / static_cast<double>(p) +
+        Eigen::MatrixXd::Identity(p, p);
+    Eigen::VectorXd m(p);
+    for (Eigen::Index i = 0; i < p; ++i) m(i) = 0.1 * std::cos(static_cast<double>(i) + g);
+    s.S.push_back(S);
+    s.mean.push_back(m);
+    s.n_obs.push_back(150 + 100 * g);
+  }
+  return s;
+}
+// Exact Hessian against central differences of the analytic gradient, at a
+// point away from the optimum so the residual term matters.
+void check_moment_quadratic_hessian(const Model& m, const data::SampleStats& s,
+                                    const estimate::gmm::Weight& w) {
+  auto theta = estimate::simple_start_values(m.pt, m.rep, s, {});
+  REQUIRE(theta.has_value());
+  Eigen::VectorXd x = *theta;
+  for (Eigen::Index k = 0; k < x.size(); ++k) x(k) += 0.05 * std::sin(3.0 * static_cast<double>(k) + 1.0);
+  auto ev = model::ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto exact = nf::evaluate_newton_moment_quadratic(*ev, s, x, w);
+  INFO(exact.detail);
+  REQUIRE(exact.status == estimate::NewtonAccuracyStatus::Available);
+  CHECK(exact.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
+  CHECK(exact.metric_kind == nf::NewtonMetricKind::Sandwich);
+  auto problem = estimate::gmm::residuals(*ev, s, x, w);
+  REQUIRE(problem.has_value());
+  double n = 0; for (auto nb : s.n_obs) n += static_cast<double>(nb);
+  auto fd = nf::evaluate_newton_objective(optim::scalarize(*problem), x, n, n);
+  REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
+  CHECK((exact.gradient - fd.gradient).norm() <= 1e-10 * (1 + fd.gradient.norm()));
+  CHECK((exact.hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
+  // The Gauss-Newton part alone differs here: the residual term is not zero.
+  const Eigen::MatrixXd gn = n * exact.whitened_jacobian.transpose() * exact.whitened_jacobian;
+  CHECK((exact.hessian - gn).norm() > 1e-4 * gn.norm());
+}
+} // namespace
+
+TEST_CASE("Newton adapters: the analytic moment-quadratic Hessian matches gradient differences") {
+  const auto cfa = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6", true, false);
+  const auto sem = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9\n"
+                              "f2 ~ f1\nf3 ~ f1 + f2", false, false);
+  // Nonrecursive: f1 and f2 regress on each other, identified by f3 and x7.
+  const auto nonrec = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\n"
+                                 "f1 ~ f2 + x7\nf2 ~ f1 + x8", false, false);
+  const auto groups = model_with("f =~ x1 + x2 + x3 + x4", true, true, 2);
+  const auto s6 = pd_sample(6, 1, 0.3);
+  const auto s9 = pd_sample(9, 1, 0.5);
+  const auto s8 = pd_sample(8, 1, 0.9);
+  const auto s4 = pd_sample(4, 2, 0.2);
+  for (const auto* c : {&cfa, &sem, &nonrec, &groups}) {
+    const auto& s = c == &cfa ? s6 : c == &sem ? s9 : c == &nonrec ? s8 : s4;
+    auto ev = model::ModelEvaluator::build(c->pt, c->rep);
+    REQUIRE(ev.has_value());
+    auto theta = estimate::simple_start_values(c->pt, c->rep, s, {});
+    REQUIRE(theta.has_value());
+    auto gls = estimate::gmm::normal_theory_weight(*ev, s, *theta);
+    REQUIRE(gls.has_value());
+    estimate::gmm::Weight dwls;
+    for (const auto& b : *gls) dwls.push_back(estimate::gmm::BlockWeight::diagonal(b.to_dense().diagonal()));
+    check_moment_quadratic_hessian(*c, s, {});
+    check_moment_quadratic_hessian(*c, s, *gls);
+    check_moment_quadratic_hessian(*c, s, dwls);
+  }
+}
+
+TEST_CASE("Newton adapters: the least-squares metric is the normal-theory gradient variance") {
+  const auto m = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6", true, false);
+  const auto s = pd_sample(6, 1, 0.3);
+  auto ev = model::ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto theta = estimate::simple_start_values(m.pt, m.rep, s, {});
+  REQUIRE(theta.has_value());
+  auto gls = estimate::gmm::normal_theory_weight(*ev, s, *theta);
+  REQUIRE(gls.has_value());
+  // GLS: W = Gamma_NT^{-1}, so the gradient variance is N J~'J~.
+  auto d = nf::evaluate_newton_moment_quadratic(*ev, s, *theta, *gls);
+  REQUIRE(d.status == estimate::NewtonAccuracyStatus::Available);
+  const Eigen::MatrixXd gn = 150.0 * d.whitened_jacobian.transpose() * d.whitened_jacobian;
+  CHECK(d.metric.isApprox(gn, 1e-8));
+  // ULS at its optimum: the distance is sqrt(G' Omega^{-1} G), free of units.
+  auto fit = estimate::fit_gmm(m.pt, m.rep, s, *theta, {});
+  REQUIRE(fit.has_value());
+  auto a = nf::audit_newton_uls(m.pt, m.rep, s, fit->theta);
+  REQUIRE(a.has_value()); check_artifacts(*a);
+  CHECK(a->diagnostics.metric == estimate::NewtonMetricKind::Sandwich);
+  const Eigen::VectorXd& G = a->geometry.reduced_gradient;
+  const double expect = std::sqrt(G.dot(a->geometry.reduced_metric.ldlt().solve(G)));
+  CHECK(a->diagnostics.distance == doctest::Approx(expect).epsilon(1e-6));
+  CHECK(a->diagnostics.passed);
+  // Units: multiplying every variable by 10 leaves d unchanged under the
+  // sandwich metric and multiplies it by 100 under the ULS Hessian metric.
+  const auto m2 = model_with("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6", false, false);
+  data::SampleStats s2 = s;
+  s2.mean.clear();
+  auto fit2 = estimate::fit_gmm(m2.pt, m2.rep, s2, *estimate::simple_start_values(m2.pt, m2.rep, s2, {}), {});
+  REQUIRE(fit2.has_value());
+  Eigen::VectorXd x = fit2->theta;
+  for (Eigen::Index k = 0; k < x.size(); ++k) x(k) += 1e-3 * std::cos(static_cast<double>(k));
+  data::SampleStats scaled = s2;
+  scaled.S[0] *= 100.0;
+  Eigen::VectorXd xs = x;
+  for (std::size_t r = 0; r < m2.pt.size(); ++r)
+    if (m2.pt.free[r] > 0 && m2.pt.op[r] == parse::Op::Covariance) xs(m2.pt.free[r] - 1) *= 100.0;
+  auto base = nf::audit_newton_uls(m2.pt, m2.rep, s2, x);
+  auto moved = nf::audit_newton_uls(m2.pt, m2.rep, scaled, xs);
+  REQUIRE(base.has_value()); REQUIRE(moved.has_value());
+  REQUIRE(base->diagnostics.status == estimate::NewtonAccuracyStatus::Available);
+  REQUIRE(moved->diagnostics.status == estimate::NewtonAccuracyStatus::Available);
+  CHECK(moved->diagnostics.distance == doctest::Approx(base->diagnostics.distance).epsilon(1e-8));
+  nf::NewtonAdapterOptions hess;
+  hess.gauss_newton = true;  // objective-Hessian metric
+  auto hb = nf::audit_newton_uls(m2.pt, m2.rep, s2, x, hess);
+  auto hm = nf::audit_newton_uls(m2.pt, m2.rep, scaled, xs, hess);
+  REQUIRE(hb.has_value()); REQUIRE(hm.has_value());
+  CHECK(hm->diagnostics.distance == doctest::Approx(100 * hb->diagnostics.distance).epsilon(1e-8));
+}
+
+TEST_CASE("Newton adapters: the exact LS Hessian rejects a saddle that Gauss-Newton cannot see") {
+  // One factor in std.lv: zero loadings with residual variances at diag(S)
+  // make the ULS gradient vanish, but the objective decreases along any
+  // loading direction aligned with the sample covariances.
+  const auto m = model_with("f =~ x1 + x2 + x3", false, true);
+  auto s = sample3();
+  Eigen::VectorXd theta = Eigen::VectorXd::Zero(m.pt.n_free());
+  for (std::size_t r = 0; r < m.pt.size(); ++r) {
+    const auto& cell = m.rep.cell_for_row[r];
+    if (m.pt.free[r] <= 0 || !cell.used || cell.mat != model::MatId::Theta) continue;
+    theta(m.pt.free[r] - 1) = s.S[0](cell.row, cell.row);
+  }
+  auto a = nf::audit_newton_uls(m.pt, m.rep, s, theta);
+  REQUIRE(a.has_value());
+  CHECK(a->derivatives.gradient.norm() < 1e-12);
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> exact(a->derivatives.hessian);
+  CHECK(exact.eigenvalues().minCoeff() < -1.0);
+  CHECK(a->diagnostics.status == estimate::NewtonAccuracyStatus::NonpositiveCurvature);
+  CHECK_FALSE(a->diagnostics.passed);
+  nf::NewtonAdapterOptions gn;
+  gn.gauss_newton = true;
+  auto approx = nf::audit_newton_uls(m.pt, m.rep, s, theta, gn);
+  REQUIRE(approx.has_value());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> gauss(approx->derivatives.hessian);
+  CHECK(gauss.eigenvalues().minCoeff() > -1e-10);
+}

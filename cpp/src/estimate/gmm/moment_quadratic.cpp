@@ -18,6 +18,9 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/problem.hpp"
 
+#include "magmaan/data/raw_data.hpp"
+
+#include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate::gmm {
@@ -539,6 +542,199 @@ expected_information_weight(const model::ModelEvaluator& ev,
     W.push_back(std::move(*bw));
   }
   return W;
+}
+
+namespace {
+
+// Stacked moment Jacobian of block b over [mean ; vech(cov)].
+Eigen::MatrixXd block_moment_jacobian(const SampleStats& s,
+                                      const model::Evaluation& e,
+                                      const Layout& layout, std::size_t b) {
+  const Eigen::Index p = e.moments.sigma[b].rows();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index n_free = e.J_sigma.cols();
+  Eigen::MatrixXd Jb = Eigen::MatrixXd::Zero(layout.block_rows[b], n_free);
+  Eigen::Index off = 0;
+  if (layout.has_means) {
+    if (b < s.mean.size() && b < e.moments.mu.size() &&
+        s.mean[b].size() > 0 && e.moments.mu[b].size() > 0 &&
+        e.J_mu.rows() == layout.n_mu_rows) {
+      Jb.topRows(p) = e.J_mu.block(layout.mu_offsets[b], 0, p, n_free);
+    }
+    off = p;
+  }
+  Jb.block(off, 0, pstar, n_free) =
+      e.J_sigma.block(layout.sigma_offsets[b], 0, pstar, n_free);
+  return Jb;
+}
+
+// Shared setup: evaluation with both Jacobians, layout, dense block weights.
+struct QuadraticPoint {
+  model::Evaluation eval;
+  Layout layout;
+  std::vector<Eigen::MatrixXd> W;
+};
+
+fit_expected<QuadraticPoint> quadratic_point(const model::ModelEvaluator& ev,
+                                             const SampleStats& samp,
+                                             const Eigen::VectorXd& theta,
+                                             const Weight& weight,
+                                             const char* who) {
+  auto eval = ev.evaluate(theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_err(eval.error(), who));
+  if (auto ok = validate_common_shapes(samp, eval->moments, who); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto n = total_n_obs(samp); !n.has_value()) return std::unexpected(n.error());
+  QuadraticPoint out;
+  out.layout = make_layout(samp, eval->moments);
+  if (eval->J_sigma.rows() != out.layout.n_sigma_rows ||
+      eval->J_sigma.cols() != theta.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": covariance Jacobian shape does not match the moment layout"));
+  }
+  out.W.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::Index rows = out.layout.block_rows[b];
+    if (weight.empty()) {
+      out.W.push_back(Eigen::MatrixXd::Identity(rows, rows));
+      continue;
+    }
+    if (weight.size() <= b || !weight[b].valid(rows)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": weight block " + std::to_string(b) +
+              " missing or of the wrong dimension"));
+    }
+    out.W.push_back(weight[b].to_dense());
+  }
+  out.eval = std::move(*eval);
+  return out;
+}
+
+// Convert h so that tr(G X) == hᵀ vech(X) for symmetric X.
+Eigen::MatrixXd vech_gradient_to_trace_weight(const Eigen::VectorXd& h,
+                                              Eigen::Index p) {
+  Eigen::MatrixXd G = Eigen::MatrixXd::Zero(p, p);
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r, ++k) {
+      if (r == c) {
+        G(r, c) = h(k);
+      } else {
+        G(r, c) = G(c, r) = 0.5 * h(k);
+      }
+    }
+  }
+  return G;
+}
+
+}  // namespace
+
+fit_expected<Eigen::MatrixXd>
+moment_quadratic_hessian(const model::ModelEvaluator& ev,
+                         const SampleStats& samp,
+                         const Eigen::VectorXd& theta,
+                         const Weight& weight) {
+  const char* who = "gmm::moment_quadratic_hessian";
+  auto pt = quadratic_point(ev, samp, theta, weight, who);
+  if (!pt.has_value()) return std::unexpected(pt.error());
+  auto assembled = ev.assembled(theta);
+  if (!assembled.has_value()) return std::unexpected(model_err(assembled.error(), who));
+  if (assembled->blocks.size() != samp.S.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": assembled block count does not match the sample"));
+  }
+  const auto locs = ev.param_locations();
+  const Eigen::Index q = theta.size();
+  if (locs.size() != static_cast<std::size_t>(q)) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": parameter-location count mismatch"));
+  }
+  for (const auto& l : locs) {
+    if (l.row < 0 || l.col < 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": a free parameter is not a model-matrix cell"));
+    }
+  }
+  const auto& layout = pt->layout;
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+    const Eigen::MatrixXd Jb = block_moment_jacobian(samp, pt->eval, layout, b);
+    const Eigen::MatrixXd& Wb = pt->W[b];
+    const Eigen::VectorXd h = Wb * block_moment_delta(samp, pt->eval.moments, layout, b);
+    H.noalias() += n_b * (Jb.transpose() * Wb * Jb);
+
+    const Eigen::Index p = pt->eval.moments.sigma[b].rows();
+    const Eigen::Index cov_off = layout.has_means ? p : 0;
+    const auto& bm = assembled->blocks[b];
+    const auto sow = detail::SecondOrderWeights::build(
+        vech_gradient_to_trace_weight(h.segment(cov_off, vech_len(p)), p), bm,
+        layout.has_means);
+    std::vector<Eigen::Index> in_block;
+    for (Eigen::Index k = 0; k < q; ++k) {
+      if (locs[static_cast<std::size_t>(k)].block == static_cast<std::int8_t>(b)) {
+        in_block.push_back(k);
+      }
+    }
+    for (std::size_t ai = 0; ai < in_block.size(); ++ai) {
+      const Eigen::Index a = in_block[ai];
+      const auto& la = locs[static_cast<std::size_t>(a)];
+      for (std::size_t ci = ai; ci < in_block.size(); ++ci) {
+        const Eigen::Index c = in_block[ci];
+        const auto& lc = locs[static_cast<std::size_t>(c)];
+        double h2 = detail::second_sigma_trace(la, lc, sow, bm);
+        if (layout.has_means) {
+          h2 += h.head(p).dot(detail::second_mu(la, lc, bm, sow.A_alpha));
+        }
+        H(a, c) += n_b * h2;
+        if (a != c) H(c, a) += n_b * h2;
+      }
+    }
+  }
+  H = (0.5 * (H + H.transpose())).eval();
+  if (!H.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        std::string(who) + ": non-finite Hessian"));
+  }
+  return H;
+}
+
+fit_expected<Eigen::MatrixXd>
+moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
+                                      const SampleStats& samp,
+                                      const Eigen::VectorXd& theta,
+                                      const Weight& weight) {
+  const char* who = "gmm::moment_quadratic_nt_gradient_variance";
+  auto pt = quadratic_point(ev, samp, theta, weight, who);
+  if (!pt.has_value()) return std::unexpected(pt.error());
+  const auto& layout = pt->layout;
+  const Eigen::Index q = theta.size();
+  Eigen::MatrixXd Omega = Eigen::MatrixXd::Zero(q, q);
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    auto gamma = layout.has_means ? data::gamma_nt_with_means(samp.S[b])
+                                  : data::gamma_nt(samp.S[b]);
+    if (!gamma.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": normal-theory Gamma failed in block " +
+              std::to_string(b) + ": " + gamma.error().detail));
+    }
+    if (gamma->rows() != layout.block_rows[b]) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": normal-theory Gamma has the wrong dimension"));
+    }
+    (void)p;
+    const Eigen::MatrixXd WJ =
+        pt->W[b] * block_moment_jacobian(samp, pt->eval, layout, b);
+    Omega.noalias() += static_cast<double>(samp.n_obs[b]) * (WJ.transpose() * (*gamma) * WJ);
+  }
+  Omega = (0.5 * (Omega + Omega.transpose())).eval();
+  if (!Omega.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        std::string(who) + ": non-finite gradient variance"));
+  }
+  return Omega;
 }
 
 }  // namespace magmaan::estimate::gmm
