@@ -439,6 +439,37 @@ the layered start, in both engines and in lavaan, reaches the moderate one. Fit
 times exclude input preparation and start construction (about 1 ms for the
 layered start); they are single concurrent executions, not a controlled speed ranking.
 
+### Why lavaan's PORT differs from magmaan's
+
+Both engines call the same PORT routine, and magmaan's adapter reproduces R's
+`nlminb` exactly: from the layered start on Kline's Roth path model, R's
+`nlminb` on magmaan's objective stops after 11 iterations at the same point as
+magmaan's PORT. The objective and gradient also agree with lavaan's at the start.
+The difference is what lavaan hands to `nlminb`. It sets PORT's diagonal scale to
+1/|start| for every parameter above 1 in magnitude. Unscaled, variances in the
+thousands dominate PORT's relative step test, only the paths move, and the run
+stops early by X-convergence. With lavaan's scale vector, the same objective reaches
+the optimum in 25 iterations, as lavaan does.
+
+```{r}
+ps <- r("port_scaling")
+ps$case <- sub("^kline_2023_ch9_roth_illness_","Kline Roth ",sub("^kline_2023_ch1[45]_","Kline ",sub("^geiser_2013_ch4_","Geiser ",ps$case)))
+ps$message <- sub(" \\(.*","",ps$message)
+knitr::kable(ps[,c("case","estimator","run","f","iterations","message")],digits=6,
+  col.names=c("Case","Estimator","Run","Objective","Iterations","Stop"))
+```
+
+The three GLS cases where lavaan succeeded from magmaan's earlier start are
+different. Neither the scale vector nor lavaan's GLS objective (magmaan's times
+(N−1)/N, the same minimizer) reproduces lavaan's endpoint systematically. With
+both, a replication tracks lavaan's iterates to six digits for 40 iterations,
+then drifts and ends at a singular point. These are path-sensitive, ill-conditioned
+problems, not a systematic lavaan advantage; the layered start recovers all three
+in both magmaan optimizers. The two engines also assess convergence differently.
+lavaan accepts PORT's return code; magmaan requires its terminal audit. In this
+comparison the stricter audit never rejected a magmaan fit at the target
+objective, while lavaan's flag accepted the reflection-trap saddles.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -531,6 +562,7 @@ Rscript R/test_layered_starts.R ../../../external/textbook-corpus results/full -
 Rscript R/summarize_layered.R results/full/layered
 Rscript R/test_lavaan_defaults.R ../../../external/textbook-corpus results/full --workers 3
 Rscript R/summarize_engines.R results/full
+Rscript R/probe_port_scaling.R ../../../external/textbook-corpus results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

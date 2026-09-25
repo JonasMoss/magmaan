@@ -159,6 +159,17 @@ design, starting-point inventory and validation rules are in
   search on the original objective and refit; schedule with the Newton-check
   work. Validate on the engineering/17 trap cases with the simple constructor.
 
+- **S — PORT coordinate scaling for ML and GLS.** magmaan's PORT runs ML and GLS
+  in raw coordinates; the ML sample scaling covers L-BFGS and SLSQP only.
+  lavaan hands `nlminb` a start-based scale (1/|start| for |start| > 1). On
+  raw-unit data, unscaled PORT stops early by X-convergence with only the paths
+  moved: Kline's Roth ML models from the layered start stop after 11 iterations,
+  while the same objective with lavaan's scale reaches the optimum in 25
+  (`engineering/17`, `R/probe_port_scaling.R`). Give PORT the existing
+  sample-derived coordinate scale (unit-equivariant, unlike lavaan's
+  start-threshold rule), extend it to GLS, and rerun the corpus comparison. The
+  three historical GLS PORT-versus-lavaan gaps are path sensitivity, not scaling.
+
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the
   [translation audit](../validation/textbook-translation-audit.md)). On the
