@@ -54,7 +54,9 @@ design, starting-point inventory and validation rules are in
   continuous and ordinal/mixed fits. Specify the nested geometry (sensitivity,
   metric, evaluation point, moment covariance, centering, normalization) before
   coding, including the misspecified-larger-model case.
-- **M — experiment: weight choice in the score tests.** Compare score tests
+- **M — experiment: weight choice in the score tests.** Complete-data ML is
+  settled by experiment engineering/16: keep expected information throughout.
+  Remaining: the least-squares estimators. Compare score tests
   built with the estimator's own weight against alternative weights (for
   example the normal-theory weight at the fitted model, or the full ADF weight
   for DWLS fits), global and nested, on size and power under non-normal and
@@ -82,6 +84,9 @@ design, starting-point inventory and validation rules are in
   intercepts); with it the lab matches lavaan's rows. It is lavaanify
   semantics and belongs in `model_spec()`.
 - **L — extend the policy to FIML, ML2S, ordinal/mixed and two-level fits,**
+  starting with FIML under the decided geometry (observed-H0 sensitivity,
+  expected metric; score and LR each with their own SB and PEBA4 spectra, both
+  reported),
   with a component-level capability table. Unimplemented components report a
   typed reason; the fit is never refused for missing inference.
 - **M — fixed-x models in the policy composer.** The shared NTML geometry

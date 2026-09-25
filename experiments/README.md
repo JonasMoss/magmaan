@@ -10,7 +10,7 @@ preserved; this reorganization does not rerun or reassess the studies.
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
 | [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 48 |
-| [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 15 |
+| [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 16 |
 | [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 9 |
 
 The existing **kind** (`parity`, `replication`, `paper-sim`, `benchmark`, `probe`)
@@ -152,6 +152,7 @@ Inform active implementation and default choices; inherited studies await a focu
 | 13 | [psd-estimator-stress](engineering/13-psd-estimator-stress/report.qmd) | benchmark | active | Across the supported single-level estimator families, where do covariance-honest point fits remain correct, admissible, stable across starts, and computationally practical? |
 | 14 | [sphere-chart-sanity](engineering/14-sphere-chart-sanity/report.qmd) | probe | active | Does the sphere chart reproduce the standard fit across identification conventions, invariance, constraint syntax and estimators, recover known populations in every identification that holds them, and flag the ones that cannot? |
 | 15 | [sphere-local-convergence](engineering/15-sphere-local-convergence/report.qmd) | probe | active | How often does ML reach a certified local optimum on the ordinary and sphere routes under marker and std.lv identification, and are the failures optimizer failures or missing estimates? |
+| 16 | [complete-ml-global-test-geometry](engineering/16-complete-ml-global-test-geometry/report.qmd) | benchmark | active | For complete-data ML, which information choices in the global score and LR tests (expected or observed sensitivity, score metric, LR spectrum) hold the nominal size with SB and PEBA4 under normal and severe non-normal data? |
 
 ## Archived
 

@@ -1,0 +1,131 @@
+---
+title: "Information geometry of the complete-data ML global tests"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+run_dir <- file.path("results", "full")
+rates_path <- file.path(run_dir, "rejection_rates.csv")
+if (!file.exists(rates_path)) {
+  stop("No results. Run: Rscript run_experiment.R --workers 4", call. = FALSE)
+}
+rates <- read.csv(rates_path, stringsAsFactors = FALSE)
+meta <- read.csv(file.path(run_dir, "metadata.csv"), stringsAsFactors = FALSE)
+arm_label <- c(
+  lr_E = "LR, expected-information spectrum (current policy)",
+  lr_O = "LR, observed-information spectrum",
+  score_EE = "Score, expected sensitivity, expected metric (current policy)",
+  score_OE = "Score, observed sensitivity, expected metric",
+  score_OO = "Score, observed sensitivity, observed metric",
+  score_OH = "Score, observed sensitivity, observed-H1 metric",
+  score_EH = "Score, expected sensitivity, observed-H1 metric")
+cal_label <- c(sb = "SB", peba4 = "PEBA4", std = "Uncorrected")
+pct <- function(x) sprintf("%.1f", 100 * x)
+summarise <- function(r) {
+  g <- split(r, list(r$arm, r$calibration), drop = TRUE)
+  do.call(rbind, lapply(g, function(x) data.frame(
+    arm = x$arm[[1L]], calibration = x$calibration[[1L]],
+    mae = mean(abs(x$reject_05 - 0.05), na.rm = TRUE),
+    max = max(x$reject_05, na.rm = TRUE), min = min(x$reject_05, na.rm = TRUE),
+    usable = sum(x$usable) / sum(x$total))))
+}
+```
+
+## Question
+
+For complete-data ML, which information matrices should magmaan's default
+global tests use? Under a correct model every choice is asymptotically valid,
+so the question is finite-sample size: does observed information in the score
+test's nuisance projection or quadratic, or in the likelihood-ratio test's
+robust spectrum, hold the 5% level better or worse than expected information,
+with SB and PEBA4 calibration?
+
+## Short answer
+
+Keep expected information in the score test. With PEBA4 it held the 5% level in
+all 32 cells (2.0 to 7.2% rejection, mean absolute error 1.2 points). Observed
+sensitivity made the score test conservative as the model grew: 0% rejection in
+every p = 40 cell and at p = 20 with N at most 400. An observed score metric was
+not positive definite in 14% of fits and rejected up to 100% of the time
+otherwise. For the likelihood-ratio test the choice of information in the
+spectrum made no practical difference (observed and expected within 1.6 points
+in every cell); PEBA4-calibrated LR was liberal when N was small relative to p
+(10% at p = 20, N = 200 and 15% at p = 40, N = 400). This agrees with the
+complete-data MCAR finding of research/44 and contrasts with FIML under
+non-normal MAR, where observed sensitivity is needed.
+
+## Evidence
+
+```{r overall}
+s <- summarise(rates[rates$calibration != "std" & rates$arm != "score_OO", ])
+s <- s[order(s$mae), ]
+knitr::kable(data.frame(
+  Test = arm_label[s$arm], Calibration = cal_label[s$calibration],
+  `Mean Abs. Size Error (pp)` = pct(s$mae),
+  `Lowest Rejection (%)` = pct(s$min), `Highest Rejection (%)` = pct(s$max),
+  `Usable Fits (%)` = pct(s$usable), check.names = FALSE),
+  row.names = FALSE, align = "llrrrr",
+  caption = "Size at the 5% level across all 32 cells (correct model).")
+```
+
+The observed-metric score test is left out of the size summary above: it was
+usable in `r pct(sum(rates$usable[rates$arm == "score_OO" & rates$calibration == "peba4"]) / sum(rates$total[rates$arm == "score_OO" & rates$calibration == "peba4"]))`%
+of fits, and where usable it rejected between
+`r pct(min(rates$reject_05[rates$arm == "score_OO"], na.rm = TRUE))` and
+`r pct(max(rates$reject_05[rates$arm == "score_OO"], na.rm = TRUE))`%.
+
+```{r by-design}
+key <- rates[rates$calibration == "peba4" &
+               rates$arm %in% c("score_EE", "score_OE", "lr_E", "lr_O"), ]
+key$design <- sprintf("p = %d, N = %d", key$p, key$N)
+g <- aggregate(reject_05 ~ arm + design + p + N, data = key, FUN = mean)
+g <- g[order(g$p, g$N), ]
+w <- reshape(g[, c("arm", "design", "reject_05")], idvar = "arm",
+             timevar = "design", direction = "wide")
+names(w) <- sub("reject_05.", "", names(w))
+w <- w[match(c("score_EE", "score_OE", "lr_E", "lr_O"), w$arm), ]
+w$arm <- arm_label[w$arm]
+for (col in names(w)[-1]) w[[col]] <- pct(w[[col]])
+names(w)[1] <- "Test"
+knitr::kable(w, row.names = FALSE,
+             caption = "PEBA4 rejection (%) by design, averaged over the four distributions.")
+```
+
+## Caveats
+
+- Only size is measured, under one correctly specified two-factor CFA. Power
+  and misspecified models are not covered.
+- `r meta$value[meta$key == "reps"]` replicates per cell for p = 10 and 20 and
+  `r meta$value[meta$key == "reps_p40"]` for p = 40, so a single cell's
+  rejection rate carries about one percentage point of simulation noise.
+- Non-normality is only the severe level (skew 3, kurtosis 21) of three
+  generators; moderate non-normality is not run.
+
+## Decision record
+
+- Current default (magmaan's policy for complete-data ML): expected information
+  for both global tests.
+- Alternatives run here: observed sensitivity, observed-H0 and observed-H1
+  score metrics, observed-information LR spectrum.
+- Evidence: expected-information score PEBA4 is the best-calibrated arm in this
+  design; no observed choice improves on it.
+- Reopening trigger: a misspecification or power study, a different model
+  family, or moderate non-normality showing a different ordering.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke          # two tiny cells
+Rscript run_experiment.R --workers 4      # full grid, about 30 minutes
+quarto render report.qmd
+```
+
+Per-cell rates are in `results/full/rejection_rates.csv`; per-fit p-values in
+`results/full/arms.csv`.

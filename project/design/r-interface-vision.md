@@ -143,21 +143,31 @@ Global tests against the saturated model:
   statistic, since it is not a likelihood ratio.
 - Profiling: when the score uses the estimator's own weight, the nuisance part
   of the score is zero at the estimate (the first-order condition), so the
-  effective (profile) score equals the raw score and profiling leaves the
-  statistic unchanged, for global and nested tests alike. Profiling still
-  shapes the reference distribution: the projection in the SB and PEBA4
-  spectrum is the effective-score covariance, and for nested tests it uses the
-  larger model's sensitivity. When the score uses a different weight from the
-  estimator, the nuisance part no longer vanishes, and the test must use the
-  effective score explicitly. Which score weight the policy uses is settled by
-  experiment (see the backlog).
+  effective (profile) score vector equals the raw score. The statistic is that
+  vector's quadratic form in the inverse of its covariance, and the covariance
+  depends on the sensitivity used for the nuisance projection. When the
+  projection uses the metric's own information the statistic reduces to the
+  unprojected form; with a different sensitivity (observed with an expected
+  metric, say) the statistic changes as well as the spectrum. When the score
+  uses a different weight from the estimator, the nuisance part no longer
+  vanishes, and the test must use the effective score explicitly. Which
+  sensitivity and score weight the policy uses is settled by experiment
+  (engineering/16 for complete-data ML; see the backlog).
 - Statistic and calibration are labelled separately; the spectrum or trace
   and numerical diagnostics are retained.
-- Geometry of the global tests (decided 2026-09-25 for complete-data ML): the
-  shared expected-information geometry, with the empirical Gamma. That is the
-  geometry the SB and PEBA4 evidence covers, and under the global null the
-  observed alternative differs only at O_p(n^-1/2). The observed-information
-  U enters as an arm of the score-weight experiment rather than as the default.
+- Geometry of the global tests, by estimator:
+  - Complete-data ML: expected information for the score sensitivity, the score
+    metric and the LR spectrum, with the empirical Gamma. Experiment
+    engineering/16 (FMG 2024 two-factor designs, 14,000 fits) found
+    expected-information score PEBA4 within 2.0 to 7.2% rejection in all 32
+    cells; observed sensitivity drove the score test to 0% rejection as p grew,
+    an observed score metric was often not positive definite and far too
+    liberal, and the LR spectrum's information choice did not matter.
+  - FIML: observed-H0 sensitivity with the expected (pattern-conditional
+    Fisher) metric in the score test, per research/44: expected sensitivity
+    fails under non-normal MAR and an observed metric is unstable. Under MAR the
+    score and LR tests are then not asymptotically equivalent, so each keeps its
+    own spectrum and both are reported.
 
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)
