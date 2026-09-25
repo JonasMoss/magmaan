@@ -1728,8 +1728,15 @@ when they next change.
   gate. In parallel, the bounded analytic
   question remains shrinkage of `G'B1G` itself, spanning SB's
   common-eigenvalue trace, pEBA-style spectral shrinkage, and the raw sandwich
-  inverse. Gate either proposal on null size, matched-null power, and meat
-  conditioning rather than one aggregate rejection rate.
+  inverse. Research/49 now supplies a complete-data global score/LRT pilot of
+  nonlinear covariance shrinkage, cycle-moment reconstruction (orders 4/6),
+  and direct truncated-CGF tails, with explicit failures and an independent
+  calibration-sample diagnostic. These remain experiment-local R prototypes.
+  Before promotion: validate population-spectrum/resolvent recovery for
+  transformed nonnormal rows, control same-sample projection error, stabilize
+  high-order moments, and establish a valid tail law (a truncated polynomial
+  is not automatically a CGF). Gate either proposal on null size, matched-null
+  power, and meat conditioning rather than one aggregate rejection rate.
   Experiment research/44 has now closed the simple version of that gate. It exposed the
   projected score/metric/meat and compared raw and centered OPG, Hotelling, two
   predeclared vanishing meat shrinkages, and two analogous shrinkages of the

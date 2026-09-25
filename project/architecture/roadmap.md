@@ -34,6 +34,19 @@ remain historical evidence, with sources and local results preserved.
 
 ## Current State
 
+Research experiment `research/49-spectral-tail-calibration` adds local R
+prototypes for analytical nonlinear covariance shrinkage, increasing-index
+cycle moments through order six, positive-spectrum reconstruction, and
+truncated-CGF right-tail rules, compared with pEBA-4 for complete-data global
+score and ML LRT tests. It checks observation-level spectra against the existing
+core and estimates moments on an additional independent sample as a diagnostic. These are
+advisory prototypes, not exported methods or changes to inference policy;
+covariance-loss shrinkage is not population-spectrum recovery, and fitted
+projections invalidate exact cycle-moment unbiasedness on the fitting sample.
+Validation includes brute-force cycles, fixed-projection Monte Carlo moments,
+scale identities, and a scaled-chi-square saddlepoint reference. The report
+records the 500-replication-per-cell null pilot and failure rates.
+
 The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
 compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and
 explicit recovery, retaining backend status, fit verdict, objective quality,

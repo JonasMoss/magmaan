@@ -1,0 +1,141 @@
+---
+title: "Can spectral estimation improve score and LRT calibration?"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Can nonlinear shrinkage or cross-observation spectral moments improve on
+pEBA-4 for global score and likelihood-ratio tests with non-normal data?
+
+## Short answer
+
+There is no consistent improvement over pEBA-4 in this 6,000-dataset null pilot.
+For skewed factors and errors, nonlinear shrinkage rejects only 0.4–2.6% at
+nominal 5%, across score/LRT and the four sample-size/model-size cells; pEBA-4
+rejects 2.6–6.8%. Fourth-order direct-CGF rejection is 4.4–5.4% at n=400,
+but the n=100, 12-indicator cell rejects 13.7% for LRT among usable calls and
+fails on 15.2% of datasets. Sixth-order moments fail on 59.0% of datasets in
+that same cell. The high-order moment route needs stabilization before it can
+be a practical replacement. These are local research prototypes, not new
+package defaults.
+
+```{r}
+path <- 'results/pilot500/summary.csv'
+if(!file.exists(path)) stop('Run the pilot500 command under Reproduce first.')
+s <- read.csv(path)
+r <- read.csv('results/pilot500/replicates.csv')
+```
+
+## Evidence
+
+The following plot shows rejection at nominal 5%, separately for each statistic
+and distribution. Shape denotes sample size (circles: 100; triangles: 400). The complete CSV includes binomial intervals, method
+failures, and paired differences from pEBA-4 with Monte Carlo standard errors.
+
+```{r}
+#| fig-width: 12
+#| fig-height: 7
+methods <- c('peba4','all','ans','mom4','mom6','cgf4','cgf6')
+cols <- c('#222222','#999999','#0072B2','#009E73','#CC79A7','#D55E00','#E69F00')
+par(mfrow=c(2,3),mar=c(4,4,3,1),oma=c(4,0,0,0))
+for(kind in c('score','lrt')) for(dist in c('normal','skewed','heterogeneous')) {
+  x <- s[s$statistic_kind==kind & s$distribution==dist,]
+  plot(NA,xlim=c(0,.56),ylim=c(0,max(.15,x$rejection,na.rm=TRUE)),
+       xlab='Degrees of freedom / sample size',ylab='Rejection proportion',
+       main=paste(kind,dist))
+  abline(h=.05,lty=2,col='grey50')
+  for(j in seq_along(methods)) {
+    z <- x[x$method==methods[j],]; z <- z[order(z$d_over_n),]
+    lines(z$d_over_n,z$rejection,col=cols[j])
+    points(z$d_over_n,z$rejection,col=cols[j],pch=ifelse(z$n==100,16,17))
+  }
+}
+par(fig=c(0,1,0,.08),new=TRUE,mar=rep(0,4))
+plot.new();legend('center',legend=methods,col=cols,lty=1,ncol=7,bty='n',cex=.8)
+```
+
+Failure rates are essential: a method that cannot decide is not counted as a
+successful nonrejection. The table pools failures across design cells, not
+rejection rates across different populations.
+
+```{r}
+f <- aggregate(cbind(failed,attempted)~method,s,sum)
+f$`Failure (%)` <- round(100*f$failed/f$attempted,1)
+knitr::kable(f[,c('method','failed','attempted','Failure (%)')],
+             col.names=c('Method','Failed','Attempted','Failure (%)'))
+```
+
+## Caveats
+
+This is a null-calibration pilot, not a power comparison. It uses one-factor
+CFA with 8 or 12 indicators, loadings from .45 to .80, and unit population
+observed variances. Independent latent factors and errors are either normal,
+standardized chi-square(1), or heterogeneous: alternating normal and
+chi-square components, with one standardized lognormal error (log SD .7).
+All these distributions have finite moments of every order. The sample sizes
+are 100 and 400, giving 20 or 54 degrees of freedom. These mechanisms preserve
+the same null covariance and deliberately vary higher moments.
+
+Five hundred replications give a Monte Carlo standard error near one percentage
+point at a true 5% rate. Calibration alone does not establish superiority, and
+these cells do not cover elliptical heavy tails, missing data, or nested tests.
+No production inference policy changes.
+
+Nonlinear shrinkage here means the analytical covariance-loss estimator of
+[Ledoit and Wolf](https://www.econ.uzh.ch/apps/workingpapers/wp/econwp264.pdf),
+used experimentally as mixture weights. It is **not** QuEST population-spectrum
+recovery, and its usual random-matrix assumptions need not hold for transformed
+quadratic observation contributions. Sample-size-dependent projection error is
+also left in the primary comparison.
+
+The moment methods use increasing-index cycles as in
+[Kong and Valiant](https://arxiv.org/abs/1602.00061), after disjoint pair
+differencing to remove unknown means. This halves the number of independent
+rows. The cycle estimators are unbiased with an independently fixed projection;
+the primary methods estimate that projection from the same data. The
+`independent` diagnostic spends an **additional n observations** estimating the
+reference moments with the original fitted projection held fixed. It is an
+extra-data diagnostic, not an equal-cost competitor. Even there, the estimated
+projection can differ from its population counterpart.
+
+Orders 4 and 6 reconstruct a positive, equal-mass spectrum by constrained
+relative-moment least squares, then use the existing numerical mixture tail.
+This reconstruction is an approximation and can lose noisy higher moments;
+its residual is saved per replication. Optimizer failures and nonpositive
+moments remain explicit failures. Pair order is fixed by the reproducible draw,
+not selected for favorable results.
+
+The direct-CGF methods truncate the cumulant series at order 4 or 6 and use a
+[Lugannani–Rice/Kuonen right-tail approximation](https://academic.oup.com/biomet/article-abstract/86/4/929/276253). A finite polynomial need not be a valid
+CGF, so these are **experimental rejection rules**, not established p-values.
+Below the estimated mean they record nonrejection with a missing p-value and
+an explicit flag. Invalid right tails remain failures. `raw_saddle` separately
+checks saddlepoint approximation using the unmodified positive spectrum.
+A consistent resolvent estimator or tail-optimal shrinkage rule remains future
+work; this pilot does not claim to implement either.
+
+## Reproduce
+
+From the repository root, with the installed `magmaanlab` package:
+
+```sh
+OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate.R
+TZ=Europe/Oslo OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/run_experiment.R --reps 500 --output pilot500
+quarto render experiments/research/49-spectral-tail-calibration/report.qmd
+```
+
+The output directory must be new. `--smoke` runs two replications per cell;
+`--help` lists options. All fits and standard reference distributions use
+`magmaanlab`; new estimators are local R research prototypes. Each replication
+checks that projected rows reproduce the existing score and LRT spectra, and
+that the independent-sample score transport agrees with the core on fitting
+data. Results record package version and binary hash, source hashes, Git
+revision and worktree status. This pilot uses the installed package without
+rebuilding the repository's unrelated in-progress changes.
