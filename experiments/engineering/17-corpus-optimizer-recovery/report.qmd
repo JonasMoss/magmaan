@@ -93,6 +93,66 @@ admissibility and objective quality remain separate outcomes. Settings do not
 have the same meaning across algorithms; tighter numerical controls are not
 in themselves a guarantee of a more accurate answer.
 
+### What PORT missed, and which identification it used
+
+PORT's 17 misses per estimator are not 17 solver breakdowns. A targeted rerun
+reproduces all 34 outcomes and separates them as follows:
+
+| Outcome | ML | GLS |
+|---|---:|---:|
+| Non-finite objective error | 2 | 0 |
+| Unsupported nonlinear equalities | 1 | 1 |
+| Returned but rejected by the fit audit | 12 | 7 |
+| Accepted but worse than the comparison objective | 2 | 9 |
+
+The two ML errors are Little Chapter 7 Table 2's `homogc_gender` and
+`vars_gender`: both supplied starts already have infinite ML objectives.
+Mplus Chapter 6 Example 6.17 requires nonlinear equality constraints that the
+PORT route does not support. Neither category establishes a PORT line-search
+failure from a valid supported problem.
+
+All twelve ML audit rejections report nonpositive curvature: Little Chapter 10
+Figure 12; Chapter 3 Figure 3.11; Chapter 7 Figure 7.10, Table 7.6
+(weak/strong/partial), and Table 7.8 (pruned initial/partial/variance test);
+and Chapter 8 Figure 7, Figure 9, and Table 8 bullying models. The two accepted
+but worse ML fits are Kline's Worland Step 2a and Little Chapter 8 Figure 3b.
+
+The seven GLS audit rejections are Geiser's Chapter 4 latent autoregressive
+cross-lagged model; Kline's Sabatelli Heywood model and Worland Step 2b;
+the three Chapter 8 Little bullying models above; and Newsom Example 5.5b.
+The nine accepted but worse GLS fits are the remaining nine Little models in
+the twelve-model ML curvature list. Full case IDs, objective gaps, messages,
+and reproduced curvature statuses are in `results/full/port_failures.csv`.
+
+**This was not an identification sweep.** We retained each corpus model's
+syntax. The builder defaults were `auto_fix_first=TRUE`, `std_lv=FALSE`, and
+`effect_coding=FALSE`, but explicit syntax overrides automatic markers and can
+impose effect coding directly. Consequently:
+
+- Kline's Worland factors use `verbal`, `read`, `motive`, and `parent` as
+  unit-loading markers. Sabatelli uses `problems` and `father`.
+- Geiser's depression/competence factors use `d11/d12/d13` and `c11/c12/c13`.
+  Newsom's simplex uses unit-loading single indicators `srh1` through `srh6`.
+- Little Figure 7.10 uses indicator 2 for both positive and negative affect
+  at each wave. Table 7.8 uses indicator 2 for positive affect and indicator 3
+  for negative affect. Both also contain unit-variance phantom factors.
+- Little Table 7.6 has no observed marker loading: unit-variance phantoms and
+  paths fixed to one in the reference group anchor the scales; shared loadings
+  link groups. This is not the same as requesting a blanket `std.lv=TRUE` fit.
+- Little Chapter 3 Figure 3.11, Chapter 10 Figure 12, and the Chapter 8 bullying
+  models combine explicitly effect-coded measurement blocks with unit-variance
+  higher-order/phantom factors. The two Chapter 7 Table 2 error cases also use
+  effect coding, plus unit-loading single-indicator covariate factors.
+- Little Chapter 8 Figure 3b fixes all level loadings to one and the slope's
+  `NegT2` loading to one; its `NegT3/NegT4` loadings are free. Mplus Example 6.17
+  uses fixed intercept loadings and slope times 0, 1, 2, 3.
+
+`port_factor_identification.csv` lists every factor and group in the affected
+models, including fixed zero loadings; those zeros are not scale markers.
+`port_identification_constraints.csv` retains their equality constraints.
+The clustering among phantom models motivates checking starts and curvature;
+it does not establish that a particular identification causes the failures.
+
 ### Previously flagged GLS cases
 
 ```{r}
@@ -200,6 +260,7 @@ Rscript R/complete_timeouts.R ../../../external/textbook-corpus results/full
 Rscript R/validate_inputs.R ../../../external/textbook-corpus results/full
 Rscript R/summarize.R results/full
 Rscript R/inspect_endpoints.R ../../../external/textbook-corpus results/full
+Rscript R/inspect_port.R ../../../external/textbook-corpus results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv
