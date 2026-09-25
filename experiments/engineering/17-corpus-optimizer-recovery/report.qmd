@@ -30,8 +30,35 @@ count <- function(est,arm,col) s[s$estimator==est & s$arm==arm,col][1]
 On the corrected textbook corpus, which ordinary optimizers recover a good
 solution from our current starts? Do the historical Newsom GLS failures still
 justify changing the evaluator?
+Where the starts are at fault, does a structure-aware start fix it without
+losing cases that already work?
 
 ## Short answer
+
+```{r layered-setup}
+lay <- r("layered/summary"); lp <- r("layered/paired")
+lc <- function(est,arm,start) lay$good_now[lay$estimator==est & lay$arm==arm & lay$start==start]
+lr <- function(col) sum(lp[[col]])
+```
+
+**A layered moment start removes most start failures and loses few cases.**
+It builds the start from the data in layers (measurement, latent covariance,
+identification scale, structure) instead of cell by cell. With the same engine
+and default controls, accepted fits matching the best observed objective rise
+for ML from `r lc("ML","port_default","current")` to `r lc("ML","port_default","layered")`
+of 304 with PORT and from `r lc("ML","lbfgs_default","current")` to
+`r lc("ML","lbfgs_default","layered")` with L-BFGS. For GLS they rise from
+`r lc("GLS","port_default","current")` to `r lc("GLS","port_default","layered")` with PORT
+and from `r lc("GLS","lbfgs_default","current")` to `r lc("GLS","lbfgs_default","layered")`
+with L-BFGS. Across the four estimator/optimizer pairs, `r lr("rescued")` case fits
+are gained and `r lr("lost")` lost. Every loss starts from a lower objective than
+the current start and fails in the optimizer: an early L-BFGS line-search abort,
+or a PORT or L-BFGS stop short of the optimum on raw-unit data. Most original
+failures share one mechanism: a latent scaled by a fixed variance
+(a std.lv or phantom factor) has a sign-reflection symmetry, and a start with all
+its sign-odd paths at zero sits on it with exactly zero gradient in those paths.
+No gradient-based optimizer leaves that subspace, lavaan included. The layered
+start is not yet a default.
 
 **Settings alone do not repair L-BFGS's early domain failures.** PORT recovers
 cases that stop almost immediately under L-BFGS, even after increasing its
@@ -63,7 +90,7 @@ start construction; it does not establish that the diagnostic 0.5 rule is a
 suitable general policy. A narrower sample-based initializer recovers three ML
 cases and one GLS case with each optimizer, but fails unit-invariance checks
 when composed with the existing loading starts. It is not ready for promotion.
-No default is changed on the basis of this study.
+The layered start below supersedes this prototype. No default is changed on the basis of this study.
 
 ## Evidence
 
@@ -332,6 +359,55 @@ the failed property checks as explicit promotion blockers. The full policy
 comparison and fallback reasons are in `results/full/structural/comparison.csv`;
 `structural_properties.csv` records both passing and failing checks.
 
+### The layered moment start
+
+At the current start, the phantom CFA, the second-order model and Table 7.6 have
+gradient exactly zero in every phantom or higher-order path, with second
+derivatives between −1.9 and −17. This is the reflection symmetry at work, not
+slow progress: the implied covariance depends on each such path only through its
+square or through products with the latent covariances, which also start at zero.
+
+The layered start estimates loading shapes per latent on the standardized
+covariance, fits the covariance of the measured latents to the indicator
+covariances, rescales each latent to the model's own identification (markers,
+effect coding, fixed variances, loading equalities across groups or time), and
+then fits the paths and latent covariances to that latent covariance, starting
+from moment-based, nonzero magnitudes for variance-carrying paths. Means are fitted
+last and the result is projected onto the model's equality constraints. The same
+change corrects a defect in the simple and FABIN starts: a disturbance fixed at
+zero was read as a std.lv scale, which made loading starts depend on observed units.
+
+```{r}
+z <- data.frame(Estimator=c("ML","ML","GLS","GLS"),
+  Optimizer=c("PORT","L-BFGS","PORT","L-BFGS"),
+  arm=c("port_default","lbfgs_default","port_default","lbfgs_default"))
+z$Current <- mapply(function(e,a) lc(e,a,"current"),z$Estimator,z$arm)
+z$Layered <- mapply(function(e,a) lc(e,a,"layered"),z$Estimator,z$arm)
+z$Gained <- mapply(function(e,a) lp$rescued[lp$estimator==e & lp$arm==a],z$Estimator,z$arm)
+z$Lost <- mapply(function(e,a) lp$lost[lp$estimator==e & lp$arm==a],z$Estimator,z$arm)
+knitr::kable(z[,c("Estimator","Optimizer","Current","Layered","Gained","Lost")],
+  col.names=c("Estimator","Optimizer","Current Start","Layered Start","Gained","Lost"))
+```
+
+Counts are accepted fits within the comparison tolerance of the best objective
+seen in any run, out of 304 per estimator. Both starts use the same installed
+engine. Of the 21 targeted pairs from the crossing study, all seven GLS pairs
+recover with both optimizers, and 12 of the 14 ML pairs; the exceptions are
+Little's two Chapter 8 ALT models. From the layered start they reach 0.547575, as they do
+from the 0.5-path diagnostic and in lavaan, against 0.543219 from the verified
+LISREL start. This looks like a second local optimum, not a start defect.
+The two cases with an infinite objective at the current start (Table 2 gender
+models, where fixed covariances meet constant 0.05 variance starts) now start
+finite and recover.
+
+The remaining losses are optimizer events from better starts. L-BFGS aborts its
+first line search on Geiser's quadratic growth model, whose solution lies near
+the edge of the admissible region. PORT stops with variances 1 to 4% short on
+Kline's raw-unit Roth models, and L-BFGS stops early on Lynam's GLS model.
+Trait-state models, whose latent covariance only the structural part identifies,
+keep the FABIN3 start. Full endpoints, start objectives and start notes are in
+`results/full/layered/`.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -354,6 +430,13 @@ work on scale-aware domain recovery, not a validated normalization policy for
 arbitrary constrained SEMs.
 
 ## Caveats
+
+The layered comparison reruns both starts on one engine build that includes the
+start change, so its current-start counts differ slightly from the frozen main
+study. Its target is the frozen best observed objective, lowered when a new fit
+is better; it is not a global-optimum certificate. Start objectives and counts
+are descriptive for this corpus. Fresh synthetic panels, other estimators and
+the sanitized build remain to be checked before a default change.
 
 The run scheduled `r nrow(jobs)` case/estimator jobs;
 `r sum(jobs$exit != 0)` ended with a process failure or wall-clock timeout.
@@ -413,6 +496,8 @@ Rscript R/summarize_starts.R results/full/starts
 Rscript R/probe_start_semantics.R ../../../external/textbook-corpus results/full
 Rscript R/check_structural_starts.R results/full
 Rscript R/test_structural_starts.R ../../../external/textbook-corpus results/full
+Rscript R/test_layered_starts.R ../../../external/textbook-corpus results/full --workers 3
+Rscript R/summarize_layered.R results/full/layered
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

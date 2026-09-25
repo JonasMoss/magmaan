@@ -90,13 +90,14 @@ std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
     return "fabin3";
   }
   if (name == "scaled-fabin" || name == "simple" || name == "fabin2" || name == "fabin3" ||
+      name == "layered" ||
       name == "guttman" || name == "guttman1952" ||
       name == "bentler" || name == "bentler1982" ||
       name == "jamesstein" || name == "james-stein" || name == "js") {
     return name;
   }
   Rcpp::stop("magmaan: %s(): unsupported start '%s' "
-             "(accepted: default, scaled-fabin, simple, fabin2, fabin3, guttman, bentler1982, jamesstein)",
+             "(accepted: default, scaled-fabin, simple, fabin2, fabin3, layered, guttman, bentler1982, jamesstein)",
              caller, name.c_str());
   return default_name;
 }
@@ -108,6 +109,7 @@ magmaan::estimate::StartMethod start_method(const std::string& name) {
   if (name == "guttman" || name == "guttman1952") return M::Guttman;
   if (name == "bentler" || name == "bentler1982") return M::Bentler1982;
   if (name == "jamesstein" || name == "james-stein" || name == "js") return M::JamesStein;
+  if (name == "layered") return M::Layered;
   return M::Fabin3;
 }
 
@@ -120,6 +122,7 @@ const char* start_method_name(magmaan::estimate::StartMethod method) {
     case M::Guttman: return "guttman";
     case M::Bentler1982: return "bentler1982";
     case M::JamesStein: return "jamesstein";
+    case M::Layered: return "layered";
   }
   return "unknown";
 }
@@ -7086,6 +7089,7 @@ Rcpp::NumericVector fit_start_values(
   out.attr("start_transport") = value->branch == es::MlStartBranch::TransportedStdLv
       ? "std-lv-to-marker" : "native";
   out.attr("start_fallback_reason") = es::start_transport_reason(value->fallback_reason);
+  out.attr("start_notes") = Rcpp::wrap(value->notes);
   return out;
 }
 

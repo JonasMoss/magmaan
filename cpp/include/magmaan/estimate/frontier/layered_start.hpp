@@ -1,0 +1,73 @@
+#pragma once
+
+// Layered moment start values (frontier; not a lavaan start scheme).
+//
+// A start constructor that works in layers instead of per partable cell:
+//
+//   1. Measurement. Per block, on the standardized sample covariance, each
+//      latent with free loadings gets a loading shape from FABIN3 (>= 4
+//      indicators), triads (3), an out-of-block instrumental ratio (2) or the
+//      squared multiple correlation (1). Rows loading on several latents, or
+//      not covered by a shape, are refitted by a row-wise least-squares step.
+//   2. Latent covariance. Given the working loadings and uniqueness priors, the
+//      covariance of the measured latents is a weighted linear least-squares
+//      fit to the standardized covariance. Pairs with a free residual
+//      covariance are excluded.
+//   3. Scale. Working latents are standardized; a per-(block, latent) factor maps
+//      them to the user's identification. It solves markers, effect-coding
+//      rows, variances pinned by fixed structure, and cross-block loading
+//      equalities jointly in log scale.
+//   4. Structure. Per block, the free paths and latent (co)variances are
+//      fitted to the latent covariance of step 2 by a small Levenberg-Marquardt
+//      least-squares problem. Its initial point gives variance-carrying paths
+//      of structure-only latents (phantoms, higher-order and growth factors)
+//      nonzero magnitudes from the moments, with the first path of each such
+//      latent positive. A start on a sign-reflection fixed subspace, where the
+//      gradient in those paths is exactly zero, is avoided by construction.
+//   5. Means are a linear least-squares fit in the reduced constraint
+//      coordinates. All parameters are then projected onto the linear equality
+//      constraints (unit-weighted, so the projection is scale equivariant),
+//      user hints are applied, and free variances are inflated if the implied
+//      covariance is not positive definite.
+//
+// Every step is a ratio or a standardized least-squares problem, so rescaling
+// the observed variables rescales the implied start covariance accordingly,
+// and equivalent spellings or identifications give the same implied start
+// covariance when no constraint projection intervenes. Two-level models and
+// native FC-SEM composites are outside the domain: the FABIN3 constructor is
+// returned with a note.
+
+#include <string>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
+
+namespace magmaan::estimate::frontier {
+
+struct LayeredStartReport {
+  Eigen::VectorXd theta;              // n_free start vector, hints applied
+  std::vector<std::string> notes;     // fallbacks, repairs and unsupported parts
+  double structural_cost_initial = 0; // summed per-block latent-fit cost, before
+  double structural_cost_final = 0;   //   and after the Levenberg-Marquardt step
+  bool covariance_repaired = false;   // free variances inflated to reach PD Σ
+};
+
+fit_expected<LayeredStartReport>
+layered_start_report(const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const data::SampleStats& samp,
+                     const spec::Starts& starts = {});
+
+fit_expected<Eigen::VectorXd>
+layered_start_values(const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const data::SampleStats& samp,
+                     const spec::Starts& starts = {});
+
+}  // namespace magmaan::estimate::frontier

@@ -55,11 +55,20 @@ An equivalent-model probe confirms that latent regressions and higher-order
 loadings currently receive different simple starts despite representing the same
 scale paths. Structural initialization beyond the loading constructors remains
 an explicit gap; no blanket nonzero-regression policy has been adopted.
-An experiment-local moment-based prototype for deterministic single-parent
-measurement blocks adds three ML and one GLS recoveries per optimizer on the
-608-pair scan. It is not promoted: composition with current loading starts fails
-observed-unit equivariance, and simple starts fail a sign check. Fixed innovation
-variance versus total latent scale is the next identified constructor issue.
+The zero-path failures are exact sign-reflection traps: a latent scaled by a
+fixed variance (std.lv or phantom) with all sign-odd free paths at zero has zero
+gradient in them, so no gradient optimizer leaves. The frontier layered moment
+start (`estimate::frontier::layered_start_values`, R `start = "layered"`, not a
+default) builds measurement shapes, the measured-latent covariance, a joint
+identification scale solve and a GLS latent-level structural fit, with
+sign-generic moment magnitudes for variance-carrying paths, then means, a
+unit-weighted constraint projection and PD repair. It is identification- and
+spelling-invariant in its implied start covariance and equivariant under
+observed rescaling (unit tests). On the 608-pair engineering/17 scan it gains
+113 and loses 4 case fits across ML/GLS × PORT/L-BFGS; the losses are optimizer
+terminations from lower start objectives. Simple/FABIN no longer read a zero
+disturbance as a std.lv scale. Trait-state blocks whose latent covariance only
+the structure identifies keep FABIN3.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under
@@ -144,6 +153,8 @@ distinguish unsupported layouts from numerical failures. Optimizer-coordinate
 scaling remains independent. R's ML and start-helper defaults agree on automatic
 transported FABIN3, and explicit `default` matches omission. Native method names
 remain available; start metadata reports the actual branch and fallback reason.
+`StartMethod::Layered` is never transported (it constructs in the target
+identification) and reports constructor notes on `StartValues::notes`.
 Simple and FABIN starts interpret observed loadings, residual variances and
 intercepts by their model meaning even when Reduced LISREL stores them in
 Beta/Psi/Alpha phantom-state cells. This fixes skipped FABIN loadings,

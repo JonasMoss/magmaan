@@ -60,11 +60,14 @@ simple_start_values(const spec::LatentStructure& pt,
   if (n_free == 0) return start;
   const std::size_t n_hint = starts.hint.size();
 
-  // Per-block table of latent (Ψ) columns whose own variance is *fixed* — the
-  // `std.lv` case (and any explicit `f ~~ c*f`). A loading into such a latent
-  // can't be scaled by the LV variance, so we start it from the indicator's
-  // own variance (≈ lavaan's `sqrt(0.5 · var_indicator)`) rather than the
-  // marker-world 0.7. Built once up front by a single sweep over the rows.
+  // Per-block table of latent (Ψ) columns whose own variance is fixed at a
+  // *positive* value — the `std.lv` case (and any explicit `f ~~ c*f`, c > 0).
+  // A loading into such a latent can't be scaled by the LV variance, so we
+  // start it from the indicator's own variance (≈ lavaan's
+  // `sqrt(0.5 · var_indicator)`) rather than the marker-world 0.7. A
+  // disturbance fixed at zero (`f ~~ 0*f`, a phantom-scaled latent) fixes no
+  // scale: the variance comes from the latent's parents. Built once up front
+  // by a single sweep over the rows.
   std::vector<std::vector<bool>> lv_var_fixed(rep.dims.size());
   // Marker indicator per latent: the observed row whose loading on that latent
   // is fixed to 1 via a user `=~` marker. Markers are partable rows, so this
@@ -80,8 +83,9 @@ simple_start_values(const spec::LatentStructure& pt,
     const auto c = detail::start_cell(pt, rep, i);
     if (!c.used || pt.free[i] != 0) continue;  // estimated → neither fact holds
     const std::size_t b = static_cast<std::size_t>(c.block);
-    // std.lv: a fixed latent variance.
+    // std.lv: a latent variance fixed at a positive value.
     if (c.mat == model::MatId::Psi && c.row == c.col &&
+        std::isfinite(pt.fixed_value[i]) && pt.fixed_value[i] > 0.0 &&
         b < lv_var_fixed.size() &&
         static_cast<std::size_t>(c.col) < lv_var_fixed[b].size()) {
       lv_var_fixed[b][static_cast<std::size_t>(c.col)] = true;

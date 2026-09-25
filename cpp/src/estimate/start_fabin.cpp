@@ -206,9 +206,13 @@ fabin_start_values(const spec::LatentStructure& pt,
     if (b >= facs.size()) continue;
     const std::size_t col = static_cast<std::size_t>(c.col);
 
-    if (c.mat == model::MatId::Psi && c.row == c.col && pt.free[i] == 0 &&
-        col < facs[b].size()) {
-      facs[b][col].std_lv = true;
+    // std.lv: a latent variance fixed at a positive value. A disturbance fixed
+    // at zero (phantom-scaled latent) sets no scale.
+    if (c.mat == model::MatId::Psi && c.row == c.col && pt.free[i] == 0) {
+      if (col < facs[b].size() && std::isfinite(pt.fixed_value[i]) &&
+          pt.fixed_value[i] > 0.0) {
+        facs[b][col].std_lv = true;
+      }
       continue;
     }
     if (c.mat != model::MatId::Lambda || col >= facs[b].size()) continue;

@@ -121,28 +121,43 @@ design, starting-point inventory and validation rules are in
   report fit-time projection/PSD repair/profiling. The current retained vector
   is the input supplied to fit, not a claim about the first optimizer iterate.
   Validate group/constraint/identification combinations before changing defaults.
-  Prioritize **structural start initialization**: the current simple producer
-  initializes the same latent path to 0 as a regression and 0.7 as a higher-order
-  loading; the equivalent-model probe in `engineering/17-corpus-optimizer-recovery`
-  confirms identical objectives at shared vectors but different supplied starts.
-  FABIN changes observed loadings only and cannot repair this difference.
-  Recognize variance-carrying scale paths from model structure, estimate their
-  magnitudes jointly with measurement/latent variance starts, and distinguish
-  fixed innovation variance from total latent variance. Keep this a composable,
-  separately callable pass with explicit applicability/fallback diagnostics;
-  retain the simple/parity constructor as a selectable baseline. Start with
-  supported acyclic single-parent blocks, preserve user hints (including zero),
-  fixed values and equalities, and validate equivalent syntax, identification,
-  signs, unit changes, finite objectives and existing successful corpus cases.
-  The experiment-local single-parent/zero-innovation prototype scans all 608
-  ML/GLS pairs, changes six models and gains three ML/one GLS recoveries per
-  optimizer; previously good fits are unchanged. Do not promote yet: observed
-  unit equivariance fails with both simple and FABIN3 loading starts, and the
-  simple constructor loses the marker sign on a reverse-keyed example. Both
-  treat fixed zero innovation variance as fixed total latent scale. Fix this
-  distinction and coordinate loading/path scaling before extending the prototype
-  to constraint-coupled, noisy higher-order or growth blocks. Preserve the
-  experiment's failed property checks as promotion gates (25/28 currently pass).
+  **Layered moment start (2026-09-25, frontier, not default).**
+  `start = "layered"` (`estimate::frontier::layered_start_values`) builds the
+  start in layers: measurement shapes on the standardized covariance, a
+  least-squares latent covariance, a joint log-scale identification solve
+  (markers, effect coding, pinned variances, cross-block loading equalities), and
+  a GLS latent-level fit of paths and latent covariances from sign-generic
+  moment magnitudes. Means come last, then a unit-weighted constraint projection
+  and a PD repair. On the 608 engineering/17 ML/GLS pairs with one engine it
+  raises accepted, best-matching fits from 287/238 to 298/297 (ML PORT/L-BFGS)
+  and 286/280 to 303/302 (GLS), gaining 113 and losing 4 case fits; every loss
+  starts lower and fails in the optimizer. The simple/FABIN misread of a zero disturbance as a std.lv
+  scale is fixed. Before making it the ML/GLS default: rerun the frozen synthetic
+  panel (fresh replications, unit scales), the sanitized build, and FIML/ordinal
+  routes (not yet covered); keep simple/FABIN3 for lavaan parity. Known limits:
+  trait-state blocks whose latent covariance only the structure identifies keep
+  FABIN3 (a full-model GLS polish from the layered start would cover them);
+  latent-basis growth relies on the latent-level fit alone (no mean information);
+  the Chapter 8 ALT ML models reach a second optimum (0.5476 against 0.5432).
+
+- **S/M — reflection-trap check and saddle escape.** Independent of the start
+  constructor. A latent whose scale is set by a fixed variance (std.lv, phantom
+  unit variance) has a sign-reflection symmetry. A start on its fixed subspace
+  (every sign-odd free parameter at zero) has exactly zero gradient there, and
+  L-BFGS, PORT, SLSQP and nlminb never leave it. engineering/17 measured gradient 0
+  and second derivatives from -1.9 to -17 on the phantom, second-order and
+  Table 7.6 paths. *Check:* give each free parameter a character over
+  (latent, block) in GF(2): a loading of j gets e_j, a path or covariance
+  between j and l gets e_j + e_l, variances and intercepts 0, a latent mean e_j.
+  The sign group G is every s that leaves each fixed nonzero entry and each
+  constraint invariant (markers and effect coding remove their latent's
+  reflection). A start is trapped iff some s in G flips at least one free
+  parameter and every flipped parameter starts at zero. Run it on every supplied
+  start (including user and lavaan-compatibility vectors) and report it.
+  *Escape:* when the terminal curvature audit finds a negative eigenvalue (all
+  12 engineering/17 ML trap endpoints), step along the eigenvector with a line
+  search on the original objective and refit; schedule with the Newton-check
+  work. Validate on the engineering/17 trap cases with the simple constructor.
 
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the
@@ -160,14 +175,15 @@ design, starting-point inventory and validation rules are in
   objective. The focused start cross-check recovers 10 of 12 ML curvature
   rejections in both PORT and lavaan by setting free, zero-start latent paths to
   0.5; lavaan defaults also miss many reference solutions. For the phantom CFA,
-  the original LISREL input supplies 0.7 on those paths. Investigate a principled
-  nondegenerate phantom/latent-path start policy, respecting explicit hints,
-  equality constraints, identification and units; do not adopt blanket 0.5
-  starts from this diagnostic. Two ALT ML models still reach worse solutions;
-  two invalid-start models remain unresolved. Three GLS cases still separate
-  PORT from successful lavaan fits at the same supplied starts. Investigate
-  starts and escape from poor stationary points before
-  unskipping the low-level golden. Geiser's marker default-start failures are
+  the original LISREL input supplies 0.7 on those paths. The layered moment
+  start (start-policy item above) recovers 19 of the 21 targeted pairs under
+  both PORT and L-BFGS, including both invalid-start models and all three GLS
+  cases; do not adopt blanket 0.5 starts. The two Chapter 8 ALT ML models still
+  reach a second optimum. From layered starts the remaining losses are
+  optimizer events: L-BFGS's early line-search abort (Geiser quadratic growth)
+  and PORT/L-BFGS stopping short on raw-unit variances (Kline Roth, Lynam GLS).
+  Investigate escape from poor stationary points before unskipping the
+  low-level golden. Geiser's marker default-start failures are
   resolved by correcting Reduced representation handling in simple/FABIN
   starts. Remaining: std.lv L-BFGS robustness and transported-start coverage
   for structural models. The start pipeline now separates

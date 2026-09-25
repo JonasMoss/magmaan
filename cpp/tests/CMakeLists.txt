@@ -88,6 +88,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/communality_test.cpp
   unit/ml_numerics_test.cpp
   unit/start_fabin_test.cpp
+  unit/start_layered_test.cpp
   unit/start_cfa_noniter_test.cpp
   unit/snlls_test.cpp
   unit/bounds_test.cpp

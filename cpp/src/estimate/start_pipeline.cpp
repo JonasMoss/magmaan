@@ -1,5 +1,6 @@
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/frontier/layered_start.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include <cmath>
 #include <numeric>
@@ -114,7 +115,17 @@ std::expected<Eigen::VectorXd, StartTransportIssue> transport_start_values(
 
 fit_expected<Eigen::VectorXd> construct_start_values(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
-    const data::SampleStats& samp, StartMethod method, const spec::Starts& hints) {
+    const data::SampleStats& samp, StartMethod method, const spec::Starts& hints,
+    std::vector<std::string>* notes) {
+  if (method == StartMethod::Layered) {
+    auto report = frontier::layered_start_report(pt, rep, samp, hints);
+    if (!report) return std::unexpected(report.error());
+    if (notes) *notes = std::move(report->notes);
+    if (report->theta.size() != pt.n_free() || !report->theta.allFinite())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "Start constructor returned an invalid vector", 0, 0});
+    return std::move(report->theta);
+  }
   auto out = method == StartMethod::Guttman ? guttman_start_values(pt, rep, samp, hints)
       : method == StartMethod::Bentler1982 ? bentler1982_start_values(pt, rep, samp, hints)
       : method == StartMethod::JamesStein ? jamesstein_start_values(pt, rep, samp, hints)
@@ -142,7 +153,7 @@ fit_expected<StartValues> start_values(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const data::SampleStats& samp, const StartPolicy& policy, const spec::Starts& hints) {
   StartTransportIssue reason = StartTransportIssue::None;
-  if (policy.transport != StartTransport::Native) {
+  if (policy.transport != StartTransport::Native && policy.method != StartMethod::Layered) {
     const bool needs_marker = policy.method == StartMethod::Guttman ||
         policy.method == StartMethod::Bentler1982 || policy.method == StartMethod::JamesStein;
     auto plan = needs_marker
@@ -169,9 +180,12 @@ fit_expected<StartValues> start_values(
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           start_transport_reason(reason), 0, 0});
   }
-  auto native = construct_start_values(pt, rep, samp, policy.method, hints);
+  std::vector<std::string> notes;
+  auto native = construct_start_values(pt, rep, samp, policy.method, hints, &notes);
   if (!native) return std::unexpected(native.error());
-  return StartValues{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
+  StartValues out{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
+  out.notes = std::move(notes);
+  return out;
 }
 
 } // namespace magmaan::estimate

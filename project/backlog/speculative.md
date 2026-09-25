@@ -108,6 +108,49 @@ changes require repeatable native-start benefits without degraded objective
 quality. Global certification is a separate project only if a concrete consumer
 requires a rigorous bound. No further runs or implementation are currently queued.
 
+### Start constructors beyond the layered moment start
+
+**Gap.** The layered moment start (`estimate::frontier::layered_start_values`,
+see the roadmap) covers measurement blocks by FABIN/triad/IV shape rules, the
+latent covariance by a weighted least-squares mapping, and the structural part
+by a small latent-level least-squares fit. Four alternatives were weighed on
+2026-09-25 (engineering/17 diagnosis) and not built:
+
+- **Per-cell rule patches.** Replace constant latent-variance starts with
+  data-derived ones, give variance-carrying latent paths nonzero starts, and
+  repair indefinite Ψ. Each structure needs its own rule, and none of the rules
+  give identification invariance or consistency by construction. The one piece
+  worth keeping, the fixed-zero-disturbance misread as std.lv, was fixed in the
+  simple and FABIN constructors.
+- **MIIV-2SLS for the whole model** (Bollen 1996; Bollen & Bauer 2004 instrument
+  selection; the MIIVsem package). It estimates every measurement and structural
+  equation by 2SLS with model-implied instruments, with variances in a separate
+  moment step; FABIN is a special case. It handles cross-loadings,
+  correlated errors, nonrecursive systems and 2-indicator factors with
+  out-of-block instruments. It needs instrument selection (the structural-zero
+  pattern of Cov(composite error, y), readable from the Jacobian at a random
+  generic point), a scaling indicator per latent, and a variance step.
+- **SAM with ML measurement blocks as the start** (`fit_sam` exists). Each block
+  can fail, and its structural step needs the layered start's sign-generic
+  structural initialization anyway.
+- **Random multistart** (Mplus `STARTS`, OpenMx `mxTryHard`). Seeded perturbation
+  restarts for suspected multimodality (the Little Chapter 8 ALT models reach
+  0.5476 against a reference of 0.5432 from nonzero starts).
+
+**Alternative already available.** The layered constructor, plus the existing
+simple/FABIN/Guttman/Bentler/James-Stein constructors, explicit start vectors,
+and the verified-solution restart used in engineering/17.
+
+**Build if.** MIIV: the layered constructor misses or degrades a supported
+model family because its measurement or structural shape rules are biased
+(cross-loading-heavy, 2-indicator or nonrecursive models) and the loss is
+shown on the corpus or a fresh synthetic panel. SAM-ML blocks: the closed-form
+measurement step is unstable on small samples in a named study. Multistart: a
+consumer needs a global-optimality diagnostic, or a model family shows
+reproducible start-dependent local optima under the layered start; keep it
+opt-in and seeded. Per-cell patches: never as the default; only if a
+lavaan-compatibility constructor needs them.
+
 ### `spectral_truncate` weight policy for degenerate ADF/WLS Γ̂
 
 An optional non-default pseudo-inverse weight policy for degenerate saturated

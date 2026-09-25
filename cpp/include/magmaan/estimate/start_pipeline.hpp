@@ -1,10 +1,15 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "magmaan/estimate/start_values.hpp"
 
 namespace magmaan::estimate {
 
-enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStein };
+// Layered is the frontier layered moment start (estimate/frontier/layered_start.hpp).
+// It already constructs in the target identification, so it is never transported.
+enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStein, Layered };
 enum class StartTransport { Native, AutoStdLv, RequireStdLv };
 enum class StartTransportIssue {
   None, ConstructorRequiresMarker, EqualityConstraints, FixedValues, MarkerLayout, SourceModel,
@@ -39,6 +44,8 @@ struct StartValues {
   StartMethod method = StartMethod::Fabin3;
   StartTransport requested_transport = StartTransport::Native;
   bool explicit_vector = false;
+  // Constructor diagnostics (fallbacks, repairs); currently filled by Layered.
+  std::vector<std::string> notes{};
 };
 
 fit_expected<StartValues> explicit_start_values(
@@ -46,7 +53,8 @@ fit_expected<StartValues> explicit_start_values(
 
 fit_expected<Eigen::VectorXd> construct_start_values(
     const spec::LatentStructure&, const model::MatrixRep&,
-    const data::SampleStats&, StartMethod, const spec::Starts& = {});
+    const data::SampleStats&, StartMethod, const spec::Starts& = {},
+    std::vector<std::string>* notes = nullptr);
 
 // Compose constructor -> optional transport -> target-coordinate hints. Auto
 // falls back to the same native constructor; RequireStdLv returns an error.
