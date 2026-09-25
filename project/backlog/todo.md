@@ -107,7 +107,16 @@ design, starting-point inventory and validation rules are in
   feeds CFI and RMSEA), modification indices under the policy, `predict()`
   factor scores, a `control` option and summary-statistic input.
 
-## Estimation and inference follow-ups
+## Optimization and convergence
+
+Starting values, optimizer defaults and backends, and the convergence verdict.
+Most open items come from real models: the source-verified textbook corpus
+(engineering/17 and engineering/19) and the covariance-honest-sem banks. A
+failure that turns out to be a model-setup gap belongs to its estimator's
+section: the categorical corpus saddles are under
+[Categorical models](#categorical-models-gaps-found-on-the-textbook-corpus).
+
+### Starting values and saddle escape
 
 - **M — finish uniform start-policy coverage.** The continuous-data/FIML slice
   shares constructor/transport selection and retained supplied-vector reports;
@@ -159,6 +168,8 @@ design, starting-point inventory and validation rules are in
   search on the original objective and refit; schedule with the Newton-check
   work. Validate on the engineering/17 trap cases with the simple constructor.
 
+### Optimizer failures on the textbook corpus
+
 - **S — PORT coordinate scaling for ML and GLS.** magmaan's PORT runs ML and GLS
   in raw coordinates; the ML sample scaling covers L-BFGS and SLSQP only.
   lavaan hands `nlminb` a start-based scale (1/|start| for |start| > 1). On
@@ -201,84 +212,29 @@ design, starting-point inventory and validation rules are in
   constructor/transport/scaling and reports fallback reasons; R
   `start="default"` agrees with omission. Do not conflate these remaining
   issues with the repaired observed-parameter start mapping.
-- **M, sem-psd corpus timings.** The supplement's accepted timing bank used the
-  mistranslated corpus. Rerun it pinned on the corrected fixtures; the
-  corrected 102-case PSD audit has two inadmissible ordinary fits (both
-  Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
-- **M, ordinal partable semantics (textbook WLSMV lane).**
-  `textbook_ordinal_golden_test.cpp` reproduces 13 of 21 textbook categorical
-  models exactly. Seven of the eight known gaps come from how
-  `prepare_ordinal_partable` treats an imported lavaan partable:
-  1. **Theta.** Ordinal residual variances are forced to 1. Mplus ex6.5 frees
-     them at later occasions (so the free count changes), and Newsom ex3.3a
-     fixes them at 0 (an equivalent fit, rescaled by √2).
-  2. **Delta.** Free scale factors (`~*~`) are forced to 1.
-  3. **Mean structure.** Latent means and intercepts do not enter the implied
-     thresholds (τ − ν − Λα). This breaks categorical growth (ex6.4, ex6.15,
-     Newsom 2024 ex7.2a) and Newsom's ex9.2 latent change models (both
-     editions). At lavaan's estimates, magmaan's objective is far from
-     lavaan's.
 
-  lavaan honors all three, and Mplus defaults to them for longitudinal and
-  multi-group categorical models.
+- **S/M, newsom corpus.** The Little/Newsom continuous golden
+  (`cpp/tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
+  NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`, and
+  now also fails on 12 corrected Little cases (see the default-fit item above).
+  Same family as the documented `ex12_3` case (a second-edition Newsom script,
+  no longer in the first-edition corpus) in
+  [newsom-corpus-failures.md](newsom-corpus-failures.md): NLopt stalling early on
+  a structurally awkward ML objective. Unskip once the starting-value path or a
+  harness-level cross-backend fallback handles it.
 
-  The eighth gap is an optimizer issue. On Newsom 2024 ex1.3c (a saturated
-  theta model with a factor variance near 85), L-BFGS from lavaan's starts
-  stops on a flat ridge at fmin 5.8e-9. From lavaan's estimates it stays at
-  lavaan's solution.
-
-  All eight cases sit in `kKnownGaps`. For each failing case the test refits
-  from lavaan's θ, which tells optimizer trouble from model semantics.
-  Related gaps found on the same models:
-  - The grammar allows only `exp`/`log` calls in `:=`, and lavaan also takes
-    `sqrt` (Mplus ex5.21/5.22 `:=` rows).
-  - `magmaanlab::fit_model()` with `ordered` and a model written in
-    `group:` blocks stops in `data_ordinal_stats_from_df()` ("model/data
-    group count mismatch"; UG ex5.19).
-  - Covariates in categorical models (lavaan `conditional.x`, 7 textbook
-    cases) have no magmaan path.
-- **S, corpus coverage follow-ups.** Corpus v3.1.0 (2026-09-25) recovered
-  the dropped cases that lacked only options or translator scope:
-  - 14 WLSMV Mplus User's Guide cases and 1 Muthén case;
-  - 11 Newsom theta/`group.equal` fits;
-  - Kline's `sample_cov_rescale`;
-  - Brown tab9.4's MLM statistic.
-
-  The details are in the corpus `docs/audit/`. ESEM is out of scope by
-  decision. The Muthén (2017) inputs without data and the Little ch9 Table 9.2
-  runs wait on source material. What remains:
-  - **Two-level Mplus models** (UG ex9.1a, 9.1b, 9.6, 9.11, 9.12). They are
-    expressible, and hand translations reproduce the H0 model. The printed
-    statistics are harder:
-    - Both programs under-converge the saturated two-level model at their
-      default EM tolerance (Mplus Demo sweep: H1 −3502.966 at the default
-      1e-4, −3502.914 at 1e-7; lavaan −3502.941 by default, −3502.912 at
-      1e-8).
-    - ex9.12 has an unexplained ~0.03 log-likelihood offset despite matching
-      estimates.
-    - Mplus's two-level MLR scaling (0.760 for ex9.6) is not reproduced
-      (lavaan 0.96–1.06).
-
-    Needs `%WITHIN%`/`%BETWEEN%` translation, the reserved `data.cluster`
-    field, and a verification standard for these statistics.
-  - **Second editions.** `newsom_2024` is built (corpus v3.2.0): 49 fits
-    that differ from every first-edition case. Little's second-edition Mplus
-    material is not built:
-    - 15 CH3 inputs and 16 of the CH5 inputs repeat first-edition models.
-    - 25 CH5 CarpThesis inputs are new data but the same model families.
-    - The 19 ch9 CLPM/RI-CLPM inputs have no `.out`; they need the second
-      edition's printed tables.
-  - **Fixture scope.** Little's 21 multi-group and 37 wider or bounded
-    verified cases are corpus-only: the Little/Newsom fixture format is
-    single-group and the file limit is 1 MB.
-  - **ULS statistic.** lavaan and magmaan both report ULS chi-square near
-    zero for Mplus `chapter6_ex6_10`, while lavaan's ULS test statistic is
-    38.3; unexplained.
-
-The remaining explicit convergence-audit extensions are deferred to
-[speculative.md](speculative.md#convergence-audit-extensions). The implemented
-coverage and contracts live in [terminal-audit.md](../design/terminal-audit.md);
-there is no scheduled expansion of this surface.
+- **S — ordinal flat ridge (Newsom 2024 ex1.3c).** A saturated
+  theta-parameterization model whose factor variance (near 85) is poorly
+  determined. From lavaan's starts, L-BFGS stops at fmin 5.8e-9 with the
+  factor variance at 83.2 against lavaan's 88.0 and the loadings a few percent
+  off; lavaan reaches 1e-16, and started at lavaan's estimates magmaan stays
+  there, so the model is right. The R path's Newton check accepts the same
+  kind of endpoint (fmin 4.5e-9, d = 0.0023, condition number 3.8e5;
+  engineering/19): within magmaan's accuracy budget the fit has converged, and
+  the parameter gap is the ridge's flatness. It is the one non-semantic case
+  among the known gaps of `textbook_ordinal_golden_test.cpp`. Decide how the
+  golden gates ill-conditioned cases (a tighter stopping rule, or parameter
+  differences in the information metric), then move it out of `kKnownGaps`.
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
@@ -300,18 +256,6 @@ there is no scheduled expansion of this surface.
   also replace the finite differences behind two-level observed standard
   errors. CatML stays on the first-order check. Plan:
   [newton-verdict-plan.md](../design/newton-verdict-plan.md).
-- **High — categorical fits from raw data end at saddles on 9 of 28
-  single-group corpus cases.** Found by the Newton check (engineering/19):
-  `fit_model(..., estimator = "DWLS", ordered = ...)` ends at objectives of 0.19
-  to 2.6 where lavaan's WLSMV reaches at most 0.055, including 0.93 against 0
-  on the just-identified probit regression of Mplus example 3.4; a
-  tight-control refit stays there, and the exact Hessian is not positive
-  definite. The first-order check had accepted all nine. Cases: Mplus
-  examples 3.4, 3.12, 3.13, 3.14, 6.4, 6.15; Newsom 2015 ex9_2, 2024 ex7_2a and
-  ex9_2 (probit regressions on covariates, growth with released scales).
-  The C++ textbook categorical golden fits the same models from lavaan's
-  partable and matches lavaan, so compare the R path's model setup
-  (`fixed.x`, conditional covariates, released scales) and starts against it.
 - **M — finish optimizer-control reporting and specialized-path inventory.**
   Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
   BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy
@@ -580,6 +524,133 @@ there is no scheduled expansion of this surface.
     drop its bridge (`project/analysis/cpp/newton_audit.cpp`) and rerun
     every accepted study at the new revision. The paper plans this as one
     final rerun.
+
+### Convergence verdict and terminal verifier
+
+The remaining explicit convergence-audit extensions are deferred to
+[speculative.md](speculative.md#convergence-audit-extensions). The implemented
+coverage and contracts live in [terminal-audit.md](../design/terminal-audit.md);
+there is no scheduled expansion of this surface.
+
+- **XL.** Design an optimizer terminal-point "ultimate verifier" track. Turn the
+  provisional audit tolerance into an empirically justified convergence
+  certificate rather than a hand-tuned cutoff. Build an offline verifier that
+  records the backend-independent L1 residual
+  `||projected_gradient||_inf / (1 + |f_recomputed|)`, objective/parameter gaps
+  to lavaan or certified fixtures, cross-backend same-basin agreement, PD margins,
+  active bounds, and constraint residuals over the
+  Geiser/Mplus/Little/Newsom/paper corpora. Add a high-precision check mode
+  (`long double`, MPFR/Boost.Multiprecision, or an R `Rmpfr` helper) that
+  re-evaluates `f` and the gradient at terminal points and optionally performs a
+  few high-precision local refinement steps. Use the resulting CSV/report to
+  separate ordinary line-search noise-floor salvages from genuinely non-stationary
+  same-objective points (e.g. Newsom `ex5_4`/`ex5_4c`; see
+  [newsom-corpus-failures.md](newsom-corpus-failures.md)) and to justify any
+  default `TerminalAuditOptions` tolerance change in
+  `project/design/terminal-audit.md`.
+- **M/L.** Decide whether `TerminalAuditOptions::stationarity_mode` should stay at
+  Absolute (lavaan-matched) or switch to Relative once the verifier track above
+  has data. v1 ships Absolute at `absolute_tol = 1e-3` to match lavaan's
+  `check.gradient = TRUE` / `optim.dx.tol = 0.001` default; this is the first hard
+  design call in magmaan and the calibration is genuinely unstable. The Relative
+  code path is fully wired and unit-test-covered
+  (`cpp/tests/unit/terminal_audit_test.cpp`), so the experiment is one option flip
+  away once the data exists; see `project/design/terminal-audit.md` "Tolerance
+  calibration".
+- **M/L.** Complete the common-verdict rollout defined in
+  `project/design/terminal-audit.md`. The authoritative C++ verdict and R
+  TRUE/FALSE/NA convergence projection now use original-objective verification
+  plus common full-model stationarity, with explicitly selected ambient/PSD
+  geometry. Legacy/backend flags are not vetoes. Remaining:
+  preserve evaluable terminal candidates uniformly across soft backend exits;
+  migrate active research consumers that still gate on driven audits/backend
+  statuses. Additional constraint and specialized-estimator audit coverage is
+  deferred to [speculative.md](speculative.md#convergence-audit-extensions). Do not convert
+  failed/unchecked returned fits into hard errors. Retain rank/conditioning
+  and fallback diagnostics alongside the common verdict, and use stress/corpus
+  comparisons to validate each coverage extension. The frozen SNLLS handoff's
+  historical screen is retained only for reproducibility of its pinned run.
+
+### Backend choice
+
+- **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS, Ceres
+  trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
+  cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay
+  visible.
+
+- **M/L.** Revisit the remaining complete-data default-backend choice once the
+  optimizer comparison studies land. FIML now defaults to the NLopt
+  L-BFGS-to-SLSQP fallback after the missing-data optimizer panel, and NLopt is
+  a required dependency. The broader default still needs justification across
+  ML, complete-data LS, bounded ordinal LS, direct optimizer callers,
+  augmented-Lagrangian inner solves, and nonlinear-constraint paths (NLopt SLSQP
+  and IPOPT). Document tolerance semantics (`gtol` vs NLopt `xtol_rel`),
+  iteration/evaluation reporting, and bounded behavior before changing the
+  remaining defaults.
+
+## Estimation and inference follow-ups
+
+### Categorical models: gaps found on the textbook corpus
+
+The corpus holds 34 categorical (WLSMV) cases, each verified against its
+book's output or the author's lavaan call. `textbook_ordinal_golden_test.cpp`
+fits the 21 all-ordinal, covariate-free ones from lavaan's partable
+(`cpp/tests/fixtures/textbook_ordinal/`) and matches lavaan on 13. The other
+eight sit in `kKnownGaps`, each refit from lavaan's θ to tell optimizer trouble
+from model semantics. Seven are the semantics below; the eighth is a flat
+ridge where the optimizer stops early (Newsom 2024 ex1.3c, under
+[Optimizer failures on the textbook corpus](#optimizer-failures-on-the-textbook-corpus)).
+
+- **High — ordinal partable semantics.** Seven of the eight known gaps come
+  from how `prepare_ordinal_partable` treats an imported lavaan partable:
+  1. **Theta.** Ordinal residual variances are forced to 1. Mplus ex6.5 frees
+     them at later occasions (so the free count changes), and Newsom ex3.3a
+     fixes them at 0 (an equivalent fit, rescaled by √2).
+  2. **Delta.** Free scale factors (`~*~`) are forced to 1.
+  3. **Mean structure.** Latent means and intercepts do not enter the implied
+     thresholds (τ − ν − Λα). This breaks categorical growth (Mplus ex6.4,
+     ex6.15, Newsom 2024 ex7.2a) and Newsom's ex9.2 latent change models
+     (both editions). At lavaan's estimates, magmaan's objective is far from
+     lavaan's.
+
+  lavaan honors all three, and Mplus defaults to them for longitudinal and
+  multi-group categorical models. The R path has the same gaps:
+  `fit_model(..., estimator = "DWLS", ordered = ...)` on those five growth and
+  latent change models ends at exactly the golden's objectives (0.192 on
+  ex6.4, 0.862 on ex6.15, 1.426 on both ex9.2, 1.447 on ex7.2a, against at most
+  0.055 for lavaan), which the Newton check rejects as saddles of magmaan's
+  objective (engineering/19). They are fits of a different model, not
+  optimizer failures; fixing the semantics should clear both paths.
+- **High — covariates in categorical models.** Eight corpus cases regress
+  ordinal outcomes on observed covariates, which lavaan handles with
+  `conditional.x`: Mplus ex3.4, 3.12, 3.13, 3.14, 5.16, 5.17, Muthén ex8.29_2
+  and Newsom 2024 ex4.2b. magmaan has no conditional path, yet the R path fits
+  the four single-group User's Guide models anyway and ends at saddles far above lavaan's
+  objective (engineering/19): 2.6 on ex3.12 and ex3.13, 1.6 on ex3.14, and
+  0.93 against 0 on the just-identified ex3.4, which any consistent setup fits
+  exactly. So the R path's handling of the covariates (`fixed.x`, joint versus
+  conditional moments) is wrong, not only missing. On the two single-group
+  cases with one covariate (Muthén ex8.29_2, Newsom 2024 ex4.2b) the R path
+  instead stops in stage 1 ("mixed ordinal stage-1 information matrix is not
+  positive definite"). Implement the conditional moments or refuse such
+  models.
+- **S — `ordered` with `group:` blocks in the R interface.**
+  `magmaanlab::fit_model()` with `ordered` and a model written in `group:`
+  blocks stops in `data_ordinal_stats_from_df()` ("model/data group count
+  mismatch"; UG ex5.19). engineering/19 leaves out the multi-group
+  categorical cases for this reason.
+- **M — mixed ordinal/continuous fits stop above lavaan's objective.** Five
+  corpus cases mix ordinal and continuous indicators without covariates. The
+  R path fits all five and the Newton check accepts every endpoint, but only
+  Mplus ex5.3 reaches lavaan's objective (0.000947 against 0.000946). The four
+  Newsom models stop 12 to 62% higher: 0.121 against 0.074 on 2015 ex5.3a,
+  0.185 against 0.146 on ex5.3b, 0.385 against 0.303 on ex5.7a and 1.216
+  against 1.082 on 2024 ex5.8b. Accepted minima that high point at a different
+  model or weight, not the optimizer; compare the setup (thresholds, means,
+  scale and residual-variance semantics, the DWLS weight) with lavaan's. A
+  fixture in the categorical lane would localize it; it needs the continuous
+  means and variances in the NACOV, and the wider cases (up to 36 variables)
+  a compact NACOV to stay under the 1 MB file limit.
 
 ### Score/inference adapter follow-ups
 
@@ -1056,6 +1127,11 @@ contract and fitted-result schema; experiment-specific simulation checkpoints
 should copy `fit$diagnostics$admissibility$admissible` into their result rows
 when they next change.
 
+- **S — unexplained ULS statistic on Mplus `chapter6_ex6_10`.** lavaan and
+  magmaan both report a ULS chi-square near zero for this corpus case, while
+  lavaan's ULS test statistic is 38.3. Find which convention each number
+  follows before gating either.
+
 - **S — complete covariance-admissibility validation plumbing.** Add a
   deterministic lavaan warning-status fixture for an improper complete-data
   solution, and thread the audit flag into simulation result checkpoints when
@@ -1316,6 +1392,11 @@ when they next change.
   comparison of ordinary Wald, plug-in cone, ordinary and directional
   bootstrap, and proximal/local-quadratic confidence sets. Full
   profile-likelihood intervals and likelihood-ratio tests remain deferred.
+
+- **M, sem-psd corpus timings.** The supplement's accepted timing bank used the
+  mistranslated corpus. Rerun it pinned on the corrected fixtures; the
+  corrected 102-case PSD audit has two inadmissible ordinary fits (both
+  Geiser), not six. `psd_ml_corpus_audit.tex` still reports the old counts.
 
 - **M/L — extend covariance-honest point estimation estimator by estimator.**
   The lift is now internally estimator-neutral and the first non-ML slice is
@@ -2359,6 +2440,21 @@ Remaining work:
   shared-observed-set restriction assumes every observed variable decomposes
   into a within and a between part. Lift it to support level-2-only covariates
   and within-only variables (lavaan's general `%WITHIN%` / `%BETWEEN%` blocks).
+- **M — the Mplus two-level examples (User's Guide ex9.1a, 9.1b, 9.6, 9.11,
+  9.12).** Not yet corpus cases. Mplus fits them by MLR. Four declare
+  within-only or between-only variables and wait on the item above; ex9.11 is
+  multi-group and waits on multi-group two-level. Hand translations to lavaan
+  reproduce the H0 model; the printed statistics are harder:
+  - Both programs under-converge the saturated two-level model at their
+    default EM tolerance (Mplus Demo sweep: H1 −3502.966 at the default 1e-4,
+    −3502.914 at 1e-7; lavaan −3502.941 by default, −3502.912 at 1e-8).
+  - ex9.12 has an unexplained ~0.03 log-likelihood offset despite matching
+    estimates.
+  - Mplus's two-level MLR scaling (0.760 for ex9.6) is not reproduced
+    (lavaan 0.96–1.06).
+
+  The corpus side needs `%WITHIN%`/`%BETWEEN%` translation, the reserved
+  `data.cluster` field, and a verification standard for these statistics.
 - **M (deferred).** Constraints under two-level: `fit_ml_twolevel` currently
   rejects equality/inequality constraints; wire the linear-reduced /
   Jacobian-projected constraint machinery through the two-level fit.
@@ -3827,6 +3923,15 @@ hardening, group-specific projection/population metadata, and model-implied
 simulation lowering — and put detailed generator, marginal, and fixture
 decisions in the simulation backlog.
 
+## Model syntax
+
+- **S — `sqrt` in defined parameters.** The grammar allows only the unary
+  `exp` and `log` calls in `:=` expressions (`function_call` in
+  `project/grammar/grammar.ebnf`). lavaan also takes `sqrt`, which the Mplus
+  User's Guide twin models use (ex5.21 and ex5.22, e.g.
+  `a := sqrt(2*(covmz - covdz))`); the corpus carries those rows. Extend the
+  EBNF first, then the parser and the defined-parameter derivatives.
+
 ## API and R boundary
 
 ### Decompose `EstimatorSpec` into its actual axes — NOT STARTED
@@ -4499,12 +4604,25 @@ work lives in [`speculative.md`](speculative.md). Open work:
   corpus. The order-free chisq/df parity is gated; per-parameter parity needs a
   lavaan→magmaan free-parameter-order map (the submodule oracle stores
   `theta`/`se` in lavaan's free-parameter order).
+- **S — textbook corpus coverage.** Corpus v3.2.0 holds 398 cases from eight
+  books, each verified against its source; the per-book evidence is in the
+  corpus's `docs/audit/`. ESEM is out of scope by decision. Not yet ingested:
+  - Little's second-edition Mplus material. 15 CH3 and 16 CH5 inputs repeat
+    first-edition models, and 25 CH5 CarpThesis inputs are new data but the
+    same model families. The 19 ch9 CLPM/RI-CLPM inputs have no `.out`; they
+    need the second edition's printed tables.
+  - Inputs waiting on source material: the Muthén (2017) inputs whose data
+    are not distributed (`bengt.062911.dat`, Monte Carlo replication lists)
+    and Little's ch9 Homcov/Omit runs, which need Table 9.2.
+  - The Mplus two-level examples; see
+    [Two-level](#two-level-multilevel-sem).
 - **S/M.** Extend the Mplus SEM corpus beyond the strict growth tranche.
   `external/textbook-corpus/raw/mplus_sem` retains 26 examples verified against
   their Mplus `.out` (28 more lack a data file in the archives), and the tracked
   fixtures gate seven continuous growth cases across ML/ULS/GLS/WLS.
   Remaining: extend the translator to the out-of-scope Mplus features recorded
-  in the corpus audit (WLSMV categorical growth, ESEM, MODEL INDIRECT), decide how to test
+  in the corpus audit (WLSMV categorical growth, MODEL INDIRECT; ESEM is out
+  of scope by decision), decide how to test
   observed-only path models without exercising the saturated observed-path abort,
   and add categorical fixtures only for models that match magmaan's ordinal/mixed
   LS surface rather than Mplus logistic/probit response models.
@@ -4513,9 +4631,11 @@ work lives in [`speculative.md`](speculative.md). Open work:
   first-edition fit calls that reproduce the author's script; the consolidated
   `magmaan_textbook_corpus_v1` manifest indexes these alongside Geiser and Mplus
   SEM, with an advisory overlap graph for future paper mining. Remaining: a
-  multi-group fixture format for Little's 21 multi-group cases, a split or
-  compact format for the wider models above the 1 MB file limit, and
-  ordinal/mixed parity checks once the categorical oracle surface is settled.
+  multi-group fixture format for Little's 21 multi-group cases and a split or
+  compact format for the 37 wider or bounded verified cases above the 1 MB
+  file limit. The categorical cases have their own lane
+  (`textbook_ordinal/`; see
+  [Categorical models](#categorical-models-gaps-found-on-the-textbook-corpus)).
 - **S/M.** Promote the remaining first paper-corpus seed and broaden the
   paper-corpus fixture surface. `external/paper-corpus` owns scouting, minimal
   derived lavaan cases, validation, and magmaan JSON exports; magmaan consumes
@@ -4546,48 +4666,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   distinguish clean convergence from line-search salvage or singular PORT
   convergence, and still avoid interpreting backend-specific missing iteration
   counts as real zero-iteration solves.
-- **XL.** Design an optimizer terminal-point "ultimate verifier" track. Turn the
-  provisional audit tolerance into an empirically justified convergence
-  certificate rather than a hand-tuned cutoff. Build an offline verifier that
-  records the backend-independent L1 residual
-  `||projected_gradient||_inf / (1 + |f_recomputed|)`, objective/parameter gaps
-  to lavaan or certified fixtures, cross-backend same-basin agreement, PD margins,
-  active bounds, and constraint residuals over the
-  Geiser/Mplus/Little/Newsom/paper corpora. Add a high-precision check mode
-  (`long double`, MPFR/Boost.Multiprecision, or an R `Rmpfr` helper) that
-  re-evaluates `f` and the gradient at terminal points and optionally performs a
-  few high-precision local refinement steps. Use the resulting CSV/report to
-  separate ordinary line-search noise-floor salvages from genuinely non-stationary
-  same-objective points (e.g. Newsom `ex5_4`/`ex5_4c`; see
-  [newsom-corpus-failures.md](newsom-corpus-failures.md)) and to justify any
-  default `TerminalAuditOptions` tolerance change in
-  `project/design/terminal-audit.md`.
-- **M/L.** Decide whether `TerminalAuditOptions::stationarity_mode` should stay at
-  Absolute (lavaan-matched) or switch to Relative once the verifier track above
-  has data. v1 ships Absolute at `absolute_tol = 1e-3` to match lavaan's
-  `check.gradient = TRUE` / `optim.dx.tol = 0.001` default; this is the first hard
-  design call in magmaan and the calibration is genuinely unstable. The Relative
-  code path is fully wired and unit-test-covered
-  (`cpp/tests/unit/terminal_audit_test.cpp`), so the experiment is one option flip
-  away once the data exists; see `project/design/terminal-audit.md` "Tolerance
-  calibration".
-- **M/L.** Complete the common-verdict rollout defined in
-  `project/design/terminal-audit.md`. The authoritative C++ verdict and R
-  TRUE/FALSE/NA convergence projection now use original-objective verification
-  plus common full-model stationarity, with explicitly selected ambient/PSD
-  geometry. Legacy/backend flags are not vetoes. Remaining:
-  preserve evaluable terminal candidates uniformly across soft backend exits;
-  migrate active research consumers that still gate on driven audits/backend
-  statuses. Additional constraint and specialized-estimator audit coverage is
-  deferred to [speculative.md](speculative.md#convergence-audit-extensions). Do not convert
-  failed/unchecked returned fits into hard errors. Retain rank/conditioning
-  and fallback diagnostics alongside the common verdict, and use stress/corpus
-  comparisons to validate each coverage extension. The frozen SNLLS handoff's
-  historical screen is retained only for reproducibility of its pinned run.
-- **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS, Ceres
-  trust-region, Ceres dense BFGS, and SNLLS only on semantically appropriate
-  cases; include shallow or Heywood-prone LS cases so bounds and conditioning stay
-  visible.
 - **S/M.** SNLLS follow-up experiments after the contract repairs. The R
   bounds rejection, full-coordinate common audit, corrected conditioning
   rationale, direct inner normal-residual screen, and explicit Kaufman
@@ -4649,24 +4727,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   identity, the affine constraint split, and the fact that magmaan reuses the
   ordinary LISREL moment Jacobian instead of hand-writing pages of tensor
   products.
-- **M/L.** Revisit the remaining complete-data default-backend choice once the
-  optimizer comparison studies land. FIML now defaults to the NLopt
-  L-BFGS-to-SLSQP fallback after the missing-data optimizer panel, and NLopt is
-  a required dependency. The broader default still needs justification across
-  ML, complete-data LS, bounded ordinal LS, direct optimizer callers,
-  augmented-Lagrangian inner solves, and nonlinear-constraint paths (NLopt SLSQP
-  and IPOPT). Document tolerance semantics (`gtol` vs NLopt `xtol_rel`),
-  iteration/evaluation reporting, and bounded behavior before changing the
-  remaining defaults.
-- **S/M, newsom corpus.** The Little/Newsom continuous golden
-  (`cpp/tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
-  NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`, and
-  now also fails on 12 corrected Little cases (see the default-fit item above).
-  Same family as the documented `ex12_3` case (a second-edition Newsom script,
-  no longer in the first-edition corpus) in
-  [newsom-corpus-failures.md](newsom-corpus-failures.md): NLopt stalling early on
-  a structurally awkward ML objective. Unskip once the starting-value path or a
-  harness-level cross-backend fallback handles it.
 
 ## Ordinal/SNLLS research
 
