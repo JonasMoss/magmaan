@@ -72,27 +72,41 @@ key_value <- function(design, pt) {
   lm <- latent_moments(pt, design$lv)
   switch(
     design$key_quantity,
-    min_theta = {
-      min(pt$est[pt$op == "~~" & pt$lhs == pt$rhs & !(pt$lhs %in% design$lv)])
-    },
+    theta_x1 = pt$est[pt$op == "~~" & pt$lhs == "x1" & pt$rhs == "x1"],
     factor_correlation = lm$Phi[1, 2] / sqrt(lm$Phi[1, 1] * lm$Phi[2, 2]),
     r2_f3 = 1 - lm$Psi[3, 3] / lm$Phi[3, 3]
   )
 }
 
-# Population parameter values in the model's own (marker) coordinates: the
-# ordinary ML fit to the population covariance is exact.
+# Population (pseudo-true) values in the model's own (marker) coordinates:
+# the unconstrained ML fit to the population covariance, exact unless the
+# design is misspecified. `se_unit` is the per-observation standard error
+# (SE at N is se_unit / sqrt(N)) from the expected information there.
+# `key_proper` is the key quantity of the PSD-constrained population fit.
 population_truth <- function(design) {
   spec <- model_spec(design$syntax)
-  fit <- magmaan_core$fit_ml(spec, list(S = list(design$Sigma), nobs = 1000000L))
-  if (!isTRUE(fit$converged) || fit$fmin > 1e-10) {
+  big <- 1000000L
+  pop <- list(S = list(design$Sigma), nobs = big)
+  fit <- magmaan_core$fit_ml(spec, pop)
+  exact <- !identical(design$kind, "misfit")
+  if (!isTRUE(fit$converged) || (exact && fit$fmin > 1e-10)) {
     stop("population fit failed for design ", design$key, call. = FALSE)
   }
   rows <- free_rows(fit$partable)
-  data.frame(
-    param = param_label(fit$partable)[rows],
-    truth = fit$partable$est[rows],
-    stringsAsFactors = FALSE)
+  se <- tryCatch({
+    info <- magmaan_core$inference_information_expected(fit)
+    as.numeric(magmaan_core$infer_se(magmaan_core$inference_vcov(info, fit)))
+  }, error = function(e) rep(NA_real_, length(rows)))
+  psd <- frontier_fit_ml_psd(spec, pop)
+  list(
+    params = data.frame(
+      param = param_label(fit$partable)[rows],
+      truth = fit$partable$est[rows],
+      se_unit = se * sqrt(big),
+      stringsAsFactors = FALSE),
+    key = key_value(design, fit$partable),
+    key_proper = key_value(design, psd$partable),
+    ncp_unit = 2 * fit$fmin)
 }
 
 vech_lower <- function(S) S[lower.tri(S, diag = TRUE)]
@@ -116,6 +130,7 @@ fit_record <- function(design, method, fit_fun, spec, dat, truth) {
     converged = NA, admissible = NA, min_eig_theta = NA_real_,
     min_eig_psi = NA_real_, classification = NA_character_,
     fmin = NA_real_, chi2 = NA_real_, df = NA_real_, pvalue = NA_real_,
+    rls = NA_real_, browne = NA_real_,
     sigma_rmse = NA_real_, key_est = NA_real_, penalty = NA_real_,
     stringsAsFactors = FALSE)
   if (inherits(fit, "error")) {
@@ -141,7 +156,20 @@ fit_record <- function(design, method, fit_fun, spec, dat, truth) {
   base$chi2 <- magmaan_core$infer_chi2_stat(ss, fit$fmin)
   base$df <- magmaan_core$infer_df_stat(fit$partable, ss)
   base$pvalue <- magmaan_core$infer_chi2_pvalue(base$chi2, base$df)
-  implied <- magmaan_core$model_implied(fit)$sigma[[1]]
+  # The unprojected RLS quadratic and Browne's projected residual statistic
+  # (lavaan's browne.residual.nt.model), both at this method's estimate. They
+  # coincide at the ML optimum. The projection removes the estimate's own
+  # displacement, so `browne` tests the unconstrained model and chi2 - browne
+  # is the admissibility part of the LR statistic.
+  imp_all <- magmaan_core$model_implied(fit)
+  base$rls <- tryCatch(
+    magmaan_core$infer_nt_moment_quadratic_fit(fit, imp_all)$statistic,
+    error = function(e) NA_real_)
+  base$browne <- tryCatch({
+    b <- magmaan_core$infer_rls_chi2_fit(fit, imp_all)
+    if (is.list(b)) b$statistic else b
+  }, error = function(e) NA_real_)
+  implied <- imp_all$sigma[[1]]
   pop <- design$Sigma[fit$ov_names, fit$ov_names]
   base$sigma_rmse <- sqrt(mean((vech_lower(implied) - vech_lower(pop))^2))
   base$key_est <- tryCatch(key_value(design, fit$partable),
@@ -157,9 +185,9 @@ fit_record <- function(design, method, fit_fun, spec, dat, truth) {
   params <- data.frame(
     method = method,
     param = param_label(fit$partable)[rows],
-    est = fit$partable$est[rows],
-    se = se,
+    est = signif(fit$partable$est[rows], 7),
+    se = signif(se, 7),
     stringsAsFactors = FALSE)
-  params$truth <- truth$truth[match(params$param, truth$param)]
+  params$truth <- signif(truth$truth[match(params$param, truth$param)], 7)
   list(fit = base, params = params)
 }

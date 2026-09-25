@@ -1126,10 +1126,20 @@ when they next change.
   difference, brute-force, closed-form, invariance, O(1/N), barrier,
   exclusion, fixed.x, nonrecursive, and FIML-equals-ML gates, and a default
   `lambda = 0.25` set by experiment research/47. Remaining, in order:
-  1. Misspecification stress. Run a population whose pseudo-true value is
-     improper and check that the penalized estimate converges to the PSD-ML
-     boundary as N grows. A barrier hides this diagnostic, so an ordinary-ML
-     audit must stay the documented companion.
+  1. Testing with a barrier estimate. Experiment research/47 (2026-09-25)
+     settles the pairing: Browne's residual statistic
+     (`inference::rls_chi2`, lavaan's `browne.residual.nt.model`) at any of ML,
+     PSD-ML, or a barrier estimate gives the same rejection rate and is better
+     calibrated at N = 50 than the LR test (3.8 to 6.5% against 5.1 to 12.6%).
+     The unprojected RLS quadratic minus Browne's statistic
+     (`frontier::nt_moment_quadratic` minus `rls_chi2`) is the score for the
+     estimator's displacement and tests admissibility against the single-face
+     law `(t(U) - U)^2` (PSD-ML: `U^2 1{U < 0}`), 3.8 to 6.2% on the face,
+     conservative inside, 85% power at N = 50 against an improper residual
+     variance that no unconstrained test sees. Improper pseudo-true values
+     converge to the face under both barrier and PSD-ML, so the ordinary-ML
+     audit is no longer needed as a companion. Remaining: a multi-face
+     reference law, and wiring the pair as a frontier test entry point.
   2. Inference at the penalized estimate. Compare the current ordinary
      information SEs with a penalized-Hessian sandwich, `(H + lambda P'')^-1`
      bread, when `lambda / N` is not negligible (N <= 100 near the boundary).
@@ -1144,16 +1154,21 @@ when they next change.
      errors inside the face, and `lambda = 0.25` is optimal at 1.6. Layer
      weights are not supported by that calibration, which replaces the
      two-weight direction. Experiment research/47 now carries the new target
-     at the joint barrier's five weights on the same datasets (2026-09-25):
-     no improper, boundary, or failed fit in 100,000; at `lambda = 0.25` it
-     tracks the joint barrier (largest paired key difference 0.011); at
-     `lambda >= 0.5` it shrinks correlations and R-squared less and keeps
-     chi-square and coverage closer to PSD-ML; the joint barrier stays
-     slightly ahead on the Heywood designs. Remaining, for
-     `papers/sem-barrier`: score it on the research/48 posterior bank; test the
-     calibration by binning datasets by the unconstrained estimate's distance
-     to the face in standard-error units; run the research/48 path cells; then
-     decide the default target. Experiment research/48's Jeffreys posterior
+     at the joint barrier's five weights on the same datasets, with truths on
+     faces and improper truths added (2026-09-25). It is never less accurate
+     than the joint barrier (30 design-weight cells at N = 50) and keeps
+     better coverage at `lambda = 1`; the earlier "joint ahead on Heywood
+     designs" came from scoring the minimum of two residual variances, a
+     downward-biased functional, now replaced by the residual variance of x1.
+     Against PSD-ML it wins with the truth inside and loses on the face by the
+     predicted RMSE factor `sqrt(1 + 2 lambda)`; the local limit `t(u)` matches
+     the simulated estimates within 0.19 SE at `lambda = 0.25`. Engineering:
+     0.08% of barrier fits fail in L-BFGS line search, mostly when the
+     pseudo-true value is well outside (7.6% at `lambda = 0.1`, N = 400);
+     a log-distance parametrization or Newton steps near the face should fix
+     it. Remaining, for `papers/sem-barrier`: score it on the research/48
+     posterior bank; run the research/48 path cells; then decide the default
+     target. Experiment research/48's Jeffreys posterior
      median remained the most accurate estimator on every design at N = 50.
   4. Scope. LS/ordinal paths need a discrepancy-specific scaling in place of
      `l = -N * fmin`. Nonrecursive models have a proved barrier only when the

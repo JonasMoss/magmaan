@@ -32,10 +32,15 @@ usage <- function() cat(
   "Options:\n",
   "  --reps N --n-values 50,100 --designs f1_p3,f2_r97 --methods ml,pen_l025\n",
   "  --seed-base N --cores N --results-dir PATH\n\n",
-  "Designs: f1_p3, f1_p5, f2_r90, f2_r97, path_r2_90\n",
+  "Designs: f1_p3, f1_p5, f2_r90, f2_r97, path_r2_90 (interior truth),\n",
+  "         f1_p3_face, f1_p5_face, f2_r99, f2_r100, path_r2_100 (truth on or\n",
+  "         at a face), imp_f1_p5, imp_f2_r103 (improper truth, exact fit),\n",
+  "         mis_f2_resid (improper pseudo-truth under misfit)\n",
   "Methods: ml, ml_bounded, psd, pen_l010, pen_l025, pen_l050, pen_l100, pen_l200,\n",
   "         det_l010, det_l025, det_l050, det_l100, det_l200\n",
-  "Writes results/<profile>/{fits,params,metadata}.csv.\n",
+  "Writes results/<profile>/{fits,params,design,truth,metadata}.csv. Parameter\n",
+  "rows are kept for --param-methods only (default ml, psd, pen_l025, det_l025,\n",
+  "pen_l100, det_l100).\n",
   sep = "")
 
 parse_int_csv <- function(x) {
@@ -48,7 +53,9 @@ parse_args <- function(args) {
   out <- list(profile = "smoke", reps = NULL, n_values = NULL,
               designs = NULL, methods = NULL, seed_base = 20260922L,
               cores = max(1L, parallel::detectCores() - 2L),
-              results_dir = NULL)
+              results_dir = NULL,
+              param_methods = c("ml", "psd", "pen_l025", "det_l025", "pen_l100",
+                                "det_l100"))
   i <- 1L
   take <- function() {
     i <<- i + 1L
@@ -70,6 +77,7 @@ parse_args <- function(args) {
     else if (arg == "--seed-base") out$seed_base <- as.integer(take())
     else if (arg == "--cores") out$cores <- as.integer(take())
     else if (arg == "--results-dir") out$results_dir <- take()
+    else if (arg == "--param-methods") out$param_methods <- parse_csv_arg(take())
     else stop("unknown argument: ", arg, call. = FALSE)
     i <- i + 1L
   }
@@ -106,7 +114,7 @@ run_rep <- function(design, spec, n, rep, opts, methods, truth) {
     m <- opts$methods[[k]]
     rec <- fit_record(design, m, methods[[m]]$fit, spec, dat, truth)
     fits[[k]] <- rec$fit
-    params[[k]] <- rec$params
+    if (m %in% opts$param_methods) params[[k]] <- rec$params
   }
   fits <- do.call(rbind, fits)
   params <- do.call(rbind, params)
@@ -125,16 +133,23 @@ main <- function() {
     fits = file.path(opts$results_dir, "fits.csv"),
     params = file.path(opts$results_dir, "params.csv"),
     design = file.path(opts$results_dir, "design.csv"),
+    truth = file.path(opts$results_dir, "truth.csv"),
     metadata = file.path(opts$results_dir, "metadata.csv"))
   unlink(c(paths$fits, paths$params))
 
+  pops <- lapply(designs, population_truth)
+  truths <- lapply(pops, `[[`, "params")
   design_rows <- do.call(rbind, lapply(designs, function(d) {
-    data.frame(design = d$key, id = d$id, label = d$label,
+    pt <- pops[[d$key]]
+    data.frame(design = d$key, id = d$id, kind = d$kind, label = d$label,
                p = ncol(d$Sigma), key_quantity = d$key_quantity,
-               key_truth = d$key_truth, stringsAsFactors = FALSE)
+               key_truth = pt$key, key_truth_proper = pt$key_proper,
+               ncp_unit = pt$ncp_unit, stringsAsFactors = FALSE)
   }))
   write_csv(design_rows, paths$design)
-  truths <- lapply(designs, population_truth)
+  write_csv(do.call(rbind, lapply(names(truths), function(k) {
+    cbind(design = k, truths[[k]], stringsAsFactors = FALSE)
+  })), paths$truth)
 
   cells <- expand.grid(n = opts$n_values, design = names(designs),
                        stringsAsFactors = FALSE)
@@ -171,6 +186,7 @@ main <- function() {
     n_values = paste(opts$n_values, collapse = ","),
     designs = paste(opts$designs, collapse = ","),
     methods = paste(opts$methods, collapse = ","),
+    param_methods = paste(opts$param_methods, collapse = ","),
     seed_base = opts$seed_base, cores = opts$cores,
     boundary_tol = boundary_tol,
     magmaan_git_head = magmaan_cache_ref()$git_head,
