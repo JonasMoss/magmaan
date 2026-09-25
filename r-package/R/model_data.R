@@ -1408,8 +1408,12 @@ frontier_fit_ml_psd_fallback <- function(
 # P(theta), the penalized criterion, and per-variable terms: log(1 - R^2) per
 # equation (joint) or log(1 - rho^2) per latent with rho^2 its factor-score
 # determinacy (determinacy, plus total_correlation and mutual_information).
+#
+# The default optimizer is PORT: its trust region rejects steps across a face
+# where the line searches of NLopt's L-BFGS family stall (experiment
+# engineering/18).
 frontier_fit_ml_multiinfo <- function(
-    model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
+    model, data, eta = 1.25, weight = NULL, optimizer = "port",
     control = NULL, bounds = NULL, missing = c("listwise", "error"),
     target = c("joint", "determinacy")) {
   missing <- match.arg(missing)
@@ -1871,7 +1875,7 @@ frontier_fit_fiml_psd <- function(
 # penalty; see frontier_fit_ml_multiinfo(). N in the penalty scaling is the
 # number of cases.
 frontier_fit_fiml_multiinfo <- function(
-    model, data, eta = 1.25, weight = NULL, optimizer = "nlopt-lbfgs",
+    model, data, eta = 1.25, weight = NULL, optimizer = "port",
     control = NULL, bounds = NULL, target = c("joint", "determinacy")) {
   target <- match.arg(target)
   if (is.character(model) && length(model) == 1L) {

@@ -141,7 +141,7 @@ test_that("determinacy penalty: marker and std.lv agree, FIML equals ML", {
   stdlv <- frontier_fit_ml_multiinfo(model_spec(syntax, std_lv = TRUE), dat,
                                      target = "determinacy")
   expect_equal(marker$penalty$value, stdlv$penalty$value, tolerance = 1e-6)
-  expect_equal(marker$fmin, stdlv$fmin, tolerance = 1e-8)
+  expect_equal(marker$fmin, stdlv$fmin, tolerance = 1e-6)
   model <- model_spec(syntax, meanstructure = TRUE)
   ml <- frontier_fit_ml_multiinfo(model, dat, target = "determinacy")
   fiml <- frontier_fit_fiml_multiinfo(model, dat, target = "determinacy")

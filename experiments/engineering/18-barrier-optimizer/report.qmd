@@ -1,0 +1,149 @@
+---
+title: "Optimizer for the latent-determinacy barrier"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+profile <- Sys.getenv("E18_PROFILE", "full")
+res <- file.path("results", profile)
+need <- file.path(res, "fits.csv")
+if (!file.exists(need)) {
+  stop("Missing results. Run: Rscript run_experiment.R --full", call. = FALSE)
+}
+f <- read.csv(need, stringsAsFactors = FALSE)
+f$fail <- f$status != "ok" | !f$converged
+key <- c("study", "design", "chart", "n", "rep", "lambda")
+best <- aggregate(pen_fmin ~ study + design + chart + n + rep + lambda,
+                  f[!f$fail, ], min)
+names(best)[7] <- "best"
+f <- merge(f, best, by = key, all.x = TRUE)
+f$gap <- f$pen_fmin - f$best
+tol <- 1e-7
+f$certified <- !f$fail & !is.na(f$gap) & f$gap <= tol
+f$worse <- !f$fail & !is.na(f$gap) & f$gap > tol
+opt_label <- c(`nlopt-lbfgs` = "L-BFGS (previous default)", port = "PORT",
+               `nlopt-slsqp` = "SLSQP",
+               `nlopt-lbfgs-slsqp-fallback` = "L-BFGS, SLSQP fallback")
+opts <- names(opt_label)[names(opt_label) %in% unique(f$optimizer)]
+f$group <- with(f, ifelse(study == "research47",
+                          paste0("Research/47 populations, λ = ", lambda),
+                  ifelse(study == "ernst", paste0("Ernst design, ", chart),
+                  ifelse(study == "fold", paste0("Collinear predictors, ", chart),
+                         "Textbook corpus cases"))))
+groups <- unique(f$group[order(f$study != "research47", f$study != "ernst",
+                               f$study != "fold", f$group)])
+pct <- function(x) sprintf("%.1f", 100 * x)
+pct2 <- function(x) sprintf("%.2f", 100 * x)
+rate <- function(g, o, col) mean(f[[col]][f$group == g & f$optimizer == o])
+n_in <- function(g) nrow(f[f$group == g & f$optimizer == opts[[1]], ])
+overall <- function(o, col) mean(f[[col]][f$optimizer == o])
+corp <- f[f$study == "corpus", ]
+imp <- f[f$design == "imp_f1_p5", ]
+lb_fail_imp <- mean(imp$fail[imp$optimizer == "nlopt-lbfgs" & imp$n == 400 & imp$lambda == 0.1])
+stall <- f[f$fail & f$optimizer == "nlopt-lbfgs" & !is.na(f$fail_f) & !is.na(f$best), ]
+secs <- tapply(f$seconds, f$optimizer, mean)
+```
+
+## Question
+
+The barrier fitter `frontier_fit_ml_multiinfo(target = "determinacy")`
+defaulted to NLopt's L-BFGS. On the Geiser quadratic growth model, one of the
+covariance-domain paper's flagship examples, L-BFGS fails while PORT and SLSQP
+converge. Which optimizer should be the default?
+
+## Short answer
+
+L-BFGS is the only optimizer that fails where the others succeed. Over all
+`r format(sum(f$optimizer == opts[[1]]), big.mark = ",")` problems, it failed
+`r pct2(overall("nlopt-lbfgs", "fail"))`% of the time, against
+`r pct2(overall("port", "fail"))`% for PORT,
+`r pct2(overall("nlopt-slsqp", "fail"))`% for SLSQP, and
+`r pct2(overall("nlopt-lbfgs-slsqp-fallback", "fail"))`% for L-BFGS with an SLSQP
+fallback. Its failures concentrate in two places. The first is populations
+whose truth is improper, where the barrier optimum hugs a face
+(`r pct(lb_fail_imp)`% at λ = 0.1 and N = 400). The second is the textbook
+corpus cases, where it failed on `r sum(corp$fail & corp$optimizer == "nlopt-lbfgs")`
+of `r sum(corp$optimizer == "nlopt-lbfgs")` fits. These are genuine stalls. A
+failure is reported only when the final point fails magmaan's stationarity
+audit, and the objective at the stall was above the optimum found by the other
+optimizers in `r pct(mean(stall$fail_f > stall$best + 1e-6))`% of them. Where
+the optimizers converge they agree. PORT, SLSQP, and the fallback reach the best
+objective found in `r pct(overall("port", "certified"))`%,
+`r pct(overall("nlopt-slsqp", "certified"))`%, and
+`r pct(overall("nlopt-lbfgs-slsqp-fallback", "certified"))`% of problems. None
+of them is slower than L-BFGS on average. The remaining failures shared by all
+optimizers are in the Ernst marker-identification fits at N = 10, where the
+data sit near a marker pole that no penalty can remove. There PORT is as
+reliable as the others and lands on a worse local optimum least often
+(`r pct(mean(f$worse[f$study == "ernst" & f$optimizer == "port"]))`% against
+`r pct(mean(f$worse[f$study == "ernst" & f$optimizer == "nlopt-lbfgs"]))`% for
+L-BFGS). PORT is now the barrier's default.
+
+## Evidence
+
+### Failure rate by optimizer
+
+Share of fits that returned an error or failed the convergence audit (%).
+
+```{r failures}
+tab <- data.frame(Problems = groups, Fits = sapply(groups, n_in),
+                  check.names = FALSE, row.names = NULL)
+for (o in opts) tab[[opt_label[[o]]]] <- sapply(groups, function(g) pct(rate(g, o, "fail")))
+knitr::kable(tab, align = paste0("lr", strrep("r", length(opts))))
+```
+
+### Agreement at convergence
+
+Share of problems on which each optimizer reached the best penalized objective
+found by any optimizer, within `r format(tol)` (%), and the share on which it
+converged to a worse point.
+
+```{r certified}
+tab <- data.frame(Optimizer = unname(opt_label[opts]),
+                  `Best objective reached` = sapply(opts, function(o) pct(overall(o, "certified"))),
+                  `Converged to a worse point` = sapply(opts, function(o) pct2(overall(o, "worse"))),
+                  `Mean seconds per fit` = sprintf("%.3f", secs[opts]),
+                  check.names = FALSE, row.names = NULL)
+knitr::kable(tab, align = "lrrr")
+```
+
+## Caveats
+
+- The best objective is the best found by these four optimizers from one
+  start each. A better optimum missed by all four would not show.
+- The penalty is the latent-determinacy barrier only. The joint barrier and
+  ordinary ML were not tested here.
+- Default tolerances and budgets for every optimizer. The comparison is of
+  the methods as magmaan configures them.
+- The corpus cases need the optional textbook corpus and are skipped without
+  it.
+
+## Reproduce
+
+```sh
+just r-dev
+Rscript experiments/engineering/18-barrier-optimizer/run_experiment.R --full --cores 4
+quarto render experiments/engineering/18-barrier-optimizer/report.qmd
+```
+
+## Decision record
+
+- Current default: PORT for `frontier_fit_ml_multiinfo()` and
+  `frontier_fit_fiml_multiinfo()`, both targets (changed from NLopt L-BFGS on
+  2026-09-25 on this evidence, which covers the determinacy target; the joint
+  target has the same faces).
+- Alternatives: L-BFGS, SLSQP, L-BFGS with an SLSQP fallback.
+- Acceptance: no failure where another optimizer converges, the best
+  objective reached at least as often as any alternative, and no material
+  slowdown.
+- Reopening trigger: a barrier fit that PORT fails and another optimizer
+  certifies, or a change of the barrier's parametrization (for example
+  log-Cholesky coordinates for the disturbance covariances, which remove the
+  domain walls that defeat L-BFGS's line search).
