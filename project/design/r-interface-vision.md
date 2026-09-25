@@ -132,6 +132,16 @@ Global tests against the saturated model:
   quadratic in the saturated moments, so the global score statistic equals the
   fit-function statistic n F. It is reported once, labelled as the fit-function
   statistic, since it is not a likelihood ratio.
+- Profiling: when the score uses the estimator's own weight, the nuisance part
+  of the score is zero at the estimate (the first-order condition), so the
+  effective (profile) score equals the raw score and profiling leaves the
+  statistic unchanged, for global and nested tests alike. Profiling still
+  shapes the reference distribution: the projection in the SB and PEBA4
+  spectrum is the effective-score covariance, and for nested tests it uses the
+  larger model's sensitivity. When the score uses a different weight from the
+  estimator, the nuisance part no longer vanishes, and the test must use the
+  effective score explicitly. Which score weight the policy uses is settled by
+  experiment (see the backlog).
 - Statistic and calibration are labelled separately; the spectrum or trace
   and numerical diagnostics are retained.
 

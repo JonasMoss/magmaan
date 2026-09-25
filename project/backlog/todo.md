@@ -55,6 +55,15 @@ starting-point inventory and validation rules are in
   continuous and ordinal/mixed fits. Specify the nested geometry (sensitivity,
   metric, evaluation point, moment covariance, centering, normalization) before
   coding, including the misspecified-larger-model case.
+- **M — experiment: weight choice in the score tests.** Compare score tests
+  built with the estimator's own weight against alternative weights (for
+  example the normal-theory weight at the fitted model, or the full ADF weight
+  for DWLS fits), global and nested, on size and power under non-normal and
+  misspecified populations. With a weight other than the estimator's, the
+  nuisance score does not vanish at the estimate, so every arm must use the
+  effective (nuisance-projected) score; `score_components_from_matrices()` and
+  `project_scores()` already carry the projection. The policy default cites
+  the result.
 - **S — listwise deletion on every estimator path, recorded.** Listwise is the
   default. The data constructors delete rows but do not record how many; store
   rows used and deleted per group in the fit for the summary. List any estimator
