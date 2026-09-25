@@ -34,6 +34,19 @@ remain historical evidence, with sources and local results preserved.
 
 ## Current State
 
+The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
+compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and
+explicit recovery, retaining backend status, fit verdict, objective quality,
+preparation exclusions and wall-clock censoring separately. It is advisory and
+changes no production default. Among 304 prepared cases per estimator, default
+L-BFGS and PORT produce 239 versus 287 accepted, objective-matching ML fits,
+and 282 versus 287 GLS fits; tighter L-BFGS improves GLS to 286 but not ML.
+The two historical Newsom GLS failures do not
+reproduce on the corrected inputs; evaluator cancellation remains an unproven
+explanation, not an established defect. Early scale-sensitive L-BFGS domain
+failures still reproduce in a scalar probe and corpus models. The Little phantom
+poor stationary point fails the curvature audit; a verified-start restart passes.
+
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under
 `EIGEN_NO_EXCEPTIONS`, and fallible APIs return `std::expected<T, Error>` —

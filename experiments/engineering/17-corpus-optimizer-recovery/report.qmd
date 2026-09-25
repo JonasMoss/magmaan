@@ -1,0 +1,213 @@
+---
+title: "Corrected corpus: optimizer settings and recovery"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+r <- function(name) {
+  p <- file.path("results","full",paste0(name,".csv"))
+  if(!file.exists(p)) stop("Missing results: run run_experiment.R and R/summarize.R first")
+  read.csv(p,stringsAsFactors=FALSE)
+}
+s <- r("summary"); d <- r("comparison"); jobs <- r("jobs"); exclusions <- r("exclusions")
+paired <- r("paired"); domain <- r("domain"); meta <- r("metadata")
+retries <- r("retry_jobs")
+primary <- c("lbfgs_default","port_default","slsqp_default")
+labels <- c(lbfgs_default="L-BFGS",port_default="PORT",slsqp_default="SLSQP")
+ps <- subset(s,arm %in% primary)
+count <- function(est,arm,col) s[s$estimator==est & s$arm==arm,col][1]
+```
+
+## Question
+
+On the corrected textbook corpus, which ordinary optimizers recover a good
+solution from our current starts? Do the historical Newsom GLS failures still
+justify changing the evaluator?
+
+## Short answer
+
+**Settings alone do not repair L-BFGS's early domain failures.** PORT recovers
+cases that stop almost immediately under L-BFGS, even after increasing its
+budget or tightening tolerances. In ML, default L-BFGS returns an accepted fit
+matching the best observed objective on `r count("ML","lbfgs_default","accepted_match")`
+of `r count("ML","lbfgs_default","attempted")` completed attempts; PORT does so on
+`r count("ML","port_default","accepted_match")` of
+`r count("ML","port_default","attempted")`. For GLS, tighter L-BFGS controls
+raise accepted, matching fits from `r count("GLS","lbfgs_default","accepted_match")`
+to `r count("GLS","lbfgs_tight","accepted_match")`;
+PORT reaches `r count("GLS","port_default","accepted_match")`.
+Missing attempts after job timeouts
+are reported separately and prevent an unconditional ranking.
+
+**The two historical Newsom GLS failures do not reproduce in these reruns.**
+L-BFGS, PORT and SLSQP agree on their objective values, with small terminal
+gradients. This run supplies no affirmative evidence for the old cancellation
+explanation. It does not certify evaluator accuracy on every model.
+
+**Some failures belong to the starting point, and success flags remain
+insufficient.** The Little phantom model reaches a much worse stationary point from
+ordinary starts under all three main optimizers. The curvature audit rejects
+that point; a verified-solution restart recovers the lower objective and passes. A separate scalar probe shows that bounded SLSQP can report
+success far from the known optimum; its independent terminal audit rejects it.
+No default is changed on the basis of this study.
+
+## Evidence
+
+### Corpus recovery
+
+“Accepted + matched” requires the library's authoritative acceptance and an
+objective within `1e-6 * (1 + abs(best))` of the best objective among accepted fits and converged references.
+That threshold is for this comparison; it is neither a production stopping rule
+nor a global-optimum certificate.
+
+```{r}
+policies <- c(lbfgs_default="L-BFGS, default",lbfgs_budget="L-BFGS, larger budget",
+  lbfgs_tight="L-BFGS, tighter",lbfgs_memory50="L-BFGS, memory 50",
+  port_default="PORT, default",port_tight="PORT, tighter",
+  slsqp_default="SLSQP, default",slsqp_tight="SLSQP, tighter",
+  lbfgs_slsqp="L-BFGS → SLSQP fallback")
+z <- data.frame(Policy=unname(policies))
+for(est in c("ML","GLS")) z[[est]] <- vapply(names(policies),function(a)
+  sprintf("%d / %d",count(est,a,"accepted_match"),count(est,a,"attempted")),character(1))
+knitr::kable(z,col.names=c("Policy","ML Accepted + Matched / Attempts","GLS Accepted + Matched / Attempts"))
+```
+
+On paired cases, default PORT gains `r sum(paired$rescued[paired$estimator=="ML" & paired$arm=="port_default"])`
+ML successes and loses `r sum(paired$lost[paired$estimator=="ML" & paired$arm=="port_default"])`
+relative to default L-BFGS. For GLS it gains
+`r sum(paired$rescued[paired$estimator=="GLS" & paired$arm=="port_default"])`
+and loses `r sum(paired$lost[paired$estimator=="GLS" & paired$arm=="port_default"])`;
+the loss is Kline's Worland structural-regression Step 2b. PORT therefore merits
+an ML recovery-policy investigation, not an unconditional replacement across estimators.
+
+The complete nine-policy comparison and verified-reference restarts are in
+`results/full/comparison.csv`. Backend stopping status, acceptance, covariance
+admissibility and objective quality remain separate outcomes. Settings do not
+have the same meaning across algorithms; tighter numerical controls are not
+in themselves a guarantee of a more accurate answer.
+
+### Previously flagged GLS cases
+
+```{r}
+z <- subset(d, estimator=="GLS" & case %in% c("newsom_2015_ex5_4","newsom_2015_ex5_4c") & arm %in% primary)
+z$case <- sub("newsom_2015_","",z$case); z$arm <- unname(labels[z$arm])
+z$gradient <- formatC(z$gradient,format="e",digits=1)
+knitr::kable(z[,c("case","arm","f","gradient","converged")],digits=9,
+             col.names=c("Case","Optimizer","Objective","Terminal Gradient","Accepted"))
+```
+
+The original cancellation explanation came from older inputs and numerical
+paths. A solver's noisy-gradient status can motivate investigation but cannot
+establish where numerical error originates. A persistent discrepancy would
+require an independent same-point objective and derivative comparison.
+
+### Starting-point dependence
+
+```{r}
+z <- subset(d, estimator=="ML" & case=="little_2013_ch3_fig_3_11_longitudinal_cfa_phantom" &
+              arm %in% c(primary,"lbfgs_reference_start"))
+z$arm <- c(labels,lbfgs_reference_start="L-BFGS, verified start")[z$arm]
+knitr::kable(z[,c("arm","f","converged","objective_gap")],digits=6,
+             col.names=c("Policy","Objective","Accepted","Gap to Best Observed"))
+```
+
+The poor phantom endpoint is rejected for nonpositive curvature, despite its
+small first-order gradient. It is not certified as a local minimum. The reference
+restart is diagnostic, not an ordinary-start reliability result.
+The old “12 failures” came from a smaller lower-level test with simple starts
+and generic controls. This larger current-interface run is a new baseline,
+not a direct rerun of that exact test protocol.
+
+### Unit-scale domain recovery
+
+A scalar variance likelihood has a known optimum. The problem is unchanged;
+only units, optimizer coordinates and an explicit nonnegative bound vary.
+These rows use a variance of one millionth and a start ten times the optimum.
+
+```{r}
+z <- subset(domain,variance==1e-6 & arm %in% c("lbfgs","port","slsqp"))
+z$condition <- ifelse(z$normalized,"Normalized coordinates",
+                       ifelse(z$bounded,"Raw coordinates, bounded","Raw coordinates, unbounded"))
+z <- z[!duplicated(paste(z$condition,z$arm)),]
+z$accurate <- is.finite(z$relative_error) & z$relative_error<1e-6
+knitr::kable(z[,c("condition","arm","returned","stationary","accurate")],
+             col.names=c("Condition","Optimizer","Returned","Audit Passed","Known Optimum Recovered"))
+```
+
+The larger-budget and tighter L-BFGS arms do not remove the small-scale failure.
+Normalized coordinates recover the optimum in this probe. That is evidence for
+work on scale-aware domain recovery, not a validated normalization policy for
+arbitrary constrained SEMs.
+
+## Caveats
+
+The run scheduled `r nrow(jobs)` case/estimator jobs;
+`r sum(jobs$exit != 0)` ended with a process failure or wall-clock timeout.
+The initial cap was 120 seconds per case/estimator across all arms.
+The `r nrow(retries)` omitted ordinary arms then received separate 120-second
+attempts; `r sum(retries$exit != 0)` remained incomplete. These caps include
+input preparation and reference fitting, so a timeout does not isolate optimizer
+cost or establish numerical failure.
+There were `r nrow(exclusions)` preparation exclusions. Categorical, FIML-only,
+composite and multilevel models are outside this comparison; unsupported input
+conventions and singular sample covariances are recorded rather than silently
+changed. The included inputs comprise 304 cases for each estimator. This is an
+ML/GLS experiment, not coverage of every supported estimator. `jobs.csv`, `exclusions.csv` and `input_contracts.csv` retain the details.
+Completed-attempt denominators differ when a timeout interrupts the policy sequence.
+
+Current start construction is held fixed across ordinary arms within each
+case and estimator. ML retains its current coordinate-scaling policy, which
+is not identical for every backend. The study compares available policies,
+not isolated algorithms under identical preconditioning. Syntax hints are
+honored; separate corpus solution-start files are reserved for references.
+
+Only accepted fits and converged references define the comparison target;
+failed or infeasible endpoints cannot lower it. The reference parameters are
+evaluated under the same original objective.
+Reference evaluation gradients live in full coordinates, whereas fitted
+optimizer gradients may live in equality-reduced coordinates; they must not
+be compared as though they were the same stationarity measure.
+
+The engine is pinned to the installed build recorded in `metadata.csv` and
+`library_hashes.csv`; the working repository may subsequently advance. Corpus
+input hashes are checked before and after the run. Single-pass, concurrent
+wall times are descriptive and order-dependent, not a controlled speed ranking.
+
+The current default remains L-BFGS. A policy change needs recovery gains without
+unexplained losses, preserved model/objective semantics and acceptable cost.
+Reopen this experiment after a domain-recovery, scaling or start-policy change;
+reopen the GLS accuracy diagnosis only with a current reproducible discrepancy.
+
+## Reproduce
+
+Install the intended `magmaanlab` build and provide the optional corrected
+textbook corpus. Run from this experiment's directory:
+
+```sh
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+Rscript run_experiment.R --help
+Rscript run_experiment.R --smoke --results results/smoke
+Rscript run_experiment.R --results results/full --workers 3 --timeout 120 \
+  --engine-source COMMIT_USED_TO_BUILD_THE_PACKAGE
+Rscript R/complete_timeouts.R ../../../external/textbook-corpus results/full
+Rscript R/validate_inputs.R ../../../external/textbook-corpus results/full
+Rscript R/summarize.R results/full
+Rscript R/inspect_endpoints.R ../../../external/textbook-corpus results/full
+cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
+cmake --build results/build
+results/build/domain_probe > results/full/domain.csv
+quarto render report.qmd
+```
+
+`--cases` selects named corpus cases. Each case/estimator has its own process,
+wall-clock cap, log and checkpointed attempts. The timeout follow-up preserves
+completed arms and gives each omitted ordinary arm its own capped process.
+Results and rendered output are
+local, ignored artifacts. The report performs no fitting.

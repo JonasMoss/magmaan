@@ -1,5 +1,26 @@
 # Newsom corpus: survey failure classes
 
+## Current reproduction (2026-09-25)
+
+The corrected-corpus optimizer experiment (`engineering/17-corpus-optimizer-recovery`)
+reran `newsom_2015_ex5_4` and `newsom_2015_ex5_4c` on a pinned engine including the
+start-policy and parameter-reporting fixes (`0a0671ce`). Ordinary L-BFGS, PORT,
+and SLSQP all return accepted GLS fits at matching objectives. L-BFGS's terminal
+gradient infinity norms are approximately 1.7e-9 and 2.7e-7 respectively; the
+full-model stationarity residuals are also small. Tighter L-BFGS controls reduce
+the gradients further. The historical failure does not reproduce on these
+current inputs and numerical paths.
+
+The cancellation diagnosis below is therefore **historical and unconfirmed**.
+PORT's noisy-objective status and a non-small terminal gradient do not, by
+themselves, locate floating-point error in the evaluator. Do not schedule a
+compensated-summation rewrite from this note alone. A current same-point
+objective/derivative discrepancy against an independent calculation is the
+reopening criterion. This does not establish accuracy on every GLS model, nor
+does it revisit the second-edition `ex12_3` case absent from the current corpus.
+
+## Historical survey
+
 **Case ids** refer to the corpus before 2026-09-25, which mixed Newsom's
 first-edition (2015) and second-edition (2024) scripts. The rebuilt
 `newsom_2015` corpus is first-edition only, so `ex12_*` and some other ids now
@@ -38,18 +59,17 @@ caught these either — `0.0015 > 1e-3` is borderline and `0.0073 ≫ 1e-3`.
 The audit's verdict ("genuinely non-stationary") is honest, and points to the
 real next investigation rather than masking it with a looser tolerance:
 
-- **The Full GLS objective/gradient evaluator has cancellation noise near a
-  near-perfect fit.** PORT's `IV(1)=8` ("noisy gradient detected") detected
-  this directly; the audit's stationarity verdict confirms it. lavaan's own
-  `nlminb` (same `drmngb` algorithm) does not trip on the same models, so
-  magmaan's evaluator carries more floating-point noise than necessary at
-  this regime.
-- The fix lives in `cpp/src/estimate/gmm/` (residual / Jacobian assembly for
-  near-zero residuals; possibly a Welford-style or compensated-summation
-  rewrite), not in the optimizer layer.
+- **Suspected cancellation noise near a near-perfect fit.** PORT's `IV(1)=8` ("noisy gradient detected") flagged
+  a numerical difficulty; neither that flag nor stationarity alone proves
+  cancellation in the evaluator. lavaan's own
+  `nlminb` (same `drmngb` algorithm) does not trip on the same models, which
+  motivated a comparison of evaluators, starts, and solver settings.
+- A demonstrated evaluator discrepancy would motivate work on residual /
+  Jacobian assembly in `cpp/src/estimate/gmm/`. The location and remedy were
+  not established by the historical solver statuses.
 
-**Status:** open, magmaan core, evaluator-accuracy track. Not blocked by
-the audit; the audit just makes the diagnosis honest.
+**Status:** not reproduced on the corrected corpus; reopen on current
+independent evaluator evidence, as described above.
 
 ### 1b. `ex12_3` — NLopt L-BFGS stuck early, distinct issue
 

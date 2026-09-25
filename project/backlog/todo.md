@@ -125,12 +125,18 @@ design, starting-point inventory and validation rules are in
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the
   [translation audit](../validation/textbook-translation-audit.md)). On the
-  faithful Little models, magmaan's default ordinary fit (NLopt L-BFGS, default
-  starts; the skipped Little/Newsom continuous golden with `--no-skip`) fails
+  faithful Little models, the historical low-level ordinary-fit test (NLopt
+  L-BFGS, simple starts and generic controls; the skipped Little/Newsom
+  continuous golden with `--no-skip`) fails
   with a generic solver failure on 12 cases (the 2-by-3 invariance models, the
-  Chapter 6 card-sorting simplex, Figure 3b) and stops at a worse local optimum
-  on the Chapter 3.11 phantom model. Investigate with the start-policy work
-  before unskipping that golden. Geiser's marker default-start failures are
+  Chapter 6 card-sorting simplex, Figure 3b) and stops at a worse stationary solution
+  on the Chapter 3.11 phantom model. The current-interface optimizer study
+  (`engineering/17-corpus-optimizer-recovery`) is a different, wider protocol;
+  do not substitute its counts for this historical test. At the current phantom
+  endpoint, L-BFGS, PORT and SLSQP have small gradients but nonpositive curvature;
+  the fit audit rejects it. A verified-solution restart passes at the lower
+  objective. Investigate starts and escape from poor stationary points before
+  unskipping the low-level golden. Geiser's marker default-start failures are
   resolved by correcting Reduced representation handling in simple/FABIN
   starts. Remaining: std.lv L-BFGS robustness and transported-start coverage
   for structural models. The start pipeline now separates
@@ -235,7 +241,14 @@ there is no scheduled expansion of this surface.
   ability to distinguish pure L-BFGS from an SLSQP recovery. The existing
   `nlopt-lbfgs-slsqp-fallback` is an available interim policy, but currently
   retries on optimizer failure/non-clean status, not every failed model-level
-  stationarity verdict. Do not substitute PSD fitting for ordinary optimization
+  stationarity verdict.
+  The corrected-corpus study and production-adapter scalar probe confirm that
+  extra evaluation budget and tighter tolerances do not remove early domain
+  failures. PORT recovers cases missed by ordinary L-BFGS; bounded SLSQP can
+  return a success code away from a known scalar optimum, where the terminal
+  audit correctly fails. Any recovery policy must assess the original objective
+  and independent audit, not merely the fallback backend's success flag.
+  Do not substitute PSD fitting for ordinary optimization
   when diagnosing this numerical failure: that changes the feasible set.
   - **Clean reproduction (2026-09-23): Little's polynomial bullying growth
     model** (30 indicators, 16 latents, effect coding, higher-order growth;
