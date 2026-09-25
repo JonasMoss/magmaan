@@ -36,7 +36,8 @@ losing cases that already work?
 ## Short answer
 
 ```{r layered-setup}
-lay <- r("layered/summary"); lp <- r("layered/paired")
+lay <- r("layered/summary"); lp <- r("layered/paired"); eng <- r("engines_summary")
+eg <- function(est,policy,col) eng[[col]][eng$estimator==est & eng$policy==policy]
 lc <- function(est,arm,start) lay$good_now[lay$estimator==est & lay$arm==arm & lay$start==start]
 lr <- function(col) sum(lp[[col]])
 ```
@@ -59,6 +60,18 @@ failures share one mechanism: a latent scaled by a fixed variance
 its sign-odd paths at zero sits on it with exactly zero gradient in those paths.
 No gradient-based optimizer leaves that subspace, lavaan included. The layered
 start is not yet a default.
+
+**Against lavaan's defaults, magmaan with the layered start recovers more cases
+and fails silently less often.** On one shared target (the lowest objective any
+successful run reached), lavaan's defaults recover
+`r eg("ML","lavaan_default","good")` ML and `r eg("GLS","lavaan_default","good")` GLS
+pairs of 304 and report convergence at a worse point in
+`r eg("ML","lavaan_default","false_success")` and `r eg("GLS","lavaan_default","false_success")`.
+Magmaan PORT with the layered start recovers `r eg("ML","port_default.layered","good")`
+and `r eg("GLS","port_default.layered","good")`. The start also helps lavaan:
+from it, lavaan recovers `r eg("ML","lavaan_layered","good")` and
+`r eg("GLS","lavaan_layered","good")`, the best of all policies, so magmaan's remaining
+gap is in its optimizers, not the start.
 
 **Settings alone do not repair L-BFGS's early domain failures.** PORT recovers
 cases that stop almost immediately under L-BFGS, even after increasing its
@@ -408,6 +421,24 @@ Trait-state models, whose latent covariance only the structural part identifies,
 keep the FABIN3 start. Full endpoints, start objectives and start notes are in
 `results/full/layered/`.
 
+```{r}
+z <- eng[,c("estimator","label","good","false_success","failed","median_seconds")]
+z$median_seconds <- round(1000*z$median_seconds,1)
+knitr::kable(z,col.names=c("Estimator","Engine and Start","Recovered","Converged Elsewhere","Failed","Median Fit (ms)"))
+```
+
+"Converged elsewhere" counts runs that report success at an objective above the
+shared target. For lavaan these are mostly the reflection-trap saddles (the
+phantom, second-order and Table 7.6 models), which lavaan reports as converged.
+Where lavaan's defaults beat magmaan's layered L-BFGS fit, three cases are
+L-BFGS's early line-search abort (PORT recovers them), one needs nonlinear
+equality constraints these routes do not support (Mplus Example 6.17), and one is
+a genuine second optimum: in Kline's Worland Step 2a, lavaan's cold start reaches
+a lower, extreme suppression solution (exogenous latent correlation −0.94), while
+the layered start, in both engines and in lavaan, reaches the moderate one. Fit
+times exclude input preparation and start construction (about 1 ms for the
+layered start); they are single concurrent executions, not a controlled speed ranking.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -498,6 +529,8 @@ Rscript R/check_structural_starts.R results/full
 Rscript R/test_structural_starts.R ../../../external/textbook-corpus results/full
 Rscript R/test_layered_starts.R ../../../external/textbook-corpus results/full --workers 3
 Rscript R/summarize_layered.R results/full/layered
+Rscript R/test_lavaan_defaults.R ../../../external/textbook-corpus results/full --workers 3
+Rscript R/summarize_engines.R results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv
