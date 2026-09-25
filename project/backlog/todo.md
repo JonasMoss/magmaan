@@ -75,10 +75,11 @@ design, starting-point inventory and validation rules are in
   default it to the empirical-Gamma weight the prepared path already builds
   (`prepare_weight(data, "WLS")`). `magmaan()` refuses continuous WLS until
   then.
-- **S — move the lavaan `meanstructure` default into the lab.** `magmaan()`
-  applies lavaan's rule (multiple groups, ordered variables, FIML/ML2S, syntax
-  intercepts); with it the lab matches lavaan's rows. It is lavaanify
-  semantics and belongs in `model_spec()`.
+- **Done 2026-09-25 — lab-owned `meanstructure` defaults.** `model_spec()`
+  resolves grouped, ordered and intercept-syntax defaults; staged grouping or
+  ordered declarations re-evaluate omitted defaults while retaining explicit
+  choices. `fit_model()` supplies the FIML/ML2S requirement. `magmaan()` delegates
+  to the lab. R regressions compare mean rows and grouped estimates with lavaan.
 - **L — extend the policy to FIML, ML2S, ordinal/mixed and two-level fits,**
   starting with FIML under the decided geometry (observed-H0 sensitivity,
   expected metric; score and LR each with their own SB and PEBA4 spectra, both

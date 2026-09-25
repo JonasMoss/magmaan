@@ -12,7 +12,11 @@ Convenience helpers are limited to R-side composition:
 
 - `model_spec()` calls the parser/lavaanify wrapper and stores the syntax plus
   lavaanify options, including `model_type = "growth"` for lavaan-style linear
-  growth defaults.
+  growth defaults. `meanstructure = "default"` enables means for grouped models;
+  ordered variables and explicit intercept syntax imply a mean structure as in
+  lavaan. Explicit `FALSE` keeps continuous grouped models covariance-only.
+  A saved spec remembers an omitted default when groups or ordered variables
+  are supplied later. FIML/ML2S fitting enables their required mean structure.
 - `df_to_data()` selects model variables from a data frame, handles optional
   grouping, and calls the C++ raw-data sample-statistics wrapper.
 - `fit_model(model, data, estimator, groups)` is the high-level estimate-only
@@ -259,9 +263,8 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 - For mixed continuous/ordinal models, use
   `magmaan_core$data_mixed_ordinal_stats_from_df()`. Ordered variables produce
   thresholds and categorical association rows; continuous variables contribute
-  ordinary means, variances, and covariances. Mixed models currently require
-  `meanstructure = TRUE` so lavaan-style categorical WLS moment order is
-  explicit.
+  ordinary means, variances, and covariances. Declaring `ordered` in
+  `model_spec()` enables the required mean structure automatically.
 - Missing observed values are handled listwise by default. Use
   `missing = "error"` to reject missing observed values instead.
 - Empty ordinal categories are hard errors. Near-empty but nonempty categories

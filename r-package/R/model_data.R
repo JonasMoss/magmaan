@@ -9,7 +9,7 @@ model_spec <- function(syntax,
                        std_lv = FALSE,
                        effect_coding = FALSE,
                        fixed_x = TRUE,
-                       meanstructure = FALSE,
+                       meanstructure = "default",
                        model_type = c("sem", "growth"),
                        ordered = NULL,
                        parameterization = "delta",
@@ -23,6 +23,11 @@ model_spec <- function(syntax,
   }
   if (!is.null(group_equal)) group_equal <- as.character(group_equal)
   if (!is.null(group_partial)) group_partial <- as.character(group_partial)
+  if (!identical(meanstructure, "default") &&
+      !(is.logical(meanstructure) && length(meanstructure) == 1L && !is.na(meanstructure))) {
+    stop('model_spec(): `meanstructure` must be "default", TRUE or FALSE', call. = FALSE)
+  }
+  requested_meanstructure <- meanstructure
   model_type <- match.arg(model_type)
   if (identical(model_type, "growth")) {
     meanstructure <- TRUE
@@ -37,6 +42,13 @@ model_spec <- function(syntax,
   group_var <- if (is.null(group)) "" else as.character(group)[1L]
   n_groups <- if (is.null(group_labels)) 1L else length(group_labels)
   if (nzchar(group_var) && n_groups < 1L) n_groups <- 1L
+
+  automatic_means <- identical(meanstructure, "default")
+  if (automatic_means) {
+    meanstructure <- nzchar(group_var) || n_groups > 1L || length(ordered) > 0L
+  }
+
+  if (length(ordered)) meanstructure <- TRUE
 
   opts <- list(
     auto_var = auto_var,
@@ -55,8 +67,8 @@ model_spec <- function(syntax,
     group_equal = group_equal,
     group_partial = group_partial
   )
-  partable <- lavaan_lavaanify(
-    syntax,
+  build_args <- list(
+    syntax = syntax,
     auto_var = auto_var,
     auto_cov_lv_x = auto_cov_lv_x,
     auto_cov_y = auto_cov_y,
@@ -75,11 +87,21 @@ model_spec <- function(syntax,
     group_equal = group_equal,
     group_partial = group_partial
   )
+  partable <- do.call(lavaan_lavaanify, build_args)
+  # Let the parser identify intercept syntax; comments and modifiers are not
+  # reliably recognized by a second R-level syntax scan.
+  if (!meanstructure && any(partable$op == "~1")) {
+    meanstructure <- TRUE
+    build_args$meanstructure <- TRUE
+    partable <- do.call(lavaan_lavaanify, build_args)
+  }
+  opts$meanstructure <- meanstructure
   attr(partable, "magmaan.ordered") <- ordered
   attr(partable, "magmaan.parameterization") <- parameterization
 
   out <- list(
     syntax = syntax,
+    requested_meanstructure = requested_meanstructure,
     partable = partable,
     options = opts,
     ordered = ordered,
@@ -141,10 +163,16 @@ as_magmaan_model_spec <- function(model) {
   group <- group %||% spec$group_var %||% ""
   if (!nzchar(group)) group <- NULL
   group_labels <- group_labels %||% spec$group_labels
+  options <- spec$options %||% list()
+  # Re-evaluate an omitted default when a staged call adds groups or items.
+  # Older specs without this field retain their stored explicit option.
+  if (!is.null(spec$requested_meanstructure)) {
+    options$meanstructure <- spec$requested_meanstructure
+  }
   do.call(
     model_spec,
     c(list(syntax = spec$syntax, group = group, group_labels = group_labels),
-      modifyList(spec$options %||% list(), overrides))
+      modifyList(options, overrides))
   )
 }
 
@@ -2271,7 +2299,8 @@ frontier_fit_mixed_ordinal_psd <- function(
 
   fiml_auto_meanstructure <- estimator %in% c("FIML", "ML2S")
   if (estimator %in% c("FIML", "ML2S")) {
-    if ("meanstructure" %in% names(dots) && !isTRUE(dots$meanstructure)) {
+    if ("meanstructure" %in% names(dots) &&
+        !identical(dots$meanstructure, "default") && !isTRUE(dots$meanstructure)) {
       stop(caller_prefix, "estimator = '", estimator, "' requires a mean structure; omit ",
            "`meanstructure` or set it to TRUE.", call. = FALSE)
     }
@@ -2282,8 +2311,13 @@ frontier_fit_mixed_ordinal_psd <- function(
     }
     spec <- model
     if (!is.null(ordered)) {
-      spec$ordered <- as.character(ordered)
-      attr(spec$partable, "magmaan.ordered") <- spec$ordered
+      if (!is.null(spec$syntax)) {
+        spec <- .rebuild_model_spec(spec, overrides = list(ordered = as.character(ordered)),
+                                    caller = caller)
+      } else {
+        spec$ordered <- as.character(ordered)
+        attr(spec$partable, "magmaan.ordered") <- spec$ordered
+      }
     }
   } else if (is.character(model) && length(model) == 1L) {
     model_dots <- dots

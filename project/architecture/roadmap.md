@@ -3827,8 +3827,12 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   convenience of the compiled R package `magmaanlab`. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
   ML/ULS/GLS/WLS, FIML, ML2S, and ordinal/mixed DWLS/WLS where the lower-level
-  inputs are available. For FIML and ML2S syntax calls it auto-enables a mean
-  structure (and rebuilds syntax-backed no-mean specs) because the raw-data
+  inputs are available. `model_spec(meanstructure = "default")` enables means
+  for grouped models; ordered declarations and explicit intercept syntax imply
+  means as in lavaan. Saved specs retain both the resolved option and the
+  requested default, so adding groups or ordered variables later re-evaluates
+  defaults without losing explicit choices. For FIML and ML2S syntax calls it
+  auto-enables a mean structure (and rebuilds syntax-backed no-mean specs) because the raw-data
   missing-data paths are mean-based; explicit `meanstructure = FALSE` errors
   early. Lavaan-style `se = "none"` and `test = "none"` are accepted as explicit
   point-estimate-only shortcuts; other values error and point users to explicit
@@ -3842,7 +3846,7 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`
   takes lavaan-named options, rejects estimator-plus-correction names such as
-  MLR and WLSMV, applies lavaan's `meanstructure` default, reports rows used
+  MLR and WLSMV, delegates `meanstructure` defaults to the lab, reports rows used
   and deleted listwise, and fits through `fit_model()`. `infer()` runs the
   inference policy (next entry) and records each component (covariance,
   global score, global LR) as available or with a typed reason; for an

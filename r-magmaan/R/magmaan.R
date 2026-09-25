@@ -78,10 +78,8 @@ magmaan <- function(model, data,
     stop("magmaan(): `meanstructure` must be \"default\", TRUE or FALSE", call. = FALSE)
   }
 
-  if (identical(meanstructure, "default")) {
-    meanstructure <- .default_meanstructure(model, group, ordered, estimator)
-  }
-  model_options <- list(fixed_x = fixed.x, meanstructure = meanstructure)
+  model_options <- list(fixed_x = fixed.x)
+  if (!identical(meanstructure, "default")) model_options$meanstructure <- meanstructure
   if (identical(identification, "std.lv")) model_options$std_lv <- TRUE
   if (!is.null(group.equal)) model_options$group_equal <- group.equal
   if (!is.null(group.partial)) model_options$group_partial <- group.partial
@@ -202,16 +200,6 @@ as_lab_fit <- function(fit) {
                  paste0("\"", choices, "\"", collapse = ", ")), call. = FALSE)
   }
   x
-}
-
-# lavaan's default: a mean structure for multiple groups, ordered variables,
-# the missing-data estimators, and syntax that states an intercept. The lab's
-# own parser decides the last.
-.default_meanstructure <- function(model, group, ordered, estimator) {
-  if (!is.null(group) || length(ordered) || estimator %in% c("FIML", "ML2S")) {
-    return(TRUE)
-  }
-  any(magmaanlab::model_spec(model)$partable$op == "~1")
 }
 
 # Rows supplied, used and not used, per group. Estimators that are not designed
