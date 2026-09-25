@@ -93,4 +93,28 @@ expected_information_weight(const model::ModelEvaluator& ev,
                             const data::SampleStats& samp,
                             const Eigen::VectorXd& theta);
 
+// Exact Hessian of the moment-quadratic objective at θ, in full θ and on the
+// TOTAL scale: N ∇²F with F = Σ_b (n_b/N) ½ r_bᵀ W_b r_b, r_b = σ_b(θ) − s_b.
+// Gauss–Newton Σ_b n_b J_bᵀ W_b J_b plus the residual term
+// Σ_b n_b Σ_k (W_b r_b)_k ∇²σ_{b,k}, which makes it indefinite at a saddle
+// point. `weight` empty ⇒ identity (ULS). Fixed.x must already be resolved in
+// `ev`'s partable; free parameters must be LISREL cells (no thresholds).
+fit_expected<Eigen::MatrixXd>
+moment_quadratic_hessian(const model::ModelEvaluator& ev,
+                         const data::SampleStats& samp,
+                         const Eigen::VectorXd& theta,
+                         const Weight& weight = {});
+
+// Normal-theory variance of the total gradient of the same objective,
+// Σ_b n_b J_bᵀ W_b Γ_b W_b J_b with Γ_b the normal-theory asymptotic
+// covariance of the block's [mean ; vech(cov)] moments built from S_b. For the
+// GLS weight W_b = Γ_b⁻¹ this is the Gauss–Newton matrix Σ_b n_b J_bᵀ W_b J_b.
+// It is the meat of the sandwich V = H⁻¹ Ω H⁻¹ and serves as the
+// standard-error metric of the Newton check for least-squares objectives.
+fit_expected<Eigen::MatrixXd>
+moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
+                                      const data::SampleStats& samp,
+                                      const Eigen::VectorXd& theta,
+                                      const Weight& weight = {});
+
 }  // namespace magmaan::estimate::gmm

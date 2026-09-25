@@ -10,7 +10,7 @@ preserved; this reorganization does not rerun or reassess the studies.
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
 | [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 48 |
-| [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 18 |
+| [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 19 |
 | [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 9 |
 
 The existing **kind** (`parity`, `replication`, `paper-sim`, `benchmark`, `probe`)
@@ -155,6 +155,7 @@ Inform active implementation and default choices; inherited studies await a focu
 | 16 | [complete-ml-global-test-geometry](engineering/16-complete-ml-global-test-geometry/report.qmd) | benchmark | active | For complete-data ML, which information choices in the global score and LR tests (expected or observed sensitivity, score metric, LR spectrum) hold the nominal size with SB and PEBA4 under normal and severe non-normal data? |
 | 17 | [corpus-optimizer-recovery](engineering/17-corpus-optimizer-recovery/report.qmd) | probe | active | On the corrected continuous corpus, which current optimizer policies recover accepted good objectives, and do the historical GLS failures still reproduce? |
 | 18 | [barrier-optimizer](engineering/18-barrier-optimizer/report.qmd) | probe | active | Which optimizer should fit the latent-determinacy barrier by default? |
+| 19 | [newton-verdict-migration](engineering/19-newton-verdict-migration/report.qmd) | probe | active | What does the Newton check change when it decides the FIML and least-squares verdicts, and is every changed verdict right? |
 
 ## Archived
 

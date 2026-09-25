@@ -186,8 +186,19 @@ fits carry the covariance-domain version (`newton_accuracy_ml_psd`): at a
 boundary point the Newton step is restricted to the face of the PSD cone the
 estimate lies on (null directions with positive multipliers held, the face's
 curvature 2 tr(M dC C^+ dC) added), so PSD fits are judged by d <= .01
-everywhere. The first-order check still decides at active box bounds, under
-nonlinear equalities, and on every non-ML path, and it remains telemetry
+everywhere. Since 2026-09-25 FIML (ordinary, pattern NTML and PSD) and every
+moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM at its final
+weight, SNLLS, and their PSD versions) carry the same check with the exact
+analytic Hessian of their objective: FIML measures the step with its observed
+information, the least-squares fits with the normal-theory sandwich
+(`d^2 = G' Omega^{-1} G`, Omega the variance of the total gradient), which
+makes `d` free of units. The verdict requires a positive-definite implied
+Sigma only for likelihood objectives. On the textbook corpus the change
+rejects 42 of 669 FIML/GLS/ULS fits the first-order check accepted, each a
+stationary point that is not a minimum, a stop far from the optimum, or a
+near miss of the budget (experiment engineering/19). The first-order check
+still decides at active box bounds, under nonlinear equalities, and on the
+ordinal, CatML, two-level and penalized paths, and it remains telemetry
 elsewhere. Like any local check, the Newton check can pass a point far along
 a divergent path (no attained maximum), where the remaining gain is tiny.
 General escape/nonattainment diagnostics are deferred to the
@@ -226,8 +237,10 @@ neither adapter certifies the outer iteration or Stage-1 convergence. Focused
 tests cover all five policies, frozen weights away from an optimum and
 unequal-group LS normalization. The check-by-path coverage matrix lives in
 `project/design/terminal-audit.md`. FIML uses its analytic observed information;
-LS defaults to checked central differences of the full objective gradient, with an explicit
-Gauss-Newton option; CatML, two-level and penalized adapters differentiate their
+the moment-quadratic LS adapters use the exact analytic Hessian
+(`gmm::moment_quadratic_hessian`) with the normal-theory sandwich metric
+(`gmm::moment_quadratic_nt_gradient_variance`), with an explicit Gauss-Newton
+option; ordinal, CatML, two-level and penalized adapters differentiate their
 actual gradients. Numerical Hessians retain step sizes and h-versus-h/2 and
 symmetry diagnostics, with runtime controls and no silent approximation fallback.
 LS artifacts also retain their whitened residuals and Jacobians. CatML holds

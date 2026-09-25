@@ -32,6 +32,8 @@
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
+
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
@@ -6955,6 +6957,37 @@ saturated_em_moments_fd(const RawData& raw, double h_step) {
 
 namespace {
 
+// FIML Newton check: the analytic observed information of the fitted
+// objective is both the curvature and the metric. `gradient` and `value` are
+// the optimiser adapter's per-observation ½F scale at est.theta; the cache is
+// the fit's own (raw-data FIML or a pattern NTML target).
+void attach_fiml_newton_accuracy(Estimates& est, const spec::LatentStructure& pt,
+                                 const model::MatrixRep& rep, const FIMLCache& cache,
+                                 const SampleStats& start_samp,
+                                 const Eigen::VectorXd& gradient, double value,
+                                 StationarityDomain domain) {
+  estimate::frontier::NewtonDerivatives d;
+  d.theta = est.theta;
+  d.objective_kind = NewtonObjectiveKind::Fiml;
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  const double n = static_cast<double>(cache.n_total);
+  d.n_obs = n;
+  d.native_to_total = n;
+  d.objective = value;
+  d.gradient = n * gradient;
+  if (std::isfinite(value) && d.gradient.allFinite() && n > 0) {
+    auto H = fiml_observed_hessian_analytic(pt, rep, cache, start_samp, est);
+    if (H.has_value() && H->rows() == est.theta.size() && H->allFinite()) {
+      d.hessian = 0.5 * n * (*H);
+      d.status = NewtonAccuracyStatus::Available;
+    } else {
+      d.detail = H.has_value() ? "invalid FIML observed Hessian" : H.error().detail;
+    }
+  }
+  est.diagnostics.newton_accuracy =
+      estimate::frontier::audit_newton_derivatives(pt, rep, std::move(d), domain).diagnostics;
+}
+
 fit_expected<Estimates>
 fit_fiml_impl(spec::LatentStructure pt,
               const model::MatrixRep& rep,
@@ -7063,6 +7096,8 @@ fit_fiml_impl(spec::LatentStructure pt,
       }
       audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
                            pt, ev, con, nl, Bounds{});
+      attach_fiml_newton_accuracy(est, pt, rep, cache, start_samp, gradient,
+                                  value, StationarityDomain::Ambient);
     }
     return est;
   };

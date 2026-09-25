@@ -24,7 +24,9 @@ struct NewtonAdapterOptions {
   StationarityDomain domain = StationarityDomain::Ambient;
   Bounds bounds; // empty means unbounded; never inferred from the estimator
   double active_bound_tol = 1e-6;
-  bool gauss_newton = false; // LS adapters only; otherwise rejected
+  // LS adapters only; otherwise rejected. Replaces the analytic Hessian of
+  // the moment-quadratic adapters by J'WJ, which cannot detect a saddle.
+  bool gauss_newton = false;
 };
 
 // Low-level derivative adapter for an ORIGINAL full-theta objective. The
@@ -36,11 +38,22 @@ NewtonDerivatives evaluate_newton_objective(
     NewtonObjectiveKind kind = NewtonObjectiveKind::Supplied,
     NewtonDifferenceOptions options = {});
 
+// Analytic derivatives of the moment-quadratic objective (ULS, GLS, WLS, DWLS,
+// fixed-weight GMM) at theta: the exact Hessian and, as the sandwich metric,
+// the normal-theory variance of the total gradient. `ev` must carry the
+// resolved (fixed.x) partable. Fit finalization and the LS adapters share it.
+NewtonDerivatives evaluate_newton_moment_quadratic(
+    const model::ModelEvaluator& ev, const SampleStats& sample,
+    const Eigen::VectorXd& theta, const gmm::Weight& weight = {});
+
 // Each adapter returns owning artifacts without fitting or changing a fit's
 // stored verdict. Build/input errors are expected errors; numerical curvature
-// failures remain inspectable artifacts with non-Available status. The .01
-// budget outside ML is an objective-curvature budget, not a claim of .01
-// sampling standard errors. No penalty is omitted from a penalized objective.
+// failures remain inspectable artifacts with non-Available status. Likelihood
+// adapters measure the step with the observed information and the
+// moment-quadratic adapters with the normal-theory sandwich, both in
+// standard-error units; finite-difference and Gauss-Newton curvature keep the
+// objective's own Hessian as metric. No penalty is omitted from a penalized
+// objective.
 fit_expected<NewtonAudit> audit_newton_objective(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const optim::ScalarProblem& problem, const Eigen::VectorXd& theta,

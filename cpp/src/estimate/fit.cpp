@@ -21,6 +21,7 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
@@ -2117,8 +2118,9 @@ static void attach_geometric_stationarity(
 }
 
 // Complete-data ML fits carry the interior Newton accuracy check, which the
-// common verdict uses at regular interior points (diagnostics.hpp). Penalized
-// and non-ML fits do not: their stationarity concerns another objective.
+// common verdict uses at regular interior points (diagnostics.hpp). Least-
+// squares fits carry their own (attach_newton_accuracy_ls); fits without an
+// analytic Hessian of their objective do not.
 static void attach_newton_accuracy(Estimates& est,
                                    const spec::LatentStructure& pt,
                                    const model::MatrixRep& rep,
@@ -2143,9 +2145,57 @@ with_newton_accuracy(fit_expected<Estimates> est,
   return est;
 }
 
+// Least-squares Newton check: exact Hessian of the moment-quadratic
+// objective, step measured by the normal-theory sandwich (diagnostics.hpp).
+static void attach_newton_accuracy_ls(
+    Estimates& est,
+    const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
+    const Prelude& pre,
+    const SampleStats& samp,
+    const gmm::Weight& weight,
+    StationarityDomain domain = StationarityDomain::Ambient) {
+  est.diagnostics.newton_accuracy = frontier::audit_newton_derivatives(
+      pt, rep,
+      frontier::evaluate_newton_moment_quadratic(pre.ev, samp, est.theta, weight),
+      domain).diagnostics;
+}
+
+// FIML Newton check: the analytic observed information is curvature and
+// metric. `full_problem` is the ½F per-observation FIML objective.
+static void attach_newton_accuracy_fiml(
+    Estimates& est, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const fiml::FIMLPack& pack, const optim::ScalarProblem& full_problem,
+    StationarityDomain domain) {
+  frontier::NewtonDerivatives d;
+  d.theta = est.theta;
+  d.objective_kind = NewtonObjectiveKind::Fiml;
+  d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+  const double n = static_cast<double>(pack.cache.n_total);
+  d.n_obs = n;
+  d.native_to_total = n;
+  Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
+  d.objective = full_problem.f(est.theta, gradient);
+  d.gradient = n * gradient;
+  if (std::isfinite(d.objective) && d.gradient.allFinite() && n > 0) {
+    auto info = fiml::fiml_observed_information(pt, rep, raw, est, pack);
+    if (info.has_value() && info->rows() == est.theta.size() && info->allFinite()) {
+      d.hessian = std::move(*info);
+      d.status = NewtonAccuracyStatus::Available;
+    } else {
+      d.detail = info.has_value() ? "invalid FIML observed information"
+                                  : info.error().detail;
+    }
+  }
+  est.diagnostics.newton_accuracy =
+      frontier::audit_newton_derivatives(pt, rep, std::move(d), domain).diagnostics;
+}
+
 static void attach_gmm_geometric_stationarity(
     Estimates& est,
     const spec::LatentStructure& pt,
+    const model::MatrixRep& rep,
     const Prelude& pre,
     const SampleStats& samp,
     const Eigen::VectorXd& layout_point,
@@ -2156,6 +2206,7 @@ static void attach_gmm_geometric_stationarity(
   if (!problem.has_value()) return;
   attach_geometric_stationarity(
       est, pt, pre, bounds, optim::scalarize(*problem), domain);
+  attach_newton_accuracy_ls(est, pt, rep, pre, samp, weight, domain);
 }
 
 namespace {
@@ -2324,6 +2375,8 @@ fit_fiml_psd_impl(spec::LatentStructure pt,
       pre->ev, raw, pack.cache, discrepancy);
   attach_geometric_stationarity(
       *est, pt, *pre, Bounds{}, full_problem, StationarityDomain::Psd);
+  attach_newton_accuracy_fiml(*est, pt, rep, raw, pack, full_problem,
+                              StationarityDomain::Psd);
   est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
@@ -2348,7 +2401,7 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
-      *est, pt, *pre, samp, x0, weight, bounds);
+      *est, pt, rep, *pre, samp, x0, weight, bounds);
   return est;
 }
 
@@ -2376,6 +2429,9 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (!est.has_value()) return est;
     attach_diagnostics(*est, pt, *pre, bounds);
     attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+    if (auto W = gmm::normal_theory_weight(pre->ev, samp, x0); W.has_value()) {
+      attach_newton_accuracy_ls(*est, pt, rep, *pre, samp, *W);
+    }
     return est;
   }
 
@@ -2386,7 +2442,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
-      *est, pt, *pre, samp, x0, *W, bounds);
+      *est, pt, rep, *pre, samp, x0, *W, bounds);
   return est;
 }
 
@@ -2478,7 +2534,7 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
-      *est, pt, *pre, samp, x0, W, bounds);
+      *est, pt, rep, *pre, samp, x0, W, bounds);
   return est;
 }
 
@@ -2884,7 +2940,7 @@ fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
                                "fit_gmm_psd");
   if (!est.has_value()) return est;
   attach_gmm_geometric_stationarity(
-      *est, pt, *pre, samp, x0, weight, Bounds{}, StationarityDomain::Psd);
+      *est, pt, rep, *pre, samp, x0, weight, Bounds{}, StationarityDomain::Psd);
   est->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return est;
 }
@@ -3244,6 +3300,7 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   attach_diagnostics(*est, pt, *pre, bounds);
   if (!extra.active()) {
     attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
+    attach_newton_accuracy_ls(*est, pt, rep, *pre, samp, weight);
   }
   return est;
 }
@@ -3419,7 +3476,7 @@ fit_gmm_fitted_weight_impl(spec::LatentStructure pt,
         pre->ev, samp, est->theta, fitted_opts.kind, who);
     if (final_weight.has_value()) {
       attach_gmm_geometric_stationarity(
-          *est, pt, *pre, samp, est->theta, *final_weight, bounds);
+          *est, pt, rep, *pre, samp, est->theta, *final_weight, bounds);
     }
   }
   return est;
@@ -3651,7 +3708,7 @@ fit_gmm_fitted_weight_psd(
       pre->ev, samp, est->theta, fitted_opts.kind, who);
   if (final_weight.has_value()) {
     attach_gmm_geometric_stationarity(
-        *est, pt, *pre, samp, est->theta, *final_weight, Bounds{},
+        *est, pt, rep, *pre, samp, est->theta, *final_weight, Bounds{},
         StationarityDomain::Psd);
   }
   est->diagnostics.stationarity_domain = StationarityDomain::Psd;
@@ -5574,7 +5631,7 @@ fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
   // SNLLS has no box bounds on the nonlinear block; attach_diagnostics
   // reads `bounds.empty()` correctly and reports no active bounds.
   attach_diagnostics(*est, pt, *pre, Bounds{});
-  attach_gmm_geometric_stationarity(*est, pt, *pre, samp, x0, weight, Bounds{});
+  attach_gmm_geometric_stationarity(*est, pt, rep, *pre, samp, x0, weight, Bounds{});
   return est;
 }
 
@@ -5589,7 +5646,7 @@ fit_snlls_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_snlls(pt, pre->ev, samp, x0, *W, backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, Bounds{});
-  attach_gmm_geometric_stationarity(*est, pt, *pre, samp, x0, *W, Bounds{});
+  attach_gmm_geometric_stationarity(*est, pt, rep, *pre, samp, x0, *W, Bounds{});
   return est;
 }
 

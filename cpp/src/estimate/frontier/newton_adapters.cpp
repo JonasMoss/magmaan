@@ -133,6 +133,15 @@ NewtonDerivatives evaluate_newton_moment_quadratic(
   d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
   d.metric_kind = NewtonMetricKind::Sandwich;
   if (d.status != NewtonAccuracyStatus::Available) return d;
+  for (const auto& l : ev.param_locations()) {
+    if (l.row < 0 || l.col < 0) {
+      // Not a model-matrix cell: the closed-form second derivatives do not
+      // cover it, so no analytic Hessian exists for this objective.
+      d.status = NewtonAccuracyStatus::Unsupported;
+      d.detail = "a free parameter is not a model-matrix cell";
+      return d;
+    }
+  }
   d.status = NewtonAccuracyStatus::Unavailable;
   auto H = gmm::moment_quadratic_hessian(ev, sample, theta, weight);
   if (!H) {

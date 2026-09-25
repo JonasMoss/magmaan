@@ -1188,6 +1188,9 @@ Rcpp::List newton_accuracy_to_r(
   return Rcpp::List::create(
       Rcpp::_["checked"] = a.checked,
       Rcpp::_["status"] = std::string(magmaan::estimate::to_string(a.status)),
+      Rcpp::_["objective"] = std::string(magmaan::estimate::to_string(a.objective)),
+      Rcpp::_["curvature"] = std::string(magmaan::estimate::to_string(a.curvature)),
+      Rcpp::_["metric"] = std::string(magmaan::estimate::to_string(a.metric)),
       Rcpp::_["distance"] = num(a.distance),
       Rcpp::_["passed"] = a.passed,
       Rcpp::_["budget"] = a.budget,
@@ -1198,6 +1201,7 @@ Rcpp::List newton_accuracy_to_r(
       Rcpp::_["solve_residual"] = num(a.solve_residual),
       Rcpp::_["n_reduced"] = a.n_reduced,
       Rcpp::_["psd_domain"] = a.psd_domain,
+      Rcpp::_["box_constrained"] = a.box_constrained,
       Rcpp::_["null_directions"] = a.null_directions,
       Rcpp::_["constrained_directions"] = a.constrained_directions,
       Rcpp::_["min_multiplier"] = num(a.min_multiplier));

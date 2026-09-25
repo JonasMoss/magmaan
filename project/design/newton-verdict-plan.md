@@ -1,8 +1,23 @@
 # The Newton check in every default verdict: plan (2026-09-25)
 
-Status: plan, decided in principle on 2026-09-25, nothing implemented. When a
+Status (2026-09-25): phases 1 and 2 landed, with the metric, provenance and
+the exact least-squares Hessian from phase 0; the dry run is experiment
+engineering/19. Remaining: the ordinal and mixed Hessians (phase 0 and 3), the
+barrier Hessian (phase 4), and the stopping-control decision below. CatML is
+out of scope (decided 2026-09-25): its inference is not worth a Hessian. When a
 phase lands, fold its contract into [terminal-audit.md](terminal-audit.md) and
-shorten this file. Part of the
+shorten this file.
+
+Dry-run result for FIML, GLS and ULS on the textbook corpus: 42 of 669 fits
+change from accepted to rejected. 29 are stationary points that are not
+minima (the Little models of engineering/17 under GLS and ULS, and FIML fits
+that stopped far from the optimum), 2 are ill-conditioned, 5 stopped far from
+the optimum with a small gradient (Newton steps of 2.6 to 8.7 standard
+errors), and 6 are near misses (0.011 to 0.054). A refit under complete-data
+ML's stopping controls converges on 4 of the near misses and on 4 of the 5
+FIML non-minima. Next decision: adopt ML's stopping controls
+(`ftol_rel` 1e-12, `xtol_rel` 1e-10, 5000 evaluations) for FIML and the
+least-squares fitters, after a corpus run shows no new failures. Part of the
 [convergence-engineering vision](convergence-engineering.md), whose judge must
 be the same for every estimator.
 

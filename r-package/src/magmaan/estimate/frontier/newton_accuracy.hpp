@@ -49,14 +49,10 @@ namespace magmaan::estimate::frontier {
 using estimate::NewtonAccuracyDiagnostics;
 using estimate::NewtonAccuracyOptions;
 using estimate::NewtonAccuracyStatus;
+using estimate::NewtonCurvatureKind;
+using estimate::NewtonMetricKind;
+using estimate::NewtonObjectiveKind;
 using estimate::to_string;
-
-enum class NewtonObjectiveKind {
-  CompleteDataMl, LeastSquares, Fiml, OrdinalLeastSquares,
-  MixedOrdinalLeastSquares, CatMl, TwoLevelMl, PenalizedMl,
-  PenalizedFiml, Supplied
-};
-enum class NewtonCurvatureKind { AnalyticObserved, GradientDifference, GaussNewton, Supplied };
 
 // Owning artifacts evaluated at theta in full free-parameter order.
 // gradient and hessian are on the TOTAL objective scale; objective is the
@@ -88,6 +84,10 @@ struct NewtonDerivatives {
   // Coordinates absent from the objective, explicitly held fixed by its
   // adapter (CatML's Stage-1 thresholds). Never inferred from Hessian rank.
   std::vector<Eigen::Index> fixed_coordinates;
+  // Sandwich metric: `metric` is Omega, the variance of the total gradient,
+  // in full coordinates. Empty for the Hessian metric.
+  NewtonMetricKind metric_kind = NewtonMetricKind::Hessian;
+  Eigen::MatrixXd metric;
 };
 
 // theta increments = equality_basis * tangent_basis * reduced increments.
@@ -105,6 +105,7 @@ struct NewtonGeometry {
   Eigen::MatrixXd curvature_correction;
   Eigen::VectorXd reduced_gradient;
   Eigen::MatrixXd reduced_hessian;
+  Eigen::MatrixXd reduced_metric;  // B' Omega B for the sandwich metric, else empty
   std::int32_t null_directions = 0;
   std::int32_t constrained_directions = 0;
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
@@ -177,8 +178,9 @@ struct NewtonAudit {
   NewtonDerivatives derivatives;
   NewtonGeometry geometry;
   NewtonSystem system;
-  NewtonSolution solution;
+  NewtonSolution solution;  // distance in the derivatives' metric
   NewtonBoxSolution box;
+  NewtonSystem metric_system;  // factorization of reduced_metric, sandwich only
   NewtonAccuracyDiagnostics diagnostics;
 };
 

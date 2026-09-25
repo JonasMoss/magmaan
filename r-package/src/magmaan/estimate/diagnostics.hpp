@@ -132,17 +132,21 @@ struct GeometricStationarityDiagnostics {
   std::int32_t cone_projection_iterations = 0;
 };
 
-// Local accuracy of a returned complete-data ML fit (Layer 2). With G the
-// total score and I the total observed information, both reduced by the
-// linear-equality basis, the Newton distance is d = sqrt(G' I^{-1} G): under
-// the local quadratic approximation, the largest predicted Newton correction
-// of any linear contrast in its information-based standard errors. The
-// accepted budget is d <= .01 (project/validation/interior-newton-audit.md). It is
-// a local accuracy approximation, not a bound on the distance to an optimum.
-// Computed by `frontier::newton_accuracy_ml`; complete-data ML fit paths
-// attach it (`checked`), and `common_fit_verdict` uses it at regular interior
-// points. The conditioning and solve guards are numerical safeguards, not
-// identification tests.
+// Local accuracy of a returned fit (Layer 2). The Newton step of the fitted
+// objective, s = -H^{-1} G with G the total gradient and H the total Hessian
+// (both reduced by the linear-equality basis), is measured in standard-error
+// units. For likelihood objectives H is the observed information and
+// d = sqrt(G' H^{-1} G): under the local quadratic approximation, the largest
+// predicted Newton correction of any linear contrast in its information-based
+// standard errors. For least-squares objectives the metric is the sandwich,
+// d = sqrt((H s)' Omega^{-1} (H s)) with Omega the variance of the total
+// gradient, which equals sqrt(G' Omega^{-1} G) for an unconstrained step. The
+// accepted budget is d <= .01 (project/validation/interior-newton-audit.md). It
+// is a local accuracy approximation, not a bound on the distance to an optimum.
+// H must be positive definite: a stationary point that is not a local minimum
+// fails. Fit paths with an analytic Hessian attach it (`checked`), and
+// `common_fit_verdict` uses it at regular interior points. The conditioning and
+// solve guards are numerical safeguards, not identification tests.
 enum class NewtonAccuracyStatus : std::uint8_t {
   Available,             // d computed
   Unavailable,           // objective, gradient, constraints or information failed
@@ -153,6 +157,28 @@ enum class NewtonAccuracyStatus : std::uint8_t {
 };
 
 std::string_view to_string(NewtonAccuracyStatus s) noexcept;
+
+// The objective a Newton check differentiates, where its curvature came from,
+// and how its step is measured.
+enum class NewtonObjectiveKind : std::uint8_t {
+  CompleteDataMl, LeastSquares, Fiml, OrdinalLeastSquares,
+  MixedOrdinalLeastSquares, CatMl, TwoLevelMl, PenalizedMl,
+  PenalizedFiml, Supplied
+};
+enum class NewtonCurvatureKind : std::uint8_t {
+  AnalyticObserved, GradientDifference, GaussNewton, Supplied
+};
+// Hessian: d^2 = G' H^{-1} G. Sandwich: d^2 = (H s)' Omega^{-1} (H s), Omega
+// the variance of the total gradient.
+enum class NewtonMetricKind : std::uint8_t { Hessian, Sandwich };
+
+std::string_view to_string(NewtonObjectiveKind k) noexcept;
+std::string_view to_string(NewtonCurvatureKind k) noexcept;
+std::string_view to_string(NewtonMetricKind k) noexcept;
+
+// Objectives defined only where every implied covariance block is positive
+// definite. Least-squares objectives are defined everywhere.
+bool newton_objective_requires_pd_sigma(NewtonObjectiveKind k) noexcept;
 
 struct NewtonAccuracyOptions {
   double budget = 0.01;
@@ -167,15 +193,21 @@ struct NewtonAccuracyOptions {
 };
 
 struct NewtonAccuracyDiagnostics {
-  // False on fit paths that do not compute the diagnostic (non-ML
-  // discrepancies, FIML, ordinal, two-level, penalized fits).
+  // False on fit paths that do not compute the diagnostic (paths without an
+  // analytic Hessian of their objective).
   bool checked = false;
   NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  NewtonObjectiveKind objective = NewtonObjectiveKind::Supplied;
+  NewtonCurvatureKind curvature = NewtonCurvatureKind::Supplied;
+  NewtonMetricKind metric = NewtonMetricKind::Hessian;
   double distance = std::numeric_limits<double>::quiet_NaN();
-  // d^2 / 2: predicted remaining decrease of the total negative log likelihood.
+  // Predicted remaining decrease of the total objective, s' H s / 2 (for a
+  // likelihood, of the total negative log likelihood).
   double predicted_gain = std::numeric_limits<double>::quiet_NaN();
   // Largest absolute predicted Newton correction in reduced coordinates.
   double max_step = std::numeric_limits<double>::quiet_NaN();
+  // Largest equilibrated condition number of the solves (the Hessian, and
+  // the sandwich metric when used) and their largest relative residual.
   double condition = std::numeric_limits<double>::quiet_NaN();
   double solve_residual = std::numeric_limits<double>::quiet_NaN();
   double budget = 0.01;

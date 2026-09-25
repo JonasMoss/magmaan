@@ -54,10 +54,18 @@ The required checks are:
    `criterion` records which check decided.
    Decision 2026-09-25: every iterative estimator gets this check at fit
    time, with the Newton step measured in standard-error units
-   ([newton-verdict-plan.md](newton-verdict-plan.md)); until each path is
-   migrated, the first-order check above still decides there. Once `checked`
-   is true, an `Unavailable` curvature fails the verdict, like nonpositive
-   curvature.
+   ([newton-verdict-plan.md](newton-verdict-plan.md)). Landed the same day
+   for FIML (ordinary, pattern NTML, PSD; observed-information metric) and
+   every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM,
+   SNLLS, their PSD versions; exact Hessian, normal-theory sandwich metric
+   `d^2 = (H s)' Omega^{-1} (H s)`). The diagnostic records its objective,
+   curvature source and metric. A positive-definite implied Sigma is required
+   only for likelihood objectives. Until the remaining paths (ordinal,
+   CatML, two-level, penalized) are migrated, the first-order check above
+   still decides there. Once `checked` is true, an `Unavailable` curvature
+   fails the verdict, like nonpositive curvature; a free parameter outside
+   the closed-form second derivatives reports `Unsupported` and leaves the
+   first-order check deciding.
 
 The fit entry point declares `Ambient` or `Psd` before the verdict is selected.
 Ordinary fits use equality/bound normals; explicitly PSD-constrained fits
@@ -388,9 +396,9 @@ the explicit report composes these checks independently of fit finalization.
 | Fit path | Common fit checks | Explicit retained Newton | Remaining coverage |
 | --- | --- | --- | --- |
 | Complete-data ML, Fisher/IRLS | Yes | Analytic | Fit/post-fit ML parity tested |
-| Fixed LS/GMM, GLS, expanded SNLLS | Yes | Numerical or requested GN | Broader constraint/domain regression combinations |
+| Fixed LS/GMM, GLS, expanded SNLLS | Yes, Newton at fit time (2026-09-25) | Analytic exact, sandwich metric; requested GN | Broader constraint/domain regression combinations |
 | Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
-| FIML | Yes | Analytic | Broader missingness/group combinations |
+| FIML | Yes, Newton at fit time (2026-09-25) | Analytic | Broader missingness/group combinations |
 | ML2S | Yes, Stage 2; explicit Stage-1 endpoint and composed report | Analytic Stage 1; all five Stage-2 policies | Automatic fit-input capture and R reports |
 | Ordinal/mixed LS, including profiled fits | Yes, full coordinates | Delta/theta; numerical or GN | Broader group/profile combinations |
 | CatML | Yes, correlation objective | Numerical; thresholds held | Stage-1 threshold estimation is separate |
@@ -431,7 +439,7 @@ feasibility, admissibility and first-order evidence remain separate checks.
 | Complete-data ML | `audit_newton_ml` | Analytic observed information |
 | ML2S Stage 2 | `audit_newton_ml2s` | NT uses analytic ML; ULS/DWLS/ADF/DLS use fixed-weight LS |
 | Fitted-weight GMM | `audit_newton_gmm_fitted_weight` | Final expected-information weight reconstructed once and frozen |
-| ULS | `audit_newton_uls` | Gradient differences; optional Gauss-Newton |
+| ULS | `audit_newton_uls` | Exact analytic (`gmm::moment_quadratic_hessian`), sandwich metric; optional Gauss-Newton |
 | GLS | `audit_newton_gls` | Same, using the sample-based NT weight |
 | WLS/DWLS/GMM | `audit_newton_wls` / `audit_newton_gmm` | Same, with the supplied fixed weight |
 | Ordinary LS-SNLLS | `audit_newton_snlls` | Full expanded LS objective, including eliminated coordinates |

@@ -29,7 +29,9 @@ FitVerdict compatibility_verdict(const FitDiagnostics& d) {
       out.stationarity = FitCheck::Failed;
     } else if (use_newton) {
       out.criterion = StationarityCriterion::Newton;
-      const bool feasible = d.sigma_pd_all && d.lin_eq_satisfied &&
+      const bool sigma_ok = d.sigma_pd_all ||
+          !newton_objective_requires_pd_sigma(newton.objective);
+      const bool feasible = sigma_ok && d.lin_eq_satisfied &&
           d.nl_eq_satisfied && (!psd || g.feasible);
       out.stationarity = feasible && newton.passed ? FitCheck::Passed
                                                    : FitCheck::Failed;

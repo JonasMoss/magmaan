@@ -252,15 +252,17 @@ there is no scheduled expansion of this surface.
   success criteria. Under discussion; the decision studies below would become
   its first consumers.
 - **High — the Newton check in every iterative estimator's default verdict
-  (decided 2026-09-25).** Only complete-data ML uses it at fit time; the other
-  families decide with the first-order check and cannot reject non-minima (of
-  engineering/17's twelve Little models that ML rejects for nonpositive
-  curvature, nine are accepted under GLS at a worse objective). Exact analytic
-  Hessians already exist for ML, FIML, continuous LS and ordinal/mixed LS
-  (built for robust sandwiches, the latter two private and reduced); two-level,
-  CatML and the barrier penalties need theirs. Curvature from the objective's
-  Hessian, step measured in standard-error units. Phased plan, dry run and
-  affected tests: [newton-verdict-plan.md](../design/newton-verdict-plan.md).
+  (decided 2026-09-25).** Landed for FIML (ordinary, pattern NTML, PSD) and
+  every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, SNLLS, PSD versions),
+  with exact analytic Hessians; on the corpus it rejects 42 of 669 fits the
+  first-order check accepted, all bad endpoints or near misses
+  (engineering/19). Remaining, in order: (1) adopt complete-data ML's
+  stopping controls for FIML and the least-squares fitters after a corpus run
+  (they rescue 4 of 6 near misses and 4 of 5 FIML non-minima); (2) the
+  ordinal and mixed exact Hessians, with the estimated-ACOV sandwich metric,
+  and confirm or clear the mean-Jacobian suspicion in the all-ordinal bread;
+  (3) the barrier-penalty Hessian; (4) two-level (deferred). CatML stays on
+  the first-order check. Plan: [newton-verdict-plan.md](../design/newton-verdict-plan.md).
 - **M — finish optimizer-control reporting and specialized-path inventory.**
   Explicit backend control blocks now cover NLopt L-BFGS/SLSQP/VAR2/TNEWTON/
   BOBYQA, PORT scalar/NLS, IPOPT, and Ceres estimator bridges, with legacy

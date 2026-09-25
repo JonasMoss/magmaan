@@ -496,6 +496,10 @@ NewtonGeometry prepare_newton_geometry(
     fail.status = NewtonAccuracyStatus::Unsupported;
     return fail;
   }
+  if (derivatives.status == NewtonAccuracyStatus::Unsupported) {
+    fail.status = NewtonAccuracyStatus::Unsupported;
+    return fail;
+  }
   if (derivatives.status != NewtonAccuracyStatus::Available ||
       derivatives.theta.size() != pt.n_free() ||
       derivatives.gradient.size() != pt.n_free() ||
