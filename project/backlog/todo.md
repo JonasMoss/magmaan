@@ -75,10 +75,6 @@ design, starting-point inventory and validation rules are in
   default it to the empirical-Gamma weight the prepared path already builds
   (`prepare_weight(data, "WLS")`). `magmaan()` refuses continuous WLS until
   then.
-- **S — ordinal delta-parameterization residual variances.** Lab fits report
-  the fixed residual-variance rows of ordered indicators as 1, whereas lavaan
-  reports the derived value (1 minus the explained variance). Fix it in the
-  result reconstruction; `magmaan::parameters()` shows these rows.
 - **S — move the lavaan `meanstructure` default into the lab.** `magmaan()`
   applies lavaan's rule (multiple groups, ordered variables, FIML/ML2S, syntax
   intercepts); with it the lab matches lavaan's rows. It is lavaanify
@@ -935,16 +931,6 @@ post-fit covariance-admissibility audit is now part of the architecture
 contract and fitted-result schema; experiment-specific simulation checkpoints
 should copy `fit$diagnostics$admissibility$admissible` into their result rows
 when they next change.
-
-- **S — `effect_coding = TRUE` with a mean structure codes loadings only.**
-  lavaan's `effect.coding = TRUE` means `c("loadings", "intercepts")`: per
-  factor the indicator intercepts sum to zero and the latent means are free.
-  magmaan's `effect_coding` adds only the loading rows, so with a mean
-  structure (FIML, `meanstructure = TRUE`) the fit and df agree with lavaan
-  but the intercept and latent-mean estimates are in a different chart
-  (found by experiment engineering/14; magmaan matches `effect.coding = "loadings"` to
-  5e-7). Decide whether `effect_coding` should accept lavaan's character
-  form, and gate the intercept chart against lavaan.
 
 - **S — complete covariance-admissibility validation plumbing.** Add a
   deterministic lavaan warning-status fixture for an improper complete-data

@@ -44,6 +44,16 @@ enum class OrdinalParameterization {
   Theta,
 };
 
+// Fitted values in structure-row order, including derived delta residual
+// variances for ordered indicators with fixed response scales. Does not alter
+// fixed values/start hints used to reconstruct the fitting model. Free scale
+// rows retain their fitted coordinates; theta residuals remain unchanged.
+post_expected<Eigen::VectorXd>
+ordinal_parameter_values(const spec::LatentStructure& pt,
+                         const model::MatrixRep& rep,
+                         const Eigen::VectorXd& theta,
+                         OrdinalParameterization parameterization);
+
 struct OrdinalRobustResult {
   Eigen::MatrixXd vcov;              // full free-parameter covariance
   Eigen::VectorXd se;                // sqrt(diag(vcov))

@@ -2841,3 +2841,5 @@ cat("regenerated", length(regenerated_composite),
 # single-level corpus. `fixtures` is already defined above, so it reuses it.
 source(file.path(repo_root, "cpp", "tests", "tools", "regen_oracle_twolevel.R"))
 source(file.path(repo_root, "cpp", "tests", "tools", "regen_oracle_fiml_nested.R"))
+
+source(file.path(repo_root, "cpp", "tests", "tools", "regen_oracle_parameter_reporting.R"))

@@ -58,6 +58,26 @@ The lavaanified model contract is the triple:
 from `LavaanParTable`, which is the compatibility format used by R bindings and
 golden `parTable()` fixtures.
 
+`effect_coding = TRUE` uses lavaan's loading and intercept identification:
+loading sums equal the number of indicators, indicator intercept sums are zero,
+and automatically supplied latent means are free. A fixed indicator intercept
+suppresses that factor's intercept coding; explicit latent-mean fixes remain
+binding. Explicit fixed loadings suppress the corresponding loading constraint.
+The builder applies the lavaan reference-group convention under scalar
+invariance. Covariance-only models retain loading-only coding.
+
+Ordinal and mixed fitted parameter tables derive fixed-scale delta residual
+variances through `estimate::ordinal_parameter_values`, using the fitted
+explained variance and unit response variance. The helper returns owning values
+in structure-row order; it leaves preparation values, start hints, and free
+coordinates unchanged. R result constructors share this reconstruction, including
+prepared and post-fit ordinal routes. Theta residuals and free response-scale
+coordinates retain their fitted values. Released-scale delta invariance remains
+outside validated coverage. Targeted pinned-lavaan fixtures cover effect-coded
+single/multigroup and scalar-invariance fits, explicit fixes, and single/multigroup
+ordinal/mixed delta/theta reporting; independent checks cover mean/covariance
+invariance, constraint sums, and residual-plus-explained variance.
+
 Continuous multi-group `group.equal = "intercepts"` releases auto-added zero
 latent means in groups 2+ unless `means` is also equal. Explicit user mean
 rows remain authoritative, and `group.partial` does not suppress the release.

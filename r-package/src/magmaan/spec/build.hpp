@@ -47,7 +47,7 @@ struct BuildOptions {
   // is the average of its indicators'. Forces auto.fix.first and std.lv off;
   // mutually exclusive with `std_lv` (lavaanify errors on both). Mean-structure
   // effect coding (`Σν == 0`) is a future sub-step, not yet implemented.
-  bool effect_coding  = false;  // free all loadings + LV var; add `Σλ == #indicators`
+  bool effect_coding  = false;  // lavaan TRUE: loading sums + intercept sums, with latent means free
   bool fixed_x        = true;   // mirror lavaan: data-given exogenous OV moments
   bool meanstructure  = false;  // auto-add ν / α rows, with defaults below
   bool int_ov_free    = true;   // observed intercepts free by default; growth() sets false

@@ -174,6 +174,7 @@ magmaan_add_test_target(magmaan_test_inference inference
 magmaan_add_test_target(magmaan_test_ordinal ordinal
   unit/ordinal_test.cpp
   golden/ordinal_golden_test.cpp
+  golden/parameter_reporting_golden_test.cpp
   golden/pairwise_golden_test.cpp)
 
 magmaan_add_test_target(magmaan_test_api api

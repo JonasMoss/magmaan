@@ -2126,6 +2126,20 @@ std::vector<Eigen::MatrixXd> matrix_blocks_from_arg(SEXP X) {
   return blocks;
 }
 
+void attach_ordinal_parameter_values(Rcpp::List& out, const Ctx& ctx,
+                                     const magmaan::estimate::Estimates& est,
+                                     const char* parameterization) {
+  auto values = magmaan::estimate::ordinal_parameter_values(
+      ctx.pt, ctx.rep, est.theta,
+      ordinal_parameterization_from_string(parameterization));
+  if (!values) stop_post(values.error());
+  Rcpp::DataFrame pt = out["partable"];
+  Rcpp::NumericVector estimates = pt["est"];
+  for (Eigen::Index i = 0; i < values->size(); ++i) estimates[i] = (*values)(i);
+  pt["est"] = estimates;
+  out["partable"] = pt;
+}
+
 Rcpp::List ordinal_fit_result(Ctx& ctx,
                               const magmaan::data::OrdinalStats& stats,
                               const magmaan::estimate::Estimates& est,
@@ -2133,6 +2147,7 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
                               const char* estimator,
                               const char* parameterization = "delta") {
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
+  attach_ordinal_parameter_values(out, ctx, est, parameterization);
   out["ordinal"] = true;
   out["parameterization"] = parameterization;
   // Carry the group.equal families on the partable so the nested ordinal LR
@@ -2158,6 +2173,7 @@ Rcpp::List mixed_ordinal_fit_result(
     const char* estimator,
     const char* parameterization = "delta") {
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
+  attach_ordinal_parameter_values(out, ctx, est, parameterization);
   out["mixed_ordinal"] = true;
   out["parameterization"] = parameterization;
   out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
@@ -5440,11 +5456,9 @@ Rcpp::List frontier_rbm_impl(
             : magmaan::estimate::frontier::rbm_implicit_mixed_ordinal(
                   ctx.pt, ctx.rep, stats, est, ow, parameterization, b, opts);
     if (!rbm.has_value()) stop_fit(rbm.error());
-    Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr,
-                                "RBM-MIXED-ORDINAL");
-    out["mixed_ordinal"] = true;
-    out["parameterization"] = parameterization_name;
-    out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
+    Rcpp::List out = mixed_ordinal_fit_result(
+        ctx, stats, rbm->estimates, nullptr, "RBM-MIXED-ORDINAL",
+        parameterization_name.c_str());
     out["rbm"] = rbm_metadata_to_r(*rbm, method_key, estimator.c_str());
     return out;
   }
@@ -6863,11 +6877,8 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  Rcpp::List out = fit_result(ctx, est, &starts, "DWLS");
-  out["mixed_ordinal"] = true;
-  out["parameterization"] = parameterization_name;
-  out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
-  return out;
+  return mixed_ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
+                                  parameterization_name.c_str());
 }
 
 // [[Rcpp::export]]
@@ -6901,11 +6912,8 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  Rcpp::List out = fit_result(ctx, est, &starts, "WLS");
-  out["mixed_ordinal"] = true;
-  out["parameterization"] = parameterization_name;
-  out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
-  return out;
+  return mixed_ordinal_fit_result(ctx, stats, est, &starts, "WLS",
+                                  parameterization_name.c_str());
 }
 
 // Mixed continuous/ordinal ULS/DWLS/WLS with PSD primitive LISREL covariance

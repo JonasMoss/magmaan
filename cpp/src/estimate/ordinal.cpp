@@ -3695,6 +3695,39 @@ ordinal_param_space_sandwich_ij(const data::OrdinalStats& stats,
 
 }  // namespace
 
+post_expected<Eigen::VectorXd>
+ordinal_parameter_values(const spec::LatentStructure& pt,
+                         const model::MatrixRep& rep,
+                         const Eigen::VectorXd& theta,
+                         OrdinalParameterization parameterization) {
+  if (theta.size() != pt.n_free() || !theta.allFinite())
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_parameter_values: invalid parameter vector"));
+  auto evaluator = model::ModelEvaluator::build(pt, rep);
+  if (!evaluator) return std::unexpected(model_to_post(evaluator.error()));
+  auto moments = evaluator->sigma(theta);
+  if (!moments) return std::unexpected(model_to_post(moments.error()));
+  Eigen::VectorXd values(static_cast<Eigen::Index>(pt.size()));
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    values(static_cast<Eigen::Index>(i)) = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
+    if (parameterization != OrdinalParameterization::Delta || pt.free[i] > 0 ||
+        pt.op[i] != parse::Op::Covariance || pt.lhs_var[i] != pt.rhs_var[i])
+      continue;
+    bool ordered = false;
+    for (std::size_t j = 0; j < pt.size(); ++j) {
+      if (pt.op[j] == parse::Op::Threshold && pt.block_of(j) == pt.block_of(i) &&
+          pt.lhs_var[j] == pt.lhs_var[i]) { ordered = true; break; }
+    }
+    if (!ordered) continue;
+    const auto& cell = rep.cell_for_row[i];
+    // Subtract the explained variance in the evaluator's own representation,
+    // including structural regressions and observed-variable phantom latents.
+    if (cell.used && cell.mat == model::MatId::Theta)
+      values(static_cast<Eigen::Index>(i)) += 1.0 - moments->sigma[static_cast<std::size_t>(cell.block)](cell.row, cell.row);
+  }
+  return values;
+}
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,

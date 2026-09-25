@@ -1190,6 +1190,49 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
     }
   }
 
+  // Collect effect-coding families; mean release follows group.equal, as
+  // in lavaan, so scalar invariance keeps its reference-group convention.
+  struct EffectBlock {
+    std::string latent;
+    std::int32_t block;
+    std::vector<std::size_t> loadings;
+    std::vector<std::size_t> intercepts;
+  };
+  std::vector<EffectBlock> effect_blocks;
+  if (opts.effect_coding) {
+    std::unordered_set<std::string> ho_latents;
+    for (const auto& c : comp_exp.composites) {
+      ho_latents.insert(c.composite);
+      for (const auto& e : c.excrescent) ho_latents.insert(e);
+    }
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+      const auto& r = rows[i];
+      if (r.op != parse::Op::Measurement || ho_latents.count(r.lhs)) continue;
+      auto b = std::find_if(effect_blocks.begin(), effect_blocks.end(),
+          [&](const auto& x) { return x.latent == r.lhs && x.block == r.block; });
+      if (b == effect_blocks.end()) {
+        effect_blocks.push_back({r.lhs, r.block, {}, {}});
+        b = effect_blocks.end() - 1;
+      }
+      b->loadings.push_back(i);
+    }
+    for (auto& b : effect_blocks) {
+      for (const auto i : b.loadings) {
+        auto it = std::find_if(rows.begin(), rows.end(), [&](const auto& r) {
+          return r.op == parse::Op::Intercept && r.block == b.block &&
+                 r.lhs == rows[i].rhs;
+        });
+        // Lavaan suppresses intercept coding if any indicator intercept is fixed.
+        if (it == rows.end() || it->user_fixed_value || it->exo == 1) {
+          b.intercepts.clear();
+          break;
+        }
+        b.intercepts.push_back(static_cast<std::size_t>(it - rows.begin()));
+      }
+
+    }
+  }
+
   // Step 8b: `group.equal` / `group.partial`. Tie the requested families across
   // groups by giving the corresponding rows a shared synthetic label, reusing
   // the same `compute_eq_groups` merge the explicit-`equal(...)`/shared-label
@@ -1280,44 +1323,43 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // shared labels is NOT a row anymore — it's `eq_groups`.)
   std::vector<PendingRow> user_constraint_rows;
 
-  // effect.coding: one linear-equality row per (latent, group),
-  // `Σ (loading plabels) == #indicators`. The `=~` rows are all already in
-  // `rows` at their final positions (the constraint rows below are appended
-  // after them), so `.p<i+1>.` for the i-th row of `rows` is its plabel.
-  if (opts.effect_coding) {
-    // Henseler-Ogasawara loading blocks are self-scaling — they must not pick
-    // up `Σλ == #indicators` effect-coding rows. Skip emergent + excrescent.
-    std::unordered_set<std::string> ho_latents;
-    for (const auto& c : comp_exp.composites) {
-      ho_latents.insert(c.composite);
-      for (const auto& e : c.excrescent) ho_latents.insert(e);
-    }
-    struct Bucket { std::string lhs; std::int32_t group = 0; std::vector<std::size_t> plabel_idx; };
-    std::vector<Bucket> buckets;
-    for (std::size_t i = 0; i < rows.size(); ++i) {
-      if (rows[i].op != parse::Op::Measurement) continue;
-      if (ho_latents.count(rows[i].lhs) != 0) continue;
-      std::size_t b = 0;
-      for (; b < buckets.size(); ++b)
-        if (buckets[b].lhs == rows[i].lhs && buckets[b].group == rows[i].group) break;
-      if (b == buckets.size()) buckets.push_back(Bucket{rows[i].lhs, rows[i].group, {}});
-      buckets[b].plabel_idx.push_back(i + 1);  // 1-based ⇒ `.p<i+1>.`
-    }
-    for (const auto& bk : buckets) {
-      std::string lhs_txt;
-      for (std::size_t j = 0; j < bk.plabel_idx.size(); ++j) {
-        if (j != 0) lhs_txt += '+';
-        lhs_txt += ".p" + std::to_string(bk.plabel_idx[j]) + ".";
+  for (const auto& b : effect_blocks) {
+    if (!b.intercepts.empty()) {
+      const bool equal_intercepts =
+          std::find(opts.group_equal.begin(), opts.group_equal.end(),
+                    GroupEqual::Intercepts) != opts.group_equal.end();
+      for (auto& r : rows) {
+        // With scalar invariance, group 2+ means were already handled above.
+        if (r.op == parse::Op::Intercept && r.block == b.block &&
+            r.lhs == b.latent && r.user == 0 &&
+            !(equal_intercepts && r.group > 1)) {
+          r.user_fixed_value = false;
+          r.user_explicit = false;
+          r.fixed_value = kNaN;
+          r.user_start_value = true;
+          r.start_value = 0.0;
+        }
       }
+    }
+    auto add_sum = [&](const std::vector<std::size_t>& indices, std::size_t sum) {
+      if (indices.empty()) return;
       PendingRow p;
-      p.user  = 1;
-      p.op    = parse::Op::EqConstraint;
+      p.user = 1;
+      p.op = parse::Op::EqConstraint;
       p.block = 0;
       p.group = 0;
-      p.lhs   = std::move(lhs_txt);
-      p.rhs   = std::to_string(bk.plabel_idx.size());
+      for (const auto i : indices) {
+        if (!p.lhs.empty()) p.lhs += '+';
+        p.lhs += ".p" + std::to_string(i + 1) + ".";
+      }
+      p.rhs = std::to_string(sum);
       user_constraint_rows.push_back(std::move(p));
-    }
+    };
+    // An explicit fixed loading supplies the scale, as in lavaan.
+    if (std::none_of(b.loadings.begin(), b.loadings.end(),
+                    [&](auto i) { return rows[i].user_fixed_value; }))
+      add_sum(b.loadings, b.loadings.size());
+    add_sum(b.intercepts, 0);
   }
 
   append_user_constraints(eflat, user_constraint_rows);
