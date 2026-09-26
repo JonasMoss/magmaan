@@ -82,8 +82,8 @@ const std::vector<KnownGap> kKnownGaps = {
     {"newsom_2024_ex7_2a",
      "latent means not in the threshold structure (categorical growth)"},
     {"newsom_2024_ex9_2",
-     "delta scale factors forced to 1 and latent means not in the threshold "
-     "structure (latent change model)"}};
+     "latent means not in the threshold structure (latent change model; the "
+     "scale factors are fixed at 1, so this case isolates the mean gap)"}};
 
 const KnownGap* known_gap(const std::string& id) {
   for (const auto& g : kKnownGaps)

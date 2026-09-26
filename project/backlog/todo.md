@@ -637,6 +637,8 @@ eight sit in `kKnownGaps`, each refit from lavaan's θ to tell optimizer trouble
 from model semantics. Seven are the semantics below; the eighth is a flat
 ridge where the optimizer stops early (Newsom 2024 ex1.3c, under
 [Optimizer failures on the textbook corpus](#optimizer-failures-on-the-textbook-corpus)).
+The evidence, with sources and run provenance, is logged in
+[the translation audit](../validation/textbook-translation-audit.md#categorical-fits-against-lavaan-2026-09-25).
 
 - **High — ordinal partable semantics.** Seven of the eight known gaps come
   from how `prepare_ordinal_partable` treats an imported lavaan partable:

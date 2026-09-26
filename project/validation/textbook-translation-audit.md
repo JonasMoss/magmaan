@@ -321,3 +321,82 @@ The second edition adds seven all-ordinal cases to the WLSMV lane:
 - four longitudinal invariance models match exactly;
 - two latent-mean models hit the known mean-structure gap;
 - one saturated theta model stalls in L-BFGS from lavaan's starts.
+
+## Categorical fits against lavaan (2026-09-25)
+
+Evidence behind the "Categorical models" items in
+[`todo.md`](../backlog/todo.md). The faithful categorical cases expose
+magmaan gaps, not translation defects. Sources:
+- **C++ lane.** `textbook_ordinal_golden_test.cpp` (21 all-ordinal,
+  covariate-free cases from lavaan's partable, run at `b4ec30ef`): 13 match,
+  8 known gaps.
+- **R path.** engineering/19 `results/current/` (`fits.csv`,
+  `rejections.csv`): `fit_model(model, data = raw, estimator = "DWLS",
+  ordered, parameterization)` on the single-group cases; corpus `3f5b838`,
+  magmaan `32e07a0f` plus the ordinal Newton check of `73e27b1c`, lavaan
+  0.7.2. The call passes every option these cases set; none has missing data.
+- **lavaan.** `fitMeasures(fit, "fmin")` of the corpus call
+  (`textbookcorpus:::.lavaan_args(case, "WLSMV")`). Objectives below are fmin
+  in each program's convention; on Mplus ex5.3, where both reach the same
+  minimum, they agree to 0.2%.
+
+**The nine Newton-check rejections are model-setup gaps.** Each endpoint is a
+saddle of magmaan's own objective, far above lavaan's minimum.
+
+| case | R path | C++ lane | lavaan | cause |
+|---|---|---|---|---|
+| Mplus ex3.4 | 0.927 | not exported | 4.0e-22 | covariates |
+| Mplus ex3.12 | 2.638 | not exported | 0.00082 | covariates |
+| Mplus ex3.13 | 2.600 | not exported | 0.0034 | covariates |
+| Mplus ex3.14 | 1.566 | not exported | 0.0012 | covariates |
+| Mplus ex6.4 | 0.192393 | 0.192393 | 0.00079 | scale factors, means |
+| Mplus ex6.15 | 0.862093 | 0.862093 | 0.055 | scale factors, means |
+| Newsom 2015 ex9.2 | 1.42593 | 1.42593 | 5.7e-5 | scale factors, means |
+| Newsom 2024 ex7.2a | 1.4474 | 1.4474 | 0.022 | means |
+| Newsom 2024 ex9.2 | 1.42593 | 1.42593 | 0.00055 | means |
+
+- The five growth and latent change models reach the C++ lane's known-gap
+  objectives to six digits, so both paths fit the same wrong model.
+- Newsom's 2024 ex9.2 isolates the mean-structure gap. It is the 2015 model
+  with the scale factors fixed at 1 (2015 frees them) and start values added.
+  magmaan forces the scale factors to 1 anyway, so it fits both editions as
+  the same model and reaches the same objective. Its latent change means
+  stay at their start value 1.1 (lavaan: 0.09 to 0.11): they do not enter
+  magmaan's objective.
+- The four User's Guide probit regressions have covariates, which lavaan
+  treats conditionally (`conditional.x`) and magmaan has no path for. ex3.4
+  is just-identified, so any consistent setup fits it exactly; magmaan's R
+  path stops at 0.93. The two other single-group covariate cases (Muthén
+  ex8.29_2, Newsom 2024 ex4.2b) fail in stage 1 instead ("mixed ordinal
+  stage-1 information matrix is not positive definite").
+
+**Mixed ordinal/continuous fits are accepted above lavaan's minimum.** All
+five mixed cases without covariates converge and pass the Newton check.
+
+| case | parameterization | ordinal / continuous | R path | lavaan | ratio | d |
+|---|---|---|---|---|---|---|
+| Mplus ex5.3 | delta | 3 / 3 | 0.000947 | 0.000946 | 1.00 | 9.0e-8 |
+| Newsom 2015 ex5.3a | theta | 8 / 6 | 0.1207 | 0.0744 | 1.62 | 4.9e-5 |
+| Newsom 2015 ex5.3b | theta | 8 / 11 | 0.1849 | 0.1456 | 1.27 | 9.9e-5 |
+| Newsom 2015 ex5.7a | delta | 8 / 16 | 0.3848 | 0.3027 | 1.27 | 2.4e-4 |
+| Newsom 2024 ex5.8b | delta | 8 / 28 | 1.2163 | 1.0817 | 1.12 | 3.6e-4 |
+
+Minima this far above lavaan's, well inside the accuracy budget, mean magmaan
+minimizes a different objective. Both parameterizations are affected and the
+small Mplus model is not, so the mixed path works in the simple case.
+Candidates, in the order to check:
+1. The stage-1 statistics magmaan estimates from raw data (polyserial
+   correlations, continuous means and variances). Compare them with
+   `lavInspect(fit, "sampstat")`.
+2. The DWLS weight's continuous block (`lavInspect(fit, "wls.v")`).
+3. Scale and residual-variance semantics for mixed longitudinal models.
+Evaluating magmaan's objective at lavaan's estimates separates the model
+from the data side.
+
+**Newsom 2024 ex1.3c is a flat ridge, not a failure.** In this saturated theta
+model, the C++ lane's L-BFGS stops at fmin 5.8e-9 from lavaan's starts, with
+the factor variance at 83.2 against lavaan's 88.0. lavaan reaches 1e-16, and
+magmaan started there stays there. The R path ends at fmin 4.5e-9 and passes
+the Newton check (d = 0.0023, condition number 3.8e5). Under magmaan's
+accuracy budget the fit has converged. The known gap is the golden's
+parameter tolerance on a poorly determined factor variance.
