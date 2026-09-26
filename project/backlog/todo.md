@@ -292,14 +292,34 @@ section: the categorical corpus saddles are under
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **Vision, not yet adopted — one machinery for numerical defaults.**
+- **High — promote the layered start and PORT, route by route (plan ready).**
+  [numerical-defaults-plan.md](../design/numerical-defaults-plan.md) stages the
+  change. Stage 0: the defaults register and the bench seed. Stage 1, complete-data
+  ML and GLS, is ready: on the 303 standard corpus pairs per estimator the
+  layered start with PORT certifies every fit (today's default: 283 and 283),
+  gains 40 certified and 38 best-known fits and loses none, and holds under unit
+  rescaling; before the flip it needs simulated families the start was not
+  developed on, the spelling and identification transforms, and a confirmation
+  run from library defaults. Stages 2 to 5 (continuous least squares, FIML,
+  ordinal after the categorical semantics fixes, the remaining routes) list
+  their candidates and the evidence each still needs.
+- **Convergence bench — partly built.**
   [convergence-engineering.md](../design/convergence-engineering.md) proposes a
   shared benchmark set (corpus, simulated families, constructed problems, with
   unit/identification/spelling/start transforms and problem classes), one judge
   (the fit verdict, with failure attribution), and a defaults register, so that
   start, optimizer and option decisions stop defining their own problems and
-  success criteria. Under discussion; the decision studies below would become
-  its first consumers.
+  success criteria. Built: the judge (the Newton check in every iterative
+  estimator's verdict, also applied to other engines' estimates through
+  `evaluate_at`) and its scoring (2026-09-26: certified local minimum first,
+  best known objective second; a reference engine's own flag is only a
+  diagnostic). Prototypes of the rest live in engineering/17: the corpus slice
+  with problem classes, configurations crossed over starts, optimizers and
+  coordinates, the unit-rescaling transform with an invariance check, and
+  lavaan under the same judge. Next: lift them into `benchmarks/convergence/`,
+  add hand-picked simulation families (research/47, Ernst, weak marker, high
+  R², collinear predictors, the engineering/13 stress cells), and start
+  `project/validation/defaults-register.md` from the design's table.
 - **High — the Newton check in every iterative estimator's default verdict
   (decided and landed 2026-09-25).** FIML, every moment-quadratic fit, the
   ordinal and mixed least-squares fits and the barrier fitters now decide

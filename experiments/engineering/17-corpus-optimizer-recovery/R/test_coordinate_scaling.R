@@ -1,11 +1,13 @@
 #!/usr/bin/env Rscript
 args<-commandArgs(TRUE)
-if('--help' %in% args){cat('Usage: Rscript R/test_coordinate_scaling.R CORPUS RESULTS [--rescaled] [--smoke] [--workers N] [--scalings a,b] [--tag T]
+if('--help' %in% args){cat('Usage: Rscript R/test_coordinate_scaling.R CORPUS RESULTS [--rescaled] [--smoke] [--workers N] [--scalings a,b] [--tag T] [--lavaan-only]
 Fits every prepared ML/GLS case with PORT and L-BFGS in three optimizer coordinate systems (none,
 sample_units, information) from the current and the layered start. --rescaled first multiplies each
 observed variable by a fixed power of ten between 10^-2 and 10^2 and adds lavaan defaults and lavaan
 from the layered start on the same rescaled data. --scalings restricts the magmaan arms (lavaan arms run only
-with all three); --tag T writes to scaling[-rescaled]-T. 240 s per case/estimator job; every fit is checkpointed.\n');quit(save='no')}
+with all three); --lavaan-only runs only the lavaan arms of --rescaled; --tag T writes to scaling[-rescaled]-T.
+lavaan endpoints are judged by the magmaan verdict (the Newton check) at the lavaan estimate.
+240 s per case/estimator job; every fit is checkpointed.\n');quit(save='no')}
 root<-normalizePath(args[1]);out<-normalizePath(args[2]);script<-normalizePath(sub('--file=','',grep('--file=',commandArgs(),value=TRUE)[1]))
 source(file.path(dirname(script),'../../../_support/R/helpers.R'));set_single_threaded_math()
 suppressPackageStartupMessages({library(magmaanlab);library(lavaan);library(jsonlite)})
@@ -13,6 +15,7 @@ source(file.path(dirname(script),'inputs.R'))
 rescaled<-'--rescaled' %in% args;smoke<-'--smoke' %in% args
 opt_arg<-function(name,default)if(name %in% args)args[match(name,args)+1L] else default
 scalings<-strsplit(opt_arg('--scalings','none,sample_units,information'),',')[[1]];tag<-opt_arg('--tag','')
+lavaan_only<-'--lavaan-only' %in% args;if(lavaan_only)scalings<-character()
 d<-read.csv(file.path(out,'comparison.csv'),stringsAsFactors=FALSE);jobs<-subset(d,arm=='port_default')
 if(smoke)jobs<-subset(jobs,case %in% c('kline_2023_ch9_roth_illness_path','kline_2023_ch9_roth_illness_mean','little_2013_ch3_fig_3_11_longitudinal_cfa_phantom','kline_2023_ch15_worland_sr_step2b'))
 manifest<-read.csv(file.path(root,'manifest.csv'),stringsAsFactors=FALSE)
@@ -44,7 +47,7 @@ if('--worker' %in% args) {
   rows<-list();file<-file.path(dest,paste0(j$case,'__',j$estimator,'.csv'))
   blank<-function(...)data.frame(case=j$case,estimator=j$estimator,mode=if(rescaled)'rescaled' else 'native',
     engine='magmaan',start='',optimizer='',scaling='',applied='',start_f=NA_real_,target=j$best_observed,returned=FALSE,
-    accepted=FALSE,f=NA_real_,status='',newton_status='',iterations=NA_integer_,f_evals=NA_integer_,seconds=NA_real_,
+    accepted=FALSE,flag=NA,f=NA_real_,status='',newton_status='',iterations=NA_integer_,f_evals=NA_integer_,seconds=NA_real_,
     message='',stringsAsFactors=FALSE,...)
   record<-function(row){rows[[length(rows)+1L]]<<-row;write.csv(do.call(rbind,rows),file,row.names=FALSE)}
   layered<-NULL
@@ -68,7 +71,7 @@ if('--worker' %in% args) {
       record(row)
     }
   }
-  if(rescaled && length(scalings)==3L) {
+  if(rescaled && (length(scalings)==3L || lavaan_only)) {
     mp<-c$model$partable;lp<-lavaan::parTable(c$pre);ix<-which(lp$free>0);mx<-match(row_key(lp[ix,]),row_key(mp))
     runs<-list(default=c$args)
     if(!is.null(layered) && !anyNA(mx)){a<-c$args;a$start<-layered[mp$free[mx]];runs$layered<-a}
@@ -77,10 +80,13 @@ if('--worker' %in% args) {
       t<-proc.time()[['elapsed']];fit<-tryCatch(suppressWarnings(do.call(c$fun,runs[[name]])),error=function(e)e)
       row$seconds<-proc.time()[['elapsed']]-t
       if(inherits(fit,'error')) row$message<-conditionMessage(fit) else {
-        row$returned<-TRUE;row$accepted<-isTRUE(lavaan::lavInspect(fit,'converged'))
+        # accepted is the magmaan verdict (the Newton check) at the lavaan
+        # estimate, the judge of every magmaan row; flag is the lavaan flag.
+        row$returned<-TRUE;row$flag<-isTRUE(lavaan::lavInspect(fit,'converged'))
         row$iterations<-as.integer(lavaan::lavInspect(fit,'iterations'))
         at<-tryCatch(magmaan_core$evaluate_at(c$model,c$sample,map_theta(c$model,fit),j$estimator),error=function(e)NULL)
-        if(!is.null(at))row$f<-at$fmin
+        if(!is.null(at)){row$f<-at$fmin;row$accepted<-isTRUE(at$converged)
+          row$newton_status<-at$diagnostics$newton_accuracy$status %||% ''}
       }
       record(row)
     }
@@ -94,7 +100,7 @@ write_metadata(file.path(dest,'metadata.csv'),values=list(pairs=nrow(jobs),engin
   target='frozen best_observed in comparison.csv (native units)'),packages=c('magmaanlab','lavaan'))
 r<-parallel::mclapply(seq_len(nrow(jobs)),function(i){j<-jobs[i,];stem<-paste0(j$case,'__',j$estimator);unlink(file.path(dest,paste0(stem,'.csv')))
   code<-system2('timeout',c('240',file.path(R.home('bin'),'Rscript'),shQuote(script),shQuote(root),shQuote(out),
-    if(rescaled)'--rescaled',if(smoke)'--smoke','--scalings',paste(scalings,collapse=','),if(nzchar(tag))c('--tag',tag),'--worker',i),stdout=file.path(dest,paste0(stem,'.log')),stderr=file.path(dest,paste0(stem,'.log')))
+    if(rescaled)'--rescaled',if(smoke)'--smoke',if(lavaan_only)'--lavaan-only' else c('--scalings',paste(scalings,collapse=',')),if(nzchar(tag))c('--tag',tag),'--worker',i),stdout=file.path(dest,paste0(stem,'.log')),stderr=file.path(dest,paste0(stem,'.log')))
   cat(sprintf('[%d/%d] %s %s exit=%d\n',i,nrow(jobs),j$case,j$estimator,code));data.frame(case=j$case,estimator=j$estimator,exit=code)
 },mc.cores=workers,mc.preschedule=FALSE)
 write.csv(do.call(rbind,r),file.path(dest,'jobs.csv'),row.names=FALSE)

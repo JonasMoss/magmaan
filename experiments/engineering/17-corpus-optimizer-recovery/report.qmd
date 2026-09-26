@@ -38,38 +38,53 @@ L-BFGS indifferent to the data's units?
 
 ```{r layered-setup}
 lay <- r("layered/summary"); lp <- r("layered/paired"); eng <- r("engines_summary")
-eg <- function(est,policy,col) eng[[col]][eng$estimator==est & eng$policy==policy]
 lc <- function(est,arm,start) lay$good_now[lay$estimator==est & lay$arm==arm & lay$start==start]
 lr <- function(col) sum(lp[[col]])
 ```
 
 ```{r scaling-setup}
-sc <- r("scaling_summary"); fiml <- r("fiml_scaling")
-g <- function(mode,est,start,opt,scal) sc$good[sc$mode==mode & sc$estimator==est & sc$start==start & sc$optimizer==opt & sc$scaling==scal]
+sc <- r("scaling_summary"); fiml <- r("fiml_scaling"); lane <- r("constrained_lane")
+g <- function(mode,est,start,opt,scal,col="best_known") sc[[col]][sc$mode==mode & sc$estimator==est & sc$start==start & sc$optimizer==opt & sc$scaling==scal]
+gc <- function(mode,est,start,opt,scal) g(mode,est,start,opt,scal,"certified")
+lv <- function(mode,est,start,col) g(mode,est,start,"nlminb","lavaan",col)
 np <- function(mode,est) sc$pairs[sc$mode==mode & sc$estimator==est & sc$engine=="magmaan"][1]
 rng <- function(...) {x <- c(...); if (min(x)==max(x)) x[1] else paste0(min(x),"–",max(x))}
-fg <- function(mode,opt,scal) sum(fiml$good[fiml$mode==mode & fiml$optimizer==opt & fiml$scaling==scal])
+fg <- function(mode,opt,scal,col="accepted") sum(fiml[[col]][fiml$mode==mode & fiml$optimizer==opt & fiml$scaling==scal])
 fn <- length(unique(fiml$case))
 ```
+
+**How fits are scored.** A fit is solved when magmaan's verdict, the Newton
+check, certifies its endpoint as a local minimum. Reaching the best known
+objective is secondary; a certified endpoint above it is another local
+minimum, since no start constructor can be required to find the best basin.
+Every engine gets the same judge: lavaan's estimates are checked by the same
+verdict, and lavaan's own convergence flag, which accepts saddles, is reported
+only alongside. The `r np("native","ML")` standard pairs per estimator exclude
+Mplus ex6.17, whose nonlinear equality constraints make it a different
+optimization problem; SLSQP solves it (`constrained_lane.csv`).
 
 **Unit-equivariant optimizer coordinates make PORT and L-BFGS indifferent to
 the data's units; they are now the default.** Both optimizers search in each
 parameter's sample unit, refined by the expected information at the start, with
-means centered at their starts. With the layered start, ML pairs recovered rise
-from `r g("native","ML","layered","nlopt-lbfgs","none")` to
-`r g("native","ML","layered","nlopt-lbfgs","information")` of 304 with L-BFGS and from
-`r g("native","ML","layered","port","none")` to `r g("native","ML","layered","port","information")`
-with PORT, with no pair lost; GLS reaches `r g("native","GLS","layered","port","information")`.
-With the current default start, ML L-BFGS rises from
-`r g("native","ML","current","nlopt-lbfgs","none")` to `r g("native","ML","current","nlopt-lbfgs","information")`.
-After multiplying each observed variable by a power of ten between 0.01 and 100,
-on the `r np("rescaled","ML")` ML and `r np("rescaled","GLS")` GLS pairs whose
-optimum survives the change, scaled runs from the layered start still recover
-`r rng(g("rescaled","ML","layered","nlopt-lbfgs","information"),g("rescaled","ML","layered","port","information"))` and
-`r rng(g("rescaled","GLS","layered","nlopt-lbfgs","information"),g("rescaled","GLS","layered","port","information"))`;
-unscaled runs recover `r rng(g("rescaled","ML","layered","nlopt-lbfgs","none"),g("rescaled","ML","layered","port","none"))` and
-`r rng(g("rescaled","GLS","layered","nlopt-lbfgs","none"),g("rescaled","GLS","layered","port","none"))`, and lavaan's
-defaults `r g("rescaled","ML","default","nlminb","lavaan")` and `r g("rescaled","GLS","default","nlminb","lavaan")`.
+means centered at their starts. From the layered start every standard ML pair
+ends at a certified local minimum with both optimizers
+(`r gc("native","ML","layered","nlopt-lbfgs","information")` and
+`r gc("native","ML","layered","port","information")` of `r np("native","ML")`; raw
+coordinates: `r gc("native","ML","layered","nlopt-lbfgs","none")` and
+`r gc("native","ML","layered","port","none")`), and
+`r g("native","ML","layered","port","information")` reach the best known objective.
+GLS certifies `r gc("native","GLS","layered","port","information")`. With the current
+default start, ML L-BFGS certifies `r gc("native","ML","current","nlopt-lbfgs","information")`
+(raw: `r gc("native","ML","current","nlopt-lbfgs","none")`). After multiplying each
+observed variable by a power of ten between 0.01 and 100, on the
+`r np("rescaled","ML")` ML and `r np("rescaled","GLS")` GLS pairs whose optimum survives
+the change, scaled runs from the layered start still certify
+`r rng(gc("rescaled","ML","layered","nlopt-lbfgs","information"),gc("rescaled","ML","layered","port","information"))` and
+`r rng(gc("rescaled","GLS","layered","nlopt-lbfgs","information"),gc("rescaled","GLS","layered","port","information"))`;
+raw coordinates certify
+`r rng(gc("rescaled","ML","layered","nlopt-lbfgs","none"),gc("rescaled","ML","layered","port","none"))` and
+`r rng(gc("rescaled","GLS","layered","nlopt-lbfgs","none"),gc("rescaled","GLS","layered","port","none"))`, and lavaan's
+defaults `r lv("rescaled","ML","default","certified")` and `r lv("rescaled","GLS","default","certified")`.
 The old ML scaling gave every observed variable in a regression the block's
 mean standard deviation; lavaan's start-based scale is not unit-equivariant.
 
@@ -93,17 +108,22 @@ its sign-odd paths at zero sits on it with exactly zero gradient in those paths.
 No gradient-based optimizer leaves that subspace, lavaan included. The layered
 start is not yet a default.
 
-**Against lavaan's defaults, magmaan with the layered start recovers more cases
-and fails silently less often.** On one shared target (the lowest objective any
-successful run reached), lavaan's defaults recover
-`r eg("ML","lavaan_default","good")` ML and `r eg("GLS","lavaan_default","good")` GLS
-pairs of 304 and report convergence at a worse point in
-`r eg("ML","lavaan_default","false_success")` and `r eg("GLS","lavaan_default","false_success")`.
-Magmaan PORT with the layered start recovers `r eg("ML","port_default.layered","good")`
-and `r eg("GLS","port_default.layered","good")`. The start also helps lavaan:
-from it, lavaan recovers `r eg("ML","lavaan_layered","good")` and
-`r eg("GLS","lavaan_layered","good")`, the best of all policies, so magmaan's remaining
-gap is in its optimizers, not the start.
+**Under the same judge, magmaan from the layered start certifies more fits
+than lavaan's defaults and exactly as many as lavaan from the same start.** On the `r np("native","ML")` standard ML pairs, lavaan's
+defaults end at a certified local minimum in `r lv("native","ML","default","certified")`
+(`r lv("native","ML","default","best_known")` at the best known objective); lavaan's own
+flag claims convergence at `r lv("native","ML","default","flag_only")` further endpoints
+that the Newton check rejects. For GLS: `r lv("native","GLS","default","certified")`
+(`r lv("native","GLS","default","best_known")`), with `r lv("native","GLS","default","flag_only")`
+rejected claims. From the layered start lavaan certifies `r lv("native","ML","layered","certified")`
+ML and `r lv("native","GLS","layered","certified")` GLS, and magmaan PORT in information
+coordinates `r gc("native","ML","layered","port","information")` and
+`r gc("native","GLS","layered","port","information")`. Both engines from the layered start
+settle in the same three worse ML minima (Little's two Chapter 8 ALT models and
+Kline's Worland step 2a), reached better only from the book's or lavaan's own
+starts. After rescaling the units, lavaan's flag claims convergence at
+`r lv("rescaled","ML","default","flag_only")` ML and `r lv("rescaled","GLS","default","flag_only")`
+GLS endpoints the Newton check rejects.
 
 **Settings alone do not repair L-BFGS's early domain failures.** PORT recovers
 cases that stop almost immediately under L-BFGS, even after increasing its
@@ -459,8 +479,9 @@ z$median_seconds <- round(1000*z$median_seconds,1)
 knitr::kable(z,col.names=c("Estimator","Engine and Start","Recovered","Converged Elsewhere","Failed","Median Fit (ms)"))
 ```
 
-"Converged elsewhere" counts runs that report success at an objective above the
-shared target. For lavaan these are mostly the reflection-trap saddles (the
+This earlier comparison scores lavaan by its own flag; the short answer gives
+the comparison under the shared judge. "Converged elsewhere" counts runs that
+report success at an objective above the shared target. For lavaan these are mostly the reflection-trap saddles (the
 phantom, second-order and Table 7.6 models), which lavaan reports as converged.
 Where lavaan's defaults beat magmaan's layered L-BFGS fit, three cases are
 L-BFGS's early line-search abort (PORT recovers them), one needs nonlinear
@@ -519,12 +540,13 @@ when the observed variables change units.
 
 ```{r}
 rows <- expand.grid(opt=c("nlopt-lbfgs","port"),est=c("ML","GLS"),start=c("layered","current"),stringsAsFactors=FALSE)
+cb <- function(mode,e,st,o,sc) paste0(gc(mode,e,st,o,sc)," / ",g(mode,e,st,o,sc))
 tab <- data.frame(Start=rows$start,Estimator=rows$est,Optimizer=ifelse(rows$opt=="port","PORT","L-BFGS"),
-  None=mapply(g,"native",rows$est,rows$start,rows$opt,"none"),
-  Units=mapply(g,"native",rows$est,rows$start,rows$opt,"sample_units"),
-  Information=mapply(g,"native",rows$est,rows$start,rows$opt,"information"))
+  None=mapply(cb,"native",rows$est,rows$start,rows$opt,"none"),
+  Units=mapply(cb,"native",rows$est,rows$start,rows$opt,"sample_units"),
+  Information=mapply(cb,"native",rows$est,rows$start,rows$opt,"information"))
 knitr::kable(tab,col.names=c("Start","Estimator","Optimizer","Raw","Sample Units","Information"),
-  caption="Accepted fits reaching the best objective, of 304 pairs, in native units.")
+  caption=paste0("Certified local minima / of those, at the best known objective; ",np("native","ML")," standard pairs, native units."))
 ```
 
 From the layered start the information coordinates lose no pair to raw
@@ -542,14 +564,15 @@ receive a step its own curvature forbids.
 
 ```{r}
 rs <- expand.grid(opt=c("nlopt-lbfgs","port"),est=c("ML","GLS"),stringsAsFactors=FALSE)
+lcb <- function(e,st) paste0(lv("rescaled",e,st,"certified")," / ",lv("rescaled",e,st,"best_known"))
 rt <- data.frame(Estimator=rs$est,Optimizer=ifelse(rs$opt=="port","PORT","L-BFGS"),
   Pairs=sapply(rs$est,function(e)np("rescaled",e)),
-  None=mapply(g,"rescaled",rs$est,"layered",rs$opt,"none"),
-  Information=mapply(g,"rescaled",rs$est,"layered",rs$opt,"information"),
-  Lavaan=sapply(rs$est,function(e)g("rescaled",e,"default","nlminb","lavaan")),
-  LavaanLayered=sapply(rs$est,function(e)g("rescaled",e,"layered","nlminb","lavaan")))
+  None=mapply(cb,"rescaled",rs$est,"layered",rs$opt,"none"),
+  Information=mapply(cb,"rescaled",rs$est,"layered",rs$opt,"information"),
+  Lavaan=sapply(rs$est,function(e)lcb(e,"default")),
+  LavaanLayered=sapply(rs$est,function(e)lcb(e,"layered")))
 knitr::kable(rt,col.names=c("Estimator","Optimizer","Pairs","Raw","Information","lavaan","lavaan, Layered Start"),
-  caption="Rescaled units: each observed variable multiplied by a power of ten between 0.01 and 100; unit-invariant pairs; magmaan from the layered start.")
+  caption="Rescaled units (each observed variable times a power of ten between 0.01 and 100), unit-invariant pairs: certified / best known. magmaan from the layered start; lavaan judged by the same verdict.")
 ```
 
 Rescaling keeps the optimum only when no fixed value or equality ties
@@ -560,13 +583,18 @@ The current start is not unit-equivariant (its start objective moves on most
 invariant pairs), so its rescaled counts are lower; the layered start moves on
 32 pairs, which the start backlog records.
 
+The one nonlinear-constraints model, Mplus ex6.17, is outside these tables:
+PORT and L-BFGS reject its constraints, and SLSQP in information coordinates
+reaches the best known objective from both starts under ML and GLS
+(`r sum(lane$best)` of `r nrow(lane)` fits, `constrained_lane.csv`).
+
 For FIML, `R/test_fiml_scaling.R` fits the `r fn` single-group continuous FIML
-cases with L-BFGS. Information coordinates recover `r fg("native","nlopt-lbfgs","information")`
+cases with L-BFGS. Information coordinates certify `r fg("native","nlopt-lbfgs","information")`
 in native units (raw: `r fg("native","nlopt-lbfgs","none")`) and
 `r fg("rescaled","nlopt-lbfgs","information")` after rescaling (raw:
-`r fg("rescaled","nlopt-lbfgs","none")`). The native case it misses reaches the
-best objective but stops short of the Newton check's accuracy under FIML's
-generic stopping controls.
+`r fg("rescaled","nlopt-lbfgs","none")`), every certified fit at the best known
+objective. The native case it misses reaches the best objective but stops
+short of the Newton check's accuracy under FIML's generic stopping controls.
 
 ### Unit-scale domain recovery
 
@@ -590,6 +618,15 @@ work on scale-aware domain recovery, not a validated normalization policy for
 arbitrary constrained SEMs.
 
 ## Caveats
+
+The scoring rule changed on 2026-09-26. The short answer and the optimizer
+coordinates section count certified local minima first and the best known
+objective second, with lavaan judged by the same verdict. The older sections
+(corpus recovery, starts, the layered start) keep their original rule,
+accepted fits at the best objective, and lavaan's own convergence flag. The
+shared judge also exposed that `evaluate_at` computed the Newton check only
+for ML; it now does so for every moment estimator, so lavaan's GLS endpoints
+are judged as magmaan's own are.
 
 The information refinement was revised twice on this corpus: the first run let
 information enlarge units (losing the trait-state models) and weighted by the
@@ -672,6 +709,8 @@ Rscript R/probe_port_scaling.R ../../../external/textbook-corpus results/full
 Rscript R/test_coordinate_scaling.R ../../../external/textbook-corpus results/full --workers 3
 Rscript R/test_coordinate_scaling.R ../../../external/textbook-corpus results/full --rescaled --workers 3
 Rscript R/check_invariance.R ../../../external/textbook-corpus results/full
+Rscript R/classify_problems.R ../../../external/textbook-corpus results/full
+Rscript R/test_constrained_lane.R ../../../external/textbook-corpus results/full
 Rscript R/test_fiml_scaling.R ../../../external/textbook-corpus results/full
 Rscript R/summarize_scaling.R results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen

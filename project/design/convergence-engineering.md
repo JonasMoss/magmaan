@@ -1,6 +1,8 @@
 # Convergence engineering: vision (2026-09-25)
 
-Status: vision for discussion. Nothing here is built yet. It proposes one way
+Status: vision, partly built. The judge and its scoring are in place; the
+benchmark set, transforms and harness exist only as prototypes in
+engineering/17 (see "Where it lives"). It proposes one way
 to decide magmaan's numerical defaults (starting values, optimizers, optimizer
 options, scaling, and fallbacks) so that each decision rests on a shared
 benchmark set, a shared judge, and a written record, instead of on a study
@@ -138,7 +140,7 @@ each with an operational definition:
 | pole | no minimum in this chart, but the implied covariance converges to a model point another chart attains | part of Ernst marker at `N = 10` |
 | fold or ridge | no minimum in any chart: the implied covariance converges to a boundary point of the model closure | Ernst std.lv with `R^2 -> 1` |
 | flat | the minimum is not unique | Little ch8 fig3a |
-| structured | equality or nonlinear constraints, several groups, missing data, large parameter count | corpus invariance models |
+| structured | equality or nonlinear constraints, several groups, missing data, large parameter count | corpus invariance models; nonlinear equalities are their own lane (Mplus ex6.17, AR(1) growth residuals) |
 
 Poles and folds both send a parameter to infinity. They differ in where the
 implied covariance goes, which does not depend on the chart. Fitting the same
@@ -193,6 +195,21 @@ Whether a failure counts against a configuration depends on the problem:
   flagged. This is the known weakness of the verdict recorded in
   [speculative.md](../backlog/speculative.md) (runaway estimates and
   nonattainment).
+
+**Scoring (settled 2026-09-26).** The primary outcome is a certified local
+minimum: the verdict accepts the endpoint. Reaching the best known objective
+of the problem is secondary, and a certified endpoint above it is reported as
+another local minimum, with the objective gap. No single start constructor can
+be required to find the best basin, so a certified worse minimum counts as
+solved; the secondary rate still ranks start policies. A saddle (a reflection
+trap, a degenerate start) fails the verdict and counts as a failure.
+
+**Every engine gets the same judge.** A reference engine's own convergence
+flag is not evidence: lavaan's flag accepts saddles that the Newton check
+rejects. Other engines' endpoints are therefore judged by evaluating the
+magmaan verdict at their estimates (R `magmaan_core$evaluate_at()`), and
+their own flags are reported alongside as a diagnostic. engineering/17 does
+this for lavaan.
 
 Every failure gets a cause, from a fixed attribution rerun: the same
 optimizer from the witness start, the other optimizers from the same start,
@@ -256,6 +273,8 @@ studies. The first entries, from existing evidence:
 | structural start pass | none | open: 10 of 12 ML curvature failures recovered by nonzero latent-path starts (engineering/17) |
 | sphere start | canonical | settled (engineering/14) |
 | fallback trigger | backend status, not the verdict | open |
+| optimizer coordinates | sample units refined by the start's information, means centered, for ML, GLS, least squares and FIML on every scalar backend | settled 2026-09-26 (engineering/17: primary and secondary gains from both starts, unit-invariant under rescaling) |
+| nonlinear equality constraints | error unless SLSQP or IPOPT is selected | open: route automatically (SLSQP solves the one corpus case) |
 | rejected | covariance continuation (engineering/02), Fisher scoring or IRLS as default (engineering/03), multistart as default (engineering/12) | settled |
 
 ## Rules for a decision study
@@ -275,6 +294,15 @@ studies. The first entries, from existing evidence:
    diagnostic, not scored.
 
 ## Where it lives
+
+Built so far: the judge (step 0 of the plan). The other parts exist only as
+prototypes inside `experiments/engineering/17-corpus-optimizer-recovery`: the
+corpus slice and its problem classes (`R/inputs.R`, `R/classify_problems.R`),
+configurations crossed over starts, optimizers and coordinates
+(`R/test_coordinate_scaling.R`), the unit-rescaling transform with an
+invariance check (`--rescaled`, `R/check_invariance.R`), lavaan under the
+shared judge (`R/test_lavaan_defaults.R`), and the scoring above
+(`R/summarize_scaling.R`). Moving them below the experiments is step 4.
 
 Experiments may not depend on each other, so the shared parts sit below them:
 
@@ -307,7 +335,8 @@ Experiments may not depend on each other, so the shared parts sit below them:
    record per fit, run the attribution rerun on failures, and render a
    per-class report.
 5. The canary tier with a `just` recipe (advisory, like `cpp/tests/checks`).
-6. First uses, in order:
+6. First uses, in order (the start and optimizer promotion is staged in
+   [numerical-defaults-plan.md](numerical-defaults-plan.md)):
    - rerun engineering/17 and 18 on the set; they should agree;
    - decide the complete-data ML optimizer (open);
    - validate the structural start pass that the backlog already prioritizes

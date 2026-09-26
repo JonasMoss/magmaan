@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 args<-commandArgs(TRUE)
-if('--help' %in% args){cat('Usage: Rscript R/test_lavaan_defaults.R CORPUS RESULTS [--smoke] [--workers N]\nFits every prepared ML/GLS case with lavaan defaults and with lavaan from the layered start.\nEndpoints are evaluated with the installed magmaan objective. 120 s per case/estimator job.\n');quit(save='no')}
+if('--help' %in% args){cat('Usage: Rscript R/test_lavaan_defaults.R CORPUS RESULTS [--smoke] [--workers N]\nFits every prepared ML/GLS case with lavaan defaults and with lavaan from the layered start.\nEndpoints are evaluated with the installed magmaan objective and judged by the magmaan verdict (the Newton
+check) at the lavaan estimate; the lavaan flag is kept as converged. 120 s per case/estimator job.\n');quit(save='no')}
 root<-normalizePath(args[1]);out<-normalizePath(args[2]);script<-normalizePath(sub('--file=','',grep('--file=',commandArgs(),value=TRUE)[1]))
 source(file.path(dirname(script),'../../../_support/R/helpers.R'));set_single_threaded_math()
 suppressPackageStartupMessages({library(magmaanlab);library(lavaan);library(jsonlite)})
@@ -21,12 +22,16 @@ if('--worker' %in% args) {
   for(name in names(runs)) {
     t<-proc.time()[['elapsed']];fit<-tryCatch(suppressWarnings(do.call(c$fun,runs[[name]])),error=function(e)e)
     row<-data.frame(case=j$case,estimator=j$estimator,arm=name,seconds=proc.time()[['elapsed']]-t,target=j$best_observed,
-      returned=!inherits(fit,'error'),converged=FALSE,f=NA_real_,iterations=NA_integer_,message='',stringsAsFactors=FALSE)
+      returned=!inherits(fit,'error'),converged=FALSE,certified=FALSE,newton_status='',f=NA_real_,iterations=NA_integer_,
+      message='',stringsAsFactors=FALSE)
     if(inherits(fit,'error')) row$message<-conditionMessage(fit) else {
       row$converged<-isTRUE(lavaan::lavInspect(fit,'converged'))
       row$iterations<-as.integer(lavaan::lavInspect(fit,'iterations'))
+      # magmaan's verdict (the Newton check) at lavaan's estimate: the same
+      # judge as every magmaan fit, independent of lavaan's own flag.
       at<-tryCatch(magmaan_core$evaluate_at(c$model,c$sample,map_theta(c$model,fit),j$estimator),error=function(e)NULL)
-      if(!is.null(at)) row$f<-at$fmin
+      if(!is.null(at)) {row$f<-at$fmin;row$certified<-isTRUE(at$converged)
+        row$newton_status<-at$diagnostics$newton_accuracy$status %||% ''}
     }
     rows[[length(rows)+1L]]<-row
     write.csv(do.call(rbind,rows),file.path(dest,paste0(j$case,'__',j$estimator,'.csv')),row.names=FALSE)
@@ -35,7 +40,7 @@ if('--worker' %in% args) {
 }
 workers<-if('--workers' %in% args) as.integer(args[match('--workers',args)+1L]) else 3L
 write_metadata(file.path(dest,'metadata.csv'),values=list(pairs=nrow(jobs),engine=find.package('magmaanlab'),
-  arms='lavaan defaults; lavaan from the layered start',objective='installed magmaan evaluate_at at the lavaan estimates'),
+  arms='lavaan defaults; lavaan from the layered start',objective='installed magmaan evaluate_at at the lavaan estimates',judge='magmaan verdict (Newton check) at the lavaan estimate'),
   packages=c('magmaanlab','lavaan'))
 r<-parallel::mclapply(seq_len(nrow(jobs)),function(i){j<-jobs[i,];stem<-paste0(j$case,'__',j$estimator);unlink(file.path(dest,paste0(stem,'.csv')))
   code<-system2('timeout',c('120',file.path(R.home('bin'),'Rscript'),shQuote(script),shQuote(root),shQuote(out),if('--smoke' %in% args)'--smoke','--worker',i),stdout=file.path(dest,paste0(stem,'.log')),stderr=file.path(dest,paste0(stem,'.log')))
