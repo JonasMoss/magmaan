@@ -16,13 +16,15 @@ comparisons <- function(lane, candidate = "layered_port") {
     "psd-ml" = list(c("psd_layered", "psd_default"), c("psd_default_none", "psd_default"),
                     c("psd_layered_none", "psd_layered"),
                     c("twostage_default", "psd_default"), c("twostage_layered", "psd_default"),
-                    c("twostage_layered", "twostage_default")))
+                    c("twostage_layered", "twostage_default"),
+                    c("twostage_layered_lbfgs", "twostage_default"),
+                    c("twostage_layered_lbfgs", "psd_default")))
 }
 
 # Comparisons whose losses are listed one by one: the candidates of the
 # gating rules and the routes. Preconditioning (rule B) is decided by counts.
 primary_comparisons <- function(lane, candidate = "layered_port")
-  comparisons(lane, candidate)[if (lane == "ml-gls") 1 else c(1, 4, 5)]
+  comparisons(lane, candidate)[if (lane == "ml-gls") 1 else c(1, 4, 5, 7)]
 
 key_of <- function(d, keys) do.call(paste, c(d[keys], sep = "|"))
 
@@ -188,13 +190,19 @@ decision_table <- function(s, lane, candidate = "layered_port") {
   secs <- function(a) rates$total_seconds[rates$role == "test" & rates$arm == a]
   tol <- tolerance_table(s)
   bites <- if (nrow(tol)) sum(tol$fits[tol$cause %in% c("link_feasibility", "inadmissible_certified")]) else 0L
+  # Rules whose arms are absent from a run are omitted (the second run drops
+  # the preconditioning arms).
+  has <- function(...) all(c(...) %in% s$arm)
   rbind(pair_rows("A layered cold start", "psd_layered", "psd_default", TRUE),
-        pair_rows("B no preconditioning", "psd_default_none", "psd_default", TRUE),
-        row("B no preconditioning", "total test seconds",
-            sprintf("none %.0f diagonal %.0f", secs("psd_default_none"), secs("psd_default")),
-            secs("psd_default_none") < secs("psd_default")),
+        if (has("psd_default_none")) rbind(
+          pair_rows("B no preconditioning", "psd_default_none", "psd_default", TRUE),
+          row("B no preconditioning", "total test seconds",
+              sprintf("none %.0f diagonal %.0f", secs("psd_default_none"), secs("psd_default")),
+              secs("psd_default_none") < secs("psd_default"))),
         row("D tolerance bites", "rescaled-only failures from feasibility or admissibility",
-            sprintf("%d fits", bites), bites == 0L))
+            sprintf("%d fits", bites), bites == 0L),
+        if (has("twostage_layered_lbfgs", "twostage_default"))
+          pair_rows("E fallback ordinary start", "twostage_layered_lbfgs", "twostage_default", TRUE))
 }
 
 # Where the primary arms break invariance: the success pattern across units,

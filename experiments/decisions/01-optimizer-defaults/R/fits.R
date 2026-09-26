@@ -61,7 +61,10 @@ lane_arms <- function(lane) {
       psd_layered        = list(kind = "psd", start = "layered"),
       psd_layered_none   = list(kind = "psd", start = "layered", preconditioning = "none"),
       twostage_default   = list(kind = "twostage"),
-      twostage_layered   = list(kind = "twostage", optimizer = "port", start = "layered")),
+      twostage_layered   = list(kind = "twostage", optimizer = "port", start = "layered"),
+      # Added for the second run: the ordinary step from complete-data ML's
+      # default since 52bc9caa (the layered start with L-BFGS).
+      twostage_layered_lbfgs = list(kind = "twostage", start = "layered")),
     stop("unknown lane ", lane))
 }
 
