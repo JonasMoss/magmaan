@@ -307,9 +307,11 @@ a `control` option for non-converging fits, and summary-statistic input.
 3. Make listwise deletion available and recorded on every estimator path.
 4. Rename the compiled package to `magmaanlab`, remove its `magmaan()`, and
    create the pure-R `magmaan` package with `magmaan()`, `infer()`,
-   `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint` and
-   `anova()`. Done on 2026-09-25; `anova()` on 2026-09-26 for complete-data
-   ML. The same day the exported `parameters()` became `coef(summary(fit))`.
+   `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint`, `fitted`
+   and `anova()`. Done on 2026-09-25; `anova()` on 2026-09-26 for complete-data
+   ML. The same day the exported `parameters()` became `coef(summary(fit))`,
+   and `fitted()` (model-implied moments, as lavaan's) arrived with support
+   for fully specified models, so populations can be written in model syntax.
 5. Extend the policy to FIML, ML2S, ordinal and mixed, and two-level fits,
    with a component-level capability table.
 6. Migrate experiments, examples, the vendoring scripts and the cluster install

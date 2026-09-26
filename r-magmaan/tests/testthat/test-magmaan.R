@@ -227,6 +227,32 @@ test_that("PSD fits on the cone boundary get inference for an interior populatio
   expect_false(interior$inference$psd_boundary)
 })
 
+test_that("fitted() gives lavaan's model-implied moments", {
+  d <- hs()
+  expect_equal(fitted(magmaan(cfa, d, inference = FALSE))$cov,
+               unclass(lavaan::fitted(lavaan::cfa(cfa, d))$cov), tolerance = 1e-5,
+               ignore_attr = TRUE)
+  mg <- fitted(magmaan(cfa, d, group = "school", meanstructure = TRUE, inference = FALSE))
+  lav <- lavaan::fitted(lavaan::cfa(cfa, d, group = "school", meanstructure = TRUE))
+  expect_equal(names(mg), names(lav))
+  expect_equal(mg[[2]]$mean, unclass(lav[[2]]$mean), tolerance = 1e-5, ignore_attr = TRUE)
+  expect_equal(rownames(mg[[1]]$cov), paste0("x", 1:6))
+})
+
+test_that("a fully specified model gives its population moments", {
+  pop <- "f =~ 1*x1 + 0.8*x2 + 0.6*x3\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nx1 ~ 4*1\nx2 ~ 6*1\nx3 ~ 2*1"
+  fit <- magmaan(pop, hs(), meanstructure = TRUE)
+  expect_true(as_lab_fit(fit)$converged)
+  expect_length(coef(fit), 0L)
+  m <- fitted(fit)
+  expect_equal(unname(m$cov), matrix(c(2, .8, .6, .8, 1.64, .48, .6, .48, 1.36), 3))
+  expect_equal(unname(m$mean), c(4, 6, 2))
+  expect_equal(unname(m$cov),
+               unname(unclass(lavaan::fitted(lavaan::sem(pop, hs(), meanstructure = TRUE))$cov)),
+               ignore_attr = TRUE)
+  expect_equal(fit$inference$status$reason, c("available", "unsupported_model", "unsupported_model"))
+})
+
 test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   d <- hs()
   m1 <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9"

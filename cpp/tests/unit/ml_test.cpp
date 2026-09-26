@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <cmath>
 #include <random>
 
 #include <fstream>
@@ -9,6 +10,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/LU>
 
 #include <nlohmann/json.hpp>
 
@@ -332,4 +334,40 @@ TEST_CASE("ML: gradient matches finite differences (3F Holzinger at lavaan θ̂)
   // Slightly looser tolerance for the larger model — FD noise grows with
   // gradient magnitude.
   CHECK(max_diff < 1e-4);
+}
+
+TEST_CASE("ML: a model without free parameters is evaluated at its fixed values") {
+  // As lavaan does: nothing is optimized, the objective is the fixed model's,
+  // and the verdict passes because no direction can improve it.
+  auto fp = Parser::parse("f =~ 1*x1 + 0.8*x2 + 0.6*x3\nf ~~ 1*f\n"
+                          "x1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3");
+  REQUIRE(fp.has_value());
+  auto pt = build(*fp);
+  REQUIRE(pt.has_value());
+  REQUIRE(pt->n_free() == 0);
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  std::mt19937 rng(77);
+  SampleStats samp;
+  samp.S = {random_pd(rng, 3)};
+  samp.n_obs = {200};
+  auto ev = ModelEvaluator::build(*pt, *mr);
+  REQUIRE(ev.has_value());
+  auto implied = ev->sigma(Eigen::VectorXd(0));
+  REQUIRE(implied.has_value());
+  Eigen::Matrix3d expected;
+  expected << 2.0, 0.8, 0.6,
+              0.8, 1.64, 0.48,
+              0.6, 0.48, 1.36;
+  CHECK((implied->sigma[0] - expected).norm() < 1e-14);
+  const Eigen::Matrix3d& S = samp.S[0];
+  const double F = std::log(expected.determinant()) + (S * expected.inverse()).trace() -
+                   std::log(S.determinant()) - 3.0;
+  for (bool gls : {false, true}) {
+    auto est = gls ? magmaan::test::fit_gls(*pt, *mr, samp) : magmaan::test::fit(*pt, *mr, samp);
+    REQUIRE(est.has_value());
+    CHECK(est->theta.size() == 0);
+    CHECK(magmaan::estimate::fit_verdict(*est).status == magmaan::estimate::FitCheck::Passed);
+    if (!gls) CHECK(est->fmin == doctest::Approx(0.5 * F).epsilon(1e-12));
+  }
 }

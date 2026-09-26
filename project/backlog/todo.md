@@ -53,6 +53,12 @@ design, starting-point inventory and validation rules are in
     global score test (engineering/16) but has no study of its own. The
     covariance-honest paper's interior-inference rerun would be the first.
   - Other estimators follow the policy's extension (the L item below).
+- **S — the test of a fully specified model.** Since 2026-09-26 a model with
+  no free parameters is evaluated at its fixed values (lavaan does the same),
+  so `fitted()` gives a population's moments. Its global tests report
+  `unsupported_model`: the NTML geometry assumes at least one model direction
+  and crashed on none. Build the zero-direction geometry (the U factor is the
+  identity), then the policy can test the fully specified model.
 - **M — likelihood-ratio intervals: `confint(fit, test = "lr")`.** The value
   is reserved (2026-09-26).
   The engine exists in the lab: `frontier_profile_lrt_ci_parameter_ml()` (and

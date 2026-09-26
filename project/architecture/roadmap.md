@@ -4006,7 +4006,12 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `magmaan::anova()`: the likelihood-ratio difference and the efficient score
   at the restricted fit, each with SB and PEBA4, for a restricted model that
   adds equality constraints on the same parameters. SB matches lavaan's
-  `satorra.2000` with the exact restriction map. C++ unit tests check the
+  `satorra.2000` with the exact restriction map. A model without free
+  parameters is evaluated at its fixed values instead of optimized
+  (`evaluate_fixed` in `estimate/fit.cpp`), passes the verdict vacuously, and
+  gets an empty covariance; its global tests are not built yet. `fitted()` in
+  `magmaan` returns model-implied moments, so such a model gives a population's
+  moments. C++ unit tests check the
   covariance against finite-difference casewise scores, including two-group
   scalar invariance with misfitting means; the R tests match lavaan's MLR
   standard errors (single- and multi-group with structured means), its

@@ -50,6 +50,35 @@ confint.magmaan <- function(object, parm, level = 0.95, test = "wald", ...) {
   out
 }
 
+#' Model-implied moments of a magmaan fit
+#'
+#' The covariance matrix and, with a mean structure, the mean vector that the
+#' fitted model implies, as lavaan's `fitted()` gives them: one list for a
+#' single group, a list per group otherwise. A model whose parameters are all
+#' fixed is evaluated at those values, so this also gives the moments of a
+#' population written in model syntax.
+#'
+#' @param object A [magmaan()] fit.
+#' @param ... Unused.
+#' @return `list(cov, mean)`, or a named list of them per group.
+#' @export
+fitted.magmaan <- function(object, ...) {
+  lab <- object$lab
+  implied <- magmaanlab::magmaan_core$model_implied(lab)
+  ov <- lab$ov_names
+  one <- function(g) {
+    cov <- implied$sigma[[g]]
+    dimnames(cov) <- list(ov, ov)
+    out <- list(cov = cov)
+    mean <- implied$mu[[g]]
+    if (length(mean)) out$mean <- stats::setNames(as.numeric(mean), ov)
+    out
+  }
+  groups <- seq_along(implied$sigma)
+  if (length(groups) == 1L) return(one(1L))
+  stats::setNames(lapply(groups, one), lab$group_labels)
+}
+
 #' @export
 nobs.magmaan <- function(object, ...) {
   sum(object$lab$nobs)

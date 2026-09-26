@@ -224,6 +224,21 @@ TEST_CASE("policy: saturated models get the covariance but no global test") {
   CHECK(api::reason_name(out.lr.reason) == "saturated");
 }
 
+TEST_CASE("policy: a fully specified model has an empty covariance and no global test yet") {
+  std::mt19937 rng(8u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 120, Eigen::Vector4d::Zero()));
+  auto p = prepare(build("f =~ 1*x1 + 0.9*x2 + 0.8*x3 + 0.7*x4\nf ~~ 1*f\n"
+                         "x1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nx4 ~~ 1*x4", false),
+                   raw, false);
+  REQUIRE(p.est.theta.size() == 0);
+  auto out = api::policy_inference_ml(*p.fit, {});
+  CHECK(out.covariance_reason == api::InferenceReason::Available);
+  CHECK(out.covariance.size() == 0);
+  CHECK(out.score.reason == api::InferenceReason::UnsupportedModel);
+  CHECK(out.lr.reason == api::InferenceReason::UnsupportedModel);
+}
+
 TEST_CASE("policy: the fit state gates every component") {
   std::mt19937 rng(11u);
   magmaan::data::RawData raw;

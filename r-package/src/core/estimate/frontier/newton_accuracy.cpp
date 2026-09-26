@@ -231,6 +231,12 @@ NewtonDerivatives evaluate_newton_ml(
   out.gradient *= out.n_obs;
   out.native_to_total = out.n_obs;
   if (!std::isfinite(out.objective) || !out.gradient.allFinite()) return out;
+  if (theta.size() == 0) {  // a fully specified model: no direction to move
+    out.gradient.resize(0);
+    out.hessian.resize(0, 0);
+    out.status = NewtonAccuracyStatus::Available;
+    return out;
+  }
   Estimates est;
   est.theta = theta;
   auto info = inference::information_observed_analytic(pt, rep, samp, est);

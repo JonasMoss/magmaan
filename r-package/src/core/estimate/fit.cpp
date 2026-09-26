@@ -81,12 +81,38 @@ sample_n_total(const SampleStats& samp, const char* who) {
   return n;
 }
 
+// A model without free parameters has nothing to optimize, whichever backend
+// was requested: it is evaluated once at its fixed values, as lavaan does. Its
+// fitted moments are the model's implied moments, and its fit statistic tests
+// the fully specified model.
+fit_expected<optim::OptimResult> evaluate_fixed(const optim::ScalarProblem& prob) {
+  Eigen::VectorXd x(0), g(0);
+  const double f = prob.f(x, g);
+  if (!std::isfinite(f)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "the model has no free parameters and its objective is not finite at the "
+        "fixed values"));
+  }
+  optim::OptimResult out;
+  out.x = x;
+  out.fmin = f;
+  out.f_evals = 1;
+  out.status = optim::OptimStatus::Converged;
+  out.grad_inf_norm = 0.0;
+  out.audit.stationary = true;
+  out.audit.grad_inf_norm = out.audit.raw_grad_inf_norm = out.audit.grad_scaled_inf = 0.0;
+  out.audit.f_recomputed = f;
+  out.audit.f_consistent = out.audit.f_finite = true;
+  return out;
+}
+
 // Dispatch a scalar-objective optimization by backend. Shared by `fit_ml` and
 // (via `scalarize`) the gmm/gls path. `Backend::Ceres` has no scalar entry
 // point — it is a least-squares-only backend — and is rejected here.
 fit_expected<optim::OptimResult>
 run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
            const Bounds& bounds, Backend backend, OptimOptions opts) {
+  if (x0.size() == 0) return evaluate_fixed(prob);
   switch (backend) {
     case Backend::NloptSlsqp:
       return optim::nlopt_slsqp(prob, x0, bounds, opts);
@@ -141,6 +167,7 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
 fit_expected<optim::OptimResult>
 run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         const Bounds& bounds, Backend backend, OptimOptions opts) {
+  if (x0.size() == 0) return evaluate_fixed(optim::scalarize(prob));
   if (backend == Backend::Ceres || backend == Backend::CeresBfgs) {
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
