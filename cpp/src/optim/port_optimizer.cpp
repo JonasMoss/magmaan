@@ -104,6 +104,12 @@ std::optional<std::string> configure_controls(
   }
   if (c.max_eval && *c.max_eval <= 0)
     return "PORT max_eval must be positive";
+  if (c.max_iter && *c.max_iter <= 0)
+    return "PORT max_iter must be positive";
+  if (c.max_iter) {
+    iv[kIv_MxIter] = *c.max_iter;
+    if (!c.max_eval) iv[kIv_MxFCal] = *c.max_iter * 10;
+  }
   if (c.rel_f_tol) v[31] = *c.rel_f_tol;
   if (c.abs_f_tol) v[30] = *c.abs_f_tol;
   if (c.x_tol) v[32] = *c.x_tol;
@@ -219,7 +225,7 @@ PortOptimizer::minimize(Objective f,
   // never signals termination. Each request consumes at most one
   // evaluation, so 100x the documented evaluation cap is comfortably
   // beyond any reasonable horizon.
-  const int budget_safeguard = 100 * (opts_.max_iter + 1) * 10;
+  const int budget_safeguard = 100 * (opts_.port.max_iter.value_or(opts_.max_iter) + 1) * 10;
   int loop_counter = 0;
 
   while (true) {
@@ -484,7 +490,7 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
     return fill_residual(xv) && fill_jacobian(xv);
   };
 
-  const int budget_safeguard = 100 * (opts_.max_iter + 1) * 10;
+  const int budget_safeguard = 100 * (opts_.port.max_iter.value_or(opts_.max_iter) + 1) * 10;
   int       loop_counter     = 0;
 
   while (true) {

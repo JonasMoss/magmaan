@@ -434,8 +434,16 @@ inline magmaan::optim::OptimOptions optim_opts_from(
     Rcpp::Nullable<Rcpp::List> control, magmaan::optim::OptimOptions o = {}) {
   if (control.isNotNull()) {
     Rcpp::List l(control.get());
-    if (l.containsElementNamed("max_iter")) { o.max_iter = Rcpp::as<int>(l["max_iter"]); o.nlopt.max_eval.reset(); }
-    if (l.containsElementNamed("ftol")) { o.ftol = Rcpp::as<double>(l["ftol"]); o.nlopt.ftol_rel.reset(); }
+    // Legacy fields replace the profile's explicit backend controls they map
+    // onto, so a caller's max_iter / ftol governs NLopt and PORT alike.
+    if (l.containsElementNamed("max_iter")) {
+      o.max_iter = Rcpp::as<int>(l["max_iter"]);
+      o.nlopt.max_eval.reset(); o.port.max_iter.reset(); o.port.max_eval.reset();
+    }
+    if (l.containsElementNamed("ftol")) {
+      o.ftol = Rcpp::as<double>(l["ftol"]);
+      o.nlopt.ftol_rel.reset(); o.port.rel_f_tol.reset();
+    }
     if (l.containsElementNamed("gtol")) { o.gtol = Rcpp::as<double>(l["gtol"]); o.nlopt.xtol_rel.reset(); }
     if (l.containsElementNamed("ml_sample_scaling"))  // legacy alias
       o.coordinate_scaling = Rcpp::as<bool>(l["ml_sample_scaling"])
@@ -465,12 +473,13 @@ inline magmaan::optim::OptimOptions optim_opts_from(
     }
     if (l.containsElementNamed("port")) {
       Rcpp::List c = Rcpp::as<Rcpp::List>(l["port"]);
-      check_optim_control_names(c, {"rel_f_tol", "abs_f_tol", "x_tol", "false_conv_tol", "max_eval"});
+      check_optim_control_names(c, {"rel_f_tol", "abs_f_tol", "x_tol", "false_conv_tol", "max_eval", "max_iter"});
       read_optim_control(c, "rel_f_tol", o.port.rel_f_tol);
       read_optim_control(c, "abs_f_tol", o.port.abs_f_tol);
       read_optim_control(c, "x_tol", o.port.x_tol);
       read_optim_control(c, "false_conv_tol", o.port.false_conv_tol);
       read_optim_control(c, "max_eval", o.port.max_eval);
+      read_optim_control(c, "max_iter", o.port.max_iter);
     }
     if (l.containsElementNamed("ipopt")) {
       Rcpp::List c = Rcpp::as<Rcpp::List>(l["ipopt"]);

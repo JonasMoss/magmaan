@@ -209,18 +209,15 @@ section: the categorical corpus saddles are under
   Little's Table 7.6 and 3.7 models, the Chapter 10 MTMM, Guo's invariance
   model and a few others (the rank-deficient fallbacks to FABIN3 among them).
   Find and remove the unit-dependent steps before defaulting the layered start.
-- **S — route nonlinear equality constraints to a constrained optimizer.**
-  `fit_ml` and `fit_gls` with PORT or L-BFGS, the defaults, return an error for
-  a model with nonlinear `==` constraints; lavaan switches to its constrained
-  `nlminb`. Mplus User's Guide ex6.17 (linear growth with AR(1) residuals,
-  written as `p2 == p1^2/resvar` and `p3 == p1^3/resvar^2`) is the only
-  engineering/17 pair where lavaan from the layered start succeeds and magmaan
-  does not. SLSQP from the same start, in information coordinates, reaches the
-  best objective (ML 0.001234678, GLS 0.001227317) and passes the Newton
-  check. When a model has nonlinear equalities and the selected backend cannot
-  take them, switch to SLSQP (IPOPT when built) and report the backend used,
-  instead of failing. With it, magmaan from the layered start ties lavaan from
-  the layered start (301 ML, 304 GLS).
+- **Route nonlinear equality constraints to a constrained optimizer — DONE
+  (2026-09-26).** `fit_ml` and `fit_gls` run NLopt SLSQP when the selected
+  backend cannot take nonlinear `==` constraints, instead of failing. They
+  record it in `Estimates::substituted_backend` (R `fit$optimizer_substituted`);
+  see the optimizer controls reference. This fixes Mplus User's Guide ex6.17,
+  the one engineering/17 pair where lavaan succeeded and magmaan errored.
+  From the layered start, SLSQP reaches the best objective (ML 0.001234678,
+  GLS 0.001227317) and passes the Newton check. PORT also gained an explicit
+  iteration budget, `port.max_iter`.
 - **S — score tests admit unidentified candidates by rounding.** A freed marker
   loading is unidentified, so its efficient information is zero at every
   estimate; the absolute tolerance in `score_for_coordinate_robust` admits or
@@ -318,10 +315,9 @@ section: the categorical corpus saddles are under
        start with PORT as candidates, on a new seed base.
     3. Decide ML and GLS separately.
   - The drafted promotion (layered start in core, PORT defaults with
-    `ml_port_controls()`, a `port.max_iter` control, nonlinear equalities
-    routed to SLSQP with `Estimates::substituted_backend`, api
-    `OptimizerKind::Default`/`Port` and `StartKind::Layered`) is kept aside.
-    The nonlinear routing and `port.max_iter` do not depend on the decision.
+    `ml_port_controls()`, api `OptimizerKind::Default`/`Port` and
+    `StartKind::Layered`) is kept aside. The nonlinear routing and
+    `port.max_iter` have landed, because they do not depend on the decision.
 - **M — runaway flag for scoring default decisions (promoted from
   speculative, 2026-09-26).** The decisions study needs to tell certified
   minima from certified points far along a divergent path. Otherwise PORT's

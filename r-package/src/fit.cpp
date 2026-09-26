@@ -1299,6 +1299,9 @@ Rcpp::List fit_result(Ctx& ctx,
   out["grad_norm"]        = est.grad_inf_norm;
   out["audit"]            = audit_to_r(est.audit);
   out["diagnostics"]      = diagnostics_to_r(est.diagnostics);
+  if (est.substituted_backend)
+    out["optimizer_substituted"] =
+        std::string(magmaan::estimate::backend_name(*est.substituted_backend));
   if (ctx.start_values) out["start"] = start_result_to_r(*ctx.start_values);
   return out;
 }

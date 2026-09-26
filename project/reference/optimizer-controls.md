@@ -25,6 +25,15 @@ control <- list(nlopt = list(ftol_rel = 1e-12, xtol_rel = 1e-10))
 # Pass control to the selected fitting entry point.
 ```
 
+## Nonlinear equality constraints (2026-09-26)
+
+`fit_ml` and `fit_gls` run NLopt SLSQP when the model has nonlinear equality
+constraints and the selected backend cannot take them (L-BFGS, PORT and the
+other unconstrained backends), instead of returning an error. The fit records
+the backend that ran in `Estimates::substituted_backend` (R
+`fit$optimizer_substituted`). An explicit SLSQP, L-BFGS-with-SLSQP-fallback or
+IPOPT request is kept; IPOPT still errors in builds without it.
+
 ## Complete-data ML defaults (2026-09-22)
 
 Bare C++ `fit_ml`, `frontier::fit_ml_psd`, the staged `api::ml()` factory,
@@ -268,10 +277,13 @@ explicit step tolerance and does not change the terminal audit threshold.
 | `abs_f_tol` | V(AFCTOL), absolute objective **size**, not change | PORT default |
 | `x_tol` | V(XCTOL), scaled relative step convergence | PORT default |
 | `false_conv_tol` | V(XFTOL), false-convergence step threshold | PORT default |
-| `max_eval` | IV(MXFCAL), function-evaluation budget | 10 × legacy `max_iter` |
+| `max_eval` | IV(MXFCAL), function-evaluation budget | 10 × the iteration budget |
+| `max_iter` | IV(MXITER), iteration budget | legacy `max_iter` |
 
-`max_iter` remains the iteration budget. Legacy `gtol` and `history` are
-unused. Explicit nonnegative tolerances are passed verbatim, including zero;
+Without `port.max_iter`, the legacy `max_iter` remains the iteration budget.
+In R, a legacy `max_iter` or `ftol` in `control` replaces any explicit PORT
+iteration/evaluation budget or relative function tolerance of the profile, as
+it replaces the NLopt ones. Legacy `gtol` and `history` are unused. Explicit nonnegative tolerances are passed verbatim, including zero;
 PORT's native validity checks and stopping rules apply. Do not interpret
 zero as a universal disable switch. PORT distinguishes x, relative-function,
 absolute-function, singular and false-convergence exits; these are not a

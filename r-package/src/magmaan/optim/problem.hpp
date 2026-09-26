@@ -129,6 +129,7 @@ struct PortControls {
   std::optional<double> x_tol = {};     // V(XCTOL), scaled relative step
   std::optional<double> false_conv_tol = {}; // V(XFTOL)
   std::optional<int> max_eval = {}; // IV(MXFCAL), separate from max_iter
+  std::optional<int> max_iter = {}; // IV(MXITER); overrides the legacy max_iter
 };
 
 struct IpoptControls {

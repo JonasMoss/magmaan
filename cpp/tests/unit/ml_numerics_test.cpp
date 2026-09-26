@@ -4,6 +4,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include <cmath>
 #include <limits>
 
 using namespace magmaan;
@@ -215,4 +216,32 @@ TEST_CASE("Start policy preserves marker-only constructors when transport is req
   invalid[0] = std::numeric_limits<double>::quiet_NaN();
   CHECK_FALSE(estimate::explicit_start_values(c.pt, invalid));
   CHECK_FALSE(estimate::explicit_start_values(c.pt, Eigen::VectorXd::Zero(1)));
+}
+
+TEST_CASE("ML and GLS route nonlinear equalities to SLSQP and record it") {
+  auto c = example("f =~ x1 + a*x2 + b*x3 + x4\na == b*b");
+  auto start = estimate::ml_start_values(c.pt, c.rep, c.sample); REQUIRE(start);
+  for (auto backend : {estimate::Backend::NloptLbfgs, estimate::Backend::Port}) {
+    auto ml = estimate::fit_ml(c.pt, c.rep, c.sample, start->theta, {}, backend); REQUIRE(ml);
+    if (!ml) continue;
+    REQUIRE(ml->substituted_backend.has_value());
+    if (!ml->substituted_backend) continue;
+    CHECK(*ml->substituted_backend == estimate::Backend::NloptSlsqp);
+    CHECK(ml->diagnostics.nl_eq_satisfied);
+    auto gls = estimate::fit_gls(c.pt, c.rep, c.sample, start->theta, {}, backend); REQUIRE(gls);
+    if (!gls) continue;
+    REQUIRE(gls->substituted_backend.has_value());
+    if (!gls->substituted_backend) continue;
+    CHECK(*gls->substituted_backend == estimate::Backend::NloptSlsqp);
+  }
+  auto chosen = estimate::fit_ml(c.pt, c.rep, c.sample, start->theta, {},
+                                 estimate::Backend::NloptSlsqp); REQUIRE(chosen);
+  CHECK_FALSE(chosen->substituted_backend.has_value());
+  auto routed = estimate::fit_ml(c.pt, c.rep, c.sample, start->theta); REQUIRE(routed);
+  CHECK(std::abs(chosen->fmin - routed->fmin) < 1e-10);
+  auto plain = example("f =~ x1 + x2 + x3 + x4");
+  auto p0 = estimate::ml_start_values(plain.pt, plain.rep, plain.sample); REQUIRE(p0);
+  auto unconstrained = estimate::fit_ml(plain.pt, plain.rep, plain.sample, p0->theta);
+  REQUIRE(unconstrained);
+  CHECK_FALSE(unconstrained->substituted_backend.has_value());
 }

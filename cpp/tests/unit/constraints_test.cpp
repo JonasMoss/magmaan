@@ -439,13 +439,18 @@ TEST_CASE("nonlinear `==` with exp/log: compiled and AD-evaluated") {
   }
 }
 
-TEST_CASE("fit: nonlinear equality constraints require a constrained backend") {
+TEST_CASE("fit: nonlinear equality constraints route an unconstrained backend to SLSQP") {
   auto samp = fixture_samp_3();
   auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b^2");
   auto rep = build_matrix_rep(pt).value();
   auto est_or = magmaan::test::fit(pt, rep, samp);
-  REQUIRE_FALSE(est_or.has_value());
-  CHECK(est_or.error().detail.find("nlopt-slsqp") != std::string::npos);
+  REQUIRE(est_or.has_value());
+  if (!est_or.has_value()) return;
+  REQUIRE(est_or->substituted_backend.has_value());
+  if (!est_or->substituted_backend) return;
+  CHECK(*est_or->substituted_backend == magmaan::estimate::Backend::NloptSlsqp);
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est_or->theta)(0)) < 1e-5);
 }
 
 TEST_CASE("fit: nonlinear equality constraints accept the NLopt SLSQP backend") {

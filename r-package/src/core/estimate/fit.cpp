@@ -214,6 +214,22 @@ run_scalar_constrained(const optim::ScalarProblem& prob,
       "unknown constrained optimizer backend"));
 }
 
+// Nonlinear equality constraints need a constrained optimizer. A backend that
+// cannot take them is replaced by NLopt SLSQP; an explicit IPOPT request is
+// kept (it errors in builds without IPOPT). Callers record the substitution.
+Backend nonlinear_capable_backend(Backend requested,
+                                  const NonlinearEqConstraints& nl) {
+  if (!nl.active()) return requested;
+  switch (requested) {
+    case Backend::NloptSlsqp:
+    case Backend::NloptLbfgsSlsqpFallback:
+    case Backend::Ipopt:
+      return requested;
+    default:
+      return Backend::NloptSlsqp;
+  }
+}
+
 // Shared prelude — resolve fixed.x, build the evaluator, build constraints.
 struct Prelude {
   model::ModelEvaluator  ev;
@@ -2533,6 +2549,8 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         Bounds bounds, Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gls");
   if (!pre.has_value()) return std::unexpected(pre.error());
+  const Backend requested = backend;
+  backend = nonlinear_capable_backend(backend, pre->nl);
 
   // Ceres / CeresBfgs / PortNls drive the residual-and-Jacobian form directly
   // (see `run_gmm`), so they need the materialized weight. Every other backend
@@ -2552,6 +2570,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
                           "fit_gls", map ? &*map : nullptr),
         map);
     if (!est.has_value()) return est;
+    if (backend != requested) est->substituted_backend = backend;
     attach_diagnostics(*est, pt, *pre, bounds);
     attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
     if (auto W = gmm::normal_theory_weight(pre->ev, samp, x0); W.has_value()) {
@@ -2565,6 +2584,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
                          backend, opts);
   if (!est.has_value()) return est;
+  if (backend != requested) est->substituted_backend = backend;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
       *est, pt, rep, *pre, samp, x0, *W, bounds);
@@ -2696,9 +2716,11 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(pre->ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  auto est = drive_ml_scalar(pt, rep, *pre, samp, prob, x0, bounds, backend,
+  const Backend used = nonlinear_capable_backend(backend, pre->nl);
+  auto est = drive_ml_scalar(pt, rep, *pre, samp, prob, x0, bounds, used,
                              opts, "fit_ml");
   if (!est.has_value()) return est;
+  if (used != backend) est->substituted_backend = used;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
   attach_newton_accuracy(*est, pt, rep, samp);

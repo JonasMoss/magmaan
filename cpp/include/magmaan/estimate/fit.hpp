@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 
 #include <Eigen/Core>
 
@@ -33,6 +34,8 @@ using optim::OptimOptions;
 
 // Estimation results — pure data, NO back-pointer to the LatentStructure.
 // (See plan: separation of concerns. Caller composes pt + Estimates.)
+enum class Backend;  // defined below; Estimates records a substituted backend
+
 struct Estimates {
   Eigen::VectorXd theta;     // size = pt.n_free()
   double          fmin       = 0.0;
@@ -73,6 +76,9 @@ struct Estimates {
   std::int32_t          n_alpha_solve_fallback = -1;
   // Search coordinates the optimizer actually used (None when unscaled).
   optim::CoordinateScaling coordinate_scaling = optim::CoordinateScaling::None;
+  // Set when the requested backend could not take the model's nonlinear
+  // equality constraints and this backend ran instead.
+  std::optional<Backend> substituted_backend = {};
 };
 
 // Consumers use this common verdict; optimizer_status explains termination.
@@ -275,7 +281,9 @@ struct ScalarProfileCiResult {
 // Normal-theory maximum likelihood. `backend` selects the optimizer; the
 // default NLopt L-BFGS, the NLopt SLSQP cross-check, or the PORT (= nlminb)
 // trust-region cross-check. `Backend::Ceres` is rejected here because Ceres
-// applies to the least-squares path only.
+// applies to the least-squares path only. A model with nonlinear equality
+// constraints runs on NLopt SLSQP when `backend` cannot take them (fit_gls
+// likewise), and the fit records the substitution in `substituted_backend`.
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},

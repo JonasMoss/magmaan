@@ -437,4 +437,30 @@ TEST_CASE("PORT explicit controls override legacy function tolerance") {
   CHECK_FALSE(PortOptimizer(named).minimize(f, Eigen::VectorXd::Ones(3)).has_value());
 }
 
+TEST_CASE("PORT max_iter control overrides the legacy iteration budget") {
+  auto f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    const double a = 1.0 - x[0];
+    const double b = x[1] - x[0] * x[0];
+    g.resize(2);
+    g[0] = -2.0 * a - 400.0 * x[0] * b;
+    g[1] = 200.0 * b;
+    return a * a + 100.0 * b * b;
+  };
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1000;
+  opts.port.max_iter = 3;
+  auto capped = PortOptimizer(opts).minimize(f, x0);
+  REQUIRE(capped.has_value());
+  CHECK(capped->status == magmaan::optim::OptimStatus::BudgetExhausted);
+  opts.max_iter = 3;
+  opts.port.max_iter = 1000;
+  auto lifted = PortOptimizer(opts).minimize(f, x0);
+  REQUIRE(lifted.has_value());
+  CHECK(lifted->status != magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK(lifted->fmin < 1e-10);
+  opts.port.max_iter = 0;
+  CHECK_FALSE(PortOptimizer(opts).minimize(f, x0).has_value());
+}
+
 #endif  // MAGMAAN_WITH_PORT
