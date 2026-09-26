@@ -1,0 +1,203 @@
+"role","family","estimator","arm","units","pattern","groups"
+"test","boomsma","GLS","default","separate","native:fail mixed:ok",8
+"control","ernst","GLS","default","separate","native:fail mixed:ok",1
+"test","research47","GLS","default","separate","native:fail mixed:ok",10
+"test","wolf","GLS","default","separate","native:fail mixed:ok",103
+"test","boomsma","ML","default","separate","native:fail mixed:ok",8
+"test","wolf","ML","default","separate","native:fail mixed:ok",7
+"test","boomsma","GLS","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","chen","GLS","layered_lbfgs","separate","native:fail mixed:ok",2
+"test","engineering15","GLS","layered_lbfgs","separate","native:fail mixed:ok",1
+"control","ernst","GLS","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","research47","GLS","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","wolf","GLS","layered_lbfgs","separate","native:fail mixed:ok",5
+"test","boomsma","ML","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","engineering15","ML","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","research47","GLS","layered_port","separate","native:fail mixed:ok",2
+"test","boomsma","ML","layered_port","separate","native:fail mixed:ok",2
+"test","engineering15","ML","layered_port","separate","native:fail mixed:ok",1
+"test","wolf","ML","layered_port","separate","native:fail mixed:ok",2
+"test","boomsma","GLS","default","common","native:fail x100:fail x0.01:ok",11
+"test","chen","GLS","default","common","native:fail x100:fail x0.01:ok",55
+"test","constrained","GLS","default","common","native:fail x100:fail x0.01:ok",7
+"test","engineering15","GLS","default","common","native:fail x100:fail x0.01:ok",20
+"test","research47","GLS","default","common","native:fail x100:fail x0.01:ok",18
+"test","wolf","GLS","default","common","native:fail x100:fail x0.01:ok",12
+"test","constrained","ML","default","common","native:fail x100:fail x0.01:ok",9
+"test","engineering15","ML","default","common","native:fail x100:fail x0.01:ok",2
+"test","boomsma","GLS","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","chen","GLS","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","GLS","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","engineering15","GLS","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","wolf","GLS","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","boomsma","ML","layered_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","constrained","ML","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","engineering15","ML","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","engineering15","GLS","layered_port","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","ML","layered_port","common","native:fail x100:fail x0.01:ok",1
+"test","boomsma","GLS","default","common","native:fail x100:ok x0.01:fail",8
+"test","chen","GLS","default","common","native:fail x100:ok x0.01:fail",25
+"test","constrained","GLS","default","common","native:fail x100:ok x0.01:fail",13
+"test","engineering15","GLS","default","common","native:fail x100:ok x0.01:fail",3
+"test","research47","GLS","default","common","native:fail x100:ok x0.01:fail",17
+"test","wolf","GLS","default","common","native:fail x100:ok x0.01:fail",92
+"test","boomsma","ML","default","common","native:fail x100:ok x0.01:fail",4
+"test","constrained","ML","default","common","native:fail x100:ok x0.01:fail",4
+"test","engineering15","ML","default","common","native:fail x100:ok x0.01:fail",3
+"test","wolf","ML","default","common","native:fail x100:ok x0.01:fail",3
+"test","boomsma","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:fail",3
+"test","boomsma","ML","layered_lbfgs","common","native:fail x100:ok x0.01:fail",2
+"test","engineering15","ML","layered_lbfgs","common","native:fail x100:ok x0.01:fail",1
+"test","engineering15","ML","layered_port","common","native:fail x100:ok x0.01:fail",2
+"test","wolf","ML","layered_port","common","native:fail x100:ok x0.01:fail",2
+"test","chen","GLS","default","common","native:fail x100:ok x0.01:ok",20
+"test","engineering15","GLS","default","common","native:fail x100:ok x0.01:ok",3
+"test","research47","GLS","default","common","native:fail x100:ok x0.01:ok",9
+"test","wolf","GLS","default","common","native:fail x100:ok x0.01:ok",6
+"test","constrained","ML","default","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","ML","default","common","native:fail x100:ok x0.01:ok",2
+"test","constrained","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","engineering15","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"control","ernst","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","GLS","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","engineering15","ML","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","ML","layered_lbfgs","common","native:fail x100:ok x0.01:ok",2
+"test","wolf","GLS","layered_port","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","ML","layered_port","common","native:fail x100:ok x0.01:ok",1
+"test","constrained","ML","layered_port","common","native:fail x100:ok x0.01:ok",1
+"test","engineering15","ML","layered_port","common","native:fail x100:ok x0.01:ok",1
+"control","ernst","ML","layered_port","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","ML","layered_port","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","GLS","default","separate","native:ok mixed:fail",488
+"test","chen","GLS","default","separate","native:ok mixed:fail",610
+"test","engineering15","GLS","default","separate","native:ok mixed:fail",206
+"control","ernst","GLS","default","separate","native:ok mixed:fail",98
+"test","research47","GLS","default","separate","native:ok mixed:fail",1363
+"test","wolf","GLS","default","separate","native:ok mixed:fail",404
+"test","boomsma","ML","default","separate","native:ok mixed:fail",37
+"test","engineering15","ML","default","separate","native:ok mixed:fail",20
+"control","ernst","ML","default","separate","native:ok mixed:fail",9
+"test","research47","ML","default","separate","native:ok mixed:fail",18
+"test","wolf","ML","default","separate","native:ok mixed:fail",51
+"test","boomsma","GLS","layered_lbfgs","separate","native:ok mixed:fail",2
+"test","chen","GLS","layered_lbfgs","separate","native:ok mixed:fail",2
+"test","research47","GLS","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","wolf","GLS","layered_lbfgs","separate","native:ok mixed:fail",6
+"test","engineering15","ML","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","research47","ML","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","wolf","ML","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","boomsma","GLS","layered_port","separate","native:ok mixed:fail",1
+"test","engineering15","GLS","layered_port","separate","native:ok mixed:fail",1
+"test","research47","GLS","layered_port","separate","native:ok mixed:fail",1
+"test","wolf","GLS","layered_port","separate","native:ok mixed:fail",2
+"test","boomsma","ML","layered_port","separate","native:ok mixed:fail",2
+"test","chen","ML","layered_port","separate","native:ok mixed:fail",1
+"test","engineering15","ML","layered_port","separate","native:ok mixed:fail",1
+"test","research47","ML","layered_port","separate","native:ok mixed:fail",2
+"test","boomsma","GLS","default","common","native:ok x100:fail x0.01:fail",12
+"test","chen","GLS","default","common","native:ok x100:fail x0.01:fail",20
+"test","constrained","GLS","default","common","native:ok x100:fail x0.01:fail",36
+"test","engineering15","GLS","default","common","native:ok x100:fail x0.01:fail",3
+"test","research47","GLS","default","common","native:ok x100:fail x0.01:fail",36
+"test","wolf","GLS","default","common","native:ok x100:fail x0.01:fail",57
+"test","boomsma","ML","default","common","native:ok x100:fail x0.01:fail",4
+"test","engineering15","ML","default","common","native:ok x100:fail x0.01:fail",1
+"control","ernst","ML","default","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","ML","default","common","native:ok x100:fail x0.01:fail",3
+"test","boomsma","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:fail",3
+"test","constrained","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","research47","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:fail",4
+"test","constrained","ML","layered_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","engineering15","ML","layered_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","boomsma","ML","layered_port","common","native:ok x100:fail x0.01:fail",1
+"test","boomsma","GLS","default","common","native:ok x100:fail x0.01:ok",3
+"test","chen","GLS","default","common","native:ok x100:fail x0.01:ok",17
+"test","constrained","GLS","default","common","native:ok x100:fail x0.01:ok",2
+"control","ernst","GLS","default","common","native:ok x100:fail x0.01:ok",1
+"test","research47","GLS","default","common","native:ok x100:fail x0.01:ok",40
+"test","wolf","GLS","default","common","native:ok x100:fail x0.01:ok",5
+"test","chen","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","engineering15","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","GLS","layered_lbfgs","common","native:ok x100:fail x0.01:ok",2
+"test","engineering15","ML","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","ML","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","GLS","layered_port","common","native:ok x100:fail x0.01:ok",1
+"test","constrained","GLS","layered_port","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","GLS","layered_port","common","native:ok x100:fail x0.01:ok",2
+"test","boomsma","ML","layered_port","common","native:ok x100:fail x0.01:ok",3
+"test","constrained","ML","layered_port","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","GLS","default","common","native:ok x100:ok x0.01:fail",747
+"test","chen","GLS","default","common","native:ok x100:ok x0.01:fail",79
+"test","constrained","GLS","default","common","native:ok x100:ok x0.01:fail",762
+"test","engineering15","GLS","default","common","native:ok x100:ok x0.01:fail",74
+"control","ernst","GLS","default","common","native:ok x100:ok x0.01:fail",24
+"test","research47","GLS","default","common","native:ok x100:ok x0.01:fail",1011
+"test","wolf","GLS","default","common","native:ok x100:ok x0.01:fail",1053
+"test","boomsma","ML","default","common","native:ok x100:ok x0.01:fail",33
+"test","constrained","ML","default","common","native:ok x100:ok x0.01:fail",347
+"test","engineering15","ML","default","common","native:ok x100:ok x0.01:fail",15
+"control","ernst","ML","default","common","native:ok x100:ok x0.01:fail",5
+"test","research47","ML","default","common","native:ok x100:ok x0.01:fail",14
+"test","wolf","ML","default","common","native:ok x100:ok x0.01:fail",42
+"test","boomsma","GLS","layered_lbfgs","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","GLS","layered_lbfgs","common","native:ok x100:ok x0.01:fail",3
+"test","wolf","GLS","layered_lbfgs","common","native:ok x100:ok x0.01:fail",2
+"test","boomsma","ML","layered_lbfgs","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","ML","layered_lbfgs","common","native:ok x100:ok x0.01:fail",2
+"test","engineering15","ML","layered_lbfgs","common","native:ok x100:ok x0.01:fail",1
+"test","wolf","ML","layered_lbfgs","common","native:ok x100:ok x0.01:fail",2
+"test","boomsma","GLS","layered_port","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","GLS","layered_port","common","native:ok x100:ok x0.01:fail",1
+"test","engineering15","GLS","layered_port","common","native:ok x100:ok x0.01:fail",2
+"test","wolf","GLS","layered_port","common","native:ok x100:ok x0.01:fail",2
+"test","boomsma","GLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","chen","GLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","GLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","boomsma","GLS","default","separate","objective differs, gap 1e-4 to 1e-3",3
+"test","boomsma","GLS","default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","constrained","GLS","default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","constrained","ML","default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","GLS","default","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","GLS","default","common","objective differs, gap 1e-6 to 1e-5",5
+"test","chen","GLS","default","common","objective differs, gap 1e-6 to 1e-5",3
+"test","constrained","GLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","GLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","GLS","default","common","objective differs, gap 1e-6 to 1e-5",4
+"test","wolf","GLS","default","common","objective differs, gap 1e-6 to 1e-5",24
+"test","boomsma","ML","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","constrained","ML","default","common","objective differs, gap 1e-6 to 1e-5",2
+"test","constrained","GLS","layered_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","GLS","layered_lbfgs","common","objective differs, gap 1e-6 to 1e-5",2
+"test","wolf","GLS","layered_lbfgs","common","objective differs, gap 1e-6 to 1e-5",3
+"test","wolf","ML","layered_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","constrained","ML","layered_port","common","objective differs, gap 1e-6 to 1e-5",4
+"test","wolf","ML","layered_port","common","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","GLS","default","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","ML","default","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","chen","GLS","layered_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","engineering15","GLS","layered_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","GLS","layered_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","wolf","GLS","layered_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","ML","layered_port","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","engineering15","ML","layered_port","separate","objective differs, gap 1e-6 to 1e-5",2
+"test","wolf","ML","layered_port","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","GLS","default","common","objective differs, gap over 1e-3",14
+"test","chen","GLS","default","common","objective differs, gap over 1e-3",21
+"test","constrained","GLS","default","common","objective differs, gap over 1e-3",30
+"test","engineering15","GLS","default","common","objective differs, gap over 1e-3",1
+"control","ernst","GLS","default","common","objective differs, gap over 1e-3",2
+"test","research47","GLS","default","common","objective differs, gap over 1e-3",7
+"test","wolf","GLS","default","common","objective differs, gap over 1e-3",16
+"test","constrained","ML","default","common","objective differs, gap over 1e-3",34
+"control","ernst","ML","default","common","objective differs, gap over 1e-3",1
+"test","research47","ML","default","common","objective differs, gap over 1e-3",1
+"test","boomsma","GLS","default","separate","objective differs, gap over 1e-3",13
+"test","chen","GLS","default","separate","objective differs, gap over 1e-3",1
+"test","research47","GLS","default","separate","objective differs, gap over 1e-3",8
+"test","wolf","GLS","default","separate","objective differs, gap over 1e-3",24
+"test","boomsma","ML","default","separate","objective differs, gap over 1e-3",2
+"test","wolf","ML","default","separate","objective differs, gap over 1e-3",2
+"test","research47","GLS","layered_lbfgs","separate","objective differs, gap over 1e-3",1
+"test","research47","GLS","layered_port","separate","objective differs, gap over 1e-3",1

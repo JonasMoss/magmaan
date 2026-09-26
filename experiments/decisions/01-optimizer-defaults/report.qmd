@@ -29,6 +29,11 @@ ps_stage <- rd("psd-ml", "twostage_stages"); ps_tol <- rd("psd-ml", "tolerance")
 rdc <- function(name) { run <<- "2026-09-26-confirm"; on.exit(run <<- "2026-09-26"); rd("ml-gls", name) }
 cf_dec <- rdc("decision"); cf_rates <- rdc("rates_by_family"); cf_pair <- rdc("paired"); cf_esc <- rdc("escapes")
 ml_esc <- rd("ml-gls", "escapes"); ps_rt <- rd("psd-ml", "rates_by_family_transform")
+rdt <- function(name) { run <<- "2026-09-26-third"; on.exit(run <<- "2026-09-26"); rd("ml-gls", name) }
+t3_choice <- rdt("choice"); t3_dec <- rdt("decision"); t3_rates <- rdt("rates_by_family")
+t3_run <- rdt("runaways"); t3_loss <- rdt("losses"); t3_pair <- rdt("paired")
+t3 <- function(arm, est, col = "success") tot(t3_rates, arm, col, est)
+t3r <- function(arm, est) sum(t3_run$beyond_10[t3_run$role == "test" & t3_run$arm == arm & t3_run$estimator == est])
 tot <- function(r, arm, col, est = NULL) sum(r[[col]][r$role == "test" & r$arm == arm &
   (is.null(est) | r$estimator %in% est)])
 pr <- function(p, cand, base, col) sum(p[[col]][p$role == "test" & p$candidate == cand & p$baseline == base])
@@ -45,36 +50,42 @@ runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
 
 ## Answer
 
-**ML and GLS: nothing is promoted yet. The pre-registered confirmation run
-failed, and it exposed a flaw in how fits are scored.**
+**ML and GLS: with runaways scored as failures (third run), the layered start
+wins for both. PORT adds certified fits, but also many runaway fits that the
+library still calls converged.**
 
-- The first run favoured the layered start with PORT (ML
-  `r f0(tot(ml_rates, "layered_port", "success", "ML"))` against
-  `r f0(tot(ml_rates, "default", "success", "ML"))` certified,
-  GLS `r f0(tot(ml_rates, "layered_port", "success", "GLS"))` against
-  `r f0(tot(ml_rates, "default", "success", "GLS"))`). Two small rule failures
-  pointed at PORT's generic budget.
-- The confirmation run, on fresh draws, gave PORT ML's budget. Its candidate
-  fails rule 1 (Chen ML) and rule 2 in five ML cells. The extra budget made
-  PORT *worse* on ML than generic PORT
-  (`r sum(cf_pair$wins[cf_pair$role == "test" & cf_pair$candidate == "layered_port_ml" & cf_pair$baseline == "layered_port" & cf_pair$estimator == "ML"])`
-  wins,
-  `r sum(cf_pair$losses[cf_pair$role == "test" & cf_pair$candidate == "layered_port_ml" & cf_pair$baseline == "layered_port" & cf_pair$estimator == "ML"])`
-  losses) and better on GLS.
-- **The reason is runaway certifications.** On draws where ordinary ML has no
-  proper minimum, PORT keeps walking down the divergent (Heywood) path. Where
-  its budget stops it, the Newton check often accepts the point. In native
-  units every PORT arm has about
-  `r f0(sum(ml_esc$escapes[ml_esc$role == "test" & ml_esc$arm == "layered_port" & ml_esc$estimator == "ML"]))`
-  such ML certifications with a largest parameter above 100 (median about
-  9,600). L-BFGS has none.
-- **Without them, the ML gain almost vanishes.** It stays large for GLS (see
-  "Confirmation run" below). The layered start with L-BFGS fails only the Chen
-  ML rule-1 check (4 losses, no wins), where today's default is already
-  perfect.
-- **Next:** add a runaway rule to the judge or the scoring, and pre-register
-  a new run with the layered start with L-BFGS and the layered start with
-  PORT as candidates.
+- A certified fit whose standardized extent exceeds 10 now counts as a
+  runaway, a failure. The extent is the largest absolute standardized
+  loading, latent path, latent correlation or residual/disturbance ratio. It
+  is unit-free, and without this rule PORT's persistence was being rewarded.
+- **GLS: the pre-registered choice is the layered start with PORT.** Both
+  candidates pass every rule. Certified fits: today
+  `r f0(t3("default", "GLS"))`, layered with L-BFGS
+  `r f0(t3("layered_lbfgs", "GLS"))`, layered with PORT
+  `r f0(t3("layered_port", "GLS"))`, of `r f0(t3("default", "GLS", "attainable"))`.
+- **ML: no candidate is eligible, so the author decides.** Both candidates
+  pass every rule except in the Chen family.
+  - Certified fits: today `r f0(t3("default", "ML"))`, layered with L-BFGS
+    `r f0(t3("layered_lbfgs", "ML"))`, layered with PORT
+    `r f0(t3("layered_port", "ML"))`, of `r f0(t3("default", "ML", "attainable"))`.
+  - Chen fails rule 1 because today's default certifies every attainable Chen
+    problem, so any loss fails. The losses are 5 of about 800 draws (model m0
+    at $N = 25$, 4 draws; model m1, 1 draw), each counted in all four unit
+    systems. On those draws the layered start sends both optimizers to a
+    worse basin (objective 0.09–0.47 higher), ending at saddles or
+    ill-conditioned points.
+- **What users would see.** The runaway rule is in the scoring, not in the
+  library's verdict. Among certified test-family fits, runaways number:
+
+  | Estimator | Today | Layered + L-BFGS | Layered + PORT |
+  |---|---:|---:|---:|
+  | ML | `r f0(t3r("default", "ML"))` | `r f0(t3r("layered_lbfgs", "ML"))` | `r f0(t3r("layered_port", "ML"))` |
+  | GLS | `r f0(t3r("default", "GLS"))` | `r f0(t3r("layered_lbfgs", "GLS"))` | `r f0(t3r("layered_port", "GLS"))` |
+
+  PORT would hand users several times as many runaway fits marked as
+  converged, unless the verdict gets a runaway check.
+- Runs 1 and 2 kept their pre-registered scoring and failed their rules. Run 2
+  exposed the runaway problem.
 
 **PSD ML: keep today's direct configuration. The two-stage route is better
 only in rescaled units.**
@@ -118,9 +129,9 @@ Two issues found along the way:
 
 | Default | Current value | Status after this run | Evidence |
 |---|---|---|---|
-| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | open: the layered start gains on GLS, only slightly on ML; rerun with a runaway rule | lane ml-gls, both runs; engineering/17 corpus |
-| ML and GLS optimizer | NLopt L-BFGS | open: PORT's ML gain is mostly runaway certifications; its GLS gain is real | lane ml-gls confirmation run |
-| judge on runaway paths | the Newton check accepts some divergent-path points | open: add a runaway rule before the next ML/GLS run | lane ml-gls confirmation run |
+| GLS start and optimizer | native FABIN3, NLopt L-BFGS | pre-registered choice (run 3): layered start with PORT; author confirms, given PORT's runaways | lane ml-gls, third run |
+| ML start and optimizer | transported FABIN3, NLopt L-BFGS | author decides (run 3): both candidates fail only on 5 Chen draws | lane ml-gls, third run |
+| verdict on runaway paths | the Newton check accepts divergent-path points | open: scoring has a runaway rule (extent > 10); the library verdict does not | lane ml-gls, runs 2 and 3 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families) | lane psd-ml |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
@@ -245,6 +256,25 @@ tab(e[order(e$estimator, e$arm), ], col.names = c("Estimator", "Arm", "Fits", "R
 - Both the pre-registered rules and the attainability witnesses count
   runaway certifications, so the next ML/GLS run needs a runaway rule
   written into its criteria.
+
+### Third run: the runaway rule
+
+Seed base 2026092603, candidates `layered_lbfgs` and `layered_port`, and the
+runaway rule at 10. Criteria are in the third dated section of
+[criteria/ml-gls.md](criteria/ml-gls.md).
+
+```{r t3-choice}
+tab(t3_choice, col.names = c("Estimator", "Eligible", "Certified", "PORT no net loss vs L-BFGS", "Choice"))
+tab(t3_dec[!t3_dec$pass, ], col.names = c("Candidate", "Rule", "Test family and estimator", "Value", "Pass"))
+```
+
+Certified fits beyond each runaway bound (all units; the extent is unit-free):
+
+```{r t3-runaways}
+w <- stats::aggregate(cbind(certified, beyond_5, beyond_10, beyond_100) ~ estimator + arm,
+                      t3_run[t3_run$role == "test", ], sum)
+tab(w[order(w$estimator, w$arm), ], col.names = c("Estimator", "Arm", "Certified", "> 5", "> 10", "> 100"))
+```
 
 ## Lane psd-ml
 

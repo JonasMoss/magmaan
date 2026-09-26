@@ -1,0 +1,871 @@
+"role","family","estimator","arm","transform","cause","fits"
+"test","boomsma","GLS","default","mixed","budget exhausted",5
+"test","chen","GLS","default","mixed","budget exhausted",62
+"test","engineering15","GLS","default","mixed","budget exhausted",9
+"control","ernst","GLS","default","mixed","budget exhausted",10
+"test","research47","GLS","default","mixed","budget exhausted",17
+"test","wolf","GLS","default","mixed","budget exhausted",52
+"test","boomsma","ML","default","mixed","budget exhausted",1
+"test","wolf","ML","default","mixed","budget exhausted",2
+"test","boomsma","GLS","default_port","mixed","budget exhausted",216
+"test","chen","GLS","default_port","mixed","budget exhausted",134
+"test","engineering15","GLS","default_port","mixed","budget exhausted",112
+"control","ernst","GLS","default_port","mixed","budget exhausted",52
+"test","research47","GLS","default_port","mixed","budget exhausted",220
+"test","wolf","GLS","default_port","mixed","budget exhausted",476
+"test","boomsma","ML","default_port","mixed","budget exhausted",195
+"test","engineering15","ML","default_port","mixed","budget exhausted",62
+"control","ernst","ML","default_port","mixed","budget exhausted",10
+"test","research47","ML","default_port","mixed","budget exhausted",14
+"test","wolf","ML","default_port","mixed","budget exhausted",151
+"test","boomsma","GLS","layered_lbfgs","mixed","budget exhausted",1
+"test","chen","GLS","layered_lbfgs","mixed","budget exhausted",1
+"control","ernst","GLS","layered_lbfgs","mixed","budget exhausted",1
+"test","research47","GLS","layered_lbfgs","mixed","budget exhausted",4
+"test","wolf","GLS","layered_lbfgs","mixed","budget exhausted",57
+"test","boomsma","ML","layered_lbfgs","mixed","budget exhausted",1
+"test","engineering15","ML","layered_lbfgs","mixed","budget exhausted",3
+"test","wolf","ML","layered_lbfgs","mixed","budget exhausted",1
+"test","boomsma","GLS","layered_port","mixed","budget exhausted",232
+"test","chen","GLS","layered_port","mixed","budget exhausted",28
+"test","engineering15","GLS","layered_port","mixed","budget exhausted",112
+"control","ernst","GLS","layered_port","mixed","budget exhausted",17
+"test","research47","GLS","layered_port","mixed","budget exhausted",72
+"test","wolf","GLS","layered_port","mixed","budget exhausted",547
+"test","boomsma","ML","layered_port","mixed","budget exhausted",180
+"test","chen","ML","layered_port","mixed","budget exhausted",2
+"test","engineering15","ML","layered_port","mixed","budget exhausted",105
+"control","ernst","ML","layered_port","mixed","budget exhausted",16
+"test","research47","ML","layered_port","mixed","budget exhausted",18
+"test","wolf","ML","layered_port","mixed","budget exhausted",142
+"test","boomsma","GLS","default","native","budget exhausted",4
+"test","chen","GLS","default","native","budget exhausted",8
+"test","constrained","GLS","default","native","budget exhausted",16
+"test","engineering15","GLS","default","native","budget exhausted",4
+"test","research47","GLS","default","native","budget exhausted",3
+"test","wolf","GLS","default","native","budget exhausted",64
+"test","wolf","ML","default","native","budget exhausted",1
+"test","boomsma","GLS","default_port","native","budget exhausted",243
+"test","chen","GLS","default_port","native","budget exhausted",97
+"test","constrained","GLS","default_port","native","budget exhausted",173
+"test","engineering15","GLS","default_port","native","budget exhausted",138
+"control","ernst","GLS","default_port","native","budget exhausted",21
+"test","research47","GLS","default_port","native","budget exhausted",159
+"test","wolf","GLS","default_port","native","budget exhausted",577
+"test","boomsma","ML","default_port","native","budget exhausted",195
+"test","constrained","ML","default_port","native","budget exhausted",55
+"test","engineering15","ML","default_port","native","budget exhausted",97
+"control","ernst","ML","default_port","native","budget exhausted",12
+"test","research47","ML","default_port","native","budget exhausted",18
+"test","wolf","ML","default_port","native","budget exhausted",135
+"test","boomsma","GLS","layered_lbfgs","native","budget exhausted",4
+"test","chen","GLS","layered_lbfgs","native","budget exhausted",1
+"test","constrained","GLS","layered_lbfgs","native","budget exhausted",10
+"test","engineering15","GLS","layered_lbfgs","native","budget exhausted",2
+"test","research47","GLS","layered_lbfgs","native","budget exhausted",4
+"test","wolf","GLS","layered_lbfgs","native","budget exhausted",80
+"test","constrained","ML","layered_lbfgs","native","budget exhausted",3
+"test","research47","ML","layered_lbfgs","native","budget exhausted",1
+"test","boomsma","GLS","layered_port","native","budget exhausted",232
+"test","chen","GLS","layered_port","native","budget exhausted",29
+"test","constrained","GLS","layered_port","native","budget exhausted",165
+"test","engineering15","GLS","layered_port","native","budget exhausted",112
+"control","ernst","GLS","layered_port","native","budget exhausted",19
+"test","research47","GLS","layered_port","native","budget exhausted",67
+"test","wolf","GLS","layered_port","native","budget exhausted",541
+"test","boomsma","ML","layered_port","native","budget exhausted",183
+"test","chen","ML","layered_port","native","budget exhausted",2
+"test","constrained","ML","layered_port","native","budget exhausted",71
+"test","engineering15","ML","layered_port","native","budget exhausted",100
+"control","ernst","ML","layered_port","native","budget exhausted",17
+"test","research47","ML","layered_port","native","budget exhausted",14
+"test","wolf","ML","layered_port","native","budget exhausted",145
+"test","research47","GLS","default","x0.01","budget exhausted",1
+"test","wolf","GLS","default","x0.01","budget exhausted",1
+"test","boomsma","ML","default","x0.01","budget exhausted",1
+"test","constrained","ML","default","x0.01","budget exhausted",8
+"test","research47","ML","default","x0.01","budget exhausted",1
+"test","wolf","ML","default","x0.01","budget exhausted",4
+"test","boomsma","GLS","default_port","x0.01","budget exhausted",58
+"test","chen","GLS","default_port","x0.01","budget exhausted",23
+"test","constrained","GLS","default_port","x0.01","budget exhausted",30
+"test","engineering15","GLS","default_port","x0.01","budget exhausted",25
+"control","ernst","GLS","default_port","x0.01","budget exhausted",13
+"test","research47","GLS","default_port","x0.01","budget exhausted",26
+"test","wolf","GLS","default_port","x0.01","budget exhausted",115
+"test","boomsma","ML","default_port","x0.01","budget exhausted",220
+"test","constrained","ML","default_port","x0.01","budget exhausted",173
+"test","engineering15","ML","default_port","x0.01","budget exhausted",95
+"control","ernst","ML","default_port","x0.01","budget exhausted",14
+"test","research47","ML","default_port","x0.01","budget exhausted",23
+"test","wolf","ML","default_port","x0.01","budget exhausted",192
+"test","boomsma","GLS","layered_lbfgs","x0.01","budget exhausted",6
+"test","chen","GLS","layered_lbfgs","x0.01","budget exhausted",3
+"test","constrained","GLS","layered_lbfgs","x0.01","budget exhausted",12
+"test","engineering15","GLS","layered_lbfgs","x0.01","budget exhausted",2
+"test","research47","GLS","layered_lbfgs","x0.01","budget exhausted",3
+"test","wolf","GLS","layered_lbfgs","x0.01","budget exhausted",70
+"test","constrained","ML","layered_lbfgs","x0.01","budget exhausted",1
+"test","wolf","ML","layered_lbfgs","x0.01","budget exhausted",2
+"test","boomsma","GLS","layered_port","x0.01","budget exhausted",231
+"test","chen","GLS","layered_port","x0.01","budget exhausted",29
+"test","constrained","GLS","layered_port","x0.01","budget exhausted",169
+"test","engineering15","GLS","layered_port","x0.01","budget exhausted",116
+"control","ernst","GLS","layered_port","x0.01","budget exhausted",19
+"test","research47","GLS","layered_port","x0.01","budget exhausted",67
+"test","wolf","GLS","layered_port","x0.01","budget exhausted",545
+"test","boomsma","ML","layered_port","x0.01","budget exhausted",180
+"test","chen","ML","layered_port","x0.01","budget exhausted",2
+"test","constrained","ML","layered_port","x0.01","budget exhausted",64
+"test","engineering15","ML","layered_port","x0.01","budget exhausted",96
+"control","ernst","ML","layered_port","x0.01","budget exhausted",15
+"test","research47","ML","layered_port","x0.01","budget exhausted",15
+"test","wolf","ML","layered_port","x0.01","budget exhausted",142
+"test","boomsma","GLS","default","x100","budget exhausted",1
+"test","chen","GLS","default","x100","budget exhausted",5
+"test","constrained","GLS","default","x100","budget exhausted",10
+"test","engineering15","GLS","default","x100","budget exhausted",5
+"test","research47","GLS","default","x100","budget exhausted",5
+"test","wolf","GLS","default","x100","budget exhausted",60
+"test","boomsma","ML","default","x100","budget exhausted",1
+"test","research47","ML","default","x100","budget exhausted",1
+"test","wolf","ML","default","x100","budget exhausted",1
+"test","boomsma","GLS","default_port","x100","budget exhausted",250
+"test","chen","GLS","default_port","x100","budget exhausted",136
+"test","constrained","GLS","default_port","x100","budget exhausted",177
+"test","engineering15","GLS","default_port","x100","budget exhausted",144
+"control","ernst","GLS","default_port","x100","budget exhausted",22
+"test","research47","GLS","default_port","x100","budget exhausted",212
+"test","wolf","GLS","default_port","x100","budget exhausted",508
+"test","boomsma","ML","default_port","x100","budget exhausted",199
+"test","constrained","ML","default_port","x100","budget exhausted",56
+"test","engineering15","ML","default_port","x100","budget exhausted",102
+"control","ernst","ML","default_port","x100","budget exhausted",16
+"test","research47","ML","default_port","x100","budget exhausted",18
+"test","wolf","ML","default_port","x100","budget exhausted",139
+"test","boomsma","GLS","layered_lbfgs","x100","budget exhausted",3
+"test","chen","GLS","layered_lbfgs","x100","budget exhausted",3
+"test","constrained","GLS","layered_lbfgs","x100","budget exhausted",15
+"test","research47","GLS","layered_lbfgs","x100","budget exhausted",4
+"test","wolf","GLS","layered_lbfgs","x100","budget exhausted",64
+"test","constrained","ML","layered_lbfgs","x100","budget exhausted",1
+"test","wolf","ML","layered_lbfgs","x100","budget exhausted",1
+"test","boomsma","GLS","layered_port","x100","budget exhausted",239
+"test","chen","GLS","layered_port","x100","budget exhausted",27
+"test","constrained","GLS","layered_port","x100","budget exhausted",164
+"test","engineering15","GLS","layered_port","x100","budget exhausted",110
+"control","ernst","GLS","layered_port","x100","budget exhausted",18
+"test","research47","GLS","layered_port","x100","budget exhausted",69
+"test","wolf","GLS","layered_port","x100","budget exhausted",546
+"test","boomsma","ML","layered_port","x100","budget exhausted",181
+"test","chen","ML","layered_port","x100","budget exhausted",2
+"test","constrained","ML","layered_port","x100","budget exhausted",65
+"test","engineering15","ML","layered_port","x100","budget exhausted",100
+"control","ernst","ML","layered_port","x100","budget exhausted",15
+"test","research47","ML","layered_port","x100","budget exhausted",16
+"test","wolf","ML","layered_port","x100","budget exhausted",143
+"test","research47","GLS","default","mixed","inadmissible",1
+"test","wolf","GLS","default","mixed","inadmissible",6
+"test","boomsma","ML","default","mixed","inadmissible",1
+"test","research47","ML","default","mixed","inadmissible",2
+"test","boomsma","GLS","default_port","mixed","inadmissible",5
+"control","ernst","GLS","default_port","mixed","inadmissible",1
+"test","research47","GLS","default_port","mixed","inadmissible",2
+"test","wolf","GLS","default_port","mixed","inadmissible",18
+"test","boomsma","ML","default_port","mixed","inadmissible",4
+"test","engineering15","ML","default_port","mixed","inadmissible",4
+"control","ernst","ML","default_port","mixed","inadmissible",1
+"test","research47","ML","default_port","mixed","inadmissible",3
+"test","wolf","ML","default_port","mixed","inadmissible",4
+"test","boomsma","GLS","layered_lbfgs","mixed","inadmissible",3
+"test","engineering15","GLS","layered_lbfgs","mixed","inadmissible",1
+"test","research47","GLS","layered_lbfgs","mixed","inadmissible",3
+"test","wolf","GLS","layered_lbfgs","mixed","inadmissible",2
+"test","boomsma","ML","layered_lbfgs","mixed","inadmissible",2
+"test","engineering15","ML","layered_lbfgs","mixed","inadmissible",1
+"test","research47","ML","layered_lbfgs","mixed","inadmissible",2
+"test","boomsma","GLS","layered_port","mixed","inadmissible",9
+"test","chen","GLS","layered_port","mixed","inadmissible",1
+"test","engineering15","GLS","layered_port","mixed","inadmissible",3
+"test","research47","GLS","layered_port","mixed","inadmissible",4
+"test","wolf","GLS","layered_port","mixed","inadmissible",13
+"test","boomsma","ML","layered_port","mixed","inadmissible",8
+"test","chen","ML","layered_port","mixed","inadmissible",1
+"test","engineering15","ML","layered_port","mixed","inadmissible",6
+"control","ernst","ML","layered_port","mixed","inadmissible",1
+"test","research47","ML","layered_port","mixed","inadmissible",4
+"test","wolf","ML","layered_port","mixed","inadmissible",5
+"test","boomsma","GLS","default","native","inadmissible",2
+"test","chen","GLS","default","native","inadmissible",1
+"test","constrained","GLS","default","native","inadmissible",5
+"test","research47","GLS","default","native","inadmissible",2
+"test","wolf","GLS","default","native","inadmissible",4
+"test","boomsma","ML","default","native","inadmissible",1
+"test","constrained","ML","default","native","inadmissible",31
+"test","engineering15","ML","default","native","inadmissible",1
+"test","research47","ML","default","native","inadmissible",2
+"test","boomsma","GLS","default_port","native","inadmissible",10
+"test","chen","GLS","default_port","native","inadmissible",3
+"test","constrained","GLS","default_port","native","inadmissible",11
+"test","engineering15","GLS","default_port","native","inadmissible",2
+"test","research47","GLS","default_port","native","inadmissible",3
+"test","wolf","GLS","default_port","native","inadmissible",10
+"test","boomsma","ML","default_port","native","inadmissible",7
+"test","constrained","ML","default_port","native","inadmissible",40
+"test","engineering15","ML","default_port","native","inadmissible",3
+"control","ernst","ML","default_port","native","inadmissible",1
+"test","research47","ML","default_port","native","inadmissible",4
+"test","wolf","ML","default_port","native","inadmissible",4
+"test","boomsma","GLS","layered_lbfgs","native","inadmissible",3
+"test","chen","GLS","layered_lbfgs","native","inadmissible",1
+"test","constrained","GLS","layered_lbfgs","native","inadmissible",2
+"test","engineering15","GLS","layered_lbfgs","native","inadmissible",1
+"test","research47","GLS","layered_lbfgs","native","inadmissible",3
+"test","wolf","GLS","layered_lbfgs","native","inadmissible",2
+"test","boomsma","ML","layered_lbfgs","native","inadmissible",3
+"test","constrained","ML","layered_lbfgs","native","inadmissible",31
+"test","research47","ML","layered_lbfgs","native","inadmissible",2
+"test","boomsma","GLS","layered_port","native","inadmissible",9
+"test","chen","GLS","layered_port","native","inadmissible",2
+"test","constrained","GLS","layered_port","native","inadmissible",16
+"test","engineering15","GLS","layered_port","native","inadmissible",3
+"test","research47","GLS","layered_port","native","inadmissible",5
+"test","wolf","GLS","layered_port","native","inadmissible",13
+"test","boomsma","ML","layered_port","native","inadmissible",7
+"test","constrained","ML","layered_port","native","inadmissible",47
+"test","engineering15","ML","layered_port","native","inadmissible",4
+"control","ernst","ML","layered_port","native","inadmissible",1
+"test","research47","ML","layered_port","native","inadmissible",4
+"test","wolf","ML","layered_port","native","inadmissible",2
+"test","boomsma","GLS","default","x0.01","inadmissible",1
+"test","research47","GLS","default","x0.01","inadmissible",2
+"test","wolf","GLS","default","x0.01","inadmissible",1
+"test","boomsma","ML","default","x0.01","inadmissible",1
+"test","constrained","ML","default","x0.01","inadmissible",17
+"test","research47","ML","default","x0.01","inadmissible",2
+"test","boomsma","GLS","default_port","x0.01","inadmissible",1
+"test","chen","GLS","default_port","x0.01","inadmissible",1
+"test","research47","GLS","default_port","x0.01","inadmissible",1
+"test","wolf","GLS","default_port","x0.01","inadmissible",5
+"test","boomsma","ML","default_port","x0.01","inadmissible",4
+"test","constrained","ML","default_port","x0.01","inadmissible",15
+"test","engineering15","ML","default_port","x0.01","inadmissible",3
+"control","ernst","ML","default_port","x0.01","inadmissible",2
+"test","research47","ML","default_port","x0.01","inadmissible",6
+"test","wolf","ML","default_port","x0.01","inadmissible",3
+"test","boomsma","GLS","layered_lbfgs","x0.01","inadmissible",3
+"test","chen","GLS","layered_lbfgs","x0.01","inadmissible",1
+"test","constrained","GLS","layered_lbfgs","x0.01","inadmissible",2
+"test","engineering15","GLS","layered_lbfgs","x0.01","inadmissible",1
+"test","research47","GLS","layered_lbfgs","x0.01","inadmissible",3
+"test","wolf","GLS","layered_lbfgs","x0.01","inadmissible",1
+"test","boomsma","ML","layered_lbfgs","x0.01","inadmissible",2
+"test","constrained","ML","layered_lbfgs","x0.01","inadmissible",27
+"control","ernst","ML","layered_lbfgs","x0.01","inadmissible",1
+"test","research47","ML","layered_lbfgs","x0.01","inadmissible",2
+"test","boomsma","GLS","layered_port","x0.01","inadmissible",8
+"test","chen","GLS","layered_port","x0.01","inadmissible",1
+"test","constrained","GLS","layered_port","x0.01","inadmissible",16
+"test","engineering15","GLS","layered_port","x0.01","inadmissible",3
+"test","research47","GLS","layered_port","x0.01","inadmissible",4
+"test","wolf","GLS","layered_port","x0.01","inadmissible",12
+"test","boomsma","ML","layered_port","x0.01","inadmissible",8
+"test","constrained","ML","layered_port","x0.01","inadmissible",46
+"test","engineering15","ML","layered_port","x0.01","inadmissible",5
+"control","ernst","ML","layered_port","x0.01","inadmissible",1
+"test","research47","ML","layered_port","x0.01","inadmissible",4
+"test","wolf","ML","layered_port","x0.01","inadmissible",4
+"test","boomsma","GLS","default","x100","inadmissible",2
+"test","chen","GLS","default","x100","inadmissible",2
+"test","constrained","GLS","default","x100","inadmissible",4
+"test","engineering15","GLS","default","x100","inadmissible",1
+"test","research47","GLS","default","x100","inadmissible",2
+"test","wolf","GLS","default","x100","inadmissible",6
+"test","boomsma","ML","default","x100","inadmissible",1
+"test","constrained","ML","default","x100","inadmissible",29
+"test","engineering15","ML","default","x100","inadmissible",1
+"test","research47","ML","default","x100","inadmissible",2
+"test","boomsma","GLS","default_port","x100","inadmissible",10
+"test","chen","GLS","default_port","x100","inadmissible",2
+"test","constrained","GLS","default_port","x100","inadmissible",12
+"test","engineering15","GLS","default_port","x100","inadmissible",3
+"test","research47","GLS","default_port","x100","inadmissible",4
+"test","wolf","GLS","default_port","x100","inadmissible",18
+"test","boomsma","ML","default_port","x100","inadmissible",7
+"test","constrained","ML","default_port","x100","inadmissible",44
+"test","engineering15","ML","default_port","x100","inadmissible",3
+"control","ernst","ML","default_port","x100","inadmissible",1
+"test","research47","ML","default_port","x100","inadmissible",4
+"test","wolf","ML","default_port","x100","inadmissible",6
+"test","boomsma","GLS","layered_lbfgs","x100","inadmissible",3
+"test","chen","GLS","layered_lbfgs","x100","inadmissible",1
+"test","constrained","GLS","layered_lbfgs","x100","inadmissible",2
+"test","engineering15","GLS","layered_lbfgs","x100","inadmissible",1
+"test","research47","GLS","layered_lbfgs","x100","inadmissible",3
+"test","wolf","GLS","layered_lbfgs","x100","inadmissible",2
+"test","boomsma","ML","layered_lbfgs","x100","inadmissible",2
+"test","constrained","ML","layered_lbfgs","x100","inadmissible",33
+"test","research47","ML","layered_lbfgs","x100","inadmissible",2
+"test","boomsma","GLS","layered_port","x100","inadmissible",8
+"test","chen","GLS","layered_port","x100","inadmissible",2
+"test","constrained","GLS","layered_port","x100","inadmissible",17
+"test","engineering15","GLS","layered_port","x100","inadmissible",3
+"test","research47","GLS","layered_port","x100","inadmissible",4
+"test","wolf","GLS","layered_port","x100","inadmissible",12
+"test","boomsma","ML","layered_port","x100","inadmissible",7
+"test","constrained","ML","layered_port","x100","inadmissible",49
+"test","engineering15","ML","layered_port","x100","inadmissible",4
+"control","ernst","ML","layered_port","x100","inadmissible",1
+"test","research47","ML","layered_port","x100","inadmissible",3
+"test","wolf","ML","layered_port","x100","inadmissible",2
+"test","boomsma","GLS","default","mixed","other error",62
+"test","chen","GLS","default","mixed","other error",29
+"test","engineering15","GLS","default","mixed","other error",51
+"control","ernst","GLS","default","mixed","other error",10
+"test","research47","GLS","default","mixed","other error",115
+"test","wolf","GLS","default","mixed","other error",71
+"test","boomsma","ML","default","mixed","other error",190
+"test","engineering15","ML","default","mixed","other error",144
+"control","ernst","ML","default","mixed","other error",15
+"test","research47","ML","default","mixed","other error",29
+"test","wolf","ML","default","mixed","other error",169
+"test","boomsma","ML","layered_lbfgs","mixed","other error",128
+"test","engineering15","ML","layered_lbfgs","mixed","other error",58
+"control","ernst","ML","layered_lbfgs","mixed","other error",10
+"test","research47","ML","layered_lbfgs","mixed","other error",5
+"test","wolf","ML","layered_lbfgs","mixed","other error",131
+"test","boomsma","ML","default","native","other error",150
+"test","constrained","ML","default","native","other error",56
+"test","engineering15","ML","default","native","other error",100
+"control","ernst","ML","default","native","other error",5
+"test","research47","ML","default","native","other error",6
+"test","wolf","ML","default","native","other error",109
+"test","boomsma","ML","layered_lbfgs","native","other error",131
+"test","constrained","ML","layered_lbfgs","native","other error",54
+"test","engineering15","ML","layered_lbfgs","native","other error",62
+"control","ernst","ML","layered_lbfgs","native","other error",10
+"test","research47","ML","layered_lbfgs","native","other error",6
+"test","wolf","ML","layered_lbfgs","native","other error",128
+"test","constrained","GLS","default","x0.01","other error",51
+"test","boomsma","ML","default","x0.01","other error",153
+"test","constrained","ML","default","x0.01","other error",115
+"test","engineering15","ML","default","x0.01","other error",100
+"control","ernst","ML","default","x0.01","other error",8
+"test","research47","ML","default","x0.01","other error",4
+"test","wolf","ML","default","x0.01","other error",134
+"test","boomsma","ML","layered_lbfgs","x0.01","other error",132
+"test","chen","ML","layered_lbfgs","x0.01","other error",1
+"test","constrained","ML","layered_lbfgs","x0.01","other error",49
+"test","engineering15","ML","layered_lbfgs","x0.01","other error",59
+"control","ernst","ML","layered_lbfgs","x0.01","other error",9
+"test","research47","ML","layered_lbfgs","x0.01","other error",7
+"test","wolf","ML","layered_lbfgs","x0.01","other error",129
+"test","boomsma","ML","default","x100","other error",152
+"test","constrained","ML","default","x100","other error",47
+"test","engineering15","ML","default","x100","other error",104
+"control","ernst","ML","default","x100","other error",5
+"test","research47","ML","default","x100","other error",5
+"test","wolf","ML","default","x100","other error",112
+"test","boomsma","ML","layered_lbfgs","x100","other error",130
+"test","constrained","ML","layered_lbfgs","x100","other error",51
+"test","engineering15","ML","layered_lbfgs","x100","other error",60
+"control","ernst","ML","layered_lbfgs","x100","other error",9
+"test","research47","ML","layered_lbfgs","x100","other error",5
+"test","wolf","ML","layered_lbfgs","x100","other error",131
+"test","boomsma","GLS","default","mixed","verdict: available",399
+"test","chen","GLS","default","mixed","verdict: available",14
+"test","engineering15","GLS","default","mixed","verdict: available",66
+"control","ernst","GLS","default","mixed","verdict: available",49
+"test","research47","GLS","default","mixed","verdict: available",151
+"test","wolf","GLS","default","mixed","verdict: available",595
+"test","boomsma","ML","default","mixed","verdict: available",107
+"test","engineering15","ML","default","mixed","verdict: available",25
+"control","ernst","ML","default","mixed","verdict: available",14
+"test","research47","ML","default","mixed","verdict: available",9
+"test","wolf","ML","default","mixed","verdict: available",76
+"test","boomsma","GLS","default_port","mixed","verdict: available",178
+"test","chen","GLS","default_port","mixed","verdict: available",168
+"test","engineering15","GLS","default_port","mixed","verdict: available",78
+"control","ernst","GLS","default_port","mixed","verdict: available",58
+"test","research47","GLS","default_port","mixed","verdict: available",147
+"test","wolf","GLS","default_port","mixed","verdict: available",140
+"test","boomsma","ML","default_port","mixed","verdict: available",16
+"test","engineering15","ML","default_port","mixed","verdict: available",16
+"test","research47","ML","default_port","mixed","verdict: available",1
+"test","wolf","ML","default_port","mixed","verdict: available",19
+"test","boomsma","GLS","layered_lbfgs","mixed","verdict: available",291
+"test","chen","GLS","layered_lbfgs","mixed","verdict: available",32
+"test","engineering15","GLS","layered_lbfgs","mixed","verdict: available",130
+"control","ernst","GLS","layered_lbfgs","mixed","verdict: available",26
+"test","research47","GLS","layered_lbfgs","mixed","verdict: available",91
+"test","wolf","GLS","layered_lbfgs","mixed","verdict: available",539
+"test","boomsma","ML","layered_lbfgs","mixed","verdict: available",119
+"test","chen","ML","layered_lbfgs","mixed","verdict: available",5
+"test","engineering15","ML","layered_lbfgs","mixed","verdict: available",79
+"control","ernst","ML","layered_lbfgs","mixed","verdict: available",16
+"test","research47","ML","layered_lbfgs","mixed","verdict: available",19
+"test","wolf","ML","layered_lbfgs","mixed","verdict: available",84
+"test","boomsma","GLS","layered_port","mixed","verdict: available",18
+"test","chen","GLS","layered_port","mixed","verdict: available",5
+"test","engineering15","GLS","layered_port","mixed","verdict: available",14
+"control","ernst","GLS","layered_port","mixed","verdict: available",3
+"test","research47","GLS","layered_port","mixed","verdict: available",4
+"test","wolf","GLS","layered_port","mixed","verdict: available",46
+"test","boomsma","ML","layered_port","mixed","verdict: available",12
+"test","chen","ML","layered_port","mixed","verdict: available",1
+"test","engineering15","ML","layered_port","mixed","verdict: available",3
+"control","ernst","ML","layered_port","mixed","verdict: available",1
+"test","research47","ML","layered_port","mixed","verdict: available",1
+"test","wolf","ML","layered_port","mixed","verdict: available",13
+"test","boomsma","GLS","default","native","verdict: available",309
+"test","chen","GLS","default","native","verdict: available",146
+"test","constrained","GLS","default","native","verdict: available",246
+"test","engineering15","GLS","default","native","verdict: available",158
+"control","ernst","GLS","default","native","verdict: available",30
+"test","research47","GLS","default","native","verdict: available",169
+"test","wolf","GLS","default","native","verdict: available",528
+"test","boomsma","ML","default","native","verdict: available",137
+"test","constrained","ML","default","native","verdict: available",95
+"test","engineering15","ML","default","native","verdict: available",55
+"control","ernst","ML","default","native","verdict: available",17
+"test","research47","ML","default","native","verdict: available",16
+"test","wolf","ML","default","native","verdict: available",103
+"test","boomsma","GLS","default_port","native","verdict: available",19
+"test","chen","GLS","default_port","native","verdict: available",5
+"test","constrained","GLS","default_port","native","verdict: available",47
+"test","engineering15","GLS","default_port","native","verdict: available",8
+"control","ernst","GLS","default_port","native","verdict: available",2
+"test","research47","GLS","default_port","native","verdict: available",12
+"test","wolf","GLS","default_port","native","verdict: available",64
+"test","boomsma","ML","default_port","native","verdict: available",10
+"test","constrained","ML","default_port","native","verdict: available",7
+"test","engineering15","ML","default_port","native","verdict: available",10
+"test","wolf","ML","default_port","native","verdict: available",14
+"test","boomsma","GLS","layered_lbfgs","native","verdict: available",291
+"test","chen","GLS","layered_lbfgs","native","verdict: available",30
+"test","constrained","GLS","layered_lbfgs","native","verdict: available",261
+"test","engineering15","GLS","layered_lbfgs","native","verdict: available",135
+"control","ernst","GLS","layered_lbfgs","native","verdict: available",29
+"test","research47","GLS","layered_lbfgs","native","verdict: available",82
+"test","wolf","GLS","layered_lbfgs","native","verdict: available",510
+"test","boomsma","ML","layered_lbfgs","native","verdict: available",117
+"test","chen","ML","layered_lbfgs","native","verdict: available",5
+"test","constrained","ML","layered_lbfgs","native","verdict: available",103
+"test","engineering15","ML","layered_lbfgs","native","verdict: available",78
+"control","ernst","ML","layered_lbfgs","native","verdict: available",16
+"test","research47","ML","layered_lbfgs","native","verdict: available",16
+"test","wolf","ML","layered_lbfgs","native","verdict: available",88
+"test","boomsma","GLS","layered_port","native","verdict: available",19
+"test","chen","GLS","layered_port","native","verdict: available",3
+"test","constrained","GLS","layered_port","native","verdict: available",55
+"test","engineering15","GLS","layered_port","native","verdict: available",12
+"control","ernst","GLS","layered_port","native","verdict: available",2
+"test","research47","GLS","layered_port","native","verdict: available",3
+"test","wolf","GLS","layered_port","native","verdict: available",39
+"test","boomsma","ML","layered_port","native","verdict: available",10
+"test","chen","ML","layered_port","native","verdict: available",1
+"test","constrained","ML","layered_port","native","verdict: available",9
+"test","engineering15","ML","layered_port","native","verdict: available",5
+"test","research47","ML","layered_port","native","verdict: available",3
+"test","wolf","ML","layered_port","native","verdict: available",15
+"test","boomsma","GLS","default","x0.01","verdict: available",434
+"test","chen","GLS","default","x0.01","verdict: available",84
+"test","constrained","GLS","default","x0.01","verdict: available",326
+"test","engineering15","GLS","default","x0.01","verdict: available",42
+"control","ernst","GLS","default","x0.01","verdict: available",30
+"test","research47","GLS","default","x0.01","verdict: available",108
+"test","wolf","GLS","default","x0.01","verdict: available",926
+"test","boomsma","ML","default","x0.01","verdict: available",114
+"test","constrained","ML","default","x0.01","verdict: available",241
+"test","engineering15","ML","default","x0.01","verdict: available",47
+"control","ernst","ML","default","x0.01","verdict: available",18
+"test","research47","ML","default","x0.01","verdict: available",20
+"test","wolf","ML","default","x0.01","verdict: available",82
+"test","boomsma","GLS","default_port","x0.01","verdict: available",564
+"test","chen","GLS","default_port","x0.01","verdict: available",378
+"test","constrained","GLS","default_port","x0.01","verdict: available",670
+"test","engineering15","GLS","default_port","x0.01","verdict: available",25
+"control","ernst","GLS","default_port","x0.01","verdict: available",23
+"test","research47","GLS","default_port","x0.01","verdict: available",222
+"test","wolf","GLS","default_port","x0.01","verdict: available",1587
+"test","boomsma","ML","default_port","x0.01","verdict: available",19
+"test","constrained","ML","default_port","x0.01","verdict: available",754
+"test","engineering15","ML","default_port","x0.01","verdict: available",14
+"test","wolf","ML","default_port","x0.01","verdict: available",14
+"test","boomsma","GLS","layered_lbfgs","x0.01","verdict: available",290
+"test","chen","GLS","layered_lbfgs","x0.01","verdict: available",27
+"test","constrained","GLS","layered_lbfgs","x0.01","verdict: available",272
+"test","engineering15","GLS","layered_lbfgs","x0.01","verdict: available",129
+"control","ernst","GLS","layered_lbfgs","x0.01","verdict: available",28
+"test","research47","GLS","layered_lbfgs","x0.01","verdict: available",93
+"test","wolf","GLS","layered_lbfgs","x0.01","verdict: available",525
+"test","boomsma","ML","layered_lbfgs","x0.01","verdict: available",116
+"test","chen","ML","layered_lbfgs","x0.01","verdict: available",4
+"test","constrained","ML","layered_lbfgs","x0.01","verdict: available",116
+"test","engineering15","ML","layered_lbfgs","x0.01","verdict: available",81
+"control","ernst","ML","layered_lbfgs","x0.01","verdict: available",16
+"test","research47","ML","layered_lbfgs","x0.01","verdict: available",16
+"test","wolf","ML","layered_lbfgs","x0.01","verdict: available",85
+"test","boomsma","GLS","layered_port","x0.01","verdict: available",16
+"test","chen","GLS","layered_port","x0.01","verdict: available",3
+"test","constrained","GLS","layered_port","x0.01","verdict: available",50
+"test","engineering15","GLS","layered_port","x0.01","verdict: available",11
+"control","ernst","GLS","layered_port","x0.01","verdict: available",2
+"test","research47","GLS","layered_port","x0.01","verdict: available",8
+"test","wolf","GLS","layered_port","x0.01","verdict: available",49
+"test","boomsma","ML","layered_port","x0.01","verdict: available",14
+"test","chen","ML","layered_port","x0.01","verdict: available",1
+"test","constrained","ML","layered_port","x0.01","verdict: available",11
+"test","engineering15","ML","layered_port","x0.01","verdict: available",8
+"test","research47","ML","layered_port","x0.01","verdict: available",2
+"test","wolf","ML","layered_port","x0.01","verdict: available",18
+"test","boomsma","GLS","default","x100","verdict: available",323
+"test","chen","GLS","default","x100","verdict: available",129
+"test","constrained","GLS","default","x100","verdict: available",271
+"test","engineering15","GLS","default","x100","verdict: available",158
+"control","ernst","GLS","default","x100","verdict: available",31
+"test","research47","GLS","default","x100","verdict: available",221
+"test","wolf","GLS","default","x100","verdict: available",528
+"test","boomsma","ML","default","x100","verdict: available",133
+"test","constrained","ML","default","x100","verdict: available",98
+"test","engineering15","ML","default","x100","verdict: available",49
+"control","ernst","ML","default","x100","verdict: available",18
+"test","research47","ML","default","x100","verdict: available",16
+"test","wolf","ML","default","x100","verdict: available",100
+"test","boomsma","GLS","default_port","x100","verdict: available",26
+"test","chen","GLS","default_port","x100","verdict: available",6
+"test","constrained","GLS","default_port","x100","verdict: available",47
+"test","engineering15","GLS","default_port","x100","verdict: available",7
+"control","ernst","GLS","default_port","x100","verdict: available",1
+"test","research47","GLS","default_port","x100","verdict: available",11
+"test","wolf","GLS","default_port","x100","verdict: available",62
+"test","boomsma","ML","default_port","x100","verdict: available",13
+"test","constrained","ML","default_port","x100","verdict: available",15
+"test","engineering15","ML","default_port","x100","verdict: available",10
+"test","wolf","ML","default_port","x100","verdict: available",15
+"test","boomsma","GLS","layered_lbfgs","x100","verdict: available",294
+"test","chen","GLS","layered_lbfgs","x100","verdict: available",32
+"test","constrained","GLS","layered_lbfgs","x100","verdict: available",264
+"test","engineering15","GLS","layered_lbfgs","x100","verdict: available",129
+"control","ernst","GLS","layered_lbfgs","x100","verdict: available",29
+"test","research47","GLS","layered_lbfgs","x100","verdict: available",92
+"test","wolf","GLS","layered_lbfgs","x100","verdict: available",545
+"test","boomsma","ML","layered_lbfgs","x100","verdict: available",118
+"test","chen","ML","layered_lbfgs","x100","verdict: available",5
+"test","constrained","ML","layered_lbfgs","x100","verdict: available",107
+"test","engineering15","ML","layered_lbfgs","x100","verdict: available",80
+"control","ernst","ML","layered_lbfgs","x100","verdict: available",17
+"test","research47","ML","layered_lbfgs","x100","verdict: available",18
+"test","wolf","ML","layered_lbfgs","x100","verdict: available",82
+"test","boomsma","GLS","layered_port","x100","verdict: available",13
+"test","chen","GLS","layered_port","x100","verdict: available",4
+"test","constrained","GLS","layered_port","x100","verdict: available",56
+"test","engineering15","GLS","layered_port","x100","verdict: available",11
+"control","ernst","GLS","layered_port","x100","verdict: available",2
+"test","research47","GLS","layered_port","x100","verdict: available",5
+"test","wolf","GLS","layered_port","x100","verdict: available",49
+"test","boomsma","ML","layered_port","x100","verdict: available",12
+"test","chen","ML","layered_port","x100","verdict: available",1
+"test","constrained","ML","layered_port","x100","verdict: available",14
+"test","engineering15","ML","layered_port","x100","verdict: available",7
+"test","research47","ML","layered_port","x100","verdict: available",2
+"test","wolf","ML","layered_port","x100","verdict: available",17
+"test","boomsma","GLS","default","mixed","verdict: ill_conditioned",66
+"test","engineering15","GLS","default","mixed","verdict: ill_conditioned",7
+"test","research47","GLS","default","mixed","verdict: ill_conditioned",141
+"test","wolf","GLS","default","mixed","verdict: ill_conditioned",26
+"test","boomsma","ML","default","mixed","verdict: ill_conditioned",3
+"test","wolf","ML","default","mixed","verdict: ill_conditioned",3
+"test","boomsma","GLS","default_port","mixed","verdict: ill_conditioned",125
+"test","chen","GLS","default_port","mixed","verdict: ill_conditioned",41
+"test","engineering15","GLS","default_port","mixed","verdict: ill_conditioned",30
+"control","ernst","GLS","default_port","mixed","verdict: ill_conditioned",8
+"test","research47","GLS","default_port","mixed","verdict: ill_conditioned",244
+"test","wolf","GLS","default_port","mixed","verdict: ill_conditioned",96
+"test","boomsma","ML","default_port","mixed","verdict: ill_conditioned",27
+"test","engineering15","ML","default_port","mixed","verdict: ill_conditioned",9
+"control","ernst","ML","default_port","mixed","verdict: ill_conditioned",6
+"test","research47","ML","default_port","mixed","verdict: ill_conditioned",1
+"test","wolf","ML","default_port","mixed","verdict: ill_conditioned",17
+"test","boomsma","GLS","layered_port","mixed","verdict: ill_conditioned",38
+"test","chen","GLS","layered_port","mixed","verdict: ill_conditioned",2
+"test","engineering15","GLS","layered_port","mixed","verdict: ill_conditioned",1
+"control","ernst","GLS","layered_port","mixed","verdict: ill_conditioned",8
+"test","research47","GLS","layered_port","mixed","verdict: ill_conditioned",7
+"test","wolf","GLS","layered_port","mixed","verdict: ill_conditioned",42
+"test","boomsma","ML","layered_port","mixed","verdict: ill_conditioned",29
+"test","chen","ML","layered_port","mixed","verdict: ill_conditioned",1
+"test","engineering15","ML","layered_port","mixed","verdict: ill_conditioned",3
+"control","ernst","ML","layered_port","mixed","verdict: ill_conditioned",6
+"test","research47","ML","layered_port","mixed","verdict: ill_conditioned",2
+"test","wolf","ML","layered_port","mixed","verdict: ill_conditioned",28
+"test","boomsma","GLS","default_port","native","verdict: ill_conditioned",38
+"test","chen","GLS","default_port","native","verdict: ill_conditioned",15
+"test","constrained","GLS","default_port","native","verdict: ill_conditioned",33
+"test","engineering15","GLS","default_port","native","verdict: ill_conditioned",7
+"control","ernst","GLS","default_port","native","verdict: ill_conditioned",7
+"test","research47","GLS","default_port","native","verdict: ill_conditioned",11
+"test","wolf","GLS","default_port","native","verdict: ill_conditioned",41
+"test","boomsma","ML","default_port","native","verdict: ill_conditioned",37
+"test","constrained","ML","default_port","native","verdict: ill_conditioned",13
+"test","engineering15","ML","default_port","native","verdict: ill_conditioned",9
+"control","ernst","ML","default_port","native","verdict: ill_conditioned",8
+"test","research47","ML","default_port","native","verdict: ill_conditioned",1
+"test","wolf","ML","default_port","native","verdict: ill_conditioned",32
+"test","boomsma","GLS","layered_port","native","verdict: ill_conditioned",37
+"test","chen","GLS","layered_port","native","verdict: ill_conditioned",1
+"test","constrained","GLS","layered_port","native","verdict: ill_conditioned",35
+"test","engineering15","GLS","layered_port","native","verdict: ill_conditioned",1
+"control","ernst","GLS","layered_port","native","verdict: ill_conditioned",7
+"test","research47","GLS","layered_port","native","verdict: ill_conditioned",10
+"test","wolf","GLS","layered_port","native","verdict: ill_conditioned",40
+"test","boomsma","ML","layered_port","native","verdict: ill_conditioned",30
+"test","constrained","ML","layered_port","native","verdict: ill_conditioned",17
+"test","engineering15","ML","layered_port","native","verdict: ill_conditioned",6
+"control","ernst","ML","layered_port","native","verdict: ill_conditioned",7
+"test","research47","ML","layered_port","native","verdict: ill_conditioned",2
+"test","wolf","ML","layered_port","native","verdict: ill_conditioned",29
+"test","boomsma","GLS","default","x0.01","verdict: ill_conditioned",208
+"test","chen","GLS","default","x0.01","verdict: ill_conditioned",15
+"test","constrained","GLS","default","x0.01","verdict: ill_conditioned",114
+"test","engineering15","GLS","default","x0.01","verdict: ill_conditioned",45
+"control","ernst","GLS","default","x0.01","verdict: ill_conditioned",13
+"test","research47","GLS","default","x0.01","verdict: ill_conditioned",352
+"test","wolf","GLS","default","x0.01","verdict: ill_conditioned",245
+"test","boomsma","ML","default","x0.01","verdict: ill_conditioned",22
+"test","constrained","ML","default","x0.01","verdict: ill_conditioned",4
+"test","engineering15","ML","default","x0.01","verdict: ill_conditioned",9
+"test","research47","ML","default","x0.01","verdict: ill_conditioned",5
+"test","wolf","ML","default","x0.01","verdict: ill_conditioned",15
+"test","boomsma","GLS","default_port","x0.01","verdict: ill_conditioned",222
+"test","chen","GLS","default_port","x0.01","verdict: ill_conditioned",16
+"test","constrained","GLS","default_port","x0.01","verdict: ill_conditioned",100
+"test","engineering15","GLS","default_port","x0.01","verdict: ill_conditioned",41
+"control","ernst","GLS","default_port","x0.01","verdict: ill_conditioned",10
+"test","research47","GLS","default_port","x0.01","verdict: ill_conditioned",173
+"test","wolf","GLS","default_port","x0.01","verdict: ill_conditioned",257
+"test","boomsma","ML","default_port","x0.01","verdict: ill_conditioned",35
+"test","constrained","ML","default_port","x0.01","verdict: ill_conditioned",26
+"test","engineering15","ML","default_port","x0.01","verdict: ill_conditioned",10
+"control","ernst","ML","default_port","x0.01","verdict: ill_conditioned",7
+"test","research47","ML","default_port","x0.01","verdict: ill_conditioned",4
+"test","wolf","ML","default_port","x0.01","verdict: ill_conditioned",17
+"test","boomsma","GLS","layered_port","x0.01","verdict: ill_conditioned",41
+"test","chen","GLS","layered_port","x0.01","verdict: ill_conditioned",1
+"test","constrained","GLS","layered_port","x0.01","verdict: ill_conditioned",41
+"test","engineering15","GLS","layered_port","x0.01","verdict: ill_conditioned",1
+"control","ernst","GLS","layered_port","x0.01","verdict: ill_conditioned",6
+"test","research47","GLS","layered_port","x0.01","verdict: ill_conditioned",10
+"test","wolf","GLS","layered_port","x0.01","verdict: ill_conditioned",43
+"test","boomsma","ML","layered_port","x0.01","verdict: ill_conditioned",30
+"test","constrained","ML","layered_port","x0.01","verdict: ill_conditioned",19
+"test","engineering15","ML","layered_port","x0.01","verdict: ill_conditioned",6
+"control","ernst","ML","layered_port","x0.01","verdict: ill_conditioned",6
+"test","research47","ML","layered_port","x0.01","verdict: ill_conditioned",2
+"test","wolf","ML","layered_port","x0.01","verdict: ill_conditioned",29
+"test","boomsma","GLS","default_port","x100","verdict: ill_conditioned",38
+"test","chen","GLS","default_port","x100","verdict: ill_conditioned",13
+"test","constrained","GLS","default_port","x100","verdict: ill_conditioned",48
+"test","engineering15","GLS","default_port","x100","verdict: ill_conditioned",6
+"control","ernst","GLS","default_port","x100","verdict: ill_conditioned",7
+"test","research47","GLS","default_port","x100","verdict: ill_conditioned",12
+"test","wolf","GLS","default_port","x100","verdict: ill_conditioned",36
+"test","boomsma","ML","default_port","x100","verdict: ill_conditioned",32
+"test","constrained","ML","default_port","x100","verdict: ill_conditioned",12
+"test","engineering15","ML","default_port","x100","verdict: ill_conditioned",5
+"control","ernst","ML","default_port","x100","verdict: ill_conditioned",4
+"test","research47","ML","default_port","x100","verdict: ill_conditioned",1
+"test","wolf","ML","default_port","x100","verdict: ill_conditioned",22
+"test","boomsma","GLS","layered_port","x100","verdict: ill_conditioned",40
+"test","chen","GLS","layered_port","x100","verdict: ill_conditioned",1
+"test","constrained","GLS","layered_port","x100","verdict: ill_conditioned",40
+"test","engineering15","GLS","layered_port","x100","verdict: ill_conditioned",1
+"control","ernst","GLS","layered_port","x100","verdict: ill_conditioned",8
+"test","research47","GLS","layered_port","x100","verdict: ill_conditioned",8
+"test","wolf","GLS","layered_port","x100","verdict: ill_conditioned",44
+"test","boomsma","ML","layered_port","x100","verdict: ill_conditioned",31
+"test","chen","ML","layered_port","x100","verdict: ill_conditioned",1
+"test","constrained","ML","layered_port","x100","verdict: ill_conditioned",17
+"test","engineering15","ML","layered_port","x100","verdict: ill_conditioned",4
+"control","ernst","ML","layered_port","x100","verdict: ill_conditioned",7
+"test","research47","ML","layered_port","x100","verdict: ill_conditioned",2
+"test","wolf","ML","layered_port","x100","verdict: ill_conditioned",27
+"test","boomsma","GLS","default","mixed","verdict: nonpositive_curvature",292
+"test","chen","GLS","default","mixed","verdict: nonpositive_curvature",688
+"test","engineering15","GLS","default","mixed","verdict: nonpositive_curvature",262
+"control","ernst","GLS","default","mixed","verdict: nonpositive_curvature",59
+"test","research47","GLS","default","mixed","verdict: nonpositive_curvature",1127
+"test","wolf","GLS","default","mixed","verdict: nonpositive_curvature",336
+"test","boomsma","ML","default","mixed","verdict: nonpositive_curvature",15
+"test","engineering15","ML","default","mixed","verdict: nonpositive_curvature",8
+"control","ernst","ML","default","mixed","verdict: nonpositive_curvature",2
+"test","research47","ML","default","mixed","verdict: nonpositive_curvature",2
+"test","wolf","ML","default","mixed","verdict: nonpositive_curvature",10
+"test","boomsma","GLS","default_port","mixed","verdict: nonpositive_curvature",267
+"test","chen","GLS","default_port","mixed","verdict: nonpositive_curvature",432
+"test","engineering15","GLS","default_port","mixed","verdict: nonpositive_curvature",176
+"control","ernst","GLS","default_port","mixed","verdict: nonpositive_curvature",54
+"test","research47","GLS","default_port","mixed","verdict: nonpositive_curvature",673
+"test","wolf","GLS","default_port","mixed","verdict: nonpositive_curvature",202
+"test","boomsma","ML","default_port","mixed","verdict: nonpositive_curvature",62
+"test","engineering15","ML","default_port","mixed","verdict: nonpositive_curvature",77
+"control","ernst","ML","default_port","mixed","verdict: nonpositive_curvature",12
+"test","research47","ML","default_port","mixed","verdict: nonpositive_curvature",26
+"test","wolf","ML","default_port","mixed","verdict: nonpositive_curvature",57
+"test","boomsma","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",32
+"test","chen","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",11
+"test","engineering15","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",17
+"control","ernst","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",2
+"test","research47","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",21
+"test","wolf","GLS","layered_lbfgs","mixed","verdict: nonpositive_curvature",200
+"test","boomsma","ML","layered_lbfgs","mixed","verdict: nonpositive_curvature",1
+"test","wolf","ML","layered_lbfgs","mixed","verdict: nonpositive_curvature",1
+"test","boomsma","GLS","layered_port","mixed","verdict: nonpositive_curvature",13
+"test","chen","GLS","layered_port","mixed","verdict: nonpositive_curvature",5
+"test","engineering15","GLS","layered_port","mixed","verdict: nonpositive_curvature",8
+"control","ernst","GLS","layered_port","mixed","verdict: nonpositive_curvature",1
+"test","research47","GLS","layered_port","mixed","verdict: nonpositive_curvature",7
+"test","wolf","GLS","layered_port","mixed","verdict: nonpositive_curvature",54
+"test","boomsma","ML","layered_port","mixed","verdict: nonpositive_curvature",7
+"test","engineering15","ML","layered_port","mixed","verdict: nonpositive_curvature",10
+"control","ernst","ML","layered_port","mixed","verdict: nonpositive_curvature",2
+"test","wolf","ML","layered_port","mixed","verdict: nonpositive_curvature",9
+"test","boomsma","GLS","default","native","verdict: nonpositive_curvature",29
+"test","chen","GLS","default","native","verdict: nonpositive_curvature",28
+"test","constrained","GLS","default","native","verdict: nonpositive_curvature",46
+"test","engineering15","GLS","default","native","verdict: nonpositive_curvature",27
+"control","ernst","GLS","default","native","verdict: nonpositive_curvature",1
+"test","research47","GLS","default","native","verdict: nonpositive_curvature",25
+"test","wolf","GLS","default","native","verdict: nonpositive_curvature",189
+"test","constrained","ML","default","native","verdict: nonpositive_curvature",1
+"test","engineering15","ML","default","native","verdict: nonpositive_curvature",1
+"test","wolf","ML","default","native","verdict: nonpositive_curvature",3
+"test","boomsma","GLS","default_port","native","verdict: nonpositive_curvature",13
+"test","chen","GLS","default_port","native","verdict: nonpositive_curvature",11
+"test","constrained","GLS","default_port","native","verdict: nonpositive_curvature",38
+"test","engineering15","GLS","default_port","native","verdict: nonpositive_curvature",14
+"control","ernst","GLS","default_port","native","verdict: nonpositive_curvature",1
+"test","research47","GLS","default_port","native","verdict: nonpositive_curvature",15
+"test","wolf","GLS","default_port","native","verdict: nonpositive_curvature",44
+"test","boomsma","ML","default_port","native","verdict: nonpositive_curvature",10
+"test","constrained","ML","default_port","native","verdict: nonpositive_curvature",50
+"test","engineering15","ML","default_port","native","verdict: nonpositive_curvature",14
+"control","ernst","ML","default_port","native","verdict: nonpositive_curvature",1
+"test","research47","ML","default_port","native","verdict: nonpositive_curvature",1
+"test","wolf","ML","default_port","native","verdict: nonpositive_curvature",11
+"test","boomsma","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",28
+"test","chen","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",12
+"test","constrained","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",46
+"test","engineering15","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",11
+"control","ernst","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",1
+"test","research47","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",30
+"test","wolf","GLS","layered_lbfgs","native","verdict: nonpositive_curvature",205
+"test","boomsma","ML","layered_lbfgs","native","verdict: nonpositive_curvature",1
+"test","constrained","ML","layered_lbfgs","native","verdict: nonpositive_curvature",3
+"test","engineering15","ML","layered_lbfgs","native","verdict: nonpositive_curvature",1
+"test","boomsma","GLS","layered_port","native","verdict: nonpositive_curvature",12
+"test","chen","GLS","layered_port","native","verdict: nonpositive_curvature",6
+"test","constrained","GLS","layered_port","native","verdict: nonpositive_curvature",35
+"test","engineering15","GLS","layered_port","native","verdict: nonpositive_curvature",9
+"control","ernst","GLS","layered_port","native","verdict: nonpositive_curvature",1
+"test","research47","GLS","layered_port","native","verdict: nonpositive_curvature",10
+"test","wolf","GLS","layered_port","native","verdict: nonpositive_curvature",67
+"test","boomsma","ML","layered_port","native","verdict: nonpositive_curvature",6
+"test","chen","ML","layered_port","native","verdict: nonpositive_curvature",1
+"test","constrained","ML","layered_port","native","verdict: nonpositive_curvature",37
+"test","engineering15","ML","layered_port","native","verdict: nonpositive_curvature",12
+"control","ernst","ML","layered_port","native","verdict: nonpositive_curvature",1
+"test","wolf","ML","layered_port","native","verdict: nonpositive_curvature",8
+"test","boomsma","GLS","default","x0.01","verdict: nonpositive_curvature",449
+"test","chen","GLS","default","x0.01","verdict: nonpositive_curvature",108
+"test","constrained","GLS","default","x0.01","verdict: nonpositive_curvature",613
+"test","engineering15","GLS","default","x0.01","verdict: nonpositive_curvature",156
+"control","ernst","GLS","default","x0.01","verdict: nonpositive_curvature",12
+"test","research47","GLS","default","x0.01","verdict: nonpositive_curvature",756
+"test","wolf","GLS","default","x0.01","verdict: nonpositive_curvature",704
+"test","boomsma","ML","default","x0.01","verdict: nonpositive_curvature",34
+"test","constrained","ML","default","x0.01","verdict: nonpositive_curvature",135
+"test","engineering15","ML","default","x0.01","verdict: nonpositive_curvature",15
+"control","ernst","ML","default","x0.01","verdict: nonpositive_curvature",2
+"test","research47","ML","default","x0.01","verdict: nonpositive_curvature",6
+"test","wolf","ML","default","x0.01","verdict: nonpositive_curvature",24
+"test","boomsma","GLS","default_port","x0.01","verdict: nonpositive_curvature",368
+"test","chen","GLS","default_port","x0.01","verdict: nonpositive_curvature",46
+"test","constrained","GLS","default_port","x0.01","verdict: nonpositive_curvature",595
+"test","engineering15","GLS","default_port","x0.01","verdict: nonpositive_curvature",160
+"control","ernst","GLS","default_port","x0.01","verdict: nonpositive_curvature",19
+"test","research47","GLS","default_port","x0.01","verdict: nonpositive_curvature",548
+"test","wolf","GLS","default_port","x0.01","verdict: nonpositive_curvature",565
+"test","boomsma","ML","default_port","x0.01","verdict: nonpositive_curvature",29
+"test","constrained","ML","default_port","x0.01","verdict: nonpositive_curvature",392
+"test","engineering15","ML","default_port","x0.01","verdict: nonpositive_curvature",43
+"control","ernst","ML","default_port","x0.01","verdict: nonpositive_curvature",2
+"test","research47","ML","default_port","x0.01","verdict: nonpositive_curvature",8
+"test","wolf","ML","default_port","x0.01","verdict: nonpositive_curvature",18
+"test","boomsma","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",30
+"test","chen","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",12
+"test","constrained","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",35
+"test","engineering15","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",15
+"control","ernst","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",1
+"test","research47","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",21
+"test","wolf","GLS","layered_lbfgs","x0.01","verdict: nonpositive_curvature",205
+"test","boomsma","ML","layered_lbfgs","x0.01","verdict: nonpositive_curvature",1
+"test","constrained","ML","layered_lbfgs","x0.01","verdict: nonpositive_curvature",3
+"test","engineering15","ML","layered_lbfgs","x0.01","verdict: nonpositive_curvature",1
+"test","boomsma","GLS","layered_port","x0.01","verdict: nonpositive_curvature",14
+"test","chen","GLS","layered_port","x0.01","verdict: nonpositive_curvature",7
+"test","constrained","GLS","layered_port","x0.01","verdict: nonpositive_curvature",31
+"test","engineering15","GLS","layered_port","x0.01","verdict: nonpositive_curvature",7
+"control","ernst","GLS","layered_port","x0.01","verdict: nonpositive_curvature",2
+"test","research47","GLS","layered_port","x0.01","verdict: nonpositive_curvature",6
+"test","wolf","GLS","layered_port","x0.01","verdict: nonpositive_curvature",52
+"test","boomsma","ML","layered_port","x0.01","verdict: nonpositive_curvature",4
+"test","chen","ML","layered_port","x0.01","verdict: nonpositive_curvature",1
+"test","constrained","ML","layered_port","x0.01","verdict: nonpositive_curvature",39
+"test","engineering15","ML","layered_port","x0.01","verdict: nonpositive_curvature",11
+"control","ernst","ML","layered_port","x0.01","verdict: nonpositive_curvature",3
+"test","wolf","ML","layered_port","x0.01","verdict: nonpositive_curvature",5
+"test","boomsma","GLS","default","x100","verdict: nonpositive_curvature",25
+"test","chen","GLS","default","x100","verdict: nonpositive_curvature",39
+"test","constrained","GLS","default","x100","verdict: nonpositive_curvature",53
+"test","engineering15","GLS","default","x100","verdict: nonpositive_curvature",22
+"control","ernst","GLS","default","x100","verdict: nonpositive_curvature",1
+"test","research47","GLS","default","x100","verdict: nonpositive_curvature",21
+"test","wolf","GLS","default","x100","verdict: nonpositive_curvature",155
+"test","boomsma","ML","default","x100","verdict: nonpositive_curvature",1
+"test","constrained","ML","default","x100","verdict: nonpositive_curvature",4
+"test","engineering15","ML","default","x100","verdict: nonpositive_curvature",1
+"test","wolf","ML","default","x100","verdict: nonpositive_curvature",1
+"test","boomsma","GLS","default_port","x100","verdict: nonpositive_curvature",11
+"test","chen","GLS","default_port","x100","verdict: nonpositive_curvature",13
+"test","constrained","GLS","default_port","x100","verdict: nonpositive_curvature",38
+"test","engineering15","GLS","default_port","x100","verdict: nonpositive_curvature",12
+"control","ernst","GLS","default_port","x100","verdict: nonpositive_curvature",1
+"test","research47","GLS","default_port","x100","verdict: nonpositive_curvature",8
+"test","wolf","GLS","default_port","x100","verdict: nonpositive_curvature",44
+"test","boomsma","ML","default_port","x100","verdict: nonpositive_curvature",11
+"test","constrained","ML","default_port","x100","verdict: nonpositive_curvature",40
+"test","engineering15","ML","default_port","x100","verdict: nonpositive_curvature",17
+"control","ernst","ML","default_port","x100","verdict: nonpositive_curvature",1
+"test","wolf","ML","default_port","x100","verdict: nonpositive_curvature",15
+"test","boomsma","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",28
+"test","chen","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",9
+"test","constrained","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",38
+"test","engineering15","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",19
+"test","research47","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",21
+"test","wolf","GLS","layered_lbfgs","x100","verdict: nonpositive_curvature",188
+"test","constrained","ML","layered_lbfgs","x100","verdict: nonpositive_curvature",3
+"test","engineering15","ML","layered_lbfgs","x100","verdict: nonpositive_curvature",1
+"test","wolf","ML","layered_lbfgs","x100","verdict: nonpositive_curvature",1
+"test","boomsma","GLS","layered_port","x100","verdict: nonpositive_curvature",10
+"test","chen","GLS","layered_port","x100","verdict: nonpositive_curvature",7
+"test","constrained","GLS","layered_port","x100","verdict: nonpositive_curvature",30
+"test","engineering15","GLS","layered_port","x100","verdict: nonpositive_curvature",12
+"control","ernst","GLS","layered_port","x100","verdict: nonpositive_curvature",1
+"test","research47","GLS","layered_port","x100","verdict: nonpositive_curvature",9
+"test","wolf","GLS","layered_port","x100","verdict: nonpositive_curvature",50
+"test","boomsma","ML","layered_port","x100","verdict: nonpositive_curvature",8
+"test","constrained","ML","layered_port","x100","verdict: nonpositive_curvature",36
+"test","engineering15","ML","layered_port","x100","verdict: nonpositive_curvature",9
+"control","ernst","ML","layered_port","x100","verdict: nonpositive_curvature",2
+"test","wolf","ML","layered_port","x100","verdict: nonpositive_curvature",7

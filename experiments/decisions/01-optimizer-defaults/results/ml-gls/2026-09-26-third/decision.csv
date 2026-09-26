@@ -1,0 +1,69 @@
+"candidate","rule","scope","value","pass"
+"layered_lbfgs","1 primary","boomsma GLS","wins 1409 losses 108; best wins 1431 losses 135",TRUE
+"layered_lbfgs","1 primary","boomsma ML","wins 298 losses 84; best wins 289 losses 85",TRUE
+"layered_lbfgs","1 primary","chen GLS","wins 1204 losses 22; best wins 1264 losses 43",TRUE
+"layered_lbfgs","1 primary","chen ML","wins 0 losses 20; best wins 15 losses 24",FALSE
+"layered_lbfgs","1 primary","constrained GLS","wins 896 losses 100; best wins 927 losses 136",TRUE
+"layered_lbfgs","1 primary","constrained ML","wins 380 losses 84; best wins 445 losses 106",TRUE
+"layered_lbfgs","1 primary","engineering15 GLS","wins 468 losses 48; best wins 459 losses 46",TRUE
+"layered_lbfgs","1 primary","engineering15 ML","wins 137 losses 41; best wins 134 losses 40",TRUE
+"layered_lbfgs","1 primary","research47 GLS","wins 2780 losses 39; best wins 2804 losses 50",TRUE
+"layered_lbfgs","1 primary","research47 ML","wins 66 losses 39; best wins 66 losses 45",TRUE
+"layered_lbfgs","1 primary","wolf GLS","wins 1739 losses 437; best wins 1775 losses 465",TRUE
+"layered_lbfgs","1 primary","wolf ML","wins 191 losses 106; best wins 208 losses 122",TRUE
+"layered_lbfgs","2 invariance","boomsma GLS common","candidate 2394 baseline 1598",TRUE
+"layered_lbfgs","2 invariance","chen GLS common","candidate 798 baseline 559",TRUE
+"layered_lbfgs","2 invariance","constrained GLS common","candidate 1993 baseline 1148",TRUE
+"layered_lbfgs","2 invariance","engineering15 GLS common","candidate 397 baseline 296",TRUE
+"layered_lbfgs","2 invariance","research47 GLS common","candidate 2597 baseline 1458",TRUE
+"layered_lbfgs","2 invariance","wolf GLS common","candidate 3584 baseline 2334",TRUE
+"layered_lbfgs","2 invariance","boomsma ML common","candidate 2395 baseline 2358",TRUE
+"layered_lbfgs","2 invariance","chen ML common","candidate 800 baseline 800",TRUE
+"layered_lbfgs","2 invariance","constrained ML common","candidate 1996 baseline 1602",TRUE
+"layered_lbfgs","2 invariance","engineering15 ML common","candidate 394 baseline 379",TRUE
+"layered_lbfgs","2 invariance","research47 ML common","candidate 2600 baseline 2585",TRUE
+"layered_lbfgs","2 invariance","wolf ML common","candidate 3594 baseline 3550",TRUE
+"layered_lbfgs","2 invariance","boomsma GLS separate","candidate 2397 baseline 1886",TRUE
+"layered_lbfgs","2 invariance","chen GLS separate","candidate 795 baseline 189",TRUE
+"layered_lbfgs","2 invariance","engineering15 GLS separate","candidate 398 baseline 194",TRUE
+"layered_lbfgs","2 invariance","research47 GLS separate","candidate 2596 baseline 1219",TRUE
+"layered_lbfgs","2 invariance","wolf GLS separate","candidate 3588 baseline 3069",TRUE
+"layered_lbfgs","2 invariance","boomsma ML separate","candidate 2399 baseline 2352",TRUE
+"layered_lbfgs","2 invariance","chen ML separate","candidate 800 baseline 800",TRUE
+"layered_lbfgs","2 invariance","engineering15 ML separate","candidate 398 baseline 380",TRUE
+"layered_lbfgs","2 invariance","research47 ML separate","candidate 2599 baseline 2582",TRUE
+"layered_lbfgs","2 invariance","wolf ML separate","candidate 3599 baseline 3540",TRUE
+"layered_port","1 primary","boomsma GLS","wins 1470 losses 98; best wins 1501 losses 124",TRUE
+"layered_port","1 primary","boomsma ML","wins 357 losses 86; best wins 347 losses 86",TRUE
+"layered_port","1 primary","chen GLS","wins 1209 losses 15; best wins 1277 losses 43",TRUE
+"layered_port","1 primary","chen ML","wins 0 losses 17; best wins 16 losses 24",FALSE
+"layered_port","1 primary","constrained GLS","wins 929 losses 94; best wins 968 losses 134",TRUE
+"layered_port","1 primary","constrained ML","wins 407 losses 67; best wins 468 losses 108",TRUE
+"layered_port","1 primary","engineering15 GLS","wins 509 losses 46; best wins 503 losses 44",TRUE
+"layered_port","1 primary","engineering15 ML","wins 197 losses 41; best wins 192 losses 44",TRUE
+"layered_port","1 primary","research47 GLS","wins 2872 losses 32; best wins 2901 losses 45",TRUE
+"layered_port","1 primary","research47 ML","wins 71 losses 37; best wins 71 losses 45",TRUE
+"layered_port","1 primary","wolf GLS","wins 2028 losses 335; best wins 2057 losses 405",TRUE
+"layered_port","1 primary","wolf ML","wins 261 losses 102; best wins 274 losses 122",TRUE
+"layered_port","2 invariance","boomsma GLS common","candidate 2398 baseline 1598",TRUE
+"layered_port","2 invariance","chen GLS common","candidate 800 baseline 559",TRUE
+"layered_port","2 invariance","constrained GLS common","candidate 1998 baseline 1148",TRUE
+"layered_port","2 invariance","engineering15 GLS common","candidate 397 baseline 296",TRUE
+"layered_port","2 invariance","research47 GLS common","candidate 2600 baseline 1458",TRUE
+"layered_port","2 invariance","wolf GLS common","candidate 3595 baseline 2334",TRUE
+"layered_port","2 invariance","boomsma ML common","candidate 2395 baseline 2358",TRUE
+"layered_port","2 invariance","chen ML common","candidate 800 baseline 800",TRUE
+"layered_port","2 invariance","constrained ML common","candidate 1993 baseline 1602",TRUE
+"layered_port","2 invariance","engineering15 ML common","candidate 397 baseline 379",TRUE
+"layered_port","2 invariance","research47 ML common","candidate 2600 baseline 2585",TRUE
+"layered_port","2 invariance","wolf ML common","candidate 3596 baseline 3550",TRUE
+"layered_port","2 invariance","boomsma GLS separate","candidate 2399 baseline 1886",TRUE
+"layered_port","2 invariance","chen GLS separate","candidate 800 baseline 189",TRUE
+"layered_port","2 invariance","engineering15 GLS separate","candidate 399 baseline 194",TRUE
+"layered_port","2 invariance","research47 GLS separate","candidate 2596 baseline 1219",TRUE
+"layered_port","2 invariance","wolf GLS separate","candidate 3598 baseline 3069",TRUE
+"layered_port","2 invariance","boomsma ML separate","candidate 2395 baseline 2352",TRUE
+"layered_port","2 invariance","chen ML separate","candidate 799 baseline 800",FALSE
+"layered_port","2 invariance","engineering15 ML separate","candidate 396 baseline 380",TRUE
+"layered_port","2 invariance","research47 ML separate","candidate 2598 baseline 2582",TRUE
+"layered_port","2 invariance","wolf ML separate","candidate 3597 baseline 3540",TRUE

@@ -306,14 +306,18 @@ section: the categorical corpus saddles are under
     L-BFGS has none.
   - **Without runaways:** ML barely gains from the layered start or PORT; GLS
     gains several hundred fits with either optimizer.
-  - **Next:**
-    1. A unit-invariant runaway rule in the scoring. For example, a
-       standardized loading, factor correlation or residual ratio above 10
-       (as engineering/15 used), or the retained Newton displacement. It must
-       also apply to attainability witnesses. See the item below.
-    2. Pre-register a run with the layered start with L-BFGS and the layered
-       start with PORT as candidates, on a new seed base.
-    3. Decide ML and GLS separately.
+  - **Third run** (seed base 2026092603). A runaway rule in the scoring: a
+    certified fit whose standardized extent exceeds 10 is a failure and no
+    witness.
+    - GLS: both candidates pass every rule, and the pre-registered choice is
+      the layered start with PORT (39,144 of 40,812 certified; L-BFGS
+      38,489; today 30,747).
+    - ML: both candidates fail only on 5 Chen draws, where the layered start
+      finds a worse basin. The author decides. Certified fits: layered PORT
+      42,307, layered L-BFGS 42,062, today 41,364, of 43,096.
+    - The library verdict has no runaway check. PORT would return about 8
+      times as many runaway fits marked converged (ML 805 against 109;
+      GLS 205 against 44).
   - The drafted promotion (layered start in core, PORT defaults with
     `ml_port_controls()`, api `OptimizerKind::Default`/`Port` and
     `StartKind::Layered`) is kept aside. The nonlinear routing and
