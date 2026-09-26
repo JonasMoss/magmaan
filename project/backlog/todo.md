@@ -209,6 +209,18 @@ section: the categorical corpus saddles are under
   Little's Table 7.6 and 3.7 models, the Chapter 10 MTMM, Guo's invariance
   model and a few others (the rank-deficient fallbacks to FABIN3 among them).
   Find and remove the unit-dependent steps before defaulting the layered start.
+- **S — route nonlinear equality constraints to a constrained optimizer.**
+  `fit_ml` and `fit_gls` with PORT or L-BFGS, the defaults, return an error for
+  a model with nonlinear `==` constraints; lavaan switches to its constrained
+  `nlminb`. Mplus User's Guide ex6.17 (linear growth with AR(1) residuals,
+  written as `p2 == p1^2/resvar` and `p3 == p1^3/resvar^2`) is the only
+  engineering/17 pair where lavaan from the layered start succeeds and magmaan
+  does not. SLSQP from the same start, in information coordinates, reaches the
+  best objective (ML 0.001234678, GLS 0.001227317) and passes the Newton
+  check. When a model has nonlinear equalities and the selected backend cannot
+  take them, switch to SLSQP (IPOPT when built) and report the backend used,
+  instead of failing. With it, magmaan from the layered start ties lavaan from
+  the layered start (301 ML, 304 GLS).
 - **S — score tests admit unidentified candidates by rounding.** A freed marker
   loading is unidentified, so its efficient information is zero at every
   estimate; the absolute tolerance in `score_for_coordinate_robust` admits or
@@ -236,8 +248,13 @@ section: the categorical corpus saddles are under
   the original LISREL input supplies 0.7 on those paths. The layered moment
   start (start-policy item above) recovers 19 of the 21 targeted pairs under
   both PORT and L-BFGS, including both invalid-start models and all three GLS
-  cases; do not adopt blanket 0.5 starts. The two Chapter 8 ALT ML models still
-  reach a second optimum. The optimizer losses that remained from layered
+  cases; do not adopt blanket 0.5 starts. Three ML pairs end at an accepted
+  second local minimum under every magmaan arm and under lavaan from the
+  layered start: Little's two Chapter 8 ALT models (0.5476; only the book's
+  LISREL starts reach 0.5432, lavaan's defaults stop at 0.5591) and Kline's
+  Worland step 2a (0.1574; only lavaan's default start reaches 0.1181). These
+  are basins, not optimizer failures; only a start policy or multistart
+  (speculative backlog) reaches them. The optimizer losses that remained from layered
   starts (L-BFGS's early line-search abort on Geiser's quadratic growth, PORT and
   L-BFGS stopping short on raw-unit variances in Kline's Roth and Lynam models)
   are recovered in information coordinates, the default since 2026-09-26.
