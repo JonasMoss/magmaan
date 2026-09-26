@@ -71,7 +71,8 @@ struct Estimates {
   // See `project/design/snlls-fast-alpha-solve.md` for the gate semantics.
   std::int32_t          n_alpha_solve_fast     = -1;
   std::int32_t          n_alpha_solve_fallback = -1;
-  bool ml_sample_scaling_applied = false;
+  // Search coordinates the optimizer actually used (None when unscaled).
+  optim::CoordinateScaling coordinate_scaling = optim::CoordinateScaling::None;
 };
 
 // Consumers use this common verdict; optimizer_status explains termination.

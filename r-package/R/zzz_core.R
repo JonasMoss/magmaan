@@ -94,6 +94,7 @@ estimate_bounds_loading <- bounds_loading
 # unified estimate_uls/gls/wls/*_snlls now take an `optimizer = "..."`
 # string that maps to any of the C++ Backend values (see backend_strings.hpp).
 estimate_start_values <- fit_start_values
+estimate_coordinate_map <- fit_coordinate_map
 frontier_fcsem_model_spec <- fcsem_model_spec_impl
 frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
 frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
@@ -399,6 +400,7 @@ magmaan_core <- local({
       "estimate_bounds_wide",
       "estimate_bounds_loading",
       "estimate_start_values",
+      "estimate_coordinate_map",
       "estimate_structured_gamma",
       "estimate_structured_gamma_weight",
       "fiml_observed_vcov",
@@ -737,6 +739,7 @@ magmaan_core <- local({
       "backconvert_std_lv_to_marker_impl",
       "fit_ml_auto_identification_impl",
       "fit_start_values",
+      "fit_coordinate_map",
       "fit_sample_stats",
       "infer_information_expected",
       "infer_information_observed_fd",

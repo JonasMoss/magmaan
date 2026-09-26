@@ -2,9 +2,6 @@
 #include <cmath>
 
 namespace magmaan::estimate {
-namespace {
-std::size_t index(auto value) { return static_cast<std::size_t>(value); }
-}
 
 
 fit_expected<MlStarts> ml_start_values(
@@ -13,49 +10,4 @@ fit_expected<MlStarts> ml_start_values(
   return start_values(pt, rep, samp, StartPolicy{}, hints);
 }
 
-fit_expected<Eigen::VectorXd> ml_coordinate_scale(
-    const spec::LatentStructure& pt, const model::MatrixRep& rep,
-    const EqConstraints& con, const data::SampleStats& samp) {
-  auto invalid = []() { return std::unexpected(FitError{
-      FitError::Kind::NumericIssue, "ML coordinate scaling requires finite positive sample variances", 0, 0}); };
-  if (samp.S.size() != rep.dims.size()) return invalid();
-  std::vector<Eigen::VectorXd> obs, latent;
-  std::vector<std::vector<bool>> assigned;
-  for (std::size_t b = 0; b < samp.S.size(); ++b) {
-    if (samp.S[b].rows() != rep.dims[b].n_observed ||
-        !samp.S[b].diagonal().allFinite() ||
-        (samp.S[b].diagonal().array() <= 0).any()) return invalid();
-    obs.emplace_back(samp.S[b].diagonal().array().sqrt());
-    latent.push_back(Eigen::VectorXd::Constant(rep.dims[b].n_latent, obs.back().mean()));
-    assigned.emplace_back(index(rep.dims[b].n_latent), false);
-  }
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    auto c = rep.cell_for_row[i];
-    if (c.used && c.mat == model::MatId::Lambda && pt.free[i] == 0 &&
-        pt.fixed_value[i] != 0 && !assigned[index(c.block)][index(c.col)]) {
-      latent[index(c.block)](c.col) = obs[index(c.block)](c.row)/std::abs(pt.fixed_value[i]);
-      assigned[index(c.block)][index(c.col)] = true;
-    }
-  }
-  Eigen::VectorXd full = Eigen::VectorXd::Ones(pt.n_free());
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    auto c = rep.cell_for_row[i];
-    if (!c.used || pt.free[i] <= 0) continue;
-    const auto& s = obs[index(c.block)]; const auto& t = latent[index(c.block)];
-    double v = 1;
-    switch (c.mat) {
-      case model::MatId::Lambda: v=s(c.row)/t(c.col); break;
-      case model::MatId::Beta: v=t(c.row)/t(c.col); break;
-      case model::MatId::Psi: v=t(c.row)*t(c.col); break;
-      case model::MatId::Theta: v=s(c.row)*s(c.col); break;
-      case model::MatId::Nu: v=s(c.row); break;
-      case model::MatId::Alpha: v=t(c.row); break;
-    }
-    full(pt.free[i]-1) = v;
-  }
-  Eigen::MatrixXd weighted = full.cwiseInverse().asDiagonal()*con.K();
-  Eigen::VectorXd scale = weighted.colwise().norm().transpose().cwiseInverse();
-  if (!scale.allFinite() || (scale.array() <= 0).any()) return invalid();
-  return scale;
-}
 } // namespace magmaan::estimate

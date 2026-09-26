@@ -814,7 +814,7 @@ constexpr const char* longitudinal_growth_model =
 }  // namespace
 
 TEST_CASE("sphere ML: without gauge units the driven run is scaled like fit_ml") {
-  // At c = 0.1 the unscaled driven run (ml_sample_scaling off) fails with an
+  // At c = 0.1 the unscaled driven run (coordinate_scaling none) fails with an
   // L-BFGS line-search error from this start, while fit_ml converges.
   BuildOptions o;
   o.auto_fix_first = false;

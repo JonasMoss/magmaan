@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
@@ -1278,7 +1280,8 @@ Rcpp::List fit_result(Ctx& ctx,
       Rcpp::_["fmin"]          = est.fmin,
       Rcpp::_["iterations"]    = est.iterations,
       Rcpp::_["f_evals"]       = est.f_evals,
-      Rcpp::_["ml_sample_scaling"] = est.ml_sample_scaling_applied,
+      Rcpp::_["coordinate_scaling"] =
+          magmaan::estimate::coordinate_scaling_name(est.coordinate_scaling),
       Rcpp::_["g_evals"]       = est.g_evals,
       Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
       Rcpp::_["ngroups"]       = static_cast<int>(nb),
@@ -7091,6 +7094,50 @@ Rcpp::NumericVector fit_start_values(
   out.attr("start_fallback_reason") = es::start_transport_reason(value->fallback_reason);
   out.attr("start_notes") = Rcpp::wrap(value->notes);
   return out;
+}
+
+// fit_coordinate_map() — the optimizer coordinates a fit would use from
+// `start` (theta order): parameter units (free parameters), and the reduced
+// coordinates' units, S-weighted information diagonal, center and scale for
+// `scaling` ("none", "sample_units", "information"). Diagnostic only.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_coordinate_map(SEXP partable, Rcpp::List sample_stats,
+                              Rcpp::NumericVector start,
+                              std::string scaling = "sample_units",
+                              bool center_locations = true) {
+  namespace es = magmaan::estimate;
+  using magmaan::optim::CoordinateScaling;
+  auto parsed = partable_from_arg(partable, "fit_coordinate_map");
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  if (auto e = es::resolve_fixed_x_from_sample(ctx.pt, ctx.rep, ctx.samp); !e) stop_fit(e.error());
+  auto ev = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!ev) stop_model(ev.error());
+  auto con = es::build_eq_constraints(ctx.pt, /*allow_nonlinear=*/true);
+  if (!con) stop_post(con.error());
+  const CoordinateScaling kind = scaling == "none" ? CoordinateScaling::None
+      : scaling == "sample_units" ? CoordinateScaling::SampleUnits
+      : scaling == "information" ? CoordinateScaling::Information
+      : (Rcpp::stop("scaling must be \"none\", \"sample_units\" or \"information\""),
+         CoordinateScaling::None);
+  const Eigen::VectorXd theta = Rcpp::as<Eigen::VectorXd>(start);
+  if (theta.size() != ctx.pt.n_free()) Rcpp::stop("start must have one value per free parameter");
+  const Eigen::VectorXd alpha = con->contract(theta);
+  auto units = es::parameter_units(ctx.pt, ctx.rep, ctx.samp);
+  if (!units) stop_fit(units.error());
+  auto reduced = es::reduced_units(*units, *con);
+  if (!reduced) stop_fit(reduced.error());
+  auto map = es::coordinate_map(kind, center_locations, ctx.pt, ctx.rep, *ev, *con, ctx.samp, alpha);
+  if (!map) stop_fit(map.error());
+  auto info = es::reduced_information_diagonal(*ev, *con, ctx.samp, alpha);
+  return Rcpp::List::create(
+      Rcpp::_["kind"] = es::coordinate_scaling_name(map->kind),
+      Rcpp::_["units"] = Rcpp::wrap(*units),
+      Rcpp::_["reduced_units"] = Rcpp::wrap(*reduced),
+      Rcpp::_["information"] = info ? Rcpp::wrap(*info) : Rcpp::wrap(Eigen::VectorXd(alpha.size()).setConstant(NA_REAL)),
+      Rcpp::_["center"] = Rcpp::wrap(map->center),
+      Rcpp::_["scale"] = Rcpp::wrap(map->scale),
+      Rcpp::_["alpha"] = Rcpp::wrap(alpha));
 }
 
 // estimate_structured_gamma() — explicit MI4 / structured-ADF Gamma builder.

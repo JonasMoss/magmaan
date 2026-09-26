@@ -1251,13 +1251,19 @@ TEST_CASE("frontier FIML robust MI: scaling approaches 1 on large-n normal data"
   // Per-candidate c is a noisy 4th-moment-driven ratio, so anchor the *mean*
   // (variance ~1/rows lower) at 1; a wrong B1/A1 scale constant (2× or ½×)
   // would instead push every row to |c−1| ≈ 1 or ½, which max_dev catches.
+  // The freed marker loading is unidentified: its statistic is numerically
+  // zero and its c a ratio of two zeros, whether or not rounding admits it.
   double sum_c = 0.0;
   double max_dev = 0.0;
+  std::size_t used = 0;
   for (const auto& r : rob->rows) {
+    if (r.mi < 1e-10) continue;
+    ++used;
     sum_c += r.scaling_factor;
     max_dev = std::max(max_dev, std::abs(r.scaling_factor - 1.0));
   }
-  const double mean_c = sum_c / static_cast<double>(rob->rows.size());
+  REQUIRE(used > 0);
+  const double mean_c = sum_c / static_cast<double>(used);
   CHECK(std::abs(mean_c - 1.0) < 0.12);
   CHECK(max_dev < 0.5);
 }

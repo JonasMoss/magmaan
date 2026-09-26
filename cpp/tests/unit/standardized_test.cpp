@@ -224,7 +224,9 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
       2.0 * g_cov * g_v0 * inf.vcov(cov_idx, v0_idx) +
       2.0 * g_cov * g_v1 * inf.vcov(cov_idx, v1_idx) +
       2.0 * g_v0  * g_v1 * inf.vcov(v0_idx, v1_idx);
-  CHECK(sol.se(cov_idx) == doctest::Approx(std::sqrt(var)).epsilon(1e-10));
+  // standardize_lv differentiates by central differences with step
+  // sqrt(eps)(1+|theta|): roundoff bounds agreement near 1e-8 relative.
+  CHECK(sol.se(cov_idx) == doctest::Approx(std::sqrt(var)).epsilon(1e-7));
 
   // (c) std.all reduces to the same transform on a latent-latent covariance
   //     (the extra 1/√σ_rr factors only touch indicators).

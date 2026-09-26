@@ -587,7 +587,7 @@ Eigen::VectorXd driven_ml_scale(const SphereSetup& s, const model::MatrixRep& re
   const bool supported = backend == Backend::NloptLbfgs ||
                          backend == Backend::NloptSlsqp ||
                          backend == Backend::NloptLbfgsSlsqpFallback;
-  if (!opts.ml_sample_scaling || !supported || s.nl_int.active() || s.n_u == 0 ||
+  if (opts.coordinate_scaling == optim::CoordinateScaling::None || !supported || s.nl_int.active() || s.n_u == 0 ||
       (!bounds.empty() && s.con_int.group.empty()))
     return {};
   auto col = ml_coordinate_scale(s.pt_int, rep, s.con_int, samp);
@@ -762,7 +762,7 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!ub) return std::unexpected(ub.error());
   const OptimOptions user_opts = opts;
   const Eigen::VectorXd scale = driven_ml_scale(**s, rep, samp, bounds, backend, user_opts);
-  opts.ml_sample_scaling = false;
+  opts.coordinate_scaling = optim::CoordinateScaling::None;
   auto r = run_driven(**s, map, &*obj, nullptr, *u0, *ub, backend, opts, who, scale);
   if (!r) return std::unexpected(r.error());
   const auto& pt_user = (*s)->pt_user;

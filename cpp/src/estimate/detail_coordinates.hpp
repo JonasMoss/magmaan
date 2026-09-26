@@ -1,0 +1,44 @@
+#pragma once
+
+#include <functional>
+
+#include <Eigen/Core>
+
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/optim/problem.hpp"
+
+// Runs an optimizer in the coordinates of a CoordinateMap. The callers own
+// backend dispatch; these helpers only change coordinates and restore them.
+
+namespace magmaan::estimate::driven {
+
+using ScalarRun = std::function<fit_expected<optim::OptimResult>(
+    const optim::ScalarProblem&, const Eigen::VectorXd&, const Bounds&)>;
+
+using ConstrainedRun = std::function<fit_expected<optim::OptimResult>(
+    const optim::ScalarProblem&, const optim::ConstraintFn&,
+    const optim::ConstraintJacFn&, Eigen::Index, const Eigen::VectorXd&,
+    const Bounds&)>;
+
+// Minimizes `problem` (in the map's alpha coordinates) from `alpha0` within
+// `bounds` (alpha coordinates; empty means unbounded). The result is returned in
+// alpha coordinates with its terminal audit recomputed there, so it reads like
+// an unscaled run. Backend status comes from the driven run.
+fit_expected<optim::OptimResult>
+run_in_coordinates(const optim::ScalarProblem& problem, const CoordinateMap& map,
+                   const Eigen::VectorXd& alpha0, const Bounds& bounds,
+                   const ScalarRun& run);
+
+// As above with equality constraints h(alpha) = 0; the audit is the
+// equality-constrained one.
+fit_expected<optim::OptimResult>
+run_in_coordinates(const optim::ScalarProblem& problem,
+                   const optim::ConstraintFn& h,
+                   const optim::ConstraintJacFn& jacobian,
+                   Eigen::Index n_constraint, const CoordinateMap& map,
+                   const Eigen::VectorXd& alpha0, const Bounds& bounds,
+                   const ConstrainedRun& run);
+
+}  // namespace magmaan::estimate::driven

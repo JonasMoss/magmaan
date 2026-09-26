@@ -357,6 +357,10 @@ fit_start_values <- function(partable, sample_stats, start = NULL, transport = N
     .Call(`_magmaanlab_fit_start_values`, partable, sample_stats, start, transport)
 }
 
+fit_coordinate_map <- function(partable, sample_stats, start, scaling = "sample_units", center_locations = TRUE) {
+    .Call(`_magmaanlab_fit_coordinate_map`, partable, sample_stats, start, scaling, center_locations)
+}
+
 estimate_structured_gamma <- function(fit, raw_data) {
     .Call(`_magmaanlab_estimate_structured_gamma`, fit, raw_data)
 }

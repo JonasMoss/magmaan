@@ -14,7 +14,7 @@ inline optim::OptimOptions ml_optim_options() {
   out.nlopt.max_eval = 5000;
   out.nlopt.ftol_rel = 1e-12;
   out.nlopt.xtol_rel = 1e-10;
-  out.ml_sample_scaling = true;
+  out.coordinate_scaling = optim::CoordinateScaling::Information;
   return out;
 }
 
@@ -27,7 +27,8 @@ fit_expected<MlStarts> ml_start_values(
     const spec::LatentStructure&, const model::MatrixRep&,
     const data::SampleStats&, const spec::Starts& = {});
 
-// Independent optimizer-coordinate transformation, not a start-vector rescaling.
+// Sample-unit scale of the equality-reduced coordinates (see coordinates.hpp).
+// An optimizer-coordinate transformation, not a start-vector rescaling.
 fit_expected<Eigen::VectorXd> ml_coordinate_scale(
     const spec::LatentStructure&, const model::MatrixRep&,
     const EqConstraints&, const data::SampleStats&);

@@ -39,17 +39,14 @@ and their R wrappers now use the validated ML numerical profile:
   cause native fallback. Finite user hints override transported values.
   Low-level fitters continue to use the caller's explicit start vector.
   R `ml_start_policy` reports transported, fallback, or explicitly selected starts.
-- Ordinary ML with L-BFGS, SLSQP or their existing fallback adapter uses
-  sample-derived scaling in equality-reduced coordinates. Pure-merge bounds
-  are transformed exactly; nonlinear constraints and general affine
-  constraints combined with bounds retain the existing unscaled adapter.
-  `Estimates::ml_sample_scaling_applied` (R: `ml_sample_scaling`) reports
-  the branch actually used. Diagnostics are evaluated in original coordinates.
+- Ordinary ML searches in unit-equivariant optimizer coordinates for every
+  scalar backend (see "Optimizer coordinates" below).
 - PSD ML enables its existing lifted expected-information diagonal scaling.
   It does not add a retry or change the PSD feasible set.
 
-Explicit C++ `OptimOptions` replace the default argument: `{}` retains generic
-legacy controls and disables ordinary ML scaling. To customize the new policy,
+Explicit C++ `OptimOptions` replace the default argument: `{}` retains the
+generic legacy tolerances; information coordinates are the default in both.
+To customize the new policy,
 start with `ml_optim_options()` or `frontier::ml_psd_optim_options()` and edit
 its backend fields. An explicit `api::OptimizerSpec` likewise replaces that
 factory's optimizer options; use the ML profile when constructing it. Selecting
@@ -58,8 +55,8 @@ ML profile. Passing `nlopt_slsqp(OptimOptions{})` explicitly opts out.
 For PSD scaling, the default argument is `ml_psd_options()`; an explicit
 `PsdFitOptions{}` retains its former unscaled behavior.
 
-In R, `control=list(start="fabin3", ml_sample_scaling=FALSE)` selects native
-starts and unscaled ordinary ML. `control$start` also accepts `scaled-fabin`,
+In R, `control=list(start="fabin3", coordinate_scaling="none")` selects native
+starts and raw optimizer coordinates. `control$start` also accepts `scaled-fabin`,
 `simple` and the existing named start methods. Use `preconditioning="none"`
 for unscaled PSD ML. Legacy `max_iter`, `ftol` and `gtol` explicitly override
 profile defaults; a supplied nested NLopt field overrides the corresponding
@@ -69,6 +66,78 @@ These search changes do not implement the research Newton audit, change the
 production fit verdict, or make PSD fitting the default estimator. The
 validation and remaining boundary/fallback limitations are documented in
 [the numerical study](../validation/interior-newton-audit.md).
+
+## Optimizer coordinates (2026-09-25)
+
+Quasi-Newton searches are not invariant to the coordinates they run in.
+L-BFGS starts from an identity metric and takes its first step along the raw
+gradient; PORT starts from the Hessian guess $D^2$ for its scale vector $D$,
+bounds its trust region in $D$-scaled steps, and declares X-convergence when
+the largest $D$-scaled step is small relative to the largest $D$-scaled
+coordinate. In raw coordinates a single large coordinate (a variance in the
+thousands, a mean far from zero) dominates that test and ends the search
+early. lavaan passes `nlminb` the scale $1/\lvert x_0\rvert$ for start values above one
+in magnitude, which depends on the start and switches at one, so its search is
+not invariant to the data's units either.
+
+`estimate/coordinates.hpp` defines the shared coordinate layer. The optimizer
+drives $z = (\alpha - c)/s$ on the equality-reduced parameter $\alpha$; objective,
+constraints, bounds and the reported terminal audit keep their model meaning,
+and the audit is recomputed in $\alpha$ after the search. `OptimOptions::
+coordinate_scaling` selects $s$:
+
+- `SampleUnits`: the unit each parameter carries. Observed variables take
+  their sample standard deviations. A latent variable takes its unit from a
+  fixed nonzero loading (marker, including the structural unit loadings of
+  phantom latents), else a fixed positive variance (std.lv, phantoms), else a
+  fixed nonzero regression on a latent with a unit (higher-order markers), else
+  an equality tying one of its parameters to a parameter with a unit
+  (cross-group loadings), else the mean standard deviation of its indicators
+  (effect coding). Loadings take indicator/latent, regressions
+  outcome/predictor, (co)variances the product, intercepts and means their
+  variable's unit. Equality-reduced coordinates take $1/\lVert K_j \oslash u\rVert$.
+- `Information` (the default): the sample units refined by the expected
+  information at the start, $h_j$, the larger of its values weighted by the
+  sample covariance and by the start's implied covariance (where positive
+  definite). A coordinate shrinks to $1/\sqrt{h_j}$ where that is finer than its
+  unit, down to $10^{-3}$ of it, and never grows beyond the unit: low
+  information at a start signals a degeneracy (a collapsed variance leaves its
+  loadings information-free), not a safe large step. The start-weighted term
+  keeps a start near a singular implied covariance from receiving a first
+  step its own curvature does not allow.
+- `None`: raw coordinates.
+
+With `center_locations` (default on), coordinates that act only on means and
+intercepts are centered at their start values, so a large location does not
+dominate relative step tests. Both scales transform like the parameters when
+observed variables change units, so a scaled search from a transported start
+retraces the same path (`tests/unit/coordinates_test.cpp`).
+
+Routes. The layer covers complete-data ML (including the multi-information
+penalty and the extra-constraint entry), GLS in its scalar and residual forms,
+the moment least-squares family (ULS, DWLS, WLS), pairwise GLS, and FIML, for
+every scalar backend: L-BFGS, SLSQP, the L-BFGS/SLSQP fallback, PORT, TNEWTON,
+VAR2, BOBYQA and IPOPT, with and without nonlinear equality constraints and
+general affine constraints. Ceres LM and NL2SOL see the residual structure
+and scale themselves, so they keep raw coordinates. PSD ML keeps its own
+lifted information scaling and the sphere route its sample units. Ordinal,
+mixed ordinal, CatML, two-level, SNLLS outer, IRLS inner, fitted-weight, RBM
+and pairwise-likelihood fits remain in raw coordinates; the backlog tracks
+them. `Estimates::coordinate_scaling` (R: `fit$coordinate_scaling`) reports
+the coordinates used; `magmaan_core$estimate_coordinate_map()` returns the
+units, information diagonal, center and scale for a model and start.
+
+`OptimOptions::coordinate_scaling` defaults to `Information` in `OptimOptions{}`
+and in `ml_optim_options()`, so every route with the layer searches in
+information coordinates unless a caller selects `SampleUnits` or `None`
+(2026-09-26, engineering/17: on the 608 ML/GLS corpus pairs and on a panel with
+each observed variable multiplied by a power of ten between $10^{-2}$ and
+$10^{2}$, it is the best or tied rule for L-BFGS and PORT from the layered start
+and for L-BFGS from the current start; PORT from the current start loses a few
+pairs to path sensitivity from far starts). In R, `control$coordinate_scaling`
+is `"none"`, `"sample_units"` or `"information"`, and `control$center_locations`
+a logical. The legacy `ml_sample_scaling = TRUE/FALSE` maps to
+`"sample_units"`/`"none"`.
 
 ## Composable starting values
 
@@ -108,10 +177,9 @@ unchanged (for example FABIN3 uses FABIN2 for a singular instrument matrix
 and retains simple loadings outside its supported indicator layouts). Finite target-coordinate hints take precedence;
 changing those hints can change the implied moments after transport.
 
-Ordinary coordinate scaling remains `ml_coordinate_scale` plus the optimizer
-adapter that transforms parameters and derivatives. PSD information scaling
-remains part of its lifted optimizer. Neither operation is implemented by
-multiplying a start vector alone. Their existing defaults are unchanged.
+Ordinary coordinate scaling is the coordinate layer above (`ml_coordinate_scale`
+returns its sample units). PSD information scaling remains part of its lifted
+optimizer. Neither operation is implemented by multiplying a start vector alone.
 
 Continuous-data and FIML R fit entry points accept the same controls:
 

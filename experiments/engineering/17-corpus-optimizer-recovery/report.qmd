@@ -31,7 +31,8 @@ On the corrected textbook corpus, which ordinary optimizers recover a good
 solution from our current starts? Do the historical Newsom GLS failures still
 justify changing the evaluator?
 Where the starts are at fault, does a structure-aware start fix it without
-losing cases that already work?
+losing cases that already work? Which optimizer coordinates make PORT and
+L-BFGS indifferent to the data's units?
 
 ## Short answer
 
@@ -41,6 +42,36 @@ eg <- function(est,policy,col) eng[[col]][eng$estimator==est & eng$policy==polic
 lc <- function(est,arm,start) lay$good_now[lay$estimator==est & lay$arm==arm & lay$start==start]
 lr <- function(col) sum(lp[[col]])
 ```
+
+```{r scaling-setup}
+sc <- r("scaling_summary"); fiml <- r("fiml_scaling")
+g <- function(mode,est,start,opt,scal) sc$good[sc$mode==mode & sc$estimator==est & sc$start==start & sc$optimizer==opt & sc$scaling==scal]
+np <- function(mode,est) sc$pairs[sc$mode==mode & sc$estimator==est & sc$engine=="magmaan"][1]
+rng <- function(...) {x <- c(...); if (min(x)==max(x)) x[1] else paste0(min(x),"–",max(x))}
+fg <- function(mode,opt,scal) sum(fiml$good[fiml$mode==mode & fiml$optimizer==opt & fiml$scaling==scal])
+fn <- length(unique(fiml$case))
+```
+
+**Unit-equivariant optimizer coordinates make PORT and L-BFGS indifferent to
+the data's units; they are now the default.** Both optimizers search in each
+parameter's sample unit, refined by the expected information at the start, with
+means centered at their starts. With the layered start, ML pairs recovered rise
+from `r g("native","ML","layered","nlopt-lbfgs","none")` to
+`r g("native","ML","layered","nlopt-lbfgs","information")` of 304 with L-BFGS and from
+`r g("native","ML","layered","port","none")` to `r g("native","ML","layered","port","information")`
+with PORT, with no pair lost; GLS reaches `r g("native","GLS","layered","port","information")`.
+With the current default start, ML L-BFGS rises from
+`r g("native","ML","current","nlopt-lbfgs","none")` to `r g("native","ML","current","nlopt-lbfgs","information")`.
+After multiplying each observed variable by a power of ten between 0.01 and 100,
+on the `r np("rescaled","ML")` ML and `r np("rescaled","GLS")` GLS pairs whose
+optimum survives the change, scaled runs from the layered start still recover
+`r rng(g("rescaled","ML","layered","nlopt-lbfgs","information"),g("rescaled","ML","layered","port","information"))` and
+`r rng(g("rescaled","GLS","layered","nlopt-lbfgs","information"),g("rescaled","GLS","layered","port","information"))`;
+unscaled runs recover `r rng(g("rescaled","ML","layered","nlopt-lbfgs","none"),g("rescaled","ML","layered","port","none"))` and
+`r rng(g("rescaled","GLS","layered","nlopt-lbfgs","none"),g("rescaled","GLS","layered","port","none"))`, and lavaan's
+defaults `r g("rescaled","ML","default","nlminb","lavaan")` and `r g("rescaled","GLS","default","nlminb","lavaan")`.
+The old ML scaling gave every observed variable in a regression the block's
+mean standard deviation; lavaan's start-based scale is not unit-equivariant.
 
 **A layered moment start removes most start failures and loses few cases.**
 It builds the start from the data in layers (measurement, latent covariance,
@@ -54,7 +85,8 @@ and from `r lc("GLS","lbfgs_default","current")` to `r lc("GLS","lbfgs_default",
 with L-BFGS. Across the four estimator/optimizer pairs, `r lr("rescued")` case fits
 are gained and `r lr("lost")` lost. Every loss starts from a lower objective than
 the current start and fails in the optimizer: an early L-BFGS line-search abort,
-or a PORT or L-BFGS stop short of the optimum on raw-unit data. Most original
+or a PORT or L-BFGS stop short of the optimum on raw-unit data. Information
+coordinates recover all of them. Most original
 failures share one mechanism: a latent scaled by a fixed variance
 (a std.lv or phantom factor) has a sign-reflection symmetry, and a start with all
 its sign-odd paths at zero sits on it with exactly zero gradient in those paths.
@@ -470,6 +502,72 @@ lavaan accepts PORT's return code; magmaan requires its terminal audit. In this
 comparison the stricter audit never rejected a magmaan fit at the target
 objective, while lavaan's flag accepted the reflection-trap saddles.
 
+### Optimizer coordinates
+
+Quasi-Newton searches depend on the coordinates they run in. L-BFGS starts
+from an identity metric and steps along the raw gradient. PORT starts from a
+Hessian guess set by its scale vector, bounds its trust region in scaled steps,
+and stops by X-convergence when the largest scaled step is small relative to the
+largest scaled coordinate; in raw units one large variance or mean dominates that
+test. Three coordinate systems were compared on every pair, with PORT and
+L-BFGS, from the current and the layered start: raw coordinates; each
+parameter's sample unit (observed standard deviations and each latent's
+identification: marker, fixed variance, higher-order marker, cross-group
+equality, or effect coding); and those units refined downward by the expected
+information at the start. Both scaled systems transform like the parameters
+when the observed variables change units.
+
+```{r}
+rows <- expand.grid(opt=c("nlopt-lbfgs","port"),est=c("ML","GLS"),start=c("layered","current"),stringsAsFactors=FALSE)
+tab <- data.frame(Start=rows$start,Estimator=rows$est,Optimizer=ifelse(rows$opt=="port","PORT","L-BFGS"),
+  None=mapply(g,"native",rows$est,rows$start,rows$opt,"none"),
+  Units=mapply(g,"native",rows$est,rows$start,rows$opt,"sample_units"),
+  Information=mapply(g,"native",rows$est,rows$start,rows$opt,"information"))
+knitr::kable(tab,col.names=c("Start","Estimator","Optimizer","Raw","Sample Units","Information"),
+  caption="Accepted fits reaching the best objective, of 304 pairs, in native units.")
+```
+
+From the layered start the information coordinates lose no pair to raw
+coordinates or to sample units and need the fewest evaluations
+(`scaling_summary.csv`). From the current start they add many L-BFGS
+recoveries; PORT from those far starts gains and loses a few pairs to path
+sensitivity (`scaling_paired.csv`, `scaling_changes.csv`). Sample units alone
+leave a well-determined parameter's first L-BFGS step too long; the information
+refinement shrinks it. The refinement never enlarges a unit: at a start with a
+collapsed variance the loadings carry almost no information, and the first run,
+which let information enlarge units up to a thousandfold, lost the Geiser and
+Newsom trait-state models that way. It also takes the start's own implied
+covariance into account, so a start close to a singular covariance does not
+receive a step its own curvature forbids.
+
+```{r}
+rs <- expand.grid(opt=c("nlopt-lbfgs","port"),est=c("ML","GLS"),stringsAsFactors=FALSE)
+rt <- data.frame(Estimator=rs$est,Optimizer=ifelse(rs$opt=="port","PORT","L-BFGS"),
+  Pairs=sapply(rs$est,function(e)np("rescaled",e)),
+  None=mapply(g,"rescaled",rs$est,"layered",rs$opt,"none"),
+  Information=mapply(g,"rescaled",rs$est,"layered",rs$opt,"information"),
+  Lavaan=sapply(rs$est,function(e)g("rescaled",e,"default","nlminb","lavaan")),
+  LavaanLayered=sapply(rs$est,function(e)g("rescaled",e,"layered","nlminb","lavaan")))
+knitr::kable(rt,col.names=c("Estimator","Optimizer","Pairs","Raw","Information","lavaan","lavaan, Layered Start"),
+  caption="Rescaled units: each observed variable multiplied by a power of ten between 0.01 and 100; unit-invariant pairs; magmaan from the layered start.")
+```
+
+Rescaling keeps the optimum only when no fixed value or equality ties
+variables whose units change differently; `R/check_invariance.R` keeps
+`r np("rescaled","ML")` ML and `r np("rescaled","GLS")` GLS pairs whose native optimum,
+carried to the new units and refined, attains the native objective.
+The current start is not unit-equivariant (its start objective moves on most
+invariant pairs), so its rescaled counts are lower; the layered start moves on
+32 pairs, which the start backlog records.
+
+For FIML, `R/test_fiml_scaling.R` fits the `r fn` single-group continuous FIML
+cases with L-BFGS. Information coordinates recover `r fg("native","nlopt-lbfgs","information")`
+in native units (raw: `r fg("native","nlopt-lbfgs","none")`) and
+`r fg("rescaled","nlopt-lbfgs","information")` after rescaling (raw:
+`r fg("rescaled","nlopt-lbfgs","none")`). The native case it misses reaches the
+best objective but stops short of the Newton check's accuracy under FIML's
+generic stopping controls.
+
 ### Unit-scale domain recovery
 
 A scalar variance likelihood has a known optimum. The problem is unchanged;
@@ -492,6 +590,14 @@ work on scale-aware domain recovery, not a validated normalization policy for
 arbitrary constrained SEMs.
 
 ## Caveats
+
+The information refinement was revised twice on this corpus: the first run let
+information enlarge units (losing the trait-state models) and weighted by the
+sample covariance only (a runaway on a latent change score FIML fit in the unit
+tests). The final rule is a principled restriction of both, but the counts are
+in-sample; a fresh panel should confirm them. Rescaling by variable name breaks
+invariance for longitudinal models whose waves share loadings, so the rescaled
+panel keeps fewer than half of the pairs. The FIML check covers 13 cases.
 
 The layered comparison reruns both starts on one engine build that includes the
 start change, so its current-start counts differ slightly from the frozen main
@@ -563,6 +669,11 @@ Rscript R/summarize_layered.R results/full/layered
 Rscript R/test_lavaan_defaults.R ../../../external/textbook-corpus results/full --workers 3
 Rscript R/summarize_engines.R results/full
 Rscript R/probe_port_scaling.R ../../../external/textbook-corpus results/full
+Rscript R/test_coordinate_scaling.R ../../../external/textbook-corpus results/full --workers 3
+Rscript R/test_coordinate_scaling.R ../../../external/textbook-corpus results/full --rescaled --workers 3
+Rscript R/check_invariance.R ../../../external/textbook-corpus results/full
+Rscript R/test_fiml_scaling.R ../../../external/textbook-corpus results/full
+Rscript R/summarize_scaling.R results/full
 cmake -S . -B results/build -DEIGEN_INCLUDE_DIR=/path/to/eigen
 cmake --build results/build
 results/build/domain_probe > results/full/domain.csv

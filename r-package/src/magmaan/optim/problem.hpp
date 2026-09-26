@@ -141,6 +141,16 @@ struct CeresControls {
   std::optional<double> parameter_tolerance = {};
 };
 
+// Optimizer coordinate systems. Neither changes the model or its solutions.
+//   None        — raw equality-reduced coordinates.
+//   SampleUnits — each coordinate in the unit its parameter carries under the
+//                 sample standard deviations and each latent's identification.
+//   Information — SampleUnits refined by the expected information at the start
+//                 (the larger of its S- and Sigma(start)-weighted values): a
+//                 coordinate shrinks to 1/sqrt(information) where that is finer
+//                 than its unit, and never grows beyond it.
+enum class CoordinateScaling : std::uint8_t { None, SampleUnits, Information };
+
 struct OptimOptions {
   int    max_iter = 1000; // legacy NLopt evaluation budget; iterations otherwise
   double ftol = 1e-10; // legacy mapping is backend-specific; see optimizer-controls.md
@@ -150,8 +160,14 @@ struct OptimOptions {
   PortControls port = {};
   IpoptControls ipopt = {};
   CeresControls ceres = {};
-  // Complete-data ML only; scale equality-reduced search coordinates.
-  bool ml_sample_scaling = false;
+  // Search coordinates z = (alpha - center) ./ scale on the equality-reduced
+  // parameter; see estimate/coordinates.hpp. Objective, constraints, bounds
+  // and the reported terminal audit keep their model-coordinate meaning.
+  // Routes without the coordinate layer ignore it (optimizer-controls.md).
+  CoordinateScaling coordinate_scaling = CoordinateScaling::Information;
+  // Center mean and intercept coordinates at their start values, so a large
+  // location does not dominate relative step tests.
+  bool center_locations = true;
 };
 
 // --- Terminal audit -------------------------------------------------------

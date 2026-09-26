@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,6 +20,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
@@ -42,6 +44,7 @@
 #include "detail_psd_probe.hpp"
 #include "detail_ordinal_psd.hpp"
 #include "detail_vech.hpp"
+#include "detail_coordinates.hpp"
 #include "detail_backend_dispatch.hpp"
 
 // Convenience composers: package the data → objective → constraints →
@@ -1252,6 +1255,33 @@ prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
                  build_nl_constraints(pt)};
 }
 
+// Optimizer coordinates for a scalar-backend fit starting at x0. Empty when the
+// options ask for none, nothing is free, the backend drives the least-squares
+// form (it scales itself), or the map cannot be formed; the fit then runs in
+// raw coordinates, since coordinates never change the problem being solved.
+std::optional<CoordinateMap>
+optimizer_coordinates(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep, const Prelude& pre,
+                      const SampleStats& samp, const Eigen::VectorXd& x0,
+                      Backend backend, const OptimOptions& opts) {
+  if (opts.coordinate_scaling == optim::CoordinateScaling::None ||
+      pre.con.n_alpha == 0 || backend == Backend::Ceres ||
+      backend == Backend::CeresBfgs || backend == Backend::PortNls)
+    return std::nullopt;
+  auto map = coordinate_map(opts.coordinate_scaling, opts.center_locations, pt,
+                            rep, pre.ev, pre.con, samp, pre.con.contract(x0));
+  if (!map) return std::nullopt;
+  return std::move(*map);
+}
+
+// Records the coordinates a successful composer ran in.
+fit_expected<Estimates>
+record_coordinates(fit_expected<Estimates> est,
+                   const std::optional<CoordinateMap>& map) {
+  if (est && map) est->coordinate_scaling = map->kind;
+  return est;
+}
+
 fit_expected<optim::GmmProblem>
 psd_ordinal_problem(const Prelude& pre,
                     const spec::LatentStructure& pt,
@@ -1751,14 +1781,35 @@ fit_expected<Estimates>
 compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
                   const NonlinearEqConstraints& nl,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
-                  Backend backend, OptimOptions opts, const char* who) {
+                  Backend backend, OptimOptions opts, const char* who,
+                  const CoordinateMap* map = nullptr) {
+  auto solve = [&](const optim::ScalarProblem& p, const Eigen::VectorXd& start,
+                   const Bounds& box) -> fit_expected<optim::OptimResult> {
+    auto run = [&](const optim::ScalarProblem& q, const Eigen::VectorXd& z0,
+                   const Bounds& zbox) {
+      return run_scalar(q, z0, zbox, backend, opts);
+    };
+    if (!map) return run(p, start, box);
+    return driven::run_in_coordinates(p, *map, start, box, run);
+  };
+  auto solve_constrained =
+      [&](const optim::ScalarProblem& p, const optim::ConstraintFn& h,
+          const optim::ConstraintJacFn& J, Eigen::Index m,
+          const Eigen::VectorXd& start,
+          const Bounds& box) -> fit_expected<optim::OptimResult> {
+    auto run = [&](const optim::ScalarProblem& q, const optim::ConstraintFn& hq,
+                   const optim::ConstraintJacFn& Jq, Eigen::Index mq,
+                   const Eigen::VectorXd& z0, const Bounds& zbox) {
+      return run_scalar_constrained(q, hq, Jq, mq, z0, zbox, backend, opts, who);
+    };
+    if (!map) return run(p, h, J, m, start, box);
+    return driven::run_in_coordinates(p, h, J, m, *map, start, box, run);
+  };
   if (nl.active()) {
     if (!con.active()) {
       auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
       auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
-      auto r =
-          run_scalar_constrained(prob, h_fn, jac_fn, nl.m(), x0, bounds,
-                                 backend, opts, who);
+      auto r = solve_constrained(prob, h_fn, jac_fn, nl.m(), x0, bounds);
       if (!r.has_value()) return std::unexpected(r.error());
       return Estimates{prob.expand(r->x), r->fmin, r->iterations,
                        r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
@@ -1785,8 +1836,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
       abounds = optim::fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
-    auto r = run_scalar_constrained(prob_a, h_a, jac_a, nl.m(), alpha0,
-                                    abounds, backend, opts, who);
+    auto r = solve_constrained(prob_a, h_a, jac_a, nl.m(), alpha0, abounds);
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd theta_hat = prob_a.expand(r->x);
     if (!bounds.empty() && !pure_merge) {
@@ -1807,7 +1857,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
   }
 
   if (!con.active()) {
-    auto out = run_scalar(prob, x0, bounds, backend, opts);
+    auto out = solve(prob, x0, bounds);
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
                      out->f_evals, out->g_evals,
@@ -1830,7 +1880,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
     abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
-  auto out = run_scalar(prob_a, alpha0, abounds, backend, opts);
+  auto out = solve(prob_a, alpha0, abounds);
   if (!out.has_value()) return std::unexpected(out.error());
   return Estimates{prob_a.expand(out->x), out->fmin, out->iterations,
                    out->f_evals, out->g_evals,
@@ -1872,7 +1922,7 @@ compose_scalar_ml_extra(
     const NonlinearEqConstraints& nl,
     const frontier::ExtraNonlinearEqConstraints& extra,
     const Eigen::VectorXd& x0, const Bounds& bounds, Backend backend,
-    OptimOptions opts, const char* who) {
+    OptimOptions opts, const char* who, const CoordinateMap* map = nullptr) {
   if (auto ok = validate_extra_constraints(extra, x0, prob.n_param, who);
       !ok.has_value()) {
     return std::unexpected(ok.error());
@@ -1881,7 +1931,7 @@ compose_scalar_ml_extra(
   const Eigen::Index n_constraint =
       static_cast<Eigen::Index>(nl.m()) + extra.n_constraint;
   if (n_constraint == 0) {
-    return compose_scalar_ml(prob, con, nl, x0, bounds, backend, opts, who);
+    return compose_scalar_ml(prob, con, nl, x0, bounds, backend, opts, who, map);
   }
 
   auto h_theta = [&nl, &extra, n_constraint](const Eigen::VectorXd& theta) {
@@ -1910,9 +1960,21 @@ compose_scalar_ml_extra(
     return out;
   };
 
+  auto solve_constrained =
+      [&](const optim::ScalarProblem& p, const optim::ConstraintFn& h,
+          const optim::ConstraintJacFn& J, const Eigen::VectorXd& start,
+          const Bounds& box) -> fit_expected<optim::OptimResult> {
+    auto run = [&](const optim::ScalarProblem& q, const optim::ConstraintFn& hq,
+                   const optim::ConstraintJacFn& Jq, Eigen::Index mq,
+                   const Eigen::VectorXd& z0, const Bounds& zbox) {
+      return run_scalar_constrained(q, hq, Jq, mq, z0, zbox, backend, opts, who);
+    };
+    if (!map) return run(p, h, J, n_constraint, start, box);
+    return driven::run_in_coordinates(p, h, J, n_constraint, *map, start, box, run);
+  };
+
   if (!con.active()) {
-    auto r = run_scalar_constrained(prob, h_theta, J_theta, n_constraint, x0,
-                                    bounds, backend, opts, who);
+    auto r = solve_constrained(prob, h_theta, J_theta, x0, bounds);
     if (!r.has_value()) return std::unexpected(r.error());
     return Estimates{prob.expand(r->x), r->fmin, r->iterations,
                      r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
@@ -1940,8 +2002,7 @@ compose_scalar_ml_extra(
     abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
-  auto r = run_scalar_constrained(prob_a, h_a, jac_a, n_constraint, alpha0,
-                                  abounds, backend, opts, who);
+  auto r = solve_constrained(prob_a, h_a, jac_a, alpha0, abounds);
   if (!r.has_value()) return std::unexpected(r.error());
   Eigen::VectorXd theta_hat = prob_a.expand(r->x);
   if (!bounds.empty() && !pure_merge) {
@@ -1968,7 +2029,36 @@ fit_expected<Estimates>
 compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
             const NonlinearEqConstraints& nl, const SampleStats& samp,
             const Eigen::VectorXd& x0, const gmm::Weight& weight,
-            const Bounds& bounds, Backend backend, OptimOptions opts) {
+            const Bounds& bounds, Backend backend, OptimOptions opts,
+            const CoordinateMap* map = nullptr) {
+  // Least-squares backends see the residual structure and scale themselves
+  // (Ceres Jacobi scaling, NL2SOL's adaptive D); scalar backends take the map.
+  const bool ls_backend = backend == Backend::Ceres ||
+      backend == Backend::CeresBfgs || backend == Backend::PortNls;
+  if (ls_backend) map = nullptr;
+  auto solve = [&](const optim::GmmProblem& p, const Eigen::VectorXd& start,
+                   const Bounds& box) -> fit_expected<optim::OptimResult> {
+    if (!map) return run_gmm(p, start, box, backend, opts);
+    auto run = [&](const optim::ScalarProblem& q, const Eigen::VectorXd& z0,
+                   const Bounds& zbox) {
+      return run_scalar(q, z0, zbox, backend, opts);
+    };
+    return driven::run_in_coordinates(optim::scalarize(p), *map, start, box, run);
+  };
+  auto solve_constrained =
+      [&](const optim::ScalarProblem& p, const optim::ConstraintFn& h,
+          const optim::ConstraintJacFn& J, Eigen::Index m,
+          const Eigen::VectorXd& start,
+          const Bounds& box) -> fit_expected<optim::OptimResult> {
+    auto run = [&](const optim::ScalarProblem& q, const optim::ConstraintFn& hq,
+                   const optim::ConstraintJacFn& Jq, Eigen::Index mq,
+                   const Eigen::VectorXd& z0, const Bounds& zbox) {
+      return run_scalar_constrained(q, hq, Jq, mq, z0, zbox, backend, opts,
+                                    "fit_gmm");
+    };
+    if (!map) return run(p, h, J, m, start, box);
+    return driven::run_in_coordinates(p, h, J, m, *map, start, box, run);
+  };
   auto prob_or = gmm::residuals(ev, samp, x0, weight);
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::GmmProblem prob = std::move(*prob_or);
@@ -1982,9 +2072,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
       const optim::ScalarProblem sprob = optim::scalarize(prob);
       auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
       auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
-      auto r =
-          run_scalar_constrained(sprob, h_fn, jac_fn, nl.m(), x0, bounds,
-                                 backend, opts, "fit_gmm");
+      auto r = solve_constrained(sprob, h_fn, jac_fn, nl.m(), x0, bounds);
       if (!r.has_value()) return std::unexpected(r.error());
       return Estimates{prob.expand(r->x), r->fmin, r->iterations,
                        r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
@@ -2016,8 +2104,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
       abounds = optim::fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
-    auto r = run_scalar_constrained(sprob_a, h_a, jac_a, nl.m(), alpha0,
-                                    abounds, backend, opts, "fit_gmm");
+    auto r = solve_constrained(sprob_a, h_a, jac_a, nl.m(), alpha0, abounds);
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd theta_hat = prob_a.expand(r->x);
     if (!bounds.empty() && !pure_merge) {
@@ -2038,7 +2125,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   }
 
   if (!con.active()) {
-    auto out = run_gmm(prob, x0, bounds, backend, opts);
+    auto out = solve(prob, x0, bounds);
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
                      out->f_evals, out->g_evals,
@@ -2062,7 +2149,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
-  auto out = run_gmm(prob_a, alpha0, abounds, backend, opts);
+  auto out = solve(prob_a, alpha0, abounds);
   if (!out.has_value()) return std::unexpected(out.error());
   Eigen::VectorXd theta_hat = prob_a.expand(out->x);
   if (!bounds.empty() && !pure_merge) {
@@ -2427,8 +2514,11 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
-                         backend, opts);
+  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto est = record_coordinates(
+      compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds, backend,
+                  opts, map ? &*map : nullptr),
+      map);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
@@ -2455,8 +2545,11 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
     auto obj_or = gmm::normal_theory_objective(pre->ev, samp, x0);
     if (!obj_or.has_value()) return std::unexpected(obj_or.error());
     const optim::ScalarProblem prob = std::move(*obj_or);
-    auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
-                                 opts, "fit_gls");
+    const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+    auto est = record_coordinates(
+        compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend, opts,
+                          "fit_gls", map ? &*map : nullptr),
+        map);
     if (!est.has_value()) return est;
     attach_diagnostics(*est, pt, *pre, bounds);
     attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
@@ -2560,8 +2653,11 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
     W.push_back(std::move(*bw));
   }
 
-  auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds,
-                         backend, opts);
+  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto est = record_coordinates(
+      compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds, backend, opts,
+                  map ? &*map : nullptr),
+      map);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
@@ -2571,61 +2667,20 @@ fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
 
 namespace {
 
-// The validated complete-data ML driver: optional sample-based coordinate
-// scaling on the constraint-reduced problem, else the generic scalar composer.
-// `prob` is any θ-space ½F-scale objective over `pre.ev` (ordinary ML, or ML
-// plus a frontier penalty).
+// The complete-data ML driver: the scalar composer in the optimizer
+// coordinates the options select. `prob` is any theta-space 1/2 F-scale
+// objective over `pre.ev` (ordinary ML, or ML plus a frontier penalty).
 fit_expected<Estimates>
 drive_ml_scalar(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 const Prelude& pre, const SampleStats& samp,
                 const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
                 const Bounds& bounds, Backend backend, const OptimOptions& opts,
                 const char* who) {
-  const bool supported_backend = backend == Backend::NloptLbfgs ||
-      backend == Backend::NloptSlsqp || backend == Backend::NloptLbfgsSlsqpFallback;
-  // General affine bounds and nonlinear constraints retain their established
-  // adapter. Scaling never drops or approximates an imposed constraint.
-  if (!opts.ml_sample_scaling || !supported_backend || pre.nl.active() ||
-      pre.con.n_alpha == 0 || (!bounds.empty() && pre.con.group.empty()))
-    return compose_scalar_ml(prob, pre.con, pre.nl, x0, bounds, backend,
-                             opts, who);
-  auto scale = ml_coordinate_scale(pt, rep, pre.con, samp);
-  if (!scale) return std::unexpected(scale.error());
-  const auto reduced = optim::reparameterize(prob, pre.con);
-  optim::ScalarProblem driven;
-  driven.n_param = pre.con.n_alpha;
-  driven.expand = [](const Eigen::VectorXd& z) { return z; };
-  driven.f = [&reduced, &scale](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
-    const double f = reduced.f(scale->cwiseProduct(z), g);
-    g.array() *= scale->array();
-    return f;
-  };
-  Bounds original_bounds = bounds.empty() ? Bounds{} :
-      optim::fold_alpha_bounds(pre.con, bounds);
-  Bounds scaled_bounds = original_bounds;
-  Eigen::VectorXd alpha = pre.con.contract(x0);
-  if (!original_bounds.empty()) {
-    alpha = alpha.cwiseMax(original_bounds.lower).cwiseMin(original_bounds.upper);
-    scaled_bounds.lower.array() /= scale->array();
-    scaled_bounds.upper.array() /= scale->array();
-  }
-  auto result = run_scalar(driven, alpha.cwiseQuotient(*scale), scaled_bounds,
-                           backend, opts);
-  if (!result) return std::unexpected(result.error());
-  alpha = scale->cwiseProduct(result->x);
-  Eigen::VectorXd gradient;
-  const double f = reduced.f(alpha, gradient);
-  const double infinity = std::numeric_limits<double>::infinity();
-  const Eigen::VectorXd lower = original_bounds.empty()
-      ? Eigen::VectorXd::Constant(alpha.size(), -infinity) : original_bounds.lower;
-  const Eigen::VectorXd upper = original_bounds.empty()
-      ? Eigen::VectorXd::Constant(alpha.size(), infinity) : original_bounds.upper;
-  auto audit = optim::audit_terminal_iterate(reduced.f, alpha, f, lower, upper);
-  Estimates scaled_est{pre.con.expand(alpha), f, result->iterations,
-      result->f_evals, result->g_evals, result->status,
-      gradient.size() ? gradient.cwiseAbs().maxCoeff() : 0.0, std::move(audit)};
-  scaled_est.ml_sample_scaling_applied = true;
-  return scaled_est;
+  const auto map = optimizer_coordinates(pt, rep, pre, samp, x0, backend, opts);
+  return record_coordinates(
+      compose_scalar_ml(prob, pre.con, pre.nl, x0, bounds, backend, opts, who,
+                        map ? &*map : nullptr),
+      map);
 }
 
 }  // namespace
@@ -2936,9 +2991,12 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  auto est = compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0,
-                                     bounds, backend, opts,
-                                     "fit_ml_constrained");
+  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto est = record_coordinates(
+      compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0, bounds,
+                              backend, opts, "fit_ml_constrained",
+                              map ? &*map : nullptr),
+      map);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   if (!extra.active()) {
@@ -3378,9 +3436,12 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto prob_or = gmm::residuals(pre->ev, samp, x0, weight);
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::ScalarProblem prob = optim::scalarize(*prob_or);
-  auto est = compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0,
-                                     bounds, backend, opts,
-                                     "fit_gmm_constrained");
+  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto est = record_coordinates(
+      compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0, bounds,
+                              backend, opts, "fit_gmm_constrained",
+                              map ? &*map : nullptr),
+      map);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, pt, *pre, bounds);
   if (!extra.active()) {

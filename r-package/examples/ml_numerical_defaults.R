@@ -8,11 +8,11 @@ s <- df_to_data(x, m, scaling='n')
 a <- magmaan_core$fit_ml(m,s)
 b <- magmaan_core$fit_ml(m,s, control=list(
   nlopt=list(ftol_rel=1e-12,xtol_rel=1e-10,max_eval=5000)))
-stopifnot(a$ml_sample_scaling, identical(a$theta,b$theta),
+stopifnot(identical(a$coordinate_scaling,'information'), identical(a$theta,b$theta),
           identical(a$ml_start_policy,'transported-std-lv-fabin'))
 legacy <- magmaan_core$fit_ml(m,s,control=list(
   start='fabin3',ml_sample_scaling=FALSE,ftol=1e-12,gtol=1e-10,max_iter=5000))
-stopifnot(!legacy$ml_sample_scaling,identical(legacy$ml_start_policy,'fabin3'),
+stopifnot(identical(legacy$coordinate_scaling,'none'),identical(legacy$ml_start_policy,'fabin3'),
           max(abs(a$theta-legacy$theta)) < 1e-4)
 # Legacy fields override profile values, explicit backend fields override both.
 c <- magmaan_core$fit_ml(m,s,control=list(ftol=.1,gtol=.1,max_iter=2,
@@ -46,7 +46,7 @@ required <- try(magmaan_core$estimate_start_values(fixed$partable, s, transport=
 stopifnot(inherits(required, "try-error"))
 fallback_fit <- magmaan_core$fit_ml(fixed, s, optimizer="nlopt-slsqp")
 stopifnot(fallback_fit$ml_start_fallback_reason == "fixed-values-unsupported",
-          fallback_fit$ml_sample_scaling)
+          identical(fallback_fit$coordinate_scaling,'information'))
 cat('Composable start policy checks passed.\n')
 pd <- frontier_fit_ml_psd(m, s, control=list(start="default"))
 stopifnot(identical(p$theta, pd$theta), pd$ml_start_fallback_reason == "none")

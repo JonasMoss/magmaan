@@ -105,7 +105,8 @@ identification scale solve and a GLS latent-level structural fit, with
 sign-generic moment magnitudes for variance-carrying paths, then means, a
 unit-weighted constraint projection and PD repair. It is identification- and
 spelling-invariant in its implied start covariance and equivariant under
-observed rescaling (unit tests). On the 608-pair engineering/17 scan it gains
+observed rescaling on the unit-test models, but not yet on 32 of 239
+unit-invariant corpus pairs (engineering/17). On the 608-pair engineering/17 scan it gains
 113 and loses 4 case fits across ML/GLS × PORT/L-BFGS; the losses are optimizer
 terminations from lower start objectives. Simple/FABIN no longer read a zero
 disturbance as a std.lv scale. Trait-state blocks whose latent covariance only
@@ -202,11 +203,17 @@ Beta/Psi/Alpha phantom-state cells. This fixes skipped FABIN loadings,
 full-variance residual starts and zero intercept starts in structural models;
 the Geiser latent-path marker default then passes ordinary L-BFGS/SLSQP and
 PSD-SLSQP without oracle starts or optimizer changes.
-Ordinary L-BFGS/SLSQP ML uses sample-derived equality-reduced scaling on
-supported constraints; PSD ML defaults to existing lifted information scaling
-and constraint tolerance 1e-8. Generic controls and explicit unscaled policies
-remain available. Search scaling is reported and terminal diagnostics are
-recomputed in original coordinates; see the optimizer-controls reference.
+Every scalar backend searches complete-data ML, GLS, the moment least-squares
+family, pairwise GLS, the constrained ML/GMM entries and FIML in shared
+unit-equivariant optimizer coordinates (`estimate/coordinates.hpp`): the
+equality-reduced parameter in sample units (observed SDs and each latent's
+identification), refined downward by the expected information at the start,
+with means and intercepts centered at their starts. This is the default
+(`OptimOptions::coordinate_scaling = Information`); `SampleUnits` and `None`
+remain selectable. The objective, constraints, bounds and the reported terminal
+audit keep model coordinates. PSD ML keeps its lifted information scaling and
+constraint tolerance 1e-8; ordinal, two-level and several frontier routes stay
+in raw coordinates (backlog). See the optimizer-controls reference.
 Explicit complete-data ML recovery is available as
 `estimate::frontier::fit_ml_psd_fallback` (header
 `estimate/frontier/ml_psd_fallback.hpp`) and R's

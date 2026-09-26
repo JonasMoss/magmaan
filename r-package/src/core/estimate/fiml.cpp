@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <limits>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -24,6 +25,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -36,6 +38,7 @@
 
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
+#include "detail_coordinates.hpp"
 
 namespace magmaan::estimate::fiml {
 
@@ -7085,7 +7088,17 @@ fit_fiml_impl(spec::LatentStructure pt,
     return 0.5 * vg->value;
   };
 
+  // Optimizer coordinates from the start moments; raw coordinates when the
+  // options ask for none or the map cannot be formed.
+  std::optional<CoordinateMap> map;
+  if (opts.coordinate_scaling != optim::CoordinateScaling::None && con.n_alpha > 0) {
+    if (auto m = coordinate_map(opts.coordinate_scaling, opts.center_locations, pt,
+                                rep, ev, con, start_samp, con.contract(x0)))
+      map = std::move(*m);
+  }
+
   auto finalize = [&](Estimates est) {
+    if (map) est.coordinate_scaling = map->kind;
     est.diagnostics = finalize_fit_diagnostics(
         est.theta, pt, ev, con, nl, Bounds{});
     if (!extra.active()) {
@@ -7102,7 +7115,7 @@ fit_fiml_impl(spec::LatentStructure pt,
     return est;
   };
 
-  auto run_fiml_scalar = [&](const optim::ScalarProblem& prob,
+  auto raw_fiml_scalar = [&](const optim::ScalarProblem& prob,
                              const Eigen::VectorXd& start)
       -> fit_expected<optim::OptimResult> {
     switch (backend) {
@@ -7126,7 +7139,7 @@ fit_fiml_impl(spec::LatentStructure pt,
     }
   };
 
-  auto run_fiml_constrained = [&](const optim::ScalarProblem& prob,
+  auto raw_fiml_constrained = [&](const optim::ScalarProblem& prob,
                                   const optim::ConstraintFn& h,
                                   const optim::ConstraintJacFn& J_h,
                                   std::int32_t m,
@@ -7158,6 +7171,31 @@ fit_fiml_impl(spec::LatentStructure pt,
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": nonlinear equality constraints require optimizer "
         "\"nlopt-slsqp\" or \"ipopt\""));
+  };
+
+  auto run_fiml_scalar = [&](const optim::ScalarProblem& prob,
+                             const Eigen::VectorXd& start)
+      -> fit_expected<optim::OptimResult> {
+    if (!map) return raw_fiml_scalar(prob, start);
+    return driven::run_in_coordinates(
+        prob, *map, start, Bounds{},
+        [&](const optim::ScalarProblem& q, const Eigen::VectorXd& z0,
+            const Bounds&) { return raw_fiml_scalar(q, z0); });
+  };
+  auto run_fiml_constrained = [&](const optim::ScalarProblem& prob,
+                                  const optim::ConstraintFn& h,
+                                  const optim::ConstraintJacFn& J_h,
+                                  std::int32_t m,
+                                  const Eigen::VectorXd& start)
+      -> fit_expected<optim::OptimResult> {
+    if (!map) return raw_fiml_constrained(prob, h, J_h, m, start);
+    return driven::run_in_coordinates(
+        prob, h, J_h, m, *map, start, Bounds{},
+        [&](const optim::ScalarProblem& q, const optim::ConstraintFn& hq,
+            const optim::ConstraintJacFn& Jq, Eigen::Index mq,
+            const Eigen::VectorXd& z0, const Bounds&) {
+          return raw_fiml_constrained(q, hq, Jq, static_cast<std::int32_t>(mq), z0);
+        });
   };
 
   if (!con.active()) {

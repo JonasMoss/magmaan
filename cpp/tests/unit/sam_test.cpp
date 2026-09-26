@@ -216,8 +216,8 @@ TEST_CASE("fit_sam global equals local for a clean two-block model") {
   REQUIRE(lres.has_value());
   REQUIRE(gres.has_value());
   if (!lres.has_value() || !gres.has_value()) return;
-  CHECK((lres->VETA - gres->VETA).cwiseAbs().maxCoeff() ==
-        doctest::Approx(0.0).epsilon(1e-8));
+  // Equal up to the global fit's stopping precision.
+  CHECK((lres->VETA - gres->VETA).cwiseAbs().maxCoeff() < 1e-7);
 }
 
 TEST_CASE("fit_sam GLS and ULS mappings match lavaan local.options M.method") {

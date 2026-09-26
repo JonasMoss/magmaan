@@ -63,20 +63,20 @@ TEST_CASE("ML numerical policy preserves fitted objective under scaling and boun
       bounds.lower=Eigen::VectorXd::Constant(c.pt.n_free(),-.5*units*units);
       bounds.upper=Eigen::VectorXd::Constant(c.pt.n_free(),1000.);
       auto scaled=estimate::fit_ml(c.pt,c.rep,sample,start->theta,bounds,estimate::Backend::NloptSlsqp,opts); REQUIRE(scaled);
-      CHECK(scaled->ml_sample_scaling_applied);
+      CHECK(scaled->coordinate_scaling!=optim::CoordinateScaling::None);
       CHECK((scaled->theta.array()>=bounds.lower.array()-1e-8).all());
-      opts.ml_sample_scaling=false;
+      opts.coordinate_scaling=optim::CoordinateScaling::None;
       auto reference=estimate::fit_ml(c.pt,c.rep,sample,scaled->theta,bounds,estimate::Backend::NloptSlsqp,opts); REQUIRE(reference);
-      CHECK_FALSE(reference->ml_sample_scaling_applied);
+      CHECK(reference->coordinate_scaling==optim::CoordinateScaling::None);
       CHECK(std::abs(scaled->fmin-reference->fmin)<1e-8);
       CHECK(scaled->diagnostics.lin_eq_residual_inf<1e-8);
     }
   }
 }
-TEST_CASE("ML numerical policy defaults and opt-out are separate from generic options") {
+TEST_CASE("ML numerical policy defaults and coordinate defaults") {
   auto opts=estimate::ml_optim_options();
   CHECK(*opts.nlopt.ftol_rel==1e-12); CHECK(*opts.nlopt.xtol_rel==1e-10); CHECK(*opts.nlopt.max_eval==5000);
-  CHECK(opts.ml_sample_scaling); CHECK_FALSE(optim::OptimOptions{}.ml_sample_scaling);
+  CHECK(opts.coordinate_scaling==optim::CoordinateScaling::Information); CHECK(optim::OptimOptions{}.coordinate_scaling==optim::CoordinateScaling::Information);
   CHECK(estimate::frontier::ml_psd_options().diagonal_preconditioning);
   CHECK(*estimate::frontier::ml_psd_optim_options().nlopt.constraint_tol==1e-8);
   auto c=example(); c.sample.S[0](0,0)=0;
@@ -84,7 +84,7 @@ TEST_CASE("ML numerical policy defaults and opt-out are separate from generic op
   CHECK_FALSE(estimate::ml_coordinate_scale(c.pt,c.rep,*con,c.sample));
 }
 
-TEST_CASE("ML numerical policy retains constrained adapters") {
+TEST_CASE("ML numerical policy scales constrained adapters") {
   for (const char* syntax : {"f =~ x1 + a*x2 + b*x3 + x4\na == b*b",
                              "f =~ x1 + a*x2 + b*x3 + x4\na + b == 2"}) {
     auto c=example(syntax);
@@ -95,7 +95,7 @@ TEST_CASE("ML numerical policy retains constrained adapters") {
     auto fit=estimate::fit_ml(c.pt,c.rep,c.sample,start->theta,bounds,
                              estimate::Backend::NloptSlsqp);
     REQUIRE(fit);
-    CHECK_FALSE(fit->ml_sample_scaling_applied);
+    CHECK(fit->coordinate_scaling!=optim::CoordinateScaling::None);
     CHECK(fit->diagnostics.lin_eq_satisfied);
     CHECK(fit->diagnostics.nl_eq_satisfied);
   }

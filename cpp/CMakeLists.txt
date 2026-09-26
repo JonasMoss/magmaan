@@ -116,6 +116,7 @@ add_library(magmaan STATIC
   src/estimate/ordinal.cpp
   src/estimate/pairwise.cpp
   src/estimate/ml_numerics.cpp
+  src/estimate/coordinates.cpp
   src/estimate/start_pipeline.cpp
   src/estimate/start_values.cpp
   src/estimate/start_fabin.cpp

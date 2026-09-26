@@ -1505,6 +1505,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_coordinate_map
+Rcpp::List fit_coordinate_map(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector start, std::string scaling, bool center_locations);
+RcppExport SEXP _magmaanlab_fit_coordinate_map(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP startSEXP, SEXP scalingSEXP, SEXP center_locationsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type start(startSEXP);
+    Rcpp::traits::input_parameter< std::string >::type scaling(scalingSEXP);
+    Rcpp::traits::input_parameter< bool >::type center_locations(center_locationsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_coordinate_map(partable, sample_stats, start, scaling, center_locations));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_structured_gamma
 SEXP estimate_structured_gamma(Rcpp::List fit, SEXP raw_data);
 RcppExport SEXP _magmaanlab_estimate_structured_gamma(SEXP fitSEXP, SEXP raw_dataSEXP) {
@@ -4439,6 +4454,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_gls_snlls_impl", (DL_FUNC) &_magmaanlab_fit_gls_snlls_impl, 5},
     {"_magmaanlab_fit_wls_snlls_impl", (DL_FUNC) &_magmaanlab_fit_wls_snlls_impl, 6},
     {"_magmaanlab_fit_start_values", (DL_FUNC) &_magmaanlab_fit_start_values, 4},
+    {"_magmaanlab_fit_coordinate_map", (DL_FUNC) &_magmaanlab_fit_coordinate_map, 5},
     {"_magmaanlab_estimate_structured_gamma", (DL_FUNC) &_magmaanlab_estimate_structured_gamma, 2},
     {"_magmaanlab_estimate_structured_gamma_weight", (DL_FUNC) &_magmaanlab_estimate_structured_gamma_weight, 2},
     {"_magmaanlab_model_implied", (DL_FUNC) &_magmaanlab_model_implied, 1},

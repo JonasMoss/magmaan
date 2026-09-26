@@ -437,7 +437,19 @@ inline magmaan::optim::OptimOptions optim_opts_from(
     if (l.containsElementNamed("max_iter")) { o.max_iter = Rcpp::as<int>(l["max_iter"]); o.nlopt.max_eval.reset(); }
     if (l.containsElementNamed("ftol")) { o.ftol = Rcpp::as<double>(l["ftol"]); o.nlopt.ftol_rel.reset(); }
     if (l.containsElementNamed("gtol")) { o.gtol = Rcpp::as<double>(l["gtol"]); o.nlopt.xtol_rel.reset(); }
-    if (l.containsElementNamed("ml_sample_scaling")) o.ml_sample_scaling = Rcpp::as<bool>(l["ml_sample_scaling"]);
+    if (l.containsElementNamed("ml_sample_scaling"))  // legacy alias
+      o.coordinate_scaling = Rcpp::as<bool>(l["ml_sample_scaling"])
+          ? magmaan::optim::CoordinateScaling::SampleUnits
+          : magmaan::optim::CoordinateScaling::None;
+    if (l.containsElementNamed("coordinate_scaling")) {
+      const std::string kind = Rcpp::as<std::string>(l["coordinate_scaling"]);
+      if (kind == "none") o.coordinate_scaling = magmaan::optim::CoordinateScaling::None;
+      else if (kind == "sample_units") o.coordinate_scaling = magmaan::optim::CoordinateScaling::SampleUnits;
+      else if (kind == "information") o.coordinate_scaling = magmaan::optim::CoordinateScaling::Information;
+      else Rcpp::stop("control$coordinate_scaling must be \"none\", \"sample_units\" or \"information\"");
+    }
+    if (l.containsElementNamed("center_locations"))
+      o.center_locations = Rcpp::as<bool>(l["center_locations"]);
     if (l.containsElementNamed("history"))  o.history  = Rcpp::as<int>(l["history"]);
     if (l.containsElementNamed("nlopt")) {
       Rcpp::List c = Rcpp::as<Rcpp::List>(l["nlopt"]);

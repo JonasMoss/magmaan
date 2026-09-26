@@ -170,16 +170,52 @@ section: the categorical corpus saddles are under
 
 ### Optimizer failures on the textbook corpus
 
-- **S — PORT coordinate scaling for ML and GLS.** magmaan's PORT runs ML and GLS
-  in raw coordinates; the ML sample scaling covers L-BFGS and SLSQP only.
-  lavaan hands `nlminb` a start-based scale (1/|start| for |start| > 1). On
-  raw-unit data, unscaled PORT stops early by X-convergence with only the paths
-  moved: Kline's Roth ML models from the layered start stop after 11 iterations,
-  while the same objective with lavaan's scale reaches the optimum in 25
-  (`engineering/17`, `R/probe_port_scaling.R`). Give PORT the existing
-  sample-derived coordinate scale (unit-equivariant, unlike lavaan's
-  start-threshold rule), extend it to GLS, and rerun the corpus comparison. The
-  three historical GLS PORT-versus-lavaan gaps are path sensitivity, not scaling.
+- **Optimizer coordinates — DONE (2026-09-26), follow-ups below.** Every
+  scalar backend (PORT, L-BFGS, SLSQP and their fallback, TNEWTON, VAR2,
+  BOBYQA, IPOPT) now searches complete-data ML, GLS, the moment least-squares
+  family, pairwise GLS, the constrained ML/GMM entries and FIML in
+  unit-equivariant coordinates, information-refined sample units by default
+  ([optimizer controls](../reference/optimizer-controls.md#optimizer-coordinates-2026-09-25),
+  `estimate/coordinates.hpp`). This fixes the Kline Roth PORT early stops and
+  replaces the old ML-only L-BFGS/SLSQP scaling, whose phantom latents took the
+  block-mean SD because their unit loadings are structural cells. Evidence:
+  `engineering/17`, section "Optimizer coordinates".
+- **S — optimizer coordinates for the remaining routes.** Still in raw
+  coordinates: ordinal and mixed ordinal fits (mixed models keep continuous
+  columns in data units), CatML, two-level ML, the frontier pairwise
+  likelihood, SNLLS's outer loading block, the IRLS inner GLS solves and the
+  fitted-weight loop (each a one-line wiring through `optimizer_coordinates`),
+  and RBM. PSD ML keeps its own lifted information diagonal, whose absolute
+  clamps [1e-4, 1e4] and unit fallback are not unit-equivariant; the sphere
+  route uses the sample units only. Ceres LM and NL2SOL scale themselves and stay
+  out. Wire each remaining route with a unit-rescaling test, as
+  `coordinates_test.cpp` does for ML.
+- **S/M — L-BFGS first-step domain aborts.** NLopt's Luksan L-BFGS takes an
+  unbounded first step along the driven gradient and ends with a generic
+  failure (about 12 evaluations) when trial points leave the positive-definite
+  region; it can also run along a flat ridge to a far "stationary" point
+  (Kievit's latent change score FIML from lavaan's start: disturbance variances
+  near 1e6, gradient under the audit tolerance), which the L-BFGS/SLSQP fallback
+  does not retry. Information coordinates size the first step and remove most
+  of these on the corpus, not all. Candidates: a first-step cap in driven
+  coordinates, a backtracking wrapper that maps infeasible trial points to a
+  finite merit value, a fallback trigger on the fit verdict rather than the
+  backend status, or PORT (whose trust region backs off) as the ordinary default.
+- **S — starts that are not unit-equivariant.** Under a per-variable change of
+  units, the auto-transported FABIN3 start moves on 148 of the 239
+  unit-invariant engineering/17 pairs, and on higher-order and cross-group
+  models in `coordinates_test.cpp`. The layered start moves on 32: Geiser's
+  latent autoregressive and state-trait models, Newsom 3.1c, 5.5b and 9.4,
+  Little's Table 7.6 and 3.7 models, the Chapter 10 MTMM, Guo's invariance
+  model and a few others (the rank-deficient fallbacks to FABIN3 among them).
+  Find and remove the unit-dependent steps before defaulting the layered start.
+- **S — score tests admit unidentified candidates by rounding.** A freed marker
+  loading is unidentified, so its efficient information is zero at every
+  estimate; the absolute tolerance in `score_for_coordinate_robust` admits or
+  drops it depending on information-matrix rounding (FIML robust MI on a
+  one-factor model: MI 1e-18 and c 2e-7 at one estimate, excluded at an estimate
+  6e-6 away). Exclude candidates that only change the identification, or judge
+  the efficient information relative to the candidate's own.
 
 - **M, default ordinary fits on the corrected textbook corpus.** The corpus is
   now source-verified (every case reproduces its book's output; see the
@@ -201,9 +237,10 @@ section: the categorical corpus saddles are under
   start (start-policy item above) recovers 19 of the 21 targeted pairs under
   both PORT and L-BFGS, including both invalid-start models and all three GLS
   cases; do not adopt blanket 0.5 starts. The two Chapter 8 ALT ML models still
-  reach a second optimum. From layered starts the remaining losses are
-  optimizer events: L-BFGS's early line-search abort (Geiser quadratic growth)
-  and PORT/L-BFGS stopping short on raw-unit variances (Kline Roth, Lynam GLS).
+  reach a second optimum. The optimizer losses that remained from layered
+  starts (L-BFGS's early line-search abort on Geiser's quadratic growth, PORT and
+  L-BFGS stopping short on raw-unit variances in Kline's Roth and Lynam models)
+  are recovered in information coordinates, the default since 2026-09-26.
   Investigate escape from poor stationary points before unskipping the
   low-level golden. Geiser's marker default-start failures are
   resolved by correcting Reduced representation handling in simple/FABIN
