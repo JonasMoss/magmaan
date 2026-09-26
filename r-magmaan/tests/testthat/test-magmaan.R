@@ -259,13 +259,11 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
 })
 
-test_that("parameter tests are Wald, with likelihood-ratio inversion planned", {
+test_that("confint() intervals are Wald, with likelihood-ratio inversion planned", {
   fit <- magmaan(cfa, hs())
-  expect_identical(parameters(fit, test = "wald"), parameters(fit))
   expect_identical(confint(fit, test = "wald"), confint(fit))
-  expect_error(parameters(fit, test = "lr"), "parameters\\(\\): test = \"lr\" is planned")
-  expect_error(confint(fit, test = "lr"), "planned")
-  expect_error(summary(fit, test = "score"), "must be one of \"wald\"")
+  expect_error(confint(fit, test = "lr"), "confint\\(\\): test = \"lr\" is planned")
+  expect_error(confint(fit, test = "score"), "must be one of \"wald\"")
 })
 
 test_that("anova() refuses pairs it cannot compare", {

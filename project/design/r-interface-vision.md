@@ -134,10 +134,9 @@ Parameter uncertainty:
 - Standard errors, Wald z-tests and symmetric Wald intervals from that
   covariance, and defined parameters by the delta method. A contrast such as
   `d := a - b` gives the one-df Wald test of `a == b`.
-- `parameters()`, `confint()` and `summary()` take `test = "wald"`, the only
-  value so far. Inverting the robust likelihood-ratio test (`"lr"`) is
-  planned. Wald stays the default until a pre-registered decision study says
-  otherwise (backlog).
+- `confint()` takes `test = "wald"`, the only value so far. Inverting the
+  robust likelihood-ratio test (`"lr"`) is planned there. Wald stays the
+  default until a pre-registered decision study says otherwise (backlog).
 
 Global tests against the saturated model:
 

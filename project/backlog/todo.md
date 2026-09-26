@@ -53,8 +53,8 @@ design, starting-point inventory and validation rules are in
     global score test (engineering/16) but has no study of its own. The
     covariance-honest paper's interior-inference rerun would be the first.
   - Other estimators follow the policy's extension (the L item below).
-- **M — likelihood-ratio intervals and p-values: `test = "lr"`.**
-  `parameters()`, `confint()` and `summary()` reserve the value (2026-09-26).
+- **M — likelihood-ratio intervals: `confint(fit, test = "lr")`.** The value
+  is reserved (2026-09-26).
   The engine exists in the lab: `frontier_profile_lrt_ci_parameter_ml()` (and
   the FIML, ML2S, GMM and ordinal variants), with a Satorra-scaled robust
   option, which is Falk's (2018) robust LR interval.
