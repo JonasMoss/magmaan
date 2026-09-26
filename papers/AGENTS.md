@@ -53,11 +53,11 @@ the `just ship` bundle are in the contract; the paper's `README.md` repeats
 them. Single-question explorations that are about magmaan rather than the
 paper belong in `experiments/`, not in the paper's `dev/`.
 
-Papers still on an older layout (sem-psd and sem-sphere on 0.1;
-closed-form-omega, guttman-inference, sem-misspecification, snlls-continuous,
-and snlls-ordinal on earlier flat layouts) keep working as they are. Move one
-at a time with the `paper-init` skill, which moves nothing until the author
-approves the complete mapping.
+sem-misspecification and sem-psd use this layout (moved 2026-09-26). Papers
+still on an older layout (sem-sphere on 0.1; closed-form-omega,
+guttman-inference, snlls-continuous, and snlls-ordinal on earlier flat layouts)
+keep working as they are. Move one at a time with the `paper-init` skill, which
+moves nothing until the author approves the complete mapping.
 
 ## magmaan specifics
 
