@@ -32,6 +32,9 @@ ml_esc <- rd("ml-gls", "escapes"); ps_rt <- rd("psd-ml", "rates_by_family_transf
 rdt <- function(name) { run <<- "2026-09-26-third"; on.exit(run <<- "2026-09-26"); rd("ml-gls", name) }
 t3_choice <- rdt("choice"); t3_dec <- rdt("decision"); t3_rates <- rdt("rates_by_family")
 t3_run <- rdt("runaways"); t3_loss <- rdt("losses"); t3_pair <- rdt("paired")
+rd2 <- function(name) { run <<- "2026-09-26-second"; on.exit(run <<- "2026-09-26"); rd("psd-ml", name) }
+p2_dec <- rd2("decision"); p2_rates <- rd2("rates_by_family"); p2_pair <- rd2("paired")
+p2_rt <- rd2("rates_by_family_transform"); p2_loss <- rd2("losses")
 t3 <- function(arm, est, col = "success") tot(t3_rates, arm, col, est)
 t3r <- function(arm, est) sum(t3_run$beyond_10[t3_run$role == "test" & t3_run$arm == arm & t3_run$estimator == est])
 tot <- function(r, arm, col, est = NULL) sum(r[[col]][r$role == "test" & r$arm == arm &
@@ -94,8 +97,16 @@ optimization project.
   `layered_lbfgs` exactly on all 92,000 fits: the same certification and the
   same objective (`results/ml-gls/2026-09-26-library/reproduction.csv`).
 
-**PSD ML: keep today's direct configuration. The two-stage route is better
-only in rescaled units.**
+**PSD ML: keep FABIN3 in both PSD routes, confirmed after the ML/GLS
+promotion (second run).** The layered start does not carry over to PSD. In
+the second run, on fresh draws with the runaway rule, it fails rule A again
+(direct PSD fits, five of six test families) and rule E (the fallback's
+ordinary step, four of six). Most of its losses exhaust SLSQP's budget. So
+`frontier_fit_ml_psd_fallback` keeps its ordinary step on FABIN3 with L-BFGS,
+although complete-data ML's own default is now the layered start. The route
+result replicates: two-stage is better overall, and its whole advantage comes from rescaled units.
+
+The first run's findings:
 
 - **Rule A fails.** The layered cold start loses in four of the six test
   families.
@@ -140,9 +151,10 @@ Two issues found along the way:
 | ML and GLS optimizer | NLopt L-BFGS | provisional: PORT certifies more but returns about eight times as many runaways; reopen once the verdict flags runaways | lane ml-gls, runs 2 and 3 |
 | verdict on runaway paths | the Newton check accepts divergent-path points | open: scoring has a runaway rule (extent > 10); the library verdict does not | lane ml-gls, runs 2 and 3 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
-| PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families) | lane psd-ml |
+| PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
+| PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
-| PSD route | direct PSD fit | open, for the author: two-stage from today's ordinary default is better and faster | lane psd-ml |
+| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | open, for the author: two-stage is better and faster overall, only in rescaled units (replicated) | lane psd-ml, runs 1 and 2 |
 | PSD feasibility tolerances | absolute | settled: keep (rule D passes, 0 fits) | lane psd-ml |
 | PSD preconditioning clamp | $[10^{-4}, 10^{4}]$, absolute | open: costs direct PSD fits at $\times 100$ | lane psd-ml failures |
 
@@ -364,6 +376,55 @@ tab(f[c("family", "cause", intersect(c("native", "x100", "x0.01", "mixed"), name
   $N = 100$. It occurs in native and $\times 0.01$ units about equally and
   never at $\times 100$. The mechanism is not yet known.
 
+### Second run: after the ML/GLS promotion
+
+Pre-registered in the dated section of
+[criteria/psd-ml.md](criteria/psd-ml.md) (commit `d0413f2c`), on seed base
+2026092604 with the runaway rule. The question: now that complete-data ML
+starts from the layered start, should the PSD routes follow?
+
+```{r psd2-rules}
+tab(p2_dec[c("rule", "scope", "value", "pass")],
+    col.names = c("Rule", "Test family", "Value", "Pass"))
+```
+
+```{r psd2-routes}
+a <- stats::aggregate(cbind(attainable, success, best, total_seconds) ~ arm, p2_rates[p2_rates$role == "test", ], sum)
+a$total_seconds <- round(a$total_seconds)
+tab(a, col.names = c("Arm", "Attainable", "Success", "Best known", "Seconds"))
+```
+
+- **Neither rule passes, so nothing changes.** Rule A fails in five of six
+  test families and rule E in four. The equality-constrained family is the
+  exception, and a large one: there the layered start avoids most of
+  FABIN3's exhausted budgets (direct PSD fits: 203 exhausted with FABIN3, 23
+  with the layered start). That family alone gives `psd_layered` the higher
+  total.
+- **The losses are mostly exhausted budgets.** Of the named losses in
+  `losses.csv`:
+  - rule A: 231 exhaust SLSQP's budget and 46 stop at a saddle (nonpositive
+    curvature), out of 301;
+  - rule E: 266 of 344 exhaust the budget.
+- **Where rule E loses.** 153 of its losses come from draws where the ordinary
+  step errors. The PSD refit then starts cold from the ordinary step's own
+  start, now the layered start, which rule A rejects for PSD. The other
+  losses are warm starts from rejected (115) or improper (76) layered-start
+  endpoints.
+- **No PSD fit is a runaway.** Every certified PSD fit, in every arm, has a
+  standardized extent of at most 10. So the runaway rule changes nothing in
+  this lane.
+- **The route result replicates.** Two-stage (with the FABIN3 ordinary step)
+  certifies more than the direct fit and takes about 40% less time. In native
+  units the direct fit is again slightly ahead
+  (`r f0(sum(p2_rt$success[p2_rt$role == "test" & p2_rt$transform == "native" & p2_rt$arm == "psd_default"]))`
+  against
+  `r f0(sum(p2_rt$success[p2_rt$role == "test" & p2_rt$transform == "native" & p2_rt$arm == "twostage_default"]))`);
+  two-stage wins after rescaling.
+
+A probe before the pre-registration, on the covariance-honest paper's own
+designs, pointed the same way (disclosed in the criteria): with marker
+identification the layered ordinary step lost 33 fits and won 2.
+
 ## Reproduce
 
 ```sh
@@ -371,7 +432,10 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 Rscript run_experiment.R --help
 Rscript run_experiment.R --lane ml-gls --smoke
 nice -n 10 Rscript run_experiment.R --lane ml-gls --workers 4   # about 10 minutes
-nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4   # about 8 minutes
+nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4   # about 13 minutes
+nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4 --seed-base 2026092604 \
+  --run-id 2026-09-26-second --candidate psd_layered --runaway-bound 10 \
+  --arms psd_default,psd_layered,twostage_default,twostage_layered_lbfgs,witness   # about 7 minutes
 quarto render report.qmd
 ```
 

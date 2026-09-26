@@ -1,0 +1,14 @@
+"candidate","rule","scope","value","pass"
+"psd_layered","A layered cold start","boomsma ML","wins 41 losses 94; best wins 70 losses 137",FALSE
+"psd_layered","A layered cold start","chen ML","wins 0 losses 0; best wins 0 losses 1",FALSE
+"psd_layered","A layered cold start","constrained ML","wins 249 losses 45; best wins 306 losses 64",TRUE
+"psd_layered","A layered cold start","engineering15 ML","wins 33 losses 70; best wins 31 losses 86",FALSE
+"psd_layered","A layered cold start","research47 ML","wins 16 losses 23; best wins 17 losses 28",FALSE
+"psd_layered","A layered cold start","wolf ML","wins 29 losses 69; best wins 49 losses 90",FALSE
+"psd_layered","D tolerance bites","rescaled-only failures from feasibility or admissibility","0 fits",TRUE
+"psd_layered","E fallback ordinary start","boomsma ML","wins 46 losses 117; best wins 78 losses 155",FALSE
+"psd_layered","E fallback ordinary start","chen ML","wins 0 losses 0; best wins 0 losses 0",TRUE
+"psd_layered","E fallback ordinary start","constrained ML","wins 48 losses 42; best wins 75 losses 60",TRUE
+"psd_layered","E fallback ordinary start","engineering15 ML","wins 30 losses 77; best wins 30 losses 95",FALSE
+"psd_layered","E fallback ordinary start","research47 ML","wins 17 losses 23; best wins 16 losses 23",FALSE
+"psd_layered","E fallback ordinary start","wolf ML","wins 29 losses 85; best wins 44 losses 108",FALSE

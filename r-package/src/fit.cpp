@@ -2604,6 +2604,8 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
   auto starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  // Pinned apart from fit_ml's layered default: with a layered ordinary stage
+  // the recovery loses (decisions/01, lane psd-ml, second run, rule E).
   std::string start_policy = "scaled-fabin";
   std::string start_fallback_reason = "none";
 

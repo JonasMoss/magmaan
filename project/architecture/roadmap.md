@@ -121,8 +121,10 @@ complete-data ML and GLS (`ml_start_values`, `api::ml()`/`gls()`, R `fit_ml`,
 Newton check accepts runaway points along divergent paths, and PORT reaches
 about eight times as many. A runaway check in the verdict comes first; see the
 backlog. For PSD ML, FABIN3 and the diagonal
-preconditioning stay. The two-stage route beats the direct fit mainly in
-rescaled units, and that route choice is open.
+preconditioning stay, in the direct fit and in the ordinary stage of the
+explicit fallback; a second pre-registered run after the ML promotion
+rejected the layered start for both. The two-stage route beats the direct fit
+only in rescaled units, and that route choice is open.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under

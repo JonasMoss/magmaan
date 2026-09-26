@@ -345,26 +345,51 @@ section: the categorical corpus saddles are under
     speculative entry "Runaway estimates and nonattainment diagnostics".
   - Validate it across units and identifications on the lane's draws before
     it gates anything.
-- **Open (author) — the PSD ML route.** Lane psd-ml of the same study.
-  - Keep for direct PSD fits: transported FABIN3 (the layered cold start
-    loses in 4 of 6 test families), the diagonal preconditioning (without it,
-    5,709 losses against 152 wins and 2.4 times the time), and the absolute
-    feasibility tolerances (no rescaled-only feasibility failure).
-  - The two-stage route (`fit_ml_psd_fallback`: ordinary ML with today's
-    default, then a PSD refit warm-started from it only when that fit is
-    rejected or improper) beats the direct fit overall: 274 certified wins
-    against 162 losses, 770 against 214 on the best known objective, and 37%
-    less time.
-  - That is mostly a units effect. In native units the direct fit certifies
-    slightly more (5,826 against 5,799). Two-stage wins at $\times 100$
-    (5,785 against 5,665, three times faster) and $\times 0.01$, where the
-    direct fit's preconditioning clamp bites. Fix the clamp before choosing.
-  - With a layered-start PORT ordinary stage, two-stage is worse than direct,
-    because refits from PORT's rejected endpoints succeed less often. If
-    two-stage becomes the default, pin its ordinary stage, or its warm start,
-    independently of the ordinary ML default.
-  - Engineering the route properly (retaining the non-PSD fit in the result)
-    comes later.
+- **PSD ML start — DONE (2026-09-26): FABIN3 stays in both PSD routes.**
+  Lane psd-ml, second run (pre-registered after the ML/GLS promotion).
+  - The layered start fails rule A again for direct PSD fits (five of six
+    test families) and rule E for the fallback's ordinary step (four of six).
+    Most losses exhaust SLSQP's budget.
+  - So `frontier_fit_ml_psd_fallback` keeps its ordinary step pinned to
+    FABIN3 with L-BFGS, apart from complete-data ML's layered default. Code
+    that runs "ordinary ML first" by hand, with `fit_ml` defaults, gets the
+    worse variant.
+  - Exception: in the equality-constrained family the layered start avoids
+    most of FABIN3's exhausted PSD budgets (203 against 23). A per-model
+    start choice would need its own rule.
+- **Open (author) — the PSD ML route.** Two-stage (`fit_ml_psd_fallback`) or
+  direct (`fit_model(psd = TRUE)` and `magmaan(psd = TRUE)` today).
+  - Replicated in both runs: two-stage certifies more (second run 22,132
+    against 21,980), reaches the best known objective more often (21,850
+    against 21,224), and takes about 40% less time.
+  - The advantage comes from rescaled units. In native units the direct fit
+    is slightly ahead (second run 5,840 against 5,829), so fix the clamp
+    (below) before choosing.
+  - Engineering the route, later:
+    - When the ordinary step errors, the PSD refit starts cold from the
+      ordinary step's own start. A cold PSD start should always be the PSD
+      default (FABIN3), whatever the ordinary step used. That is the main
+      reason a layered ordinary step loses (153 of rule E's 344 losses).
+    - Warm starts from rejected or improper endpoints: consider trying the
+      cold start too and keeping the better certified fit. PORT's far-out
+      endpoints (first run) and the layered endpoints (second run) are both
+      poor warm starts.
+    - The fallback already returns both attempts (`ordinary`, `psd`); the
+      route as a `psd = TRUE` default needs a documented result shape for
+      them.
+- **S — the Newton check certifies an unidentified fit on an exact-fit ridge.**
+  `r-package/examples/ml_psd_fallback.R` fails at `!e$converged` (before
+  52bc9caa too): `f =~ x1 + x2 + x3` with `auto_fix_first = FALSE` has 7
+  parameters for 6 moments.
+  - The PSD fit reaches the ridge with gradient about $10^{-10}$. There the
+    Hessian's null direction has curvature of the gradient's order, so its
+    condition number ($8 \cdot 10^{10}$) stays under the $10^{12}$ guard, and
+    the Newton distance is $5 \cdot 10^{-10}$.
+  - A larger guard is not the fix, since the condition number depends on how
+    precisely the optimizer lands. A scale-free identification check (the
+    rank of the moment Jacobian at the estimate) belongs next to the verdict.
+  - It does not touch identified models, such as those of the
+    covariance-honest paper.
 - **S — PSD lift round-trip error in the std.lv equal-loadings CFA.**
   `fit_ml_psd` fails with "PSD lift finalization could not round-trip the
   terminal covariance links into ordinary partable coordinates" (decisions/01,

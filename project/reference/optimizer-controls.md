@@ -44,7 +44,10 @@ run, author's decision), with the evidence in its report.
   that the Newton check accepts). It waits for a runaway check in the verdict.
 - **Unchanged routes.** Two-level and ordinal fits keep their own start
   constructors, and PSD ML keeps transported FABIN3. So does the explicit
-  ordinary-first PSD recovery, whose ordinary stage is also still L-BFGS.
+  ordinary-first PSD recovery (`frontier_fit_ml_psd_fallback`), whose
+  ordinary stage is pinned to FABIN3 with L-BFGS, apart from the ML default.
+  A second pre-registered PSD run tested the layered start for both and
+  rejected it (decisions/01, lane psd-ml, `2026-09-26-second`).
 
 ## Nonlinear equality constraints (2026-09-26)
 
