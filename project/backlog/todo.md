@@ -1740,9 +1740,17 @@ when they next change.
   observed weighting makes corrected MV liberal (39.1–41.3% versus 4.9–5.6%
   at skewed p=12, n=100 on common usable fits) and adds 26 metric failures.
   Expected-score/LRT results reproduce exactly; keep expected weighting.
-  Next gates are
-  fitted-projection bias and nominal-rank feasibility, then independent
-  calibration replication and matched-null power, not another high-order fit.
+  The oracle/constraint gate is now run: the original latent-component design
+  has a flat oracle spectrum, while severe Cholesky IG supplies weights up to
+  5.20. In the 10,000-dataset smaller IG grid, at p=12/n=500 oracle score/LRT
+  reject 4.2%/4.6%, versus corrected MV's 9.8%/9.6%. The lower-bound constraint
+  does not repair that cell and stays close to SB overall. The fitted score
+  trace and corrected tau2 average 92% and 61% of their oracle targets there.
+  Next gates are isolating feasible-moment/nuisance bias on nonflat spectra
+  and fit-selection effects (19–22% failures at severe Cholesky n=100), then
+  independent calibration replication and matched-null power. Do not treat
+  latent-component nonnormality or matched marginal skew/kurtosis alone as
+  sufficient evidence of heterogeneous mixture weights.
   Before promotion: validate population-spectrum/resolvent recovery for
   transformed nonnormal rows, control same-sample projection error, stabilize
   high-order moments, and establish a valid tail law (a truncated polynomial

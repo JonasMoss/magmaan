@@ -1,13 +1,17 @@
 # Invoked by run_experiment.R --mv; uses base and args from that entry point.
 if('--help'%in%args) {
-  cat('Usage: Rscript run_experiment.R --mv [--metrics] [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
+  cat('Usage: Rscript run_experiment.R --mv [--metrics] [--ig] [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
       'Default: 500 reps, 24 cells: one/two-factor CFA; p=8,12; n=100,200,500; normal/skewed.\n',
       'Compares SB, MV, MV tau2-only U4, MV both moments, ALL, pEBA4, independent tau2 diagnostic.\n',
+      '--ig: smaller two-factor grid, p=8/12, n=100/500; normal, IG(2,7), IG(3,21).\n',
+      'IG crosses symmetric/Cholesky roots with Pearson draws; omits the extra-sample diagnostic.\n',
       '--metrics: also compare observed-H0 score weight, with expected sensitivity held fixed.\n',
       '--smoke: 2 reps/cell. Output directory must be new.\n')
 } else {
 compare_metrics <- '--metrics'%in%args
-args <- args[args!='--metrics']
+use_ig <- '--ig'%in%args
+if(use_ig && compare_metrics)stop('IG follow-up fixes expected weighting; omit --metrics')
+args <- args[!args%in%c('--metrics','--ig')]
 opt <- list(reps=500L,seed_base=20260926L,output='mv_pilot500')
 i <- 1L
 while(i<=length(args)) {
@@ -20,6 +24,7 @@ while(i<=length(args)) {
 stopifnot(opt$reps>0,opt$reps<100000,opt$seed_base>0,opt$seed_base<1e9,
           grepl('^[a-zA-Z0-9_-]+$',opt$output))
 source(file.path(base,'R','spectral.R'));source(file.path(base,'R','mv.R'))
+if(use_ig)source(file.path(base,'R','oracle.R'))
 suppressPackageStartupMessages(library(magmaanlab))
 outdir <- file.path(base,'results',opt$output)
 if(dir.exists(outdir)) stop('Output exists; choose a new --output')
@@ -28,16 +33,37 @@ write_out <- function(x,name)write.csv(x,file.path(outdir,name),row.names=FALSE,
 root <- normalizePath(file.path(base,'../../..'))
 writeLines(capture.output(sessionInfo()),file.path(outdir,'session.txt'))
 writeLines(system2('git',c('-C',shQuote(root),'status','--short'),stdout=TRUE),file.path(outdir,'worktree-status.txt'))
-src <- file.path(base,c('run_experiment.R','R/mv_experiment.R','R/mv.R','R/spectral.R'))
+src <- file.path(base,c('run_experiment.R','R/mv_experiment.R','R/mv.R','R/spectral.R',if(use_ig)'R/oracle.R'))
 write_out(data.frame(path=basename(src),md5=unname(tools::md5sum(src))),'source_hashes.csv')
 write_out(data.frame(key=c('args','seed','magmaanlab','git','package_so_md5'),value=c(
- paste(c(if(compare_metrics)'--metrics',args),collapse=' '),opt$seed_base,as.character(packageVersion('magmaanlab')),
+ paste(c(if(compare_metrics)'--metrics',if(use_ig)'--ig',args),collapse=' '),opt$seed_base,as.character(packageVersion('magmaanlab')),
  system2('git',c('-C',shQuote(root),'rev-parse','HEAD'),stdout=TRUE),
  paste(tools::md5sum(list.files(find.package('magmaanlab'),pattern='\\.so$',recursive=TRUE,full.names=TRUE)),collapse=';'))),'metadata.csv')
 grid <- expand.grid(model=c('one_factor','two_factor'),p=c(8L,12L),n=c(100L,200L,500L),
                     distribution=c('normal','skewed'),stringsAsFactors=FALSE)
+if(use_ig)grid <- expand.grid(model='two_factor',p=c(8L,12L),n=c(100L,500L),
+                             distribution=c('normal','ig_moderate','ig_severe','ig_moderate_cholesky','ig_severe_cholesky'),stringsAsFactors=FALSE)
 grid$cell <- seq_len(nrow(grid));write_out(grid,'design.csv')
-draw <- function(cell) {
+ig_pop <- list()
+if(use_ig) {
+  populations <- unique(grid[,c('model','p','distribution')]);cal_rows <- list()
+  for(j in seq_len(nrow(populations))) {
+    z <- populations[j,];key <- paste(z$p,z$distribution,sep='_')
+    o <- cfa_oracle(z$model,z$p,z$distribution);ig_pop[[key]] <- o
+    if(!is.null(o$calibration))cal_rows[[key]] <- data.frame(p=z$p,distribution=z$distribution,
+      component=seq_len(z$p),skewness=o$calibration$generator_skewness,
+      excess_kurtosis=o$calibration$generator_excess_kurtosis)
+    cat(sprintf('IG setup p=%d %s; oracle spectrum %.3f--%.3f\n',z$p,z$distribution,min(o$lambda),max(o$lambda)))
+  }
+  write_out(do.call(rbind,cal_rows),'ig_calibration.csv')
+}
+draw <- function(cell,seed) {
+  if(use_ig) {
+    o <- ig_pop[[paste(cell$p,cell$distribution,sep='_')]]
+    X <- if(cell$distribution=='normal') matrix(rnorm(cell$n*cell$p),cell$n,cell$p)%*%chol(o$Sigma) else
+      magmaanlab::magmaan_core$sim_ig_draw(o$calibration,n=cell$n,reps=1L,seed_base=seed)$draws[[1]]
+    colnames(X) <- paste0('x',seq_len(cell$p));return(as.data.frame(X))
+  }
   n <- cell$n;p <- cell$p;Z <- matrix(rnorm(n*(p+2)),n,p+2)
   if(cell$distribution=='skewed') Z <- (Z^2-1)/sqrt(2)
   if(cell$model=='one_factor') {
@@ -51,6 +77,7 @@ draw <- function(cell) {
   colnames(X) <- paste0('x',seq_len(p));as.data.frame(X)
 }
 methods <- c('sb','mv','mv_tau2','mv_both','all','peba4','mv_tau2_independent')
+if(use_ig)methods <- setdiff(methods,'mv_tau2_independent')
 one_mv <- function(cell,rep_id) {
   seed <- opt$seed_base+cell$cell*100000L+rep_id;set.seed(seed)
   ans <- expand.grid(method=methods,statistic_kind=c('score','lrt',if(compare_metrics)'score_observed'),stringsAsFactors=FALSE)
@@ -62,7 +89,7 @@ one_mv <- function(cell,rep_id) {
   start <- proc.time()[['elapsed']]
   finish <- function() {ans$seconds <- proc.time()[['elapsed']]-start;ans}
   ing <- tryCatch({
-    X <- draw(cell);p <- cell$p
+    X <- draw(cell,seed);p <- cell$p
     syntax <- if(cell$model=='one_factor') paste('f =~',paste(names(X),collapse='+')) else
       paste(paste('f1 =~',paste(names(X)[1:(p/2)],collapse='+')),
             paste('f2 =~',paste(names(X)[(p/2+1):p],collapse='+')),sep='\n')
@@ -72,9 +99,9 @@ one_mv <- function(cell,rep_id) {
     W <- s$projection%*%solve(chol(s$metric))*sqrt(cell$n);Y <- c$rows%*%W
     sr <- score_spectrum(s);lr <- fmg_tests(ctx,tests='all_ml')
     t0 <- proc.time()[['elapsed']];m <- mv_cross_moments(Y);mt <- proc.time()[['elapsed']]-t0
-    Xi <- draw(cell);sigma <- magmaanlab:::model_implied(f)$sigma[[1]];mu <- colMeans(X)
+    Xi <- if(use_ig)NULL else draw(cell,seed+50000L);sigma <- magmaanlab:::model_implied(f)$sigma[[1]];mu <- colMeans(X)
     if(max(abs(fixed_covariance_scores(X,mu,sigma)-c$rows))>1e-7) stop('Score transport identity failed')
-    mi <- mv_cross_moments(fixed_covariance_scores(Xi,mu,sigma)%*%W)
+    mi <- if(use_ig)NULL else mv_cross_moments(fixed_covariance_scores(Xi,mu,sigma)%*%W)
     expected <- list(Y=Y,m=m,mi=mi,mt=mt,q=s$statistic,eigen=sr$eigenvalues)
     lrt <- list(Y=scale(Y,scale=FALSE),m=m,mi=mi,mt=mt,
                 q=lr$base_statistic[1],eigen=lr$eigenvalues[[1]])
@@ -130,12 +157,12 @@ for(i in seq_len(nrow(grid))) {
   rows <- vector('list',opt$reps)
   for(r in seq_len(opt$reps)) {
     rows[[r]] <- one_mv(grid[i,],r)
-    if(r%%100==0) {cat(sprintf('MV cell %d/24: %d/%d\n',i,r,opt$reps));flush.console()}
+    if(r%%100==0) {cat(sprintf('MV cell %d/%d: %d/%d\n',i,nrow(grid),r,opt$reps));flush.console()}
   }
   all[[i]] <- do.call(rbind,rows)
   write.table(all[[i]],file.path(outdir,'replicates.csv'),sep=',',row.names=FALSE,col.names=i==1,append=i>1,na='')
   elapsed <- as.numeric(difftime(Sys.time(),started,units='secs'))
-  cat(sprintf('MV cell %d/24 complete; %.1fs elapsed; ETA %.1fs\n',i,elapsed,elapsed/i*(24-i)));flush.console()
+  cat(sprintf('MV cell %d/%d complete; %.1fs elapsed; ETA %.1fs\n',i,nrow(grid),elapsed,elapsed/i*(nrow(grid)-i)));flush.console()
 }
 raw <- do.call(rbind,all)
 summary <- do.call(rbind,lapply(split(raw,interaction(raw$cell,raw$statistic_kind,raw$method,drop=TRUE)),function(x) {

@@ -1,5 +1,11 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(TRUE)
+if('--oracle'%in%args) {
+  args <- args[args!='--oracle']
+  base <- dirname(normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1])))
+  source(file.path(base,'R','oracle_experiment.R'))
+  quit(status=0)
+}
 if('--mv'%in%args) {
   args <- args[args!='--mv']
   base <- dirname(normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1])))
@@ -8,6 +14,7 @@ if('--mv'%in%args) {
 }
 if('--help'%in%args) {
   cat('Usage: Rscript run_experiment.R [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
+      'Use --oracle to replay saved MV results with population calibration and constrained MV.\n',
       'Use --mv for the focused debiased-MV study (--mv --help for its options).\n',
       'Default: 200 reps, 12 cells: p=8,12; n=100,400; normal, skewed, heterogeneous.\n',
       'Null one-factor CFA; output is a new results/ subdirectory. --smoke: 2 reps.\n')

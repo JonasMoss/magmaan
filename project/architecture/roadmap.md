@@ -60,6 +60,20 @@ and compares expected versus observed-H0 score weights. Expected-score/LRT
 outputs reproduce exactly. Observed weighting makes tau2-corrected MV liberal
 (39.1–41.3% versus 4.9–5.6% on paired skewed p=12, n=100 fits) and adds 26
 nonpositive-metric failures; keep expected weighting for this candidate.
+The `--oracle` replay adds analytic population fourth moments and constrained
+MV, with Gaussian-mixture calibration checks and statistic-moment diagnostics.
+The original latent-component CFA generator has an exactly flat oracle spectrum;
+perfect eigenvalues still leave finite-sample score/LRT errors there. A smaller
+`--mv --ig` grid now covers 10,000 two-factor datasets (p=8/12, n=100/500,
+normal and moderate/severe Pearson IG with symmetric/Cholesky roots). Symmetric
+roots remain nearly flat; severe Cholesky weights extend to 5.20. At p=12,
+n=500, severe Cholesky oracle rejection is 4.2% score/4.6% LRT versus corrected
+MV's 9.8%/9.6%; the lower-bound constraint leaves those rates unchanged. There
+are 332 common fit failures, including 19–22% in severe Cholesky n=100 cells,
+so results condition on usable fits. Population geometry, generator moments,
+and bound-active SB equivalence are independently checked. These diagnostics
+support investigating feasible moment underestimation on nonflat spectra;
+they do not promote corrected MV or change inference policy.
 
 The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
 compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and

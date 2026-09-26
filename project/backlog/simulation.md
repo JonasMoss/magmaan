@@ -199,6 +199,18 @@ Validation:
 
 ## IG Generator Family: Draw Cost and Moment-Matching (2026-06-01)
 
+**Root choice changes the inferential target (2026-09-26).** Research/49's
+smaller two-factor oracle study matches covariance and observed marginal
+skewness/excess kurtosis (2/7 or 3/21) using native Pearson IG. Symmetric roots
+give expected-score mixture weights nearly equal to one (maximum 1.05), while
+Cholesky roots give maxima 2.40 (moderate) and 5.20 (severe) at p=12. Record and
+vary the root when spectral heterogeneity is the simulation target; marginal
+moments alone do not specify that target. Analytic fourth-moment spectra agree
+with an independent residual-projector calculation and native-draw checks.
+The severe Cholesky n=100 cells also have 19–22% common fit/admissibility
+failures, which must accompany conditional rejection rates. No generator
+implementation or defaults changed.
+
 Findings from profiling the independent-generator (`sim_ig_*`) path while
 scaling experiment showcases/03 (Foldnes-Moss-Gronneberg 2024) to the full grid.
 
