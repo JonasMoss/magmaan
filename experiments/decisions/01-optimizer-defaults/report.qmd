@@ -9,25 +9,276 @@ execute:
   message: false
 ---
 
+```{r setup}
+run <- "2026-09-26"
+rd <- function(lane, name) {
+  p <- file.path("results", lane, run, paste0(name, ".csv"))
+  if (!file.exists(p)) stop("Missing ", p, ": run run_experiment.R --lane ", lane)
+  read.csv(p, stringsAsFactors = FALSE)
+}
+tab <- function(x, ...) knitr::kable(x, row.names = FALSE, format.args = list(big.mark = ","), ...)
+fam <- c(research47 = "research/47", engineering15 = "engineering/15", boomsma = "Boomsma 1985",
+         wolf = "Wolf et al. 2013", chen = "Chen et al. 2001", constrained = "equality-constrained",
+         ernst = "Ernst (control)")
+ml_rates <- rd("ml-gls", "rates_by_family"); ml_pair <- rd("ml-gls", "paired")
+ml_dec <- rd("ml-gls", "decision"); ml_loss <- rd("ml-gls", "losses")
+ml_breaks <- rd("ml-gls", "invariance_breaks")
+ps_rates <- rd("psd-ml", "rates_by_family"); ps_pair <- rd("psd-ml", "paired")
+ps_dec <- rd("psd-ml", "decision"); ps_fail <- rd("psd-ml", "failures")
+ps_stage <- rd("psd-ml", "twostage_stages"); ps_tol <- rd("psd-ml", "tolerance")
+tot <- function(r, arm, col, est = NULL) sum(r[[col]][r$role == "test" & r$arm == arm &
+  (is.null(est) | r$estimator %in% est)])
+pr <- function(p, cand, base, col) sum(p[[col]][p$role == "test" & p$candidate == cand & p$baseline == base])
+f0 <- function(x) format(round(x), big.mark = ",")
+```
+
 ## Question
 
 Which start, optimizer and PSD route should each estimation route use by
-default? Every fit is judged by the library verdict, on simulated problems the
-candidates were not developed on.
+default? Every fit is judged by the library verdict, on simulated problems
+the candidates were not developed on. The criteria were committed before the
+runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
+[criteria/psd-ml.md](criteria/psd-ml.md) (commit `ec5b0c96`).
+
+## Answer
+
+**ML and GLS: the layered start with PORT is much better than today's
+default, but PORT needs ML's budget before it becomes the default.**
+
+- On the test families, today's default (FABIN3 with L-BFGS) certifies
+  `r f0(tot(ml_rates, "default", "success", "ML"))` of
+  `r f0(tot(ml_rates, "default", "attainable", "ML"))` attainable ML problems,
+  and the candidate certifies
+  `r f0(tot(ml_rates, "layered_port", "success", "ML"))`.
+- For GLS the counts are `r f0(tot(ml_rates, "default", "success", "GLS"))`
+  and `r f0(tot(ml_rates, "layered_port", "success", "GLS"))` of
+  `r f0(tot(ml_rates, "default", "attainable", "GLS"))`.
+- Most of the gain is the start: the layered start with L-BFGS already
+  certifies `r f0(tot(ml_rates, "layered_lbfgs", "success", "ML"))` ML and
+  `r f0(tot(ml_rates, "layered_lbfgs", "success", "GLS"))` GLS problems.
+  PORT from today's start is slightly worse than L-BFGS.
+
+Two pre-registered checks fail, both small:
+
+- **One loss in the Chen family.** A single ML draw, where the default
+  certifies all of that family's problems.
+- **Invariance under common units** for ML on the Boomsma and Wolf families.
+  - The candidate's success flips across units about as often as the
+    default's there (91 against 94 draws), and far less often over all test
+    families (ML 138 against 537, GLS 19 against 4,321).
+  - Its excess there is 41 draws certified in every unit system at objectives
+    that differ by $10^{-6}$ to $10^{-5}$ of the objective; the default has 2.
+    At $N = 25$ a Newton distance of .01 allows differences of about this
+    size, so these are the same minimum reached to slightly different
+    precision.
+
+Both trace to one configuration gap: the ML option profile sets NLopt's budget
+and tolerances (5000 evaluations, $10^{-12}$ and $10^{-10}$), while PORT runs
+with its generic 1000 iterations and its own tolerances. Most of the
+candidate's losses end with PORT's budget exhausted. **Recommendation:**
+promote the layered start with PORT after PORT gets ML's budget and
+tolerances, and confirm that on fresh draws (a new seed base, about ten
+minutes).
+
+**PSD ML: keep today's direct configuration; the two-stage route is better.**
+
+- **Rule A fails.** The layered cold start loses in four of the six test
+  families.
+- **Rule B fails.** Dropping the diagonal preconditioning loses
+  `r f0(pr(ps_pair, "psd_default_none", "psd_default", "losses"))` fits
+  against `r f0(pr(ps_pair, "psd_default_none", "psd_default", "wins"))` and
+  takes 2.4 times as long.
+- **The two-stage route beats the direct fit.** It fits ordinary ML first
+  with today's default and refits under the PSD constraint only when needed.
+  It wins `r pr(ps_pair, "twostage_default", "psd_default", "wins")` and loses
+  `r pr(ps_pair, "twostage_default", "psd_default", "losses")` certified fits
+  against the direct fit, reaches the best known objective
+  `r pr(ps_pair, "twostage_default", "psd_default", "best_wins")` against
+  `r pr(ps_pair, "twostage_default", "psd_default", "best_losses")` times, and
+  takes `r round(100 * (1 - tot(ps_rates, "twostage_default", "total_seconds") / tot(ps_rates, "psd_default", "total_seconds")))`%
+  less time. The author decides the route.
+- **Its ordinary stage must not inherit the layered start with PORT.** With
+  that ordinary stage the two-stage route is worse than the direct fit: the
+  PSD refit succeeds less often when it is warm-started from PORT's rejected
+  or improper endpoints than from L-BFGS's.
+- **Rule D passes.** The absolute feasibility tolerances do not bite.
+
+Two issues found along the way:
+
+- The preconditioning's absolute clamp does cost fits in large units.
+- A lift round-trip error in equality-constrained models occurs in every unit
+  system.
 
 ## The register
 
-Status as of the pre-registration commit; the lanes have not run yet.
+| Default | Current value | Status after this run | Evidence |
+|---|---|---|---|
+| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | open: promote the layered start together with the optimizer below | lane ml-gls; engineering/17 corpus (303 + 303 pairs, no loss) |
+| ML and GLS optimizer | NLopt L-BFGS | open: promote PORT once it gets ML's budget and tolerances, after a confirmation run on fresh draws | lane ml-gls |
+| optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
+| PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families) | lane psd-ml |
+| PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
+| PSD route | direct PSD fit | open, for the author: two-stage from today's ordinary default is better and faster | lane psd-ml |
+| PSD feasibility tolerances | absolute | settled: keep (rule D passes, 0 fits) | lane psd-ml |
+| PSD preconditioning clamp | $[10^{-4}, 10^{4}]$, absolute | open: costs direct PSD fits at $\times 100$ | lane psd-ml failures |
 
-| Default | Current value | Candidate | Status | Evidence |
-|---|---|---|---|---|
-| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | layered | open | lane `ml-gls` (pending); engineering/17 corpus |
-| ML and GLS optimizer | NLopt L-BFGS | PORT | open | lane `ml-gls` (pending); engineering/17 corpus |
-| optimizer coordinates | information-refined sample units | none | settled 2026-09-26 on the corpus; confirmed out of sample by lane `ml-gls` (pending) | engineering/17 |
-| PSD cold start | transported FABIN3 | layered | open | lane `psd-ml` (pending) |
-| PSD preconditioning | lifted information diagonal | none | provisional | lane `psd-ml` (pending) |
-| PSD route | direct PSD fit | two-stage | open, author decides after the lane | lane `psd-ml` (pending) |
-| PSD feasibility tolerances | absolute, in covariance units | relative to sample units | open, fix if the lane shows they bite | lane `psd-ml` (pending) |
+## How much to trust it
 
-Criteria: [criteria/ml-gls.md](criteria/ml-gls.md) and
-[criteria/psd-ml.md](criteria/psd-ml.md).
+- **The problems are held out.**
+  - 51 test populations and one control: research/47,
+    engineering/15's weak marker and high $R^2$, Boomsma (1985), Wolf et al.
+    (2013), Chen et al. (2001) with four fitted models, and ten
+    equality-constrained models. The control is Ernst, used in the 2026-09-22
+    start work.
+  - Each population is drawn at a small $N$ and at $N = 100$: 100
+    replications per $N$ for ml-gls, 50 for psd-ml.
+  - Every draw is fitted in native units, $\times 100$, $\times 0.01$ and
+    separate units.
+  - None of these populations shaped the layered start, the coordinates or
+    the PSD scaling.
+- **One judge.** Success is the library verdict (the Newton check), plus
+  admissibility for PSD fits. A problem counts only if some arm, or a PORT
+  or PSD fit from the population values, certifies it.
+- **The engine.** The `magmaanlab` build from `30514b09`, built 2026-09-26
+  04:58 UTC. The engine source is unchanged through the pre-registration
+  commit.
+- **Limits.**
+  - The data are multivariate normal and complete, and all groups are single.
+  - FIML, least squares, ordinal routes and lavaan are not covered; the
+    textbook corpus is engineering/17's evidence.
+  - Counts of fits are descriptive; paired wins and losses on the same draws
+    carry the comparisons.
+
+## Lane ml-gls
+
+### Rules
+
+```{r ml-rules}
+tab(ml_dec, col.names = c("Rule", "Test family and estimator", "Value", "Pass"))
+```
+
+### Certified fits by family
+
+Attainable problems and certified fits, pooled over $N$, units and
+replications.
+
+```{r ml-rates}
+w <- reshape(ml_rates[c("role", "family", "estimator", "arm", "attainable", "success")],
+             idvar = c("role", "family", "estimator"), timevar = "arm", direction = "wide")
+w <- w[order(w$role == "control", w$estimator, w$family), ]
+tab(data.frame(Family = fam[w$family], Estimator = w$estimator, Attainable = w$attainable.default,
+  Default = w$success.default, `Default + PORT` = w$success.default_port,
+  `Layered + L-BFGS` = w$success.layered_lbfgs, `Layered + PORT` = w$success.layered_port,
+  check.names = FALSE))
+```
+
+### The candidate's losses
+
+Every loss is an optimizer termination; none is an error. The columns show
+which single-change arm solves the same problem.
+
+```{r ml-losses}
+l <- ml_loss[ml_loss$role == "test", ]
+l$attribution <- ifelse(grepl("layered_lbfgs:ok", l$arms), "the layered start with L-BFGS solves it",
+                 ifelse(grepl("default_port:ok", l$arms), "today's start with PORT solves it",
+                        "only today's default solves it"))
+tab(as.data.frame.matrix(table(l$attribution, l$estimator)) |>
+      (\(m) cbind(Attribution = rownames(m), m))())
+tab(as.data.frame.matrix(table(l$optimizer_status, l$estimator)) |>
+      (\(m) cbind(`PORT status` = rownames(m), m))())
+```
+
+Most losses are draws where the layered start leads both optimizers to a
+worse place, and PORT then stops at its 1000-iteration budget. The single
+Chen loss is of this kind: model m0 at $N = 25$ in separate units, where PORT
+exhausted its budget at an objective of 0.763 against the default's certified
+0.665.
+
+### Invariance
+
+Breaks among the draws of the candidate and the baseline, by pattern:
+
+```{r ml-breaks}
+b <- ml_breaks[ml_breaks$role == "test" & ml_breaks$arm %in% c("default", "layered_port"), ]
+b <- stats::aggregate(groups ~ arm + estimator + units + pattern, b, sum)
+tab(b[order(b$estimator, b$units, -b$groups), ], col.names = c("Arm", "Estimator", "Units", "Pattern", "Draws"))
+```
+
+The candidate flips between certified and not across units less often than
+the default. Its excess on common units in Boomsma and Wolf ML is certified
+fits whose objectives differ by $10^{-6}$ to $10^{-5}$ of the objective. That
+is consistent with PORT stopping on its generic tolerances rather than ML's
+tighter profile; the confirmation run with ML's controls will show it.
+
+## Lane psd-ml
+
+### Rules
+
+```{r psd-rules}
+tab(ps_dec, col.names = c("Rule", "Test family", "Value", "Pass"))
+```
+
+### Routes
+
+Attainable problems, successes (certified and admissible), best-known
+objective reached, and total seconds, on the test families.
+
+```{r psd-routes}
+a <- stats::aggregate(cbind(attainable, success, best, total_seconds) ~ arm, ps_rates[ps_rates$role == "test", ], sum)
+a$total_seconds <- round(a$total_seconds)
+tab(a, col.names = c("Arm", "Attainable", "Success", "Best known", "Seconds"))
+```
+
+Which stage returned the two-stage fits, and how often it succeeded:
+
+```{r psd-stages}
+st <- stats::aggregate(cbind(fits, success) ~ arm + stage, ps_stage[ps_stage$role == "test", ], sum)
+st$rate <- sprintf("%.1f%%", 100 * st$success / st$fits)
+tab(st, col.names = c("Arm", "Stage", "Fits", "Success", "Rate"))
+```
+
+When the ordinary fit is rejected or improper, the PSD refit warm-starts from
+the ordinary endpoint. From L-BFGS endpoints that refit succeeds far more
+often than from PORT endpoints. Why is not established; a likely reason is
+that PORT, stopping at its budget, ends further along divergent paths.
+
+### Units and failure causes
+
+The pre-registered tolerance check (rule D) finds no fit that fails only in
+rescaled units because of link feasibility or admissibility.
+
+```{r psd-tolerance}
+tab(ps_tol, col.names = c("Units", "Arm", "Cause", "Fits"))
+```
+
+Two other failures depend on the model or the units:
+
+```{r psd-failures}
+f <- ps_fail[ps_fail$arm == "psd_default" & ps_fail$cause %in% c("budget exhausted", "link round-trip"), ]
+f <- stats::aggregate(fits ~ family + cause + transform, f, sum)
+f <- reshape(f, idvar = c("family", "cause"), timevar = "transform", direction = "wide")
+names(f) <- sub("fits.", "", names(f), fixed = TRUE); f[is.na(f)] <- 0
+tab(f[c("family", "cause", intersect(c("native", "x100", "x0.01", "mixed"), names(f)))])
+```
+
+- **Budget exhaustion rises at $\times 100$.** This is most marked in the
+  equality-constrained family. The lifted information scale is clamped to
+  $[10^{-4}, 10^{4}]$, which binds on variances of order $10^{4}$.
+- **The lift round-trip error ("could not round-trip the terminal covariance
+  links")** occurs only in equality-constrained models, in native units as
+  often as rescaled. It is a defect of the PSD lift with cross-variable
+  equalities, not a units effect.
+
+## Reproduce
+
+```sh
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane ml-gls --smoke
+nice -n 10 Rscript run_experiment.R --lane ml-gls --workers 4   # about 10 minutes
+nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4   # about 8 minutes
+quarto render report.qmd
+```
+
+`--summarize` rescores existing raw rows (about 30 seconds per lane). Raw
+rows stay local; the summaries in `results/<lane>/2026-09-26/` are tracked.

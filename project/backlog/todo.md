@@ -292,34 +292,73 @@ section: the categorical corpus saddles are under
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **High — promote the layered start and PORT, route by route (plan ready).**
-  [numerical-defaults-plan.md](../design/numerical-defaults-plan.md) stages the
-  change. Stage 0: the defaults register and the bench seed. Stage 1, complete-data
-  ML and GLS, is ready: on the 303 standard corpus pairs per estimator the
-  layered start with PORT certifies every fit (today's default: 283 and 283),
-  gains 40 certified and 38 best-known fits and loses none, and holds under unit
-  rescaling; before the flip it needs simulated families the start was not
-  developed on, the spelling and identification transforms, and a confirmation
-  run from library defaults. Stages 2 to 5 (continuous least squares, FIML,
-  ordinal after the categorical semantics fixes, the remaining routes) list
-  their candidates and the evidence each still needs.
-- **Convergence bench — partly built.**
-  [convergence-engineering.md](../design/convergence-engineering.md) proposes a
-  shared benchmark set (corpus, simulated families, constructed problems, with
-  unit/identification/spelling/start transforms and problem classes), one judge
-  (the fit verdict, with failure attribution), and a defaults register, so that
-  start, optimizer and option decisions stop defining their own problems and
-  success criteria. Built: the judge (the Newton check in every iterative
-  estimator's verdict, also applied to other engines' estimates through
-  `evaluate_at`) and its scoring (2026-09-26: certified local minimum first,
-  best known objective second; a reference engine's own flag is only a
-  diagnostic). Prototypes of the rest live in engineering/17: the corpus slice
-  with problem classes, configurations crossed over starts, optimizers and
-  coordinates, the unit-rescaling transform with an invariance check, and
-  lavaan under the same judge. Next: lift them into `benchmarks/convergence/`,
-  add hand-picked simulation families (research/47, Ernst, weak marker, high
-  R², collinear predictors, the engineering/13 stress cells), and start
-  `project/validation/defaults-register.md` from the design's table.
+- **High — ML and GLS defaults: the layered start with PORT (decision study
+  run 2026-09-26).**
+  [decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd),
+  lane ml-gls, evaluates it on 51 held-out simulated populations under four
+  unit transforms.
+  - Certified ML fits: 43,336 against 41,541 for today's default (FABIN3,
+    L-BFGS), of 44,109 attainable. GLS: 39,593 against 30,840, of 41,164.
+    Most of the gain is the start.
+  - Two pre-registered checks fail, both small: one Chen ML loss, and
+    accuracy-level objective spreads under common units in the Boomsma and
+    Wolf families.
+  - Both trace to PORT running with its generic 1000 iterations and
+    tolerances. `ml_optim_options()` sets only NLopt's budget (5000
+    evaluations) and tolerances.
+  - Next:
+    1. Give PORT ML's budget and tolerances.
+    2. Rerun the lane on a new seed base (about ten minutes).
+    3. If it passes, promote:
+       - move `layered_start_values` to core;
+       - make the layered start the default for `fit_ml`, `fit_gls`,
+         `api::ml()`, `api::gls()` and R;
+       - make PORT the default backend for those entries;
+       - route nonlinear equality constraints to SLSQP (IPOPT when built)
+         and report the backend used;
+       - update the tests that pin the old defaults;
+       - run a corpus confirmation run that reads the defaults from the
+         library.
+  - Keep `simple`, `fabin3` and `scaled-fabin` selectable for lavaan parity.
+  - Later routes (least squares, FIML, ordinal, the rest) and the shared
+    bench are in the speculative backlog ("Convergence bench beyond the
+    decisions study").
+- **Open (author) — the PSD ML route.** Lane psd-ml of the same study.
+  - Keep for direct PSD fits: transported FABIN3 (the layered cold start
+    loses in 4 of 6 test families), the diagonal preconditioning (without it,
+    5,709 losses against 152 wins and 2.4 times the time), and the absolute
+    feasibility tolerances (no rescaled-only feasibility failure).
+  - The two-stage route (`fit_ml_psd_fallback`: ordinary ML with today's
+    default, then a PSD refit warm-started from it only when that fit is
+    rejected or improper) beats the direct fit: 274 certified wins against
+    162 losses, 770 against 214 on the best known objective, and 37% less
+    time.
+  - With a layered-start PORT ordinary stage, two-stage is worse than direct,
+    because refits from PORT's rejected endpoints succeed less often. If
+    two-stage becomes the default, pin its ordinary stage, or its warm start,
+    independently of the ordinary ML default.
+  - Engineering the route properly (retaining the non-PSD fit in the result)
+    comes later.
+- **S — PSD lift round-trip error in equality-constrained models.**
+  `fit_ml_psd` fails with "PSD lift finalization could not round-trip the
+  terminal covariance links into ordinary partable coordinates" on
+  equality-constrained CFA, chain SEM and mean-structure models (decisions/01,
+  lane psd-ml: 188 fits over all arms, in native units as often as rescaled).
+  Find which cross-variable equality the finalization cannot map back.
+- **S — PSD preconditioning clamp.** The lifted information scale is clamped
+  to $[10^{-4}, 10^{4}]$ in absolute terms. In decisions/01, direct PSD fits of
+  the equality-constrained family exhaust the SLSQP budget in 127 fits at
+  $\times 100$ units against 6 in native units, and the other families roughly
+  double at $\times 100$. Make the scale relative to the sample units (the
+  shared coordinate layer's rule), with a unit-rescaling test.
+- **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
+  built (the Newton check in every iterative estimator's verdict, also applied
+  to other engines through `evaluate_at`; certified local minimum first, best
+  known objective second). Default decisions now run in `experiments/decisions/`
+  under a pre-registration standard (see `experiments/AGENTS.md`). The shared
+  benchmark set, canary tier, problem classes and holdout protocol from
+  [convergence-engineering.md](../design/convergence-engineering.md) are in the
+  speculative backlog with their triggers.
 - **High — the Newton check in every iterative estimator's default verdict
   (decided and landed 2026-09-25).** FIML, every moment-quadratic fit, the
   ordinal and mixed least-squares fits and the barrier fitters now decide

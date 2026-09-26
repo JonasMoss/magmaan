@@ -1468,6 +1468,55 @@ sharper "structural-FMG" GOF test if a paper wants more than the mean correction
 
 ## Optimizers
 
+### Convergence bench beyond the decisions study
+
+**Gap.** [convergence-engineering.md](../design/convergence-engineering.md)
+proposes shared machinery for every numerical default. Beyond what the
+decisions study carries, it would add:
+
+- a benchmark set in `benchmarks/convergence/`: the corpus slice with problem
+  classes, the simulated families and constructed problems, with a canary tier
+  and a `just` recipe;
+- automatic problem classes (regular, near-face, pole, fold or ridge, flat) and
+  failure attribution by a fixed rerun protocol;
+- a holdout protocol with an exposure log per family and seed namespaces
+  derived from the frozen commit;
+- a random SEM model generator, so that test problems never run out;
+- identification (marker, std.lv, effect coding) and equivalent-spelling
+  transforms;
+- performance and data profiles;
+- reference engines (lavaan) under the shared judge in every lane.
+
+It would also cover the later lanes of the 2026-09-26 staged plan, each with its
+candidates:
+
+- continuous least squares (ULS, DWLS, WLS) and pairwise GLS;
+- FIML, which needs PORT wired into its dispatch and complete-data ML's
+  stopping controls;
+- ordinal, mixed ordinal and CatML, blocked on the categorical-model fixes and
+  needing a threshold start;
+- two-level, SAM, the SNLLS outer block, IRLS, the fitted-weight loop, RBM and
+  the pairwise likelihood.
+
+**Alternative already available.**
+[decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd)
+covers the ML, GLS and PSD-ML defaults. It has one lane per route, its own
+simulated populations, unit transforms and scoring, the library verdict as
+judge, and pre-registered criteria. engineering/17 holds the corpus prototypes
+(classes, crossed arms, rescaling, lavaan under the shared judge).
+
+**Build if.**
+- **Lanes:** a default decision starts for another route. Add it first as a new
+  lane of the decisions study.
+- **`benchmarks/convergence/`:** a second study needs the same problems. Lift
+  the families there instead of copying them.
+- **Canary tier:** a default change breaks a previously solved problem without
+  any test catching it.
+- **Automatic classes:** a decision turns on telling pole, fold and optimizer
+  failure apart at scale.
+- **Model generator:** a lane's held-out families are spent, meaning a fix was
+  tuned on them.
+
 ### Exact Hessians for IPOPT
 
 The IPOPT adapter uses limited-memory Hessian approximation and supplies

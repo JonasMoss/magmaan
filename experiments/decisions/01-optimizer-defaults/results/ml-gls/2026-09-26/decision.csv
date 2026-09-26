@@ -1,0 +1,35 @@
+"rule","scope","value","pass"
+"1 primary","boomsma GLS","wins 1521 losses 109; best wins 1540 losses 141",TRUE
+"1 primary","boomsma ML","wins 650 losses 70; best wins 572 losses 100",TRUE
+"1 primary","chen GLS","wins 1287 losses 19; best wins 1309 losses 46",TRUE
+"1 primary","chen ML","wins 0 losses 1; best wins 0 losses 1",FALSE
+"1 primary","constrained GLS","wins 966 losses 85; best wins 1005 losses 129",TRUE
+"1 primary","constrained ML","wins 607 losses 69; best wins 688 losses 113",TRUE
+"1 primary","engineering15 GLS","wins 578 losses 34; best wins 574 losses 36",TRUE
+"1 primary","engineering15 ML","wins 256 losses 41; best wins 233 losses 47",TRUE
+"1 primary","research47 GLS","wins 2865 losses 27; best wins 2889 losses 45",TRUE
+"1 primary","research47 ML","wins 117 losses 25; best wins 113 losses 38",TRUE
+"1 primary","wolf GLS","wins 2134 losses 324; best wins 2136 losses 395",TRUE
+"1 primary","wolf ML","wins 441 losses 70; best wins 424 losses 93",TRUE
+"2 invariance","boomsma GLS common","candidate 2399 baseline 1595",TRUE
+"2 invariance","chen GLS common","candidate 800 baseline 568",TRUE
+"2 invariance","constrained GLS common","candidate 1991 baseline 1184",TRUE
+"2 invariance","engineering15 GLS common","candidate 399 baseline 283",TRUE
+"2 invariance","research47 GLS common","candidate 2598 baseline 1434",TRUE
+"2 invariance","wolf GLS common","candidate 3592 baseline 2309",TRUE
+"2 invariance","boomsma ML common","candidate 2317 baseline 2346",FALSE
+"2 invariance","chen ML common","candidate 800 baseline 800",TRUE
+"2 invariance","constrained ML common","candidate 1962 baseline 1567",TRUE
+"2 invariance","engineering15 ML common","candidate 382 baseline 371",TRUE
+"2 invariance","research47 ML common","candidate 2589 baseline 2586",TRUE
+"2 invariance","wolf ML common","candidate 3551 baseline 3558",FALSE
+"2 invariance","boomsma GLS separate","candidate 2399 baseline 1867",TRUE
+"2 invariance","chen GLS separate","candidate 800 baseline 221",TRUE
+"2 invariance","engineering15 GLS separate","candidate 399 baseline 185",TRUE
+"2 invariance","research47 GLS separate","candidate 2598 baseline 1177",TRUE
+"2 invariance","wolf GLS separate","candidate 3596 baseline 3059",TRUE
+"2 invariance","boomsma ML separate","candidate 2348 baseline 2332",TRUE
+"2 invariance","chen ML separate","candidate 800 baseline 799",TRUE
+"2 invariance","engineering15 ML separate","candidate 387 baseline 368",TRUE
+"2 invariance","research47 ML separate","candidate 2590 baseline 2584",TRUE
+"2 invariance","wolf ML separate","candidate 3566 baseline 3559",TRUE

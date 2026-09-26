@@ -1,0 +1,15 @@
+"rule","scope","value","pass"
+"A layered cold start","boomsma ML","wins 48 losses 114; best wins 53 losses 150",FALSE
+"A layered cold start","chen ML","wins 0 losses 0; best wins 6 losses 4",TRUE
+"A layered cold start","constrained ML","wins 231 losses 78; best wins 270 losses 108",TRUE
+"A layered cold start","engineering15 ML","wins 34 losses 79; best wins 34 losses 93",FALSE
+"A layered cold start","research47 ML","wins 7 losses 15; best wins 18 losses 27",FALSE
+"A layered cold start","wolf ML","wins 39 losses 56; best wins 53 losses 77",FALSE
+"B no preconditioning","boomsma ML","wins 54 losses 1168; best wins 57 losses 1210",FALSE
+"B no preconditioning","chen ML","wins 0 losses 630; best wins 0 losses 609",FALSE
+"B no preconditioning","constrained ML","wins 52 losses 696; best wins 62 losses 670",FALSE
+"B no preconditioning","engineering15 ML","wins 21 losses 179; best wins 22 losses 159",FALSE
+"B no preconditioning","research47 ML","wins 3 losses 755; best wins 14 losses 741",FALSE
+"B no preconditioning","wolf ML","wins 22 losses 2281; best wins 34 losses 2284",FALSE
+"B no preconditioning","total test seconds","none 515 diagonal 214",FALSE
+"D tolerance bites","rescaled-only failures from feasibility or admissibility","0 fits",TRUE

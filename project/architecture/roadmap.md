@@ -111,6 +111,16 @@ unit-invariant corpus pairs (engineering/17). On the 608-pair engineering/17 sca
 terminations from lower start objectives. Simple/FABIN no longer read a zero
 disturbance as a std.lv scale. Trait-state blocks whose latent covariance only
 the structure identifies keep FABIN3.
+Default decisions for starts, optimizers and the PSD route are made in
+`experiments/decisions/01-optimizer-defaults`, whose report opens with the
+register of those defaults. Its criteria are committed before each run, the
+library verdict is the only judge, and it uses held-out simulated populations
+under unit transforms. On 51 held-out populations (2026-09-26), the layered start
+with PORT certifies 43,336 of 44,109 attainable ML problems against 41,541 for
+FABIN3 with L-BFGS, and 39,593 of 41,164 GLS problems against 30,840. It is
+promoted once PORT gets ML's budget and tolerances and a fresh-draw run
+confirms it. For PSD ML, FABIN3 and the diagonal preconditioning stay, and the
+two-stage route beats the direct fit; that route choice is open.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under

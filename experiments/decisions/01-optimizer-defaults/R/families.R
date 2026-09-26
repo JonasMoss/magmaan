@@ -89,7 +89,7 @@ family_ernst <- function() {
   one <- function(key, role, source, l, beta, psi) {
     Lambda <- matrix(0, 6, 2); Lambda[1:3, 1] <- l; Lambda[4:6, 2] <- l
     B <- matrix(c(0, beta, 0, 0), 2)
-    population("ernst", key, role, source,
+    population(if (role == "control") "ernst" else "engineering15", key, role, source,
       named(lisrel_moments(Lambda, B, diag(c(1, psi)), diag(6)), nm),
       list(fitted_model("sem", "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nY ~ X")))
   }

@@ -105,8 +105,15 @@ if (!"--summarize" %in% args) {
 }
 
 files <- list.files(raw_dir, pattern = "^batch_.*\\.csv$", full.names = TRUE)
-raw <- do.call(rbind, lapply(files, utils::read.csv, stringsAsFactors = FALSE))
+raw <- do.call(rbind, lapply(files, utils::read.csv, stringsAsFactors = FALSE,
+                              na.strings = "NA"))
+raw$message[is.na(raw$message)] <- ""
+# Family and role labels come from R/families.R; the population key is the
+# stable identifier of the draws.
+raw$family <- vapply(pops[raw$pop], `[[`, "", "family")
+raw$role <- vapply(pops[raw$pop], `[[`, "", "role")
 s <- score_rows(raw)
+groups <- unit_groups(s)
 written <- c(
   write_csv(rate_table(s, c("lane", "role", "family", "estimator", "transform", "arm")),
             file.path(out, "rates_by_family_transform.csv")),
@@ -116,9 +123,13 @@ written <- c(
             file.path(out, "rates_by_cell.csv")),
   write_csv(paired_table(s, lane), file.path(out, "paired.csv")),
   write_csv(loss_table(s, lane), file.path(out, "losses.csv")),
-  write_csv(invariance_table(s), file.path(out, "invariance.csv")),
+  write_csv(invariance_table(s, groups), file.path(out, "invariance.csv")),
+  write_csv(inconsistency_table(s, lane, groups), file.path(out, "invariance_breaks.csv")),
+  write_csv(failure_table(s), file.path(out, "failures.csv")),
   write_csv(decision_table(s, lane), file.path(out, "decision.csv")))
-if (lane == "psd-ml") written <- c(written, write_csv(tolerance_table(s), file.path(out, "tolerance.csv")))
+if (lane == "psd-ml") written <- c(written,
+  write_csv(tolerance_table(s), file.path(out, "tolerance.csv")),
+  write_csv(stage_table(s), file.path(out, "twostage_stages.csv")))
 errs <- list.files(raw_dir, pattern = "^errors_", full.names = TRUE)
 if (length(errs)) cat("Task errors in:", errs, sep = "\n  ")
 cat("Wrote:", written, sep = "\n  ")

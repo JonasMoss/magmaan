@@ -1,8 +1,12 @@
 # Convergence engineering: vision (2026-09-25)
 
-Status: vision, partly built. The judge and its scoring are in place; the
-benchmark set, transforms and harness exist only as prototypes in
-engineering/17 (see "Where it lives"). It proposes one way
+Status: vision, partly built, the rest deferred (2026-09-26). The judge and
+its scoring are in place. The live default decisions run in
+[experiments/decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd),
+one lane per estimation route, whose report opens with the defaults register.
+The shared benchmark set, canary tier, problem classes, holdout protocol and
+later lanes are in the speculative backlog ("Convergence bench beyond the
+decisions study"); engineering/17 keeps the corpus prototypes. It proposes one way
 to decide magmaan's numerical defaults (starting values, optimizers, optimizer
 options, scaling, and fallbacks) so that each decision rests on a shared
 benchmark set, a shared judge, and a written record, instead of on a study
@@ -308,12 +312,13 @@ Experiments may not depend on each other, so the shared parts sit below them:
 
 - benchmark set, transforms, judge wrapper, and harness:
   `benchmarks/convergence/`, next to the existing case manifest;
-- the defaults register: `project/validation/defaults-register.md`, next to
-  the oracle-defects ledger;
-- decision studies: `experiments/engineering/`, now thin. A study picks a
-  slice and configurations, runs, reports, and updates the register. Once its
-  decision is in the register and its problems are in the set, the study is
-  archived.
+- the defaults register: the first screen of the decisions study's report
+  (decided 2026-09-26, instead of a separate
+  `project/validation/defaults-register.md`);
+- decision studies: `experiments/decisions/`, one study per decision area with
+  a lane per route (decided 2026-09-26, instead of thin engineering studies).
+  Each lane picks its problems and configurations, commits its criteria, runs,
+  and updates the register.
 
 ## Plan
 
@@ -335,8 +340,9 @@ Experiments may not depend on each other, so the shared parts sit below them:
    record per fit, run the attribution rerun on failures, and render a
    per-class report.
 5. The canary tier with a `just` recipe (advisory, like `cpp/tests/checks`).
-6. First uses, in order (the start and optimizer promotion is staged in
-   [numerical-defaults-plan.md](numerical-defaults-plan.md)):
+6. First uses, in order (the ML, GLS and PSD-ML promotion now runs in
+   decisions/01-optimizer-defaults; the later routes are in the speculative
+   backlog):
    - rerun engineering/17 and 18 on the set; they should agree;
    - decide the complete-data ML optimizer (open);
    - validate the structural start pass that the backlog already prioritizes

@@ -1,0 +1,248 @@
+"role","family","estimator","arm","units","pattern","groups"
+"test","boomsma","ML","psd_default","separate","native:fail mixed:ok",2
+"test","engineering15","ML","psd_default","separate","native:fail mixed:ok",5
+"test","wolf","ML","psd_default","separate","native:fail mixed:ok",3
+"test","boomsma","ML","psd_layered","separate","native:fail mixed:ok",7
+"test","engineering15","ML","psd_layered","separate","native:fail mixed:ok",4
+"test","research47","ML","psd_layered","separate","native:fail mixed:ok",1
+"test","wolf","ML","psd_layered","separate","native:fail mixed:ok",1
+"test","boomsma","ML","twostage_default","separate","native:fail mixed:ok",12
+"test","chen","ML","twostage_default","separate","native:fail mixed:ok",1
+"test","engineering15","ML","twostage_default","separate","native:fail mixed:ok",5
+"control","ernst","ML","twostage_default","separate","native:fail mixed:ok",1
+"test","research47","ML","twostage_default","separate","native:fail mixed:ok",4
+"test","wolf","ML","twostage_default","separate","native:fail mixed:ok",5
+"test","boomsma","ML","twostage_layered","separate","native:fail mixed:ok",40
+"test","engineering15","ML","twostage_layered","separate","native:fail mixed:ok",20
+"control","ernst","ML","twostage_layered","separate","native:fail mixed:ok",2
+"test","research47","ML","twostage_layered","separate","native:fail mixed:ok",5
+"test","wolf","ML","twostage_layered","separate","native:fail mixed:ok",23
+"test","boomsma","ML","psd_default","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","ML","psd_default","common","native:fail x100:fail x0.01:ok",3
+"test","engineering15","ML","psd_default","common","native:fail x100:fail x0.01:ok",1
+"test","wolf","ML","psd_default","common","native:fail x100:fail x0.01:ok",3
+"test","boomsma","ML","psd_layered","common","native:fail x100:fail x0.01:ok",8
+"test","constrained","ML","psd_layered","common","native:fail x100:fail x0.01:ok",4
+"test","engineering15","ML","psd_layered","common","native:fail x100:fail x0.01:ok",5
+"test","boomsma","ML","twostage_default","common","native:fail x100:fail x0.01:ok",2
+"test","constrained","ML","twostage_default","common","native:fail x100:fail x0.01:ok",8
+"test","engineering15","ML","twostage_default","common","native:fail x100:fail x0.01:ok",6
+"test","research47","ML","twostage_default","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","ML","twostage_default","common","native:fail x100:fail x0.01:ok",1
+"test","boomsma","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",15
+"test","constrained","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",7
+"test","engineering15","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",9
+"control","ernst","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",1
+"test","research47","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","ML","twostage_layered","common","native:fail x100:fail x0.01:ok",17
+"test","constrained","ML","psd_default","common","native:fail x100:ok x0.01:fail",9
+"test","research47","ML","psd_default","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","ML","psd_layered","common","native:fail x100:ok x0.01:fail",11
+"test","engineering15","ML","psd_layered","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","ML","psd_layered","common","native:fail x100:ok x0.01:fail",1
+"test","boomsma","ML","twostage_default","common","native:fail x100:ok x0.01:fail",2
+"test","chen","ML","twostage_default","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","ML","twostage_default","common","native:fail x100:ok x0.01:fail",8
+"test","wolf","ML","twostage_default","common","native:fail x100:ok x0.01:fail",3
+"test","boomsma","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",15
+"test","chen","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",16
+"test","engineering15","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",9
+"control","ernst","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","ML","twostage_layered","common","native:fail x100:ok x0.01:fail",15
+"test","constrained","ML","psd_default","common","native:fail x100:ok x0.01:ok",8
+"test","engineering15","ML","psd_default","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","ML","psd_layered","common","native:fail x100:ok x0.01:ok",2
+"test","constrained","ML","psd_layered","common","native:fail x100:ok x0.01:ok",3
+"test","engineering15","ML","psd_layered","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","ML","psd_layered","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","ML","twostage_default","common","native:fail x100:ok x0.01:ok",5
+"test","chen","ML","twostage_default","common","native:fail x100:ok x0.01:ok",2
+"test","constrained","ML","twostage_default","common","native:fail x100:ok x0.01:ok",9
+"test","engineering15","ML","twostage_default","common","native:fail x100:ok x0.01:ok",1
+"control","ernst","ML","twostage_default","common","native:fail x100:ok x0.01:ok",1
+"test","research47","ML","twostage_default","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","ML","twostage_default","common","native:fail x100:ok x0.01:ok",3
+"test","boomsma","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",21
+"test","chen","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",1
+"test","constrained","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",11
+"test","engineering15","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",5
+"control","ernst","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",2
+"test","research47","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",2
+"test","wolf","ML","twostage_layered","common","native:fail x100:ok x0.01:ok",22
+"test","boomsma","ML","psd_default","separate","native:ok mixed:fail",31
+"test","engineering15","ML","psd_default","separate","native:ok mixed:fail",13
+"control","ernst","ML","psd_default","separate","native:ok mixed:fail",7
+"test","research47","ML","psd_default","separate","native:ok mixed:fail",5
+"test","wolf","ML","psd_default","separate","native:ok mixed:fail",30
+"test","boomsma","ML","psd_layered","separate","native:ok mixed:fail",11
+"test","engineering15","ML","psd_layered","separate","native:ok mixed:fail",3
+"control","ernst","ML","psd_layered","separate","native:ok mixed:fail",1
+"test","research47","ML","psd_layered","separate","native:ok mixed:fail",1
+"test","wolf","ML","psd_layered","separate","native:ok mixed:fail",10
+"test","boomsma","ML","twostage_default","separate","native:ok mixed:fail",36
+"test","engineering15","ML","twostage_default","separate","native:ok mixed:fail",15
+"control","ernst","ML","twostage_default","separate","native:ok mixed:fail",8
+"test","research47","ML","twostage_default","separate","native:ok mixed:fail",5
+"test","wolf","ML","twostage_default","separate","native:ok mixed:fail",28
+"test","boomsma","ML","twostage_layered","separate","native:ok mixed:fail",28
+"test","chen","ML","twostage_layered","separate","native:ok mixed:fail",1
+"test","engineering15","ML","twostage_layered","separate","native:ok mixed:fail",11
+"control","ernst","ML","twostage_layered","separate","native:ok mixed:fail",2
+"test","research47","ML","twostage_layered","separate","native:ok mixed:fail",7
+"test","wolf","ML","twostage_layered","separate","native:ok mixed:fail",25
+"test","boomsma","ML","psd_default","common","native:ok x100:fail x0.01:fail",6
+"test","constrained","ML","psd_default","common","native:ok x100:fail x0.01:fail",29
+"test","engineering15","ML","psd_default","common","native:ok x100:fail x0.01:fail",3
+"test","wolf","ML","psd_default","common","native:ok x100:fail x0.01:fail",3
+"test","boomsma","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"test","engineering15","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"control","ernst","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"test","research47","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","ML","psd_layered","common","native:ok x100:fail x0.01:fail",1
+"test","boomsma","ML","twostage_default","common","native:ok x100:fail x0.01:fail",2
+"test","constrained","ML","twostage_default","common","native:ok x100:fail x0.01:fail",2
+"test","engineering15","ML","twostage_default","common","native:ok x100:fail x0.01:fail",3
+"test","wolf","ML","twostage_default","common","native:ok x100:fail x0.01:fail",5
+"test","boomsma","ML","twostage_layered","common","native:ok x100:fail x0.01:fail",16
+"test","constrained","ML","twostage_layered","common","native:ok x100:fail x0.01:fail",1
+"test","engineering15","ML","twostage_layered","common","native:ok x100:fail x0.01:fail",9
+"test","wolf","ML","twostage_layered","common","native:ok x100:fail x0.01:fail",7
+"test","boomsma","ML","psd_default","common","native:ok x100:fail x0.01:ok",10
+"test","constrained","ML","psd_default","common","native:ok x100:fail x0.01:ok",118
+"test","engineering15","ML","psd_default","common","native:ok x100:fail x0.01:ok",6
+"test","wolf","ML","psd_default","common","native:ok x100:fail x0.01:ok",5
+"test","boomsma","ML","psd_layered","common","native:ok x100:fail x0.01:ok",1
+"test","constrained","ML","psd_layered","common","native:ok x100:fail x0.01:ok",2
+"test","wolf","ML","psd_layered","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","ML","twostage_default","common","native:ok x100:fail x0.01:ok",14
+"test","constrained","ML","twostage_default","common","native:ok x100:fail x0.01:ok",7
+"test","engineering15","ML","twostage_default","common","native:ok x100:fail x0.01:ok",7
+"control","ernst","ML","twostage_default","common","native:ok x100:fail x0.01:ok",4
+"test","research47","ML","twostage_default","common","native:ok x100:fail x0.01:ok",2
+"test","wolf","ML","twostage_default","common","native:ok x100:fail x0.01:ok",7
+"test","boomsma","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",19
+"test","constrained","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",5
+"test","engineering15","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",10
+"control","ernst","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",2
+"test","research47","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","ML","twostage_layered","common","native:ok x100:fail x0.01:ok",8
+"test","boomsma","ML","psd_default","common","native:ok x100:ok x0.01:fail",11
+"test","constrained","ML","psd_default","common","native:ok x100:ok x0.01:fail",57
+"test","engineering15","ML","psd_default","common","native:ok x100:ok x0.01:fail",5
+"test","research47","ML","psd_default","common","native:ok x100:ok x0.01:fail",2
+"test","wolf","ML","psd_default","common","native:ok x100:ok x0.01:fail",13
+"test","boomsma","ML","psd_layered","common","native:ok x100:ok x0.01:fail",8
+"test","constrained","ML","psd_layered","common","native:ok x100:ok x0.01:fail",12
+"test","engineering15","ML","psd_layered","common","native:ok x100:ok x0.01:fail",2
+"test","wolf","ML","psd_layered","common","native:ok x100:ok x0.01:fail",12
+"test","boomsma","ML","twostage_default","common","native:ok x100:ok x0.01:fail",22
+"test","constrained","ML","twostage_default","common","native:ok x100:ok x0.01:fail",35
+"test","engineering15","ML","twostage_default","common","native:ok x100:ok x0.01:fail",7
+"test","research47","ML","twostage_default","common","native:ok x100:ok x0.01:fail",1
+"test","wolf","ML","twostage_default","common","native:ok x100:ok x0.01:fail",16
+"test","boomsma","ML","twostage_layered","common","native:ok x100:ok x0.01:fail",17
+"test","chen","ML","twostage_layered","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","ML","twostage_layered","common","native:ok x100:ok x0.01:fail",12
+"test","engineering15","ML","twostage_layered","common","native:ok x100:ok x0.01:fail",3
+"test","wolf","ML","twostage_layered","common","native:ok x100:ok x0.01:fail",16
+"test","boomsma","ML","psd_default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","ML","psd_default","common","objective differs, gap 1e-4 to 1e-3",2
+"test","wolf","ML","psd_default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","constrained","ML","psd_layered","common","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","ML","psd_layered","common","objective differs, gap 1e-4 to 1e-3",3
+"test","wolf","ML","psd_layered","common","objective differs, gap 1e-4 to 1e-3",1
+"test","constrained","ML","twostage_default","common","objective differs, gap 1e-4 to 1e-3",2
+"test","research47","ML","twostage_default","common","objective differs, gap 1e-4 to 1e-3",2
+"test","constrained","ML","twostage_layered","common","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","ML","twostage_layered","common","objective differs, gap 1e-4 to 1e-3",1
+"test","boomsma","ML","psd_default","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","engineering15","ML","psd_default","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","ML","psd_default","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","ML","psd_layered","separate","objective differs, gap 1e-4 to 1e-3",2
+"test","boomsma","ML","twostage_default","separate","objective differs, gap 1e-4 to 1e-3",16
+"test","chen","ML","twostage_default","separate","objective differs, gap 1e-4 to 1e-3",8
+"test","engineering15","ML","twostage_default","separate","objective differs, gap 1e-4 to 1e-3",11
+"test","research47","ML","twostage_default","separate","objective differs, gap 1e-4 to 1e-3",51
+"test","wolf","ML","twostage_default","separate","objective differs, gap 1e-4 to 1e-3",12
+"test","boomsma","ML","twostage_layered","separate","objective differs, gap 1e-4 to 1e-3",15
+"test","chen","ML","twostage_layered","separate","objective differs, gap 1e-4 to 1e-3",8
+"test","engineering15","ML","twostage_layered","separate","objective differs, gap 1e-4 to 1e-3",11
+"test","research47","ML","twostage_layered","separate","objective differs, gap 1e-4 to 1e-3",51
+"test","wolf","ML","twostage_layered","separate","objective differs, gap 1e-4 to 1e-3",12
+"test","boomsma","ML","psd_default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","wolf","ML","psd_layered","common","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",6
+"test","chen","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",3
+"test","engineering15","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",5
+"control","ernst","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","research47","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",13
+"test","wolf","ML","twostage_default","separate","objective differs, gap 1e-5 to 1e-4",10
+"test","boomsma","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",6
+"test","chen","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",3
+"test","engineering15","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",5
+"control","ernst","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","research47","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",13
+"test","wolf","ML","twostage_layered","separate","objective differs, gap 1e-5 to 1e-4",9
+"test","constrained","ML","psd_default","common","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","ML","psd_default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","wolf","ML","twostage_default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","ML","twostage_layered","common","objective differs, gap 1e-6 to 1e-5",1
+"test","engineering15","ML","twostage_layered","common","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","ML","twostage_layered","common","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","ML","twostage_default","separate","objective differs, gap 1e-6 to 1e-5",4
+"test","engineering15","ML","twostage_default","separate","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","ML","twostage_default","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","ML","twostage_default","separate","objective differs, gap 1e-6 to 1e-5",7
+"test","wolf","ML","twostage_default","separate","objective differs, gap 1e-6 to 1e-5",2
+"test","boomsma","ML","twostage_layered","separate","objective differs, gap 1e-6 to 1e-5",6
+"test","engineering15","ML","twostage_layered","separate","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","ML","twostage_layered","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","ML","twostage_layered","separate","objective differs, gap 1e-6 to 1e-5",7
+"test","wolf","ML","twostage_layered","separate","objective differs, gap 1e-6 to 1e-5",4
+"test","boomsma","ML","psd_default","common","objective differs, gap over 1e-3",13
+"test","chen","ML","psd_default","common","objective differs, gap over 1e-3",3
+"test","constrained","ML","psd_default","common","objective differs, gap over 1e-3",38
+"test","engineering15","ML","psd_default","common","objective differs, gap over 1e-3",5
+"control","ernst","ML","psd_default","common","objective differs, gap over 1e-3",2
+"test","research47","ML","psd_default","common","objective differs, gap over 1e-3",5
+"test","wolf","ML","psd_default","common","objective differs, gap over 1e-3",13
+"test","boomsma","ML","psd_layered","common","objective differs, gap over 1e-3",13
+"test","constrained","ML","psd_layered","common","objective differs, gap over 1e-3",6
+"test","engineering15","ML","psd_layered","common","objective differs, gap over 1e-3",1
+"test","research47","ML","psd_layered","common","objective differs, gap over 1e-3",5
+"test","wolf","ML","psd_layered","common","objective differs, gap over 1e-3",2
+"test","boomsma","ML","twostage_default","common","objective differs, gap over 1e-3",19
+"test","constrained","ML","twostage_default","common","objective differs, gap over 1e-3",25
+"test","engineering15","ML","twostage_default","common","objective differs, gap over 1e-3",8
+"control","ernst","ML","twostage_default","common","objective differs, gap over 1e-3",1
+"test","research47","ML","twostage_default","common","objective differs, gap over 1e-3",6
+"test","wolf","ML","twostage_default","common","objective differs, gap over 1e-3",18
+"test","boomsma","ML","twostage_layered","common","objective differs, gap over 1e-3",9
+"test","constrained","ML","twostage_layered","common","objective differs, gap over 1e-3",7
+"test","engineering15","ML","twostage_layered","common","objective differs, gap over 1e-3",3
+"control","ernst","ML","twostage_layered","common","objective differs, gap over 1e-3",3
+"test","research47","ML","twostage_layered","common","objective differs, gap over 1e-3",6
+"test","wolf","ML","twostage_layered","common","objective differs, gap over 1e-3",9
+"test","boomsma","ML","psd_default","separate","objective differs, gap over 1e-3",22
+"test","chen","ML","psd_default","separate","objective differs, gap over 1e-3",1
+"test","engineering15","ML","psd_default","separate","objective differs, gap over 1e-3",13
+"test","research47","ML","psd_default","separate","objective differs, gap over 1e-3",8
+"test","wolf","ML","psd_default","separate","objective differs, gap over 1e-3",10
+"test","boomsma","ML","psd_layered","separate","objective differs, gap over 1e-3",10
+"test","engineering15","ML","psd_layered","separate","objective differs, gap over 1e-3",5
+"test","research47","ML","psd_layered","separate","objective differs, gap over 1e-3",6
+"test","wolf","ML","psd_layered","separate","objective differs, gap over 1e-3",5
+"test","boomsma","ML","twostage_default","separate","objective differs, gap over 1e-3",59
+"test","chen","ML","twostage_default","separate","objective differs, gap over 1e-3",18
+"test","engineering15","ML","twostage_default","separate","objective differs, gap over 1e-3",43
+"control","ernst","ML","twostage_default","separate","objective differs, gap over 1e-3",5
+"test","research47","ML","twostage_default","separate","objective differs, gap over 1e-3",219
+"test","wolf","ML","twostage_default","separate","objective differs, gap over 1e-3",33
+"test","boomsma","ML","twostage_layered","separate","objective differs, gap over 1e-3",52
+"test","chen","ML","twostage_layered","separate","objective differs, gap over 1e-3",18
+"test","engineering15","ML","twostage_layered","separate","objective differs, gap over 1e-3",40
+"control","ernst","ML","twostage_layered","separate","objective differs, gap over 1e-3",4
+"test","research47","ML","twostage_layered","separate","objective differs, gap over 1e-3",215
+"test","wolf","ML","twostage_layered","separate","objective differs, gap over 1e-3",23

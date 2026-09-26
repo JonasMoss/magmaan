@@ -17,7 +17,9 @@ comparisons <- function(lane) {
                     c("twostage_layered", "twostage_default")))
 }
 
-primary_comparisons <- function(lane) comparisons(lane)[if (lane == "ml-gls") 1 else 1:5]
+# Comparisons whose losses are listed one by one: the candidates of the
+# gating rules and the routes. Preconditioning (rule B) is decided by counts.
+primary_comparisons <- function(lane) comparisons(lane)[if (lane == "ml-gls") 1 else c(1, 4, 5)]
 
 key_of <- function(d, keys) do.call(paste, c(d[keys], sep = "|"))
 
@@ -79,34 +81,56 @@ loss_table <- function(s, lane) {
       fmin_baseline = lost$fmin_baseline, best_known = lost$best_known)
   }
   if (!length(out)) return(data.frame(candidate = character(), baseline = character()))
-  do.call(rbind, out)
+  out <- do.call(rbind, out)
+  # Attribution: which other arms (and the witness) solve the same problem.
+  lost_keys <- key_of(out, problem_keys)
+  others <- s[s$pkey %in% lost_keys, c("pkey", "arm", "success", "fmin")]
+  tag <- tapply(seq_len(nrow(others)), others$pkey, function(i)
+    paste(sprintf("%s:%s", others$arm[i], ifelse(others$success[i], "ok", "fail")), collapse = ";"))
+  out$arms <- unname(tag[lost_keys])
+  out
 }
 
 # Same draw, different units: the same success, and the same objective when
-# every transform succeeds. Common units (x100, x0.01) and separate units
-# (mixed) are checked apart.
-invariance_table <- function(s) {
+# every version succeeds. Common units (x100, x0.01) and separate units (mixed)
+# are checked apart. `gap` is the relative objective spread when every version
+# succeeds; at N = 25 the verdict's accuracy budget alone allows about 1e-6.
+unit_groups <- function(s) {
   arms <- s[s$arm != "witness", ]
   out <- list()
-  for (set in list(common = c("native", "x100", "x0.01"), separate = c("native", "mixed"))) {
+  for (units in c("common", "separate")) {
+    set <- if (units == "common") c("native", "x100", "x0.01") else c("native", "mixed")
     d <- arms[arms$transform %in% set, ]
-    g <- split(d, key_of(d, c(group_keys, "arm")))
-    g <- g[vapply(g, function(x) all(set %in% x$transform), logical(1))]
-    if (!length(g)) next
-    rows <- lapply(g, function(x) {
-      same <- length(unique(x$success)) == 1L
-      f <- x$fmin[x$success]
-      if (same && all(x$success)) same <- diff(range(f)) <= 1e-6 * (1 + abs(min(f)))
-      cbind(x[1, c("lane", "role", "family", "estimator", "arm")], consistent = same)
-    })
-    r <- do.call(rbind, rows)
-    agg <- stats::aggregate(consistent ~ lane + role + family + estimator + arm, r,
-                            function(v) c(groups = length(v), consistent = sum(v)))
-    agg <- cbind(agg[1:5], as.data.frame(agg$consistent))
-    agg$units <- if (identical(set, c("native", "mixed"))) "separate" else "common"
-    out[[length(out) + 1L]] <- agg
+    k <- key_of(d, c(group_keys, "arm"))
+    complete <- tapply(d$transform, k, function(t) all(set %in% t))
+    keep <- complete[k]
+    d <- d[keep, ]; k <- k[keep]
+    n_ok <- tapply(d$success, k, sum); n <- tapply(d$success, k, length)
+    fs <- ifelse(d$success, d$fmin, NA_real_)
+    lo <- suppressWarnings(tapply(fs, k, min, na.rm = TRUE))
+    hi <- suppressWarnings(tapply(fs, k, max, na.rm = TRUE))
+    first <- d[!duplicated(k), c("lane", "role", "family", "estimator", "arm")]
+    kk <- k[!duplicated(k)]
+    g <- cbind(first, units = units, n = as.integer(n[kk]), n_ok = as.integer(n_ok[kk]),
+               gap = ifelse(n_ok[kk] == n[kk], (hi[kk] - lo[kk]) / (1 + abs(lo[kk])), NA_real_))
+    pat <- tapply(paste0(d$transform, ":", ifelse(d$success, "ok", "fail"))[order(match(d$transform, set))],
+                  k[order(match(d$transform, set))], paste, collapse = " ")
+    g$pattern <- unname(pat[kk])
+    g$consistent <- (g$n_ok == 0L) | (g$n_ok == g$n & g$gap <= 1e-6)
+    out[[units]] <- g
   }
   do.call(rbind, out)
+}
+
+count_ok <- function(x, by, flag, names = c("groups", "consistent")) {
+  a <- stats::aggregate(list(v = x[[flag]]), x[by], function(v) c(length(v), sum(v)))
+  out <- cbind(a[by], as.data.frame(a$v))
+  names(out)[length(by) + 1:2] <- names
+  out
+}
+
+invariance_table <- function(s, g = unit_groups(s)) {
+  count_ok(g, c("lane", "role", "family", "estimator", "arm", "units"), "consistent")
 }
 
 # PSD tolerance check: fits that fail only in rescaled units, by cause.
@@ -158,4 +182,35 @@ decision_table <- function(s, lane) {
             secs("psd_default_none") < secs("psd_default")),
         row("D tolerance bites", "rescaled-only failures from feasibility or admissibility",
             sprintf("%d fits", bites), bites == 0L))
+}
+
+# Where the primary arms break invariance: the success pattern across units,
+# or the size of the objective spread when every version succeeds.
+inconsistency_table <- function(s, lane, g = unit_groups(s)) {
+  arms <- unique(unlist(primary_comparisons(lane)))
+  b <- g[g$arm %in% arms & !g$consistent, ]
+  if (!nrow(b)) return(data.frame(role = character(), groups = integer()))
+  b$pattern <- ifelse(b$n_ok == b$n, paste("objective differs,",
+    as.character(cut(b$gap, c(1e-6, 1e-5, 1e-4, 1e-3, Inf),
+                     c("gap 1e-6 to 1e-5", "gap 1e-5 to 1e-4", "gap 1e-4 to 1e-3", "gap over 1e-3")))),
+    b$pattern)
+  stats::aggregate(list(groups = b$pattern), b[c("role", "family", "estimator", "arm", "units", "pattern")], length)
+}
+
+# Two-stage fits by the stage that returned them, and failures by cause and
+# units (PSD lane).
+stage_table <- function(s) {
+  d <- s[grepl("^twostage", s$arm) & s$attainable, ]
+  if (!nrow(d)) return(data.frame())
+  count_ok(d, c("role", "family", "arm", "stage"), "success", c("fits", "success"))
+}
+
+failure_table <- function(s) {
+  d <- s[s$arm != "witness" & !s$success, ]
+  d$cause <- ifelse(grepl("round-trip", d$message), "link round-trip",
+             ifelse(grepl("covariance-link residual", d$message), "link residual",
+             ifelse(grepl("budget", d$message) | d$optimizer_status == "budget_exhausted", "budget exhausted",
+             ifelse(nzchar(d$message), "other error",
+             ifelse(d$certified, "inadmissible", paste("verdict:", d$newton_status))))))
+  stats::aggregate(list(fits = d$pkey), d[c("role", "family", "estimator", "arm", "transform", "cause")], length)
 }
