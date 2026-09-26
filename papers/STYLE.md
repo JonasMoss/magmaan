@@ -320,7 +320,7 @@ sentence was filler.
 Style consistency that the pipeline must enforce, not the author:
 
 - **Every cited number is generated.** Prose numbers come from a single
-  `tables/<slug>_stats.tex` file written by the paper's table script.
+  `manuscript/tables/numbers.tex` file written by `code/tables.R`.
   Caption numbers come from the same file. The manuscript carries `??`
   fallbacks for unbuilt macros so it compiles before the tables exist.
 - **Figure and table file slugs match in-text `\label{}` slugs.**

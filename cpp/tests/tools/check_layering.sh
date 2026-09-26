@@ -36,7 +36,7 @@ deny_list() {
     alphaomegawald ugammafast compositeml rawstandardizedalpha \
     hpolychoricssem ordinalsnlls
   if [ -d papers ]; then
-    for d in papers/*/r-package/DESCRIPTION; do
+    for d in papers/*/r-package/DESCRIPTION papers/*/code/r-package/DESCRIPTION; do
       [ -f "$d" ] && sed -n 's/^Package:[[:space:]]*//p' "$d"
     done
   fi

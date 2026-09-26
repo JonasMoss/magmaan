@@ -2,14 +2,14 @@
 
 Repo-local rules for magmaan paper subprojects. Sibling to
 `experiments/AGENTS.md` but distinct: experiments are short, single-question
-folders rendered as one Quarto report; papers are larger LaTeX manuscripts
-with their own simulation pipelines, helper packages, and online supplements.
+folders rendered as one Quarto report; papers are LaTeX manuscripts with their
+own studies, code, supplement, and kept results.
 
 Each paper folder is **its own independent git repository**, nested inside
 the magmaan working copy. The outer magmaan repo ignores `papers/*` except
-this convention doc. Submodules are not used; a paper that is ready to
-archive can be pushed to its own remote (Zenodo, OSF mirror, GitHub) without
-touching magmaan.
+this convention doc, `CLAUDE.md`, and `STYLE.md`. Submodules are not used; a
+paper that is ready to archive can be pushed to its own remote (Zenodo, OSF
+mirror, GitHub) without touching magmaan.
 
 **Papers are private** (see "Dependency layering" in the root `AGENTS.md`).
 Nothing outside a paper references it: no experiment, test, benchmark, core
@@ -24,267 +24,86 @@ historical material rather than active paper leaves, so the layering checker
 does not scan their internal code. Active core, orchestration, experiment,
 test, benchmark, and paper code still must not depend on the archive.
 
-## Purpose
+## Layout
 
-One paper folder holds one manuscript-in-progress aimed at a specific
-journal. It owns its bibliography, its simulation scripts, its helper R
-package, its online supplement, and a curated set of run outputs that the
-manuscript cites. It does not hold scratch that belongs in a separate
-experiments folder, nor library changes that belong in `cpp/src/`.
+Papers use the collection-wide layout `paper-project-structure/0.2`, defined in
+`00_paper-writing/docs/contracts/paper-project-structure.md` next to this
+checkout. Create a paper from the magmaan root with the scaffold, which also
+gives it its own repository:
 
-## Directory Shape
-
-A short kebab-case slug names the folder. No numeric prefix; papers are not
-ordered.
+```sh
+../00_paper-writing/tools/scaffold-paper.rb \
+  --slug <slug> --title "Working Title" --output papers/<slug>
+```
 
 ```text
-papers/<paper-slug>/
-  # ---- archive-bound: ships to the journal / OSF / Zenodo ----
-  <paper-slug>.tex            # manuscript
-  <paper-slug>.bib            # bibliography
-  figures/                    # final figures (tracked)
-  tables/                     # final .tex tables + stats macros (tracked)
-  supplement/                 # online supplement (Quarto sources)
-    *.qmd                     # tracked
-    *.html / *_files/         # generated, ignored
-  scripts/                    # thin runners, public-facing
-  r-package/                  # paper helper package, public-facing
-  results/                    # curated CSVs that the manuscript cites (tracked)
-    raw/                      # bulky run dumps (ignored)
-    .gitignore                # keeps results/ present; ignores raw/
-
-  # ---- dev-only: never ships ----
-  dev/
-    notes/                    # derivation / design notes (tracked)
-    inspect/                  # .qmd reports that read run data for dev eyes
-    audits/                   # investigation write-ups + raw audit data
-    status/                   # dated status snapshots
-    todo.md                   # current paper TODO
-
-  # ---- always ignored ----
-  extern/                     # downloaded papers, code mirrors
-  resources/                  # local data, scratch
-
-  # ---- meta ----
-  README.md                   # one-screen overview for an outside reader
-  AGENTS.md                   # paper-specific direction (voice, scope)
-  justfile                    # pipeline driver
-  .gitignore
+papers/<slug>/
+  README.md  AGENTS.md  STATUS.md (optional)  justfile  .gitignore
+  manuscript/  <slug>.tex, <slug>-supplement.tex, preamble.tex, <slug>.bib,
+               appendices/, tables/, figures/; compiles on its own        ships
+  code/        studies/<study>/run.R, tables.R, modal/, slurm/,
+               r-package/, environment/magmaan.json; README.md             ships
+  results/     curated CSVs and kept runs in runs/<study>/<run-id>/        ships
+  dev/         notes, probes, checks, drafts, talks                        never
+  local/       git-ignored: literature, raw runs, builds, magmaan checkouts never
 ```
 
-The split is **archive-bound vs dev-only**, with `extern/` and `resources/`
-as permanently-ignored sinks. The `just archive` recipe bundles only the
-archive-bound parts; nothing from `dev/`, `extern/`, or `resources/`
-appears in the OSF zip.
+The three rules, the study runner protocol, `just sim`/`keep`/`tables`, and
+the `just ship` bundle are in the contract; the paper's `README.md` repeats
+them. Single-question explorations that are about magmaan rather than the
+paper belong in `experiments/`, not in the paper's `dev/`.
 
-## Naming
+Papers still on an older layout (sem-psd and sem-sphere on 0.1;
+closed-form-omega, guttman-inference, sem-misspecification, snlls-continuous,
+and snlls-ordinal on earlier flat layouts) keep working as they are. Move one
+at a time with the `paper-init` skill, which moves nothing until the author
+approves the complete mapping.
 
-- Folder slug is the manuscript's working short name: `snlls-continuous`,
-  `composite-ml`, `ugamma-fast`. Avoid numeric prefixes; paper slugs are
-  meaningful identifiers and there is no "next paper" sequence.
-- The main TeX file matches the folder slug (`<slug>.tex`, `<slug>.bib`).
-  Do not rename to `paper.tex`; ambiguous filenames break grep across
-  paper boundaries.
-- The R helper package directory is always `r-package/`. Its `Package:`
-  name in `DESCRIPTION` is the folder slug with dashes removed
-  (`snllscontinuous`, `compositeml`).
+## magmaan specifics
 
-## Run Outputs
-
-Run output is partitioned by intent, not by run id:
-
-- **`results/`** — curated CSVs (and other small artifacts) that the
-  manuscript, the supplement, or a public reader actually depends on.
-  Tracked. Small enough to live in git.
-- **`results/raw/`** — everything else. Raw per-replicate simulation
-  output, timing logs, per-run pilot directories. Ignored. Bulky and
-  unstable.
-
-Runners write to `results/raw/<run-id>/` by default. A summarising step
-(usually invoked via `just tables` or a `make_*` script) reads
-`results/raw/` and writes the curated CSVs into `results/`. If a runner
-writes directly to `results/` it must be small, stable, and cited in
-the manuscript or supplement.
-
-`LATEST_*` pointer files used to find the most recent run live next to the
-runs themselves under `results/raw/` and are git-ignored.
-
-## Supplement
-
-`supplement/` is the home for the online appendix. Sources are tracked
-`.qmd` files; generated HTML/PDF outputs are ignored. Supplements read
-from `results/` and `results/raw/`, never from `dev/`.
-
-Each `supplement/*.qmd` should declare itself a supplement in the YAML
-title (`title: "Online Supplement: ..."`) and should be self-contained
-enough that an OSF reader can render it from a clean clone given a
-populated `results/` directory.
-
-## Dev Folder
-
-`dev/` collects work intended for the author and coding agents, never for
-the OSF archive.
-
-- `dev/notes/` — derivation notes, design notes, implementation maps. May
-  feed paper text later. Tracked.
-- `dev/inspect/` — `.qmd` files that read run data and produce inspection
-  HTML for the author. Differs from `supplement/` in audience and polish;
-  these may break, change, or be deleted freely. Tracked sources, ignored
-  HTML.
-- `dev/audits/` — investigation write-ups for specific anomalies
-  (`lcs-objective-gap.md`, `convergence-audit-notes.md`) and any small
-  audit data they need. Tracked.
-- `dev/status/` — dated status snapshots
-  (`status-2026-05-23.md`). Tracked.
-- `dev/todo.md` — current paper TODO. Tracked.
-
-The rule of thumb: if a reader of the published paper might want it,
-it belongs in `supplement/` or `results/`; otherwise it belongs in `dev/`.
-
-## Build Driver
-
-Papers use a `justfile`, not a `Makefile`. Recipes:
-
-```
-just                    # alias for `just --list`
-just pdf                # build the manuscript PDF
-just sim <name>         # run one simulation by short name
-just sims               # run every simulation (hours)
-just tables             # rebuild tables/ from results/
-just figures            # rebuild figures/ from results/
-just supplement         # render supplement/*.qmd to HTML
-just paper              # tables + figures + pdf (no sims)
-just archive            # zip the archive-bound subset for OSF
-just clean              # remove LaTeX build products
-```
-
-Heavy work goes in `sim` / `sims`. The cheap recipes (`tables`, `figures`,
-`supplement`, `pdf`, `paper`) must reuse existing `results/` and complete
-in seconds-to-minutes, so manuscript iteration does not require
-re-simulation.
-
-OSF reviewers may not have `just` installed. The `archive` bundle should
-include a `scripts/run-all.sh` mirror at submission time. Day-to-day
-work does not need it.
-
-## R Helper Package
-
-Each paper carries a paper-local R helper package under `r-package/`. It
-holds reusable benchmark cases, simulation generators, and runners that
-would otherwise bloat individual scripts. Scripts load it with
-`pkgload::load_all("r-package")`; the package itself must be installable
-with `R CMD INSTALL r-package`.
-
-Package code is organised by tier inside `R/`:
-
-- `core-*.R` — reusable infrastructure (env helpers, I/O, timing, stats,
-  optimizer specs). Expected to survive into future papers.
-- `harness-*.R` — this paper's apparatus (its benchmark runner,
-  simulation designs, table toolkit). Expected to be rewritten per paper.
-
-The tiering is a reader convention; R sources every file in `R/`
-regardless of name.
-
-## Manuscript
-
-LaTeX, plain `natbib`. `latexmk` when available, `pdflatex`/`bibtex` cycle
-otherwise; the `justfile` handles both. Manuscript prose numbers come from
-a single generated file under `tables/` (e.g. `tables/<slug>_stats.tex`),
-so every cited number is reproducible from `results/` and the prose itself
-carries `??` fallbacks until the tables are built.
-
-Bibliographies are paper-local. Do not share `.bib` files across paper
-folders; copy what you need.
+- **Pin magmaan.** Record the exact magmaan commit the paper's code uses in
+  `code/environment/magmaan.json`. Runners read a clean checkout of that commit
+  through `MAGMAAN_SOURCE_ROOT` (and a matching build through
+  `MAGMAAN_BUILD_ROOT` when paper code compiles against the core). Checkouts and
+  builds live under the paper's `local/`, never in Git.
+- **Paper-local R package.** `code/r-package/`, with `Package:` equal to the
+  slug with dashes removed (`snllscontinuous`). The layering check reads its
+  `DESCRIPTION`, so core code cannot reference the paper's namespace. Inside
+  `R/`, `core-*.R` holds infrastructure expected to outlive the paper and
+  `harness-*.R` holds this paper's apparatus; R sources every file regardless.
+- **Modal.** The template's `code/modal/app.py` image must also build magmaan at
+  the pinned commit before running the study; closed-form-omega and sem-psd
+  show two ways to do that.
 
 ## Style
 
-Prose, tables, figures, citations, math notation, and audience profiles
-live in `papers/STYLE.md`. Every paper inherits those defaults. The
-per-paper AGENTS.md declares one `Profile:` line (Math / Applied / Tool)
-that picks the matching length and tone defaults from `STYLE.md`, plus
-paper-specific direction (target journal, scope, what to cite or skip).
-It should not re-state the defaults.
+Prose, tables, figures, citations, math notation, and audience profiles live
+in `papers/STYLE.md`. Every paper inherits those defaults. The per-paper
+`AGENTS.md` declares one `Profile:` line (Math, Applied, or Tool) plus
+paper-specific direction (target journal, scope, what to cite or skip). It
+should not restate the defaults.
 
-## Reproducibility and Versioning
+## Reproducibility and versioning
 
 magmaan has no releases, so the honest version is a commit SHA. Near
 submission:
 
-1. Pick a magmaan commit.
-2. Tag it (e.g. `<paper-slug>-v1`).
-3. Rerun every simulation against that single state and regenerate
-   every table, figure, and supplement from one consistent build.
-4. Cite the commit/tag in the manuscript ("benchmarks were run against
-   magmaan at commit `abc1234`").
+1. Pick a magmaan commit, tag it (for example `<slug>-v1`), and record it in
+   `code/environment/magmaan.json`.
+2. Rerun every study against that single state, keep the runs, and regenerate
+   tables and figures with `just tables`.
+3. Commit, run `just ship`, and cite the commit or tag in the manuscript
+   ("benchmarks were run against magmaan at commit `abc1234`").
 
 Bit-exact reproducibility is not the goal; a recoverable pin plus robust
-reporting is.
-
-Report ratios where possible (a speedup factor survives hardware
-changes), disclose CPU/OS/compiler/BLAS, and keep correctness validation
-(against lavaan / OpenMx to several digits) separate from speed
+reporting is. Report ratios where possible (a speedup factor survives hardware
+changes), disclose CPU, OS, compiler, and BLAS, and keep correctness
+validation (against lavaan or OpenMx to several digits) separate from speed
 benchmarks.
 
-## Git Hygiene
+## Git hygiene
 
-- Generated outputs (LaTeX build products, Quarto HTML, raw run data,
-  rendered PDFs) are ignored. Curated tables/figures/results are tracked.
-- Bulky binaries, downloaded papers, vendor source mirrors, and local
-  scratch all live under `extern/` or `resources/` and never enter the
-  index.
-- Each paper folder carries its own `.gitignore`. The patterns below are
-  the recommended baseline; copy and trim per paper.
-
-```gitignore
-# Local resources and source mirrors
-extern/
-resources/
-
-# Run output
-results/raw/
-results/**/LATEST*
-
-# Supplement build
-supplement/*.html
-supplement/*_files/
-
-# Dev build artifacts
-dev/inspect/*.html
-dev/inspect/*_files/
-
-# R artifacts
-.Rproj.user/
-.Rhistory
-.RData
-.Ruserdata
-*.Rcheck/
-*.tar.gz
-r-package/src/*.o
-r-package/src/*.so
-r-package/src/*.dll
-
-# LaTeX build products
-*.aux
-*.bbl
-*.bcf
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.lof
-*.lot
-*.nav
-*.out
-*.pdf
-*.run.xml
-*.snm
-*.synctex.gz
-*.toc
-*.vrb
-*.xdv
-_minted-*/
-cpp/build/
-```
-
-Placeholder `.gitkeep` files and per-folder `.gitignore` files may be
-tracked so the directory layout survives cloning.
+The scaffold's `.gitignore` and self-ignoring `local/` are the baseline.
+Downloaded papers, source mirrors, magmaan checkouts and builds, raw runs, and
+ship bundles stay in `local/`. Kept runs, curated results, and generated tables
+and figures are committed; build products and rendered PDFs are not.
