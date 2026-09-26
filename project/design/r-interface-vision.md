@@ -279,7 +279,7 @@ Checked against the source on 2026-09-25.
 | Surface | Today | Consequence |
 | --- | --- | --- |
 | `magmaan()` in `model_data.R` | Estimate-only; `se` and `test` must be `"none"`; many estimator-specific controls | Renamed to the lab's `fit_model()`; the ordinary `magmaan()` is new |
-| S3 methods on `magmaan_fit` | `print`, `residuals` and `vcov` only | `summary`, `coef`, `confint`, `anova` and `parameters()` are new |
+| S3 methods on `magmaan_fit` | `print`, `residuals` and `vcov` only | `summary`, `coef`, `confint` and `anova` are new; the parameter table is `coef(summary(fit))` |
 | `vcov.magmaan_fit()` in `context.R` | `regime = "model"` means inverse observed information for FIML but an expected-bread sandwich with empirical meat for complete ML; continuous fits stop without `data` although fits retain `fit$raw_data` | Retained data already exists; the regime naming is inconsistent across estimators |
 | `prepare_inference()` in `scores.R` | ML, FIML and fixed-NT ML2S; rejects active bounds | The ordinary policy needs every listed estimator |
 | `inference_quadratic()`, `inference_covariance()`, `calibrate_quadratic()` | Score and LR, each with SB and PEBA4, plus the robust covariance, on structured expected-information geometry (`man/inference_reuse.Rd`) | The bundle's composer exists; the geometry changes |
@@ -307,9 +307,9 @@ a `control` option for non-converging fits, and summary-statistic input.
 3. Make listwise deletion available and recorded on every estimator path.
 4. Rename the compiled package to `magmaanlab`, remove its `magmaan()`, and
    create the pure-R `magmaan` package with `magmaan()`, `infer()`,
-   `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint`,
-   `parameters()` and `anova()`. Done on 2026-09-25; `anova()` on 2026-09-26,
-   for complete-data ML.
+   `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint` and
+   `anova()`. Done on 2026-09-25; `anova()` on 2026-09-26 for complete-data
+   ML. The same day the exported `parameters()` became `coef(summary(fit))`.
 5. Extend the policy to FIML, ML2S, ordinal and mixed, and two-level fits,
    with a component-level capability table.
 6. Migrate experiments, examples, the vendoring scripts and the cluster install

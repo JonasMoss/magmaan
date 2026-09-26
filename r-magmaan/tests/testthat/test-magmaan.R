@@ -20,7 +20,7 @@ expect_lavaan_estimates <- function(fit, lav, tolerance = 1e-4) {
 
 # Standard errors of every lavaan free row, aligned by (lhs, op, rhs, group).
 expect_lavaan_se <- function(fit, lav, tolerance = 1e-4) {
-  p <- parameters(fit)
+  p <- coef(summary(fit))
   theirs <- lavaan::parTable(lav)
   theirs <- theirs[theirs$free > 0L, , drop = FALSE]
   group <- if (is.null(p$group)) 1L else p$group
@@ -49,7 +49,7 @@ test_that("identification and group options follow lavaan's meaning", {
   expect_lavaan_estimates(fit, lavaan::cfa(cfa, d, group = "school",
                                            group.equal = "loadings"))
   expect_equal(fit$rows$group, unique(as.character(d$school)))
-  expect_true("group" %in% names(parameters(fit)))
+  expect_true("group" %in% names(coef(summary(fit))))
   intercept <- "visual =~ x1 + x2 + x3\n x1 ~ 1"
   expect_lavaan_estimates(magmaan(intercept, d), lavaan::cfa(intercept, d))
 })
@@ -128,7 +128,7 @@ test_that("unsupported estimators keep their estimates and give a reason", {
   expect_true(all(fit$inference$status$reason == "unsupported_model"))
   err <- tryCatch(confint(fit), magmaan_inference_unavailable = function(e) e)
   expect_equal(err$reason, "unsupported_model")
-  expect_true(all(is.na(parameters(fit)$se)))
+  expect_true(all(is.na(coef(summary(fit))$se)))
   expect_output(print(summary(fit)), "Unavailable inference")
 })
 
@@ -160,7 +160,7 @@ test_that("ML covariance is lavaan's observed-information sandwich", {
   expect_equal(fit$inference$status$available, c(TRUE, TRUE, TRUE))
   lav <- lavaan::cfa(cfa, d, estimator = "MLR")
   expect_lavaan_se(fit, lav)
-  p <- parameters(fit)
+  p <- coef(summary(fit))
   pt <- fit$lab$partable
   free <- pt$free[pt$free > 0L & !pt$op %in% c("==", "<", ">")]
   expect_equal(p$se[p$free], unname(sqrt(diag(vcov(fit))))[free])
@@ -194,7 +194,7 @@ test_that("the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentle
 test_that("defined parameters use the policy covariance", {
   d <- hs()
   m <- "visual =~ x1 + a*x2 + b*x3\ntextual =~ x4 + x5 + x6\nab := a*b"
-  p <- parameters(magmaan(m, d))
+  p <- coef(summary(magmaan(m, d)))
   lav <- lavaan::parameterEstimates(lavaan::cfa(m, d, estimator = "MLR"))
   expect_equal(p$est[p$op == ":="], lav$est[lav$op == ":="], tolerance = 1e-5)
   expect_equal(p$se[p$op == ":="], lav$se[lav$op == ":="], tolerance = 1e-4)

@@ -55,18 +55,10 @@ nobs.magmaan <- function(object, ...) {
   sum(object$lab$nobs)
 }
 
-#' Parameter table of a magmaan fit
-#'
-#' One row per model parameter, fixed and free, with the estimate and, when
-#' inference is available, its standard error, z-statistic, p-value and Wald
-#' interval.
-#'
-#' @param fit A [magmaan()] fit.
-#' @param level Confidence level of the intervals.
-#' @return A data frame.
-#' @export
-parameters <- function(fit, level = 0.95) {
-  if (!inherits(fit, "magmaan")) stop("parameters(): supply a magmaan() fit", call. = FALSE)
+# The parameter table: one row per model parameter, fixed and free, with the
+# estimate and, when inference is available, its standard error, z-statistic,
+# p-value and Wald interval. summary() stores it; coef(summary(fit)) returns it.
+.parameter_table <- function(fit, level = 0.95) {
   pt <- fit$lab$partable
   pt <- pt[!pt$op %in% .constraint_ops, , drop = FALSE]
   ngroups <- length(fit$lab$nobs)
@@ -76,7 +68,7 @@ parameters <- function(fit, level = 0.95) {
   out$free <- pt$free > 0L
   out$est <- pt$est
   out$se <- NA_real_
-  V <- tryCatch(.inference_result(fit, "covariance", "parameters()"),
+  V <- tryCatch(.inference_result(fit, "covariance", "summary()"),
                 magmaan_inference_unavailable = function(e) NULL)
   if (!is.null(V)) {
     se_free <- sqrt(pmax(diag(V), 0))
@@ -132,11 +124,29 @@ print.magmaan <- function(x, ...) {
   invisible(x)
 }
 
+#' Summary of a magmaan fit
+#'
+#' The fit, its parameter table and its global tests. `coef()` on the summary
+#' returns the parameter table: one row per model parameter, fixed and free,
+#' including defined (`:=`) parameters, with the estimate and, when inference
+#' is available, its robust standard error, z-statistic, p-value and Wald
+#' interval. `coef(fit)` stays the vector of free estimates that matches
+#' `vcov(fit)`.
+#'
+#' @param object A [magmaan()] fit.
+#' @param level Confidence level of the intervals.
+#' @param ... Unused.
+#' @return An object of class `summary.magmaan`.
 #' @export
 summary.magmaan <- function(object, level = 0.95, ...) {
-  structure(list(fit = object, parameters = parameters(object, level = level),
+  structure(list(fit = object, coefficients = .parameter_table(object, level = level),
                  tests = .global_tests(object), level = level),
             class = "summary.magmaan")
+}
+
+#' @export
+coef.summary.magmaan <- function(object, ...) {
+  object$coefficients
 }
 
 #' @export
@@ -148,7 +158,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     print(fit$rows, row.names = FALSE)
   }
   cat("\nParameters\n")
-  p <- x$parameters
+  p <- x$coefficients
   num <- vapply(p, is.numeric, logical(1))
   p[num] <- lapply(p[num], function(v) round(v, digits))
   print(p, row.names = FALSE)
@@ -184,7 +194,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' such as a shared label or `b == 0`, fitted to the same observations with
 #' the same estimator and `psd` setting. For a single restriction, a Wald test
 #' is the z-statistic of a defined parameter such as `d := a - b` in
-#' [parameters()].
+#' `coef(summary(fit))`.
 #'
 #' @param object,... Two [magmaan()] fits, in either order.
 #' @return A data frame with one row per test, of class `magmaan_anova`.

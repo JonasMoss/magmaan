@@ -9,8 +9,8 @@ library(magmaan)
 fit <- magmaan("visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6",
                lavaan::HolzingerSwineford1939)
 summary(fit)
-coef(fit)
-parameters(fit)
+coef(fit)            # free estimates, matching vcov(fit)
+coef(summary(fit))   # the parameter table: estimates, robust SEs, z, p, intervals
 ```
 
 This package is pure R. Every computation happens in
