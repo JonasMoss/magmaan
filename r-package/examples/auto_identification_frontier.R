@@ -157,17 +157,21 @@ Sb <- do.call(rbind, lapply(case_b$sample_cov,
 samp_b <- list(S = list(Sb), nobs = as.integer(case_b$n_obs))
 mb <- model_spec(case_b$model, std_lv = FALSE, auto_fix_first = TRUE)
 sb <- model_spec(case_b$model, std_lv = TRUE,  auto_fix_first = FALSE)
+# This marker model is a known loss of the layered default start (it stalls
+# short of the optimum; see the backlog item on Geiser's latent autoregressive
+# cross-lagged model), so the timing uses the former FABIN3 start.
+fabin <- list(start = "scaled-fabin")
 stopifnot(isTRUE(magmaan_core$frontier_is_std_lv_admissible(mb, sb)$admissible))
 
 reps <- 50L
 t_marker <- replicate(reps, {
   st <- Sys.time()
-  magmaan_core$fit_ml(mb, samp_b)
+  magmaan_core$fit_ml(mb, samp_b, control = fabin)
   as.numeric(difftime(Sys.time(), st, units = "secs"))
 })
 t_std_lv <- replicate(reps, {
   st <- Sys.time()
-  f <- magmaan_core$fit_ml(sb, samp_b)
+  f <- magmaan_core$fit_ml(sb, samp_b, control = fabin)
   magmaan_core$frontier_backconvert_std_lv_to_marker(f, mb$partable)
   as.numeric(difftime(Sys.time(), st, units = "secs"))
 })

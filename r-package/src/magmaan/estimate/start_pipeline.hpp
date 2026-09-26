@@ -8,7 +8,8 @@
 
 namespace magmaan::estimate {
 
-// Layered is the frontier layered moment start (estimate/frontier/layered_start.hpp).
+// Layered is the layered moment start (estimate/layered_start.hpp), the default
+// of complete-data ML and GLS.
 // It already constructs in the target identification, so it is never transported.
 enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStein, Layered };
 enum class StartTransport { Native, AutoStdLv, RequireStdLv };

@@ -231,7 +231,11 @@ inline OptimizerSpec ipopt(optim::OptimOptions options) {
   return OptimizerSpec{OptimizerKind::Ipopt, options};
 }
 
+// `Layered` is the complete-data ML and GLS default (the layered moment start);
+// routes with their own start constructors (two-level, ordinal) treat it, like
+// `MlScaled`, as a request for their native default.
 enum class StartKind : std::uint8_t {
+  Layered,
   MlScaled,
   Simple,
   Fabin,
@@ -252,7 +256,10 @@ inline StartSpec start_policy(estimate::StartPolicy policy) {
   return StartSpec{StartKind::Policy, {}, policy};
 }
 
-inline StartSpec ml_starts() { return StartSpec{StartKind::MlScaled, {}}; }
+inline StartSpec ml_starts() { return StartSpec{StartKind::Layered, {}}; }
+inline StartSpec layered_starts() { return StartSpec{StartKind::Layered, {}}; }
+// The pre-2026-09-26 ML default: FABIN3 transported from std.lv.
+inline StartSpec scaled_fabin_starts() { return StartSpec{StartKind::MlScaled, {}}; }
 inline StartSpec simple_starts() { return StartSpec{StartKind::Simple, {}}; }
 inline StartSpec fabin_starts() { return StartSpec{StartKind::Fabin, {}}; }
 inline StartSpec guttman_starts() { return StartSpec{StartKind::Guttman, {}}; }

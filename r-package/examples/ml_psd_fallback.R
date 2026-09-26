@@ -8,7 +8,8 @@ boundary <- list(S = list(matrix(c(1, .7, .7, .7, 1, .3, .7, .3, 1), 3)),
 
 # Ordinary success: no PSD attempt or change to the returned ordinary fit.
 a <- frontier_fit_ml_psd_fallback(model, interior)
-ordinary <- magmaan_core$fit_ml(model, interior)
+# The recovery's ordinary stage keeps FABIN3 with L-BFGS (decisions/01, lane psd-ml).
+ordinary <- magmaan_core$fit_ml(model, interior, control = list(start = 'scaled-fabin'))
 stopifnot(a$converged, !a$fallback_used, !a$warm_start_used, is.null(a$psd),
           identical(a$fallback_reason, 'none'),
           identical(a$fit, a$ordinary$fit), identical(a$fit$theta, ordinary$theta))

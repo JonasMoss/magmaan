@@ -30,7 +30,7 @@ for (name in names(fitters)) {
   fit <- check(f(ctl))
   default <- f(list(max_iter=3000))
   expected_default <- magmaan_core$estimate_start_values(m$partable,s,
-      start=if (name %in% c('ml','psd','penalized')) 'scaled-fabin' else 'fabin3')
+      start=if (name %in% c('ml','gls')) 'layered' else if (name %in% c('psd','penalized')) 'scaled-fabin' else 'fabin3')
   stopifnot(max(abs(default$start$theta - expected_default)) < 1e-12)
   explicit <- f(list(start=fit$theta, max_iter=3000))
   stopifnot(explicit$start$method == 'explicit',

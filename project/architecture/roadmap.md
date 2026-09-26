@@ -98,9 +98,9 @@ scale paths. Structural initialization beyond the loading constructors remains
 an explicit gap; no blanket nonzero-regression policy has been adopted.
 The zero-path failures are exact sign-reflection traps: a latent scaled by a
 fixed variance (std.lv or phantom) with all sign-odd free paths at zero has zero
-gradient in them, so no gradient optimizer leaves. The frontier layered moment
-start (`estimate::frontier::layered_start_values`, R `start = "layered"`, not a
-default) builds measurement shapes, the measured-latent covariance, a joint
+gradient in them, so no gradient optimizer leaves. The layered moment start
+(`estimate::layered_start_values`, R `start = "layered"`, the complete-data ML
+and GLS default since 2026-09-26) builds measurement shapes, the measured-latent covariance, a joint
 identification scale solve and a GLS latent-level structural fit, with
 sign-generic moment magnitudes for variance-carrying paths, then means, a
 unit-weighted constraint projection and PD repair. It is identification- and
@@ -115,11 +115,12 @@ Default decisions for starts, optimizers and the PSD route are made in
 `experiments/decisions/01-optimizer-defaults`, whose report opens with the
 register of those defaults. Its criteria are committed before each run, the
 library verdict is the only judge, and it uses held-out simulated populations
-under unit transforms. As of 2026-09-26 no ML/GLS default has changed.
-PORT's apparent ML gain is mostly runaway certifications: on draws without a
-proper minimum, PORT walks a divergent path and the Newton check accepts where
-its budget stops. The GLS gain of the layered start is real. A runaway rule in
-the scoring comes before the next run. For PSD ML, FABIN3 and the diagonal
+under unit transforms. Since 2026-09-26 the layered start is the default of
+complete-data ML and GLS (`ml_start_values`, `api::ml()`/`gls()`, R `fit_ml`,
+`fit_gls`), and the optimizer stays NLopt L-BFGS. PORT certifies more, but the
+Newton check accepts runaway points along divergent paths, and PORT reaches
+about eight times as many. A runaway check in the verdict comes first; see the
+backlog. For PSD ML, FABIN3 and the diagonal
 preconditioning stay. The two-stage route beats the direct fit mainly in
 rescaled units, and that route choice is open.
 

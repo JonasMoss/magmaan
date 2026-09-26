@@ -23,7 +23,7 @@ Case example(const char* syntax = "f =~ x1 + x2 + x3 + x4") {
 }
 TEST_CASE("ML numerical policy transports std.lv starts without changing moments") {
   auto c=example();
-  auto start=estimate::ml_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
+  auto start=estimate::scaled_fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
   CHECK(start->branch==estimate::MlStartBranch::TransportedStdLv);
   auto parsed=parse::Parser::parse("f =~ x1 + x2 + x3 + x4"); REQUIRE(parsed);
   spec::BuildOptions options; options.fixed_x=false; options.std_lv=true;
@@ -36,18 +36,18 @@ TEST_CASE("ML numerical policy transports std.lv starts without changing moments
   REQUIRE(a); REQUIRE(b);
   CHECK((a->moments.sigma[0]-b->moments.sigma[0]).norm()<1e-12);
   auto scaled=c.sample; scaled.S[0]*=100;
-  auto other=estimate::ml_start_values(c.pt,c.rep,scaled); REQUIRE(other);
+  auto other=estimate::scaled_fabin_start_values(c.pt,c.rep,scaled); REQUIRE(other);
   auto v=me->evaluate(other->theta,false,false); REQUIRE(v);
   CHECK((v->moments.sigma[0]-100*b->moments.sigma[0]).norm()<1e-9);
   spec::Starts hints; hints.hint.resize(static_cast<std::size_t>(c.pt.n_free()),std::numeric_limits<double>::quiet_NaN());
   hints.hint[0]=.314159;
-  auto explicit_hint=estimate::ml_start_values(c.pt,c.rep,c.sample,hints); REQUIRE(explicit_hint);
+  auto explicit_hint=estimate::scaled_fabin_start_values(c.pt,c.rep,c.sample,hints); REQUIRE(explicit_hint);
   CHECK(explicit_hint->theta(0)==.314159);
 }
 TEST_CASE("ML numerical policy falls back for fixed values and equalities") {
   for (const char* syntax : {"f =~ x1 + 2*x2 + x3 + x4", "f =~ x1 + a*x2 + a*x3 + x4", "f =~ x1 + a*x2 + b*x3 + x4\na == b*b"}) {
     auto c=example(syntax);
-    auto start=estimate::ml_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
+    auto start=estimate::scaled_fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
     auto native=estimate::fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(native);
     CHECK(start->branch==estimate::MlStartBranch::NativeFabin);
     CHECK((start->theta-*native).norm()==0);
@@ -58,7 +58,7 @@ TEST_CASE("ML numerical policy preserves fitted objective under scaling and boun
     auto c=example(syntax);
     for(double units : {.1,1.,10.}) {
       auto sample=c.sample; sample.S[0]*=units*units;
-      auto start=estimate::ml_start_values(c.pt,c.rep,sample); REQUIRE(start);
+      auto start=estimate::scaled_fabin_start_values(c.pt,c.rep,sample); REQUIRE(start);
       auto opts=estimate::ml_optim_options();
       estimate::Bounds bounds;
       bounds.lower=Eigen::VectorXd::Constant(c.pt.n_free(),-.5*units*units);
@@ -89,7 +89,7 @@ TEST_CASE("ML numerical policy scales constrained adapters") {
   for (const char* syntax : {"f =~ x1 + a*x2 + b*x3 + x4\na == b*b",
                              "f =~ x1 + a*x2 + b*x3 + x4\na + b == 2"}) {
     auto c=example(syntax);
-    auto start=estimate::ml_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
+    auto start=estimate::scaled_fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
     estimate::Bounds bounds;
     bounds.lower=Eigen::VectorXd::Constant(c.pt.n_free(),-10.);
     bounds.upper=Eigen::VectorXd::Constant(c.pt.n_free(),10.);
@@ -137,7 +137,7 @@ TEST_CASE("Start policy reports fallback and supports requiring or disabling tra
   for (const char* syntax : {"f =~ x1 + 2*x2 + x3 + x4",
                              "f =~ x1 + a*x2 + a*x3 + x4"}) {
     auto c = example(syntax);
-    auto automatic = estimate::ml_start_values(c.pt, c.rep, c.sample); REQUIRE(automatic);
+    auto automatic = estimate::scaled_fabin_start_values(c.pt, c.rep, c.sample); REQUIRE(automatic);
     CHECK(automatic->fallback_reason != estimate::StartTransportIssue::None);
     CHECK_FALSE(estimate::start_values(c.pt, c.rep, c.sample,
         {estimate::StartMethod::Fabin3, estimate::StartTransport::RequireStdLv}));

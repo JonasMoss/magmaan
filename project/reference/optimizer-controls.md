@@ -25,6 +25,27 @@ control <- list(nlopt = list(ftol_rel = 1e-12, xtol_rel = 1e-10))
 # Pass control to the selected fitting entry point.
 ```
 
+## Complete-data ML and GLS start: the layered moment start (2026-09-26)
+
+Decided in `experiments/decisions/01-optimizer-defaults`, lane ml-gls (third
+run, author's decision), with the evidence in its report.
+
+- **Start.** The layered moment start (`estimate::layered_start_values`, now in
+  core, R `start = "layered"`) is the default of the following:
+  - C++ `ml_start_values`;
+  - `api::ml()` (`ml_starts()`, also `layered_starts()`) and `api::gls()`;
+  - R `fit_ml`, `fit_gls`, `fit_model(estimator = "ML" | "GLS")` and
+    `fit_start_values`.
+- **The former defaults stay selectable.** `scaled-fabin` (C++
+  `scaled_fabin_start_values`, api `scaled_fabin_starts()`) was the former ML
+  default. `fabin3` and `simple` give lavaan-compatible starts.
+- **Optimizer: unchanged, NLopt L-BFGS.** PORT certified more fits, but also
+  about eight times as many runaway fits (points far along a divergent path
+  that the Newton check accepts). It waits for a runaway check in the verdict.
+- **Unchanged routes.** Two-level and ordinal fits keep their own start
+  constructors, and PSD ML keeps transported FABIN3. So does the explicit
+  ordinary-first PSD recovery, whose ordinary stage is also still L-BFGS.
+
 ## Nonlinear equality constraints (2026-09-26)
 
 `fit_ml` and `fit_gls` run NLopt SLSQP when the model has nonlinear equality
@@ -42,8 +63,10 @@ and their R wrappers now use the validated ML numerical profile:
 - NLopt relative objective tolerance 1e-12, relative step tolerance 1e-10,
   and maximum 5000 objective evaluations. Luksan gradient tolerance and
   memory remain backend defaults. PSD ML uses constraint tolerance 1e-8.
-- High-level ML starts use `ml_start_values`: std.lv FABIN starts transported
-  to the original marker chart when safe, native FABIN otherwise. Fixed values,
+- (Superseded 2026-09-26 by the layered start, above.) High-level ML starts
+  used `ml_start_values`: std.lv FABIN starts transported to the original
+  marker chart when safe, native FABIN otherwise; this is now
+  `scaled_fabin_start_values`. Fixed values,
   linear/nonlinear equalities, unsupported marker layouts and failed transport
   cause native fallback. Finite user hints override transported values.
   Low-level fitters continue to use the caller's explicit start vector.
@@ -201,9 +224,10 @@ control = list(start = x0)
 `start_transport` is `"native"`, `"auto"`, or `"required"`. An explicit vector
 must have exactly `n_free` finite entries; it supersedes partable start hints
 and cannot request nonnative transport. Omission and `start="default"` preserve
-each entry point's existing default: the ordinary/PSD/multi-information
-complete-data ML wrappers use auto-transported FABIN3; ordinary LS, SNLLS,
-FIML and prepared wrappers retain native FABIN3. Explicit method names retain
+each entry point's existing default: ordinary complete-data ML and GLS use the
+layered start (since 2026-09-26); the PSD and multi-information ML wrappers use
+auto-transported FABIN3; ULS, WLS, SNLLS, FIML and prepared wrappers retain
+native FABIN3. Explicit method names retain
 native construction unless transport is selected separately. `scaled-fabin`
 remains an alias for FABIN3 with automatic transport.
 

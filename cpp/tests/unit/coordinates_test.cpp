@@ -11,7 +11,7 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/estimate/frontier/layered_start.hpp"
+#include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -186,7 +186,7 @@ void check_equivariant(const Built& b, bool means) {
     // From transported starts the scaled optimizers retrace the same path.
     for (auto backend : {Backend::Port, Backend::NloptLbfgs}) {
       CAPTURE(static_cast<int>(backend));
-      auto start = magmaan::estimate::ml_start_values(b.pt, b.rep, s);
+      auto start = magmaan::estimate::scaled_fabin_start_values(b.pt, b.rep, s);
       REQUIRE(start.has_value());
       const auto x = fit(b, s, start->theta, backend, kind);
       const auto y = fit(b, sd, start->theta.cwiseProduct(factor), backend, kind);
@@ -198,8 +198,8 @@ void check_equivariant(const Built& b, bool means) {
   }
 
   // The layered start is itself unit-equivariant.
-  auto ls = magmaan::estimate::frontier::layered_start_values(b.pt, b.rep, s);
-  auto ld = magmaan::estimate::frontier::layered_start_values(b.pt, b.rep, sd);
+  auto ls = magmaan::estimate::layered_start_values(b.pt, b.rep, s);
+  auto ld = magmaan::estimate::layered_start_values(b.pt, b.rep, sd);
   REQUIRE(ls.has_value());
   REQUIRE(ld.has_value());
   CHECK(rel_gap(*ld, ls->cwiseProduct(factor)) < 1e-4);
@@ -310,7 +310,7 @@ TEST_CASE("scaled fits keep bounds and nonlinear equality constraints") {
   const Eigen::VectorXd t = truth(b);
   SampleStats s = population(b, t, false);
   s = rescale(s, Eigen::Vector4d(100.0, 0.1, 3.0, 20.0));
-  auto start = magmaan::estimate::ml_start_values(b.pt, b.rep, s);
+  auto start = magmaan::estimate::scaled_fabin_start_values(b.pt, b.rep, s);
   REQUIRE(start.has_value());
   magmaan::estimate::Bounds box;
   box.lower = Eigen::VectorXd::Constant(b.pt.n_free(), -1e6);

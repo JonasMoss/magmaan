@@ -50,9 +50,12 @@ runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
 
 ## Answer
 
-**ML and GLS: with runaways scored as failures (third run), the layered start
-wins for both. PORT adds certified fits, but also many runaway fits that the
-library still calls converged.**
+**ML and GLS: the layered start is the default since 2026-09-26, and the
+optimizer stays L-BFGS (the author's decision after the third run).** With
+runaways scored as failures, the layered start wins for both estimators. PORT
+adds certified fits, but also many runaway fits that the library still calls
+converged. PORT therefore waits for a runaway check in the verdict, the next
+optimization project.
 
 - A certified fit whose standardized extent exceeds 10 now counts as a
   runaway, a failure. The extent is the largest absolute standardized
@@ -86,6 +89,10 @@ library still calls converged.**
   converged, unless the verdict gets a runaway check.
 - Runs 1 and 2 kept their pre-registered scoring and failed their rules. Run 2
   exposed the runaway problem.
+- **The shipped default is the evaluated candidate.** After the promotion, a
+  run of the library's `default` arm on the third run's draws reproduces
+  `layered_lbfgs` exactly on all 92,000 fits: the same certification and the
+  same objective (`results/ml-gls/2026-09-26-library/reproduction.csv`).
 
 **PSD ML: keep today's direct configuration. The two-stage route is better
 only in rescaled units.**
@@ -129,8 +136,8 @@ Two issues found along the way:
 
 | Default | Current value | Status after this run | Evidence |
 |---|---|---|---|
-| GLS start and optimizer | native FABIN3, NLopt L-BFGS | pre-registered choice (run 3): layered start with PORT; author confirms, given PORT's runaways | lane ml-gls, third run |
-| ML start and optimizer | transported FABIN3, NLopt L-BFGS | author decides (run 3): both candidates fail only on 5 Chen draws | lane ml-gls, third run |
+| ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
+| ML and GLS optimizer | NLopt L-BFGS | provisional: PORT certifies more but returns about eight times as many runaways; reopen once the verdict flags runaways | lane ml-gls, runs 2 and 3 |
 | verdict on runaway paths | the Newton check accepts divergent-path points | open: scoring has a runaway rule (extent > 10); the library verdict does not | lane ml-gls, runs 2 and 3 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families) | lane psd-ml |

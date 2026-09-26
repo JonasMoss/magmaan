@@ -1,6 +1,6 @@
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/estimate/frontier/layered_start.hpp"
+#include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include <cmath>
 #include <numeric>
@@ -118,7 +118,7 @@ fit_expected<Eigen::VectorXd> construct_start_values(
     const data::SampleStats& samp, StartMethod method, const spec::Starts& hints,
     std::vector<std::string>* notes) {
   if (method == StartMethod::Layered) {
-    auto report = frontier::layered_start_report(pt, rep, samp, hints);
+    auto report = layered_start_report(pt, rep, samp, hints);
     if (!report) return std::unexpected(report.error());
     if (notes) *notes = std::move(report->notes);
     if (report->theta.size() != pt.n_free() || !report->theta.allFinite())

@@ -8,6 +8,13 @@ namespace magmaan::estimate {
 fit_expected<MlStarts> ml_start_values(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const data::SampleStats& samp, const spec::Starts& hints) {
+  return start_values(pt, rep, samp,
+                      StartPolicy{StartMethod::Layered, StartTransport::Native}, hints);
+}
+
+fit_expected<MlStarts> scaled_fabin_start_values(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::SampleStats& samp, const spec::Starts& hints) {
   return start_values(pt, rep, samp, StartPolicy{}, hints);
 }
 

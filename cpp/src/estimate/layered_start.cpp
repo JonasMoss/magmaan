@@ -1,4 +1,4 @@
-#include "magmaan/estimate/frontier/layered_start.hpp"
+#include "magmaan/estimate/layered_start.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +20,7 @@
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::estimate::frontier {
+namespace magmaan::estimate {
 
 namespace {
 
@@ -1328,4 +1328,4 @@ layered_start_values(const spec::LatentStructure& pt, const model::MatrixRep& re
   return std::move(out->theta);
 }
 
-}  // namespace magmaan::estimate::frontier
+}  // namespace magmaan::estimate

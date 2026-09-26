@@ -114,7 +114,7 @@ requires a rigorous bound. No further runs or implementation are currently queue
 
 ### Start constructors beyond the layered moment start
 
-**Gap.** The layered moment start (`estimate::frontier::layered_start_values`,
+**Gap.** The layered moment start (`estimate::layered_start_values`,
 see the roadmap) covers measurement blocks by FABIN/triad/IV shape rules, the
 latent covariance by a weighted least-squares mapping, and the structural part
 by a small latent-level least-squares fit. Four alternatives were weighed on

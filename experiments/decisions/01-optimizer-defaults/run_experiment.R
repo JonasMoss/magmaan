@@ -23,6 +23,8 @@ units for invariant models), then writes the scored summaries.
                     with two, choice.csv applies the pre-registered choice
   --runaway-bound X certified fits with a standardized extent above X are runaways,
                     scored as failures (default Inf: no runaway rule)
+  --reproduces R:A  compare this run's `default` arm draw by draw with arm A of run R
+                    (same seed base), writing reproduction.csv
   --arms a,b        run only these arms (the witness runs unless omitted from a list
                     that is given)
   --smoke           one replication of the first population per family, at the
@@ -124,6 +126,7 @@ raw$message[is.na(raw$message)] <- ""
 raw$family <- vapply(pops[raw$pop], `[[`, "", "family")
 raw$role <- vapply(pops[raw$pop], `[[`, "", "role")
 s <- score_rows(raw, runaway_bound)
+candidates <- intersect(candidates, unique(s$arm))
 groups <- unit_groups(s)
 written <- c(
   write_csv(rate_table(s, c("lane", "role", "family", "estimator", "transform", "arm")),
@@ -138,9 +141,22 @@ written <- c(
   write_csv(inconsistency_table(s, lane, groups, candidates), file.path(out, "invariance_breaks.csv")),
   write_csv(failure_table(s), file.path(out, "failures.csv")),
   write_csv(escape_table(s), file.path(out, "escapes.csv")),
-  write_csv(do.call(rbind, lapply(candidates, function(cd)
+  if (length(candidates)) write_csv(do.call(rbind, lapply(candidates, function(cd)
     cbind(candidate = cd, decision_table(s, lane, cd)))), file.path(out, "decision.csv")),
   write_csv(runaway_table(s), file.path(out, "runaways.csv")))
+if (!is.null(opt("--reproduces"))) {
+  ref <- strsplit(opt("--reproduces"), ":", fixed = TRUE)[[1]]
+  rf <- list.files(file.path(here, "results", lane, ref[1], "raw"), "^batch_.*\\.csv$", full.names = TRUE)
+  b <- do.call(rbind, lapply(rf, utils::read.csv, stringsAsFactors = FALSE))
+  k <- c("pop", "model", "n", "rep", "transform", "estimator")
+  m <- merge(raw[raw$arm == "default", c(k, "certified", "fmin")], b[b$arm == ref[2], c(k, "certified", "fmin")],
+             by = k, suffixes = c("_default", "_reference"))
+  same_f <- (is.na(m$fmin_default) & is.na(m$fmin_reference)) | (m$fmin_default == m$fmin_reference)
+  written <- c(written, write_csv(data.frame(reference_run = ref[1], reference_arm = ref[2],
+    fits = sum(raw$arm == "default"), matched = nrow(m),
+    same_certified = sum(m$certified_default == m$certified_reference),
+    same_objective = sum(same_f %in% TRUE)), file.path(out, "reproduction.csv")))
+}
 if (length(candidates) == 2L) written <- c(written,
   write_csv(choice_table(s, lane, candidates), file.path(out, "choice.csv")))
 if (lane == "psd-ml") written <- c(written,

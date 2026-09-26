@@ -125,7 +125,7 @@ add_library(magmaan STATIC
   src/estimate/start_jamesstein.cpp
   src/estimate/frontier/communality.cpp
   src/estimate/frontier/gauge.cpp
-  src/estimate/frontier/layered_start.cpp
+  src/estimate/layered_start.cpp
   src/estimate/frontier/multiinfo_penalty.cpp
   src/estimate/frontier/newton_accuracy.cpp
   src/estimate/frontier/newton_box.cpp

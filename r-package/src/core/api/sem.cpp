@@ -22,6 +22,7 @@ Result<estimate::StartValues> start_values(const spec::LatentStructure &pt,
   estimate::StartPolicy policy{M::Simple, T::Native};
   switch (spec.kind) {
     case StartKind::Policy: policy = spec.policy; break;
+    case StartKind::Layered: policy = {M::Layered, T::Native}; break;
     case StartKind::MlScaled: policy = {M::Fabin3, T::AutoStdLv}; break;
     case StartKind::Simple: break;
     case StartKind::Fabin: policy.method = M::Fabin3; break;
@@ -614,6 +615,7 @@ EstimatorSpec uls() {
 EstimatorSpec gls() {
   EstimatorSpec out;
   out.kind = EstimatorKind::GLS;
+  out.start_spec = layered_starts();
   return out;
 }
 

@@ -130,8 +130,9 @@ section: the categorical corpus saddles are under
   report fit-time projection/PSD repair/profiling. The current retained vector
   is the input supplied to fit, not a claim about the first optimizer iterate.
   Validate group/constraint/identification combinations before changing defaults.
-  **Layered moment start (2026-09-25, frontier, not default).**
-  `start = "layered"` (`estimate::frontier::layered_start_values`) builds the
+  **Layered moment start (2026-09-25; the ML/GLS default since 2026-09-26, see
+  "ML and GLS defaults" below).**
+  `start = "layered"` (`estimate::layered_start_values`) builds the
   start in layers: measurement shapes on the standardized covariance, a
   least-squares latent covariance, a joint log-scale identification solve
   (markers, effect coding, pinned variances, cross-block loading equalities), and
@@ -141,9 +142,8 @@ section: the categorical corpus saddles are under
   raises accepted, best-matching fits from 287/238 to 298/297 (ML PORT/L-BFGS)
   and 286/280 to 303/302 (GLS), gaining 113 and losing 4 case fits; every loss
   starts lower and fails in the optimizer. The simple/FABIN misread of a zero disturbance as a std.lv
-  scale is fixed. Before making it the ML/GLS default: rerun the frozen synthetic
-  panel (fresh replications, unit scales), the sanitized build, and FIML/ordinal
-  routes (not yet covered); keep simple/FABIN3 for lavaan parity. Known limits:
+  scale is fixed. Still open for other routes: FIML and ordinal (not covered by
+  the decision); simple/FABIN3 stay selectable for lavaan parity. Known limits:
   trait-state blocks whose latent covariance only the structure identifies keep
   FABIN3 (a full-model GLS polish from the layered start would cover them);
   latent-basis growth relies on the latent-level fit alone (no mean information);
@@ -289,39 +289,54 @@ section: the categorical corpus saddles are under
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **High — ML and GLS defaults: not promoted (decision study, 2026-09-26).**
+- **ML and GLS defaults — DONE (2026-09-26): the layered start, L-BFGS kept.**
   [decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd),
-  lane ml-gls.
-  - **First run** (51 held-out populations, four unit transforms): the
-    layered start with PORT certified 43,336 of 44,109 attainable ML problems,
-    against 41,541 for today's default (FABIN3, L-BFGS). For GLS the counts
-    were 39,593 and 30,840 of 41,164.
-  - **Confirmation run** (fresh seed base 2026092602): PORT with ML's budget
-    (5000 evaluations) and tolerances failed the pre-registered rules. The
-    larger budget lost ML fits against generic PORT (305 wins, 447 losses).
-  - **Cause: runaway certifications.** On draws without a proper ordinary
-    minimum, PORT walks down the divergent Heywood path, and the Newton check
-    accepts where the budget stops it. In native units that is about 213 ML
-    certifications per PORT arm, with a median largest parameter near 9,600.
-    L-BFGS has none.
-  - **Without runaways:** ML barely gains from the layered start or PORT; GLS
-    gains several hundred fits with either optimizer.
-  - **Third run** (seed base 2026092603). A runaway rule in the scoring: a
-    certified fit whose standardized extent exceeds 10 is a failure and no
-    witness.
-    - GLS: both candidates pass every rule, and the pre-registered choice is
-      the layered start with PORT (39,144 of 40,812 certified; L-BFGS
-      38,489; today 30,747).
-    - ML: both candidates fail only on 5 Chen draws, where the layered start
-      finds a worse basin. The author decides. Certified fits: layered PORT
-      42,307, layered L-BFGS 42,062, today 41,364, of 43,096.
-    - The library verdict has no runaway check. PORT would return about 8
-      times as many runaway fits marked converged (ML 805 against 109;
-      GLS 205 against 44).
-  - The drafted promotion (layered start in core, PORT defaults with
-    `ml_port_controls()`, api `OptimizerKind::Default`/`Port` and
-    `StartKind::Layered`) is kept aside. The nonlinear routing and
-    `port.max_iter` have landed, because they do not depend on the decision.
+  lane ml-gls, three pre-registered runs.
+  - **Start.** The layered start is now the complete-data ML and GLS default,
+    moved to core. In the third run it certified, of the attainable test
+    problems:
+    - GLS: 38,489 of 40,812, against 30,747 for FABIN3;
+    - ML: 42,062 of 43,096, against 41,364.
+  - **Losses.** Five Chen draws at $N = 25$, where the layered start finds a
+    worse basin.
+  - **Optimizer.** Runs 1 and 2 over-credited PORT, because the Newton check
+    certifies runaway points and PORT walks further along divergent paths.
+    With runaways scored as failures, PORT still certifies more, but it
+    returns about eight times as many runaway fits marked converged. So
+    L-BFGS stays, pending the next item.
+- **High — the layered start stalls on Geiser's latent AR cross-lagged model.**
+  This is a loss of the new default found by the R examples
+  (`r-package/examples/auto_identification_frontier.R`; data in
+  `cpp/tests/fixtures/geiser/gls_reference.json`, case
+  `latent_ar_cross_lagged_extended`, marker identification, $N = 569$, $p = 12$).
+  - From the layered start, the start objective is 0.66 against 3.10 for
+    FABIN3, but the fits stall short of the optimum 0.0411: L-BFGS aborts
+    with a line-search failure at 0.0485, and PORT exhausts its budget at
+    0.0478.
+  - FABIN3 and std.lv identification converge.
+  - The corpus holds only the strong-invariance variant, where the layered
+    start works.
+  - Diagnose the start: likely a flat or ill-conditioned valley reached from
+    the latent-level fit. The example times the former start until then.
+  - Consider a verdict-triggered safety net: when a default fit from the
+    layered start fails the verdict, refit from FABIN3 and keep the better
+    certified fit. It needs a lane run before it becomes the default.
+- **High — next optimization project: a runaway check in the verdict, then PORT.**
+  The Newton check accepts points far along divergent (Heywood) paths.
+  - The decisions study scores these as runaways: a certified fit whose
+    standardized extent exceeds 10 (`experiments/decisions/01-optimizer-defaults/R/fits.R`).
+    The extent is the largest absolute standardized loading, latent path,
+    latent correlation, or residual or disturbance ratio.
+  - Plan:
+    1. Validate a runaway diagnostic across units, identifications and the
+       lane's families; see the speculative entry "Runaway estimates and
+       nonattainment diagnostics" for the cautions.
+    2. Decide whether the verdict reports it, rejects the fit, or both.
+    3. Rerun lane ml-gls with PORT, under a fresh seed base, and decide the
+       optimizer.
+  - The stashed PORT promotion (`ml_port_controls()`, api
+    `OptimizerKind::Default`/`Port`) is the starting point, as is the
+    finding that ML's 5000-evaluation budget made PORT worse on ML.
 - **M — runaway flag for scoring default decisions (promoted from
   speculative, 2026-09-26).** The decisions study needs to tell certified
   minima from certified points far along a divergent path. Otherwise PORT's

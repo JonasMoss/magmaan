@@ -9,7 +9,7 @@ a <- magmaan_core$fit_ml(m,s)
 b <- magmaan_core$fit_ml(m,s, control=list(
   nlopt=list(ftol_rel=1e-12,xtol_rel=1e-10,max_eval=5000)))
 stopifnot(identical(a$coordinate_scaling,'information'), identical(a$theta,b$theta),
-          identical(a$ml_start_policy,'transported-std-lv-fabin'))
+          identical(a$ml_start_policy,'layered'))
 legacy <- magmaan_core$fit_ml(m,s,control=list(
   start='fabin3',ml_sample_scaling=FALSE,ftol=1e-12,gtol=1e-10,max_iter=5000))
 stopifnot(identical(legacy$coordinate_scaling,'none'),identical(legacy$ml_start_policy,'fabin3'),
@@ -29,7 +29,11 @@ cat('ML numerical default checks passed.\n')
 # Start construction, transport and optimizer scaling are independent.
 x0 <- magmaan_core$estimate_start_values(m$partable, s)
 xd <- magmaan_core$estimate_start_values(m$partable, s, start="default")
-stopifnot(identical(x0, xd), attr(x0, "start_transport") == "std-lv-to-marker",
+# The default is the layered start, which constructs in the target
+# identification (never transported); scaled-fabin is the former default.
+xf <- magmaan_core$estimate_start_values(m$partable, s, start="scaled-fabin")
+stopifnot(identical(x0, xd), attr(x0, "start_transport") == "native",
+          attr(xf, "start_transport") == "std-lv-to-marker",
           attr(x0, "start_fallback_reason") == "none")
 d <- magmaan_core$fit_ml(m, s, control=list(start="default"))
 stopifnot(identical(a$theta, d$theta), d$ml_start_fallback_reason == "none")
@@ -38,18 +42,19 @@ xn <- magmaan_core$estimate_start_values(m$partable, s, start="simple", transpor
 stopifnot(attr(xs, "start_transport") == "std-lv-to-marker",
           attr(xn, "start_transport") == "native", max(abs(xs-xn)) > .01)
 fixed <- model_spec('f =~ x1 + 2*x2 + x3 + x4')
-xf <- magmaan_core$estimate_start_values(fixed$partable, s)
+xf <- magmaan_core$estimate_start_values(fixed$partable, s, start="scaled-fabin")
 xfn <- magmaan_core$estimate_start_values(fixed$partable, s, start="fabin3")
 stopifnot(identical(as.numeric(xf), as.numeric(xfn)),
           attr(xf, "start_fallback_reason") == "fixed-values-unsupported")
-required <- try(magmaan_core$estimate_start_values(fixed$partable, s, transport="required"), silent=TRUE)
+required <- try(magmaan_core$estimate_start_values(fixed$partable, s, start="scaled-fabin", transport="required"), silent=TRUE)
 stopifnot(inherits(required, "try-error"))
-fallback_fit <- magmaan_core$fit_ml(fixed, s, optimizer="nlopt-slsqp")
+fallback_fit <- magmaan_core$fit_ml(fixed, s, optimizer="nlopt-slsqp", control=list(start="scaled-fabin"))
 stopifnot(fallback_fit$ml_start_fallback_reason == "fixed-values-unsupported",
           identical(fallback_fit$coordinate_scaling,'information'))
 cat('Composable start policy checks passed.\n')
 pd <- frontier_fit_ml_psd(m, s, control=list(start="default"))
 stopifnot(identical(p$theta, pd$theta), pd$ml_start_fallback_reason == "none")
 fb <- frontier_fit_ml_psd_fallback(m, s, ordinary_control=list(start="default"))
-stopifnot(fb$ordinary$ml_start_policy == a$ml_start_policy,
+# The explicit PSD recovery keeps FABIN3 transported from std.lv for its ordinary stage.
+stopifnot(fb$ordinary$ml_start_policy == "transported-std-lv-fabin",
           fb$ordinary$ml_start_fallback_reason == "none")

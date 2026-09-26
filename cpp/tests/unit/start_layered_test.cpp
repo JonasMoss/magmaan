@@ -9,7 +9,7 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/estimate/frontier/layered_start.hpp"
+#include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -20,7 +20,7 @@
 
 using magmaan::data::SampleStats;
 using magmaan::estimate::build_eq_constraints;
-using magmaan::estimate::frontier::layered_start_report;
+using magmaan::estimate::layered_start_report;
 using magmaan::model::MatId;
 using magmaan::model::MatrixRep;
 using magmaan::model::ModelEvaluator;

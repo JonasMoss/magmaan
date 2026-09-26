@@ -2518,7 +2518,8 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 }
 
 // fit_ml() — public ML spelling. Threads through an `optimizer` string and
-// optional `control` list. Backends:
+// optional `control` list. The default start is the layered moment start
+// (control$start = "scaled-fabin" gives the former default). Backends:
 //   "nlopt-lbfgs" (default), "ipopt", "port", "nlopt-slsqp",
 //   "nlopt-tnewton", "nlopt-var2"  (any scalar-shape backend)
 // "ceres" / "ceres-bfgs" are rejected — Ceres applies to the LS path only.
@@ -2533,7 +2534,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  std::string start_policy = "scaled-fabin";
+  std::string start_policy = "layered";
   std::string start_fallback_reason = "none";
 
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, control);
@@ -6121,7 +6122,8 @@ Rcpp::List fit_gls_pairwise_impl(SEXP partable, SEXP X,
   return fit_result(ctx, est, &starts, "GLSpw");
 }
 
-// fit_gls() — composes fit_gls(pt, rep, samp, x0, bounds, backend).
+// fit_gls() — composes fit_gls(pt, rep, samp, x0, bounds, backend). The
+// default start is the layered moment start.
 //
 // [[Rcpp::export]]
 Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
@@ -6132,7 +6134,7 @@ Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "layered", nullptr, nullptr, control);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0,
       bounds_from_nullable(bounds), backend, optim_opts_from(control));
@@ -7069,8 +7071,9 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
 
 // fit_start_values() — returns a theta-ordered start vector (length npar).
 // `sample_stats` is as in fit_fit(); values are used verbatim. The default
-// matches complete-data ML: auto-transported FABIN3. Explicit simple/fabin3
-// retain their native meaning; transport can be selected independently.
+// matches complete-data ML: the layered start. "scaled-fabin" is the former
+// default (auto-transported FABIN3); explicit simple/fabin3 retain their native
+// meaning; transport can be selected independently.
 //
 // [[Rcpp::export]]
 Rcpp::NumericVector fit_start_values(
@@ -7081,7 +7084,7 @@ Rcpp::NumericVector fit_start_values(
   auto parsed = partable_from_arg(partable, "fit_start_values");
   auto starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
-  const auto name = start_name_from_arg(start, "fit_start_values", "scaled-fabin");
+  const auto name = start_name_from_arg(start, "fit_start_values", "layered");
   es::StartPolicy policy{start_method(name), name == "scaled-fabin"
       ? es::StartTransport::AutoStdLv : es::StartTransport::Native};
   if (transport.isNotNull()) {

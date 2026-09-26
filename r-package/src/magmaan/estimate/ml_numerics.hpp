@@ -22,8 +22,16 @@ inline optim::OptimOptions ml_optim_options() {
 using MlStarts = StartValues;
 using MlStartBranch = StartBranch;
 
-// Default shortcut. Does not alter identification or optimizer coordinates.
+// The complete-data ML (and GLS) default start: the layered moment start
+// (experiments/decisions/01-optimizer-defaults, lane ml-gls). Does not alter
+// identification or optimizer coordinates.
 fit_expected<MlStarts> ml_start_values(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const data::SampleStats&, const spec::Starts& = {});
+
+// The former ML default (before 2026-09-26): FABIN3 constructed under std.lv
+// and transported to the model's identification when safe, native otherwise.
+fit_expected<MlStarts> scaled_fabin_start_values(
     const spec::LatentStructure&, const model::MatrixRep&,
     const data::SampleStats&, const spec::Starts& = {});
 

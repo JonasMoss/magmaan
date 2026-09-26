@@ -288,6 +288,13 @@ TEST_CASE("api sem header compiles standalone and parse errors keep stage") {
   CHECK(bad.error().stage == magmaan::api::ErrorStage::Parse);
 }
 
+TEST_CASE("api ML and GLS default to the layered start") {
+  namespace api = magmaan::api;
+  CHECK(api::ml().start_spec.kind == api::StartKind::Layered);
+  CHECK(api::gls().start_spec.kind == api::StartKind::Layered);
+  CHECK(api::scaled_fabin_starts().kind == api::StartKind::MlScaled);
+}
+
 TEST_CASE("api complete-data ML exposes staged post-fit calls") {
   const auto model = magmaan::api::model_from_lavaan(
       "f =~ x1 + a*x2 + x3 + x4\na_sq := a^2");
