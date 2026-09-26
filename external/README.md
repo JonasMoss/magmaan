@@ -6,8 +6,8 @@ Optional local inputs, ignored by magmaan except this guide:
   [the corpus guide](../project/reference/textbook-corpus.md).
 - `paper-corpus/`: independent Git repository owning paper ingestion, derived
   cases, validation, and exports.
-- `paper-downloads/`: source archives used by experiments showcases/06 (Etzel) and 32
-  (Schlechter). These are still required by those experiments.
+- `paper-downloads/`: source archives from the removed Etzel and Schlechter
+  showcases; no current experiment reads them.
 - `refs/`: reference papers and books.
 - Other source mirrors may be placed here for reference; they are not built.
 

@@ -56,9 +56,7 @@ Demonstrate magmaan capabilities, agreement with lavaan/other references, or a c
 | 03 | [foldnes-moss-gronneberg-peba](showcases/03-foldnes-moss-gronneberg-peba/report.qmd) | replication | complete | Do the penalized EBA goodness-of-fit tests hold nominal Type I under nonnormality? |
 | 04 | [foldnes-moss-gronneberg-2026](showcases/04-foldnes-moss-gronneberg-2026/report.qmd) | replication | active | Can magmaan reproduce the full FMG goodness-of-fit machinery versus lavaan and semTests? |
 | 05 | [fiml-measurement-invariance-fmg](showcases/05-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |
-| 06 | [etzel-2024-kas](showcases/06-etzel-2024-kas/report.qmd) | probe | active | Which part of Etzel's OSF Mplus models is inside magmaan's SEM scope? |
-| 07 | [schlechter-2024-asci-cfa](showcases/07-schlechter-2024-asci-cfa/report.qmd) | parity | complete | Do Schlechter et al.'s final ASCI ordinal CFA models match lavaan on paper data? |
-| 08 | [speed-attribution](showcases/08-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
+| 06 | [speed-attribution](showcases/06-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
 
 ## Replications and reference studies
 
