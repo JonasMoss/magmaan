@@ -130,7 +130,7 @@ Investigate statistical behavior, new methods, estimands, or inferential validit
 | 46 | [latent-metric-geometry](research/46-latent-metric-geometry/report.qmd) | benchmark | active | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? |
 | 47 | [multiinfo-penalty-improper](research/47-multiinfo-penalty-improper/report.qmd) | benchmark | active | Do the joint and latent-determinacy (Q) barriers remove improper solutions without costing PSD-constrained ML's accuracy, also with the truth on a face, which fit test goes with a barrier estimate, and does the barrier's local limit hold? |
 | 48 | [multiinfo-jeffreys-posterior](research/48-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? |
-| 49 | [spectral-tail-calibration](research/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and cross-observation moments improve score and LRT calibration over pEBA-4 under non-normality? |
+| 49 | [spectral-tail-calibration](research/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? |
 
 ## Engineering checks
 

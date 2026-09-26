@@ -1,9 +1,10 @@
 ---
-title: "Can spectral estimation improve score and LRT calibration?"
+title: "Can debiased spectral moments improve score and LRT calibration?"
 format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -12,10 +13,84 @@ execute:
 
 ## Question
 
-Can nonlinear shrinkage or cross-observation spectral moments improve on
-pEBA-4 for global score and likelihood-ratio tests with non-normal data?
+Does replacing the plug-in second spectral moment improve mean–variance (MV)
+correction for global score and likelihood-ratio tests? The focused follow-up
+compares it with ordinary MV, SB, full eigenvalues, and pEBA-4 under normal
+and non-normal data.
 
 ## Short answer
+
+Correcting only the second moment substantially reduces MV's conservatism for
+score tests, but is not a general fix for LRT. Across the six skewed,
+12-indicator cells, score rejection moves from **0.4–1.8% to 3.2–6.2%** at
+nominal 5%; pEBA-4 gives 2.6–3.6%. For LRT at n=100, corrected MV overshoots
+to **9.0–10.6%**, versus 5.8–7.0% for pEBA-4. Correcting both moments changes
+little. The U-statistic has no moment-estimation failures on the 11,983 usable
+fits; 17 of 12,000 datasets fail the common fitting/admissibility check.
+
+This is more promising than the earlier high-order approach, especially for
+score tests. However, in the skewed 12-indicator score cells, 86.0–93.0% of
+corrected moment pairs cannot represent a positive spectrum with the nominal
+degrees of freedom. Improved rejection rates alone do not justify a default
+change or a claim that the fitted-projection bias has been removed.
+
+```{r}
+path <- 'results/pilot500/summary.csv'
+if(!file.exists(path)) stop('Run the pilot500 command under Reproduce first.')
+s <- read.csv(path)
+mv_path <- 'results/mv_pilot500/summary.csv'
+if(!file.exists(mv_path)) stop('Run the --mv command under Reproduce first.')
+mv <- read.csv(mv_path)
+```
+
+## Evidence
+
+The focused follow-up uses 12,000 null datasets: two CFA structures, 8 or 12
+indicators, n=100/200/500, normal or skewed components, and 500 replications per
+cell. Each dataset supplies both statistics and every comparison. Rejection
+rates exclude failed calls; binomial intervals, paired Monte Carlo standard
+errors against MV and pEBA-4, and moment estimates are in the CSV outputs.
+
+```{r}
+#| label: mv-calibration
+#| fig-width: 14
+#| fig-height: 8
+#| fig-alt: "Eight panels compare corrected and standard MV with SB, full eigenvalues and pEBA-4 for score and LRT null rejection."
+methods_mv <- c('sb','mv','mv_tau2','mv_both','all','peba4')
+colors_mv <- c('#999999','#0072B2','#D55E00','#009E73','#CC79A7','#222222')
+labels_mv <- c('SB','Standard MV','MV: corrected second moment',
+               'MV: both moments corrected','Full eigenvalues','pEBA-4')
+layout(rbind(matrix(1:8,nrow=2,byrow=TRUE),rep(9,4)),heights=c(1,1,.2))
+par(mar=c(4,4,3,1))
+for(kind in c('score','lrt')) for(model in c('one_factor','two_factor'))
+  for(dist in c('normal','skewed')) {
+    x <- mv[mv$statistic_kind==kind & mv$model==model & mv$distribution==dist &
+              mv$method%in%methods_mv,]
+    plot(NA,xlim=c(0,.56),ylim=c(0,max(.15,x$rejection,na.rm=TRUE)),
+         xlab='Degrees of freedom / n',ylab=paste(toupper(kind),'rejection'),
+         main=paste(if(model=='one_factor') 'One factor' else 'Two factors',dist,sep=': '))
+    abline(h=.05,lty=2,col='grey50')
+    for(j in seq_along(methods_mv)) {
+      z <- x[x$method==methods_mv[j],];z <- z[order(z$d_over_n),]
+      lines(z$d_over_n,z$rejection,col=colors_mv[j])
+      points(z$d_over_n,z$rejection,col=colors_mv[j],pch=ifelse(z$p==8,16,17))
+    }
+  }
+par(mar=rep(0,4));plot.new()
+legend('center',legend=labels_mv,col=colors_mv,lty=1,ncol=3,bty='n',cex=.9)
+```
+
+For the one-factor, 12-indicator skewed cell at n=100, score correction raises
+rejection by 5.4 percentage points relative to standard MV (paired Monte Carlo
+SE 1.0 point). The corresponding LRT increase is 8.0 points (SE 1.2 points).
+These are clear changes in rejection, but only the score change moves close
+to nominal size. Both comparisons use the same fitted datasets.
+
+Circles denote 8 indicators and triangles 12. The horizontal line is nominal
+5%. These lines connect design cells, not a controlled experiment changing
+only the dimension-to-sample-size ratio.
+
+### Earlier spectral pilot
 
 There is no consistent improvement over pEBA-4 in this 6,000-dataset null pilot.
 For skewed factors and errors, nonlinear shrinkage rejects only 0.4–2.6% at
@@ -26,15 +101,6 @@ fails on 15.2% of datasets. Sixth-order moments fail on 59.0% of datasets in
 that same cell. The high-order moment route needs stabilization before it can
 be a practical replacement. These are local research prototypes, not new
 package defaults.
-
-```{r}
-path <- 'results/pilot500/summary.csv'
-if(!file.exists(path)) stop('Run the pilot500 command under Reproduce first.')
-s <- read.csv(path)
-r <- read.csv('results/pilot500/replicates.csv')
-```
-
-## Evidence
 
 The following plot shows rejection at nominal 5%, separately for each statistic
 and distribution. Shape denotes sample size (circles: 100; triangles: 400). The complete CSV includes binomial intervals, method
@@ -74,6 +140,80 @@ knitr::kable(f[,c('method','failed','attempted','Failure (%)')],
 ```
 
 ## Caveats
+
+### What the debiased-MV estimator does
+
+Let Y be the observation contributions after the fitted projection and metric
+transformation. For four independent observations and a fixed transformation,
+
+$$
+\widehat\tau_{2,U} = \frac{1}{4(n)_4}
+\sum_{i,j,k,l\;\mathrm{distinct}}
+\{(Y_i-Y_j)^\top(Y_k-Y_l)\}^2,
+\qquad E[\widehat\tau_{2,U}]=\operatorname{tr}(A^2).
+$$
+
+Here $(n)_4=n(n-1)(n-2)(n-3)$ and $A=\operatorname{Cov}(Y_i)$.
+The two differences are independent, each with covariance $2A$ and zero mean,
+so the squared inner product has expectation $4\operatorname{tr}(A^2)$.
+Averaging all distinct quadruples removes arbitrary pairing and is exactly
+translation invariant. Expanding the kernel reduces the calculation to a
+cross-product matrix and sums of squared row lengths; no quadruple loop,
+eigendecomposition, or leave-one-out fit is needed.
+
+This uses established covariance-functional estimation machinery; see
+[*A note on the unbiased estimator of Sigma squared*](https://www.sciencedirect.com/science/article/pii/S016771521730189X).
+The conventional estimator targets the same population quantity consistently
+at fixed dimension. Its defect here is finite-sample bias, not a different
+asymptotic target.
+
+The primary modification keeps each statistic's original first-moment estimate
+and changes only the second moment. The second modification also replaces the
+first moment with the trace of the sample covariance using denominator n−1.
+Both feed the same Satterthwaite reference:
+
+$$
+a=\widehat\tau_2/\widehat\tau_1,\qquad
+\nu=\widehat\tau_1^2/\widehat\tau_2,\qquad
+p=P(\chi^2_\nu\ge T/a).
+$$
+
+The score reference originally uses uncentered contributions; the LRT reference
+uses centered contributions. The U-statistic removes estimated contribution
+means algebraically in either case. **It does not remove bias from estimating
+the SEM projection or fitted covariance on the same observations.** A diagnostic
+using an additional n independent observations holds that fitted transform
+fixed and estimates only the second moment; it is not an equal-cost competitor.
+
+There is no clipping to force $\widehat\tau_2\ge\widehat\tau_1^2/d$.
+Violations are recorded: such moments do not describe d nonnegative eigenvalues,
+although the fractional-df gamma reference still exists. The simulation retains
+these decisions rather than changing the estimator after seeing the results.
+Failures and infeasibility fractions are in the summary CSV. The frequent
+violations in this pilot are a reason to study moment feasibility and nuisance
+estimation separately; they do not by themselves identify which effect is
+responsible.
+
+At fixed dimension, with consistent nuisance estimates and regularity ensuring
+convergence of the empirical moment functionals, both versions converge to the
+same first two spectral moments as ordinary MV. The continuous Satterthwaite
+map therefore gives the same first-order MV reference. This is **not** a proof
+of nominal asymptotic size for an arbitrary weighted mixture: two-moment gamma
+matching remains an approximation. It is also not a growing-dimension theorem.
+The fixed-transform unbiasedness identity is exact; extending it to a feasible
+finite-sample SEM estimator is precisely the issue the simulation probes.
+
+The follow-up uses one-factor and correlated two-factor CFA (factor correlation
+.4), loadings .45–.80, and unit observed variances. Skewed components are
+standardized chi-square(1); the second correlated factor is a standardized
+linear combination of two such independent components. This preserves the
+specified covariance. All conditions are under the null, with no power study.
+The numerical validation includes brute-force quadruple averaging, translation,
+rotation, permutation and scale identities, and normal/skewed Monte Carlo
+checks at fixed projection. Five hundred replications give about a one-percentage-
+point standard error at 5%, so modest differences remain uncertain.
+
+### Scope of the earlier spectral pilot
 
 This is a null-calibration pilot, not a power comparison. It uses one-factor
 CFA with 8 or 12 indicators, loadings from .45 to .80, and unit population
@@ -124,7 +264,15 @@ work; this pilot does not claim to implement either.
 
 ## Reproduce
 
-From the repository root, with the installed `magmaanlab` package:
+From the repository root, with the installed `magmaanlab` package, the focused follow-up is:
+
+```sh
+OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate_mv.R
+TZ=Europe/Oslo OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/run_experiment.R --mv --reps 500 --output mv_pilot500
+quarto render experiments/research/49-spectral-tail-calibration/report.qmd
+```
+
+The earlier pilot is reproduced with:
 
 ```sh
 OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate.R

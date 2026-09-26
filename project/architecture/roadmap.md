@@ -46,6 +46,15 @@ projections invalidate exact cycle-moment unbiasedness on the fitting sample.
 Validation includes brute-force cycles, fixed-projection Monte Carlo moments,
 scale identities, and a scaled-chi-square saddlepoint reference. The report
 records the 500-replication-per-cell null pilot and failure rates.
+The focused `--mv` follow-up adds an all-distinct, translation-invariant
+U-statistic for the second spectral moment, comparing tau2-only and both-moment
+Satterthwaite corrections without leave-one-out refits. The 12,000-dataset
+one/two-factor normal/skewed pilot improves conservative score calibration but
+can overshoot for LRT; corrected moments frequently violate the nominal-rank
+spectral bound. The positive four-observation kernel agrees with brute-force
+enumeration and fixed-transform Monte Carlo checks. Same-sample nuisance bias,
+nominal-rank moment feasibility, and power remain unresolved; no core or R
+package default changes.
 
 The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
 compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and

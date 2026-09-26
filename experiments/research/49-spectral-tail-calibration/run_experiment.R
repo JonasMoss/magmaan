@@ -1,7 +1,14 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(TRUE)
+if('--mv'%in%args) {
+  args <- args[args!='--mv']
+  base <- dirname(normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1])))
+  source(file.path(base,'R','mv_experiment.R'))
+  quit(status=0)
+}
 if('--help'%in%args) {
   cat('Usage: Rscript run_experiment.R [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
+      'Use --mv for the focused debiased-MV study (--mv --help for its options).\n',
       'Default: 200 reps, 12 cells: p=8,12; n=100,400; normal, skewed, heterogeneous.\n',
       'Null one-factor CFA; output is a new results/ subdirectory. --smoke: 2 reps.\n')
   quit()

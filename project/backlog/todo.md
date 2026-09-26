@@ -1732,6 +1732,12 @@ when they next change.
   nonlinear covariance shrinkage, cycle-moment reconstruction (orders 4/6),
   and direct truncated-CGF tails, with explicit failures and an independent
   calibration-sample diagnostic. These remain experiment-local R prototypes.
+  The focused `--mv` follow-up implements all-distinct U4 estimation of tau2
+  with unknown means handled exactly for a fixed projection. Its 12,000-dataset
+  null pilot substantially improves score MV but can make LRT liberal; moment
+  feasibility violations remain frequent. Keep it experimental. Next gates are
+  fitted-projection bias and nominal-rank feasibility, then independent
+  calibration replication and matched-null power, not another high-order fit.
   Before promotion: validate population-spectrum/resolvent recovery for
   transformed nonnormal rows, control same-sample projection error, stabilize
   high-order moments, and establish a valid tail law (a truncated polynomial
