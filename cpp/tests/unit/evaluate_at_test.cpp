@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <Eigen/Core>
+#include <utility>
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/evaluate.hpp"
@@ -110,6 +111,33 @@ TEST_CASE("evaluate_at: GLS picks up the same converged θ as fit_gls") {
   REQUIRE(ev.has_value());
   CHECK(ev->audit.stationary);
   CHECK(ev->audit.grad_inf_norm < 1e-6);
+}
+
+TEST_CASE("evaluate_at: every moment estimator carries the fit-time Newton verdict") {
+  // evaluate_at judges any engine's estimate, so it must reach the verdict a
+  // magmaan fit gets at the same point, Newton check included.
+  auto h = handles_for("f =~ x1 + x2 + x3 + x4");
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {300};
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto gls = magmaan::estimate::fit_gls(h.pt, h.rep, samp, *x0);
+  REQUIRE(gls.has_value());
+  auto uls = magmaan::estimate::fit_gmm(h.pt, h.rep, samp, *x0, {});
+  REQUIRE(uls.has_value());
+  for (auto [estimator, fit] : {std::pair{Estimator::GLS, &*gls}, std::pair{Estimator::ULS, &*uls}}) {
+    CAPTURE(static_cast<int>(estimator));
+    auto ev = evaluate_at(h.pt, h.rep, samp, fit->theta, estimator);
+    REQUIRE(ev.has_value());
+    CHECK(ev->diagnostics.newton_accuracy.checked);
+    const auto a = magmaan::estimate::fit_verdict(*fit);
+    const auto b = magmaan::estimate::fit_verdict(*ev);
+    CHECK(b.criterion == magmaan::estimate::StationarityCriterion::Newton);
+    CHECK(a.criterion == b.criterion);
+    CHECK(a.status == b.status);
+    CHECK(b.status == magmaan::estimate::FitCheck::Passed);
+  }
 }
 
 TEST_CASE("evaluate_at: ML picks up the converged θ from fit_ml") {

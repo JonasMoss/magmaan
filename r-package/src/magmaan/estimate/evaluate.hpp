@@ -45,7 +45,9 @@ enum class Estimator {
   ML,     // F(θ) = ½·[log|Σ| + tr(SΣ⁻¹) − log|S| − p] (+ mean term)
 };
 
-// ML includes the same Newton evidence as fit-time finalization. `domain`
+// ML, ULS, GLS and WLS include the same Newton evidence as fit-time
+// finalization, so a verdict at another engine's estimate is the verdict a
+// magmaan fit would get there. `domain`
 // declares the fitting domain; it is never inferred from the point. Runtime
 // policy assessment and owning artifacts are available in frontier/convergence.hpp.
 // Run the standard L1 + L2 audit on `theta_full` against the chosen moment
