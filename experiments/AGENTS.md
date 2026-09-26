@@ -31,7 +31,7 @@ kind, lifecycle, and the one-line question. Adding an experiment means adding a
 row. This collection-level index is the one allowed exception to the "no README"
 rule below, which still holds for individual `NN-` folders.
 
-Store experiments under the matching purpose folder: `showcases/`,
+Store experiments under the matching purpose folder: `decisions/`, `showcases/`,
 `replications/` (including reference studies), `research/`, or `engineering/`.
 `_archive/` holds retired studies and `_support/` remains the shared harness.
 Each individual experiment is the dependency leaf, not its category directory;
@@ -51,6 +51,37 @@ Also retain these two axes in the index:
   (a one-off engineering diagnostic).
 - **Lifecycle** - `active` (still rerun, extended, or load-bearing), `complete`
   (finished, retained in its category for reference value), `archived` (inert).
+
+## Decisions set library defaults
+
+A `decisions/` study holds the evidence and the reasoning for a group of
+library defaults, one **lane** per estimation route (for example `ml-gls`,
+`psd-ml`, later `ordinal`). It is held to a stricter standard than the other
+categories, because its results change what every user gets:
+
+- **Criteria first.** Before a lane's decision run, `criteria/<lane>.md` is
+  committed: the decision, the configurations, the problems, the judge, the
+  rules and the outcome they imply. It is not edited after the run; a later
+  amendment gets a dated section marked as written after seeing results.
+- **The baseline is the library default**, called without options, so the
+  study tests what users get.
+- **One judge.** Success is the library verdict (`fit$converged`), never a
+  study-specific tolerance. Other engines are judged by the same verdict at
+  their estimates.
+- **Held-out problems.** Test problems were not used to develop any
+  candidate; populations that were are labelled controls, reported and never
+  gating. Rates are reported per family, never pooled across families, and
+  every loss against the baseline is listed.
+- **Fresh draws.** Each decision run uses a seed base not used before; smoke
+  runs use a different base. Draws that prompted a fix become development
+  data, so the confirming run after the fix uses a new base.
+- **Tracked evidence.** The per-run summary CSVs and `metadata.csv` under
+  `results/<lane>/<run-id>/` are committed (an exception to the ignored-results
+  rule below); raw per-fit rows stay local.
+- **The report opens with the register**: every default the study covers, its
+  current value, its status (settled, provisional, open) and the evidence.
+
+Exploratory checks that inform a decision stay in `engineering/`.
 
 ## Engineering is a live decision workspace
 

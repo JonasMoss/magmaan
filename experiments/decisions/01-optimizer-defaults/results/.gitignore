@@ -1,0 +1,5 @@
+# Raw per-fit rows, logs and heartbeats stay local; the per-run summary CSVs
+# and metadata are the tracked evidence of each decision.
+*/*/raw/
+*.log
+progress.csv

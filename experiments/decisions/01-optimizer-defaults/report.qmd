@@ -1,0 +1,33 @@
+---
+title: "Optimizer defaults"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Which start, optimizer and PSD route should each estimation route use by
+default? Every fit is judged by the library verdict, on simulated problems the
+candidates were not developed on.
+
+## The register
+
+Status as of the pre-registration commit; the lanes have not run yet.
+
+| Default | Current value | Candidate | Status | Evidence |
+|---|---|---|---|---|
+| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | layered | open | lane `ml-gls` (pending); engineering/17 corpus |
+| ML and GLS optimizer | NLopt L-BFGS | PORT | open | lane `ml-gls` (pending); engineering/17 corpus |
+| optimizer coordinates | information-refined sample units | none | settled 2026-09-26 on the corpus; confirmed out of sample by lane `ml-gls` (pending) | engineering/17 |
+| PSD cold start | transported FABIN3 | layered | open | lane `psd-ml` (pending) |
+| PSD preconditioning | lifted information diagonal | none | provisional | lane `psd-ml` (pending) |
+| PSD route | direct PSD fit | two-stage | open, author decides after the lane | lane `psd-ml` (pending) |
+| PSD feasibility tolerances | absolute, in covariance units | relative to sample units | open, fix if the lane shows they bite | lane `psd-ml` (pending) |
+
+Criteria: [criteria/ml-gls.md](criteria/ml-gls.md) and
+[criteria/psd-ml.md](criteria/psd-ml.md).

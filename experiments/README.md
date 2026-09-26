@@ -7,6 +7,7 @@ preserved; this reorganization does not rerun or reassess the studies.
 
 | Purpose | What belongs here | Count |
 |---------|-------------------|------:|
+| [Decisions](#decisions) | Pre-registered studies whose results set library defaults, with the register of those defaults. | 1 |
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
 | [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 49 |
@@ -44,6 +45,15 @@ Showcase reports still carry their own accuracy and scope caveats.
 Historical output metadata and cloud app/volume identifiers can retain the old
 global numbers. They identify existing evidence or storage, not current folder
 positions; do not rewrite frozen results or rename remote storage for navigation.
+
+## Decisions
+
+Pre-registered studies whose results set library defaults; see
+[AGENTS.md](AGENTS.md#decisions-set-library-defaults) for the standard.
+
+| # | Experiment | Kind | Lifecycle | Question |
+|--:|------------|------|-----------|----------|
+| 01 | [optimizer-defaults](decisions/01-optimizer-defaults/report.qmd) | benchmark | active | Which start, optimizer and PSD route should each estimation route use by default, judged by the library verdict on held-out simulated problems? |
 
 ## Showcases
 
