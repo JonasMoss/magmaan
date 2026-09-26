@@ -1,10 +1,13 @@
 # Invoked by run_experiment.R --mv; uses base and args from that entry point.
 if('--help'%in%args) {
-  cat('Usage: Rscript run_experiment.R --mv [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
+  cat('Usage: Rscript run_experiment.R --mv [--metrics] [--smoke] [--reps N] [--seed-base N] [--output NAME]\n',
       'Default: 500 reps, 24 cells: one/two-factor CFA; p=8,12; n=100,200,500; normal/skewed.\n',
       'Compares SB, MV, MV tau2-only U4, MV both moments, ALL, pEBA4, independent tau2 diagnostic.\n',
+      '--metrics: also compare observed-H0 score weight, with expected sensitivity held fixed.\n',
       '--smoke: 2 reps/cell. Output directory must be new.\n')
 } else {
+compare_metrics <- '--metrics'%in%args
+args <- args[args!='--metrics']
 opt <- list(reps=500L,seed_base=20260926L,output='mv_pilot500')
 i <- 1L
 while(i<=length(args)) {
@@ -28,7 +31,7 @@ writeLines(system2('git',c('-C',shQuote(root),'status','--short'),stdout=TRUE),f
 src <- file.path(base,c('run_experiment.R','R/mv_experiment.R','R/mv.R','R/spectral.R'))
 write_out(data.frame(path=basename(src),md5=unname(tools::md5sum(src))),'source_hashes.csv')
 write_out(data.frame(key=c('args','seed','magmaanlab','git','package_so_md5'),value=c(
- paste(args,collapse=' '),opt$seed_base,as.character(packageVersion('magmaanlab')),
+ paste(c(if(compare_metrics)'--metrics',args),collapse=' '),opt$seed_base,as.character(packageVersion('magmaanlab')),
  system2('git',c('-C',shQuote(root),'rev-parse','HEAD'),stdout=TRUE),
  paste(tools::md5sum(list.files(find.package('magmaanlab'),pattern='\\.so$',recursive=TRUE,full.names=TRUE)),collapse=';'))),'metadata.csv')
 grid <- expand.grid(model=c('one_factor','two_factor'),p=c(8L,12L),n=c(100L,200L,500L),
@@ -50,7 +53,7 @@ draw <- function(cell) {
 methods <- c('sb','mv','mv_tau2','mv_both','all','peba4','mv_tau2_independent')
 one_mv <- function(cell,rep_id) {
   seed <- opt$seed_base+cell$cell*100000L+rep_id;set.seed(seed)
-  ans <- expand.grid(method=methods,statistic_kind=c('score','lrt'),stringsAsFactors=FALSE)
+  ans <- expand.grid(method=methods,statistic_kind=c('score','lrt',if(compare_metrics)'score_observed'),stringsAsFactors=FALSE)
   cells <- cell[rep(1L,nrow(ans)),,drop=FALSE];rownames(cells) <- NULL
   ans <- cbind(cells,rep=rep_id,seed=seed,ans)
   ans$p_value <- ans$tau1 <- ans$tau2 <- ans$tau2_plugin <- ans$effective_df <- NA_real_
@@ -65,24 +68,43 @@ one_mv <- function(cell,rep_id) {
             paste('f2 =~',paste(names(X)[(p/2+1):p],collapse='+')),sep='\n')
     f <- fit_model(syntax,X,estimator='ML')
     if(!isTRUE(f$converged)||!isTRUE(f$diagnostics$admissibility$admissible)) stop('Fit not converged/admissible')
-    ctx <- prepare_inference(f,X);c <- score_components(ctx);s <- project_scores(c)
+    ctx <- prepare_inference(f,X);c <- score_components(ctx,sensitivity='expected',metric='expected');s <- project_scores(c)
     W <- s$projection%*%solve(chol(s$metric))*sqrt(cell$n);Y <- c$rows%*%W
     sr <- score_spectrum(s);lr <- fmg_tests(ctx,tests='all_ml')
     t0 <- proc.time()[['elapsed']];m <- mv_cross_moments(Y);mt <- proc.time()[['elapsed']]-t0
     Xi <- draw(cell);sigma <- magmaanlab:::model_implied(f)$sigma[[1]];mu <- colMeans(X)
     if(max(abs(fixed_covariance_scores(X,mu,sigma)-c$rows))>1e-7) stop('Score transport identity failed')
     mi <- mv_cross_moments(fixed_covariance_scores(Xi,mu,sigma)%*%W)
-    list(Y=Y,m=m,mi=mi,mt=mt,q=c(score=s$statistic,lrt=lr$base_statistic[1]),
-         eigen=list(score=sr$eigenvalues,lrt=lr$eigenvalues[[1]]))
+    expected <- list(Y=Y,m=m,mi=mi,mt=mt,q=s$statistic,eigen=sr$eigenvalues)
+    lrt <- list(Y=scale(Y,scale=FALSE),m=m,mi=mi,mt=mt,
+                q=lr$base_statistic[1],eigen=lr$eigenvalues[[1]])
+    observed <- if(compare_metrics) tryCatch({
+      co <- score_components(ctx,sensitivity='expected',metric='observed')
+      so <- project_scores(co)
+      Wo <- so$projection%*%solve(chol(so$metric))*sqrt(cell$n)
+      Yo <- co$rows%*%Wo
+      if(max(abs(co$rows-c$rows))>1e-7) stop('Metric changed score rows')
+      if(max(abs(tcrossprod(so$projection)-tcrossprod(s$projection)))>1e-7)
+        stop('Metric changed nuisance complement')
+      # Independent check of the statistic as well as its calibration spectrum.
+      qo <- sum(colSums(Yo)^2)/cell$n
+      if(abs(qo-so$statistic)>1e-7*max(1,abs(qo))) stop('Observed quadratic identity failed')
+      t0 <- proc.time()[['elapsed']];mo <- mv_cross_moments(Yo)
+      mto <- proc.time()[['elapsed']]-t0
+      list(Y=Yo,m=mo,mi=mv_cross_moments(fixed_covariance_scores(Xi,mu,sigma)%*%Wo),
+           mt=mto,q=so$statistic,eigen=score_spectrum(so)$eigenvalues)
+    },error=function(e)e) else NULL
+    list(score=expected,lrt=lrt,score_observed=observed)
   },error=function(e)e)
   if(inherits(ing,'error')) {ans$error <- conditionMessage(ing);return(finish())}
-  z <- ing
-  for(kind in c('score','lrt')) {
-    Y <- if(kind=='lrt') scale(z$Y,scale=FALSE) else z$Y
+  for(kind in unique(ans$statistic_kind)) {
+    ix <- which(ans$statistic_kind==kind);z <- ing[[kind]]
+    if(inherits(z,'error')) {ans$error[ix] <- conditionMessage(z);next}
+    Y <- z$Y
     raw <- eigen(crossprod(Y)/cell$n,symmetric=TRUE,only.values=TRUE)$values
-    q <- z$q[[kind]];d <- length(raw);t1 <- sum(raw);t2 <- sum(raw^2)
+    q <- z$q;d <- length(raw);t1 <- sum(raw);t2 <- sum(raw^2)
     ix <- which(ans$statistic_kind==kind)
-    err <- max(abs(sort(raw)-sort(z$eigen[[kind]])))
+    err <- max(abs(sort(raw)-sort(z$eigen)))
     ans$df[ix] <- d;ans$statistic[ix] <- q;ans$spectral_error[ix] <- err;ans$moment_seconds[ix] <- z$mt
     if(err>1e-7*max(1,max(raw))) {ans$error[ix] <- 'Spectrum identity failed';next}
     for(j in ix) {
@@ -139,5 +161,18 @@ paired <- do.call(rbind,lapply(split(raw,interaction(raw$cell,raw$statistic_kind
   }))
 }))
 write_out(paired,'paired.csv')
+if(compare_metrics) {
+  metric_pairs <- do.call(rbind,lapply(split(raw,interaction(raw$cell,raw$method,drop=TRUE)),function(x) {
+    e <- x[x$statistic_kind=='score',];o <- x[x$statistic_kind=='score_observed',]
+    o <- o[match(e$rep,o$rep),]
+    ok <- !nzchar(e$error)&!nzchar(o$error)&is.finite(e$p_value)&is.finite(o$p_value)
+    delta <- as.numeric(o$p_value[ok]<.05)-as.numeric(e$p_value[ok]<.05)
+    data.frame(e[1,c('cell','model','p','n','distribution','method')],paired=sum(ok),
+      expected_failed=sum(nzchar(e$error)),observed_failed=sum(nzchar(o$error)),
+      expected=mean(e$p_value[ok]<.05),observed=mean(o$p_value[ok]<.05),
+      difference=mean(delta),mcse=if(length(delta)>1)sd(delta)/sqrt(length(delta)) else NA_real_)
+  }))
+  write_out(metric_pairs,'metric_pairs.csv')
+}
 cat('Wrote MV study results to ',outdir,'\n',sep='')
 }

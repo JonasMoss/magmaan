@@ -55,6 +55,11 @@ spectral bound. The positive four-observation kernel agrees with brute-force
 enumeration and fixed-transform Monte Carlo checks. Same-sample nuisance bias,
 nominal-rank moment feasibility, and power remain unresolved; no core or R
 package default changes.
+The paired `--mv --metrics` replay holds expected nuisance sensitivity fixed
+and compares expected versus observed-H0 score weights. Expected-score/LRT
+outputs reproduce exactly. Observed weighting makes tau2-corrected MV liberal
+(39.1–41.3% versus 4.9–5.6% on paired skewed p=12, n=100 fits) and adds 26
+nonpositive-metric failures; keep expected weighting for this candidate.
 
 The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
 compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and

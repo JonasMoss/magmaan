@@ -20,7 +20,15 @@ and non-normal data.
 
 ## Short answer
 
-Correcting only the second moment substantially reduces MV's conservatism for
+**The score used expected information. Switching its weight to the observed
+Hessian makes corrected MV substantially too liberal in this pilot.** In the
+12-indicator skewed cells at n=100, corrected MV rejects **39.1–41.3%** with
+observed weighting, versus **4.9–5.6%** with expected weighting on the same
+usable datasets (nominal 5%). The observed metric also fails on 26 additional
+datasets. Expected weighting remains the better candidate here; this result
+concerns the weight alone, with nuisance projection held fixed.
+
+With expected weighting, correcting only the second moment substantially reduces MV's conservatism for
 score tests, but is not a general fix for LRT. Across the six skewed,
 12-indicator cells, score rejection moves from **0.4–1.8% to 3.2–6.2%** at
 nominal 5%; pEBA-4 gives 2.6–3.6%. For LRT at n=100, corrected MV overshoots
@@ -89,6 +97,74 @@ to nominal size. Both comparisons use the same fitted datasets.
 Circles denote 8 indicators and triangles 12. The horizontal line is nominal
 5%. These lines connect design cells, not a controlled experiment changing
 only the dimension-to-sample-size ratio.
+
+### Expected versus observed score weight
+
+The original score uses expected Fisher information for both its weight and
+nuisance projection. The paired extension changes only the weight to the
+observed likelihood Hessian at the fitted null; nuisance projection stays
+expected. The statistic, mixture spectrum, and corrected moments are all
+recomputed for that weight. This is complete-data ML, not a missing-data FIML
+experiment. Nonpositive observed metrics are recorded as failures, without repair.
+
+```{r}
+metric_path <- 'results/mv_metrics500/metric_pairs.csv'
+if(!file.exists(metric_path)) stop('Run --mv --metrics --reps 500 --output mv_metrics500 first.')
+mp <- read.csv(metric_path)
+```
+
+```{r}
+#| label: metric-comparison
+#| fig-width: 12
+#| fig-height: 7
+#| fig-alt: "Paired observed-minus-expected rejection differences with Monte Carlo intervals for MV, corrected MV, and pEBA-4."
+metric_methods <- c('mv','mv_tau2','peba4')
+metric_colors <- c('#0072B2','#D55E00','#222222')
+layout(rbind(matrix(1:4,2,byrow=TRUE),c(5,5)),heights=c(1,1,.2))
+par(mar=c(4,4,3,1))
+shown <- mp[mp$method%in%metric_methods,]
+metric_ylim <- range(0,100*(shown$difference-1.96*shown$mcse),
+                       100*(shown$difference+1.96*shown$mcse),na.rm=TRUE)+c(-2,2)
+for(model in c('one_factor','two_factor')) for(dist in c('normal','skewed')) {
+  x <- mp[mp$model==model & mp$distribution==dist,]
+  plot(NA,xlim=c(.5,6.5),ylim=metric_ylim,xaxt='n',
+       xlab='Indicators / sample size',ylab='Observed minus expected (percentage points)',
+       main=paste(if(model=='one_factor') 'One factor' else 'Two factors',dist,sep=': '))
+  axis(1,1:6,labels=c('8/100','8/200','8/500','12/100','12/200','12/500'))
+  abline(h=0,lty=2,col='grey50')
+  for(j in seq_along(metric_methods)) {
+    z <- x[x$method==metric_methods[j],];z <- z[order(z$p,z$n),]
+    xx <- 1:6+(j-2)*.18;yy <- 100*z$difference;se <- 100*z$mcse
+    segments(xx,yy-1.96*se,xx,yy+1.96*se,col=metric_colors[j])
+    points(xx,yy,pch=16,col=metric_colors[j])
+  }
+}
+par(mar=rep(0,4));plot.new()
+legend('center',legend=c('Standard MV','MV: corrected second moment','pEBA-4'),
+       col=metric_colors,pch=16,ncol=3,bty='n')
+```
+
+For skewed data with 12 indicators, observed-weight corrected MV still rejects
+16.6–18.4% at n=200 and 8.8–11.0% at n=500. Ordinary MV with observed weighting
+rejects 14.1–19.5%, 5.6–6.0%, and 3.4–4.0% respectively; pEBA-4 also becomes
+liberal at small n. Thus changing the weight does not rescue the correction.
+Normal data show the same small-sample problem: corrected MV rejects
+36.9–45.7% with observed weighting for 12 indicators at n=100.
+
+For the one-factor skewed 12-indicator n=100 cell, the corrected-MV increase is
+36.3 percentage points (paired Monte Carlo SE 2.2 points). Of 12,000 attempted
+datasets, 17 fail the common fit check and another 26 fail observed-metric
+positive definiteness (all at n=100 with 12 indicators). Comparisons use the
+11,957 datasets where both weights succeed. The expected-score and LRT results
+reproduce the earlier run exactly. Changing the weight preserves the score
+contributions and nuisance complement; direct quadratic and spectral checks
+pass on every usable observed-metric fit. This is a replay of the original
+simulation seeds, not independent confirmation.
+
+Intervals show plus/minus 1.96 paired Monte Carlo standard errors on datasets
+where both metrics succeed. Positive values mean more rejection with observed
+weight; they do not by themselves mean better calibration. Full cell rates,
+failures, and the both-moments correction are retained in the CSV outputs.
 
 ### Earlier spectral pilot
 
@@ -257,7 +333,7 @@ The direct-CGF methods truncate the cumulant series at order 4 or 6 and use a
 [Lugannani–Rice/Kuonen right-tail approximation](https://academic.oup.com/biomet/article-abstract/86/4/929/276253). A finite polynomial need not be a valid
 CGF, so these are **experimental rejection rules**, not established p-values.
 Below the estimated mean they record nonrejection with a missing p-value and
-an explicit flag. Invalid right tails remain failures. `raw_saddle` separately
+an explicit flag. Invalid right tails remain failures. `raw_saddle`{.literal-code} separately
 checks saddlepoint approximation using the unmodified positive spectrum.
 A consistent resolvent estimator or tail-optimal shrinkage rule remains future
 work; this pilot does not claim to implement either.
@@ -266,18 +342,19 @@ work; this pilot does not claim to implement either.
 
 From the repository root, with the installed `magmaanlab` package, the focused follow-up is:
 
-```sh
-OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate_mv.R
+```{=html}
+<pre><code class="literal-code">OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate_mv.R
 TZ=Europe/Oslo OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/run_experiment.R --mv --reps 500 --output mv_pilot500
-quarto render experiments/research/49-spectral-tail-calibration/report.qmd
+TZ=Europe/Oslo OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/run_experiment.R --mv --metrics --reps 500 --output mv_metrics500
+quarto render experiments/research/49-spectral-tail-calibration/report.qmd</code></pre>
 ```
 
 The earlier pilot is reproduced with:
 
-```sh
-OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate.R
+```{=html}
+<pre><code class="literal-code">OPENBLAS_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/R/validate.R
 TZ=Europe/Oslo OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript experiments/research/49-spectral-tail-calibration/run_experiment.R --reps 500 --output pilot500
-quarto render experiments/research/49-spectral-tail-calibration/report.qmd
+quarto render experiments/research/49-spectral-tail-calibration/report.qmd</code></pre>
 ```
 
 The output directory must be new. `--smoke` runs two replications per cell;

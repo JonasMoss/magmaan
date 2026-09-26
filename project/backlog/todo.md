@@ -1735,7 +1735,12 @@ when they next change.
   The focused `--mv` follow-up implements all-distinct U4 estimation of tau2
   with unknown means handled exactly for a fixed projection. Its 12,000-dataset
   null pilot substantially improves score MV but can make LRT liberal; moment
-  feasibility violations remain frequent. Keep it experimental. Next gates are
+  feasibility violations remain frequent. Keep it experimental. The paired
+  expected-versus-observed-H0 metric replay retains expected nuisance sensitivity:
+  observed weighting makes corrected MV liberal (39.1–41.3% versus 4.9–5.6%
+  at skewed p=12, n=100 on common usable fits) and adds 26 metric failures.
+  Expected-score/LRT results reproduce exactly; keep expected weighting.
+  Next gates are
   fitted-projection bias and nominal-rank feasibility, then independent
   calibration replication and matched-null power, not another high-order fit.
   Before promotion: validate population-spectrum/resolvent recovery for
