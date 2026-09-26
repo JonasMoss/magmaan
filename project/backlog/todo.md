@@ -292,37 +292,44 @@ section: the categorical corpus saddles are under
 
 ### High priority: reliable optimizer defaults and L-BFGS domain recovery
 
-- **High — ML and GLS defaults: the layered start with PORT (decision study
-  run 2026-09-26).**
+- **High — ML and GLS defaults: not promoted (decision study, 2026-09-26).**
   [decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd),
-  lane ml-gls, evaluates it on 51 held-out simulated populations under four
-  unit transforms.
-  - Certified ML fits: 43,336 against 41,541 for today's default (FABIN3,
-    L-BFGS), of 44,109 attainable. GLS: 39,593 against 30,840, of 41,164.
-    Most of the gain is the start.
-  - Two pre-registered checks fail, both small: one Chen ML loss, and
-    accuracy-level objective spreads under common units in the Boomsma and
-    Wolf families.
-  - Both trace to PORT running with its generic 1000 iterations and
-    tolerances. `ml_optim_options()` sets only NLopt's budget (5000
-    evaluations) and tolerances.
-  - Next:
-    1. Give PORT ML's budget and tolerances.
-    2. Rerun the lane on a new seed base (about ten minutes).
-    3. If it passes, promote:
-       - move `layered_start_values` to core;
-       - make the layered start the default for `fit_ml`, `fit_gls`,
-         `api::ml()`, `api::gls()` and R;
-       - make PORT the default backend for those entries;
-       - route nonlinear equality constraints to SLSQP (IPOPT when built)
-         and report the backend used;
-       - update the tests that pin the old defaults;
-       - run a corpus confirmation run that reads the defaults from the
-         library.
-  - Keep `simple`, `fabin3` and `scaled-fabin` selectable for lavaan parity.
-  - Later routes (least squares, FIML, ordinal, the rest) and the shared
-    bench are in the speculative backlog ("Convergence bench beyond the
-    decisions study").
+  lane ml-gls.
+  - **First run** (51 held-out populations, four unit transforms): the
+    layered start with PORT certified 43,336 of 44,109 attainable ML problems,
+    against 41,541 for today's default (FABIN3, L-BFGS). For GLS the counts
+    were 39,593 and 30,840 of 41,164.
+  - **Confirmation run** (fresh seed base 2026092602): PORT with ML's budget
+    (5000 evaluations) and tolerances failed the pre-registered rules. The
+    larger budget lost ML fits against generic PORT (305 wins, 447 losses).
+  - **Cause: runaway certifications.** On draws without a proper ordinary
+    minimum, PORT walks down the divergent Heywood path, and the Newton check
+    accepts where the budget stops it. In native units that is about 213 ML
+    certifications per PORT arm, with a median largest parameter near 9,600.
+    L-BFGS has none.
+  - **Without runaways:** ML barely gains from the layered start or PORT; GLS
+    gains several hundred fits with either optimizer.
+  - **Next:**
+    1. A unit-invariant runaway rule in the scoring. For example, a
+       standardized loading, factor correlation or residual ratio above 10
+       (as engineering/15 used), or the retained Newton displacement. It must
+       also apply to attainability witnesses. See the item below.
+    2. Pre-register a run with the layered start with L-BFGS and the layered
+       start with PORT as candidates, on a new seed base.
+    3. Decide ML and GLS separately.
+  - The drafted promotion (layered start in core, PORT defaults with
+    `ml_port_controls()`, a `port.max_iter` control, nonlinear equalities
+    routed to SLSQP with `Estimates::substituted_backend`, api
+    `OptimizerKind::Default`/`Port` and `StartKind::Layered`) is kept aside.
+    The nonlinear routing and `port.max_iter` do not depend on the decision.
+- **M — runaway flag for scoring default decisions (promoted from
+  speculative, 2026-09-26).** The decisions study needs to tell certified
+  minima from certified points far along a divergent path. Otherwise PORT's
+  persistence is rewarded and the attainability witnesses are contaminated.
+  - Start as a scoring diagnostic, not a verdict change, per the
+    speculative entry "Runaway estimates and nonattainment diagnostics".
+  - Validate it across units and identifications on the lane's draws before
+    it gates anything.
 - **Open (author) — the PSD ML route.** Lane psd-ml of the same study.
   - Keep for direct PSD fits: transported FABIN3 (the layered cold start
     loses in 4 of 6 test families), the diagonal preconditioning (without it,
@@ -330,9 +337,13 @@ section: the categorical corpus saddles are under
     feasibility tolerances (no rescaled-only feasibility failure).
   - The two-stage route (`fit_ml_psd_fallback`: ordinary ML with today's
     default, then a PSD refit warm-started from it only when that fit is
-    rejected or improper) beats the direct fit: 274 certified wins against
-    162 losses, 770 against 214 on the best known objective, and 37% less
-    time.
+    rejected or improper) beats the direct fit overall: 274 certified wins
+    against 162 losses, 770 against 214 on the best known objective, and 37%
+    less time.
+  - That is mostly a units effect. In native units the direct fit certifies
+    slightly more (5,826 against 5,799). Two-stage wins at $\times 100$
+    (5,785 against 5,665, three times faster) and $\times 0.01$, where the
+    direct fit's preconditioning clamp bites. Fix the clamp before choosing.
   - With a layered-start PORT ordinary stage, two-stage is worse than direct,
     because refits from PORT's rejected endpoints succeed less often. If
     two-stage becomes the default, pin its ordinary stage, or its warm start,

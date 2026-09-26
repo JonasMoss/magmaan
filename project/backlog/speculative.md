@@ -48,6 +48,10 @@ validation criteria; broader coverage alone is not a reason to build them.
 
 ### Runaway estimates and nonattainment diagnostics
 
+**Partly promoted (2026-09-26):** a scoring diagnostic for the decisions study,
+because PORT's runaway certifications distort the ML/GLS default decision
+(see the todo item "runaway flag for scoring default decisions").
+
 **Gap.** A local stationarity/accuracy certificate does not establish that a
 finite optimum exists. For the illustrative objective f(t) = f_inf + 1/t,
 t > 0, the squared Newton distance g²/H = 1/(2t) tends to zero while the

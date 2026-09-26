@@ -132,6 +132,7 @@ written <- c(
   write_csv(invariance_table(s, groups), file.path(out, "invariance.csv")),
   write_csv(inconsistency_table(s, lane, groups, candidate), file.path(out, "invariance_breaks.csv")),
   write_csv(failure_table(s), file.path(out, "failures.csv")),
+  write_csv(escape_table(s), file.path(out, "escapes.csv")),
   write_csv(decision_table(s, lane, candidate), file.path(out, "decision.csv")))
 if (lane == "psd-ml") written <- c(written,
   write_csv(tolerance_table(s), file.path(out, "tolerance.csv")),

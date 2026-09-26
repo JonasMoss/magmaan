@@ -219,3 +219,17 @@ failure_table <- function(s) {
              ifelse(d$certified, "inadmissible", paste("verdict:", d$newton_status))))))
   stats::aggregate(list(fits = d$pkey), d[c("role", "family", "estimator", "arm", "transform", "cause")], length)
 }
+
+# Certified endpoints far along a divergent path (runaway Heywood escapes): the
+# Newton check can accept them. Reported for native units only, where every
+# population has unit-order parameters and a largest |theta| above 100 is a
+# runaway; `success_no_escape` rescores without them (reporting, not a rule).
+escape_table <- function(s) {
+  d <- s[s$transform == "native" & s$arm != "witness", ]
+  d$escape <- d$certified & d$max_abs_theta > 100
+  a <- count_ok(d, c("lane", "role", "family", "estimator", "arm"), "escape", c("fits", "escapes"))
+  ok <- d$success & !d$escape
+  a$success <- stats::aggregate(list(x = d$success), d[c("lane", "role", "family", "estimator", "arm")], sum)$x
+  a$success_no_escape <- stats::aggregate(list(x = ok), d[c("lane", "role", "family", "estimator", "arm")], sum)$x
+  a
+}

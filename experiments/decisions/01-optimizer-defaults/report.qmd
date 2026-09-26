@@ -26,6 +26,9 @@ ml_breaks <- rd("ml-gls", "invariance_breaks")
 ps_rates <- rd("psd-ml", "rates_by_family"); ps_pair <- rd("psd-ml", "paired")
 ps_dec <- rd("psd-ml", "decision"); ps_fail <- rd("psd-ml", "failures")
 ps_stage <- rd("psd-ml", "twostage_stages"); ps_tol <- rd("psd-ml", "tolerance")
+rdc <- function(name) { run <<- "2026-09-26-confirm"; on.exit(run <<- "2026-09-26"); rd("ml-gls", name) }
+cf_dec <- rdc("decision"); cf_rates <- rdc("rates_by_family"); cf_pair <- rdc("paired"); cf_esc <- rdc("escapes")
+ml_esc <- rd("ml-gls", "escapes"); ps_rt <- rd("psd-ml", "rates_by_family_transform")
 tot <- function(r, arm, col, est = NULL) sum(r[[col]][r$role == "test" & r$arm == arm &
   (is.null(est) | r$estimator %in% est)])
 pr <- function(p, cand, base, col) sum(p[[col]][p$role == "test" & p$candidate == cand & p$baseline == base])
@@ -42,45 +45,39 @@ runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
 
 ## Answer
 
-**ML and GLS: the layered start with PORT is much better than today's
-default, but PORT needs ML's budget before it becomes the default.**
+**ML and GLS: nothing is promoted yet. The pre-registered confirmation run
+failed, and it exposed a flaw in how fits are scored.**
 
-- On the test families, today's default (FABIN3 with L-BFGS) certifies
-  `r f0(tot(ml_rates, "default", "success", "ML"))` of
-  `r f0(tot(ml_rates, "default", "attainable", "ML"))` attainable ML problems,
-  and the candidate certifies
-  `r f0(tot(ml_rates, "layered_port", "success", "ML"))`.
-- For GLS the counts are `r f0(tot(ml_rates, "default", "success", "GLS"))`
-  and `r f0(tot(ml_rates, "layered_port", "success", "GLS"))` of
-  `r f0(tot(ml_rates, "default", "attainable", "GLS"))`.
-- Most of the gain is the start: the layered start with L-BFGS already
-  certifies `r f0(tot(ml_rates, "layered_lbfgs", "success", "ML"))` ML and
-  `r f0(tot(ml_rates, "layered_lbfgs", "success", "GLS"))` GLS problems.
-  PORT from today's start is slightly worse than L-BFGS.
+- The first run favoured the layered start with PORT (ML
+  `r f0(tot(ml_rates, "layered_port", "success", "ML"))` against
+  `r f0(tot(ml_rates, "default", "success", "ML"))` certified,
+  GLS `r f0(tot(ml_rates, "layered_port", "success", "GLS"))` against
+  `r f0(tot(ml_rates, "default", "success", "GLS"))`). Two small rule failures
+  pointed at PORT's generic budget.
+- The confirmation run, on fresh draws, gave PORT ML's budget. Its candidate
+  fails rule 1 (Chen ML) and rule 2 in five ML cells. The extra budget made
+  PORT *worse* on ML than generic PORT
+  (`r sum(cf_pair$wins[cf_pair$role == "test" & cf_pair$candidate == "layered_port_ml" & cf_pair$baseline == "layered_port" & cf_pair$estimator == "ML"])`
+  wins,
+  `r sum(cf_pair$losses[cf_pair$role == "test" & cf_pair$candidate == "layered_port_ml" & cf_pair$baseline == "layered_port" & cf_pair$estimator == "ML"])`
+  losses) and better on GLS.
+- **The reason is runaway certifications.** On draws where ordinary ML has no
+  proper minimum, PORT keeps walking down the divergent (Heywood) path. Where
+  its budget stops it, the Newton check often accepts the point. In native
+  units every PORT arm has about
+  `r f0(sum(ml_esc$escapes[ml_esc$role == "test" & ml_esc$arm == "layered_port" & ml_esc$estimator == "ML"]))`
+  such ML certifications with a largest parameter above 100 (median about
+  9,600). L-BFGS has none.
+- **Without them, the ML gain almost vanishes.** It stays large for GLS (see
+  "Confirmation run" below). The layered start with L-BFGS fails only the Chen
+  ML rule-1 check (4 losses, no wins), where today's default is already
+  perfect.
+- **Next:** add a runaway rule to the judge or the scoring, and pre-register
+  a new run with the layered start with L-BFGS and the layered start with
+  PORT as candidates.
 
-Two pre-registered checks fail, both small:
-
-- **One loss in the Chen family.** A single ML draw, where the default
-  certifies all of that family's problems.
-- **Invariance under common units** for ML on the Boomsma and Wolf families.
-  - The candidate's success flips across units about as often as the
-    default's there (91 against 94 draws), and far less often over all test
-    families (ML 138 against 537, GLS 19 against 4,321).
-  - Its excess there is 41 draws certified in every unit system at objectives
-    that differ by $10^{-6}$ to $10^{-5}$ of the objective; the default has 2.
-    At $N = 25$ a Newton distance of .01 allows differences of about this
-    size, so these are the same minimum reached to slightly different
-    precision.
-
-Both trace to one configuration gap: the ML option profile sets NLopt's budget
-and tolerances (5000 evaluations, $10^{-12}$ and $10^{-10}$), while PORT runs
-with its generic 1000 iterations and its own tolerances. Most of the
-candidate's losses end with PORT's budget exhausted. **Recommendation:**
-promote the layered start with PORT after PORT gets ML's budget and
-tolerances, and confirm that on fresh draws (a new seed base, about ten
-minutes).
-
-**PSD ML: keep today's direct configuration; the two-stage route is better.**
+**PSD ML: keep today's direct configuration. The two-stage route is better
+only in rescaled units.**
 
 - **Rule A fails.** The layered cold start loses in four of the six test
   families.
@@ -96,7 +93,14 @@ minutes).
   `r pr(ps_pair, "twostage_default", "psd_default", "best_wins")` against
   `r pr(ps_pair, "twostage_default", "psd_default", "best_losses")` times, and
   takes `r round(100 * (1 - tot(ps_rates, "twostage_default", "total_seconds") / tot(ps_rates, "psd_default", "total_seconds")))`%
-  less time. The author decides the route.
+  less time. The advantage is mostly a units effect, though. In native units
+  the direct fit certifies slightly more
+  (`r f0(sum(ps_rt$success[ps_rt$role == "test" & ps_rt$transform == "native" & ps_rt$arm == "psd_default"]))`
+  against
+  `r f0(sum(ps_rt$success[ps_rt$role == "test" & ps_rt$transform == "native" & ps_rt$arm == "twostage_default"]))`).
+  Two-stage wins at $\times 100$ and $\times 0.01$, where the direct fit's
+  absolute preconditioning clamp bites; with that fixed, the two routes may
+  end up equal. The author decides the route.
 - **Its ordinary stage must not inherit the layered start with PORT.** With
   that ordinary stage the two-stage route is worse than the direct fit: the
   PSD refit succeeds less often when it is warm-started from PORT's rejected
@@ -114,8 +118,9 @@ Two issues found along the way:
 
 | Default | Current value | Status after this run | Evidence |
 |---|---|---|---|
-| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | open: promote the layered start together with the optimizer below | lane ml-gls; engineering/17 corpus (303 + 303 pairs, no loss) |
-| ML and GLS optimizer | NLopt L-BFGS | open: promote PORT once it gets ML's budget and tolerances, after a confirmation run on fresh draws | lane ml-gls |
+| ML and GLS start | transported FABIN3 (ML), native FABIN3 (GLS) | open: the layered start gains on GLS, only slightly on ML; rerun with a runaway rule | lane ml-gls, both runs; engineering/17 corpus |
+| ML and GLS optimizer | NLopt L-BFGS | open: PORT's ML gain is mostly runaway certifications; its GLS gain is real | lane ml-gls confirmation run |
+| judge on runaway paths | the Newton check accepts some divergent-path points | open: add a runaway rule before the next ML/GLS run | lane ml-gls confirmation run |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families) | lane psd-ml |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
@@ -210,6 +215,36 @@ the default. Its excess on common units in Boomsma and Wolf ML is certified
 fits whose objectives differ by $10^{-6}$ to $10^{-5}$ of the objective. That
 is consistent with PORT stopping on its generic tolerances rather than ML's
 tighter profile; the confirmation run with ML's controls will show it.
+
+### Confirmation run
+
+Seed base 2026092602, candidate `layered_port_ml`, with criteria in the dated
+section of [criteria/ml-gls.md](criteria/ml-gls.md). Failing rules:
+
+```{r cf-rules}
+tab(cf_dec[!cf_dec$pass, ], col.names = c("Rule", "Test family and estimator", "Value", "Pass"))
+```
+
+Native units, test families, fresh draws: certified fits, runaway
+certifications among them (largest $\lvert\theta\rvert > 100$; every
+population has unit-order parameters), and certified fits without them.
+
+```{r cf-escapes}
+e <- stats::aggregate(cbind(fits, escapes, success, success_no_escape) ~ estimator + arm,
+                      cf_esc[cf_esc$role == "test", ], sum)
+tab(e[order(e$estimator, e$arm), ], col.names = c("Estimator", "Arm", "Fits", "Runaways", "Certified", "Certified, no runaways"))
+```
+
+- L-BFGS never certifies a runaway. PORT does, from either start.
+- The PORT runaways that the 1000-iteration budget certified sit at a median
+  largest parameter of about 9,600 (10th percentile 140). With 5000
+  iterations PORT runs further, and the verdict rejects most of them. That is
+  why the larger budget "lost" ML fits.
+- Without runaways, on ML the layered start with L-BFGS and with PORT gain
+  little over today's default. On GLS both gain several hundred fits.
+- Both the pre-registered rules and the attainability witnesses count
+  runaway certifications, so the next ML/GLS run needs a runaway rule
+  written into its criteria.
 
 ## Lane psd-ml
 
