@@ -98,3 +98,51 @@ Nothing else changes: the same populations, transforms, judge and scoring.
 - Then a run on the same seed base, whose `default` arm reads the new
   library defaults, must reproduce the candidate's outcomes draw by draw.
 - If a rule fails, there is no promotion, and the report explains the losses.
+
+## Third run: the runaway rule (written 2026-09-26, after the confirmation run and before this one)
+
+**Why.** The confirmation run failed its rules, and its report found the
+cause. On draws without a proper ordinary minimum, PORT walks down the
+divergent Heywood path, and the Newton check often certifies the point where
+the budget stops it. Those runaway certifications count as successes, and they
+make problems "attainable" through the witness. So the earlier scoring rewards
+an optimizer for how far it runs on problems with no answer. Both earlier runs'
+draws are development data.
+
+**Scoring change (the runaway rule).** The standardized extent of a fit is the
+largest absolute value among:
+
+- its standardized loadings and latent paths;
+- the latent correlations;
+- the residual and disturbance variance ratios.
+
+It is recorded per fit (`standardized_extent` in `R/fits.R`) and is unit-free.
+A certified fit whose extent exceeds 10 (engineering/15's bound) is a runaway.
+It counts as a failure and as no witness of attainability, for every arm and
+the witness alike. Certified fits beyond 5, 10 and 100 are reported per arm
+(`runaways.csv`); only 10 gates.
+
+**Candidates.**
+
+- `layered_lbfgs`: the layered start with NLopt L-BFGS, a start-only change.
+- `layered_port`: the layered start with PORT under its current controls.
+
+Arms: `default`, `default_port`, the two candidates, and the witness. The
+confirmation run's PORT-control arms are dropped.
+
+**Draws.** Seed base 2026092603, never used before. Run id `2026-09-26-third`.
+Same populations and transforms.
+
+**Rules.** Rules 1 to 3 above, for each candidate against `default`, with the
+runaway rule in the scoring.
+
+**Outcome, decided separately for ML and for GLS** (`choice.csv`):
+
+- A candidate is eligible for an estimator when rules 1 and 2 pass in every
+  test family for that estimator.
+- If both are eligible, `layered_lbfgs` is chosen, being the smaller change.
+  `layered_port` is chosen instead only if it certifies more pooled test fits
+  and has no net loss against `layered_lbfgs` in any test family.
+- If one is eligible, it is chosen.
+- If neither is, the report names the failing families' losses and the author
+  decides, as in the first run's outcome clause.

@@ -19,7 +19,10 @@ units for invariant models), then writes the scored summaries.
   --workers W       parallel workers, one thread each (default 4)
   --batch B         tasks per checkpointed batch (default 40)
   --run-id ID       results/<lane>/<ID> (default 2026-09-26)
-  --candidate A     the arm the rules test against `default` (default layered_port)
+  --candidate A[,B] the arm(s) the rules test against `default` (default layered_port);
+                    with two, choice.csv applies the pre-registered choice
+  --runaway-bound X certified fits with a standardized extent above X are runaways,
+                    scored as failures (default Inf: no runaway rule)
   --arms a,b        run only these arms (the witness runs unless omitted from a list
                     that is given)
   --smoke           one replication of the first population per family, at the
@@ -51,7 +54,9 @@ out <- file.path(here, "results", lane, run_id)
 raw_dir <- file.path(out, "raw")
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 
-candidate <- opt("--candidate", "layered_port")
+candidates <- strsplit(opt("--candidate", "layered_port"), ",")[[1]]
+candidate <- candidates[1]
+runaway_bound <- as.numeric(opt("--runaway-bound", "Inf"))
 arm_filter <- if (is.null(opt("--arms"))) NULL else strsplit(opt("--arms"), ",")[[1]]
 pops <- all_populations()
 roles <- strsplit(opt("--roles", "test,control"), ",")[[1]]
@@ -74,7 +79,7 @@ if (!"--summarize" %in% args) {
     lane = lane, seed_base = seed_base, reps = reps, smoke = smoke,
     populations = paste(names(pops_run), collapse = ","), tasks = nrow(tasks),
     arms = paste(arm_filter %||% c(names(lane_arms(lane)), "witness"), collapse = ","),
-    candidate = candidate,
+    candidate = paste(candidates, collapse = ","), runaway_bound = runaway_bound,
     estimators = paste(lane_estimators(lane), collapse = ","),
     transforms = "native,x100,x0.01,mixed (mixed only for unit-invariant models)",
     judge = "fit$converged (Newton check); PSD fits also admissible",
@@ -118,7 +123,7 @@ raw$message[is.na(raw$message)] <- ""
 # stable identifier of the draws.
 raw$family <- vapply(pops[raw$pop], `[[`, "", "family")
 raw$role <- vapply(pops[raw$pop], `[[`, "", "role")
-s <- score_rows(raw)
+s <- score_rows(raw, runaway_bound)
 groups <- unit_groups(s)
 written <- c(
   write_csv(rate_table(s, c("lane", "role", "family", "estimator", "transform", "arm")),
@@ -128,12 +133,16 @@ written <- c(
   write_csv(rate_table(s, c("lane", "role", "family", "pop", "model", "n", "estimator", "arm")),
             file.path(out, "rates_by_cell.csv")),
   write_csv(paired_table(s, lane, candidate = candidate), file.path(out, "paired.csv")),
-  write_csv(loss_table(s, lane, candidate), file.path(out, "losses.csv")),
+  write_csv(loss_table(s, lane, candidates), file.path(out, "losses.csv")),
   write_csv(invariance_table(s, groups), file.path(out, "invariance.csv")),
-  write_csv(inconsistency_table(s, lane, groups, candidate), file.path(out, "invariance_breaks.csv")),
+  write_csv(inconsistency_table(s, lane, groups, candidates), file.path(out, "invariance_breaks.csv")),
   write_csv(failure_table(s), file.path(out, "failures.csv")),
   write_csv(escape_table(s), file.path(out, "escapes.csv")),
-  write_csv(decision_table(s, lane, candidate), file.path(out, "decision.csv")))
+  write_csv(do.call(rbind, lapply(candidates, function(cd)
+    cbind(candidate = cd, decision_table(s, lane, cd)))), file.path(out, "decision.csv")),
+  write_csv(runaway_table(s), file.path(out, "runaways.csv")))
+if (length(candidates) == 2L) written <- c(written,
+  write_csv(choice_table(s, lane, candidates), file.path(out, "choice.csv")))
 if (lane == "psd-ml") written <- c(written,
   write_csv(tolerance_table(s), file.path(out, "tolerance.csv")),
   write_csv(stage_table(s), file.path(out, "twostage_stages.csv")))

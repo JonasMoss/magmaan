@@ -71,7 +71,42 @@ blank_record <- function() {
   data.frame(returned = FALSE, certified = FALSE, admissible = NA, fmin = NA_real_,
              newton_status = "", optimizer_status = "", f_evals = NA_integer_,
              seconds = NA_real_, start_policy = "", stage = "", max_abs_theta = NA_real_,
-             message = "", stringsAsFactors = FALSE)
+             std_extent = NA_real_, message = "", stringsAsFactors = FALSE)
+}
+
+# Largest absolute standardized quantity of a single-group fit: loadings,
+# latent paths, latent correlations, and residual and disturbance variance
+# ratios. It is unit-free, near or below 1 for proper solutions (improper
+# ones slightly above), and large far along a divergent path. Absolute values
+# keep it defined when a variance is negative; a latent with zero implied
+# variance gives Inf.
+standardized_extent <- function(fit) {
+  p <- fit$partable; e <- p$est
+  if (is.null(e) || !length(e)) return(NA_real_)
+  lv <- unique(p$lhs[p$op == "=~"]); ov <- fit$ov_names
+  Sigma <- tryCatch(magmaanlab::magmaan_core$model_implied(fit)$sigma[[1]],
+                    error = function(err) NULL)
+  if (is.null(Sigma) || !length(lv)) return(NA_real_)
+  k <- length(lv); B <- matrix(0, k, k, dimnames = list(lv, lv)); Psi <- B
+  for (i in which(p$op == "~" & p$lhs %in% lv & p$rhs %in% lv)) B[p$lhs[i], p$rhs[i]] <- e[i]
+  for (i in which(p$op == "~~" & p$lhs %in% lv & p$rhs %in% lv))
+    Psi[p$lhs[i], p$rhs[i]] <- Psi[p$rhs[i], p$lhs[i]] <- e[i]
+  A <- tryCatch(solve(diag(k) - B), error = function(err) NULL)
+  if (is.null(A)) return(Inf)
+  Phi <- A %*% Psi %*% t(A); v <- abs(diag(Phi)); names(v) <- lv
+  s2 <- abs(diag(Sigma)); names(s2) <- ov
+  L <- which(p$op == "=~" & p$rhs %in% ov)
+  R <- which(p$op == "~" & p$lhs %in% lv & p$rhs %in% lv)
+  D <- which(p$op == "~~" & p$lhs == p$rhs & p$lhs %in% lv)
+  Th <- which(p$op == "~~" & p$lhs %in% ov & p$rhs %in% ov)
+  corr <- abs(Phi) / sqrt(outer(v, v)); diag(corr) <- 0
+  vals <- c(abs(e[L]) * sqrt(v[p$lhs[L]] / s2[p$rhs[L]]),
+            abs(e[R]) * sqrt(v[p$rhs[R]] / v[p$lhs[R]]),
+            abs(e[D]) / v[p$lhs[D]],
+            abs(e[Th]) / sqrt(s2[p$lhs[Th]] * s2[p$rhs[Th]]),
+            corr)
+  vals[is.nan(vals)] <- Inf
+  max(vals)
 }
 
 fill_record <- function(rec, fit) {
@@ -84,6 +119,7 @@ fill_record <- function(rec, fit) {
   rec$f_evals <- as.integer(fit$f_evals %||% NA_integer_)
   rec$start_policy <- fit$ml_start_policy %||% ""
   rec$max_abs_theta <- if (length(fit$theta)) max(abs(fit$theta)) else NA_real_
+  rec$std_extent <- tryCatch(standardized_extent(fit), error = function(err) NA_real_)
   rec
 }
 

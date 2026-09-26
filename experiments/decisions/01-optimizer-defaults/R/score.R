@@ -26,8 +26,14 @@ primary_comparisons <- function(lane, candidate = "layered_port")
 
 key_of <- function(d, keys) do.call(paste, c(d[keys], sep = "|"))
 
-score_rows <- function(raw) {
-  raw$success <- raw$certified & (raw$lane != "psd-ml" | raw$admissible %in% TRUE)
+# `runaway_bound`: a certified fit whose standardized extent exceeds it is a
+# runaway (a point far along a divergent path), neither a success nor a
+# witness of attainability. Inf (the default) scores as the first two runs did.
+score_rows <- function(raw, runaway_bound = Inf) {
+  ext <- if ("std_extent" %in% names(raw)) raw$std_extent else rep(NA_real_, nrow(raw))
+  raw$runaway <- raw$certified & !is.na(ext) & ext > runaway_bound
+  raw$success <- raw$certified & !raw$runaway &
+    (raw$lane != "psd-ml" | raw$admissible %in% TRUE)
   raw$pkey <- key_of(raw, problem_keys)
   ok <- raw[raw$success & is.finite(raw$fmin), ]
   best <- tapply(ok$fmin, ok$pkey, min)
@@ -75,7 +81,9 @@ loss_table <- function(s, lane, candidate = "layered_port") {
   out <- list()
   cols <- c(problem_keys, "seed", "fmin", "newton_status", "optimizer_status", "f_evals",
             "start_policy", "stage", "admissible", "message")
-  for (cmp in primary_comparisons(lane, candidate)) {
+  cols <- c(cols, intersect(c("std_extent", "runaway"), names(s)))
+  cmps <- unique(unlist(lapply(candidate, function(cd) primary_comparisons(lane, cd)), recursive = FALSE))
+  for (cmp in cmps) {
     cand <- s[s$arm == cmp[1] & s$attainable, ]
     base <- s[s$arm == cmp[2] & s$attainable, c("pkey", "success", "fmin")]
     m <- merge(cand, base, by = "pkey", suffixes = c("", "_baseline"))
@@ -192,7 +200,7 @@ decision_table <- function(s, lane, candidate = "layered_port") {
 # Where the primary arms break invariance: the success pattern across units,
 # or the size of the objective spread when every version succeeds.
 inconsistency_table <- function(s, lane, g = unit_groups(s), candidate = "layered_port") {
-  arms <- unique(unlist(primary_comparisons(lane, candidate)))
+  arms <- unique(unlist(lapply(candidate, function(cd) primary_comparisons(lane, cd))))
   b <- g[g$arm %in% arms & !g$consistent, ]
   if (!nrow(b)) return(data.frame(role = character(), groups = integer()))
   b$pattern <- ifelse(b$n_ok == b$n, paste("objective differs,",
@@ -232,4 +240,47 @@ escape_table <- function(s) {
   a$success <- stats::aggregate(list(x = d$success), d[c("lane", "role", "family", "estimator", "arm")], sum)$x
   a$success_no_escape <- stats::aggregate(list(x = ok), d[c("lane", "role", "family", "estimator", "arm")], sum)$x
   a
+}
+
+# Certified fits beyond several runaway bounds (standardized extent), by arm:
+# the sensitivity of the runaway rule. Unit-free, so all transforms count.
+runaway_table <- function(s, bounds = c(5, 10, 100)) {
+  d <- s[s$certified & "std_extent" %in% names(s), ]
+  if (!nrow(d)) return(data.frame())
+  by <- c("lane", "role", "family", "estimator", "arm")
+  out <- stats::aggregate(list(certified = d$certified), d[by], length)
+  for (b in bounds) out[[paste0("beyond_", b)]] <-
+    stats::aggregate(list(x = !is.na(d$std_extent) & d$std_extent > b), d[by], sum)$x
+  out
+}
+
+# Pre-registered choice between two candidates, per estimator: a candidate is
+# eligible when every rule passes for that estimator's test families. With both
+# eligible, the second (layered_port) replaces the first (layered_lbfgs) only if
+# it certifies more pooled test fits and has no net loss against the first in
+# any test family.
+choice_table <- function(s, lane, candidates) {
+  if (length(candidates) != 2L) return(data.frame())
+  p <- paired_table(s, lane)
+  rates <- rate_table(s, c("role", "estimator", "arm"))
+  out <- list()
+  for (est in lane_estimators(lane)) {
+    elig <- vapply(candidates, function(cd) {
+      d <- decision_table(s, lane, cd)
+      all(d$pass[grepl(paste0(" ", est, "( |$)"), d$scope)])
+    }, logical(1))
+    succ <- vapply(candidates, function(cd)
+      sum(rates$success[rates$role == "test" & rates$estimator == est & rates$arm == cd]), numeric(1))
+    q <- p[p$role == "test" & p$estimator == est & p$candidate == candidates[2] &
+           p$baseline == candidates[1], ]
+    no_net_loss <- nrow(q) > 0 && all(q$wins >= q$losses)
+    choice <- if (all(elig)) {
+      if (succ[2] > succ[1] && no_net_loss) candidates[2] else candidates[1]
+    } else if (any(elig)) candidates[elig][1] else "none (author decides)"
+    out[[est]] <- data.frame(estimator = est,
+      eligible = paste(sprintf("%s:%s", candidates, elig), collapse = " "),
+      certified = paste(sprintf("%s:%d", candidates, succ), collapse = " "),
+      second_no_net_loss_vs_first = no_net_loss, choice = choice)
+  }
+  do.call(rbind, out)
 }
