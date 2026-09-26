@@ -105,9 +105,10 @@ minutes).
 
 Two issues found along the way:
 
-- The preconditioning's absolute clamp does cost fits in large units.
-- A lift round-trip error in equality-constrained models occurs in every unit
-  system.
+- Direct PSD fits exhaust their budget more often after rescaling, in the
+  pattern the preconditioning's absolute clamp predicts.
+- A lift round-trip error hits the std.lv equal-loadings CFA (about 4% of
+  fits at $N = 25$).
 
 ## The register
 
@@ -238,9 +239,25 @@ tab(st, col.names = c("Arm", "Stage", "Fits", "Success", "Rate"))
 ```
 
 When the ordinary fit is rejected or improper, the PSD refit warm-starts from
-the ordinary endpoint. From L-BFGS endpoints that refit succeeds far more
-often than from PORT endpoints. Why is not established; a likely reason is
-that PORT, stopping at its budget, ends further along divergent paths.
+the ordinary endpoint; when the ordinary fit errors, it starts from the
+original start. From L-BFGS endpoints that refit succeeds far more often than
+from PORT endpoints.
+
+A probe on 30 draws where the layered-start PORT two-stage fails and the
+direct fit succeeds (native units, mostly $N = 25$ with weak loadings) shows
+why. On these draws the ordinary likelihood keeps improving along a Heywood
+path: a residual variance goes negative while loadings grow.
+
+- **L-BFGS** usually aborts early: 18 of 30 fits end in a line-search error
+  after about 100 evaluations. The PSD refit then starts cold from FABIN3 and
+  succeeds.
+- **PORT** follows the path for its whole budget: 21 of 30 fits exhaust it.
+  It ends far out, with a median most-negative variance of $-33$ and a median
+  largest parameter of 211; the worst case reaches $-2543$. No PSD refit
+  from these endpoints succeeds.
+
+So PORT's persistence, an advantage when a minimum exists, turns into a poor
+warm start when none does.
 
 ### Units and failure causes
 
@@ -261,13 +278,19 @@ names(f) <- sub("fits.", "", names(f), fixed = TRUE); f[is.na(f)] <- 0
 tab(f[c("family", "cause", intersect(c("native", "x100", "x0.01", "mixed"), names(f)))])
 ```
 
-- **Budget exhaustion rises at $\times 100$.** This is most marked in the
-  equality-constrained family. The lifted information scale is clamped to
-  $[10^{-4}, 10^{4}]$, which binds on variances of order $10^{4}$.
+- **Budget exhaustion rises after rescaling, at both ends of the clamp.**
+  The lifted information scale $s_k = 1/\sqrt{I_{kk}}$ is clamped to
+  $[10^{-4}, 10^{4}]$, and a variance of size $v$ wants $s \approx v$.
+  - The chain SEM with equal paths goes from 0 exhausted fits in native units
+    to 53 at $\times 100$, where its variances are near $10^{4}$.
+  - With equal disturbances too, it goes to 54 at $\times 0.01$, where the
+    disturbance variances are near $4 \cdot 10^{-5}$.
+  - The pattern fits the clamp but is not yet proven.
 - **The lift round-trip error ("could not round-trip the terminal covariance
-  links")** occurs only in equality-constrained models, in native units as
-  often as rescaled. It is a defect of the PSD lift with cross-variable
-  equalities, not a units effect.
+  links")** occurs only in the two std.lv equal-loadings CFAs, mostly with
+  loadings .4. It hits about 4% of their fits at $N = 25$ and 0.5% at
+  $N = 100$. It occurs in native and $\times 0.01$ units about equally and
+  never at $\times 100$. The mechanism is not yet known.
 
 ## Reproduce
 

@@ -339,18 +339,29 @@ section: the categorical corpus saddles are under
     independently of the ordinary ML default.
   - Engineering the route properly (retaining the non-PSD fit in the result)
     comes later.
-- **S — PSD lift round-trip error in equality-constrained models.**
+- **S — PSD lift round-trip error in the std.lv equal-loadings CFA.**
   `fit_ml_psd` fails with "PSD lift finalization could not round-trip the
-  terminal covariance links into ordinary partable coordinates" on
-  equality-constrained CFA, chain SEM and mean-structure models (decisions/01,
-  lane psd-ml: 188 fits over all arms, in native units as often as rescaled).
-  Find which cross-variable equality the finalization cannot map back.
-- **S — PSD preconditioning clamp.** The lifted information scale is clamped
-  to $[10^{-4}, 10^{4}]$ in absolute terms. In decisions/01, direct PSD fits of
-  the equality-constrained family exhaust the SLSQP budget in 127 fits at
-  $\times 100$ units against 6 in native units, and the other families roughly
-  double at $\times 100$. Make the scale relative to the sample units (the
-  shared coordinate layer's rule), with a unit-rescaling test.
+  terminal covariance links into ordinary partable coordinates" (decisions/01,
+  lane psd-ml: 188 fits over all arms).
+  - It occurs only in the two std.lv equal-loadings CFAs (three factors,
+    fixed unit latent variances). Most cases have loadings .4, where it hits
+    about 4% of fits at $N = 25$ and 0.5% at $N = 100$.
+  - It occurs in native and $\times 0.01$ units about equally and never at
+    $\times 100$.
+  - The mechanism is unknown: fixed-diagonal $\Psi$ blocks, the equality
+    links, or an absolute round-trip threshold.
+- **S — PSD preconditioning clamp.** The lifted information scale
+  $s_k = 1/\sqrt{I_{kk}}$ is clamped to $[10^{-4}, 10^{4}]$ in absolute terms,
+  and a variance of size $v$ wants $s \approx v$.
+  - In decisions/01, direct PSD fits exhaust the SLSQP budget where the clamp
+    should bind. The chain SEM with equal paths goes from 0 fits in native
+    units to 53 at $\times 100$ (variances near $10^{4}$). With equal
+    disturbances too, it goes from 0 to 54 at $\times 0.01$ (disturbance
+    variances near $4 \cdot 10^{-5}$) and 57 at $\times 100$.
+  - The other families roughly double at $\times 100$.
+  - The pattern fits both ends of the clamp but is not yet proven.
+  - Make the scale relative to the sample units (the shared coordinate
+    layer's rule), with a unit-rescaling test.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best
