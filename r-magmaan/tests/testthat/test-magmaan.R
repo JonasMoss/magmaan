@@ -54,6 +54,28 @@ test_that("identification and group options follow lavaan's meaning", {
   expect_lavaan_estimates(magmaan(intercept, d), lavaan::cfa(intercept, d))
 })
 
+test_that("start = \"fabin3\" gives the former FABIN3 start", {
+  d <- hs()
+  fit <- magmaan(cfa, d, inference = FALSE)
+  old <- magmaan(cfa, d, start = "fabin3", inference = FALSE)
+  expect_identical(as_lab_fit(fit)$ml_start_policy, "layered")
+  expect_identical(as_lab_fit(old)$ml_start_policy, "transported-std-lv-fabin")
+  lab <- magmaanlab::fit_model(cfa, d, control = list(start = "scaled-fabin"))
+  expect_identical(unname(coef(old)), lab$theta)
+  expect_equal(coef(old), coef(fit), tolerance = 1e-4)
+  gls <- magmaan(cfa, d, estimator = "GLS", start = "fabin3", inference = FALSE)
+  expect_identical(unname(coef(gls)),
+                   magmaanlab::fit_model(cfa, d, estimator = "GLS",
+                                         control = list(start = "fabin3"))$theta)
+  psd <- magmaan(cfa, d, psd = TRUE, inference = FALSE)
+  expect_identical(coef(magmaan(cfa, d, psd = TRUE, start = "fabin3", inference = FALSE)),
+                   coef(psd))
+  expect_identical(as_lab_fit(psd)$ml_start_policy, "transported-std-lv-fabin")
+  expect_error(magmaan(cfa, d, start = "simple"), "must be one of")
+  expect_error(magmaan(cfa, d, start = "fabin3", cluster = "school"),
+               "not available with `ordered` or `cluster`")
+})
+
 test_that("bundled lavaan estimator names point to the plain estimator", {
   d <- hs()
   expect_error(magmaan(cfa, d, estimator = "MLR"), "Use estimator = \"ML\"")

@@ -39,6 +39,12 @@
 #'   "FIML"` or `"ML2S"` to use incomplete rows.
 #' @param psd Constrain the model-implied covariance matrices to be positive
 #'   semidefinite.
+#' @param start Starting values: `"default"` or `"fabin3"`. By default, ML,
+#'   ML2S and GLS fits start from the layered moment start, and all other
+#'   fits, including every PSD fit, from FABIN3 (Hägglund, 1982). `"fabin3"`
+#'   uses FABIN3 for ML, ML2S and GLS too, as magmaan did before 2026-09-26.
+#'   It is not available with `ordered` or `cluster`, whose fits have their
+#'   own starts.
 #' @param inference Compute inference now. With `FALSE`, call [infer()] later.
 #' @return An object of class `magmaan`.
 #' @export
@@ -52,6 +58,7 @@ magmaan <- function(model, data,
                     meanstructure = "default", fixed.x = TRUE,
                     missing = "listwise",
                     psd = FALSE,
+                    start = "default",
                     inference = TRUE) {
   if (!is.character(model) || length(model) != 1L || is.na(model)) {
     stop("magmaan(): `model` must be lavaan model syntax in one string", call. = FALSE)
@@ -69,6 +76,7 @@ magmaan <- function(model, data,
   parameterization <- .check_choice(parameterization, "parameterization",
                                     c("delta", "theta"))
   missing <- .check_choice(missing, "missing", c("listwise", "pairwise"))
+  start <- .check_choice(start, "start", c("default", "fabin3"))
   ordered <- .check_ordered(ordered)
   .check_estimator_data(estimator, ordered, missing)
   group <- .check_column(group, "group", data)
@@ -88,7 +96,7 @@ magmaan <- function(model, data,
     list(model = model, data = data, estimator = estimator, groups = group,
          cluster = cluster, ordered = ordered, parameterization = parameterization,
          missing = if (estimator %in% c("FIML", "ML2S")) "listwise" else missing,
-         psd = psd),
+         psd = psd, control = .start_control(start, estimator, psd, ordered, cluster)),
     model_options))
 
   fit <- structure(
@@ -178,6 +186,24 @@ as_lab_fit <- function(fit) {
     stop(sprintf("magmaan(): `%s` column \"%s\" is not in `data`", arg, x), call. = FALSE)
   }
   x
+}
+
+# The magmaanlab start for `start = "fabin3"`: the FABIN3 start each fitter
+# used before the layered start became the ML and GLS default. ML (and ML2S,
+# whose second stage is an ML fit) transports FABIN3 from unit latent
+# variances, as PSD ML does; GLS used native FABIN3. Every other continuous
+# fit already starts from FABIN3.
+.start_control <- function(start, estimator, psd, ordered, cluster) {
+  if (identical(start, "default")) return(NULL)
+  if (!is.null(ordered) || !is.null(cluster)) {
+    stop("magmaan(): start = \"fabin3\" is not available with `ordered` or `cluster`",
+         call. = FALSE)
+  }
+  if (psd) return(NULL)
+  switch(estimator,
+         ML = , ML2S = list(start = "scaled-fabin"),
+         GLS = list(start = "fabin3"),
+         NULL)
 }
 
 .check_flag <- function(x, arg) {

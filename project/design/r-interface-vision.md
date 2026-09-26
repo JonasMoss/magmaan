@@ -65,6 +65,7 @@ magmaan(model, data,
         meanstructure = "default", fixed.x = TRUE,
         missing = "listwise",
         psd = FALSE,
+        start = "default",
         inference = TRUE)
 ```
 
@@ -101,7 +102,8 @@ inference is automatic. This matches the backlog item on decomposing
 | MLM, MLR, MLMV, WLSM, WLSMV, ULSM, ULSMV | Rejected | Estimator plus correction in one name |
 | `se`, `test`, `information`, `h1.information`, `observed.information`, `likelihood`, `bootstrap` | Dropped | Set by the policy |
 | `bounds` | `psd` | The principled replacement |
-| `optimizer`, `control`, `start`, `W`, `stage2_weight`, `dls_a`, `stage1_regularization`, `pd_gamma` | Lab only | Expert tuning |
+| `start` | `"default"` or `"fabin3"` (added 2026-09-26) | FABIN3 was the ML and GLS start before the layered start; it reproduces earlier results and gives every fit, ordinary and PSD, the same start. Other starts and start vectors stay in the lab |
+| `optimizer`, `control`, `W`, `stage2_weight`, `dls_a`, `stage1_regularization`, `pd_gamma` | Lab only | Expert tuning |
 | `orthogonal`, `auto.*`, `int.ov.free` and similar | Lab only | Expressible in model syntax or `model_spec()` |
 | `sample.cov`, `sample.nobs` | Lab only | The policy needs raw data |
 
