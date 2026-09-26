@@ -63,3 +63,38 @@ recorded in `metadata.csv`. Scoring:
 The secondary outcomes are reported but do not gate, per the 2026-09-26
 scoring rule: the best-known rate, and the median evaluations and seconds
 among successes.
+
+## Confirmation run (written 2026-09-26, after the first run and before this one)
+
+**Why.** The first run (seed base 20260926) failed rules 1 and 2 for
+`layered_port`: one Chen ML loss, and common-unit invariance for the Boomsma
+and Wolf ML families. Its report traces both to PORT running with its generic
+controls (1000 iterations, PORT's default tolerances), because the ML option
+profile sets only NLopt's budget. Those draws are now development data.
+
+**Candidate.** `layered_port_ml`: the layered start with PORT given ML's
+budget and tolerances:
+
+- `max_iter = 5000`;
+- `port = list(max_eval = 5000, rel_f_tol = 1e-12, x_tol = 1e-10)`.
+
+Diagnostic arms:
+
+- `layered_port_budget`, with the budget only;
+- the first run's four arms, unchanged.
+
+Nothing else changes: the same populations, transforms, judge and scoring.
+
+**Draws.** Seed base 2026092602, never used before. Run id `2026-09-26-confirm`.
+
+**Rules.** Rules 1 to 3 above, with `layered_port_ml` in place of
+`layered_port` as the candidate.
+
+**Outcome.**
+
+- If rules 1 and 2 pass, promote the candidate as the complete-data ML and
+  GLS default: the layered start, PORT, and those controls in the ML option
+  profile.
+- Then a run on the same seed base, whose `default` arm reads the new
+  library defaults, must reproduce the candidate's outcomes draw by draw.
+- If a rule fails, there is no promotion, and the report explains the losses.

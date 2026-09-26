@@ -7,10 +7,12 @@
 problem_keys <- c("lane", "family", "role", "pop", "model", "n", "rep", "transform", "estimator")
 group_keys <- setdiff(problem_keys, "transform")
 
-comparisons <- function(lane) {
+comparisons <- function(lane, candidate = "layered_port") {
   switch(lane,
-    "ml-gls" = list(c("layered_port", "default"), c("layered_lbfgs", "default"),
-                    c("default_port", "default"), c("layered_port", "layered_lbfgs")),
+    "ml-gls" = unique(list(c(candidate, "default"), c("layered_port", "default"),
+                    c("layered_lbfgs", "default"), c("default_port", "default"),
+                    c("layered_port", "layered_lbfgs"), c("layered_port_ml", "layered_port"),
+                    c("layered_port_budget", "layered_port"))),
     "psd-ml" = list(c("psd_layered", "psd_default"), c("psd_default_none", "psd_default"),
                     c("psd_layered_none", "psd_layered"),
                     c("twostage_default", "psd_default"), c("twostage_layered", "psd_default"),
@@ -19,7 +21,8 @@ comparisons <- function(lane) {
 
 # Comparisons whose losses are listed one by one: the candidates of the
 # gating rules and the routes. Preconditioning (rule B) is decided by counts.
-primary_comparisons <- function(lane) comparisons(lane)[if (lane == "ml-gls") 1 else c(1, 4, 5)]
+primary_comparisons <- function(lane, candidate = "layered_port")
+  comparisons(lane, candidate)[if (lane == "ml-gls") 1 else c(1, 4, 5)]
 
 key_of <- function(d, keys) do.call(paste, c(d[keys], sep = "|"))
 
@@ -51,9 +54,10 @@ rate_table <- function(s, by) {
   out[do.call(order, out[by]), ]
 }
 
-paired_table <- function(s, lane, by = c("lane", "role", "family", "estimator")) {
+paired_table <- function(s, lane, by = c("lane", "role", "family", "estimator"),
+                         candidate = "layered_port") {
   out <- list()
-  for (cmp in comparisons(lane)) {
+  for (cmp in comparisons(lane, candidate)) {
     cand <- s[s$arm == cmp[1] & s$attainable, ]
     base <- s[s$arm == cmp[2] & s$attainable, ]
     m <- merge(cand[c(by, "pkey", "success", "best")], base[c("pkey", "success", "best")],
@@ -67,11 +71,11 @@ paired_table <- function(s, lane, by = c("lane", "role", "family", "estimator"))
   out
 }
 
-loss_table <- function(s, lane) {
+loss_table <- function(s, lane, candidate = "layered_port") {
   out <- list()
   cols <- c(problem_keys, "seed", "fmin", "newton_status", "optimizer_status", "f_evals",
             "start_policy", "stage", "admissible", "message")
-  for (cmp in primary_comparisons(lane)) {
+  for (cmp in primary_comparisons(lane, candidate)) {
     cand <- s[s$arm == cmp[1] & s$attainable, ]
     base <- s[s$arm == cmp[2] & s$attainable, c("pkey", "success", "fmin")]
     m <- merge(cand, base, by = "pkey", suffixes = c("", "_baseline"))
@@ -149,8 +153,8 @@ tolerance_table <- function(s) {
 }
 
 # The rules of criteria/<lane>.md, evaluated on test families.
-decision_table <- function(s, lane) {
-  p <- paired_table(s, lane)
+decision_table <- function(s, lane, candidate = "layered_port") {
+  p <- paired_table(s, lane, candidate = candidate)
   p <- p[p$role == "test", ]
   row <- function(rule, scope, value, pass) data.frame(rule = rule, scope = scope,
     value = value, pass = pass, stringsAsFactors = FALSE)
@@ -163,13 +167,14 @@ decision_table <- function(s, lane) {
   }
   if (lane == "ml-gls") {
     inv <- invariance_table(s)
-    inv <- inv[inv$role == "test" & inv$arm %in% c("layered_port", "default"), ]
+    inv <- inv[inv$role == "test" & inv$arm %in% c(candidate, "default"), ]
+    inv$arm <- ifelse(inv$arm == candidate, "candidate", "baseline")
     w <- reshape(inv[c("family", "estimator", "units", "arm", "consistent")],
                  idvar = c("family", "estimator", "units"), timevar = "arm", direction = "wide")
     r2 <- do.call(rbind, lapply(seq_len(nrow(w)), function(i) with(w[i, ], row("2 invariance",
       paste(family, estimator, units), sprintf("candidate %d baseline %d",
-      consistent.layered_port, consistent.default), consistent.layered_port >= consistent.default))))
-    return(rbind(pair_rows("1 primary", "layered_port", "default", FALSE), r2))
+      consistent.candidate, consistent.baseline), consistent.candidate >= consistent.baseline))))
+    return(rbind(pair_rows("1 primary", candidate, "default", FALSE), r2))
   }
   rates <- rate_table(s, c("role", "arm"))
   secs <- function(a) rates$total_seconds[rates$role == "test" & rates$arm == a]
@@ -186,8 +191,8 @@ decision_table <- function(s, lane) {
 
 # Where the primary arms break invariance: the success pattern across units,
 # or the size of the objective spread when every version succeeds.
-inconsistency_table <- function(s, lane, g = unit_groups(s)) {
-  arms <- unique(unlist(primary_comparisons(lane)))
+inconsistency_table <- function(s, lane, g = unit_groups(s), candidate = "layered_port") {
+  arms <- unique(unlist(primary_comparisons(lane, candidate)))
   b <- g[g$arm %in% arms & !g$consistent, ]
   if (!nrow(b)) return(data.frame(role = character(), groups = integer()))
   b$pattern <- ifelse(b$n_ok == b$n, paste("objective differs,",

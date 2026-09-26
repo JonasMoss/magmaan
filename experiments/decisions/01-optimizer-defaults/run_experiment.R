@@ -19,6 +19,9 @@ units for invariant models), then writes the scored summaries.
   --workers W       parallel workers, one thread each (default 4)
   --batch B         tasks per checkpointed batch (default 40)
   --run-id ID       results/<lane>/<ID> (default 2026-09-26)
+  --candidate A     the arm the rules test against `default` (default layered_port)
+  --arms a,b        run only these arms (the witness runs unless omitted from a list
+                    that is given)
   --smoke           one replication of the first population per family, at the
                     small N, seed base + 1 (never the decision draws)
   --summarize       only rescore existing raw batches
@@ -48,6 +51,8 @@ out <- file.path(here, "results", lane, run_id)
 raw_dir <- file.path(out, "raw")
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 
+candidate <- opt("--candidate", "layered_port")
+arm_filter <- if (is.null(opt("--arms"))) NULL else strsplit(opt("--arms"), ",")[[1]]
 pops <- all_populations()
 roles <- strsplit(opt("--roles", "test,control"), ",")[[1]]
 keep <- vapply(pops, function(p) p$role %in% roles, logical(1))
@@ -68,7 +73,8 @@ if (!"--summarize" %in% args) {
   write_metadata(file.path(out, "metadata.csv"), values = list(
     lane = lane, seed_base = seed_base, reps = reps, smoke = smoke,
     populations = paste(names(pops_run), collapse = ","), tasks = nrow(tasks),
-    arms = paste(names(lane_arms(lane)), collapse = ","),
+    arms = paste(arm_filter %||% c(names(lane_arms(lane)), "witness"), collapse = ","),
+    candidate = candidate,
     estimators = paste(lane_estimators(lane), collapse = ","),
     transforms = "native,x100,x0.01,mixed (mixed only for unit-invariant models)",
     judge = "fit$converged (Newton check); PSD fits also admissible",
@@ -83,7 +89,7 @@ if (!"--summarize" %in% args) {
       idx <- batches[[b]]
       res <- parallel::mclapply(idx, function(i) {
         cache <- new.env()
-        tryCatch(run_task(tasks[i, ], pops, lane, cache),
+        tryCatch(run_task(tasks[i, ], pops, lane, cache, arm_filter),
                  error = function(e) data.frame(lane = lane, pop = tasks$pop[i], n = tasks$n[i],
                    rep = tasks$rep[i], task_error = one_line(conditionMessage(e))))
       }, mc.cores = workers, mc.preschedule = TRUE)
@@ -121,12 +127,12 @@ written <- c(
             file.path(out, "rates_by_family.csv")),
   write_csv(rate_table(s, c("lane", "role", "family", "pop", "model", "n", "estimator", "arm")),
             file.path(out, "rates_by_cell.csv")),
-  write_csv(paired_table(s, lane), file.path(out, "paired.csv")),
-  write_csv(loss_table(s, lane), file.path(out, "losses.csv")),
+  write_csv(paired_table(s, lane, candidate = candidate), file.path(out, "paired.csv")),
+  write_csv(loss_table(s, lane, candidate), file.path(out, "losses.csv")),
   write_csv(invariance_table(s, groups), file.path(out, "invariance.csv")),
-  write_csv(inconsistency_table(s, lane, groups), file.path(out, "invariance_breaks.csv")),
+  write_csv(inconsistency_table(s, lane, groups, candidate), file.path(out, "invariance_breaks.csv")),
   write_csv(failure_table(s), file.path(out, "failures.csv")),
-  write_csv(decision_table(s, lane), file.path(out, "decision.csv")))
+  write_csv(decision_table(s, lane, candidate), file.path(out, "decision.csv")))
 if (lane == "psd-ml") written <- c(written,
   write_csv(tolerance_table(s), file.path(out, "tolerance.csv")),
   write_csv(stage_table(s), file.path(out, "twostage_stages.csv")))

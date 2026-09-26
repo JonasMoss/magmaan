@@ -48,7 +48,13 @@ lane_arms <- function(lane) {
       default       = list(kind = "ordinary"),
       default_port  = list(kind = "ordinary", optimizer = "port"),
       layered_lbfgs = list(kind = "ordinary", optimizer = "nlopt-lbfgs", start = "layered"),
-      layered_port  = list(kind = "ordinary", optimizer = "port", start = "layered")),
+      layered_port  = list(kind = "ordinary", optimizer = "port", start = "layered"),
+      # Added for the confirmation run: PORT with complete-data ML's budget
+      # (5000 evaluations, as NLopt gets) and tolerances, or the budget only.
+      layered_port_ml = list(kind = "ordinary", optimizer = "port", start = "layered",
+        control = list(max_iter = 5000L, port = list(max_eval = 5000L, rel_f_tol = 1e-12, x_tol = 1e-10))),
+      layered_port_budget = list(kind = "ordinary", optimizer = "port", start = "layered",
+        control = list(max_iter = 5000L, port = list(max_eval = 5000L)))),
     "psd-ml" = list(
       psd_default        = list(kind = "psd"),
       psd_default_none   = list(kind = "psd", preconditioning = "none"),
@@ -86,7 +92,8 @@ one_line <- function(x) gsub("[\r\n,]+", " ", substr(x, 1, 300))
 # One configuration on one problem. `start` may be a policy name or a vector.
 run_arm <- function(arm, model, sample, estimator) {
   rec <- blank_record()
-  ctl <- if (is.null(arm$start)) NULL else list(start = arm$start)
+  ctl <- c(if (is.null(arm$start)) NULL else list(start = arm$start), arm$control)
+  if (!length(ctl)) ctl <- NULL
   t0 <- proc.time()[["elapsed"]]
   fit <- tryCatch(switch(arm$kind,
     ordinary = {
@@ -135,10 +142,12 @@ witness_arm <- function(lane, theta) {
 }
 
 # Every model, transform, estimator and arm on one draw of one population.
-run_task <- function(task, pops, lane, cache) {
+run_task <- function(task, pops, lane, cache, arm_filter = NULL) {
   pop <- pops[[task$pop]]
   moments <- draw_moments(pop, task$n, task$seed)
   arms <- lane_arms(lane)
+  if (!is.null(arm_filter)) arms <- arms[names(arms) %in% arm_filter]
+  want_witness <- is.null(arm_filter) || "witness" %in% arm_filter
   rows <- list()
   transforms <- c("native", "x100", "x0.01", "mixed")
   for (fm in pop$models) for (tr in transforms) {
@@ -147,11 +156,13 @@ run_task <- function(task, pops, lane, cache) {
     model <- build_model(fm)
     sample <- sample_in_units(moments, factors, fm$meanstructure)
     key <- paste(pop$key, fm$key, tr, sep = "|")
-    if (!exists(key, envir = cache, inherits = FALSE))
-      assign(key, population_start(pop, fm, model, factors), envir = cache)
-    theta_pop <- get(key, envir = cache)
     all_arms <- arms
-    if (!is.null(theta_pop)) all_arms$witness <- witness_arm(lane, theta_pop)
+    if (want_witness) {
+      if (!exists(key, envir = cache, inherits = FALSE))
+        assign(key, population_start(pop, fm, model, factors), envir = cache)
+      theta_pop <- get(key, envir = cache)
+      if (!is.null(theta_pop)) all_arms$witness <- witness_arm(lane, theta_pop)
+    }
     for (est in lane_estimators(lane)) for (a in names(all_arms)) {
       rec <- run_arm(all_arms[[a]], model, sample, est)
       rows[[length(rows) + 1L]] <- cbind(data.frame(
