@@ -39,12 +39,15 @@
 #'   "FIML"` or `"ML2S"` to use incomplete rows.
 #' @param psd Constrain the model-implied covariance matrices to be positive
 #'   semidefinite.
-#' @param start Starting values: `"default"` or `"fabin3"`. By default, ML,
-#'   ML2S and GLS fits start from the layered moment start, and all other
-#'   fits, including every PSD fit, from FABIN3 (Hägglund, 1982). `"fabin3"`
-#'   uses FABIN3 for ML, ML2S and GLS too, as magmaan did before 2026-09-26.
-#'   It is not available with `ordered` or `cluster`, whose fits have their
-#'   own starts.
+#' @param start Starting values: `"default"`, `"fabin3"`, a previous
+#'   [magmaan()] fit, or a parameter table. By default, ML, ML2S and GLS fits
+#'   start from the layered moment start, and all other fits, including every
+#'   PSD fit, from FABIN3 (Hägglund, 1982). `"fabin3"` uses FABIN3 for ML,
+#'   ML2S and GLS too, as magmaan did before 2026-09-26; it is not available
+#'   with `ordered` or `cluster`, whose fits have their own starts. A fit or a
+#'   data frame with columns `lhs`, `op`, `rhs` and `est` (and `group` for
+#'   several groups) gives the start of every free parameter it matches, as
+#'   lavaan's `start = fit`; the others keep the default start.
 #' @param inference Compute inference now. With `FALSE`, call [infer()] later.
 #' @return An object of class `magmaan`.
 #' @export
@@ -76,7 +79,7 @@ magmaan <- function(model, data,
   parameterization <- .check_choice(parameterization, "parameterization",
                                     c("delta", "theta"))
   missing <- .check_choice(missing, "missing", c("listwise", "pairwise"))
-  start <- .check_choice(start, "start", c("default", "fabin3"))
+  start <- .check_start(start)
   ordered <- .check_ordered(ordered)
   .check_estimator_data(estimator, ordered, missing)
   group <- .check_column(group, "group", data)
@@ -194,6 +197,7 @@ as_lab_fit <- function(fit) {
 # variances, as PSD ML does; GLS used native FABIN3. Every other continuous
 # fit already starts from FABIN3.
 .start_control <- function(start, estimator, psd, ordered, cluster) {
+  if (is.data.frame(start)) return(list(start = start))
   if (identical(start, "default")) return(NULL)
   if (!is.null(ordered) || !is.null(cluster)) {
     stop("magmaan(): start = \"fabin3\" is not available with `ordered` or `cluster`",
@@ -204,6 +208,18 @@ as_lab_fit <- function(fit) {
          ML = , ML2S = list(start = "scaled-fabin"),
          GLS = list(start = "fabin3"),
          NULL)
+}
+
+# A start policy name, or a table of start values (from a fit or given).
+.check_start <- function(start) {
+  if (inherits(start, "magmaan")) start <- stats::coef(summary(start))
+  if (is.data.frame(start)) {
+    if (!all(c("lhs", "op", "rhs", "est") %in% names(start))) {
+      stop("magmaan(): a start table needs columns lhs, op, rhs and est", call. = FALSE)
+    }
+    return(start)
+  }
+  .check_choice(start, "start", c("default", "fabin3"))
 }
 
 .check_flag <- function(x, arg) {

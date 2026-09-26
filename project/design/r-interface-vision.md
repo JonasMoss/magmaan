@@ -102,7 +102,7 @@ inference is automatic. This matches the backlog item on decomposing
 | MLM, MLR, MLMV, WLSM, WLSMV, ULSM, ULSMV | Rejected | Estimator plus correction in one name |
 | `se`, `test`, `information`, `h1.information`, `observed.information`, `likelihood`, `bootstrap` | Dropped | Set by the policy |
 | `bounds` | `psd` | The principled replacement |
-| `start` | `"default"` or `"fabin3"` (added 2026-09-26) | FABIN3 was the ML and GLS start before the layered start; it reproduces earlier results and gives every fit, ordinary and PSD, the same start. Other starts and start vectors stay in the lab |
+| `start` | `"default"`, `"fabin3"`, a previous fit or a parameter table (added 2026-09-26) | FABIN3 was the ML and GLS start before the layered start; it reproduces earlier results and gives every fit, ordinary and PSD, the same start. A fit or table sets the start of each matching free parameter, as lavaan's `start = fit`. Other start constructors stay in the lab |
 | `optimizer`, `control`, `W`, `stage2_weight`, `dls_a`, `stage1_regularization`, `pd_gamma` | Lab only | Expert tuning |
 | `orthogonal`, `auto.*`, `int.ov.free` and similar | Lab only | Expressible in model syntax or `model_spec()` |
 | `sample.cov`, `sample.nobs` | Lab only | The policy needs raw data |

@@ -76,6 +76,22 @@ test_that("start = \"fabin3\" gives the former FABIN3 start", {
                "not available with `ordered` or `cluster`")
 })
 
+test_that("start = a fit or a parameter table sets the start values", {
+  d <- hs()
+  fit <- magmaan(cfa, d, inference = FALSE)
+  again <- magmaan(cfa, d, start = fit, inference = FALSE)
+  expect_equal(as_lab_fit(again)$start$theta, unname(coef(fit)), tolerance = 1e-12)
+  expect_equal(coef(again), coef(fit), tolerance = 1e-6)
+  table <- coef(summary(fit))
+  table$est[table$lhs == "visual" & table$rhs == "x2"] <- 0.3
+  partial <- magmaan(cfa, d, start = table[table$op == "=~", ], inference = FALSE)
+  x2 <- which(names(coef(fit)) == "visual=~x2")
+  expect_equal(as_lab_fit(partial)$start$theta[x2], 0.3)
+  psd <- magmaan(cfa, d, psd = TRUE, start = fit, inference = FALSE)
+  expect_equal(as_lab_fit(psd)$start$theta, unname(coef(fit)), tolerance = 1e-12)
+  expect_error(magmaan(cfa, d, start = data.frame(lhs = "visual")), "start table needs")
+})
+
 test_that("bundled lavaan estimator names point to the plain estimator", {
   d <- hs()
   expect_error(magmaan(cfa, d, estimator = "MLR"), "Use estimator = \"ML\"")

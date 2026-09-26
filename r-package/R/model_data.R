@@ -2282,6 +2282,26 @@ frontier_fit_mixed_ordinal_psd <- function(
 # Shared front half of fit_model() and frontier_fit_sphere(): resolve the
 # grouping column, build (or validate) the model spec, and force a mean
 # structure for FIML/ML2S. Messages are prefixed with `caller`.
+# Start values from a parameter table (for example a previous fit's), matched
+# to the model's free rows by lhs, op, rhs and group, as lavaan's `start = fit`.
+# The values become the rows' start hints, which override the constructed
+# start; unmatched free rows keep it.
+.start_from_table <- function(spec, table) {
+  need <- c("lhs", "op", "rhs")
+  value <- if ("start" %in% names(table)) "start" else "est"
+  if (!all(c(need, value) %in% names(table))) {
+    stop("fit_model(): a start table needs columns lhs, op, rhs and est (or start)",
+         call. = FALSE)
+  }
+  pt <- spec$partable
+  key <- function(x) paste(x$lhs, x$op, x$rhs, if (is.null(x$group)) 1L else x$group)
+  hit <- match(key(pt), key(table))
+  use <- pt$free > 0 & !is.na(hit) & is.finite(table[[value]][hit])
+  pt$ustart[use] <- table[[value]][hit[use]]
+  spec$partable <- pt
+  spec
+}
+
 .magmaan_prepare_spec <- function(model, data, estimator, groups, dots,
                                   ordered, parameterization,
                                   caller = "fit_model") {
@@ -2412,6 +2432,11 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                                 ordered, parameterization, caller = "fit_model")
   spec <- prep$spec
   group_var <- prep$group_var
+  if (is.data.frame(control$start)) {
+    spec <- .start_from_table(spec, control$start)
+    control$start <- NULL
+    if (!length(control)) control <- NULL
+  }
   done <- function(fit) {
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
     fit$options$psd <- psd
