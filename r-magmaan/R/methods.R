@@ -37,7 +37,8 @@ vcov.magmaan <- function(object, ...) {
 }
 
 #' @export
-confint.magmaan <- function(object, parm, level = 0.95, ...) {
+confint.magmaan <- function(object, parm, level = 0.95, test = "wald", ...) {
+  .check_test(test, "confint()")
   V <- .inference_result(object, "covariance", "confint()")
   est <- coef(object)
   if (!missing(parm)) est <- est[parm]
@@ -62,10 +63,15 @@ nobs.magmaan <- function(object, ...) {
 #'
 #' @param fit A [magmaan()] fit.
 #' @param level Confidence level of the intervals.
+#' @param test The test behind the p-values and intervals. `"wald"`: the
+#'   z-statistic from the policy's robust standard errors, and the interval
+#'   estimate plus or minus z times the standard error. Inverting the
+#'   likelihood-ratio test (`"lr"`) is planned.
 #' @return A data frame.
 #' @export
-parameters <- function(fit, level = 0.95) {
+parameters <- function(fit, level = 0.95, test = "wald") {
   if (!inherits(fit, "magmaan")) stop("parameters(): supply a magmaan() fit", call. = FALSE)
+  .check_test(test, "parameters()")
   pt <- fit$lab$partable
   pt <- pt[!pt$op %in% .constraint_ops, , drop = FALSE]
   ngroups <- length(fit$lab$nobs)
@@ -132,8 +138,8 @@ print.magmaan <- function(x, ...) {
 }
 
 #' @export
-summary.magmaan <- function(object, level = 0.95, ...) {
-  structure(list(fit = object, parameters = parameters(object, level = level),
+summary.magmaan <- function(object, level = 0.95, test = "wald", ...) {
+  structure(list(fit = object, parameters = parameters(object, level = level, test = test),
                  tests = .global_tests(object), level = level),
             class = "summary.magmaan")
 }
@@ -245,4 +251,10 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")
   invisible(x)
+}
+
+# The test behind parameter p-values and intervals. Only Wald exists; the
+# argument keeps room for likelihood-ratio inversion without changing calls.
+.check_test <- function(test, caller) {
+  .check_choice(test, "test", "wald", planned = "lr", caller = caller)
 }

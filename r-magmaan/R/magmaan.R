@@ -213,16 +213,16 @@ as_lab_fit <- function(fit) {
   invisible(x)
 }
 
-.check_choice <- function(x, arg, choices, planned = character()) {
+.check_choice <- function(x, arg, choices, planned = character(), caller = "magmaan()") {
   if (!is.character(x) || length(x) != 1L || is.na(x)) {
-    stop(sprintf("magmaan(): `%s` must be one string", arg), call. = FALSE)
+    stop(sprintf("%s: `%s` must be one string", caller, arg), call. = FALSE)
   }
   if (x %in% planned) {
-    stop(sprintf("magmaan(): %s = \"%s\" is planned but not available yet", arg, x),
+    stop(sprintf("%s: %s = \"%s\" is planned but not available yet", caller, arg, x),
          call. = FALSE)
   }
   if (!x %in% choices) {
-    stop(sprintf("magmaan(): `%s` must be one of %s", arg,
+    stop(sprintf("%s: `%s` must be one of %s", caller, arg,
                  paste0("\"", choices, "\"", collapse = ", ")), call. = FALSE)
   }
   x
