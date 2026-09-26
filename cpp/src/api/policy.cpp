@@ -1,5 +1,7 @@
 #include "magmaan/api/policy.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "magmaan/estimate/diagnostics.hpp"
@@ -12,10 +14,10 @@ std::string_view reason_name(InferenceReason reason) noexcept {
   switch (reason) {
     case InferenceReason::Available:        return "available";
     case InferenceReason::NotConverged:     return "not_converged";
-    case InferenceReason::PsdBoundary:      return "psd_boundary";
     case InferenceReason::Saturated:        return "saturated";
     case InferenceReason::UnsupportedModel: return "unsupported_model";
     case InferenceReason::NumericFailure:   return "numeric_failure";
+    case InferenceReason::NotNested:        return "not_nested";
   }
   return "unknown";
 }
@@ -42,8 +44,8 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail) {
 
 namespace {
 
-void global_test(robust::frontier::NTMLFit& fit, bool score, PolicyGlobalTest& out) {
-  auto q = robust::frontier::ntml_quadratic(fit, score);
+void calibrate(const post_expected<std::shared_ptr<robust::frontier::NTMLQuadratic>>& q,
+               PolicyTest& out) {
   if (!q) {
     out.reason = InferenceReason::NumericFailure;
     out.detail = q.error().detail;
@@ -67,6 +69,12 @@ void global_test(robust::frontier::NTMLFit& fit, bool score, PolicyGlobalTest& o
                                            {FmgMethod::Peba, 4.0, true}).p_value;
 }
 
+void set_unavailable(PolicyTest& test, InferenceReason reason, const std::string& detail) {
+  test = PolicyTest{};
+  test.reason = reason;
+  test.detail = detail;
+}
+
 }  // namespace
 
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
@@ -75,14 +83,8 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
     return policy_unavailable(InferenceReason::NotConverged,
                               "the fit did not pass its convergence verdict");
   }
-  if (state.psd_boundary) {
-    return policy_unavailable(
-        InferenceReason::PsdBoundary,
-        "the PSD-constrained estimate lies on the cone boundary, where regular "
-        "Wald, score and likelihood-ratio theory does not apply");
-  }
-
   PolicyInference out;
+  out.psd_boundary = state.psd_boundary;
   auto covariance = robust::frontier::ntml_score_sandwich(fit, robust::Information::Observed);
   if (covariance) {
     out.covariance = **covariance;
@@ -107,8 +109,42 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
         "the model has zero degrees of freedom, so there is no global test";
     return out;
   }
-  global_test(fit, true, out.score);
-  global_test(fit, false, out.lr);
+  calibrate(robust::frontier::ntml_quadratic(fit, true), out.score);
+  calibrate(robust::frontier::ntml_quadratic(fit, false), out.lr);
+  return out;
+}
+
+PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
+                              const PolicyFitState& null_state,
+                              std::shared_ptr<robust::frontier::NTMLFit> alternative,
+                              const PolicyFitState& alternative_state) {
+  PolicyNested out;
+  out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
+  auto unavailable = [&](InferenceReason reason, const std::string& detail) {
+    set_unavailable(out.score, reason, detail);
+    set_unavailable(out.lr, reason, detail);
+    return out;
+  };
+  if (!null_state.converged || !alternative_state.converged) {
+    return unavailable(InferenceReason::NotConverged,
+                       "a fit did not pass its convergence verdict");
+  }
+  auto hypothesis = robust::frontier::prepare_ntml_hypothesis(std::move(null),
+                                                              std::move(alternative));
+  if (!hypothesis) return unavailable(InferenceReason::NotNested, hypothesis.error().detail);
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true), out.score);
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, false), out.lr);
+  // A negative difference means the alternative stopped above the null's
+  // optimum, so at least one fit is not at its minimum. The score statistic
+  // needs only the null fit and stays.
+  const auto& h = **hypothesis;
+  const double scale = inference::chi2_stat(h.null_fit->data->sample, h.null_fit->estimates);
+  if (out.lr.reason == InferenceReason::Available &&
+      out.lr.statistic < -1e-8 * std::max(1.0, scale)) {
+    set_unavailable(out.lr, InferenceReason::NotConverged,
+                    "the alternative fits worse than the null (likelihood-ratio "
+                    "statistic " + std::to_string(out.lr.statistic) + ")");
+  }
   return out;
 }
 

@@ -11146,7 +11146,7 @@ Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
 #include "magmaan/api/policy.hpp"
 
 namespace {
-Rcpp::List policy_test_list(const magmaan::api::PolicyGlobalTest& t) {
+Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
   return Rcpp::List::create(
       Rcpp::_["available"] = t.reason == magmaan::api::InferenceReason::Available,
       Rcpp::_["reason"] = std::string(magmaan::api::reason_name(t.reason)),
@@ -11183,7 +11183,36 @@ Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary
       Rcpp::_["covariance_reason"] = std::string(magmaan::api::reason_name(out.covariance_reason)),
       Rcpp::_["covariance_detail"] = out.covariance_detail,
       Rcpp::_["score"] = policy_test_list(out.score),
-      Rcpp::_["lr"] = policy_test_list(out.lr));
+      Rcpp::_["lr"] = policy_test_list(out.lr),
+      Rcpp::_["psd_boundary"] = out.psd_boundary);
+}
+
+// policy_nested_impl() — mirrors api::policy_nested_ml() on two prepared
+// inference contexts that share one prepared dataset.
+//
+// [[Rcpp::export]]
+Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
+                              Rcpp::LogicalVector null_state,
+                              Rcpp::LogicalVector alternative_state) {
+  auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
+  auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
+  using magmaan::api::InferenceReason;
+  magmaan::api::PolicyNested out;
+  if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
+    const std::string detail =
+        "nested policy tests cover complete-data ML with random x, affine equality "
+        "constraints and no active bounds";
+    for (auto* t : {&out.score, &out.lr}) {
+      t->reason = InferenceReason::UnsupportedModel;
+      t->detail = detail;
+    }
+  } else {
+    out = magmaan::api::policy_nested_ml(a.ntml, {bool(null_state[0]), bool(null_state[1])},
+                                         b.ntml, {bool(alternative_state[0]), bool(alternative_state[1])});
+  }
+  return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
+                            Rcpp::_["lr"] = policy_test_list(out.lr),
+                            Rcpp::_["psd_boundary"] = out.psd_boundary);
 }
 
 // [[Rcpp::export]]

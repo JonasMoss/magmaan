@@ -236,8 +236,87 @@ TEST_CASE("policy: the fit state gates every component") {
   CHECK(failed.covariance_reason == api::InferenceReason::NotConverged);
   CHECK(failed.score.reason == api::InferenceReason::NotConverged);
   CHECK(failed.covariance.size() == 0);
+  // A PSD boundary estimate still gets every component, flagged: the regular
+  // limits hold when the population is interior.
+  auto interior = api::policy_inference_ml(*p.fit, {true, false});
   auto boundary = api::policy_inference_ml(*p.fit, {true, true});
-  CHECK(boundary.covariance_reason == api::InferenceReason::PsdBoundary);
-  CHECK(boundary.lr.reason == api::InferenceReason::PsdBoundary);
-  CHECK(api::reason_name(boundary.lr.reason) == "psd_boundary");
+  CHECK_FALSE(interior.psd_boundary);
+  CHECK(boundary.psd_boundary);
+  CHECK(boundary.covariance_reason == api::InferenceReason::Available);
+  CHECK(boundary.lr.reason == api::InferenceReason::Available);
+  CHECK((boundary.covariance - interior.covariance).norm() == 0.0);
+  CHECK(boundary.score.statistic == interior.score.statistic);
+}
+
+namespace {
+
+std::shared_ptr<ntml::NTMLFit> prepare_on(const std::shared_ptr<ntml::NTMLData>& data,
+                                          const Model& model) {
+  auto est = magmaan::test::fit(model.pt, model.rep, data->sample);
+  REQUIRE(est.has_value());
+  auto fit = ntml::prepare_ntml_fit(data, model.pt, model.rep, *est);
+  REQUIRE(fit.has_value());
+  return *fit;
+}
+
+}  // namespace
+
+TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
+  std::mt19937 rng(314u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 400, Eigen::Vector4d::Zero()));
+  auto data = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(data.has_value());
+  const Model alt_model = build("f =~ x1 + x2 + x3 + x4", false);
+  const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", false);
+  auto alt = prepare_on(*data, alt_model);
+  auto null = prepare_on(*data, null_model);
+  auto out = api::policy_nested_ml(null, {}, alt, {});
+  CHECK_FALSE(out.psd_boundary);
+  // References on fresh snapshots of the same fits.
+  auto h = ntml::prepare_ntml_hypothesis(prepare_on(*data, null_model), prepare_on(*data, alt_model));
+  REQUIRE(h.has_value());
+  for (bool score : {true, false}) {
+    const auto& test = score ? out.score : out.lr;
+    REQUIRE(test.reason == api::InferenceReason::Available);
+    auto quadratic = ntml::ntml_quadratic(**h, score);
+    REQUIRE(quadratic.has_value());
+    auto spectrum = ntml::ntml_spectrum(**quadratic);
+    REQUIRE(spectrum.has_value());
+    CHECK(test.df == 2);
+    CHECK(test.statistic == doctest::Approx((*quadratic)->statistic).epsilon(1e-12));
+    CHECK((test.eigenvalues - **spectrum).norm() < 1e-12);
+    using ntml::FmgMethod;
+    CHECK(test.p_peba4 == doctest::Approx(ntml::fmg_test(test.statistic, 2, **spectrum,
+                                          {FmgMethod::Peba, 4.0, true}).p_value));
+    CHECK(test.p_sb == doctest::Approx(inf::chi2_pvalue(test.statistic / test.sb_scale, 2)));
+  }
+  CHECK(out.lr.statistic == doctest::Approx(inf::chi2_stat((*data)->sample, null->estimates) -
+                                            inf::chi2_stat((*data)->sample, alt->estimates)));
+  // Under a true null the score and LR statistics agree to first order.
+  CHECK(std::abs(out.score.statistic - out.lr.statistic) < 0.1 * (1.0 + out.lr.statistic));
+}
+
+TEST_CASE("policy nested tests: gating and nesting") {
+  std::mt19937 rng(2718u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 250, Eigen::Vector4d::Zero()));
+  auto data = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(data.has_value());
+  auto alt = prepare_on(*data, build("f =~ x1 + x2 + x3 + x4", false));
+  auto null = prepare_on(*data, build("f =~ x1 + a*x2 + a*x3 + x4", false));
+  auto swapped = api::policy_nested_ml(alt, {}, null, {});
+  CHECK(swapped.lr.reason == api::InferenceReason::NotNested);
+  CHECK(api::reason_name(swapped.score.reason) == "not_nested");
+  auto failed = api::policy_nested_ml(null, {false, false}, alt, {});
+  CHECK(failed.lr.reason == api::InferenceReason::NotConverged);
+  auto boundary = api::policy_nested_ml(null, {true, true}, alt, {});
+  CHECK(boundary.psd_boundary);
+  CHECK(boundary.lr.reason == api::InferenceReason::Available);
+  // Different observations cannot be compared.
+  auto other = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(other.has_value());
+  auto elsewhere = api::policy_nested_ml(prepare_on(*other, build("f =~ x1 + a*x2 + a*x3 + x4", false)),
+                                         {}, alt, {});
+  CHECK(elsewhere.score.reason == api::InferenceReason::NotNested);
 }

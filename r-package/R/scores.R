@@ -247,9 +247,42 @@ policy_inference <- function(fit, data = NULL) {
   if (inherits(context, "error")) {
     return(.policy_unavailable("unsupported_model", conditionMessage(context)))
   }
-  psd_boundary <- identical(fit$verdict$domain, "psd") &&
-    identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE)
-  policy_inference_impl(context$native, isTRUE(fit$converged), psd_boundary)
+  state <- .policy_state(fit)
+  policy_inference_impl(context$native, state[[1]], state[[2]])
+}
+
+# Converged, and a PSD estimate on the cone boundary (inference is computed
+# there under an interior population, and flagged).
+.policy_state <- function(fit) {
+  c(isTRUE(fit$converged),
+    identical(fit$verdict$domain, "psd") &&
+      identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE))
+}
+
+# magmaan's nested tests of fit_H0 against fit_H1, as applied by the
+# ordinary-user package's anova(): the likelihood-ratio and score statistics,
+# each with SB and PEBA4. fit_H0 must be fit_H1's model plus equality
+# constraints (same parameters), fitted to the same observations.
+policy_nested <- function(fit_H1, fit_H0, data = NULL) {
+  if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
+    stop("policy_nested(): supply two fitted magmaan models")
+  unsupported <- function(detail) {
+    t <- .policy_unavailable("unsupported_model", detail)$score
+    list(score = t, lr = t, psd_boundary = FALSE)
+  }
+  for (fit in list(fit_H1, fit_H0)) {
+    if (!identical(toupper(fit$estimator %||% ""), "ML") || !is.null(fit$nclusters))
+      return(unsupported("the inference policy covers single-level complete-data ML so far"))
+  }
+  if (is.null(data) && !identical(fit_H1$raw_data, fit_H0$raw_data))
+    stop("policy_nested(): the two fits must use the same observations in the same order")
+  contexts <- tryCatch({
+    shared <- prepare_inference_data(fit_H1, data)
+    list(H0 = prepare_inference(fit_H0, shared), H1 = prepare_inference(fit_H1, shared))
+  }, error = function(e) e)
+  if (inherits(contexts, "error")) return(unsupported(conditionMessage(contexts)))
+  policy_nested_impl(contexts$H0$native, contexts$H1$native,
+                     .policy_state(fit_H0), .policy_state(fit_H1))
 }
 
 .policy_unavailable <- function(reason, detail) {
@@ -257,5 +290,5 @@ policy_inference <- function(fit, data = NULL) {
                statistic = NA_real_, df = 0L, sb_scale = NA_real_,
                p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric())
   list(covariance = NULL, covariance_available = FALSE, covariance_reason = reason,
-       covariance_detail = detail, score = test, lr = test)
+       covariance_detail = detail, score = test, lr = test, psd_boundary = FALSE)
 }

@@ -176,6 +176,27 @@ report the analogous score and likelihood-ratio (or fit-function difference)
 tests with SB and PEBA4. The comparison checks that data, estimator and nesting
 agree.
 
+Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26):
+
+- **Nesting.** The restricted model is the other model plus equality
+  constraints on the same parameters (shared labels, or `b == 0` on a labeled
+  parameter). The restriction map is exact. A restriction written as a fixed
+  value (`0*`) changes the parameter slots and is not yet recognized (backlog).
+- **Likelihood ratio.** The difference of the two normal-theory fit statistics.
+  Its spectrum uses the expected information at the larger model with the
+  empirical Gamma: Satorra (2000) with the exact restriction map. SB equals
+  lavaan's `lavTestLRT(method = "satorra.2000", A.method = "exact",
+  scaled.shifted = FALSE)` on MLM fits. Evidence for SB and PEBA on this
+  statistic: FMG (2026) Study 2, reproduced in
+  `experiments/replications/07-foldnes-moss-gronneberg-2026-study2/`.
+- **Score.** Evaluated at the restricted fit: casewise likelihood scores along
+  the restriction directions, projected against the restricted model's own
+  directions with its expected information (the efficient score), and the
+  expected-information metric. The projection keeps the statistic meaningful
+  where the restricted fit is not stationary, as at a PSD boundary. It mirrors
+  the global score test (engineering/16); a calibration study of its own is
+  still missing (backlog).
+
 Where observed information matters: under the global null the observed and
 expected Hessians differ by O_p(n^-1/2), so the global tests have the same
 asymptotic law either way and the choice is a finite-sample one. For parameter
@@ -198,11 +219,19 @@ does not make that null true.
   different estimator.
 - Structural gaps (an estimator path whose policy is not yet implemented) are
   reported as unavailable, not refused, so the estimates remain usable.
-- With `psd = TRUE`, interior solutions get full inference. Boundary solutions
-  report inference unavailable until a boundary-aware policy exists;
-  boundary-aware optimization does not establish boundary-aware sampling
-  inference. The default stays `psd = FALSE` pending the separate decision on
-  the default PSD estimation policy.
+- With `psd = TRUE`, every converged fit gets full inference, including one
+  whose estimate lies on the boundary of the covariance space (since
+  2026-09-26). When the population is interior, the PSD and ordinary
+  estimators coincide with probability tending to one, so the regular limits
+  apply; a boundary estimate is a finite-sample event. The output says that
+  the inference assumes an interior population. Improper ordinary fits get
+  inference under the same assumption. A population on the boundary (a
+  hypothesis that a growth factor has no variance, or a correlation of one)
+  has chi-bar-square limits and stays out of scope. Evidence at interior
+  populations near the boundary: the covariance-honest paper's
+  interior-inference study, with normal-theory tests so far; its rerun with
+  the policy components is planned. The default stays `psd = FALSE` pending
+  the separate decision on the default PSD estimation policy.
 
 ## Validation
 
@@ -275,8 +304,8 @@ a `control` option for non-converging fits, and summary-statistic input.
 4. Rename the compiled package to `magmaanlab`, remove its `magmaan()`, and
    create the pure-R `magmaan` package with `magmaan()`, `infer()`,
    `as_lab_fit()`, `print`, `summary`, `coef`, `vcov`, `confint`,
-   `parameters()` and `anova()`. Done on 2026-09-25 except `anova()`, which
-   waits for the composer.
+   `parameters()` and `anova()`. Done on 2026-09-25; `anova()` on 2026-09-26,
+   for complete-data ML.
 5. Extend the policy to FIML, ML2S, ordinal and mixed, and two-level fits,
    with a component-level capability table.
 6. Migrate experiments, examples, the vendoring scripts and the cluster install

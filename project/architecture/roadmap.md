@@ -3997,9 +3997,16 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   centered-moment `ntml_covariance(fit, true)` and `casewise_scores()` use the
   sample mean). The global score and likelihood-ratio tests come from the
   shared expected-information NTML geometry, each calibrated with SB and PEBA4.
-  Components carry typed reasons (`not_converged`, `psd_boundary` for a PSD fit
-  whose covariance blocks are singular, `saturated`, `unsupported_model`,
-  `numeric_failure`) instead of substitute results. C++ unit tests check the
+  Components carry typed reasons (`not_converged`, `saturated`,
+  `unsupported_model`, `numeric_failure`, `not_nested`) instead of substitute
+  results. A PSD estimate on the cone boundary gets every component, flagged
+  `psd_boundary`: the inference assumes an interior population (since
+  2026-09-26; before, it was refused). Nested tests are
+  `api::policy_nested_ml()`, exposed as `magmaanlab::policy_nested()` and
+  `magmaan::anova()`: the likelihood-ratio difference and the efficient score
+  at the restricted fit, each with SB and PEBA4, for a restricted model that
+  adds equality constraints on the same parameters. SB matches lavaan's
+  `satorra.2000` with the exact restriction map. C++ unit tests check the
   covariance against finite-difference casewise scores, including two-group
   scalar invariance with misfitting means; the R tests match lavaan's MLR
   standard errors (single- and multi-group with structured means), its

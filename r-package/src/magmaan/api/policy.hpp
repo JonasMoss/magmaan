@@ -7,6 +7,7 @@
 // component is ever replaced by a result under another convention.
 
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -20,10 +21,10 @@ namespace magmaan::api {
 enum class InferenceReason {
   Available,
   NotConverged,      // the fit did not pass its convergence verdict
-  PsdBoundary,       // PSD-constrained fit on the cone boundary: nonregular
   Saturated,         // zero degrees of freedom: no global test exists
   UnsupportedModel,  // outside the policy's model class (e.g. fixed x)
   NumericFailure,    // singular information or a failed decomposition
+  NotNested,         // the null is not the alternative plus equality constraints
 };
 
 std::string_view reason_name(InferenceReason reason) noexcept;
@@ -38,7 +39,9 @@ struct PolicyFitState {
 
 PolicyFitState policy_fit_state(const estimate::Estimates& estimates);
 
-struct PolicyGlobalTest {
+// One test statistic with its calibrations: a global test against the
+// saturated model, or a nested test of a null against an alternative.
+struct PolicyTest {
   InferenceReason reason = InferenceReason::Available;
   std::string detail;
   double statistic = std::numeric_limits<double>::quiet_NaN();
@@ -54,7 +57,24 @@ struct PolicyInference {
   InferenceReason covariance_reason = InferenceReason::Available;
   std::string covariance_detail;
   Eigen::MatrixXd covariance;  // free parameters, total-sample scale
-  PolicyGlobalTest score, lr;
+  PolicyTest score, lr;
+  // The fit is a PSD-constrained estimate on the cone boundary. Inference is
+  // still computed there: when the population is interior, the PSD and
+  // ordinary estimators coincide with probability tending to one, so the
+  // regular limits apply. Callers report that assumption.
+  bool psd_boundary = false;
+};
+
+// Nested tests of `null` against `alternative`, which must be fits to one
+// prepared dataset in the same parameter slots, the null adding equality
+// constraints: the likelihood-ratio statistic (the difference of the two fit
+// statistics) and the score statistic at the null, whose restriction
+// directions are projected against the null's own directions, so it keeps its
+// meaning at a PSD boundary null. Each is calibrated with SB and PEBA4 from
+// the restriction's UGamma spectrum.
+struct PolicyNested {
+  PolicyTest score, lr;
+  bool psd_boundary = false;  // either fit is a PSD estimate on the boundary
 };
 
 // All components unavailable for one reason.
@@ -74,5 +94,10 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 // for this geometry.
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state);
+
+PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
+                              const PolicyFitState& null_state,
+                              std::shared_ptr<robust::frontier::NTMLFit> alternative,
+                              const PolicyFitState& alternative_state);
 
 }  // namespace magmaan::api

@@ -206,7 +206,7 @@ test_that("saturated models have a covariance but no global test", {
   expect_equal(dim(vcov(fit)), c(6L, 6L))
 })
 
-test_that("PSD fits on the cone boundary get no inference", {
+test_that("PSD fits on the cone boundary get inference for an interior population", {
   set.seed(3)
   n <- 150
   f <- stats::rnorm(n)
@@ -214,7 +214,64 @@ test_that("PSD fits on the cone boundary get no inference", {
                   y3 = 0.4 * f + stats::rnorm(n), y4 = 0.6 * f + stats::rnorm(n))
   m <- "F =~ y1 + y2 + y3 + y4"
   boundary <- suppressWarnings(magmaan(m, d, psd = TRUE))
-  expect_true(all(boundary$inference$status$reason == "psd_boundary"))
+  expect_false(isTRUE(as_lab_fit(boundary)$diagnostics$newton_accuracy$covariance_interior))
+  expect_true(all(boundary$inference$status$available))
+  expect_true(boundary$inference$psd_boundary)
+  expect_output(print(summary(boundary)), "assumes the population is interior")
+  # The same components as the explicit lab composition at that estimate.
+  lab <- magmaanlab::policy_inference(as_lab_fit(boundary))
+  expect_equal(unname(vcov(boundary)), unname(lab$covariance))
+  expect_true(lab$psd_boundary)
   interior <- magmaan(cfa, hs(), psd = TRUE)
   expect_true(all(interior$inference$status$available))
+  expect_false(interior$inference$psd_boundary)
+})
+
+test_that("anova() gives nested LR and score tests with SB and PEBA4", {
+  d <- hs()
+  m1 <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9"
+  m0 <- "visual =~ x1 + a*x2 + a*x3\ntextual =~ x4 + b*x5 + b*x6\nspeed =~ x7 + x8 + x9"
+  f1 <- magmaan(m1, d)
+  f0 <- magmaan(m0, d)
+  a <- anova(f0, f1)
+  expect_s3_class(a, "magmaan_anova")
+  expect_equal(attr(a, "restricted"), "f0")
+  expect_equal(unclass(anova(f1, f0)), unclass(a), ignore_attr = TRUE)
+  expect_equal(a$df, c(2L, 2L))
+  # LR: the normal-theory difference, and SB is lavaan's Satorra (2000) with
+  # the exact restriction map.
+  l1 <- lavaan::cfa(m1, d, estimator = "MLM")
+  l0 <- lavaan::cfa(m0, d, estimator = "MLM")
+  nt <- lavaan::lavTestLRT(lavaan::cfa(m0, d), lavaan::cfa(m1, d))
+  expect_equal(a$statistic[1], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
+  sb <- lavaan::lavTestLRT(l0, l1, method = "satorra.2000", A.method = "exact",
+                           scaled.shifted = FALSE)
+  expect_equal(a$statistic[1] / a$sb.scale[1], as.numeric(sb[2, "Chisq diff"]), tolerance = 1e-6)
+  expect_equal(a$p.sb[1], as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
+  # Score: the lab's hypothesis quadratic, calibrated explicitly.
+  shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))
+  h <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(as_lab_fit(f0), shared),
+                                      magmaanlab::prepare_inference(as_lab_fit(f1), shared))
+  cal <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "score"),
+                                         c("sb", "peba4"))
+  expect_equal(a$statistic[2], cal$statistic[1], tolerance = 1e-10)
+  expect_equal(c(a$p.sb[2], a$p.peba4[2]), cal$p_value, tolerance = 1e-10)
+  expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
+})
+
+test_that("anova() refuses pairs it cannot compare", {
+  d <- hs()
+  f1 <- magmaan(cfa, d, inference = FALSE)
+  other <- magmaan("visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ 0*textual", d,
+                   inference = FALSE)
+  expect_error(anova(f1, other), "not nested")
+  expect_error(anova(f1, magmaan(cfa, d[-1, ], inference = FALSE)), "same observations")
+  expect_error(anova(f1, magmaan(cfa, d, psd = TRUE, inference = FALSE)), "psd setting")
+  expect_error(anova(f1), "exactly two")
+  # A restriction written as a constraint on a labeled parameter is nested.
+  labeled <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ c*textual"
+  zero <- paste(labeled, "c == 0", sep = "\n")
+  z <- anova(magmaan(zero, d, inference = FALSE), magmaan(labeled, d, inference = FALSE))
+  expect_equal(z$df, c(1L, 1L))
+  expect_true(all(is.finite(z$p.sb)))
 })

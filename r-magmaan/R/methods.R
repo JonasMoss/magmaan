@@ -159,6 +159,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     print(t, row.names = FALSE)
   }
   inf <- fit$inference
+  if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")
   if (!is.null(inf) && !all(inf$status$available)) {
     cat("\nUnavailable inference\n")
     s <- inf$status[!inf$status$available, , drop = FALSE]
@@ -167,5 +168,81 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
           if (nzchar(s$detail[i])) paste0(" (", s$detail[i], ")"), "\n", sep = "")
     }
   }
+  invisible(x)
+}
+
+.boundary_note <- paste(
+  "The PSD estimate lies on the boundary of the covariance space. The inference",
+  "assumes the population is interior (every covariance matrix positive definite).")
+
+#' Compare two nested magmaan fits
+#'
+#' Likelihood-ratio and score tests of the restricted fit against the other,
+#' each calibrated with SB and PEBA4, as the global tests are. The restricted
+#' model must be the other model plus equality constraints on its parameters,
+#' such as a shared label or `b == 0`, fitted to the same observations with
+#' the same estimator and `psd` setting. For a single restriction, a Wald test
+#' is the z-statistic of a defined parameter such as `d := a - b` in
+#' [parameters()].
+#'
+#' @param object,... Two [magmaan()] fits, in either order.
+#' @return A data frame with one row per test, of class `magmaan_anova`.
+#' @export
+anova.magmaan <- function(object, ...) {
+  fits <- c(list(object), list(...))
+  labels <- vapply(as.list(substitute(list(object, ...)))[-1L],
+                   function(e) paste(deparse(e), collapse = ""), character(1))
+  if (length(fits) != 2L || !all(vapply(fits, inherits, logical(1), "magmaan"))) {
+    stop("anova(): compare exactly two magmaan() fits", call. = FALSE)
+  }
+  a <- fits[[1L]]$lab
+  b <- fits[[2L]]$lab
+  if (!identical(fits[[1L]]$estimator, fits[[2L]]$estimator) ||
+      !identical(fits[[1L]]$psd, fits[[2L]]$psd)) {
+    stop("anova(): the fits must use the same estimator and psd setting", call. = FALSE)
+  }
+  if (!identical(a$raw_data, b$raw_data)) {
+    stop("anova(): the fits must use the same observations in the same order", call. = FALSE)
+  }
+  null <- 2L
+  res <- magmaanlab::policy_nested(a, b)
+  if (identical(res$lr$reason, "not_nested")) {
+    swapped <- magmaanlab::policy_nested(b, a)
+    if (identical(swapped$lr$reason, "not_nested")) {
+      stop("anova(): the models are not nested: the restricted model must be the ",
+           "other model plus equality constraints on its parameters (",
+           res$lr$detail, ")", call. = FALSE)
+    }
+    res <- swapped
+    null <- 1L
+  }
+  rows <- lapply(c("lr", "score"), function(component) {
+    t <- res[[component]]
+    data.frame(test = if (component == "lr") "likelihood ratio" else "score",
+               statistic = t$statistic, df = t$df, p.sb = t$p_sb,
+               p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  reasons <- vapply(res[c("lr", "score")], function(t)
+    if (isTRUE(t$available)) "" else paste0(t$reason, if (nzchar(t$detail)) paste0(": ", t$detail)),
+    character(1))
+  structure(out, class = c("magmaan_anova", "data.frame"),
+            restricted = labels[[null]], alternative = labels[[3L - null]],
+            unavailable = reasons[nzchar(reasons)],
+            psd_boundary = isTRUE(res$psd_boundary))
+}
+
+#' @export
+print.magmaan_anova <- function(x, digits = 3, ...) {
+  cat("Nested tests of ", attr(x, "restricted"), " (restricted) against ",
+      attr(x, "alternative"), "\n", sep = "")
+  t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
+  num <- vapply(t, is.numeric, logical(1))
+  t[num] <- lapply(t[num], function(v) round(v, digits))
+  print(t, row.names = FALSE)
+  u <- attr(x, "unavailable")
+  for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
+  if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")
   invisible(x)
 }

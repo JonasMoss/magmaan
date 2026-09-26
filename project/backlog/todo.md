@@ -35,11 +35,24 @@ automatic inference, `r-magmaan/`) over the compiled `magmaanlab` package
 design, starting-point inventory and validation rules are in
 [r-interface-vision.md](../design/r-interface-vision.md). Items in order:
 
-- **M — nested comparisons: `anova(fit0, fit1)`.** The policy composer for
-  complete-data ML landed (see the roadmap). Nested score and LR tests with SB
-  and PEBA4 exist on the shared expected geometry (`prepare_ntml_hypothesis`);
-  specify the nested geometry for a misspecified larger model (observed
-  sensitivity) before wiring `anova()` into `magmaan`.
+- **Nested comparisons: `anova(fit0, fit1)` — DONE for complete-data ML
+  (2026-09-26), with open parts.** `api::policy_nested_ml`,
+  `magmaanlab::policy_nested()` and `magmaan::anova()` give nested LR and score
+  tests with SB and PEBA4 on the shared expected geometry. SB matches lavaan's
+  exact-map Satorra (2000). The geometry is in the design doc. Open:
+  - **M — misspecified larger model.** The expected geometry assumes the larger
+    model is correct. Under misspecification (the usual invariance-testing
+    case) the choice of sensitivity is first order; specify it (observed
+    sensitivity?) and check it before claiming calibration there.
+  - **M — restrictions written as fixed values.** `0*` in the restricted model
+    changes the parameter slots, so `anova()` reports "not nested". Recognize
+    it by embedding the restricted fit in the larger model's slots (the value
+    becomes an equality constraint). Until then users write `b == 0` on a
+    labeled parameter.
+  - **M — calibration evidence for the nested score test.** It mirrors the
+    global score test (engineering/16) but has no study of its own. The
+    covariance-honest paper's interior-inference rerun would be the first.
+  - Other estimators follow the policy's extension (the L item below).
 - **M — least-squares estimators under the policy.** For fixed-weight GLS, ULS,
   WLS and DWLS the global score statistic against the saturated model equals the
   fit-function statistic; report it once with SB and PEBA4 from the policy

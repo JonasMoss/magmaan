@@ -31,7 +31,9 @@ infer <- function(fit) {
     detail = c(res$covariance_detail, res$score$detail, res$lr$detail),
     stringsAsFactors = FALSE
   )
-  out <- list(status = status)
+  # A PSD estimate on the cone boundary: computed, valid for an interior
+  # population (project/design/r-interface-vision.md, Availability).
+  out <- list(status = status, psd_boundary = isTRUE(res$psd_boundary))
   if (isTRUE(res$covariance_available)) {
     V <- res$covariance
     nm <- names(coef(fit))
@@ -75,7 +77,8 @@ infer <- function(fit) {
   inf <- fit$inference
   if (is.null(inf)) return("not computed; call infer(fit)")
   s <- inf$status
-  if (all(s$available)) return("computed")
+  if (all(s$available))
+    return(if (isTRUE(inf$psd_boundary)) "computed, assuming an interior population" else "computed")
   if (!any(s$available)) {
     reasons <- unique(s$reason)
     if (length(reasons) == 1L) return(paste0("unavailable (", reasons, ")"))
