@@ -1,0 +1,6 @@
+{
+  "digits": 90,
+  "method": "profile slope root in [600,900], followed by unrestricted high-precision Newton check",
+  "identification": "original x1/y1 markers",
+  "interpretation": "numerical finite local minimum; not a global-optimality proof"
+}

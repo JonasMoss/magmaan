@@ -35,64 +35,22 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
-The requested identification is now an explicit acceptance requirement: the
-roughly 184,000-loading example must fail in its original marker chart. A
-successful translation to another marker is diagnostic evidence, not an
-automatic replacement fit. This is a near-pole rejection policy; it does not
-assert that the finite endpoint is an exact mathematical pole.
+Of the nine inspected spherical endpoints, two are near-pole failures in the
+requested marker chart. The other seven now have numerical evidence of finite
+local minima in the original marker identification. Five refine directly to
+stable points; one requires the better starting point found earlier; the last
+has an exceptionally flat but finite minimum, confirmed at 60 and 90 decimal
+digits. Six refined points pass the library's ordinary-precision accuracy check.
+The very flat case still fails that check and should remain a numerical failure,
+not be called nonattainment. None of this proves global optimality.
 
-A direct translation-only inspection gives a simpler view of the saved sphere
-endpoints. All nine translate to marker identification; a better-loaded marker
-reduces the largest loading to about 1–1.24. Eight cannot translate to ordinary
-positive std.lv because a latent variance or disturbance is negative. The one
-that can still has negative indicator residual variances. Marker choice explains
-some enormous loadings, but rescaling does not remove the improper variances.
-These are the lowest-objective saved spherical endpoints, including three that
-do not pass the local numerical checks; they are not all accepted solutions.
-
-Inspection across identifications changes the interpretation of the nine ML
-problems previously lacking a screened sphere reference. All nine yield finite,
-locally checked candidates in the expanded diagnostic search. Two now pass the
-original extent screen, six show stable candidates excluded by that magnitude
-cutoff, and one remains numerically delicate. A missing screened reference did
-not mean that every optimizer failed or that no finite solution exists. No
-nonattainment claim is made for these random draws.
-
-The geometry checks now include exact marker and std.lv poles, an attained PSD
-boundary solution, and an analytically nonattained unrestricted-ML target.
-A fixed alternative marker and the sphere recover both pole targets; the
-requested charts cannot attain them. On the nonattainment example, no ML
-attempt passes the screen, while all tested PSD routes agree on a checked
-boundary candidate. This separates chart failure from a change of estimator.
-On the retained fresh PSD batch, FABIN3-auto plus positive spectral starts
-matches 51/60 sphere references under either scaling choice. These results
-support further development, not promotion of the fitting strategy.
-
-Purposeful starts help beyond the original two-factor examples. In 120 fresh
-datasets from three new model families, canonical starts reach the best
-screened objective on 93 problems; the expanded portfolio reaches it on 118.
-The largest gain is in the three-factor chain: 24/40 to 39/40. These are best
-observed candidates within the tested portfolio, not certified optima.
-
-The expansion also reverses one proposed simplification: the all-positive
-spectral start contributes a better candidate on one problem. Keep it for now.
-Single-factor negative alternatives miss ten references found by combined sign
-patterns. Exhaustive combinations are useful for this small reference study,
-but their cost grows exponentially with the factor count; this is not yet a
-production retry policy.
-
-The same spectral recipes also work directly in the ordinary marker chart,
-without fitting on the sphere first. On the 60 previously retained fresh draws,
-layered starts with information scaling match a sphere reference on 35 problems
-with L-BFGS and 36 with PORT; adding four sample-based spectral starts raises
-those counts to 49 and 53. Only 55 draws have a screened sphere reference.
-This is a five-fit exploratory portfolio, not a selected production policy.
-
-The earlier pilot and start-development results remain below as separate
-batches. All screens still use a strongest-indicator marker chart for the local
-Newton cross-check; a sphere-native curvature assessment remains missing.
-Two expanded problems have no screened reference. That does not establish
-nonexistence or a pole. No library default changes here.
+All seven finite ML witnesses have negative primitive variance components.
+That is separate from chart availability and numerical accuracy, and excludes
+them as PSD-ML solutions. In the separate retained fresh PSD batch, FABIN3-auto
+plus positive spectral starts matches 51/60 sphere references under either
+scaling choice. The remaining search gap and the requested-chart rejection gate
+still block promotion. Marker changes in this study are diagnostic only;
+automatic substitution of the user's markers is not the adopted policy.
 
 ```{r results='asis'}
 if (!is.null(probe)) {
@@ -106,6 +64,75 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### What became of the other seven?
+
+We checked the seven endpoints that pass the study's marker-proximity test
+using an independent high-precision calculation of the same unrestricted
+Gaussian ML objective. The original markers x1 and y1 stay fixed at 1. Both
+the saved sphere endpoint and the best locally checked point found earlier
+were used as starting points. The calculation retains the starting sign of
+X's variance while refining, so a trajectory is not silently carried through
+a singular regression representation. It is a local diagnostic, not a new
+production fitter or an exhaustive search.
+
+The derivative formulas agree with independent numerical differentiation at
+high precision. Every retained finite witness has a positive definite observed
+covariance, a vanishing gradient to the stated numerical precision, and positive
+curvature in every free parameter direction. These are strong numerical local
+minimum checks, not exact-arithmetic or global-optimality proofs. The resulting
+points reproduce the library's objective in the original marker chart to
+less than 1e-14 and all pass the explicit 1e-4 chart-proximity check.
+
+```{r}
+finite <- read.csv(file.path("results", "open-case-conclusions", "finite_witnesses.csv"))
+accuracy <- read.csv(file.path("results", "open-case-conclusions", "library_crosscheck.csv"))
+finite <- merge(finite, accuracy[c("case_id","accuracy_status","accuracy_passed")], by="case_id", sort=FALSE)
+tab(data.frame(Batch=finite$batch, Design=finite$design, N=finite$n, Draw=finite$rep,
+  Objective=finite$objective, `Largest loading`=finite$max_loading,
+  `Ordinary-precision accuracy`=ifelse(finite$accuracy_passed,"Pass","Ill-conditioned"),check.names=FALSE))
+```
+
+Five saved spherical endpoints refine directly to the same finite minimum as
+the earlier checked point. Their large or negative variance components do not
+by themselves indicate a runaway path. Two cases need a more specific explanation:
+
+**Fresh weak-marker N=20 draw 1: the sphere had followed a losing path.**
+Sign-preserving continuation from that endpoint approaches X variance zero,
+while the regression coefficient and compensating disturbance grow without
+bound numerically. The continuation reaches X variance about 2e-32 and a
+regression magnitude above 5e30 before stopping; its objective is about
+0.2920422 and its gradient has not vanished. The previously found negative-X-
+variance point instead refines to a finite local minimum at 0.2917589, with
+regression about 6.33 in the requested marker chart. Both sphere backends
+recover it when started from that witness. This identifies a missed basin,
+not nonattainment of the entire problem. It does not establish what other
+paths or minima exist.
+
+**Development weak-marker N=100 draw 2: a very flat finite minimum.**
+Simply increasing ordinary refinement effort made little progress. Holding
+the y3 loading fixed and optimizing the remaining parameters shows the objective
+first decreasing and then increasing. Solving for the bottom of that local
+profile gives loading 740.4555345 and objective 0.0246899172027636. A subsequent
+unrestricted gradient/curvature check confirms a finite numerical local minimum;
+60- and 90-digit calculations agree. This is evidence against interpreting the
+investigated branch as an endlessly improving large-loading sequence.
+
+```{r}
+profile <- read.csv(file.path("results", "delicate-loading-profile", "summary.csv"))
+minimum <- read.csv(file.path("results", "delicate-finite-minimum", "summary.csv"))
+plot(profile$fixed_y3_loading, (profile$objective-minimum$objective)*1e9,
+  log="xy", type="b", pch=19, xlab="Fixed y3 loading (y1 marker = 1)",
+  ylab="Objective above local minimum (× 10⁹)")
+abline(v=minimum$max_loading, lty=2, col="steelblue")
+```
+
+The ordinary-precision library still reports this point as ill-conditioned,
+with an accuracy-condition measure around 5e12, even when supplied the refined
+point. It should remain rejected or unresolved on numerical accuracy grounds.
+Finding the minimum at high precision does not make routine parameter estimates
+or inference reliable. The other six refined witnesses pass that accuracy check.
+All seven are improper ML points; none may be substituted for a PSD fit.
 
 ### Requested-chart failure: the 184,000-loading example
 
@@ -655,6 +682,9 @@ machinery was needed for these recoveries.
 
 ## Reproduce
 
+The high-precision diagnostic scripts require Python with `mpmath`; they are
+study-local checks of the six-indicator, two-factor covariance model only.
+
 ```sh
 cd experiments/engineering/15-sphere-reference-fits
 Rscript scripts/check_labels.R
@@ -672,6 +702,13 @@ Rscript scripts/inspect_unresolved.R
 Rscript scripts/check_escape.R
 Rscript scripts/translate_sphere.R
 Rscript scripts/check_requested_chart.R
+Rscript scripts/export_open_cases.R
+python3 scripts/refine_open_cases.py
+python3 scripts/profile_delicate.py
+python3 scripts/resolve_profile_minimum.py
+python3 scripts/resolve_profile_minimum.py --digits 90 --run-id delicate-finite-minimum-90
+python3 scripts/check_open_cases.py
+Rscript scripts/check_open_case_translation.R
 # Optional reference-informed diagnostic; requires retained raw pilot/start fits:
 Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R

@@ -1,0 +1,9 @@
+{
+  "digits": 60,
+  "max_iterations": 60,
+  "mpmath": "1.3.0",
+  "identification": "original markers x1/y1 fixed at one",
+  "objective": "half Gaussian covariance ML discrepancy, unrestricted primitive variances",
+  "restriction": "retain starting sign of var(X) to avoid crossing the singular SEM regression map",
+  "interpretation": "local high-precision diagnostic only; no global-optimality or nonattainment proof"
+}

@@ -705,6 +705,20 @@ that study threshold and already fails accuracy; the other seven do not show
 marker proximity at that threshold. This is a numerical rejection policy,
 not an exact-pole or general nonattainment claim. Production validation of the
 requested-chart gate remains open; automatic marker substitution is not planned.
+The seven saved endpoints not rejected by that study chart check have now
+been investigated independently with high-precision derivatives of the same
+six-indicator ML objective, retaining the original x1/y1 markers. Five refine
+directly to finite local minima. Fresh weak-marker N=20 draw 1 has a losing
+sphere path toward var(X)=0 and diverging regression/disturbance, but the better
+negative-X-variance point is a finite local minimum; both sphere backends
+recover it from the witness. Development weak-marker N=100 draw 2 has a finite
+profile minimum at loading 740.4555345, confirmed at 60 and 90 decimal digits,
+with positive but extremely weak curvature. All seven finite witnesses reproduce
+the library objective and pass the explicit study chart check. Six pass the
+ordinary-precision accuracy check; the profile-resolved case remains
+ill-conditioned (condition measure about 5e12), so it is still a numerical
+failure for routine use. These are local numerical witnesses, not global or
+exact-arithmetic proofs, and all retain negative primitive variance components.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

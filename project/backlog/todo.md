@@ -2866,14 +2866,26 @@ have finite locally checked candidates. Two high-R2 extremes arise mainly from
 standardization by small total latent variances. Do not call this collection
 nonconvergent or infer nonattainment from its missing screened references.
 
+**Seven non-near-pole cases investigated (2026-09-27):** independent 60-digit
+ML refinement supplies finite positive-curvature local witnesses for all seven
+in the original marker chart. Five refine directly. Fresh weak-marker N=20 draw 1
+has a losing sphere path toward var(X)=0, but a better finite negative-X-variance
+minimum exists and both sphere backends recover it when started there.
+Development weak-marker N=100 draw 2 is resolved by a profile minimum at loading
+740.4555345, confirmed at 90 digits; it remains ill-conditioned under the library
+accuracy check. Thus six pass ordinary-precision accuracy and one remains a
+numerical failure, rather than an established nonattainment example. All seven
+remain covariance-inadmissible unrestricted-ML points, separate from PSD fits.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a
   future protocol revision; preserve the old frozen classifications. Inspect
   finite primitive contributions and latent-variance cancellation before
-  labelling an endpoint runaway. Retain uncertainty for development weak-marker
-  N=100 draw 2, and inspect losing diverging paths against the better finite
-  witnesses now available. Positive std.lv only covers the positive disturbance
+  labelling an endpoint runaway. Development weak-marker N=100 draw 2 now has
+  a high-precision finite witness but remains a routine-accuracy failure; keep
+  that distinction. The fresh weak-marker N=20 draw 1 witness isolates a missed
+  basin from a losing path toward a singular regression representation. Positive std.lv only covers the positive disturbance
   sector; identification comparisons must preserve the feasible point/domain.
 - **Requested-chart failure policy adopted 2026-09-27:** do not automatically
   change markers. Reject the retained fresh weak-marker N=100 draw 4 endpoint

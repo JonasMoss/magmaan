@@ -1,0 +1,16 @@
+{
+  "digits": 60,
+  "fixed_parameter": "y3 loading, y1 marker fixed at 1",
+  "source": {
+    "start_id": "7",
+    "case_id": "4",
+    "batch": "development",
+    "design": "weak_marker",
+    "n": "100",
+    "rep": "2",
+    "seed": "202819283",
+    "source": "sphere",
+    "library_objective": "0.024689917254986593"
+  },
+  "interpretation": "local conditional profile; not global optimization or nonattainment proof"
+}

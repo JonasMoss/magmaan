@@ -1,0 +1,2 @@
+start_id,iteration,objective,scaled_gradient,hessian_positive,component_extent,var_X,beta,disturbance_Y,covariance_drift
+resolved,0,0.0246899172027635514132892822342,2.18170158134e-51,True,175.218531860748526,0.012215509754264429,-0.000746880134300592158,0.00029986741266189915,0.0
