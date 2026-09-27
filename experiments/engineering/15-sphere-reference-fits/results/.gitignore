@@ -49,3 +49,18 @@ direct-starts-information/*
 !direct-starts-information/references.csv
 !direct-starts-information/metadata.csv
 !direct-starts-information/labels.csv
+
+# Small exact-geometry witness records and fresh PSD summaries are frozen evidence.
+!geometry-witnesses/
+geometry-witnesses/*
+!geometry-witnesses/fits.csv
+!geometry-witnesses/summary.csv
+!geometry-witnesses/nonattainment_sequence.csv
+!geometry-witnesses/metadata.csv
+!psd-fresh/
+psd-fresh/*
+!psd-fresh/summary.csv
+!psd-fresh/paired.csv
+!psd-fresh/references.csv
+!psd-fresh/metadata.csv
+!psd-fresh/labels.csv

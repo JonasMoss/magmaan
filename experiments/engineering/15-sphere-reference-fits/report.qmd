@@ -6,6 +6,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -33,6 +34,16 @@ uncertainty about the best solution separate? Can those references explain
 ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
+
+The geometry checks now include exact marker and std.lv poles, an attained PSD
+boundary solution, and an analytically nonattained unrestricted-ML target.
+A fixed alternative marker and the sphere recover both pole targets; the
+requested charts cannot attain them. On the nonattainment example, no ML
+attempt passes the screen, while all tested PSD routes agree on a checked
+boundary candidate. This separates chart failure from a change of estimator.
+On the retained fresh PSD batch, FABIN3-auto plus positive spectral starts
+matches 51/60 sphere references under either scaling choice. These results
+support further development, not promotion of the fitting strategy.
 
 Purposeful starts help beyond the original two-factor examples. In 120 fresh
 datasets from three new model families, canonical starts reach the best
@@ -72,6 +83,118 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### Known geometry before promotion
+
+Five deterministic covariance witnesses isolate behavior from sampling noise.
+The requested identification is the first marker except for the std.lv case.
+The alternative chart always fixes the second indicator, selected before any
+fit. ML uses L-BFGS and PORT with native layered and feasible-to-construct signed
+spectral starts; PSD uses SLSQP with FABIN3 automatic transport and positive
+spectral starts under both no and diagonal preconditioning. The sphere uses its
+canonical start with polishing disabled. Its internal scaling is recorded
+separately from ordinary ML's information scaling.
+
+```{r}
+g <- read.csv(file.path("results", "geometry-witnesses", "fits.csv"))
+geom_names <- c("interior", "marker_pole", "residual_face", "stdlv_pole", "nonattainment")
+recovery <- function(name, route, domain) {
+  z <- g[g$design == name & g$route == route & g$domain == domain, ]
+  if (any(z$screened & z$matches_covariance)) "Yes" else "No"
+}
+tab(data.frame(Case=c("Interior", "Marker pole", "Zero residual variance", "std.lv pole", "ML nonattainment"),
+  `Requested ML`=vapply(geom_names, recovery, "", route="requested", domain="ML"),
+  `Requested PSD`=vapply(geom_names, recovery, "", route="requested", domain="PSD"),
+  `Alternative marker ML / PSD`=vapply(geom_names, function(n) paste(recovery(n,"alternate_marker","ML"), recovery(n,"alternate_marker","PSD"),sep=" / "), ""),
+  `Sphere ML / PSD`=vapply(geom_names, function(n) paste(recovery(n,"sphere","ML"), recovery(n,"sphere","PSD"),sep=" / "), ""),
+  check.names=FALSE))
+```
+
+“Yes” requires both the local endpoint screen and a maximum covariance error,
+standardized by the target indicator variances, below 1e-6. It means exact-target
+recovery to this tolerance, not simply a convergence flag. The table deliberately
+shows no recovery for PSD on the last row: that target is outside the PSD model,
+so PSD must minimize a different, strictly positive discrepancy.
+
+At the marker pole the first loading is zero while the other indicators share
+nonzero covariance. The original marker cannot represent this point. Its
+spectral construction explicitly returns `start_unavailable`; choosing a
+representable chart permits fitting. At the std.lv pole the endogenous latent's
+disturbance variance is zero, whereas the requested identification fixes it at
+one. Ordinary fits report convergence and pass the local screen at finite
+approximations, but their standardized covariance gaps range from about 3e-6
+(PSD) to 2e-4 (ML). Alternative-marker and sphere gaps are below 3e-8. Thus
+convergence and a small discrepancy do not establish finite attainment in the
+requested chart. Successful alternative fits retain a translation-failure or
+near-boundary flag for that original chart.
+
+The zero-residual witness attains zero discrepancy with an observed covariance
+that is still positive definite. Every tested PSD configuration recovers it;
+a primitive covariance boundary is therefore not a failed fit. The numerical
+face nomination uses a 1e-7 threshold on scaled primitive eigenvalues, with
+PSD feasibility and accuracy assessed separately. The scale is invariant to
+indicator units and latent rescaling for these simple-structure models; it is
+not a general boundary certificate.
+
+#### A nonattainment witness, independently of optimization
+
+For a one-factor model with diagonal residual covariance, consider
+
+$$
+S=\begin{pmatrix}1&0.3&0.4\\0.3&1&0\\0.4&0&1\end{pmatrix}.
+$$
+
+The nonzero covariances $s_{12}=\lambda_1\lambda_2\phi$ and
+$s_{13}=\lambda_1\lambda_3\phi$ force all three loadings and $\phi$ to be
+nonzero at a finite solution. Then $s_{23}=\lambda_2\lambda_3\phi$ cannot
+be zero. No finite factor parameters reproduce $S$, even with signed variances.
+Yet the sequence
+
+$$
+\lambda(t)=(t,0.3/t,0.4/t)^\top,\qquad
+\phi=1,\qquad \theta_i(t)=1-\lambda_i(t)^2
+$$
+
+keeps the diagonal and first two covariances fixed while
+$s_{23}(t)=0.12/t^2\to0$. Its observed covariance is positive definite for
+$t\ge1$. Since the Gaussian covariance discrepancy is nonnegative and vanishes
+only at equality, its infimum is zero and is not attained. This is a proved
+closure/nonattainment example; no claim about a particular differential-geometric
+fold type is needed. The stored sequence and checks verify the covariance map
+and the library's half-discrepancy convention independently of optimization.
+
+For $t>1$ this sequence has a negative first residual variance. PSD excludes it.
+All ten tested PSD attempts across the requested, alternative and sphere routes
+instead agree at a boundary candidate with reported discrepancy 0.009509003 and
+$s_{23}\simeq0.12$. Their agreement and local checks are not a global-optimality
+proof. No unrestricted ML attempt passes the local screen on this witness.
+
+### Fresh PSD reference coverage
+
+The retained fresh batch now has a separate PSD reference pool: canonical,
+positive spectral and three reproducible random sphere starts under each of
+the two preconditioning choices. The ordinary arms run independently on every
+draw, with no reference-selected retries. All 60 draws have screened sphere
+references: 58 reached by multiple start recipes and two by only one. All are
+marker-representable at 1e-6; 42 draws have a matching reference candidate near
+a PSD face under the numerical nomination above.
+
+```{r}
+psd <- read.csv(file.path("results", "psd-fresh", "summary.csv"))
+tab(data.frame(Preconditioning=psd$preconditioning,
+  `FABIN3-auto matches`=psd$fabin3_hit, `Positive spectral matches`=psd$spectral_hit,
+  `Combined matches`=psd$portfolio_hit, `Any screened candidate`=psd$any_screened,
+  check.names=FALSE))
+```
+
+Counts are out of 60. Both settings leave eight draws with screened but inferior
+ordinary candidates and one with no screened ordinary candidate. No ordinary
+candidate improves on the sphere reference. This is evidence for a remaining
+search problem, not evidence that these nine datasets lack a PSD solution.
+The references remain best observed candidates with a marker-chart accuracy
+cross-check; they do not replace the missing sphere-native assessment. The
+batch was already used in the direct-start comparison, so it is not a new
+held-out decision study.
 
 ### What a spectral start does
 
@@ -121,9 +244,10 @@ Counts are out of 60 draws per batch. A match requires the existing endpoint
 screen and objective agreement with the saved domain-specific reference.
 No screened ordinary point improved on an available reference in this run.
 The constructor is layered for ML and FABIN3 with automatic transport for PSD.
-The fresh PSD arms produce screened candidates on 59/60 draws under either
-scaling choice, but no fresh PSD sphere reference was retained, so their
-reference-match counts are unavailable. Raw attempts and starting vectors stay
+At the time of this direct run, the fresh PSD arms produced screened candidates
+on 59/60 draws under either scaling choice, but had no sphere reference pool.
+Those frozen match counts remain unavailable; the later PSD-specific run above
+adds an independent reference comparison on the same draws. Raw attempts and starting vectors stay
 local; the paired rows, summaries and reference classifications are retained.
 
 The earlier reference-informed diagnostic is separate: translating a known
@@ -136,7 +260,8 @@ explicitly.
 
 ### What happened to fold / pole / fine?
 
-There is no fold/pole/fine partition in this study. The retained chart flag is
+There is no inferred fold/pole/fine partition for the random-draw batches.
+The later deterministic geometry witnesses above supply known cases instead. The retained chart flag is
 proximity to the requested marker-chart boundary, at tolerances 1e-4, 1e-6 and
 1e-8. Numerical accuracy, parameter extent and PSD admissibility are separate
 flags. At 1e-6, all 56 development ML references, all 55 fresh ML references,
@@ -354,6 +479,9 @@ Rscript scripts/tune_starts.R --phase witness
 Rscript scripts/tune_starts.R --phase development
 Rscript scripts/tune_starts.R --phase fresh
 Rscript scripts/direct_starts.R
+Rscript scripts/probe_geometry.R
+Rscript scripts/check_geometry.R
+Rscript scripts/psd_fresh.R
 # Optional reference-informed diagnostic; requires retained raw pilot/start fits:
 Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R

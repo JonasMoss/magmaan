@@ -661,6 +661,21 @@ FABIN3-auto plus the positive spectral start reaches 57/60 with no preconditioni
 and 56/60 with diagonal preconditioning, against 54/60 for FABIN3-auto alone.
 All available reference targets are marker-representable at 1e-6; unresolved
 cases are not classified as folds or poles. This remains a study-local portfolio.
+The follow-up now includes five deterministic geometry witnesses: interior,
+marker pole, zero residual PSD face, std.lv disturbance pole, and a proved
+one-factor unrestricted-ML nonattainment covariance. Fixed second-indicator
+marker and sphere routes recover the four finite targets for both ML and PSD.
+Requested std.lv fits can pass local checks along a finite approximation to
+an unattained chart target; convergence must not be reported as attainment.
+No unrestricted-ML attempt passes the screen on the analytic closure witness;
+all tested PSD routes agree on a checked positive-discrepancy boundary candidate.
+A PSD-only reference run on the retained fresh 60 draws supplies 58 repeated
+and two single-start references. FABIN3-auto plus positive spectral ordinary
+fits match 51/60 under each scaling choice (47/60 FABIN3-auto alone); eight
+remaining draws have inferior screened candidates and one has no screened
+ordinary candidate. Boundary nominations use scaled primitive eigenvalues;
+they remain separate from feasibility, local accuracy and chart translation.
+No generic nonattainment classifier or production chart fallback is implemented.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

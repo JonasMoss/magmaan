@@ -2846,10 +2846,29 @@ references available. No sphere fit or reference-selected retry enters this
 portfolio. All available targets are marker-representable at 1e-6; no
 fold/pole classification has been established. Ordinary PSD with FABIN3-auto
 plus positive spectral reaches 57/60 development references without scaling
-and 56/60 with diagonal scaling. Fresh PSD reference coverage remains unmeasured.
+and 56/60 with diagonal scaling. The follow-up PSD reference run on the retained fresh batch supplies 60
+references (58 repeated, two single-start). FABIN3-auto alone matches 47/60;
+adding positive spectral reaches 51/60 under each scaling choice. Eight misses
+have screened inferior candidates; one has no screened ordinary candidate.
+Five exact geometry witnesses now cover an interior target, marker/std.lv
+poles, an attained PSD face, and proved unrestricted-ML nonattainment. Both
+alternative-marker and sphere routes recover the finite targets. Requested
+std.lv fits can pass local checks without attaining the chart's limiting target.
+No ML attempt passes the screen on the analytic nonattainment example; all
+PSD attempts agree on a checked boundary candidate at positive discrepancy.
 
 Remaining before a stronger reference claim:
 
+- Turn the geometry evidence into a supported result contract before promotion:
+  preserve a checked alternative-chart point and its implied covariance when
+  translation fails; keep original-chart availability, PSD feasibility/face,
+  numerical accuracy and attainment claims separate. A convergence flag or
+  finite approximation must never imply proof of attainment. Exact witnesses
+  are study-local; no generic fold detector is claimed.
+- Inspect the nine fresh PSD ordinary-portfolio misses and two single-start
+  references; develop feasible direction/face alternatives only against the
+  same PSD target. Frozen fresh evidence is now development evidence. A later
+  decision study needs new draws, held-out families and criteria written first.
 - A sphere-native accuracy assessment, separate from user-chart translation
   and polish. Reuse existing derivatives and geometry where possible. The
   pilot's strongest-indicator Newton cross-check is explicitly provisional.
