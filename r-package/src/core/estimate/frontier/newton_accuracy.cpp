@@ -256,7 +256,7 @@ NewtonAudit audit_newton_ml(
   const bool single_level = rep.block_info.empty() ||
       (rep.block_info.size() == 1 && rep.block_info[0].role == model::BlockLevel::Single);
   const bool normalize = domain == StationarityDomain::Psd && rep.dims.size() == 1 &&
-      single_level && con && !con->active() && !build_nl_constraints(pt).active();
+      single_level && con && !build_nl_constraints(pt).active();
   if (!normalize)
     return audit_newton_derivatives(pt, rep,
         evaluate_newton_ml(pt, rep, samp, theta), domain, opts);
@@ -278,6 +278,27 @@ NewtonAudit audit_newton_ml(
   auto normalized_pt = pt;
   auto normalized_rep = rep;
   auto normalized_sample = samp;
+  if (con->active()) {
+    // theta = D z: A theta = b becomes (A D) z = b. Equal labels
+    // become weighted rows too; retaining their merge groups would impose
+    // extra, generally incorrect equalities in the normalized coordinates.
+    normalized_pt.eq_groups.resize(static_cast<std::size_t>(pt.n_free()));
+    std::iota(normalized_pt.eq_groups.begin(), normalized_pt.eq_groups.end(), 0);
+    normalized_pt.lin_constraint_R.clear();
+    normalized_pt.lin_constraint_d.clear();
+    const Eigen::MatrixXd A = con->A_eq * units->asDiagonal();
+    for (Eigen::Index r = 0; r < A.rows(); ++r) {
+      const double scale = A.row(r).cwiseAbs().maxCoeff();
+      if (!(scale > 0.0) || !std::isfinite(scale))
+        return unavailable("PSD accuracy normalization encountered invalid constraint units");
+      for (Eigen::Index k = 0; k < A.cols(); ++k)
+        normalized_pt.lin_constraint_R.push_back(A(r, k) / scale);
+      normalized_pt.lin_constraint_d.push_back(con->b_eq(r) / scale);
+    }
+    auto normalized_con = build_eq_constraints(normalized_pt);
+    if (!normalized_con || normalized_con->rank != con->rank)
+      return unavailable("PSD accuracy normalization could not preserve linear constraint rank");
+  }
   for (std::size_t i = 0; i < pt.size(); ++i) {
     const auto& c = rep.cell_for_row[i];
     if (!c.used) continue;

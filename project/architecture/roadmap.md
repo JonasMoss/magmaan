@@ -220,8 +220,10 @@ differences to zero/zero; direct std.lv has no remaining certified objective
 differences but five verdict differences. This does not establish better basin
 selection: normalized two-stage fits sometimes reach worse local minima.
 PSD accuracy now uses sample-normalized geometry and Newton systems for
-single-group complete-data ML without equality constraints; fixed and structural
-matrix cells are transported too. Requested markers and the accuracy thresholds
+single-group complete-data ML, including equal labels and general linear
+equalities. Fixed and structural matrix cells are transported too. Equalities
+are rewritten in the internal model as A D z = b, with former merge groups
+replaced by weighted linear rows; normalization must preserve constraint rank. Requested markers and the accuracy thresholds
 are preserved. Retained full-space derivatives and geometry maps return in
 caller coordinates; reduced diagnostics use normalized units, exposed through
 `unit_normalized`. Other audit domains/scopes retain their existing path.
@@ -229,8 +231,11 @@ Re-auditing 4,742 saved points without fitting recovers the five unit-induced
 false failures, with zero representation-dependent verdict or face-geometry
 differences. Two checks now correctly reproduce the internal nonpositive-curvature
 rejection of already-failed fits. This is a development regression check, not
-fresh evidence for fitting policy. Full fitting normalization, equality-constraint
-transport and route adoption remain open.
+fresh evidence for fitting policy. Additional regression tests compare explicitly
+written equivalent constrained models under mixed unit changes, at interior and
+PSD-boundary points, including an affine nonzero constant and an inaccurate
+point. Full fitting normalization and route adoption remain open; multigroup,
+multilevel and other objective audits retain their existing scope.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start

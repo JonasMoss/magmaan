@@ -587,7 +587,7 @@ section: the categorical corpus saddles are under
     normalized two-stage marker best-observed matches fall 1,178→1,149.
     All paired losses and remaining unit exceptions are retained.
   - **Done: normalized PSD accuracy diagnostics (2026-09-27).** Single-group
-    complete-data ML without equality constraints now audits PSD geometry and
+    complete-data ML with equal labels and general linear equalities now audits PSD geometry and
     Newton accuracy in sample-normalized units, preserving requested markers
     and returning reusable full-space derivatives in caller coordinates.
     Accuracy thresholds are unchanged; `unit_normalized` exposes the scope.
@@ -596,6 +596,12 @@ section: the categorical corpus saddles are under
     disagreements. Two previously passing original-unit checks now detect
     nonpositive curvature; both fits already failed their internal check.
     The regression uses development data, not a fresh policy decision run.
+    Linear equalities are transported into the internal model as weighted rows,
+    including affine constants; original merge groups are cleared there to avoid
+    imposing extra constraints. Constraint rank must be preserved. Tests cover
+    equivalent mixed-unit models, interior and PSD-boundary geometry, feasible
+    Newton steps, and rejection of an inaccurate point. Nonlinear equalities
+    remain unsupported by this audit.
   - Continue with the unconstrained route first; inspect the remaining
     two-stage sensitivity to roundoff and retain alternative local minima
     as search evidence. Equality/fixed-value transport remains outside this

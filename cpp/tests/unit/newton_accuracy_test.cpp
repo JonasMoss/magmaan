@@ -611,13 +611,86 @@ TEST_CASE("PSD Newton normalization preserves rejection and its supported scope"
     sample.S[0](0, 0) = 0.0;
     CHECK_FALSE(audit_newton_ml(m.pt, m.rep, sample, m.theta0, StationarityDomain::Psd).diagnostics.passed);
   }
-  SUBCASE("equality constraints and ambient audit retain their existing path") {
+  SUBCASE("linear equalities normalize while ambient audit retains its existing path") {
     auto m = exact_model("f =~ x1 + a*x2 + a*x3 + x4");
     const auto psd = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0, StationarityDomain::Psd);
-    CHECK_FALSE(psd.diagnostics.unit_normalized);
+    CHECK(psd.diagnostics.unit_normalized);
     CHECK(psd.diagnostics.passed);
     const auto ambient = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0);
     CHECK_FALSE(ambient.diagnostics.unit_normalized);
     CHECK(ambient.diagnostics.passed);
+  }
+}
+
+TEST_CASE("PSD Newton normalization transports equal labels and affine constraints") {
+  using namespace magmaan::estimate;
+  using namespace magmaan::estimate::frontier;
+  // The two syntaxes express the same model under x2 *= 100, x3 *= .01,
+  // x4 *= 2. In particular, an equal label becomes a weighted equality.
+  auto m = exact_model("f =~ x1 + a*x2 + a*x3 + b*x4\na == b + 0.2");
+  auto scaled = exact_model("f =~ x1 + u*x2 + v*x3 + w*x4\nu == 10000*v\nu == 50*w + 20");
+  Eigen::Vector4d factors;
+  factors << 1.0, 100.0, 0.01, 2.0;
+  for (bool boundary : {false, true}) {
+    CAPTURE(boundary);
+    auto target = m.theta0;
+    if (boundary) {
+      for (std::size_t i = 0; i < m.pt.size(); ++i) {
+        const auto& c = m.rep.cell_for_row[i];
+        if (c.used && c.mat == magmaan::model::MatId::Theta && c.row == 0 && c.col == 0 && m.pt.free[i] > 0)
+          target(m.pt.free[i] - 1) = 0.0;
+      }
+    }
+    auto ev = ModelEvaluator::build(m.pt, m.rep);
+    REQUIRE(ev.has_value());
+    auto moments = ev->evaluate(target, false, false);
+    REQUIRE(moments.has_value());
+    m.samp.S[0] = moments->moments.sigma[0];
+    scaled.samp = m.samp;
+    scaled.samp.S[0] = factors.asDiagonal() * m.samp.S[0] * factors.asDiagonal();
+    auto units = parameter_units(m.pt, m.rep, m.samp);
+    auto scaled_units = parameter_units(scaled.pt, scaled.rep, scaled.samp);
+    REQUIRE(units.has_value());
+    REQUIRE(scaled_units.has_value());
+    const Eigen::VectorXd ratio = scaled_units->cwiseQuotient(*units);
+    auto con = build_eq_constraints(m.pt);
+    auto scaled_con = build_eq_constraints(scaled.pt);
+    REQUIRE(con.has_value());
+    REQUIRE(scaled_con.has_value());
+    for (bool displaced : {false, true}) {
+      CAPTURE(displaced);
+      auto theta = target;
+      if (displaced) {
+        // Increase all three free loadings equally: both original equalities
+        // remain satisfied, but this is no longer the sample's optimum.
+        for (std::size_t i = 0; i < m.pt.size(); ++i)
+          if (m.rep.cell_for_row[i].used && m.rep.cell_for_row[i].mat == magmaan::model::MatId::Lambda && m.pt.free[i] > 0)
+            theta(m.pt.free[i] - 1) += 0.005;
+      }
+      const Eigen::VectorXd scaled_theta = theta.cwiseProduct(ratio);
+      REQUIRE((con->A_eq * theta - con->b_eq).norm() < 1e-10);
+      REQUIRE((scaled_con->A_eq * scaled_theta - scaled_con->b_eq).norm() < 1e-10);
+      const auto a = audit_newton_ml(m.pt, m.rep, m.samp, theta, StationarityDomain::Psd);
+      const auto b = audit_newton_ml(scaled.pt, scaled.rep, scaled.samp, scaled_theta, StationarityDomain::Psd);
+      REQUIRE(a.diagnostics.unit_normalized);
+      REQUIRE(b.diagnostics.unit_normalized);
+      REQUIRE(a.diagnostics.status == NewtonAccuracyStatus::Available);
+      REQUIRE(b.diagnostics.status == NewtonAccuracyStatus::Available);
+      if (a.diagnostics.status != NewtonAccuracyStatus::Available ||
+          b.diagnostics.status != NewtonAccuracyStatus::Available) continue;
+      CHECK(a.diagnostics.passed == !displaced);
+      CHECK(b.diagnostics.passed == a.diagnostics.passed);
+      CHECK(b.diagnostics.null_directions == a.diagnostics.null_directions);
+      CHECK(b.diagnostics.constrained_directions == a.diagnostics.constrained_directions);
+      CHECK(b.diagnostics.distance == doctest::Approx(a.diagnostics.distance).epsilon(1e-7));
+      const Eigen::MatrixXd B = b.geometry.equality_basis * b.geometry.tangent_basis;
+      CHECK((scaled_con->A_eq * B).norm() < 1e-9);
+      const Eigen::VectorXd step = B * b.solution.step;
+      const Eigen::VectorXd reference_step = a.geometry.equality_basis * a.geometry.tangent_basis * a.solution.step;
+      CHECK((step.cwiseQuotient(ratio) - reference_step).norm() < 1e-8);
+      CHECK((scaled_con->A_eq * (scaled_theta + step) - scaled_con->b_eq).norm() < 1e-8);
+      CHECK(b.geometry.reduced_hessian.isApprox(
+          B.transpose() * (b.derivatives.hessian + b.geometry.curvature_correction) * B, 1e-8));
+    }
   }
 }

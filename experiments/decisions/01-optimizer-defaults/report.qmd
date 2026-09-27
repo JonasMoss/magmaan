@@ -608,8 +608,10 @@ fitting normalization or route change is adopted here.
 The scoped PSD accuracy check now normalizes each supplied point and its sample
 before assessing boundary geometry and accuracy. It preserves the requested
 marker and uses the same accuracy thresholds. This applies to single-group
-complete-data ML without equality constraints. Estimates remain in requested
-units.
+complete-data ML, now including equal labels and general linear equalities.
+Estimates remain in requested units. The equality extension is covered by
+regression tests of equivalent models in mixed units, including boundary and
+inaccurate points; the saved-point pilot below contains no equality constraints.
 
 We re-audited all 4,742 returned normalized-pilot points, without fitting.
 All five earlier false failures now pass. Original and normalized
