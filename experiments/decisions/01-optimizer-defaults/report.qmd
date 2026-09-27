@@ -129,7 +129,8 @@ The first run's findings:
   `r f0(sum(ps_rt$success[ps_rt$role == "test" & ps_rt$transform == "native" & ps_rt$arm == "twostage_default"]))`).
   Two-stage wins at $\times 100$ and $\times 0.01$, where the direct fit's
   absolute preconditioning clamp bites; with that fixed, the two routes may
-  end up equal. The author decides the route.
+  end up equal. The author kept the direct fit for now (2026-09-27); the
+  clamp fix and a route rerun are the priority follow-up.
 - **Its ordinary stage must not inherit the layered start with PORT.** With
   that ordinary stage the two-stage route is worse than the direct fit: the
   PSD refit succeeds less often when it is warm-started from PORT's rejected
@@ -154,7 +155,7 @@ Two issues found along the way:
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
-| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | open, for the author: two-stage is better and faster overall, only in rescaled units (replicated) | lane psd-ml, runs 1 and 2 |
+| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. Priority follow-up: fix the clamp, then rerun the route comparison | lane psd-ml, runs 1 and 2 |
 | PSD feasibility tolerances | absolute | settled: keep (rule D passes, 0 fits) | lane psd-ml |
 | PSD preconditioning clamp | $[10^{-4}, 10^{4}]$, absolute | open: costs direct PSD fits at $\times 100$ | lane psd-ml failures |
 

@@ -388,8 +388,12 @@ section: the categorical corpus saddles are under
   - Exception: in the equality-constrained family the layered start avoids
     most of FABIN3's exhausted PSD budgets (203 against 23). A per-model
     start choice would need its own rule.
-- **Open (author) — the PSD ML route.** Two-stage (`fit_ml_psd_fallback`) or
-  direct (`fit_model(psd = TRUE)` and `magmaan(psd = TRUE)` today).
+- **High — revisit the PSD ML route after the barrier lane.** Decided for now
+  (author, 2026-09-27): the direct fit (`fit_model(psd = TRUE)`,
+  `magmaan(psd = TRUE)`) stays the route; two-stage (`fit_ml_psd_fallback`)
+  stays an explicit frontier call. Next, after
+  `experiments/decisions/02-barrier-defaults`: fix the preconditioning clamp
+  (the S item below), then rerun the route comparison on a fresh seed base.
   - Replicated in both runs: two-stage certifies more (second run 22,132
     against 21,980), reaches the best known objective more often (21,850
     against 21,224), and takes about 40% less time.

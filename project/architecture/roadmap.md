@@ -124,7 +124,9 @@ backlog. For PSD ML, FABIN3 and the diagonal
 preconditioning stay, in the direct fit and in the ordinary stage of the
 explicit fallback; a second pre-registered run after the ML promotion
 rejected the layered start for both. The two-stage route beats the direct fit
-only in rescaled units, and that route choice is open.
+only in rescaled units, so the direct fit stays the PSD route for now
+(author, 2026-09-27); fixing the preconditioning clamp and rerunning the route
+comparison is a priority follow-up.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under
