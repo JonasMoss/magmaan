@@ -1,0 +1,10 @@
+"batch","design","n","rep","chart_level","local_checked","translates_at_1e6","translates_at_1e4","study_requested_chart_status","named_required_failure"
+"fresh","ernst",20,1,0.0176968229104318,TRUE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"fresh","weak_marker",20,1,0.302215131530346,FALSE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"fresh","weak_marker",100,1,0.00901477176698365,TRUE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"development","weak_marker",100,2,0.00140037824226519,FALSE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"development","high_r2",20,4,0.40557969356472,TRUE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"development","weak_marker",20,4,1.1503578820508e-06,FALSE,TRUE,FALSE,"reject_requested_chart_near_pole",FALSE
+"fresh","weak_marker",20,4,0.00227935520911935,TRUE,TRUE,TRUE,"passes_chart_proximity_check",FALSE
+"fresh","weak_marker",100,4,5.444364441791e-06,TRUE,TRUE,FALSE,"reject_requested_chart_near_pole",TRUE
+"development","high_r2",20,6,0.77589572423338,TRUE,TRUE,TRUE,"passes_chart_proximity_check",FALSE

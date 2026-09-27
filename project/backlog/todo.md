@@ -2875,12 +2875,18 @@ Remaining before a stronger reference claim:
   N=100 draw 2, and inspect losing diverging paths against the better finite
   witnesses now available. Positive std.lv only covers the positive disturbance
   sector; identification comparisons must preserve the feasible point/domain.
-- Turn the geometry evidence into a supported result contract before promotion:
-  preserve a checked alternative-chart point and its implied covariance when
-  translation fails; keep original-chart availability, PSD feasibility/face,
-  numerical accuracy and attainment claims separate. A convergence flag or
-  finite approximation must never imply proof of attainment. Exact witnesses
-  are study-local; no generic fold detector is claimed.
+- **Requested-chart failure policy adopted 2026-09-27:** do not automatically
+  change markers. Reject the retained fresh weak-marker N=100 draw 4 endpoint
+  in its requested chart (loading about 184,000; chart level 5.44e-6), report
+  a near-pole identification problem, and retain alternative-chart output only
+  as diagnostic evidence. `scripts/check_requested_chart.R` freezes this
+  required-failure witness: explicit study tolerance 1e-4 rejects it, while
+  the current 1e-6 accepts it. Validate and implement a general requested-chart
+  gate before promotion; do not turn this one example into an untested global
+  tolerance change. A second endpoint (development weak-marker N=20 draw 4)
+  also fails the study proximity check and already fails sphere accuracy.
+  Keep chart failure, PSD feasibility, local accuracy and attainment claims
+  separate. Reidentification remains an explicit user choice.
 - Inspect the nine fresh PSD ordinary-portfolio misses and two single-start
   references; develop feasible direction/face alternatives only against the
   same PSD target. Frozen fresh evidence is now development evidence. A later

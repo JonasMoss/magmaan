@@ -76,6 +76,25 @@ works as typed. lavaan's `ordered = TRUE` (every endogenous observed variable)
 is deferred; the scaffold asks for the names. This makes the ordinary package dot-case while the lab stays snake_case,
 a deliberate trade for users moving from lavaan.
 
+### Requested identification is part of the result contract
+
+Adopted 2026-09-27: do not automatically change the user's marker indicators
+to turn a failed requested identification into a successful fit. If a candidate
+is too close to a pole of the requested chart, fail that fit and explain the
+identification problem. Another marker or the sphere may be used internally
+for diagnosis, but its estimates must not replace the requested result.
+Retain the diagnostic point and implied covariance where available; choosing
+a different identification is an explicit user action.
+
+The concrete promotion witness is the retained fresh weak-marker N=100 draw 4
+in engineering/15: a marker loading near 184,000 becomes 1 under a different
+marker, while the fitted covariance is unchanged. This endpoint must fail in
+the requested chart. It is a numerical near-pole case, not a proof of an exact
+pole or of nonattainment in every chart. The general rejection criterion is
+still to be validated: the existing pole tolerance 1e-6 admits this saved point;
+a study check at 1e-4 rejects it. No library tolerance is changed by this policy
+record. Accuracy failures and covariance inadmissibility remain separate causes.
+
 ### Estimators
 
 Development follows the [estimator tiers](../architecture/roadmap.md#estimator-development-priorities)

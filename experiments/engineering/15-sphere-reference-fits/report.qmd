@@ -35,6 +35,12 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
+The requested identification is now an explicit acceptance requirement: the
+roughly 184,000-loading example must fail in its original marker chart. A
+successful translation to another marker is diagnostic evidence, not an
+automatic replacement fit. This is a near-pole rejection policy; it does not
+assert that the finite endpoint is an exact mathematical pole.
+
 A direct translation-only inspection gives a simpler view of the saved sphere
 endpoints. All nine translate to marker identification; a better-loaded marker
 reduces the largest loading to about 1–1.24. Eight cannot translate to ordinary
@@ -100,6 +106,35 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### Requested-chart failure: the 184,000-loading example
+
+**Decision:** reject the fresh weak-marker N=100 draw 4 endpoint in the requested
+identification. Do not automatically switch its marker. Report that the fitted
+point is too close to a pole of the requested marker chart to return as an
+accepted fit in that chart. The alternative-marker point and implied covariance
+may be retained for diagnosis, and the user can explicitly choose a different
+identification.
+
+The saved normalized chart level is 5.44e-6. The existing translation tolerance
+1e-6 admits it; the already-reported study threshold 1e-4 rejects it. The new
+required-failure check confirms this using the saved point without optimization
+or marker changes. The 1e-4 value is an explicit study check, not a newly adopted
+library-wide tolerance. A general near-pole acceptance criterion still needs
+validation before promotion.
+
+Of the other eight saved endpoints, development weak-marker N=20 draw 4 also
+fails that proximity check (level 1.15e-6) and already fails sphere stationarity.
+The other seven pass it; their negative variance components and, in two cases,
+failed/unresolved accuracy are separate issues. Passing this proximity check
+does not establish that a solution is regular, proper or globally optimal.
+We should therefore not call all nine “poles,” nor claim that the seven are
+proved free of every identification problem.
+
+Suggested failure explanation for the named case: “The requested marker is
+extremely weak relative to the other indicators at the fitted point. Fixing its
+loading to 1 produces extremely large parameter estimates. The fit is rejected
+in this identification; no marker was changed automatically.”
 
 ### Looking at the same spherical point in familiar coordinates
 
@@ -636,6 +671,7 @@ Rscript scripts/psd_fresh.R
 Rscript scripts/inspect_unresolved.R
 Rscript scripts/check_escape.R
 Rscript scripts/translate_sphere.R
+Rscript scripts/check_requested_chart.R
 # Optional reference-informed diagnostic; requires retained raw pilot/start fits:
 Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R

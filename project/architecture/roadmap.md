@@ -695,6 +695,16 @@ because of negative latent/disturbance variances; the ninth can, but has negativ
 indicator residuals and unresolved local accuracy. Six of the nine spherical
 endpoints pass local checks; three do not. The report retains their actual
 parameter tables, separating successful translation from numerical acceptance.
+The adopted requested-identification policy (2026-09-27) rejects a numerically
+near-pole result rather than changing markers automatically. Fresh weak-marker
+N=100 draw 4 is a required-failure witness: the saved chart level is 5.44e-6,
+and its roughly 184,000 loading is rejected by an explicit study pole tolerance
+of 1e-4 but still admitted by the current 1e-6. A regression check records this
+gap without changing library tolerances. Another saved endpoint also fails
+that study threshold and already fails accuracy; the other seven do not show
+marker proximity at that threshold. This is a numerical rejection policy,
+not an exact-pole or general nonattainment claim. Production validation of the
+requested-chart gate remains open; automatic marker substitution is not planned.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

@@ -84,3 +84,8 @@ sphere-translations-inspected/*
 !sphere-translations-inspected/sphere_parameters.csv
 !sphere-translations-inspected/source_endpoints.csv
 !sphere-translations-inspected/metadata.csv
+
+# Required-failure witness; explicit study tolerance, no production default change.
+!requested-chart-policy/
+requested-chart-policy/*
+!requested-chart-policy/endpoint_checks.csv
