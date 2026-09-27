@@ -1,2 +1,4 @@
 *
 !.gitignore
+!frozen/
+!frozen/*.csv

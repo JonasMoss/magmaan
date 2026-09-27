@@ -1,0 +1,4 @@
+"run","attempted","common_valid","ordinary_successful_covering","bartlett_successful_covering","paired_coverage_difference","paired_difference_mcse","paired_mean_width_difference"
+"bartlett-pilot",50,49,0.94,0.94,0.0204081632653061,0.0204081632653061,0.00545792984913555
+"bartlett-large",10,9,0.9,0.9,0,0,0.00259183232539634
+"bartlett-independent",10,10,0.9,0.9,0,0,0.00269642777026269

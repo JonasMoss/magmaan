@@ -1,9 +1,9 @@
 # Implementation requirements
 
-This folder is a planned magmaan experiment, not a completed implementation.
-The statistical design and run sizes are fixed in `report.qmd`. Implement the
-runner and validations before producing findings; do not manufacture results
-to fill the report. This is an exploratory study, not authorization to change
+This folder implements the normal parameter-interval experiment.
+The statistical design and run sizes are fixed in `report.qmd`. Preserve the
+validated construction and source fingerprints when extending it; use fresh
+confirmation seeds after statistical or numerical changes. This is an exploratory study, not authorization to change
 ordinary-user inference defaults.
 
 ## Scope and dependencies

@@ -74,6 +74,17 @@ availability claims. Existing entry points and numerical defaults are unchanged.
 
 ## Current State
 
+Research experiment `research/50-normal-parameter-intervals` composes existing
+ML fitting and score primitives into a validated normal-theory Wald/score/LR
+interval comparison and a candidate-specific bootstrap Bartlett pilot. Its
+600-dataset ordinary run gives 4,800 valid intervals with no truth-test/inversion
+disagreements; the profile LR agrees with installed lavaan and the score passes
+an independent finite-difference check. The study records admissibility events,
+bootstrap convergence failures, endpoint-noise checks and compute cost. This
+is experiment-local orchestration, not a new exported score-interval API or a
+change to the ordinary-user policy. The non-normal counterpart remains planned.
+
+
 Research experiment `research/49-spectral-tail-calibration` adds local R
 prototypes for analytical nonlinear covariance shrinkage, increasing-index
 cycle moments through order six, positive-spectrum reconstruction, and

@@ -4,6 +4,8 @@ format:
   html:
     toc: true
     number-sections: false
+    embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
 ---
@@ -16,17 +18,96 @@ correction improve profile-LR inversion enough to justify its cost?
 
 ## Short answer
 
-**Planned; no simulation has run.** The main comparison will establish numerical
-correctness and finite-sample coverage. A separate, deliberately small Bartlett
-pilot will test whether candidate-specific correction gives stable endpoints.
-It cannot establish a coverage improvement on its own.
+**Score and LR improve the small-sample correlation interval in this pilot;
+there is no clear advantage for the loading.** At N = 100, correlation coverage
+is 88.5% for Wald, 93.0% for score and 92.0% for LR, against nominal 95%.
+The paired gains over Wald are 4.5 percentage points (Monte Carlo SE 1.6) and
+3.5 points (SE 1.5), respectively. At N = 300 and 1,000 their correlation
+coverages are within half a percentage point of one another. All 4,800 ordinary
+intervals completed, with no truth-test/inversion disagreements.
+
+```{r setup}
+#| include: false
+paths <- c("results/frozen/main_summary.csv", "results/frozen/bartlett-pilot_summary.csv",
+           "results/frozen/stability.csv", "results/frozen/bootstrap_noise.csv",
+           "results/frozen/endpoint_corrections.csv")
+if (!all(file.exists(paths))) stop("Complete the runs and run Rscript scripts/summarize.R before rendering.")
+main <- read.csv(paths[1])
+bs <- read.csv(paths[2])
+stability <- read.csv(paths[3])
+noise <- read.csv(paths[4])
+ec <- read.csv(paths[5])
+br <- bs[bs$method == "lr_bartlett", ]
+stable_valid <- stability[stability$valid, ]
+fmt <- function(x, digits=1) formatC(x, format="f", digits=digits)
+safe_max <- function(x) if(any(is.finite(x))) max(x[is.finite(x)]) else NA_real_
+```
+
+The candidate-specific Bartlett pilot returned **`r br$valid` of 50 intervals**,
+with `r fmt(100*br$coverage)`% coverage among successful intervals. Both ordinary
+LR and corrected LR produced 47 successful, covering intervals out of 50
+attempts. On the 49 datasets where both succeeded, Bartlett covered one
+additional case; this is too little evidence to establish a benefit. In the
+prespecified endpoint checks, `r sum(stable_valid$unstable)` of
+`r nrow(stable_valid)` valid comparisons moved an endpoint by more than 5% of
+the ordinary LR interval's width. This is a feasibility and noise check;
+50 datasets cannot establish a small coverage improvement.
 
 ## Evidence
 
-There are no results yet. The planned evidence is one coverage/tail-error plot
-for the three ordinary methods, and one paired endpoint-stability/cost summary
-for the Bartlett pilot. Keep full cell tables and numerical diagnostics in
-`results/`.
+### Ordinary interval coverage
+
+```{r}
+methods <- c("wald_expected", "score_expected", "lr")
+key <- unique(main[,c("n","target")]); key <- key[order(key$target,key$n),]
+values <- sapply(methods,function(method) vapply(seq_len(nrow(key)),function(i)
+  100*main$coverage[main$n==key$n[i] & main$target==key$target[i] & main$method==method],numeric(1)))
+tab <- data.frame(Target=tools::toTitleCase(key$target),N=key$n,values,check.names=FALSE)
+names(tab)[3:5] <- c("Wald (%)", "Score (%)", "LR (%)")
+knitr::kable(tab,digits=1,row.names=FALSE,
+  caption="Coverage of nominal 95% intervals; 200 paired datasets per sample size.")
+```
+
+The N = 100 correlation Wald interval misses below its lower endpoint in
+8.0% of samples and above its upper endpoint in 3.5%. Score gives 3.0% and
+4.0%; LR gives 4.0% and 4.0%. The improvement is mainly in the placement of the
+interval: mean widths are 0.374 for Wald, 0.380 for score and 0.374 for LR.
+Observed-information Wald has the same correlation coverage as the primary
+Wald method in all three cells. Loading coverage across methods and sample
+sizes ranges from 94.0% to 97.5%; the paired differences are small and do not
+support a general method ranking.
+
+### Bartlett inversion: correction noise and cost
+
+```{r}
+brief <- bs[bs$method %in% c("lr","lr_bartlett"),]
+knitr::kable(data.frame(
+  Method=ifelse(brief$method=="lr","Ordinary LR","Bootstrap Bartlett LR"),
+  Attempted=brief$attempted,Successful=brief$valid,
+  `Coverage (%)`=100*brief$coverage,
+  `Successful and Covering (%)`=100*brief$successful_covering,
+  `Mean Width`=brief$mean_width,
+  `Mean Seconds`=brief$mean_seconds,check.names=FALSE),digits=c(0,0,0,1,1,3,2),
+  caption="Paired N = 100 loading pilot; 399 bootstrap draws per candidate.")
+```
+
+Increasing the bootstrap size from 399 to 1,999 and changing the random stream
+are checked on the first ten prespecified datasets. The larger run returned
+nine intervals and failed once because a bootstrap fit did not converge; the
+independent stream returned all ten. The independent-stream
+comparison at 1,999 draws has `r sum(noise$valid)` valid pairs; its largest
+endpoint displacement is `r fmt(100*safe_max(noise$endpoint_shift_fraction))`%
+of the ordinary LR width. The median endpoint correction is
+`r fmt(median(ec$correction[ec$run=="bartlett-pilot"]),3)` with median Monte Carlo
+SE `r fmt(median(ec$mcse[ec$run=="bartlett-pilot"]),3)` at 399 draws, versus
+`r fmt(median(ec$mcse[ec$run=="bartlett-large"]),3)` at 1,999 draws. These checks
+separate finite-bootstrap noise from error in the underlying LR approximation.
+
+A compact evidence snapshot in `results/frozen/` is deliberately tracked so
+these findings and the rendered report remain reviewable without repeating the
+nested bootstrap. It contains summaries, numerical checks, stability checks
+run metadata and interval-failure summaries only. Raw intervals, candidate
+diagnostics and individual bootstrap diagnostics remain local and ignored.
 
 ## Caveats
 
@@ -35,6 +116,18 @@ does not settle inference for non-normal data, misspecified covariance models,
 boundary parameters, missing data, or penalized estimates. Two targets in one
 dataset are paired outcomes, not independent replications. At 200 replications,
 the Monte Carlo SE of 95% coverage is about 1.5 percentage points.
+
+The run used ordinary unpenalized likelihood fits with a positive-definite
+implied covariance, without bounds on primitive variances. One of the 200
+N = 100 unrestricted fits was covariance-inadmissible; none at larger N were.
+Candidate searches also visit inadmissible primitive covariance parameters.
+These events are retained and separately tabulated; this is not a test of
+intervals constrained to the physically admissible parameter space. A finite
+wider-grid check found no additional acceptance components, but is not a proof
+of connectedness over the entire parameter domain. The failed Bartlett interval had one nonconvergent bootstrap dataset even
+after its predetermined fallback. Timing of Wald covariance
+setup was shared and not measured separately; no Wald speed ratio is claimed. Dataset workers run concurrently, so interval
+elapsed times include scheduling contention and are not isolated microbenchmarks.
 
 Bartlett correction is compatible with test inversion: invert the corrected
 test rather than the uncorrected one. A simulated null mean is an estimate of
@@ -53,10 +146,25 @@ Rscript run_experiment.R --help
 Rscript run_experiment.R --plan
 ```
 
-These commands inspect the committed design. Computation is not implemented;
-the runner fails explicitly if asked to simulate. Implementation requirements
-are in the local `AGENTS.md`. Once implemented, the runner must document smoke,
-main-comparison and Bartlett-pilot commands through `--help`.
+The runner is implemented and resumable. The completed commands are:
+
+```sh
+Rscript run_experiment.R --validate
+Rscript run_experiment.R --smoke --workers 2 --output smoke-v2
+Rscript run_experiment.R --main --workers 4
+Rscript run_experiment.R --bartlett-pilot --workers 4
+Rscript run_experiment.R --bartlett-pilot --reps 10 --bootstrap-reps 1999 --workers 2 --output bartlett-large
+Rscript run_experiment.R --bartlett-pilot --reps 10 --bootstrap-reps 1999 --stream 1 --workers 2 --output bartlett-independent
+Rscript scripts/summarize.R
+quarto render report.qmd --to html
+```
+
+Use a new output name for a changed code version or statistical configuration.
+An identical command resumes completed datasets. Source fingerprints, package
+versions, seeds, numerical checks and run metadata accompany the results.
+All 14 numerical checks passed: agreement with lavaan for the LR, an independent
+score derivative check, information scaling, endpoint equations, truth-test
+agreement and reproducibility of the bootstrap correction.
 
 ## Prespecified design
 

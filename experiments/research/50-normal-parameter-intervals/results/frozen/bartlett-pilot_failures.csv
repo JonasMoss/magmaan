@@ -1,0 +1,2 @@
+"target","method","estimate","truth","lower","upper","valid","error","covered","lower_miss","upper_miss","width","asymmetry","truth_rejected","truth_agreement","endpoint_gap","audit_lower","audit_upper","unrestricted_admissible","candidate_inadmissible","refits","seconds","n","replicate","seed","B","stream"
+"loading","lr_bartlett",0.715620435649962,0.7,NA,NA,FALSE,"bootstrap fits failed: 1/399",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,TRUE,0,13583,37.521,100,14,2026192764,399,0

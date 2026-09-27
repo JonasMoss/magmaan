@@ -1,0 +1,6 @@
+"n","target","method","attempted","valid","failures","coverage","coverage_mcse","successful_covering","lower_miss","upper_miss","mean_width","median_width","mean_seconds","mean_refits","unrestricted_inadmissible","candidate_inadmissible","truth_disagreements"
+100,"loading","lr",10,10,0,0.9,0.0948683298050514,0.9,0,0.1,0.36389790751243,0.371980646421072,0.0864999999999949,25.4,0,10,0
+100,"loading","lr_bartlett",10,9,1,1,0,0.9,0,0,0.372431016345394,0.37737200020699,178.5196,91578.1,0,10,0
+100,"loading","score_expected",10,10,0,0.9,0.0948683298050514,0.9,0,0.1,0.376241111463544,0.383594196410754,0.118199999999998,24.7,0,9,0
+100,"loading","wald_expected",10,10,0,0.9,0.0948683298050514,0.9,0,0.1,0.357846505560971,0.366837494019811,0.000699999999994349,0,0,0,0
+100,"loading","wald_observed",10,10,0,0.9,0.0948683298050514,0.9,0,0.1,0.358927713000591,0.366591647146135,0.000400000000004286,0,0,0,0

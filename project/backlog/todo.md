@@ -105,13 +105,14 @@ execution follows the estimator priority programme above.
   option, which is Falk's (2018) robust LR interval.
   - Decide the policy's robust calibration of the profiled statistic. The
     funLR notes say small-sample correction is the open problem.
-  - Planned exploratory comparisons: `research/50-normal-parameter-intervals`
-    specifies normal Wald/score/LR validation and a candidate-specific bootstrap
-    Bartlett feasibility pilot; `research/51-robust-parameter-intervals` specifies
-    paired robust scalar intervals with normal, t(10) and heterogeneous-skew
-    populations. Both are design scaffolds, not implemented studies or evidence
-    for a default. The robust folder carries self-contained implementation
-    requirements; score inversion and API/convention checks remain to implement.
+  - Exploratory normal comparison implemented in
+    `research/50-normal-parameter-intervals`: 600 datasets, 4,800 ordinary
+    intervals, validated score/LR endpoint inversion, and candidate-specific
+    bootstrap Bartlett feasibility and endpoint-noise checks. The N=100
+    correlation favors score/LR over raw Wald in this pilot; this is not a
+    robust-inference default decision. `research/51-robust-parameter-intervals`
+    remains a design scaffold with self-contained implementation requirements;
+    robust score inversion and API/convention checks remain to implement.
   - Price it: each interval needs a root search over constrained refits, for
     every parameter.
   - Choose the default by a decisions study (Wald or LR coverage and
