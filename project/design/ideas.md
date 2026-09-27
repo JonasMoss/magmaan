@@ -31,6 +31,12 @@ That wording preserves the useful pieces:
 
 ## API Status: Two Axes
 
+Development priority is now recorded separately in the adopted
+[estimator tiers](../architecture/roadmap.md#estimator-development-priorities)
+(2026-09-27). Primary classical and priority frontier methods share the main
+programme; the API-status and statistical-evidence distinctions below remain
+independent of that allocation of work.
+
 The recurring question is how to distinguish supported work from
 methods-development work so the distinction is visible in code, docs, tests,
 and bindings. Two questions are easy to conflate and must be kept apart:

@@ -78,6 +78,13 @@ a deliberate trade for users moving from lavaan.
 
 ### Estimators
 
+Development follows the [estimator tiers](../architecture/roadmap.md#estimator-development-priorities)
+adopted 2026-09-27: NTML, FIML and ordinal/mixed DWLS come first, with PSD
+and barrier developed alongside them. Priority includes inference and interface
+completion; it does not itself expose a method here or make it a default.
+The broader estimator list below records the intended surface, not equal
+implementation priority or complete policy-inference availability.
+
 `estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
 ULS and WLS. Variables declared in `ordered`: DWLS, WLS and ULS. The data type
 is declared by `ordered`, never inferred from the estimator. Normal-theory ML
@@ -269,8 +276,11 @@ Otherwise it stays in the lab.
   ordinal and mixed data) and PEBA4, which is part of the policy.
 - **Candidates:** `identification = "sphere"`, the closed-form CFA estimator
   and catML (currently only a PSD frontier fit).
-- **Lab only:** the multi-information penalty, robust ordinal estimation,
-  FC-SEM, flip tests and simulation.
+- **Priority frontier, currently lab-only:** the multi-information barrier.
+  Ordinary-user exposure requires its argument and inference contracts plus
+  the evidence above; development priority alone does not promote it.
+- **Other lab-only methods:** robust ordinal estimation, FC-SEM, flip tests
+  and simulation.
 
 ## Starting point
 
@@ -298,6 +308,14 @@ modification indices under the policy, factor scores through `predict()`,
 a `control` option for non-converging fits, and summary-statistic input.
 
 ## Implementation sequence
+
+The steps below retain the package-split history. For remaining work, the
+[estimator priority programme](../backlog/todo.md#estimator-priority-programme)
+supersedes their original ordering: finish NTML gaps and extend policy inference
+to FIML and ordinal/mixed DWLS first, with PSD and barrier work alongside them.
+Other least-squares estimators, ML2S and broader two-level work follow their
+assigned scope and priority. Broader PSD/barrier applicability remains the goal;
+each combination needs its own estimation and inference validation.
 
 1. Build the C++ policy composer for complete-data ML: observed sandwich,
    global score and likelihood-ratio tests, SB and PEBA4. Gate it against lab

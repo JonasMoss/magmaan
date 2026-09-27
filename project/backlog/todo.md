@@ -27,13 +27,52 @@ Effort tags: **S** bounded project/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
 semantics · **XL** statistical design/research track before implementation.
 
+## Estimator priority programme
+
+Follow the [development tiers](../architecture/roadmap.md#estimator-development-priorities)
+adopted 2026-09-27. Primary classical (NTML, FIML, ordinal/mixed DWLS) and
+priority frontier (PSD and barrier) share the main development programme.
+Effort tags describe work size, not priority. The thematic sections retain the
+detailed tasks; their order does not put every classical estimator ahead of
+frontier work.
+
+- **S/M — inventory actual capabilities.** Audit public C++ and R entry points
+  and their validation evidence. Record estimator/data slice, covariance domain,
+  penalty, algorithm, development tier and API status. Track estimation,
+  convergence/admissibility diagnostics, parameter covariance, global tests,
+  nested tests and intervals separately, including ordinary-policy availability.
+  Distinguish implemented and validated, implemented with limited validation,
+  planned, unsupported and inapplicable. Use one inventory with links to evidence,
+  not another roadmap; automate its checks when the schema is settled.
+- **Primary workflows first.** Close the complete-data NTML policy gaps below
+  (including fixed-x and fully specified models), bring FIML policy inference
+  forward, and prioritize ordinal/mixed DWLS within the least-squares policy,
+  nested-test and weight-influence work. Include interface consistency,
+  reliability and performance in each workflow's completion criteria.
+- **PSD and barrier alongside those workflows.** Continue the active barrier
+  decision work and PSD route follow-ups under optimization. Complete their
+  applicable NTML, FIML and DWLS estimation/inference combinations first;
+  establish estimator-specific penalty and inference contracts before claiming
+  new support. Then expand to other applicable estimators. Existing broad PSD
+  fitting coverage does not establish corresponding inference coverage.
+- **Secondary and research work.** Preserve existing correctness gates; extend
+  secondary classical workflows for a concrete use or low-cost shared benefit.
+  Research methods retain their explicit supported slices. Revisit the
+  provisional ML2S/pairwise assignments and two-level expansion priority when
+  there is a concrete downstream need.
+- **Incremental surface cleanup.** Use the decomposition task under
+  [API and R boundary](#api-and-r-boundary) to separate domain and penalty from
+  algorithms. Prioritization takes effect now; namespace moves, entry-point
+  renaming and default changes are separate work.
+
 ## Two-package R interface
 
 Adopted 2026-09-25: an opinionated pure-R `magmaan` package (one call,
 automatic inference, `r-magmaan/`) over the compiled `magmaanlab` package
 (`r-package/`). The split and the `magmaan` scaffold landed the same day; the
 design, starting-point inventory and validation rules are in
-[r-interface-vision.md](../design/r-interface-vision.md). Items in order:
+[r-interface-vision.md](../design/r-interface-vision.md). Tasks are grouped below;
+execution follows the estimator priority programme above.
 
 - **Nested comparisons: `anova(fit0, fit1)` — DONE for complete-data ML
   (2026-09-26), with open parts.** `api::policy_nested_ml`,
@@ -71,7 +110,7 @@ design, starting-point inventory and validation rules are in
   - Choose the default by a decisions study (Wald or LR coverage and
     non-convergence on held-out families, including boundary-near variances
     and correlations) before changing it.
-- **M — least-squares estimators under the policy.** For fixed-weight GLS, ULS,
+- **M — least-squares estimators under the policy (DWLS first).** For fixed-weight GLS, ULS,
   WLS and DWLS the global score statistic against the saturated model equals the
   fit-function statistic; report it once with SB and PEBA4 from the policy
   geometry. Include the weight-estimation influence in the covariance for
@@ -4174,7 +4213,9 @@ decisions in the simulation backlog.
 
 ### Decompose `EstimatorSpec` into its actual axes — NOT STARTED
 
-The "estimator" is four orthogonal things flattened into one string. C++ emits
+The current "estimator" surface mixes several axes in one string. The
+development tiers require covariance domain and penalty to be explicit alongside
+discrepancy, moments, algorithm and post-fit inference. C++ emits
 **26 distinct `fit$estimator` labels** (`ML ULS GLS WLS DWLS FIML ML2S GLSpw
 ML-Fisher ML-Fisher-SNLLS ML-IRLS ML-IRLS-SNLLS ULS-SNLLS GLS-SNLLS WLS-SNLLS
 PNTML SAM FCSEM-ML RBM-*×5 noniterative*×3`) while `api::EstimatorKind` has
@@ -4189,14 +4230,18 @@ PNTML SAM FCSEM-ML RBM-*×5 noniterative*×3`) while `api::EstimatorKind` has
    status** — per-pattern likelihood really is a different F. ML2S and GLSpw do
    not: same F, different moments. The tell is that R has to synthesize
    cross-product label strings (`ML2S_DWLS`, `ML2S_ADF`, `ML2S_DLS`).
-3. **Algorithm** — direct gradient, Fisher scoring, IRLS, SNLLS
-   (Golub-Pereyra), PSD-lifted, ridge continuation, two-stage EM. Currently
+3. **Covariance domain** — ordinary or PSD-constrained. PSD lifting implements
+   the domain restriction; it does not define a separate estimator family.
+4. **Penalty** — none or a specified multi-information barrier, including its
+   weight and applicability contract. This changes the objective.
+5. **Algorithm** — direct gradient, Fisher scoring, IRLS, SNLLS
+   (Golub-Pereyra), lifted optimization, ridge continuation, two-stage EM. Currently
    encoded *in the function name* (`fit_ml_irls_snlls`) and re-encoded in the
    label string.
-4. **Post-fit correction** — MLM/MLR/SB. Already correctly excluded; R
+6. **Post-fit correction** — MLM/MLR/SB. Already correctly excluded; R
    hard-errors on `estimator = "MLM"`. This axis is the part that is right.
 
-So `ML-IRLS-SNLLS` is axis 1 × axis 3, and `FIML` is axis 1 × axis 2, and
+So `ML-IRLS-SNLLS` is axis 1 × axis 5, and `FIML` is axis 1 × axis 2, and
 nothing in the type system says so.
 
 **Why this is not a C++-only change.** The R side is where the drift actually

@@ -32,6 +32,46 @@ The marker-chart sanity and PSD optimization-default studies are
 archived under `experiments/_archive/` as of 2026-09-24; their recorded findings
 remain historical evidence, with sources and local results preserved.
 
+## Estimator development priorities
+
+Adopted 2026-09-27. Development priority applies to complete workflows:
+estimation, convergence and admissibility diagnostics, parameter covariance,
+global and nested tests, intervals, and the R interface. It is independent of
+API stability (`core` / `frontier`), statistical evidence, ordinary-user
+availability, and the decision to make a method a default.
+
+| Development tier | Initial scope | Commitment |
+| --- | --- | --- |
+| **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and ordinal/mixed DWLS | First priority for reliable, efficient estimation and complete inference workflows |
+| **Priority frontier** | PSD covariance constraints and the multi-information barrier | Develop alongside the primary classical workflows, then extend to all applicable estimators with estimator-specific validation |
+| **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
+| **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators, catML and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
+
+The first two tiers form the main development programme. A frontier method
+may receive more attention than a classical method with a stable API. Lower
+priority does not relax correctness requirements or remove existing support.
+Two-level ML remains supported in its documented slice; its expansion priority
+needs an explicit scope decision and is not inherited from single-level NTML.
+The provisional secondary assignments can be revisited for a concrete use.
+
+PSD and barrier are capabilities across estimator families. PSD changes the
+covariance domain; the barrier changes the objective. Track those separately
+from the estimator/data combination and the numerical algorithm. Fisher
+scoring, IRLS and SNLLS receive priority through the workflows they improve.
+A fitter's existence does not establish its inference coverage, and extending a
+penalty or constraint requires validation for each applicable combination.
+
+Priority, ordinary-user exposure, API stabilization and default adoption are
+separate decisions. PSD already has ordinary-user exposure; barrier remains
+lab-only pending its exposure and inference contract. Both retain their current
+API status. Promotion of either to a default requires recorded evidence.
+
+The [active backlog](../backlog/todo.md#estimator-priority-programme) tracks
+execution and the remaining capability inventory. The inventory will distinguish
+implemented and validated, implemented with limited validation, planned,
+unsupported, and inapplicable components; these tiers alone make no new
+availability claims. Existing entry points and numerical defaults are unchanged.
+
 ## Current State
 
 Research experiment `research/49-spectral-tail-calibration` adds local R
