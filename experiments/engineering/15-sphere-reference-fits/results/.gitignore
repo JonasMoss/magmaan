@@ -128,3 +128,12 @@ open-case-conclusions/*
 !open-case-conclusions/parameters.csv
 !open-case-conclusions/library_crosscheck.csv
 !open-case-conclusions/sphere_witness_restart.csv
+
+# Small frozen retrospective single-start selection evidence.
+!single-start-selection/
+single-start-selection/*
+!single-start-selection/selections.csv
+!single-start-selection/paired.csv
+!single-start-selection/summary.csv
+!single-start-selection/by_family.csv
+!single-start-selection/metadata.csv

@@ -52,6 +52,14 @@ scaling choice. The remaining search gap and the requested-chart rejection gate
 still block promotion. Marker changes in this study are diagnostic only;
 automatic substitution of the user's markers is not the adopted policy.
 
+A retrospective check of three sample-only, single-fit start selectors finds no
+clear replacement for the current starts. The strongest signed spectral rule
+adds two reference matches on the later 60 draws in ordinary ML with either
+backend, but loses two previously successful fits and brings no net gain on the
+earlier 60. Selecting by the lowest initial discrepancy performs worse. All
+three rules miss the finite negative-X witness above. Keep the current starts;
+this small check does not establish that they are optimal.
+
 ```{r results='asis'}
 if (!is.null(probe)) {
   p <- probe[1, ]
@@ -64,6 +72,65 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### Can a single sample-based start do better?
+
+The layered measurement construction initially keeps the latent covariance
+positive. That suggests a general possible improvement for unrestricted ML:
+let the observed correlations choose a negative variance direction when they
+support one. This is inapplicable to PSD-ML, whose domain excludes those points.
+
+We checked three deterministic rules on all 120 retained draws. The first uses,
+for each factor, the eigenvector of its standardized off-diagonal correlation
+matrix with the largest absolute eigenvalue, retaining that eigenvalue's sign.
+It constructs one spectral start with strength 0.5. The second keeps the route's
+constructor start whenever both selected signs are positive, and otherwise uses
+the same signed spectral start. The third evaluates the initial ML discrepancy
+of the four existing spectral vectors and chooses the smallest. It evaluates
+starting points, not fitted endpoints. Each rule requires only one optimization;
+none changes the requested markers or uses a sphere solution to initialize an
+ordinary fit.
+
+Selections were computed from regenerated sample moments before reading any
+fit outcomes. We then looked up the already saved fit for the chosen start,
+so no optimization was rerun. Both batches have already been inspected: these
+are retrospective engineering checks, not fresh confirmation data. The ordinary
+comparison is layered/native with information scaling; the sphere comparison
+is canonical with diagonal scaling and polishing disabled.
+
+```{r}
+selection <- read.csv(file.path("results", "single-start-selection", "summary.csv"))
+a <- selection[selection$batch == "fresh", ]
+a <- a[order(a$route, a$backend, a$policy), ]
+tab(data.frame(Route=a$route, Backend=a$backend, Rule=a$policy,
+  `Constructor matches`=a$baseline_hit, `Selected matches`=a$selected_hit,
+  Gains=a$gain, Losses=a$loss, check.names=FALSE))
+```
+
+These counts use the frozen reference-hit screen, including its historical
+magnitude cutoff; they measure continuity with the earlier experiment, not a
+new convergence verdict. Of the later 60 draws, 55 have a reference under that
+screen. Library convergence verdicts and every gain/loss are retained separately
+in the paired results, along with summaries by population.
+
+The strongest signed rule gives a small ordinary-route gain on the later batch,
+but exchanges four gains for two losses with each backend. On the earlier batch
+it exchanges one gain for one loss. For sphere it loses three net matches on the
+earlier batch and gains two on the later one. Keeping the constructor when both
+signs are positive does not remove those tradeoffs. Lowest initial discrepancy
+loses matches on both batches and both routes: a better initial objective does
+not reliably identify a better destination.
+
+Most tellingly, all three rules choose a negative-Y start for the inspected
+fresh weak-marker N=20 draw 1. None reaches its better finite negative-X minimum.
+The local correlation signal misses the sign needed by the jointly fitted model.
+Thus negative directions matter, but this check does not supply a reliable
+sample-only rule for choosing them. A model-wide moment construction retaining
+signed latent covariances is a possible future investigation; it would need to
+handle structural paths and observed-covariance positivity together and is not
+a small clipping change. We do not promote a new start rule on this evidence.
+The pole rejection policy and the very flat finite minimum remain separate
+issues that a starting-value change need not cure.
 
 ### What became of the other seven?
 
@@ -681,6 +748,17 @@ machinery was needed for these recoveries.
   objective proves nonattainment.
 
 ## Reproduce
+
+The single-start selection check reuses raw fits from `direct_starts.R` and
+`tune_starts.R` (development and fresh phases). Its small selections, paired
+outcomes, summaries, and metadata are frozen for reading the report:
+
+```sh
+Rscript scripts/select_single_start.R --help
+Rscript scripts/select_single_start.R --smoke
+Rscript scripts/select_single_start.R
+```
+
 
 The high-precision diagnostic scripts require Python with `mpmath`; they are
 study-local checks of the six-indicator, two-factor covariance model only.

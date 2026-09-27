@@ -2877,6 +2877,18 @@ accuracy check. Thus six pass ordinary-precision accuracy and one remains a
 numerical failure, rather than an established nonattainment example. All seven
 remain covariance-inadmissible unrestricted-ML points, separate from PSD fits.
 
+**Single-start selection checked (2026-09-27):** three retrospective sample-only
+rules select one saved spectral fit: strongest absolute signed block eigenvalue,
+the same rule retaining the constructor for positive signs, and lowest initial
+spectral discrepancy. Across the retained 120 draws none gives a clear upgrade.
+On the later 60, strongest signed improves ordinary ML 35→37 (L-BFGS) and
+36→38 (PORT), each with four gains and two losses; the earlier 60 give no net
+gain. Initial-discrepancy selection loses matches. All three miss the inspected
+negative-X finite witness, choosing negative Y instead. Keep layered/native
+ML and FABIN3-auto PSD starts unchanged; negative variance starts are not PSD
+candidates. This is retrospective evidence under the frozen historical screen,
+not a fresh policy decision or a claim that single starts cannot improve.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

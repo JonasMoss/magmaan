@@ -720,6 +720,15 @@ ill-conditioned (condition measure about 5e12), so it is still a numerical
 failure for routine use. These are local numerical witnesses, not global or
 exact-arithmetic proofs, and all retain negative primitive variance components.
 No optimizer, estimator, inference or paper protocol changes.
+A subsequent retrospective single-start check selects spectral signs from sample
+correlations or ranks the four spectral starting discrepancies, without using
+fitted endpoints in selection. On the retained 120 draws, small gains come with
+losses, and every rule misses the inspected negative-X finite witness. The
+strongest signed rule adds two ordinary-ML matches per backend on the later 60
+but loses two previous matches; it has no net gain on the earlier 60. Starts
+remain unchanged. These checks use the frozen reference screen, not a new
+production acceptance policy; neither multistart nor automatic marker switching
+is adopted.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
