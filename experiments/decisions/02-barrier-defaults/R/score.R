@@ -70,7 +70,7 @@ paired_table <- function(s, lane, by = c("lane", "role", "family", "estimator"),
 loss_table <- function(s, lane, candidate = candidate_arms) {
   out <- list()
   cols <- c(problem_keys, "seed", "fmin", "newton_status", "optimizer_status", "f_evals",
-            "start_policy", "stage", "admissible", "message")
+            "start_policy", "message")
   cols <- c(cols, "std_extent", "chart_extent", "runaway", "start_repaired")
   cmps <- primary_comparisons(lane, candidate)
   for (cmp in cmps) {
@@ -87,9 +87,18 @@ loss_table <- function(s, lane, candidate = candidate_arms) {
   # Attribution: which other arms (and the witness) solve the same problem.
   lost_keys <- key_of(out, problem_keys)
   others <- s[s$pkey %in% lost_keys, c("pkey", "arm", "success", "fmin")]
+  # Solved (+) or not (-) by: d default, lp layered_port, dl default_lbfgs,
+  # ll layered_lbfgs, w witness.
+  short <- c(default = "d", layered_port = "lp", default_lbfgs = "dl", layered_lbfgs = "ll", witness = "w")
   tag <- tapply(seq_len(nrow(others)), others$pkey, function(i)
-    paste(sprintf("%s:%s", others$arm[i], ifelse(others$success[i], "ok", "fail")), collapse = ";"))
+    paste0(short[others$arm[i]], ifelse(others$success[i], "+", "-"), collapse = " "))
   out$arms <- unname(tag[lost_keys])
+  out$message <- substr(sub("^magmaan fit error ", "", out$message), 1, 60)
+  # Every baseline is `default`; lane and start repairs are constant here.
+  out$baseline <- NULL; out$lane <- NULL; out$start_repaired <- NULL
+  # Rounded so the tracked file stays small; raw batches keep full precision.
+  for (k in c("fmin", "fmin_baseline", "best_known", "std_extent", "chart_extent"))
+    out[[k]] <- signif(out[[k]], 8)
   out
 }
 

@@ -7,7 +7,7 @@ preserved; this reorganization does not rerun or reassess the studies.
 
 | Purpose | What belongs here | Count |
 |---------|-------------------|------:|
-| [Decisions](#decisions) | Pre-registered studies whose results set library defaults, with the register of those defaults. | 1 |
+| [Decisions](#decisions) | Pre-registered studies whose results set library defaults, with the register of those defaults. | 2 |
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
 | [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 49 |
@@ -54,6 +54,7 @@ Pre-registered studies whose results set library defaults; see
 | # | Experiment | Kind | Lifecycle | Question |
 |--:|------------|------|-----------|----------|
 | 01 | [optimizer-defaults](decisions/01-optimizer-defaults/report.qmd) | benchmark | active | Which start, optimizer and PSD route should each estimation route use by default, judged by the library verdict on held-out simulated problems? |
+| 02 | [barrier-defaults](decisions/02-barrier-defaults/report.qmd) | benchmark | active | Which start and optimizer should the complete-data ML barrier fitter use by default, judged by the library verdict on held-out simulated problems? |
 
 ## Showcases
 

@@ -427,6 +427,30 @@ section: the categorical corpus saddles are under
   - Exception: in the equality-constrained family the layered start avoids
     most of FABIN3's exhausted PSD budgets (203 against 23). A per-model
     start choice would need its own rule.
+- **Barrier ML start and optimizer — DECIDED (2026-09-27): defaults stay.**
+  [decisions/02-barrier-defaults](../../experiments/decisions/02-barrier-defaults/report.qmd),
+  lane barrier-ml, one pre-registered run. No candidate was eligible:
+  transported FABIN3 with PORT stays for `frontier_fit_ml_multiinfo`.
+  - The layered start loses in five of six test families. It begins next to
+    the factor-disappearance set (a latent variance near zero, a loading of
+    the wrong sign), which the determinacy penalty favours, and PORT stops
+    there at nonpositive curvature. Keep the barrier's start pinned apart from
+    the ML default.
+  - L-BFGS still stalls in line searches (Boomsma, engineering/15, Wolf).
+- **High — barrier start at ×0.01 in equality-constrained models.** Found by
+  lane barrier-ml: the default fails 2,653 of the constrained family's
+  attainable ×0.01 fits (L-BFGS 506, layered start 132). The start transport
+  falls back to native FABIN3 (`native-fabin-fallback`), not in the data's
+  units, and PORT reports convergence after about 12 evaluations without
+  moving; the verdict rejects it. Fix the fallback's units, then rerun lane
+  barrier-ml on a fresh seed base. Check whether the PSD lane's ×0.01 budget
+  exhaustion in the same family (the clamp item below) is partly this
+  fallback, since PSD also starts from transported FABIN3.
+- **High — the verdict certifies barrier fits near a marker pole.** PORT
+  returns certified barrier fits with a marker-chart extent above 1000 (287
+  default, 510 layered start in lane barrier-ml; L-BFGS none). Treat this with
+  the ML runaway check in the item "next optimization project" above: the
+  scoring rule is `chart_extent` in `decisions/02-barrier-defaults/R/fits.R`.
 - **High — revisit the PSD ML route after the barrier lane.** Decided for now
   (author, 2026-09-27): the direct fit (`fit_model(psd = TRUE)`,
   `magmaan(psd = TRUE)`) stays the route; two-stage (`fit_ml_psd_fallback`)
@@ -1618,7 +1642,9 @@ when they next change.
      (resolved 2026-09-25): the barrier fits that failed in NLopt L-BFGS line
      search converge under PORT, now the barrier default (experiment
      engineering/18). The failures shared by every optimizer are Ernst
-     marker-chart fits near a marker pole. Remaining, for `papers/sem-barrier`: score it on the research/48
+     marker-chart fits near a marker pole. Lane barrier-ml (decisions/02,
+     2026-09-27) kept FABIN3 + PORT as the default against the layered start
+     and L-BFGS. Remaining, for `papers/sem-barrier`: score it on the research/48
      posterior bank; run the research/48 path cells; then decide the default
      target. Experiment research/48's Jeffreys posterior
      median remained the most accurate estimator on every design at N = 50.

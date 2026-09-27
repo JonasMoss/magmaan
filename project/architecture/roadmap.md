@@ -167,6 +167,13 @@ rejected the layered start for both. The two-stage route beats the direct fit
 only in rescaled units, so the direct fit stays the PSD route for now
 (author, 2026-09-27); fixing the preconditioning clamp and rerunning the route
 comparison is a priority follow-up.
+The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
+transported FABIN3 with PORT after lane barrier-ml
+(`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start
+stalls next to the factor-disappearance set that the determinacy penalty
+favours, and L-BFGS stalls in line searches. That lane also found a ×0.01
+start fallback failure in equality-constrained models and certified fits near
+marker poles; both are in the backlog.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under

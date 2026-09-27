@@ -1,0 +1,139 @@
+"candidate","rule","scope","value","pass"
+"layered_port","1 primary","boomsma lambda0.25","wins 60 losses 269",FALSE
+"layered_port","2 best known","boomsma lambda0.25","best wins 59 losses 270",FALSE
+"layered_port","1 primary","boomsma lambda1","wins 40 losses 303",FALSE
+"layered_port","2 best known","boomsma lambda1","best wins 48 losses 297",FALSE
+"layered_port","1 primary","chen lambda0.25","wins 0 losses 0",TRUE
+"layered_port","2 best known","chen lambda0.25","best wins 4 losses 0",TRUE
+"layered_port","1 primary","chen lambda1","wins 0 losses 0",TRUE
+"layered_port","2 best known","chen lambda1","best wins 0 losses 4",FALSE
+"layered_port","1 primary","constrained lambda0.25","wins 1274 losses 147",TRUE
+"layered_port","2 best known","constrained lambda0.25","best wins 1275 losses 163",TRUE
+"layered_port","1 primary","constrained lambda1","wins 1300 losses 114",TRUE
+"layered_port","2 best known","constrained lambda1","best wins 1306 losses 116",TRUE
+"layered_port","1 primary","engineering15 lambda0.25","wins 42 losses 176",FALSE
+"layered_port","2 best known","engineering15 lambda0.25","best wins 45 losses 186",FALSE
+"layered_port","1 primary","engineering15 lambda1","wins 24 losses 166",FALSE
+"layered_port","2 best known","engineering15 lambda1","best wins 26 losses 166",FALSE
+"layered_port","1 primary","research47 lambda0.25","wins 18 losses 55",FALSE
+"layered_port","2 best known","research47 lambda0.25","best wins 18 losses 59",FALSE
+"layered_port","1 primary","research47 lambda1","wins 11 losses 68",FALSE
+"layered_port","2 best known","research47 lambda1","best wins 11 losses 68",FALSE
+"layered_port","1 primary","wolf lambda0.25","wins 74 losses 167",FALSE
+"layered_port","2 best known","wolf lambda0.25","best wins 87 losses 178",FALSE
+"layered_port","1 primary","wolf lambda1","wins 59 losses 206",FALSE
+"layered_port","2 best known","wolf lambda1","best wins 74 losses 206",FALSE
+"layered_port","3 invariance","boomsma lambda0.25 common","candidate 2400 baseline 2323",TRUE
+"layered_port","3 invariance","chen lambda0.25 common","candidate 800 baseline 800",TRUE
+"layered_port","3 invariance","constrained lambda0.25 common","candidate 1999 baseline 685",TRUE
+"layered_port","3 invariance","engineering15 lambda0.25 common","candidate 399 baseline 325",TRUE
+"layered_port","3 invariance","research47 lambda0.25 common","candidate 2600 baseline 2581",TRUE
+"layered_port","3 invariance","wolf lambda0.25 common","candidate 3599 baseline 3526",TRUE
+"layered_port","3 invariance","boomsma lambda1 common","candidate 2399 baseline 2353",TRUE
+"layered_port","3 invariance","chen lambda1 common","candidate 800 baseline 800",TRUE
+"layered_port","3 invariance","constrained lambda1 common","candidate 1998 baseline 670",TRUE
+"layered_port","3 invariance","engineering15 lambda1 common","candidate 400 baseline 319",TRUE
+"layered_port","3 invariance","research47 lambda1 common","candidate 2600 baseline 2586",TRUE
+"layered_port","3 invariance","wolf lambda1 common","candidate 3599 baseline 3551",TRUE
+"layered_port","3 invariance","boomsma lambda0.25 separate","candidate 2400 baseline 2292",TRUE
+"layered_port","3 invariance","chen lambda0.25 separate","candidate 800 baseline 800",TRUE
+"layered_port","3 invariance","engineering15 lambda0.25 separate","candidate 400 baseline 320",TRUE
+"layered_port","3 invariance","research47 lambda0.25 separate","candidate 2600 baseline 2568",TRUE
+"layered_port","3 invariance","wolf lambda0.25 separate","candidate 3599 baseline 3517",TRUE
+"layered_port","3 invariance","boomsma lambda1 separate","candidate 2398 baseline 2305",TRUE
+"layered_port","3 invariance","chen lambda1 separate","candidate 800 baseline 800",TRUE
+"layered_port","3 invariance","engineering15 lambda1 separate","candidate 400 baseline 321",TRUE
+"layered_port","3 invariance","research47 lambda1 separate","candidate 2600 baseline 2574",TRUE
+"layered_port","3 invariance","wolf lambda1 separate","candidate 3597 baseline 3532",TRUE
+"default_lbfgs","1 primary","boomsma lambda0.25","wins 45 losses 51",FALSE
+"default_lbfgs","2 best known","boomsma lambda0.25","best wins 43 losses 52",FALSE
+"default_lbfgs","1 primary","boomsma lambda1","wins 18 losses 72",FALSE
+"default_lbfgs","2 best known","boomsma lambda1","best wins 24 losses 71",FALSE
+"default_lbfgs","1 primary","chen lambda0.25","wins 0 losses 0",TRUE
+"default_lbfgs","2 best known","chen lambda0.25","best wins 0 losses 0",TRUE
+"default_lbfgs","1 primary","chen lambda1","wins 0 losses 0",TRUE
+"default_lbfgs","2 best known","chen lambda1","best wins 0 losses 0",TRUE
+"default_lbfgs","1 primary","constrained lambda0.25","wins 1107 losses 35",TRUE
+"default_lbfgs","2 best known","constrained lambda0.25","best wins 1095 losses 38",TRUE
+"default_lbfgs","1 primary","constrained lambda1","wins 1094 losses 35",TRUE
+"default_lbfgs","2 best known","constrained lambda1","best wins 1098 losses 38",TRUE
+"default_lbfgs","1 primary","engineering15 lambda0.25","wins 18 losses 68",FALSE
+"default_lbfgs","2 best known","engineering15 lambda0.25","best wins 17 losses 70",FALSE
+"default_lbfgs","1 primary","engineering15 lambda1","wins 13 losses 48",FALSE
+"default_lbfgs","2 best known","engineering15 lambda1","best wins 13 losses 50",FALSE
+"default_lbfgs","1 primary","research47 lambda0.25","wins 11 losses 7",TRUE
+"default_lbfgs","2 best known","research47 lambda0.25","best wins 10 losses 7",TRUE
+"default_lbfgs","1 primary","research47 lambda1","wins 8 losses 7",TRUE
+"default_lbfgs","2 best known","research47 lambda1","best wins 8 losses 7",TRUE
+"default_lbfgs","1 primary","wolf lambda0.25","wins 43 losses 60",FALSE
+"default_lbfgs","2 best known","wolf lambda0.25","best wins 41 losses 58",FALSE
+"default_lbfgs","1 primary","wolf lambda1","wins 10 losses 66",FALSE
+"default_lbfgs","2 best known","wolf lambda1","best wins 14 losses 65",FALSE
+"default_lbfgs","3 invariance","boomsma lambda0.25 common","candidate 2323 baseline 2323",TRUE
+"default_lbfgs","3 invariance","chen lambda0.25 common","candidate 800 baseline 800",TRUE
+"default_lbfgs","3 invariance","constrained lambda0.25 common","candidate 1748 baseline 685",TRUE
+"default_lbfgs","3 invariance","engineering15 lambda0.25 common","candidate 335 baseline 325",TRUE
+"default_lbfgs","3 invariance","research47 lambda0.25 common","candidate 2586 baseline 2581",TRUE
+"default_lbfgs","3 invariance","wolf lambda0.25 common","candidate 3547 baseline 3526",TRUE
+"default_lbfgs","3 invariance","boomsma lambda1 common","candidate 2330 baseline 2353",FALSE
+"default_lbfgs","3 invariance","chen lambda1 common","candidate 800 baseline 800",TRUE
+"default_lbfgs","3 invariance","constrained lambda1 common","candidate 1741 baseline 670",TRUE
+"default_lbfgs","3 invariance","engineering15 lambda1 common","candidate 334 baseline 319",TRUE
+"default_lbfgs","3 invariance","research47 lambda1 common","candidate 2590 baseline 2586",TRUE
+"default_lbfgs","3 invariance","wolf lambda1 common","candidate 3550 baseline 3551",FALSE
+"default_lbfgs","3 invariance","boomsma lambda0.25 separate","candidate 2291 baseline 2292",FALSE
+"default_lbfgs","3 invariance","chen lambda0.25 separate","candidate 800 baseline 800",TRUE
+"default_lbfgs","3 invariance","engineering15 lambda0.25 separate","candidate 327 baseline 320",TRUE
+"default_lbfgs","3 invariance","research47 lambda0.25 separate","candidate 2574 baseline 2568",TRUE
+"default_lbfgs","3 invariance","wolf lambda0.25 separate","candidate 3528 baseline 3517",TRUE
+"default_lbfgs","3 invariance","boomsma lambda1 separate","candidate 2296 baseline 2305",FALSE
+"default_lbfgs","3 invariance","chen lambda1 separate","candidate 800 baseline 800",TRUE
+"default_lbfgs","3 invariance","engineering15 lambda1 separate","candidate 336 baseline 321",TRUE
+"default_lbfgs","3 invariance","research47 lambda1 separate","candidate 2575 baseline 2574",TRUE
+"default_lbfgs","3 invariance","wolf lambda1 separate","candidate 3532 baseline 3532",TRUE
+"layered_lbfgs","1 primary","boomsma lambda0.25","wins 53 losses 292",FALSE
+"layered_lbfgs","2 best known","boomsma lambda0.25","best wins 52 losses 293",FALSE
+"layered_lbfgs","1 primary","boomsma lambda1","wins 20 losses 363",FALSE
+"layered_lbfgs","2 best known","boomsma lambda1","best wins 24 losses 349",FALSE
+"layered_lbfgs","1 primary","chen lambda0.25","wins 0 losses 0",TRUE
+"layered_lbfgs","2 best known","chen lambda0.25","best wins 4 losses 0",TRUE
+"layered_lbfgs","1 primary","chen lambda1","wins 0 losses 0",TRUE
+"layered_lbfgs","2 best known","chen lambda1","best wins 0 losses 4",FALSE
+"layered_lbfgs","1 primary","constrained lambda0.25","wins 1264 losses 158",TRUE
+"layered_lbfgs","2 best known","constrained lambda0.25","best wins 1260 losses 169",TRUE
+"layered_lbfgs","1 primary","constrained lambda1","wins 1277 losses 139",TRUE
+"layered_lbfgs","2 best known","constrained lambda1","best wins 1284 losses 142",TRUE
+"layered_lbfgs","1 primary","engineering15 lambda0.25","wins 20 losses 202",FALSE
+"layered_lbfgs","2 best known","engineering15 lambda0.25","best wins 21 losses 209",FALSE
+"layered_lbfgs","1 primary","engineering15 lambda1","wins 21 losses 179",FALSE
+"layered_lbfgs","2 best known","engineering15 lambda1","best wins 21 losses 177",FALSE
+"layered_lbfgs","1 primary","research47 lambda0.25","wins 18 losses 59",FALSE
+"layered_lbfgs","2 best known","research47 lambda0.25","best wins 17 losses 63",FALSE
+"layered_lbfgs","1 primary","research47 lambda1","wins 10 losses 72",FALSE
+"layered_lbfgs","2 best known","research47 lambda1","best wins 10 losses 72",FALSE
+"layered_lbfgs","1 primary","wolf lambda0.25","wins 63 losses 209",FALSE
+"layered_lbfgs","2 best known","wolf lambda0.25","best wins 67 losses 210",FALSE
+"layered_lbfgs","1 primary","wolf lambda1","wins 36 losses 244",FALSE
+"layered_lbfgs","2 best known","wolf lambda1","best wins 44 losses 236",FALSE
+"layered_lbfgs","3 invariance","boomsma lambda0.25 common","candidate 2397 baseline 2323",TRUE
+"layered_lbfgs","3 invariance","chen lambda0.25 common","candidate 800 baseline 800",TRUE
+"layered_lbfgs","3 invariance","constrained lambda0.25 common","candidate 1999 baseline 685",TRUE
+"layered_lbfgs","3 invariance","engineering15 lambda0.25 common","candidate 398 baseline 325",TRUE
+"layered_lbfgs","3 invariance","research47 lambda0.25 common","candidate 2599 baseline 2581",TRUE
+"layered_lbfgs","3 invariance","wolf lambda0.25 common","candidate 3598 baseline 3526",TRUE
+"layered_lbfgs","3 invariance","boomsma lambda1 common","candidate 2399 baseline 2353",TRUE
+"layered_lbfgs","3 invariance","chen lambda1 common","candidate 800 baseline 800",TRUE
+"layered_lbfgs","3 invariance","constrained lambda1 common","candidate 1995 baseline 670",TRUE
+"layered_lbfgs","3 invariance","engineering15 lambda1 common","candidate 399 baseline 319",TRUE
+"layered_lbfgs","3 invariance","research47 lambda1 common","candidate 2600 baseline 2586",TRUE
+"layered_lbfgs","3 invariance","wolf lambda1 common","candidate 3598 baseline 3551",TRUE
+"layered_lbfgs","3 invariance","boomsma lambda0.25 separate","candidate 2399 baseline 2292",TRUE
+"layered_lbfgs","3 invariance","chen lambda0.25 separate","candidate 800 baseline 800",TRUE
+"layered_lbfgs","3 invariance","engineering15 lambda0.25 separate","candidate 399 baseline 320",TRUE
+"layered_lbfgs","3 invariance","research47 lambda0.25 separate","candidate 2600 baseline 2568",TRUE
+"layered_lbfgs","3 invariance","wolf lambda0.25 separate","candidate 3599 baseline 3517",TRUE
+"layered_lbfgs","3 invariance","boomsma lambda1 separate","candidate 2400 baseline 2305",TRUE
+"layered_lbfgs","3 invariance","chen lambda1 separate","candidate 800 baseline 800",TRUE
+"layered_lbfgs","3 invariance","engineering15 lambda1 separate","candidate 399 baseline 321",TRUE
+"layered_lbfgs","3 invariance","research47 lambda1 separate","candidate 2599 baseline 2574",TRUE
+"layered_lbfgs","3 invariance","wolf lambda1 separate","candidate 3599 baseline 3532",TRUE

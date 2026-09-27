@@ -1,0 +1,183 @@
+"role","family","estimator","arm","units","pattern","groups"
+"test","boomsma","lambda0.25","default","separate","native:fail mixed:ok",4
+"test","engineering15","lambda0.25","default","separate","native:fail mixed:ok",3
+"test","wolf","lambda0.25","default","separate","native:fail mixed:ok",4
+"test","engineering15","lambda1","default","separate","native:fail mixed:ok",1
+"test","wolf","lambda1","default","separate","native:fail mixed:ok",2
+"test","boomsma","lambda0.25","default_lbfgs","separate","native:fail mixed:ok",4
+"test","engineering15","lambda0.25","default_lbfgs","separate","native:fail mixed:ok",1
+"test","wolf","lambda0.25","default_lbfgs","separate","native:fail mixed:ok",2
+"test","boomsma","lambda1","default_lbfgs","separate","native:fail mixed:ok",1
+"test","wolf","lambda1","default_lbfgs","separate","native:fail mixed:ok",1
+"test","engineering15","lambda0.25","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","engineering15","lambda1","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","wolf","lambda1","layered_lbfgs","separate","native:fail mixed:ok",1
+"test","boomsma","lambda1","layered_port","separate","native:fail mixed:ok",1
+"test","wolf","lambda1","layered_port","separate","native:fail mixed:ok",2
+"test","boomsma","lambda0.25","default","common","native:fail x100:fail x0.01:ok",3
+"test","constrained","lambda0.25","default","common","native:fail x100:fail x0.01:ok",3
+"test","engineering15","lambda0.25","default","common","native:fail x100:fail x0.01:ok",5
+"test","wolf","lambda0.25","default","common","native:fail x100:fail x0.01:ok",6
+"test","boomsma","lambda1","default","common","native:fail x100:fail x0.01:ok",2
+"test","constrained","lambda1","default","common","native:fail x100:fail x0.01:ok",1
+"test","engineering15","lambda1","default","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","lambda1","default","common","native:fail x100:fail x0.01:ok",7
+"test","boomsma","lambda0.25","default_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","constrained","lambda0.25","default_lbfgs","common","native:fail x100:fail x0.01:ok",3
+"test","engineering15","lambda0.25","default_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","lambda0.25","default_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","boomsma","lambda1","default_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","constrained","lambda1","default_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","lambda1","default_lbfgs","common","native:fail x100:fail x0.01:ok",4
+"test","boomsma","lambda0.25","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","lambda1","layered_lbfgs","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","lambda1","layered_lbfgs","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","lambda1","layered_port","common","native:fail x100:fail x0.01:ok",1
+"test","constrained","lambda0.25","default","common","native:fail x100:ok x0.01:fail",2
+"test","engineering15","lambda0.25","default","common","native:fail x100:ok x0.01:fail",4
+"test","engineering15","lambda1","default","common","native:fail x100:ok x0.01:fail",2
+"test","wolf","lambda1","default","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","lambda0.25","default_lbfgs","common","native:fail x100:ok x0.01:fail",3
+"test","engineering15","lambda0.25","default_lbfgs","common","native:fail x100:ok x0.01:fail",2
+"test","wolf","lambda0.25","default_lbfgs","common","native:fail x100:ok x0.01:fail",4
+"test","boomsma","lambda1","default_lbfgs","common","native:fail x100:ok x0.01:fail",2
+"test","constrained","lambda1","default_lbfgs","common","native:fail x100:ok x0.01:fail",2
+"test","engineering15","lambda1","default_lbfgs","common","native:fail x100:ok x0.01:fail",3
+"test","wolf","lambda1","default_lbfgs","common","native:fail x100:ok x0.01:fail",2
+"test","engineering15","lambda0.25","layered_lbfgs","common","native:fail x100:ok x0.01:fail",1
+"test","engineering15","lambda0.25","layered_port","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","lambda1","layered_port","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","lambda0.25","default","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","lambda0.25","default","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","lambda1","default","common","native:fail x100:ok x0.01:ok",1
+"test","constrained","lambda0.25","default_lbfgs","common","native:fail x100:ok x0.01:ok",2
+"test","engineering15","lambda0.25","default_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","wolf","lambda0.25","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","lambda1","layered_lbfgs","common","native:fail x100:ok x0.01:ok",1
+"test","constrained","lambda1","layered_lbfgs","common","native:fail x100:ok x0.01:ok",2
+"test","boomsma","lambda0.25","default","separate","native:ok mixed:fail",97
+"test","engineering15","lambda0.25","default","separate","native:ok mixed:fail",76
+"control","ernst","lambda0.25","default","separate","native:ok mixed:fail",13
+"test","research47","lambda0.25","default","separate","native:ok mixed:fail",32
+"test","wolf","lambda0.25","default","separate","native:ok mixed:fail",75
+"test","boomsma","lambda1","default","separate","native:ok mixed:fail",91
+"test","engineering15","lambda1","default","separate","native:ok mixed:fail",78
+"control","ernst","lambda1","default","separate","native:ok mixed:fail",17
+"test","research47","lambda1","default","separate","native:ok mixed:fail",26
+"test","wolf","lambda1","default","separate","native:ok mixed:fail",66
+"test","boomsma","lambda0.25","default_lbfgs","separate","native:ok mixed:fail",100
+"test","engineering15","lambda0.25","default_lbfgs","separate","native:ok mixed:fail",71
+"control","ernst","lambda0.25","default_lbfgs","separate","native:ok mixed:fail",11
+"test","research47","lambda0.25","default_lbfgs","separate","native:ok mixed:fail",26
+"test","wolf","lambda0.25","default_lbfgs","separate","native:ok mixed:fail",64
+"test","boomsma","lambda1","default_lbfgs","separate","native:ok mixed:fail",100
+"test","engineering15","lambda1","default_lbfgs","separate","native:ok mixed:fail",64
+"control","ernst","lambda1","default_lbfgs","separate","native:ok mixed:fail",12
+"test","research47","lambda1","default_lbfgs","separate","native:ok mixed:fail",25
+"test","wolf","lambda1","default_lbfgs","separate","native:ok mixed:fail",67
+"test","boomsma","lambda0.25","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","wolf","lambda0.25","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","research47","lambda1","layered_lbfgs","separate","native:ok mixed:fail",1
+"test","wolf","lambda0.25","layered_port","separate","native:ok mixed:fail",1
+"test","boomsma","lambda1","layered_port","separate","native:ok mixed:fail",1
+"test","wolf","lambda1","layered_port","separate","native:ok mixed:fail",1
+"test","constrained","lambda0.25","default","common","native:ok x100:fail x0.01:fail",3
+"test","wolf","lambda0.25","default","common","native:ok x100:fail x0.01:fail",3
+"test","constrained","lambda1","default","common","native:ok x100:fail x0.01:fail",2
+"test","wolf","lambda1","default","common","native:ok x100:fail x0.01:fail",3
+"test","boomsma","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:fail",3
+"test","boomsma","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:fail",3
+"test","constrained","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","engineering15","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","lambda0.25","layered_lbfgs","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","lambda0.25","layered_port","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","lambda0.25","layered_port","common","native:ok x100:fail x0.01:fail",1
+"test","boomsma","lambda1","layered_port","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","lambda1","layered_port","common","native:ok x100:fail x0.01:fail",1
+"test","boomsma","lambda0.25","default","common","native:ok x100:fail x0.01:ok",1
+"test","engineering15","lambda0.25","default","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","lambda1","default","common","native:ok x100:fail x0.01:ok",1
+"test","constrained","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","engineering15","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","lambda0.25","default_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","lambda1","default_lbfgs","common","native:ok x100:fail x0.01:ok",2
+"test","boomsma","lambda0.25","layered_lbfgs","common","native:ok x100:fail x0.01:ok",2
+"test","engineering15","lambda0.25","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","lambda0.25","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","wolf","lambda1","layered_lbfgs","common","native:ok x100:fail x0.01:ok",1
+"test","boomsma","lambda0.25","default","common","native:ok x100:ok x0.01:fail",64
+"test","constrained","lambda0.25","default","common","native:ok x100:ok x0.01:fail",1301
+"test","engineering15","lambda0.25","default","common","native:ok x100:ok x0.01:fail",64
+"control","ernst","lambda0.25","default","common","native:ok x100:ok x0.01:fail",9
+"test","research47","lambda0.25","default","common","native:ok x100:ok x0.01:fail",19
+"test","wolf","lambda0.25","default","common","native:ok x100:ok x0.01:fail",57
+"test","boomsma","lambda1","default","common","native:ok x100:ok x0.01:fail",37
+"test","constrained","lambda1","default","common","native:ok x100:ok x0.01:fail",1325
+"test","engineering15","lambda1","default","common","native:ok x100:ok x0.01:fail",77
+"control","ernst","lambda1","default","common","native:ok x100:ok x0.01:fail",11
+"test","research47","lambda1","default","common","native:ok x100:ok x0.01:fail",13
+"test","wolf","lambda1","default","common","native:ok x100:ok x0.01:fail",35
+"test","boomsma","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",57
+"test","constrained","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",223
+"test","engineering15","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",58
+"control","ernst","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",5
+"test","research47","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",13
+"test","wolf","lambda0.25","default_lbfgs","common","native:ok x100:ok x0.01:fail",36
+"test","boomsma","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",59
+"test","constrained","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",250
+"test","engineering15","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",62
+"control","ernst","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",9
+"test","research47","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",9
+"test","wolf","lambda1","default_lbfgs","common","native:ok x100:ok x0.01:fail",39
+"test","constrained","lambda1","layered_lbfgs","common","native:ok x100:ok x0.01:fail",1
+"test","engineering15","lambda1","layered_lbfgs","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","lambda0.25","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","lambda1","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","constrained","lambda0.25","default_lbfgs","common","objective differs, gap 1e-4 to 1e-3",2
+"control","ernst","lambda0.25","default_lbfgs","common","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","lambda0.25","default_lbfgs","common","objective differs, gap 1e-4 to 1e-3",2
+"test","research47","lambda1","default_lbfgs","common","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","lambda0.25","default","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","lambda0.25","default_lbfgs","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","boomsma","lambda1","default_lbfgs","separate","objective differs, gap 1e-4 to 1e-3",1
+"test","boomsma","lambda1","default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","lambda0.25","default_lbfgs","common","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","lambda0.25","default","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","lambda0.25","default_lbfgs","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","wolf","lambda1","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","lambda0.25","default_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","constrained","lambda0.25","default_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","lambda0.25","default_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","constrained","lambda1","default_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","lambda0.25","layered_lbfgs","common","objective differs, gap 1e-6 to 1e-5",1
+"test","engineering15","lambda0.25","default_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","lambda0.25","default_lbfgs","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","lambda0.25","default","common","objective differs, gap over 1e-3",9
+"test","constrained","lambda0.25","default","common","objective differs, gap over 1e-3",4
+"test","engineering15","lambda0.25","default","common","objective differs, gap over 1e-3",1
+"control","ernst","lambda0.25","default","common","objective differs, gap over 1e-3",1
+"test","wolf","lambda0.25","default","common","objective differs, gap over 1e-3",7
+"test","boomsma","lambda1","default","common","objective differs, gap over 1e-3",6
+"test","constrained","lambda1","default","common","objective differs, gap over 1e-3",2
+"test","wolf","lambda1","default","common","objective differs, gap over 1e-3",1
+"test","boomsma","lambda0.25","default_lbfgs","common","objective differs, gap over 1e-3",15
+"test","constrained","lambda0.25","default_lbfgs","common","objective differs, gap over 1e-3",16
+"test","engineering15","lambda0.25","default_lbfgs","common","objective differs, gap over 1e-3",1
+"control","ernst","lambda0.25","default_lbfgs","common","objective differs, gap over 1e-3",4
+"test","wolf","lambda0.25","default_lbfgs","common","objective differs, gap over 1e-3",5
+"test","boomsma","lambda1","default_lbfgs","common","objective differs, gap over 1e-3",3
+"test","constrained","lambda1","default_lbfgs","common","objective differs, gap over 1e-3",3
+"test","wolf","lambda1","default_lbfgs","common","objective differs, gap over 1e-3",2
+"test","boomsma","lambda0.25","default","separate","objective differs, gap over 1e-3",6
+"test","engineering15","lambda0.25","default","separate","objective differs, gap over 1e-3",1
+"test","wolf","lambda0.25","default","separate","objective differs, gap over 1e-3",3
+"test","boomsma","lambda1","default","separate","objective differs, gap over 1e-3",4
+"control","ernst","lambda1","default","separate","objective differs, gap over 1e-3",1
+"test","boomsma","lambda0.25","default_lbfgs","separate","objective differs, gap over 1e-3",4
+"control","ernst","lambda0.25","default_lbfgs","separate","objective differs, gap over 1e-3",2
+"test","wolf","lambda0.25","default_lbfgs","separate","objective differs, gap over 1e-3",5
+"test","boomsma","lambda1","default_lbfgs","separate","objective differs, gap over 1e-3",2
