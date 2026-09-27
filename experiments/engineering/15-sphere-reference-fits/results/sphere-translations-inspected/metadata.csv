@@ -1,0 +1,7 @@
+"key","value"
+"source","unresolved-identifications"
+"selection","lowest objective evaluable sphere endpoint per case, regardless of magnitude/local-check status"
+"method","reidentify + evaluate only; no optimization"
+"pole_tol","1e-6"
+"negative_scaled_variance_report_tol","-1e-8"
+"interpretation","translation success does not establish local accuracy or global optimality"

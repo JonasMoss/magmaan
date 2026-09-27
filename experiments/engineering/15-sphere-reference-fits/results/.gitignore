@@ -75,3 +75,12 @@ unresolved-identifications/*
 !unresolved-identifications/candidate_evidence.csv
 !unresolved-identifications/candidate_parameters.csv
 !unresolved-identifications/candidate_covariances.csv
+
+# Translation-only inspection of saved spherical endpoints, including failed local checks.
+!sphere-translations-inspected/
+sphere-translations-inspected/*
+!sphere-translations-inspected/summary.csv
+!sphere-translations-inspected/parameters.csv
+!sphere-translations-inspected/sphere_parameters.csv
+!sphere-translations-inspected/source_endpoints.csv
+!sphere-translations-inspected/metadata.csv

@@ -687,6 +687,14 @@ variance. Positive std.lv excludes negative-disturbance solutions and is not
 an equivalent chart for all unrestricted-ML sectors. Missing screened references
 must not be equated with nonconvergence or nonattainment. Raw historical screens
 are retained; component magnitude, accuracy and attainment evidence stay separate.
+A translation-only inspection of the nine lowest-objective saved spherical
+endpoints preserves their covariance/objective in marker coordinates. Better
+markers reduce maximum loadings to about 1--1.24, but negative primitive
+variances remain in every case. Eight endpoints cannot enter positive std.lv
+because of negative latent/disturbance variances; the ninth can, but has negative
+indicator residuals and unresolved local accuracy. Six of the nine spherical
+endpoints pass local checks; three do not. The report retains their actual
+parameter tables, separating successful translation from numerical acceptance.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

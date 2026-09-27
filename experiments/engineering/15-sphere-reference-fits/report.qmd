@@ -35,6 +35,15 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
+A direct translation-only inspection gives a simpler view of the saved sphere
+endpoints. All nine translate to marker identification; a better-loaded marker
+reduces the largest loading to about 1–1.24. Eight cannot translate to ordinary
+positive std.lv because a latent variance or disturbance is negative. The one
+that can still has negative indicator residual variances. Marker choice explains
+some enormous loadings, but rescaling does not remove the improper variances.
+These are the lowest-objective saved spherical endpoints, including three that
+do not pass the local numerical checks; they are not all accepted solutions.
+
 Inspection across identifications changes the interpretation of the nine ML
 problems previously lacking a screened sphere reference. All nine yield finite,
 locally checked candidates in the expanded diagnostic search. Two now pass the
@@ -91,6 +100,76 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### Looking at the same spherical point in familiar coordinates
+
+This inspection does not fit anything again. It takes each case's lowest-objective
+evaluable saved sphere endpoint and translates it to the original marker, a
+better-loaded marker, and ordinary std.lv. Successful translations preserve the
+implied covariance and objective to numerical precision. “No” for std.lv means
+that this same point cannot be expressed there; it is not a new failed fit.
+
+```{r}
+translations <- read.csv(file.path("results", "sphere-translations-inspected", "summary.csv"))
+first <- translations[translations$chart == "first_marker", ]
+strong <- translations[translations$chart == "strongest_marker", ]
+std <- translations[translations$chart == "std_lv", ]
+stopifnot(identical(first$case_id, strong$case_id), identical(first$case_id, std$case_id))
+tab(data.frame(Batch=first$batch, Design=first$design, N=first$n, Draw=first$rep,
+  `Largest loading, first marker`=first$max_abs_loading,
+  `Largest loading, better marker`=strong$max_abs_loading,
+  `Negative variance rows`=strong$negative_variances,
+  `std.lv possible`=ifelse(std$translated,"Yes","No"),
+  `Local checks passed`=ifelse(first$source_local_checked,"Yes","No"),check.names=FALSE))
+```
+
+Here `X` denotes the exogenous latent variance, `Y` the disturbance variance in
+`Y ~ X`, and lowercase indicator names denote their residual variances. In this
+regression model, std.lv fixes X's variance and Y's disturbance variance to +1.
+A real rescaling cannot change a negative variance into a positive one. Negative
+indicator residuals, by contrast, do not themselves prevent std.lv translation.
+
+Three concrete examples explain most of what to look for:
+
+- **High-R2, development N=20 draw 4:** with better markers, loadings are at
+  most 1 and the regression is about 0.53. Y's disturbance variance is about
+  -0.377, almost cancelling the explained variance and leaving total variance
+  about 0.0021. The point is locally checked but improper; enormous standardized
+  ratios do not mean enormous unstandardized parameters here.
+- **Weak marker, fresh N=100 draw 4:** the largest loading falls from about
+  184,000 to 1 after changing markers. That dramatic loading was a coordinate
+  issue. The negative Y disturbance (about -27.7 under the better marker) and
+  large residual compensation remain. Translation clarifies the point but does
+  not make it an admissible covariance model.
+- **Weak marker, development N=100 draw 2:** std.lv translation works, with a
+  largest loading about 12.6, but x3 and y3 have negative residual variances.
+  The largest absolute indicator residual variance is about 168 times that
+  indicator's sample variance. This endpoint also has unresolved local accuracy,
+  so it warrants further numerical inspection.
+
+All nine saved endpoints have negative primitive variance components. This is
+allowed by the unrestricted observed-covariance ML objective, but excluded by
+PSD-ML. Six pass the local accuracy checks; the other three are retained as
+endpoints to inspect, not accepted estimates. Translation alone does not tell
+us whether a path is runaway or whether the endpoint is globally optimal.
+
+```{r results='asis'}
+pt <- read.csv(file.path("results", "sphere-translations-inspected", "parameters.csv"))
+for (i in first$case_id) {
+  x <- first[first$case_id == i, ]
+  cat(sprintf("\n<details><summary>%s, %s, N=%d, draw %d: parameter tables</summary>\n\n",
+    x$batch, x$design, x$n, x$rep))
+  z <- pt[pt$case_id == i, ]
+  for (chart in c("first_marker", "strongest_marker", "std_lv")) {
+    q <- z[z$chart == chart, c("lhs", "op", "rhs", "est")]
+    cat(sprintf("\n**%s**\n\n", gsub("_", " ", chart)))
+    if (nrow(q)) cat(as.character(knitr::kable(q, digits=6, row.names=FALSE)), sep="\n") else
+      cat("This point cannot be translated to positive std.lv.\n")
+    cat("\n\n")
+  }
+  cat("</details>\n\n")
+}
+```
 
 ### Inspecting the unresolved draws
 
@@ -556,6 +635,7 @@ Rscript scripts/check_geometry.R
 Rscript scripts/psd_fresh.R
 Rscript scripts/inspect_unresolved.R
 Rscript scripts/check_escape.R
+Rscript scripts/translate_sphere.R
 # Optional reference-informed diagnostic; requires retained raw pilot/start fits:
 Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R
