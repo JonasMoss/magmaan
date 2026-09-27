@@ -1,0 +1,8 @@
+"key","value"
+"protocol","retrospective certified-only handoff candidate, all 120 saved draws; no tuning; no production policy change"
+"candidate","if ordinary-rejected and warm start used, replace PSD outcome with saved normalized direct FABIN3/auto outcome; otherwise unchanged"
+"validation","same library fingerprint as saved run; every replayed wrapper verdict and returned objective verified"
+"git_head","fb1a2489d0e8ddf26b6fc224ea2ad0953f3736f1"
+"R_version","R version 4.6.1 (2026-06-24)"
+"command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/engineering/15-sphere-reference-fits/scripts/check_two_stage_handoff.R"
+"magmaanlab_version","0.0.1"

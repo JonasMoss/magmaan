@@ -1,0 +1,62 @@
+---
+title: "Two-stage PSD: what went wrong?"
+subtitle: "Diagnostic follow-up · 27 September 2026"
+format:
+  html:
+    toc: false
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+**The handoff from ordinary ML to PSD is sensitive; no simple fix wins reliably.**
+Normalization can change both the ordinary solution handed over and the PSD
+path from that solution. Increasing the budget does not recover the three lost
+targets. Restricting which ordinary estimates may be reused helps some cases
+but loses another. **Keep two-stage provisional; no implementation change here.**
+
+## The three regressions
+
+| Saved case, all N=20 | What the diagnostic isolates | Starting PSD directly |
+|:--|:--|:--|
+| Ernst, draw 1 | Either ordinary endpoint reaches the target with PSD normalization off; both stall with it on. | Reaches the target in 40 evaluations with normalization on. |
+| Ernst, draw 3 | The normalized ordinary stage finds a better unrestricted solution, but that endpoint leads to a worse PSD minimum under either scaling. | Reaches that same worse PSD minimum. |
+| High R², draw 7 | Both the ordinary endpoint and PSD scaling matter. Only the old endpoint with PSD normalization off reaches the target. | Converges, but misses the target. |
+
+The two stalled runs reuse ordinary estimates that **failed the accuracy check**,
+with large positive and negative variance components. Increasing the PSD budget
+from 5,000 to **25,000 evaluations** makes them return much worse objectives and
+loadings in the millions. It does not recover the targets. The third regression
+already converges, so a larger budget leaves it unchanged.
+
+## Does a stricter handoff help?
+
+We checked one general rule on **all 120 saved datasets**: reuse ordinary
+estimates only when they pass convergence; otherwise start PSD from the original
+FABIN3-auto start. This is a single-start policy, not multistart.
+
+```{r}
+x <- read.csv('results/two-stage-handoff/summary.csv')
+knitr::kable(data.frame(
+  Batch=ifelse(x$batch=='development','Earlier 60','Later 60'),
+  `Targets: current → candidate`=paste0(x$baseline_hit,' → ',x$candidate_hit),
+  Gains=x$gain, Losses=x$loss, check.names=FALSE),row.names=FALSE)
+```
+
+The rule rescues two Ernst cases but loses an earlier weak-marker case that the
+rejected ordinary estimate helped solve. It is **not a clear upgrade** on these
+already-inspected data. A better unrestricted ML endpoint also need not be a
+better PSD starting point—the feasible domains differ.
+
+**Verdict:** retain normalization, leave the two-stage handoff unchanged for now,
+and do not promote two-stage as uniformly preferable to direct PSD. Any further
+handoff rule needs broader evidence; avoid a magnitude cutoff tailored to these
+examples. Direct PSD remains the simpler route, though it also misses targets.
+
+[Diagnostic crossings](results/two-stage-probe/fits.csv) ·
+[All 120 handoff comparisons](results/two-stage-handoff/paired.csv) ·
+[Original challenge summary](executive-summary.html) ·
+[Methods and reproduction](report.html#two-stage-handoff-investigation)

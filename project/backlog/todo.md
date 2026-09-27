@@ -3076,6 +3076,18 @@ study 1e-4 check but pass 1e-6; no production gate is implied. Preserve all
 changed outcomes in engineering/15's normalization-revisit evidence and use its
 executive summary for the current result. No spectral/multistart promotion.
 
+**Two-stage regressions investigated (2026-09-27):** fixed ordinary endpoints
+crossed with PSD normalization off/on isolate path sensitivity in Ernst N=20
+draw 1, endpoint selection in Ernst draw 3, and both effects in high-R² draw 7.
+Standalone PSD reproduces the wrapper from the same start; no wrapper mismatch
+was found. Increasing the PSD budget 5,000→25,000 does not recover any of the
+three targets and sends the two stalled paths to large-loading, worse endpoints.
+A general certified-only warm-start rule checked on all 120 saved draws changes
+ten handoffs: earlier 54→54 targets (one gain/one loss), later 46→47 (one gain).
+Do not promote from this retrospective tradeoff; preserve the current handoff
+and keep two-stage provisional. Evidence and loss identities are in
+engineering/15's two-stage summary. No magnitude gate or multistart added.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

@@ -250,6 +250,11 @@ no target-recovery gains for layered/native ML or FABIN3-auto direct PSD.
 Later-batch two-stage PSD loses three targets (two budget failures and a worse
 local solution); six of seven saved finite ML witnesses still pass direct
 accuracy checks. Normalization does not close the start/solution-search gap.
+Fixed-endpoint diagnostics reproduce the three two-stage regressions outside
+the wrapper: the handoff endpoint and PSD path both matter. A fivefold budget
+does not recover the lost targets. Certified-only warm starts gain two targets
+and lose one across the 120 saved cases; this retrospective tradeoff is not
+promoted. Two-stage retains its existing handoff and remains provisional.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct

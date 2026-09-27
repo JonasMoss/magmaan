@@ -926,3 +926,59 @@ that name to the witness checker when rerunning. Full fits and parameters remain
 local, while compact summaries and all changes are tracked. The two-stage
 regressions and the remaining finite-reference misses are the next diagnostic
 targets; this run does not promote spectral starts or multistart.
+
+## Two-stage handoff investigation
+
+The [short two-stage report](two-stage-summary.html) summarizes the follow-up.
+The three later-batch regressions were replayed with their original controls.
+Both ordinary endpoints were then supplied explicitly to PSD with normalization
+off/on, alongside independent FABIN3-auto controls, at budgets of 5,000 and
+25,000. Every combination is retained; these diagnostic fits are not a new
+multistart policy. No sphere reference enters a start.
+
+All six ordinary endpoints were returned and used as warm starts. Ernst draw 1
+and high-R² draw 7 fail ordinary accuracy under both normalizations; Ernst draw 3
+passes accuracy but is inadmissible. The standalone PSD fits reproduce the
+wrapper outcomes at the same endpoint, normalization and budget. This supports
+handoff/path sensitivity rather than an unexplained wrapper discrepancy.
+
+For Ernst draw 1, either endpoint reaches the PSD target 0.13842345 with
+normalization off; with it on, both exhaust 5,000 evaluations and eventually
+return objective 0.22897031 at the larger budget. A cold FABIN3-auto start reaches
+the target under either normalization. For Ernst draw 3, the old ordinary
+endpoint leads to PSD objective 0.39193273 under both normalizations. The new
+ordinary endpoint has a better unrestricted objective (0.33911821 versus
+0.37150774), yet leads to the worse PSD objective 0.40385641 under both
+normalizations, as does the cold start. This loss is endpoint selection, not a
+failure of PSD accuracy at the returned local solution.
+
+For high-R² draw 7, the old endpoint reaches 0.35601702 only with PSD
+normalization off; turning it on reaches 0.39103251. The new endpoint exhausts
+5,000 under either normalization, then returns 0.44965490 at the larger budget.
+The cold start reaches 0.36575495 under either normalization. The extended-budget
+Ernst/high-R² paths have loadings in the millions and are not recovered targets;
+a finite return or convergence flag alone does not justify accepting those
+requested-chart endpoints. The study's target comparison remains separate.
+
+A retrospective rule permits warm starts only from certified ordinary fits;
+rejected ordinary estimates instead use the original FABIN3-auto start. This
+was checked on all 120 normalized cases, using the saved direct-PSD fit as that
+counterfactual. The library fingerprint is verified, and every current two-stage
+verdict and returned objective is replay-checked against the saved run. Ten
+handoffs change. Earlier-batch target recovery stays 54/60 (one gain and one
+loss); later-batch recovery rises 46→47/60 (one gain). Gains: earlier Ernst
+N=20 draw 9 and later Ernst N=20 draw 1. Loss: earlier weak-marker N=100 draw 9.
+Per-family outcomes and every pair are saved. This is not held-out evidence and
+does not justify promoting the rule. No production code is changed.
+
+Reproduce using the same library as the saved normalization revisit:
+
+```sh
+Rscript scripts/probe_two_stage.R
+Rscript scripts/check_two_stage_handoff.R
+```
+
+Both refuse to overwrite an existing directory; use a fresh `--run-id NAME`.
+Frozen evidence is under `results/two-stage-probe/` and
+`results/two-stage-handoff/`. Keep the current handoff while two-stage remains
+provisional; broader start/PSD-boundary work is separate from normalization.

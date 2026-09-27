@@ -149,3 +149,16 @@ normalization-revisit/*
 !normalization-revisit/metadata.csv
 !normalization-revisit/witness_audits.csv
 !normalization-revisit/chart_witnesses.csv
+
+# Frozen three-case handoff diagnostics and all-draw policy counterfactual.
+!two-stage-probe/
+two-stage-probe/*
+!two-stage-probe/fits.csv
+!two-stage-probe/parameters.csv
+!two-stage-probe/metadata.csv
+!two-stage-handoff/
+two-stage-handoff/*
+!two-stage-handoff/paired.csv
+!two-stage-handoff/summary.csv
+!two-stage-handoff/by_family.csv
+!two-stage-handoff/metadata.csv

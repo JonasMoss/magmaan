@@ -1,0 +1,7 @@
+"batch","design","changed_handoff","baseline_accepted","candidate_accepted","baseline_hit","candidate_hit","gain","loss"
+"development","ernst",1,19,20,19,20,1,0
+"fresh","ernst",2,19,20,16,17,1,0
+"development","high_r2",0,20,20,20,20,0,0
+"fresh","high_r2",1,19,20,19,19,0,0
+"development","weak_marker",5,18,17,15,14,0,1
+"fresh","weak_marker",1,17,17,11,11,0,0
