@@ -1,5 +1,60 @@
 # magmaan TODO
 
+## Top priority: complete normalization machinery for ML, PSD and barrier
+
+- [ ] **L — shared end-to-end normalization (requested 2026-09-27).** Build
+  one reusable model/data coordinate transformation for ordinary ML, direct PSD,
+  ordinary-then-PSD fallback, and barrier fitting. Cover each route's supported
+  data/model slices; completion is not a single-group PSD accuracy check or an
+  experiment-only wrapper. Implement and validate the machinery before deciding
+  whether to enable it by default.
+  - **Model and identification:** normalize observed variables using sample-based
+    units; transport latent units, free parameters, fixed values, structural
+    cells, means/intercepts, equal labels, general linear equalities (including
+    nonzero constants), and explicit parameter bounds. Preserve the user's
+    markers, identification and model in the returned result. Nonlinear
+    equalities remain outside this task's supported scope. Check rank and
+    round-trip equivalence; never silently drop or alter a constraint.
+  - **Groups and data:** include single-group and multigroup models, unequal
+    group sizes and cross-group equalities. Cover complete-data and supported
+    missing-data ML routes, transforming raw data, observed patterns, sample
+    moments and fixed-x inputs consistently. Specify and test the coordinate
+    contract for supported multilevel routes too; track any remaining unsupported
+    slice explicitly rather than describing partial coverage as complete.
+  - **Whole fitting path:** construct automatic starts in normalized coordinates,
+    transport user starts, and use consistent units for covariance repairs,
+    floors/clamps, preconditioning, gradients, optimizer tolerances, constraint
+    residuals and stopping checks. Share the transformation across ordinary,
+    PSD and barrier stages, including fallback/warm-start/polish transitions;
+    avoid double normalization. Preserve explicit start and optimizer choices;
+    automatic marker changes and multistart are separate decisions.
+  - **PSD and barrier semantics:** preserve the covariance domain and transport
+    lifted/Cholesky coordinates. Establish the transformation of each supported
+    barrier penalty, its strength and continuation schedule: equivalent fits must
+    optimize the same statistical criterion, allowing only accounted-for additive
+    constants. Do not silently change regularization by changing measurement units.
+  - **Outputs and checks:** return estimates, implied moments, partables and
+    reusable derivatives in the requested coordinates. Make accuracy, stationarity,
+    admissibility and boundary checks consistent with the fitting representation.
+    Preserve the contracts of applicable information, covariance/SE, score and
+    fit-statistic calculations, including the needed derivative transformations
+    and cached artifacts. Expose effective normalization consistently through the
+    C++ and R entry points and retain useful failures when scaling is unavailable.
+  - **Validation and adoption:** test uniform and mixed units, groups with very
+    different scales, marker/std.lv identification, constrained/fixed-value and
+    mean models, interior/boundary points, poles and inaccurate/invalid points.
+    Separate same-point objective/penalty/derivative/constraint/round-trip checks
+    from complete fits; assess changed convergence and local solutions, not just
+    normalized residuals. Preserve the existing accuracy thresholds. Use the saved
+    difficult cases as development controls and fresh held-out draws under
+    precommitted criteria for any default change; retain every regression and
+    compare direct, fallback and barrier routes separately.
+  - **Starting evidence:** the unconstrained normalization pilot improves unit
+    consistency but sometimes finds worse local solutions. Normalized PSD Newton
+    accuracy already covers single-group complete-data ML with linear equalities.
+    These are starting components, not completion of the programme. The detailed
+    pilot evidence remains under Optimization below.
+
 Repository reorganization completed 2026-09-24: C++ under `cpp/`, public
 maintainer material under `project/`, R build tools alongside the package, and
 external source collections under `external/`. **Deferred:** regenerate the
@@ -602,11 +657,11 @@ section: the categorical corpus saddles are under
     equivalent mixed-unit models, interior and PSD-boundary geometry, feasible
     Newton steps, and rejection of an inaccurate point. Nonlinear equalities
     remain unsupported by this audit.
-  - Continue with the unconstrained route first; inspect the remaining
-    two-stage sensitivity to roundoff and retain alternative local minima
-    as search evidence. Equality/fixed-value transport remains outside this
-    pilot. Fitting normalization and route adoption remain open; the scoped accuracy
-    normalization is implemented.
+  - Follow the shared ML/PSD/barrier normalization programme at the top of this
+    backlog. Inspect remaining two-stage sensitivity to roundoff and retain
+    alternative local minima as search evidence. Equality/fixed-value transport
+    remains outside this pilot; the core accuracy check now transports linear
+    equalities. Full fitting normalization and route adoption remain open.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best
