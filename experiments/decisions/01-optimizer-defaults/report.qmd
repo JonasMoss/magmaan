@@ -162,9 +162,15 @@ points now agree across original and normalized representations. See the
 [unconstrained normalization pilot](#unconstrained-normalization-pilot);
 full fitting normalization is not promoted by this experiment.
 
+After this pilot, the author requested enabling shared normalization throughout
+complete-data ML and PSD fitting (2026-09-27), including multiple groups and
+linear equality constraints. That implementation is checked by unit/fixture and
+R integration tests. This is an explicit adoption decision, not a new held-out
+run establishing better basin selection; the mixed pilot results remain relevant.
+
 ## The register
 
-| Default | Current value | Status after this run | Evidence |
+| Default | Current value | Current status | Evidence |
 |---|---|---|---|
 | ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
 | ML and GLS optimizer | NLopt L-BFGS | provisional: PORT certifies more but returns about eight times as many runaways; reopen once the verdict flags runaways | lane ml-gls, runs 2 and 3 |
@@ -174,8 +180,9 @@ full fitting normalization is not promoted by this experiment.
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
 | PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. The clamp correction and a small paired route rerun are now recorded below; remaining unit-sensitive failures are still open | lane psd-ml, runs 1 and 2 |
-| PSD feasibility tolerances | absolute | settled: keep (rule D passes, 0 fits) | lane psd-ml |
-| PSD preconditioning clamp | $[10^{-4}, 10^{4}]$, absolute | open: costs direct PSD fits at $\times 100$ | lane psd-ml failures |
+| ML and PSD fitting normalization | sample-normalized model and starts; estimates returned in requested units | enabled by author request, 2026-09-27; complete-data, single/multigroup, linear equalities | exploratory pilot below plus library regression checks; no claim of uniformly better local solutions |
+| PSD feasibility tolerances | absolute in the internal normalized units | numerical threshold unchanged; its units now follow the fitting normalization | lane psd-ml and subsequent author-requested normalization |
+| PSD preconditioning clamp | $[10^{-4}u, 10^{4}u]$, relative to sample-derived units | implemented; further normalization now precedes fitting | PSD scaling follow-up below |
 
 ## How much to trust it
 
@@ -607,8 +614,9 @@ fitting normalization or route change is adopted here.
 
 The scoped PSD accuracy check now normalizes each supplied point and its sample
 before assessing boundary geometry and accuracy. It preserves the requested
-marker and uses the same accuracy thresholds. This applies to single-group
-complete-data ML, now including equal labels and general linear equalities.
+marker and uses the same accuracy thresholds. Originally single-group PSD,
+this now extends to ordinary and PSD complete-data ML with multiple groups,
+equal labels and general linear equalities.
 Estimates remain in requested units. The equality extension is covered by
 regression tests of equivalent models in mixed units, including boundary and
 inaccurate points; the saved-point pilot below contains no equality constraints.

@@ -504,7 +504,7 @@ TEST_CASE("Newton artifacts: full Hessian remains reusable after equality reduct
   REQUIRE(info.has_value());
   CHECK(d.hessian.isApprox(*info));
   CHECK(g.curvature_correction.isZero());
-  CHECK(g.reduced_hessian.isApprox(con->K().transpose() * d.hessian * con->K()));
+  CHECK(g.reduced_hessian.isApprox(g.equality_basis.transpose() * d.hessian * g.equality_basis));
   const Eigen::VectorXd full_step = g.equality_basis * g.tangent_basis * audit.solution.step;
   CHECK((con->A_eq * full_step).norm() < 1e-12);
   CHECK((g.reduced_hessian * audit.solution.step + g.reduced_gradient).norm() < 1e-10);
@@ -515,8 +515,12 @@ TEST_CASE("Newton artifacts: full Hessian remains reusable after equality reduct
   const auto psd_geometry = prepare_newton_geometry(m.pt, m.rep, d,
       magmaan::estimate::StationarityDomain::Psd);
   REQUIRE(psd_geometry.status == NewtonAccuracyStatus::Available);
-  CHECK(psd_geometry.reduced_hessian.isApprox(g.reduced_hessian));
-  CHECK(psd_geometry.reduced_gradient.isApprox(g.reduced_gradient));
+  const auto raw_solution = solve_newton_system(
+      prepare_newton_system(psd_geometry.reduced_hessian), psd_geometry.reduced_gradient);
+  REQUIRE(raw_solution.status == NewtonAccuracyStatus::Available);
+  CHECK((psd_geometry.equality_basis * psd_geometry.tangent_basis * raw_solution.step
+         - full_step).norm() < 1e-10);
+  CHECK(raw_solution.distance == doctest::Approx(audit.solution.distance).epsilon(1e-8));
   CHECK(newton_accuracy_ml(m.pt, m.rep, m.samp, at(theta)).distance ==
         doctest::Approx(audit.diagnostics.distance));
 }
@@ -611,13 +615,13 @@ TEST_CASE("PSD Newton normalization preserves rejection and its supported scope"
     sample.S[0](0, 0) = 0.0;
     CHECK_FALSE(audit_newton_ml(m.pt, m.rep, sample, m.theta0, StationarityDomain::Psd).diagnostics.passed);
   }
-  SUBCASE("linear equalities normalize while ambient audit retains its existing path") {
+  SUBCASE("linear equalities normalize in ambient and PSD audits") {
     auto m = exact_model("f =~ x1 + a*x2 + a*x3 + x4");
     const auto psd = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0, StationarityDomain::Psd);
     CHECK(psd.diagnostics.unit_normalized);
     CHECK(psd.diagnostics.passed);
     const auto ambient = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0);
-    CHECK_FALSE(ambient.diagnostics.unit_normalized);
+    CHECK(ambient.diagnostics.unit_normalized);
     CHECK(ambient.diagnostics.passed);
   }
 }

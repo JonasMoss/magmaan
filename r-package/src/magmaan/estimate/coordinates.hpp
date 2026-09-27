@@ -23,6 +23,20 @@
 
 namespace magmaan::estimate {
 
+// Complete-data single-level ML coordinate transformation, including groups
+// and linear equalities. theta_original = parameter_units .* theta_normalized.
+struct NormalizedMlModel {
+  spec::LatentStructure structure;
+  model::MatrixRep representation;
+  data::SampleStats sample;
+  Eigen::VectorXd parameter_units;
+};
+bool ml_normalization_supported(const spec::LatentStructure& pt,
+                                const model::MatrixRep& rep);
+fit_expected<NormalizedMlModel> normalize_ml_model(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::SampleStats& sample);
+
 struct CoordinateMap {
   optim::CoordinateScaling kind = optim::CoordinateScaling::None;
   Eigen::VectorXd center;  // nonzero only on centered location coordinates

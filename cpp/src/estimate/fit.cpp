@@ -2761,15 +2761,64 @@ fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds,
        Backend backend, OptimOptions opts) {
+  if (opts.normalize_sample && ml_normalization_supported(pt, rep)) {
+    auto normalized = normalize_ml_model(pt, rep, samp);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (x0.size() != normalized->parameter_units.size())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue, "ML start has wrong size", 0, 0.0});
+    const Eigen::VectorXd start = x0.cwiseQuotient(normalized->parameter_units);
+    opts.normalize_sample = false;
+    if (!bounds.empty()) {
+      if (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size())
+        return std::unexpected(FitError{FitError::Kind::NumericIssue, "ML bounds have wrong size", 0, 0.0});
+      bounds.lower.array() /= normalized->parameter_units.array();
+      bounds.upper.array() /= normalized->parameter_units.array();
+    }
+    auto est = fit_ml(std::move(normalized->structure), normalized->representation,
+        normalized->sample, start, std::move(bounds), backend, opts);
+    if (est) {
+      est->theta.array() *= normalized->parameter_units.array();
+      est->sample_normalized = true;
+    }
+    return est;
+  }
   auto pre = prelude(pt, rep, samp, x0, "fit_ml");
   if (!pre.has_value()) return std::unexpected(pre.error());
 
   auto obj_or = estimate::ml_objective(pre->ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  const Backend used = nonlinear_capable_backend(backend, pre->nl);
-  auto est = drive_ml_scalar(pt, rep, *pre, samp, prob, x0, bounds, used,
-                             opts, "fit_ml");
+  Backend used = nonlinear_capable_backend(backend, pre->nl);
+  fit_expected<Estimates> est;
+  if (!bounds.empty() && (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size()))
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue, "fit_ml: bounds size mismatch"));
+  const bool finite_box = !bounds.empty() &&
+      (bounds.lower.array().isFinite().any() || bounds.upper.array().isFinite().any());
+  if (finite_box && pre->con.active() && pre->con.group.empty() && pre->con.n_alpha > 0) {
+    // Weighted equalities generally turn a theta box into a non-box in alpha.
+    // Keep theta as the optimizer coordinates and impose the linear rows
+    // explicitly, so normalization cannot silently discard a supplied bound.
+    EqConstraints identity;
+    identity.npar = identity.n_alpha = static_cast<std::int32_t>(x0.size());
+    identity.theta0 = Eigen::VectorXd::Zero(x0.size());
+    identity.Kmat = Eigen::MatrixXd::Identity(x0.size(), x0.size());
+    frontier::ExtraNonlinearEqConstraints linear;
+    linear.n_constraint = pre->con.rank;
+    linear.h = [&](const Eigen::VectorXd& theta) {
+      return Eigen::VectorXd(pre->con.A_eq * theta - pre->con.b_eq);
+    };
+    linear.jacobian = [&](const Eigen::VectorXd&) { return pre->con.A_eq; };
+    if (used != Backend::NloptSlsqp && used != Backend::Ipopt) used = Backend::NloptSlsqp;
+    auto map = coordinate_map(opts.coordinate_scaling, opts.center_locations,
+        pt, rep, pre->ev, identity, samp, x0);
+    if (!map) return std::unexpected(map.error());
+    const Eigen::VectorXd start = x0.cwiseMax(bounds.lower).cwiseMin(bounds.upper);
+    est = compose_scalar_ml_extra(prob, identity, pre->nl, linear, start, bounds,
+                                  used, opts, "fit_ml", &*map);
+    if (est) est->coordinate_scaling = map->kind;
+  } else {
+    est = drive_ml_scalar(pt, rep, *pre, samp, prob, x0, bounds, used, opts, "fit_ml");
+  }
   if (!est.has_value()) return est;
   if (used != backend) est->substituted_backend = used;
   attach_diagnostics(*est, pt, *pre, bounds);
@@ -3084,6 +3133,21 @@ fit_expected<Estimates>
 fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
            const SampleStats& samp, const Eigen::VectorXd& x0,
            Backend backend, OptimOptions opts, PsdFitOptions psd_opts) {
+  if (opts.normalize_sample && ml_normalization_supported(pt, rep)) {
+    auto normalized = normalize_ml_model(pt, rep, samp);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (x0.size() != normalized->parameter_units.size())
+      return std::unexpected(FitError{FitError::Kind::NumericIssue, "ML start has wrong size", 0, 0.0});
+    const Eigen::VectorXd start = x0.cwiseQuotient(normalized->parameter_units);
+    opts.normalize_sample = false;
+    auto est = fit_ml_psd(std::move(normalized->structure), normalized->representation,
+        normalized->sample, start, backend, opts, psd_opts);
+    if (est) {
+      est->theta.array() *= normalized->parameter_units.array();
+      est->sample_normalized = true;
+    }
+    return est;
+  }
   if (auto ok = validate_psd_fit_options(psd_opts, "fit_ml_psd");
       !ok.has_value()) return std::unexpected(ok.error());
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_psd");

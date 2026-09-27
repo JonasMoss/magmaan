@@ -1231,7 +1231,12 @@ TEST_CASE("api continuous and FIML fits retain the shared explicit start policy"
     REQUIRE(fit); REQUIRE(fit->starts());
     CHECK(fit->starts()->method == es::StartMethod::Fabin2);
     CHECK(fit->starts()->requested_transport == es::StartTransport::AutoStdLv);
-    if (!fiml) CHECK(fit->starts()->theta.isApprox(expected->theta));
+    if (estimator.kind == api::EstimatorKind::ML) {
+      auto normalized = es::normalized_ml_start_values(model->structure(), model->matrix_rep(),
+          *stats, policy, model->starts()); REQUIRE(normalized);
+      CHECK(fit->starts()->theta.isApprox(normalized->theta));
+      CHECK(fit->estimates().sample_normalized);
+    } else if (!fiml) CHECK(fit->starts()->theta.isApprox(expected->theta));
     else {
       auto fiml_expected = es::start_values(model->structure(), model->matrix_rep(),
           fit->fiml_pack()->start_stats, policy, model->starts()); REQUIRE(fiml_expected);

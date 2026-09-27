@@ -206,11 +206,12 @@ NewtonAudit audit_newton_derivatives(
     NewtonAccuracyOptions opts = {}, const Bounds& bounds = {},
     double active_bound_tol = 1e-6);
 
-// Single-group complete-data PSD ML with linear equalities is audited after
-// sample-unit normalization (including fixed/structural cells and equal labels).
+// Single-level complete-data ML (ambient or PSD, including multiple groups)
+// with linear equalities is audited after sample-unit normalization, including
+// fixed/structural cells and equal labels.
 // The retained derivatives and full-space geometry are transported back to the
 // supplied parameter coordinates; reduced diagnostics retain normalized units.
-// Other domains/scopes keep the supplied-coordinate audit.
+// Other model scopes keep the supplied-coordinate audit.
 NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta,

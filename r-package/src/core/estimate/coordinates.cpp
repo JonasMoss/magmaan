@@ -6,12 +6,14 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <numeric>
 #include <string>
 #include <vector>
 
 #include <Eigen/Cholesky>
 
 #include "magmaan/estimate/ml_numerics.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
 
 #include "../detail_vech.hpp"
@@ -222,6 +224,90 @@ parameter_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
     out(pt.free[i] - 1) = std::isfinite(v) && v > 0.0 ? v : 1.0;
   }
   return out;
+}
+
+
+bool ml_normalization_supported(const spec::LatentStructure& pt,
+                                const model::MatrixRep& rep) {
+  return !rep.dims.empty() &&
+      std::all_of(rep.block_info.begin(), rep.block_info.end(), [](const auto& b) {
+        return b.role == model::BlockLevel::Single;
+      }) && build_eq_constraints(pt).has_value() && !build_nl_constraints(pt).active();
+}
+
+fit_expected<NormalizedMlModel> normalize_ml_model(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::SampleStats& samp) {
+  if (!ml_normalization_supported(pt, rep))
+    return std::unexpected(numeric("ML normalization requires single-level models with linear equalities"));
+  auto con = build_eq_constraints(pt);
+  auto variables = driven::variable_units(pt, rep, samp);
+  auto units = parameter_units(pt, rep, samp);
+  if (!variables) return std::unexpected(variables.error());
+  if (!units) return std::unexpected(units.error());
+  if (!units->allFinite() || (units->array() <= 0.0).any())
+    return std::unexpected(numeric("ML normalization requires finite positive parameter units"));
+  auto normalized_pt = pt;
+  auto normalized_rep = rep;
+  auto normalized_sample = samp;
+  if (con->active()) {
+    // theta = D z: A theta = b becomes (A D) z = b. Equal labels
+    // become weighted rows too; retaining their merge groups would impose
+    // extra, generally incorrect equalities in the normalized coordinates.
+    normalized_pt.eq_groups.resize(static_cast<std::size_t>(pt.n_free()));
+    std::iota(normalized_pt.eq_groups.begin(), normalized_pt.eq_groups.end(), 0);
+    normalized_pt.lin_constraint_R.clear();
+    normalized_pt.lin_constraint_d.clear();
+    const Eigen::MatrixXd A = con->A_eq * units->asDiagonal();
+    for (Eigen::Index r = 0; r < A.rows(); ++r) {
+      const double scale = A.row(r).cwiseAbs().maxCoeff();
+      if (!(scale > 0.0) || !std::isfinite(scale))
+        return std::unexpected(numeric("ML normalization encountered invalid constraint units"));
+      for (Eigen::Index k = 0; k < A.cols(); ++k)
+        normalized_pt.lin_constraint_R.push_back(A(r, k) / scale);
+      normalized_pt.lin_constraint_d.push_back(con->b_eq(r) / scale);
+    }
+    auto normalized_con = build_eq_constraints(normalized_pt);
+    if (!normalized_con || normalized_con->rank != con->rank)
+      return std::unexpected(numeric("ML normalization could not preserve linear constraint rank"));
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& c = rep.cell_for_row[i];
+    if (!c.used) continue;
+    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
+                                              static_cast<std::size_t>(c.block));
+    if (!(u > 0.0) || !std::isfinite(u))
+      return std::unexpected(numeric("ML normalization encountered invalid matrix-cell units"));
+    if (pt.free[i] > 0) {
+      // A parameter shared across cells cannot acquire two different units.
+      const double assigned = (*units)(pt.free[i] - 1);
+      if (std::abs(u / assigned - 1.0) > 1e-12)
+        return std::unexpected(numeric("ML normalization needs consistent units for shared parameters"));
+    } else {
+      normalized_pt.fixed_value[i] /= u;
+    }
+  }
+  for (auto& c : normalized_rep.structural_cells) {
+    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
+                                              static_cast<std::size_t>(c.block));
+    if (!(u > 0.0) || !std::isfinite(u))
+      return std::unexpected(numeric("ML normalization encountered invalid structural-cell units"));
+    c.value /= u;
+  }
+
+  if (!samp.mean.empty() && samp.mean.size() != samp.S.size())
+    return std::unexpected(numeric("ML normalization requires compatible sample means"));
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const auto& sd = variables->observed[b];
+    if (samp.S[b].cols() != sd.size() ||
+        (!samp.mean.empty() && samp.mean[b].size() != 0 && samp.mean[b].size() != sd.size()))
+      return std::unexpected(numeric("ML normalization requires compatible sample dimensions"));
+    normalized_sample.S[b].array() /= (sd * sd.transpose()).array();
+    if (!samp.mean.empty() && samp.mean[b].size() != 0)
+      normalized_sample.mean[b].array() /= sd.array();
+  }
+  return NormalizedMlModel{std::move(normalized_pt), std::move(normalized_rep),
+                           std::move(normalized_sample), std::move(*units)};
 }
 
 fit_expected<Eigen::VectorXd>

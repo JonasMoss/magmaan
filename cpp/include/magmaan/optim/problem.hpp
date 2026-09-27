@@ -168,6 +168,9 @@ struct OptimOptions {
   // Center mean and intercept coordinates at their start values, so a large
   // location does not dominate relative step tests.
   bool center_locations = true;
+  // Complete-data ML/PSD: normalize model and sample before optimization.
+  // Other objective families ignore this option.
+  bool normalize_sample = true;
 };
 
 // --- Terminal audit -------------------------------------------------------

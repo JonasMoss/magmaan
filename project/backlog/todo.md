@@ -49,10 +49,19 @@
     difficult cases as development controls and fresh held-out draws under
     precommitted criteria for any default change; retain every regression and
     compare direct, fallback and barrier routes separately.
+  - **Delivered slice (2026-09-27):** complete-data ordinary ML and PSD ML now
+    use the shared normalized model in optimization, including single/multigroup
+    models, means, fixed/structural cells, equal labels and linear equalities.
+    Staged C++/R automatic starts, original-unit explicit starts/hints/bounds,
+    fallback warm starts, returned estimates, and ambient/PSD Newton checks use
+    the same transformation. The effective behavior is exposed by
+    `sample_normalized`, with `normalize_sample=false` retaining the former
+    fitting path. This implements the user's requested ML/PSD fitting change;
+    FIML, barrier, multilevel and the broader validation programme above remain.
   - **Starting evidence:** the unconstrained normalization pilot improves unit
     consistency but sometimes finds worse local solutions. Normalized PSD Newton
-    accuracy already covers single-group complete-data ML with linear equalities.
-    These are starting components, not completion of the programme. The detailed
+    accuracy first covered single-group complete-data ML with linear equalities.
+    These are starting components, not completion of the full programme. The detailed
     pilot evidence remains under Optimization below.
 
 Repository reorganization completed 2026-09-24: C++ under `cpp/`, public
@@ -661,7 +670,8 @@ section: the categorical corpus saddles are under
     backlog. Inspect remaining two-stage sensitivity to roundoff and retain
     alternative local minima as search evidence. Equality/fixed-value transport
     remains outside this pilot; the core accuracy check now transports linear
-    equalities. Full fitting normalization and route adoption remain open.
+    equalities. Complete-data ML/PSD fitting normalization has since landed;
+    broader coverage and route adoption remain open.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best

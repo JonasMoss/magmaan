@@ -456,6 +456,8 @@ inline magmaan::optim::OptimOptions optim_opts_from(
       else if (kind == "information") o.coordinate_scaling = magmaan::optim::CoordinateScaling::Information;
       else Rcpp::stop("control$coordinate_scaling must be \"none\", \"sample_units\" or \"information\"");
     }
+    if (l.containsElementNamed("normalize_sample"))
+      o.normalize_sample = Rcpp::as<bool>(l["normalize_sample"]);
     if (l.containsElementNamed("center_locations"))
       o.center_locations = Rcpp::as<bool>(l["center_locations"]);
     if (l.containsElementNamed("history"))  o.history  = Rcpp::as<int>(l["history"]);

@@ -37,7 +37,8 @@ normalize_unconstrained_sample <- function(model, sample, std_lv) {
 }
 
 normalization_fit <- function(model,sample,route) {
-  ctl <- list(start='fabin3',start_transport='auto',max_iter=5000L,
+  # This pilot controls normalization itself; keep the original-unit arm explicit.
+  ctl <- list(start='fabin3',start_transport='auto',normalize_sample=FALSE,max_iter=5000L,
     nlopt=list(max_eval=5000L,ftol_rel=1e-12,xtol_rel=1e-10),coordinate_scaling='information')
   if(route=='direct') {
     fit <- magmaanlab::frontier_fit_ml_psd(model,sample,optimizer='nlopt-slsqp',control=ctl,

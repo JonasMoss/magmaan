@@ -80,6 +80,10 @@ struct Estimates {
   // Set when the requested backend could not take the model's nonlinear
   // equality constraints and this backend ran instead.
   std::optional<Backend> substituted_backend = {};
+  // theta is in caller units; diagnostics/terminal audit describe the
+  // normalized fitting model when this flag is true.
+  bool sample_normalized = false;
+
 };
 
 // Consumers use this common verdict; optimizer_status explains termination.
@@ -285,6 +289,10 @@ struct ScalarProfileCiResult {
 // applies to the least-squares path only. A model with nonlinear equality
 // constraints runs on NLopt SLSQP when `backend` cannot take them (fit_gls
 // likewise), and the fit records the substitution in `substituted_backend`.
+// Single-level complete-data models with linear equalities (including groups)
+// use sample-normalized model/data coordinates unless opts.normalize_sample is
+// false. x0, bounds and returned theta are always in caller coordinates;
+// optimizer tolerances and diagnostics refer to the internal representation.
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},

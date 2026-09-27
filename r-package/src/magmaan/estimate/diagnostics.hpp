@@ -222,7 +222,7 @@ struct NewtonAccuracyDiagnostics {
   // directions with a zero or negative multiplier stay free. Without null
   // directions this is the interior check.
   bool psd_domain = false;
-  // The PSD audit used sample-normalized model/data coordinates. Numerical
+  // The ML audit used sample-normalized model/data coordinates. Numerical
   // condition, face multipliers and reduced steps refer to that representation.
   bool unit_normalized = false;
   bool box_constrained = false; // correction respected the supplied box domain

@@ -12,7 +12,7 @@
 #include <Eigen/SVD>
 
 #include "magmaan/estimate/constraints.hpp"
-#include "../detail_coordinates.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -252,84 +252,22 @@ NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta,
     StationarityDomain domain, NewtonAccuracyOptions opts) {
-  auto con = build_eq_constraints(pt);
-  const bool single_level = rep.block_info.empty() ||
-      (rep.block_info.size() == 1 && rep.block_info[0].role == model::BlockLevel::Single);
-  const bool normalize = domain == StationarityDomain::Psd && rep.dims.size() == 1 &&
-      single_level && con && !build_nl_constraints(pt).active();
-  if (!normalize)
+  if (!ml_normalization_supported(pt, rep))
     return audit_newton_derivatives(pt, rep,
         evaluate_newton_ml(pt, rep, samp, theta), domain, opts);
-
-  auto variables = driven::variable_units(pt, rep, samp);
-  auto units = parameter_units(pt, rep, samp);
-  auto unavailable = [&](const char* detail) {
+  auto normalized = normalize_ml_model(pt, rep, samp);
+  if (!normalized || theta.size() != pt.n_free()) {
     NewtonDerivatives d;
     d.theta = theta;
     d.objective_kind = NewtonObjectiveKind::CompleteDataMl;
     d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
-    d.detail = detail;
+    d.detail = normalized ? "invalid theta size" : normalized.error().detail;
     return audit_newton_derivatives(pt, rep, std::move(d), domain, opts);
-  };
-  if (!variables || !units || units->size() != theta.size() ||
-      !units->allFinite() || (units->array() <= 0.0).any())
-    return unavailable("PSD accuracy normalization requires finite positive sample/parameter units");
-
-  auto normalized_pt = pt;
-  auto normalized_rep = rep;
-  auto normalized_sample = samp;
-  if (con->active()) {
-    // theta = D z: A theta = b becomes (A D) z = b. Equal labels
-    // become weighted rows too; retaining their merge groups would impose
-    // extra, generally incorrect equalities in the normalized coordinates.
-    normalized_pt.eq_groups.resize(static_cast<std::size_t>(pt.n_free()));
-    std::iota(normalized_pt.eq_groups.begin(), normalized_pt.eq_groups.end(), 0);
-    normalized_pt.lin_constraint_R.clear();
-    normalized_pt.lin_constraint_d.clear();
-    const Eigen::MatrixXd A = con->A_eq * units->asDiagonal();
-    for (Eigen::Index r = 0; r < A.rows(); ++r) {
-      const double scale = A.row(r).cwiseAbs().maxCoeff();
-      if (!(scale > 0.0) || !std::isfinite(scale))
-        return unavailable("PSD accuracy normalization encountered invalid constraint units");
-      for (Eigen::Index k = 0; k < A.cols(); ++k)
-        normalized_pt.lin_constraint_R.push_back(A(r, k) / scale);
-      normalized_pt.lin_constraint_d.push_back(con->b_eq(r) / scale);
-    }
-    auto normalized_con = build_eq_constraints(normalized_pt);
-    if (!normalized_con || normalized_con->rank != con->rank)
-      return unavailable("PSD accuracy normalization could not preserve linear constraint rank");
   }
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    const auto& c = rep.cell_for_row[i];
-    if (!c.used) continue;
-    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
-                                              static_cast<std::size_t>(c.block));
-    if (!(u > 0.0) || !std::isfinite(u))
-      return unavailable("PSD accuracy normalization encountered invalid matrix-cell units");
-    if (pt.free[i] > 0) {
-      // A parameter shared across cells cannot acquire two different units.
-      const double assigned = (*units)(pt.free[i] - 1);
-      if (std::abs(u / assigned - 1.0) > 1e-12)
-        return unavailable("PSD accuracy normalization needs consistent units for shared parameters");
-    } else {
-      normalized_pt.fixed_value[i] /= u;
-    }
-  }
-  for (auto& c : normalized_rep.structural_cells) {
-    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
-                                              static_cast<std::size_t>(c.block));
-    if (!(u > 0.0) || !std::isfinite(u))
-      return unavailable("PSD accuracy normalization encountered invalid structural-cell units");
-    c.value /= u;
-  }
-  const auto& sd = variables->observed[0];
-  if (normalized_sample.S[0].cols() != sd.size() ||
-      (!normalized_sample.mean.empty() &&
-       (normalized_sample.mean.size() != 1 || normalized_sample.mean[0].size() != sd.size())))
-    return unavailable("PSD accuracy normalization requires compatible sample dimensions");
-  normalized_sample.S[0].array() /= (sd * sd.transpose()).array();
-  if (!normalized_sample.mean.empty())
-    normalized_sample.mean[0].array() /= sd.array();
+  const auto& normalized_pt = normalized->structure;
+  const auto& normalized_rep = normalized->representation;
+  const auto& normalized_sample = normalized->sample;
+  const auto* units = &normalized->parameter_units;
   const Eigen::VectorXd normalized_theta = theta.cwiseQuotient(*units);
   auto out = audit_newton_derivatives(normalized_pt, normalized_rep,
       evaluate_newton_ml(normalized_pt, normalized_rep, normalized_sample, normalized_theta),

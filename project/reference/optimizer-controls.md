@@ -90,8 +90,8 @@ ML profile. Passing `nlopt_slsqp(OptimOptions{})` explicitly opts out.
 For PSD scaling, the default argument is `ml_psd_options()`; an explicit
 `PsdFitOptions{}` retains its former unscaled behavior.
 
-In R, `control=list(start="fabin3", coordinate_scaling="none")` selects native
-starts and raw optimizer coordinates. `control$start` also accepts `scaled-fabin`,
+In R, `control=list(start="fabin3", coordinate_scaling="none",
+normalize_sample=FALSE)` selects native starts and raw optimizer coordinates. `control$start` also accepts `scaled-fabin`,
 `simple` and the existing named start methods. Use `preconditioning="none"`
 for unscaled PSD ML. Legacy `max_iter`, `ftol` and `gtol` explicitly override
 profile defaults; a supplied nested NLopt field overrides the corresponding
@@ -101,6 +101,45 @@ These search changes do not implement the research Newton audit, change the
 production fit verdict, or make PSD fitting the default estimator. The
 validation and remaining boundary/fallback limitations are documented in
 [the numerical study](../validation/interior-newton-audit.md).
+
+## Complete-data ML and PSD sample normalization (2026-09-27)
+
+`OptimOptions::normalize_sample` defaults to `true` for the ordinary ML and
+PSD ML fitting entry points. Single-level complete-data models, including
+multiple groups and cross-group linear equalities, are transformed internally
+by their sample standard deviations and identification-aware latent units.
+Fixed/structural cells, affine constraints, explicit starts and ML box bounds
+are transported with the model. Nonlinear equality and multilevel models retain
+their existing paths; FIML, barrier and other objective families do not use this
+new fitting transformation.
+
+The staged C++ API and R ML/PSD wrappers construct automatic starts in the
+normalized model. Low-level callers supplying `x0` continue to supply it in
+original units; `normalized_ml_start_values()` exposes the matching constructor.
+User start hints also remain in original units. Ordinary-then-PSD fallback
+returns its ordinary estimates to original units before transporting its warm
+start into the PSD stage. There is no automatic marker change or multistart.
+
+`Estimates::sample_normalized` (R: `fit$sample_normalized`) records whether the
+fit used this transformation. Estimates, partables, implied moments and
+post-fit information calculations retain the caller's units; optimizer audit,
+stationarity/admissibility diagnostics and stopping tolerances describe the
+internal fitting representation. Standalone complete-data ML and PSD Newton
+accuracy audits normalize independently, preserving their thresholds and
+returning retained derivatives in caller coordinates.
+
+Set `control$normalize_sample=FALSE` (C++: `opts.normalize_sample=false`) to
+reproduce the original-unit fitting path. This switch is separate from
+`coordinate_scaling`: the latter still controls optimizer preconditioning
+inside whichever model representation is used. PSD covariance floors and
+feasibility tolerances therefore apply in normalized units when enabled. ML
+boxes combined with weighted linear equalities are imposed together in full
+parameter coordinates; if needed the backend switches to SLSQP and records
+`substituted_backend`, rather than dropping the bounds in an affine reduction.
+Normalization can change starts, search paths and the selected local minimum;
+it is not a guarantee of a better objective. The user requested enabling this
+shared fitting machinery; the earlier exploratory pilot is not a new held-out
+comparison establishing universal improvement.
 
 ## Optimizer coordinates (2026-09-25)
 

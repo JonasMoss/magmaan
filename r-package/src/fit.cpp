@@ -154,7 +154,7 @@ Rcpp::List start_result_to_r(const magmaan::estimate::StartValues& value) {
 Eigen::VectorXd start_values_or_stop(Ctx& ctx,
     const magmaan::spec::Starts& starts, const std::string& default_name = "fabin3",
     std::string* applied_policy = nullptr, std::string* fallback_reason = nullptr,
-    Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue, bool normalize = false) {
   namespace es = magmaan::estimate;
   std::string name = default_name;
   Rcpp::List ctl = control.isNotNull() ? Rcpp::List(control.get()) : Rcpp::List::create();
@@ -169,9 +169,12 @@ Eigen::VectorXd start_values_or_stop(Ctx& ctx,
   if (explicit_vector && ctl.containsElementNamed("start_transport") &&
       policy.transport != es::StartTransport::Native)
     Rcpp::stop("explicit start vectors are already in target coordinates; use native transport");
+  if (ctl.containsElementNamed("normalize_sample"))
+    normalize = normalize && Rcpp::as<bool>(ctl["normalize_sample"]);
   auto value = explicit_vector
       ? es::explicit_start_values(ctx.pt, Rcpp::as<Eigen::VectorXd>(input))
-      : es::start_values(ctx.pt, ctx.rep, ctx.samp, policy, starts);
+      : normalize ? es::normalized_ml_start_values(ctx.pt, ctx.rep, ctx.samp, policy, starts)
+                  : es::start_values(ctx.pt, ctx.rep, ctx.samp, policy, starts);
   if (!value) stop_fit(value.error());
   if (applied_policy) *applied_policy = explicit_vector ? "explicit" :
       (name == "scaled-fabin" && policy.transport != es::StartTransport::Native
@@ -1296,6 +1299,7 @@ Rcpp::List fit_result(Ctx& ctx,
       Rcpp::_["nobs"]          = nobs_out,
       Rcpp::_["sample_mean"]   = mean_out,
       Rcpp::_["meanstructure"] = ctx.meanstructure);
+  out["sample_normalized"] = est.sample_normalized;
   out["optimizer_status"] = opt_status;
   out["grad_norm"]        = est.grad_inf_norm;
   out["audit"]            = audit_to_r(est.audit);
@@ -2538,7 +2542,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   std::string start_policy = "layered";
   std::string start_fallback_reason = "none";
 
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, control);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, control, true);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
       bounds_from_nullable(bounds), backend, optim_opts_from(control, magmaan::estimate::ml_optim_options()));
@@ -2570,7 +2574,7 @@ Rcpp::List frontier_fit_ml_psd_impl(
   std::string start_policy = "scaled-fabin";
   std::string start_fallback_reason = "none";
 
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, control);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, control, true);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
           ? magmaan::estimate::Backend::NloptSlsqp
@@ -2613,7 +2617,7 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
   if (psd_control.isNotNull() && (Rcpp::List(psd_control.get()).containsElementNamed("start") ||
       Rcpp::List(psd_control.get()).containsElementNamed("start_transport")))
     Rcpp::stop("set the initial start policy in ordinary_control; PSD uses the ordinary estimates or that original start");
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, ordinary_control);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, start_policy, &start_policy, &start_fallback_reason, ordinary_control, true);
   ef::MlPsdFallbackOptions options;
   options.ordinary_backend = backend_from_optimizer_arg(ordinary_optimizer);
   if (psd_optimizer.isNotNull())

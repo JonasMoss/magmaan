@@ -66,4 +66,10 @@ fit_expected<StartValues> start_values(
     const spec::LatentStructure&, const model::MatrixRep&,
     const data::SampleStats&, const StartPolicy&, const spec::Starts& = {});
 
+// Construct starts in the same normalized model used by ML/PSD fitting, then
+// return them in caller units. Hints retain their original-unit interpretation.
+fit_expected<StartValues> normalized_ml_start_values(
+    const spec::LatentStructure&, const model::MatrixRep&,
+    const data::SampleStats&, const StartPolicy&, const spec::Starts& = {});
+
 } // namespace magmaan::estimate

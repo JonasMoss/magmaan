@@ -219,23 +219,29 @@ direct marker PSD goes from nine verdict differences/two certified objective
 differences to zero/zero; direct std.lv has no remaining certified objective
 differences but five verdict differences. This does not establish better basin
 selection: normalized two-stage fits sometimes reach worse local minima.
-PSD accuracy now uses sample-normalized geometry and Newton systems for
-single-group complete-data ML, including equal labels and general linear
-equalities. Fixed and structural matrix cells are transported too. Equalities
-are rewritten in the internal model as A D z = b, with former merge groups
-replaced by weighted linear rows; normalization must preserve constraint rank. Requested markers and the accuracy thresholds
-are preserved. Retained full-space derivatives and geometry maps return in
-caller coordinates; reduced diagnostics use normalized units, exposed through
-`unit_normalized`. Other audit domains/scopes retain their existing path.
-Re-auditing 4,742 saved points without fitting recovers the five unit-induced
-false failures, with zero representation-dependent verdict or face-geometry
-differences. Two checks now correctly reproduce the internal nonpositive-curvature
-rejection of already-failed fits. This is a development regression check, not
-fresh evidence for fitting policy. Additional regression tests compare explicitly
-written equivalent constrained models under mixed unit changes, at interior and
-PSD-boundary points, including an affine nonzero constant and an inaccurate
-point. Full fitting normalization and route adoption remain open; multigroup,
-multilevel and other objective audits retain their existing scope.
+Complete-data ordinary ML and PSD ML now share a model/data normalization
+before optimization (author request, 2026-09-27). The staged C++ and R entry
+points construct automatic starts there; explicit starts, hints and ML bounds
+keep their caller-unit interpretation. The transformation supports single-level
+single/multigroup models, means, fixed/structural cells, and cross-group equal
+labels/general linear equalities. Equalities become weighted rows A D z = b;
+constraint rank must be preserved. Returned theta and post-fit model evaluation
+remain in the user's identification and units. Fallback stages each transform
+their supplied original-unit starts, including warm starts.
+`OptimOptions::normalize_sample` / R `control$normalize_sample` enables this
+behavior by default; `Estimates::sample_normalized` / R `fit$sample_normalized`
+reports whether it applied. Optimizer tolerances, terminal audit and numerical
+fit diagnostics refer to the internal fitting representation. The separate
+optimizer preconditioning choice remains available within that representation.
+Both ambient and PSD complete-data ML Newton audits use the shared normalized
+model, preserving accuracy thresholds and returning retained full-space
+derivatives and geometry maps in caller coordinates. Earlier saved-point
+regressions recovered five unit-induced PSD false failures among 4,742 points;
+that development evidence is not a fresh comparison of full fitting defaults.
+Normalization can still change which local solution is found. Barrier, FIML,
+multilevel and nonlinear-equality fitting retain their existing paths, and the
+complete cross-route programme remains at the top of the backlog. The direct
+versus ordinary-then-PSD route decision is unchanged.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start

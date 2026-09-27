@@ -11,8 +11,10 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/estimate/ml_numerics.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -104,6 +106,7 @@ magmaan::estimate::Estimates fit(const Built& b, const SampleStats& s,
                                  CoordinateScaling kind) {
   auto opts = magmaan::estimate::ml_optim_options();
   opts.coordinate_scaling = kind;
+  opts.normalize_sample = false;  // isolate the optimizer coordinate layer
   auto r = magmaan::estimate::fit_ml(b.pt, b.rep, s, x0, {}, backend, opts);
   if (!r) {
     FAIL_CHECK(r.error().detail);
@@ -327,4 +330,120 @@ TEST_CASE("scaled fits keep bounds and nonlinear equality constraints") {
     CHECK(r->diagnostics.nl_eq_satisfied);
     CHECK(r->audit.f_finite);
   }
+}
+
+TEST_CASE("ML and PSD normalize complete fitting across groups and units") {
+  using namespace magmaan::estimate;
+  BuildOptions o;
+  o.n_groups = 2;
+  o.meanstructure = true;
+  o.group_equal = {magmaan::spec::GroupEqual::Loadings};
+  auto b = build("f =~ x1 + x2 + x3 + x4", o);
+  const auto s = population(b, truth(b), true, 0.01);
+  Eigen::Vector4d d;
+  d << .01, 100.0, 2.0, .5;
+  auto other = rescale(s, d);
+  // A group-wide change cancels out of marker loading ratios, so the original
+  // cross-group loading equalities still describe the same model.
+  other.S[0] *= .01 * .01;
+  other.mean[0] *= .01;
+  other.S[1] *= 100.0 * 100.0;
+  other.mean[1] *= 100.0;
+  other.n_obs = {250, 550};
+  auto sample = s;
+  sample.n_obs = other.n_obs;
+  const StartPolicy policy{StartMethod::Fabin3, StartTransport::Native};
+  auto x = normalized_ml_start_values(b.pt, b.rep, sample, policy);
+  auto y = normalized_ml_start_values(b.pt, b.rep, other, policy);
+  REQUIRE(x.has_value());
+  REQUIRE(y.has_value());
+  if (!x || !y) return;
+  auto u = parameter_units(b.pt, b.rep, sample);
+  auto v = parameter_units(b.pt, b.rep, other);
+  REQUIRE(u.has_value());
+  REQUIRE(v.has_value());
+  const Eigen::VectorXd ratio = v->cwiseQuotient(*u);
+  CHECK((y->theta.cwiseQuotient(ratio) - x->theta).norm() < 1e-8);
+  for (bool psd : {false, true}) {
+    CAPTURE(psd);
+    auto opts = psd ? frontier::ml_psd_optim_options() : ml_optim_options();
+    opts.nlopt.max_eval = 20000;
+    opts.nlopt.ftol_rel = 1e-14;
+    opts.nlopt.xtol_rel = 1e-12;
+    auto a = psd ? frontier::fit_ml_psd(b.pt, b.rep, sample, x->theta, Backend::NloptSlsqp, opts)
+                 : fit_ml(b.pt, b.rep, sample, x->theta, {}, Backend::NloptLbfgs, opts);
+    auto c = psd ? frontier::fit_ml_psd(b.pt, b.rep, other, y->theta, Backend::NloptSlsqp, opts)
+                 : fit_ml(b.pt, b.rep, other, y->theta, {}, Backend::NloptLbfgs, opts);
+    REQUIRE(a.has_value());
+    REQUIRE(c.has_value());
+    if (!a || !c) continue;
+    CHECK(a->sample_normalized);
+    CHECK(c->sample_normalized);
+    CHECK(accepted(*a));
+    CHECK(accepted(*c));
+    CHECK(std::abs(a->fmin - c->fmin) < 1e-9);
+    CHECK((c->theta.cwiseQuotient(ratio) - a->theta).norm() < 1e-4);
+    auto con = build_eq_constraints(b.pt);
+    REQUIRE(con.has_value());
+    CHECK((con->A_eq * c->theta - con->b_eq).norm() < 1e-7);
+    auto ev = ModelEvaluator::build(b.pt, b.rep);
+    REQUIRE(ev.has_value());
+    auto objective = ml_objective(*ev, other);
+    REQUIRE(objective.has_value());
+    Eigen::VectorXd gradient;
+    CHECK(std::abs(objective->f(c->theta, gradient) - c->fmin) < 1e-9);
+  }
+}
+
+TEST_CASE("ML normalization preserves explicit starts hints and bounds") {
+  using namespace magmaan::estimate;
+  auto b = build("f =~ x1 + x2 + x3 + x4");
+  auto sample = population(b, truth(b), false);
+  sample = rescale(sample, Eigen::Vector4d(.01, 100, 2, .5));
+  magmaan::spec::Starts hints;
+  hints.hint.assign(static_cast<std::size_t>(b.pt.n_free()), std::numeric_limits<double>::quiet_NaN());
+  hints.hint[0] = 100;
+  auto start = normalized_ml_start_values(b.pt, b.rep, sample,
+      {StartMethod::Fabin3, StartTransport::Native}, hints);
+  REQUIRE(start.has_value());
+  if (!start) return;
+  CHECK(start->theta(0) == doctest::Approx(100));
+  Bounds bounds;
+  bounds.lower = Eigen::VectorXd::Constant(b.pt.n_free(), -std::numeric_limits<double>::infinity());
+  bounds.upper = Eigen::VectorXd::Constant(b.pt.n_free(), std::numeric_limits<double>::infinity());
+  bounds.lower(0) = bounds.upper(0) = 100;
+  auto result = fit_ml(b.pt, b.rep, sample, start->theta, bounds);
+  REQUIRE(result.has_value());
+  if (!result) return;
+  CHECK(result->sample_normalized);
+  CHECK(result->theta(0) == doctest::Approx(100));
+  auto opts = ml_optim_options();
+  opts.normalize_sample = false;
+  auto legacy = fit_ml(b.pt, b.rep, sample, start->theta, bounds, Backend::NloptLbfgs, opts);
+  REQUIRE(legacy.has_value());
+  if (legacy) CHECK_FALSE(legacy->sample_normalized);
+}
+
+TEST_CASE("normalized ML preserves boxes together with weighted equalities") {
+  using namespace magmaan::estimate;
+  auto b = build("f =~ x1 + a*x2 + a*x3 + x4");
+  auto s = population(b, truth(b), false);
+  auto start = normalized_ml_start_values(b.pt, b.rep, s,
+      {StartMethod::Fabin3, StartTransport::Native});
+  REQUIRE(start.has_value());
+  if (!start) return;
+  Bounds bounds;
+  bounds.lower = Eigen::VectorXd::Constant(b.pt.n_free(), -std::numeric_limits<double>::infinity());
+  bounds.upper = Eigen::VectorXd::Constant(b.pt.n_free(), std::numeric_limits<double>::infinity());
+  bounds.lower(0) = bounds.upper(0) = .8;
+  auto result = fit_ml(b.pt, b.rep, s, start->theta, bounds);
+  REQUIRE(result.has_value());
+  if (!result) return;
+  CHECK(result->sample_normalized);
+  CHECK(result->substituted_backend == Backend::NloptSlsqp);
+  CHECK(result->theta(0) == doctest::Approx(.8));
+  auto con = build_eq_constraints(b.pt);
+  REQUIRE(con.has_value());
+  CHECK((con->A_eq * result->theta - con->b_eq).norm() < 1e-8);
+  CHECK(result->diagnostics.lin_eq_satisfied);
 }

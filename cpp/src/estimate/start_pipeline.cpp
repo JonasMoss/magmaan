@@ -1,5 +1,6 @@
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include <cmath>
@@ -185,6 +186,22 @@ fit_expected<StartValues> start_values(
   if (!native) return std::unexpected(native.error());
   StartValues out{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
   out.notes = std::move(notes);
+  return out;
+}
+
+fit_expected<StartValues> normalized_ml_start_values(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::SampleStats& samp, const StartPolicy& policy, const spec::Starts& hints) {
+  if (!ml_normalization_supported(pt, rep)) return start_values(pt, rep, samp, policy, hints);
+  auto normalized = normalize_ml_model(pt, rep, samp);
+  if (!normalized) return std::unexpected(normalized.error());
+  auto scaled_hints = hints;
+  for (std::size_t k = 0; k < scaled_hints.hint.size() &&
+       k < static_cast<std::size_t>(normalized->parameter_units.size()); ++k)
+    scaled_hints.hint[k] /= normalized->parameter_units(static_cast<Eigen::Index>(k));
+  auto out = start_values(normalized->structure, normalized->representation,
+                          normalized->sample, policy, scaled_hints);
+  if (out) out->theta.array() *= normalized->parameter_units.array();
   return out;
 }
 

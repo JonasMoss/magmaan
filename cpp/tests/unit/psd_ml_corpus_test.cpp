@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
@@ -226,10 +227,23 @@ void check_case(const nlohmann::json& c, bool precondition) {
         doctest::Approx(expected.at("psd_fmin").get<double>())
             .epsilon(1e-7));
 
-  CHECK(minimum_eigenvalue(
-            ordinary->diagnostics.admissibility.psi_blocks) ==
-        doctest::Approx(expected.at("ordinary_psi_min").get<double>())
-            .epsilon(2e-5));
+  // The fixture's eigenvalue is in original units; fitting diagnostics now
+  // describe the normalized covariance blocks. Reconstruct the original Psi.
+  auto evaluator = magmaan::model::ModelEvaluator::build(handles.pt, handles.rep);
+  REQUIRE(evaluator.has_value());
+  if (!evaluator) return;
+  auto matrices = evaluator->assembled(ordinary->theta);
+  REQUIRE(matrices.has_value());
+  if (!matrices) return;
+  double original_min = std::numeric_limits<double>::infinity();
+  for (const auto& block : matrices->blocks) {
+    if (block.Psi.size() == 0) continue;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(block.Psi, Eigen::EigenvaluesOnly);
+    REQUIRE(eigen.info() == Eigen::Success);
+    original_min = std::min(original_min, eigen.eigenvalues().minCoeff());
+  }
+  CHECK(original_min == doctest::Approx(expected.at("ordinary_psi_min").get<double>())
+                            .epsilon(2e-5));
   CHECK(minimum_eigenvalue(psd->diagnostics.admissibility.psi_blocks) >=
         -1e-7);
 
@@ -263,12 +277,6 @@ void check_case(const nlohmann::json& c, bool precondition) {
           doctest::Approx(focus.at("psd").get<double>()).epsilon(2e-5));
   }
 
-  auto evaluator =
-      magmaan::model::ModelEvaluator::build(handles.pt, handles.rep);
-  if (!evaluator.has_value()) {
-    FAIL_CHECK("model evaluator failed: " << evaluator.error().detail);
-    return;
-  }
   auto ordinary_implied = evaluator->sigma(ordinary->theta);
   auto psd_implied = evaluator->sigma(psd->theta);
   if (!ordinary_implied.has_value() || !psd_implied.has_value()) {

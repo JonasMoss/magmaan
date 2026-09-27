@@ -16,7 +16,7 @@ namespace {
 
 Result<estimate::StartValues> start_values(const spec::LatentStructure &pt,
     const model::MatrixRep &rep, const data::SampleStats &stats,
-    const spec::Starts &starts, const StartSpec &spec) {
+    const spec::Starts &starts, const StartSpec &spec, bool normalize = false) {
   using M = estimate::StartMethod;
   using T = estimate::StartTransport;
   estimate::StartPolicy policy{M::Simple, T::Native};
@@ -33,7 +33,8 @@ Result<estimate::StartValues> start_values(const spec::LatentStructure &pt,
   }
   auto out = spec.kind == StartKind::Explicit
       ? estimate::explicit_start_values(pt, spec.theta)
-      : estimate::start_values(pt, rep, stats, policy, starts);
+      : normalize ? estimate::normalized_ml_start_values(pt, rep, stats, policy, starts)
+                  : estimate::start_values(pt, rep, stats, policy, starts);
   if (!out) return std::unexpected(make_error(ErrorStage::Fit, out.error()));
   return std::move(*out);
 }
@@ -862,7 +863,8 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   }
 
   auto x0 =
-      start_values(pt, rep, *stats, model->starts(), estimator.start_spec);
+      start_values(pt, rep, *stats, model->starts(), estimator.start_spec,
+          estimator.kind == EstimatorKind::ML && estimator.optimizer_spec.options.normalize_sample);
   if (!x0) {
     return std::unexpected(x0.error());
   }
