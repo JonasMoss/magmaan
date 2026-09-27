@@ -40,3 +40,12 @@ expanded-families/*
 !expanded-families/references.csv
 !expanded-families/metadata.csv
 !expanded-families/labels.csv
+
+# Frozen direct ordinary-chart transfer evidence; full fits/starts stay local.
+!direct-starts-information/
+direct-starts-information/*
+!direct-starts-information/summary.csv
+!direct-starts-information/paired.csv
+!direct-starts-information/references.csv
+!direct-starts-information/metadata.csv
+!direct-starts-information/labels.csv

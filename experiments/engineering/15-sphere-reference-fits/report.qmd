@@ -47,6 +47,13 @@ patterns. Exhaustive combinations are useful for this small reference study,
 but their cost grows exponentially with the factor count; this is not yet a
 production retry policy.
 
+The same spectral recipes also work directly in the ordinary marker chart,
+without fitting on the sphere first. On the 60 previously retained fresh draws,
+layered starts with information scaling match a sphere reference on 35 problems
+with L-BFGS and 36 with PORT; adding four sample-based spectral starts raises
+those counts to 49 and 53. Only 55 draws have a screened sphere reference.
+This is a five-fit exploratory portfolio, not a selected production policy.
+
 The earlier pilot and start-development results remain below as separate
 batches. All screens still use a strongest-indicator marker chart for the local
 Newton cross-check; a sphere-native curvature assessment remains missing.
@@ -82,6 +89,68 @@ same ML objective. Negative latent variances can be allowed by ML while the
 observed covariance remains positive definite; such endpoints may be
 substantively inadmissible and are flagged separately. These recipes are not
 being proposed for PSD estimation.
+
+### Direct ordinary-chart starts
+
+The direct probe constructs every start from the sample covariance and runs
+all recipes on every draw. It reads saved sphere references only after fitting;
+no sphere endpoint, reference-selected marker, or reference-dependent retry
+enters this portfolio. The spectral directions are converted algebraically to
+the requested marker units: divide each loading by its marker loading and
+multiply the latent variance by the squared marker loading. A zero marker
+component would prevent that conversion; none occurred in these runs.
+
+ML uses native layered starts plus four spectral alternatives, under information
+scaling, separately with L-BFGS and PORT. PSD uses FABIN3 with automatic std.lv
+transport plus the positive spectral alternative, under SLSQP with either no
+preconditioning or diagonal preconditioning. Negative-variance recipes are
+excluded from PSD. Each batch contains 60 draws from the original three
+populations; the fresh batch is the previously retained start-study batch,
+not a newly independent confirmation after this probe.
+
+```{r}
+direct <- read.csv(file.path("results", "direct-starts-information", "summary.csv"))
+d <- direct[direct$reference_available > 0, ]
+tab(data.frame(Batch=d$batch, Domain=d$domain, Backend=d$backend,
+  Scaling=d$preconditioning, `Available references`=d$reference_available,
+  `Constructor matches`=d$constructor_hit, `Portfolio matches`=d$portfolio_hit,
+  check.names=FALSE))
+```
+
+Counts are out of 60 draws per batch. A match requires the existing endpoint
+screen and objective agreement with the saved domain-specific reference.
+No screened ordinary point improved on an available reference in this run.
+The constructor is layered for ML and FABIN3 with automatic transport for PSD.
+The fresh PSD arms produce screened candidates on 59/60 draws under either
+scaling choice, but no fresh PSD sphere reference was retained, so their
+reference-match counts are unavailable. Raw attempts and starting vectors stay
+local; the paired rows, summaries and reference classifications are retained.
+
+The earlier reference-informed diagnostic is separate: translating a known
+sphere endpoint recovered all 16 ML misses per backend and all six PSD misses
+with references. That establishes that those points can be reached from a
+known solution; it does not establish a sample-only recipe. Historical files
+labelled `default` describe the then-used constructor and settings, not a
+stable or recommended configuration. New ordinary probes name these settings
+explicitly.
+
+### What happened to fold / pole / fine?
+
+There is no fold/pole/fine partition in this study. The retained chart flag is
+proximity to the requested marker-chart boundary, at tolerances 1e-4, 1e-6 and
+1e-8. Numerical accuracy, parameter extent and PSD admissibility are separate
+flags. At 1e-6, all 56 development ML references, all 55 fresh ML references,
+and all 60 development PSD references are representable. The remaining four
+and five ML problems have no screened sphere reference and remain unresolved.
+A representable candidate is not a proof of a global optimum or of good
+behavior in every chart. The ordinary probe does not measure std.lv proximity.
+
+Thus the recovered misses with finite representable references provide evidence
+of start/optimization trouble. They do not support labelling those targets
+marker poles. A near-boundary flag alone would only nominate a possible pole;
+a fold would require separate evidence that the limiting covariance is not
+attained in any relevant chart. Failed multistarts and an extreme endpoint
+cannot supply that conclusion.
 
 ### Expansion to new model families
 
@@ -284,6 +353,9 @@ Rscript scripts/probe_reference_gap.R reference-pilot
 Rscript scripts/tune_starts.R --phase witness
 Rscript scripts/tune_starts.R --phase development
 Rscript scripts/tune_starts.R --phase fresh
+Rscript scripts/direct_starts.R
+# Optional reference-informed diagnostic; requires retained raw pilot/start fits:
+Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R
 Rscript scripts/check_expansion.R
 Rscript scripts/expand_starts.R --smoke

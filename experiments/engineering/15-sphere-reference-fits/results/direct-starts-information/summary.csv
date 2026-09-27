@@ -1,0 +1,9 @@
+"batch","domain","backend","preconditioning","reference_available","constructor_hit","spectral_hit","portfolio_hit","any_screened"
+"development","PSD","nlopt-slsqp","diagonal",60,54,54,56,58
+"fresh","PSD","nlopt-slsqp","diagonal",0,NA,NA,NA,59
+"development","ML","nlopt-lbfgs","information",56,40,47,47,48
+"fresh","ML","nlopt-lbfgs","information",55,35,49,49,51
+"development","ML","port","information",56,40,49,49,50
+"fresh","ML","port","information",55,36,53,53,55
+"development","PSD","nlopt-slsqp","none",60,54,55,57,58
+"fresh","PSD","nlopt-slsqp","none",0,NA,NA,NA,59

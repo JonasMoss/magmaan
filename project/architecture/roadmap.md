@@ -652,6 +652,15 @@ is not supported. Single-negative alternatives miss ten references reached by
 combined sign patterns. The exhaustive construction remains study-local,
 simple-structure, and capped at three factors; its exponential cost is not a
 production policy. Two problems remain unresolved (one extent-only exclusion).
+A direct ordinary-marker follow-up runs sample-only spectral starts on all 60
+original and 60 retained fresh draws without sphere optimization or reference-
+dependent selection. With information scaling on fresh ML draws, layered alone
+matches 35 references under L-BFGS and 36 under PORT; adding four spectral
+recipes reaches 49 and 53 (55 available references). For development PSD,
+FABIN3-auto plus the positive spectral start reaches 57/60 with no preconditioning
+and 56/60 with diagonal preconditioning, against 54/60 for FABIN3-auto alone.
+All available reference targets are marker-representable at 1e-6; unresolved
+cases are not classified as folds or poles. This remains a study-local portfolio.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

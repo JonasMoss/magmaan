@@ -2838,6 +2838,16 @@ adds one result and should be retained; single-negative alternatives miss ten
 references found by combined sign patterns. There are 97 repeated, 21 single-start
 and two missing references, including one extent-only exclusion.
 
+The direct ordinary-marker transfer probe now constructs starts from sample
+moments alone and runs every recipe on every draw. On the retained fresh ML
+batch, layered with information scaling matches 35/60 references (L-BFGS) and
+36/60 (PORT); adding four spectral starts reaches 49/60 and 53/60, with 55
+references available. No sphere fit or reference-selected retry enters this
+portfolio. All available targets are marker-representable at 1e-6; no
+fold/pole classification has been established. Ordinary PSD with FABIN3-auto
+plus positive spectral reaches 57/60 development references without scaling
+and 56/60 with diagonal scaling. Fresh PSD reference coverage remains unmeasured.
+
 Remaining before a stronger reference claim:
 
 - A sphere-native accuracy assessment, separate from user-chart translation

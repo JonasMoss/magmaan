@@ -71,6 +71,7 @@ assess_endpoint <- function(fit, sample, domain, sphere,
   rec <- endpoint_record(); rec$returned <- TRUE
   rec$call_status <- if (inherits(fit, "magmaan_user_chart_singular")) "chart_condition" else "returned"
   rec$original_verdict <- if (is.logical(fit$converged)) fit$converged else NA
+  if (!sphere) rec$start_used <- fit$ml_start_policy %||% ""
   g <- if (sphere) fit$gauge else NULL
   pt <- if (sphere) g$sphere_partable else fit$partable
   rec$backend_status <- if (sphere) g$optimizer_status else fit$optimizer_status %||% ""
@@ -122,7 +123,7 @@ assess_endpoint <- function(fit, sample, domain, sphere,
 }
 
 run_fit <- function(spec, data, sample, domain, route, backend, start_id, theta = NULL,
-                    preconditioning = "diagonal", assessment = list()) {
+                    preconditioning = "diagonal", assessment = list(), control = NULL) {
   t0 <- proc.time()[["elapsed"]]
   warnings <- character()
   fit <- tryCatch(withCallingHandlers({
@@ -139,9 +140,11 @@ run_fit <- function(spec, data, sample, domain, route, backend, start_id, theta 
       list(partable = lavaan::parTable(f), converged = lavaan::lavInspect(f, "converged"),
            optimizer_status = "lavaan_nlminb")
     } else if (domain == "PSD") {
-      magmaanlab::frontier_fit_ml_psd(spec, data)
+      magmaanlab::frontier_fit_ml_psd(spec, data, optimizer = backend,
+        preconditioning = preconditioning, control = if (is.null(theta)) control else modifyList(control %||% list(), list(start = theta)))
     } else {
-      magmaanlab::fit_model(spec, data, optimizer = backend)
+      magmaanlab::fit_model(spec, data, optimizer = backend,
+        control = if (is.null(theta)) control else modifyList(control %||% list(), list(start = theta)))
     }
   }, warning = function(w) {
     warnings <<- c(warnings, conditionMessage(w)); invokeRestart("muffleWarning")
