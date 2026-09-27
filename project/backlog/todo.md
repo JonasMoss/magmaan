@@ -3112,6 +3112,17 @@ no claim for a future integrated C++ cold-fallback API or other problem mixes.
 Timing evidence supports direct PSD for this workload, not a speed argument
 for ordinary-first. Independent fallback remains a reasonable policy candidate.
 
+**Normalization timing extension (2026-09-27):** paired off/on timing,
+11,520 calls on the same 120 challenge cases. Typical milliseconds are nearly
+unchanged: ML 0.47→0.48, direct PSD 1.07→1.09. Total costs change by ~−5% ML,
++14% direct PSD/independent fallback, +34% warm fallback. Almost all direct-PSD
+increase comes from later weak-marker N=20 draw 2 (1.46→68.76 ms, now a budget
+failure; neither endpoint reaches its reference). Both-certified PSD cost is
+unchanged; six failed normalized cases account for ~69% of total PSD time.
+Treat this as changed optimizer-path cost, not a 14% scaling overhead on every
+fit. The timing summary includes mean/median/tail costs; scope is prepared small
+models, current R workflows, no inference. No policy change.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

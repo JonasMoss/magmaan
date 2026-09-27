@@ -265,6 +265,10 @@ costs 0.553 s per pass, independent fallback 0.703 s, and warm fallback 0.839 s
 (sum of per-case median costs). Direct is fastest in each of six rounds.
 These are current R-workflow costs, including failures; other workload mixes
 and a future native independent-fallback implementation are unmeasured.
+Paired off/on timing subsequently finds nearly unchanged median fit costs
+(ML 0.47→0.48 ms, direct PSD 1.07→1.09 ms). Direct PSD's 14% aggregate increase
+is dominated by one newly failed budget-limited case, not routine per-fit
+scaling overhead. The six normalized PSD failures consume 69% of its bank time.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct

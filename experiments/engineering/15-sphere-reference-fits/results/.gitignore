@@ -182,3 +182,14 @@ two-stage-timing/*
 !two-stage-timing/overall.csv
 !two-stage-timing/round_totals.csv
 !two-stage-timing/metadata.csv
+
+# Paired normalization timing: compact summaries only, raw blocks stay local.
+!normalization-timing/
+normalization-timing/*
+!normalization-timing/per_case.csv
+!normalization-timing/family.csv
+!normalization-timing/status.csv
+!normalization-timing/overall.csv
+!normalization-timing/round_totals.csv
+!normalization-timing/metadata.csv
+!normalization-timing/cost_changes.csv

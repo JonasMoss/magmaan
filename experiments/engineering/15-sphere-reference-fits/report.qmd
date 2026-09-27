@@ -1077,3 +1077,54 @@ Rscript scripts/time_two_stage.R
 Use a fresh `--run-id NAME` to rerun. The runner prints elapsed time and an ETA,
 checks all saved outcomes outside timed blocks, and records timing scope and
 platform metadata. Rendering the report performs no fitting.
+
+## Normalization timing
+
+The [updated timing summary](timing-summary.html) answers the absolute-speed and
+normalization-off/on questions. It adds standalone ordinary ML with the saved
+layered/native start and repeats direct, independent two-stage and warm two-stage
+under both normalization settings. Two-stage starts remain FABIN3-auto; all
+optimizers and budgets are unchanged. Four serial rounds rotate the four routes
+through every position once per case and alternate normalization order. Three
+calls per timed block give 11,520 policy calls, excluding warmup. Preparation,
+manual garbage collection and verification remain outside timing. Every block's
+last outcome matches its saved return status, objective and convergence flag.
+
+Typical (median) milliseconds per fit, off→on: ordinary ML 0.47→0.48, direct
+PSD 1.07→1.09, independent two-stage 1.38→1.42, warm two-stage 1.37→1.37.
+Means including difficult/failed fits are 2.06→1.96, 4.22→4.81, 5.33→6.06 and
+5.40→7.22 ms respectively. Thus normalization's aggregate cost ratio is 0.95
+for ML, 1.14 for direct PSD, 1.14 for independent two-stage and 1.34 for warm
+two-stage. Per-round ratios retain the same direction: ML 0.941–0.953,
+direct 1.125–1.148, independent 1.127–1.146 and warm 1.332–1.383.
+
+These are full-fit timing changes, not isolated normalization overhead.
+Direct PSD's 70.52 ms extra bank cost is dominated by 67.30 ms on one newly
+failing case: later weak-marker N=20 draw 2 takes 1.46→68.76 ms. It missed the
+reference under both settings. The total on cases certified in both settings
+falls by 0.27 ms; old failures add 3.50 ms. Normalized direct PSD's six failures
+consume 400.0 of its 577.0 ms total, about 69%. Its median is 1.09 ms, 95th
+percentile 14.86 ms and slowest 68.76 ms. This explains the gap between typical
+and mean times. The warm route's three newly failed cases similarly contribute
+195.75 ms of its 217.88 ms increase. All outcome-dependent costs are retained;
+no failed fit is removed to improve a timing comparison.
+
+The results concern small six-indicator, two-factor covariance models with
+prepared samples/models, no inference, and the current R-accessible workflows
+on an Intel Core i7-1355U with single-threaded math. They do not predict large-
+model, missing-data, multigroup or full user-call runtimes. Independent fallback
+still incurs up to two library calls versus native warm orchestration.
+No production policy or controls changed. Prior timing figures remain frozen
+as a separate run; modest absolute differences across runs are expected.
+
+Reproduce with the saved normalization-revisit comparisons and same library:
+
+```sh
+Rscript scripts/time_normalization.R --smoke
+Rscript scripts/time_normalization.R
+```
+
+Use a fresh `--run-id NAME` when rerunning. Frozen per-case, per-family,
+convergence-status, aggregate and repeat summaries are under
+`results/normalization-timing/`; raw measured blocks stay local. Model/sample
+preparation, extra audits and report rendering are not timed.

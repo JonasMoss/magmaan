@@ -1,6 +1,6 @@
 ---
-title: "Does ordinary-first PSD save time?"
-subtitle: "Repeated serial timings · 27 September 2026"
+title: "How fast are ML and PSD?"
+subtitle: "Normalization off versus on · 27 September 2026"
 format:
   html:
     toc: false
@@ -13,78 +13,72 @@ execute:
 ---
 
 ```{r}
-p <- 'results/two-stage-timing/'
-o <- read.csv(paste0(p,'overall.csv'))
-f <- read.csv(paste0(p,'family.csv'))
-s <- read.csv(paste0(p,'path.csv'))
+p <- 'results/normalization-timing/'
+x <- read.csv(paste0(p,'overall.csv'))
 r <- read.csv(paste0(p,'round_totals.csv'))
-cost <- function(m) o$sum_ms[o$method==m]
-ratio <- function(m) sprintf('%.2f',cost(m)/cost('direct'))
-seconds <- function(m) sprintf('%.3f',cost(m)/1000)
+methods <- c('ml','direct','cold','warm')
+labels <- c('Ordinary ML','Direct PSD','Independent two-stage','Warm-start two-stage')
+a <- x[!x$normalized,];b <- x[x$normalized,]
+a <- a[match(methods,a$method),];b <- b[match(methods,b$method),]
+direct <- b[b$method=='direct',]
+ms <- function(v) sprintf('%.2f',v)
 ```
 
-**Direct PSD is fastest on this challenge set.** Independent two-stage takes
-**`r ratio('cold')` times** its total fitting time; warm-start two-stage takes
-**`r ratio('warm')` times**. Estimated time for one pass over the 120 datasets is
-**`r seconds('direct')` s direct**, **`r seconds('cold')` s independent two-stage**,
-and **`r seconds('warm')` s warm-start two-stage**. Failures are included.
+**These are millisecond-scale fits.** With normalization enabled, a typical
+direct PSD fit takes **`r ms(direct$median_ms)` ms**; its mean is
+**`r ms(direct$sum_ms/direct$cases)` ms** because a few difficult fits cost much
+more. The earlier half-second figure was for **all 120 datasets**, not one fit.
 
-This is a cost comparison, not a new accuracy test. Independent two-stage and
-direct PSD reach the same 101 saved targets; warm-start two-stage reaches 100,
-with different gains and losses. The times summarize repeated measurements,
-not one unusually fast or slow pass.
+## Normalization off → on
 
-## Where the time goes
-
-**Mean milliseconds per dataset**, including failures. Each row contains 20
-datasets; each dataset's cost is the median of six timed block averages.
+All entries below are **milliseconds per fit**. The median describes a typical
+case; the mean includes the cost of difficult fits and failures.
 
 ```{r}
-k <- expand.grid(design=c('ernst','weak_marker','high_r2'),batch=c('development','fresh'),stringsAsFactors=FALSE)
-t <- data.frame(Batch=ifelse(k$batch=='development','Earlier','Later'),
- Problem=unname(c(ernst='Ernst',weak_marker='Weak markers',high_r2='High R²')[k$design]))
-for(m in c('direct','cold','warm')) {
- z <- f[f$method==m,];z <- z[match(paste(k$batch,k$design),paste(z$batch,z$design)),]
- t[[switch(m,direct='Direct PSD',cold='Independent two-stage',warm='Warm two-stage')]] <- z$sum_ms/z$cases
-}
-knitr::kable(t,row.names=FALSE,digits=2)
+t <- data.frame(Method=labels,
+ `Median off → on`=paste0(ms(a$median_ms),' → ',ms(b$median_ms)),
+ `Mean off → on`=paste0(ms(a$sum_ms/a$cases),' → ',ms(b$sum_ms/b$cases)),
+ `Total-time on/off`=paste0(sprintf('%.2f',b$sum_ms/a$sum_ms),'×'),check.names=FALSE)
+knitr::kable(t,row.names=FALSE)
 ```
 
-The ordinary-first shortcut works when ordinary ML is accepted. But only
-**34 of 120** datasets take that shortcut; the other **86** pay for both attempts.
+**Normalization barely changes typical fit times.** Direct PSD's total cost
+rises about 14%, but almost all of that increase is one previously certified
+case that now exhausts its budget: 1.46 → 68.76 ms. It missed the saved target
+in both settings. Combined time on cases certified in both settings is
+essentially unchanged. Warm two-stage's larger slowdown is also dominated by
+additional failures; ordinary ML's total cost falls about 5%.
 
-```{r}
-t <- data.frame(Path=c('Ordinary accepted (34)','PSD needed (86)'))
-for(m in c('direct','cold','warm')) {
- z <- s[s$method==m,];z <- z[match(c(TRUE,FALSE),z$ordinary_accepted),]
- t[[switch(m,direct='Direct PSD',cold='Independent two-stage',warm='Warm two-stage')]] <- z$sum_ms/z$cases
-}
-knitr::kable(t,row.names=FALSE,digits=2,caption='Mean milliseconds per dataset, grouped by whether ordinary ML is accepted.')
-```
+For normalized direct PSD, 95% of these per-case times are below
+**`r ms(direct$p95_ms)` ms**; the slowest is **`r ms(direct$max_ms)` ms**.
+The six failed direct-PSD fits consume about **69% of its total time**.
+The six-indicator, two-factor models are small. These numbers do not predict
+runtime for a large SEM, multiple groups, missing data or inference.
 
-**Practical conclusion:** independent fallback is a reasonable policy, but
-it is not a speed optimization for this difficult problem mix. Use direct PSD
-when this evidence is the guide; an ordinary-first speed claim needs a workload
-where ordinary ML succeeds much more often or costs much less.
+Ordinary ML optimizes a different domain and can accept negative variances;
+it is a speed reference, not a substitute for PSD. Its standalone start is
+layered/native. Both two-stage routes use FABIN3-auto for ordinary ML, matching
+the earlier policy comparison; independent fallback constructs PSD's own start.
 
-## How much to trust the timing
+**What this measures:** complete fits with normalization explicitly off/on,
+including automatic starts, optimizer work, library diagnostics and R return
+objects. Any timing difference can include a changed optimization path—not just
+the arithmetic cost of scaling. Faster does not necessarily mean a better
+solution; saved outcome counts accompany the timing data.
 
-One serial R process, single-threaded math, on an Intel Core i7-1355U. Every
-case/method is warmed up before measurement. Six rounds use all six method
-orders, with shuffled case order; each timed block contains five calls.
-That is **10,800 timed policy calls**. Samples/models are prepared beforehand;
-garbage collection and outcome verification are outside timed blocks. Failed
-fits count toward cost. Every block's final result is checked against the saved
-verdict and objective.
+The same 120 challenge datasets were measured serially in four rounds, with
+rotating route order and alternating normalization order. Three calls per block
+give **11,520 timed policy calls**, after warmup. Each case's reported time is
+the median of its four block averages. Model/data preparation, manual garbage
+collection and outcome verification are outside the timer. Failures count.
+Every measured block's final outcome matches the saved verdict and objective.
 
-The measurements include automatic starts, library diagnostics, returned R
-objects and R orchestration. Independent fallback currently uses up to two
-library calls; warm fallback uses one native orchestration call. These are
-end-to-end timings of the available workflows, not an isolated C++ comparison.
-They do not establish timings for a future integrated independent-fallback API,
-larger models, or a representative user workload.
+Hardware: Intel Core i7-1355U, single-threaded math. These are the current
+R-accessible workflows; independent fallback uses up to two library calls,
+while warm fallback uses native orchestration. No production behavior changed.
 
-[Per-case timings](results/two-stage-timing/per_case.csv) ·
-[Repeat totals](results/two-stage-timing/round_totals.csv) ·
+[Per-family results](results/normalization-timing/family.csv) ·
+[Cost changes by verdict](results/normalization-timing/cost_changes.csv) ·
+[Repeat totals](results/normalization-timing/round_totals.csv) ·
 [Accuracy comparison](two-stage-summary.html) ·
-[Reproduction](report.html#two-stage-timing)
+[Reproduction](report.html#normalization-timing)
