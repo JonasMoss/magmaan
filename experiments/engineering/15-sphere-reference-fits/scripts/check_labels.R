@@ -45,3 +45,26 @@ for (backend in c("port", "nlopt-lbfgs")) {
   stopifnot(a$record$returned, a$record$start_used == "user")
 }
 cat("Label, chart-translation and start checks passed.\n")
+
+# Signed starts remain in the observed-covariance PD domain and commute with
+# unequal positive changes of indicator units. They are ML-only recipes.
+source(file.path(here, 'R', 'start_design.R'))
+unit_scale <- c(.1, 2, 7, .3, 4, 10)
+scaled <- sample; scaled$S[[1]] <- sample$S[[1]] * outer(unit_scale, unit_scale)
+a <- start_recipes(spec, sample, ablations = TRUE)
+b <- start_recipes(spec, scaled, ablations = TRUE)
+for (name in names(a)) {
+  ev <- magmaan_core$evaluate_at(pt, sample, a[[name]], estimator = 'ML')
+  ev2 <- magmaan_core$evaluate_at(pt, scaled, b[[name]], estimator = 'ML')
+  sigma <- magmaan_core$model_implied(ev)$sigma[[1]]
+  sigma2 <- magmaan_core$model_implied(ev2)$sigma[[1]]
+  stopifnot(all(dim(sigma) == c(6, 6)), all(dim(sigma2) == c(6, 6)), ev$diagnostics$admissibility$implied_sigma_pd,
+    ev2$diagnostics$admissibility$implied_sigma_pd,
+    abs(ev$fmin - ev2$fmin) < 1e-10,
+    max(abs(sigma2 - sigma * outer(unit_scale, unit_scale))) < 1e-8)
+}
+# Fresh draws must not reuse the original pilot's overlapping seed ranges.
+pilot_seeds <- outer(202609281L + (1:3)*100000L + rep(c(20L,100L), each=3)*100L, 1:10, '+')
+fresh_seeds <- outer(902609281L + (1:3)*100000L + rep(c(20L,100L), each=3)*100L, 1:10, '+')
+stopifnot(!any(fresh_seeds %in% pilot_seeds))
+cat('Signed-start PD, unequal-unit and disjoint-seed checks passed.\n')

@@ -2825,6 +2825,13 @@ are preserved. The 60-dataset pilot yields repeated best-observed candidates on
 46 ML and 59 PSD problems; nine ML problems have no screened reference, and
 one has a screened lavaan witness that both sphere backends recover when started
 there. These are exploratory candidates, not optimum or nonexistence proofs.
+The start-design follow-up recovers five missing ML references and improves one
+existing reference. On 60 fresh draws of the same populations, canonical starts
+match the expanded best-observed reference on 37 problems; adding negative-X,
+negative-Y and double-negative spectral starts reaches 55. The all-positive
+spectral alternative adds no coverage. A witness ablation implicates loading
+direction, not variance sign alone. These remain study-local ML starts, not PSD
+starts or a production policy; both backends and the current screen are retained.
 
 Remaining before a stronger reference claim:
 
@@ -2833,8 +2840,13 @@ Remaining before a stronger reference claim:
   pilot's strongest-indicator Newton cross-check is explicitly provisional.
 - Preserve evaluable sphere endpoints when original-chart finalization fails;
   a chart condition alone must not assert that an optimum lies at a pole.
-- Inspect the unresolved/single-start cases and the extent-screen sensitivity;
-  expand starts only when those cases motivate it. Keep ordinary-route
+- Confirm canonical plus three signed spectral starts on new model families;
+  the reduction from the tested five-start portfolio is retrospective. General
+  SEM start construction is still open. Inspect single-start cases and extent
+  sensitivity: three original misses pass local checks but exceed the extent
+  screen; one other original miss remains unresolved after targeted starts.
+  A retry only after convergence failure misses screened-but-inferior solutions.
+  Keep ordinary-route
   performance and auxiliary reference discovery separate for PSD comparisons.
 - The sphere R wrapper currently rejects numeric `control$start` although the
   ordinary fitter accepts it. The pilot uses explicit partable start hints,

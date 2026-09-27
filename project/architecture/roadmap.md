@@ -636,7 +636,15 @@ attempts; both sphere backends recover it when started there. This confirms a
 portfolio miss, not nonexistence. The study keeps original verdicts, chart
 proximity, local accuracy and extremes separate; ordinary fits never define its
 sphere reference. Historical results are retained with their classification
-limitations stated. No optimizer, estimator, inference or paper protocol changes.
+limitations stated. A study-local start-design follow-up recovers five of the
+nine missing ML references and improves one existing reference. On 60 fresh
+draws, canonical starts match the expanded best-observed reference on 37
+problems; adding three signed spectral alternatives reaches 55. The tested
+all-positive spectral alternative adds no coverage. A witness ablation shows
+that an alternative loading direction can recover the point even with positive
+initial latent variance; sign alone is insufficient. This motivates a smaller
+purposeful reference portfolio, with general-model construction and independent
+confirmation still open. No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the

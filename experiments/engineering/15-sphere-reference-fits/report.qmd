@@ -42,6 +42,14 @@ sphere reference on `r count("ML", "no_screened_reference")` ML problems and
 `r count("PSD", "no_screened_reference")` PSD problems. Those remain unresolved;
 we do not label them nonexistent estimates or proven poles.
 
+A start-design follow-up recovers five of the nine missing ML references and
+improves one existing reference. On 60 fresh draws, canonical starts reach the
+best screened objective found by the tested portfolio on 37 problems;
+canonical plus three signed spectral alternatives reaches it on 55. An extra
+all-positive spectral start adds no coverage in either batch. This supports a
+small, purposeful portfolio for further investigation; it does not select a
+production default.
+
 This pilot supplies reference **candidates**, not certified optima. It uses an
 existing local-accuracy check after re-expressing each endpoint with its
 strongest standardized indicator as marker. A sphere-native curvature check
@@ -114,6 +122,66 @@ ordinary estimator, change paper protocols, or count a sphere rescue as an
 ordinary-route success. A paper can report ordinary performance against a
 best-observed numerical reference while describing that reference transparently.
 
+### Purposeful starts: loading direction matters
+
+The missed lavaan witness has a negative X-factor variance. The pilot's random
+starts used positive latent variances. For this witness, merely making X's
+starting variance negative fails; changing its loading direction to the
+smallest-eigenvalue direction succeeds with either initial variance sign.
+Thus the sign alone does not explain the miss. These are ML starts: negative
+latent variances are outside the PSD estimator's domain.
+
+The follow-up uses each factor's within-block correlation matrix with its
+diagonal removed. A positive factor uses its largest-eigenvalue direction;
+a negative factor uses its smallest. Both start with standardized variance
+magnitude 0.5, zero structural regression, and residual variances chosen to
+preserve observed diagonal variances. The implied observed covariance is
+positive definite for either sign. This construction is specific to the
+current two-factor design; extension to general SEM remains open.
+
+Four spectral recipes (both positive, negative X, negative Y, both negative)
+were tested with canonical starts under both ML backends. The recipes were
+fixed before the fresh run; the recommendation to drop the all-positive recipe
+is a retrospective simplification, still needing confirmation. Fresh means new
+random draws of the same three populations, not held-out model families.
+
+```{r}
+start_tables <- lapply(c("development", "fresh"), function(phase) {
+  path <- file.path("results", paste0("start-", phase), "coverage_summary.csv")
+  if (!file.exists(path)) stop("Missing start evidence: run scripts/tune_starts.R and scripts/summarize_starts.R")
+  x <- read.csv(path)
+  x <- x[x$backend == "both", ]
+  aggregate(x[c("matches_best_observed", "attempts")], x[c("phase", "portfolio")], sum)
+})
+x <- do.call(rbind, start_tables)
+names(x) <- c("Batch (60 problems)", "Start portfolio", "Best observed reached", "Fits")
+tab(x)
+```
+
+Coverage means at least one endpoint matches the best screened objective in
+that batch's reference pool. Development references additionally retain the
+original pilot candidates; fresh references use only the new portfolio. The
+canonical figure is therefore 45/60 on development against the expanded pool,
+versus 46 against the older pilot pool. Adding both single-negative recipes
+reaches 54 development and 52 fresh references; the double-negative recipe
+adds two and three, respectively. Neither backend dominates: each alone reaches
+54/60 fresh references with the full portfolio; together they reach 55/60.
+The retained `coverage.csv` gives every paired case, backend and fit cost.
+
+Three of the original nine missing references already had endpoints passing
+the local checks but excluded by the extent screen. All three remain excluded.
+Of the other six, five now have a screened candidate, leaving weak-marker
+N=20 draw 4 unresolved. The development reference pool now has 50 repeated,
+six single-start and four missing references. The fresh pool has 38 repeated,
+17 single-start and five missing references. Supporting starts are recipes,
+not independent replications; agreement by two backends alone is not repetition.
+
+A canonical fit can pass the screen and still miss a better observed solution.
+Therefore a retry triggered only by failed convergence would miss some of this
+benefit. Keep the small portfolio as an exploratory reference search before
+trying to invent an adaptive retry rule. No additional optimizer or termination
+machinery was needed for these recoveries.
+
 ## Caveats
 
 - This is exploratory development data, not a held-out default-selection run.
@@ -157,6 +225,10 @@ Rscript scripts/check_labels.R
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R --pilot
 Rscript scripts/probe_reference_gap.R reference-pilot
+Rscript scripts/tune_starts.R --phase witness
+Rscript scripts/tune_starts.R --phase development
+Rscript scripts/tune_starts.R --phase fresh
+Rscript scripts/summarize_starts.R
 quarto render report.qmd
 # Optional small paired unit check; a distinct run, not default-selection evidence:
 Rscript run_experiment.R --smoke --transforms native,x0.01,x100 --no-lavaan --run-id reference-units
@@ -166,8 +238,11 @@ The runner refuses to overwrite a completed run; choose a fresh `--run-id` for
 reruns and render it with `quarto render report.qmd -P run:NAME`. The seed base
 is separate for smoke and pilot profiles. Raw fits, endpoint parameter tables,
 random starts and comparison rows stay local under `results/`. Small pilot
-summaries, per-problem references and metadata are frozen with the source so
-the report can be rendered without rerunning fits. Metadata identifies the
+summaries, per-problem references, paired start coverage and metadata are frozen with the source so
+the report can be rendered without rerunning fits. The start-follow-up sections
+always show the frozen development/fresh batches. Witness and development
+runners require the original pilot raw fits, regenerated by the pilot command;
+the fresh runner does not. Metadata identifies the
 installed package and source checkout; a dirty checkout is recorded explicitly.
 
 ## Label contract
@@ -209,8 +284,11 @@ not part of the original reference pool. Both recoveries are recorded in
 `witness_probe.csv`. The unit smoke run separately retains paired rescalings;
 it is too small to establish general unit invariance.
 
-Next inspect disagreements and single-start references, then decide whether a
-sphere-native assessment is necessary for the next claim. Preserve the existing
+Next retain canonical plus the three signed alternatives as the provisional
+ML reference portfolio. Confirm the reduction on new model families and examine
+the remaining single-start references and extent exclusions before enlarging
+the search. A sphere-native assessment remains necessary for stronger local
+accuracy claims. Preserve the existing
 ordinary-parameterization comparisons for PSD work. Any production promotion
 requires a fresh decision study with criteria written before its run.
 

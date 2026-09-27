@@ -1,0 +1,15 @@
+"design","backend","start_id","label","comparison","fits"
+"weak_marker","nlopt-lbfgs","positive_x_negative_direction","screened_candidate","matches_sphere_reference",1
+"weak_marker","port","positive_x_negative_direction","screened_candidate","matches_sphere_reference",1
+"weak_marker","nlopt-lbfgs","spectral_negative_x","screened_candidate","matches_sphere_reference",1
+"weak_marker","port","spectral_negative_x","screened_candidate","matches_sphere_reference",1
+"weak_marker","nlopt-lbfgs","canonical","accuracy_failed","not_screened",1
+"weak_marker","nlopt-lbfgs","spectral_negative_xy","accuracy_failed","not_screened",1
+"weak_marker","nlopt-lbfgs","spectral_negative_y","accuracy_failed","not_screened",1
+"weak_marker","nlopt-lbfgs","spectral_positive","accuracy_failed","not_screened",1
+"weak_marker","nlopt-lbfgs","negative_x_positive_direction","call_error","not_screened",1
+"weak_marker","port","canonical","sphere_first_order_failed","not_screened",1
+"weak_marker","port","negative_x_positive_direction","sphere_first_order_failed","not_screened",1
+"weak_marker","port","spectral_negative_xy","sphere_first_order_failed","not_screened",1
+"weak_marker","port","spectral_negative_y","sphere_first_order_failed","not_screened",1
+"weak_marker","port","spectral_positive","sphere_first_order_failed","not_screened",1
