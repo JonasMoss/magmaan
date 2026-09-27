@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -14,6 +15,16 @@
 // backend dispatch; these helpers only change coordinates and restore them.
 
 namespace magmaan::estimate::driven {
+
+// Shared identification-aware units for original and lifted coordinates.
+struct VariableUnits {
+  std::vector<Eigen::VectorXd> observed;
+  std::vector<Eigen::VectorXd> latent;
+};
+
+fit_expected<VariableUnits>
+variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+               const data::SampleStats& samp);
 
 using ScalarRun = std::function<fit_expected<optim::OptimResult>(
     const optim::ScalarProblem&, const Eigen::VectorXd&, const Bounds&)>;

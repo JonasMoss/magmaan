@@ -1,0 +1,5 @@
+"transform","gain","loss","objective_gain","objective_loss"
+"mixed",0,1,23,1
+"native",1,2,1,3
+"x0.01",2,3,4,7
+"x100",8,1,13,2

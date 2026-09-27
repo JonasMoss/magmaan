@@ -1,0 +1,17 @@
+"scale","transform","arm","fit_count","success","hit","seconds"
+"absolute","mixed","direct",294,289,265,3.80900000000001
+"relative","mixed","direct",294,289,266,1.634
+"absolute","native","direct",354,351,351,3.82799999999999
+"relative","native","direct",354,351,351,2.03999999999999
+"absolute","x0.01","direct",354,345,344,4.927
+"relative","x0.01","direct",354,347,345,1.81499999999999
+"absolute","x100","direct",354,343,340,9.469
+"relative","x100","direct",354,341,336,4.55600000000001
+"absolute","mixed","two_stage",294,289,288,2.38799999999999
+"relative","mixed","two_stage",294,288,288,0.965000000000002
+"absolute","native","two_stage",354,349,348,2.79099999999999
+"relative","native","two_stage",354,350,349,1.29
+"absolute","x0.01","two_stage",354,345,342,4.05999999999998
+"relative","x0.01","two_stage",354,346,342,1.80800000000002
+"absolute","x100","two_stage",354,350,349,2.43999999999999
+"relative","x100","two_stage",354,348,347,1.384

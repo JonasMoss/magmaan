@@ -4,3 +4,22 @@
 */*/raw/
 */*/progress.csv
 *.log
+
+# Retain only the frozen paired diagnostic evidence, not exploratory raw runs.
+psd-scale/*
+!psd-scale/absolute-controls/
+psd-scale/absolute-controls/*
+!psd-scale/absolute-controls/metadata.csv
+!psd-scale/absolute-controls/summary.csv
+!psd-scale/relative-final/
+psd-scale/relative-final/*
+!psd-scale/relative-final/metadata.csv
+!psd-scale/relative-final/summary.csv
+!psd-scale/comparison/
+psd-scale/comparison/*
+!psd-scale/comparison/summary.csv
+!psd-scale/comparison/family.csv
+!psd-scale/comparison/pair.csv
+!psd-scale/comparison/changes.csv
+!psd-scale/comparison/route.csv
+!psd-scale/comparison/route_summary.csv

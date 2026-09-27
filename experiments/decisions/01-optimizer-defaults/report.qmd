@@ -3,6 +3,7 @@ title: "Optimizer defaults"
 format:
   html:
     toc: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -127,9 +128,8 @@ The first run's findings:
   (`r f0(sum(ps_rt$success[ps_rt$role == "test" & ps_rt$transform == "native" & ps_rt$arm == "psd_default"]))`
   against
   `r f0(sum(ps_rt$success[ps_rt$role == "test" & ps_rt$transform == "native" & ps_rt$arm == "twostage_default"]))`).
-  Two-stage wins at $\times 100$ and $\times 0.01$, where the direct fit's
-  absolute preconditioning clamp bites; with that fixed, the two routes may
-  end up equal. The author kept the direct fit for now (2026-09-27); the
+  Two-stage wins at $\times 100$ and $\times 0.01$, where the absolute preconditioning clamp was a suspected cause. The
+  follow-up below tests that hypothesis; the earlier comparison did not isolate it. The author kept the direct fit for now (2026-09-27); the
   clamp fix and a route rerun are the priority follow-up.
 - **Its ordinary stage must not inherit the layered start with PORT.** With
   that ordinary stage the two-stage route is worse than the direct fit: the
@@ -144,6 +144,15 @@ Two issues found along the way:
 - A lift round-trip error hits the std.lv equal-loadings CFA (about 4% of
   fits at $N = 25$).
 
+The PSD coordinate-scale clamp has since been made relative to measurement
+units. A small paired follow-up tests that correction and repeats the route
+comparison with explicit, unchanged starts. The coordinate tests pass, but direct PSD still certifies 1,328/1,356 fits:
+eight gains offset eight losses. With the corrected scales, two-stage certifies
+1,332 and matches more best observed objectives (1,326 versus 1,298), while
+direct remains slightly ahead in native-unit certification (351 versus 350).
+The [PSD scaling follow-up](#psd-scaling-follow-up) retains every paired loss. This diagnostic does not promote
+a route or introduce multistart.
+
 ## The register
 
 | Default | Current value | Status after this run | Evidence |
@@ -155,7 +164,7 @@ Two issues found along the way:
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
-| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. Priority follow-up: fix the clamp, then rerun the route comparison | lane psd-ml, runs 1 and 2 |
+| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. The clamp correction and a small paired route rerun are now recorded below; remaining unit-sensitive failures are still open | lane psd-ml, runs 1 and 2 |
 | PSD feasibility tolerances | absolute | settled: keep (rule D passes, 0 fits) | lane psd-ml |
 | PSD preconditioning clamp | $[10^{-4}, 10^{4}]$, absolute | open: costs direct PSD fits at $\times 100$ | lane psd-ml failures |
 
@@ -426,7 +435,97 @@ A probe before the pre-registration, on the covariance-honest paper's own
 designs, pointed the same way (disclosed in the criteria): with marker
 identification the layered ordinary step lost 33 fits and won 2.
 
+## PSD scaling follow-up
+
+The absolute clamp is a real coordinate-scaling defect, but correcting it alone
+does not make the fitting routes interchangeable. The change keeps the same
+clamp range relative to each parameter's measurement units. It also makes the
+zero-information fallback follow those units. Existing information scales are
+left numerically unchanged when the clamp and fallback are inactive. Estimated
+variances and PSD boundary solutions are not clamped by this change.
+
+The criteria were committed before the runs in
+[criteria/psd-scale-followup.md](criteria/psd-scale-followup.md). All test
+populations contribute three replications at each sample size, with a new seed
+base, giving 1,356 problems per route after model and unit transformations.
+Both versions use FABIN3 with automatic transport, SLSQP and diagonal
+preconditioning for direct PSD, and FABIN3 with automatic transport and L-BFGS
+for the ordinary first step of the two-stage route. A rejected or inadmissible
+ordinary fit triggers the existing SLSQP PSD fallback. Budgets and tolerances
+are fixed. The same samples are used before and after the scale change.
+
+```{r}
+pscale <- read.csv(file.path("results", "psd-scale", "comparison", "summary.csv"))
+psum <- function(scale, arm, field) sum(pscale[[field]][pscale$scale == scale & pscale$arm == arm])
+units <- c("native", "x0.01", "x100", "mixed")
+pcol <- function(scale, arm, field) {
+  z <- pscale[pscale$scale == scale & pscale$arm == arm, ]
+  z[[field]][match(units, z$transform)]
+}
+tab(data.frame(Units=units, Problems=pcol("relative", "direct", "fit_count"),
+  `Direct before`=pcol("absolute", "direct", "success"),
+  `Direct after`=pcol("relative", "direct", "success"),
+  `Two-stage before`=pcol("absolute", "two_stage", "success"),
+  `Two-stage after`=pcol("relative", "two_stage", "success"),check.names=FALSE))
+```
+
+After the change, direct PSD certifies `r psum("relative", "direct", "success")`
+fits and two-stage certifies `r psum("relative", "two_stage", "success")`.
+Their counts matching the best certified objective among the four paired
+attempts are `r psum("relative", "direct", "hit")` and
+`r psum("relative", "two_stage", "hit")`. These are observed comparison targets,
+not independently established global optima. Paired gains, losses, objective
+changes and population breakdowns are retained in `results/psd-scale/comparison/`.
+The failure records retain budget exhaustion, accuracy rejection and covariance
+round-trip failures rather than collapsing them into one cause.
+
+The final implementation applies units directly to the clamp bounds. An initial,
+mathematically equivalent divide-and-multiply implementation was also inspected
+locally, but introduced unnecessary rounding changes even for unclamped scales;
+its results are not the final comparison above. Both implementations implement
+the criterion's same relative range. This numerical refinement makes the final
+comparison exploratory, not an untouched confirmation run.
+
+Tests isolate the coordinate correction by transporting the same starting point
+and keeping its covariance projection inactive. They cover marker and std.lv
+identification, correlated residuals, equality constraints, zero-information
+loadings, and uniform and mixed changes of observed units. A fitted PSD boundary
+case also preserves its objective and covariance under ×0.01 and ×100 units.
+All 535 estimation tests pass.
+
+One retained example makes the remaining problem concrete. For the equal-path,
+equal-disturbance chain with coefficient 0.2, N=25 draw 3, direct PSD certifies
+objective 1.555299 in native units and 2.198990 at ×100. Two-stage reaches
+1.555299 at ×100. The issue therefore includes the destination reached, not just
+whether the optimizer reports success.
+
+Remaining unit sensitivity has other possible sources. The start covariance
+projection still uses an absolute eigenvalue floor, and covariance-link residuals
+retain physical units. Those facts do not establish the cause of each remaining
+failure. The next diagnostic should separate them on the retained losses before
+a larger route decision. Spectral starts remain a separate banked candidate;
+this comparison does not change the start recipe or add multistart.
+
+The run is small (three draws per population/N), and transformations share the
+same draws. Timing is advisory: compilations overlapped portions of the runs,
+so the before/after elapsed times cannot establish a clamp speedup. Both routes'
+times are retained for inspection. The direct route remains the ordinary-user
+policy and two-stage remains an explicit frontier call.
+
 ## Reproduce
+
+For the scale follow-up, run the same script against the pre-fix and fixed
+library builds, retaining separate result IDs; do not generate both IDs with
+the same library. Use an isolated R library for the changed build. The final
+paired summaries are frozen, so rendering does not require raw fit files.
+
+```sh
+Rscript scripts/psd_scale_followup.R --help
+Rscript scripts/psd_scale_followup.R --run-id absolute-controls  # pre-fix library
+Rscript scripts/psd_scale_followup.R --run-id relative-final     # fixed library
+Rscript scripts/summarize_psd_scale.R
+```
+
 
 ```sh
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1

@@ -191,14 +191,25 @@ preconditioning stay, in the direct fit and in the ordinary stage of the
 explicit fallback; a second pre-registered run after the ML promotion
 rejected the layered start for both. The two-stage route beats the direct fit
 only in rescaled units, so the direct fit stays the PSD route for now
-(author, 2026-09-27); fixing the preconditioning clamp and rerunning the route
-comparison is a priority follow-up. Code review confirms the absolute bounds remain
-in the PSD lifted-coordinate scaling; their role in the observed failures is
-still a hypothesis to test. First compare sample-relative scaling on identical
-problems under changed observed units, covering both original parameters and
-Cholesky entries, then repeat the route comparison with starts held fixed.
-Spectral starts from engineering/15 are banked for a later defaults study;
-no single-start selector or multistart policy is adopted.
+(author, 2026-09-27). The lifted PSD information-scale clamp is now relative
+to sample-derived units: original/equality-reduced coordinates reuse the shared
+unit machinery, and Cholesky entries take their row variable's unit. Bounds are
+`[1e-4*u, 1e4*u]` and the zero-information fallback is `u`; unclamped information
+scales retain their original arithmetic. Model constraints and the PSD domain
+are unchanged. Tests cover transported starts across uniform/mixed units,
+marker/std.lv identification, correlated residuals/equalities, zero information,
+and fitted boundary agreement under ×0.01 and ×100. The full estimate suite
+passes (535 tests).
+A small paired follow-up on 1,356 fresh problems per route keeps FABIN3-auto,
+ordinary L-BFGS and constrained SLSQP explicit. The coordinate fix alone does
+not settle the route comparison: direct certification stays at 1,328/1,356
+(eight gains, eight losses), and two-stage changes 1,333→1,332. Under the fix,
+two-stage matches 1,326 best observed objectives versus direct's 1,298, while
+native certification remains slightly better for direct (351 versus 350).
+The retained failures motivate investigating the still-absolute start eigenvalue
+floor and covariance-link residual units.
+Direct PSD remains the ordinary route, two-stage remains explicit frontier,
+and spectral starts remain banked for a later defaults study.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start

@@ -1200,7 +1200,8 @@ psd_information_diagonal(const model::Evaluation& eval,
 }
 
 fit_expected<Eigen::VectorXd>
-psd_ml_coordinate_scale(const model::ModelEvaluator& ev,
+psd_ml_coordinate_scale(const spec::LatentStructure& pt,
+                         const model::ModelEvaluator& ev,
                          const model::MatrixRep& rep,
                          const EqConstraints& con,
                          const PsdLiftLayout& layout,
@@ -1228,12 +1229,36 @@ psd_ml_coordinate_scale(const model::ModelEvaluator& ev,
   if (!alpha_diagonal.has_value()) return std::unexpected(alpha_diagonal.error());
   diagonal->head(layout.n_alpha) = *alpha_diagonal;
 
+  auto variables = driven::variable_units(pt, rep, samp);
+  if (!variables) return std::unexpected(variables.error());
+  auto parameters = parameter_units(pt, rep, samp);
+  if (!parameters) return std::unexpected(parameters.error());
+  auto alpha_units = reduced_units(*parameters, con);
+  if (!alpha_units) return std::unexpected(alpha_units.error());
+  Eigen::VectorXd units(diagonal->size());
+  units.head(layout.n_alpha) = *alpha_units;
+  for (const auto& block : layout.blocks) {
+    const auto& rows = block.kind == LiftCovarianceKind::Theta
+        ? variables->observed[block.block] : variables->latent[block.block];
+    Eigen::Index k = layout.n_alpha + block.lift_offset;
+    // C -> D C D implies L -> D L: every lower-triangular entry has
+    // its row variable's unit, including off-diagonal entries.
+    for (Eigen::Index c = 0; c < block.active_dim(); ++c)
+      for (Eigen::Index r = c; r < block.active_dim(); ++r)
+        units(k++) = rows(block.active[static_cast<std::size_t>(r)]);
+  }
+  if (!units.allFinite() || (units.array() <= 0.0).any())
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "PSD ML coordinate units must be finite and positive"));
   Eigen::VectorXd scale(diagonal->size());
   for (Eigen::Index k = 0; k < scale.size(); ++k) {
-    // A zero derivative is not evidence for an arbitrarily large step. Keep
-    // unit scaling there; cap extreme nonzero scales without changing the model.
+    // Bounds and the zero-information fallback must follow sample units.
+    // Retain the existing relative range; changing its width is a separate policy.
+    // Scale the bounds rather than dividing and multiplying the interior
+    // value, so unclamped information scales retain their original arithmetic.
     scale(k) = (*diagonal)(k) > 0.0
-        ? std::clamp(1.0 / std::sqrt((*diagonal)(k)), 1e-4, 1e4) : 1.0;
+        ? std::clamp(1.0 / std::sqrt((*diagonal)(k)), 1e-4 * units(k), 1e4 * units(k))
+        : units(k);
   }
   return scale;
 }
@@ -1628,7 +1653,7 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
   if (options.diagonal_preconditioning) {
-    auto scale = psd_ml_coordinate_scale(pre->ev, rep, pre->con, *layout, samp, *start);
+    auto scale = psd_ml_coordinate_scale(pt, pre->ev, rep, pre->con, *layout, samp, *start);
     if (!scale.has_value()) return std::unexpected(scale.error());
     auto probe = probe_callbacks(psd_scaled_objective(objective, *scale),
         psd_scaled_constraints(constraints, *scale), start->cwiseQuotient(*scale),
@@ -3080,7 +3105,7 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
   Eigen::VectorXd coordinate_scale;
   if (psd_opts.diagonal_preconditioning) {
-    auto scale = psd_ml_coordinate_scale(pre->ev, rep, pre->con, *layout, samp, *start);
+    auto scale = psd_ml_coordinate_scale(pt, pre->ev, rep, pre->con, *layout, samp, *start);
     if (!scale.has_value()) return std::unexpected(scale.error());
     coordinate_scale = std::move(*scale);
   }

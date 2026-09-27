@@ -483,15 +483,17 @@ section: the categorical corpus saddles are under
 - **High — revisit the PSD ML route after the barrier lane.** Decided for now
   (author, 2026-09-27): the direct fit (`fit_model(psd = TRUE)`,
   `magmaan(psd = TRUE)`) stays the route; two-stage (`fit_ml_psd_fallback`)
-  stays an explicit frontier call. Next, after
-  `experiments/decisions/02-barrier-defaults`: fix the preconditioning clamp
-  (the S item below), then rerun the route comparison on a fresh seed base.
+  stays an explicit frontier call. The sample-relative preconditioning clamp
+  and a small fresh paired route check are now implemented (see the S item
+  below). The clamp alone does not explain the route gap. Next inspect the
+  remaining start projection, covariance links and equality-constrained losses
+  before a larger route decision.
   - Replicated in both runs: two-stage certifies more (second run 22,132
     against 21,980), reaches the best known objective more often (21,850
     against 21,224), and takes about 40% less time.
-  - The advantage comes from rescaled units. In native units the direct fit
-    is slightly ahead (second run 5,840 against 5,829), so fix the clamp
-    (below) before choosing.
+  - The earlier advantage comes from rescaled units. In native units the direct
+    fit is slightly ahead (second run 5,840 against 5,829). The smaller post-fix
+    comparison is recorded below; it does not promote the two-stage route.
   - Engineering the route, later:
     - When the ordinary step errors, the PSD refit starts cold from the
       ordinary step's own start. A cold PSD start should always be the PSD
@@ -528,37 +530,41 @@ section: the categorical corpus saddles are under
     $\times 100$.
   - The mechanism is unknown: fixed-diagonal $\Psi$ blocks, the equality
     links, or an absolute round-trip threshold.
-- **S — PSD preconditioning clamp.** The lifted information scale
-  $s_k = 1/\sqrt{I_{kk}}$ is clamped to $[10^{-4}, 10^{4}]$ in absolute terms,
-  and a variance of size $v$ wants $s \approx v$.
-  - In decisions/01, direct PSD fits exhaust the SLSQP budget where the clamp
-    should bind. The chain SEM with equal paths goes from 0 fits in native
-    units to 53 at $\times 100$ (variances near $10^{4}$). With equal
-    disturbances too, it goes from 0 to 54 at $\times 0.01$ (disturbance
-    variances near $4 \cdot 10^{-5}$) and 57 at $\times 100$.
-  - The other families roughly double at $\times 100$.
-  - The pattern fits both ends of the clamp but is not yet proven.
-  - Make the scale relative to the sample units (the shared coordinate
-    layer's rule), with a unit-rescaling test.
-  - **Code review 2026-09-27:** `psd_ml_coordinate_scale` in
-    `cpp/src/estimate/fit.cpp` still implements the absolute bounds and a
-    fallback scale of 1 for zero information. These are optimizer-coordinate
-    scales, not clamps on estimated variances or PSD boundary solutions.
-    The shared ordinary coordinate map already bounds information refinement
-    relative to sample-derived units. The PSD lift also has Cholesky entries;
-    their units must be derived separately from covariance-parameter units.
-  - Next diagnostic: hold sample, model, starting point, backend and budget
-    fixed under native, ×0.01 and ×100 observed units. Record clamp activation
-    separately for ordinary and lifted coordinates, including zero-information
-    fallbacks. Compare the existing scale with a sample-relative scale and
-    verify equivalent implied covariance/objective and boundary solutions.
-    This distinguishes a real clamp effect from start-transport or link issues.
-  - Then rerun direct PSD (FABIN3-auto, SLSQP, diagonal preconditioning) against
-    ordinary-then-PSD (FABIN3-auto, L-BFGS; SLSQP PSD fallback) on a fresh seed
-    base. Keep start recipes fixed for that comparison; the banked spectral
-    candidates are a separate defaults question. Report native and rescaled
-    results separately, certification, objective matches, time, and paired losses.
-
+- **S — PSD preconditioning clamp — FIXED; wider unit sensitivity remains
+  (2026-09-27).** The information scale now has bounds `[1e-4*u, 1e4*u]`,
+  where `u` is the coordinate's sample-derived unit, and zero information uses
+  `u`. Original parameters reuse the shared identification/equality unit
+  machinery; lifted Cholesky entries use their row variable's unit. The raw
+  information scale retains its original arithmetic whenever unclamped.
+  These are optimizer scales, not restrictions on estimated variances.
+  - The former absolute clamp fails the transported-start coordinate test.
+    Regression coverage now includes marker, std.lv with zero-information
+    loadings, correlated residuals/equal variances, uniform ×0.001 to ×1000,
+    and mixed observed units. The start eigenvalue floor is kept inactive
+    for this test. A fitted PSD boundary witness also agrees under ×0.01
+    and ×100. All 535 estimate tests pass.
+  - A paired follow-up in decisions/01 uses three draws at each population/N,
+    seed 202609290, explicit FABIN3-auto starts, L-BFGS ordinary and SLSQP
+    constrained fits, diagonal PSD preconditioning. Both scale versions are
+    evaluated on the same 1,356 problems per route. See
+    `criteria/psd-scale-followup.md` and the report's PSD scaling follow-up.
+    This is a diagnostic, not a route/defaults promotion. Final direct PSD
+    certification is unchanged at 1,328/1,356 (eight gains, eight losses);
+    two-stage changes 1,333→1,332. Under the corrected scale, two-stage matches
+    1,326 best observed objectives versus direct's 1,298; native certification
+    is 350 versus direct's 351. No route promotion follows.
+  - **Remaining:** covariance-link residuals and their absolute tolerances
+    still retain physical units; changing optimizer columns alone does not
+    normalize those rows. The start covariance projection also floors
+    eigenvalues at the absolute `start_eigen_floor`; when active it can change
+    an otherwise transported starting covariance. Isolate these effects on
+    the retained paired losses, especially the equality-constrained chains
+    and the std.lv round-trip failure. Do not call every unit-sensitive failure
+    a clamp effect. A retained witness is `eqchain_b20`, equal paths and
+    disturbances, N=25 draw 3: direct native objective 1.555299 becomes
+    2.198990 at ×100 although both certify; two-stage reaches 1.555299 at ×100.
+    Preserve this as a unit-sensitive objective witness, not a proof about
+    which solver component caused it. Keep the spectral-start question separate.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best

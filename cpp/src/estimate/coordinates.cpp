@@ -40,10 +40,7 @@ Located locate(MatId mat, Eigen::Index row, Eigen::Index col, std::size_t block)
 
 // Standard deviations of the observed variables and units of the latent
 // variables, per block; a latent unit is NaN until identified.
-struct VariableUnits {
-  std::vector<Eigen::VectorXd> observed;
-  std::vector<Eigen::VectorXd> latent;
-};
+using driven::VariableUnits;
 
 double unit_of(const VariableUnits& u, const Located& a) {
   const auto& s = u.observed[a.block];
@@ -95,7 +92,7 @@ bool impose(VariableUnits& u, const Located& a, double target) {
 }
 
 fit_expected<VariableUnits>
-variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+compute_variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                const data::SampleStats& samp) {
   if (samp.S.size() != rep.dims.size())
     return std::unexpected(numeric("coordinate units: sample and model block counts differ"));
@@ -200,10 +197,16 @@ variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
 
 }  // namespace
 
+fit_expected<driven::VariableUnits>
+driven::variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                       const data::SampleStats& samp) {
+  return compute_variable_units(pt, rep, samp);
+}
+
 fit_expected<Eigen::VectorXd>
 parameter_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 const data::SampleStats& samp) {
-  auto u = variable_units(pt, rep, samp);
+  auto u = driven::variable_units(pt, rep, samp);
   if (!u) return std::unexpected(u.error());
   Eigen::VectorXd out = Eigen::VectorXd::Ones(pt.n_free());
   for (std::size_t i = 0; i < pt.size(); ++i) {

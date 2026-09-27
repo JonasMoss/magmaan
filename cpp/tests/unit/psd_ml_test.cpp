@@ -18,6 +18,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -1372,8 +1373,88 @@ TEST_CASE("PSD ML diagonal preconditioning preserves the cone boundary solution"
   REQUIRE(a.has_value());
   REQUIRE(b.has_value());
   CHECK(a->moments.sigma[0].isApprox(b->moments.sigma[0], 1e-5));
+  auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
+  REQUIRE(units.has_value());
+  for (double factor : {0.01, 100.0}) {
+    CAPTURE(factor);
+    auto other_sample = sample_stats(covariance * (factor * factor), 80);
+    auto other_units = magmaan::estimate::parameter_units(pt, *rep, other_sample);
+    REQUIRE(other_units.has_value());
+    Eigen::VectorXd transported = start->cwiseProduct(other_units->cwiseQuotient(*units));
+    auto other = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, other_sample, transported, Backend::NloptSlsqp, strict_options(), options);
+    REQUIRE_MESSAGE(other.has_value(), (other.has_value() ? "" : other.error().detail));
+    check_psd_terminal(*other);
+    CHECK(std::abs(other->fmin - scaled->fmin) < 1e-8);
+    auto implied = ev->evaluate(other->theta, false, false);
+    REQUIRE(implied.has_value());
+    CHECK((implied->moments.sigma[0] / (factor * factor)).isApprox(b->moments.sigma[0], 1e-5));
+  }
   auto unsupported = magmaan::estimate::frontier::fit_gmm_psd(
       pt, *rep, samp, *start, {}, Backend::NloptSlsqp, strict_options(), options);
   REQUIRE_FALSE(unsupported.has_value());
   CHECK(unsupported.error().detail.find("only for complete-data ML") != std::string::npos);
+}
+
+TEST_CASE("PSD ML coordinate scales follow observed units") {
+  BuildOptions build_options;
+  std::string syntax = "f =~ x1 + x2 + x3";
+  bool zero_loadings = false;
+  SUBCASE("marker") {}
+  SUBCASE("std.lv and zero-information loadings") {
+    build_options.std_lv = true;
+    zero_loadings = true;
+  }
+  SUBCASE("correlated residual Cholesky rows and equal variances") {
+    syntax += "\nx1 ~~ x2\nx1 ~~ v*x1\nx2 ~~ v*x2";
+  }
+  auto pt = lavaanify(syntax, build_options);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Matrix3d covariance;
+  covariance << 1.8, 0.72, 0.55, 0.72, 1.5, 0.46, 0.55, 0.46, 1.3;
+  auto samp = sample_stats(covariance);
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+  if (zero_loadings)
+    for (std::size_t i = 0; i < pt.size(); ++i)
+      if (rep->cell_for_row[i].used && rep->cell_for_row[i].mat == MatId::Lambda && pt.free[i] > 0)
+        (*start)(pt.free[i] - 1) = 0.0;
+  magmaan::estimate::frontier::PsdFitOptions options;
+  options.diagonal_preconditioning = true;
+  options.start_eigen_floor = 1e-12; // Keep projection inactive at every tested unit.
+  auto base = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+      pt, *rep, samp, *start, 1e-6, options);
+  REQUIRE(base.has_value());
+  auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
+  REQUIRE(units.has_value());
+  std::vector<Eigen::Vector3d> transforms;
+  for (double factor : {0.001, 0.01, 100.0, 1000.0})
+    transforms.push_back(Eigen::Vector3d::Constant(factor));
+  if (syntax == "f =~ x1 + x2 + x3")
+    transforms.emplace_back(0.01, 100.0, 2.0);
+  for (const auto& factors : transforms) {
+    CAPTURE(factors.transpose());
+    auto rescaled = sample_stats(factors.asDiagonal() * covariance * factors.asDiagonal());
+    auto other_units = magmaan::estimate::parameter_units(pt, *rep, rescaled);
+    REQUIRE(other_units.has_value());
+    Eigen::VectorXd other_start = start->cwiseProduct(other_units->cwiseQuotient(*units));
+    auto other = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, rescaled, other_start, 1e-6, options);
+    REQUIRE(other.has_value());
+    CHECK(other->objective == doctest::Approx(base->objective).epsilon(1e-10));
+    CHECK(other->x.isApprox(base->x, 1e-10));
+    CHECK(other->analytic_gradient.isApprox(base->analytic_gradient, 1e-9));
+    if (zero_loadings) {
+      // Zero loadings hide their scale in x and the gradient; check their
+      // zero-information fallback directly against the transported units.
+      for (std::size_t i = 0; i < pt.size(); ++i) {
+        if (!rep->cell_for_row[i].used || rep->cell_for_row[i].mat != MatId::Lambda || pt.free[i] <= 0)
+          continue;
+        const Eigen::Index k = pt.free[i] - 1;
+        CHECK(other->coordinate_scale(k) / base->coordinate_scale(k) ==
+              doctest::Approx((*other_units)(k) / (*units)(k)).epsilon(1e-10));
+      }
+    }
+  }
 }
