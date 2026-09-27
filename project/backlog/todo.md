@@ -388,6 +388,19 @@ section: the categorical corpus saddles are under
     With runaways scored as failures, PORT still certifies more, but it
     returns about eight times as many runaway fits marked converged. So
     L-BFGS stays, pending the next item.
+- **TODO — spectral starts in the next defaults study (banked 2026-09-27).**
+  Retain the sample-only recipes and evidence from
+  [engineering/15](../../experiments/engineering/15-sphere-reference-fits/report.qmd).
+  Unrestricted ML candidates include positive and signed spectral directions;
+  PSD candidates include only the positive construction. Compare explicitly
+  against layered/native with information scaling for ordinary ML, and
+  FABIN3-auto with diagonal preconditioning for direct PSD ML. The saved
+  portfolios improve coverage, but the three retrospective single-start
+  selectors do not establish a reliable replacement. This is a defaults-study
+  TODO, not adoption: keep the recipes banked, preserve requested markers,
+  and do not add multistart now. Revisit after the PSD scale/route work, using
+  fresh problems, per-family gains and losses, and the revised chart/accuracy
+  checks rather than treating magnitude alone as failure.
 - **High — the layered start stalls on Geiser's latent AR cross-lagged model.**
   This is a loss of the new default found by the R examples
   (`r-package/examples/auto_identification_frontier.R`; data in
@@ -527,6 +540,25 @@ section: the categorical corpus saddles are under
   - The pattern fits both ends of the clamp but is not yet proven.
   - Make the scale relative to the sample units (the shared coordinate
     layer's rule), with a unit-rescaling test.
+  - **Code review 2026-09-27:** `psd_ml_coordinate_scale` in
+    `cpp/src/estimate/fit.cpp` still implements the absolute bounds and a
+    fallback scale of 1 for zero information. These are optimizer-coordinate
+    scales, not clamps on estimated variances or PSD boundary solutions.
+    The shared ordinary coordinate map already bounds information refinement
+    relative to sample-derived units. The PSD lift also has Cholesky entries;
+    their units must be derived separately from covariance-parameter units.
+  - Next diagnostic: hold sample, model, starting point, backend and budget
+    fixed under native, ×0.01 and ×100 observed units. Record clamp activation
+    separately for ordinary and lifted coordinates, including zero-information
+    fallbacks. Compare the existing scale with a sample-relative scale and
+    verify equivalent implied covariance/objective and boundary solutions.
+    This distinguishes a real clamp effect from start-transport or link issues.
+  - Then rerun direct PSD (FABIN3-auto, SLSQP, diagonal preconditioning) against
+    ordinary-then-PSD (FABIN3-auto, L-BFGS; SLSQP PSD fallback) on a fresh seed
+    base. Keep start recipes fixed for that comparison; the banked spectral
+    candidates are a separate defaults question. Report native and rescaled
+    results separately, certification, objective matches, time, and paired losses.
+
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best

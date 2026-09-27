@@ -192,7 +192,13 @@ explicit fallback; a second pre-registered run after the ML promotion
 rejected the layered start for both. The two-stage route beats the direct fit
 only in rescaled units, so the direct fit stays the PSD route for now
 (author, 2026-09-27); fixing the preconditioning clamp and rerunning the route
-comparison is a priority follow-up.
+comparison is a priority follow-up. Code review confirms the absolute bounds remain
+in the PSD lifted-coordinate scaling; their role in the observed failures is
+still a hypothesis to test. First compare sample-relative scaling on identical
+problems under changed observed units, covering both original parameters and
+Cholesky entries, then repeat the route comparison with starts held fixed.
+Spectral starts from engineering/15 are banked for a later defaults study;
+no single-start selector or multistart policy is adopted.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start
