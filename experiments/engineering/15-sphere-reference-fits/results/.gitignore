@@ -1,0 +1,11 @@
+*
+!.gitignore
+# Small frozen evidence for the exploratory reference pilot; raw fits/starts
+# and historical runs stay local. No default is selected by these summaries.
+!reference-pilot/
+reference-pilot/*
+!reference-pilot/summary.csv
+!reference-pilot/reference_summary.csv
+!reference-pilot/references.csv
+!reference-pilot/metadata.csv
+!reference-pilot/witness_probe.csv

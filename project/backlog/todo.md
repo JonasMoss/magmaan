@@ -399,30 +399,30 @@ section: the categorical corpus saddles are under
   - Consider a verdict-triggered safety net: when a default fit from the
     layered start fails the verdict, refit from FABIN3 and keep the better
     certified fit. It needs a lane run before it becomes the default.
-- **High — next optimization project: a runaway check in the verdict, then PORT.**
-  The Newton check accepts points far along divergent (Heywood) paths.
-  - The decisions study scores these as runaways: a certified fit whose
-    standardized extent exceeds 10 (`experiments/decisions/01-optimizer-defaults/R/fits.R`).
-    The extent is the largest absolute standardized loading, latent path,
-    latent correlation, or residual or disturbance ratio.
-  - Plan:
-    1. Validate a runaway diagnostic across units, identifications and the
-       lane's families; see the speculative entry "Runaway estimates and
-       nonattainment diagnostics" for the cautions.
-    2. Decide whether the verdict reports it, rejects the fit, or both.
-    3. Rerun lane ml-gls with PORT, under a fresh seed base, and decide the
-       optimizer.
-  - The stashed PORT promotion (`ml_port_controls()`, api
-    `OptimizerKind::Default`/`Port`) is the starting point, as is the
-    finding that ML's 5000-evaluation budget made PORT worse on ML.
-- **M — runaway flag for scoring default decisions (promoted from
-  speculative, 2026-09-26).** The decisions study needs to tell certified
-  minima from certified points far along a divergent path. Otherwise PORT's
-  persistence is rewarded and the attainability witnesses are contaminated.
-  - Start as a scoring diagnostic, not a verdict change, per the
-    speculative entry "Runaway estimates and nonattainment diagnostics".
-  - Validate it across units and identifications on the lane's draws before
-    it gates anything.
+- **High — separate chart failures, parameter escape and numerical failures
+  before revisiting the optimizer (2026-09-27).** The next step is the light
+  sphere reference study in
+  [engineering/15](../../experiments/engineering/15-sphere-reference-fits/report.qmd),
+  alongside the start-unit and PSD-clamp fixes below. The current ML/PSD
+  defaults remain shipped choices, open to revision; PORT promotion is not
+  the predetermined outcome.
+  - The decisions study's extent > 10 rule is a scoring screen, not a proof
+    of nonattainment. Preserve its historical results and distinguish local
+    accuracy, covariance admissibility, chart proximity and extreme parameters.
+  - Engineering/15 now supplies best-observed sphere candidates from a small
+    multistart portfolio, assessed without user-chart polish. Its interim
+    Newton check uses a strongest-indicator marker chart. A sphere-native
+    tangent/curvature assessment remains missing; use candidate labels, not
+    certificates. No passing candidate means unresolved, not nonexistent.
+  - Inspect disagreements and the single-start references before expanding
+    the portfolio. A pilot case has a screened lavaan point missed by all
+    original sphere attempts; starting sphere there recovers it with both
+    backends. Failed multistarts alone cannot classify nonexistence.
+  - Validate any eventual escape diagnostic across units and identifications
+    before changing the verdict. The speculative nonattainment cautions still
+    apply. A fresh decision run follows concrete fixes and settled labels.
+  - The finding that ML's 5000-evaluation budget worsened PORT's results
+    remains evidence to explain, not a reason to add another control profile.
 - **PSD ML start — DONE (2026-09-26): FABIN3 stays in both PSD routes.**
   Lane psd-ml, second run (pre-registered after the ML/GLS promotion).
   - The layered start fails rule A again for direct PSD fits (five of six
@@ -456,9 +456,11 @@ section: the categorical corpus saddles are under
   fallback, since PSD also starts from transported FABIN3.
 - **High — the verdict certifies barrier fits near a marker pole.** PORT
   returns certified barrier fits with a marker-chart extent above 1000 (287
-  default, 510 layered start in lane barrier-ml; L-BFGS none). Treat this with
-  the ML runaway check in the item "next optimization project" above: the
-  scoring rule is `chart_extent` in `decisions/02-barrier-defaults/R/fits.R`.
+  default, 510 layered start in lane barrier-ml; L-BFGS none). Investigate
+  chart proximity separately from parameter escape under the sphere-reference
+  programme above. The study screen is `chart_extent` in
+  `decisions/02-barrier-defaults/R/fits.R`; it is not an exact-pole proof.
+  Barrier composition with the sphere is not implemented by this pilot.
 - **High — revisit the PSD ML route after the barrier lane.** Decided for now
   (author, 2026-09-27): the direct fit (`fit_model(psd = TRUE)`,
   `magmaan(psd = TRUE)`) stays the route; two-stage (`fit_ml_psd_fallback`)
@@ -2810,6 +2812,35 @@ Remaining work:
 
 ## Sphere chart / global latent-scale gauge (frontier)
 
+**Current investigation (2026-09-27):**
+[engineering/15-sphere-reference-fits](../../experiments/engineering/15-sphere-reference-fits/report.qmd)
+replaces the old local-convergence study's active protocol. Historical results
+are preserved. The 60-dataset pilot yields repeated best-observed candidates on
+46 ML and 59 PSD problems; nine ML problems have no screened reference, and
+one has a screened lavaan witness that both sphere backends recover when started
+there. These are exploratory candidates, not optimum or nonexistence proofs.
+
+Remaining before a stronger reference claim:
+
+- A sphere-native accuracy assessment, separate from user-chart translation
+  and polish. Reuse existing derivatives and geometry where possible. The
+  pilot's strongest-indicator Newton cross-check is explicitly provisional.
+- Preserve evaluable sphere endpoints when original-chart finalization fails;
+  a chart condition alone must not assert that an optimum lies at a pole.
+- Inspect the unresolved/single-start cases and the extent-screen sensitivity;
+  expand starts only when those cases motivate it. Keep ordinary-route
+  performance and auxiliary reference discovery separate for PSD comparisons.
+- The sphere R wrapper currently rejects numeric `control$start` although the
+  ordinary fitter accepts it. The pilot uses explicit partable start hints,
+  verified as user starts. Unify this input contract when the wrapper is next
+  changed; no core workaround is needed for the pilot.
+
+The historical entries below retain their original measurements. Their
+"local optimum", "runaway" and "no estimate" labels were heuristic and must
+not be reused as mathematical classifications. Neither a failed portfolio nor
+an objective below PSD establishes nonattainment. Broader sphere coverage is a
+research direction; no default promotion is decided here.
+
 Design and evidence: `papers/global-gauge-sem` (implementation plan of
 2026-09-23). The C++ core landed: `analyze_gauge`, `reidentify`, the nonlinear
 `optim::reparameterize(problem, ParameterMap)`, and `fit_ml_sphere`,
@@ -2949,8 +2980,8 @@ Remaining work, tiered:
     - 178 sit below the PSD-ML minimum, so the likelihood keeps improving
       into the improper region;
     - L-BFGS, SLSQP and PORT all fail on 163. The uncertified stops examined have
-      parameters up to 3.4e3. These are nonexistence ridges (structural
-      poles), which no chart removes and PSD-ML closes.
+      parameters up to 3.4e3. These suggest escape paths beyond identification
+      poles, but do not establish nonexistence; PSD is a different domain.
     - PORT certifies 15, so those are optimizer failures.
     - Against the unscaled run, 39 draws flipped from converged to failed
       and 36 the other way, almost all on such ridges. Whether a ridge stop
@@ -2981,8 +3012,9 @@ Remaining work, tiered:
         zero residual (the factor collapses onto it), a zero factor
         variance, or a factor correlation of ±1. 89 of 92 misses are on a
         different face from the best.
-      - These are genuine constrained local minima. The polish does not
-        move them, and the marker route finds them too.
+      - These are candidate constrained local minima: the polish does not
+        move them, and the marker route finds them too. Those observations
+        alone do not certify local minimality.
       - Fit gaps are small: median Δχ² 0.6, 90% under 3.1, max 7.2. The
         estimates differ completely, though.
     - **Cheap remedies fall short.** Adding the user start gains 1 to 2.5
@@ -2994,7 +3026,7 @@ Remaining work, tiered:
       - Converged canonical fits miss the best in 16 to 21.5% of draws
         (median Δχ² 0.14).
       - Unverified whether those better points are local minima or ridge
-        points where no ML optimum exists.
+        points without established attainment.
       - At N = 10, no fit from any start converged in 14 to 15% of draws.
     - **Parked (author, 2026-09-23).** Global optimality is a later,
       separate question. Experiment engineering/15 judges convergence to a local
@@ -3007,7 +3039,7 @@ Remaining work, tiered:
       - for PSD, whether a face-aware start is feasible (a research
         question).
 - **Done 2026-09-23 — experiment engineering/15, small version**
-  (`experiments/engineering/15-sphere-local-convergence`, about 70 s).
+  (`experiments/engineering/15-sphere-reference-fits`, about 70 s).
   - **Setup.** ML and PSD-ML; the Ernst, weak-marker and high-R² populations;
     N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
     marker and std.lv.
@@ -3019,12 +3051,13 @@ Remaining work, tiered:
     - The sphere beats the ordinary marker route by up to 10 points (weak
       marker). It is level with ordinary std.lv from N = 20 and up to 5.5
       points ahead at N = 10.
-    - Most failures have no estimate to find. All four routes fail on the
+    - Many failures remain unresolved. All four routes fail on the
       same draw in up to 38.5% of Ernst draws and 61% of weak-marker draws
       at N = 10, still 38% for the weak marker at N = 100.
     - Optimizer failures (another optimizer finds a certified local
       optimum) are rare: 51 draws for ordinary marker, 22 for sphere marker,
-      5 for ordinary std.lv and 21 for sphere std.lv, of 2400 each.
+      5 for ordinary std.lv and 21 for sphere std.lv, of 2400 each. These
+      are recoveries under the historical numerical screen.
     - Routes differ in how they fail on ridges. Ordinary marker errors. The
       ordinary std.lv route reports convergence at a runaway point in up to
       54% of draws. The sphere sits in between.

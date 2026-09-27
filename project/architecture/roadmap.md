@@ -170,8 +170,11 @@ under unit transforms. Since 2026-09-26 the layered start is the default of
 complete-data ML and GLS (`ml_start_values`, `api::ml()`/`gls()`, R `fit_ml`,
 `fit_gls`), and the optimizer stays NLopt L-BFGS. PORT certifies more, but the
 Newton check accepts runaway points along divergent paths, and PORT reaches
-about eight times as many. A runaway check in the verdict comes first; see the
-backlog. For PSD ML, FABIN3 and the diagonal
+about eight times as many points flagged by the study's extent screen. Since
+2026-09-27 the next step is a small sphere-reference investigation separating
+chart proximity, extreme parameters and numerical accuracy; the screen is not
+a proof of nonattainment and PORT promotion remains undecided. For PSD ML,
+FABIN3 and the diagonal
 preconditioning stay, in the direct fit and in the ordinary stage of the
 explicit fallback; a second pre-registered run after the ML promotion
 rejected the layered start for both. The two-stage route beats the direct fit
@@ -605,6 +608,23 @@ not faces of this barrier, so in charts that represent negative latent
 variances (marker, sphere) the domain check, not the barrier value, keeps
 estimates proper. The default target stays `joint` until the paper experiments
 (`papers/sem-barrier`) settle it.
+
+The exploratory sphere reference study (`engineering/15-sphere-reference-fits`,
+renamed from the local-convergence study on 2026-09-27) uses canonical, layered
+and three random starts on 60 datasets from three two-factor designs at N=20/100.
+It compares ML L-BFGS/PORT and PSD SLSQP with/without diagonal scaling, with
+polish disabled. Endpoints are cross-checked without refitting in a
+strongest-indicator marker chart using the existing Newton diagnostic. Full
+sphere coverage, first-order/norm checks, PSD admissibility where applicable,
+and an explicitly heuristic extent screen define candidate eligibility.
+A sphere-native curvature assessment remains missing. Repeated best-observed
+candidates occur on 46 ML and 59 PSD problems; nine ML problems have no screened
+reference. One has a screened lavaan point below all the original sphere
+attempts; both sphere backends recover it when started there. This confirms a
+portfolio miss, not nonexistence. The study keeps original verdicts, chart
+proximity, local accuracy and extremes separate; ordinary fits never define its
+sphere reference. Historical results are retained with their classification
+limitations stated. No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the

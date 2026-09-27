@@ -1,0 +1,13 @@
+"design","domain","transform","reference_label","chart_status","draws"
+"ernst","ML","native","repeated_best_observed","representable",18
+"high_r2","ML","native","repeated_best_observed","representable",18
+"weak_marker","ML","native","repeated_best_observed","representable",10
+"ernst","PSD","native","repeated_best_observed","representable",20
+"high_r2","PSD","native","repeated_best_observed","representable",20
+"weak_marker","PSD","native","repeated_best_observed","representable",19
+"ernst","ML","native","single_start_best_observed","representable",1
+"weak_marker","ML","native","single_start_best_observed","representable",4
+"weak_marker","PSD","native","single_start_best_observed","representable",1
+"ernst","ML","native","no_screened_reference","unavailable",1
+"high_r2","ML","native","no_screened_reference","unavailable",2
+"weak_marker","ML","native","no_screened_reference","unavailable",6

@@ -1,0 +1,221 @@
+---
+title: "Sphere reference fits: a small exploratory pilot"
+params:
+  run: reference-pilot
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+read_result <- function(name) {
+  path <- file.path("results", params$run, paste0(name, ".csv"))
+  if (!file.exists(path)) stop("Missing results: run Rscript run_experiment.R --pilot")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+s <- read_result("summary"); refs <- read_result("references"); metadata <- read_result("metadata")
+probe_path <- file.path("results", params$run, "witness_probe.csv")
+probe <- if (file.exists(probe_path)) read.csv(probe_path) else NULL
+count <- function(domain, label) sum(refs$domain == domain & refs$reference_label == label)
+tab <- function(x) knitr::kable(x, row.names = FALSE, digits = 3)
+```
+
+## Question
+
+Can a small collection of sphere fits provide useful reference solutions for
+ML and PSD-ML, while keeping local numerical accuracy, chart problems and
+uncertainty about the best solution separate? Can those references explain
+ordinary-route failures without changing the estimator used in a paper?
+
+## Short answer
+
+Across `r sum(refs$domain == "ML")` datasets, the best screened sphere objective
+is reached from at least two start recipes on
+`r count("ML", "repeated_best_observed")` ML problems and
+`r count("PSD", "repeated_best_observed")` PSD problems. There is no screened
+sphere reference on `r count("ML", "no_screened_reference")` ML problems and
+`r count("PSD", "no_screened_reference")` PSD problems. Those remain unresolved;
+we do not label them nonexistent estimates or proven poles.
+
+This pilot supplies reference **candidates**, not certified optima. It uses an
+existing local-accuracy check after re-expressing each endpoint with its
+strongest standardized indicator as marker. A sphere-native curvature check
+remains missing. Agreement across starts strengthens the numerical evidence but
+does not establish global optimality. No library default changes here.
+
+```{r results='asis'}
+if (!is.null(probe)) {
+  p <- probe[1, ]
+  cat(sprintf(paste0("The targeted follow-up supplies a concrete counterexample to calling failed multistarts ",
+    "\"no estimate\": on %s draw %d at N=%d, lavaan finds a screened objective of %.6f. ",
+    "%d sphere backend(s) recover a screened candidate when started there. ",
+    "The original finite portfolio missed a point the sphere route can represent.\n"),
+    p$design, p$rep, p$n, p$witness_objective, sum(probe$label == "screened_candidate")))
+}
+```
+
+## Evidence
+
+### How often a reference is found
+
+All datasets remain in the denominator. ML and PSD references are built
+separately, using sphere attempts only. Repetition means different start
+recipes reached the best observed objective; two optimizers from the same
+start do not suffice.
+
+```{r}
+a <- aggregate(list(Datasets = refs$rep), refs[c("design", "domain", "reference_label")], length)
+names(a)[1:3] <- c("Design", "Domain", "Reference evidence")
+tab(a)
+```
+
+### Which sphere configurations reach the reference
+
+The same random starting points are supplied to each configuration on a draw.
+Each configuration has canonical and layered starts, plus
+`r metadata$value[metadata$key == "random_starts"]` random starts.
+The random starts have positive disturbances but varying loading signs and
+latent paths. Their limited distribution does not exhaust possible basins.
+The table pools starts and the two sample sizes within each design, so its
+attempts are repeated fits, not independent datasets. Screening time is included.
+
+```{r}
+z <- s[s$route == "sphere", ]
+z$screened <- z$fits * (z$label == "screened_candidate")
+z$matched <- z$fits * (z$comparison == "matches_sphere_reference")
+a <- aggregate(cbind(fits, screened, matched) ~ design + domain + backend + preconditioning, z, sum)
+names(a) <- c("Design", "Domain", "Optimizer", "PSD scaling", "Attempts", "Screened", "At reference")
+tab(a)
+```
+
+### Ordinary fits compared with the sphere reference
+
+These attempts never define the sphere reference. A better ordinary endpoint is
+retained as evidence that the sphere search missed something; the reference is
+not silently replaced. Every finite returned ordinary endpoint is checked in
+the same strongest-indicator chart. Its original convergence flag is retained
+separately in the raw results.
+
+```{r}
+z <- s[s$route != "sphere", ]
+a <- aggregate(fits ~ domain + route + backend + comparison, z, sum)
+names(a) <- c("Domain", "Route", "Optimizer", "Comparison", "Attempts")
+tab(a)
+```
+
+The ordinary PSD route remains ordinary PSD-ML. Sphere is an auxiliary
+engineering reference: this study does not introduce sphere fitting into the
+ordinary estimator, change paper protocols, or count a sphere rescue as an
+ordinary-route success. A paper can report ordinary performance against a
+best-observed numerical reference while describing that reference transparently.
+
+## Caveats
+
+- This is exploratory development data, not a held-out default-selection run.
+  The initial pilot has three two-factor models, N = 20 and 100, ten draws per
+  cell, complete Gaussian data, one group and native units. Both latents must
+  be covered by the sphere transformation. No conclusions extend to uncovered
+  structures, FIML, DWLS or barrier fitting.
+- Fits use unit-free sphere coordinates with user-chart polishing disabled.
+  The current route still finalizes in the original chart when possible; a
+  finalization error can therefore hide an otherwise usable sphere endpoint.
+  Such attempts remain errors, never evidence that no solution exists.
+- The strongest-indicator assessment is a local Newton cross-check, not an
+  intrinsic sphere certificate or an identification proof. PSD checks use the
+  PSD domain. Original-chart verdicts do not decide the reference screen.
+- A first-order sphere check, norm residual at most 1e-6, finite consistent
+  objectives, and the local Newton budget .01 must pass. PSD also requires
+  covariance admissibility. These are an explicit exploratory screen, not a
+  replacement library verdict. Nonpositive curvature, unavailable accuracy and
+  excessive Newton distance are recorded separately in the raw evidence.
+- Standardized extent above 10 is an **extreme-parameter screen**. Such points
+  remain recorded but are excluded from the main reference pool. They are not
+  called runaways. A finite improper optimum can be ML's best answer; being
+  improper alone never excludes an ML candidate. A validated escape diagnostic
+  and threshold-sensitivity study remain open.
+- Objective agreement uses 1e-6 times one plus the absolute reference objective.
+  Equal objectives need not imply equal parameters or the same basin. The
+  number of observed objective levels is not a count of local minima.
+- The marker diagnostic is evaluated at each endpoint, not at a known optimum.
+  A level below 1e-6 means numerical proximity to the requested chart's boundary,
+  not a proven zero loading. Levels and classifications at 1e-4, 1e-6 and 1e-8
+  are retained. No chart condition is counted as convergence on its own.
+- Sphere may remove identification poles while other parameter escape paths
+  persist. Neither unsuccessful multistarts nor an ML objective below the PSD
+  objective proves nonattainment.
+
+## Reproduce
+
+```sh
+cd experiments/engineering/15-sphere-reference-fits
+Rscript scripts/check_labels.R
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
+Rscript scripts/probe_reference_gap.R reference-pilot
+quarto render report.qmd
+# Optional small paired unit check; a distinct run, not default-selection evidence:
+Rscript run_experiment.R --smoke --transforms native,x0.01,x100 --no-lavaan --run-id reference-units
+```
+
+The runner refuses to overwrite a completed run; choose a fresh `--run-id` for
+reruns and render it with `quarto render report.qmd -P run:NAME`. The seed base
+is separate for smoke and pilot profiles. Raw fits, endpoint parameter tables,
+random starts and comparison rows stay local under `results/`. Small pilot
+summaries, per-problem references and metadata are frozen with the source so
+the report can be rendered without rerunning fits. Metadata identifies the
+installed package and source checkout; a dirty checkout is recorded explicitly.
+
+## Label contract
+
+Labels describe the evidence collected, never a mathematical existence claim.
+The raw columns retain the ingredients so a later screen can be compared without
+rewriting the original run.
+
+| Label | Meaning | Does not imply |
+| --- | --- | --- |
+| `screened_candidate` | Endpoint passes the stated numerical and extent screen | A certified local minimum, identification, or global optimality |
+| `screened_extreme` | Local checks pass, but standardized extent exceeds 10 or is undefined | A proven runaway; a finite optimum is impossible |
+| `accuracy_failed` | Available Newton distance exceeds its budget | No better start or backend can solve the problem |
+| `accuracy_unresolved` | Curvature/conditioning does not support the requested accuracy assessment; consult `audit_status` | Every unresolved case has the same mechanism |
+| `sphere_first_order_failed` / `sphere_norm_failed` | The driven first-order or unit-norm check fails | The endpoint is a local optimum at a pole |
+| `partial_sphere` | At least one relevant latent did not use the sphere | This attempt is a pole-free reference |
+| `nonfinite_objective` / `objective_disagreement` / `psd_infeasible` | A finite, consistently evaluated point in the requested domain was not established | A valid reference candidate |
+| `assessment_unavailable` / `call_error` | Endpoint assessment or fitting could not return the required evidence | Nonexistence |
+| `single_start_best_observed` | Best screened sphere objective has one supporting start recipe | An unreliable point by definition, or a unique minimum |
+| `repeated_best_observed` | At least two start recipes reach that objective within tolerance | Independent replications or exhaustive search |
+| `no_screened_reference` | The finite portfolio supplies no qualifying reference | An unattainable problem |
+| `near_chart_boundary` | Endpoint's original marker-chart level is below the declared tolerance | A mathematically exact pole or failed sphere optimization |
+| `better_than_sphere_reference` | Screened ordinary endpoint improves on the sphere reference | The ordinary endpoint is globally optimal |
+| `above_sphere_reference` | Screened endpoint has a worse objective | It lies in a distinct basin; convergence failed |
+| `matches_sphere_reference` | Screened endpoint agrees in objective within tolerance | Equality of parameter estimates |
+| `not_screened` / `no_sphere_reference` | Comparison lacks a qualifying endpoint or a sphere reference | Inferiority to a known optimum |
+
+## Current choice and next step
+
+The current engineering setup is a small sphere portfolio, strongest-indicator
+cross-check, and separate original-chart diagnostics. Alternatives compared are
+L-BFGS versus PORT for ML, and diagonal versus no PSD scaling with SLSQP.
+A configuration deserves a larger follow-up only if it repeatedly finds the
+best screened candidates without concentrating unresolved outcomes in a design;
+this pilot does not select a library default.
+
+The targeted witness follow-up is selected after inspecting the pilot; it is
+not part of the original reference pool. Both recoveries are recorded in
+`witness_probe.csv`. The unit smoke run separately retains paired rescalings;
+it is too small to establish general unit invariance.
+
+Next inspect disagreements and single-start references, then decide whether a
+sphere-native assessment is necessary for the next claim. Preserve the existing
+ordinary-parameterization comparisons for PSD work. Any production promotion
+requires a fresh decision study with criteria written before its run.
+
+This study was renamed from `15-sphere-local-convergence` on 2026-09-27.
+Historical `results/full` and `results/smoke` are preserved but are not read by
+this report. The former `no_estimate` classification combined failed alternative
+fits with an objective below PSD; it was heuristic and must not be used as
+proof of nonexistence. Historical sources remain available in Git history.
