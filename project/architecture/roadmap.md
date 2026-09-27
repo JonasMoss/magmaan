@@ -238,6 +238,13 @@ model, preserving accuracy thresholds and returning retained full-space
 derivatives and geometry maps in caller coordinates. Earlier saved-point
 regressions recovered five unit-induced PSD false failures among 4,742 points;
 that development evidence is not a fresh comparison of full fitting defaults.
+A paired development revisit of 1,356 saved cases (including linear equalities
+and means) finds no unit-dependent verdict/objective/covariance differences for
+normalized direct PSD; equality-family successes improve from 167/180 to 177/180.
+ML and fallback results remain mixed. Saved-point inspection identifies 23 old
+mixed-unit fallback solutions accepted despite indefinite covariance blocks;
+caller-unit admissibility scale robustness remains open. All convergence and
+objective regressions are retained in the optimizer-defaults study.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct

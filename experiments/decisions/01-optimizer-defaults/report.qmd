@@ -168,6 +168,14 @@ linear equality constraints. That implementation is checked by unit/fixture and
 R integration tests. This is an explicit adoption decision, not a new held-out
 run establishing better basin selection; the mixed pilot results remain relevant.
 
+The subsequent [paired development revisit](#paired-fitting-revisit) includes
+linear equalities and means. Direct PSD becomes consistent across all tested
+unit changes and improves equality-constrained successes from 167 to 177 out of
+180. Ordinary ML changes little; two-stage PSD still has convergence losses.
+Of 25 apparent two-stage objective regressions, 23 compare against an old
+accepted solution that violates PSD. The remaining regressions are retained,
+not used to tune the methods during this run.
+
 ## The register
 
 | Default | Current value | Current status | Evidence |
@@ -527,6 +535,91 @@ same draws. Timing is advisory: compilations overlapped portions of the runs,
 so the before/after elapsed times cannot establish a clamp speedup. Both routes'
 times are retained for inspection. The direct route remains the ordinary-user
 policy and two-stage remains an explicit frontier call.
+
+## Paired fitting revisit
+
+Shared fitting normalization makes direct PSD consistent across the tested
+measurement units. Its largest improvement is in the equality-constrained
+family. Ordinary ML is roughly unchanged, with four additional failures on
+one near-boundary path sample under its four unit representations. Two-stage
+PSD does not improve uniformly. These are saved development draws, not a new
+held-out default-selection experiment.
+
+The paired comparison uses the same 1,356 model/sample/unit cases as the
+scaling follow-up: 51 test populations, 306 draws, including means and linear
+equalities. Both arms use the current accuracy checks; only fitting
+normalization changes. ML uses layered starts in the requested identification
+and L-BFGS with information scaling. PSD uses FABIN3 starts with automatic
+std.lv transport and SLSQP with diagonal preconditioning; the two-stage route
+first tries L-BFGS. The budget is 5,000 evaluations, relative objective tolerance
+1e-12 and parameter tolerance 1e-10. PSD floor and feasibility tolerance are
+1e-6. The [protocol](criteria/normalization-revisit.md) was committed before
+running. Groups and barrier are outside this grid.
+
+```{r revisit-success}
+v <- read.csv("results/normalization-revisit/paired/family.csv")
+v0 <- v[v$arm == "original_units", ]; v1 <- v[v$arm == "normalized", ]
+vw <- merge(v0, v1, by=c("family", "route"), suffixes=c("_old", "_new"))
+vt <- data.frame(Family=unname(fam[unique(vw$family)]))
+for (r in c("ml", "direct", "two_stage")) {
+  z <- vw[vw$route == r, ]; z <- z[match(unique(vw$family), z$family), ]
+  vt[[switch(r, ml="ML", direct="Direct PSD", two_stage="Two-stage PSD")]] <-
+    paste0(z$success_old, " → ", z$success_new, " / ", z$attempts_old)
+}
+tab(vt, caption="Successful fits: original-unit fitting → normalized fitting. ML allows improper solutions; PSD requires the library admissibility verdict.")
+```
+
+Across the 1,002 native-versus-rescaled pairs per route, direct PSD's success
+verdict differences fall from 18 to zero, objective differences from 12 to zero,
+and fitted-covariance differences from 12 to zero. Two-stage verdict differences
+fall from 19 to four and objective differences from 34 to zero. Ordinary ML
+verdict differences rise from one to four, with zero objective differences
+among jointly successful pairs in either arm. Normalized ML and two-stage PSD
+each retain three fitted-covariance differences above 1e-5. Full per-family
+unit comparisons are in `results/normalization-revisit/paired/invariance.csv`.
+
+The objective comparison needs an admissibility caveat. Among pairs successful
+in both arms, direct PSD finds ten lower and one higher objective; two-stage
+finds eight lower and 25 higher objectives. A **post-run inspection of the
+saved covariance parameters** shows that 23 of those 25 old two-stage solutions
+have negative variances or indefinite latent covariance matrices. All 23 used
+mixed units and were accepted at the ordinary stage; normalized fitting
+correctly sent them to PSD. Diagonal rescaling of each covariance block exposes
+negative eigenvalues below -1e-6, whereas the corresponding normalized fits
+have none. This descriptive inspection leaves the predeclared success counts
+unchanged. Those 23 lower objectives cannot establish better PSD minima.
+Two unexplained two-stage objective losses remain in the equality-constrained
+chain cases; direct PSD's one objective loss is a Boomsma case.
+
+Every convergence loss remains visible: six direct PSD losses, five ML losses,
+and eleven two-stage losses, balanced against 16, two, and eleven gains,
+respectively. The PSD losses involve exhausted budgets or failure to reconstruct
+the final constrained parameters; ML losses fail the accuracy criterion.
+`changes.csv` lists every verdict or objective change and
+`objective_covariance_checks.csv` preserves the additional covariance inspection.
+Six ML fits exceed the historical standardized-extent screen in each arm;
+this is a separate descriptive flag, not evidence of runaway behavior.
+
+This run supports improved unit consistency, especially for direct PSD. It
+neither selects a new PSD route nor promises better local minima in every
+case. There are only three replications per sample size. Repeated unit versions
+of one draw are dependent, and these cases were already used during development.
+The inspection also identifies a remaining need to make caller-unit
+admissibility checks independent of heterogeneous variable scales.
+
+To reproduce with a library containing shared ML/PSD fitting normalization:
+
+```sh
+Rscript scripts/normalization_revisit.R --help
+Rscript scripts/normalization_revisit.R
+Rscript scripts/summarize_normalization_revisit.R
+Rscript scripts/inspect_normalization_revisit.R
+```
+
+The runner refuses to overwrite a run; use a fresh `--run-id` and pass that ID
+to both post-processing scripts. Frozen summaries are under
+`results/normalization-revisit/paired/`; full fits, parameters, and fitted
+covariances remain local. Barrier normalization stays first on the backlog.
 
 ## Unconstrained normalization pilot
 

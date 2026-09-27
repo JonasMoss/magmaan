@@ -73,6 +73,20 @@
     `sample_normalized`, with `normalize_sample=false` retaining the former
     fitting path. This implements the user's requested ML/PSD fitting change;
     FIML, barrier, multilevel and the broader validation programme above remain.
+  - **Paired development revisit (2026-09-27):** 1,356 saved scaling cases,
+    including linear equalities and means, compared with normalization on/off
+    under the same current judge. Direct PSD has zero unit-dependent verdict,
+    objective or covariance differences; equality-family successes rise
+    167/180 → 177/180. ML is roughly unchanged; fallback remains mixed.
+    Preserve the six direct/five ML/eleven fallback convergence losses and the
+    one direct/two unexplained fallback objective losses as regression targets.
+    Twenty-three other apparent fallback objective losses compare against
+    old accepted but indefinite covariance solutions under mixed units.
+    **Remaining:** make caller-unit covariance admissibility auditing robust
+    to heterogeneous scales (including normalization-disabled fits and
+    standalone audits), and investigate constrained PSD finalization failures.
+    Full per-family evidence is in the optimizer-defaults report's paired
+    fitting revisit; this is development evidence, not a held-out route choice.
   - **Starting evidence:** the unconstrained normalization pilot improves unit
     consistency but sometimes finds worse local solutions. Normalized PSD Newton
     accuracy first covered single-group complete-data ML with linear equalities.

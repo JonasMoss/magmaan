@@ -48,3 +48,16 @@ psd-accuracy-normalization/points/*
 !psd-accuracy-normalization/points/metadata.csv
 !psd-accuracy-normalization/points/summary.csv
 !psd-accuracy-normalization/points/changes.csv
+
+# Frozen paired development revisit; raw fits and smoke runs remain local.
+normalization-revisit/*
+!normalization-revisit/paired/
+normalization-revisit/paired/*
+!normalization-revisit/paired/metadata.csv
+!normalization-revisit/paired/family.csv
+!normalization-revisit/paired/family_transform.csv
+!normalization-revisit/paired/paired_summary.csv
+!normalization-revisit/paired/changes.csv
+!normalization-revisit/paired/invariance.csv
+!normalization-revisit/paired/unit_exceptions.csv
+!normalization-revisit/paired/objective_covariance_checks.csv
