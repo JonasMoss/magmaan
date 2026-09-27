@@ -44,6 +44,8 @@ pr <- function(p, cand, base, col) sum(p[[col]][p$role == "test" & p$candidate =
 f0 <- function(x) format(round(x), big.mark = ",")
 ```
 
+For the latest normalization comparison, see the [executive summary](executive-summary.html).
+
 ## Question
 
 Which start, optimizer and PSD route should each estimation route use by

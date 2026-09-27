@@ -1,0 +1,77 @@
+---
+title: "ML and PSD: normalization test summary"
+subtitle: "Paired revisit · 27 September 2026"
+format:
+  html:
+    toc: false
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+**Did fitting in normalized units help? Most clearly for direct PSD.**
+It removed all observed unit-dependent success/failure differences and improved
+equality-constrained fitting. Ordinary ML changed little. The two-stage route
+still has failures; this run does not settle whether it should replace direct PSD.
+
+## The important numbers
+
+Each cell shows **successful cases before → after normalization**. Both arms
+use the same current accuracy checks. Direct PSD fits under PSD restrictions
+from the start; two-stage first tries ordinary ML and uses PSD when needed.
+
+```{r}
+x <- read.csv("results/normalization-revisit/paired/family.csv")
+order <- c("constrained", "boomsma", "chen", "engineering15", "research47", "wolf")
+labels <- c("Equalities", "Boomsma", "Chen", "Engineering stress cases", "Research stress cases", "Wolf")
+a <- x[x$arm == "original_units", ]; b <- x[x$arm == "normalized", ]
+p <- merge(a, b, by=c("family", "route"), suffixes=c("_before", "_after"))
+t <- data.frame(Family=labels, Cases=a$attempts[match(order, a$family)])
+for (route in c("ml", "direct", "two_stage")) {
+  z <- p[p$route == route, ]; z <- z[match(order, z$family), ]
+  t[[switch(route, ml="ML", direct="Direct PSD", two_stage="Two-stage PSD")]] <-
+    paste0(z$success_before, " → ", z$success_after)
+}
+knitr::kable(t, row.names=FALSE, align=c("l", "r", "r", "r", "r"))
+```
+
+**What are the 180 equality cases?** Five populations × two model variants ×
+two sample sizes × three simulated samples × three unit scales. That is
+**30 independent datasets**, reused across models and scales—not 180 independent
+datasets. Across all families there are 1,356 cases, each fitted six ways:
+three methods, with normalization off/on (8,136 fits).
+
+“Success” means the library certifies convergence; PSD routes also require its
+admissibility verdict. ML may have negative variances, so its successes do not
+mean the same thing as PSD successes.
+
+## What changed—and what remains
+
+- **More consistent across units.** Among 1,002 comparisons with rescaled data,
+  direct PSD's success/failure disagreements fell **18 → 0**; objective and
+  fitted-covariance disagreements also disappeared among jointly successful
+  fits. Two-stage verdict disagreements fell **19 → 4**; ML rose **1 → 4**.
+- **Most apparent two-stage objective losses were misleading.** Of 25 cases
+  with a higher objective after normalization, **23 old accepted solutions
+  actually violated PSD**. Normalized fitting rejected those ordinary solutions
+  and proceeded to PSD. Two unexplained objective losses remain, plus one for
+  direct PSD.
+- **Normalization is not a universal convergence fix.** Direct PSD gained 16
+  successes but lost six; ML gained two and lost five; two-stage gained eleven
+  and lost eleven. All losses are saved for investigation.
+
+**Next:** investigate constrained PSD finalization failures and make
+admissibility checks reliable under mixed variable scales. Barrier normalization
+remains the first implementation TODO. No new route choice is justified yet.
+
+**Scope:** saved development cases, only three samples per sample size, with
+repeated unit versions. Means and linear equalities are included; groups and
+barrier are not tested here. These results do not establish performance on fresh
+held-out problems.
+
+[Full report and reproduction commands](report.html#paired-fitting-revisit) ·
+[Per-family data](results/normalization-revisit/paired/family.csv) ·
+[Every changed verdict or objective](results/normalization-revisit/paired/changes.csv)
