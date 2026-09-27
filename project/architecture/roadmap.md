@@ -82,7 +82,19 @@ disagreements; the profile LR agrees with installed lavaan and the score passes
 an independent finite-difference check. The study records admissibility events,
 bootstrap convergence failures, endpoint-noise checks and compute cost. This
 is experiment-local orchestration, not a new exported score-interval API or a
-change to the ordinary-user policy. The non-normal counterpart remains planned.
+change to the ordinary-user policy.
+
+Research experiment `research/51-robust-parameter-intervals` adds the paired
+normal, t(10) and heterogeneous-gamma comparison: observed-sandwich Wald,
+expected-information robust score/LR inversion, information-choice variants
+and uncorrected controls. Its 66 numerical checks cover likelihood scaling,
+full-model restricted scores, the policy covariance, lavaan LR agreement and
+endpoint inversion. The experiment fixes uncentered score second moments;
+the landed profile helpers instead center empirical contributions, and the
+scalar relationship is checked explicitly. This is experiment-local
+composition of existing primitives, not a new exported interval API or an
+ordinary-user default change. The 3,000-dataset confirmation records all
+54,000 interval attempts, failures, domain events, paired coverage and cost.
 
 
 Research experiment `research/49-spectral-tail-calibration` adds local R

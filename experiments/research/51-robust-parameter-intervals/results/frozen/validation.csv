@@ -1,0 +1,67 @@
+"check","error","tolerance","passed"
+"normal expected nested_score",-8.88178419700125e-16,1e-06,TRUE
+"normal expected scalar_scale",-4.44089209850063e-16,1e-09,TRUE
+"normal expected efficient_score",-1.33226762955019e-15,1e-09,TRUE
+"normal expected scale_ratio",2.22044604925031e-16,1e-09,TRUE
+"normal expected centered_meat_identity",1.40571555784508e-09,1e-04,TRUE
+"normal observed nested_score",0,1e-06,TRUE
+"normal observed scalar_scale",0,1e-09,TRUE
+"normal observed efficient_score",-1.33226762955019e-15,1e-09,TRUE
+"normal observed scale_ratio",-1.11022302462516e-16,1e-09,TRUE
+"normal observed centered_meat_identity",2.51440471915609e-09,1e-04,TRUE
+"normal policy_covariance",7.37257477290143e-18,1e-09,TRUE
+"normal full_score_derivative",8.64292442059877e-10,1e-06,TRUE
+"lavaan_convergence",0,0,TRUE
+"normal_profile_LR_lavaan",6.93916035743314e-11,1e-05,TRUE
+"normal score_E endpoint",2.4868075998441e-07,1e-04,TRUE
+"normal score_E truth_inversion",0,0,TRUE
+"normal lr_E endpoint",8.26476425075384e-08,1e-04,TRUE
+"normal lr_E truth_inversion",0,0,TRUE
+"normal score_O endpoint",3.25481292584584e-07,1e-04,TRUE
+"normal score_O truth_inversion",0,0,TRUE
+"normal lr_O endpoint",2.16089190985258e-09,1e-04,TRUE
+"normal lr_O truth_inversion",0,0,TRUE
+"normal population_covariance_max_mc_z",1.72212060264618,5,TRUE
+"t10 expected nested_score",-8.88178419700125e-16,1e-06,TRUE
+"t10 expected scalar_scale",-4.44089209850063e-16,1e-09,TRUE
+"t10 expected efficient_score",1.77635683940025e-15,1e-09,TRUE
+"t10 expected scale_ratio",0,1e-09,TRUE
+"t10 expected centered_meat_identity",-1.70136596113618e-08,1e-04,TRUE
+"t10 observed nested_score",0,1e-06,TRUE
+"t10 observed scalar_scale",4.44089209850063e-16,1e-09,TRUE
+"t10 observed efficient_score",2.66453525910038e-15,1e-09,TRUE
+"t10 observed scale_ratio",6.66133814775094e-16,1e-09,TRUE
+"t10 observed centered_meat_identity",-1.82045747903342e-08,1e-04,TRUE
+"t10 policy_covariance",5.20417042793042e-18,1e-09,TRUE
+"t10 full_score_derivative",6.13862146299956e-10,1e-06,TRUE
+"t10 score_E endpoint",8.33188806392826e-07,1e-04,TRUE
+"t10 score_E truth_inversion",0,0,TRUE
+"t10 lr_E endpoint",6.45459657722114e-07,1e-04,TRUE
+"t10 lr_E truth_inversion",0,0,TRUE
+"t10 score_O endpoint",9.04210934127292e-07,1e-04,TRUE
+"t10 score_O truth_inversion",0,0,TRUE
+"t10 lr_O endpoint",7.42465035674655e-07,1e-04,TRUE
+"t10 lr_O truth_inversion",0,0,TRUE
+"t10 population_covariance_max_mc_z",1.77356913217147,5,TRUE
+"heterogeneous_gamma expected nested_score",0,1e-06,TRUE
+"heterogeneous_gamma expected scalar_scale",2.22044604925031e-16,1e-09,TRUE
+"heterogeneous_gamma expected efficient_score",6.66133814775094e-16,1e-09,TRUE
+"heterogeneous_gamma expected scale_ratio",-4.44089209850063e-16,1e-09,TRUE
+"heterogeneous_gamma expected centered_meat_identity",-1.45123457348517e-08,1e-04,TRUE
+"heterogeneous_gamma observed nested_score",0,1e-06,TRUE
+"heterogeneous_gamma observed scalar_scale",0,1e-09,TRUE
+"heterogeneous_gamma observed efficient_score",-2.22044604925031e-16,1e-09,TRUE
+"heterogeneous_gamma observed scale_ratio",1.33226762955019e-15,1e-09,TRUE
+"heterogeneous_gamma observed centered_meat_identity",-1.481604390563e-08,1e-04,TRUE
+"heterogeneous_gamma policy_covariance",6.24500451351651e-17,1e-09,TRUE
+"heterogeneous_gamma full_score_derivative",6.96754334228444e-10,1e-06,TRUE
+"heterogeneous_gamma score_E endpoint",9.83896932815753e-07,1e-04,TRUE
+"heterogeneous_gamma score_E truth_inversion",0,0,TRUE
+"heterogeneous_gamma lr_E endpoint",3.103690637829e-10,1e-04,TRUE
+"heterogeneous_gamma lr_E truth_inversion",0,0,TRUE
+"heterogeneous_gamma score_O endpoint",5.51968915019074e-09,1e-04,TRUE
+"heterogeneous_gamma score_O truth_inversion",0,0,TRUE
+"heterogeneous_gamma lr_O endpoint",1.62819318916263e-07,1e-04,TRUE
+"heterogeneous_gamma lr_O truth_inversion",0,0,TRUE
+"heterogeneous_gamma population_covariance_max_mc_z",1.59117648878033,5,TRUE
+"normal_variance_total_information",4.2632564145606e-14,1e-07,TRUE

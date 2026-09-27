@@ -1,2 +1,6 @@
+# Raw runs remain local. Small frozen summaries/provenance support review.
 *
 !.gitignore
+!frozen/
+frozen/*
+!frozen/*.csv

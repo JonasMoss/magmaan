@@ -1,0 +1,13 @@
+"metric","value"
+"datasets",3000
+"interval_attempts",54000
+"valid_intervals",53608
+"candidate_evaluations",922207
+"converged_candidate_fits",922183
+"candidate_evaluation_errors",317
+"maximum_constraint_residual",0
+"maximum_valid_endpoint_statistic_gap",2.42643115466734e-06
+"valid_truth_disagreements",0
+"valid_near_cutoff",0
+"method_order_invariant",1
+"checkpoint_reproduced",1

@@ -111,8 +111,14 @@ execution follows the estimator priority programme above.
     bootstrap Bartlett feasibility and endpoint-noise checks. The N=100
     correlation favors score/LR over raw Wald in this pilot; this is not a
     robust-inference default decision. `research/51-robust-parameter-intervals`
-    remains a design scaffold with self-contained implementation requirements;
-    robust score inversion and API/convention checks remain to implement.
+    now implements the robust comparison (3,000 datasets, 54,000 interval
+    attempts), validated score/LR inversion, failure accounting and paired
+    common-valid comparisons. Its uncentered-score correction differs from
+    the centered empirical contributions in the landed profile helpers;
+    the relationship is validated, but choosing the policy convention remains
+    open. The skewed N=100 loading still undercovers (88.6–90.8% across
+    primary methods), and domain/search failures remain. The study changes no
+    default and adds no exported score-CI API.
   - Price it: each interval needs a root search over constrained refits, for
     every parameter.
   - Choose the default by a decisions study (Wald or LR coverage and

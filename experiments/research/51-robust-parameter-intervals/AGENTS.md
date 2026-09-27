@@ -1,10 +1,16 @@
 # Implementation requirements
 
-Implement this planned experiment using `report.qmd` as the statistical design.
-It is self-contained: no other experiment needs to finish first. Current
-status is design only; `run_experiment.R` can print the plan but cannot simulate.
-The deliverable is a validated runner, recorded pilot/full results and a report
-with actual findings, not a new ordinary-user interval default.
+The experiment implements the statistical design in `report.qmd` using existing
+library primitives. It is self-contained and does not change the ordinary-user
+interval default. Keep the contracts below when extending or rerunning it.
+
+`R/methods.R` owns generation, fitting and inversion; `R/validation.R` checks
+normalization, score algebra, API conventions, lavaan agreement and endpoints.
+The runner checkpoints deterministic replicate IDs and refuses to resume after
+a source, package-binary, seed or cell change. `scripts/freeze_results.R` checks
+completed output, method-order invariance and checkpoint reproducibility.
+Tiny CSV summaries and provenance under `results/frozen/` are deliberately
+tracked so the report remains reviewable; all raw runs remain ignored.
 
 ## Boundaries
 
@@ -165,3 +171,33 @@ Update the active backlog for concrete missing primitives or completed scope;
 update the roadmap only if implementation contracts change. Commit explicit
 paths on the current branch, preserving unrelated edits. No cross-experiment
 imports or private/session handoff files belong in this folder.
+
+
+## Recorded implementation choices
+
+The profile primitives with `robust_scaled` / `misspec_scaled` center empirical
+contributions at the sample covariance. This study instead composes its fixed
+uncentered-score correction from `scores()`, the matrix score adapter,
+`project_scores(center=FALSE)`, `score_sandwich()` and `score_spectrum()`.
+For a scalar candidate the two scales obey
+`c_uncentered = c_centered + ordinary_score / n`; validation checks this
+relationship rather than claiming the existing profile helpers are aliases.
+`parameter_covariance()` applies the fit's equality constraints, so it is used
+only at the unrestricted fit for Wald. Restricted score/LR geometry uses the
+full parameter derivatives and an explicit nuisance projection.
+
+Fitting uses SLSQP without bounds, PSD penalties or repairs; the implied
+covariance must be positive definite. Both factor signs remain anchored by
+positive first loadings. Primitive inadmissibility is recorded, including
+latent correlations outside [-1,1]. The wider audit extends half an interval
+width beyond each endpoint, samples nine equally spaced points plus the
+estimate, and requires two acceptance transitions. It cannot certify the
+acceptance set outside that finite grid. Failure there invalidates the reported
+interval even when both local endpoints passed their checks.
+
+The original-seed 50/cell pilot is retained locally as `results/main/`. A logging
+refinement then preserved a successful constrained-fit convergence verdict
+when later information evaluation failed. The confirming 50/cell pilot and its
+500/cell extension use seed base 2026132751 and identical computation in
+`results/confirmation/`; the pilot summary remains in its `pilot-50/` folder.
+The fixed populations, methods and tolerances were not tuned from coverage.

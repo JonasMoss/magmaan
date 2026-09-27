@@ -4,71 +4,235 @@ format:
   html:
     toc: true
     number-sections: false
+    embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
+  warning: false
+  message: false
 ---
+
+```{r}
+path <- "results/frozen"
+if (!file.exists(file.path(path, "summary.csv")))
+  stop("Run the experiment and scripts/freeze_results.R as described in Reproduce.")
+s <- read.csv(file.path(path, "summary.csv"))
+pairs <- read.csv(file.path(path, "paired.csv"))
+common <- read.csv(file.path(path, "common_valid.csv"))
+failures <- read.csv(file.path(path, "failures.csv"))
+integrity <- read.csv(file.path(path, "integrity.csv"))
+primary <- c("wald_O", "score_E", "lr_E")
+labels <- c(wald_O="Wald-O", score_E="Score-E", lr_E="LR-E",
+            wald_E="Wald-E", score_O="Score-O", lr_O="LR-O",
+            wald_naive="Uncorrected Wald", score_naive="Uncorrected score",
+            lr_naive="Uncorrected LR")
+colours <- c(wald_O="#333333", score_E="#0072B2", lr_E="#D55E00")
+cell <- function(n, distribution, target, method) {
+  z <- s[s$n==n & s$distribution==distribution & s$target==target & s$method==method,]
+  stopifnot(nrow(z)==1L);z
+}
+pc <- function(x) sprintf("%.1f%%",100*x)
+interval_range <- function(x) paste(sprintf("%.1f",100*range(x)),collapse="–")
+```
 
 ## Question
 
-For interior SEM parameters estimated by complete-data ML, which robust
-intervals give useful coverage under non-normal sampling: Wald, score
-inversion or profile-LR inversion, and at what computational cost?
+For interior SEM parameters estimated by complete-data ML, do robust score
+or profile-LR intervals improve on robust Wald intervals under non-normal
+sampling, and at what cost?
 
 ## Short answer
 
-**Planned; no simulation has run.** This is a paired, small-scale comparison
-with a normal control and two non-normal populations sharing the same
-covariance. It will distinguish coverage errors from numerical failures and
-assess whether information-matrix choices change the comparison. It will not
-select a new library default.
+**The benefit depended on the parameter.** In the difficult N = 100 skewed
+correlation cell, Score-E covered 94.9% of valid intervals, versus 89.6% for
+Wald-O; counting failures against all attempts reduced Score-E to 92.6%.
+LR-E reached 93.8% conditional coverage and 90.8% successful-and-covering.
+For the skewed loading, all three remained below nominal coverage (88.6–90.8%).
+
+Observed-information inversion failed in up to 24.2% of one cell under the
+prespecified search rule. Expected-information inversion was more reliable,
+but cost roughly 26–33 times as much as Wald here. These 3,000 datasets support
+further study of score inversion, with no ordinary-user default change.
 
 ## Evidence
 
-There are no results yet. The planned evidence is one coverage/tail-error plot
-for the primary methods and one width/cost/failure summary. Put full cell and
-information-choice results in `results/` rather than expanding the report
-into a large method grid.
+The comparison uses the same datasets and unrestricted estimates for all
+methods. Wald-O uses observed information; Score-E and LR-E use expected
+information at each candidate restriction. The secondary methods change only
+that information choice. All six robust methods use uncentered empirical score
+second moments. The three uncorrected methods are diagnostic controls.
+
+```{r}
+#| fig-width: 10
+#| fig-height: 6.2
+#| fig-cap: "Coverage among valid intervals. Bars show approximate 95% Monte Carlo intervals; the dashed line is 95% coverage. Failures are reported separately below."
+layout(rbind(c(7,7,7),matrix(1:6,nrow=2,byrow=TRUE)),heights=c(.35,3,3))
+par(mar=c(3,3,2.2,.6),oma=c(.5,2,0,0))
+for(target in c("loading","correlation")) for(d in c("normal","t10","heterogeneous_gamma")) {
+  z <- s[s$target==target & s$distribution==d & s$method%in%primary,]
+  yr <- c(85,99)
+  plot(NA,xlim=c(.65,2.35),ylim=yr,xaxt="n",xlab="",ylab="",
+       main=paste(if(target=="loading") "Loading" else "Correlation",
+                  c(normal="Normal",t10="t(10)",heterogeneous_gamma="Gamma")[[d]],sep=" · "))
+  axis(1,1:2,c("N = 100","N = 300"));abline(h=95,lty=2,col="grey60")
+  for(j in seq_along(primary)) {
+    v <- z[z$method==primary[j],];v <- v[order(v$n),]
+    xx <- 1:2+(j-2)*.12;yy <- 100*v$coverage;err <- 196*v$coverage_mcse
+    arrows(xx,yy-err,xx,yy+err,angle=90,code=3,length=.04,col=colours[j])
+    points(xx,yy,pch=16,col=colours[j]);lines(xx,yy,col=colours[j],lty=3)
+  }
+}
+mtext("Coverage (%)",side=2,outer=TRUE,line=.5)
+par(mar=rep(0,4));plot.new()
+legend("center",legend=labels[primary],col=colours,pch=16,horiz=TRUE,bty="n")
+```
+
+For N = 100 skewed correlations, the common-valid paired improvement over
+Wald-O was 5.53 percentage points for Score-E (Monte Carlo SE 1.04 points)
+and 4.55 points for LR-E (SE 0.99). On the 484 datasets valid for all three,
+coverage was 89.3%, 94.8% and 93.8%, respectively. This supports the direction
+of the correlation finding without ignoring its search failures. In the same
+population, the loading difference was only +0.4 points for Score-E (SE 0.63)
+and −1.8 points for LR-E (SE 0.91).
+
+Loading errors were asymmetric: at N = 100 under skewness, the true loading
+lay above the upper endpoint in 7.2% of Wald-O intervals, 8.0% of Score-E
+intervals and 10.2% of LR-E intervals. Thus wider intervals alone did not
+repair the problematic tail. Across cells, mean Score-E widths were 0.9–8.8%
+larger than Wald-O and LR-E widths 0.6–6.5% larger, using each method's valid
+intervals; paired width differences are also retained.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3.2
+#| fig-cap: "Skewed loading, N = 100: which side misses? All 500 intervals per primary method were valid. The dashed line marks 5% total noncoverage."
+z <- s[s$n==100 & s$distribution=="heterogeneous_gamma" & s$target=="loading",]
+z <- z[match(primary,z$method),]
+par(mar=c(4,5,3,.5))
+barplot(100*t(as.matrix(z[c("lower_miss","upper_miss")])),horiz=TRUE,
+        names.arg=labels[primary],las=1,col=c("#56B4E9","#E69F00"),border=NA,
+        xlim=c(0,14),xlab="Noncoverage (%)")
+abline(v=5,lty=2,col="grey40")
+legend("top",inset=c(0,-.25),legend=c("Truth below interval","Truth above interval"),
+       fill=c("#56B4E9","#E69F00"),horiz=TRUE,bty="n",cex=.9,xpd=NA)
+```
+
+The uncorrected controls show why non-normal inference matters: for the
+t(10) correlation at N = 300, uncorrected coverage was 90.0–90.4%, compared
+with 94.2–95.0% for the primary robust methods. Robust calibration was not
+uniformly better in the normal control: the N = 100 loading had 92.6% LR-E
+coverage versus 94.6% for uncorrected LR. These are descriptive controls,
+not additional candidates for a robust default.
+
+The full per-cell coverage, tail misses, widths and failure counts are in
+[summary.csv](results/frozen/summary.csv). Paired coverage differences and
+Monte Carlo standard errors use datasets valid for both compared methods in
+[paired.csv](results/frozen/paired.csv); the stricter subset valid for all three
+primary methods is in [common_valid.csv](results/frozen/common_valid.csv).
+The successful-and-covering rate counts failures against all 500 attempts.
+
+```{r}
+show <- c(primary,"wald_E","score_O","lr_O")
+cost <- do.call(rbind,lapply(show,function(m) {
+  z <- s[s$method==m,]
+  data.frame(Method=labels[[m]],`Valid / attempted`=paste(sum(z$valid),"/",sum(z$attempts)),
+             `Mean time (ms)`=round(1000*mean(z$mean_seconds),1),
+             `Mean refits`=round(mean(z$mean_refits),1),
+             `Correlation endpoints outside domain`=sum(z$out_of_domain),check.names=FALSE)
+}))
+knitr::kable(cost,align=c("l","r","r","r","r"))
+```
+
+Wald-O returned all 6,000 intervals; Score-E failed 15 times and LR-E 18.
+Score-O failed 148 times and LR-O 211. Failures were concentrated: for
+N = 100 under skewness, LR-O failed on 121/500 loading intervals (24.2%)
+and Score-O on 96/500 correlation intervals (19.2%). Across all cells,
+293 observed-information failures involved nonpositive sensitivity and 66
+involved an unresolved acceptance set. Of their 359 failures, 293 occurred
+during the wider audit, beyond the candidate endpoint searches.
+
+All 18 LR-E failures and 14 of 15 Score-E failures ended at a candidate
+correlation outside [-1,1]. The remaining Score-E failure was an endpoint
+check. These domain/search events warrant follow-up before policy exposure;
+they are not replaced by Wald. The failure types and search stages are retained
+in [failures.csv](results/frozen/failures.csv) and
+[failure_stages.csv](results/frozen/failure_stages.csv).
+
+Times are incremental per attempted interval, including failed searches, and
+exclude the shared unrestricted fit (about 9 ms per dataset). These local measurements include four
+concurrent workers. The mean shared fit cost is recorded separately in
+[timing_summary.csv](results/frozen/timing_summary.csv). Widths are reported
+in the original parameter units; no interval is clipped to the correlation
+domain. Primitive covariance inadmissibility during profile searches is
+flagged in the summary rather than silently repaired. Sixteen of the 3,000
+unrestricted fits were primitive-inadmissible; they remain in all comparisons.
+Wald-O and Wald-E each had one correlation interval outside the domain.
+
+The final audit checked 922,207 candidate evaluations. All valid inversions
+agreed with the pointwise test at truth, every recorded equality residual was
+zero, and the largest valid endpoint-statistic gap was 0.00000243 (tolerance
+0.0001). All 66 numerical validation checks passed, as did method-order
+invariance and checkpoint reproduction. The compact audit is in
+[integrity.csv](results/frozen/integrity.csv).
 
 ## Caveats
 
-Robustness here concerns non-normality with a correctly specified covariance
-model. It does not establish performance under covariance misspecification,
-at parameter boundaries, with missing or ordinal data, or with penalized fits.
-At 500 replications, the Monte Carlo SE of 95% coverage is about one percentage
-point. Targets within a dataset are paired, not independent replications.
+These are two interior targets in one correctly specified covariance model.
+The study does not establish performance under covariance misspecification,
+at boundaries, with missing or ordinal data, or with penalized fits. A method
+that fails more often cannot be judged from its successful-interval coverage
+alone. Monte Carlo standard errors near 95% coverage are about one percentage
+point per cell, and the two targets from each dataset are paired.
 
-For a regular scalar restriction the limiting quadratic-form reference has
-one nonzero eigenvalue. Scalar scaling removes that asymptotic scale; it does
-not remove finite-sample error in the estimated correction. A many-method
-comparison of spectral approximations is therefore outside the initial scope.
-Bartlett and bootstrap refinements are also outside this study's initial scope.
+The profile search checks a finite wider grid for additional crossings. That
+is a numerical audit, not a proof that the acceptance set has no further
+components. Unresolved searches remain failures; their convex hull is never
+reported as a confidence interval. Fits require a positive implied covariance,
+but the latent correlation can leave its admissible range during the search.
+Some failures occur only during the wider audit, beyond the proposed interval;
+the counts characterize this search procedure, not mathematical nonexistence
+of a confidence set. Robust scalar scaling is an asymptotic
+correction and does not eliminate finite-sample uncertainty in the estimated
+scale. Centered and uncentered empirical score moments can differ at a
+restricted fit, so these results should not be transferred silently between
+those conventions. Bartlett and bootstrap corrections are outside this study.
 
 ## Reproduce
 
 From this directory:
 
 ```sh
-Rscript run_experiment.R --help
-Rscript run_experiment.R --plan
+Rscript run_experiment.R --smoke --output results/smoke-confirmation
+Rscript run_experiment.R --main --reps 50 --seed-base 2026132751 --output results/confirmation
+Rscript run_experiment.R --main --reps 500 --seed-base 2026132751 --output results/confirmation
+Rscript scripts/freeze_results.R results/confirmation
+quarto render report.qmd --to html
 ```
 
-These commands inspect the committed design. Simulation is not implemented;
-the runner fails explicitly if asked to simulate. The local `AGENTS.md`
-contains the complete implementation sequence, API starting points,
-statistical contracts and completion checks. Work can begin independently
-without results or code from another experiment.
+The 50-per-cell confirmation pilot is a prefix of the full run, using unchanged
+computation. The original-seed development pilot is retained locally under
+`results/main/`; a logging refinement preserves constrained-fit convergence
+when a later information calculation fails. The confirmation run uses a fresh
+seed after that refinement. No population or method was selected or changed
+using pilot coverage. All numerical validation checks must pass before a run.
+Source and package-binary hashes protect resumption against changed computation.
+
+The small frozen CSV summaries and provenance under `results/frozen/` are
+committed so the findings remain reviewable without rerunning the simulation.
+Raw intervals, complete candidate traces and per-replicate checkpoints stay
+local under `results/confirmation/`. Rendering reads only the frozen results.
 
 ## Prespecified design
 
 Use eight centered continuous indicators, four per factor. Fix both factor
 variances to one and set their correlation to 0.4. Loadings on each factor are
-(0.8, 0.7, 0.9, 0.6); independent residual variances equal one minus the squared
-loading. Fit all eight loadings, eight residual variances and the factor
+(0.8, 0.7, 0.9, 0.6); residual variances equal one minus the squared loading, with zero
+residual covariances. Fit all eight loadings, eight residual variances and the factor
 correlation, retaining unit factor variances and positive factor orientation.
 Targets are the second loading (0.7) and factor correlation (0.4), tested
 separately with all other free parameters treated as nuisance parameters.
 
-Define independent, mean-zero, unit-variance innovations z1 through z10.
+Define mean-zero, unit-variance innovations z1 through z10.
 Construct f1 = z1, f2 = 0.4 z1 + sqrt(1 - 0.4^2) z2, and indicator residuals
 from z3 through z10 times their population residual SDs. Fix this construction;
 changing the covariance square root changes the non-normal population.
@@ -89,7 +253,8 @@ These constructions preserve the target covariance analytically. Do not
 force simulated sample covariances to equal that target. Center each sample
 and use the ML covariance divisor N. Use N = 100 and 300 with 500 datasets per
 distribution/sample-size cell: 3,000 datasets and two targets per dataset.
-Use seed base 2026092751 for the main run and 2026102751 for smoke runs.
+The prespecified seed bases were 2026092751 for the main run and
+2026102751 for smoke runs. The fresh confirmation base is 2026132751.
 
 Compare 95% robust Wald, robust efficient-score inversion and robust profile-LR
 inversion on the same datasets and unrestricted fits. The primary comparison
