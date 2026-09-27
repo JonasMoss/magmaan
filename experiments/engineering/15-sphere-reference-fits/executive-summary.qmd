@@ -18,10 +18,10 @@ off and on. Two-stage PSD loses three targets in the later batch: two fits
 exhaust their budgets and one reaches a worse local solution. This run supports
 normalization as a numerical scaling tool, not a remedy for missed solutions.
 
-**Follow-up:** the [two-stage investigation](two-stage-summary.html) isolates
-handoff sensitivity. More iterations do not rescue the lost targets; a stricter
-handoff rule gains two targets but loses one across all 120 draws. No policy
-change is adopted.
+**Latest follow-up:** [ordinary ML followed by independently started PSD](two-stage-summary.html)
+matches direct PSD on all 120 cases and skips PSD in 34. Compared with the warm-start
+route it gains two targets and loses one. The test supports independent fallback
+as a reasonable policy; production behavior is unchanged.
 
 ## The important data
 

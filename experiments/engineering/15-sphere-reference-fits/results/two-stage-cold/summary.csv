@@ -1,0 +1,3 @@
+"batch","ordinary_accepted","fallback_used","cold_accepted","cold_hit","warm_accepted","warm_hit","direct_accepted","direct_hit","gain_vs_warm","loss_vs_warm","gain_vs_direct","loss_vs_direct"
+"development",18,42,57,54,57,54,57,54,1,1,0,0
+"fresh",16,44,57,47,55,46,57,47,1,0,0,0

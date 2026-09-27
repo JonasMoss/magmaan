@@ -3088,6 +3088,19 @@ Do not promote from this retrospective tradeoff; preserve the current handoff
 and keep two-stage provisional. Evidence and loss identities are in
 engineering/15's two-stage summary. No magnitude gate or multistart added.
 
+**Exact independent-fallback policy checked (2026-09-27, user clarification):**
+ordinary ML is accepted only when converged and PSD-admissible; otherwise PSD
+constructs its own FABIN3-auto start, never reusing ordinary estimates. All 120
+saved normalized challenge datasets were fitted. Thirty-four stop after ordinary
+ML; 86 run PSD. Final acceptance, target recovery and returned objectives match
+direct PSD (maximum objective discrepancy <1e-12). Recovery is 54/60 earlier,
+47/60 later; against warm fallback there are two gains and one loss. This is a
+reasonable candidate; warm starts are not required. No timing advantage or
+held-out superiority established. **Remaining:** expose independent versus warm
+fallback explicitly if adopting the user's intended policy; the current C++/R
+fallback still warms from usable ordinary estimates. The exact test is
+engineering/15's two-stage-cold evidence and updated two-stage summary.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

@@ -982,3 +982,52 @@ Both refuse to overwrite an existing directory; use a fresh `--run-id NAME`.
 Frozen evidence is under `results/two-stage-probe/` and
 `results/two-stage-handoff/`. Keep the current handoff while two-stage remains
 provisional; broader start/PSD-boundary work is separate from normalization.
+
+## Independent PSD fallback
+
+The user's intended policy is ordinary-first acceptance followed, when needed,
+by PSD with its own start. It does not reuse ordinary estimates, even when
+ordinary ML converges but is inadmissible. This differs from the earlier
+certified-only handoff probe, which still warmed PSD from converged inadmissible
+ordinary solutions. The [current short report](two-stage-summary.html) presents
+this exact policy, superseding its earlier handoff recommendation.
+
+All 120 saved challenge datasets were fitted explicitly under normalization.
+Ordinary ML uses FABIN3-auto, L-BFGS/information; its convergence and admissibility
+verdicts decide whether PSD is needed. PSD independently constructs FABIN3-auto
+starts in an unchanged model, with SLSQP/diagonal, without receiving ordinary
+parameters. Controls remain 5,000 evaluations, relative objective tolerance
+1e-12, parameter tolerance 1e-10, and PSD floor/feasibility tolerance 1e-6. These
+starts match the previous comparison; choosing a different ordinary start is
+outside this isolated handoff test. Final target judging retains PSD accuracy
+and the requested-chart check at 1e-4, without a magnitude cutoff.
+
+Ordinary ML is accepted on 34 datasets (18 earlier, 16 later); 86 require PSD.
+Every cold fallback reproduces the saved direct PSD return status, verdict,
+acceptance and objective. Accepted ordinary fits also reproduce their saved
+ordinary-first results. All 120 final acceptance and target-hit statuses agree
+with direct PSD; the maximum objective difference across returned pairs is
+9.41e-14 (rounded upward). Earlier target recovery is 54/60 and later 47/60,
+versus 54/60 and 46/60 for the warm-start route. The gains are earlier Ernst
+N=20 draw 9 and later Ernst N=20 draw 1; the loss is earlier weak-marker N=100
+draw 9. Per-family counts and every stage are preserved. The fact that the
+previous certified-only candidate had the same hit counts is an observed result,
+not an equivalence between those policies.
+
+Independent fallback is a reasonable candidate and warm starts are not required
+by the mathematics. These development results do not establish a universal
+advantage or a speed benefit: 34 PSD calls are avoided, but the other 86 cases
+incur an additional ordinary attempt. Production warm-start behavior is unchanged;
+a future API/policy change should expose this distinction explicitly.
+
+With the library and raw comparisons from the normalization revisit available:
+
+```sh
+Rscript scripts/check_two_stage_cold.R --smoke
+Rscript scripts/check_two_stage_cold.R
+```
+
+Use a fresh `--run-id NAME` for reruns. The runner checks the library fingerprint
+and reproducibility against the saved direct and warm fits. Frozen evidence is
+in `results/two-stage-cold/`; full fitted parameters remain local. No reference
+solution enters a starting point, and no retries or multistart are used.

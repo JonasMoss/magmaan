@@ -1,0 +1,7 @@
+"batch","design","ordinary_accepted","fallback_used","cold_accepted","cold_hit","warm_accepted","warm_hit","direct_accepted","direct_hit","gain_vs_warm","loss_vs_warm","gain_vs_direct","loss_vs_direct"
+"development","ernst",10,10,20,20,19,19,20,20,1,0,0,0
+"fresh","ernst",8,12,20,17,19,16,20,17,1,0,0,0
+"development","high_r2",7,13,20,20,20,20,20,20,0,0,0,0
+"fresh","high_r2",7,13,20,19,19,19,20,19,0,0,0,0
+"development","weak_marker",1,19,17,14,18,15,17,14,0,1,0,0
+"fresh","weak_marker",1,19,17,11,17,11,17,11,0,0,0,0

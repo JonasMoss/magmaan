@@ -1,6 +1,6 @@
 ---
-title: "Two-stage PSD: what went wrong?"
-subtitle: "Diagnostic follow-up · 27 September 2026"
+title: "Ordinary ML, then independent PSD if needed"
+subtitle: "Exact policy check · 27 September 2026"
 format:
   html:
     toc: false
@@ -12,51 +12,53 @@ execute:
   message: false
 ---
 
-**The handoff from ordinary ML to PSD is sensitive; no simple fix wins reliably.**
-Normalization can change both the ordinary solution handed over and the PSD
-path from that solution. Increasing the budget does not recover the three lost
-targets. Restricting which ordinary estimates may be reused helps some cases
-but loses another. **Keep two-stage provisional; no implementation change here.**
+**The proposed policy works as intended on these challenge cases.** Accept
+ordinary ML only when it passes convergence and PSD admissibility; otherwise
+run PSD from its own FABIN3-auto start, without reusing ordinary estimates.
+It matches direct PSD's success/failure outcomes and fitted objectives on all
+120 saved datasets. Compared with the existing warm-start route, it gains two
+targets and loses one.
 
-## The three regressions
+## The important data
 
-| Saved case, all N=20 | What the diagnostic isolates | Starting PSD directly |
-|:--|:--|:--|
-| Ernst, draw 1 | Either ordinary endpoint reaches the target with PSD normalization off; both stall with it on. | Reaches the target in 40 evaluations with normalization on. |
-| Ernst, draw 3 | The normalized ordinary stage finds a better unrestricted solution, but that endpoint leads to a worse PSD minimum under either scaling. | Reaches that same worse PSD minimum. |
-| High R², draw 7 | Both the ordinary endpoint and PSD scaling matter. Only the old endpoint with PSD normalization off reaches the target. | Converges, but misses the target. |
-
-The two stalled runs reuse ordinary estimates that **failed the accuracy check**,
-with large positive and negative variance components. Increasing the PSD budget
-from 5,000 to **25,000 evaluations** makes them return much worse objectives and
-loadings in the millions. It does not recover the targets. The third regression
-already converges, so a larger budget leaves it unchanged.
-
-## Does a stricter handoff help?
-
-We checked one general rule on **all 120 saved datasets**: reuse ordinary
-estimates only when they pass convergence; otherwise start PSD from the original
-FABIN3-auto start. This is a single-start policy, not multistart.
+**Known targets reached, out of 20 datasets per row.** Both stages use
+normalization. “Independent” means PSD constructs its own start.
 
 ```{r}
-x <- read.csv('results/two-stage-handoff/summary.csv')
+x <- read.csv('results/two-stage-cold/by_family.csv')
+k <- expand.grid(design=c('ernst','weak_marker','high_r2'),batch=c('development','fresh'),stringsAsFactors=FALSE)
+x <- x[match(paste(k$batch,k$design),paste(x$batch,x$design)),]
 knitr::kable(data.frame(
-  Batch=ifelse(x$batch=='development','Earlier 60','Later 60'),
-  `Targets: current → candidate`=paste0(x$baseline_hit,' → ',x$candidate_hit),
-  Gains=x$gain, Losses=x$loss, check.names=FALSE),row.names=FALSE)
+  Batch=ifelse(x$batch=='development','Earlier','Later'),
+  Problem=unname(c(ernst='Ernst',weak_marker='Weak markers',high_r2='High R²')[x$design]),
+  `Warm-start two-stage`=x$warm_hit, `Independent two-stage`=x$cold_hit,
+  `Direct PSD`=x$direct_hit,check.names=FALSE),row.names=FALSE)
 ```
 
-The rule rescues two Ernst cases but loses an earlier weak-marker case that the
-rejected ordinary estimate helped solve. It is **not a clear upgrade** on these
-already-inspected data. A better unrestricted ML endpoint also need not be a
-better PSD starting point—the feasible domains differ.
+- **34 cases stop after ordinary ML; 86 need PSD.** All independently started
+  PSD fits reproduce the saved direct-PSD results. Where ordinary ML is
+  accepted, its objective also matches direct PSD; the largest discrepancy
+  across returned pairs is below 1e-12.
+- **Compared with warm starts:** two Ernst cases are recovered; one earlier
+  weak-marker case is lost. There is no hidden retry or multistart.
+- **No speed claim yet.** The policy avoids PSD in 34 cases but adds an ordinary
+  attempt before PSD in the other 86. Whether that saves time depends on the
+  problem mix and relative fitting costs.
 
-**Verdict:** retain normalization, leave the two-stage handoff unchanged for now,
-and do not promote two-stage as uniformly preferable to direct PSD. Any further
-handoff rule needs broader evidence; avoid a magnitude cutoff tailored to these
-examples. Direct PSD remains the simpler route, though it also misses targets.
+**Verdict:** this is a reasonable, simpler interpretation of ordinary-first
+PSD. These results provide no reason to require warm starts. They support
+keeping independent fallback as a candidate policy; they do not establish
+universal superiority. The library's existing warm-start implementation has
+not been changed by this test.
 
-[Diagnostic crossings](results/two-stage-probe/fits.csv) ·
-[All 120 handoff comparisons](results/two-stage-handoff/paired.csv) ·
+Both stages use FABIN3-auto starts, matching the earlier comparison so that
+only the handoff changes. Ordinary ML uses L-BFGS with information scaling;
+PSD uses SLSQP with diagonal preconditioning. Each has 5,000 evaluations,
+relative objective tolerance 1e-12 and parameter tolerance 1e-10. Target recovery
+requires convergence, PSD accuracy/admissibility and the requested-chart check.
+The 120 datasets are already-inspected development cases, not held-out evidence.
+
+[All policy comparisons](results/two-stage-cold/paired.csv) ·
+[Changed targets](results/two-stage-cold/changes.csv) ·
 [Original challenge summary](executive-summary.html) ·
-[Methods and reproduction](report.html#two-stage-handoff-investigation)
+[Methods and reproduction](report.html#independent-psd-fallback)

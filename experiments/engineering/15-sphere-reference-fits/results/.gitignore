@@ -162,3 +162,13 @@ two-stage-handoff/*
 !two-stage-handoff/summary.csv
 !two-stage-handoff/by_family.csv
 !two-stage-handoff/metadata.csv
+
+# Exact ordinary-first / independent-PSD policy check. Full parameter rows stay local.
+!two-stage-cold/
+two-stage-cold/*
+!two-stage-cold/paired.csv
+!two-stage-cold/summary.csv
+!two-stage-cold/by_family.csv
+!two-stage-cold/changes.csv
+!two-stage-cold/stages.csv
+!two-stage-cold/metadata.csv

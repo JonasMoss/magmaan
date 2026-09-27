@@ -1,0 +1,4 @@
+"batch","design","n","rep","seed","ordinary_accepted","fallback_used","reason","cold_accepted","cold_hit","cold_objective","warm_accepted","warm_hit","warm_objective","direct_accepted","direct_hit","direct_objective","gain_vs_warm","loss_vs_warm","gain_vs_direct","loss_vs_direct"
+"development","ernst",20,9,202711290,FALSE,TRUE,"ordinary-rejected",TRUE,TRUE,0.150775147422399,FALSE,FALSE,NA,TRUE,TRUE,0.150775147422399,TRUE,FALSE,FALSE,FALSE
+"development","weak_marker",100,9,202819290,FALSE,TRUE,"ordinary-rejected",FALSE,FALSE,NA,TRUE,TRUE,0.0175772673418124,FALSE,FALSE,NA,FALSE,TRUE,FALSE,FALSE
+"fresh","ernst",20,1,902711282,FALSE,TRUE,"ordinary-rejected",TRUE,TRUE,0.138423451764506,FALSE,FALSE,NA,TRUE,TRUE,0.138423451764506,TRUE,FALSE,FALSE,FALSE

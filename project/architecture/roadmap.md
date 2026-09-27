@@ -255,6 +255,12 @@ the wrapper: the handoff endpoint and PSD path both matter. A fivefold budget
 does not recover the lost targets. Certified-only warm starts gain two targets
 and lose one across the 120 saved cases; this retrospective tradeoff is not
 promoted. Two-stage retains its existing handoff and remains provisional.
+The user's clarified independent-fallback policy was then fitted on all 120
+cases: accept certified/admissible ordinary ML, otherwise construct PSD's own
+FABIN3-auto start. It matches direct PSD's outcomes and objectives, stops after
+ordinary ML in 34 cases, and gains two targets while losing one against warm
+fallback. This is a tested candidate; the production fallback still uses warm
+starts. A speed advantage has not been established.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct
