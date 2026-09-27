@@ -1,0 +1,79 @@
+---
+title: "Challenge models: did normalization help?"
+subtitle: "Saved sphere-reference cases · 27 September 2026"
+format:
+  html:
+    toc: false
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+**No improvement in reaching the known solutions on these harder cases.**
+Ordinary ML and direct PSD recover exactly the same targets with normalization
+off and on. Two-stage PSD loses three targets in the later batch: two fits
+exhaust their budgets and one reaches a worse local solution. This run supports
+normalization as a numerical scaling tool, not a remedy for missed solutions.
+
+## The important data
+
+**Targets reached: normalization off → on.** Each row contains 20 saved datasets.
+ML has 19 eligible targets in each weak-marker row because one known near-pole
+case is kept separate; all other rows/methods have 20 targets.
+
+```{r}
+x <- read.csv("results/normalization-revisit/by_family.csv")
+a <- x[x$arm=='original_units',]; b <- x[x$arm=='normalized',]
+p <- merge(a,b,by=c('batch','design','method'),suffixes=c('_off','_on'))
+k <- expand.grid(design=c('ernst','weak_marker','high_r2'),batch=c('development','fresh'),stringsAsFactors=FALSE)
+t <- data.frame(Batch=ifelse(k$batch=='development','Earlier','Later'),
+                Problem=unname(c(ernst='Ernst',weak_marker='Weak markers',high_r2='High R²')[k$design]))
+for(m in c('ml_lbfgs','ml_port','direct_psd','two_stage_psd')) {
+ z <- p[p$method==m,]; z <- z[match(paste(k$batch,k$design),paste(z$batch,z$design)),]
+ t[[switch(m,ml_lbfgs='ML: L-BFGS',ml_port='ML: PORT',direct_psd='Direct PSD',two_stage_psd='Two-stage PSD')]] <-
+ paste0(z$target_reached_off,' → ',z$target_reached_on)
+}
+knitr::kable(t,row.names=FALSE)
+```
+
+A target is a saved best-observed solution, not a proven global optimum. A hit
+requires a matching objective, the library convergence verdict, requested-marker
+accuracy, and the study chart check; PSD also requires admissibility. The old
+magnitude cutoff is not used to reject finite solutions here.
+
+## The difficult cases are still difficult
+
+- **Seven refined finite ML solutions:** L-BFGS reaches **one of seven** and
+  PORT **two of seven**, unchanged. Six saved solutions still pass accuracy
+  when checked directly; the exceptionally flat minimum with loading about
+  **740** remains ill-conditioned. The other misses cannot all be dismissed
+  as nonexistent solutions.
+- **Two expected chart failures:** neither produces a certified ML fit in this
+  rerun. Their saved near-pole endpoints still fail the explicit study chart
+  tolerance of 1e-4, including the loading around **184,000**. The library's
+  1e-6 translation tolerance still admits both saved endpoints; a general
+  production rejection policy remains unfinished.
+- **Later-batch PSD:** direct PSD stays at **47/60** targets; two-stage drops
+  **49 → 46/60**. The losses are Ernst, N=20, draws 1 and 3, and high-R²,
+  N=20, draw 7. Draw 3 reaches objective 0.403856 instead of 0.391933;
+  the other two exhaust the PSD evaluation budget.
+
+**Next:** investigate those two-stage regressions and the missed finite
+solutions. Scaling alone has not solved the start/solution-search problem.
+Spectral alternatives remain banked; this run neither adds multistart nor
+changes markers automatically.
+
+**Scope:** these are the earlier simulated sphere challenges, not textbook
+corpus models: 120 datasets, four methods, two normalization settings =
+**960 fits**. ML uses layered/native starts, L-BFGS or PORT with information
+scaling. PSD uses FABIN3/auto and SLSQP with diagonal preconditioning; two-stage
+first tries L-BFGS. Budgets are 5,000 evaluations, relative objective tolerance
+1e-12 and parameter tolerance 1e-10. Both arms use the same current judge.
+Saved references never enter the starts. Both batches are development data.
+
+[All changed outcomes](results/normalization-revisit/changes.csv) ·
+[Seven finite witnesses](results/normalization-revisit/witness_audits.csv) ·
+[Full study and reproduction](report.html#normalization-revisit)

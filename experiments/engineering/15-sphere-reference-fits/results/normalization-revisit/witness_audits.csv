@@ -1,0 +1,8 @@
+"case_id","batch","design","n","rep","objective","accuracy_status","accuracy_passed","newton_distance","condition","chart_pass","admissible"
+1,"fresh","ernst",20,1,0.0766199290621787,"available",TRUE,3.2145646240021e-14,591242870.066996,TRUE,FALSE
+2,"fresh","weak_marker",20,1,0.291758862351737,"available",TRUE,8.6397507713151e-15,5698760.63506498,TRUE,FALSE
+3,"fresh","weak_marker",100,1,0.0260170453954975,"available",TRUE,6.36009276503163e-14,89242931.802826,TRUE,FALSE
+4,"development","weak_marker",100,2,0.0246899172027635,"ill_conditioned",FALSE,2.34670257129624e-13,5200157959268.46,TRUE,FALSE
+5,"development","high_r2",20,4,0.206163341379058,"available",TRUE,3.41407173637449e-15,68.5724102291845,TRUE,FALSE
+6,"fresh","weak_marker",20,4,0.137720478294061,"available",TRUE,2.19691225109581e-14,948363754.233765,TRUE,FALSE
+7,"development","high_r2",20,6,0.152108279873088,"available",TRUE,1.64404940765444e-15,143.828699020445,TRUE,FALSE

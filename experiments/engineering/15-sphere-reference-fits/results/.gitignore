@@ -137,3 +137,15 @@ single-start-selection/*
 !single-start-selection/summary.csv
 !single-start-selection/by_family.csv
 !single-start-selection/metadata.csv
+
+# Paired single-start normalization revisit; full fits/parameters remain local.
+!normalization-revisit/
+normalization-revisit/*
+!normalization-revisit/summary.csv
+!normalization-revisit/by_family.csv
+!normalization-revisit/paired_summary.csv
+!normalization-revisit/changes.csv
+!normalization-revisit/hard_cases.csv
+!normalization-revisit/metadata.csv
+!normalization-revisit/witness_audits.csv
+!normalization-revisit/chart_witnesses.csv

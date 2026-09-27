@@ -35,6 +35,12 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
+**Latest rerun:** shared normalization does not improve target recovery on the
+120 retained challenge draws. ML and direct PSD recover the same targets;
+two-stage PSD loses three in the later batch. The [executive summary](executive-summary.html)
+contains the compact comparison; see [normalization revisit](#normalization-revisit)
+for controls and reproduction. Earlier reference-building results follow.
+
 Of the nine inspected spherical endpoints, two are near-pole failures in the
 requested marker chart. The other seven now have numerical evidence of finite
 local minima in the original marker identification. Five refine directly to
@@ -863,3 +869,60 @@ Historical `results/full` and `results/smoke` are preserved but are not read by
 this report. The former `no_estimate` classification combined failed alternative
 fits with an objective below PSD; it was heuristic and must not be used as
 proof of nonexistence. Historical sources remain available in Git history.
+
+## Normalization revisit
+
+A paired single-start rerun on the 120 retained draws compares normalization
+explicitly off/on, with the same current library judge in both arms. No sphere
+optimization, retries or endpoint-derived starts occur. ML uses layered/native
+starts with L-BFGS and PORT, information scaling; PSD uses FABIN3/auto, SLSQP and
+diagonal preconditioning. Two-stage PSD first uses L-BFGS/information. All have
+5,000 evaluations, relative objective tolerance 1e-12 and parameter tolerance
+1e-10; PSD floor and feasibility tolerance are 1e-6. The sample seed rules and
+library fingerprint are in the frozen metadata.
+
+ML targets use the saved reference plus the seven refined finite witnesses;
+the two known near-pole cases are excluded from recovery denominators and
+reported separately. PSD targets use the earlier pilot and retained fresh PSD
+references. A target hit requires the current fit verdict, requested-marker
+accuracy, chart translation at the explicit study tolerance 1e-4, and an
+objective no higher than the target by more than 1e-6 times one plus its absolute
+value. PSD additionally requires admissibility. Better objectives are flagged
+separately; neither of the two lower-objective PORT endpoints passes accuracy.
+The historical extent/strong-marker screen is retained as a separate column,
+not the acceptance rule. Thus the new totals need not reproduce old screening
+counts (such as 35 versus 36 ML hits). Compare the two current arms to isolate
+normalization; do not interpret differences from older runs as its effect.
+
+There are no target-hit gains or losses for either ML backend or direct PSD.
+Two-stage loses three later-batch targets: Ernst N=20 draws 1 and 3, high-R²
+N=20 draw 7. Two exhaust the PSD budget; Ernst draw 3 reaches a worse local
+solution. Direct PSD also loses one certified fit that was already above its
+reference, so unchanged target counts do not mean every outcome is unchanged.
+PORT gains three certified fits in the later batch, all above their targets.
+Every changed verdict, acceptance or material objective is retained in
+`results/normalization-revisit/changes.csv`; per-family counts are in
+`by_family.csv`. The compact results table is in the executive summary.
+
+All seven high-precision witnesses reproduce their saved objectives when
+re-evaluated with the current library. Six pass requested-marker accuracy and
+one remains ill-conditioned. The two saved near-pole endpoints are still
+rejected at the study tolerance 1e-4 and admitted at 1e-6; neither sample yields
+a certified ML fit in this rerun. This is not evidence that a general production
+chart gate is implemented, or that these samples cannot have other solutions.
+
+These saved batches are development evidence, not fresh held-out validation.
+No algorithms were tuned during this comparison. Reproduce from this folder
+with the current ML/PSD normalization implementation installed:
+
+```sh
+Rscript scripts/normalization_revisit.R --smoke
+Rscript scripts/normalization_revisit.R
+Rscript scripts/check_normalization_witnesses.R
+```
+
+The runner refuses to overwrite results; use a fresh `--run-id NAME` and pass
+that name to the witness checker when rerunning. Full fits and parameters remain
+local, while compact summaries and all changes are tracked. The two-stage
+regressions and the remaining finite-reference misses are the next diagnostic
+targets; this run does not promote spectral starts or multistart.

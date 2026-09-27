@@ -1,0 +1,9 @@
+"batch","method","attempts","gain","loss","acceptance_gain","acceptance_loss","verdict_changed","objective_changed"
+"development","direct_psd",60,0,0,0,0,0,1
+"fresh","direct_psd",60,0,0,0,1,1,0
+"development","ml_lbfgs",60,0,0,0,0,0,7
+"fresh","ml_lbfgs",60,0,0,0,0,0,5
+"development","ml_port",60,0,0,2,2,4,9
+"fresh","ml_port",60,0,0,3,0,3,14
+"development","two_stage_psd",60,0,0,0,0,0,0
+"fresh","two_stage_psd",60,0,3,0,3,3,1

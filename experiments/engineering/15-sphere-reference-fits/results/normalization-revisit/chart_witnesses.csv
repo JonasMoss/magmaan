@@ -1,0 +1,10 @@
+"batch","design","n","rep","chart_level","chart_pass_1e4","chart_pass_1e6"
+"fresh","ernst",20,1,0.0176968229104318,TRUE,TRUE
+"fresh","weak_marker",20,1,0.302215131530346,TRUE,TRUE
+"fresh","weak_marker",100,1,0.00901477176698365,TRUE,TRUE
+"development","weak_marker",100,2,0.00140037824226519,TRUE,TRUE
+"development","high_r2",20,4,0.40557969356472,TRUE,TRUE
+"development","weak_marker",20,4,1.1503578820508e-06,FALSE,TRUE
+"fresh","weak_marker",20,4,0.00227935520911935,TRUE,TRUE
+"fresh","weak_marker",100,4,5.444364441791e-06,FALSE,TRUE
+"development","high_r2",20,6,0.77589572423338,TRUE,TRUE

@@ -3063,6 +3063,19 @@ ML and FABIN3-auto PSD starts unchanged; negative variance starts are not PSD
 candidates. This is retrospective evidence under the frozen historical screen,
 not a fresh policy decision or a claim that single starts cannot improve.
 
+**Paired challenge normalization rerun (2026-09-27):** 120 retained draws,
+960 single-start fits, normalization explicitly off/on with the current judge.
+Layered/native ML (L-BFGS and PORT/information) and FABIN3-auto direct PSD
+(SLSQP/diagonal) have unchanged target recovery. Later-batch direct PSD remains
+47/60; two-stage falls 49→46/60. Investigate Ernst N=20 draws 1 and 3 and
+high-R² N=20 draw 7: two PSD budget failures and one worse local solution.
+Six of seven saved finite witnesses still pass requested-marker accuracy;
+L-BFGS reaches one and PORT two, with no normalization gain. The flat loading-740
+witness remains ill-conditioned. Both saved near-pole endpoints still fail the
+study 1e-4 check but pass 1e-6; no production gate is implied. Preserve all
+changed outcomes in engineering/15's normalization-revisit evidence and use its
+executive summary for the current result. No spectral/multistart promotion.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

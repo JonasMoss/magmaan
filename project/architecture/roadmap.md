@@ -245,6 +245,11 @@ ML and fallback results remain mixed. Saved-point inspection identifies 23 old
 mixed-unit fallback solutions accepted despite indefinite covariance blocks;
 caller-unit admissibility scale robustness remains open. All convergence and
 objective regressions are retained in the optimizer-defaults study.
+The separate engineering/15 challenge rerun (120 saved draws, 960 fits) finds
+no target-recovery gains for layered/native ML or FABIN3-auto direct PSD.
+Later-batch two-stage PSD loses three targets (two budget failures and a worse
+local solution); six of seven saved finite ML witnesses still pass direct
+accuracy checks. Normalization does not close the start/solution-search gap.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct

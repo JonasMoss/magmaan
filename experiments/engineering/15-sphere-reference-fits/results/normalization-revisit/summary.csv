@@ -1,0 +1,17 @@
+"batch","method","arm","attempts","returned","certified","accepted","target_available","objective_match","better_objective","target_reached","historical_hit"
+"development","direct_psd","normalized",60,57,57,57,60,54,0,54,54
+"fresh","direct_psd","normalized",60,57,57,57,60,47,0,47,47
+"development","ml_lbfgs","normalized",60,50,43,43,59,41,0,41,40
+"fresh","ml_lbfgs","normalized",60,43,38,38,59,34,0,34,34
+"development","ml_port","normalized",60,60,47,47,59,41,0,41,40
+"fresh","ml_port","normalized",60,60,44,44,59,37,1,37,36
+"development","two_stage_psd","normalized",60,57,57,57,60,54,0,54,54
+"fresh","two_stage_psd","normalized",60,55,55,55,60,46,0,46,46
+"development","direct_psd","original_units",60,57,57,57,60,54,0,54,54
+"fresh","direct_psd","original_units",60,58,58,58,60,47,0,47,47
+"development","ml_lbfgs","original_units",60,51,43,43,59,41,0,41,40
+"fresh","ml_lbfgs","original_units",60,45,38,38,59,34,0,34,34
+"development","ml_port","original_units",60,60,47,47,59,41,0,41,40
+"fresh","ml_port","original_units",60,60,41,41,59,37,1,37,36
+"development","two_stage_psd","original_units",60,57,57,57,60,54,0,54,54
+"fresh","two_stage_psd","original_units",60,58,58,58,60,49,0,49,49
