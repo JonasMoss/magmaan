@@ -1,0 +1,6 @@
+# Decision evidence is tracked: re-include the lane folders that
+# experiments/.gitignore excludes; raw per-fit rows, logs and heartbeats stay local.
+!/*/
+*/*/raw/
+*/*/progress.csv
+*.log
