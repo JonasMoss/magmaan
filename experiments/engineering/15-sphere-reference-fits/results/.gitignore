@@ -64,3 +64,14 @@ psd-fresh/*
 !psd-fresh/references.csv
 !psd-fresh/metadata.csv
 !psd-fresh/labels.csv
+
+# Identification/continuation evidence; full search fits and covariance traces stay local.
+!unresolved-identifications/
+unresolved-identifications/*
+!unresolved-identifications/tasks.csv
+!unresolved-identifications/summary.csv
+!unresolved-identifications/metadata.csv
+!unresolved-identifications/continuation.csv
+!unresolved-identifications/candidate_evidence.csv
+!unresolved-identifications/candidate_parameters.csv
+!unresolved-identifications/candidate_covariances.csv

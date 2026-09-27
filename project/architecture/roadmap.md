@@ -676,6 +676,17 @@ remaining draws have inferior screened candidates and one has no screened
 ordinary candidate. Boundary nominations use scaled primitive eigenvalues;
 they remain separate from feasibility, local accuracy and chart translation.
 No generic nonattainment classifier or production chart fallback is implemented.
+Inspection of the nine missing ML references (four development, five fresh)
+now compares nine marker placements, effect coding, positive std.lv and sphere,
+with common transported spectral points and tighter endpoint continuations.
+All nine yield finite locally checked candidates; two pass the original screen,
+six have stable candidates excluded by the magnitude cutoff, and one remains
+numerically delicate across charts. Two high-R2 cases have moderate invariant
+primitive components despite large standardized ratios near zero total latent
+variance. Positive std.lv excludes negative-disturbance solutions and is not
+an equivalent chart for all unrestricted-ML sectors. Missing screened references
+must not be equated with nonconvergence or nonattainment. Raw historical screens
+are retained; component magnitude, accuracy and attainment evidence stay separate.
 No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,

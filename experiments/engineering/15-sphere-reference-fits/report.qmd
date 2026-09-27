@@ -35,6 +35,14 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
+Inspection across identifications changes the interpretation of the nine ML
+problems previously lacking a screened sphere reference. All nine yield finite,
+locally checked candidates in the expanded diagnostic search. Two now pass the
+original extent screen, six show stable candidates excluded by that magnitude
+cutoff, and one remains numerically delicate. A missing screened reference did
+not mean that every optimizer failed or that no finite solution exists. No
+nonattainment claim is made for these random draws.
+
 The geometry checks now include exact marker and std.lv poles, an attained PSD
 boundary solution, and an analytically nonattained unrestricted-ML target.
 A fixed alternative marker and the sphere recover both pole targets; the
@@ -83,6 +91,70 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### Inspecting the unresolved draws
+
+The inspection selects all four development and five retained fresh ML problems
+with no screened sphere reference. It fits nine combinations of marker
+indicators, effect coding, positive std.lv and the sphere, with L-BFGS and PORT.
+The four spectral starting points are transported across charts; their implied
+covariances are checked for agreement before fitting. Native constructors are
+separate arms. Positive std.lv cannot represent negative latent disturbance
+variances, so unavailable starts are recorded rather than silently changed.
+Failure in that sign-restricted chart is not failure of unrestricted ML.
+
+For each optimizer, the lowest-objective evaluable endpoint in the marker,
+effect-coded, std.lv and sphere families is continued at tighter tolerances
+with budgets of 1,000, 10,000 and 50,000. These are allowed budgets, not evidence
+that the optimizer used every evaluation. The inspection retains covariance
+drift, objective, local accuracy and both the old extent and a new diagnostic
+of scale-invariant component magnitudes. Neither magnitude statistic is a
+proof of runaway or nonattainment.
+
+```{r}
+escape <- read.csv(file.path("results", "unresolved-identifications", "candidate_evidence.csv"))
+tab(data.frame(Batch=escape$batch, Design=escape$design, N=escape$n, Draw=escape$rep,
+  Objective=escape$objective, `Old extent`=escape$std_extent,
+  `Component extent`=escape$component_extent, check.names=FALSE))
+```
+
+These are the lowest-objective locally checked candidates in this inspection,
+not certified global optima. The magnitude-only screen still labels seven of
+these `screened_extreme`; the original records are preserved.
+
+- Development weak-marker N=20 draw 4 and fresh weak-marker N=20 draw 1 now
+  pass the original screen. Marker charts find lower finite candidates than
+  the sphere attempts in this inspection. Those sphere attempts can show
+  large components on losing paths without establishing nonattainment of the
+  problem itself.
+- Both high-R2 development cases have moderate component magnitudes, around
+  1.1–1.3, despite old standardized extents of roughly 18 and 177. A small
+  total latent variance makes standardized ratios large; the fitted primitive
+  components need not diverge. Multiple charts recover the same objective.
+- Fresh Ernst N=20 draw 1 and weak-marker N=20 draw 4, N=100 draw 1, and N=100
+  draw 4 have stable locally checked candidates with component magnitudes
+  around 13–28. Their large signed variance components remain finite in the
+  continuations. These are improper ML candidates, not PSD candidates.
+- Development weak-marker N=100 draw 2 remains delicate. Several charts give
+  almost the same objective, around 0.024689918, while representative component
+  magnitudes range roughly from 125 to 169 and local-check outcomes differ.
+  The best evaluable endpoint is not the best locally checked endpoint.
+  Stagnation at tighter tolerances does not resolve finite attainment here.
+
+The component diagnostic uses loading energies (squared loadings divided by
+sample indicator variances) to scale latent total/disturbance covariances and
+structural paths; residual contributions are scaled by indicator variances.
+Unlike the old standardized extent, it never divides by a fitted latent total
+variance. Both statistics are reported, and neither replaces the accuracy check.
+The retained candidate parameters and implied covariances permit inspection
+without rerunning the optimizers.
+
+The practical conclusion is to separate magnitude flags from local accuracy
+and from evidence about attainment. We do not need every unrestricted ML
+problem to have a solution, and making PSD solve a different constrained
+problem cannot answer whether ML attains its infimum. However, the original
+five missing fresh references cannot be described collectively as five
+nonconvergent or apparently nonattained fits.
 
 ### Known geometry before promotion
 
@@ -482,6 +554,8 @@ Rscript scripts/direct_starts.R
 Rscript scripts/probe_geometry.R
 Rscript scripts/check_geometry.R
 Rscript scripts/psd_fresh.R
+Rscript scripts/inspect_unresolved.R
+Rscript scripts/check_escape.R
 # Optional reference-informed diagnostic; requires retained raw pilot/start fits:
 Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
 Rscript scripts/summarize_starts.R

@@ -128,7 +128,8 @@ run_fit <- function(spec, data, sample, domain, route, backend, start_id, theta 
   warnings <- character()
   fit <- tryCatch(withCallingHandlers({
     if (route == "sphere") {
-      ctl <- if (start_id == "layered") list(start = "layered") else NULL
+      ctl <- control
+      if (start_id == "layered") ctl <- modifyList(ctl %||% list(), list(start = "layered"))
       if (!is.null(theta)) {
         free <- spec$partable$free
         spec$partable$ustart[free > 0] <- theta[free[free > 0]]

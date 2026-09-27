@@ -1,0 +1,10 @@
+"batch","design","n","rep","extreme_sphere","seed"
+"development","high_r2",20,4,14,202911285
+"development","high_r2",20,6,11,202911287
+"development","weak_marker",20,4,0,202811285
+"development","weak_marker",100,2,10,202819283
+"fresh","ernst",20,1,2,902711282
+"fresh","weak_marker",20,1,2,902811282
+"fresh","weak_marker",20,4,2,902811285
+"fresh","weak_marker",100,1,2,902819282
+"fresh","weak_marker",100,4,2,902819285

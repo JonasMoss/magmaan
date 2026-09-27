@@ -2857,8 +2857,24 @@ std.lv fits can pass local checks without attaining the chart's limiting target.
 No ML attempt passes the screen on the analytic nonattainment example; all
 PSD attempts agree on a checked boundary candidate at positive discrepancy.
 
+The nine missing original/fresh ML references have now been inspected across
+nine markers, effect coding, positive std.lv and sphere with common transported
+starts and tighter continuations. Two acquire candidates passing the original
+screen; six have stable local candidates rejected by the extent cutoff; one
+(development weak-marker N=100 draw 2) remains numerically delicate. All nine
+have finite locally checked candidates. Two high-R2 extremes arise mainly from
+standardization by small total latent variances. Do not call this collection
+nonconvergent or infer nonattainment from its missing screened references.
+
 Remaining before a stronger reference claim:
 
+- Separate the magnitude-only exclusion from reference eligibility in a
+  future protocol revision; preserve the old frozen classifications. Inspect
+  finite primitive contributions and latent-variance cancellation before
+  labelling an endpoint runaway. Retain uncertainty for development weak-marker
+  N=100 draw 2, and inspect losing diverging paths against the better finite
+  witnesses now available. Positive std.lv only covers the positive disturbance
+  sector; identification comparisons must preserve the feasible point/domain.
 - Turn the geometry evidence into a supported result contract before promotion:
   preserve a checked alternative-chart point and its implied covariance when
   translation fails; keep original-chart availability, PSD feasibility/face,
