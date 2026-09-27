@@ -11,6 +11,7 @@
 #include <Eigen/SVD>
 
 #include "magmaan/estimate/constraints.hpp"
+#include "../detail_coordinates.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -250,8 +251,85 @@ NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta,
     StationarityDomain domain, NewtonAccuracyOptions opts) {
-  return audit_newton_derivatives(pt, rep,
-      evaluate_newton_ml(pt, rep, samp, theta), domain, opts);
+  auto con = build_eq_constraints(pt);
+  const bool single_level = rep.block_info.empty() ||
+      (rep.block_info.size() == 1 && rep.block_info[0].role == model::BlockLevel::Single);
+  const bool normalize = domain == StationarityDomain::Psd && rep.dims.size() == 1 &&
+      single_level && con && !con->active() && !build_nl_constraints(pt).active();
+  if (!normalize)
+    return audit_newton_derivatives(pt, rep,
+        evaluate_newton_ml(pt, rep, samp, theta), domain, opts);
+
+  auto variables = driven::variable_units(pt, rep, samp);
+  auto units = parameter_units(pt, rep, samp);
+  auto unavailable = [&](const char* detail) {
+    NewtonDerivatives d;
+    d.theta = theta;
+    d.objective_kind = NewtonObjectiveKind::CompleteDataMl;
+    d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+    d.detail = detail;
+    return audit_newton_derivatives(pt, rep, std::move(d), domain, opts);
+  };
+  if (!variables || !units || units->size() != theta.size() ||
+      !units->allFinite() || (units->array() <= 0.0).any())
+    return unavailable("PSD accuracy normalization requires finite positive sample/parameter units");
+
+  auto normalized_pt = pt;
+  auto normalized_rep = rep;
+  auto normalized_sample = samp;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& c = rep.cell_for_row[i];
+    if (!c.used) continue;
+    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
+                                              static_cast<std::size_t>(c.block));
+    if (!(u > 0.0) || !std::isfinite(u))
+      return unavailable("PSD accuracy normalization encountered invalid matrix-cell units");
+    if (pt.free[i] > 0) {
+      // A parameter shared across cells cannot acquire two different units.
+      const double assigned = (*units)(pt.free[i] - 1);
+      if (std::abs(u / assigned - 1.0) > 1e-12)
+        return unavailable("PSD accuracy normalization needs consistent units for shared parameters");
+    } else {
+      normalized_pt.fixed_value[i] /= u;
+    }
+  }
+  for (auto& c : normalized_rep.structural_cells) {
+    const double u = driven::matrix_cell_unit(*variables, c.mat, c.row, c.col,
+                                              static_cast<std::size_t>(c.block));
+    if (!(u > 0.0) || !std::isfinite(u))
+      return unavailable("PSD accuracy normalization encountered invalid structural-cell units");
+    c.value /= u;
+  }
+  const auto& sd = variables->observed[0];
+  if (normalized_sample.S[0].cols() != sd.size() ||
+      (!normalized_sample.mean.empty() &&
+       (normalized_sample.mean.size() != 1 || normalized_sample.mean[0].size() != sd.size())))
+    return unavailable("PSD accuracy normalization requires compatible sample dimensions");
+  normalized_sample.S[0].array() /= (sd * sd.transpose()).array();
+  if (!normalized_sample.mean.empty())
+    normalized_sample.mean[0].array() /= sd.array();
+  const Eigen::VectorXd normalized_theta = theta.cwiseQuotient(*units);
+  auto out = audit_newton_derivatives(normalized_pt, normalized_rep,
+      evaluate_newton_ml(normalized_pt, normalized_rep, normalized_sample, normalized_theta),
+      domain, opts);
+  out.unit_normalized = true;
+
+  // Keep reusable derivative artifacts in the caller's coordinates. The
+  // reduced solve stays normalized; its full step is still B * solution.step.
+  const auto inverse = units->cwiseInverse().eval();
+  out.derivatives.theta = theta;
+  if (out.derivatives.gradient.size() == units->size())
+    out.derivatives.gradient.array() *= inverse.array();
+  if (out.derivatives.hessian.rows() == units->size() &&
+      out.derivatives.hessian.cols() == units->size())
+    out.derivatives.hessian = inverse.asDiagonal() * out.derivatives.hessian * inverse.asDiagonal();
+  if (out.geometry.equality_basis.rows() == units->size())
+    out.geometry.equality_basis = units->asDiagonal() * out.geometry.equality_basis;
+  if (out.geometry.curvature_correction.rows() == units->size() &&
+      out.geometry.curvature_correction.cols() == units->size())
+    out.geometry.curvature_correction = inverse.asDiagonal() * out.geometry.curvature_correction * inverse.asDiagonal();
+  out.diagnostics = assess_newton_accuracy(out, opts);
+  return out;
 }
 
 NewtonAudit audit_newton_derivatives(
@@ -389,6 +467,7 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
   out.metric = audit.derivatives.metric_kind;
   out.n_reduced = static_cast<std::int32_t>(audit.geometry.reduced_gradient.size());
   out.psd_domain = audit.geometry.domain == StationarityDomain::Psd;
+  out.unit_normalized = audit.unit_normalized;
   out.box_constrained = audit.box.applied;
   out.covariance_interior = audit.geometry.covariance_interior;
   out.null_directions = audit.geometry.null_directions;

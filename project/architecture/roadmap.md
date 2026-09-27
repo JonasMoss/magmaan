@@ -219,11 +219,18 @@ direct marker PSD goes from nine verdict differences/two certified objective
 differences to zero/zero; direct std.lv has no remaining certified objective
 differences but five verdict differences. This does not establish better basin
 selection: normalized two-stage fits sometimes reach worse local minima.
-Five marker points also expose unit-dependent PSD accuracy diagnostics: they
-pass in normalized/native units but fail after rescaling, despite successful
-point transport. Fitting and accuracy checks need a common normalized space
-before promotion. The pilot is confined to decisions/01 tooling; production
-normalization, equality-constraint transport and route adoption remain open.
+PSD accuracy now uses sample-normalized geometry and Newton systems for
+single-group complete-data ML without equality constraints; fixed and structural
+matrix cells are transported too. Requested markers and the accuracy thresholds
+are preserved. Retained full-space derivatives and geometry maps return in
+caller coordinates; reduced diagnostics use normalized units, exposed through
+`unit_normalized`. Other audit domains/scopes retain their existing path.
+Re-auditing 4,742 saved points without fitting recovers the five unit-induced
+false failures, with zero representation-dependent verdict or face-geometry
+differences. Two checks now correctly reproduce the internal nonpositive-curvature
+rejection of already-failed fits. This is a development regression check, not
+fresh evidence for fitting policy. Full fitting normalization, equality-constraint
+transport and route adoption remain open.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start

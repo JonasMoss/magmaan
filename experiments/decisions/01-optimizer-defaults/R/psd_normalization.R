@@ -86,3 +86,12 @@ normalization_attempt <- function(model,sample,std_lv,route,normalize) {
   if(inherits(check,'error')) {rec$message<-one_line(conditionMessage(check));return(list(record=rec))}
   check
 }
+
+
+normalization_populations <- function() {
+  pops <- all_populations()
+  pops <- pops[vapply(pops,function(p)p$role=='test' && p$family!='constrained',logical(1))]
+  pops[['r47_mis_f2_resid']]$models[[2]] <- fitted_model('correlated_residuals',
+    'f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nx1 ~~ x4\nx2 ~~ x5\nx3 ~~ x6')
+  pops
+}

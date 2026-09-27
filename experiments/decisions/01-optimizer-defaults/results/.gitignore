@@ -40,3 +40,11 @@ psd-normalization/pilot/*
 !psd-normalization/pilot/input_invariance.csv
 !psd-normalization/pilot/accuracy_checks.csv
 !psd-normalization/pilot/failures.csv
+
+# Saved-point accuracy regression; full per-point rows stay local.
+psd-accuracy-normalization/*
+!psd-accuracy-normalization/points/
+psd-accuracy-normalization/points/*
+!psd-accuracy-normalization/points/metadata.csv
+!psd-accuracy-normalization/points/summary.csv
+!psd-accuracy-normalization/points/changes.csv

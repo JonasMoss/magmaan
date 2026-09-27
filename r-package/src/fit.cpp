@@ -1206,6 +1206,7 @@ Rcpp::List newton_accuracy_to_r(
       Rcpp::_["solve_residual"] = num(a.solve_residual),
       Rcpp::_["n_reduced"] = a.n_reduced,
       Rcpp::_["psd_domain"] = a.psd_domain,
+      Rcpp::_["unit_normalized"] = a.unit_normalized,
       Rcpp::_["box_constrained"] = a.box_constrained,
       Rcpp::_["null_directions"] = a.null_directions,
       Rcpp::_["constrained_directions"] = a.constrained_directions,

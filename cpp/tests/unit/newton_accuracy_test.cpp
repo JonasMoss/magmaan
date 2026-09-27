@@ -9,6 +9,7 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/nt.hpp"
@@ -386,7 +387,9 @@ TEST_CASE("Newton accuracy: predicted gain matches the objective along a face") 
   CHECK(geometry.curvature_correction.norm() > 0.0);
   CHECK(geometry.reduced_hessian.isApprox(
       B.transpose() * (retained.derivatives.hessian + geometry.curvature_correction) * B));
-  CHECK(geometry.reduced_gradient.isApprox(B.transpose() * retained.derivatives.gradient));
+  // Projection onto the face cancels the normal gradient near the optimum.
+  CHECK((geometry.reduced_gradient - B.transpose() * retained.derivatives.gradient).norm()
+        < 1e-12 * std::max(1.0, B.norm() * retained.derivatives.gradient.norm()));
   CHECK(retained.diagnostics.distance == doctest::Approx(at_fit.distance));
   const auto reassessed = magmaan::estimate::frontier::assess_newton_accuracy(retained);
   CHECK(reassessed.psd_domain);
@@ -535,4 +538,86 @@ TEST_CASE("Newton artifacts: rejected curvature retains derivatives and geometry
   CHECK_FALSE(assess_newton_accuracy(solution).passed);
   CHECK(evaluate_newton_ml(m.pt, m.rep, m.samp, Eigen::VectorXd::Zero(1)).status ==
         NewtonAccuracyStatus::Unavailable);
+}
+
+
+TEST_CASE("PSD Newton accuracy: same point is unit invariant with reusable native artifacts") {
+  using namespace magmaan::estimate;
+  using namespace magmaan::estimate::frontier;
+  Model m = correlated_factors_above_one();
+  auto options = ml_psd_optim_options();
+  options.nlopt.max_eval = 20000;
+  options.nlopt.ftol_rel = 1e-15;
+  options.nlopt.xtol_rel = 1e-13;
+  auto fit = fit_ml_psd(m.pt, m.rep, m.samp, m.theta0, Backend::NloptSlsqp, options);
+  REQUIRE(fit.has_value());
+  const auto baseline = audit_newton_ml(m.pt, m.rep, m.samp, fit->theta, StationarityDomain::Psd);
+  REQUIRE(baseline.diagnostics.passed);
+  REQUIRE(baseline.diagnostics.unit_normalized);
+  REQUIRE(baseline.diagnostics.null_directions == 1);
+  auto units = parameter_units(m.pt, m.rep, m.samp);
+  REQUIRE(units.has_value());
+  for (int scenario = 0; scenario < 3; ++scenario) {
+    CAPTURE(scenario);
+    Eigen::VectorXd factors = Eigen::VectorXd::Constant(6, scenario == 0 ? 0.01 : 100.0);
+    if (scenario == 2) factors << 0.01, 100.0, 2.0, 100.0, 0.01, 0.5;
+    auto sample = m.samp;
+    sample.S[0] = factors.asDiagonal() * m.samp.S[0] * factors.asDiagonal();
+    auto other_units = parameter_units(m.pt, m.rep, sample);
+    REQUIRE(other_units.has_value());
+    const Eigen::VectorXd ratio = other_units->cwiseQuotient(*units);
+    const Eigen::VectorXd theta = fit->theta.cwiseProduct(ratio);
+    const auto audit = audit_newton_ml(m.pt, m.rep, sample, theta, StationarityDomain::Psd);
+    REQUIRE(audit.diagnostics.passed);
+    CHECK(audit.diagnostics.unit_normalized);
+    CHECK(audit.diagnostics.null_directions == baseline.diagnostics.null_directions);
+    CHECK(audit.diagnostics.constrained_directions == baseline.diagnostics.constrained_directions);
+    CHECK(audit.diagnostics.condition == doctest::Approx(baseline.diagnostics.condition).epsilon(1e-7));
+    CHECK(std::abs(audit.diagnostics.distance - baseline.diagnostics.distance) < 1e-7);
+    CHECK(audit.derivatives.theta.isApprox(theta, 1e-14));
+    const auto native = evaluate_newton_ml(m.pt, m.rep, sample, theta);
+    REQUIRE(native.status == NewtonAccuracyStatus::Available);
+    CHECK(audit.derivatives.gradient.isApprox(native.gradient, 1e-7));
+    CHECK(audit.derivatives.hessian.isApprox(native.hessian, 1e-8));
+    const Eigen::MatrixXd B = audit.geometry.equality_basis * audit.geometry.tangent_basis;
+    CHECK(audit.geometry.reduced_gradient.isApprox(B.transpose() * audit.derivatives.gradient, 1e-7));
+    CHECK(audit.geometry.reduced_hessian.isApprox(
+        B.transpose() * (audit.derivatives.hessian + audit.geometry.curvature_correction) * B, 1e-8));
+    CHECK(assess_newton_accuracy(audit).unit_normalized);
+    auto strict = audit.options;
+    strict.max_condition = 1.0;
+    CHECK_FALSE(assess_newton_accuracy(audit, strict).passed);
+  }
+}
+
+TEST_CASE("PSD Newton normalization preserves rejection and its supported scope") {
+  using namespace magmaan::estimate;
+  using namespace magmaan::estimate::frontier;
+  SUBCASE("std.lv interior and infeasible variance") {
+    auto m = exact_model("f =~ NA*x1 + x2 + x3 + x4\nf ~~ 1*f");
+    const auto good = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0, StationarityDomain::Psd);
+    CHECK(good.diagnostics.unit_normalized);
+    CHECK(good.diagnostics.passed);
+    auto theta = m.theta0;
+    for (std::size_t i = 0; i < m.pt.size(); ++i) {
+      const auto& c = m.rep.cell_for_row[i];
+      if (c.used && c.mat == magmaan::model::MatId::Theta && c.row == 0 && c.col == 0 && m.pt.free[i] > 0)
+        theta(m.pt.free[i] - 1) = -0.01;
+    }
+    const auto bad = audit_newton_ml(m.pt, m.rep, m.samp, theta, StationarityDomain::Psd);
+    CHECK(bad.diagnostics.unit_normalized);
+    CHECK_FALSE(bad.diagnostics.passed);
+    auto sample = m.samp;
+    sample.S[0](0, 0) = 0.0;
+    CHECK_FALSE(audit_newton_ml(m.pt, m.rep, sample, m.theta0, StationarityDomain::Psd).diagnostics.passed);
+  }
+  SUBCASE("equality constraints and ambient audit retain their existing path") {
+    auto m = exact_model("f =~ x1 + a*x2 + a*x3 + x4");
+    const auto psd = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0, StationarityDomain::Psd);
+    CHECK_FALSE(psd.diagnostics.unit_normalized);
+    CHECK(psd.diagnostics.passed);
+    const auto ambient = audit_newton_ml(m.pt, m.rep, m.samp, m.theta0);
+    CHECK_FALSE(ambient.diagnostics.unit_normalized);
+    CHECK(ambient.diagnostics.passed);
+  }
 }

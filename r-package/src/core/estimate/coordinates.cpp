@@ -204,6 +204,11 @@ driven::variable_units(const spec::LatentStructure& pt, const model::MatrixRep& 
   return compute_variable_units(pt, rep, samp);
 }
 
+double driven::matrix_cell_unit(const VariableUnits& units, model::MatId mat,
+                                Eigen::Index row, Eigen::Index col, std::size_t block) {
+  return unit_of(units, locate(mat, row, col, block));
+}
+
 fit_expected<Eigen::VectorXd>
 parameter_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 const data::SampleStats& samp) {

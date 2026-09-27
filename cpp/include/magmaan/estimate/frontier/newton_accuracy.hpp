@@ -171,6 +171,9 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
 // Convenience composition retaining every stage. Fit wrappers below return
 // only its small diagnostics record; callers wanting reuse own this result.
 struct NewtonAudit {
+  // Derivatives and full-space geometry maps still use the caller's parameter
+  // coordinates; the reduced solve may use normalized internal coordinates.
+  bool unit_normalized = false;
   NewtonAccuracyOptions options;  // effective preparation and assessment settings
   Bounds bounds;
   double active_bound_tol = 1e-6;
@@ -202,6 +205,11 @@ NewtonAudit audit_newton_derivatives(
     NewtonAccuracyOptions opts = {}, const Bounds& bounds = {},
     double active_bound_tol = 1e-6);
 
+// Single-group complete-data PSD ML without equality constraints is audited
+// after sample-unit normalization (including fixed and structural matrix cells).
+// The retained derivatives and full-space geometry are transported back to the
+// supplied parameter coordinates; reduced diagnostics retain normalized units.
+// Other domains/scopes keep the supplied-coordinate audit.
 NewtonAudit audit_newton_ml(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& samp, const Eigen::VectorXd& theta,

@@ -15,9 +15,7 @@ smoke<-'--smoke' %in% args;run<-opt('--run-id',if(smoke)'smoke'else'pilot')
 stopifnot(grepl('^[a-zA-Z0-9_-]+$',run))
 workers<-as.integer(opt('--workers','4'));out<-file.path(here,'results','psd-normalization',run)
 if(file.exists(out))stop('choose a fresh run ID')
-pops<-all_populations();pops<-pops[vapply(pops,function(p)p$role=='test' && p$family!='constrained',logical(1))]
-pops[['r47_mis_f2_resid']]$models[[2]]<-fitted_model('correlated_residuals',
- 'f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nx1 ~~ x4\nx2 ~~ x5\nx3 ~~ x6')
+pops<-normalization_populations()
 if(smoke)pops<-pops[!duplicated(vapply(pops,`[[`,'','family'))]
 seed_base<-202609291L+as.integer(smoke)
 tasks<-do.call(rbind,lapply(pops,function(p){

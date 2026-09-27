@@ -586,17 +586,21 @@ section: the categorical corpus saddles are under
     Direct marker certification rises 1,179→1,184/1,200 internally, but
     normalized two-stage marker best-observed matches fall 1,178→1,149.
     All paired losses and remaining unit exceptions are retained.
-  - **Next prerequisite: unit-consistent PSD accuracy diagnostics.** Five
-    normalized marker fits pass internally but fail the original-unit PSD
-    accuracy check. The same points pass after transport to native units;
-    original-unit condition measures rise to 1e13–1e15, and mixed units also
-    change the detected covariance nullity. These are diagnostic unit effects,
-    not failed covariance/objective transport. Preserve the separate verdicts
-    until fitting and post-fit checks share a consistent normalized space.
+  - **Done: normalized PSD accuracy diagnostics (2026-09-27).** Single-group
+    complete-data ML without equality constraints now audits PSD geometry and
+    Newton accuracy in sample-normalized units, preserving requested markers
+    and returning reusable full-space derivatives in caller coordinates.
+    Accuracy thresholds are unchanged; `unit_normalized` exposes the scope.
+    Re-auditing 4,742 saved points without refitting recovers all five earlier
+    false failures, with zero original/normalized verdict or nullity/held-face
+    disagreements. Two previously passing original-unit checks now detect
+    nonpositive curvature; both fits already failed their internal check.
+    The regression uses development data, not a fresh policy decision run.
   - Continue with the unconstrained route first; inspect the remaining
     two-stage sensitivity to roundoff and retain alternative local minima
     as search evidence. Equality/fixed-value transport remains outside this
-    pilot. Neither normalization nor a route change is a production policy yet.
+    pilot. Fitting normalization and route adoption remain open; the scoped accuracy
+    normalization is implemented.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best

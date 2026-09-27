@@ -1,0 +1,5 @@
+"chart","route","points","gain","loss","verdict_disagreement","geometry_disagreement"
+"marker","direct",1184,2,0,0,0
+"std_lv","direct",1172,0,0,0,0
+"marker","two_stage",1186,3,2,0,0
+"std_lv","two_stage",1200,0,0,0,0

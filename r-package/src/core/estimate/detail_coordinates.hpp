@@ -26,6 +26,9 @@ fit_expected<VariableUnits>
 variable_units(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                const data::SampleStats& samp);
 
+double matrix_cell_unit(const VariableUnits& units, model::MatId mat,
+                        Eigen::Index row, Eigen::Index col, std::size_t block);
+
 using ScalarRun = std::function<fit_expected<optim::OptimResult>(
     const optim::ScalarProblem&, const Eigen::VectorXd&, const Bounds&)>;
 

@@ -156,10 +156,11 @@ a route or introduce multistart.
 A later unconstrained pilot tries full normalization before starts and fitting.
 It removes all unit-dependent verdict and objective differences for direct
 marker PSD in this sample, with exact backtransformation to numerical precision.
-It does not uniformly improve the solutions found. Five otherwise successful
-fits also expose unit-dependent post-fit accuracy checks. See the
+It does not uniformly improve the solutions found. A subsequent accuracy-only
+fix resolves five unit-induced failures without refitting; all 4,742 saved
+points now agree across original and normalized representations. See the
 [unconstrained normalization pilot](#unconstrained-normalization-pilot);
-normalization is not promoted by this experiment.
+full fitting normalization is not promoted by this experiment.
 
 ## The register
 
@@ -525,7 +526,7 @@ policy and two-stage remains an explicit frontier call.
 Full sample normalization improves consistency across measurement units, most
 clearly for direct marker-identified PSD fitting. It is not yet an across-the-board
 improvement in which local solution is reached, and post-fit accuracy checks
-must be made consistent with the internal normalization before adoption.
+were subsequently made consistent in the scoped accuracy check described below.
 
 The pilot divides each observed variable by its sample standard deviation,
 constructs FABIN3-auto starts and fits in those normalized units, then transforms
@@ -584,7 +585,7 @@ condition; they are not global optima. Normalization can make a fitter more
 consistent while consistently sending it to a less favorable local solution.
 Every paired gain/loss and unit exception is retained in the pilot results.
 
-Five normalized marker fits pass internally but fail the PSD accuracy check
+With the previous accuracy check, five normalized marker fits pass internally but fail the PSD accuracy check
 when evaluated in original units. We rechecked those exact points without any
 optimization: all pass in normalized and native units, while the rescaled
 checks report ill-conditioning. Condition measures increase from about
@@ -596,13 +597,42 @@ PSD admissibility; `output_success` in the summaries additionally requires
 the original-unit PSD accuracy check, reducing normalized marker counts to
 1,182 direct and 1,179 two-stage. These verdicts remain explicitly separate.
 
-The next prerequisite is to give PSD fitting and its numerical accuracy checks
-a consistent normalized space while preserving estimates in the requested
-units. Remaining two-stage sensitivity and worse local solutions still need
+Remaining two-stage sensitivity and worse local solutions still need
 inspection. Equality-constrained models, general fixed-value transport,
 multi-group models and inference are outside this pilot. The small number of
 draws and their repeated unit transformations limit any policy claim; no
-normalization or route change is adopted here.
+fitting normalization or route change is adopted here.
+
+### Accuracy checks in normalized units
+
+The scoped PSD accuracy check now normalizes each supplied point and its sample
+before assessing boundary geometry and accuracy. It preserves the requested
+marker and uses the same accuracy thresholds. This applies to single-group
+complete-data ML without equality constraints. Estimates remain in requested
+units.
+
+We re-audited all 4,742 returned normalized-pilot points, without fitting.
+All five earlier false failures now pass. Original and normalized
+representations agree on every verdict and on the numbers of null and held
+boundary directions. Two original-unit checks newly fail with nonpositive
+curvature; these are two unit representations of the Boomsma 4US, N=25,
+replicate 3, marker two-stage case. Both fits already failed their internal
+accuracy check, so no previously successful fit is lost.
+
+```{r}
+a <- read.csv(file.path("results", "psd-accuracy-normalization", "points", "summary.csv"))
+tab(data.frame(
+  Identification=a$chart, Route=a$route, `Saved points`=a$points,
+  `New passes`=a$gain, `New rejections`=a$loss,
+  `Unit verdict disagreements`=a$verdict_disagreement,
+  `Unit geometry disagreements`=a$geometry_disagreement,
+  check.names=FALSE))
+```
+
+These are development regression checks of the diagnostic, not fresh draws or
+a new comparison of fitting routes. The original pilot summaries remain frozen;
+the separate accuracy results retain every changed verdict. Other fit checks
+and the choice of local solution can still depend on units.
 
 ## Reproduce
 
@@ -647,3 +677,10 @@ quarto render report.qmd
 
 `--summarize` rescores existing raw rows (about 30 seconds per lane). Raw
 rows stay local; the summaries in `results/<lane>/2026-09-26/` are tracked.
+
+For the saved-point accuracy regression, install the normalized PSD accuracy
+build and run `Rscript scripts/recheck_psd_accuracy.R --smoke`, then
+`Rscript scripts/recheck_psd_accuracy.R`. It reads the local pilot fit and
+parameter files and regenerates samples from their recorded seeds; it never
+runs an optimizer. Summary, metadata and changed verdicts are retained under
+`results/psd-accuracy-normalization/points/`; full point rows remain local.
