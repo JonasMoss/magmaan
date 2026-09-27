@@ -413,6 +413,19 @@ print.magmaan_score_lrt <- function(x, ...) {
       if (!is.null(weight)) list(W = weight),
       mo)))
   }
+  route <- fit$options$route
+  if (!is.null(route) && !identical(route$fitter, "fit_model")) {
+    # A frontier fit (PSD, penalized, ...) refits through its own fitter, with
+    # the anchor's model options, so the comparison keeps its constraint or
+    # penalty.
+    if (nzchar(fit$group_var %||% "") || length(extra_partial)) {
+      stop("likelihood-ratio refits of a ", route$fitter, "() fit support ",
+           "single-group models only", call. = FALSE)
+    }
+    spec <- .rebuild_model_spec(modifyList(model, list(syntax = syntax)),
+                                caller = route$fitter)
+    return(.route_refit_fun(fit)(spec, data))
+  }
   do.call(fit_model, c(
     list(model = syntax, data = data,
          estimator = toupper(fit$estimator %||% "ML"),
@@ -420,6 +433,7 @@ print.magmaan_score_lrt <- function(x, ...) {
          group_equal = model$group_equal,
          group_partial = if (length(partial)) partial else NULL),
     if (!is.null(weight)) list(W = weight),  # continuous WLS augmented refit
+    if (isTRUE(fit$options$psd)) list(psd = TRUE),
     mo))
 }
 

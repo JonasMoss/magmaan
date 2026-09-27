@@ -36,6 +36,29 @@
   }
 }
 
+# Complete-data fitters whose leave-one-out refit case_rerun() can reproduce
+# from the down-dated sample moments.
+.case_route_fitters <- c(
+  "fit_model", "frontier_fit_ml_psd", "frontier_fit_ml_psd_fallback",
+  "frontier_fit_ml_multiinfo", "frontier_fit_uls_psd", "frontier_fit_gls_psd",
+  "frontier_fit_wls_psd", "frontier_fit_gmm_fitted_weight_psd")
+
+# The leave-one-out refit: the same chart for sphere fits, the same route
+# (constraint, penalty, optimizer settings) for fits that record one, else the
+# estimator's ordinary fitter. A route this function cannot reproduce is an
+# error, never a silent ordinary refit.
+.case_refit_fun <- function(fit, estimator) {
+  if (identical(fit$options$chart, "sphere")) return(.sphere_refit_fun(fit, estimator))
+  route <- fit$options$route
+  if (is.null(route)) return(.case_fit_fun(estimator))
+  if (!route$fitter %in% .case_route_fitters ||
+      (identical(route$fitter, "fit_model") && !estimator %in% c("ML", "ULS", "GLS"))) {
+    stop("case_rerun(): cannot refit a fit from ", route$fitter, "() (estimator ",
+         estimator, ") case by case", call. = FALSE)
+  }
+  .route_refit_fun(fit)
+}
+
 .case_estimator <- function(fit) {
   est <- fit$estimator %||% fit$options$estimator %||% NA_character_
   toupper(as.character(est)[1L])
@@ -160,11 +183,7 @@ case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
     stop("case_rerun(): `fit` must be a magmaan_fit", call. = FALSE)
   }
   estimator <- .case_estimator(fit)
-  fit_fun <- .case_fit_fun(estimator)
-  if (identical(fit$options$chart, "sphere")) {
-    # Refit through the same chart the fit was estimated in.
-    fit_fun <- .sphere_refit_fun(fit, estimator)
-  }
+  fit_fun <- .case_refit_fun(fit, estimator)
   spec_warm <- .case_warm_spec(fit, warm_start)
   group_var <- fit$group_var %||% ""
 

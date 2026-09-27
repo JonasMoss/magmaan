@@ -1357,7 +1357,8 @@ frontier_fit_ml_psd <- function(
     feasibility_tol = feasibility_tol,
     diagonal_preconditioning = identical(preconditioning, "diagonal")
   )
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, "ML", "frontier_fit_ml_psd", .route_args(environment(), sys.function()), missing)
 }
 
 # Explicit ordinary-first PSD recovery; selection and warm-start policy live in C++.
@@ -1376,9 +1377,16 @@ frontier_fit_ml_psd_fallback <- function(
     partable_arg(model), sample_stats_arg(data), ordinary_optimizer, psd_optimizer,
     ordinary_control, psd_control, start_eigen_floor, feasibility_tol,
     identical(preconditioning, "diagonal"))
+  args <- .route_args(environment(), sys.function())
+  # Each attempt is a first-class fit; the returned fit refits through the
+  # whole fallback, since the route that produced it depends on the data.
   for (stage in c("ordinary", "psd")) {
-    if (!is.null(out[[stage]]$fit))
-      out[[stage]]$fit <- attach_complete_raw_data(out[[stage]]$fit, data)
+    if (!is.null(out[[stage]]$fit)) {
+      f <- attach_complete_raw_data(out[[stage]]$fit, data)
+      out[[stage]]$fit <- .finish_frontier_fit(
+        f, model, "ML", "frontier_fit_ml_psd_fallback", args, missing,
+        extract = "fit", warn = FALSE)
+    }
   }
   if (isTRUE(out$converged))
     out$fit <- if (out$fallback_used) out$psd$fit else out$ordinary$fit
@@ -1428,7 +1436,8 @@ frontier_fit_ml_multiinfo <- function(
     optimizer = optimizer, control = control, bounds = b, target = target
   )
   .warn_nonrecursive_multiinfo(fit, "frontier_fit_ml_multiinfo")
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, "ML", "frontier_fit_ml_multiinfo", .route_args(environment(), sys.function()), missing)
 }
 
 # Frontier sphere-chart estimation (design: papers/global-gauge-sem).
@@ -1600,7 +1609,8 @@ frontier_fit_uls_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, fit$estimator %||% "ULS", "frontier_fit_uls_psd", .route_args(environment(), sys.function()), missing)
 }
 
 # Frontier normal-theory GLS over PSD primitive LISREL covariance matrices.
@@ -1619,7 +1629,8 @@ frontier_fit_gls_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, fit$estimator %||% "GLS", "frontier_fit_gls_psd", .route_args(environment(), sys.function()), missing)
 }
 
 # Frontier caller-fixed WLS/ADF over PSD primitive LISREL covariance matrices.
@@ -1638,7 +1649,8 @@ frontier_fit_wls_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, fit$estimator %||% "WLS", "frontier_fit_wls_psd", .route_args(environment(), sys.function()), missing)
 }
 
 # Frontier expected-information fitted-weight GMM over PSD primitive LISREL
@@ -1661,7 +1673,8 @@ frontier_fit_gmm_fitted_weight_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  .finish_frontier_fit(fit, model, fit$estimator %||% "GMM", "frontier_fit_gmm_fitted_weight_psd", .route_args(environment(), sys.function()), missing)
 }
 
 # Normal-theory ML via local Fisher scoring. This is a damped expected-
@@ -1841,10 +1854,12 @@ frontier_fit_pattern_ntml <- function(
     )
   }
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  frontier_fit_pattern_ntml_impl(
+  fit <- frontier_fit_pattern_ntml_impl(
     partable_arg(model), fiml_data_arg(data), optimizer = optimizer,
     control = control, stage1 = stage1
   )
+  .finish_frontier_fit(fit, model, fit$estimator %||% "FIML",
+                       "frontier_fit_pattern_ntml", .route_args(environment(), sys.function()))
 }
 
 # Frontier raw-data FIML over PSD primitive LISREL covariance matrices.
@@ -1863,12 +1878,13 @@ frontier_fit_fiml_psd <- function(
     )
   }
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  frontier_fit_fiml_psd_impl(
+  fit <- frontier_fit_fiml_psd_impl(
     partable_arg(model), fiml_data_arg(data),
     optimizer = optimizer, control = control,
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
+  .finish_frontier_fit(fit, model, "FIML", "frontier_fit_fiml_psd", .route_args(environment(), sys.function()))
 }
 
 # Frontier casewise FIML plus the multi-information or latent-determinacy
@@ -1894,6 +1910,7 @@ frontier_fit_fiml_multiinfo <- function(
     optimizer = optimizer, control = control, bounds = b, target = target
   )
   .warn_nonrecursive_multiinfo(fit, "frontier_fit_fiml_multiinfo")
+  .finish_frontier_fit(fit, model, "FIML", "frontier_fit_fiml_multiinfo", .route_args(environment(), sys.function()))
 }
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
@@ -1937,7 +1954,7 @@ frontier_fit_ml2s_psd <- function(
     covariance_policy = "psd", start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
-  fit
+  .finish_frontier_fit(fit, model, "ML2S", "frontier_fit_ml2s_psd", .route_args(environment(), sys.function()))
 }
 
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
@@ -2015,7 +2032,10 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
                            optimizer = optimizer, control = control,
                            bounds = b$bounds,
                            bounds_preset = b$bounds_preset)
-  finalize_magmaan_fit(fit, spec, "ML", missing, "none", "none")
+  fit <- finalize_magmaan_fit(fit, spec, "ML", missing, "none", "none")
+  fit$options$route <- list(fitter = "fit_twolevel",
+                            args = .route_args(environment(), sys.function()))
+  fit
 }
 
 # Coerce a data.frame + cluster/group selectors into the matrix + id vectors
@@ -2197,12 +2217,13 @@ frontier_fit_ordinal_psd <- function(
                          c("DWLS", "WLS", "ULS"))
   pt <- augment_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "frontier_fit_ordinal_psd")
-  frontier_fit_ordinal_psd_impl(
+  fit <- frontier_fit_ordinal_psd_impl(
     pt, data, estimator = estimator, optimizer = optimizer,
     control = control, bounds = b,
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
+  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_ordinal_psd", .route_args(environment(), sys.function()))
 }
 
 # Frontier categorical ML: normal-theory ML applied to the Stage-1
@@ -2212,10 +2233,12 @@ frontier_fit_catml_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
   pt <- augment_ordinal_partable(model, data)
-  frontier_fit_catml_psd_impl(
+  fit <- frontier_fit_catml_psd_impl(
     pt, data, optimizer = optimizer, control = control,
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol)
+  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, fit$estimator %||% "CATML",
+                       "frontier_fit_catml_psd", .route_args(environment(), sys.function()))
 }
 
 ordinal_stage2_weight_blocks <- function(data,
@@ -2271,12 +2294,13 @@ frontier_fit_mixed_ordinal_psd <- function(
                          c("DWLS", "WLS", "ULS"))
   pt <- augment_mixed_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "frontier_fit_mixed_ordinal_psd")
-  frontier_fit_mixed_ordinal_psd_impl(
+  fit <- frontier_fit_mixed_ordinal_psd_impl(
     pt, data, estimator = estimator, optimizer = optimizer,
     control = control, bounds = b,
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
+  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_mixed_ordinal_psd", .route_args(environment(), sys.function()))
 }
 
 # Shared front half of fit_model() and frontier_fit_sphere(): resolve the
@@ -2440,6 +2464,11 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   done <- function(fit) {
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
     fit$options$psd <- psd
+    # A PSD fit is refitted through fit_model() with the same constraint and
+    # optimizer settings; ordinary fits keep their callers' estimator refit.
+    if (psd) fit$options$route <- list(fitter = "fit_model", args = list(
+      estimator = estimator, psd = TRUE, optimizer = optimizer, control = control,
+      W = W, missing = missing, parameterization = parameterization))
     fit
   }
 
@@ -2674,6 +2703,51 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
   class(fit) <- c("magmaan_fit", "list")
   .warn_fit_admissibility(fit)
   fit
+}
+
+# A fit's route: the exported fitter that produced it and that call's
+# arguments other than the model and the data. Refit-based methods
+# (case_rerun(), the likelihood-ratio refits) read it, so a PSD or penalized
+# fit is refitted with its own constraint or penalty, never as plain ML.
+.route_args <- function(env = parent.frame(), fun = sys.function(sys.parent())) {
+  mget(setdiff(names(formals(fun)), c("model", "data", "...")), envir = env)
+}
+
+# Finish a frontier fit as a first-class magmaan_fit carrying its route.
+# `model` is the spec the fitter used (or syntax, turned into a spec here);
+# `extract` names the element of the fitter's return value that is the fit,
+# for fitters that return more than one attempt.
+# `warn = FALSE` skips the admissibility warning, for attempts whose
+# inadmissibility the caller already handles.
+.finish_frontier_fit <- function(fit, model, estimator, fitter, args,
+                                 missing = "listwise", extract = NULL, warn = TRUE) {
+  spec <- if (is.character(model) && length(model) == 1L) model_spec(model) else model
+  if (inherits(spec, "magmaan_model_spec")) {
+    fit <- if (warn) {
+      finalize_magmaan_fit(fit, spec, estimator, missing, "none", "none")
+    } else {
+      suppressWarnings(finalize_magmaan_fit(fit, spec, estimator, missing, "none", "none"))
+    }
+  } else {
+    fit$options <- list(estimator = estimator, missing = missing,
+                        se = "none", test = "none")
+    class(fit) <- c("magmaan_fit", "list")
+  }
+  fit$options$route <- list(fitter = fitter, args = args, extract = extract)
+  fit
+}
+
+# A function(model, data) that refits the way `fit` was fitted, from its
+# route; NULL when the fit has no route (ordinary fits keep their callers'
+# estimator-based refit).
+.route_refit_fun <- function(fit) {
+  r <- fit$options$route
+  if (is.null(r)) return(NULL)
+  f <- get(r$fitter, envir = asNamespace("magmaanlab"))
+  function(model, data) {
+    out <- do.call(f, c(list(model, data), r$args))
+    if (is.null(r$extract)) out else out[[r$extract]]
+  }
 }
 
 print.magmaan_fit <- function(x, ...) {

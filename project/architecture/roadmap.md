@@ -709,7 +709,16 @@ partable) and `fit$options$chart = "sphere"`. It signals a classed
 `magmaan_user_chart_singular` condition carrying the sphere solution when the
 user chart does not hold the point. `frontier_reidentify(fit, model)` wraps
 `reidentify`. `case_rerun()` and `modification_indices_lrt()` refit sphere fits
-through the sphere. Out of
+through the sphere. Since 2026-09-27 every exported frontier fitter (PSD,
+barrier, PSD fallback, LS/FIML/ML2S/ordinal PSD, pattern NTML) and
+`fit_twolevel()` return a finalized `magmaan_fit` carrying
+`fit$options$route` (the fitter and its non-data arguments), as do
+`fit_model(psd = TRUE)` fits. So `vcov()` and `residuals()` apply as for
+ordinary ML, and the refit-based methods refit through the route: a PSD fit
+stays PSD and a barrier fit keeps its penalty and weight. `case_rerun()`
+refuses routes it cannot rebuild from down-dated moments (FIML, ML2S, ordinal,
+two-level) instead of refitting plain ML, and the likelihood-ratio refits of a
+frontier route are single-group. Out of
 scope for now: two-level, SNLLS, ordinal, composites, partial invariance via
 nested spheres, the PSD LS/FIML siblings, and Wald inference when the user
 chart is singular.
