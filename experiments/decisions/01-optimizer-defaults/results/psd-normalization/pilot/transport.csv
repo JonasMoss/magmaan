@@ -1,0 +1,5 @@
+"chart","arm","returned","checked","failures","max_covariance_error","max_objective_error","accuracy_lost_after_transport"
+"marker","current",2371,2371,0,0,0,0
+"std_lv","current",2375,2375,0,0,2.1316282072803e-13,0
+"marker","normalized",2370,2370,0,5.93469325949313e-16,4.44089209850063e-14,5
+"std_lv","normalized",2372,2372,0,5.50597483850875e-16,2.70006239588838e-13,0

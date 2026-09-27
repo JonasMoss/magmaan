@@ -1,0 +1,16 @@
+"pop","model","n","rep","chart","transform","route","arm","space","fmin","status","passed","condition","distance","null_directions","constrained_directions","min_multiplier"
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","direct","normalized","normalized",0.355823362828117,"available",TRUE,1121449.99164387,7.30180442886063e-07,1,1,51.887642611649
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","direct","normalized","original",0.355823362828119,"ill_conditioned",FALSE,195461763195007,7.3019370852971e-07,1,1,610833.918380758
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","direct","normalized","native",0.355823362828118,"available",TRUE,2006326.91801419,7.30180441754358e-07,1,1,61.0833918380758
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","two_stage","normalized","normalized",0.355823362828118,"available",TRUE,1121453.68885734,7.83972919368975e-07,1,1,51.8876497838617
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","two_stage","normalized","original",0.355823362828119,"ill_conditioned",FALSE,194585584545197,7.83993063669475e-07,1,1,610834.010507934
+"wolf_3f3i_l50","cfa",25,2,"marker","x0.01","two_stage","normalized","native",0.355823362828118,"available",TRUE,2006333.30979551,7.8397292386957e-07,1,1,61.0834010507935
+"wolf_3f6i_l50","cfa",28,2,"marker","x0.01","two_stage","normalized","normalized",4.64285116958405,"available",TRUE,108875.733988141,7.8769756637799e-06,2,2,3.54082178304646
+"wolf_3f6i_l50","cfa",28,2,"marker","x0.01","two_stage","normalized","original",4.64285116958405,"ill_conditioned",FALSE,10233243884119.4,7.8769528619123e-06,2,2,44095.0805893518
+"wolf_3f6i_l50","cfa",28,2,"marker","x0.01","two_stage","normalized","native",4.64285116958404,"available",TRUE,102202.063084533,7.87697553914748e-06,2,2,4.40950805893512
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","direct","normalized","normalized",4.66664020607881,"available",TRUE,2256.57414091667,5.11380557454799e-06,1,1,7.40979367550975
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","direct","normalized","original",4.6666402060788,"ill_conditioned",FALSE,2316763195619598,4.79054230603776e-06,8,4,-0.162348338264565
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","direct","normalized","native",4.6666402060788,"available",TRUE,2027.06624765872,5.1138055706915e-06,1,1,7.8093270749939
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","two_stage","normalized","normalized",4.64285116958405,"available",TRUE,108875.733740961,7.877031484289e-06,2,2,3.54082178116168
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","two_stage","normalized","original",4.64285116958404,"ill_conditioned",FALSE,316458921271148,7.87288339792464e-06,9,4,-0.0320172327810724
+"wolf_3f6i_l50","cfa",28,2,"marker","mixed","two_stage","normalized","native",4.64285116958404,"available",TRUE,102202.062880181,7.87703136664717e-06,2,2,4.40950805658797

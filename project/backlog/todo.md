@@ -565,6 +565,38 @@ section: the categorical corpus saddles are under
     2.198990 at ×100 although both certify; two-stage reaches 1.555299 at ×100.
     Preserve this as a unit-sensitive objective witness, not a proof about
     which solver component caused it. Keep the spectral-start question separate.
+- **Full normalization before PSD fitting — unconstrained pilot completed
+  (2026-09-27), not promoted.** `decisions/01-optimizer-defaults`,
+  `criteria/psd-normalization-pilot.md`, seed 202609291: 300 model/sample
+  combinations, four observed-unit transforms, marker and std.lv charts,
+  direct and ordinary-then-PSD routes, current versus normalized inputs
+  (9,600 attempts). Equality constraints and arbitrary nonzero fixed values
+  are rejected. Markers stay fixed; estimates are backtransformed explicitly.
+  - The sample-only normalization and parameter transport preserve every
+    returned normalized point: maximum standardized covariance discrepancy
+    5.94e-16 and objective discrepancy 2.71e-13. Correlated residuals and
+    cross-loadings are included; a separate mean-transport check passes.
+  - Direct marker PSD: 900 native-versus-rescaled comparisons go from nine
+    verdict differences and two certified objective differences to zero of
+    each. Direct std.lv certified objective differences go from nine to zero;
+    five verdict differences remain. Two-stage marker objective differences
+    go from 32 to one; two-stage std.lv from 20 to seven. Normalized inputs
+    themselves differ by at most 4.45e-16 across observed-unit transforms.
+  - This is improved unit consistency, not demonstrated basin selection.
+    Direct marker certification rises 1,179→1,184/1,200 internally, but
+    normalized two-stage marker best-observed matches fall 1,178→1,149.
+    All paired losses and remaining unit exceptions are retained.
+  - **Next prerequisite: unit-consistent PSD accuracy diagnostics.** Five
+    normalized marker fits pass internally but fail the original-unit PSD
+    accuracy check. The same points pass after transport to native units;
+    original-unit condition measures rise to 1e13–1e15, and mixed units also
+    change the detected covariance nullity. These are diagnostic unit effects,
+    not failed covariance/objective transport. Preserve the separate verdicts
+    until fitting and post-fit checks share a consistent normalized space.
+  - Continue with the unconstrained route first; inspect the remaining
+    two-stage sensitivity to roundoff and retain alternative local minima
+    as search evidence. Equality/fixed-value transport remains outside this
+    pilot. Neither normalization nor a route change is a production policy yet.
 - **Convergence bench — deferred (2026-09-26).** The judge and its scoring are
   built (the Newton check in every iterative estimator's verdict, also applied
   to other engines through `evaluate_at`; certified local minimum first, best

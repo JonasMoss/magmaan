@@ -1,0 +1,9 @@
+"chart","route","arm","pairs","both_success","verdict_changed","objective_mismatch","covariance_mismatch"
+"marker","direct","current",900,881,9,2,2
+"std_lv","direct","current",900,874,9,9,9
+"marker","two_stage","current",900,880,14,32,34
+"std_lv","two_stage","current",900,897,3,20,21
+"marker","direct","normalized",900,888,0,0,0
+"std_lv","direct","normalized",900,876,5,0,0
+"marker","two_stage","normalized",900,886,2,1,4
+"std_lv","two_stage","normalized",900,892,6,7,7

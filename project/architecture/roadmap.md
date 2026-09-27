@@ -210,6 +210,20 @@ The retained failures motivate investigating the still-absolute start eigenvalue
 floor and covariance-link residual units.
 Direct PSD remains the ordinary route, two-stage remains explicit frontier,
 and spectral starts remain banked for a later defaults study.
+A subsequent study-local unconstrained normalization pilot standardizes the
+sample before constructing FABIN3-auto starts and backtransforms the fitted
+parameters, preserving the requested markers or std.lv identification. All
+returned normalized points reproduce their covariance/objective in original
+units (errors below 6e-16 and 3e-13 respectively). Across 900 unit comparisons,
+direct marker PSD goes from nine verdict differences/two certified objective
+differences to zero/zero; direct std.lv has no remaining certified objective
+differences but five verdict differences. This does not establish better basin
+selection: normalized two-stage fits sometimes reach worse local minima.
+Five marker points also expose unit-dependent PSD accuracy diagnostics: they
+pass in normalized/native units but fail after rescaling, despite successful
+point transport. Fitting and accuracy checks need a common normalized space
+before promotion. The pilot is confined to decisions/01 tooling; production
+normalization, equality-constraint transport and route adoption remain open.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml
 (`experiments/decisions/02-barrier-defaults`, 2026-09-27): the layered start

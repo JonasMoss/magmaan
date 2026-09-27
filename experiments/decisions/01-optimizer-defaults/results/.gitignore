@@ -23,3 +23,20 @@ psd-scale/comparison/*
 !psd-scale/comparison/changes.csv
 !psd-scale/comparison/route.csv
 !psd-scale/comparison/route_summary.csv
+
+# Frozen unconstrained normalization pilot; full fits/parameters remain local.
+psd-normalization/*
+!psd-normalization/pilot/
+psd-normalization/pilot/*
+!psd-normalization/pilot/metadata.csv
+!psd-normalization/pilot/summary.csv
+!psd-normalization/pilot/family.csv
+!psd-normalization/pilot/paired_changes.csv
+!psd-normalization/pilot/changes.csv
+!psd-normalization/pilot/invariance.csv
+!psd-normalization/pilot/unit_exceptions.csv
+!psd-normalization/pilot/transport.csv
+!psd-normalization/pilot/transport_failures.csv
+!psd-normalization/pilot/input_invariance.csv
+!psd-normalization/pilot/accuracy_checks.csv
+!psd-normalization/pilot/failures.csv

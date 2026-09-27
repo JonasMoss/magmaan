@@ -1,0 +1,17 @@
+"chart","transform","route","gain","loss","objective_gain","objective_loss"
+"marker","mixed","direct",5,2,3,3
+"std_lv","mixed","direct",0,0,2,2
+"marker","native","direct",0,0,0,2
+"std_lv","native","direct",2,2,2,2
+"marker","x0.01","direct",1,0,1,1
+"std_lv","x0.01","direct",0,2,1,2
+"marker","x100","direct",1,0,1,1
+"std_lv","x100","direct",2,0,2,2
+"marker","mixed","two_stage",4,3,5,32
+"std_lv","mixed","two_stage",2,1,8,10
+"marker","native","two_stage",0,0,0,1
+"std_lv","native","two_stage",0,2,1,4
+"marker","x0.01","two_stage",3,3,4,4
+"std_lv","x0.01","two_stage",0,3,5,5
+"marker","x100","two_stage",1,2,1,2
+"std_lv","x100","two_stage",1,0,4,1
