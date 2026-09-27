@@ -1,5 +1,20 @@
 # magmaan TODO
 
+## Next: barrier fitting normalization
+
+- [ ] **L — extend the shared ML/PSD normalization to barrier fitting.** This
+  is the first outstanding implementation task (requested 2026-09-27). Transport
+  the model, automatic/user starts, linear equalities and group structure through
+  the full barrier fit. Establish how every supported penalty, its strength and
+  continuation schedule transform so a change of measurement units does not
+  change the statistical criterion. Return estimates in caller units; align
+  penalty derivatives, optimizer controls, accuracy/stationarity checks and
+  applicable post-fit calculations with that contract. Validate same-point
+  criterion/derivative equivalence, boundary/pole behavior, and complete fits
+  under uniform/mixed units, including groups and linear constraints. Preserve
+  explicit markers and retain every regression. Reuse the complete machinery
+  programme below; do not implement another experiment-only normalization wrapper.
+
 ## Top priority: complete normalization machinery for ML, PSD and barrier
 
 - [ ] **L — shared end-to-end normalization (requested 2026-09-27).** Build
