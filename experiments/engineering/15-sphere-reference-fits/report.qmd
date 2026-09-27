@@ -34,27 +34,24 @@ ordinary-route failures without changing the estimator used in a paper?
 
 ## Short answer
 
-Across `r sum(refs$domain == "ML")` datasets, the best screened sphere objective
-is reached from at least two start recipes on
-`r count("ML", "repeated_best_observed")` ML problems and
-`r count("PSD", "repeated_best_observed")` PSD problems. There is no screened
-sphere reference on `r count("ML", "no_screened_reference")` ML problems and
-`r count("PSD", "no_screened_reference")` PSD problems. Those remain unresolved;
-we do not label them nonexistent estimates or proven poles.
+Purposeful starts help beyond the original two-factor examples. In 120 fresh
+datasets from three new model families, canonical starts reach the best
+screened objective on 93 problems; the expanded portfolio reaches it on 118.
+The largest gain is in the three-factor chain: 24/40 to 39/40. These are best
+observed candidates within the tested portfolio, not certified optima.
 
-A start-design follow-up recovers five of the nine missing ML references and
-improves one existing reference. On 60 fresh draws, canonical starts reach the
-best screened objective found by the tested portfolio on 37 problems;
-canonical plus three signed spectral alternatives reaches it on 55. An extra
-all-positive spectral start adds no coverage in either batch. This supports a
-small, purposeful portfolio for further investigation; it does not select a
-production default.
+The expansion also reverses one proposed simplification: the all-positive
+spectral start contributes a better candidate on one problem. Keep it for now.
+Single-factor negative alternatives miss ten references found by combined sign
+patterns. Exhaustive combinations are useful for this small reference study,
+but their cost grows exponentially with the factor count; this is not yet a
+production retry policy.
 
-This pilot supplies reference **candidates**, not certified optima. It uses an
-existing local-accuracy check after re-expressing each endpoint with its
-strongest standardized indicator as marker. A sphere-native curvature check
-remains missing. Agreement across starts strengthens the numerical evidence but
-does not establish global optimality. No library default changes here.
+The earlier pilot and start-development results remain below as separate
+batches. All screens still use a strongest-indicator marker chart for the local
+Newton cross-check; a sphere-native curvature assessment remains missing.
+Two expanded problems have no screened reference. That does not establish
+nonexistence or a pole. No library default changes here.
 
 ```{r results='asis'}
 if (!is.null(probe)) {
@@ -68,6 +65,64 @@ if (!is.null(probe)) {
 ```
 
 ## Evidence
+
+### What a spectral start does
+
+A start is an initial guess for every parameter. Each indicator block supplies
+a correlation pattern. The positive recipe chooses a loading direction that
+captures positive shared variation. The negative recipe chooses an alternative
+direction suited to a negative latent variance. Changing direction changes the
+relative loadings. The construction adjusts residual variances so the implied
+observed covariance is positive definite at the start.
+
+Each factor receives one of those two guesses. Regressions and between-factor
+covariances start at zero. The optimizer then estimates all free parameters
+normally: the initial signs are not constraints, and every recipe targets the
+same ML objective. Negative latent variances can be allowed by ML while the
+observed covariance remains positive definite; such endpoints may be
+substantively inadmissible and are flagged separately. These recipes are not
+being proposed for PSD estimation.
+
+### Expansion to new model families
+
+The expansion uses Gaussian data, weak first indicators, unequal residual
+variances, and N=30/100 with 20 draws per cell. New families are one factor with
+five indicators (including a negative loading), two correlated factors with
+four indicators each (mixed loading signs), and a three-factor regression chain
+with three indicators per factor. Families and recipes were fixed before this
+run. These models expand structural scope but still have simple measurement
+structure, no equality constraints, and no missing data.
+
+```{r}
+expanded <- read.csv(file.path("results", "expanded-families", "summary.csv"))
+x <- expanded[expanded$backend == "both", c("design", "portfolio", "matches_best_observed")]
+x <- reshape(x, idvar="design", timevar="portfolio", direction="wide")
+x <- x[c("design", paste0("matches_best_observed.", c("canonical", "single_negative", "all_signed", "positive_control")))]
+names(x) <- c("Family (40 problems)", "Canonical", "+ Single negatives", "+ All negative subsets", "+ Positive control")
+tab(x)
+```
+
+All entries pool the same two backends and compare against the full portfolio's
+best screened objective. Canonical plus every nonempty negative subset uses
+2^k starts for k factors; retaining the positive spectral control uses 2^k+1.
+That is 6, 10 and 18 fits per problem for these one-, two- and three-factor
+families with both backends. The full expansion uses 1,360 fits; recorded fitting
+and endpoint-assessment time totals about 54 seconds on this machine. The three-factor full portfolio takes about 21 times
+the canonical fitting time. Every draw's coverage and timing are retained in
+`expanded-families/coverage.csv`.
+
+The positive control's unique improvement is one-factor N=30 draw 1: PORT
+finds a screened objective of 0.190643 versus canonical's 0.199426. The lower
+point is inadmissible by the substantive variance screen, but remains a valid
+candidate for unconstrained ML. This also shows why starts are search choices,
+not declarations of endpoint admissibility. PORT alone reaches all 118 expanded
+references, versus 117 for L-BFGS; this small result does not select a backend.
+
+The two unresolved problems differ. One-factor N=30 draw 10 has locally screened
+endpoints excluded only by the extent rule. Three-factor N=100 draw 6 has no
+endpoint passing the full local screen. Neither is labelled nonexistent. Across
+the expansion, 97 references have support from multiple start recipes and 21
+from just one; the latter merit inspection before stronger reference claims.
 
 ### How often a reference is found
 
@@ -136,8 +191,9 @@ diagonal removed. A positive factor uses its largest-eigenvalue direction;
 a negative factor uses its smallest. Both start with standardized variance
 magnitude 0.5, zero structural regression, and residual variances chosen to
 preserve observed diagonal variances. The implied observed covariance is
-positive definite for either sign. This construction is specific to the
-current two-factor design; extension to general SEM remains open.
+positive definite for either sign. The first follow-up used only the original
+two-factor design. The expansion applies the same construction to other simple
+structures; extension to general SEM remains open.
 
 Four spectral recipes (both positive, negative X, negative Y, both negative)
 were tested with canonical starts under both ML backends. The recipes were
@@ -229,6 +285,9 @@ Rscript scripts/tune_starts.R --phase witness
 Rscript scripts/tune_starts.R --phase development
 Rscript scripts/tune_starts.R --phase fresh
 Rscript scripts/summarize_starts.R
+Rscript scripts/check_expansion.R
+Rscript scripts/expand_starts.R --smoke
+Rscript scripts/expand_starts.R
 quarto render report.qmd
 # Optional small paired unit check; a distinct run, not default-selection evidence:
 Rscript run_experiment.R --smoke --transforms native,x0.01,x100 --no-lavaan --run-id reference-units
@@ -240,7 +299,7 @@ is separate for smoke and pilot profiles. Raw fits, endpoint parameter tables,
 random starts and comparison rows stay local under `results/`. Small pilot
 summaries, per-problem references, paired start coverage and metadata are frozen with the source so
 the report can be rendered without rerunning fits. The start-follow-up sections
-always show the frozen development/fresh batches. Witness and development
+always show the frozen development/fresh and expanded-family batches. Witness and development
 runners require the original pilot raw fits, regenerated by the pilot command;
 the fresh runner does not. Metadata identifies the
 installed package and source checkout; a dirty checkout is recorded explicitly.
@@ -284,10 +343,12 @@ not part of the original reference pool. Both recoveries are recorded in
 `witness_probe.csv`. The unit smoke run separately retains paired rescalings;
 it is too small to establish general unit invariance.
 
-Next retain canonical plus the three signed alternatives as the provisional
-ML reference portfolio. Confirm the reduction on new model families and examine
-the remaining single-start references and extent exclusions before enlarging
-the search. A sphere-native assessment remains necessary for stronger local
+Retain the positive spectral control alongside canonical and signed alternatives:
+the new-family run refutes dropping it universally. The exhaustive sign portfolio
+remains an exploratory reference tool for at most three factors. Before adding
+more starts, inspect the 21 single-start references and the two unresolved cases.
+Developing a cheaper selection rule is open; changing only one factor at a time
+already loses ten references here. A sphere-native assessment remains necessary for stronger local
 accuracy claims. Preserve the existing
 ordinary-parameterization comparisons for PSD work. Any production promotion
 requires a fresh decision study with criteria written before its run.

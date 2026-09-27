@@ -2832,6 +2832,11 @@ negative-Y and double-negative spectral starts reaches 55. The all-positive
 spectral alternative adds no coverage. A witness ablation implicates loading
 direction, not variance sign alone. These remain study-local ML starts, not PSD
 starts or a production policy; both backends and the current screen are retained.
+Expansion to 120 fresh draws in three new simple-structure model families gives
+93 canonical versus 118 full-portfolio references. The positive spectral control
+adds one result and should be retained; single-negative alternatives miss ten
+references found by combined sign patterns. There are 97 repeated, 21 single-start
+and two missing references, including one extent-only exclusion.
 
 Remaining before a stronger reference claim:
 
@@ -2840,14 +2845,15 @@ Remaining before a stronger reference claim:
   pilot's strongest-indicator Newton cross-check is explicitly provisional.
 - Preserve evaluable sphere endpoints when original-chart finalization fails;
   a chart condition alone must not assert that an optimum lies at a pole.
-- Confirm canonical plus three signed spectral starts on new model families;
-  the reduction from the tested five-start portfolio is retrospective. General
-  SEM start construction is still open. Inspect single-start cases and extent
-  sensitivity: three original misses pass local checks but exceed the extent
-  screen; one other original miss remains unresolved after targeted starts.
-  A retry only after convergence failure misses screened-but-inferior solutions.
-  Keep ordinary-route
-  performance and auxiliary reference discovery separate for PSD comparisons.
+- Inspect the expansion's 21 single-start references and two unresolved cases
+  before adding search machinery. Retain the positive spectral control: the
+  new-family check refutes dropping it universally. Find a cheaper alternative
+  to enumerating sign subsets only if it preserves useful coverage; single-factor
+  changes alone already lose ten references. General SEM start construction
+  beyond simple structure and at most three factors remains open. A retry only
+  after convergence failure misses screened-but-inferior solutions. Keep
+  ordinary-route performance and auxiliary reference discovery separate for PSD
+  comparisons; the extent cutoff remains a heuristic.
 - The sphere R wrapper currently rejects numeric `control$start` although the
   ordinary fitter accepts it. The pilot uses explicit partable start hints,
   verified as user starts. Unify this input contract when the wrapper is next

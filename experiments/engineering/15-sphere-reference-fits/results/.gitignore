@@ -32,3 +32,11 @@ start-fresh/*
 !start-fresh/references.csv
 !start-fresh/coverage.csv
 !start-fresh/coverage_summary.csv
+
+!expanded-families/
+expanded-families/*
+!expanded-families/summary.csv
+!expanded-families/coverage.csv
+!expanded-families/references.csv
+!expanded-families/metadata.csv
+!expanded-families/labels.csv

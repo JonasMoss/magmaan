@@ -65,7 +65,9 @@ chart_label <- function(level, tol) {
   if (!is.finite(level)) "unavailable" else if (level <= tol) "near_chart_boundary" else "representable"
 }
 
-assess_endpoint <- function(fit, sample, domain, sphere) {
+assess_endpoint <- function(fit, sample, domain, sphere,
+                            marker_model = strong_marker_model,
+                            extent = standardized_extent) {
   rec <- endpoint_record(); rec$returned <- TRUE
   rec$call_status <- if (inherits(fit, "magmaan_user_chart_singular")) "chart_condition" else "returned"
   rec$original_verdict <- if (is.logical(fit$converged)) fit$converged else NA
@@ -74,7 +76,7 @@ assess_endpoint <- function(fit, sample, domain, sphere) {
   rec$backend_status <- if (sphere) g$optimizer_status else fit$optimizer_status %||% ""
   if (sphere) {
     rec$sphere_objective <- g$fmin_sphere
-    rec$full_sphere <- nrow(g$passthrough) == 0 && nrow(g$units) == 2
+    rec$full_sphere <- nrow(g$passthrough) == 0 && nrow(g$units) == length(unique(pt$lhs[pt$op == "=~"]))
     rec$driven_stationary <- isTRUE(g$driven_stationary)
     rec$pin_residual <- g$pin_residual
     rec$chart_level <- min(abs(g$units$direction_level))
@@ -86,7 +88,7 @@ assess_endpoint <- function(fit, sample, domain, sphere) {
   # No refitting: a well-loaded marker avoids the originally requested pole.
   # This is a chart-based Newton cross-check, not a sphere-tangent certificate.
   checked <- tryCatch({
-    target <- strong_marker_model(pt, sample)
+    target <- marker_model(pt, sample)
     translated <- magmaanlab::frontier_reidentify(pt, target, pole_tol = 0)
     ev <- magmaanlab::magmaan_core$evaluate_at(
       target$partable, sample, translated$theta, estimator = "ML")
@@ -104,7 +106,7 @@ assess_endpoint <- function(fit, sample, domain, sphere) {
   rec$audit_status <- na$status; rec$newton_distance <- na$distance
   rec$newton_condition <- na$condition; rec$newton_step <- na$max_step
   rec$admissible <- isTRUE(ev$diagnostics$admissibility$admissible)
-  rec$std_extent <- standardized_extent(ev$partable, checked$sigma)
+  rec$std_extent <- extent(ev$partable, checked$sigma)
   rec$extreme <- !is.finite(rec$std_extent) || rec$std_extent > 10
   rec$label <- if (!is.finite(rec$objective)) "nonfinite_objective" else
     if (sphere && !isTRUE(rec$full_sphere)) "partial_sphere" else
@@ -120,7 +122,7 @@ assess_endpoint <- function(fit, sample, domain, sphere) {
 }
 
 run_fit <- function(spec, data, sample, domain, route, backend, start_id, theta = NULL,
-                    preconditioning = "diagonal") {
+                    preconditioning = "diagonal", assessment = list()) {
   t0 <- proc.time()[["elapsed"]]
   warnings <- character()
   fit <- tryCatch(withCallingHandlers({
@@ -147,7 +149,7 @@ run_fit <- function(spec, data, sample, domain, route, backend, start_id, theta 
   result <- if (inherits(fit, "error") && !inherits(fit, "magmaan_user_chart_singular")) {
     rec <- endpoint_record(); rec$message <- conditionMessage(fit)
     list(record = rec, partable = NULL)
-  } else assess_endpoint(fit, sample, domain, route == "sphere")
+  } else do.call(assess_endpoint, c(list(fit, sample, domain, route == "sphere"), assessment))
   result$record$warnings <- paste(unique(warnings), collapse = " | ")
   result$record$seconds <- proc.time()[["elapsed"]] - t0
   result

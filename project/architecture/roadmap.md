@@ -644,7 +644,15 @@ all-positive spectral alternative adds no coverage. A witness ablation shows
 that an alternative loading direction can recover the point even with positive
 initial latent variance; sign alone is insufficient. This motivates a smaller
 purposeful reference portfolio, with general-model construction and independent
-confirmation still open. No optimizer, estimator, inference or paper protocol changes.
+confirmation still open. Expansion to 120 draws from one-factor five-indicator,
+correlated two-factor four-indicator, and three-factor chain models raises
+best-observed coverage from 93 canonical to 118 with the full start portfolio.
+The positive spectral control adds one reference, so dropping it universally
+is not supported. Single-negative alternatives miss ten references reached by
+combined sign patterns. The exhaustive construction remains study-local,
+simple-structure, and capped at three factors; its exponential cost is not a
+production policy. Two problems remain unresolved (one extent-only exclusion).
+No optimizer, estimator, inference or paper protocol changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the

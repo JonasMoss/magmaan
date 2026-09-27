@@ -1,17 +1,24 @@
-# Study-local starting points for the two-factor ML model only. A negative
+# Study-local starting points for simple-structure covariance-only ML models. A negative
 # primitive variance is permitted by ordinary ML, never by the PSD domain.
 # On standardized indicators, a unit vector v gives covariance
 # I + sign * strength * (v v' - diag(v^2)). With strength=.5 this is PD
 # for either sign. Independent factors give a block-diagonal PD full start.
 spectral_start <- function(spec, sample, negative = character(),
                            minimum_direction = negative, strength = .5) {
+  pt <- spec$partable
+  latents <- unique(pt$lhs[pt$op == "=~"])
+  observed <- colnames(sample$S[[1]])
+  stopifnot(!anyDuplicated(pt$rhs[pt$op == "=~"]),
+            setequal(pt$rhs[pt$op == "=~"], observed),
+            all(pt$op %in% c("=~", "~~", "~")))
   stopifnot(is.finite(strength), strength > 0, strength < 1,
-            all(negative %in% c("X", "Y")), all(minimum_direction %in% c("X", "Y")))
-  S <- sample$S[[1]]; sd <- sqrt(diag(S)); names(sd) <- ov_names
-  pt <- spec$partable; values <- pt$ustart
-  for (factor in c("X", "Y")) {
+            all(negative %in% latents), all(minimum_direction %in% latents))
+  S <- sample$S[[1]]; sd <- sqrt(diag(S)); names(sd) <- observed
+  values <- pt$ustart
+  values[pt$op == "~~" & pt$lhs != pt$rhs] <- 0
+  for (factor in latents) {
     rows <- which(pt$lhs == factor & pt$op == "=~")
-    obs <- pt$rhs[rows]; idx <- match(obs, ov_names)
+    obs <- pt$rhs[rows]; idx <- match(obs, observed)
     R <- S[idx, idx] / outer(sd[obs], sd[obs]); diag(R) <- 0
     eig <- eigen(R, symmetric = TRUE)
     v <- eig$vectors[, if (factor %in% minimum_direction) length(obs) else 1L]
