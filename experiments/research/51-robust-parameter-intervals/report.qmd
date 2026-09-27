@@ -1,0 +1,128 @@
+---
+title: "Robust parameter intervals: Wald, score and profile LR"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+---
+
+## Question
+
+For interior SEM parameters estimated by complete-data ML, which robust
+intervals give useful coverage under non-normal sampling: Wald, score
+inversion or profile-LR inversion, and at what computational cost?
+
+## Short answer
+
+**Planned; no simulation has run.** This is a paired, small-scale comparison
+with a normal control and two non-normal populations sharing the same
+covariance. It will distinguish coverage errors from numerical failures and
+assess whether information-matrix choices change the comparison. It will not
+select a new library default.
+
+## Evidence
+
+There are no results yet. The planned evidence is one coverage/tail-error plot
+for the primary methods and one width/cost/failure summary. Put full cell and
+information-choice results in `results/` rather than expanding the report
+into a large method grid.
+
+## Caveats
+
+Robustness here concerns non-normality with a correctly specified covariance
+model. It does not establish performance under covariance misspecification,
+at parameter boundaries, with missing or ordinal data, or with penalized fits.
+At 500 replications, the Monte Carlo SE of 95% coverage is about one percentage
+point. Targets within a dataset are paired, not independent replications.
+
+For a regular scalar restriction the limiting quadratic-form reference has
+one nonzero eigenvalue. Scalar scaling removes that asymptotic scale; it does
+not remove finite-sample error in the estimated correction. A many-method
+comparison of spectral approximations is therefore outside the initial scope.
+Bartlett and bootstrap refinements are also outside this study's initial scope.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --plan
+```
+
+These commands inspect the committed design. Simulation is not implemented;
+the runner fails explicitly if asked to simulate. The local `AGENTS.md`
+contains the complete implementation sequence, API starting points,
+statistical contracts and completion checks. Work can begin independently
+without results or code from another experiment.
+
+## Prespecified design
+
+Use eight centered continuous indicators, four per factor. Fix both factor
+variances to one and set their correlation to 0.4. Loadings on each factor are
+(0.8, 0.7, 0.9, 0.6); independent residual variances equal one minus the squared
+loading. Fit all eight loadings, eight residual variances and the factor
+correlation, retaining unit factor variances and positive factor orientation.
+Targets are the second loading (0.7) and factor correlation (0.4), tested
+separately with all other free parameters treated as nuisance parameters.
+
+Define independent, mean-zero, unit-variance innovations z1 through z10.
+Construct f1 = z1, f2 = 0.4 z1 + sqrt(1 - 0.4^2) z2, and indicator residuals
+from z3 through z10 times their population residual SDs. Fix this construction;
+changing the covariance square root changes the non-normal population.
+
+Use three distributions:
+
+- **Normal control:** all innovations standard normal.
+- **Symmetric heavy tails:** begin with ten independent standard normals,
+  then multiply the entire ten-dimensional vector for each observation by
+  sqrt(8/U), where U is an independent chi-square variate with 10 degrees of
+  freedom. The resulting indicators have standardized multivariate t(10)
+  sampling and the same population covariance as the normal control.
+- **Heterogeneous skewness:** independent standardized gamma innovations
+  (G-k)/sqrt(k), G ~ Gamma(shape=k, scale=1), with shapes
+  (2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5, 2, 0.5) in z1,...,z10 order.
+
+These constructions preserve the target covariance analytically. Do not
+force simulated sample covariances to equal that target. Center each sample
+and use the ML covariance divisor N. Use N = 100 and 300 with 500 datasets per
+distribution/sample-size cell: 3,000 datasets and two targets per dataset.
+Use seed base 2026092751 for the main run and 2026102751 for smoke runs.
+
+Compare 95% robust Wald, robust efficient-score inversion and robust profile-LR
+inversion on the same datasets and unrestricted fits. The primary comparison
+uses the current ordinary-user Wald policy and expected-information geometry
+for the two inverted tests. A prespecified secondary comparison changes the
+information choice within each method. Exact definitions are fixed in the
+implementation requirements before simulation. Include uncorrected intervals
+as diagnostics of the effect of non-normality, never as robust candidates.
+
+Use the same unpenalized ML objective, optimizer, bounds, starts policy and
+covariance domain across methods. Record them before running the pilot.
+Boundary-active fits are flagged and reported separately; do not replace them
+with repaired or penalized estimates. Avoid post-hoc changes to the population
+or method definitions in response to observed coverage.
+
+## Outcomes and run stages
+
+First validate the numerical constructions. Then run two datasets per cell
+with both targets to measure cost and detect failures. After passing these
+checks, run 50 datasets per cell, followed by the full 500 using deterministic
+replicate IDs and resumable output. The first 50 can be a prefix of the final
+run only if code and method definitions remain unchanged. After a statistical
+or numerical fix, retain old results as development runs and use a fresh seed
+base for the confirming run.
+
+Record coverage and each tail's noncoverage, mean and median width, endpoint
+asymmetry, inversion failures, boundary events, refit counts and elapsed time.
+Report method-specific successful-interval coverage, the successful-and-covering
+fraction of all attempts, and paired method differences on common-valid
+datasets. Never replace a failed score or LR interval with Wald. Save enough
+candidate-level diagnostics to explain failed or disconnected confidence sets.
+
+Timing includes candidate corrections and all constrained refits. Report
+shared unrestricted-fit cost separately from incremental interval cost.
+Present Monte Carlo uncertainty and paired differences; do not declare a
+winner from a small apparent coverage improvement or pool away a poor cell.

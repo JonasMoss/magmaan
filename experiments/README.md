@@ -140,6 +140,8 @@ Investigate statistical behavior, new methods, estimands, or inferential validit
 | 47 | [multiinfo-penalty-improper](research/47-multiinfo-penalty-improper/report.qmd) | benchmark | active | Do the joint and latent-determinacy (Q) barriers remove improper solutions without costing PSD-constrained ML's accuracy, also with the truth on a face, which fit test goes with a barrier estimate, and does the barrier's local limit hold? |
 | 48 | [multiinfo-jeffreys-posterior](research/48-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? |
 | 49 | [spectral-tail-calibration](research/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? |
+| 50 | [normal-parameter-intervals](research/50-normal-parameter-intervals/report.qmd) | probe | active | Planned: do normal-theory Wald, score and profile-LR parameter intervals calibrate, and is candidate-specific bootstrap Bartlett inversion feasible? |
+| 51 | [robust-parameter-intervals](research/51-robust-parameter-intervals/report.qmd) | probe | active | Planned: how do robust Wald, score and profile-LR scalar intervals compare in coverage, width, failures and cost under non-normality? |
 
 ## Engineering checks
 
