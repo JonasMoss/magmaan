@@ -178,6 +178,12 @@ Of 25 apparent two-stage objective regressions, 23 compare against an old
 accepted solution that violates PSD. The remaining regressions are retained,
 not used to tune the methods during this run.
 
+**Default decision closed:** retain normalized complete-data ML and direct PSD
+ML, including groups and affine linear equalities. The option was already on;
+this confirms its adoption. FIML, multilevel, ordinal and barrier normalization
+remain separate work; arbitrary inequality constraints are not supported.
+Two-stage is not promoted in place of direct PSD.
+
 ## The register
 
 | Default | Current value | Current status | Evidence |
@@ -190,7 +196,7 @@ not used to tune the methods during this run.
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
 | PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. The clamp correction and a small paired route rerun are now recorded below; remaining unit-sensitive failures are still open | lane psd-ml, runs 1 and 2 |
-| ML and PSD fitting normalization | sample-normalized model and starts; estimates returned in requested units | enabled by author request, 2026-09-27; complete-data, single/multigroup, linear equalities | exploratory pilot below plus library regression checks; no claim of uniformly better local solutions |
+| ML and PSD fitting normalization | sample-normalized model and starts; estimates returned in requested units | settled and closed by author request, 2026-09-27: single-level continuous complete-data ML/PSD, groups and affine linear equalities | paired scaling revisit, scope regression checks and later challenge/timing evidence; no claim of uniformly better solutions or coverage of other estimators |
 | PSD feasibility tolerances | absolute in the internal normalized units | numerical threshold unchanged; its units now follow the fitting normalization | lane psd-ml and subsequent author-requested normalization |
 | PSD preconditioning clamp | $[10^{-4}u, 10^{4}u]$, relative to sample-derived units | implemented; further normalization now precedes fitting | PSD scaling follow-up below |
 

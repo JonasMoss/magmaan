@@ -15,14 +15,23 @@
   explicit markers and retain every regression. Reuse the complete machinery
   programme below; do not implement another experiment-only normalization wrapper.
 
-## Top priority: complete normalization machinery for ML, PSD and barrier
+## Remaining normalization machinery beyond complete-data ML/PSD
+
+**The single-level complete-data ML/direct-PSD default decision is closed.**
+Normalization stays enabled, including groups, means and affine linear equalities;
+see the [scope contract](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27).
+The programme below concerns remaining objective families and broader validation,
+not another decision about that default. Arbitrary linear inequalities are not
+covered. Direct PSD remains the route; independent two-stage API adoption is a
+separate outstanding item. Barrier stays first above.
 
 - [ ] **L — shared end-to-end normalization (requested 2026-09-27).** Build
   one reusable model/data coordinate transformation for ordinary ML, direct PSD,
   ordinary-then-PSD fallback, and barrier fitting. Cover each route's supported
   data/model slices; completion is not a single-group PSD accuracy check or an
-  experiment-only wrapper. Implement and validate the machinery before deciding
-  whether to enable it by default.
+  experiment-only wrapper. For each remaining objective family, implement and
+  validate the transformation before enabling it by default. Complete-data ML/PSD
+  already satisfy the documented implementation slice and default decision.
   - **Model and identification:** normalize observed variables using sample-based
     units; transport latent units, free parameters, fixed values, structural
     cells, means/intercepts, equal labels, general linear equalities (including

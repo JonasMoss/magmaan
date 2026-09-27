@@ -104,6 +104,32 @@ validation and remaining boundary/fallback limitations are documented in
 
 ## Complete-data ML and PSD sample normalization (2026-09-27)
 
+**Settled default; this implementation/adoption slice is closed (2026-09-27).**
+Keep sample normalization enabled for ordinary complete-data ML and direct PSD
+ML. The option was already enabled during the development comparisons; closure
+confirms that behavior rather than changing the estimator or introducing a
+new runtime switch. `fit_model(..., estimator="ML", psd=TRUE)` continues to use
+direct PSD. Ordinary ML remains unrestricted ML, not implicitly PSD-constrained.
+
+| Scope | Normalized fitting support |
+|---|---|
+| Single-level continuous, complete-data ML and PSD ML | Supported, on by default |
+| Multiple groups, unequal group sizes, cross-group equalities | Supported |
+| Means/intercepts, fixed and structural cells, marker/std.lv identification | Supported |
+| Equal labels and general affine linear equalities | Supported; constants and coefficients are transported |
+| Original-unit starts/hints; ML box bounds with linear equalities | Supported |
+| Arbitrary linear `<`/`>` constraints | Unsupported by the constraint interface; not implied by support for linear equalities |
+| FIML, multilevel, ordinal/other objectives, barrier normalization | Outside this completed slice |
+
+Validation includes multigroup fitting under mixed variable/group scales,
+means and cross-group loading equalities; affine-equality and boundary audits;
+explicit-start/bound transport; and R integration. The broader fitting studies
+use saved single-group development problems, so they do not establish general
+multigroup success rates. Closing normalization does not close requested-chart
+rejection, caller-unit admissibility robustness, or difficult-solution search.
+Independent ordinary-first fallback remains a separately tested policy; the
+existing opt-in fallback API still reuses usable ordinary estimates.
+
 `OptimOptions::normalize_sample` defaults to `true` for the ordinary ML and
 PSD ML fitting entry points. Single-level complete-data models, including
 multiple groups and cross-group linear equalities, are transformed internally

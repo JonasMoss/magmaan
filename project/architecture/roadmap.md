@@ -219,6 +219,19 @@ direct marker PSD goes from nine verdict differences/two certified objective
 differences to zero/zero; direct std.lv has no remaining certified objective
 differences but five verdict differences. This does not establish better basin
 selection: normalized two-stage fits sometimes reach worse local minima.
+**Default adoption closed (2026-09-27):** retain normalized fitting for
+single-level, continuous complete-data ML and direct PSD ML. The existing
+`normalize_sample=true` default is confirmed; no estimator/domain or route is
+silently changed. Groups, means, equal labels and affine linear equalities are
+inside this scope. Arbitrary `<`/`>` constraints are not supported; FIML,
+multilevel, ordinal and barrier normalization remain outside it. The scope and
+validation contract are in [optimizer controls](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27).
+Closeout reran 13 normalization/fallback estimation tests (270 assertions),
+20 staged API tests (459 assertions), and the R affine/start/fallback integration
+example; all passed. Existing C++ tests include unequal-size groups, cross-group
+loading equalities, means and mixed scales. The empirical challenge bank remains
+single-group development evidence, not an exhaustive feature/estimator claim.
+
 Complete-data ordinary ML and PSD ML now share a model/data normalization
 before optimization (author request, 2026-09-27). The staged C++ and R entry
 points construct automatic starts there; explicit starts, hints and ML bounds

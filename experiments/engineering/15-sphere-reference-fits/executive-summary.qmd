@@ -12,6 +12,12 @@ execute:
   message: false
 ---
 
+**Default decision closed:** keep normalization enabled for single-level
+complete-data ML and direct PSD, including groups and affine linear equalities.
+The implementation was already enabled; the experiments support retaining it.
+Other estimators and arbitrary inequality constraints are outside this closure.
+Two-stage remains separate.
+
 **No improvement in reaching the known solutions on these harder cases.**
 Ordinary ML and direct PSD recover exactly the same targets with normalization
 off and on. Two-stage PSD loses three targets in the later batch: two fits
