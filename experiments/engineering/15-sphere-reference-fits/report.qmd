@@ -1031,3 +1031,49 @@ Use a fresh `--run-id NAME` for reruns. The runner checks the library fingerprin
 and reproducibility against the saved direct and warm fits. Frozen evidence is
 in `results/two-stage-cold/`; full fitted parameters remain local. No reference
 solution enters a starting point, and no retries or multistart are used.
+
+## Two-stage timing
+
+The [short timing report](timing-summary.html) compares direct PSD,
+independent two-stage, and the existing warm-start two-stage on all 120 retained
+cases. A single R process with single-threaded math warms every case/method,
+then measures all six method orders per case across six rounds. Case order is
+shuffled deterministically each round; five calls form each timed block,
+for 10,800 timed policy calls. Model/sample preparation, manual garbage
+collection, warmup and result verification are outside measured blocks.
+Failures remain in the timing. Every block's final result reproduces the saved
+verdict and objective. The original fixed starts, normalization, tolerances and
+5,000-evaluation budgets are unchanged.
+
+Per-case costs are medians of six block-average wall times. Their sums give
+estimated costs per 120-case pass: direct 0.553 s, independent two-stage 0.703 s,
+and warm two-stage 0.839 s. Independent is about 27% slower than direct and 16%
+faster than warm; warm is about 52% slower than direct. Independent and direct
+retain the same target recovery, while warm has different gains and losses.
+On the 34 ordinary-accepted cases, mean independent time is 0.35 ms versus
+0.96 ms direct. On the other 86, independent costs 8.03 ms versus 6.06 ms direct.
+That mix explains why the shortcut does not pay overall. Weak-marker cases
+dominate total cost. Per-family, per-case, path and round summaries are frozen
+under `results/two-stage-timing/`; raw block measurements stay local.
+
+Absolute round totals drift upward during the run, but direct PSD is fastest
+in every round. Use the per-round ratios and repeated costs rather than one
+pass as the evidence. Wall and process-CPU totals closely agree. These are
+end-to-end R-accessible workflows on an Intel Core i7-1355U, including automatic
+starts, library diagnostics and returned R objects. Independent fallback uses
+up to two library calls, while warm fallback is orchestrated natively. The
+result is not an isolated C++ timing or a prediction for a future integrated
+independent-fallback API, large models or a representative user workload.
+
+Independent fallback remains a reasonable policy, but it is not a speed
+optimization for this saved difficult-case mix. No production policy changes.
+Reproduce with the same library fingerprint and saved two-stage-cold results:
+
+```sh
+Rscript scripts/time_two_stage.R --smoke
+Rscript scripts/time_two_stage.R
+```
+
+Use a fresh `--run-id NAME` to rerun. The runner prints elapsed time and an ETA,
+checks all saved outcomes outside timed blocks, and records timing scope and
+platform metadata. Rendering the report performs no fitting.

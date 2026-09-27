@@ -172,3 +172,13 @@ two-stage-cold/*
 !two-stage-cold/changes.csv
 !two-stage-cold/stages.csv
 !two-stage-cold/metadata.csv
+
+# Balanced serial timing summaries; raw timed blocks and smoke runs remain local.
+!two-stage-timing/
+two-stage-timing/*
+!two-stage-timing/per_case.csv
+!two-stage-timing/family.csv
+!two-stage-timing/path.csv
+!two-stage-timing/overall.csv
+!two-stage-timing/round_totals.csv
+!two-stage-timing/metadata.csv

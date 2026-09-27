@@ -3101,6 +3101,17 @@ fallback explicitly if adopting the user's intended policy; the current C++/R
 fallback still warms from usable ordinary estimates. The exact test is
 engineering/15's two-stage-cold evidence and updated two-stage summary.
 
+**Two-stage timing completed (2026-09-27):** six balanced-order rounds,
+five calls per timed block, serial single-thread math on the 120 retained cases.
+Per-case median costs sum to 0.553 s direct, 0.703 s independent fallback and
+0.839 s warm fallback per bank pass. Independent costs ~27% more than direct,
+~16% less than warm. Its 34 ordinary-accepted cases average 0.35 ms versus
+0.96 ms direct; the 86 fallback cases cost 8.03 versus 6.06 ms. Direct is fastest
+in every round. End-to-end R workflows include errors and current orchestration;
+no claim for a future integrated C++ cold-fallback API or other problem mixes.
+Timing evidence supports direct PSD for this workload, not a speed argument
+for ordinary-first. Independent fallback remains a reasonable policy candidate.
+
 Remaining before a stronger reference claim:
 
 - Separate the magnitude-only exclusion from reference eligibility in a

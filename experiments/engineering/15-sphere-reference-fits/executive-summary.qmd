@@ -22,6 +22,8 @@ normalization as a numerical scaling tool, not a remedy for missed solutions.
 matches direct PSD on all 120 cases and skips PSD in 34. Compared with the warm-start
 route it gains two targets and loses one. The test supports independent fallback
 as a reasonable policy; production behavior is unchanged.
+[Repeated timings](timing-summary.html) show direct PSD is fastest on this
+challenge set: independent two-stage costs 27% more, warm two-stage 52% more.
 
 ## The important data
 

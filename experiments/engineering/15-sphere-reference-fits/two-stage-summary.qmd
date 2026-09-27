@@ -41,9 +41,10 @@ knitr::kable(data.frame(
   across returned pairs is below 1e-12.
 - **Compared with warm starts:** two Ernst cases are recovered; one earlier
   weak-marker case is lost. There is no hidden retry or multistart.
-- **No speed claim yet.** The policy avoids PSD in 34 cases but adds an ordinary
-  attempt before PSD in the other 86. Whether that saves time depends on the
-  problem mix and relative fitting costs.
+- **Timing is now checked.** On this set, independent two-stage takes about
+  27% more total time than direct PSD, but about 16% less than warm-start
+  two-stage. The ordinary shortcut saves time on 34 cases; the other 86
+  outweigh that saving. See the [timing summary](timing-summary.html).
 
 **Verdict:** this is a reasonable, simpler interpretation of ordinary-first
 PSD. These results provide no reason to require warm starts. They support

@@ -260,7 +260,11 @@ cases: accept certified/admissible ordinary ML, otherwise construct PSD's own
 FABIN3-auto start. It matches direct PSD's outcomes and objectives, stops after
 ordinary ML in 34 cases, and gains two targets while losing one against warm
 fallback. This is a tested candidate; the production fallback still uses warm
-starts. A speed advantage has not been established.
+starts. Repeated balanced timings on that bank show no speed advantage: direct PSD
+costs 0.553 s per pass, independent fallback 0.703 s, and warm fallback 0.839 s
+(sum of per-case median costs). Direct is fastest in each of six rounds.
+These are current R-workflow costs, including failures; other workload mixes
+and a future native independent-fallback implementation are unmeasured.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
 complete cross-route programme remains at the top of the backlog. The direct
