@@ -4,7 +4,7 @@
 
 The corrected-corpus optimizer experiment (`engineering/17-corpus-optimizer-recovery`)
 reran `newsom_2015_ex5_4` and `newsom_2015_ex5_4c` on a pinned engine including the
-start-policy and parameter-reporting fixes (`0a0671ce`). Ordinary L-BFGS, PORT,
+start-policy and parameter-reporting fixes (`35ed8471`). Ordinary L-BFGS, PORT,
 and SLSQP all return accepted GLS fits at matching objectives. L-BFGS's terminal
 gradient infinity norms are approximately 1.7e-9 and 2.7e-7 respectively; the
 full-model stationarity residuals are also small. Tighter L-BFGS controls reduce

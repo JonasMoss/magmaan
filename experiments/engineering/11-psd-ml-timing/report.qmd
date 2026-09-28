@@ -142,7 +142,7 @@ a near-boundary uniqueness, a classical Heywood solution, jointly indefinite
 latent and residual covariance matrices, a negative structural disturbance,
 and an equality-constrained interior control.
 
-The frozen baseline is the same 30-repetition pilot from commit `ee156162`,
+The frozen baseline is the same 30-repetition pilot from commit `1ced543f`,
 before covariance-structure compilation. It was collected on the same host
 with the same runner and fit policies.
 

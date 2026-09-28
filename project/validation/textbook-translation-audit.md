@@ -12,7 +12,7 @@ Little case is verified against LISREL's own output. See
 The sections before it describe the corpus as it was on 2026-09-24.
 
 Audited 2026-09-24 against original companion inputs, not just lavaan output
-from the translated syntax. Fitting probes used magmaan `99c5d6dbc07a`,
+from the translated syntax. Fitting probes used magmaan `5bacca25dded`,
 R 4.6.1 and lavaan 0.7-2. This is an input-fidelity audit; it does not alter
 the existing fixture snapshots or certify the other corpus cases.
 
@@ -193,7 +193,7 @@ repairing all groups gives the native corrected result above. Fixing loadings
 alone does not rescue L-BFGS or direct PSD. This is a start-vector defect,
 not evidence that PSD itself necessarily causes the earlier failure.
 
-The reduction of observed loadings into Beta dates to commit `0547187b`
+The reduction of observed loadings into Beta dates to commit `7be42999`
 (2026-05-25); the mismatch is not demonstrated to be a regression introduced
 in the last few days. Recent default/policy changes and reliance on different
 start routes can expose it. This diagnosis does not settle every historical
@@ -328,12 +328,12 @@ Evidence behind the "Categorical models" items in
 [`todo.md`](../backlog/todo.md). The faithful categorical cases expose
 magmaan gaps, not translation defects. Sources:
 - **C++ lane.** `textbook_ordinal_golden_test.cpp` (21 all-ordinal,
-  covariate-free cases from lavaan's partable, run at `b4ec30ef`): 13 match,
+  covariate-free cases from lavaan's partable, run at `6e1968c8`): 13 match,
   8 known gaps.
 - **R path.** engineering/19 `results/current/` (`fits.csv`,
   `rejections.csv`): `fit_model(model, data = raw, estimator = "DWLS",
   ordered, parameterization)` on the single-group cases; corpus `3f5b838`,
-  magmaan `32e07a0f` plus the ordinal Newton check of `73e27b1c`, lavaan
+  magmaan `aa04285b` plus the ordinal Newton check of `bf64ee3a`, lavaan
   0.7.2. The call passes every option these cases set; none has missing data.
 - **lavaan.** `fitMeasures(fit, "fmin")` of the corpus call
   (`textbookcorpus:::.lavaan_args(case, "WLSMV")`). Objectives below are fmin

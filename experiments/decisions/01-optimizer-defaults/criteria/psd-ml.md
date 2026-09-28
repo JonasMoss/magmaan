@@ -59,7 +59,7 @@ ml-gls lane, fitted by ML only, with 50 replications per $N$.
 ## Second run: PSD after the ML/GLS promotion (written 2026-09-26, after the promotion and before this run)
 
 **Why.** Complete-data ML's default start became the layered start (with
-L-BFGS) in 52bc9caa. The PSD routes kept FABIN3. Two things about that were
+L-BFGS) in f10fdd84. The PSD routes kept FABIN3. Two things about that were
 never tested:
 
 - **The fallback's ordinary step.** `frontier_fit_ml_psd_fallback` pins

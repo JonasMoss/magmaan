@@ -52,7 +52,7 @@ Which start, optimizer and PSD route should each estimation route use by
 default? Every fit is judged by the library verdict, on simulated problems
 the candidates were not developed on. The criteria were committed before the
 runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
-[criteria/psd-ml.md](criteria/psd-ml.md) (commit `ec5b0c96`).
+[criteria/psd-ml.md](criteria/psd-ml.md) (commit `46476ccf`).
 
 ## Answer
 
@@ -217,7 +217,7 @@ Two-stage is not promoted in place of direct PSD.
 - **One judge.** Success is the library verdict (the Newton check), plus
   admissibility for PSD fits. A problem counts only if some arm, or a PORT
   or PSD fit from the population values, certifies it.
-- **The engine.** The `magmaanlab` build from `30514b09`, built 2026-09-26
+- **The engine.** The `magmaanlab` build from `de41ed02`, built 2026-09-26
   04:58 UTC. The engine source is unchanged through the pre-registration
   commit.
 - **Limits.**
@@ -421,7 +421,7 @@ tab(f[c("family", "cause", intersect(c("native", "x100", "x0.01", "mixed"), name
 ### Second run: after the ML/GLS promotion
 
 Pre-registered in the dated section of
-[criteria/psd-ml.md](criteria/psd-ml.md) (commit `d0413f2c`), on seed base
+[criteria/psd-ml.md](criteria/psd-ml.md) (commit `190f7dfc`), on seed base
 2026092604 with the runaway rule. The question: now that complete-data ML
 starts from the layered start, should the PSD routes follow?
 
@@ -748,7 +748,7 @@ and the choice of local solution can still depend on units.
 ## Reproduce
 
 For the unconstrained normalization pilot, use the library with the relative
-PSD scale fix (`9c6146a1`). Raw fits and parameter/covariance rows stay local;
+PSD scale fix (`263ed8fd`). Raw fits and parameter/covariance rows stay local;
 small summaries, exceptions and accuracy rechecks are retained for rendering.
 
 ```sh

@@ -4054,7 +4054,7 @@ CSV/min/max/CPU logs and binary hashes are ignored under
 `benchmarks/results/ordinal_gamma_local_{before,after}.{csv,log}` and
 `benchmarks/results/ordinal_gamma_local.sha256`. All 18 printed result
 checksums agree at their ten-significant-digit precision. The pre-change core
-was `29e97b0f`; the old/new opt archive SHA-256 values are
+was `f5bb13fc`; the old/new opt archive SHA-256 values are
 `2c12c92f8e818bdbefcd3856db0b95ba4e0d3b449eb7ef2cdefbc154330a8734` and
 `79546954d0a6e31bb8c94439e284d6595fd348a7cbe625b563d413f714c0c18e`.
 

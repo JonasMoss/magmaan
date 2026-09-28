@@ -43,7 +43,7 @@ Under nonnormal (ig2) data the native convention over-rejected: the strict
 complete-data draws, and the over-rejection worsened with model size and did not
 shrink with N. None of this was visible to the single-dataset gate, which kept
 passing. It surfaced only from a paired magmaan-vs-lavaan **rejection-rate** Monte
-Carlo on the same draws. The fix (`fbb8914`) added a `convention = "lavaan"`
+Carlo on the same draws. The fix (`55eeb77`) added a `convention = "lavaan"`
 selector that reproduces lavaan's metric per dataset, so calibration parity then
 holds by construction. The native convention remains available as a diagnostic.
 

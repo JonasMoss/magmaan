@@ -610,7 +610,7 @@ section: the categorical corpus saddles are under
       them.
 - **S — the Newton check certifies an unidentified fit on an exact-fit ridge.**
   `r-package/examples/ml_psd_fallback.R` fails at `!e$converged` (before
-  52bc9caa too): `f =~ x1 + x2 + x3` with `auto_fix_first = FALSE` has 7
+  f10fdd84 too): `f =~ x1 + x2 + x3` with `auto_fix_first = FALSE` has 7
   parameters for 6 moments.
   - The PSD fit reaches the ridge with gradient about $10^{-10}$. There the
     Hessian's null direction has curvature of the gradient's order, so its
@@ -1763,7 +1763,7 @@ when they next change.
      separate speculative estimator project.
   7. **Open (found 2026-09-24): PSD-SLSQP stalls, and a larger budget does
      not help.** Ernst design, marker identification, N = 10, 1,000 draws at
-     `20c13c31` with the 2026-09-22 defaults (5,000 evaluations):
+     `ba10b089` with the 2026-09-22 defaults (5,000 evaluations):
      - All 28 PSD-SLSQP failures exhaust the evaluation budget (66 of 68
        failures over N = 10 to 100).
      - With 50,000 evaluations all 28 return after 5,000 to 12,600
@@ -4118,7 +4118,7 @@ Remaining work, tiered:
       metric-dominating channel in RMSEA/the nested test) — CRMR's fixed metric
       makes it largely robust to weight estimation. Deferred: R bindings, lavaan
       `crmr` oracle/goldens, threshold-inclusive SRMR variants, the residual-map
-      curvature term. (Multi-group landed in `b82b1f7`; the open piece is the
+      curvature term. (Multi-group landed in `2f007e2`; the open piece is the
       pooling *convention*, below.)
     - **TODO: survey the multigroup CRMR/SRMR pooling convention** (short lit
       survey). Multi-group is implemented, but the CRMR point has two defensible
@@ -4565,7 +4565,7 @@ landed; remaining open items:
   parity as a KNOWN divergence ("magmaan believed correct" on normal-data
   evidence) while over-rejecting 5x under nonnormality (.45 vs lavaan .085 at the
   strict rung), caught only by a paired rejection-rate Monte Carlo and fixed by
-  the `convention = "lavaan"` selector (`fbb8914`). Write-up:
+  the `convention = "lavaan"` selector (`55eeb77`). Write-up:
   [project/validation/calibration-parity.md](../validation/calibration-parity.md).
   Two follow-ups: (1) add a Monte Carlo calibration check (advisory, under
   `cpp/tests/checks/`) that pins magmaan rejection rates to lavaan **and** to nominal,
@@ -4809,7 +4809,7 @@ continuous-whitening entry above.
   22 df (p = 0.438200). The remaining paper work is its own item below.
 - **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
-  and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
+  and match lavaan in C++ (commits cf79721 / f7d8639 / 7c7d270; see the ordinal
   SNLLS bullet above). The R surface (single-fit + nested) is now done and
   lavaan-gated, and `mplus_wlsmv_invariance()` now provides the ergonomic
   Mplus-style delta ladder over all-ordinal pairwise/listwise data plus mixed
@@ -4941,7 +4941,7 @@ continuous-whitening entry above.
   variant is marked legacy in its report; `examples/fmg.R` and the
   `fiml_ugamma_spectrum` C++ test no longer exercise it.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
-  2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
+  2026-06-13** (commit 9989c9d): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
   `robust_mixed_ordinal()` polychoric UGamma spectrum (`eigvals` + `chisq_standard`
   + `df`), single- and multi-group, `_ml`/`_ug` rejected, anchored by the ordinal
@@ -5385,13 +5385,13 @@ work lives in [`speculative.md`](speculative.md). Open work:
   repository).
 - **S/M.** Extend the frozen common-verdict SNLLS handoff to the larger paper
   grids. The handoff bundle (`private/snlls-handoff/handoff-current`, outside
-  this repository) pins core `6e7bdb38`, including
+  this repository) pins core `5f2ebe10`, including
   theta specialization and input guards, with fresh clean-source diagnostic
   comparisons and a manuscript evidence inventory. Full paper grids still need
   a rerun with balanced timing order and the common verdict; reconcile the
   continuous corpus's 280-versus-289 model counts and the Ernst replication
   provenance before carrying over manuscript headlines. Preserve the earlier
-  frozen `c54cfc5f` bundle as its own historical snapshot.
+  frozen `b8bd95d9` bundle as its own historical snapshot.
 - **S/M.** SNLLS audit follow-up: released-scale delta is now explicitly
   rejected by both all-ordinal SNLLS entry points, and the shared GP classifier
   rejects nonlinear equalities for every caller. New support needs a nonlinear
@@ -5736,7 +5736,7 @@ work until a concrete downstream consumer appears.
   batched. The old `guttman` selector is retained as the legacy lavaan-like
   Spearman/incidence map.
   **Deferred: Guttman vocabulary cleanup phase.** The 2026-07 rename
-  (commit 7655659) made the gmm-free names canonical (communality
+  (commit e873d1d) made the gmm-free names canonical (communality
   `triad_mean`/`triad_pooled`/`triad_ls`/`extended_triad_ls`/`triad_wls`/
   `triad_wls_joint`; estimator `guttman_lavaan`/`guttman_aligned`;
   composite `adaptive`) but kept every old string as an accepted input

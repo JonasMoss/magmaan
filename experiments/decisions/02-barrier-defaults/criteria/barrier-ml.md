@@ -9,12 +9,12 @@ $\lambda \log\det Q$ of the sem-barrier paper.
 **Why now.** The fitter's defaults were never judged as a whole:
 
 - Its start is the transported FABIN3 start, pinned in the R glue when the
-  layered start became the complete-data ML default (52bc9caa). No run
+  layered start became the complete-data ML default (f10fdd84). No run
   compared the two for the barrier.
-- Its optimizer, PORT, was chosen in engineering/18 (ca420456), an
+- Its optimizer, PORT, was chosen in engineering/18 (298d6bed), an
   exploratory study. That study used research/47 draws, eight corpus fits and
-  Ernst, and ran before the information coordinates (3c5e3d8b) and the
-  penalized Newton verdict (73e27b1c), which both apply to the fitter now.
+  Ernst, and ran before the information coordinates (93a56d11) and the
+  penalized Newton verdict (bf64ee3a), which both apply to the fitter now.
 
 **Configurations.** Every arm runs in information coordinates (the default).
 Before a fit starts, the fitter floors nonpositive variances and shrinks

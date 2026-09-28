@@ -48,7 +48,7 @@ $\lambda \log\det Q$) use by default? Its current defaults were set before the
 optimizer coordinates and the penalized Newton verdict existed, and no study
 compared its start with the layered start that complete-data ML now uses. The
 criteria were committed before the run, in
-[criteria/barrier-ml.md](criteria/barrier-ml.md) (commit `35b326ff`).
+[criteria/barrier-ml.md](criteria/barrier-ml.md) (commit `677e78bc`).
 
 ## Answer
 
