@@ -1629,6 +1629,30 @@ Items whose communality exceeds the ceiling need 7-point items, a few-point
 latent (latent-class-like data), or a capped population with a normal control
 on the same population.
 
+A second, cheaper family keeps thresholding but changes the copula.
+Thresholding sees only the copula, so discretized Vale-Maurelli or NORTA data
+equal discretized normal data. Suppose every respondent's latent response is
+Gaussian with one correlation matrix, and a respondent-level class variable,
+independent of it, rescales or shifts it before the thresholds. Then each
+pair's code distribution is a mixture of bivariate normals in a single
+`r_ij`. The existing per-pair Pearson-code calibration stays exact, with no
+correlation inflation. Verified 2026-09-28 on the seven research/52
+populations (n = 3e5 each, experiment-local R with `pbivnorm`):
+
+- **Scale mixture ("extreme response style").** `Z = sqrt(W) N` with
+  `W in {1, 4}` at probabilities (.8, .2). All 7 populations were feasible:
+  code correlations within .005 and marginals within .002 (Monte Carlo
+  error), and every latent matrix was PD (smallest eigenvalue .012, MTMM).
+  A shared `W` gives tail dependence and cross-item co-kurtosis. The
+  continuous version is the `t` copula.
+- **Location mixture (acquiescent class).** Class-specific threshold shifts;
+  the same calibration applies. Not yet tested.
+- **Careless responders.** A fraction `1 - w` answers independently from the
+  same marginals; the rest follow the Gaussian copula at
+  `R* = I + (R - I) / w`. This is exact and reuses `sim_ordcorr` unchanged,
+  but the inflation limits it: 5% careless was feasible for 6 of 7
+  populations, 10% for 4, 20% for 3.
+
 **Alternative already available.** `sim_ordcorr` Pearson-code calibration
 reproduces the moments of every research/52 population exactly and covers
 "realistic 5-point data analysed by ML".
@@ -1636,10 +1660,12 @@ reproduces the moments of every research/52 population exactly and covers
 **Build if** a calibration conclusion from
 `experiments/research/52-robust-calibration-battery` (or a paper built on it)
 hinges on the discretized arm, and we need to show it is not an artifact of
-Gaussian-copula thresholding. The intended form is stochastic rounding of
-bounded independent-component populations (uniform, or Beta for skew), with a
-per-case 5-/7-point choice. This fits in the experiment first, and
-`magmaan::sim` only if a second consumer appears.
+Gaussian-copula thresholding. The first choice is the scale-mixture copula,
+which is universal on the research/52 populations and cheap. Stochastic
+rounding of bounded independent-component populations (uniform, or Beta for
+skew, with a per-case 5-/7-point choice) is the second, since it is a
+non-threshold mechanism. Either goes in the experiment first. A mixture option
+for `sim_ordcorr` in `magmaan::sim` waits until a second consumer appears.
 
 ### Ordinal SNLLS speed pilot: literature-grade grid
 
