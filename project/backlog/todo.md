@@ -1145,6 +1145,28 @@ see the roadmap's reusable-score entry and `r-package/examples/scores.R`.
   existing interfaces. Extend the same reusable ingredients when their
   sensitivity, influence and normalization contracts are independently tested;
   do not label arbitrary estimating functions likelihood scores.
+- **M — `compute_satorra2000` rejects well-identified models with badly scaled
+  variables.** Its SPD and pivot checks on the pooled expected information `P`
+  are relative to the largest eigenvalue/pivot (`1e-10 * max`), so they are
+  not scale-invariant. Found by `experiments/research/52-robust-calibration-battery`
+  on Kline's two-group Lynam path model (`kline_2023_ch12_lynam_indirect`),
+  whose variable variances span a ratio near 300 (IQ scale against 0-1 scales).
+  `robust_nested_lrt()` failed with `InfoMatrixSingular` ("rank 32/33", rcond
+  ~1e-10) in about a fifth of normal draws at n = 300, while `policy_nested()`
+  on the same fits was fine. Fix: judge rank on the diagonally scaled
+  `D^{-1/2} P D^{-1/2}` (or on the whitened restriction problem), and add a
+  test that rescales a variable by 100 and expects an identical statistic.
+- **M — `score_components(ctx0, H1 = fit1)` nested score disagrees with
+  `policy_nested()` and `lavTestScore()` for some constant restrictions.** On
+  Kline's Worland SR model (`kline_2023_ch15_worland_sr_step2a`) with H0 adding
+  `r1 == 0; r2 == 0` on the two `Risk` structural paths, the projected
+  `score_components` statistic differs from both references (e.g. 3.68 against
+  4.04 at n = 300, and a different two-point spectrum), while `policy_nested()`
+  matches `lavTestScore()` to 1e-6. The same route agrees exactly for
+  `cu == 0` residual-covariance restrictions (Little's 2x3 longitudinal CFA),
+  equalities between parameters (growth residual variances, a cross-group
+  path), and globally. Diagnose the H1-partable restriction map / nuisance
+  projection in `score_components_impl` for structural-path constants.
 
 ### Uniform prepared-model/data interface in R
 

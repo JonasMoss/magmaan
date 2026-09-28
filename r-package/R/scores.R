@@ -219,6 +219,14 @@ inference_quadratic <- function(object, test = c("score", "lr")) {
       "magmaan_ntml_quadratic",source=object,test=test)
 }
 
+# Casewise rows behind a quadratic from inference_quadratic(): one row per
+# observation, groups in block order. For the score quadratic the statistic is
+# sum(colSums(rows)^2); crossprod(rows) is the reduced matrix of its spectrum.
+inference_rows <- function(quadratic) {
+  stopifnot(inherits(quadratic, "magmaan_ntml_quadratic"))
+  ntml_rows_impl(quadratic$native)
+}
+
 inference_covariance <- function(context, robust = FALSE) {
   stopifnot(inherits(context,"magmaan_inference"),is.logical(robust),length(robust)==1L,!is.na(robust))
   out <- ntml_covariance_impl(context$native,robust)

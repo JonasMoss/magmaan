@@ -11141,6 +11141,17 @@ Rcpp::List ntml_reference_impl(SEXP object, bool spectrum) {
   } else out["mean_scale"]=(q.reduced ? q.reduced->trace() : q.rows.squaredNorm())/q.df;
   return out;
 }
+// Casewise rows of a shared-geometry quadratic, one row per observation in
+// group-block order. For a score quadratic the statistic is the squared norm of
+// their column sums; for either kind their crossproduct is the reduced matrix
+// whose eigenvalues are the reference spectrum.
+// [[Rcpp::export]]
+Rcpp::NumericMatrix ntml_rows_impl(SEXP object) {
+  auto& q = *score_bindings::get<std::shared_ptr<magmaan::robust::frontier::NTMLQuadratic>>(object,"magmaan_ntml_quadratic");
+  if (q.rows.size() == 0)
+    Rcpp::stop("inference_rows(): this quadratic kept no casewise rows (tiled large-N storage)");
+  return Rcpp::wrap(q.rows);
+}
 // [[Rcpp::export]]
 Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
   auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");

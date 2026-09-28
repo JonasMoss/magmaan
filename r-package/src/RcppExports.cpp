@@ -2855,6 +2855,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ntml_rows_impl
+Rcpp::NumericMatrix ntml_rows_impl(SEXP object);
+RcppExport SEXP _magmaanlab_ntml_rows_impl(SEXP objectSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type object(objectSEXP);
+    rcpp_result_gen = Rcpp::wrap(ntml_rows_impl(object));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ntml_covariance_impl
 Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust);
 RcppExport SEXP _magmaanlab_ntml_covariance_impl(SEXP contextSEXP, SEXP robustSEXP) {
@@ -4566,6 +4577,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_prepare_ntml_hypothesis_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_hypothesis_impl, 2},
     {"_magmaanlab_ntml_quadratic_impl", (DL_FUNC) &_magmaanlab_ntml_quadratic_impl, 3},
     {"_magmaanlab_ntml_reference_impl", (DL_FUNC) &_magmaanlab_ntml_reference_impl, 2},
+    {"_magmaanlab_ntml_rows_impl", (DL_FUNC) &_magmaanlab_ntml_rows_impl, 1},
     {"_magmaanlab_ntml_covariance_impl", (DL_FUNC) &_magmaanlab_ntml_covariance_impl, 2},
     {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 3},
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},

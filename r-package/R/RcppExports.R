@@ -749,6 +749,10 @@ ntml_reference_impl <- function(object, spectrum) {
     .Call(`_magmaanlab_ntml_reference_impl`, object, spectrum)
 }
 
+ntml_rows_impl <- function(object) {
+    .Call(`_magmaanlab_ntml_rows_impl`, object)
+}
+
 ntml_covariance_impl <- function(context, robust) {
     .Call(`_magmaanlab_ntml_covariance_impl`, context, robust)
 }
