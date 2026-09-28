@@ -51,13 +51,17 @@ if (mode == "plan") {
 out <- option("--output", file.path(root, "results", mode))
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
 
-git <- function(...) tryCatch(system2("git", c("-C", root, ...), stdout = TRUE, stderr = FALSE)[1],
+git <- function(...) tryCatch(suppressWarnings(system2("git", c("-C", root, ...), stdout = TRUE,
+                                                     stderr = FALSE))[1],
                               error = function(e) NA_character_)
+# A synced copy on a compute host has no .git; the launcher passes the commit.
+in_git <- !is.na(git("rev-parse", "--is-inside-work-tree"))
 meta <- list(mode = mode, reps = reps, seed_base = seed_base, workers = workers,
              cells = nrow(grid), selection = selection,
              command = paste(commandArgs(), collapse = " "),
-             git_commit = git("rev-parse", "HEAD"),
-             git_dirty = length(system2("git", c("-C", root, "status", "--porcelain", "--", "."), stdout = TRUE)) > 0,
+             git_commit = if (in_git) git("rev-parse", "HEAD") else Sys.getenv("MAGMAAN_SOURCE_COMMIT", NA),
+             git_dirty = if (in_git) length(system2("git", c("-C", root, "status", "--porcelain", "--", "."),
+                                                    stdout = TRUE)) > 0 else NA,
              magmaanlab = as.character(utils::packageVersion("magmaanlab")),
              magmaanlab_built = utils::packageDescription("magmaanlab")$Built,
              r_version = R.version.string, host = Sys.info()[["nodename"]],
