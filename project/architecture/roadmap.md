@@ -1771,7 +1771,10 @@ an unconstrained gradient test to constrained solutions.
   R `prepare_inference_data` provides a shared dataset to `prepare_inference`.
   `prepare_hypothesis` owns an exact affine nested pair with matching ambient
   parameter slots. `inference_quadratic` produces global score/ML GOF or nested
-  score/exact H1-anchored Satorra–2000 LR without invoking a test wrapper.
+  score/exact H1-anchored Satorra–2000 LR without invoking a test wrapper;
+  `inference_rows` returns its casewise rows (a score statistic is the squared
+  norm of their column sums, and their crossproduct is the spectrum's reduced
+  matrix), so moment-based calibrations can be composed outside the core.
   `inference_covariance` shares expected information and empirical contributions
   with Wald consumers. Existing compatible GOF (including unbiased spectra),
   expected-information, expected sandwich-SE and exact empirical streaming LR
