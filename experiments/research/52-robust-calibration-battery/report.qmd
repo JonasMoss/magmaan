@@ -1,7 +1,7 @@
 ---
 title: "Robust test calibration battery: global and nested tests on textbook models"
 params:
-  run: main
+  run: frozen
 format:
   html:
     toc: true
@@ -24,7 +24,8 @@ if (has_results) {
   meta <- read.csv(file.path(path, "metadata.csv"))
   get_meta <- function(k) meta$value[match(k, meta$key)]
 }
-checks_path <- file.path("results", "validate", "checks.csv")
+checks_path <- file.path(path, "checks.csv")
+if (!file.exists(checks_path)) checks_path <- file.path("results", "validate", "checks.csv")
 checks <- if (file.exists(checks_path)) read.csv(checks_path) else NULL
 primary <- c(
   lr_own_std = "LR, chi-square", lr_own_sb = "LR, SB", lr_own_mv = "LR, MV",
@@ -49,31 +50,40 @@ Satorra-Bentler mean scaling (SB), Satterthwaite mean-and-variance adjustment
 
 ## Short answer
 
-```{r short}
-#| results: asis
-if (!has_results) {
-  cat("**Not yet run.** This report currently states the design. Run the",
-      "`--main` command under Reproduce and render again.\n")
-} else {
-  mad <- function(test, subset = "converged") {
-    z <- s[s$subset == subset & s$test == test & s$arm %in% names(primary), ]
-    a <- aggregate(abs(reject_05 - .05) ~ arm + dgp, z, mean)
-    names(a)[3] <- "mad"
-    a
-  }
-  for (test in c("gof", "nested")) {
-    a <- mad(test)
-    best <- do.call(rbind, lapply(split(a, a$dgp), function(z) z[which.min(z$mad), ]))
-    cat(sprintf("- **%s:** smallest mean absolute deviation from 5%% by generator: %s.\n",
-      if (test == "gof") "Global fit" else "Nested tests",
-      paste(sprintf("%s %s (%.1f pp)", dgp_label[best$dgp], primary[best$arm], 100 * best$mad),
-            collapse = "; ")))
-  }
-  cat(sprintf("\n%s datasets, %s replications per cell, seed base %s, magmaanlab built %s.\n",
-              format(as.numeric(get_meta("datasets")), big.mark = ","), get_meta("reps"),
-              get_meta("seed_base"), get_meta("magmaanlab_built")))
-}
-```
+**The score statistic beats the likelihood-ratio statistic, and nested score
+tests are essentially exact.** These results cover seven textbook models,
+$n$ of 100, 300 and 1000, and four data generators, with 5,000 replications
+per cell.
+
+- **Nested restrictions** (df 1-18, 48 cells). The policy's score test,
+  calibrated by SB on its own null-fit spectrum, rejected between 3.6% and
+  5.8% at nominal 5% in every cell, under every generator; pEBA4 gave
+  2.8-5.5%. With the same calibrations the LR difference reached 6.6-17.7% at
+  $n = 100$. lavaan's RLS-difference base reached 5.5-15.3%.
+- **Global fit** (84 cells). Under normal and discretized data, score SB
+  rejected 4.3-6.2% and score pEBA4 3.2-6.0%. LR-SB and LR-pEBA4 over-reject
+  at $n = 100$ in models with many degrees of freedom, up to 20.8% and 15.8%
+  (the 18-indicator longitudinal CFA, df 102); by $n = 1000$ LR-SB is within
+  4.9-6.0%.
+- **IG data (heterogeneous spectra) remain unsolved for global fit.** The best
+  arm is score pEBA4, with a mean absolute deviation from 5% of 1.6 points and
+  a worst cell of 12.3% (two-group path model, $n = 100$). Score SB reaches
+  14.1%.
+- **The MV family does not help the score.**
+  - Plain MV and MV with the unbiased Gamma are conservative on the score
+    statistic. Their median rejection is 4% under normal data and 2% under
+    Vale-Maurelli and IG, with cells as low as 0.5%.
+  - On LR, MV removes most of the small-sample inflation under normal and
+    discretized data, but under-rejects under non-normal continuous data.
+  - The corrected MV of `research/49` behaves like SB. It is slightly better
+    under IG (mean deviation 2.1 against 2.6 points) and does not beat pEBA4.
+- **5-point discretized data calibrate like normal data.** For every arm the
+  mean deviation under Pearson-calibrated 5-point data is within 0.1 points
+  of its normal-data value.
+
+For the ordinary-user policy, this supports the score test under both SB and
+pEBA4. Its LR companion is the weak half at small $n$ with many degrees of
+freedom.
 
 ## Evidence
 
@@ -120,6 +130,9 @@ plot_arms <- function(test, subset = "converged") {
 
 ### Global fit
 
+LR calibrations fan out to the right at $n = 100$, while the score arms stay
+near 5% except under IG. Normal and discretized panels are nearly identical.
+
 ```{r gof-plot}
 #| fig-width: 12
 #| fig-height: 5.2
@@ -128,6 +141,10 @@ if (has_results) plot_arms("gof")
 ```
 
 ### Nested tests
+
+The score arms (SB, pEBA4) sit on 5% in every generator. LR and the RLS
+difference over-reject at $n = 100$, most under IG and Vale-Maurelli in the
+growth model.
 
 ```{r nested-plot}
 #| fig-width: 12
@@ -150,6 +167,11 @@ if (has_results) {
 
 ## Caveats
 
+- Rejection rates condition on converged fits. At $n = 100$, 9.4% of
+  second-order CFA fits and about 2% of Worland SEM fits failed to converge;
+  elsewhere failures were negligible. Restricting to admissible fits changes
+  no conclusion (per-arm summaries for both subsets are in
+  `results/frozen/arm_summary.csv`).
 - This is an exploratory null-size battery. It says nothing about power, and
   a final run may add generators first (see the mean-preserving discretizers
   entry in `project/backlog/speculative.md`).

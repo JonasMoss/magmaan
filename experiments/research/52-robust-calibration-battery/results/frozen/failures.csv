@@ -1,0 +1,186 @@
+"case","dgp","n","test","outcome","rep"
+"sem_worland11","disc",100,"nested","H0 fit error",1
+"sem_worland11","ig",100,"nested","H0 fit error",1
+"sem_worland11","normal",100,"nested","H0 fit error",1
+"sem_worland11","disc",100,"nested","H0 not converged",3
+"sem_worland11","ig",100,"nested","H0 not converged",20
+"sem_worland11","normal",100,"nested","H0 not converged",10
+"sem_worland11","vm",100,"nested","H0 not converged",3
+"cfa_second12","disc",100,"gof","H1 fit error",40
+"sem_worland11","disc",100,"gof","H1 fit error",9
+"cfa_second12","ig",100,"gof","H1 fit error",43
+"sem_worland11","ig",100,"gof","H1 fit error",15
+"cfa_second12","normal",100,"gof","H1 fit error",35
+"sem_worland11","normal",100,"gof","H1 fit error",13
+"cfa_second12","vm",100,"gof","H1 fit error",37
+"sem_worland11","vm",100,"gof","H1 fit error",10
+"cfa_second12","disc",300,"gof","H1 fit error",1
+"cfa_second12","ig",300,"gof","H1 fit error",1
+"cfa_second12","normal",300,"gof","H1 fit error",1
+"sem_worland11","disc",100,"nested","H1 fit error",9
+"sem_worland11","ig",100,"nested","H1 fit error",15
+"sem_worland11","normal",100,"nested","H1 fit error",13
+"sem_worland11","vm",100,"nested","H1 fit error",10
+"cfa_second12","disc",100,"gof","H1 not converged",432
+"sem_worland11","disc",100,"gof","H1 not converged",73
+"cfa_second12","ig",100,"gof","H1 not converged",387
+"sem_worland11","ig",100,"gof","H1 not converged",124
+"cfa_second12","normal",100,"gof","H1 not converged",416
+"sem_worland11","normal",100,"gof","H1 not converged",79
+"cfa_mtmm9","vm",100,"gof","H1 not converged",1
+"cfa_second12","vm",100,"gof","H1 not converged",494
+"sem_worland11","vm",100,"gof","H1 not converged",55
+"cfa_second12","disc",300,"gof","H1 not converged",20
+"cfa_second12","ig",300,"gof","H1 not converged",13
+"cfa_second12","normal",300,"gof","H1 not converged",10
+"cfa_second12","vm",300,"gof","H1 not converged",25
+"sem_worland11","disc",100,"nested","H1 not converged",67
+"sem_worland11","ig",100,"nested","H1 not converged",98
+"sem_worland11","normal",100,"nested","H1 not converged",68
+"sem_worland11","vm",100,"nested","H1 not converged",50
+"sem_worland11","disc",100,"nested","H1 not converged; H0 fit error",1
+"sem_worland11","ig",100,"nested","H1 not converged; H0 fit error",2
+"sem_worland11","normal",100,"nested","H1 not converged; H0 fit error",1
+"sem_worland11","vm",100,"nested","H1 not converged; H0 fit error",1
+"sem_worland11","disc",100,"nested","H1 not converged; H0 not converged",5
+"sem_worland11","ig",100,"nested","H1 not converged; H0 not converged",24
+"sem_worland11","normal",100,"nested","H1 not converged; H0 not converged",10
+"sem_worland11","vm",100,"nested","H1 not converged; H0 not converged",4
+"sem_worland11","disc",100,"nested","magmaan inference error [InfoMatrixSingular]",9
+"sem_worland11","ig",100,"nested","magmaan inference error [InfoMatrixSingular]",18
+"sem_worland11","normal",100,"nested","magmaan inference error [InfoMatrixSingular]",14
+"sem_worland11","vm",100,"nested","magmaan inference error [InfoMatrixSingular]",3
+"cfa_long18","ig",100,"nested","magmaan inference error [NumericIssue]",7
+"sem_worland11","ig",100,"nested","some arm unavailable",1
+"cfa_long18","disc",100,"gof","valid",5000
+"cfa_mtmm9","disc",100,"gof","valid",5000
+"cfa_ptsd8","disc",100,"gof","valid",5000
+"cfa_second12","disc",100,"gof","valid",4528
+"growth6","disc",100,"gof","valid",5000
+"mg_path5","disc",100,"gof","valid",5000
+"sem_worland11","disc",100,"gof","valid",4918
+"cfa_long18","ig",100,"gof","valid",5000
+"cfa_mtmm9","ig",100,"gof","valid",5000
+"cfa_ptsd8","ig",100,"gof","valid",5000
+"cfa_second12","ig",100,"gof","valid",4570
+"growth6","ig",100,"gof","valid",5000
+"mg_path5","ig",100,"gof","valid",5000
+"sem_worland11","ig",100,"gof","valid",4861
+"cfa_long18","normal",100,"gof","valid",5000
+"cfa_mtmm9","normal",100,"gof","valid",5000
+"cfa_ptsd8","normal",100,"gof","valid",5000
+"cfa_second12","normal",100,"gof","valid",4549
+"growth6","normal",100,"gof","valid",5000
+"mg_path5","normal",100,"gof","valid",5000
+"sem_worland11","normal",100,"gof","valid",4908
+"cfa_long18","vm",100,"gof","valid",5000
+"cfa_mtmm9","vm",100,"gof","valid",4999
+"cfa_ptsd8","vm",100,"gof","valid",5000
+"cfa_second12","vm",100,"gof","valid",4469
+"growth6","vm",100,"gof","valid",5000
+"mg_path5","vm",100,"gof","valid",5000
+"sem_worland11","vm",100,"gof","valid",4935
+"cfa_long18","disc",300,"gof","valid",5000
+"cfa_mtmm9","disc",300,"gof","valid",5000
+"cfa_ptsd8","disc",300,"gof","valid",5000
+"cfa_second12","disc",300,"gof","valid",4979
+"growth6","disc",300,"gof","valid",5000
+"mg_path5","disc",300,"gof","valid",5000
+"sem_worland11","disc",300,"gof","valid",5000
+"cfa_long18","ig",300,"gof","valid",5000
+"cfa_mtmm9","ig",300,"gof","valid",5000
+"cfa_ptsd8","ig",300,"gof","valid",5000
+"cfa_second12","ig",300,"gof","valid",4986
+"growth6","ig",300,"gof","valid",5000
+"mg_path5","ig",300,"gof","valid",5000
+"sem_worland11","ig",300,"gof","valid",5000
+"cfa_long18","normal",300,"gof","valid",5000
+"cfa_mtmm9","normal",300,"gof","valid",5000
+"cfa_ptsd8","normal",300,"gof","valid",5000
+"cfa_second12","normal",300,"gof","valid",4989
+"growth6","normal",300,"gof","valid",5000
+"mg_path5","normal",300,"gof","valid",5000
+"sem_worland11","normal",300,"gof","valid",5000
+"cfa_long18","vm",300,"gof","valid",5000
+"cfa_mtmm9","vm",300,"gof","valid",5000
+"cfa_ptsd8","vm",300,"gof","valid",5000
+"cfa_second12","vm",300,"gof","valid",4975
+"growth6","vm",300,"gof","valid",5000
+"mg_path5","vm",300,"gof","valid",5000
+"sem_worland11","vm",300,"gof","valid",5000
+"cfa_long18","disc",1000,"gof","valid",5000
+"cfa_mtmm9","disc",1000,"gof","valid",5000
+"cfa_ptsd8","disc",1000,"gof","valid",5000
+"cfa_second12","disc",1000,"gof","valid",5000
+"growth6","disc",1000,"gof","valid",5000
+"mg_path5","disc",1000,"gof","valid",5000
+"sem_worland11","disc",1000,"gof","valid",5000
+"cfa_long18","ig",1000,"gof","valid",5000
+"cfa_mtmm9","ig",1000,"gof","valid",5000
+"cfa_ptsd8","ig",1000,"gof","valid",5000
+"cfa_second12","ig",1000,"gof","valid",5000
+"growth6","ig",1000,"gof","valid",5000
+"mg_path5","ig",1000,"gof","valid",5000
+"sem_worland11","ig",1000,"gof","valid",5000
+"cfa_long18","normal",1000,"gof","valid",5000
+"cfa_mtmm9","normal",1000,"gof","valid",5000
+"cfa_ptsd8","normal",1000,"gof","valid",5000
+"cfa_second12","normal",1000,"gof","valid",5000
+"growth6","normal",1000,"gof","valid",5000
+"mg_path5","normal",1000,"gof","valid",5000
+"sem_worland11","normal",1000,"gof","valid",5000
+"cfa_long18","vm",1000,"gof","valid",5000
+"cfa_mtmm9","vm",1000,"gof","valid",5000
+"cfa_ptsd8","vm",1000,"gof","valid",5000
+"cfa_second12","vm",1000,"gof","valid",5000
+"growth6","vm",1000,"gof","valid",5000
+"mg_path5","vm",1000,"gof","valid",5000
+"sem_worland11","vm",1000,"gof","valid",5000
+"cfa_long18","disc",100,"nested","valid",5000
+"growth6","disc",100,"nested","valid",5000
+"mg_path5","disc",100,"nested","valid",5000
+"sem_worland11","disc",100,"nested","valid",4905
+"cfa_long18","ig",100,"nested","valid",4993
+"growth6","ig",100,"nested","valid",5000
+"mg_path5","ig",100,"nested","valid",5000
+"sem_worland11","ig",100,"nested","valid",4821
+"cfa_long18","normal",100,"nested","valid",5000
+"growth6","normal",100,"nested","valid",5000
+"mg_path5","normal",100,"nested","valid",5000
+"sem_worland11","normal",100,"nested","valid",4883
+"cfa_long18","vm",100,"nested","valid",5000
+"growth6","vm",100,"nested","valid",5000
+"mg_path5","vm",100,"nested","valid",5000
+"sem_worland11","vm",100,"nested","valid",4929
+"cfa_long18","disc",300,"nested","valid",5000
+"growth6","disc",300,"nested","valid",5000
+"mg_path5","disc",300,"nested","valid",5000
+"sem_worland11","disc",300,"nested","valid",5000
+"cfa_long18","ig",300,"nested","valid",5000
+"growth6","ig",300,"nested","valid",5000
+"mg_path5","ig",300,"nested","valid",5000
+"sem_worland11","ig",300,"nested","valid",5000
+"cfa_long18","normal",300,"nested","valid",5000
+"growth6","normal",300,"nested","valid",5000
+"mg_path5","normal",300,"nested","valid",5000
+"sem_worland11","normal",300,"nested","valid",5000
+"cfa_long18","vm",300,"nested","valid",5000
+"growth6","vm",300,"nested","valid",5000
+"mg_path5","vm",300,"nested","valid",5000
+"sem_worland11","vm",300,"nested","valid",5000
+"cfa_long18","disc",1000,"nested","valid",5000
+"growth6","disc",1000,"nested","valid",5000
+"mg_path5","disc",1000,"nested","valid",5000
+"sem_worland11","disc",1000,"nested","valid",5000
+"cfa_long18","ig",1000,"nested","valid",5000
+"growth6","ig",1000,"nested","valid",5000
+"mg_path5","ig",1000,"nested","valid",5000
+"sem_worland11","ig",1000,"nested","valid",5000
+"cfa_long18","normal",1000,"nested","valid",5000
+"growth6","normal",1000,"nested","valid",5000
+"mg_path5","normal",1000,"nested","valid",5000
+"sem_worland11","normal",1000,"nested","valid",5000
+"cfa_long18","vm",1000,"nested","valid",5000
+"growth6","vm",1000,"nested","valid",5000
+"mg_path5","vm",1000,"nested","valid",5000
+"sem_worland11","vm",1000,"nested","valid",5000

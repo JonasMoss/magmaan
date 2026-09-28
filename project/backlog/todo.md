@@ -190,9 +190,23 @@ execution follows the estimator priority programme above.
     it by embedding the restricted fit in the larger model's slots (the value
     becomes an equality constraint). Until then users write `b == 0` on a
     labeled parameter.
-  - **M — calibration evidence for the nested score test.** It mirrors the
-    global score test (engineering/16) but has no study of its own. The
-    covariance-honest paper's interior-inference rerun would be the first.
+  - **Calibration evidence for the nested score test — first study landed
+    (2026-09-28).** `experiments/research/52-robust-calibration-battery` has
+    four natural restrictions (df 1-18: lagged residual covariances, structural
+    paths, growth residual variances, a cross-group path), normal,
+    Vale-Maurelli, IG and 5-point discretized data, n = 100-1000, and 5,000
+    replications per cell. Score SB rejected 3.6-5.8% at nominal 5% in all 48
+    cells; score pEBA4 rejected 2.8-5.5%. Still open: a misspecified larger
+    model (above) and power. The covariance-honest paper's interior-inference
+    rerun remains the natural second study.
+  - **M — the LR half of the policy over-rejects at small n with many df.**
+    In the same study, LR-SB and LR-pEBA4 global tests reached 20.8% and 15.8%
+    at n = 100 (18-indicator CFA, df 102, normal data), and nested LR-SB
+    reached 17.7% (growth, IG). Score arms stayed near 5% in the same cells.
+    Decide whether the policy keeps LR as a co-primary test, reports it with
+    a small-sample warning, or leads with the score test. Global fit under
+    IG-type heterogeneous spectra is unsolved for every arm (best: score
+    pEBA4, worst cell 12.3%).
   - Other estimators follow the policy's extension (the L item below).
 - **S — the test of a fully specified model.** Since 2026-09-26 a model with
   no free parameters is evaluated at its fixed values (lavaan does the same),
