@@ -4618,6 +4618,20 @@ decisions in the simulation backlog.
   `a := sqrt(2*(covmz - covdz))`); the corpus carries those rows. Extend the
   EBNF first, then the parser and the defined-parameter derivatives.
 
+## Documentation
+
+- **M, later — decide which research-note derivations become supplementary
+  docs.** The derivation notes moved on 2026-09-24 to the private
+  `private/research-notes` repository (outside this repository), alongside
+  paper-track work such as the robust RMSEA material that may take a long time
+  to publish, if ever. Derivations behind shipped behaviour (for example
+  two-level ML, RMSEA asymptotics, two-stage weighting) are not esoteric and
+  should be documented in magmaan, as supplementary derivation docs, well
+  before any slow journal route. Per note: "level up and leanify" it into a
+  clear, self-contained derivation checked against the implementation, then
+  promote it; keep paper-track ideas private until their paper decides. Nothing
+  blocks on this.
+
 ## API and R boundary
 
 ### Decompose `EstimatorSpec` into its actual axes — NOT STARTED
