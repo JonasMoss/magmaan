@@ -10,7 +10,7 @@ preserved; this reorganization does not rerun or reassess the studies.
 | [Decisions](#decisions) | Pre-registered studies whose results set library defaults, with the register of those defaults. | 2 |
 | [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
 | [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
-| [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 49 |
+| [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 52 |
 | [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 19 |
 | [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 9 |
 
@@ -142,6 +142,7 @@ Investigate statistical behavior, new methods, estimands, or inferential validit
 | 49 | [spectral-tail-calibration](research/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? |
 | 50 | [normal-parameter-intervals](research/50-normal-parameter-intervals/report.qmd) | probe | active | Do normal-theory Wald, score and profile-LR parameter intervals calibrate, and is candidate-specific bootstrap Bartlett inversion feasible? |
 | 51 | [robust-parameter-intervals](research/51-robust-parameter-intervals/report.qmd) | probe | complete | How do robust Wald, score and profile-LR scalar intervals compare in coverage, width, failures and cost under non-normality? |
+| 52 | [robust-calibration-battery](research/52-robust-calibration-battery/report.qmd) | benchmark | active | Across textbook SEMs, sample sizes and non-normal data including discretized 5-point items analysed by ML, which of SB, MV, MV-UG, corrected MV and pEBA4 applied to the score, LR and RLS statistics keeps nominal size for global and nested tests? |
 
 ## Engineering checks
 

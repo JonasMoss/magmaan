@@ -1,0 +1,319 @@
+---
+title: "Robust test calibration battery: global and nested tests on textbook models"
+params:
+  run: main
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+path <- file.path("results", params$run)
+has_results <- file.exists(file.path(path, "summary.csv"))
+source("R/dgp.R")
+source("R/populations.R")
+pops <- read_populations("populations")
+if (has_results) {
+  s <- read.csv(file.path(path, "summary.csv"))
+  fails <- read.csv(file.path(path, "failures.csv"))
+  meta <- read.csv(file.path(path, "metadata.csv"))
+  get_meta <- function(k) meta$value[match(k, meta$key)]
+}
+checks_path <- file.path("results", "validate", "checks.csv")
+checks <- if (file.exists(checks_path)) read.csv(checks_path) else NULL
+primary <- c(
+  lr_own_std = "LR, chi-square", lr_own_sb = "LR, SB", lr_own_mv = "LR, MV",
+  lr_unbiased_mv = "LR, MV-UG", lr_rows_cmv = "LR, corrected MV", lr_own_peba4 = "LR, pEBA4",
+  score_own_sb = "Score, SB", score_own_mv = "Score, MV", score_unbiased_mv = "Score, MV-UG",
+  score_rows_cmv = "Score, corrected MV", score_own_peba4 = "Score, pEBA4",
+  rls_biased_sb = "RLS, SB", rls_biased_peba4 = "RLS, pEBA4")
+dgp_label <- c(normal = "Normal", vm = "Vale-Maurelli (2, 7)", ig = "IG (2, 7)",
+               disc = "Discretized, 5-point")
+```
+
+## Question
+
+Across a varied set of textbook SEMs, sample sizes and non-normal data,
+including discretized 5-point items analysed by ML, which calibration of which
+base statistic keeps nominal Type I error, for global fit and for nested
+restrictions? The candidates are the ordinary-user policy's score and
+likelihood-ratio statistics and lavaan's RLS statistic, calibrated with
+Satorra-Bentler mean scaling (SB), Satterthwaite mean-and-variance adjustment
+(MV), MV with Du and Bentler's unbiased Gamma (MV-UG), the corrected MV of
+`research/49`, and pEBA4.
+
+## Short answer
+
+```{r short}
+#| results: asis
+if (!has_results) {
+  cat("**Not yet run.** This report currently states the design. Run the",
+      "`--main` command under Reproduce and render again.\n")
+} else {
+  mad <- function(test, subset = "converged") {
+    z <- s[s$subset == subset & s$test == test & s$arm %in% names(primary), ]
+    a <- aggregate(abs(reject_05 - .05) ~ arm + dgp, z, mean)
+    names(a)[3] <- "mad"
+    a
+  }
+  for (test in c("gof", "nested")) {
+    a <- mad(test)
+    best <- do.call(rbind, lapply(split(a, a$dgp), function(z) z[which.min(z$mad), ]))
+    cat(sprintf("- **%s:** smallest mean absolute deviation from 5%% by generator: %s.\n",
+      if (test == "gof") "Global fit" else "Nested tests",
+      paste(sprintf("%s %s (%.1f pp)", dgp_label[best$dgp], primary[best$arm], 100 * best$mad),
+            collapse = "; ")))
+  }
+  cat(sprintf("\n%s datasets, %s replications per cell, seed base %s, magmaanlab built %s.\n",
+              format(as.numeric(get_meta("datasets")), big.mark = ","), get_meta("reps"),
+              get_meta("seed_base"), get_meta("magmaanlab_built")))
+}
+```
+
+## Evidence
+
+```{r results-note}
+#| results: asis
+if (!has_results) cat("No run in `results/", params$run, "/` yet.\n", sep = "")
+```
+
+```{r plot-fn}
+plot_arms <- function(test, subset = "converged") {
+  z <- s[s$subset == subset & s$test == test & s$arm %in% names(primary), ]
+  arms <- rev(names(primary))
+  ns <- sort(unique(z$n))
+  cols <- setNames(c("#86b6ef", "#2a78d6", "#104281")[seq_along(ns)], ns)
+  pchs <- setNames(c(1, 17, 15)[seq_along(ns)], ns)
+  reps <- median(z$valid)
+  band <- 1.96 * sqrt(.05 * .95 / reps)
+  old <- par(mfrow = c(1, 4), mar = c(3.6, 0.5, 2.2, 0.6), oma = c(0, 9.5, 0, 0),
+             mgp = c(2.2, .6, 0), cex = .8, col.axis = "#52514e", fg = "#c3c2b7")
+  on.exit(par(old))
+  xmax <- max(.12, min(.35, max(z$reject_05)))
+  for (g in names(dgp_label)) {
+    w <- z[z$dgp == g, ]
+    plot(NA, xlim = c(0, xmax), ylim = c(.5, length(arms) + .5), yaxt = "n",
+         xlab = "Rejection at 5%", ylab = "", main = dgp_label[[g]], font.main = 1,
+         col.main = "#0b0b0b")
+    rect(.05 - band, 0, .05 + band, length(arms) + 1, col = "#f0efec", border = NA)
+    abline(v = .05, col = "#898781", lty = 2)
+    abline(h = seq_along(arms), col = "#e1e0d9", lwd = .6)
+    for (k in seq_along(arms)) {
+      a <- w[w$arm == arms[k], ]
+      jitter <- (match(a$n, ns) - 2) * .18
+      points(pmin(a$reject_05, xmax), k + jitter, col = cols[as.character(a$n)],
+             pch = pchs[as.character(a$n)], cex = .8)
+      segments(median(a$reject_05), k - .35, median(a$reject_05), k + .35, lwd = 2, col = "#0b0b0b")
+    }
+    if (g == names(dgp_label)[1]) axis(2, at = seq_along(arms), labels = primary[arms],
+                                       las = 1, outer = TRUE, col.axis = "#0b0b0b")
+    if (g == names(dgp_label)[4]) legend("bottomright", legend = paste("n =", ns),
+      col = cols, pch = pchs, bty = "n", cex = .85, text.col = "#52514e")
+  }
+}
+```
+
+### Global fit
+
+```{r gof-plot}
+#| fig-width: 12
+#| fig-height: 5.2
+#| fig-cap: "Global fit: rejection at nominal 5% per cell (7 cases per sample size), coloured and shaped by n. The vertical bar is the median over cells, the grey band is +/-1.96 Monte Carlo SE around 5%, and values above the axis limit are drawn at the edge."
+if (has_results) plot_arms("gof")
+```
+
+### Nested tests
+
+```{r nested-plot}
+#| fig-width: 12
+#| fig-height: 5.2
+#| fig-cap: "Nested tests (four cases): rejection at nominal 5% per cell, as above."
+if (has_results) plot_arms("nested")
+```
+
+```{r failures}
+#| results: asis
+if (has_results) {
+  bad <- fails[fails$outcome != "valid", ]
+  total <- sum(fails$rep)
+  cat(sprintf("%d of %d replicate tests were unusable (%s). Per-cell rejection rates, the admissible-only subset and per-arm summaries are in `summary.csv`, `arm_summary.csv` and `failures.csv` under `results/%s/`.\n",
+              sum(bad$rep), total,
+              if (nrow(bad)) paste(sprintf("%s: %d", names(tapply(bad$rep, bad$outcome, sum)), tapply(bad$rep, bad$outcome, sum)), collapse = "; ") else "none",
+              params$run))
+}
+```
+
+## Caveats
+
+- This is an exploratory null-size battery. It says nothing about power, and
+  a final run may add generators first (see the mean-preserving discretizers
+  entry in `project/backlog/speculative.md`).
+- The discretized arm uses a Gaussian copula. Its non-normality is specific to
+  thresholding a normal vector.
+- Populations inherit the corpus models' parameter values, including high
+  communalities.
+- The corrected MV's moment estimators are unbiased for fixed transforms of iid
+  rows, not for rows built on estimated SEM projections (as in `research/49`).
+
+## Reproduce
+
+From the repository root, with `magmaanlab` installed:
+
+```sh
+# once, where the textbook corpus is mounted (already done; output is tracked)
+Rscript experiments/research/52-robust-calibration-battery/R/build_populations.R
+# lavaan checks (needs lavaan)
+OPENBLAS_NUM_THREADS=1 Rscript experiments/research/52-robust-calibration-battery/run_experiment.R --validate
+# smoke, then the main run (workers are forked processes)
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 nice -n 10 Rscript experiments/research/52-robust-calibration-battery/run_experiment.R --smoke --workers 4
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 nice -n 10 Rscript experiments/research/52-robust-calibration-battery/run_experiment.R --main --workers 4
+quarto render experiments/research/52-robust-calibration-battery/report.qmd
+```
+
+## Design
+
+### Why this study
+
+The ordinary-user policy reports a global score test and a likelihood-ratio
+test against the saturated model, each calibrated by SB and pEBA4, and the same
+pair for nested tests. `research/45` compared score and LR under SB and pEBA on one two-factor
+population with 10 or 20 indicators. This battery widens that evidence in
+four directions: model types from the textbook corpus, discretized data (the
+typical shape of real item data), Satterthwaite-type calibrations, and nested
+tests.
+
+The three base statistics are closely related on complete normal-theory data.
+With means absent or saturated, the policy's expected-information score
+statistic equals lavaan's RLS statistic exactly. With restricted means they
+differ at $O_p(n^{-1/2})$, because the score's residual is taken about the
+fitted mean. The nested score statistic equals lavaan's score test. The nested
+RLS base used by lavaan's single-group FMG tests
+is the difference of two RLS statistics. It shares the score's first term, but
+its second term is evaluated at the alternative's fit, and it is not a
+quadratic form (it can be negative).
+
+### Models
+
+Each population is the model-implied mean and covariance of a textbook-corpus
+model, fitted by lavaan ML to the book's data. Where a nested restriction is
+tested, the population is the restricted model's fit, so both hypotheses hold
+exactly. The populations are stored with the experiment, so a run does not
+need the corpus.
+
+```{r models}
+tab <- do.call(rbind, lapply(pops, function(p) data.frame(
+  Case = p$id, Source = p$corpus, Model = p$type,
+  p = length(p$groups[[1]]$ov), Groups = length(p$groups),
+  `GOF df` = as.integer(p$source_fit$h1$df),
+  `Nested restriction` = if (is.null(p$h0)) "none" else p$restriction,
+  check.names = FALSE)))
+knitr::kable(tab, row.names = FALSE)
+```
+
+The nested restrictions are natural single-model hypotheses, not
+measurement-invariance steps. The two-group path model's global test is itself
+a test of seven cross-group equalities, because each group's path model is
+saturated. Its variables are rescaled by their pooled population standard
+deviation, the same factor in every group. Every tested hypothesis is invariant
+to that. The rescaling only avoids a numerical failure of the nested
+Satorra (2000) spectrum on badly scaled variables, logged as a bug.
+
+### Data-generating processes
+
+Every generator reproduces each group's population mean and covariance exactly.
+A check on 200,000 draws per case put the largest standardized moment error
+below 0.02, which is Monte Carlo error.
+
+- **Normal.**
+- **Vale-Maurelli (2, 7):** Fleishman margins with skewness 2 and excess
+  kurtosis 7.
+- **IG (2, 7):** the Foldnes-Olsson independent generator with the same
+  marginal targets, Pearson marginal family, and Cholesky root. The Cholesky
+  root gives heterogeneous spectra (`research/49`).
+- **Discretized, 5-point:** a Gaussian copula thresholded at fixed category
+  probabilities. The latent correlations are calibrated so that the Pearson
+  correlations of the integer codes equal the population correlations. Each
+  item is then
+  mapped affinely to the population mean and SD. Items keep 5 values and are
+  analysed by ML. No polychoric step is involved anywhere.
+  - Default marginals alternate a symmetric shape (.10, .20, .40, .20, .10)
+    and a right-skewed one (.35, .30, .18, .11, .06).
+  - The CES-D growth model uses the skewed shape at every wave.
+
+  No latent correlation matrix needed repair.
+
+### Statistics, spectra and calibrations
+
+Each replicate fits H1 (and H0) by ML. It then records three base
+statistics:
+
+| Base | Global | Nested |
+|---|---|---|
+| LR | $2N\,F_{ML}$ | difference of the two |
+| Score | policy score (expected information, null fit) | policy nested score (equals lavaan's score test) |
+| RLS | lavaan's RLS test | difference of the two RLS statistics |
+
+Each statistic is calibrated against the eigenvalues of $U\Gamma$ from three
+sources:
+
+- **own:** the policy's spectrum for that statistic. This is the score's rows
+  at the null fit, or the LR's centred rows.
+- **biased:** empirical $\hat\Gamma$ at the fitted H1 (global), or Satorra's
+  (2000) exact restriction map at H1 (nested). All three bases share it.
+- **unbiased:** the same with Du and Bentler's unbiased $\hat\Gamma$.
+
+The calibrations are:
+
+- chi-square with the model df;
+- SB mean scaling;
+- MV, Satterthwaite with fractional df;
+- pEBA4, penalized eigenvalue block averaging with 4 blocks;
+- corrected MV (`research/49`), extended to several groups. It estimates
+  $\operatorname{tr}V$ and $\operatorname{tr}V^2$ without bias from the policy
+  score's casewise rows, not from a spectrum.
+
+All combinations are stored. The report focuses on the arms listed in the
+figures.
+
+### Sample sizes, replications and seeds
+
+Total $n \in \{100, 300, 1000\}$, split by the source group proportions in the
+two-group case. Seven cases, four generators and three sample sizes give 84
+cells. Each cell's seeds are `seed_base + 100000 * cell_id + rep` in the
+canonical grid. The second group adds 50000. Calibration objects are built
+once per cell.
+
+### Outcomes
+
+- The outcome is rejection at nominal 1%, 5% and 10%.
+- A replicate counts for a test when the fits converged (the library verdict)
+  and every arm returned a p-value, so arms are compared on common valid draws.
+- Converged but inadmissible fits are kept (this is what users get), with an
+  admissible-only subset reported alongside.
+- Failures are tabulated by cause.
+
+### Validation
+
+One draw per case under normal and discretized data is compared with
+lavaan. The checks cover:
+
+- LR, RLS, and lavaan's SB and mean-and-variance adjusted p-values;
+- the nested LR difference;
+- the nested score, against lavaan's score test for the added constraints;
+- the nested RLS difference;
+- the nested Satorra (2000) SB p-value, with the exact restriction map;
+- internal identities: the LR spectrum is shared, the global score equals RLS
+  when means are free, and each score statistic is rebuilt from its casewise
+  terms.
+
+```{r checks}
+#| results: asis
+if (is.null(checks)) cat("Validation not run in this checkout.\n") else
+  cat(sprintf("**%d of %d checks passed.**\n", sum(checks$passed), nrow(checks)))
+```
+

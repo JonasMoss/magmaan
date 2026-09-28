@@ -1586,6 +1586,61 @@ Completed or archived experiments whose extensions are needed only if a paper's
 evidence base demands them. Each experiment's landed coverage is recorded in
 the experiment folder and the roadmap.
 
+### Mean-preserving discretizers: exact-moment discrete data without a Gaussian copula
+
+**Gap.** The only discretized generator that keeps an SEM population exact is
+the Pearson-code Gaussian copula (`sim_ordcorr_*`, `metric = "pearson_codes"`,
+plus a per-item affine map to the target mean and SD). Its latent is Gaussian
+and its discreteness is deterministic thresholding, so it cannot tell whether a
+calibration result is specific to Gaussian-copula discreteness.
+
+A structurally different family keeps the moments exact by construction: take
+a bounded latent response `Z` that satisfies the SEM (reduced form over
+independent bounded components), then randomize each item independently with
+`E[Y_j | Z] = Z_j`. Then `Cov(Y) = Cov(Z) + diag(E Var(Y_j | Z))`, so only the
+residual variances move, and they are pre-compensated. A per-item affine map
+gives any target `(Lambda, Phi, Theta, mu)`, including restrictions such as
+equal residual variances. Members differ only in added noise and support:
+
+- **Stochastic (dithered) rounding**, `Y_j = round(Z_j + U_j)` with
+  `U_j ~ U(-1/2, 1/2)`. This is the least-noise member, with variance
+  `f(1 - f) <= 1/4` (`f` the fractional part). The noise has a closed form,
+  `E f(1 - f) = 1/6 - sum_k Re phi_Zj(2 pi k) / (pi k)^2`, a product of sincs
+  for uniform components. Checked 2026-09-28 with 4e6 draws (4 items, 3
+  components): means within 3e-4, `Cov(Y) = WW' + diag(r)` within 7e-4.
+  The communality ceiling for 5-point items is about .89 (one uniform
+  component, symmetric item), about .80 (two components) and about .74 for a
+  skewed item (about .84 with a right-skewed bounded latent). Conditional
+  noise still depends on the latent, so asymptotic robustness breaks, mildly.
+- **Binomial (Lord's strong true-score model with a linear latent).** Here
+  `Y_j | eta ~ Bin(K, pi_j)` with `pi_j` linear in bounded latents. The
+  ceiling is `h^2 <= qK / (qK + kappa^2 - q)`, where
+  `q = min(a, 1 - a)^2 / (a(1 - a))` and `kappa` is max/SD of the item's
+  common part. That gives .67 (symmetric) or .40 (skewed) for 5-point items
+  under a uniform latent. This is below most textbook populations
+  (research/52 cases reach .74-.90).
+- **Beta-binomial** adds overdispersion noise and has a lower ceiling.
+  **Poisson / negative binomial** need only `Z >= 0`, so the upper bound
+  disappears. The price is unbounded right-skewed counts (symptom counts, not
+  Likert) and one-sided latents, which make negative loadings or negative
+  factor correlations awkward.
+
+Items whose communality exceeds the ceiling need 7-point items, a few-point
+latent (latent-class-like data), or a capped population with a normal control
+on the same population.
+
+**Alternative already available.** `sim_ordcorr` Pearson-code calibration
+reproduces the moments of every research/52 population exactly and covers
+"realistic 5-point data analysed by ML".
+
+**Build if** a calibration conclusion from
+`experiments/research/52-robust-calibration-battery` (or a paper built on it)
+hinges on the discretized arm, and we need to show it is not an artifact of
+Gaussian-copula thresholding. The intended form is stochastic rounding of
+bounded independent-component populations (uniform, or Beta for skew), with a
+per-case 5-/7-point choice. This fits in the experiment first, and
+`magmaan::sim` only if a second consumer appears.
+
 ### Ordinal SNLLS speed pilot: literature-grade grid
 
 **Fired 2026-06 and absorbed into `papers/ordinal-snlls/`.** The native

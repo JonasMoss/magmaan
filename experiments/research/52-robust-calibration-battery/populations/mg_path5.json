@@ -1,0 +1,55 @@
+{
+  "id": "mg_path5",
+  "corpus": "kline_2023_ch12_lynam_indirect",
+  "type": "two-group path model, means, cross-group equalities",
+  "restriction": "equal achieve -> delinq path across groups (1 constraint)",
+  "disc_pattern": "alternate",
+  "rescaled": true,
+  "lavaan_function": "sem",
+  "meanstructure": true,
+  "h1": "achieve ~ c(a1,a1)*ses + c(a2,a2)*effort + c(a3,a3)*viq\ndelinq ~ c(b4,b5)*achieve + c(b1,b1)*ses + c(b2,b2)*effort + c(b3,b3)*viq\nses ~~ ses\neffort ~~ effort\nviq ~~ viq\nses ~~ effort\nses ~~ viq\neffort ~~ viq\nses ~ 1\neffort ~ 1\nviq ~ 1\nachieve ~ c(d1,d1)*1\ndelinq ~ 1\nses1 := a1*b4\nses2 := a1*b5\neffort1 := a2*b4\neffort2 := a2*b5\nviq1 := a3*b4\nviq2 := a3*b5",
+  "h0": "achieve ~ c(a1,a1)*ses + c(a2,a2)*effort + c(a3,a3)*viq\ndelinq ~ c(b4,b5)*achieve + c(b1,b1)*ses + c(b2,b2)*effort + c(b3,b3)*viq\nses ~~ ses\neffort ~~ effort\nviq ~~ viq\nses ~~ effort\nses ~~ viq\neffort ~~ viq\nses ~ 1\neffort ~ 1\nviq ~ 1\nachieve ~ c(d1,d1)*1\ndelinq ~ 1\nses1 := a1*b4\nses2 := a1*b5\neffort1 := a2*b4\neffort2 := a2*b5\nviq1 := a3*b4\nviq2 := a3*b5\nb4 == b5",
+  "source_n": 395,
+  "groups": [
+    {
+      "label": "Group 1",
+      "proportion": 0.541772151898734,
+      "ov": ["achieve", "delinq", "ses", "effort", "viq"],
+      "sigma": [
+        [0.877745207562288, -0.222054566609489, 0.11222361353605, 0.206382082539503, 0.467994088994036],
+        [-0.222054566609489, 1.06993413323974, -0.0757891645877676, -0.16481310859216, -0.230788372646829],
+        [0.11222361353605, -0.0757891645877676, 0.9212182567284, 0.0775839867445637, 0.245418819910254],
+        [0.206382082539503, -0.16481310859216, 0.0775839867445637, 1.02094408028993, 0.276815749779324],
+        [0.467994088994036, -0.230788372646829, 0.245418819910254, 0.276815749779324, 0.833944516912081]
+      ],
+      "mu": [2.90088462849931, 0.905006796113391, 2.90615953331371, -0.00750216019748256, 6.30124169348899]
+    },
+    {
+      "label": "Group 2",
+      "proportion": 0.458227848101266,
+      "ov": ["achieve", "delinq", "ses", "effort", "viq"],
+      "sigma": [
+        [1.14454434023022, -0.301751193625274, 0.215047015541292, 0.284153891489759, 0.67115771331826],
+        [-0.301751193625274, 0.917315444677875, -0.137674257396082, -0.199848064549258, -0.335085725912289],
+        [0.215047015541292, -0.137674257396082, 1.09314526552554, 0.258127355525596, 0.423122644076509],
+        [0.284153891489759, -0.199848064549258, 0.258127355525596, 0.975237385734561, 0.432056739322929],
+        [0.67115771331826, -0.335085725912289, 0.423122644076509, 0.432056739322929, 1.1963307921592]
+      ],
+      "mu": [3.2824789970383, 0.794571704472559, 3.14985517975777, 0.0375107257270286, 7.00152920035985]
+    }
+  ],
+  "source_fit": {
+    "h1": {
+      "chisq": 6.40902578771113,
+      "df": 7,
+      "cfi": 1,
+      "rmsea": 0
+    },
+    "population_model": {
+      "chisq": 12.0374495192774,
+      "df": 8,
+      "cfi": 0.985522940609375,
+      "rmsea": 0.0505504480396661
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# Raw runs stay local. Frozen summaries under frozen/ support the report.
+*
+!.gitignore
+!frozen/
+frozen/*
+!frozen/*.csv
