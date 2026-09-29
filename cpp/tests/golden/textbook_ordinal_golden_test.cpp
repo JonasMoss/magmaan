@@ -61,29 +61,16 @@ struct KnownGap {
   std::string reason;
 };
 const std::vector<KnownGap> kKnownGaps = {
-    {"mplus_users_guide_v8_ch6_ex6_4",
-     "delta scale factors forced to 1 and latent means not in the threshold "
-     "structure (categorical growth)"},
-    {"mplus_users_guide_v8_ch6_ex6_5",
-     "theta residual variances forced to 1 (free at later occasions)"},
-    {"mplus_users_guide_v8_ch6_ex6_15",
-     "delta scale factors forced to 1 and latent means not in the threshold "
-     "structure (multiple-indicator categorical growth)"},
-    {"newsom_2015_ex3_3a",
-     "theta residual variances forced to 1 where the model fixes them at 0 "
-     "(an equivalent fit in a rescaled parameterization)"},
     {"newsom_2015_ex9_2",
-     "delta scale factors forced to 1 and latent means not in the threshold "
-     "structure (latent change model)"},
+     "delta-release translation hits the Heywood-prevention lower bound: "
+     "lavaan's free-delta optimum implies a negative residual variance for "
+     "several occasions in magmaan's free-theta translation (Sigma*_ii > 0 "
+     "throughout, but theta_ii < 0 in the additive decomposition), which "
+     "the default variance_bounds excludes (latent change model)"},
     {"newsom_2024_ex1_3c",
      "optimizer: from lavaan's starts L-BFGS stops on a flat ridge of this "
      "saturated theta model (fmin 5.8e-9); from lavaan's estimates magmaan "
-     "stays at lavaan's solution"},
-    {"newsom_2024_ex7_2a",
-     "latent means not in the threshold structure (categorical growth)"},
-    {"newsom_2024_ex9_2",
-     "latent means not in the threshold structure (latent change model; the "
-     "scale factors are fixed at 1, so this case isolates the mean gap)"}};
+     "stays at lavaan's solution"}};
 
 const KnownGap* known_gap(const std::string& id) {
   for (const auto& g : kKnownGaps)
@@ -155,6 +142,14 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     auto fail = [&](const std::string& why) { failures.push_back(id + ": " + why); };
 
     auto h = model_from_json(j);
+    // fit_ordinal_bounded runs its own (single) prepare_ordinal_partable
+    // internally, so it must always be handed the pristine, never-prepped
+    // structure -- handing it one this loop already prepped would prep it a
+    // second time and undo a translation that isn't idempotent (a `~~` row
+    // freed by translating an explicitly-freed `~*~` row looks, on a second
+    // pass, identical to a `~~` row that was never released, since the
+    // sibling `~*~` is fixed either way).
+    const spec::LatentStructure pristine = h.structure;
     auto& pt = h.structure;
     auto stats = ordinal_from_json(j);
     const auto param = j["parameterization"].get<std::string>() == "theta"
@@ -169,9 +164,12 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
       continue;
     }
     // Ordinal preparation reorders free parameters; carry lavaan's vectors
-    // across by partable row.
+    // across by partable row. Pass the fixture's own row provenance so an
+    // explicit `~~`/`~1` row (freed, or fixed at a non-default value) is
+    // honored rather than forced back to the single-group default.
     const auto old_free = pt.free;
-    auto prep = estimate::prepare_ordinal_partable(pt, stats, param);
+    auto prep = estimate::prepare_ordinal_partable(pt, stats, param, nullptr,
+                                                    &h.names.row_user);
     if (!prep.has_value()) {
       fail("prepare_ordinal_partable: " + prep.error().detail);
       continue;
@@ -179,17 +177,32 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     if (theta.size() != pt.n_free()) {
       if (known_gap(id))
         MESSAGE(id << ": known gap (" << known_gap(id)->reason
-                   << "): preparation changed the free-parameter count");
+                   << "): preparation changed the free-parameter count ("
+                   << pt.n_free() << " vs lavaan " << theta.size() << ")");
       else
         fail("preparation changed the free-parameter count");
       continue;
     }
     Eigen::VectorXd th2(pt.n_free()), st2(pt.n_free());
+    std::vector<char> reparam_row(static_cast<std::size_t>(pt.n_free()), 0);
     for (std::size_t r = 0; r < pt.size(); ++r) {
-      if (pt.free[r] > 0) {
+      if (pt.free[r] <= 0) continue;
+      if (old_free[r] > 0) {
         th2(pt.free[r] - 1) = theta(old_free[r] - 1);
         st2(pt.free[r] - 1) = start(old_free[r] - 1);
+        continue;
       }
+      // Reparameterized: this row was fixed in lavaan's own partable (the
+      // free dimension lived on a sibling row -- a `~*~` scale prep now
+      // fixes -- instead). There is no lavaan theta entry to carry over;
+      // use the fixture's own reported value as a start and exclude the row
+      // from the raw-theta match below (fmin/chisq/implied correlations are
+      // the right check for a genuine reparameterization).
+      const auto& ustart = j["partable"][r]["ustart"];
+      const double u = ustart.is_null() ? 1.0 : ustart.get<double>();
+      th2(pt.free[r] - 1) = u;
+      st2(pt.free[r] - 1) = u;
+      reparam_row[static_cast<std::size_t>(pt.free[r] - 1)] = 1;
     }
     theta = std::move(th2);
     start = std::move(st2);
@@ -201,8 +214,8 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     }
     optim::OptimOptions opts{.max_iter = 7000, .ftol = 1e-13, .gtol = 1e-8};
     auto fit = estimate::fit_ordinal_bounded(
-        pt, *rep, stats, {}, estimate::OrdinalWeightKind::DWLS, start,
-        estimate::Backend::NloptLbfgs, opts, param);
+        pristine, *rep, stats, {}, estimate::OrdinalWeightKind::DWLS, start,
+        estimate::Backend::NloptLbfgs, opts, param, &h.names.row_user);
     if (!fit.has_value()) {
       fail("fit_ordinal_bounded: " + fit.error().detail);
       continue;
@@ -215,9 +228,14 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     for (auto n : stats.n_obs) n_total += static_cast<double>(n);
     const double lav_fmin = j["fit"]["fmin"].get<double>();
     const double lav_chisq = j["fit"]["chisq"].get<double>();
-    const double d_theta = (fit->theta - theta).cwiseAbs().maxCoeff();
-    const double d_abs_theta =
-        (fit->theta.cwiseAbs() - theta.cwiseAbs()).cwiseAbs().maxCoeff();
+    double d_theta = 0.0, d_abs_theta = 0.0;
+    for (Eigen::Index k = 0; k < fit->theta.size(); ++k) {
+      if (reparam_row[static_cast<std::size_t>(k)]) continue;
+      d_theta = std::max(d_theta, std::abs(fit->theta(k) - theta(k)));
+      d_abs_theta = std::max(
+          d_abs_theta,
+          std::abs(std::abs(fit->theta(k)) - std::abs(theta(k))));
+    }
     const bool reflected = d_theta > 1e-3 && d_abs_theta <= 1e-3;
     if (d_theta > 1e-3 && !reflected) {
       why << " max|dtheta|=" << d_theta << " [";
@@ -225,6 +243,7 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
       for (std::size_t r = 0; r < pt.size() && r < rows.size(); ++r) {
         if (pt.free[r] <= 0) continue;
         const auto k = static_cast<Eigen::Index>(pt.free[r] - 1);
+        if (reparam_row[static_cast<std::size_t>(k)]) continue;
         if (std::abs(fit->theta(k) - theta(k)) > 1e-3)
           why << " " << rows[r]["lhs"].get<std::string>() << rows[r]["op"].get<std::string>()
               << rows[r]["rhs"].get<std::string>() << "@g" << rows[r]["group"].get<int>()
@@ -247,16 +266,46 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     REQUIRE(evaluator.has_value());
     auto implied = evaluator->sigma(fit->theta);
     REQUIRE(implied.has_value());
+    // Per-block, per-indicator "released" mask: a `~~` row prep left free
+    // (the delta-release translation above, or every indicator under theta)
+    // is compared standardized by its own implied variance -- see the
+    // block_released/theta_param branches of ordinal_residuals -- a row
+    // fixed at 1 (the ordinal default) is compared via raw off-diagonal
+    // entries, with the diagonal itself not meaningful under delta (nothing
+    // in the objective touches it) and excluded from the comparison.
+    std::vector<std::vector<char>> released(j["implied"].size());
+    for (auto& row : released) row.assign(static_cast<std::size_t>(p), 0);
+    if (param == estimate::OrdinalParameterization::Theta) {
+      for (auto& row : released) std::fill(row.begin(), row.end(), 1);
+    } else {
+      for (std::size_t r = 0; r < pt.size(); ++r) {
+        if (pt.op[r] != parse::Op::Covariance || pt.free[r] <= 0 ||
+            pt.group[r] <= 0 || pt.lhs_var[r] < 0 ||
+            pt.rhs_var[r] != pt.lhs_var[r]) {
+          continue;
+        }
+        const std::size_t bb = static_cast<std::size_t>(pt.group[r] - 1);
+        if (bb >= released.size()) continue;
+        const std::int32_t ov =
+            pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[r])];
+        if (ov >= 0 && static_cast<std::size_t>(ov) < released[bb].size())
+          released[bb][static_cast<std::size_t>(ov)] = 1;
+      }
+    }
     double d_cor = 0.0;
     for (std::size_t b = 0; b < j["implied"].size(); ++b) {
       Eigen::MatrixXd expected = matrix_from_json(j["implied"][b]["cov"]);
       Eigen::MatrixXd got = implied->sigma[b];
-      // Compare latent-response correlations: delta fixes the diagonal at one,
-      // theta implies it from the residual variances.
-      Eigen::VectorXd sg = got.diagonal().cwiseSqrt().cwiseInverse();
       Eigen::VectorXd se = expected.diagonal().cwiseSqrt().cwiseInverse();
-      if (param == estimate::OrdinalParameterization::Delta) got.diagonal().setOnes();
-      else got = sg.asDiagonal() * got * sg.asDiagonal();
+      Eigen::VectorXd sg = Eigen::VectorXd::Ones(got.rows());
+      for (Eigen::Index k = 0;
+           k < got.rows() && static_cast<std::size_t>(k) < released[b].size();
+           ++k) {
+        if (released[b][static_cast<std::size_t>(k)])
+          sg(k) = 1.0 / std::sqrt(got(k, k));
+      }
+      got = sg.asDiagonal() * got * sg.asDiagonal();
+      got.diagonal().setOnes();
       expected = se.asDiagonal() * expected * se.asDiagonal();
       d_cor = std::max(d_cor, (got - expected).cwiseAbs().maxCoeff());
     }
@@ -281,8 +330,8 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     // agrees and only the path from lavaan's starts differs.
     if (!why.str().empty()) {
       auto refit = estimate::fit_ordinal_bounded(
-          pt, *rep, stats, {}, estimate::OrdinalWeightKind::DWLS, theta,
-          estimate::Backend::NloptLbfgs, opts, param);
+          pristine, *rep, stats, {}, estimate::OrdinalWeightKind::DWLS, theta,
+          estimate::Backend::NloptLbfgs, opts, param, &h.names.row_user);
       if (refit.has_value())
         why << " | from lavaan's theta: fmin " << refit->fmin << ", max|dtheta| "
             << (refit->theta - theta).cwiseAbs().maxCoeff();
@@ -312,11 +361,20 @@ TEST_CASE("Textbook categorical models: the analytic DWLS Hessian matches gradie
   namespace nf = estimate::frontier;
   for (const auto& id : kCases) {
     CAPTURE(id);
+    // A known gap isn't held to reproducing lavaan's exact optimum (that's
+    // the whole reason it's a gap), so evaluating the analytic Hessian AT
+    // lavaan's reported theta isn't meaningful for one -- skip, exactly as
+    // the parity test above doesn't require these to match.
+    if (known_gap(id)) continue;
     auto raw = test::read_fixture(test::fixtures_dir() + "/textbook_ordinal/" + id + ".json");
     REQUIRE(raw.has_value());
     auto j = nlohmann::json::parse(*raw, nullptr, false);
     REQUIRE_FALSE(j.is_discarded());
     auto h = model_from_json(j);
+    // ordinal_ls_objective, like fit_ordinal_bounded, runs its own (single)
+    // prepare_ordinal_delta_partable internally, so it needs a never-prepped
+    // copy -- see the comment on the parity test case above.
+    const spec::LatentStructure pristine = h.structure;
     auto& pt = h.structure;
     auto stats = ordinal_from_json(j);
     const auto param = j["parameterization"].get<std::string>() == "theta"
@@ -325,11 +383,20 @@ TEST_CASE("Textbook categorical models: the analytic DWLS Hessian matches gradie
     Eigen::VectorXd theta = vector_from_json(j["theta"]);
     if (theta.size() != pt.n_free()) continue;
     const auto old_free = pt.free;
-    if (!estimate::prepare_ordinal_partable(pt, stats, param).has_value() ||
+    if (!estimate::prepare_ordinal_partable(pt, stats, param, nullptr,
+                                            &h.names.row_user)
+             .has_value() ||
         theta.size() != pt.n_free()) continue;
     Eigen::VectorXd x(pt.n_free());
-    for (std::size_t r = 0; r < pt.size(); ++r)
-      if (pt.free[r] > 0) x(pt.free[r] - 1) = theta(old_free[r] - 1);
+    for (std::size_t r = 0; r < pt.size(); ++r) {
+      if (pt.free[r] <= 0) continue;
+      if (old_free[r] > 0) {
+        x(pt.free[r] - 1) = theta(old_free[r] - 1);
+        continue;
+      }
+      const auto& ustart = j["partable"][r]["ustart"];
+      x(pt.free[r] - 1) = ustart.is_null() ? 1.0 : ustart.get<double>();
+    }
     auto rep = model::build_matrix_rep(pt);
     REQUIRE(rep.has_value());
     auto parts = nf::ordinal_ls_newton_parts_prepared(
@@ -339,8 +406,9 @@ TEST_CASE("Textbook categorical models: the analytic DWLS Hessian matches gradie
     REQUIRE(parts.has_value());
     estimate::Estimates at;
     at.theta = x;
-    auto original = nf::ordinal_ls_objective(pt, *rep, stats, at,
-                                             estimate::OrdinalWeightKind::DWLS, param);
+    auto original = nf::ordinal_ls_objective(pristine, *rep, stats, at,
+                                             estimate::OrdinalWeightKind::DWLS,
+                                             param, &h.names.row_user);
     REQUIRE(original.has_value());
     double n = 0.0;
     for (auto nb : stats.n_obs) n += static_cast<double>(nb);

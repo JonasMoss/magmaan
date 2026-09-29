@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -209,38 +210,54 @@ struct OrdinalMisspecFitMeasures {
   std::vector<std::string> warnings;
 };
 
+// `row_user` is the lavaanified model's per-row provenance (spec::LatentNames
+// ::row_user: 0 = auto-added by lavaanify, 1/2 = the user's own model syntax
+// resolved this row). When given, an ordinal indicator's residual-variance
+// (`~~`) or intercept (`~1`) row that the user *explicitly* wrote (free, or
+// fixed at a value other than the ordinal default) is left as spec::build
+// resolved it instead of being forced back to the single-group delta default
+// (residual variance 1, intercept 0); rows lavaanify auto-added still get the
+// default. Null (the default) preserves the unconditional-forcing behavior,
+// which is correct for partables synthesized in C++ (nested-test H0/H1 pairs,
+// PSD probes) rather than parsed from a user's model syntax.
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
-                                spec::Starts* starts = nullptr);
+                                spec::Starts* starts = nullptr,
+                                const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalMoments& moments,
-                                spec::Starts* starts = nullptr);
+                                spec::Starts* starts = nullptr,
+                                const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<void>
 prepare_ordinal_partable(spec::LatentStructure& pt,
                          const data::OrdinalStats& stats,
                          OrdinalParameterization parameterization,
-                         spec::Starts* starts = nullptr);
+                         spec::Starts* starts = nullptr,
+                         const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<void>
 prepare_ordinal_partable(spec::LatentStructure& pt,
                          const data::OrdinalMoments& moments,
                          OrdinalParameterization parameterization,
-                         spec::Starts* starts = nullptr);
+                         spec::Starts* starts = nullptr,
+                         const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<void>
 prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalStats& stats,
-                                      spec::Starts* starts = nullptr);
+                                      spec::Starts* starts = nullptr,
+                                      const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<void>
 prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
                                 const data::MixedOrdinalStats& stats,
                                 OrdinalParameterization parameterization,
-                                spec::Starts* starts = nullptr);
+                                spec::Starts* starts = nullptr,
+                                const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
@@ -487,7 +504,8 @@ ordinal_ls_objective(spec::LatentStructure pt,
                      const Estimates& at,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization =
-                         OrdinalParameterization::Delta);
+                         OrdinalParameterization::Delta,
+                     const std::vector<std::int8_t>* row_user = nullptr);
 
 // All-ordinal ULS/DWLS/WLS over covariance-honest primitive SEM blocks. The
 // estimated thresholds, polychoric matrix, and NACOV weights are consumed
@@ -912,7 +930,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     Backend backend = Backend::NloptLbfgs,
                     optim::OptimOptions opts = {},
                     OrdinalParameterization parameterization =
-                        OrdinalParameterization::Delta);
+                        OrdinalParameterization::Delta,
+                    const std::vector<std::int8_t>* row_user = nullptr);
 
 // Cache-aware all-ordinal LS over moment metadata plus an explicit Gamma cache.
 // `FitOnly` keeps ULS/DWLS cheap: ULS uses identity weights and DWLS asks only
@@ -972,7 +991,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           Backend backend = Backend::NloptLbfgs,
                           optim::OptimOptions opts = {},
                           OrdinalParameterization parameterization =
-                              OrdinalParameterization::Delta);
+                              OrdinalParameterization::Delta,
+                          const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,

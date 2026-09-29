@@ -239,12 +239,16 @@ Result<void> require_complete_ml(const Fit &fit, std::string_view call) {
 Result<spec::LatentStructure> prepared_structure(const Fit &fit) {
   spec::LatentStructure pt = fit.model().structure();
   const auto param = fit.estimator_spec().ordinal_parameterization;
+  const auto &row_user = fit.model().names().row_user;
   if (const auto *stats = fit.data().ordinal()) {
-    if (auto p = estimate::prepare_ordinal_partable(pt, *stats, param); !p) {
+    if (auto p = estimate::prepare_ordinal_partable(pt, *stats, param,
+                                                     nullptr, &row_user);
+        !p) {
       return std::unexpected(make_error(ErrorStage::Fit, p.error()));
     }
   } else if (const auto *mstats = fit.data().mixed_ordinal()) {
-    if (auto p = estimate::prepare_mixed_ordinal_partable(pt, *mstats, param);
+    if (auto p = estimate::prepare_mixed_ordinal_partable(
+            pt, *mstats, param, nullptr, &row_user);
         !p) {
       return std::unexpected(make_error(ErrorStage::Fit, p.error()));
     }
@@ -810,7 +814,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     auto est = estimate::fit_ordinal_bounded(
         pt, rep, *stats, *bounds, estimator.ordinal_weight, *x0,
         backend_from(estimator.optimizer_spec), estimator.optimizer_spec.options,
-        estimator.ordinal_parameterization);
+        estimator.ordinal_parameterization, &model->names().row_user);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
     }
@@ -841,7 +845,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     auto est = estimate::fit_mixed_ordinal_bounded(
         pt, rep, *stats, *bounds, estimator.ordinal_weight, *x0,
         backend_from(estimator.optimizer_spec), estimator.optimizer_spec.options,
-        estimator.ordinal_parameterization);
+        estimator.ordinal_parameterization, &model->names().row_user);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
     }
