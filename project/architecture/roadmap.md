@@ -1572,7 +1572,8 @@ an unconstrained gradient test to constrained solutions.
   `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,constrained,
   scalar}_impl`.
   Theory in the guttman-inference paper's constrained-CFA note
-  (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated on the
+  (`constrained_noniterative_cfa`, removed from the paper's notes on 2026-09-29
+  when invariance left its scope; recoverable from that repo's history); validated on the
   legacy map by the retired research/26 study, 300 reps, findings in the
   guttman-inference paper's notes (metric Wald tracks the ML LRT on
   normal data with matched power; on non-normal data the NT-Gamma metric Wald

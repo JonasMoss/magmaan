@@ -1081,34 +1081,79 @@ there is no scheduled expansion of this surface.
 The corpus holds 34 categorical (WLSMV) cases, each verified against its
 book's output or the author's lavaan call. `textbook_ordinal_golden_test.cpp`
 fits the 21 all-ordinal, covariate-free ones from lavaan's partable
-(`cpp/tests/fixtures/textbook_ordinal/`) and matches lavaan on 13. The other
-eight sit in `kKnownGaps`, each refit from lavaan's θ to tell optimizer trouble
-from model semantics. Seven are the semantics below; the eighth is a flat
-ridge where the optimizer stops early (Newsom 2024 ex1.3c, under
+(`cpp/tests/fixtures/textbook_ordinal/`) and matches lavaan on 19. The other
+two sit in `kKnownGaps`: one is the residual mean-structure/delta-scale gap
+below, the other a flat ridge where the optimizer stops early (Newsom 2024
+ex1.3c, under
 [Optimizer failures on the textbook corpus](#optimizer-failures-on-the-textbook-corpus)).
 The evidence, with sources and run provenance, is logged in
 [the translation audit](../validation/textbook-translation-audit.md#categorical-fits-against-lavaan-2026-09-25).
 
-- **High — ordinal partable semantics.** Seven of the eight known gaps come
-  from how `prepare_ordinal_partable` treats an imported lavaan partable:
-  1. **Theta.** Ordinal residual variances are forced to 1. Mplus ex6.5 frees
-     them at later occasions (so the free count changes), and Newsom ex3.3a
-     fixes them at 0 (an equivalent fit, rescaled by √2).
-  2. **Delta.** Free scale factors (`~*~`) are forced to 1.
-  3. **Mean structure.** Latent means and intercepts do not enter the implied
-     thresholds (τ − ν − Λα). This breaks categorical growth (Mplus ex6.4,
-     ex6.15, Newsom 2024 ex7.2a) and Newsom's ex9.2 latent change models
-     (both editions). At lavaan's estimates, magmaan's objective is far from
-     lavaan's.
+- **Done 2026-09-29 — ordinal partable semantics.** `prepare_ordinal_partable`
+  unconditionally forced every ordinal indicator's residual-variance (`~~`)
+  and intercept (`~1`) row to the single-group delta default (1 and 0), and
+  never subtracted the mean structure (τ − ν − Λα, Λα ≡ μ since ν is always 0
+  for an ordinal indicator) from the implied thresholds outside the
+  Wu-Estabrook multigroup path. Three fixes, all in `cpp/src/estimate/
+  ordinal.cpp`:
+  1. **Mean structure.** `ordinal_residuals`/`ordinal_block_residual`/
+     `ordinal_moment_jacobian_block`'s plain (single-group delta) branch now
+     subtracts μ like the theta/released branches already did, and
+     `ordinal_curvature_weights`'s `subtract_mu` gate (the analytic-Hessian
+     second-order term) was generalized the same way — `add_lisrel_second_order`
+     already consumed the bilinear Λα curvature generically, it just needed
+     the weight populated. Fixes Mplus ex6.4/ex6.15 (partially — see #3) and
+     Newsom ex7.2a/ex9.2 (both editions) outright.
+  2. **Theta explicit free/fixed.** `prepare_ordinal_*_partable` now checks
+     `spec::LatentNames::row_user` (threaded through as a new optional
+     `row_user` parameter on `prepare_ordinal_partable`/
+     `prepare_mixed_ordinal_partable`/`fit_ordinal_bounded`/
+     `fit_mixed_ordinal_bounded`/`ordinal_ls_objective`, wired from
+     `Model::names().row_user` in `api/sem.cpp`) and leaves a `~~` row the
+     user's own model syntax explicitly resolved — free, or fixed at a
+     non-default value — alone instead of overwriting it. Fixes Mplus ex6.5
+     (residual variance freed at later occasions) and Newsom ex3.3a (fixed
+     at 0, an equivalent rescaled fit) outright. `row_user` defaults to
+     `nullptr` (old unconditional-forcing behavior) everywhere except the
+     handful of call sites that now pass it, so partables synthesized in C++
+     (nested-test H0/H1 pairs, PSD probes) are unaffected.
+  3. **Delta scale.** magmaan never reads a `~*~` (response scale) *value* —
+     δ is always derived analytically as `1/√Σ*ᵢᵢ` (see the Wu-Estabrook
+     `block_released` branch) — so an explicitly-freed `~*~` row is
+     translated into leaving the *sibling* `~~` row free instead: the same
+     reparameterization (same fmin/χ²/df, different raw coordinates) that
+     branch already implements, generalized from the multigroup-only release
+     to any group. Since the translated `~~` row arrives *fixed* from
+     lavaan's own imported partable (lavaan puts the free dimension on
+     `~*~`), it needs an active new free-index assignment, not just an
+     exemption from forcing — done in a pre-pass before `remove_free` is
+     sized, mirroring the existing `intercepts_equal` pre-pass. Fixes Mplus
+     ex6.4/ex6.15 fully (fmin/χ²/implied-Σ match lavaan to numerical
+     precision) and clears the free-parameter-count mismatch on Newsom
+     ex9.2, but that one case hits a narrower **remaining gap**: lavaan's
+     free-delta optimum implies a *negative* residual variance for several
+     occasions (Σ*ᵢᵢ > 0 throughout, but θᵢᵢ < 0 in magmaan's additive
+     decomposition — a Heywood-looking point that's perfectly legitimate
+     under free-delta, since only Σ*ᵢᵢ > 0 is truly required), which
+     `fit_ordinal_bounded`'s default `variance_bounds` (θ ≥ 0, the deliberate
+     Heywood-prevention default for ordinal fits) excludes. Left as
+     `kKnownGaps` rather than relaxing that default for one fixture; a
+     targeted per-row bound relaxation for delta-translated rows would clear
+     it if a concrete need arises.
 
-  lavaan honors all three, and Mplus defaults to them for longitudinal and
-  multi-group categorical models. The R path has the same gaps:
-  `fit_model(..., estimator = "DWLS", ordered = ...)` on those five growth and
-  latent change models ends at exactly the golden's objectives (0.192 on
-  ex6.4, 0.862 on ex6.15, 1.426 on both ex9.2, 1.447 on ex7.2a, against at most
-  0.055 for lavaan), which the Newton check rejects as saddles of magmaan's
-  objective (engineering/19). They are fits of a different model, not
-  optimizer failures; fixing the semantics should clear both paths.
+  All three landed together (the mean-structure and delta-scale fixes
+  interact: ex6.4/ex6.15 needed both). Regression evidence: full `ordinal`/
+  `estimate`/`inference`/`spec`/`api`/`parity`/`sphere_route_parity` ctest
+  labels green (2600+ cases), plus the textbook-ordinal analytic-Hessian-vs-
+  finite-difference golden test, which exercises the new Jacobian/curvature
+  terms directly. Vendored into `r-package/src/` via `just vendor`; the R
+  surface inherits the fix through the shared C++ core (no parallel R logic
+  per the two-package design) and was smoke-checked via `just r-dev` +
+  the existing R test/example suites, not re-verified against a hand-built
+  Mplus-syntax growth model in R.
+  **Remaining, separate from this fix (unrelated bugs, own backlog items
+  below):** covariates in categorical models, `ordered` with `group:` blocks,
+  and mixed ordinal/continuous fits stopping above lavaan's objective.
 - **High — covariates in categorical models.** Eight corpus cases regress
   ordinal outcomes on observed covariates, which lavaan handles with
   `conditional.x`: Mplus ex3.4, 3.12, 3.13, 3.14, 5.16, 5.17, Muthén ex8.29_2
@@ -5639,6 +5684,15 @@ work until a concrete downstream consumer appears.
   paper, and the others' findings are recorded in that paper's notes. The rerun
   (Modal, ~$6 at 2000 reps, with a multiple-vs-own-composite arm) is the
   paper's next step and no longer tracked here.
+  Remaining C++ work (do not build while another agent holds the build tree):
+  (1) `fit_noniterative_cfa` / `noniterative_cfa_theta` (configural entry)
+  still hard-code the `triad_wls` communality; thread a `CommunalityMethod`
+  through them and the configural Jacobian so the paper's estimator
+  (`extended_triad_ls`) no longer needs the restricted entry as a proxy.
+  (2) Optional, if the paper ships it: a tau-equivalent communality rule
+  `h_i = cbar` (mean off-diagonal covariance) for the restricted map, under
+  which the tau-equivalent fit with unit composites returns coefficient alpha
+  exactly.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
   1952, delta-method via the map Jacobian; derivations in
@@ -5874,9 +5928,9 @@ work until a concrete downstream consumer appears.
   covariance \(LP^+L'\) and an explicit boundary warning for the
   marker-scaled parameter representative; separate, named regularized fallback
   (ridge / PSD repair) for indefinite or incompatible systems, because that is
-  no longer the pure Guttman map. Record the derivation in the
-  guttman-inference paper's estimator-criterion note
-  (`papers/guttman-inference/dev/notes/`) before implementation.
+  no longer the pure Guttman map. Record the derivation before implementation
+  (the paper's estimator-criterion note was retired on 2026-09-29, when the
+  paper's least-squares definition superseded it).
 
   **Measurement invariance landed** (2026-07): multi-group blocks with a
   block-diagonal `Omega` for configural maps and a full stacked restricted
@@ -5897,8 +5951,8 @@ work until a concrete downstream consumer appears.
   `fit_noniterative_cfa_{metric,restricted}` and
   `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,
   constrained,scalar}_impl`;
-  note `constrained_noniterative_cfa` (guttman-inference paper,
-  `papers/guttman-inference/dev/notes/`); validated on the legacy map by the
+  note `constrained_noniterative_cfa` (guttman-inference paper; removed from its
+  notes on 2026-09-29, recoverable from that repo's history); validated on the legacy map by the
   retired research/26 study (findings in the paper's notes; metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).

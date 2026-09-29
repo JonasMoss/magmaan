@@ -334,10 +334,12 @@ closed-form estimators it is part of the estimator's *definition*:
   guttman-inference paper's notes) showed the marker chart is
   irrelevant to the closed-form fit, moving the implied covariance by 8.9e-16
   configural and 1.3e-15 metric-constrained while coordinates move by 1.32 and 0.90.
-- But `guttman_estimator_criterion.tex` records that *"marker-style scalings that
-  depend on the loading matrix can make the same constraint linear in one chart and
-  nonlinear in another"*, which decides whether the restricted fit stays closed-form
-  at all. Different `V_Y` also define different off-model targets.
+- But marker-style scalings that depend on the loading matrix can make the same
+  constraint linear in one chart and nonlinear in another, which decides whether
+  the restricted fit stays closed-form at all. Since 2026-09-29 the aligned map
+  imposes within-factor restrictions on the unit-composite coefficients, where
+  every such restriction is linear; only cross-factor and cross-group rows remain
+  chart-dependent. Different `V_Y` also define different off-model targets.
 - Under `std.lv` ordinal delta the SNLLS arm is structurally N/A, because the
   conditionally-linear block empties out once the latent variance is fixed.
 
