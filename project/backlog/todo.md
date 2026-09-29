@@ -5623,6 +5623,19 @@ work until a concrete downstream consumer appears.
 - **Small-sample DF coverage (Kauermann-Carroll Wald sibling)** — `experiments/44`;
   variance-of-variance `t`-on-effective-df correction for covariance functionals. See
   speculative.md.
+- **Guttman own-composite regression: rerun the aligned-map studies** (2026-09-29).
+  The aligned map now reads loadings from the own-composite regression
+  `K_if = (HB)_if / Q_ff` instead of truncating the multiple regression
+  `HB Q^-1`, reports `psi = diag(S) - diag(H)` everywhere, and imposes
+  within-factor loading restrictions (including fixed non-marker loadings and
+  tau-equivalence) as an exact projection before the marker rescaling. A toy
+  3x4 check had the new map ahead in 90-99% of replications at factor
+  correlation .6-.8 with a far lighter error tail, so the high-correlation
+  failure regime reported by `experiments/research/29-guttman-rmse-coverage`
+  may largely be an artifact of `Q^-1`. Numbers for the aligned map in
+  research/24, 26, 27, 28, 29, 30 and engineering/10 predate the change. Next:
+  rerun research/29 (Modal, ~$6 at 2000 reps) with a multiple-vs-own-composite
+  arm, then refresh the others as the guttman-inference paper needs them.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
   1952, delta-method via the map Jacobian; derivations in

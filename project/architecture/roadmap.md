@@ -1394,7 +1394,11 @@ an unconstrained gradient test to constrained solutions.
   `guttman_aligned`; `unit` uses incidence weights,
   `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
   in every map evaluation, and `adaptive` uses the existing H-aligned
-  data-dependent weights as an explicit retired compatibility path.
+  data-dependent weights as an explicit retired compatibility path. Aligned
+  maps read loadings from the own-composite regression
+  `K_if = (HB)_if / Q_ff` (the least-squares simple-structure fit; 2026-09-29),
+  not the multiple regression `HB Q^-1` that `guttman_lavaan` keeps, and report
+  residual variances as the communality split `diag(S) - diag(H)`.
   `estimator_map_jacobian` is its `J = dtheta/dvech(S)`: configural Guttman
   maps use an analytic regular-interior derivative (including the
   correlation-standardization, triad-GMM communality, fixed-rank
@@ -1544,8 +1548,13 @@ an unconstrained gradient test to constrained solutions.
   estimator-side restricted map `fit_noniterative_cfa_restricted` imposes
   separable loading/residual linear constraints inside the Guttman
   reconstruction: residual rows enter the selected LS-form communality/H step
-  (default `triad_wls`) and loading rows enter the Sigma-only composite
-  projection; unsupported mixed/factor/mean rows error. Grouped restricted
+  (default `triad_wls`). Loading rows confined to one factor, and fixed
+  non-marker loadings, are homogeneous linear restrictions on that factor's
+  own-composite coefficients and are imposed exactly by a partable-only
+  Euclidean projector before the marker rescaling (tau-equivalence averages,
+  independent of the marker); rows spanning factors or groups fall back to a
+  second-stage marker-chart projection over all loading rows. Unsupported
+  mixed/factor/mean rows error. Grouped restricted
   inference uses the restricted map's full stacked analytic-first Jacobian
   with the same communality and composite choices, so cross-block constraints
   propagate into `Omega`, GOF, and pseudo-LRTs. General linear equality testing
