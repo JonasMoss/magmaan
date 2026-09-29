@@ -44,8 +44,12 @@ calibrate_group <- function(group, dgp, pattern = "alternate") {
                                               root = "cholesky", generator_family = "pearson")),
     disc = {
       marg <- disc_marginals(p, pattern)
-      list(state = core()$sim_ordcorr_calibrate(R, marg, metric = "pearson_codes"),
-           code = t(vapply(marg, code_moments, numeric(2))))
+      state <- core()$sim_ordcorr_calibrate(R, marg, metric = "pearson_codes")
+      # The calibrator clips an unreachable pair instead of failing, so an
+      # inexact population would otherwise run silently with the wrong moments.
+      if (state$max_abs_error > 1e-6)
+        stop(sprintf("discretized calibration misses the target correlations by %.2g", state$max_abs_error))
+      list(state = state, code = t(vapply(marg, code_moments, numeric(2))))
     })
   cal$sds <- sds
   cal$mu <- group$mu

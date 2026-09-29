@@ -343,6 +343,14 @@ Open work only; landed generator slices are inventoried in the roadmap.
   `sim_ordcorr_mg_summary_calibrate()` accept observed kinds, thresholds, and a
   latent summary `R` directly; repair diagnostics report latent-matrix repair
   deltas instead of pairwise-inversion residuals.
+- **S.** `sim_ordcorr_calibrate()` succeeds on unreachable targets. A pair
+  above its Fréchet ceiling (for example .936 between a symmetric and a skewed
+  5-point item, ceiling .900) is clipped at `rho_bound` and only
+  `max_abs_error` (.038 there) reports the miss. If the clipped latent matrix
+  stays PD, draws run silently with the wrong covariance. Decide between an
+  error by default above a tolerance and an explicit
+  `on_unreachable = "clip"` opt-in. research/52 now checks
+  `max_abs_error` itself.
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
 - **S/M.** Remaining PLSIM work: lower-level pair-cache / performance tuning and
