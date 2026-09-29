@@ -722,6 +722,74 @@ Eigen::MatrixXd incidence_matrix(const CfaBlockLayout& L) {
   return Z;
 }
 
+// How loadings are read off the composites F = B'Y_H (Cov(Y_H, F) = HB,
+// Cov(F) = Q). Multiple: regress each item on every composite, K = HB Q⁻¹, and
+// keep the pattern cells (the lavaan-like legacy map). OwnComposite: regress
+// each item on its own factor's composite only, K_if = (HB)_if / Q_ff, the
+// minimizer of E‖Y_H − KF‖² over simple-structure K. Both are exact on the
+// model; OwnComposite avoids Q⁻¹, which is ill-conditioned when factors
+// correlate strongly.
+enum class LoadingRegression : std::uint8_t { Multiple, OwnComposite };
+
+LoadingRegression loading_regression_for(NonIterativeEstimator which) {
+  return which == NonIterativeEstimator::GuttmanLavaan
+             ? LoadingRegression::Multiple
+             : LoadingRegression::OwnComposite;
+}
+
+struct LoadingRegressionState {
+  LoadingRegression kind = LoadingRegression::OwnComposite;
+  Eigen::MatrixXd Z;     // nvar × nfac incidence (OwnComposite)
+  Eigen::MatrixXd Qinv;  // nfac × nfac (Multiple)
+};
+
+fit_expected<LoadingRegressionState>
+make_loading_regression(const CfaBlockLayout& L, const Eigen::MatrixXd& Q,
+                        LoadingRegression kind, const char* label) {
+  LoadingRegressionState s;
+  s.kind = kind;
+  if (kind == LoadingRegression::Multiple) {
+    auto Qinv = invert_full_rank(Q, label);
+    if (!Qinv.has_value()) return std::unexpected(Qinv.error());
+    s.Qinv = std::move(*Qinv);
+    return s;
+  }
+  for (Eigen::Index f = 0; f < Q.rows(); ++f) {
+    if (!std::isfinite(Q(f, f)) || Q(f, f) <= 0.0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          std::string(label) + ": non-positive composite variance"});
+  }
+  s.Z = incidence_matrix(L);
+  return s;
+}
+
+Eigen::MatrixXd loading_coefficients(const LoadingRegressionState& s,
+                                     const Eigen::MatrixXd& HB,
+                                     const Eigen::MatrixXd& Q) {
+  if (s.kind == LoadingRegression::Multiple) return HB * s.Qinv;
+  Eigen::MatrixXd K = Eigen::MatrixXd::Zero(HB.rows(), HB.cols());
+  for (Eigen::Index i = 0; i < HB.rows(); ++i)
+    for (Eigen::Index f = 0; f < HB.cols(); ++f)
+      if (s.Z(i, f) != 0.0) K(i, f) = HB(i, f) / Q(f, f);
+  return K;
+}
+
+Eigen::MatrixXd loading_coefficients_direction(const LoadingRegressionState& s,
+                                               const Eigen::MatrixXd& HB,
+                                               const Eigen::MatrixXd& Q,
+                                               const Eigen::MatrixXd& K,
+                                               const Eigen::MatrixXd& dHB,
+                                               const Eigen::MatrixXd& dQ) {
+  if (s.kind == LoadingRegression::Multiple)
+    return dHB * s.Qinv - K * dQ * s.Qinv;
+  Eigen::MatrixXd dK = Eigen::MatrixXd::Zero(HB.rows(), HB.cols());
+  for (Eigen::Index i = 0; i < HB.rows(); ++i)
+    for (Eigen::Index f = 0; f < HB.cols(); ++f)
+      if (s.Z(i, f) != 0.0)
+        dK(i, f) = dHB(i, f) / Q(f, f) - HB(i, f) * dQ(f, f) / (Q(f, f) * Q(f, f));
+  return dK;
+}
+
 struct HMatrixResult {
   Eigen::MatrixXd H;
   Eigen::Index n_h2_clamped = 0;
@@ -1052,7 +1120,8 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                              const Eigen::MatrixXd& dH, const Eigen::MatrixXd& B,
                              const Eigen::MatrixXd& dB, const char* label,
                              const ResolvedScoreConditioning&
-                                 score_conditioning) {
+                                 score_conditioning,
+                             LoadingRegression regression) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac || dB.rows() != nvar ||
@@ -1065,8 +1134,8 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       condition_score_covariance(Qraw, score_conditioning, label);
   if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   const Eigen::MatrixXd& Q = conditioned->value;
-  auto Qinv = invert_full_rank(Q, label);
-  if (!Qinv.has_value()) return std::unexpected(Qinv.error());
+  auto reg = make_loading_regression(L, Q, regression, label);
+  if (!reg.has_value()) return std::unexpected(reg.error());
   const Eigen::MatrixXd dQraw =
       dB.transpose() * H * B + B.transpose() * dH * B +
       B.transpose() * H * dB;
@@ -1077,8 +1146,9 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 
   const Eigen::MatrixXd HB = H * B;
   const Eigen::MatrixXd dHB = dH * B + H * dB;
-  const Eigen::MatrixXd Kstar = HB * (*Qinv);
-  const Eigen::MatrixXd dKstar = dHB * (*Qinv) - Kstar * dQ * (*Qinv);
+  const Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
+  const Eigen::MatrixXd dKstar =
+      loading_coefficients_direction(*reg, HB, Q, Kstar, dHB, dQ);
 
   Eigen::MatrixXd Lambda = Kstar;
   Eigen::MatrixXd dLambda = dKstar;
@@ -1112,16 +1182,25 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
     }
   }
 
-  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
-  const Eigen::MatrixXd dimplied =
-      dLambda * Phi * Lambda.transpose() +
-      Lambda * dPhi * Lambda.transpose() +
-      Lambda * Phi * dLambda.transpose();
+  // Legacy: residual variances are the fitted leftover diag(S − ΛΦΛ').
+  // OwnComposite: they are the communality split diag(S) − diag(H).
   Eigen::VectorXd psi(nvar);
   Eigen::VectorXd dpsi(nvar);
-  for (Eigen::Index i = 0; i < nvar; ++i) {
-    psi(i) = S(i, i) - implied(i, i);
-    dpsi(i) = dS(i, i) - dimplied(i, i);
+  if (regression == LoadingRegression::Multiple) {
+    const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+    const Eigen::MatrixXd dimplied =
+        dLambda * Phi * Lambda.transpose() +
+        Lambda * dPhi * Lambda.transpose() +
+        Lambda * Phi * dLambda.transpose();
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      psi(i) = S(i, i) - implied(i, i);
+      dpsi(i) = dS(i, i) - dimplied(i, i);
+    }
+  } else {
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      psi(i) = S(i, i) - H(i, i);
+      dpsi(i) = dS(i, i) - dH(i, i);
+    }
   }
   if (!Lambda.allFinite() || !Phi.allFinite() || !psi.allFinite() ||
       !dLambda.allFinite() || !dPhi.allFinite() || !dpsi.allFinite())
@@ -1218,10 +1297,10 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
       condition_score_covariance(Qraw, score_conditioning, label);
   if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   const Eigen::MatrixXd& Q = conditioned->value;
-  auto Qinv = invert_full_rank(Q, label);
-  if (!Qinv.has_value()) return std::unexpected(Qinv.error());
+  auto reg = make_loading_regression(L, Q, loading_regression_for(which), label);
+  if (!reg.has_value()) return std::unexpected(reg.error());
   const Eigen::MatrixXd HB = h->H * B;
-  const Eigen::MatrixXd Kstar = HB * (*Qinv);
+  const Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
 
   Eigen::VectorXd marker(nfac);
   Eigen::MatrixXd Lambda = Kstar;
@@ -1243,10 +1322,8 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
     for (Eigen::Index g = 0; g < nfac; ++g)
       Phi(f, g) = marker(f) * Q(f, g) * marker(g);
   }
-  const Eigen::MatrixXd LambdaPhi = Lambda * Phi;
   Eigen::VectorXd psi(nvar);
-  for (Eigen::Index i = 0; i < nvar; ++i)
-    psi(i) = S(i, i) - LambdaPhi.row(i).dot(Lambda.row(i));
+  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - h->H(i, i);
 
   Eigen::MatrixXd dLambda = Eigen::MatrixXd::Zero(nvar * nfac, pstar);
   Eigen::MatrixXd dPhi = Eigen::MatrixXd::Zero(nfac * nfac, pstar);
@@ -1314,7 +1391,7 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
       if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
       const Eigen::MatrixXd& dQ = *dQ_or;
       const Eigen::MatrixXd dKstar =
-          dHB * (*Qinv) - Kstar * dQ * (*Qinv);
+          loading_coefficients_direction(*reg, HB, Q, Kstar, dHB, dQ);
 
       Eigen::MatrixXd dLambda_col(nvar, nfac);
       Eigen::MatrixXd dPhi_col(nfac, nfac);
@@ -1335,15 +1412,9 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
         }
       }
 
-      const Eigen::MatrixXd dLambdaPhi = dLambda_col * Phi;
-      const Eigen::MatrixXd LambdaDPhi = Lambda * dPhi_col;
       for (Eigen::Index i = 0; i < nvar; ++i) {
         const double dSii = (r == c && r == i) ? 1.0 : 0.0;
-        const double dimplied_ii =
-            dLambdaPhi.row(i).dot(Lambda.row(i)) +
-            LambdaDPhi.row(i).dot(Lambda.row(i)) +
-            LambdaPhi.row(i).dot(dLambda_col.row(i));
-        dpsi(i, col) = dSii - dimplied_ii;
+        dpsi(i, col) = dSii - dH_diag(i, col);
       }
       for (Eigen::Index i = 0; i < nvar; ++i) {
         for (Eigen::Index f = 0; f < nfac; ++f)
@@ -1442,10 +1513,11 @@ fit_block_jacobian_from_h_batched_columns(
       condition_score_covariance(Qraw, score_conditioning, label);
   if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   const Eigen::MatrixXd& Q = conditioned->value;
-  auto Qinv = invert_full_rank(Q, label);
-  if (!Qinv.has_value()) return std::unexpected(Qinv.error());
+  auto reg = make_loading_regression(L, Q, LoadingRegression::OwnComposite,
+                                     label);
+  if (!reg.has_value()) return std::unexpected(reg.error());
   const Eigen::MatrixXd HB = H * B;
-  const Eigen::MatrixXd Kstar = HB * (*Qinv);
+  const Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
 
   Eigen::VectorXd marker(nfac);
   Eigen::MatrixXd Lambda = Kstar;
@@ -1549,7 +1621,7 @@ fit_block_jacobian_from_h_batched_columns(
     if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
     const Eigen::MatrixXd& dQ = *dQ_or;
     const Eigen::MatrixXd dKstar =
-        dHB * (*Qinv) - Kstar * dQ * (*Qinv);
+        loading_coefficients_direction(*reg, HB, Q, Kstar, dHB, dQ);
 
     Eigen::MatrixXd dLambda_col(nvar, nfac);
     Eigen::MatrixXd dPhi_col(nfac, nfac);
@@ -1613,7 +1685,8 @@ fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       L, S, dS, H->value, H->deriv, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
   return regression_block_directional(L, S, dS, H->value, H->deriv, B->value,
-                                      B->deriv, label, score_conditioning);
+                                      B->deriv, label, score_conditioning,
+                                      loading_regression_for(which));
 }
 
 struct RestrictedRows {
@@ -1881,7 +1954,8 @@ std::expected<BlockGuttman, FitError>
 regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                  const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
                  const char* label,
-                 const ResolvedScoreConditioning& score_conditioning) {
+                 const ResolvedScoreConditioning& score_conditioning,
+                 LoadingRegression regression) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac)
@@ -1893,10 +1967,10 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       condition_score_covariance(score_cov_raw, score_conditioning, label);
   if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   const Eigen::MatrixXd& score_cov = conditioned->value;
-  auto score_cov_inv = invert_full_rank(score_cov, label);
-  if (!score_cov_inv.has_value()) return std::unexpected(score_cov_inv.error());
+  auto reg = make_loading_regression(L, score_cov, regression, label);
+  if (!reg.has_value()) return std::unexpected(reg.error());
 
-  Eigen::MatrixXd Kstar = H * B * (*score_cov_inv);
+  Eigen::MatrixXd Kstar = loading_coefficients(*reg, H * B, score_cov);
   Eigen::MatrixXd Lambda = Kstar;
   Eigen::VectorXd marker(nfac);
   for (Eigen::Index f = 0; f < nfac; ++f) {
@@ -1917,9 +1991,13 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
     for (Eigen::Index g = 0; g < nfac; ++g)
       Phi(f, g) = marker(f) * score_cov(f, g) * marker(g);
 
-  const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
   Eigen::VectorXd psi(nvar);
-  for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+  if (regression == LoadingRegression::Multiple) {
+    const Eigen::MatrixXd implied = Lambda * Phi * Lambda.transpose();
+    for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - implied(i, i);
+  } else {
+    for (Eigen::Index i = 0; i < nvar; ++i) psi(i) = S(i, i) - H(i, i);
+  }
 
   BlockGuttman out{std::move(Lambda), std::move(Phi), std::move(psi)};
   out.score_conditioning = conditioned->diagnostics;
@@ -1940,7 +2018,8 @@ guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   if (!B.has_value()) return std::unexpected(B.error());
 
   auto out = regression_block(L, S, H->H, *B, "Guttman GLS-aligned map",
-                              score_conditioning);
+                              score_conditioning,
+                              LoadingRegression::OwnComposite);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -1962,12 +2041,12 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
   const Eigen::Index nfac = L.n_factor();
   auto B = composite_matrix(L, S, H, composite, label);
   if (!B.has_value()) return std::unexpected(B.error());
-  auto out = regression_block(L, S, H, *B, label, score_conditioning);
+  auto out = regression_block(L, S, H, *B, label, score_conditioning,
+                              LoadingRegression::OwnComposite);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         std::string(label) + ": output factor dimension mismatch"});
-  for (Eigen::Index i = 0; i < L.n_observed; ++i) out->psi(i) = S(i, i) - H(i, i);
   out->h_conditioning = h_conditioning;
   return out;
 }
@@ -2015,7 +2094,7 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   auto B = composite_matrix(L, S, H->H, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
   auto out = regression_block(
-      L, S, H->H, *B, label, score_conditioning);
+      L, S, H->H, *B, label, score_conditioning, loading_regression_for(which));
   if (!out.has_value()) return std::unexpected(out.error());
   out->n_h2_clamped = H->n_h2_clamped;
   out->h_conditioning = H->h_conditioning;
@@ -3776,7 +3855,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
         if (!B.has_value()) return std::unexpected(B.error());
         auto db = regression_block_directional(
             layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv,
-            label, (*score_configs)[b]);
+            label, (*score_configs)[b], LoadingRegression::OwnComposite);
         if (!db.has_value()) return std::unexpected(db.error());
         for (Eigen::Index i = 0; i < p; ++i) {
           db->base.psi(i) = samp.S[b](i, i) - H[b](i, i);

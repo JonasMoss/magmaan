@@ -328,6 +328,64 @@ TEST_CASE("standardized composite weights change the off-model map") {
   CHECK((*unit - *std).cwiseAbs().maxCoeff() > 1e-6);
 }
 
+TEST_CASE("aligned map regresses each item on its own composite, scale-equivariantly") {
+  Built b = build(kThreeFactor);
+  Eigen::MatrixXd S = three_factor_equicorrelated_cov();
+  S(0, 4) += 0.15;
+  S(4, 0) += 0.15;
+  S(2, 8) -= 0.10;
+  S(8, 2) -= 0.10;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(fit);
+
+  // Rebuild H = S with the communality diagonal, then the own-composite
+  // regression: Λ_if = (HB)_if / (HB)_{m_f f}, Φ = m Q m with m_f = (HB)_{m_f f}/Q_ff.
+  Eigen::MatrixXd H = S;
+  for (Eigen::Index i = 0; i < 9; ++i) H(i, i) = S(i, i) - fit->psi[0](i);
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(9, 3);
+  for (Eigen::Index i = 0; i < 9; ++i) B(i, i / 3) = 1.0 / std::sqrt(S(i, i));
+  const Eigen::MatrixXd HB = H * B;
+  const Eigen::MatrixXd Q = B.transpose() * H * B;
+  Eigen::VectorXd m(3);
+  for (Eigen::Index f = 0; f < 3; ++f) m(f) = HB(3 * f, f) / Q(f, f);
+  for (Eigen::Index i = 0; i < 9; ++i) {
+    const Eigen::Index f = i / 3;
+    CHECK(fit->Lambda[0](i, f) == doctest::Approx(HB(i, f) / HB(3 * f, f)).epsilon(1e-10));
+  }
+  for (Eigen::Index f = 0; f < 3; ++f)
+    for (Eigen::Index g = 0; g < 3; ++g)
+      CHECK(fit->Phi[0](f, g) == doctest::Approx(m(f) * Q(f, g) * m(g)).epsilon(1e-10));
+
+  // Rescaling the items rescales the loadings and factor covariances as ML does.
+  Eigen::VectorXd d(9);
+  d << 0.5, 2.0, 1.5, 3.0, 0.7, 1.1, 0.9, 4.0, 1.3;
+  SampleStats scaled = samp;
+  scaled.S[0] = d.asDiagonal() * S * d.asDiagonal();
+  auto fit2 = ef::fit_noniterative_cfa_restricted(
+      b.pt, b.rep, scaled, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(fit2);
+  for (Eigen::Index i = 0; i < 9; ++i) {
+    const Eigen::Index f = i / 3;
+    const double dm = d(3 * f);
+    CHECK(fit2->Lambda[0](i, f) ==
+          doctest::Approx(d(i) * fit->Lambda[0](i, f) / dm).epsilon(1e-9));
+    CHECK(fit2->psi[0](i) == doctest::Approx(d(i) * d(i) * fit->psi[0](i)).epsilon(1e-9));
+  }
+  for (Eigen::Index f = 0; f < 3; ++f)
+    for (Eigen::Index g = 0; g < 3; ++g)
+      CHECK(fit2->Phi[0](f, g) ==
+            doctest::Approx(d(3 * f) * d(3 * g) * fit->Phi[0](f, g)).epsilon(1e-9));
+}
+
 TEST_CASE("aligned score conditioning preserves raw compatibility and resolves auto") {
   Built b = build(kTwoFactor);
   Eigen::MatrixXd S = two_factor_cov();
