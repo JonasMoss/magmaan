@@ -386,6 +386,78 @@ TEST_CASE("aligned map regresses each item on its own composite, scale-equivaria
             doctest::Approx(d(3 * f) * d(3 * g) * fit->Phi[0](f, g)).epsilon(1e-9));
 }
 
+TEST_CASE("restricted map imposes within-factor loading restrictions by projection") {
+  // Congeneric one-factor population plus a perturbation (off the tau manifold).
+  Eigen::VectorXd lam(4);
+  lam << 0.9, 0.7, 0.8, 0.6;
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.5;
+  S(0, 3) += 0.05;
+  S(3, 0) += 0.05;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+
+  // Tau-equivalence by fixed unit loadings: the own-composite coefficients are
+  // averaged, so with unit composites Φ = 1'H1/p², whichever item is the marker.
+  Built tau = build("f =~ 1*x1 + 1*x2 + 1*x3 + 1*x4\n");
+  auto fit = ef::fit_noniterative_cfa_restricted(
+      tau.pt, tau.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares, ef::CompositeWeight::Unit);
+  REQUIRE_OK(fit);
+  Eigen::MatrixXd H = S;
+  for (Eigen::Index i = 0; i < 4; ++i) H(i, i) = S(i, i) - fit->psi[0](i);
+  CHECK(fit->Phi[0](0, 0) == doctest::Approx(H.sum() / 16.0).epsilon(1e-10));
+  for (Eigen::Index i = 0; i < 4; ++i)
+    CHECK(fit->Lambda[0](i, 0) == doctest::Approx(1.0).epsilon(1e-12));
+
+  // Equal free loadings: the constrained cells share one value and the Jacobian
+  // (a fixed projector inside the map) matches central differences.
+  Built eq = build("f =~ x1 + a*x2 + a*x3 + x4\n");
+  auto fe = ef::fit_noniterative_cfa_restricted(
+      eq.pt, eq.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
+      ef::CommunalityMethod::ExtendedTriadLeastSquares,
+      ef::CompositeWeight::Standardized);
+  REQUIRE_OK(fe);
+  CHECK(fe->Lambda[0](1, 0) == doctest::Approx(fe->Lambda[0](2, 0)).epsilon(1e-12));
+
+  for (const Built* b : {&tau, &eq}) {
+    auto ev = ModelEvaluator::build(b->pt, b->rep);
+    REQUIRE_OK(ev);
+    const auto composite = (b == &tau) ? ef::CompositeWeight::Unit
+                                       : ef::CompositeWeight::Standardized;
+    auto analytic = ef::estimator_map_jacobian_restricted_block(
+        b->pt, b->rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned, 0,
+        2e-6, ef::CommunalityMethod::ExtendedTriadLeastSquares, composite);
+    REQUIRE_OK(analytic);
+    Eigen::MatrixXd fd(analytic->rows(), analytic->cols());
+    Eigen::Index col = 0;
+    for (Eigen::Index c = 0; c < 4; ++c) {
+      for (Eigen::Index r = c; r < 4; ++r) {
+        const double h = 2e-6 * std::max(std::abs(S(r, c)), 1.0);
+        SampleStats plus = samp;
+        SampleStats minus = samp;
+        plus.S[0](r, c) += h;
+        minus.S[0](r, c) -= h;
+        if (r != c) {
+          plus.S[0](c, r) += h;
+          minus.S[0](c, r) -= h;
+        }
+        auto fp = ef::fit_noniterative_cfa_restricted(
+            b->pt, b->rep, plus, ef::NonIterativeEstimator::GuttmanAligned,
+            ef::CommunalityMethod::ExtendedTriadLeastSquares, composite);
+        auto fm = ef::fit_noniterative_cfa_restricted(
+            b->pt, b->rep, minus, ef::NonIterativeEstimator::GuttmanAligned,
+            ef::CommunalityMethod::ExtendedTriadLeastSquares, composite);
+        REQUIRE_OK(fp);
+        REQUIRE_OK(fm);
+        fd.col(col++) = (fp->theta - fm->theta) / (2.0 * h);
+      }
+    }
+    CHECK((*analytic - fd).cwiseAbs().maxCoeff() < 5e-5);
+  }
+}
+
 TEST_CASE("aligned score conditioning preserves raw compatibility and resolves auto") {
   Built b = build(kTwoFactor);
   Eigen::MatrixXd S = two_factor_cov();

@@ -742,6 +742,40 @@ struct LoadingRegressionState {
   Eigen::MatrixXd Qinv;  // nfac × nfac (Multiple)
 };
 
+// Within-factor loading restrictions imposed on the own-composite regression
+// coefficients before the marker rescaling. In the unit-composite scale every
+// restriction that is linear in one factor's marker-chart loadings (fixed
+// values, equalities, including ones involving the marker) is a homogeneous
+// linear restriction C_f k_f = 0 on that factor's coefficient column, and the
+// constrained least-squares fit is the Euclidean projection P_f = I − C_f⁺C_f.
+// P_f depends on the partable only, so it passes through derivatives
+// unchanged. `marker_value` is the fixed marker loading c_m (Λ = K c_m / K_m).
+struct LoadingProjector {
+  std::vector<std::vector<Eigen::Index>> rows;  // per factor: item rows
+  std::vector<Eigen::MatrixXd> P;               // per factor: projector (empty = I)
+  Eigen::VectorXd marker_value;                 // per factor
+};
+
+void apply_loading_projector(const LoadingProjector* proj, Eigen::MatrixXd& K) {
+  if (proj == nullptr) return;
+  for (std::size_t f = 0; f < proj->P.size(); ++f) {
+    const auto& P = proj->P[f];
+    if (P.size() == 0) continue;
+    const auto& rr = proj->rows[f];
+    const auto col = static_cast<Eigen::Index>(f);
+    Eigen::VectorXd k(static_cast<Eigen::Index>(rr.size()));
+    for (std::size_t a = 0; a < rr.size(); ++a)
+      k(static_cast<Eigen::Index>(a)) = K(rr[a], col);
+    const Eigen::VectorXd kp = P * k;
+    for (std::size_t a = 0; a < rr.size(); ++a)
+      K(rr[a], col) = kp(static_cast<Eigen::Index>(a));
+  }
+}
+
+double marker_loading_value(const LoadingProjector* proj, Eigen::Index f) {
+  return proj == nullptr ? 1.0 : proj->marker_value(f);
+}
+
 fit_expected<LoadingRegressionState>
 make_loading_regression(const CfaBlockLayout& L, const Eigen::MatrixXd& Q,
                         LoadingRegression kind, const char* label) {
@@ -1120,7 +1154,8 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                              const Eigen::MatrixXd& dB, const char* label,
                              const ResolvedScoreConditioning&
                                  score_conditioning,
-                             LoadingRegression regression) {
+                             LoadingRegression regression,
+                             const LoadingProjector* proj = nullptr) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac || dB.rows() != nvar ||
@@ -1145,9 +1180,11 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 
   const Eigen::MatrixXd HB = H * B;
   const Eigen::MatrixXd dHB = dH * B + H * dB;
-  const Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
-  const Eigen::MatrixXd dKstar =
+  Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
+  Eigen::MatrixXd dKstar =
       loading_coefficients_direction(*reg, HB, Q, Kstar, dHB, dQ);
+  apply_loading_projector(proj, Kstar);
+  apply_loading_projector(proj, dKstar);
 
   Eigen::MatrixXd Lambda = Kstar;
   Eigen::MatrixXd dLambda = dKstar;
@@ -1158,8 +1195,8 @@ regression_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
     if (mk < 0 || mk >= nvar)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": factor without a marker indicator"});
-    marker(f) = Kstar(mk, f);
-    dmarker(f) = dKstar(mk, f);
+    marker(f) = Kstar(mk, f) / marker_loading_value(proj, f);
+    dmarker(f) = dKstar(mk, f) / marker_loading_value(proj, f);
     if (std::abs(marker(f)) < 1e-10)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": near-zero marker loading"});
@@ -1448,7 +1485,8 @@ fit_block_jacobian_from_h_batched_columns(
     const std::vector<DirectCovColumn>& direct_cols,
     CompositeWeight resolved,
     const char* label,
-    const ResolvedScoreConditioning& score_conditioning) {
+    const ResolvedScoreConditioning& score_conditioning,
+    const LoadingProjector* proj = nullptr) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   const auto pstar = static_cast<Eigen::Index>(direct_cols.size());
@@ -1516,7 +1554,8 @@ fit_block_jacobian_from_h_batched_columns(
                                      label);
   if (!reg.has_value()) return std::unexpected(reg.error());
   const Eigen::MatrixXd HB = H * B;
-  const Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
+  Eigen::MatrixXd Kstar = loading_coefficients(*reg, HB, Q);
+  apply_loading_projector(proj, Kstar);
 
   Eigen::VectorXd marker(nfac);
   Eigen::MatrixXd Lambda = Kstar;
@@ -1525,7 +1564,7 @@ fit_block_jacobian_from_h_batched_columns(
     if (mk < 0 || mk >= nvar)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": factor without a marker indicator"});
-    marker(f) = Kstar(mk, f);
+    marker(f) = Kstar(mk, f) / marker_loading_value(proj, f);
     if (std::abs(marker(f)) < 1e-10)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": near-zero marker loading"});
@@ -1619,15 +1658,16 @@ fit_block_jacobian_from_h_batched_columns(
         condition_score_covariance_direction(*conditioned, dQraw, label);
     if (!dQ_or.has_value()) return std::unexpected(dQ_or.error());
     const Eigen::MatrixXd& dQ = *dQ_or;
-    const Eigen::MatrixXd dKstar =
+    Eigen::MatrixXd dKstar =
         loading_coefficients_direction(*reg, HB, Q, Kstar, dHB, dQ);
+    apply_loading_projector(proj, dKstar);
 
     Eigen::MatrixXd dLambda_col(nvar, nfac);
     Eigen::MatrixXd dPhi_col(nfac, nfac);
     Eigen::VectorXd dmarker(nfac);
     for (Eigen::Index f = 0; f < nfac; ++f) {
       const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
-      dmarker(f) = dKstar(mk, f);
+      dmarker(f) = dKstar(mk, f) / marker_loading_value(proj, f);
       dLambda_col.col(f) =
           dKstar.col(f) / marker(f) -
           Kstar.col(f) * (dmarker(f) / (marker(f) * marker(f)));
@@ -1954,7 +1994,8 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                  const Eigen::MatrixXd& H, const Eigen::MatrixXd& B,
                  const char* label,
                  const ResolvedScoreConditioning& score_conditioning,
-                 LoadingRegression regression) {
+                 LoadingRegression regression,
+                 const LoadingProjector* proj = nullptr) {
   const Eigen::Index nvar = L.n_observed;
   const Eigen::Index nfac = L.n_factor();
   if (B.rows() != nvar || B.cols() != nfac)
@@ -1970,6 +2011,7 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   if (!reg.has_value()) return std::unexpected(reg.error());
 
   Eigen::MatrixXd Kstar = loading_coefficients(*reg, H * B, score_cov);
+  apply_loading_projector(proj, Kstar);
   Eigen::MatrixXd Lambda = Kstar;
   Eigen::VectorXd marker(nfac);
   for (Eigen::Index f = 0; f < nfac; ++f) {
@@ -1977,7 +2019,7 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
     if (mk < 0 || mk >= nvar)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": factor without a marker indicator"});
-    marker(f) = Kstar(mk, f);
+    marker(f) = Kstar(mk, f) / marker_loading_value(proj, f);
     if (std::abs(marker(f)) < 1e-10)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           std::string(label) + ": near-zero marker loading"});
@@ -2036,12 +2078,13 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
                                  CompositeWeight composite,
                                  const ResolvedScoreConditioning&
                                      score_conditioning,
-                                 const HConditioningDiagnostics& h_conditioning = {}) {
+                                 const HConditioningDiagnostics& h_conditioning = {},
+                                 const LoadingProjector* proj = nullptr) {
   const Eigen::Index nfac = L.n_factor();
   auto B = composite_matrix(L, S, H, composite, label);
   if (!B.has_value()) return std::unexpected(B.error());
   auto out = regression_block(L, S, H, *B, label, score_conditioning,
-                              LoadingRegression::OwnComposite);
+                              LoadingRegression::OwnComposite, proj);
   if (!out.has_value()) return std::unexpected(out.error());
   if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -2244,7 +2287,8 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
                                    const AdmissibilityClamp& clamp,
                                    const ResolvedScoreConditioning&
                                        score_conditioning,
-                                   const ResolvedHConditioning& h_conditioning) {
+                                   const ResolvedHConditioning& h_conditioning,
+                                   const LoadingProjector* proj = nullptr) {
   auto block_of = block_ids_from_layout(L);
   if (!block_of.has_value()) return std::unexpected(block_of.error());
   auto h = estimate_h_communalities(S, *block_of, comm, clamp);
@@ -2265,9 +2309,164 @@ fit_aligned_block_with_communality(const CfaBlockLayout& L,
   if (!conditioned.has_value()) return std::unexpected(conditioned.error());
   auto out = guttman_aligned_block_from_h(
       L, S, conditioned->value, label, composite, score_conditioning,
-      conditioned->diagnostics);
+      conditioned->diagnostics, proj);
   if (!out.has_value()) return std::unexpected(out.error());
   out->n_h2_clamped = h->n_active_clamped;
+  return out;
+}
+
+std::vector<std::int16_t> lat_to_f_of(const CfaBlockLayout& L);
+
+// Loading restrictions split by where they are imposed. Fixed loadings and
+// loading rows confined to one factor of one block become that factor's
+// projector (exact constrained least squares on the own-composite regression).
+// Rows spanning factors or blocks are bilinear in the regression coefficients;
+// if any exist, every loading row is handed to the marker-chart projection
+// (`stage2`), which then lands on the intersection of all of them.
+struct LoadingRestrictionSplit {
+  std::vector<LoadingProjector> projectors;  // one per block
+  RestrictedRows stage2;
+  bool any_within = false;
+  bool all_unit_markers = true;
+};
+
+fit_expected<LoadingRestrictionSplit>
+split_loading_restrictions(const spec::LatentStructure& pt,
+                           const model::MatrixRep& rep,
+                           const model::ModelEvaluator& ev,
+                           const std::vector<CfaBlockLayout>& layouts,
+                           const RestrictedRows& rows) {
+  const std::size_t nblk = layouts.size();
+  const auto err = [](const char* what) -> fit_expected<LoadingRestrictionSplit> {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        std::string("restricted Guttman map: ") + what});
+  };
+
+  LoadingRestrictionSplit out;
+  out.stage2.R_h2 = rows.R_h2;
+  out.stage2.r_h2 = rows.r_h2;
+  out.stage2.R_load = Eigen::MatrixXd::Zero(0, rows.R_load.cols());
+  out.stage2.r_load = Eigen::VectorXd::Zero(0);
+  out.projectors.resize(nblk);
+
+  std::vector<std::vector<std::int16_t>> lat_to_f(nblk);
+  std::vector<std::vector<Eigen::Index>> pos_of(nblk);
+  std::vector<std::vector<std::vector<std::pair<Eigen::Index, double>>>> fixed(nblk);
+  std::vector<std::vector<std::vector<Eigen::VectorXd>>> C(nblk);
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    const auto nfac = static_cast<std::size_t>(L.n_factor());
+    lat_to_f[b] = lat_to_f_of(L);
+    auto& proj = out.projectors[b];
+    proj.rows = rows_by_factor(L);
+    proj.P.assign(nfac, Eigen::MatrixXd());
+    proj.marker_value = Eigen::VectorXd::Ones(static_cast<Eigen::Index>(nfac));
+    pos_of[b].assign(static_cast<std::size_t>(L.n_observed), -1);
+    for (const auto& rr : proj.rows)
+      for (std::size_t a = 0; a < rr.size(); ++a)
+        pos_of[b][static_cast<std::size_t>(rr[a])] = static_cast<Eigen::Index>(a);
+    fixed[b].resize(nfac);
+    C[b].resize(nfac);
+  }
+
+  const auto factor_of = [&](std::size_t b, std::int16_t lat) -> std::int16_t {
+    if (lat < 0 || static_cast<std::size_t>(lat) >= lat_to_f[b].size()) return -1;
+    return lat_to_f[b][static_cast<std::size_t>(lat)];
+  };
+
+  for (std::size_t row_id = 0; row_id < pt.size(); ++row_id) {
+    const auto& c = rep.cell_for_row[row_id];
+    if (!c.used || c.mat != model::MatId::Lambda || pt.free[row_id] != 0) continue;
+    const auto b = static_cast<std::size_t>(c.block);
+    if (b >= nblk) return err("fixed loading block out of range");
+    const std::int16_t f = factor_of(b, c.col);
+    if (f < 0 || c.row < 0 || c.row >= layouts[b].n_observed)
+      return err("fixed loading out of range");
+    const double v = pt.fixed_value[row_id];
+    if (!std::isfinite(v)) return err("fixed loading has no value");
+    fixed[b][static_cast<std::size_t>(f)].emplace_back(c.row, v);
+  }
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    for (std::size_t f = 0; f < fixed[b].size(); ++f) {
+      const std::int16_t mk = L.marker_ov[f];
+      const auto fi = static_cast<Eigen::Index>(f);
+      const auto n_f = static_cast<Eigen::Index>(out.projectors[b].rows[f].size());
+      for (const auto& [row, v] : fixed[b][f])
+        if (row == mk) out.projectors[b].marker_value(fi) = v;
+      const double cm = out.projectors[b].marker_value(fi);
+      if (std::abs(cm) < 1e-12) return err("zero-valued marker loading");
+      if (cm != 1.0) out.all_unit_markers = false;
+      for (const auto& [row, v] : fixed[b][f]) {
+        if (row == mk) continue;
+        // λ_i = v with λ = K c_m / K_m  ⇔  c_m K_i − v K_m = 0.
+        Eigen::VectorXd coef = Eigen::VectorXd::Zero(n_f);
+        coef(pos_of[b][static_cast<std::size_t>(row)]) += cm;
+        coef(pos_of[b][static_cast<std::size_t>(mk)]) -= v;
+        C[b][f].push_back(std::move(coef));
+      }
+    }
+  }
+
+  const auto locs = ev.param_locations();
+  bool any_cross = false;
+  for (Eigen::Index r = 0; r < rows.R_load.rows(); ++r) {
+    std::int64_t bf = -1;
+    bool cross = false;
+    for (Eigen::Index k = 0; k < rows.R_load.cols(); ++k) {
+      if (std::abs(rows.R_load(r, k)) <= 1e-12) continue;
+      const auto& loc = locs[static_cast<std::size_t>(k)];
+      const auto b = static_cast<std::size_t>(loc.block);
+      if (loc.mat != model::MatId::Lambda || b >= nblk)
+        return err("loading row touches a non-loading parameter");
+      const std::int16_t f = factor_of(b, loc.col);
+      if (f < 0) return err("loading row on an untracked factor");
+      const std::int64_t key = static_cast<std::int64_t>(b) * 65536 + f;
+      if (bf < 0) bf = key;
+      else if (bf != key) cross = true;
+    }
+    if (bf < 0) continue;
+    if (cross) {
+      any_cross = true;
+      continue;
+    }
+    const auto b = static_cast<std::size_t>(bf / 65536);
+    const auto f = static_cast<std::size_t>(bf % 65536);
+    const std::int16_t mk = layouts[b].marker_ov[f];
+    const double cm = out.projectors[b].marker_value(static_cast<Eigen::Index>(f));
+    // Σ a_k λ_k = r with λ = K c_m / K_m  ⇔  Σ a_k c_m K_k − r K_m = 0.
+    Eigen::VectorXd coef = Eigen::VectorXd::Zero(
+        static_cast<Eigen::Index>(out.projectors[b].rows[f].size()));
+    for (Eigen::Index k = 0; k < rows.R_load.cols(); ++k) {
+      const double a = rows.R_load(r, k);
+      if (std::abs(a) <= 1e-12) continue;
+      const auto& loc = locs[static_cast<std::size_t>(k)];
+      coef(pos_of[b][static_cast<std::size_t>(loc.row)]) += a * cm;
+    }
+    coef(pos_of[b][static_cast<std::size_t>(mk)]) -= rows.r_load(r);
+    C[b][f].push_back(std::move(coef));
+  }
+  if (any_cross) {
+    out.stage2.R_load = rows.R_load;
+    out.stage2.r_load = rows.r_load;
+  }
+
+  for (std::size_t b = 0; b < nblk; ++b) {
+    for (std::size_t f = 0; f < C[b].size(); ++f) {
+      if (C[b][f].empty()) continue;
+      const auto n_f = static_cast<Eigen::Index>(out.projectors[b].rows[f].size());
+      Eigen::MatrixXd Cm(static_cast<Eigen::Index>(C[b][f].size()), n_f);
+      for (std::size_t i = 0; i < C[b][f].size(); ++i)
+        Cm.row(static_cast<Eigen::Index>(i)) = C[b][f][i].transpose();
+      auto Ginv = symmetric_pinv_local(Cm * Cm.transpose(),
+                                       "restricted Guttman loading projector");
+      if (!Ginv.has_value()) return std::unexpected(Ginv.error());
+      out.projectors[b].P[f] = Eigen::MatrixXd::Identity(n_f, n_f) -
+                               Cm.transpose() * (*Ginv) * Cm;
+      out.any_within = true;
+    }
+  }
   return out;
 }
 
@@ -2280,10 +2479,12 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
                       const std::vector<AdmissibilityClamp>& clamps,
                       const std::vector<ResolvedScoreConditioning>&
                           score_conditioning,
-                      const std::vector<ResolvedHConditioning>& h_conditioning) {
+                      const std::vector<ResolvedHConditioning>& h_conditioning,
+                      const std::vector<LoadingProjector>& projectors) {
   const std::size_t nblk = layouts.size();
   if (nblk == 0 || nblk != S.size() || nblk != clamps.size() ||
-      nblk != score_conditioning.size() || nblk != h_conditioning.size())
+      nblk != score_conditioning.size() || nblk != h_conditioning.size() ||
+      nblk != projectors.size())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman map: block / sample covariance count mismatch"});
 
@@ -2293,7 +2494,8 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     for (std::size_t b = 0; b < nblk; ++b) {
       auto gb = fit_aligned_block_with_communality(
           layouts[b], S[b], comm, composite, "restricted Guttman map",
-          clamps[b], score_conditioning[b], h_conditioning[b]);
+          clamps[b], score_conditioning[b], h_conditioning[b],
+          &projectors[b]);
       if (!gb.has_value()) return std::unexpected(gb.error());
       out.push_back(std::move(*gb));
     }
@@ -2362,7 +2564,8 @@ fit_restricted_blocks(const std::vector<CfaBlockLayout>& layouts,
     if (!conditioned.has_value()) return std::unexpected(conditioned.error());
     auto gb = guttman_aligned_block_from_h(
         layouts[b], S[b], conditioned->value, "restricted Guttman map",
-        composite, score_conditioning[b], conditioned->diagnostics);
+        composite, score_conditioning[b], conditioned->diagnostics,
+        &projectors[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     gb->n_h2_clamped = n_h2_clamped;
     out.push_back(std::move(*gb));
@@ -3427,7 +3630,8 @@ restricted_no_h2_jacobian(
     CommunalityMethod comm,
     CompositeWeight resolved,
     const std::vector<AdmissibilityClamp>& clamps,
-    const std::vector<ResolvedScoreConditioning>& score_conditioning) {
+    const std::vector<ResolvedScoreConditioning>& score_conditioning,
+    const std::vector<LoadingProjector>& projectors) {
   const Eigen::Index p_active = samp.S[block].rows();
   const Eigen::Index pstar = vech_size(p_active);
   const char* label = "restricted Guttman analytic Jacobian";
@@ -3473,7 +3677,7 @@ restricted_no_h2_jacobian(
 
     auto db = fit_block_jacobian_from_h_batched_columns(
         layouts[b], samp.S[b], h->H, dH_diag, direct_cols, resolved, label,
-        score_conditioning[b]);
+        score_conditioning[b], &projectors[b]);
     if (!db.has_value()) return std::unexpected(db.error());
     base_blocks.push_back(db->base);
     dblocks.push_back(std::move(*db));
@@ -3623,8 +3827,11 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
   auto rows = restricted_rows_from_partable(pt, rep, ev, layouts, samp);
   if (!rows.has_value()) return std::unexpected(rows.error());
-  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
-      comm == CommunalityMethod::TriadWls) {
+  auto split = split_loading_restrictions(pt, rep, ev, layouts, *rows);
+  if (!split.has_value()) return std::unexpected(split.error());
+  const RestrictedRows& load_rows = split->stage2;
+  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) && !split->any_within &&
+      split->all_unit_markers && comm == CommunalityMethod::TriadWls) {
     return estimator_map_jacobian_block_analytic_impl(
         pt, rep, ev, samp, which, block, composite, admissibility,
         score_conditioning);
@@ -3644,8 +3851,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
   if (!has_rows(rows->R_h2) && comm != CommunalityMethod::TriadWlsJoint) {
     auto fast = restricted_no_h2_jacobian(
-        ev, layouts, samp, *rows, block, comm, resolved, *clamps,
-        *score_configs);
+        ev, layouts, samp, load_rows, block, comm, resolved, *clamps,
+        *score_configs, split->projectors);
     if (fast.has_value()) return fast;
     return std::unexpected(fast.error());
   }
@@ -3704,7 +3911,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
     if (!Hb.has_value()) return std::unexpected(Hb.error());
     H[b] = std::move(*Hb);
     auto gb = guttman_aligned_block_from_h(
-        layouts[b], samp.S[b], H[b], label, resolved, (*score_configs)[b]);
+        layouts[b], samp.S[b], H[b], label, resolved, (*score_configs)[b], {},
+        &split->projectors[b]);
     if (!gb.has_value()) return std::unexpected(gb.error());
     blocks.push_back(std::move(*gb));
   }
@@ -3713,7 +3921,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
   if (!theta0.has_value()) return std::unexpected(theta0.error());
   std::vector<BlockGuttman> projected_blocks = blocks;
   auto theta_proj =
-      project_loading_constraints(ev, layouts, projected_blocks, *rows, *theta0);
+      project_loading_constraints(ev, layouts, projected_blocks, load_rows,
+                                  *theta0);
   if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
 
   {
@@ -3767,7 +3976,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
 
           auto db = fit_block_jacobian_from_h_batched_columns(
               layouts[b], samp.S[b], H[b], dH_diag, direct_cols, resolved,
-              label, (*score_configs)[b]);
+              label, (*score_configs)[b], &split->projectors[b]);
           if (!db.has_value()) {
             ok = false;
             break;
@@ -3780,7 +3989,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
               ev, layouts, dblocks, pstar);
           if (J0.has_value()) {
             auto Jproj = project_loading_constraints_jacobian(
-                ev, layouts, dblocks, *rows, *theta0, *J0);
+                ev, layouts, dblocks, load_rows, *theta0, *J0);
             if (Jproj.has_value()) {
               if (!Jproj->allFinite())
                 return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -3854,7 +4063,8 @@ estimator_map_jacobian_restricted_block_analytic_impl(
         if (!B.has_value()) return std::unexpected(B.error());
         auto db = regression_block_directional(
             layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv,
-            label, (*score_configs)[b], LoadingRegression::OwnComposite);
+            label, (*score_configs)[b], LoadingRegression::OwnComposite,
+            &split->projectors[b]);
         if (!db.has_value()) return std::unexpected(db.error());
         for (Eigen::Index i = 0; i < p; ++i) {
           db->base.psi(i) = samp.S[b](i, i) - H[b](i, i);
@@ -3866,7 +4076,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
       auto dtheta0 = assemble_theta_direction_multi(ev, layouts, dblocks);
       if (!dtheta0.has_value()) return std::unexpected(dtheta0.error());
       auto dtheta = project_loading_constraints_direction(
-          ev, layouts, blocks, dblocks, *rows, *theta0, *dtheta0);
+          ev, layouts, blocks, dblocks, load_rows, *theta0, *dtheta0);
       if (!dtheta.has_value()) return std::unexpected(dtheta.error());
       J.col(col) = *dtheta;
       ++col;
@@ -4112,8 +4322,10 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
 
   auto rows = restricted_rows_from_partable(pt, rep, *ev, layouts, samp);
   if (!rows.has_value()) return std::unexpected(rows.error());
-  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) &&
-      comm == CommunalityMethod::TriadWls)
+  auto split = split_loading_restrictions(pt, rep, *ev, layouts, *rows);
+  if (!split.has_value()) return std::unexpected(split.error());
+  if (!has_rows(rows->R_h2) && !has_rows(rows->R_load) && !split->any_within &&
+      split->all_unit_markers && comm == CommunalityMethod::TriadWls)
     return fit_noniterative_cfa(
         pt, rep, samp, which, composite, admissibility, score_conditioning,
         h_conditioning);
@@ -4133,12 +4345,12 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
   if (!h_configs.has_value()) return std::unexpected(h_configs.error());
   auto blocks = fit_restricted_blocks(
       layouts, samp.S, *rows, comm, resolved, *clamps, *score_configs,
-      *h_configs);
+      *h_configs, split->projectors);
   if (!blocks.has_value()) return std::unexpected(blocks.error());
   auto theta = assemble_theta(*ev, layouts, *blocks, samp);
   if (!theta.has_value()) return std::unexpected(theta.error());
   auto theta_proj =
-      project_loading_constraints(*ev, layouts, *blocks, *rows, *theta);
+      project_loading_constraints(*ev, layouts, *blocks, split->stage2, *theta);
   if (!theta_proj.has_value()) return std::unexpected(theta_proj.error());
 
   NonIterativeFit out;
