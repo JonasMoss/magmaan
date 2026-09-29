@@ -317,20 +317,21 @@ Worth stating because the names collide. In `papers/guttman-inference` and
 `papers/closed-form-omega`, `standardized` is the **composite-weight** choice
 `A_std = diag(S)^{-1/2} Z`, a within-factor reweighting that changes the composite
 direction, not `std.lv`. The extraction metric there is UVI by construction with
-marker applied afterwards. The supporting evidence is thinner than the recipe's
-prominence suggests: exp research/29's paper-grade run pins `aligned_composite = standardized`
-as a fixed setting with no composite-versus-composite arm, exp research/27's map probe is
-`reps=8`, exp research/30 is `reps=5`, and `Remark 2` of the paper says outright that the
-choice is a declaration. Exp research/29 does carry an `equal`/`unequal` indicator-scale factor,
-which is where the standardized composite should earn its keep, but no scale-sliced
-result has been written up.
+marker applied afterwards. Since 2026-09-29 the choice has a theoretical basis
+rather than a simulation one: with standardized composites and a
+correlation-scale communality rule the Guttman map is scale-equivariant in the
+ML sense, and unit composites are not (an equivariance proposition in the
+guttman-inference paper). The paper simulation still carries an
+`equal`/`unequal` indicator-scale factor that could show the practical size of
+the difference.
 
 ## Where parameterization bites harder than it does under ML
 
 For ML a convention is a coordinate change and the fit is invariant. For the
 closed-form estimators it is part of the estimator's *definition*:
 
-- `experiments/_archive/noniterative-constraint-charts` shows the marker chart is
+- The retired constraint-charts check (deleted 2026-09-29, result kept in the
+  guttman-inference paper's notes) showed the marker chart is
   irrelevant to the closed-form fit, moving the implied covariance by 8.9e-16
   configural and 1.3e-15 metric-constrained while coordinates move by 1.32 and 0.90.
 - But `guttman_estimator_criterion.tex` records that *"marker-style scalings that

@@ -774,7 +774,7 @@ regression at once. Hence a forward rank-1 sweep, not a hat matrix. The
 downstream deliverables are all reductions over the same `N` LOO vectors:
 (a) a **jackknife SE** `V_jack = ((N-1)/N) sum (theta-hat_{-i}-thetabar)(.)'`, a
 third distribution-free leg alongside delta-method-NT and delta-method-empirical-Gamma
-(exp-research/24 showed NT-Gamma SEs are asymptotically wrong on non-normal data and
+(the retired research/24 study, now in the guttman-inference paper, showed NT-Gamma SEs are asymptotically wrong on non-normal data and
 empirical-Gamma is calibrated -- does jackknife track empirical-Gamma at N=50?);
 (b) an **estimator-native LOO-CV discrepancy** `(1/N) sum_i F(S, Sigma(theta-hat_{-i}))`
 (ULS or NTML) for model comparison where AIC/BIC are documented-invalid for this
@@ -799,7 +799,7 @@ one of the incumbents does not cover: a **model-selection** need where the
 documented-invalid AIC/BIC leave a real hole (LOO-CV discrepancy is the
 likelihood-free answer, and the closed form is what makes it affordable -- the
 strength/weakness symmetry is the hook), a **jackknife-vs-empirical-Gamma SE**
-calibration study on the existing exp-research/24 harness, or **CV-debiased reliability**
+calibration study on the research/24 harness (now the guttman-inference paper's gof-calibration study), or **CV-debiased reliability**
 graduating the closed-form-omega lane. Cheapest probe (~40 lines, pure R over the
 landed post-fit surface): `loo_influence(fit)` = the first-order quadratic forms,
 validated against a brute-force exact refit sweep on Holzinger-Swineford; if they

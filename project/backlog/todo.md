@@ -5631,18 +5631,22 @@ work until a concrete downstream consumer appears.
   tau-equivalence) as an exact projection before the marker rescaling. A toy
   3x4 check had the new map ahead in 90-99% of replications at factor
   correlation .6-.8 with a far lighter error tail, so the high-correlation
-  failure regime reported by `experiments/research/29-guttman-rmse-coverage`
-  may largely be an artifact of `Q^-1`. Numbers for the aligned map in
-  research/24, 26, 27, 28, 29, 30 and engineering/10 predate the change. Next:
-  rerun research/29 (Modal, ~$6 at 2000 reps) with a multiple-vs-own-composite
-  arm, then refresh the others as the guttman-inference paper needs them.
+  failure regime reported by the research/29 paper simulation
+  may largely be an artifact of `Q^-1`. On 2026-09-29 the Guttman studies
+  (research/15, 24, 26, 27, 28, 29, 30, engineering/10 and the
+  constraint-charts archive) were retired from `experiments/`: research/29 (the
+  paper simulation) and research/24's runner moved into the guttman-inference
+  paper, and the others' findings are recorded in that paper's notes. The rerun
+  (Modal, ~$6 at 2000 reps, with a multiple-vs-own-composite arm) is the
+  paper's next step and no longer tracked here.
 - **Non-iterative CFA inference** — the `estimate::frontier` / `robust::frontier`
   GOF/LRT/SE machinery for closed-form CFA estimators landed (2026-07; Guttman
   1952, delta-method via the map Jacobian; derivations in
   `noniterative_cfa_tests` (guttman-inference paper,
   `papers/guttman-inference/dev/notes/`) and the shared
   `guttman_cfa_asymptotics.tex`).
-  **Validated** by `experiments/research/24-noniterative-cfa-tests` (SE coverage + GOF /
+  **Validated** on the legacy map by the retired research/24 study, whose runner
+  and findings moved to the guttman-inference paper on 2026-09-29 (SE coverage + GOF /
   difference-test Type-I / power vs magmaan ML across normal / independent-
   component / ordinal-as-continuous generators, Dhaene-Rosseel 2024 style): the
   headline is that the empirical Gamma is calibrated everywhere while the
@@ -5672,8 +5676,8 @@ work until a concrete downstream consumer appears.
   returning `h2`, `diag(H)`, and the filled `H`. `extended_triad_ls` is the
   identity-weighted extended anchor-triad rule: one anchor stays in the target
   indicator's block, while the other may be cross-block.
-  `experiments/research/27-guttman-communality-estimators` now benchmarks the package
-  implementation directly. The promoted point-estimator lane landed as
+  The retired research/27 smoke study (8 reps; findings in the
+  guttman-inference paper's notes) ranked extended triad LS first. The promoted point-estimator lane landed as
   `guttman_aligned`: blockwise triad-GMM for the H diagonal plus the aligned
   score reconstruction, exposed through the non-iterative CFA C++ and R paths.
   The composite-weight axis also landed: `auto` resolves to `unit` for legacy
@@ -5687,9 +5691,9 @@ work until a concrete downstream consumer appears.
   communality policies on the symmetric correlation-scale box. `raw` is the
   production default and is bit-for-bit behavior preserving; clamp derivatives
   are included in analytic SEs, and R fits record tuning values and per-block
-  activation counts. Run and interpret
-  `experiments/engineering/10-guttman-admissibility-clamp` before changing the production
-  default or choosing `(margin, beta0, rate)`. Making the configural and
+  activation counts. The engineering/10 screen (below) found no clamp or
+  repair worth promoting, so the production default stays `raw` and no
+  `(margin, beta0, rate)` is recommended. Making the configural and
   restricted Raw-path improper-split guards consistent remains a separate,
   announced behavior change.
   Score covariance conditioning is separately opt-in and `raw` by default.
@@ -5706,7 +5710,9 @@ work until a concrete downstream consumer appears.
   without these fields reconstruct raw conditioning, and nested pseudo-LRTs
   require matching configurations. Configural, metric, and restricted fits now
   all report the real communality-clamp activation counts.
-  Experiment engineering/10 crosses the four communality-clamp finalists with hard/soft
+  Experiment engineering/10 (retired 2026-09-29; gate table, arm grid and
+  findings kept in the guttman-inference paper's notes; all runs predate the
+  own-composite map) crossed the four communality-clamp finalists with hard/soft
   score rates `{0.5,1}` and `delta_50 in {0.01,0.025,0.05,0.1}`, screens them
   under the predeclared success/PD/coverage/tail/benign/runtime gate, and can
   confirm the best two survivors. The completed 24-cell/300-rep screen on
@@ -5722,7 +5728,10 @@ work until a concrete downstream consumer appears.
   clamp-only arm; median shrinkage was about 6--12 and hard/soft saturated to
   the same practical map. **Do not build analytic/FD post-fit support or promote
   H repair.** Retain the opt-in point-fit implementation and experiment mode as
-  a reproducible negative result; the R post-fit surface rejects it explicitly.
+  a negative result; the R post-fit surface rejects it explicitly. With the
+  study retired, the result is final for the pre-2026-09-29 map. The
+  own-composite map no longer inverts `Q`, so if clamps are revisited, rerun
+  against it before relying on the old gate.
   **Analytic Jacobians and SE-only inference landed**: `estimator_map_jacobian`
   now uses the regular-interior analytic derivative for configural Guttman
   maps, including the correlation-standardization, triad-GMM communality,
@@ -5735,7 +5744,7 @@ work until a concrete downstream consumer appears.
   `noniterative_se*` primitives compute just `Omega = J Gamma J'/N`; empirical
   SEs stream casewise moment rows in parameter space, while full
   `noniterative_inference*` remains responsible for the residual GOF projector
-  and weighted-chi2 spectrum. A p = 25 configural probe of the experiment-research/29
+  and weighted-chi2 spectrum. A p = 25 configural probe of the research/29 (now the paper sim)
   shape (`normal`, five factors, five indicators each) initially showed
   remaining 5 ms fixed Jacobian cost, not empirical meat: NT and empirical SE
   timings were nearly identical at n = 300, while n-scaling only made the
@@ -5805,7 +5814,7 @@ work until a concrete downstream consumer appears.
   **Quality verdict (2026-07-09): the aligned map is a decent success on
   RMSE; speed is now mostly an SE-coverage caveat, not a blocker.** Bad-boi
   worst-draw sanity (q=3, m=5,
-  rho=0.8, weak, n=150; single draw, exp-research/29 has the across-draws numbers):
+  rho=0.8, weak, n=150; single draw, the paper sim has the across-draws numbers):
   the recommended `extended_triad_ls` + `standardized` recipe lands loading
   RMSE at ~1.1x NTML (a dead heat on the parameters, in closed form on the
   worst draw), and `extended_triad_ls` beats `triad_wls` in every composite.
@@ -5837,7 +5846,8 @@ work until a concrete downstream consumer appears.
   still use the stacked KKT path, and methods whose SE is still direction-wise
   or finite-difference fallback (`triad_wls_joint`, `triad_mean`,
   `triad_pooled`).
-  **Experiment-research/29 paper lane (2026-07-11):** the completed 1,728-cell by
+  **Paper-sim lane (2026-07-11; the study moved to the guttman-inference paper on
+  2026-09-29 and these numbers predate the own-composite map):** the completed 1,728-cell by
   150-replication configural screen now includes raw and soft-clamped aligned
   maps. Factor correlation and loading strength interact sharply: under
   moderate loadings, the raw map's median common-covariance RMSE ratio versus ML
@@ -5853,7 +5863,10 @@ work until a concrete downstream consumer appears.
   paired RMSE reference. Full runs include that regime by default; the completed
   configural result set contains no paper-grade restricted evidence, so the
   paired restricted run remains the next required result.
-  Future point-estimator lane: a **boundary-complete Guttman map** (not
+  Future point-estimator lane (largely moot for the aligned map since
+  2026-09-29: the own-composite regression needs only `Q_ff > 0`, not `Q^-1`,
+  so it remains relevant to legacy `guttman_lavaan` only): a
+  **boundary-complete Guttman map** (not
   "robust") that always returns a well-labeled object when the composite
   correlation \(P\) is singular or nearly singular. Policy sketch: ordinary
   inverse in the interior; Moore-Penrose inverse for compatible PSD-singular
@@ -5885,11 +5898,11 @@ work until a concrete downstream consumer appears.
   `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,
   constrained,scalar}_impl`;
   note `constrained_noniterative_cfa` (guttman-inference paper,
-  `papers/guttman-inference/dev/notes/`); validated by
-  `experiments/research/26-noniterative-invariance` (metric Wald tracks the ML LRT, the
+  `papers/guttman-inference/dev/notes/`); validated on the legacy map by the
+  retired research/26 study (findings in the paper's notes; metric Wald tracks the ML LRT, the
   empirical Gamma restores the level under non-normality, the scalar Wald is
   nominal and does true scalar in one step where the ML nested test cannot).
-  `experiments/_archive/noniterative-constraint-charts` adds the marker-chart sanity
+  The retired constraint-charts archive study added the marker-chart sanity
   check for the estimator-side metric map: configural and metric-constrained
   implied covariances are marker-invariant at roundoff even off the metric
   surface; theta coordinates differ by chart, as expected.
@@ -6084,13 +6097,8 @@ work until a concrete downstream consumer appears.
     convergence arm cannot corroborate or contradict exp _archive/heywood-box-constraints. Loadings of 0.7 with
     ψ=0.51 are not extreme enough. Wiring a near-Heywood population into exp research/46
     (weak loadings, tiny ψ, n≈50) is the cheap way to put both results on one grid.
-- **S. exp research/29 has an unexploited `equal`/`unequal` indicator-scale slice.** The
-  `standardized` composite in the Guttman/omega recipe is pinned as a fixed
-  setting in `experiments/research/29-guttman-rmse-coverage/results/paper-full`, with no
-  composite-vs-composite arm anywhere at evidence-grade reps (exp research/27 map probe is
-  `reps=8`, exp research/30 is `reps=5`), and `Remark 2` of `guttman-inference.tex` concedes
-  the choice is a declaration. The `scale` factor already in the 2592-row grid is
-  exactly where a standardized composite should earn its keep, since it rescales
-  by `diag(S)^{-1/2}`. Slicing the existing results costs nothing and either
-  supports the recipe or shows the knob is inert. Note `standardized` there is the
-  *composite-weight* axis, not `std.lv`.
+- **S. (resolved 2026-09-29) standardized composite evidence.** The
+  guttman-inference paper now proves that standardized composites make the
+  Guttman map scale-equivariant and unit composites do not, and the paper
+  simulation (moved there from research/29) carries the indicator-scale slice
+  if a practical-size check is wanted.

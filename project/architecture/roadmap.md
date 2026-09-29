@@ -1431,9 +1431,11 @@ an unconstrained gradient test to constrained solutions.
   raw/repaired eigenvalues, normalized eigenvalues, intensity, floor violation,
   score variance, and marker diagnostics, so post-fit inference reconstructs
   the identical map. Conditioning remains `raw` by default, is rejected for
-  legacy `guttman_lavaan` and explicit `adaptive`, and experiment engineering/10 calibrates
-  hard and smooth score repairs jointly with the communality-clamp finalists.
-  The completed 24-cell/300-rep screen (2026-07-10) produced no survivor:
+  legacy `guttman_lavaan` and explicit `adaptive`. The retired engineering/10
+  screen calibrated hard and smooth score repairs jointly with the
+  communality-clamp finalists; its 24-cell/300-rep run (2026-07-10) produced no
+  survivor (findings kept in the guttman-inference paper's notes since
+  2026-09-29):
   raw-H arms frequently hit the existing improper-communality-split guard, and
   even clamped-H arms could have non-positive score variances. Fixed-diagonal
   Q repair intentionally cannot cure that latter failure because it preserves
@@ -1507,8 +1509,9 @@ an unconstrained gradient test to constrained solutions.
   `r-package/examples/noniterative_postfit.R`.
   Theory in
   the guttman-inference paper's derivation notes
-  (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated by
-  `experiments/research/24-noniterative-cfa-tests` (empirical Gamma calibrated across
+  (`papers/guttman-inference/dev/notes/noniterative_cfa_tests`); validated on the
+  legacy map by the retired research/24 study, whose runner and findings moved
+  to the guttman-inference paper on 2026-09-29 (empirical Gamma calibrated across
   normal / independent-component / ordinal-as-continuous generators and across a
   0.3-0.7 reliability sweep, NT Gamma asymptotically miscalibrated on non-normal
   data, GOF power near 1; Guttman's efficiency gap vs ML is small at high
@@ -1532,8 +1535,8 @@ an unconstrained gradient test to constrained solutions.
   choices in its restricted analytic-first Jacobian and grouped inference;
   AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
-  LS systems. `experiments/research/27-guttman-communality-estimators` times the package
-  implementation directly.
+  LS systems. The retired research/27 smoke study (findings in the
+  guttman-inference paper's notes) ranked extended triad LS first.
 - Frontier multi-group / constrained / mean-structure non-iterative CFA
   (2026-07) extends the closed-form estimator to measurement invariance. The map
   fits each group's Guttman block independently and stacks them, so
@@ -1569,14 +1572,15 @@ an unconstrained gradient test to constrained solutions.
   `magmaan_core$noniterative_cfa_{se,grouped_inference,pseudo_lrt,constrained,
   scalar}_impl`.
   Theory in the guttman-inference paper's constrained-CFA note
-  (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated by
-  `experiments/research/26-noniterative-invariance` (metric Wald tracks the ML LRT on
+  (`papers/guttman-inference/dev/notes/constrained_noniterative_cfa`); validated on the
+  legacy map by the retired research/26 study, 300 reps, findings in the
+  guttman-inference paper's notes (metric Wald tracks the ML LRT on
   normal data with matched power; on non-normal data the NT-Gamma metric Wald
   over-rejects and the empirical Gamma restores the level, mirroring the ML
   NT-vs-robust split; the scalar Wald is exactly nominal on normal data, far more
   robust to non-normality, and delivers true scalar in one closed-form step where
-  the ML nested test cannot). `experiments/_archive/noniterative-constraint-charts`
-  now targets the estimator-side metric map: both the configural and
+  the ML nested test cannot). The retired constraint-charts check (archived
+  study, deleted 2026-09-29) showed for the estimator-side metric map that both the configural and
   metric-constrained implied covariances are marker-chart invariant at roundoff,
   including deliberately off-surface metric-violation cells; the raw theta
   coordinates differ, as they should.
