@@ -5207,21 +5207,19 @@ work lives in [`speculative.md`](speculative.md). Open work:
   broader cases and independent reproduction. Pinned SNLLS bundles and old
   runners remain untouched until their replacements cover their consumers.
 - **S/M.** Retire the hand-rolled timing loops now that
-  `benchmarks/timing/timing.hpp` exists (batch auto-calibration, arm rotation,
-  median reporting, DCE barriers). Seven independent copies had accumulated
-  before it landed, each weaker in a different way: `benchmarks/score_primitives.R`
+  `benchmarks/timing/timing.hpp` (C++) and `benchmarks/r/timing.R` (R,
+  `time_paired()`: batch auto-calibration, arm rotation, median reporting) both
+  exist. `experiments/showcases/02-lavaan-speed-bench` and
+  `experiments/showcases/06-speed-attribution` are migrated to
+  `benchmarks/r/timing.R`. Still hand-rolled: `benchmarks/score_primitives.R`
   and `benchmarks/inference_reuse.R` (mean-of-15 over `proc.time()`/`system.time()`,
   whose ~0.5 ms quantisation is a quarter of the ~2 ms workloads they time),
   `benchmarks/r/bench_mi_lrt.R` (3 reps, no warmup), `benchmarks/r/run_benchmark.R`
-  (`bench::mark`, whole-fit only), `experiments/showcases/02-lavaan-speed-bench`,
-  `experiments/engineering/11-psd-ml-timing` (the best of the R set: batch calibration plus
-  `--repeats/--warmups`), `experiments/research/08-ordinal-stage2-pairwise`, and
-  `private/oslo-psychometric-gathering-2026/tools/benchmark_score_shared.R` (outside this repository; the
-  best overall: `Sys.time()`, arm rotation, artifact hashing). Convert the C++
-  benches to include `timing/timing.hpp` first — that is mechanical. The R
-  scripts are a separate and lower-value job: unifying an R and a C++ timer buys
-  nothing, so the R-side target is a shared `benchmarks/r/timing.R` modelled on
-  the talks harness, not a binding to the C++ header. Do not add an eighth copy.
+  (`bench::mark`, whole-fit only), `experiments/engineering/11-psd-ml-timing`
+  (already batch-calibrated with `--repeats/--warmups`, just not on the shared
+  helper), and `experiments/research/08-ordinal-stage2-pairwise`. Convert the
+  C++ benches to include `timing/timing.hpp` first — that is mechanical. Do
+  not add another hand-rolled copy; migrate to `benchmarks/r/timing.R` instead.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **S/M.** Continue extending benchmark coverage beyond the current

@@ -1,14 +1,30 @@
 # magmaan <img src="project/assets/logo/logo_compact.png" align="right" height="85" />
 
-`magmaan` is the subterranean cousin of `lavaan`. It's C++23 toolkit for methods developers and simulation ethusiasts working on linear SEM, with a focus on modularity, extensibility, and full control over moving parts.
+`magmaan` is the subterranean cousin of `lavaan`: a C++23 core for linear SEM,
+checked component by component against `lavaan`, exposed to two different
+audiences over the same statistics.
 
-* **Status:** alpha (v0.0.1). No API-stability promise yet, the lavaan-parity core should stabilize first.
+* **Ordinary users** (R package [`magmaan`](r-magmaan/)) write one call. It
+  estimates the model and computes inference under a single policy that
+  magmaan chooses and justifies — few options, no compatibility switches
+  (no MLR, no WLSMV, no information/SE/test conventions to pick between).
+* **Methods developers** (R package [`magmaanlab`](r-package/), or the C++
+  core directly) get the full composable surface: every estimator path, every
+  information and Gamma convention, lavaan-compatibility routes, and the
+  frontier methods the research depends on.
 
-* **Language:** C++23, built with `-fno-exceptions -fno-rtti`.
+Neither package is a second SEM implementation; both sit over the same
+`cpp/` core. See
+[project/design/r-interface-vision.md](project/design/r-interface-vision.md)
+for the design.
 
-* **Scope:** Estimation and inference for linear SEM + convenience functions.
+* **Status:** alpha (v0.0.1). No API-stability promise yet; the lavaan-parity core should stabilize first.
 
-* **Philosophy:** `lavaan` is the oracle, failures are values, APIs stay explicit and composable.
+* **Language:** C++23 core, built with `-fno-exceptions -fno-rtti`. Failures are values (`std::expected`), not exceptions.
+
+* **Scope:** Estimation and inference for linear SEM, from the lavaan-parity core to frontier (non-lavaan) methods.
+
+* **Philosophy:** `lavaan` is the oracle for the parity core, failures are values, APIs stay explicit and composable, no virtual functions on the hot path.
 
 `magmaan` is heavily tested against `lavaan`, and the two libraries agree on a
 large corpus of models. See the
@@ -20,30 +36,18 @@ replication, and benchmark.
 
 ## Speed
 
-`magmaan` fits SEM models orders of magnitude faster than `lavaan` on many
-fit-heavy workloads.
+Estimate-only fits are commonly one to two orders of magnitude faster than
+`lavaan` on the same model: magmaan skips R's dispatch/model-building
+overhead and runs a lean C++ core. Whole-pipeline workloads (raw-data
+statistic construction, robust reporting, ordinal polychoric fits) see
+smaller but still real speedups.
 
-| Model                                        | Estimator | lavaan ms | magmaan ms | Speedup |
-| -------------------------------------------- | --------- | --------: | ---------: | ------: |
-| Latent state-trait (Geiser 2013)             | ML        |     103.7 |       1.28 |    103× |
-| Latent state strict invariance (Geiser 2013) | ML        |      34.6 |       0.63 |     80× |
-| Three-factor CFA (Geiser 2013)               | ML        |      32.6 |       0.73 |     73× |
-| HS 3-factor CFA                              | ULS       |      23.9 |       0.70 |     34× |
-| HS 3-factor CFA (masked)                     | FIML      |      40.7 |       1.70 |     24× |
-| Bollen democracy SEM                         | ML        |      26.7 |       1.90 |     14× |
-
-Small whole-pipeline smoke rows, including raw-data statistic construction and
-selected post-fit reporting:
-
-| Workflow                         | Estimator   | Data path                | lavaan ms | magmaan ms | Speedup |
-| -------------------------------- | ----------- | ------------------------ | --------: | ---------: | ------: |
-| HS 3-factor CFA robust report    | ML + UGamma | raw continuous           |      32.0 |        2.0 |     16× |
-| Ordinal CFA robust report        | DWLS        | all ordinal              |      46.0 |       18.0 |    2.6× |
-| Mixed ordinal/continuous CFA fit | DWLS        | 2 ordinal + 2 continuous |      48.5 |       12.5 |    3.9× |
-
-See the
+Numbers live in one place, not two: see the
 [magmaan vs lavaan speed benchmark report](experiments/showcases/02-lavaan-speed-bench/report.md)
-for methodology, caveats, and the full benchmark slices.
+for current measurements, methodology, and caveats. It's regenerated from
+`experiments/showcases/02-lavaan-speed-bench/run_experiment.R`, not copied
+into this README, so it can't go stale here — check its own timestamp (and
+rerun it) after a change to estimator/optimizer defaults.
 
 
 ## Build
@@ -61,9 +65,15 @@ cmake --build --preset opt
 ctest --preset opt
 ```
 
-`fast` is the everyday Debug loop; `opt` is the optimized build; `dev` adds
-AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
-`just test`, `just opt`, `just test-opt`, `just r-check`, and `just check`.
+`fast` is the everyday Debug loop; `opt` is the local Release/native-CPU
+build; `dev` adds AddressSanitizer + UBSan; `ceres`/`ipopt` add optional
+optimizer backends. `just` wraps the usual loops: `just build` / `just test`
+(the `fast` loop), `just opt`, `just test-opt`, `just r-dev` (fast R-bindings
+dev loop, linking the prebuilt C++ core), `just r-install` (portable,
+self-contained R build, as a release install would do), `just r-check`
+(R build + example smoke tests + `magmaan` package tests), and `just check`
+(everything: layering, tracked-file, vendor-drift, C++ and R checks). Bare
+`just` lists every recipe.
 
 
 ## License
@@ -72,10 +82,10 @@ magmaan is released under the [MIT License](LICENSE).
 
 Vendored third-party sources under `cpp/third_party/` (PORT, BSD-3-Clause;
 QUADPACK, public domain) keep their own terms, recorded in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and each subdirectory's
+`LICENSE-*`/`README.md`.
 
-Vendored third-party sources under `cpp/third_party/` keep their own licenses (see
-each subdirectory's `LICENSE-*` and `README.md`). A handful of test fixtures
+A handful of test fixtures
 embed well-known public SEM teaching datasets (Holzinger-Swineford,
 PoliticalDemocracy, bfi, ...) reproduced from their original distributions;
 their provenance and terms are documented in
@@ -86,12 +96,17 @@ curated from copyrighted textbooks are a private, optional dependency and are
 ## Navigate
 
 - [cpp/](cpp/): C++ source, headers, tests, fixtures, dependencies, and CMake.
-- [r-package/](r-package/): R bindings; build helpers are in `tools/`.
+- [r-package/](r-package/): `magmaanlab`, the compiled methods-developer R
+  package (Rcpp bindings over the C++ core); build helpers are in `tools/`.
+- [r-magmaan/](r-magmaan/): `magmaan`, the pure-R ordinary-user package
+  (imports `magmaanlab`, no compiled code).
 - [project/](project/): architecture, backlog, grammar, design, and validation.
 - [experiments/](experiments/): showcases, replications, research, and engineering investigations.
 - [benchmarks/](benchmarks/): shared benchmark harness.
 - [external/](external/): optional source collections and reference material.
 - `papers/` and `private/`: independent local repositories, excluded from magmaan.
 
-Run `just configure`, `just build`, and `just test` from here. CMake presets
-live in `cpp/`; direct preset commands should run from that directory.
+Run `just configure` once to set up the `fast`/`dev`/`opt` build trees, then
+`just build`, `just test`, `just check`, etc. from here, the repo root. CMake
+presets live in `cpp/`; direct `cmake`/`ctest` preset commands should run from
+that directory.

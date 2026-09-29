@@ -63,7 +63,7 @@ Demonstrate magmaan capabilities, agreement with lavaan/other references, or a c
 | # | Experiment | Kind | Lifecycle | Question |
 |--:|------------|------|-----------|----------|
 | 01 | [lavaan-parity](showcases/01-lavaan-parity/report.md) | parity | active | Does magmaan's ML inference match lavaan across the textbook corpus? |
-| 02 | [lavaan-speed-bench](showcases/02-lavaan-speed-bench/report.md) | benchmark | active | How fast is magmaan versus lavaan on the Geiser textbook corpus? |
+| 02 | [lavaan-speed-bench](showcases/02-lavaan-speed-bench/report.md) | benchmark | active | How much faster is magmaan than lavaan on the same prepared-input CFA fit? |
 | 03 | [foldnes-moss-gronneberg-peba](showcases/03-foldnes-moss-gronneberg-peba/report.qmd) | replication | complete | Do the penalized EBA goodness-of-fit tests hold nominal Type I under nonnormality? |
 | 04 | [foldnes-moss-gronneberg-2026](showcases/04-foldnes-moss-gronneberg-2026/report.qmd) | replication | active | Can magmaan reproduce the full FMG goodness-of-fit machinery versus lavaan and semTests? |
 | 05 | [fiml-measurement-invariance-fmg](showcases/05-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |

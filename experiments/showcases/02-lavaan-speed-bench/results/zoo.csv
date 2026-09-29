@@ -1,7 +1,0 @@
-"case_id","label","estimator","n_obs","n_vars","npar","lavaan_ms_median","magmaan_ms_median","speedup","est_max_abs_diff","iterations"
-"hs_3factor_cfa","Holzinger-Swineford 3-factor CFA","ML",301,9,21,16.9,0.700000000000001,24.1428571428571,9.50247004194438e-07,30
-"hs_3factor_cfa_fiml_masked","Holzinger-Swineford 3-factor CFA (masked)","FIML",301,9,30,40.7,1.69999999999995,23.941176470589,1.75932889012742e-06,30
-"hs_3factor_cfa_uls","Holzinger-Swineford 3-factor CFA","ULS",301,9,21,23.8500000000002,0.700000000000145,34.0714285714218,0.00380945383350806,30
-"hs_3factor_cfa_gls","Holzinger-Swineford 3-factor CFA","GLS",301,9,21,22.4,0.900000000000034,24.888888888888,0.00347887835146898,30
-"bollen_democracy_sem","Bollen democracy SEM","ML",75,11,31,26.6499999999997,1.89999999999984,14.0263157894747,2.03826634530557e-05,30
-"demo_growth_linear","Demo.growth linear LGC","ML",400,10,17,26.5499999999999,1.39999999999958,18.9642857142914,6.65457566828564e-07,30

@@ -1,0 +1,4 @@
+"task","label","speedup_geomean"
+"continuous","Continuous ML",18.1744211287702
+"fiml","FIML (10% MCAR)",33.3263911372706
+"ordinal","Ordinal DWLS (4 categories)",28.0652683712715
