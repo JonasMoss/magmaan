@@ -5,7 +5,7 @@ compiled package is `magmaanlab` in `r-package/`, and the pure-R `magmaan`
 package is in `r-magmaan/`. The policy composer (`api::policy_inference_ml`)
 covers single-level complete-data ML; other estimators fit but report their
 inference as `unsupported_model`. The remaining work is tracked in
-[todo.md](../backlog/todo.md#two-package-r-interface).
+[todo.md](../backlog/todo.md#primary-inference-workflows).
 
 ## Intention
 
@@ -329,12 +329,14 @@ a `control` option for non-converging fits, and summary-statistic input.
 ## Implementation sequence
 
 The steps below retain the package-split history. For remaining work, the
-[estimator priority programme](../backlog/todo.md#estimator-priority-programme)
+[development priorities](../architecture/roadmap.md#estimator-development-priorities)
 supersedes their original ordering: finish NTML gaps and extend policy inference
 to FIML and ordinal/mixed DWLS first, with PSD and barrier work alongside them.
-Other least-squares estimators, ML2S and broader two-level work follow their
-assigned scope and priority. Broader PSD/barrier applicability remains the goal;
-each combination needs its own estimation and inference validation.
+Other least-squares estimators and ML2S extend for a concrete consumer or
+inexpensive shared benefit. Two-level, SAM and composite expansion is parked;
+the historical steps below do not schedule their policy work. Broader PSD/barrier
+applicability is consumer-gated, with estimation and inference validated for each
+combination.
 
 1. Build the C++ policy composer for complete-data ML: observed sandwich,
    global score and likelihood-ratio tests, SB and PEBA4. Gate it against lab

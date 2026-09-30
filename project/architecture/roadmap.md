@@ -62,7 +62,8 @@ remain historical evidence, with sources and local results preserved.
 
 ## Estimator development priorities
 
-Adopted 2026-09-27. Development priority applies to complete workflows:
+Adopted 2026-09-27; active scope narrowed 2026-09-30. Development priority applies
+to complete workflows:
 estimation, convergence and admissibility diagnostics, parameter covariance,
 global and nested tests, intervals, and the R interface. It is independent of
 API stability (`core` / `frontier`), statistical evidence, ordinary-user
@@ -71,15 +72,22 @@ availability, and the decision to make a method a default.
 | Development tier | Initial scope | Commitment |
 | --- | --- | --- |
 | **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and ordinal/mixed DWLS | First priority for reliable, efficient estimation and complete inference workflows |
-| **Priority frontier** | PSD covariance constraints and the multi-information barrier | Develop alongside the primary classical workflows, then extend to all applicable estimators with estimator-specific validation |
+| **Priority frontier** | PSD covariance constraints and the multi-information barrier | Develop alongside primary classical workflows with estimator-specific validation; secondary expansion needs a concrete consumer or inexpensive shared benefit |
 | **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
 | **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators, catML and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
 
 The first two tiers form the main development programme. A frontier method
 may receive more attention than a classical method with a stable API. Lower
 priority does not relax correctness requirements or remove existing support.
-Two-level ML remains supported in its documented slice; its expansion priority
-needs an explicit scope decision and is not inherited from single-level NTML.
+Two-level ML, SAM and composites remain supported in their documented slices,
+with existing APIs and regression gates. They have no scheduled expansion work:
+multi-group/level-specific two-level support, broader SAM inference and composite
+estimator families are parked in the [trigger register](../backlog/speculative.md#parked-model-families).
+Shared normalization, starts, prepared R ownership and ordinary-policy inference
+do not implicitly extend to these families. Reactivation requires a named
+consumer and a bounded, validated scope. Broader chart development, specialist
+methods and general optimizer/benchmark expansion are likewise consumer-gated;
+concrete primary correctness failures remain active.
 The provisional secondary assignments can be revisited for a concrete use.
 
 PSD and barrier are capabilities across estimator families. PSD changes the
@@ -94,11 +102,19 @@ separate decisions. PSD already has ordinary-user exposure; barrier remains
 lab-only pending its exposure and inference contract. Both retain their current
 API status. Promotion of either to a default requires recorded evidence.
 
-The [active backlog](../backlog/todo.md#estimator-priority-programme) tracks
+The [active backlog](../backlog/todo.md#capability-inventory) tracks
 execution and the remaining capability inventory. The inventory will distinguish
 implemented and validated, implemented with limited validation, planned,
 unsupported, and inapplicable components; these tiers alone make no new
 availability claims. Existing entry points and numerical defaults are unchanged.
+
+The active queue is organized around barrier normalization, fitting reliability,
+primary inference workflows, API/performance and validation/maintenance. Tasks
+state a result and completion check; completed work and run histories live in
+the maintained contracts, test ledger and experiment reports. Simulation has its
+own backlog, research activity belongs to the experiment index, and paper-local
+planning belongs to the independent paper. Neither an implemented method nor
+an active research study creates an obligation to expand the library surface.
 
 ## Current State
 

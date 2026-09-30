@@ -29,6 +29,13 @@ Specialized ML2S, two-level, FC-SEM, SAM and frontier methods remain on legacy
 entry points. Those functions are retained without warnings; they cannot be
 deprecated until their functionality and experiment callers have migrated.
 
+The active programme is limited to primary single-level workflows. Two-level,
+SAM and FC-SEM preparation migration has no scheduled work; shared ownership
+goals do not imply expanding those interfaces or deprecating their current
+entry points. ML2S and other specialized migration requires a concrete consumer
+or inexpensive reuse. See the [development priorities](../architecture/roadmap.md#estimator-development-priorities)
+and [trigger register](../backlog/speculative.md#parked-model-families).
+
 ## Finding
 
 Both the interface and the Oslo benchmark contributed to the ordinal timing
