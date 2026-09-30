@@ -1,0 +1,49 @@
+#pragma once
+
+#include <cstddef>
+#include <string>
+
+#include "magmaan/data/pairwise_cov.hpp"
+
+namespace magmaan::detail {
+
+// Dense Gamma and its operator forms consume the same block shapes and
+// availabilities. Validate them before any block or coefficient indexing.
+inline post_expected<void>
+validate_pairwise_gamma_data(const data::RawData& raw,
+                            const data::PairwiseSampleStats& pw,
+                            const char* caller) {
+  const auto fail = [&](const std::string& message) -> post_expected<void> {
+    return std::unexpected(PostError{PostError::Kind::NumericIssue,
+                                    std::string(caller) + ": " + message});
+  };
+  if (raw.X.empty() || pw.S.size() != raw.X.size() ||
+      pw.pi_hat.size() != raw.X.size()) {
+    return fail("raw data, covariance, and availability block counts disagree or are empty");
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return fail("mask and raw data block counts disagree");
+  }
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const auto& X = raw.X[b];
+    const auto& S = pw.S[b];
+    const auto& pi = pw.pi_hat[b];
+    const Eigen::Index p = X.cols();
+    const std::string block = "block " + std::to_string(b) + ": ";
+    if (X.rows() < 2 || p == 0 || S.rows() != p || S.cols() != p ||
+        pi.rows() != p || pi.cols() != p) {
+      return fail(block + "invalid raw-data, covariance, or availability shape");
+    }
+    if (has_mask && (raw.mask[b].rows() != X.rows() || raw.mask[b].cols() != p)) {
+      return fail(block + "mask shape mismatch");
+    }
+    if (!S.allFinite()) return fail(block + "non-finite covariance");
+    if (!pi.allFinite() || (pi.array() <= 0.0).any() || (pi.array() > 1.0).any()) {
+      return fail(block + "pairwise availabilities must be finite and in (0, 1]");
+    }
+  }
+  return {};
+}
+
+}  // namespace magmaan::detail

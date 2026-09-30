@@ -74,6 +74,16 @@ availability claims. Existing entry points and numerical defaults are unchanged.
 
 ## Current State
 
+Pairwise normal-theory Gamma now uses the same observation rule as pairwise
+sample summaries: an explicit mask when supplied, otherwise finite raw entries.
+The dense metric, streamed expected-information bread, and reduced Gamma all
+apply missingness corrections to NaN-coded data without a mask. Shared private
+validation rejects inconsistent raw/covariance/availability/mask shapes,
+non-finite covariances, and invalid availability probabilities before indexing;
+reducers also require raw row counts to match their retained inference geometry.
+Regressions compare inferred and explicit masks, independently counted four-way
+overlaps, and complete-data identities, and exercise malformed-input errors.
+
 Complete-data moment helpers (`sample_stats_from_raw`, `empirical_gamma`,
 `empirical_gamma_with_means`, `gamma_nt`, and `gamma_nt_with_means`) reject
 non-finite inputs and arithmetic overflow with `PostError::NumericIssue`

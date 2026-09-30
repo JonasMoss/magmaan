@@ -40,8 +40,9 @@ struct PairwiseSampleStats {
 };
 
 // Build `PairwiseSampleStats` from raw data with optional missingness mask.
-// When `raw.mask` is empty, falls through to the complete-data identity: every
-// entry of `pi_hat[b]` is 1, `n_pair[b]` is `n_b`, and `S[b]` equals the usual
+// When `raw.mask` is empty, finite entries are observed and non-finite entries
+// are missing. With fully observed data every entry of `pi_hat[b]` is 1,
+// `n_pair[b]` is `n_b`, and `S[b]` equals the usual
 // N-divisor sample covariance — so callers can treat this as a drop-in
 // generalisation of `sample_stats_from_raw` for the pairwise setting.
 //
@@ -66,7 +67,8 @@ pairwise_sample_stats(const RawData& raw);
 // summed over the K distinct missingness patterns in the block. Cost per
 // block: O(p⁴) for `gamma_nt(Σ̂_pw)` once + O(K·p*²) for the K rescalings.
 //
-// Complete-data degeneracy: with no mask, K = 1 and a_1 ≡ 1, π̂_diag ≡ 1, so
+// Complete-data degeneracy: with fully observed data, K = 1 and a_1 ≡ 1,
+// π̂_diag ≡ 1, so
 // the sum collapses to `gamma_nt(Σ̂_pw[b])` exactly.
 //
 // Used as the asymptotically-efficient GLS weight by
@@ -75,6 +77,11 @@ pairwise_sample_stats(const RawData& raw);
 // entirely and uses `Γ_NT(Σ̂_pw)⁻¹` directly — the Savalei-Bentler 2005 /
 // Gold-Bentler-Kim 2003 literature convention, simpler and consistent but
 // asymptotically suboptimal under MAR.
+//
+// Missingness follows `pairwise_sample_stats`: use the supplied mask, or infer
+// it from finite raw entries. Raw data and summaries must describe the same
+// observations. Returns `NumericIssue` for inconsistent block/column shapes,
+// non-finite covariances, or availabilities outside the finite interval (0, 1].
 post_expected<std::vector<Eigen::MatrixXd>>
 gamma_nt_pairwise(const RawData& raw, const PairwiseSampleStats& pw);
 

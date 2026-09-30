@@ -186,6 +186,66 @@ TEST_CASE("reduced_gamma_nt_pairwise: complete-data degeneracy vs reduced_gamma_
   CHECK((*M_full_or - *M_pw_or).cwiseAbs().maxCoeff() < 1e-12);
 }
 
+TEST_CASE("pairwise inference: inferred missingness matches explicit masks") {
+  auto fx = build_missing_fixture(20260930);
+  magmaan::robust::InferenceSpec spec{
+      magmaan::robust::Information::Expected,
+      magmaan::robust::WeightMoments::Pairwise,
+      magmaan::robust::ScoreCovariance::ModelImplied};
+  auto masked_uf = magmaan::robust::build_u_factor(
+      fx.model.pt, fx.model.rep, fx.samp, fx.est, fx.raw, fx.pw, spec);
+  REQUIRE(masked_uf.has_value());
+  if (!masked_uf) return;
+  auto masked_gamma = magmaan::robust::reduced_gamma_nt_pairwise(
+      *masked_uf, fx.raw, fx.pw);
+  REQUIRE(masked_gamma.has_value());
+  if (!masked_gamma) return;
+
+  fx.raw.mask.clear();
+  auto inferred_gamma = magmaan::robust::reduced_gamma_nt_pairwise(
+      *masked_uf, fx.raw, fx.pw);
+  REQUIRE(inferred_gamma.has_value());
+  if (!inferred_gamma) return;
+  CHECK((*inferred_gamma - *masked_gamma).norm() < 1e-10);
+
+  auto inferred_uf = magmaan::robust::build_u_factor(
+      fx.model.pt, fx.model.rep, fx.samp, fx.est, fx.raw, fx.pw, spec);
+  REQUIRE(inferred_uf.has_value());
+  if (!inferred_uf) return;
+  const Eigen::MatrixXd masked_U = masked_uf->B * masked_uf->B.transpose();
+  const Eigen::MatrixXd inferred_U = inferred_uf->B * inferred_uf->B.transpose();
+  CHECK((masked_U - inferred_U).norm() < 1e-10);
+}
+
+TEST_CASE("pairwise inference: malformed summaries return NumericIssue") {
+  auto fx = build_missing_fixture(20260929);
+  magmaan::robust::InferenceSpec spec{
+      magmaan::robust::Information::Expected,
+      magmaan::robust::WeightMoments::Pairwise,
+      magmaan::robust::ScoreCovariance::ModelImplied};
+  auto uf = magmaan::robust::build_u_factor(
+      fx.model.pt, fx.model.rep, fx.samp, fx.est, fx.raw, fx.pw, spec);
+  REQUIRE(uf.has_value());
+  if (!uf) return;
+  SUBCASE("missing availability blocks") { fx.pw.pi_hat.clear(); }
+  SUBCASE("short availability columns") { fx.pw.pi_hat[0].conservativeResize(5, 1); }
+  SUBCASE("short mask columns") { fx.raw.mask[0].conservativeResize(400, 1); }
+  SUBCASE("wrong observation count") {
+    fx.raw.X[0].conservativeResize(399, 5);
+    fx.raw.mask[0].conservativeResize(399, 5);
+  }
+  SUBCASE("non-finite availability") {
+    fx.pw.pi_hat[0](0, 0) = std::numeric_limits<double>::infinity();
+  }
+  auto reduced = magmaan::robust::reduced_gamma_nt_pairwise(*uf, fx.raw, fx.pw);
+  CHECK_FALSE(reduced.has_value());
+  if (!reduced) CHECK(reduced.error().kind == magmaan::PostError::Kind::NumericIssue);
+  auto bread = magmaan::robust::build_u_factor(
+      fx.model.pt, fx.model.rep, fx.samp, fx.est, fx.raw, fx.pw, spec);
+  CHECK_FALSE(bread.has_value());
+  if (!bread) CHECK(bread.error().kind == magmaan::PostError::Kind::NumericIssue);
+}
+
 TEST_CASE("reduced_gamma_nt_pairwise: matches materialised B'·Γ_NT^pw·B under missingness") {
   auto fx = build_missing_fixture(20260622);
 

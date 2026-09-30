@@ -83,6 +83,91 @@ TEST_CASE("gamma_nt_pairwise: complete-data degeneracy matches gamma_nt") {
   CHECK((gnt_pw_or->at(0) - *gnt_or).cwiseAbs().maxCoeff() < 1e-12);
 }
 
+TEST_CASE("gamma_nt_pairwise: inferred missingness matches explicit masks and overlaps") {
+  magmaan::data::RawData raw;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(6, 2);
+  X << -1.0, 2.0, 1.0, 4.0, nan, 6.0, nan, 8.0, 3.0, nan, 5.0, nan;
+  raw.X = {Eigen::MatrixXd::Ones(6, 1), X};
+  auto pw = magmaan::data::pairwise_sample_stats(raw);
+  REQUIRE(pw.has_value());
+  if (!pw) return;
+  auto inferred = magmaan::data::gamma_nt_pairwise(raw, *pw);
+  REQUIRE(inferred.has_value());
+  if (!inferred) return;
+
+  using Mask = Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>;
+  raw.mask = {Mask::Ones(6, 1), X.array().isFinite().cast<std::uint8_t>()};
+  auto masked = magmaan::data::gamma_nt_pairwise(raw, *pw);
+  REQUIRE(masked.has_value());
+  if (!masked) return;
+  CHECK(((*inferred)[0] - (*masked)[0]).norm() == 0.0);
+  CHECK(((*inferred)[1] - (*masked)[1]).norm() < 1e-12);
+
+  auto nt = magmaan::data::gamma_nt(pw->S[1]);
+  REQUIRE(nt.has_value());
+  if (!nt) return;
+  const int first[] = {0, 1, 1};
+  const int second[] = {0, 0, 1};
+  for (int a = 0; a < 3; ++a) {
+    for (int b = 0; b < 3; ++b) {
+      int overlap = 0;
+      for (Eigen::Index r = 0; r < X.rows(); ++r) {
+        overlap += std::isfinite(X(r, first[a])) && std::isfinite(X(r, second[a])) &&
+                   std::isfinite(X(r, first[b])) && std::isfinite(X(r, second[b]));
+      }
+      const double pi_a = pw->pi_hat[1](first[a], second[a]);
+      const double pi_b = pw->pi_hat[1](first[b], second[b]);
+      const double expected = (*nt)(a, b) * (static_cast<double>(overlap) / 6.0) /
+                              (pi_a * pi_b);
+      CHECK((*inferred)[1](a, b) == doctest::Approx(expected).epsilon(1e-12));
+    }
+  }
+}
+
+TEST_CASE("gamma_nt_pairwise: malformed summaries return NumericIssue") {
+  magmaan::data::RawData raw;
+  raw.X = {Eigen::MatrixXd::Ones(4, 2)};
+  auto stats = magmaan::data::pairwise_sample_stats(raw);
+  REQUIRE(stats.has_value());
+  if (!stats) return;
+  auto pw = *stats;
+  using Mask = Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>;
+
+  SUBCASE("empty inputs") { raw.X.clear(); pw.S.clear(); pw.pi_hat.clear(); }
+  SUBCASE("missing covariance blocks") { pw.S.clear(); }
+  SUBCASE("missing availability blocks") { pw.pi_hat.clear(); }
+  SUBCASE("extra availability blocks") { pw.pi_hat.push_back(pw.pi_hat[0]); }
+  SUBCASE("raw column mismatch") { raw.X[0].resize(4, 1); }
+  SUBCASE("too few observations") { raw.X[0].resize(1, 2); }
+  SUBCASE("zero columns") {
+    raw.X[0].resize(4, 0); pw.S[0].resize(0, 0); pw.pi_hat[0].resize(0, 0);
+  }
+  SUBCASE("nonsquare covariance") { pw.S[0].resize(2, 1); }
+  SUBCASE("short availability rows") { pw.pi_hat[0].resize(1, 2); }
+  SUBCASE("short availability columns") { pw.pi_hat[0].resize(2, 1); }
+  SUBCASE("mask block mismatch") { raw.mask = {Mask::Ones(4, 2), Mask::Ones(4, 2)}; }
+  SUBCASE("mask row mismatch") { raw.mask = {Mask::Ones(3, 2)}; }
+  SUBCASE("mask column mismatch") { raw.mask = {Mask::Ones(4, 1)}; }
+  SUBCASE("non-finite covariance") {
+    pw.S[0](0, 0) = std::numeric_limits<double>::infinity();
+  }
+  SUBCASE("invalid availability") {
+    for (double bad : {0.0, -0.1, 1.1, std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::infinity()}) {
+      CAPTURE(bad);
+      pw.pi_hat[0](1, 0) = bad;
+      auto result = magmaan::data::gamma_nt_pairwise(raw, pw);
+      CHECK_FALSE(result.has_value());
+      if (!result) CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+    }
+    return;
+  }
+  auto result = magmaan::data::gamma_nt_pairwise(raw, pw);
+  CHECK_FALSE(result.has_value());
+  if (!result) CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+}
+
 TEST_CASE("fit_gls_pairwise: complete-data fit matches fit_gls") {
   std::mt19937 rng(20260602);
   auto model = build_cfa();

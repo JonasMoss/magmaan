@@ -129,6 +129,16 @@ Effort tags: **S** bounded project/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
 semantics · **XL** statistical design/research track before implementation.
 
+## Moment-summary numeric validation
+
+- [ ] **S — reject invalid computed pairwise and cluster summaries.**
+  `pairwise_sample_stats` can return successful non-finite moments after finite
+  observations overflow. `cluster_sample_stats` accepts NaN observations and
+  can return non-finite means/scatters, including from finite-input overflow.
+  Return `PostError::NumericIssue` with block attribution; preserve pairwise
+  missingness inference and explicit masks, and inspect only selected cluster
+  columns. Small standalone probes reproduce both paths (2026-09-30).
+
 ## Estimator priority programme
 
 Follow the [development tiers](../architecture/roadmap.md#estimator-development-priorities)

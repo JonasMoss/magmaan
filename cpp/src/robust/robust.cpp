@@ -20,6 +20,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
+#include "../detail_pairwise.hpp"
 
 namespace magmaan::robust {
 
@@ -162,16 +163,15 @@ apply_pairwise_gamma_nt_columns(const UFactor&                       uf,
                                 const RawData&                       raw,
                                 const data::PairwiseSampleStats&     pw,
                                 const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  auto valid = detail::validate_pairwise_gamma_data(
+      raw, pw, "apply_pairwise_gamma_nt_columns");
+  if (!valid) return std::unexpected(valid.error());
   if (uf.blocks.size() != raw.X.size() || uf.blocks.size() != pw.S.size() ||
       cols.rows() != uf.total_rows) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "apply_pairwise_gamma_nt_columns: UFactor/raw/pw/column shape mismatch"));
   }
   const bool has_mask = !raw.mask.empty();
-  if (has_mask && raw.mask.size() != raw.X.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "apply_pairwise_gamma_nt_columns: mask and X block counts disagree"));
-  }
 
   Eigen::MatrixXd out = Eigen::MatrixXd::Zero(cols.rows(), cols.cols());
   Eigen::MatrixXd in_scaled;
@@ -202,27 +202,16 @@ apply_pairwise_gamma_nt_columns(const UFactor&                       uf,
         pi_diag(detail::vech_index(p, jj, ll)) = pw.pi_hat[b](jj, ll);
       }
     }
-    if (!(pi_diag.minCoeff() > 0.0)) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "apply_pairwise_gamma_nt_columns: zero pairwise availability in "
-          "block " + std::to_string(b)));
-    }
-
     const Eigen::MatrixXd X_sigma =
         cols.middleRows(blk.row_offset, pstar);
-    if (!has_mask) {
+    if (!has_mask && raw.X[b].allFinite()) {
       applied.resize(pstar, cols.cols());
       apply_gamma_nt_cov_columns(blk.S, X_sigma, applied, H_buf);
       out.middleRows(blk.row_offset, pstar).noalias() += applied;
       continue;
     }
-    if (raw.mask[b].rows() != n_b || raw.mask[b].cols() != p) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "apply_pairwise_gamma_nt_columns: mask block " + std::to_string(b) +
-          " shape mismatch"));
-    }
-
     auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      if (!has_mask) return std::isfinite(raw.X[b](r, c));
       return raw.mask[b](r, c) != 0;
     };
 
@@ -1834,6 +1823,9 @@ post_expected<Eigen::MatrixXd>
 reduced_gamma_nt_pairwise(const UFactor&                       uf,
                           const RawData&                       raw,
                           const data::PairwiseSampleStats&     pw) {
+  auto valid = detail::validate_pairwise_gamma_data(
+      raw, pw, "reduced_gamma_nt_pairwise");
+  if (!valid) return std::unexpected(valid.error());
   if (uf.kind != UFactor::Kind::ProjectionExpected) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "reduced_gamma_nt_pairwise: only the ProjectionExpected U-factor "
@@ -1844,10 +1836,6 @@ reduced_gamma_nt_pairwise(const UFactor&                       uf,
         "reduced_gamma_nt_pairwise: UFactor / raw / pw block count mismatch"));
   }
   const bool has_mask = !raw.mask.empty();
-  if (has_mask && raw.mask.size() != raw.X.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "reduced_gamma_nt_pairwise: mask and X block counts disagree"));
-  }
 
   Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
   Eigen::MatrixXd H_buf;
@@ -1859,7 +1847,7 @@ reduced_gamma_nt_pairwise(const UFactor&                       uf,
     const Eigen::Index p     = blk.p;
     const Eigen::Index pstar = blk.pstar;
     const Eigen::Index n_b   = blk.n_obs;
-    if (raw.X[b].cols() != p || pw.pi_hat[b].rows() != p) {
+    if (raw.X[b].rows() != n_b || raw.X[b].cols() != p) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "reduced_gamma_nt_pairwise: block " + std::to_string(b) +
           " dimension mismatch between UFactor (p=" + std::to_string(p) +
@@ -1875,18 +1863,12 @@ reduced_gamma_nt_pairwise(const UFactor&                       uf,
         pi_diag(detail::vech_index(p, jj, ll)) = pi_hat_mat(jj, ll);
       }
     }
-    if (!(pi_diag.minCoeff() > 0.0)) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "reduced_gamma_nt_pairwise: zero π̂ entry in block " +
-          std::to_string(b) + " — pair with no joint observations"));
-    }
-
     auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
       if (!has_mask) return std::isfinite(raw.X[b](r, c));
       return raw.mask[b](r, c) != 0;
     };
 
-    if (!has_mask) {
+    if (!has_mask && raw.X[b].allFinite()) {
       // Complete data: every pattern has a_k ≡ 1 and π̂ ≡ 1; the pattern-
       // grouped sum collapses to one apply_gamma_nt_block per column.
       GB_b.setZero();
@@ -1898,7 +1880,7 @@ reduced_gamma_nt_pairwise(const UFactor&                       uf,
       continue;
     }
 
-    // Enumerate distinct missingness patterns in raw.mask[b].
+    // Enumerate distinct observed patterns from the mask or finite entries.
     std::vector<std::vector<bool>> patterns;
     std::vector<Eigen::Index>      pattern_count;
     const Eigen::Index n_rows = raw.X[b].rows();

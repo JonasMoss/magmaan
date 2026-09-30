@@ -1,5 +1,6 @@
 #include "magmaan/data/pairwise_cov.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 
@@ -7,6 +8,8 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+
+#include "../detail_pairwise.hpp"
 
 namespace magmaan::data {
 
@@ -157,16 +160,9 @@ constexpr Eigen::Index vech_idx(Eigen::Index p, Eigen::Index j, Eigen::Index l) 
 
 post_expected<std::vector<Eigen::MatrixXd>>
 gamma_nt_pairwise(const RawData& raw, const PairwiseSampleStats& pw) {
-  if (raw.X.size() != pw.S.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "gamma_nt_pairwise: RawData and PairwiseSampleStats block count "
-        "mismatch"));
-  }
+  auto valid = detail::validate_pairwise_gamma_data(raw, pw, "gamma_nt_pairwise");
+  if (!valid) return std::unexpected(valid.error());
   const bool has_mask = !raw.mask.empty();
-  if (has_mask && raw.mask.size() != raw.X.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "gamma_nt_pairwise: mask and X have inconsistent block counts"));
-  }
 
   std::vector<Eigen::MatrixXd> out;
   out.reserve(raw.X.size());
@@ -202,13 +198,7 @@ gamma_nt_pairwise(const RawData& raw, const PairwiseSampleStats& pw) {
         pi_diag(vech_idx(p, jj, ll)) = pw.pi_hat[b](jj, ll);
       }
     }
-    if (!(pi_diag.minCoeff() > 0.0)) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "gamma_nt_pairwise: π̂ has a zero entry on block " +
-              std::to_string(b) + " (pair with no joint observations)"));
-    }
-
-    if (!has_mask) {
+    if (!has_mask && raw.X[b].allFinite()) {
       // Complete data: a_k ≡ 1, π̂_diag ≡ 1 → Γ_NT^pw = Γ_NT(Σ̂_pw).
       out.push_back(G);
       continue;
