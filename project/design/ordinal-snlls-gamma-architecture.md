@@ -1,161 +1,49 @@
-# Ordinal SNLLS and Gamma Workspace Plan
+# Ordinal workspaces and threshold profiling
 
-This note is the restart point for the ordinal SNLLS / Gamma work. It records
-the intended architecture before touching C++ source again.
+This document records the shipped ordinal workspace and threshold-profile
+contracts. Implementation state is summarized in the
+[roadmap](../architecture/roadmap.md#ordinal-and-mixed-categorical-ls);
+remaining work belongs in the [backlog](../backlog/todo.md#api-and-r-boundary).
 
-## Why Ordinal Is Not Plug And Play
+## Model and moment boundary
 
-The continuous SNLLS path works on a moment vector that is essentially
+LISREL / `MatrixRep` owns implied covariance and mean evaluation. Ordinal
+thresholds and response scales belong to the lavaanified model; the ordinal
+fit compares observed thresholds and latent-response associations with their
+model counterparts. Gamma/NACOV is the asymptotic covariance of that ordinal
+moment vector, not the continuous covariance-statistic Gamma.
 
-```text
-s = vech(S)          or          s = [mean; vech(S)]
-sigma(theta) = vech(Sigma(theta))
-```
+## Shipped data split
 
-and `Sigma(theta)` comes directly from the LISREL block
+The public types live in
+[`data/ordinal.hpp`](../../cpp/include/magmaan/data/ordinal.hpp):
 
-```text
-Sigma(theta) = Lambda (I - B)^-1 Psi (I - B)^-T Lambda^T + Theta.
-```
+- `OrdinalMoments` and `MixedOrdinalMoments` carry observed moments, variable
+  names, threshold ownership/levels and sample metadata, without NACOV or weights.
+- `OrdinalGammaCacheBlock` holds diagonal/full Gamma, DWLS/WLS weights and
+  explicit flags indicating which products have been materialized.
+- `OrdinalWeightPlan` selects purpose (`FitOnly`, `FitPlusInference`,
+  `InferenceOnly`), estimator (ULS/DWLS/WLS), delta/theta parameterization,
+  threshold-mode metadata and Gamma materialization. The partable supplies the
+  actual free, fixed, shared or linearly constrained threshold design; the
+  threshold-mode enum is bookkeeping rather than a replacement for that design.
+- `OrdinalWorkspace` and `MixedOrdinalWorkspace` pair moments with their Gamma
+  cache. They do not own the model evaluator or a prepared partable.
+- `OrdinalStats` / `MixedOrdinalStats` remain compatibility objects with
+  materialized NACOV and weights. Cache conversion and ensure helpers bridge
+  them to the workspace paths.
 
-Ordinal data changes the target. The observed statistics are thresholds plus
-latent-response correlations/polychorics:
+Raw-data workspace constructors honor fit-only costs: ULS avoids Gamma, DWLS
+builds its diagonal, and WLS needs full Gamma and its weight. Mixed WLS defers
+inversion to the cache ensure helper. Fit-plus-inference can retain the full
+Gamma products needed downstream. The `Reduced` materialization enum does not
+establish a general reduced-Gamma inference implementation; that work remains
+[speculative](../backlog/speculative.md).
 
-```text
-s = [tau_hat; rho_hat]
-m(theta) = [tau(theta); rho_star(theta)]
-```
-
-Thresholds are not entries of `Sigma(theta)`. They are an ordinal measurement
-layer around the LISREL covariance model. Lavaan represents them with `|`
-partable rows. Internally, magmaan should keep that separation:
-
-- LISREL / `MatrixRep` owns the covariance and mean machinery.
-- Ordinal threshold rows live in the lavaanified model/partable layer.
-- The ordinal fit layer compares `[tau; rho]`, not just `vech(Sigma)`.
-- The Gamma/NACOV object is the asymptotic covariance of the full ordinal
-  statistic vector, not the continuous covariance statistic.
-
-That is the core reason the continuous SNLLS implementation cannot simply take
-a polychoric matrix and a Gamma matrix and continue unchanged.
-
-## Current Starting Point
-
-The current code already has a working bounded ordinal LS surface:
-
-- `data::OrdinalStats`
-  - `R`, `thresholds`, threshold metadata, `NACOV`, `W_dwls`, `W_wls`,
-    levels, names, and `n_obs`.
-- `data::MixedOrdinalStats`
-  - mixed continuous/ordinal moments, `NACOV`, `W_dwls`, `W_wls`, and metadata.
-- `estimate::fit_ordinal_bounded(...)`
-- `estimate::fit_mixed_ordinal_bounded(...)`
-- `estimate::robust_ordinal(...)`
-- `estimate::robust_mixed_ordinal(...)`
-
-The immediate design problem is that these stat structs conflate three things:
-
-1. Observed moments and metadata.
-2. Gamma/NACOV construction.
-3. Weight construction for DWLS/WLS.
-
-That is convenient for parity tests, but it is wrong for benchmark hygiene and
-for a methods-developer architecture where fitting and inference should be
-conceptually separable.
-
-## Design Goals
-
-- Keep fit-only speed experiments honest: do not compute full Gamma, full WLS
-  weights, or robust inference products when the selected estimator does not
-  need them.
-- Still allow a one-call "fit plus inference" path that computes all needed
-  Gamma pieces once when that is cheaper than rebuilding them downstream.
-- Make DWLS cheap: compute only the diagonal Gamma entries needed by the fit.
-- Make ULS cheaper: compute no Gamma for fit-only ULS.
-- Make full WLS explicit: full WLS needs either full Gamma inversion or the
-  equivalent profiled blocks.
-- Preserve cached Gamma pieces so later inference can reconstruct full or
-  reduced products without recomputing pairwise/polychoric estimating equations
-  when the caller requested that.
-- Treat threshold profiling as part of the ordinal LS layer, not as a LISREL
-  matrix-representation concern.
-- Implement the simple `H = I` threshold case first, then generalize to
-  constrained thresholds.
-
-## Proposed Data Split
-
-Introduce a non-breaking internal split first; the public compatibility structs
-can remain as adapters until the new path is stable.
-
-### `OrdinalMoments`
-
-Observed statistics and metadata only.
-
-Likely contents:
-
-- `R`
-- `thresholds`
-- threshold owner/level metadata
-- mixed continuous means/variances/covariances when needed
-- moment layout descriptors
-- `n_obs`
-- `n_levels`
-- observed-variable names
-
-No `NACOV`, `W_dwls`, or `W_wls`.
-
-### `OrdinalGammaCache`
-
-Lazy/cache object for asymptotic covariance pieces.
-
-It should be able to provide, per block:
-
-- diagonal of Gamma
-- full Gamma
-- Gamma subblocks for threshold/correlation partitions
-- full inverse or factorization when WLS asks for it
-- reduced products for robust inference where possible
-- provenance flags saying exactly which pieces have been computed
-
-The cache should not materialize full Gamma just because DWLS asks for diagonal
-weights.
-
-### `OrdinalWeightPlan`
-
-Small object describing what the caller needs:
-
-```text
-purpose: fit_only | fit_plus_inference | inference_only
-estimator: ULS | DWLS | WLS
-parameterization: delta | theta
-threshold_mode: free_identity | linear_map | fixed_or_constrained
-materialization: none | diagonal | full | reduced
-```
-
-The plan chooses which cache pieces to build. The same plan should drive
-benchmark reporting so we can separate:
-
-- statistic construction
-- diagonal Gamma construction
-- full Gamma construction
-- WLS inversion/factorization
-- optimizer time
-- post-fit inference time
-
-### `OrdinalFitWorkspace`
-
-Prepared object shared by fit and inference:
-
-- prepared ordinal partable
-- evaluator / matrix representation
-- moment layout
-- `OrdinalMoments`
-- `OrdinalGammaCache`
-- chosen `OrdinalWeightPlan`
-
-This is where the "compute all in one go" option belongs. The conceptual API
-can still say fitting and inference are separate; the workspace lets a caller
-pay for shared setup once when desired.
+Cache-aware bounded fits, all-ordinal delta SNLLS, theta threshold profiling,
+mixed theta SNLLS, and robust all-ordinal cache reuse are implemented. The
+threshold derivation below describes the affine delta profile. Theta uses the
+separate standardized-threshold profile described under SNLLS Integration.
 
 ## Threshold Profiling
 
@@ -182,8 +70,8 @@ e_tau = 0
 
 So fit-only ULS and DWLS do not need to optimize thresholds. For DWLS, the fit
 only needs the diagonal Gamma entries for the non-threshold moments that remain
-in the profiled objective. If we keep constrained/fixed thresholds in a later
-slice, the threshold block re-enters.
+in the profiled objective. Fixed or constrained thresholds retain their threshold residuals and need
+the corresponding Gamma diagonal entries.
 
 ### Full WLS, `H = I`
 
@@ -335,7 +223,7 @@ models retain the generic full-threshold implementation. The explicit
 `fit_ordinal_snlls_full_thresholds()` entry point remains available as a
 reference for eligible models too.
 
-The nonlinear SNLLS block should operate on the profiled ordinal correlation
+The nonlinear delta SNLLS block operates on the profiled ordinal correlation
 objective after thresholds have been eliminated. Threshold estimates are then
 reconstructed for the returned full parameter vector / partable output.
 
@@ -347,99 +235,29 @@ tau = tau_hat
 
 For WLS, use the formula above.
 
-The SNLLS compatibility checker must reject cases where threshold constraints,
-theta-parameterization details, or mixed moments require machinery not yet in
-the ordinal SNLLS implementation.
+The SNLLS compatibility checker rejects unsupported constraint and
+parameterization combinations. Mixed theta SNLLS has its own fit path; the
+affine all-ordinal delta derivation is not a general mixed-moment profile.
 
-## Benchmarks To Add
+## Validation and remaining work
 
-Keep two experiment families separate.
+[`ordinal_test.cpp`](../../cpp/tests/unit/ordinal_test.cpp) covers workspace
+materialization costs, cached-versus-legacy fits, fixed/shared/linearly
+constrained thresholds, joint multi-group profiling, delta/theta fits and
+mixed workspaces. The theta profiler also has off-optimum objective/gradient
+checks. [`ordinal_golden_test.cpp`](../../cpp/tests/golden/ordinal_golden_test.cpp)
+drives the profiled and bounded paths through threshold-invariance and linear
+constraint fixtures (0013/0014); keyword theta invariance has separate fixtures
+0017–0020. The roadmap records their numerical conventions and boundaries.
 
-### Fit Speed
+Keep benchmark boundaries explicit: moment construction, diagonal/full Gamma,
+weight construction, optimization and post-fit inference. Compare fit-only
+and fit-plus-inference workloads separately; a fit-only ULS/DWLS result must
+not hide full-Gamma work in setup.
 
-Fit speed should report:
-
-- moment construction time
-- Gamma diagonal/full construction time
-- weight construction time
-- optimizer time
-- total fit-only time
-
-For fit-only comparisons:
-
-- ULS should not build Gamma.
-- DWLS should not build full Gamma.
-- WLS should report full Gamma/weight setup separately from optimizer time.
-
-### Fit Plus Inference Speed
-
-A later experiment should report:
-
-- moment construction
-- Gamma construction
-- fitting
-- robust SE/test construction
-- total fit plus inference
-
-This is where "compute all in one go" can be evaluated against "fit cheaply,
-extend cache during inference."
-
-## Implementation Slices
-
-1. **Documentation only.**
-   This file plus a backlog pointer.
-
-2. **Internal cache skeleton.**
-   Add `OrdinalMoments`, `OrdinalGammaCache`, and `OrdinalWeightPlan` behind
-   existing `OrdinalStats` / `MixedOrdinalStats` adapters. No estimator behavior
-   change yet.
-
-3. **Cost-aware existing bounded fits.**
-   Route existing ordinal ULS/DWLS/WLS through the plan/cache enough to verify
-   that ULS/DWLS no longer build unnecessary full weights in new fit-only
-   entry points. Keep compatibility constructors for lavaan parity fixtures.
-
-4. **Threshold profiler, `H = I`.**
-   Implement the ULS/DWLS exact profile and WLS Schur complement. Add tests that
-   compare profiled and unprofiled bounded fits on small ordinal fixtures.
-
-5. **All-ordinal SNLLS, ULS/DWLS.**
-   Add the profiled residual/Jacobian path for ordinal correlations and compare
-   against the full bounded LS path on supported fixtures.
-
-6. **All-ordinal SNLLS, WLS.**
-   Add the full-WLS profiled threshold block and verify parity with full WLS.
-
-7. **Inference workspace integration.**
-   Add fit-plus-inference and inference-only cache extension paths. Verify that
-   robust ordinal SE/test results match the current materialized NACOV path.
-
-8. **Fixed threshold rows.**
-   Keep fixed threshold residuals in the profiled full-moment objective and
-   verify bounded and SNLLS parity against the unprofiled path.
-
-9. **Threshold-local pure-merge constraints.**
-   Let shared-label / bare-merge threshold equality groups share columns in the
-   threshold map and verify bounded plus SNLLS parity against the unprofiled
-   constrained path.
-
-10. **Mixed ordinal / general threshold maps.**
-   Generalize only after the all-ordinal free/fixed/pure-merge threshold path is
-   stable.
-
-11. **Experiments.**
-   Add fit-only and fit-plus-inference ordinal experiments with explicit setup
-   time accounting.
-
-## Open Questions
-
-- Should the first public cache surface be C++ only, with R wrappers added only
-  after the experiments need them?
-- Should full WLS store the inverse weight, a Cholesky/factorization, or just
-  the Schur-complement operator?
-- How should threshold constraints be represented in `LatentStructure` without
-  making `MatrixRep` aware of them?
-- Can the robust U-Gamma path consume ordinal reduced products directly enough
-  to avoid full Gamma in common inference calls?
-- What is the smallest instrumentation we need to prove fit-only benchmarks are
-  not accidentally computing full Gamma?
+Remaining R/API polish and mixed invariance work are tracked in the
+[active backlog](../backlog/todo.md#api-and-r-boundary); Gamma-influence
+performance and weight storage have their own entries. Reduced-Gamma robust
+products require a concrete size-driven consumer before promotion from the
+speculative backlog. These pointers replace the completed implementation
+sequence and its superseded public-surface questions.

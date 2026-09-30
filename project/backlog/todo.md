@@ -992,42 +992,6 @@ section: the categorical corpus saddles are under
 - General runaway/nonattainment diagnostics are deferred to
   [the speculative backlog](speculative.md#runaway-estimates-and-nonattainment-diagnostics).
   Local stationarity does not establish attainment of a finite optimum.
-- **Done 2026-09-24 — make the Newton check part of the default
-  convergence verdict (author, 2026-09-24).** Landed as specified below:
-  complete-data ML paths (ordinary, equality-constrained, PSD, Fisher
-  scoring, IRLS) attach `FitDiagnostics::newton_accuracy`, and
-  `common_fit_verdict` decides interior stationarity by d <= .01.
-  Nonpositive curvature, ill conditioning and an unreliable solve fail;
-  Unsupported (nonlinear equalities), PSD-boundary points and active box
-  bounds keep the first-order check. The verdict reports its `criterion`.
-  Tests: `newton_accuracy_test.cpp` (verdict routing, PSD interior and
-  boundary, multi-group distance against the information metric). Cost:
-  0.03 s per check on Little's polynomial bullying model (30 variables with
-  means, 192 free parameters), against 0.49 s for its SLSQP fit. Remaining:
-  the LS/FIML/ordinal/two-level curvature analogues below. Original item: `common_fit_verdict` still
-  passes a fit on the first-order residual alone: the metric-dual L2 residual
-  at most 1e-3, ambient for ordinary fits and cone for PSD fits. The
-  author's validated policy is Newton accuracy at regular interiors and the
-  cone check only at PSD boundaries. The old interior residual becomes
-  telemetry, not an extra veto.
-  - **Change.** For complete-data ML, ordinary and PSD:
-    - an interior point passes when `newton_accuracy_ml` is available with
-      d <= .01;
-    - a PSD fit with a singular primitive block keeps the cone check.
-    This is the criterion the covariance paper already applies through its
-    own bridge. Decide how a nonpositive-curvature, ill-conditioned or
-    unsupported (nonlinear-constraint) Newton status maps to the verdict.
-    The paper counts them as not converged.
-  - **Scope.** LS, FIML, ordinal and two-level fits keep the first-order
-    verdict until each has its own curvature analogue: Gauss-Newton
-    information for LS, observed information for FIML.
-  - **Cost.** One analytic observed information per fit. Time it on the
-    large corpus models before making it unconditional.
-  - **Downstream.** Once this lands, re-pin `papers/covariance-honest-sem`,
-    drop its bridge (`project/analysis/cpp/newton_audit.cpp`) and rerun
-    every accepted study at the new revision. The paper plans this as one
-    final rerun.
-
 ### Convergence verdict and terminal verifier
 
 The remaining explicit convergence-audit extensions are deferred to
@@ -1388,219 +1352,24 @@ So the fix belongs in the stats constructor, not the caller:
 repository) is the behaviour gate used for the attempt: it snapshots whole fit objects across
 DWLS/ULS/WLS, binary, multi-group and listwise cases and diffs them recursively.
 
-### Continuous moment-quadratic whitening is dense where a structured weight would do — IN PROGRESS
+### Continuous moment-quadratic weight follow-ups
 
-The continuous analog of the ordinal whitening fix above, discovered while
-scoping estimator-API stabilization. The ordinal path got `WhitenFactor`
-(Identity/Diagonal/Dense); the continuous path
-(`gmm::Weight` -> `cpp/src/estimate/gmm/moment_quadratic.cpp`) never did, and
-neither path had the Kronecker case that GLS needs.
-
-`gmm::Weight` was `std::vector<Eigen::MatrixXd>` with empty as the ULS
-sentinel, so `weighted_jacobian` reached a dense `factors[b].transpose() * Jb`
-GEMM — O(q²·n_free) per iteration with q = p + p(p+1)/2 — for ULS, GLS,
-continuous DWLS and WLS alike, plus a one-off O(q³) Cholesky and q² doubles per
-block.
-
-**New:** `cpp/include/magmaan/estimate/gmm/weight.hpp` defines `gmm::BlockWeight`
-with four kinds — Identity / Diagonal / Dense / **NormalTheory**. NormalTheory
-stores `chol(A)` (p×p) and represents
-`W = blockdiag(A⁻¹, ½·Dᵀ(A⁻¹ ⊗ A⁻¹)D)` without materializing q×q; A = S gives
-GLS, A = Σ(θ_k) gives the Fisher/IRLS reweight. Validated to machine precision
-against the dense `normal_theory_weight` reference (quadratic form ~1e-16,
-`to_dense()` ~1e-17) for p ∈ {2,3,5,8} × means on/off.
-
-**The per-iteration win is mostly *not* in the LS shape.** Whitening a q×n_free
-Jacobian, n_free = 2p:
-
-| p | q | dense µs/it | NT µs/it | speedup | dense MB | NT MB |
-|---|---|---|---|---|---|---|
-| 10 | 65 | 4.7 | 10.1 | **0.5x** | 0.03 | 0.0008 |
-| 20 | 230 | 72 | 73 | 1.0x | 0.40 | 0.003 |
-| 30 | 495 | 489 | 286 | 1.7x | 1.87 | 0.007 |
-| 45 | 1080 | 3531 | 1050 | 3.4x | 8.90 | 0.015 |
-| 60 | 1890 | 15302 | 2336 | 6.6x | 27.25 | 0.028 |
-
-The asymptotic factor-of-p is real but constants dominate: dense whitening is
-one BLAS-3 GEMM, the NT apply is per-column triangular solves with vech packing
-(BLAS-2, poor locality), and below p≈20 it is a net loss. Memory is a clean
-~1000x and the O(q³) setup Cholesky disappears.
-
-**The real win is the scalar shape.** `optim::scalarize`
-(`cpp/src/optim/optimizers.cpp:53`) computes `grad = Jᵀr`, and — as the ordinal
-entry above already notes — *always* needs the gradient. `fit_gls` defaults to
-`Backend::NloptLbfgs`, a scalar optimizer, so GLS builds a full q×n_free
-whitened Jacobian every iteration purely to collapse it to a q-vector. The
-trace form never forms it:
-
-```
-f      = ½·tr(A⁻¹DA⁻¹D)                 one O(p³)
-grad_k = <G, ∂Σ/∂θ_k>,  G = A⁻¹DA⁻¹     O(p³) once, then O(p²) per parameter
-```
-
-O(p³ + p²·n_free) against the current O(p⁴·n_free) — ~650k flops at p=60
-against the 15 ms measured above.
-
-**Scalar trace path landed.** `gmm::normal_theory_objective` (declared in
-`estimate/gmm/moment_quadratic.hpp`) is the scalar (F, ∇F) GLS objective via
-the trace identity, and `fit_gls` routes every scalar-shaped backend through it
-plus `compose_scalar_ml` — structurally identical to `fit_ml`. `Backend::Ceres`
-/ `CeresBfgs` / `PortNls` genuinely drive the residual-and-Jacobian form (see
-`run_gmm`), so they keep the dense route.
-
-Measured on the `opt` preset, single-group CFA with 8 indicators per factor,
-N=500, optimizer held fixed at `NloptLbfgs` — "old" is the dense NT weight
-through `fit_gmm`, which is exactly what `fit_gls` used to do:
-
-| p | q | n_free | dense µs/eval | trace µs/eval | | old ms | new ms | | max abs dtheta |
-|---|---|---|---|---|---|---|---|---|---|
-| 16 | 136 | 33 | 32.2 | 3.7 | 8.7x | 1.7 | 0.2 | 10.2x | 2.2e-16 |
-| 24 | 300 | 51 | 195.6 | 9.6 | 20.3x | 12.5 | 0.7 | 17.8x | 2.8e-15 |
-| 32 | 528 | 70 | 743.9 | 20.3 | 36.6x | 57.6 | 1.9 | 30.7x | 5.1e-14 |
-| 40 | 820 | 90 | 2390.7 | 41.5 | 57.6x | 277.9 | 5.0 | 55.5x | 3.6e-13 |
-| 48 | 1176 | 111 | 6267.0 | 72.4 | **86.5x** | 584.8 | 9.0 | **64.9x** | 7.1e-13 |
-
-Empirical complexity exponent in p went 4.80 -> 2.71, matching the predicted
-O(p⁴·n_free) -> O(p³ + p²·n_free) with n_free ∝ p. `|Δfmin| ≤ 1.1e-16` and
-θ̂ agrees to 7e-13 at p=48 (accumulated along the optimizer path, not a
-per-evaluation difference — F and ∇F agree to 1e-11/1e-9 by
-`cpp/tests/unit/gls_scalar_objective_test.cpp`).
-
-**Structured weight type landed.** `gmm::Weight` is now
-`std::vector<BlockWeight>` rather than `std::vector<Eigen::MatrixXd>`, so each
-block carries its own whitening form and `residuals`' factoring loop is pure
-shape validation. Producers declare what they built: `normal_theory_weight`
-and `expected_information_weight` emit NormalTheory (p×p `chol`),
-`empirical_dwls_weight_from_rows` emits Diagonal (it was already building
-`Zero(n,n)` with only `(k,k)` written), and `fit_gls_pairwise` / `dls_weight` /
-`structured_gamma_weight` stay Dense because they genuinely are.
-
-`fit_ml_irls` was the big beneficiary, since it rebuilds
-`expected_information_weight` every outer iteration and re-entered `residuals`
-for a fresh O(q³) Cholesky each time. Same `opt` setup as the GLS table above:
-
-| p | n_free | before ms | after ms | | fmin before/after |
-|---|---|---|---|---|---|
-| 16 | 33 | 31.2 | 12.4 | 2.5x | 2.809e-02 both |
-| 24 | 51 | 223.5 | 37.3 | 6.0x | 7.367e-02 both |
-| 32 | 70 | 992.3 | 134.8 | 7.4x | 1.399e-01 both |
-| 40 | 90 | 3692.2 | 399.1 | 9.2x | 2.199e-01 both |
-| 48 | 111 | 11959.4 | 953.2 | **12.5x** | 3.133e-01 both |
-
-`fmin` is identical to every printed digit at every p, so convergence is
-unchanged; this is purely per-outer-iteration cost. The advertised fast Fisher
-path is no longer the most expensive thing here.
-
-Also fixed while materializing: the old `symmetric_vech_gls_weight` computed
-`(A1 * E2).trace()` per vech pair — a full O(p³) GEMM against a matrix with two
-nonzeros, so O(p⁷) overall. `BlockWeight::to_dense()` derives the same entries
-in closed form from `tr(A E1 A E2) = Σ_{T1×T2} A_bc·A_da`, O(1) per entry and
-O(p⁴) overall.
-
+Structured `BlockWeight`, scalar GLS, structured Stage-2 weights and the
+whitened expected-information assembly are shipped; contracts, performance
+checks and guard tests are in the
+[roadmap](../architecture/roadmap.md#continuous-moment-quadratic-weights).
 Remaining:
 
-- ~~**Structured Stage-2 weights.**~~ **Done.** The
-  `data::gamma_nt(Σ)⁻¹ == ½·Dᵀ(Σ⁻¹ ⊗ Σ⁻¹)D` equivalence is pinned (<1e-9
-  relative, p ∈ {2,3,4,5,6,8,10}) in `gls_scalar_objective_test.cpp`, so
-  `two_stage_stage2_weight_structured` now emits `Uls` → Identity, `Nt` →
-  NormalTheory (skipping an O(p⁴) Γ_NT build plus an O(p⁶) inverse in favour of
-  a p×p Cholesky), `Dwls` → Diagonal. `Adf` and `Dls` stay Dense because they
-  genuinely are.
-- ~~**Share the p×p factor.**~~ **Retired as a performance item; the real defect
-  it was circling is fixed.** The item read: `½Dᵀ(A⁻¹⊗A⁻¹)D` is built
-  independently by the GLS weight (A=S), the IRLS reweight (A=Σ(θ_k)),
-  `inference::expected_information` (A=Σ(θ̂)), and the NT Γ behind SB
-  corrections, and ML already factors Σ(θ) every iteration and discards it.
-
-  That was written when a `gmm::Weight` block was a dense q×q, so sharing meant
-  sharing an **O(q³)** Cholesky. After the structured-weight work a NormalTheory
-  block stores `chol(A)` only, so the shareable quantity is a **p×p** Cholesky,
-  and the premise dissolved. Measured ceiling — the largest speedup *any* sharing
-  scheme could deliver, `(outer iterations × chol cost) / total IRLS fit time`,
-  `benchmarks/nt_factor_share_bench.cpp` on `opt`:
-
-  | p | n_free | chol ms | outer | fit ms | sharing ceiling |
-  |---|---|---|---|---|---|
-  | 6 | 12 | 0.0002 | 4 | 0.34 | 0.229% |
-  | 12 | 24 | 0.0006 | 5 | 2.86 | 0.100% |
-  | 24 | 48 | 0.0007 | 5 | 23.9 | 0.016% |
-  | 48 | 96 | 0.0041 | 6 | 411.9 | **0.006%** |
-
-  The ceiling *falls* with p, because the inner solve grows faster than the
-  factorization. Do not build plumbing to share it.
-
-  What the item was right about is that these sites each **hand-roll** the same
-  bilinear form — the normal-theory inner product `⟨X,Y⟩_A = ½·tr(A⁻¹XA⁻¹Y)` —
-  and one of them paid badly for it. `information_expected_per_case_blocks`
-  materialized `T[k][b] = Σ_b⁻¹·unvech(J[:,k])` for every free parameter and
-  every block, all live at once, then reduced each parameter pair with an
-  elementwise trace across every block. In a multi-group model a parameter
-  usually touches one group, so most of that array is explicitly-stored p×p
-  zeros that the pair loop then contracts against anyway.
-
-  Both terms of the expected information are that same form, which the
-  NormalTheory `BlockWeight` already whitens by, so with `Y_b = Fᵀ[dμ/dθ ;
-  dvech(Σ)/dθ]_b` the block is exactly `I_b = Y_bᵀ Y_b` — no residual scaling.
-  One q_b × n_free whitened Jacobian per block, built and discarded in turn, and
-  one BLAS-3 syrk instead of the n_free²·n_blocks·p² reduction.
-  `benchmarks/expected_info_bench.cpp` (`opt`, reference implementation carried
-  locally in the benchmark so the comparison needs no old checkout):
-
-  | p | groups | n_free | before ms | after ms | | T array MB | Y MB |
-  |---|---|---|---|---|---|---|---|
-  | 6 | 1 | 12 | 0.008 | 0.009 | 0.85x | 0.00 | 0.00 |
-  | 12 | 1 | 24 | 0.051 | 0.044 | 1.18x | 0.03 | 0.01 |
-  | 24 | 1 | 48 | 0.59 | 0.22 | 2.71x | 0.21 | 0.11 |
-  | 48 | 1 | 96 | 5.19 | 1.81 | 2.87x | 1.69 | 0.86 |
-  | 6 | 4 | 48 | 0.102 | 0.057 | 1.80x | 0.05 | 0.01 |
-  | 12 | 4 | 96 | 0.98 | 0.35 | 2.80x | 0.42 | 0.06 |
-  | 24 | 4 | 192 | 20.8 | 3.72 | 5.59x | 3.38 | 0.44 |
-  | 48 | 4 | 384 | 513.9 | 35.7 | **14.4x** | **27.0** | **3.45** |
-
-  Both the speedup and the memory ratio grow with group count, which is the
-  signature of the stored zeros. Single-group p=6 is 0.85x — the whitening setup
-  costs more than the tiny T array there — but that is 9 µs against 8 µs, and
-  the crossover is already passed by p=12. Not worth a size-switch.
-
-  Both benchmarks run on `benchmarks/timing/timing.hpp` rather than a private
-  timing loop, so the old/new arms are a rotated paired comparison and survive
-  DCE at `-O3 -march=native`. One trap worth knowing about that harness:
-  `StageStats::checksum` is the sum over the *calibrated batch*, and two arms
-  calibrate to different batch sizes, so the cross-arm checksum tripwire only
-  works after dividing by `StageStats::batch`. Raw checksums differ by the batch
-  ratio, which looks like a correctness failure and is not. `expected_info_covariance_only` (the FCSEM
-  path) carried the identical pattern and got the same treatment. The identity
-  is pinned against an independent explicit-trace reference over 1–4 groups,
-  with and without mean structure, in
-  `cpp/tests/unit/expected_info_whitened_test.cpp`.
-
-  Fallout worth recording: this moved the information matrix by ~1e-16, which
-  broke `score_robust_test.cpp`'s `mean_variance_relative_shift == 0.0`. That
-  assertion was knife-edge, not a real invariant — sweeping the data seed over
-  {1..7, 20260712} against the **pre-existing** implementation gives an exactly
-  zero shift for four seeds and 1.8e-16 – 2.7e-16 for the other four, and the
-  test's seed simply landed on a bit-exact one. The shift is insensitive to the
-  flip seed, confirming a fixed arithmetic-path difference rather than
-  resampling noise. The assertion now tests the property (V_flip agrees with
-  V_identity) at 1e-12 rather than pinning the arithmetic path.
 - **Continuous DWLS still arrives Dense from the R boundary.**
   `prepared_weight_impl` hands `prepare_weight(method = "DWLS")` across as a
-  bare matrix, so it becomes a Dense block even though it is diagonal. Wants
-  the R glue to pass the diagonal through (and `r-package/src/prepared.hpp`
-  retyped) before the DWLS fit path sees the ~q = p²/2 whitening win. Not done
-  this pass because `r-package/` had unrelated in-flight edits.
-- **Converge `detail::WhitenFactor` and `gmm::BlockWeight`.** Deliberately left
-  separate: `WhitenFactor` represents the factor F and `BlockWeight` the weight
-  W, so the same-named `diagonal()` factory means `diag(F)` in one and
-  `diag(W)` in the other. Converging them while also changing the continuous
-  hot path would destabilize 53 working `ordinal.cpp` sites for no immediate
-  gain.
-- Batched-`trsm` LS-shape optimization: see
-  [speculative.md](speculative.md).
-
-Gated on `ctest` staying at 1138/1140 (the 2 failures are a pre-existing
-`external/textbook-corpus/cases/newsom_2015` checkout gap, identical with the
-changes stashed) plus element-wise θ̂ parity, as the ordinal fix did.
+  bare matrix. Pass its diagonal through the R glue and `prepared.hpp` so the
+  fitter can retain diagonal whitening.
+- **Converge `detail::WhitenFactor` and `gmm::BlockWeight` only with a clear
+  factor/weight contract.** The first represents F and the second W; their
+  same-named diagonal factories take different quantities. Preserve the
+  working ordinal consumers during any consolidation.
+- Batched triangular-solve optimization for the residual/Jacobian shape
+  remains in the [speculative backlog](speculative.md).
 
 ### Other estimation and inference follow-ups
 
@@ -3524,757 +3293,107 @@ Remaining work, tiered:
 
 ## Misspecification-robust SE for the moment-quadratic family (frontier)
 
-- **Reduced-bias estimation (RBM) frontier.** V1 landed 2026-06 for raw-data
-  continuous ML and FIML. The 2026-06-25 extension adds the moment-quadratic
-  family: continuous ULS/GLS/WLS through `continuous_ls_rbm_parts()`, ordinal
-  and mixed ordinal through `ordinal_rbm_parts()` /
-  `mixed_ordinal_rbm_parts()`, and ML2S NT/ULS/DWLS/ADF/DLS through
-  `two_stage_rbm_parts()`. All use the same reduced-space trace algebra as ML
-  (`K' J K`, `K' E K`) and the R frontier dispatcher now routes existing fit
-  objects through `magmaan_core$frontier_rbm()`. Remaining work:
-  - **Done 2026-06-25 — validation breadth (FD checks for the adjusted
-    estimating equations).** `cpp/tests/unit/rbm_fd_test.cpp` independently
-    finite-difference-validates the RBM *driver's* penalty/correction assembly
-    (the ingredients `j`/`e` are already FD-gated transitively via
-    `robust_weighted_moment_ij` and the `*_ij` / Γ-influence gates). Three
-    checks: **A** explicit one-step reconstruction (independently central-FD the
-    penalty `P(θ)=−½tr(j⁻¹e)`, solve `j_α·δ=∇P`, assert `correction≈δ` and
-    `adjustment≈∇P` — guards sign, the −½, the K-reduction, the solve), run on
-    **every** family (continuous ULS/GLS/WLS, ML, FIML complete+missing, ordinal
-    DWLS/WLS/ULS, mixed DWLS, ML2S Nt/Uls/Dwls/Adf); **B** explicit↔implicit
-    agreement to `O(‖corr‖²)` (confirmed second-order: the gap shrinks faster
-    than `‖corr‖²` as N grows); **C** implicit stationarity of
-    `M(θ)=base.f(θ)+trace(θ)/(2N)` (the adjusted estimating equation verbatim).
-    B and C run on the cheap-implicit families (continuous/ML/FIML): the implicit
-    RBM solve is an FD-gradient-over-parts optimization that rebuilds the
-    IF(Ŵ)-carrying parts ~2q times per iterate, so the estimated-weight families
-    (ordinal/mixed/ML2S, especially missing-data ML2S with its per-case Stage-1
-    Γ-influence) run Check A only. `trace(θ)` is read directly from the public
-    `*_rbm_parts` (weighted families) or via the explicit base-swap (ML/FIML);
-    `base.f(θ)` is rebuilt from each family's public objective constructor.
-    13 cases, all green.
-  - **Deferred — performance and regular-region checks (2026-09-22).**
-    RBM has been dropped from the current inference-study expansion at the
-    author's request. The optimization prototype was reverted; no new RBM
-    implementation or search restriction is shipped. Reopen only for an
-    explicitly renewed RBM consumer.
-    Complete-data implicit ML finite-differences the full adjusted objective in
-    full theta coordinates: `1 + 2*n_free` parts rebuilds per optimizer
-    value/gradient callback, even when equalities reduce the search dimension.
-    Each rebuild includes observed information and raw empirical scores; the
-    base likelihood's analytic gradient is computed and discarded. Add a
-    value-only ML penalty/parts interface so external derivative audits need
-    not invoke a complete explicit correction to read the penalty. Retain the
-    analytic base gradient, differentiate the adjustment in reduced coordinates,
-    and investigate model/sample-feature reuse and analytic trace derivatives.
-    For complete-data Gaussian scores, cache centered linear/quadratic data
-    features (or their empirical cross-product when smaller) once per fit;
-    preserve empirical meat rather than replacing it by a normal expectation.
-    Independently verify off-optimum scores, means, equality reduction and
-    small/large-N branches before accepting that optimization.
-    The existing trace solve checks LU invertibility, not positive curvature;
-    finite indefinite-information endpoints can have large negative trace
-    adjustments. Specify conditioning/curvature acceptance and a documented
-    regular-region search policy before treating such returned endpoints as
-    validated inference estimates. Preserve the distinction between search
-    restrictions, estimator definition, and solver return status. Benchmark
-    fitting and independent audit separately before scaling up simulations.
-  - **M — magmaan-owned paper rerun.** Experiment
-    `06-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
-    paper's main two-factor and growth-curve examples from the authors' OSF
-    result objects. Remaining work is the independent magmaan rerun: implement
-    the bounded-estimation choices needed for the paper design, rerun the
-    normal/non-normal cells from generated data, and compare magmaan ML/eRBM/iRBM
-    to the OSF summaries.
+Observed-Hessian bread, complete/MCAR estimated-weight IJ adapters, the ML2S
+Stage-1 Gamma influence, profile RMSEA/LRT and scalar parameter-profile
+references are implemented. All-ordinal and mixed fit-index bundles and FIML
+observed/robust covariance dispatch are exposed in R. The
+[roadmap](../architecture/roadmap.md#ordinal-and-mixed-categorical-ls) owns
+capabilities and validation boundaries; the
+[test ledger](../validation/test_ledger.md) records cross-subsystem guards.
+Completed rollout entries are not another work queue.
 
-- **Done 2026-06-19.** Observed-Hessian ("robust" regime) bread for the
-  moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV, mixed/polyserial,
-  continuous ULS/GLS/WLS), which previously had only the Gauss-Newton/expected
-  bread. The initial version used `observed_moment_bread_fd`
-  (central-difference of the per-unit moment-LS gradient, reduced via `K`) as an
-  optional `bread_override` into `robust_weighted_moments`; the meat (NACOV),
-  df, and chi-square are unchanged. Selector `bread = "expected" | "observed"` (reusing
-  `robust::Information`) threaded through `robust_ordinal` / `robust_mixed_ordinal`
-  / `robust_continuous_ls`, surfaced in R as `vcov(fit, regime = "model" |
-  "robust")`, which feeds `standardized(fit, vcov)`. Continuous ML already had
-  the observed bread; FIML's observed-information model vcov and MLR sandwich
-  now use the same `vcov(fit, regime=)` keyword. Default stays `expected`
-  (lavaan parity) where an expected-bread estimator exists.
-  Validation: experiment research/12 (`12-misspec-robust-se`) -- under the correct model
-  the two breads coincide and both match the empirical sampling SD. Focal is a
-  free loading on a cross-loading-distorted factor (raw + std.all), continuous
-  ML, MCAR FIML, and ordinal DWLS. Under the omitted cross-loading the
-  expected-bread/model SE
-  underestimates by about a third (std loading 0.69-0.78 of truth) and the
-  observed bread recovers it -- essentially completely for continuous ML
-  (std 1.01) and substantially for ordinal DWLS (std 0.85, the new bread), with
-  FIML now included as the missing-data continuous cell. Note:
-  `misspec_observed_bread.tex`. This is `frontier`, not core
-  parity: the correct-model cell is the validation oracle (no mainstream
-  *software* -- lavaan/Mplus -- exposes this for the ordinal/WLS family).
-  This observed-bread SE *is* Lai & Simoes (2023, SEM 30:5, "Reflecting on the
-  'Robust' Standard Errors..."): their new SE (Eq 34-36, `Pi_DWLS`, bread
-  `H = 2 D' Gd^-1 D - 2[I (x) eps' Gd^-1] Psi`); their "robust SE" (Eq 17, Muthen
-  1997 = lavaan default) is our expected bread. The initial implementation
-  computed `H` by FD; the continuous, all-ordinal, and mixed ordinal production
-  observed breads now use closed-form moment Hessians. Their findings match exp
-  35 (robust SE biased 15-40% under misspec, not improving with n; new SE
-  consistent; ULS closes better than DWLS).
-  The DWLS finite-sample residual is the data-dependent weight `Wd = Gd^-1`: both
-  their new SE and ours treat the Stage-2 weight as fixed, so neither captures its
-  higher-order variability (ULS, W=I, has none -> closes cleanly); a
-  case-resampling bootstrap recovers that term.
-  Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS/WLS now has
-  `robust_ordinal_ij`, an explicit infinitesimal-jackknife covariance that carries
-  the estimated diagonal-weight and full dense-weight terms. The data-direct
-  Γ-diagonal and full-Γ channels are regression-tested against case-weight
-  finite differences, and the dense diagonal extraction is pinned against the
-  DWLS helper. This is the
-  Hall-Inoue estimated-weight correction for misspecified moment-GMM, specialized
-  to the moment-quadratic SEM stack. The reusable `robust_weighted_moment_ij`
-  primitive is now the shared transport for observed-bread weighted-moment IJ
-  covariance: callers provide per-case moment influence rows plus optional
-  per-case estimated-weight corrections. Robust/experimental mixed stage-1
-  variants, MCAR/pairwise-missing variants, and ML2S adapters remain out of
-  scope.
-  Derivation and implementation grid:
-  `weighted_moment_ij_grid.tex`.
-  Open follow-ups:
-  - **Hall-Inoue estimated-weight IJ grid** (`weighted_moment_ij_grid.tex`).
-    Verification gates for every adapter: fixed-weight reduction to
-    `robust_weighted_moments`; derivative checks for each new weight-influence
-    channel; deterministic resampling-jackknife fixture; misspecification
-    simulation with ULS/fixed-weight negative controls. Slices: complete
-    continuous LS fixed-weight/ULS reduction **landed 2026-06-19** as
-    `robust_continuous_ls_fixed_weight_ij`; sample-built continuous GLS
-    normal-theory-weight correction **landed 2026-06-19** as
-    `robust_continuous_ls_gls_ij` (this is not the ML/FIML robust-score NT
-    path); complete-data continuous WLS/ADF empirical-weight correction
-    **landed 2026-06-19** as `robust_continuous_ls_wls_ij`, with
-    covariance-only and meanstructure finite-difference contamination gates.
-    Complete-data continuous DWLS empirical diagonal-weight correction
-    **landed 2026-06-19** as `robust_continuous_ls_dwls_ij`, with the same
-    covariance-only and meanstructure contamination gates on
-    `diag(Gamma)^{-1}`. Complete-data continuous DLS fixed-mixing correction
-    **landed 2026-06-19** as `robust_continuous_ls_dls_ij`, with
-    covariance-only and meanstructure contamination gates on
-    `((1-a) Gamma_NT + a Gamma_ADF)^{-1}`. EB-DLS scalar-selection uncertainty
-    is a separate future scalar-IF term, not part of the fixed-`a` adapter.
-    Complete all-ordinal full WLS **landed 2026-06-19** in
-    `robust_ordinal_ij`, using dense `IF(Gamma)` from integer data plus the
-    finite-difference stage-1 kappa channel; tests gate the full case-weight
-    derivative and diagonal extraction against the DWLS path.
-    Complete mixed ordinal/polyserial fixed-weight ULS **landed 2026-06-19** as
-    `robust_mixed_ordinal_ij`, with `MixedOrdinalStats::moment_influence` rows
-    reconstructed from the mixed moment builder and an exact reduction test
-    against the observed-bread fixed-weight sandwich.
-    Complete mixed ordinal/polyserial DWLS diagonal estimated-weight correction
-    **landed 2026-06-19** in `robust_mixed_ordinal_ij`, using ordinary
-    complete-data ML/polyserial raw mixed blocks, mixed moment influence rows,
-    data-direct diagonal `IF(Gamma)`, and finite-difference
-    `d diag(Gamma) / d kappa` in the mixed moment order.
-    Complete mixed ordinal/polyserial full WLS estimated-weight correction
-    **landed 2026-06-19** in `robust_mixed_ordinal_ij`, using dense mixed
-    data-direct `IF(Gamma)` plus finite-difference `d Gamma / d kappa`; tests
-    gate the full case-weight derivative and diagonal extraction against the
-    DWLS path.
-    ML2S observed-bread Stage-2 regime **landed 2026-06-20** as
-    `TwoStageBread::Observed` on `two_stage_em_ml_inference`, with
-    complete-data reductions against unstructured observed-bread robust SEM
-    for `TwoStageWeight::Nt` and observed-bread `robust_continuous_ls` for
-    `TwoStageWeight::Adf`.
-    ML2S saturated-EM casewise moment influence primitive **landed
-    2026-06-20** as `saturated_em_moment_influence`, with complete-data
-    reduction to centered mean/covariance moment rows and missing-data
-    `IF'IF == SaturatedMoments::acov` gates.
-    ML2S raw complete-data observed-bread covariance for non-NT Stage-2 weights
-    **landed 2026-06-20** by routing
-    `TwoStageWeight::{Dwls,Adf,Dls}` through the continuous-LS IJ adapters
-    while fixed-weight `Uls` stays on the shared ML2S IJ assembly;
-    tests gate ADF/DWLS/DLS against
-    `robust_continuous_ls_{wls,dwls,dls}_ij`. The scaled-test fields remain
-    the fixed-weight Satorra-Bentler quantities.
-    ML2S raw missing-data observed-bread covariance for non-NT Stage-2 weights
-    **landed 2026-06-20** by adding the Stage-1 FIML sandwich-Gamma
-    influence through a case-weight finite-difference over the saturated EM
-    `(H,J,ACOV)` stack; the adapter covers `TwoStageWeight::{Dwls,Adf,Dls}`
-    and tests that the IJ path changes `vcov`/`se` while preserving the
-    fixed-weight scaled-test fields.
-    Analytic replacement **landed 2026-06-23**: the per-case Stage-1
-    sandwich-Γ influence `n·dΓ_b/dw_i` (Γ_b = n·H⁻¹JH⁻¹) is now closed-form,
-    `dΓ/dw_i = H⁻¹JH⁻¹ + n(−H⁻¹dH H⁻¹JH⁻¹ + H⁻¹dJ H⁻¹ − sym)` with the
-    direct (explicit case-weight) and θ-movement parts of `dH = I_i +
-    (∂H/∂θ)Δθ_i`, `dJ = g_ig_iᵀ + (∂J/∂θ)Δθ_i`, where `Δθ_i = H⁻¹g_i` is the
-    `saturated_em_moment_influence` row. The J-movement collapses to
-    `¼(dSᵀS + SᵀdS)` (directional deviance score `dS`, no per-case info
-    matrix); the H-movement is the per-pattern directional third derivative of
-    the analytic saturated Hessian (`fiml_saturated_hessian_directional_block`,
-    differentiating `A, Zsum, M` and reusing `basis_trace_xy`). This is the
-    "score-product / observed-information / eta-movement" decomposition the
-    remaining-slice flagged; it removes the per-case EM re-fits (was O(n) EM
-    solves per block) and the ε step. `two_stage_saturated_gamma_influence(...,
-    GammaInfluenceRegime::{Analytic,FiniteDifference})` exposes both; the FD is
-    retained as the validation oracle. Gated in `fiml_test.cpp` (analytic == FD
-    to ~1e-5 on complete and missing data, symmetric) plus the existing
-    missing-data DWLS/ADF/DLS IJ vcov tests now run through the analytic path.
-    Continuous-LS analytic observed bread **landed 2026-06-20** by replacing
-    the production finite-difference Hessian with the closed-form
-    `J' W J + residual-curvature` contraction from
-    `weighted_moment_ij_grid.tex`; tests keep the finite-difference bread as
-    the validation oracle for fixed-weight, GLS, WLS, DWLS, and DLS IJ paths.
-    All-ordinal and mixed ordinal/polyserial analytic observed bread **landed
-    2026-06-20** by adding the same `Delta' W Delta + residual-curvature`
-    contraction for threshold, correlation, variance, mean, and polyserial
-    association moments, including theta/released-scale standardization terms.
-    All-ordinal MCAR/pairwise-overlap ULS IJ **landed 2026-06-20** by
-    materializing case-aligned sparse moment-influence rows in
-    `ordinal_stats_from_observed_integer_data(..., Overlap)`; tests gate
-    complete-data reduction, `G'G/N == NACOV`, and observed-bread ULS reduction
-    under deterministic MCAR.
-    All-ordinal MCAR/pairwise-overlap DWLS/WLS IJ **landed 2026-06-20** by
-    adding support-aware observed Gamma data-influence and Jacobian helpers;
-    tests gate missing-pattern case-weight finite differences, complete-data
-    reduction, and deterministic-MCAR DWLS/WLS fit-level IJ execution.
-    Mixed ordinal/polyserial MCAR/pairwise-overlap ULS IJ **landed
-    2026-06-20** by adding
-    `mixed_ordinal_stats_from_observed_data`, which materializes support-aligned
-    mixed moment influence rows over thresholds, continuous means/variances,
-    polychorics, polyserial covariances, and Pearson covariances; tests gate
-    complete-data reduction, `G'G/N == NACOV`, and observed-bread ULS reduction
-    under deterministic MCAR.
-    Mixed ordinal/polyserial MCAR/pairwise-overlap DWLS/WLS IJ **landed
-    2026-06-20** by adding support-aware observed mixed Gamma
-    data-influence and finite-difference `d Gamma / d kappa` helpers; observed
-    mixed stats retain NaN-coded raw blocks so `robust_mixed_ordinal_ij` can
-    route DWLS and dense WLS through the MCAR estimated-weight correction.
-    Tests gate complete-data reduction of the observed helpers, diagonal/full
-    consistency, `IF(Gamma)` centering at fixed kappa, and deterministic-MCAR
-    DWLS/WLS fit-level IJ execution.
-    Follow-up landed 2026-06-23: observed mixed stats now also materialize
-    support-aligned `gamma_diag_influence` / `gamma_full_influence` rows, and
-    `robust_mixed_ordinal_ij` plus `mixed_ordinal_dwls_profile_rmsea` consume
-    those rows directly, falling back to raw-data reconstruction only for older
-    complete-data stats. This makes missing-data mixed IJ/profile inference
-    explicit-data-object driven like the all-ordinal overlap path.
-    Basic hybrid mixed observed-data stats **landed 2026-06-23** as
-    `estimate::fiml::mixed_ordinal_stats_hybrid_fiml_from_observed_data`:
-    ordinal thresholds/polychorics and polyserials remain observed-pairwise,
-    while continuous means/covariances and their influence rows come from
-    saturated continuous FIML. R exposes this through
-    `magmaan_core$data_mixed_ordinal_stats_hybrid_fiml_from_raw/_from_df`,
-    with observed-pairwise companions and `robust_mixed_ordinal_ij`. Gated by
-    C++ MCAR smoke tests and an R smoke. MCAR/MAR efficiency validated
-    2026-06-23 by `experiments/research/14-mixed-fiml-pairwise-efficiency`: the hybrid
-    leaves the ordinal block bit-for-bit identical, modestly reduces continuous
-    sampling variance under MCAR (grows with the missing rate), and removes the
-    pairwise continuous-moment bias under MAR (worst continuous-parameter |bias|
-    ~0.10 pairwise vs ~0.01 hybrid at 35% missing). Remaining validation is
-    finite-sample calibration and stress tests for singular full WLS Gamma.
-    Remaining
-    slices: the default `TwoStageWeight::Nt` path remains ordinary normal-theory
-    ML robust-score inference, while the moment-quadratic GLS IJ correction is
-    covered by complete continuous LS. (Robust/experimental mixed stage-1
-    variants under missing data — WMA/DPD/Huber polyserial — are cut to
-    [speculative.md](speculative.md): blocked on a recipe choice, no consumer.)
-  - **Done 2026-06-20.** Analytic moment-Hessian remainder: complete continuous
-    LS, all-ordinal, and mixed ordinal/polyserial observed breads now have the
-    closed-form `J' W J + residual-curvature` contraction; FD remains the
-    diagnostic validation helper rather than the production path.
-  - **Done 2026-06-22.** First fixed-misspecification profile-RMSEA / profile
-    LRT slices: `weighted_moment_profile_rmsea` builds the dense profile Hessian
-    `Q = W - W D B^{-1} D' W` from the observed-Hessian bread and reports the
-    signed `tr(QΓ)` RMSEA centering, positive `QΓ` mixture-tail spectrum,
-    negative count, rank, nominal df, and actual positive `spectrum_size`;
-    `continuous_ls_profile_rmsea` wires this for complete
-    continuous ULS/GLS/WLS/DWLS-style moment-quadratic fits with Γ from raw data
-    or caller blocks. `weighted_moment_profile_lrt` and
-    `continuous_ls_profile_lrt` now compare nested dense profile Hessians in a
-    common first-stage moment space and report both nominal `df_diff` and actual
-    positive `spectrum_size`. `weighted_moment_profile_rmsea_two_metric` and
-    the complete-data ML wrappers `ml_profile_rmsea` / `ml_profile_lrt` now
-    implement the basic dense two-metric profile Hessian
-    `Q = V0 - W* D B^{-1} D' W*` with raw-data or caller Γ. This is the basic
-    research surface only.
-    - **Done 2026-06-22.** Estimated-weight (diagonal DWLS) profile-Hessian
-      core primitive `weighted_moment_profile_rmsea_estimated_weight` (+ the
-      `WeightedEstimatedWeightProfileBlock` ingredient struct). It assembles the
-      value-function Hessian over the *extended* first-stage vector `x = (u, γ)`,
-      `Q = φ_xx - φ_xθ B^{-1} φ_θx = [[W,R],[R,S]] - [[WD],[RD]] B^{-1} [D'W,D'R]`
-      with `W=diag(1/γ)`, `R=diag(r/γ²)`, `S=diag(r²/γ³)`, routing the extended
-      block (`jacobian=[D;D]`, `V0=[[W,R],[R,S]]`, `W*=blkdiag(W,R)`,
-      `gamma=Γ_x`) through the existing two-metric core and restating `df` to the
-      classical u-moment count `Σ m_b − n_alpha`. At `r=0` the γ channel is
-      dormant and `Q` collapses to the fixed-weight `W − W D B^{-1} D' W`; under
-      fixed misspecification the γ block reshapes the law (matches the
-      `ordinal_dwls_profile_*` prototype). `weighted_moment_profile_lrt`
-      already consumes the nested pair unchanged. Gated by FD-vs-analytic,
-      `r=0` reduction, and nested-LRT cases in `weighted_inference_test.cpp`.
-    - **Done 2026-06-22 (rank accounting).** The structured inertia bookkeeping
-      for the profile spectrum is characterized in
-      `profile_hessian_rank_accounting.tex` (+ the numpy
-      check `profile_hessian_rank_check.py`). Writing the profile Hessian as
-      `Q = V_o^{1/2}(I − Ĝ B^{-1} Ĝ') V_o^{1/2}` with `Ĝ = V_o^{-1/2} W_p D` and
-      the metric-gap form `Ã = D' W_p V_o^{-1} W_p D`, `col(Ĝ)` is invariant and
-      `spec(I − Ĝ B^{-1} Ĝ') = {1}^{(m−p)} ∪ {1 − ν_j}`, `ν_j = eig(B^{-1} Ã)`.
-      With full-rank `Γ`, Sylvester gives the same inertia for `Q`, the
-      symmetric `Γ^{1/2}QΓ^{1/2}` form, and the inner matrix, so
-      `spectrum_size = n_+(QΓ) = (m−p) + #{ν_j < 1}`, `n_−(QΓ) = #{ν_j > 1}`,
-      `rank(QΓ) = (m−p) + #{ν_j ≠ 1}`; with singular `Γ`, the count is restricted
-      to `range(Γ)`. These counts are `Γ`-free only conditional on fixed `Q`;
-      `Q` can itself move with population moments / weights. Classical df
-      survives iff `ν_j ≡ 1`, i.e.
-      `B = Ã`, which needs `K = 0` (observed-bread/curvature channel off) **and**
-      `W_p = V_o` (estimated-weight/metric channel off); both hold under correct
-      spec and at `e=0`. ULS exposes only the curvature channel, ML/GLS both, and
-      positive residual-curvature directions make `QΓ` indefinite (negative
-      mixture weights). The note also flags that the positive-only `bias_trace`
-      overcounts the signed `tr(QΓ)` of `higher_order_discrepancy_misspec.tex`
-      when `n_−>0` (a convention, not a bug), and that the extra weights are
-      `O(‖e‖)` so the integer rank is brittle (read `spectrum_size` as an
-      effective rank at a floor). Numerically verified to machine precision (ULS
-      inertia `(13,7,1)`, ML `(17,1,3)` at `df=9`; e→0 collapse to df).
-    - **Done 2026-06-22 (signed trace fields).** Profile RMSEA/LRT result
-      structs expose `trace_signed = tr(QΓ)`, `negative_trace_abs`,
-      `negative_spectrum_size`, and `spectrum_rank` alongside the existing
-      positive-tail `eigvals` / `bias_trace` / `spectrum_size`. RMSEA centering
-      uses `trace_signed`; `rmsea_positive_trace` preserves the old positive-only
-      comparator. LRT p-value summaries remain positive-tail approximations and
-      warn when the contrast is indefinite.
-    - **Done 2026-06-22 (small-pencil diagnostics).** Single-model profile
-      RMSEA results now expose the parameter-space pencil
-      `ν_j = eig(B^{-1} Ã)` when the stacked data metric `V_o` is positive
-      definite, with `max|ν_j−1|` and predicted structural positive/negative/rank
-      counts. Estimated-weight extended metrics can be singular, so they leave
-      the pencil empty and continue through the dense `QΓ` path.
-    - **Done 2026-06-22 (categorical DWLS wiring).**
-      `estimate::ordinal_dwls_profile_rmsea` / `ordinal_dwls_profile_lrt`
-      (`estimate/ordinal.{hpp,cpp}`) extract `(D, γ, r, B)` from an all-ordinal
-      DWLS fit (`ordinal_moment_jacobian`, `NACOV.diagonal()`,
-      `ordinal_block_residual`, `ordinal_observed_bread_analytic`) and build the
-      joint NACOV `Γ_x` of `(u, γ)` as the cross-product of the stacked per-case
-      influence rows `[g_i | IF_i(γ)]`, with `IF_i(γ) = IFG + G·(dΓ̂/dκ)'`
-      reusing the same `ordinal_gamma_diag_data_influence` /
-      `ordinal_gamma_diag_jacobian_fd` channels (and `*observed*` variants for
-      pairwise-overlap MCAR) that `robust_ordinal_ij` uses. `fmin` is the
-      standard DWLS `F`, so `chisq_standard` and `df` match `robust_ordinal`
-      exactly; the γ channel is the first-stage estimated-weight direction the
-      rank note flags. Single- and multi-group. Gated in `ordinal_test.cpp`
-      (single-fit `Γ_x` uu-block == NACOV + df/chisq vs `robust_ordinal` + live
-      γ channel; nested LRT df_diff / spectrum / mixture-p).
-    - **Done 2026-06-22 (mixed categorical DWLS wiring).**
-      `estimate::mixed_ordinal_dwls_profile_rmsea` /
-      `mixed_ordinal_dwls_profile_lrt` now run the same estimated-weight profile
-      construction for mixed continuous/ordinal DWLS. The wrapper prepares the
-      mixed delta partable, builds `D` with `mixed_moment_jacobian`, takes
-      `(γ, r)` from `MixedOrdinalStats::NACOV.diagonal()` and
-      `mixed_model_moments() - stats.moments`, uses
-      `mixed_observed_bread_analytic` for `B`, and assembles the extended
-      `Γ_x` from `[g_i | IF_i(γ)]` using the complete or observed
-      `mixed_gamma_diag_*` influence/Jacobian channels. Gated in
-      `ordinal_test.cpp` by the live mixed γ block, uu-block == NACOV,
-      standard χ²/df parity with `robust_mixed_ordinal`, raw-data requirement,
-      and a nested mixed DWLS profile-LRT smoke.
-      Follow-up 2026-06-23: the mixed profile accepts precomputed
-      `MixedOrdinalStats::gamma_diag_influence` and only falls back to raw
-      mixed data when those rows are absent; the observed-missing mixed builder
-      now provides the precomputed rows.
-    - **Done 2026-06-22 (R ordinal profile surface).**
-      The R package now exposes the all-ordinal and mixed DWLS profile methods
-      through `magmaan_core$ordinal_profile_rmsea` /
-      `ordinal_profile_lrt` and
-      `magmaan_core$mixed_ordinal_profile_rmsea` /
-      `mixed_ordinal_profile_lrt`, backed by `infer_*` Rcpp wrappers. These
-      take the same explicit `magmaan_ordinal_data` /
-      `magmaan_mixed_ordinal_data` object used for fitting, enforce DWLS, and
-      return the profile Hessian, Gamma, dense spectrum, signed/positive trace
-      summaries, RMSEA or nested-LRT statistics, and any warnings. Verified by
-      `just r-dev` and an R smoke over all-ordinal and mixed nested DWLS fits.
-    - **Done 2026-06-25 (estimator-aware LRT modification indices).**
-      The R `modification_indices_lrt()` observed-bread column `lrt_p_obs` now
-      dispatches the profile-LRT on the anchor's estimator instead of hardcoding
-      `ml_profile_lrt`: complete-data ML keeps `ml_profile_lrt`, all-ordinal DWLS
-      uses `ordinal_profile_lrt` (sharing the anchor's `fit$ordinal_stats`), and
-      mixed-ordinal DWLS uses `mixed_ordinal_profile_lrt` (`fit$mixed_ordinal_stats`)
-      — making `modification_indices_lrt` the first R consumer of those bindings.
-      `.lrt_refit` now propagates `ordered=` so an ordinal augmented model refits
-      under DWLS (it previously errored "requires ordered variables"). Estimators
-      without a wired profile-LRT path report `lrt_p_obs = NA`; the plain
-      `lrt`/`lrt_p` Δχ² columns still report for any complete-data estimator.
-      `.lrt_refit` now propagates `ordered=` so an ordinal augmented model refits
-      under DWLS (it previously errored "requires ordered variables").
-    - **Done 2026-06-25 (continuous ULS/GLS + FIML + ML2S LRT MI).** Extended the
-      `lrt_p_obs` dispatch to the remaining estimator families via three new Rcpp
-      bindings (in `fit.cpp`, co-located with the fit-local weight/pack helpers;
-      the shared `profile_lrt_to_list` serializer was hoisted to `internal.hpp`):
-      `infer_continuous_ls_profile_lrt` (continuous **ULS/GLS** — one shared weight
-      built at the anchor θ, empirical Γ from the raw data),
-      `infer_fiml_profile_lrt` (**FIML** — one shared missingness/saturated stage,
-      per-model χ² from `fiml_extras`), and `infer_two_stage_nt_profile_lrt`
-      (**ML2S** — Stage-1 EM moments reconstructed from `fit$stage1`). The FIML
-      `stop()` is gone. For FIML/ML2S the plain `lrt`/`lrt_p` come from the
-      profile-LRT's own `T_diff`/`p_unscaled` (the incomplete-data saturated term
-      cancels in the difference), not `2N·fmin`; `robust_nested_lrt` is unusable
-      here because its Satorra-2000 restriction map requires equal npar, not the
-      parameter additions a modindex sweep makes. ML2S also needed an ML2S arm in
-      `inference_modification_indices` for candidate enumeration (one-step ML score
-      MI on the EM moments). Validated by GLS/ULS/FIML/ML2S arms in
-      `r-package/examples/modification_indices_lrt.R` (each table value matches a
-      direct `*_profile_lrt` call to ~1e-9).
-    - **Done 2026-06-25 (continuous WLS LRT MI — family complete).** Continuous WLS
-      is now wired too: `modification_indices_lrt()` gains a `weight=` argument (the
-      fitting W, which is not retained on the fit), threaded through the candidate
-      sweep, the augmented refit (`fit_model(..., W=)`), and the profile-LRT binding.
-      A WLS fit without `weight=` errors clearly. Pure-R change (the
-      `infer_continuous_ls_profile_lrt` binding already accepted `weight=`). The
-      `lrt_p_obs` dispatch now covers **every** estimator magmaan fits: ML, ordinal
-      DWLS, mixed-ordinal DWLS, continuous ULS/GLS/WLS, FIML, and ML2S. Validated by
-      a WLS arm (ADF weight from `robust_empirical_gamma`) in the example.
-    - **Done 2026-07-02 (ML scalar/profile-LR seed).**
-      `estimate::frontier::fit_ml_constrained` appends a programmatic nonlinear
-      equality closure to the ordinary partable nonlinear constraints and reuses
-      the existing constrained ML optimizer path. `profile_lrt_scalar_ml` and
-      `profile_lrt_parameter_ml` build the first df-1 ordinary profile-LR test
-      on top, reporting `2N·Δfmin` and `χ²_1` p-values. This initial landing was
-      deliberately only the normal-theory ML seed; the later parameter-CI and
-      raw-data robust-scaling slices reuse the same constrained-fit surface.
-      Bartlett or calibrated small-sample factors, functional callbacks, and
-      ordinal DWLS functional versions remain open funLR work.
-    - **Done 2026-07-03 (fixed-weight GMM scalar/profile-LRT seed).**
-      `estimate::frontier::fit_gmm_constrained` reuses the same programmatic
-      nonlinear equality closure path after scalarizing the moment-quadratic
-      objective. `profile_lrt_scalar_gmm` and `profile_lrt_parameter_gmm` report
-      the ordinary df-1 `2N·Δfmin` statistic for a caller-fixed ULS/GLS/WLS
-      weight; R exposes the parameter special case as
-      `magmaan_core$frontier_profile_lrt_parameter_gmm()`, with
-      `r-package/examples/profile_lrt_parameter_gmm.R` as the smoke check.
-      Robust/Satorra scaling, fitted-weight policy, CI inversion, and ordinal
-      fitted-functional constraints remained open at this slice; later same-day
-      slices closed the fixed-weight parameter robust/CI pieces.
-    - **Done 2026-07-03 (fitted-weight parameter profile + CI inversion seed).**
-      The continuous moment-quadratic profile surface now has a fitted-weight
-      policy: `estimate::frontier::fit_gmm_fitted_weight` and
-      `fit_gmm_fitted_weight_constrained` refresh the expected-information
-      weight `W(θ)` in an outer fixed-point loop, and
-      `profile_lrt_parameter_gmm_fitted_weight` reports the same ordinary df-1
-      `2N·Δfmin` statistic after refitting the unrestricted point under that
-      policy. The first CI inverter landed for parameter profiles:
-      `profile_lrt_ci_parameter_ml`,
-      `profile_lrt_ci_parameter_gmm`, and
-      `profile_lrt_ci_parameter_gmm_fitted_weight` adaptively bracket and bisect
-      the ordinary profile statistic against the χ²₁ cutoff, returning endpoint
-      diagnostics and the endpoint constrained fits. R exposes the parameter
-      wrappers as `magmaan_core$frontier_profile_lrt_parameter_gmm_fitted_weight`
-      and `magmaan_core$frontier_profile_lrt_ci_parameter_*`; the existing
-      profile-LRT example now smokes fixed-weight, fitted-weight, and CI paths.
-      Still open at this slice: robust/Satorra/misspec scaling,
-      Bartlett/calibrated constants, functional R callbacks, and ordinal DWLS
-      fitted-functional constraints.
-    - **Done 2026-07-03 (continuous parameter robust profile scaling).**
-      Complete-data ML and caller-fixed continuous GMM parameter profile LRT/CI
-      now accept complete raw data for empirical 1-df sandwich scaling. The
-      constrained point keeps the ordinary `T`/`p_value`, adds
-      `scaling_factor`, `T_scaled = T / c`, and `p_value_scaled`, and the CI
-      inverter can target the scaled statistic through
-      `ScalarProfileReference::RobustScaled`. ML uses
-      `robust::param_space_sandwich`; fixed-weight GMM uses
-      `continuous_ls_param_space_sandwich` with the caller's fixed weight. R
-      exposes the option as `raw_data=` plus `robust=TRUE` on the ML/GMM
-      parameter LRT and CI helpers, and the fixed-weight GMM example now smokes
-      the robust scaled LRT/CI path.
-    - **Done 2026-07-03 (fitted-weight profile-metric robust scaling).**
-      The fitted-weight continuous GMM parameter profile LRT/CI now accepts the
-      same `raw_data` / `robust=TRUE` path. At each constrained endpoint it
-      rebuilds the final expected-information weight `W(theta)` and computes the
-      empirical 1-df sandwich scale for that profile metric, filling
-      `scaling_factor`, `T_scaled`, and `p_value_scaled`; the CI inverter can
-      root on `T_scaled`. This closes the fitted-weight parameter proving slice
-      for the correct-model robust reference. Still open: complete
-      weight-derivative / misspecification scaling, functional R callbacks,
-      ordinal fitted-functional constraints, and Bartlett/calibrated constants.
-      Experiment research/21 now also carries the paired non-normal coverage probe:
-      multivariate `t(5)` data, ULS/GMM parameter CI inversion, fixed versus
-      fitted profile weights, and ordinary versus robust-scaled references over
-      `N in {100,200,500}`.
-    - **Done 2026-07-03 (fixed-profile estimated-weight robust scaling).**
-      Caller-fixed continuous GMM parameter LRT/CI now has an opt-in
-      estimated-weight robust scale for GLS/WLS via
-      `GmmProfileRobustOptions::estimated_weight`: GLS uses the
-      sample-normal-theory IJ weight mode, WLS uses the empirical-WLS IJ mode,
-      and ULS remains the fixed-weight reference. R exposes this as
-      `estimated_weight=TRUE`, requiring `robust=TRUE` and complete `raw_data`.
-      Experiment research/21's CI branch now keeps ULS fixed/fitted rows and adds GLS/WLS
-      fixed-profile `ordinary`, `robust_fixed`, and
-      `robust_estimated_weight` rows. Still open: fitted-weight derivative /
-      misspecification references, scalar functional callbacks, ordinal
-      fitted-functional constraints, and Bartlett/calibrated constants.
-    - **Done 2026-07-03 (model-misspec profile references).**
-      Scalar profile LRT/CI now separates the reference target from the legacy
-      `robust` switch with `ScalarProfileReference::{Ordinary,RobustScaled,
-      MisspecScaled,MisspecMixture}` and the R-facing `reference=` argument.
-      ML, caller-fixed continuous GMM, fitted-weight continuous GMM, ordinal
-      parameter profiles, and ordinal polychoric-omega profiles now expose the
-      observed-bread misspecification scale, singleton mixture eigenvalue, and
-      endpoint-specific mixture cutoffs for CI inversion. Continuous fixed
-      GLS/WLS can combine the misspec reference with IJ estimated-weight meat;
-      ordinal uses the same complete ordinal IJ meat as robust SE/MI. The
-      fitted-weight continuous path is deliberately a profile-metric reference:
-      it rebuilds the endpoint `W(theta)` and treats it as fixed, leaving
-      derivative-of-weight corrections as a research extension. The canonical
-      no-integration categorical proving slice is now ordinal polychoric omega.
-      Still open: model-level small-sample/Bartlett/calibrated constants,
-      richer functional R callbacks, observed-score / Green-Yang-like omega
-      targets, and validation beyond the current focused smokes.
-    - **Done 2026-07-04 (pre-Bartlett weight-family completion).**
-      Caller-fixed continuous GMM parameter profile LRT/CI now exposes the full
-      supported estimated-weight IJ family for profile references: GLS/NT,
-      empirical WLS/ADF, empirical DWLS, and fixed-`a` DLS
-      (`GmmProfileRobustOptions::dls_opts`; R `ij_weight=` / `dls_a=`). The R
-      frontier also has `frontier_dls_weight()` so DLS profile experiments can
-      build the explicit second-stage weight without duplicating C++ logic.
-      ML2S parameter profile LRT/CI is generalized from the NT-only wrapper to
-      `profile_lrt_parameter_ml2s` / `profile_lrt_ci_parameter_ml2s`, covering
-      Stage-2 `nt`, `uls`, `dwls`, `adf`/`wls`, and fixed-`a` `dls`; the old
-      `*_ml2s_nt` names remain compatibility wrappers. Robust/misspec profile
-      references use the Stage-1 saturated-moment sandwich and, for
-      data-dependent non-NT Stage-2 weights, the existing ML2S IJ estimated-
-      weight blocks when raw/FIML internals are available. The GMM and mainline
-      profile examples smoke DLS/DWLS and ML2S-DLS. Still open: Bartlett /
-      calibrated small-sample constants, generic functional R callbacks, and
-      optional future uncertainty for data-adaptive DLS `a` selection.
-    - **Done 2026-07-03 (ordinary mainline estimator parameter profiles).**
-      The ordinary df-1 scalar/profile-LRT parameter path now covers the
-      remaining mainline estimators needed before robust extensions:
-      direct FIML (`fit_fiml_constrained`,
-      `profile_lrt_parameter_fiml`, CI inversion), ML2S-NT
-      (`profile_lrt_parameter_ml2s_nt`, CI inversion over retained Stage-1 EM
-      moments), and mixed continuous/ordinal ULS/DWLS/WLS
-      (`profile_lrt_parameter_mixed_ordinal`, CI inversion). R exposes the
-      thin frontier wrappers as
-      `frontier_profile_lrt_{parameter,ci}_{fiml,ml2s_nt,mixed_ordinal}`, with
-      `r-package/examples/profile_lrt_parameter_mainline.R` as the smoke check.
-      Robust/misspec references for these three estimator-specific surfaces
-      remain outside this ordinary mainline slice.
-    - **Done 2026-06-22 (mean-structure ML wiring).**
-      `estimate::ml_profile_rmsea` / `ml_profile_lrt` now handle complete-data
-      mean-structure ML in addition to covariance-only ML. The two-metric
-      profile blocks use the stacked `[mean; vech(S)]` Jacobian, block-diagonal
-      normal-theory metrics (`S^{-1}` or `Σ(θ̂)^{-1}` for means plus
-      `Γ_NT^{-1}` for vech covariances), observed ML bread scaled per unit, and
-      either caller-supplied stacked Γ or raw-data Γ from
-      `data::empirical_gamma_with_means`. Gated in
-      `weighted_inference_test.cpp` by raw-vs-supplied Γ parity for single-fit
-      RMSEA and nested LRT.
-    - **Done 2026-06-22 (ML2S-NT profile wiring).**
-      `estimate::fiml::two_stage_nt_profile_rmsea` /
-      `two_stage_nt_profile_lrt` now adapt the ML2S normal-theory Stage-2
-      likelihood to the same two-metric profile-Hessian engine: saturated EM
-      moments become the complete-data ML sample statistics, and Stage-1
-      uncertainty is the block-diagonal stacked `[mean; vech(cov)]` Gamma from
-      `two_stage_gamma_from_acov(sm, false)`. The public overloads cover
-      precomputed `SaturatedMoments`, raw data, and raw data plus precomputed
-      `FIMLPack`/`FIMLH1`; `fiml_test.cpp` gates raw/precomputed parity for
-      single-model RMSEA and nested LRT.
-    - **Done 2026-06-22 (FIML profile wiring).**
-      `estimate::fiml::fiml_profile_rmsea` / `fiml_profile_lrt` now adapt
-      raw-data FIML to the same two-metric profile-Hessian engine. The
-      first-stage space is the EM saturated `[mean; vech(cov)]` coordinate:
-      `V0 = H/n_b`, `W*` is the model-implied observed-pattern H1 information
-      per block, Γ is the n-scaled saturated ACOV from
-      `two_stage_gamma_from_acov(sm, false)`, and the observed FIML information
-      divided by N supplies the profile bread. The API takes the already-known
-      FIML LRT chi-square so `chisq_standard = chi2_lrt`; overloads cover raw,
-      precomputed `FIMLPack`/`FIMLH1`, and precomputed `SaturatedMoments`.
-      `fiml_test.cpp` gates raw/precomputed parity for single-model RMSEA and
-      nested LRT.
-    - **Done 2026-06-22 (finite-sample calibration experiment).**
-      `experiments/research/13-ordinal-dwls-profile-lrt` (C++ Monte-Carlo, paper-sim).
-      On the exact C4 binary pseudo-null it shows the standard fixed-weight
-      DWLS nested test (Satorra-2000) is anti-conservative under fixed
-      misspecification of the larger model — rising to 10.5% rejection at a
-      nominal 5% (strong design, n=1500) as ε grows — while the estimated-weight
-      profile law stays flat at ~4.2%. The empirical mean of the difference
-      statistic tracks the full-profile trace, not the fixed-weight trace
-      (2.63 vs 2.13 at the strongest setting). This is the nested-LRT companion
-      to experiment research/12 / `papers/estimated-weight-se`.
-    - **Done 2026-06-22 (population cross-check).** Advisory check
-      `cpp/tests/checks/ordinal_dwls_profile/` reproduces the symmetry-protected C4
-      binary pseudo-null of `ordinal_dwls_profile_exploration.tex` in magmaan
-      (tally→expand population dataset, congeneric vs tau-equivalent DWLS). Two
-      verifications: (1) at `ε=0` the estimated-weight channel is dormant
-      (`gap=0`, `tr_full==tr_fixed`) and the law reduces to the fixed-weight DWLS
-      law (eigenvalues = the single SB scaling `c≈0.954`, *not* χ²₃ — DWLS≠WLS);
-      (2) for `ε∈[0.02,0.10]` magmaan matches the prototype's population
-      `tr_fixed` to ~1e-3 and the `ε=0.10` eigenvalues to ~1e-3, with the γ
-      channel positive and monotone. Surfaced a prototype defect: its
-      double-finite-differenced `tr_full` at `ε=0.06` is non-monotonic; magmaan's
-      analytic-influence law is the corrected reference (as the note anticipated).
-    - **Done 2026-06-22 (CRMR/SRMR estimated-weight inference).** The
-      absolute-fit (single-model) companion. `estimate::ordinal_crmr` (point) +
-      `OrdinalFitMeasures.crmr`; `estimate::ordinal_crmr_misspec_inference`
-      (`OrdinalCrmrInference`) returns a bias-corrected point, exact-fit mixture
-      p-value, and a confidence interval for CRMR/SRMR that propagates the
-      estimated-weight γ channel. It is a criterion-at-estimator sandwich
-      `Q_G = Dφᵀ V0 Dφ`, `V0` = correlation-selector, `Dφ` the full extended
-      `(u,γ)` residual jacobian (u-channel `−(I−P)`; γ-channel the estimator
-      weight-sensitivity), reusing the catml projector and the
-      `ordinal_dwls_profile_rmsea` `Γ_x`; CI uses the normal-theory `g_Gᵀ Γ_x g_G`
-      under misspec and the `weighted_chisq` mixture at the null. `estimated_weight`
-      flag toggles the fixed-weight comparator; `srmr_denominator` switches the
-      scaling. Single-group only this pass (multi-group coupling deferred). Gated
-      by `ordinal_test.cpp` (denominator relation, point==fm.crmr, γ channel
-      active, SRMR scaling) and the C4 MC harness
-      `cpp/tests/checks/ordinal_crmr_inference/` (bias/variance/coverage vs
-      Monte-Carlo + ε=0 dormancy). **Finding:** the CI is calibrated, but the γ
-      channel is only ~2–3% of the CRMR variance under misspecification (vs the
-      metric-dominating channel in RMSEA/the nested test) — CRMR's fixed metric
-      makes it largely robust to weight estimation. Deferred: R bindings, lavaan
-      `crmr` oracle/goldens, threshold-inclusive SRMR variants, the residual-map
-      curvature term. (Multi-group landed in `2f007e2`; the open piece is the
-      pooling *convention*, below.)
-    - **TODO: survey the multigroup CRMR/SRMR pooling convention** (short lit
-      survey). Multi-group is implemented, but the CRMR point has two defensible
-      forms that diverge for G>1: lavaan / `ordinal_crmr` use the size-weighted
-      *mean of per-group roots* `Σ_b (n_b/N)·√(‖r_b‖²/k)` (oracle-pinned for the
-      core fit measure), while `ordinal_crmr_misspec_inference` reports the literal
-      RMS, the *root of the size-weighted mean* `√(Σ_b (n_b/N)‖r_b‖²/k)`, forced by
-      the `T = N·G` statistic its CI is built on; by Jensen the former ≤ the latter,
-      equal at G=1 (pinned in `ordinal_test.cpp`). Two questions: (1) mean-of-roots
-      vs root-of-mean (root-of-mean is the literal "root mean square residual" and
-      coheres with the CI; lavaan's is the nonstandard form); (2) the weighting
-      itself: CRMR is not a discrepancy (identity metric, no `W`), so `π_g = n_g/N`
-      is not derived; it enters legitimately only via the pseudo-true
-      `θ_0 = argmin Σ_g π_g F_g`, whereas the explicit `π_g`-weighting of the pooled
-      residuals is inherited convention plus the independence-additivity that keeps
-      `Var(T) = Σ_g n_g(·)` a clean block sum. Unweighted stacked-RMS
-      `√(Σ_b‖r_b‖²/Σ_b k_b)` is a third, equally-legit target. Survey what
-      lavaan / Mplus / EQS and the SRMR literature actually do, then decide which
-      the frontier index should report (current: weighted root-of-mean) and whether
-      to expose a `crmr_lavaan` companion. From the 2026-06-22 audit discussion.
-    - **Done 2026-06-22 (RMSEA estimated-weight CI).** The absolute-fit
-      large-γ case. `estimate::ordinal_rmsea_misspec_inference`
-      (`OrdinalRmseaInference`) returns the bias-corrected RMSEA (=
-      `ordinal_dwls_profile_rmsea.rmsea`), an exact-fit mixture p-value, and a
-      CI. RMSEA's criterion is the discrepancy `F = rᵀWr` itself, so by the
-      envelope theorem the gradient is the bare profile score `g_F = (−2Wr,
-      −r²/γ²)` (no projector, unlike CRMR); the CI is the normal-theory interval
-      on `F₀` with `Var(N·F)=N·g_Fᵀ Γ_x g_F`, reusing the profile `Q`/`Γ_x`/bias/
-      spectrum. `estimated_weight=false` is the fixed-weight comparator.
-      Single-group only. Gated by `ordinal_test.cpp` (point==profile rmsea, CI
-      ordering, γ active) and `cpp/tests/checks/ordinal_rmsea_inference/`
-      (bias/variance/coverage vs Monte-Carlo). **Finding:** the γ channel is
-      large (−0.12 to −0.80 of the variance) and **variance-reducing** (`r` and
-      `γ` co-vary negatively), so the estimated-weight CI is calibrated (~nominal)
-      while the fixed-weight CI is increasingly **conservative / too wide**
-      (coverage 0.93→0.98 as ε grows) — accounting for the estimated weight
-      *tightens* RMSEA's interval. Same theme as the rest of the program, opposite
-      direction from the nested test (conservative, not anti-conservative).
-      Deferred: R bindings, close-fit p-value, classical-noncentral comparator,
-      multi-group.
-    - **Done 2026-06-22 (CFI/TLI estimated-weight inference).** The program's
-      first *incremental* (two-model) index. `estimate::ordinal_cfi_tli_misspec_-
-      inference` (`OrdinalIncrementalFitInference`) returns misspecification-robust
-      CFI and TLI with confidence intervals. The user model runs through
-      `ordinal_dwls_profile_rmsea`; the independence baseline (free thresholds,
-      zero correlations) is an analytic block (`D_b=[I;0]`, Gauss-Newton bread
-      `W_tt` since σ_b is linear) routed through the *same*
-      `weighted_moment_profile_rmsea_estimated_weight` with the *shared* `Γ_x`, so
-      the joint law of `(T_u,T_b)` is one bilinear form: `Cov(T_u,T_b)=N gᵤᵀΓ_x g_b`
-      with the envelope-score gradients `g=(−2Wd,−d²/γ²)`. CFI `=1−δ_u/δ_b` and
-      TLI `=1−(Q̄_b/Q̄_u)·δ_u/δ_b` (noncentralities `δ=T−Q̄`, generalized df
-      `Q̄=tr(QΓ_x)`) are a ratio delta-method; the TLI interval is the CFI
-      interval scaled by `Q̄_b/Q̄_u`. `estimated_weight=false` zeros the γ channel.
-      Single-group only. Derivation in
-      `cfi_tli_misspec_inference.tex` (joint CLT + ratio
-      delta-method + the baseline-dominated `Var(CFI)≈V_uu/δ_b²` simplification,
-      which the test confirms). Gated by `ordinal_test.cpp` (T_u/T_b pass-through,
-      baseline==`fm.baseline`, CFI∈[0,1] ordered CI, TLI=1−c·r and
-      `Var(TLI)=c²Var(CFI)`, leading-order check, γ channel active vs fixed-weight
-      comparator) and the C4 MC harness `cpp/tests/checks/ordinal_cfi_inference/`
-      (point unbiasedness, coverage, γ-share, leading-order ratio). **Findings**
-      (reps=2000, n=1000): CFI's CI is **calibrated** (coverage 0.90–0.91, var
-      matches MC); CFI is **largely robust to weight estimation** (γ-share only
-      ≈±3–8%, CRMR-like, *opposite* to RMSEA's −12…−80%); the baseline-dominated
-      `Var(CFI)≈V_uu/δ_b²` simplification is accurate only at weak misfit (ratio
-      0.99→0.84→0.35 as ε grows — the full bivariate form is load-bearing). TLI's
-      point is unbiased and its CI calibrated at weak/moderate misfit but its
-      analytic variance **over-states at strong misfit** (≈8× MC, over-covers)
-      because `c=Q̄_b/Q̄_u` is ill-conditioned when `Q̄_u` is small — conservative,
-      not anti-conservative; CFI is the index to trust for an interval. Deferred:
-      a stabilized-`c` TLI variance, close-fit boundary calibration, multi-group.
-    - **Done 2026-06-22 (consolidated R binding).** The estimated-weight
-      fit-index family is now R-exposed through one surface.
-      `estimate::ordinal_fit_measures_misspec_inference` (`OrdinalMisspecFitMeasures`)
-      bundles RMSEA + CRMR/SRMR + CFI/TLI with their CIs (delegating to the
-      per-index entry points; SRMR is the CRMR statistic rescaled to the vech
-      denominator), gated by `ordinal_test.cpp`. The Rcpp entry
-      `infer_ordinal_fit_measures_misspec` (`r-package/src/robust.cpp`,
-      dotted-key list) and the `@export`ed wrapper `fit_measures_misspec(fit,
-      ordinal_stats, estimated_weight, conf_level)` (`r-package/R/fmg.R`) expose
-      it; `ordinal_stats` is passed explicitly (a fit does not retain `int_data`).
-      Validated by `r-package/examples/fit_measures_misspec.R` (RMSEA == the
-      standalone profile binding, SRMR==CRMR·√(ncorr/vech), ordered/in-range
-      intervals, CFI near weight-invariant). The individual `ordinal_{rmsea,crmr,
-      cfi_tli}_misspec_inference` stay C++-only. Deferred: per-index R bindings
-      (covered by the bundle), the `.scaled`/`.robust` integration into the main
-      `fit_measures()` table.
-    - **Done 2026-06-22 (multi-group).** RMSEA, CRMR/SRMR, CFI and TLI
-      estimated-weight inference now handle multi-group all-ordinal DWLS fits
-      (the single-group guards are lifted). The criteria pool as `Σ_b n_b·crit_b`;
-      the underlying profile already returns the block-diagonal `Γ_x` and pooled
-      signed trace, so the new work is the stacked envelope gradient (`√(n_b/N)`
-      per-group weights), a per-block γ-zeroing helper (`zero_extended_gamma_-
-      channel`) for the fixed-weight comparator, the stacked CRMR sandwich
-      (block-diagonal `Q_G`, statistic `Σ_b n_b G_b`), and a multi-group baseline
-      (direct sum of per-group independence models; its bread is scaled `(n_b/N)·
-      W_tt` so it pools correctly). The R `fit_measures_misspec` is group-agnostic
-      and works unchanged. Note's "Multi-group" section derives the pooling.
-      Gated by a duplicate-group reduction in `ordinal_test.cpp` (points
-      invariant, statistic/df double, RMSEA interval tightens) plus a different-
-      two-group run and the R example's two-group block. CRMR/SRMR require a
-      common per-group `p` (shared denominator). The MC harness
-      `cpp/tests/checks/ordinal_cfi_inference` gained a two-group cell (heterogeneous
-      ε/size, configural): CFI coverage ≈0.92 (calibrated, point unbiased), TLI
-      conservative — the pooling holds under genuine multi-group sampling, not
-      just the exact-arithmetic reduction. A stabilized-`c` TLI variance remains
-      the one outstanding quality gap.
-    Remaining profile-Hessian fit/test work:
-    using the small-pencil `max|ν_j−1|` diagnostic as an actual
-    runtime gate to skip dense profile-curvature work when negligible (still use
-    dense `QΓ` when actual positive mixture weights are needed); an *a-priori*
-    analytic sign count of `#{ν_j < 1}` from model structure (the note settles
-    the inertia identity but still reads the signs off an eigendecomposition).
-  - **M — mixed continuous/ordinal misspec fit-measure bundle.** Mixed DWLS
-    already has estimated-weight profile RMSEA/LRT over the extended
-    `(u, gamma)` moment stack and observed/pairwise-missing stats now materialize
-    the needed gamma-influence rows. First reportable slice **landed
-    2026-06-23**: `mixed_ordinal_rmsea_misspec_inference` adds the same
-    estimated-weight envelope-score CI and exact-fit mixture p-value as the
-    all-ordinal RMSEA path, exposed through
-    `magmaan_core$mixed_ordinal_rmsea_misspec`. Second slice **landed
-    2026-06-23**: `mixed_ordinal_crmr_misspec_inference` adds CRMR/SRMR
-    inference over the existing standardized mixed association residual
-    convention (continuous-continuous and polyserial residuals divided by
-    observed standard-deviation scales, with scale derivatives carried in the
-    sandwich), exposed through `magmaan_core$mixed_ordinal_crmr_misspec`. Third
-    slice **landed 2026-06-23**:
-    `mixed_ordinal_cfi_tli_misspec_inference` adds incremental CFI/TLI inference
-    using the mixed DWLS independence-baseline convention, exposed through
-    `magmaan_core$mixed_ordinal_cfi_tli_misspec`. Consolidated surface **landed
-    2026-06-23**: `mixed_ordinal_fit_measures_misspec_inference` bundles
-    RMSEA + CRMR/SRMR + CFI/TLI into the same reportable schema as the
-    all-ordinal table, exposed through
-    `magmaan_core$mixed_ordinal_fit_measures_misspec` and the explicit exported R
-    companion `fit_measures_misspec_mixed_ordinal(fit, mixed_stats, ...)`.
-  - **FIML slice landed 2026-06-23.** R now exposes
-    `magmaan_core$fiml_observed_vcov()` / `inference_fiml_observed_vcov()` and
-    `vcov(fit, regime = "model" | "robust")` dispatches FIML fits to inverse
-    observed information or the existing MLR sandwich respectively, without a
-    separate raw-data argument. `r-package/examples/fiml.R` checks the
-    model-vs-robust route on a non-saturated FIML fit, and
-    experiment research/12 includes an MCAR FIML cell under both correct and omitted
-    cross-loading conditions.
-  - A continuous-LS R `bread` binding for `vcov(fit, regime=)`; the
-    single-source-of-truth refactor of `ordinal_block_residual`.
+### Reduced-bias estimation
+
+The reduced-space parts and explicit/implicit drivers are shipped; their
+independent FD guards are in `rbm_fd_test.cpp`. Remaining:
+
+- **Deferred — performance and regular-region checks (2026-09-22).**
+  RBM has been dropped from the current inference-study expansion at the
+  author's request. The optimization prototype was reverted; no new RBM
+  implementation or search restriction is shipped. Reopen only for an
+  explicitly renewed RBM consumer.
+  Complete-data implicit ML finite-differences the full adjusted objective in
+  full theta coordinates: `1 + 2*n_free` parts rebuilds per optimizer
+  value/gradient callback, even when equalities reduce the search dimension.
+  Each rebuild includes observed information and raw empirical scores; the
+  base likelihood's analytic gradient is computed and discarded. Add a
+  value-only ML penalty/parts interface so external derivative audits need
+  not invoke a complete explicit correction to read the penalty. Retain the
+  analytic base gradient, differentiate the adjustment in reduced coordinates,
+  and investigate model/sample-feature reuse and analytic trace derivatives.
+  For complete-data Gaussian scores, cache centered linear/quadratic data
+  features (or their empirical cross-product when smaller) once per fit;
+  preserve empirical meat rather than replacing it by a normal expectation.
+  Independently verify off-optimum scores, means, equality reduction and
+  small/large-N branches before accepting that optimization.
+  The existing trace solve checks LU invertibility, not positive curvature;
+  finite indefinite-information endpoints can have large negative trace
+  adjustments. Specify conditioning/curvature acceptance and a documented
+  regular-region search policy before treating such returned endpoints as
+  validated inference estimates. Preserve the distinction between search
+  restrictions, estimator definition, and solver return status. Benchmark
+  fitting and independent audit separately before scaling up simulations.
+- **M — magmaan-owned paper rerun.** Experiment
+  `06-jamil-rosseel-2026-rbm-sem` now reproduces the SEM bias-reduction
+  paper's main two-factor and growth-curve examples from the authors' OSF
+  result objects. Remaining work is the independent magmaan rerun: implement
+  the bounded-estimation choices needed for the paper design, rerun the
+  normal/non-normal cells from generated data, and compare magmaan ML/eRBM/iRBM
+  to the OSF summaries.
+
+### Estimated-weight and hybrid validation
+
+- Continue finite-sample calibration and stress checks for singular full-WLS
+  Gamma on mixed hybrid observed-data fits. Existing hybrid construction keeps
+  ordinal moments pairwise and obtains continuous moments/influence from
+  saturated FIML; its MCAR/MAR efficiency checks do not establish this coverage.
+- Keep the ordinary NT ML2S robust-score path distinct from the
+  moment-quadratic GLS IJ correction. Robust/experimental mixed missing-data
+  Stage-1 variants (WMA/DPD/Huber polyserial) remain in the speculative backlog
+  until a recipe and consumer are selected.
+- New IJ adapters require fixed-weight reduction, independent weight-influence
+  derivatives, a deterministic resampling-jackknife check and misspecification
+  simulation with ULS/fixed-weight negative controls. Existing analytic
+  Hessian/Gamma channels retain finite differences as validation references.
+
+### Profile and fit-index follow-ups
+
+- **TODO: survey the multigroup CRMR/SRMR pooling convention** (short lit
+  survey). Multi-group is implemented, but the CRMR point has two defensible
+  forms that diverge for G>1: lavaan / `ordinal_crmr` use the size-weighted
+  *mean of per-group roots* `Σ_b (n_b/N)·√(‖r_b‖²/k)` (oracle-pinned for the
+  core fit measure), while `ordinal_crmr_misspec_inference` reports the literal
+  RMS, the *root of the size-weighted mean* `√(Σ_b (n_b/N)‖r_b‖²/k)`, forced by
+  the `T = N·G` statistic its CI is built on; by Jensen the former ≤ the latter,
+  equal at G=1 (pinned in `ordinal_test.cpp`). Two questions: (1) mean-of-roots
+  vs root-of-mean (root-of-mean is the literal "root mean square residual" and
+  coheres with the CI; lavaan's is the nonstandard form); (2) the weighting
+  itself: CRMR is not a discrepancy (identity metric, no `W`), so `π_g = n_g/N`
+  is not derived; it enters legitimately only via the pseudo-true
+  `θ_0 = argmin Σ_g π_g F_g`, whereas the explicit `π_g`-weighting of the pooled
+  residuals is inherited convention plus the independence-additivity that keeps
+  `Var(T) = Σ_g n_g(·)` a clean block sum. Unweighted stacked-RMS
+  `√(Σ_b‖r_b‖²/Σ_b k_b)` is a third, equally-legit target. Survey what
+  lavaan / Mplus / EQS and the SRMR literature actually do, then decide which
+  the frontier index should report (current: weighted root-of-mean) and whether
+  to expose a `crmr_lavaan` companion. From the 2026-06-22 audit discussion.
+
+- Assess whether the small-pencil `max|nu_j-1|` diagnostic can skip negligible
+  dense profile-curvature work; keep dense `Q Gamma` when actual mixture
+  weights are needed. An a-priori analytic sign count from model structure
+  remains separate from the implemented inertia identity/eigendecomposition.
+- Stabilize the CFI-to-TLI scale ratio when the user model's signed trace is
+  small. The existing TLI variance is conservative at strong misfit; the
+  multi-group extension did not resolve this quality gap.
+- **Deferred:** close-fit/boundary calibration and the classical-noncentral
+  RMSEA comparator require an explicit validation design.
+- **Deferred CRMR/SRMR coverage:** threshold-inclusive variants, residual-map
+  curvature, and lavaan CRMR oracle/golden checks. Preserve the distinction
+  between the core mean-of-roots point and the frontier root-of-mean CI target.
+- Per-index R bindings remain deferred because the bundles already expose
+  them. Main `fit_measures()` scaled/robust table integration remains separate.
+- Expose the continuous-LS `bread` choice for `vcov(fit, regime=)` at the R
+  boundary, and consolidate `ordinal_block_residual` into one implementation.
 
 ## Robust score / modification-index tests (frontier)
 
@@ -4772,123 +3891,23 @@ continuous-whitening entry above.
   factor only): the multi-factor / multi-group / weighted `ω_G(σ;w)` form and
   omega-hierarchical via a second-stage Schmid-Leiman centroid on `Φ_G` (k>=3),
   derived in the `guttman_cfa_asymptotics.tex` note.
-- **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
-  track (the landed split is in the roadmap and
-  [project/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
-  threshold-profiled general linear maps, joint multi-group threshold
-  profiling/invariance, their lavaan oracle fixtures 0013/0014, exact mixed
-  robust parity — the muthen1984-faithful mixed Gamma sandwich, gated at
-  all-ordinal tightness — mixed theta SNLLS, and lazy mixed WLS (the
-  workspace defers the O(m³) inverse to the cache ensure helpers) landed
-  2026-06): only-when-needed R/API polish remains; reduced-Gamma
-  robust-inference products moved to [speculative.md](speculative.md) with a
-  size-triggered build-if. **`group.equal` ordinal measurement invariance landed
-  2026-06-15 (theta).** The `BuildOptions::group_equal` / `group_partial` keyword
-  ties the requested families across groups (synthetic shared labels → the same
-  `compute_eq_groups` merge as explicit labels), and the Wu-Estabrook (2016)
-  identification frees the group-2+ ordinal residual variances (the released
-  latent-response *scale*, binary-vetoed) and indicator intercepts in
-  `prepare_ordinal_*_partable`, with `build` forcing a mean structure so the
-  intercept rows exist. The gated parameterization is **theta** (the standard for
-  ordinal invariance): under delta lavaan's released `~*~` scale is unidentified
-  (it stays pinned at 1 with a singular vcov), so lavaan-delta invariance is
-  *not* gated; the explicit Mplus-style delta probe below covers the released
-  branch. lavaan-gated by `cfa(..., parameterization="theta",
-  group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
-  scale-veto), 0019 (thresholds-only), and 0020
-  (thresholds+loadings+intercepts / scalar), df/chisq/theta_hat parity in the
-  `ordinal invariance (group.equal) theta fits match lavaan` golden. The
-  released-scale moment Jacobian is now shared between the fit and robust nested
-  paths: theta subtracts the released μ and threads `J_mu`, while released delta
-  differentiates `(τ−μ)δ_i` plus the implied association rows so explicit
-  latent-mean and response-scale columns are not rank-dropped. At scalar,
-  lavaan fixes the group-2+ indicator intercepts back to 0 and frees group-2+
-  latent means; magmaan mirrors that in `prepare_ordinal_*_partable`. **The
-  Satorra-2000 nested LRT ladder also landed 2026-06-18** (delta A-method,
-  theta), using the same shared moment-Jacobian block for freed intercept and
-  latent-mean columns. Gated by the `ordinal invariance nested LRT
-  (satorra.2000 delta) matches lavaan` golden: configural→metric and
-  thresholds→metric scaled Δχ² 3.025 / Δdf 3 / p 0.388, metric→scalar scaled
-  Δχ² 3.765 / Δdf 3 / p 0.288 (scalar-only 1.5e-2 tolerance on the scaled
-  statistic for the documented `(n_g−1)/n_g` LS-weight gap), and
-  configural→thresholds recorded as a df=0 χ²-equivalence because lavaan cannot
-  form a positive-df `lavTestLRT` there. The explicit Mplus-style delta scalar
-  probe in `experiments/research/10-mplus-demo-wlsmv-difftest` also now passes: with
-  overlap pairwise Gamma, magmaan's scaled-shifted restriction-map statistic is
-  22.365850 on 22 df (p = 0.438242), matching Mplus Demo DIFFTEST 22.366000 on
-  22 df (p = 0.438200). The remaining paper work is its own item below.
-- **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
-  The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
-  and match lavaan in C++ (commits cf79721 / f7d8639 / 7c7d270; see the ordinal
-  SNLLS bullet above). The R surface (single-fit + nested) is now done and
-  lavaan-gated, and `mplus_wlsmv_invariance()` now provides the ergonomic
-  Mplus-style delta ladder over all-ordinal pairwise/listwise data plus mixed
-  continuous/ordinal listwise data. It is fixture-gated against the Mplus Demo
-  DIFFTEST scalar probe (`cpp/tests/fixtures/mplus_wlsmv_invariance`) and a small
-  mixed deterministic regression; mixed pairwise missing remains deferred until
-  mixed pairwise NACOV construction exists. Only the paper remains.
-  - **R surface — LANDED 2026-06-15, lavaan-gated.** `model_spec()` /
-    `fit_model(...)` take `group_equal` / `group_partial` (snake_case, lavaan
-    family strings); Rcpp `lavaan_lavaanify` maps strings → `GroupEqual` and ties
-    the families at build (`RcppExports` regenerated). The build round-trip drops
-    `LatentStructure::group_equal` (a lavaan partable has no such column), so
-    `lavaan_lavaanify` now stamps the resolved families as an integer-index
-    `magmaan.group_equal` attribute and the three ordinal fit impls
-    (`fit_{dwls,uls,wls}_ordinal_impl`) read it back (`group_equal_attr`) to
-    re-apply the fit-time Wu-Estabrook release. Because the ordinal threshold
-    rows are materialized in R `augment_ordinal_partable` (after the data-free
-    build, so build can't tie them), augment now (a) ties equated thresholds via
-    shared `.theq.` labels — the same shared-label path build uses for loadings,
-    so `from_lavaan_partable` emits the cross-group `==` rows — and (b) leaves the
-    group-2+ non-binary ordinal `~~` free (binary-vetoed) for the C++ release
-    instead of pinning it. The scalar/intercept rung now suppresses the indicator
-    intercept release and frees the group-2+ latent mean, matching lavaan's
-    theta scalar convention. Gated by `r-package/examples/group_equal_ordinal.R`
-    (0017/0019/0020 analogues, theta): npar, LS χ², released-row count, and every
-    free estimate match `lavaan::cfa(group.equal=, parameterization="theta")`
-    (est diff ≤ 2.4e-4; `~*~` excluded — a fixed theta row lavaan reports as a
-    derived implied scale, magmaan keeps the nominal 1.0 and carries the scale on
-    `~~`).
-  - **Nested-ordinal FMG wrapper — LANDED 2026-06-15, lavaan-gated.** No new
-    Rcpp export was needed: `infer_ordinal_lr_test_satorra2000` already returns
-    the difference triple (`T_diff`, `df_diff`, `eigenvalues`), so
-    `fmg_nested_ordinal(fit_H1, fit_H0, ordinal_stats, ...)` (`r-package/R/fmg.R`)
-    is a thin R wrapper that runs `robust_nested_lrt(method="restriction_map")`
-    and feeds that triple through the same `.fmg_result_rows_ordinal` /
-    `infer_fmg_test` path as `fmg_tests_ordinal`. Its `A.method` defaults to
-    `"delta"` (the configural→metric Wu-Estabrook pair is non-nested);
-    `robust_nested_lrt()` keeps its `"exact"` default so nested complete-data /
-    FIML pairs are unaffected. The threading gotcha was real and is fixed:
-    `ctx_from_fit` → `from_lavaan_partable` drops `group_equal`, which the H0
-    re-prep inside `lr_test_satorra2000_ordinal` needs (it re-preps both
-    structures), so `ordinal_fit_result` now stamps `magmaan.group_equal` on
-    `fit$partable` (`stamp_group_equal_attr`) and `ctx_from_fit` re-attaches it.
-    Gated by `r-package/examples/group_equal_nested_ordinal.R`: configural→metric
-    and metric→scalar rescaled satorra.2000 Δχ²/Δdf/p match
-    `lavTestLRT(method="satorra.2000")` on `se="robust.sem"` fits (≤ 5e-3 for
-    metric, ≤ 1.5e-2 scalar scaled statistic, reproducing the C++ nested
-    golden), and the FMG `sb_ls` row reproduces `nestedTest()`'s `T_scaled`.
-    The mixed continuous/ordinal companion `fmg_nested_mixed_ordinal()` landed
-    2026-07-17; it exposes the already-implemented mixed difference spectrum
-    and both delta/exact restriction maps at the friendly R boundary.
-  - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
-    `harness-population.R::invariance_syntax` from loadings-only to
-    `group.equal = c("thresholds","loadings")` under theta; add a
-    `lavTestLRT(method="satorra.2000")` cross-check in `harness-oracle.R`; route
-    the nested arm through `fmg_nested_ordinal`.
-  - **Parameterization note (deliberate):** the lavaan-gated invariance path is
-    **theta**, not delta. lavaan's *delta* threshold+loading release is
-    structurally degenerate — the freed `~*~` scale stays pinned at 1 for any
-    latent-scale difference, the vcov is singular, and chisq cannot absorb the
-    difference — so magmaan does not gate lavaan-delta invariance. The released
-    delta moment branch is tested through the explicit Mplus-style scalar probe
-    above, not through lavaan's degenerate delta `group.equal` convention. The
-    paper's arm should use `parameterization = "theta"`.
-  - **Mixed-ordinal release not started** (all-ordinal only).
+- **Ordinal workspace and invariance follow-ups.** The workspace split,
+  threshold maps, all-ordinal/mixed SNLLS, keyword theta invariance and R
+  nested-test wrappers are implemented and documented in the
+  [roadmap](../architecture/roadmap.md#ordinal-and-mixed-categorical-ls) and
+  [workspace contract](../design/ordinal-snlls-gamma-architecture.md). Remaining:
+  - Add R/API polish only when a concrete caller needs it. Reduced-Gamma
+    robust products remain speculative with a size-driven build-if trigger.
+  - Extend the ordinal release to mixed models; the current keyword release
+    is all-ordinal only.
+  - Decide the supported mixed-pairwise input contract before extending
+    `mplus_wlsmv_invariance()`, which currently rejects those inputs.
   - **S — review `continuous_invariance()`'s explicit mean-syntax insertion**
     now that `spec::build` supplies the release. Preserve explicit user mean
-    specifications and the metric-to-scalar delta restriction map. The core
-    release and regression coverage are recorded in the roadmap/test ledger.
+    specifications and the metric-to-scalar delta restriction map.
+  Paper-specific reruns belong to the paper's own planning, not this library
+  backlog. Existing C++/R fixtures and the deliberate theta versus released-
+  delta validation boundary remain recorded in the roadmap.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the
@@ -5033,83 +4052,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S.** Keep the build-loop timings table in
   [project/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
-- **M. `std_lv` audit — CLOSED, one bug fixed, the rest were false alarms.**
-  The multi-group + `group_equal = Loadings` divergence is **FIXED** (Step 8a-bis
-  in `cpp/src/spec/build.cpp`, gated by "std.lv multi-group metric invariance agrees
-  with marker scaling" in `cpp/tests/unit/constraints_test.cpp`); see the roadmap for
-  the contract. All four remaining gaps were then characterized against lavaan
-  0.7-2 and pinned by tests in `cpp/tests/unit/lavaanify_test.cpp`. **magmaan already
-  matched lavaan in every one** — no further divergences:
-
-  - **two-level** — std.lv applies per block/level; every latent variance in
-    every level fixed at 1, `auto_fix_first` suppressed everywhere. Exact
-    reparameterization (lavaan npar 15 both ways, identical loglik).
-  - **`auto_fix_single`** — orthogonal to std.lv; both rules fire. `x4 ~~ x4`
-    still pinned at 0, `f2 ~~ f2` pinned at 1, the lone loading carries the
-    scale. npar unchanged (8 vs 8).
-  - **meanstructure / growth** — std.lv never touches the mean structure; latent
-    means follow `int_lv_free` regardless. See the roadmap caveat: because std.lv
-    does not override *user*-fixed loadings, `growth(std.lv = TRUE)` adds real
-    restrictions (lavaan npar 9→7, df 5→7, χ² 8.07→106.85) and is **not** a
-    reparameterization.
-  - **`f ~~ start(2)*f`** — **the earlier note here was wrong.** It claimed
-    lavaan's `ustart <- 1.0` is unconditional and magmaan diverged by honouring
-    the start. Both halves were wrong: lavaan gives `free=0, ustart=2` (it
-    promotes the start to a hard fix at its own value), and magmaan does the
-    same. The mechanism is that `ustart` doubles as "start when free" / "value
-    when fixed", and std.lv zeroes `free` without rewriting `ustart` — so
-    `start(2)*` and `2*` are indistinguishable in the result. Verified by running
-    both, not by reading either source. Full rule now pinned by "std.lv vs
-    explicit modifiers on the latent variance row": only `NA*` keeps the row
-    free; a bare label does **not** protect it.
-
-  Composites are ignored by design (Henseler-Ogasawara marks composite variances
-  `user_explicit`, FC-SEM is inert), and `effect_coding + std_lv` is a tested hard
-  error. Second-order and endogenous-latent `std_lv` match the marker fit to 13+
-  digits on `soc_2nd` and `sem_2x2` across p ∈ {12,24,48}.
-
-  **The multi-group `fit_stdlv` golden is DONE.**
-  `fit_stdlv/0002_three_factor_hs_2group_loadings` (HS 1939, `group = "school"`,
-  `group.equal = "loadings"`, `meanstructure = FALSE`, npar 45 / df 54) now gates
-  the fix directly against lavaan 0.7-2 on θ̂, SE, χ², and df, on top of the
-  self-consistency check. Confirmed to have teeth: with Step 8a-bis disabled it
-  fails with an n_free deficit of exactly (G−1)·n_lv.
-
-  **All three numeric bounds there are now scale-free**, `|ours − ref| /
-  max(1, |ref|)`, instead of absolute. The absolute forms were quietly
-  fixture-specific: an absolute 1e-6 on χ² is ~8e-9 relative at these fixtures'
-  χ² ≈ 85/124, but ~2e-10 relative for a fixture with χ² ≈ 5000 — tighter than a
-  different BLAS or `-march` reproduces, so it would have failed for reasons
-  unrelated to SEM. Converting can only relax a bound (denominator ≥ 1), so it
-  cannot mask a regression the absolute form would have caught.
-
-  Measured scaled discrepancies and the bounds chosen, with headroom:
-
-  | quantity | 0001 | 0002 | bound | headroom |
-  |---|---|---|---|---|
-  | n_free / df | — | — | exact | — |
-  | χ² | 3.10e-11 | 3.16e-11 | 1e-8 | ~300× |
-  | SE | 2.79e-07 | 9.59e-07 | 1e-4 | ~100× |
-  | θ̂ | 3.21e-06 | 6.76e-06 | 3e-5 | ~4× |
-
-  θ̂ is the loose one on purpose. It and χ² *both* detect a different local
-  minimum — χ² is a function of θ̂, so it is not optimizer-independent, and an
-  earlier note here framing it that way was wrong. The real difference is dynamic
-  range: θ̂'s noise floor from benign convergence wobble is ~7e-6, only ~3 orders
-  below a real defect, while χ²'s is ~3e-11, some 7-8 orders below. So χ² is the
-  sharp basin-change detector and θ̂ is kept as a coarse cross-check. Note 1e-5 on
-  θ̂ would have left only 1.5× headroom over observed noise — measured, not
-  guessed, after the scale-free conversion lowered the numbers.
-
-  **Do not "fix" the marker case.** lavaan's sibling rule, commented "marker
-  indicator if std.lv = FALSE (new in 0.6-20)", *does* fire — group 2's marker
-  loadings leave `lav_partable_flat` with `free=1, ustart=NA` — and is then undone
-  downstream, so markers end up fixed at 1.0 in every group. Mechanism:
-  `group.equal` emits `==` rows only for loadings that are free in group 1 (6 rows
-  under std.lv, 4 under marker), and where group 1 is fixed the fixed value is
-  propagated instead. magmaan already matches the net behaviour exactly
-  (npar/df/χ² 38/20/38.94709 on HS 1939, both libraries). Reading that source
-  comment alone would lead you to break parity.
 - **S. Two fixture fields are written but read by nothing** — found while bumping
   the oracle pin to lavaan 0.7-2, because both changed and *no test noticed*:
 

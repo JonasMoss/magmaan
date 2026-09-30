@@ -20,7 +20,6 @@ robust-score demonstration was removed after its checks became maintained tests.
 The ordinal observed-score omega studies share one leaf with separate target
 and sampling result trees; RBM estimation risk is research/53.
 
-
 ## Repository layout
 
 The C++ project is self-contained under `cpp/` (source, headers, tests,
@@ -1281,8 +1280,8 @@ an unconstrained gradient test to constrained solutions.
   (`lav_partable_flat.R`, upstream `fecaf6b7`, 2019-06-27 — behaviour stable from
   0.6-4 through 0.7-2). Net effect: df unchanged across conventions, raw npar
   higher by (G−1)·n_lv under `std_lv`, the surplus absorbed by the extra
-  cross-group loading equalities. Gated *self-consistently* rather than against a
-  fixture, by "std.lv multi-group metric invariance agrees with marker scaling"
+  cross-group loading equalities. Gated both by the `fit_stdlv` multi-group
+  golden fixture and self-consistently by "std.lv multi-group metric invariance agrees with marker scaling"
   (`cpp/tests/unit/constraints_test.cpp`), which fits one deliberately misspecified
   two-group model both ways and requires equal df/chi²/fmin — an oracle-free
   check, and the cheapest guard against any future scaling convention silently
@@ -1799,8 +1798,8 @@ an unconstrained gradient test to constrained solutions.
   3.45 MB (`benchmarks/expected_info_bench.cpp`, paired/rotated via `benchmarks/timing/timing.hpp`). Pinned against an independent
   explicit-trace reference in `cpp/tests/unit/expected_info_whitened_test.cpp`.
   This is the surviving half of the retired "share the p×p factor" backlog item;
-  the CPU-sharing half is measurably dead (ceiling 0.006% at p=48, see
-  `project/backlog/todo.md`).
+  the CPU-sharing half was retired (ceiling 0.006% at p=48; see
+  the continuous-weight capability below).
 - **Persistent continuous NTML inference (2026-09-16):** the existing
   U-factor shared phase is now the owning `robust::NTMLGeometry`, exposed by
   `prepare_ntml_geometry` and consumed by expected/observed U-factor tails.
@@ -2221,6 +2220,16 @@ an unconstrained gradient test to constrained solutions.
   definite, the RMSEA result also carries the small profile pencil
   `ν_j = eig(B^{-1} Ã)` plus its predicted positive/negative/rank counts; dense
   `QΓ` eigensolve remains the source of actual mixture weights.
+  With `G_hat = V_o^-1/2 W_p D`,
+  `Q = V_o^(1/2)(I - G_hat B^-1 G_hat')V_o^(1/2)` and
+  `A_tilde = D' W_p V_o^-1 W_p D`, the inner spectrum is `(m-p)` unit
+  eigenvalues plus `1-nu_j`, where `nu_j = eig(B^-1 A_tilde)`. For full-rank
+  Gamma, congruence preserves inertia: positive count is
+  `(m-p) + #{nu_j < 1}`, negative count is `#{nu_j > 1}`, and rank is
+  `(m-p) + #{nu_j != 1}`. Singular Gamma restricts these counts to its range.
+  The counts are Gamma-free only conditional on fixed Q, which can move with
+  moments/weights. Small residuals make integer rank floor-sensitive; signed
+  trace and positive-tail trace remain distinct when the contrast is indefinite.
   `estimate::weighted_moment_profile_lrt` compares two such profile Hessians in
   a common first-stage moment space, uses the positive spectrum of
   `(Q_H0 - Q_H1)Γ` for mixture and adjusted tails, and reports nominal `df_diff`
@@ -3409,6 +3418,65 @@ of the optimizer stop. A returned estimate need not pass that verdict.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 
+#### Continuous moment-quadratic weights
+
+`gmm::Weight` is `std::vector<BlockWeight>` with Identity, Diagonal, Dense and
+NormalTheory blocks. NormalTheory stores a p×p Cholesky factor of A and applies
+`blockdiag(A⁻¹, ½ Dᵀ(A⁻¹ ⊗ A⁻¹)D)` without a dense moment-weight factor.
+GLS uses A=S; Fisher/IRLS uses A=Σ(theta_k). Empirical DWLS weights are diagonal;
+pairwise GLS, DLS and structured empirical Gamma weights remain dense.
+`BlockWeight::to_dense()` fills NT entries by the closed-form vech-pair identity
+in O(p⁴), replacing the former O(p⁷) sequence of sparse-basis GEMMs.
+
+Scalar GLS uses `gmm::normal_theory_objective` and the trace-form gradient;
+residual/Jacobian backends retain their corresponding LS formulation.
+Structured ML2S Stage-2 weights choose Identity for ULS, NormalTheory for NT,
+Diagonal for DWLS, and Dense for ADF/DLS. `gls_scalar_objective_test.cpp` gates
+Gamma-inverse equivalence (<1e-9 relative, p=2,3,4,5,6,8,10) and scalar
+objective/gradient agreement (1e-11/1e-9). Same-path paired fits had
+`|delta fmin| <= 1.1e-16` and parameter differences at most 7.1e-13.
+
+The original `opt` comparisons below are historical validation measurements,
+not fresh timing claims. A Jacobian with n_free=2p shows the residual-shape
+constant-factor tradeoff: NT whitening loses below about p=20, while storage
+falls from O(p⁴) to O(p²).
+
+| p | q | dense µs/it | NT µs/it | speedup | dense MB | NT MB |
+|---|---|---|---|---|---|---|
+| 10 | 65 | 4.7 | 10.1 | **0.5x** | 0.03 | 0.0008 |
+| 20 | 230 | 72 | 73 | 1.0x | 0.40 | 0.003 |
+| 30 | 495 | 489 | 286 | 1.7x | 1.87 | 0.007 |
+| 45 | 1080 | 3531 | 1050 | 3.4x | 8.90 | 0.015 |
+| 60 | 1890 | 15302 | 2336 | 6.6x | 27.25 | 0.028 |
+
+Single-group CFA, eight indicators per factor, N=500 and fixed NLopt L-BFGS:
+
+| p | q | n_free | Dense µs/eval | Trace µs/eval | Evaluation speedup | Before ms | After ms | Fit speedup | Max abs dtheta |
+|---|---|---|---|---|---|---|---|---|---|
+| 16 | 136 | 33 | 32.2 | 3.7 | 8.7x | 1.7 | 0.2 | 10.2x | 2.2e-16 |
+| 24 | 300 | 51 | 195.6 | 9.6 | 20.3x | 12.5 | 0.7 | 17.8x | 2.8e-15 |
+| 32 | 528 | 70 | 743.9 | 20.3 | 36.6x | 57.6 | 1.9 | 30.7x | 5.1e-14 |
+| 40 | 820 | 90 | 2390.7 | 41.5 | 57.6x | 277.9 | 5.0 | 55.5x | 3.6e-13 |
+| 48 | 1176 | 111 | 6267.0 | 72.4 | **86.5x** | 584.8 | 9.0 | **64.9x** | 7.1e-13 |
+
+The fitted-cost exponent fell from 4.80 to 2.71. The same designs measured IRLS
+with the structured weight rebuilt on each outer iteration:
+
+| p | n_free | Before ms | After ms | Speedup | fmin before/after |
+|---|---|---|---|---|---|
+| 16 | 33 | 31.2 | 12.4 | 2.5x | 2.809e-02 both |
+| 24 | 51 | 223.5 | 37.3 | 6.0x | 7.367e-02 both |
+| 32 | 70 | 992.3 | 134.8 | 7.4x | 1.399e-01 both |
+| 40 | 90 | 3692.2 | 399.1 | 9.2x | 2.199e-01 both |
+| 48 | 111 | 11959.4 | 953.2 | **12.5x** | 3.133e-01 both |
+
+Printed IRLS objectives agree throughout. Sharing the remaining p×p Cholesky
+was retired as a performance task: `benchmarks/nt_factor_share_bench.cpp`
+measured maximum whole-fit savings of 0.229%, 0.100%, 0.016% and 0.006% at
+p=6,12,24,48. Whitened expected-information assembly is documented above;
+remaining R-boundary diagonal transport and factor/weight API consolidation
+are in the [backlog](../backlog/todo.md#continuous-moment-quadratic-weight-follow-ups).
+
 ### Ordinal and mixed categorical LS
 
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
@@ -3567,57 +3635,24 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   composite likelihood, not multivariate MAR ordinal FIML.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
-- A first internal ordinal workspace split is in place: `OrdinalMoments` /
-  `MixedOrdinalMoments` carry observed statistics and metadata only,
-  `OrdinalGammaCache` records which Gamma/weight pieces are materialized, and
-  `OrdinalWeightPlan` encodes the fit-only ULS/DWLS/WLS Gamma cost rules. The
-  legacy `OrdinalStats` and `MixedOrdinalStats` structs remain the
-  compatibility adapters that materialize full NACOV plus DWLS/WLS weights.
-- The all-ordinal fit-only path can now consume `OrdinalMoments` plus an
-  `OrdinalWeightPlan`: ULS builds identity weights and does not touch Gamma,
-  while DWLS consumes only diagonal Gamma entries from `OrdinalGammaCache`.
-  The cache-aware ULS/DWLS/WLS paths profile thresholds out of the optimizer
-  through a joint affine threshold design `tau_b = c_b + H_b gamma` built from
-  the prepared partable: free thresholds, fixed rows (kept as threshold
-  residuals in the profiled full-moment objective), equality-label merges
-  within and across groups (cross-group threshold invariance), and
-  threshold-only linear equality constraints folded through a null-space
-  basis. The threshold normal equations are joint across blocks with `n_b/N`
-  sample weights, so multi-group profiled fitting is supported and one gamma
-  coordinate may span groups; block `b`'s profiled thresholds then consume the
-  stacked correlation residual over all blocks. Non-threshold equalities and
-  constraints mixing threshold with non-threshold columns remain outside this
-  cache-aware fit-only path. The cache-aware WLS path uses the full
-  inverse-weight threshold/correlation blocks, applies the equivalent profiled
-  affine threshold/correlation residual transform, and reconstructs thresholds
-  with the profiled cross-block formula.
-  Fit-plus-inference and inference-only all-ordinal plans can also reuse a
-  full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
-  diagonal weights from the full Gamma when needed, WLS materializes the full
-  inverse weight, and the robust result matches the legacy materialized
-  `OrdinalStats` path. The default all-ordinal SNLLS entry point reuses the
-  same joint threshold-design profiled objective for delta ULS/DWLS/WLS:
-  thresholds are fixed out before the generic Golub-Pereyra classifier sees the
-  problem (absorbed threshold-only linear rows are stripped from the reduced
-  partable), conditionally linear covariance parameters are profiled, WLS uses
-  the same affine full-weight transform, and the returned vector is
-  reconstructed in the ordinary prepared ordinal partable coordinate. For theta, cache-aware
-  bounded fitting uses the full standardized threshold/correlation moment
-  objective with the requested ULS/DWLS/WLS cache materialization, and SNLLS
-  profiles only threshold free parameters because the standardized covariance
-  moments make the remaining covariance block nonlinear. A second full-threshold
-  ordinal SNLLS entry point keeps the full threshold+correlation moment stack
-  and marks threshold free parameters as Golub-Pereyra linear coordinates, so
-  linear threshold constraints remain compatible without using the ordinal
-  threshold-profiling map. `experiments/_archive/ordinal-threshold-constraints`
-  validated the original split (free/shared-label cases through both paths,
-  general linear threshold constraints only through the full bounded and
-  full-threshold SNLLS paths); the threshold-profiled paths have since gained
-  general threshold-only linear constraints and multi-group invariance, gated
-  by unit parity tests against the full-threshold and legacy bounded fits and
-  by lavaan oracle fixtures (0013 cross-group threshold invariance via explicit
-  shared labels, 0014 threshold-only linear constraint) driven through both the
-  legacy bounded and profiled SNLLS golden paths. **Keyword `group.equal`
+- Ordinal workspaces separate observed moments from cached Gamma/weights and
+  the requested fit/inference products. `OrdinalMoments` / `MixedOrdinalMoments`,
+  `OrdinalGammaCache` and `OrdinalWeightPlan` are public in `data/ordinal.hpp`;
+  legacy stats remain materialized compatibility objects. Fit-only ULS avoids
+  Gamma; DWLS uses its diagonal; WLS needs the full weight. All-ordinal and
+  mixed workspace construction, all-ordinal robust cache reuse, delta SNLLS
+  and mixed/theta fitting are implemented.
+- Threshold profiling supports fixed rows, shared labels, threshold-only
+  linear equalities and joint multi-group equations with `n_b/N` weights.
+  All-ordinal delta SNLLS uses this affine map; eligible theta SNLLS profiles
+  standardized thresholds, with generic full-threshold fitting retained for
+  fixed/shared/constrained cases. Released-scale delta is rejected by the
+  all-ordinal SNLLS paths. Unit tests compare profiled/cache-aware fits with
+  full-threshold and legacy bounded fits; lavaan fixtures 0013/0014 cover
+  cross-group shared thresholds and threshold-only linear constraints.
+  The maintained [workspace contract](../design/ordinal-snlls-gamma-architecture.md)
+  owns the data split, profiling algebra, cost rules and support boundaries.
+- **Keyword `group.equal`
   ordinal measurement invariance landed 2026-06-15 (theta).**
   `BuildOptions::group_equal`/`group_partial` ties the requested families across
   groups (synthetic shared labels feeding the same `compute_eq_groups` merge as

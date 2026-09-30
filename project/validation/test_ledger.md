@@ -501,6 +501,45 @@ exception (`has_known_nonparity_fit`) is removed.
 Scope: the latent family's residual objective-value gap is the documented GLS/ULS
 scale convention, with the implied moments as the authoritative parity.
 
+**Latent-scale convention parity.**
+Regression: multi-group std.lv metric invariance fixed every latent variance,
+adding restrictions beyond its marker equivalent. Group-2+ latent variances
+are now released when loadings, but not latent variances, are equated.
+Guard: `constraints_test.cpp` checks the coordinate-change invariant;
+`fit_stdlv/0002_three_factor_hs_2group_loadings` directly gates estimates, SE,
+chi-square and df against lavaan. Scale-free discrepancy bounds are 3e-5 for
+estimates, 1e-4 for SE and 1e-8 for chi-square; n_free/df are exact.
+`lavaanify_test.cpp` separately pins per-level std.lv, single-indicator fixing,
+user-fixed growth loadings and latent-variance modifiers: `start(2)*` becomes
+a fixed value of 2 under std.lv, while `NA*` keeps the row free. Marker
+loadings stay fixed across groups where the group-1 loading is fixed.
+
+**Whitened expected-information arithmetic.**
+Regression: the original expected-information assembly stored mostly-zero
+parameter-by-group matrices and contracted them pairwise. The factored
+Jacobian assembly removes that cost while preserving the trace identity.
+Guard: `expected_info_whitened_test.cpp` compares independent explicit traces
+across 1–4 groups, with and without means. `score_robust_test.cpp` checks
+identity-versus-flip covariance agreement at 1e-12; exact-zero relative shift
+was an arithmetic-path accident (the former implementation also gave
+1.8e-16–2.7e-16 shifts on other seeds), not an invariant.
+
+**Reduced-bias and estimated-weight inference assembly.**
+Regression protection: `rbm_fd_test.cpp` independently reconstructs the
+`-0.5 trace(j^-1 e)` penalty derivative and reduced-space correction over ML,
+FIML, continuous/ordinal/mixed LS and ML2S. Every family gets the explicit
+one-step check; cheap implicit families also get explicit/implicit order and
+adjusted-objective stationarity checks. Weighted ordinal/mixed/ML2S families
+are not claimed to have those more expensive implicit checks.
+`weighted_inference_test.cpp`, `ordinal_test.cpp` and `fiml_test.cpp` retain
+fixed-weight reductions, case-weight FD gates for Gamma influence, analytic
+versus FD bread, complete-versus-observed-data reductions and live
+estimated-weight channels. The default NT ML2S robust-score path remains
+separate from the moment-quadratic GLS IJ adapter. Advisory calibration
+harnesses under `cpp/tests/checks/ordinal_{dwls_profile,rmsea_inference,
+crmr_inference,cfi_inference}/` assess prototype finite-sample behavior;
+passing deterministic reductions alone does not establish calibration.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
