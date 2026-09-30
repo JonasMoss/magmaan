@@ -29,7 +29,16 @@ its builds under `cpp/build/` and the R package. R build helpers belong to
 Public maintainer knowledge lives under `project/`; research working notes
 are maintained independently and are not build or test dependencies. External
 textbook and paper collections share `external/`; tests retain frozen fixture
-snapshots. Experiments are grouped by purpose under `experiments/{showcases,replications,
+snapshots.
+
+Agent guidance uses a concise root `AGENTS.md` plus directory instructions for
+C++, both R packages, experiments and papers. Versioned `.agents/skills/`
+workflows cover oracle validation, R bindings/vendoring and experiments, with
+task-specific references loaded only as needed. `CLAUDE.md` imports the adjacent
+instructions. The tracked-content guard allows repository skills under `.agents/`
+while excluding agent configuration/session files.
+
+Experiments are grouped by purpose under `experiments/{showcases,replications,
 research,engineering}/`; `_archive/` and `_support/` remain at collection level.
 Numbering starts at 01 within each live category; archived folders use unnumbered
 slugs. Each study remains an independent leaf, including within a category.

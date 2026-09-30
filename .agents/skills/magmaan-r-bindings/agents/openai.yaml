@@ -1,0 +1,3 @@
+interface:
+  display_name: "Magmaan R bindings"
+  short_description: "Maintain R adapters and portable C++ vendoring"

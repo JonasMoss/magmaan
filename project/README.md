@@ -24,3 +24,16 @@ is stable enough to describe without rewriting the story every week.
 Local reference PDFs, package tarballs, downloaded data, and cloned upstream
 source trees are intentionally not tracked here. See
 [`reference/external_resources.md`](reference/external_resources.md).
+
+## Agent guidance and workflows
+
+The root [AGENTS.md](../AGENTS.md) holds repository-wide contracts and ownership
+rules. C++ and both R packages have focused directory instructions; experiments
+keep collection/lifecycle and decision-study safeguards in their own instructions.
+`CLAUDE.md` files import the adjacent `AGENTS.md` rather than duplicating it.
+
+Versioned skills in [`.agents/skills/`](../.agents/skills/) provide the optional
+oracle-validation, R-binding/vendor, and experiment workflows. Their entrypoints
+route to detailed references only when the task needs them. Read relevant roadmap
+and backlog sections before structural changes; these large documents remain the
+source of implementation state, not unconditional context to load in full.

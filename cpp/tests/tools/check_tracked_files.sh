@@ -6,8 +6,8 @@
 #
 #   1. Only known top-level entries. A new top-level folder is a layout
 #      decision; add it here and to AGENTS.md deliberately.
-#   2. Nothing inside the ignored mount points (papers/, private/, external/,
-#      external/) except their tracked convention files.
+#   2. Nothing inside the ignored mount points (papers/, private/, external/)
+#      except their tracked convention files; .agents/ holds skills only.
 #   3. No archives, office documents, serialized R/Python objects, or build
 #      products anywhere, and no IDE/session state.
 #   4. No PDFs (working notes are maintained independently).
@@ -22,7 +22,7 @@ cd "$ROOT" || { echo "check_tracked_files: cannot cd to repo root" >&2; exit 2; 
 
 DOC="see AGENTS.md 'What belongs in this repository'"
 
-TOP_ALLOWED=" .github .gitignore AGENTS.md CLAUDE.md LICENSE README.md THIRD_PARTY_NOTICES.md benchmarks cpp experiments external justfile papers private project r-magmaan r-package "
+TOP_ALLOWED=" .agents .github .gitignore AGENTS.md CLAUDE.md LICENSE README.md THIRD_PARTY_NOTICES.md benchmarks cpp experiments external justfile papers private project r-magmaan r-package "
 
 # Tracked convention files inside otherwise-ignored mount points.
 MOUNT_ALLOWED=" papers/AGENTS.md papers/CLAUDE.md papers/STYLE.md \
@@ -62,6 +62,8 @@ cut -f1 "$paths" | git cat-file --batch-check='%(objectsize)' |
       top = f; sub(/\/.*/, "", top)
       if (index(top_allowed, " " top " ") == 0)
         fail(f, "unexpected top-level entry \x27" top "\x27")
+      if (top == ".agents" && f !~ /^\.agents\/skills\/[a-z0-9][a-z0-9-]*\//)
+        fail(f, "only named repository skills belong in .agents/skills/")
       if (f ~ /^(papers|private|external)\// && index(mount_allowed, " " f " ") == 0)
         fail(f, "tracked file inside an ignored mount point")
       if (low ~ binary_re)

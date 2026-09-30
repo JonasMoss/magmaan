@@ -1,0 +1,3 @@
+interface:
+  display_name: "Magmaan oracle validation"
+  short_description: "Investigate parity and maintain oracle fixtures"
