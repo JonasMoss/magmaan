@@ -1061,15 +1061,27 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   }
   const parse::FlatPartable& eflat = *flatp;
 
-  // Number of levels = the largest flat-row block. The parser advances
-  // `FlatRow.block` across `level:` / `group:` headers; a single-level (and a
-  // multi-group single-level) model never sees a header, so every block is 1
-  // and `n_levels == 1` — the whole multilevel branch below collapses to the
-  // pre-multilevel single-group-template loop. (v1: a `group:` header is not
-  // yet a separate axis here; the supported two-level form is `level:`-only.)
+  const bool group_blocks = !eflat.block_kinds.empty() &&
+      eflat.block_kinds.front() == parse::BlockKind::Group;
+  if (!eflat.block_kinds.empty()) {
+    const auto kind = eflat.block_kinds.front();
+    if (kind == parse::BlockKind::Block ||
+        std::any_of(eflat.block_kinds.begin(), eflat.block_kinds.end(),
+                    [&](auto k) { return k != kind; })) {
+      return std::unexpected(make_err(PartableError::Kind::BadGroupSpec,
+          "mixed header kinds and generic block: models are unsupported"));
+    }
+    if (group_blocks && eflat.block_kinds.size() !=
+        static_cast<std::size_t>(opts.n_groups)) {
+      return std::unexpected(make_err(PartableError::Kind::BadGroupSpec,
+          "group: header count does not match n_groups"));
+    }
+  }
+  // Explicit group blocks are single-level; legacy programmatically built
+  // flat rows without header metadata retain their existing level semantics.
   std::int32_t n_levels = 1;
   for (const auto& r : eflat.rows)
-    if (static_cast<std::int32_t>(r.block) > n_levels)
+    if (!group_blocks && static_cast<std::int32_t>(r.block) > n_levels)
       n_levels = static_cast<std::int32_t>(r.block);
 
   // Step 2: classify variables and build the name-free inventory (var ids,
@@ -1104,12 +1116,12 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // Per-level VarSets cache (1-based; index 0 unused). For single-level this is
   // just `v`; for two-level each level classifies only its own rows so auto.var
   // / auto.cov fire over that level's latents and observed variables.
-  auto level_varsets = [&](std::int32_t level) -> VarSets {
-    if (n_levels <= 1) return v;
+  auto block_varsets = [&](std::int32_t block) -> VarSets {
+    if (block == 0) return v;
     std::vector<parse::FlatRow> sub;
     sub.reserve(eflat.rows.size());
     for (const auto& r : eflat.rows)
-      if (static_cast<std::int32_t>(r.block) == level) sub.push_back(r);
+      if (static_cast<std::int32_t>(r.block) == block) sub.push_back(r);
     return classify_vars(sub);
   };
 
@@ -1121,11 +1133,12 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
     // whatever the caller asked for. (lavaan: the within block has no
     // intercepts; the between block holds the indicator means.)
     BuildOptions lvl_opts = tmpl_opts;
-    const std::int32_t level_filter = (n_levels > 1) ? level : 0;
+    const std::int32_t level_filter = group_blocks ? g :
+        (n_levels > 1 ? level : 0);
     if (n_levels > 1) {
       lvl_opts.meanstructure = (level == n_levels);  // between level only
     }
-    const VarSets vlev = level_varsets(level);
+    const VarSets vlev = block_varsets(level_filter);
     auto group_rows_or = build_group_template(eflat, lvl_opts, vlev,
                                               native_composites,
                                               /*group_idx=*/g - 1,
@@ -1245,9 +1258,11 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // intercept *release* is NOT here — it needs category counts and lives in
   // `prepare_ordinal_*_partable`, keyed off `out.group_equal` (stamped below).
   if (!opts.group_equal.empty() && opts.n_groups > 1 &&
-      rows.size() % static_cast<std::size_t>(opts.n_groups) == 0) {
+      (group_blocks || rows.size() % static_cast<std::size_t>(opts.n_groups) == 0)) {
     const std::size_t n_per =
-        rows.size() / static_cast<std::size_t>(opts.n_groups);
+        group_blocks ? static_cast<std::size_t>(std::count_if(
+            rows.begin(), rows.end(), [](const auto& r) { return r.group == 1; })) :
+            rows.size() / static_cast<std::size_t>(opts.n_groups);
     auto has_family = [&](GroupEqual f) {
       return std::find(opts.group_equal.begin(), opts.group_equal.end(), f) !=
              opts.group_equal.end();
@@ -1292,9 +1307,15 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
       const std::string shared =
           r1.label.empty() ? (".eqg" + std::to_string(off) + ".") : r1.label;
       for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-        PendingRow& rg = rows[static_cast<std::size_t>(g - 1) * n_per + off];
-        // Same structural row in every group (positional alignment); only tie
-        // the ones that stay free in their group.
+        // Explicit group templates may have different row counts and order.
+        auto found = group_blocks ? std::find_if(rows.begin(), rows.end(),
+            [&](const auto& r) {
+              return r.group == g && r.op == r1.op &&
+                     r.lhs == r1.lhs && r.rhs == r1.rhs;
+            }) : rows.begin() + static_cast<std::ptrdiff_t>(
+                static_cast<std::size_t>(g - 1) * n_per + off);
+        if (found == rows.end()) continue;
+        PendingRow& rg = *found;
         if (rg.op == r1.op && rg.lhs == r1.lhs && rg.rhs == r1.rhs &&
             will_be_free(rg) && !in_group_partial(rg)) {
           rg.label = shared;

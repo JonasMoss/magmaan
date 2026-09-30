@@ -237,6 +237,26 @@ std::string diff_ptable_semantic(const nlohmann::json& got, const nlohmann::json
 
 }  // namespace
 
+TEST_CASE("ptable goldens — explicit group blocks match lavaan") {
+  const std::string id = "group_blocks_distinct";
+  auto raw = magmaan::test::read_fixture(
+      magmaan::test::fixtures_dir() + "/ptable/" + id + ".ptable.json");
+  REQUIRE(raw.has_value());
+  auto exp = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+  auto flat = magmaan::parse::Parser::parse(exp["input"].get<std::string>());
+  REQUIRE(flat.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = 2;
+  magmaan::spec::Starts starts;
+  magmaan::spec::LatentNames names;
+  auto structure = magmaan::spec::build(*flat, opts, &starts, &names);
+  REQUIRE(structure.has_value());
+  auto pt = magmaan::compat::lavaan::to_lavaan_partable(*structure, names, starts);
+  auto got = ptable_to_json(exp["input"].get<std::string>(), id, pt);
+  CHECK_MESSAGE(diff_ptable_semantic(got, exp).empty(), diff_ptable_semantic(got, exp));
+}
+
 TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
   const auto corpus = magmaan::test::load_corpus();
   REQUIRE(!corpus.empty());

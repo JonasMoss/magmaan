@@ -123,11 +123,14 @@ struct Constraint {
 // relocate a std::string's inline buffer on move; vector<char>'s data
 // pointer is heap-allocated and survives moves.
 
+enum class BlockKind : std::uint8_t { Group, Level, Block };
+
 struct FlatPartable {
   std::vector<FlatRow>    rows;
   std::vector<Modifier>   mods;          // 1-indexed; mods[0] is a sentinel
   std::vector<Constraint> constraints;   // ==, <, >, := statements
   std::vector<char>       source_text;   // owned; heap-stable
+  std::vector<BlockKind>  block_kinds;   // header order, parallel to 1-based row blocks
 
   FlatPartable() : mods(1) {}            // mods[0] sentinel
 

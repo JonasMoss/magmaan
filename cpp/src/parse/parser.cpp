@@ -868,11 +868,10 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
 // block *value* token (the `1` / `2` / label after `:`) is consumed for
 // syntactic well-formedness but is not retained on the flat row — lavaan's
 // `lavParseModelString` likewise carries only the running block index, with
-// the verbal level label resolved later. v1 supports the two-level `level:`
-// axis over a shared observed set; `group:`/`block:` headers and 3+ levels
-// parse but their downstream lavaanify support is intentionally limited.
+// the verbal level label resolved later. The header keyword is retained so
+// model construction can distinguish group templates from levels.
 parse_expected<void>
-parse_block_header(State& st, FlatPartable& /*flat*/) noexcept {
+parse_block_header(State& st, FlatPartable& flat) noexcept {
   const Token& kw = st.peek();
   if (kw.kind != TokenKind::Identifier || !is_block_keyword(kw.text)) {
     return std::unexpected(make_err(
@@ -881,6 +880,8 @@ parse_block_header(State& st, FlatPartable& /*flat*/) noexcept {
                     "or 'block'; got '") +
             std::string(kw.text) + "'"));
   }
+  const BlockKind kind = kw.text == "group" ? BlockKind::Group :
+      kw.text == "level" ? BlockKind::Level : BlockKind::Block;
   st.consume();  // the keyword
   const Token& colon = st.peek();
   if (colon.kind != TokenKind::Colon) {
@@ -903,6 +904,7 @@ parse_block_header(State& st, FlatPartable& /*flat*/) noexcept {
   // keep the default block 1.
   ++st.header_count;
   st.block = st.header_count;
+  flat.block_kinds.push_back(kind);
   return {};
 }
 

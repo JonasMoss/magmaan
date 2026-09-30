@@ -1140,26 +1140,34 @@ The evidence, with sources and run provenance, is logged in
   the existing R test/example suites, not re-verified against a hand-built
   Mplus-syntax growth model in R.
   **Remaining, separate from this fix (unrelated bugs, own backlog items
-  below):** covariates in categorical models, `ordered` with `group:` blocks,
-  and mixed ordinal/continuous fits stopping above lavaan's objective.
-- **High — covariates in categorical models.** Eight corpus cases regress
+  below):** conditional moments for categorical covariates and mixed
+  ordinal/continuous fits stopping above lavaan's objective.
+- **M — implement conditional moments for categorical covariates.**
+  The silent wrong-fit path was closed on 2026-09-30: categorical preparation
+  in C++ and the R fit/data/augmentation helpers reject fixed observed
+  covariates (`exo` rows) before fitting. Explicit joint models with
+  `fixed_x = FALSE` remain available; they are a different statistical model,
+  not a substitute for conditional estimation. Eight corpus cases regress
   ordinal outcomes on observed covariates, which lavaan handles with
   `conditional.x`: Mplus ex3.4, 3.12, 3.13, 3.14, 5.16, 5.17, Muthén ex8.29_2
-  and Newsom 2024 ex4.2b. magmaan has no conditional path, yet the R path fits
-  the four single-group User's Guide models anyway and ends at saddles far above lavaan's
+  and Newsom 2024 ex4.2b. magmaan has no conditional path. Before the guard,
+  the R path fitted the four single-group User's Guide models and ended at saddles far above lavaan's
   objective (engineering/active/19-newton-verdict-migration): 2.6 on ex3.12 and ex3.13, 1.6 on ex3.14, and
   0.93 against 0 on the just-identified ex3.4, which any consistent setup fits
-  exactly. So the R path's handling of the covariates (`fixed.x`, joint versus
-  conditional moments) is wrong, not only missing. On the two single-group
-  cases with one covariate (Muthén ex8.29_2, Newsom 2024 ex4.2b) the R path
-  instead stops in stage 1 ("mixed ordinal stage-1 information matrix is not
-  positive definite"). Implement the conditional moments or refuse such
-  models.
-- **S — `ordered` with `group:` blocks in the R interface.**
-  `magmaanlab::fit_model()` with `ordered` and a model written in `group:`
-  blocks stops in `data_ordinal_stats_from_df()` ("model/data group count
-  mismatch"; UG ex5.19). engineering/active/19-newton-verdict-migration leaves out the multi-group
-  categorical cases for this reason.
+  exactly. The covariate handling (`fixed.x`, joint versus conditional
+  moments) was wrong, not only missing. The two single-group cases with one
+  covariate (Muthén ex8.29_2, Newsom 2024 ex4.2b) instead stopped in stage 1
+  ("mixed ordinal stage-1 information matrix is not positive definite").
+  Remaining: implement conditional stage-1 moments, their sampling covariance,
+  and the corresponding stage-2 model before removing the refusal.
+- **S — reconstruct fitted theta response-scale rows.** Categorical
+  theta fits currently display the prepared `~*~` value 1, whereas lavaan
+  reports the scale derived from the fitted response variance. Found while
+  validating group-block fits on a two-group HS three-indicator CFA; the
+  estimated loadings, thresholds and variances agree. **Check:** canonical
+  parameter-value reconstruction and complete fitted-table parity in both
+  categorical parameterizations; retain the numerical preparation value 1.
+
 - **M — mixed ordinal/continuous fits stop above lavaan's objective.** Five
   corpus cases mix ordinal and continuous indicators without covariates. The
   R path fits all five and the Newton check accepts every endpoint, but only

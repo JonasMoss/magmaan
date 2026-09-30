@@ -200,6 +200,7 @@ expand_composites(const parse::FlatPartable& flat) {
 
   // --- 4. modifier table: originals + the three synthesized fixes -----------
   out.flat.mods = flat.mods;
+  out.flat.block_kinds = flat.block_kinds;
   const std::uint32_t m_zero = static_cast<std::uint32_t>(out.flat.mods.size());
   out.flat.mods.push_back(parse::Modifier{parse::FixedValue{0.0}});
   const std::uint32_t m_one = static_cast<std::uint32_t>(out.flat.mods.size());

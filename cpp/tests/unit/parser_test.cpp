@@ -22,6 +22,18 @@ using magmaan::parse::Op;
 using magmaan::parse::Parser;
 using magmaan::parse::StartValue;
 
+TEST_CASE("parser: block headers retain their axis after moving the flat model") {
+  auto parsed = Parser::parse("group: first\ny ~ x\nlevel: 2\ny ~ x\nblock: 3\ny ~ x");
+  REQUIRE(parsed.has_value());
+  auto flat = std::move(*parsed);
+  REQUIRE(flat.block_kinds.size() == 3);
+  CHECK(flat.block_kinds[0] == magmaan::parse::BlockKind::Group);
+  CHECK(flat.block_kinds[1] == magmaan::parse::BlockKind::Level);
+  CHECK(flat.block_kinds[2] == magmaan::parse::BlockKind::Block);
+  REQUIRE(flat.rows.size() == 3);
+  for (std::size_t i = 0; i < flat.rows.size(); ++i) CHECK(flat.rows[i].block == i + 1);
+}
+
 namespace {
 
 // Convenience: parse and assert success, returning the FlatPartable.

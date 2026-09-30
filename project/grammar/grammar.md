@@ -86,7 +86,11 @@ followed by `:` and a block index/label opens a new block; the lexer emits a
 `Colon` punctuation token only in this header position, and
 `parse_block_header` consumes `keyword : index`. v1 supports the two-level
 `level:` axis (`level: 1` = within / L1, `level: 2` = between / L2) over a
-shared observed variable set; `group:` headers and 3+ levels are reserved. A
+shared observed variable set. Single-level `group:` headers select separate
+group templates in header order, with one header per requested data group.
+The parser retains the header kind alongside formula-row block indices;
+mixed header kinds, generic `block:` construction and 3+ level fits remain
+unsupported. A
 lone `:` outside the block-header position is still rejected at the lexer
 level.
 
@@ -140,7 +144,7 @@ visual =~ a*x1 + a*x2 + a*x3
 visual =~ 1*x1 + NA*x2 + start(0.7)*x3
 
 # Multi-group, per-group fixed value
-visual =~ 1*x1 + c(0.8, 1.2)*x2 + x3   # group: header axis reserved (level: is live)
+visual =~ 1*x1 + c(0.8, 1.2)*x2 + x3   # shared template with per-group modifiers
 
 # Two-level (multilevel) random-intercept CFA: the `level:` block axis is live
 level: 1

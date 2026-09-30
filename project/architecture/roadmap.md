@@ -412,6 +412,17 @@ single/multigroup and scalar-invariance fits, explicit fixes, and single/multigr
 ordinal/mixed delta/theta reporting; independent checks cover mean/covariance
 invariance, constraint sums, and residual-plus-explained variance.
 
+Explicit single-level `group:` headers select separate group templates in
+header order instead of being interpreted as levels and replicated across
+groups. `FlatPartable::block_kinds` preserves the parsed header axis, including
+through composite expansion. Header counts must match the requested groups;
+mixed axes and generic `block:` construction fail explicitly. `group_equal`
+matches explicit templates by parameter term even when row order/count differs.
+Frozen lavaan parser/partable fixtures and R ordinal delta/theta, mixed/continuous,
+and staged-model regressions cover grouping and estimated parameters. The
+existing theta response-scale display gap is separately tracked in the backlog.
+The two-level `level:` path retains its existing templates and mean rules.
+
 Continuous multi-group `group.equal = "intercepts"` releases auto-added zero
 latent means in groups 2+ unless `means` is also equal. Explicit user mean
 rows remain authoritative, and `group.partial` does not suppress the release.
@@ -4680,6 +4691,15 @@ failures.
   parameterization; remaining lavaan parity is fixture-backed for the covered
   ordinal slices and smoke-tested where lavaan fixture coverage is not yet
   available.
+- Categorical models with fixed observed covariates (`exo` rows) are explicitly
+  unsupported: conditional moments (`conditional.x`) are not implemented.
+  C++ preparation rejects these models, including cached moment routes; R
+  fit/data/augmentation helpers reject them before constructing marginal
+  statistics or entering the fitter. Explicit joint random-x models
+  (`fixed_x = FALSE`) retain their existing path. Regressions cover direct and
+  precomputed-data routes, staged model preparation, PSD dispatch, and a
+  lavaan-matched joint-model regression slope; they do not establish broader
+  mixed-model parameter-table parity.
 - WLS ordinal point estimates and standard chi-square are lavaan-backed.
   Robust WLS scaled-test reporting remains shape-only because lavaan rejects
   Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the

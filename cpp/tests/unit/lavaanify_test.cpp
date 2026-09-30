@@ -52,6 +52,63 @@ std::size_t find_row(const LavaanParTable& pt, std::string_view lhs, Op op,
 
 }  // namespace
 
+TEST_CASE("lavaanify: group headers select distinct single-level templates") {
+  BuildOptions opts;
+  opts.n_groups = 2;
+  auto pt = must_lavaanify(
+      "group: first\nf =~ x1 + a*x2 + shared*x3\n"
+      "group: second\nf =~ x1 + 0.6*x2 + shared*x3", opts);
+  REQUIRE(pt.size() == 15);  // shared loading also projects an equality row
+  std::size_t x2_count = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    CHECK(pt.block[i] == pt.group[i]);
+    if (pt.op[i] != Op::Measurement || pt.rhs[i] != "x2") continue;
+    ++x2_count;
+    if (pt.group[i] == 1) {
+      CHECK(pt.free[i] > 0);
+      CHECK(pt.label[i] == "a");
+    } else {
+      CHECK(pt.free[i] == 0);
+      CHECK(pt.ustart[i] == doctest::Approx(0.6));
+    }
+  }
+  CHECK(x2_count == 2);
+}
+
+TEST_CASE("lavaanify: group.equal matches reordered unequal group templates by term") {
+  BuildOptions opts;
+  opts.n_groups = 2;
+  opts.std_lv = true;
+  opts.group_equal = {magmaan::spec::GroupEqual::Loadings};
+  auto pt = must_lavaanify(
+      "group: first\nf =~ x1 + x2 + x3\n"
+      "group: second\nf =~ x3 + x1 + x2\nx1 ~~ x2", opts);
+  for (std::string_view rhs : {"x1", "x2", "x3"}) {
+    std::string label;
+    int found = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != Op::Measurement || pt.rhs[i] != rhs) continue;
+      if (++found == 1) label = pt.label[i];
+      else CHECK(pt.label[i] == label);
+      CHECK_FALSE(pt.label[i].empty());
+    }
+    CHECK(found == 2);
+  }
+}
+
+TEST_CASE("lavaanify: invalid block axes and group counts fail explicitly") {
+  for (const auto src : {
+      "group: 1\ny ~ x\ngroup: 2\ny ~ x",
+      "group: 1\ny ~ x\nlevel: 2\ny ~ x",
+      "block: 1\ny ~ x"}) {
+    auto flat = Parser::parse(src);
+    REQUIRE(flat.has_value());
+    auto pt = build(*flat);
+    REQUIRE_FALSE(pt.has_value());
+    CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
+  }
+}
+
 TEST_CASE("lavaanify: 1-factor CFA produces 4 rows (3 loadings + 1 var auto.fix.first marker)") {
   // f =~ x1 + x2 + x3
   //   → loadings rows for x1 (auto-fixed to 1), x2, x3

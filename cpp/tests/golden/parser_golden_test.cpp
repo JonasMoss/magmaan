@@ -15,6 +15,20 @@
 // fixtures generated, so the comparison flips from "skipped" to "compared"
 // the moment P4 lands without any fixture-side change.
 
+TEST_CASE("parser group-block formula rows match lavaan") {
+  const std::string id = "group_blocks_distinct";
+  auto raw = magmaan::test::read_fixture(
+      magmaan::test::fixtures_dir() + "/flat/" + id + ".flat.json");
+  REQUIRE(raw.has_value());
+  auto exp = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+  const auto input = exp["input"].get<std::string>();
+  auto flat = magmaan::parse::Parser::parse(input);
+  REQUIRE(flat.has_value());
+  auto got = magmaan::test::flat_partable_to_json(input, id, *flat);
+  CHECK(magmaan::test::strip_meta(got) == magmaan::test::strip_meta(exp));
+}
+
 TEST_CASE("parser flat fixtures match lavaan") {
   const auto corpus = magmaan::test::load_corpus();
   REQUIRE(!corpus.empty());

@@ -8,6 +8,7 @@
 #
 # Usage:
 #   Rscript cpp/tests/tools/regen_oracle.R                 # regenerate flat/*.flat.json
+#   Rscript cpp/tests/tools/regen_oracle.R --group-blocks  # focused header-axis fixtures
 #   Rscript cpp/tests/tools/regen_oracle.R --check         # diff against working tree (TODO)
 #
 # The script aborts loudly if the installed lavaan version disagrees with
@@ -43,6 +44,12 @@ source(file.path(repo_root, "benchmarks", "r", "fixture_json.R"))
 corpus_path <- file.path(fixtures, "corpus.json")
 corpus_json <- fromJSON(corpus_path, simplifyVector = FALSE)
 models <- corpus_json$models
+group_blocks_only <- "--group-blocks" %in% commandArgs(trailingOnly = TRUE)
+if (group_blocks_only) {
+  models <- list(list(id = "group_blocks_distinct", n_groups = 2L,
+    model = paste("group: 1", "f =~ x1 + a*x2 + shared*x3",
+                  "group: 2", "f =~ x1 + 0.6*x2 + shared*x3", sep = "\n")))
+}
 cat("corpus:", length(models), "models\n")
 
 # --- modifier translator ---------------------------------------------------
@@ -117,11 +124,15 @@ for (m in models) {
   modifiers   <- attr(flat, "modifiers")
   constraints <- attr(flat, "constraints")
 
-  rows <- vector("list", nrow(flat))
-  for (i in seq_len(nrow(flat))) {
+  # lavaan emits header declarations as ':' pseudo-rows; our formula-row
+  # contract carries their ordinal in `block` and their kind separately.
+  formula_rows <- which(flat$op != ":")
+  rows <- vector("list", length(formula_rows))
+  for (k in seq_along(formula_rows)) {
+    i <- formula_rows[[k]]
     mod_idx  <- flat$mod.idx[i]
     modifier <- if (mod_idx > 0) modifier_to_json(modifiers[[mod_idx]]) else NULL
-    rows[[i]] <- flat_row_to_json(flat[i, ], modifier)
+    rows[[k]] <- flat_row_to_json(flat[i, ], modifier)
   }
   cons <- if (length(constraints) > 0) lapply(constraints, constraint_to_json) else list()
 
@@ -199,7 +210,7 @@ for (m in models) {
               auto.cov.y     = FALSE,
               auto.fix.first = TRUE,
               fixed.x        = TRUE,
-              ngroups        = 1),
+              ngroups        = if (group_blocks_only) m$n_groups else 1),
     error = function(e) e
   )
   if (inherits(pt_or_err, "error")) {
@@ -230,6 +241,7 @@ for (m in models) {
 }
 
 cat("regenerated", length(regenerated_pt), "ptable fixtures under", ptable_dir, "\n")
+if (group_blocks_only) quit(status = 0L)
 
 # === matrix_rep layer ======================================================
 # lavMatrixRepresentation(pt) returns the partable with `mat`, `row`, `col`
