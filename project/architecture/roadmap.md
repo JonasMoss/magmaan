@@ -74,6 +74,14 @@ availability claims. Existing entry points and numerical defaults are unchanged.
 
 ## Current State
 
+Complete-data moment helpers (`sample_stats_from_raw`, `empirical_gamma`,
+`empirical_gamma_with_means`, `gamma_nt`, and `gamma_nt_with_means`) reject
+non-finite inputs and arithmetic overflow with `PostError::NumericIssue`
+rather than returning successful objects containing NaN or infinity. Finite
+singular moments remain valid outputs; these helpers do not require positive
+definiteness. Raw-data unit regressions cover NaN, both infinities, multiblock
+error attribution, and overflow of means, second moments, and fourth moments.
+
 Research experiment `research/50-normal-parameter-intervals` composes existing
 ML fitting and score primitives into a validated normal-theory Wald/score/LR
 interval comparison and a candidate-specific bootstrap Bartlett pilot. Its

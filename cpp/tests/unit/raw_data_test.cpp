@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <random>
+#include <string>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -231,4 +233,95 @@ TEST_CASE("sample_stats_from_raw: error on degenerate / missingness") {
       Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(10, 3));
   // Mask present → FIML-phase territory, not yet supported.
   CHECK_FALSE(magmaan::data::sample_stats_from_raw(raw).has_value());
+}
+
+TEST_CASE("moment helpers: reject non-finite inputs") {
+  const auto check_error = [](const auto& result) {
+    CHECK_FALSE(result.has_value());
+    if (!result) {
+      CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+    }
+  };
+  for (const double bad : {std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::infinity(),
+                           -std::numeric_limits<double>::infinity()}) {
+    CAPTURE(bad);
+    Eigen::MatrixXd X(3, 2);
+    X << 1.0, 2.0, 3.0, bad, 5.0, 6.0;
+    magmaan::data::RawData raw;
+    raw.X = {Eigen::MatrixXd::Ones(3, 2), X};
+    auto stats = magmaan::data::sample_stats_from_raw(raw);
+    check_error(stats);
+    if (!stats) {
+      CHECK(stats.error().detail.find("block 1") != std::string::npos);
+    }
+
+    auto empirical = magmaan::data::empirical_gamma(X);
+    check_error(empirical);
+    auto with_means = magmaan::data::empirical_gamma_with_means(X);
+    check_error(with_means);
+
+    Eigen::MatrixXd Sigma = Eigen::MatrixXd::Identity(2, 2);
+    Sigma(1, 1) = bad;
+    auto nt = magmaan::data::gamma_nt(Sigma);
+    check_error(nt);
+    auto nt_means = magmaan::data::gamma_nt_with_means(Sigma);
+    check_error(nt_means);
+  }
+}
+
+TEST_CASE("moment helpers: reject arithmetic overflow from finite inputs") {
+  SUBCASE("sample mean overflow") {
+    magmaan::data::RawData raw;
+    raw.X = {Eigen::MatrixXd::Constant(3, 1, 1e308)};
+    CHECK_FALSE(magmaan::data::sample_stats_from_raw(raw).has_value());
+    CHECK_FALSE(magmaan::data::empirical_gamma(raw.X[0]).has_value());
+    CHECK_FALSE(magmaan::data::empirical_gamma_with_means(raw.X[0]).has_value());
+  }
+  SUBCASE("sample covariance and centered outer-product overflow") {
+    Eigen::MatrixXd X(3, 1);
+    X << -1e200, 0.0, 1e200;
+    magmaan::data::RawData raw;
+    raw.X = {X};
+    CHECK_FALSE(magmaan::data::sample_stats_from_raw(raw).has_value());
+    CHECK_FALSE(magmaan::data::empirical_gamma(X).has_value());
+    CHECK_FALSE(magmaan::data::empirical_gamma_with_means(X).has_value());
+  }
+  SUBCASE("fourth moments overflow while second moments remain finite") {
+    Eigen::MatrixXd X(3, 1);
+    X << -1e100, 0.0, 1e100;
+    magmaan::data::RawData raw;
+    raw.X = {X};
+    auto stats = magmaan::data::sample_stats_from_raw(raw);
+    REQUIRE(stats.has_value());
+    if (!stats) return;
+    CHECK(stats->S[0].allFinite());
+    CHECK_FALSE(magmaan::data::empirical_gamma(X).has_value());
+    CHECK_FALSE(magmaan::data::empirical_gamma_with_means(X).has_value());
+  }
+  SUBCASE("normal-theory covariance products overflow") {
+    Eigen::MatrixXd Sigma = Eigen::MatrixXd::Identity(2, 2) * 1e200;
+    CHECK_FALSE(magmaan::data::gamma_nt(Sigma).has_value());
+    CHECK_FALSE(magmaan::data::gamma_nt_with_means(Sigma).has_value());
+  }
+}
+
+TEST_CASE("moment helpers: finite singular moments remain valid") {
+  const Eigen::MatrixXd X = Eigen::MatrixXd::Constant(3, 2, 7.0);
+  magmaan::data::RawData raw;
+  raw.X = {X};
+  auto stats = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(stats.has_value());
+  if (!stats) return;
+  CHECK(stats->mean[0].isConstant(7.0));
+  CHECK(stats->S[0].isZero());
+
+  const auto check_zero = [](const auto& result) {
+    CHECK(result.has_value());
+    if (result) CHECK(result->isZero());
+  };
+  check_zero(magmaan::data::empirical_gamma(X));
+  check_zero(magmaan::data::empirical_gamma_with_means(X));
+  check_zero(magmaan::data::gamma_nt(stats->S[0]));
+  check_zero(magmaan::data::gamma_nt_with_means(stats->S[0]));
 }

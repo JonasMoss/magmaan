@@ -45,6 +45,10 @@ build_centered_moments(const Eigen::Ref<const Eigen::MatrixXd>& X,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         std::string(fname) + ": data matrix has 0 columns"));
   }
+  if (!X.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fname) + ": data matrix contains non-finite values"));
+  }
   const Eigen::Index pstar = p * (p + 1) / 2;
 
   CenteredMoments cm;
@@ -63,6 +67,10 @@ build_centered_moments(const Eigen::Ref<const Eigen::MatrixXd>& X,
   }
   const Eigen::VectorXd dbar = cm.Dc.colwise().mean();
   cm.Dc.rowwise() -= dbar.transpose();
+  if (!cm.Xc.allFinite() || !cm.Dc.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fname) + ": non-finite centered moments"));
+  }
   return cm;
 }
 
@@ -98,10 +106,20 @@ sample_stats_from_raw(const RawData& raw) {
           "sample_stats_from_raw: block " + std::to_string(b) +
               " has 0 columns"));
     }
+    if (!X.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "sample_stats_from_raw: block " + std::to_string(b) +
+              " contains non-finite values"));
+    }
     const Eigen::VectorXd mean = X.colwise().mean();
     const Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
     // N-divisor cov matches lavaan's likelihood = "normal" convention.
     Eigen::MatrixXd S = (Xc.transpose() * Xc) / static_cast<double>(n);
+    if (!mean.allFinite() || !S.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "sample_stats_from_raw: block " + std::to_string(b) +
+              " has non-finite sample moments"));
+    }
     out.S.push_back(std::move(S));
     out.mean.push_back(std::move(mean));
     out.n_obs.push_back(static_cast<std::int64_t>(n));
@@ -114,7 +132,12 @@ empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X) {
   auto cm = build_centered_moments(X, "empirical_gamma");
   if (!cm) return std::unexpected(cm.error());
   const double inv_n = 1.0 / static_cast<double>(X.rows());
-  return Eigen::MatrixXd(cm->Dc.transpose() * cm->Dc * inv_n);
+  Eigen::MatrixXd Gamma = cm->Dc.transpose() * cm->Dc * inv_n;
+  if (!Gamma.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "empirical_gamma: non-finite fourth moments"));
+  }
+  return Gamma;
 }
 
 post_expected<Eigen::MatrixXd>
@@ -144,6 +167,10 @@ empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X) {
   Gamma.topRightCorner(p, pstar)       = cm->Xc.transpose() * cm->Dc * inv_n;
   Gamma.bottomLeftCorner(pstar, p)     = Gamma.topRightCorner(p, pstar).transpose();
   Gamma.bottomRightCorner(pstar, pstar) = cm->Dc.transpose() * cm->Dc * inv_n;
+  if (!Gamma.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "empirical_gamma_with_means: non-finite stacked moments"));
+  }
   return Gamma;
 }
 
@@ -153,6 +180,10 @@ gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma) {
   if (Sigma.cols() != p) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "gamma_nt: Σ is not square"));
+  }
+  if (!Sigma.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "gamma_nt: Σ contains non-finite values"));
   }
   const Eigen::Index pstar = p * (p + 1) / 2;
 
@@ -172,6 +203,10 @@ gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma) {
       Gamma(a, b) = Sigma(A.i, B.i) * Sigma(A.j, B.j) +
                     Sigma(A.i, B.j) * Sigma(A.j, B.i);
     }
+  }
+  if (!Gamma.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "gamma_nt: non-finite covariance products"));
   }
   return Gamma;
 }

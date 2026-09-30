@@ -65,7 +65,8 @@ struct RawData {
 // straight from raw observations.
 //
 // Returns `PostError::NumericIssue` if any block has fewer than 2 rows
-// (covariance undefined) or zero columns.
+// (covariance undefined), zero columns, non-finite observations, or non-finite
+// computed moments. Empty data and nonempty missingness masks are rejected.
 post_expected<SampleStats>
 sample_stats_from_raw(const RawData& raw);
 
@@ -84,7 +85,8 @@ sample_stats_from_raw(const RawData& raw);
 // the two diverge when the data has heavier tails or kurtosis ≠ 3, which
 // is exactly the regime robust SE / Satorra-Bentler scaling addresses.
 //
-// Returns `PostError::NumericIssue` if `X` has fewer than 2 rows.
+// Returns `PostError::NumericIssue` if `X` has fewer than 2 rows, zero columns,
+// non-finite observations, or non-finite computed moments.
 post_expected<Eigen::MatrixXd>
 empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X);
 
@@ -111,7 +113,8 @@ empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X);
 // `empirical_gamma(X)` is only valid when the moment vector is vech(S)
 // alone (or under normality).
 //
-// Returns `PostError::NumericIssue` if `X` has fewer than 2 rows.
+// Returns `PostError::NumericIssue` if `X` has fewer than 2 rows, zero columns,
+// non-finite observations, or non-finite computed moments.
 post_expected<Eigen::MatrixXd>
 empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X);
 
@@ -125,7 +128,8 @@ empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X);
 // the two converge as `n → ∞`. Used for sandwich SE and Satorra-Bentler
 // scaling as the model-implied weight matrix.
 //
-// Returns `PostError::NumericIssue` if `Sigma` is not square.
+// Returns `PostError::NumericIssue` if `Sigma` is not square, contains non-finite
+// values, or produces non-finite covariance products.
 post_expected<Eigen::MatrixXd>
 gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma);
 
@@ -141,7 +145,8 @@ gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma);
 // normal-theory third moments vanish. The counterpart to
 // `empirical_gamma_with_means`; the two converge on multivariate-normal data.
 //
-// Returns `PostError::NumericIssue` if `Sigma` is not square.
+// Returns `PostError::NumericIssue` if `Sigma` is not square, contains non-finite
+// values, or produces non-finite covariance products.
 post_expected<Eigen::MatrixXd>
 gamma_nt_with_means(const Eigen::Ref<const Eigen::MatrixXd>& Sigma);
 
