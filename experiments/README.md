@@ -1,50 +1,49 @@
 # Experiments
 
-Experiments are grouped by purpose. Numbering starts at **01 within each
-category**; cite the category and slug because numbers are only navigation.
-Archived folders have **no numeric prefix**. Reports and existing results are
-preserved; this reorganization does not rerun or reassess the studies.
+Experiments are grouped by purpose. Engineering also separates **active work**,
+**banked ideas**, and **completed paper evidence**. Numbers are stable across
+engineering activity moves; cite the slug and its current path. Archived folders
+have no numeric prefix. Conventions are in [AGENTS.md](AGENTS.md).
 
-| Purpose | What belongs here | Count |
-|---------|-------------------|------:|
-| [Decisions](#decisions) | Pre-registered studies whose results set library defaults, with the register of those defaults. | 2 |
-| [Showcases](#showcases) | Demonstrate magmaan capabilities, agreement with lavaan/other references, or a concrete performance comparison. | 8 |
-| [Replications and reference studies](#replications-and-reference-studies) | Reproduce published results or reconstruct the reference method needed to interpret them. | 9 |
-| [Research](#research) | Investigate statistical behavior, new methods, estimands, or inferential validity. | 45 |
-| [Engineering checks](#engineering-checks) | Inform active implementation and default choices; inherited studies await a focused review. | 18 |
-| [Archived](#archived) | Already retired engineering investigations; kept for provenance. | 8 |
+| Purpose | Studies | Activity |
+|---------|--------:|----------|
+| [Decisions](#decisions) | 2 | Maintained registers and held-out evidence for library defaults. |
+| [Showcases](#showcases) | 6 | Capabilities, parity and performance demonstrations. |
+| [Replications](#replications-and-reference-studies) | 9 | Published results and reference reconstructions. |
+| [Research](#research) | 46 | Statistical behavior and methods, including RBM estimation risk. |
+| [Engineering](#engineering-checks) | 9 | 4 active, 4 banked, 1 completed paper-evidence study. |
+| [Archive](#archived) | 14 | Settled investigations, with sources and existing results retained. |
 
-The existing **kind** (`parity`, `replication`, `paper-sim`, `benchmark`, `probe`)
-and **lifecycle** (`active`, `complete`, `archived`) remain separate metadata.
-Lifecycle labels are carried forward, not certified by this skim. In particular,
-`complete` does not imply disposable, and `paper-sim` remains protected regardless
-of its navigation category. Conventions and shared harness rules are in
-[AGENTS.md](AGENTS.md).
+## Engineering cleanup, 30 September 2026
 
-## Direction for the next cleanup
+The flat engineering collection was reviewed against current decisions, tests
+and locally available evidence. The active workspace now contains only
+unresolved implementation choices. The tables below state the next check or
+reopening trigger; a banked study does not imply a queued simulation.
 
-**Engineering should stay live and focused:** each retained study should inform
-a current choice, such as the default estimator, optimizer, starts, scaling,
-or convergence rule. State the current default, credible alternatives, decision
-criteria, latest evidence, and what would trigger reconsideration. Once a decision
-is settled, capture the contract in maintained tests/docs and archive the study;
-keep a recurring benchmark only if it still informs a live decision.
+- **Merged:** ordinal observed-score omega sampling (former engineering/07) and
+  its target audit (former engineering/08) now share one study, one report and
+  one runner. Their result trees and metadata remain separate and unchanged.
+- **Moved to research:** the former small RBM check (engineering/06) is
+  [research/53](research/53-rbm-estimation-risk/report.qmd). Its 5,000-replication
+  N=30 run exposes post-hoc correction tails; the report now defaults to it.
+- **Archived:** estimator timing (01), covariance continuation (02), PSD timing
+  (11), sphere correctness (14), global-test geometry (16), and barrier optimizer
+  selection (18). The corresponding findings remain available at their new paths.
+- **Deleted:** the robust-score/modification-index demonstration (04), whose
+  scaling and reduction checks are maintained in
+  [score_robust_test.cpp](../cpp/tests/unit/score_robust_test.cpp),
+  [score_robust_golden_test.cpp](../cpp/tests/golden/score_robust_golden_test.cpp)
+  and the [R example](../r-package/examples/estimated_weight_modindices.R). Its
+  twelve-replication demonstration supplied no additional calibration evidence.
+- **Preserved independently:** the PSD basin audit supports the covariance-honest
+  paper. Its frequency sample must stay distinct from the sphere development
+  cases. Its result CSVs were absent locally at review; recover the original
+  artifacts or reproduce the prespecified run before rebuilding its report.
 
-This is the direction for the next cleanup, not a claim that every inherited
-engineering entry already meets it. `engineering/03-irls-ernst-convergence` remains a completed
-engineering check pending that review. Research may stay exploratory and less
-uniform; no additional studies are archived in this renaming pass. Paper-supporting
-pipelines and frozen evidence remain protected.
-
-Classification follows the main question, not the presence of a paper title.
-The Deng–Chan critique, Bell omega target investigation, and Li–Savalei interval
-extension remain research. Replications include reference reconstructions and
-explicitly labeled analogues; placement does not certify exact replication.
-Showcase reports still carry their own accuracy and scope caveats.
-
-Historical output metadata and cloud app/volume identifiers can retain the old
-global numbers. They identify existing evidence or storage, not current folder
-positions; do not rewrite frozen results or rename remote storage for navigation.
+Frozen result metadata, pre-registered criteria and external cloud identifiers
+retain their historical numbers. Navigation changes do not rescore those runs.
+Paper-supporting pipelines remain protected regardless of their kind label.
 
 ## Decisions
 
@@ -136,36 +135,38 @@ Investigate statistical behavior, new methods, estimands, or inferential validit
 | 50 | [normal-parameter-intervals](research/50-normal-parameter-intervals/report.qmd) | probe | active | Do normal-theory Wald, score and profile-LR parameter intervals calibrate, and is candidate-specific bootstrap Bartlett inversion feasible? |
 | 51 | [robust-parameter-intervals](research/51-robust-parameter-intervals/report.qmd) | probe | complete | How do robust Wald, score and profile-LR scalar intervals compare in coverage, width, failures and cost under non-normality? |
 | 52 | [robust-calibration-battery](research/52-robust-calibration-battery/report.qmd) | benchmark | active | Across textbook SEMs, sample sizes and non-normal data including discretized 5-point items analysed by ML, which of SB, MV, MV-UG, corrected MV and pEBA4 applied to the score, LR and RLS statistics keeps nominal size for global and nested tests? |
+| 53 | [RBM estimation risk](research/53-rbm-estimation-risk/report.qmd) | probe | active | When do post-hoc and integrated reduced-bias corrections improve error, and when do tails or fit failures erase that gain? |
 
 ## Engineering checks
 
-Inform active implementation and default choices; inherited studies await a focused review.
+### Active implementation choices
 
-| # | Experiment | Kind | Lifecycle | Question |
-|--:|------------|------|-----------|----------|
-| 01 | [complete-data-estimator-speed](engineering/01-complete-data-estimator-speed/report.qmd) | benchmark | active | How do the NT/ULS/GLS estimators compare on wall-time across the corpus? |
-| 02 | [near-singular-ml-continuation](engineering/02-near-singular-ml-continuation/report.qmd) | benchmark | active | Does shrinkage-blended covariance continuation help ML converge on near-singular problems? |
-| 03 | [irls-ernst-convergence](engineering/03-irls-ernst-convergence/report.qmd) | benchmark | complete | Does Fisher-scoring IRLS improve ML convergence on the Ernst small-sample design? |
-| 04 | [robust-score-modification-indices](engineering/04-robust-score-modification-indices/report.qmd) | probe | active | Do robust modification indices / score tests change the omitted-path call (ordinal DWLS, continuous GLS), and reduce to naive where theory says c=1? |
-| 05 | [pairwise-composite-nested](engineering/05-pairwise-composite-nested/report.qmd) | probe | active | Does the frontier pairwise/composite ordinal estimator produce usable nested LR inference under a small ordinal MCAR loading-equality setup? |
-| 06 | [rbm-bias-small](engineering/06-rbm-bias-small/report.qmd) | probe | active | In a small magmaan-owned CFA run, do standard, explicit post-hoc RBM, and implicit integrated RBM differ in finite-sample bias for GLS, FIML, and ordinal DWLS? |
-| 07 | [ordinal-observed-omega-dwls](engineering/07-ordinal-observed-omega-dwls/report.qmd) | probe | active | Does observed-category-score omega from an all-ordinal DWLS fit run end-to-end with complete-sandwich delta SEs, and where do balanced vs threshold-extreme smoke cells first bend? |
-| 08 | [ordinal-omega-target-audit](engineering/08-ordinal-omega-target-audit/report.qmd) | probe | active | Does the current ordinal observed-score covariance omega equal the direct one-factor ordinal true-score target, or is it only on the same observed-score metric? |
-| 09 | [sam-efficiency-stability](engineering/09-sam-efficiency-stability/report.qmd) | benchmark | active | Under normal, native independent-generator, and pseudo-continuous ordinal stress data, how do local SAM and joint ML compare on SE calibration, failures, and runtime at small N? |
-| 11 | [psd-ml-timing](engineering/11-psd-ml-timing/report.qmd) | benchmark | active | What does covariance-honest complete-data NTML cost when run directly or only after an ordinary fit fails its covariance audit? |
-| 12 | [psd-ml-basin-audit](engineering/12-psd-ml-basin-audit/report.qmd) | benchmark | active | When PSD-ML returns an admissible KKT-stationary solution, how often does a multistart portfolio find a materially better basin? |
-| 13 | [psd-estimator-stress](engineering/13-psd-estimator-stress/report.qmd) | benchmark | active | Across the supported single-level estimator families, where do covariance-honest point fits remain correct, admissible, stable across starts, and computationally practical? |
-| 14 | [sphere-chart-sanity](engineering/14-sphere-chart-sanity/report.qmd) | probe | active | Does the sphere chart reproduce the standard fit across identification conventions, invariance, constraint syntax and estimators, recover known populations in every identification that holds them, and flag the ones that cannot? |
-| 15 | [sphere-reference-fits](engineering/15-sphere-reference-fits/report.qmd) | probe | active | Can a small sphere multistart portfolio provide best-observed ML/PSD reference candidates, with local accuracy, chart proximity and unresolved cases labelled separately, to assess ordinary fits? |
-| 16 | [complete-ml-global-test-geometry](engineering/16-complete-ml-global-test-geometry/report.qmd) | benchmark | active | For complete-data ML, which information choices in the global score and LR tests (expected or observed sensitivity, score metric, LR spectrum) hold the nominal size with SB and PEBA4 under normal and severe non-normal data? |
-| 17 | [corpus-optimizer-recovery](engineering/17-corpus-optimizer-recovery/report.qmd) | probe | active | On the corrected continuous corpus, which current optimizer policies recover accepted good objectives, do the historical GLS failures still reproduce, and does a layered moment start fix the start-induced failures, and which optimizer coordinates make PORT and L-BFGS indifferent to the data's units? |
-| 18 | [barrier-optimizer](engineering/18-barrier-optimizer/report.qmd) | probe | active | Which optimizer should fit the latent-determinacy barrier by default? |
-| 19 | [newton-verdict-migration](engineering/19-newton-verdict-migration/report.qmd) | probe | active | What does the Newton check change when it decides the FIML and least-squares verdicts, and is every changed verdict right? |
+| # | Study | Kind | Current question and next check |
+|--:|-------|------|---------------------------------|
+| 13 | [PSD estimator stress](engineering/active/13-psd-estimator-stress/report.qmd) | benchmark | Where do covariance-honest estimators fail under conditioning and boundary stress? Extend the missing-data/categorical smoke anchors under the current verdict; retain all failures and cost. |
+| 15 | [Sphere reference fits](engineering/active/15-sphere-reference-fits/report.qmd) | probe | Which failures are missed finite minima, accuracy failures or requested-chart poles? Preserve the witnesses; validate chart rejection and independent PSD fallback separately. |
+| 17 | [Corpus optimizer recovery](engineering/active/17-corpus-optimizer-recovery/report.qmd) | probe | Starts and information coordinates have landed. Isolate the remaining domain/line-search failures and keep known worse local minima distinct from rejected endpoints. |
+| 19 | [Newton verdict migration](engineering/active/19-newton-verdict-migration/report.qmd) | probe | The Newton verdict has landed. Resolve the exposed categorical bad endpoints and stopping-control near misses, with every changed verdict explained. |
+
+### Banked ideas — no run queued
+
+| # | Study | Kind | Evidence and reopening trigger |
+|--:|-------|------|-------------------------------|
+| 03 | [IRLS Ernst convergence](engineering/banked/03-irls-ernst-convergence/report.qmd) | benchmark | Local results have one replicate per sample-size cell. Reopen for a concrete Fisher-scoring/SNLLS use case with a cost-normalized comparison under the current verdict. |
+| 05 | [Pairwise composite nested tests](engineering/banked/05-pairwise-composite-nested/report.qmd) | probe | Six replicates per truth condition establish execution only. Reopen when a consumer needs this estimator's nested-test calibration or stable Godambe calculation. |
+| 07 | [Ordinal observed-score omega](engineering/banked/07-ordinal-observed-omega/report.qmd) | probe | A 16-cell population audit distinguishes covariance omega from direct true-score reliability; 200-replicate checks cover the covariance target only. Reopen for direct-target inference or a named coverage study. |
+| 09 | [SAM efficiency and stability](engineering/banked/09-sam-efficiency-stability/report.qmd) | benchmark | Two replicates per regime do not rank SAM against ML. Reopen for a specified two-step SEM use case requiring efficiency or SE calibration evidence. |
+
+### Completed paper evidence
+
+| # | Study | Kind | Lifecycle | Retention reason |
+|--:|-------|------|-----------|------------------|
+| 12 | [PSD ML basin audit](engineering/evidence/12-psd-ml-basin-audit/report.qmd) | benchmark | complete | Prespecified random-core basin frequencies, enriched diagnostics and tight confirmation for the covariance-honest paper. Preserve the original design and recover absent local artifacts. |
 
 ## Archived
 
-Retired engineering investigations, retained with their sources and local results.
-The marker-chart sanity and total-variance studies joined the archive on 2026-09-24.
+Retired investigations retain their sources and existing local results. They
+carry no queued work. Reopen only for a named failure, consumer or changed decision.
 
 | Experiment | Question |
 |------------|----------|
@@ -177,6 +178,12 @@ The marker-chart sanity and total-variance studies joined the archive on 2026-09
 | [ordinal-threshold-constraints](_archive/ordinal-threshold-constraints/report.qmd) | Which ordinal fitting paths can handle equality constraints on thresholds? |
 | [ordinal-construction-boundary](_archive/ordinal-construction-boundary/report.qmd) | What does ordinal statistic construction (lazy vs eager) cost before fitting begins? |
 | [sem-total-variance](_archive/sem-total-variance/report.qmd) | Engineering decision: retain unscaled native PSD ML; diagonal scaling stays opt-in and boundary-specific restarts remain experimental. |
+| [complete-data-estimator-speed](_archive/complete-data-estimator-speed/report.qmd) | Historical NT/ULS/GLS corpus timing snapshot. Future timing work belongs in the shared benchmark machinery. |
+| [near-singular-ml-continuation](_archive/near-singular-ml-continuation/report.qmd) | Tested covariance continuation paths added cost without improving convergence. |
+| [psd-ml-timing](_archive/psd-ml-timing/report.qmd) | Historical direct-PSD and audit-first costs, including backend checks. Current route decisions live in decisions/01. |
+| [sphere-chart-sanity](_archive/sphere-chart-sanity/report.qmd) | Deterministic sphere correctness and translation checks; core properties are now regression-gated. |
+| [complete-ml-global-test-geometry](_archive/complete-ml-global-test-geometry/report.qmd) | Supports expected information for complete-data ML global tests. Reopen for a named misspecification, power or model-family counterexample. |
+| [barrier-optimizer](_archive/barrier-optimizer/report.qmd) | Exploratory evidence for PORT; the maintained default decision is decisions/02. |
 
 `_support/` (path, metadata, and I/O helpers; no SEM logic) is the only shared
 sibling an experiment may consume. Use category-qualified slugs in references. Numeric prefixes are local ordering,

@@ -330,7 +330,7 @@ magmaan gaps, not translation defects. Sources:
 - **C++ lane.** `textbook_ordinal_golden_test.cpp` (21 all-ordinal,
   covariate-free cases from lavaan's partable, run at `6e1968c8`): 13 match,
   8 known gaps.
-- **R path.** engineering/19 `results/current/` (`fits.csv`,
+- **R path.** engineering/active/19-newton-verdict-migration `results/current/` (`fits.csv`,
   `rejections.csv`): `fit_model(model, data = raw, estimator = "DWLS",
   ordered, parameterization)` on the single-group cases; corpus `3f5b838`,
   magmaan `aa04285b` plus the ordinal Newton check of `bf64ee3a`, lavaan

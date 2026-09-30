@@ -6,7 +6,7 @@ its scoring are in place. The live default decisions run in
 one lane per estimation route, whose report opens with the defaults register.
 The shared benchmark set, canary tier, problem classes, holdout protocol and
 later lanes are in the speculative backlog ("Convergence bench beyond the
-decisions study"); engineering/17 keeps the corpus prototypes. It proposes one way
+decisions study"); engineering/active/17-corpus-optimizer-recovery keeps the corpus prototypes. It proposes one way
 to decide magmaan's numerical defaults (starting values, optimizers, optimizer
 options, scaling, and fallbacks) so that each decision rests on a shared
 benchmark set, a shared judge, and a written record, instead of on a study
@@ -19,13 +19,13 @@ engineering and research studies, several design notes, and many backlog
 items. Each study chose its own problems, its own acceptance rule, and its own
 reference answer. Some consequences:
 
-- `engineering/17-corpus-optimizer-recovery` and
-  `engineering/18-barrier-optimizer` both asked whether PORT beats NLopt
+- `engineering/active/17-corpus-optimizer-recovery` and
+  `_archive/barrier-optimizer` both asked whether PORT beats NLopt
   L-BFGS. They used different problems, and each defined success against the
   best objective among the optimizers it compared, with tolerances
   `1e-6 (1 + |f|)` and `1e-7` absolute. One changed a default, the other did
   not.
-- The Ernst design is copied into engineering/03, 15 and 18. The research/47
+- The Ernst design is copied into engineering/banked/03-irls-ernst-convergence, 15 and 18. The research/47
   populations are copied into 18.
 - An earlier result that L-BFGS was the most reliable optimizer was scored
   under an older acceptance rule. Nothing records which rule a result was
@@ -57,7 +57,7 @@ Out of scope:
 - **global optimality.** Which local minimum a fit reaches is not the
   question. A fit that reaches a different accepted local minimum than another
   configuration is recorded as a different endpoint, not as a failure.
-  Multistart portfolios stay an opt-in policy (engineering/12).
+  Multistart portfolios stay an opt-in policy (engineering/evidence/12-psd-ml-basin-audit).
 - statistical properties of estimators (bias, coverage, tests). Those are
   research. Changing the estimator to remove a problem (PSD-ML, the
   determinacy barrier, the sphere chart) is a research decision, even when it
@@ -104,16 +104,16 @@ A manifest of problems. A problem is a model with data, and says which
 estimators it applies to. Problems come from four sources:
 
 - **Textbook corpus** (optional mount): the source-verified continuous cases
-  (304 ML and 304 GLS fits in engineering/17) and, later, the categorical
+  (304 ML and 304 GLS fits in engineering/active/17-corpus-optimizer-recovery) and, later, the categorical
   lane. The real-model backbone.
 - **Simulated families:** a population, an `N`, and a seed rule, so a family
   yields as many instances as a study needs. Existing families: the
   research/47 populations, Ernst, weak marker, high `R^2`, collinear latent
-  predictors, the engineering/13 stress cells, and the bullying-model
+  predictors, the engineering/active/13-psd-estimator-stress stress cells, and the bullying-model
   population.
 - **Constructed problems** that isolate one mechanism: the scalar variance
   likelihood at small units (`cpp/tests/checks/nlopt_lbfgs_domain.c`) and the
-  equivalent-spelling pair from engineering/17's start-semantics probe.
+  equivalent-spelling pair from engineering/active/17-corpus-optimizer-recovery's start-semantics probe.
 - **The existing benchmark cases** in `benchmarks/cases.yml`, which keep their
   timing role.
 
@@ -125,7 +125,7 @@ as COCO's instances do. A configuration should be invariant to each:
 - reordering variables;
 - identification: marker choice, std.lv, effect coding, the sphere chart;
 - equivalent spellings: a latent regression written as a higher-order loading
-  (engineering/17 found the simple start gives 0 to one and 0.7 to the other);
+  (engineering/active/17-corpus-optimizer-recovery found the simple start gives 0 to one and 0.7 to the other);
 - moving the start: the constructor's start, a rescaled start, a perturbed
   start, and a known solution.
 
@@ -171,7 +171,7 @@ estimator:
 Start questions and optimizer questions are then the same kind of experiment:
 a comparison of configurations on the same problems. Options belong to the
 configuration because they do not mean the same thing across algorithms
-(engineering/17). The library's current default is always one of the
+(engineering/active/17-corpus-optimizer-recovery). The library's current default is always one of the
 configurations, read from the library, so the benchmark tests what users get.
 
 ### 3. The judge
@@ -212,22 +212,22 @@ trap, a degenerate start) fails the verdict and counts as a failure.
 flag is not evidence: lavaan's flag accepts saddles that the Newton check
 rejects. Other engines' endpoints are therefore judged by evaluating the
 magmaan verdict at their estimates (R `magmaan_core$evaluate_at()`), and
-their own flags are reported alongside as a diagnostic. engineering/17 does
+their own flags are reported alongside as a diagnostic. engineering/active/17-corpus-optimizer-recovery does
 this for lavaan.
 
 Every failure gets a cause, from a fixed attribution rerun: the same
 optimizer from the witness start, the other optimizers from the same start,
 and the same configuration under the transforms. The cause is one of
 optimizer, start, options (budget or tolerance), problem (no configuration
-succeeds), or unexplained. engineering/17's crossed starts and optimizers are
+succeeds), or unexplained. engineering/active/17-corpus-optimizer-recovery's crossed starts and optimizers are
 this protocol done by hand.
 
 **Every iterative estimator uses the Newton metric (decided and landed
 2026-09-25, except two-level; CatML stays first-order).** Until then the
 Newton check, which also rejects stationary points with nonpositive curvature,
 was part of the default verdict only for complete-data ML
-([terminal-audit.md](terminal-audit.md#authoritative-fit-verdict-2026-09-12), engineering/19).
-engineering/17 showed the cost: of the twelve Little models where ML's
+([terminal-audit.md](terminal-audit.md#authoritative-fit-verdict-2026-09-12), engineering/active/19-newton-verdict-migration).
+engineering/active/17-corpus-optimizer-recovery showed the cost: of the twelve Little models where ML's
 check rejects a PORT endpoint for nonpositive curvature, nine are accepted
 under GLS at a worse objective. A judge that differs by estimator makes
 convergence rates incomparable across estimators, so a uniform judge is a
@@ -264,22 +264,22 @@ studies. The first entries, from existing evidence:
 | Default | Current value | Status |
 |---|---|---|
 | acceptance rule | fit verdict, Newton check for complete-data ML | settled 2026-09-24 |
-| complete-data ML optimizer | NLopt L-BFGS | open: PORT gained 48 corpus cases and lost none (engineering/17) |
+| complete-data ML optimizer | NLopt L-BFGS | open: PORT gained 48 corpus cases and lost none (engineering/active/17-corpus-optimizer-recovery) |
 | complete-data ML controls | `ftol_rel` 1e-12, `xtol_rel` 1e-10, 5000 evaluations | settled 2026-09-22 (interior Newton audit) |
 | GLS, ULS, WLS optimizer | NLopt L-BFGS | open: PORT gains, loses Kline's Worland step 2b under GLS |
 | FIML optimizer | L-BFGS with SLSQP fallback | provisional |
-| PSD-constrained fits | SLSQP; PSD as an explicit refit after an ordinary fit fails its audit | settled (engineering/11, 12, 13, research/42, 43) |
-| barrier fitters | PORT | settled 2026-09-25 (engineering/18) |
-| IRLS | PORT NLS | settled, IRLS itself no gain (engineering/03) |
+| PSD-constrained fits | SLSQP; PSD as an explicit refit after an ordinary fit fails its audit | settled (_archive/psd-ml-timing, 12, 13, research/42, 43) |
+| barrier fitters | PORT | settled 2026-09-25 (_archive/barrier-optimizer) |
+| IRLS | PORT NLS | settled, IRLS itself no gain (engineering/banked/03-irls-ernst-convergence) |
 | two-level, ML2S, SAM, ordinal optimizers | NLopt L-BFGS | provisional |
 | ML starts | FABIN3, transported from std.lv to the marker chart | settled for measurement, open for structural paths |
 | other starts | native FABIN3 | provisional |
-| structural start pass | none | open: 10 of 12 ML curvature failures recovered by nonzero latent-path starts (engineering/17) |
-| sphere start | canonical | settled (engineering/14) |
+| structural start pass | none | open: 10 of 12 ML curvature failures recovered by nonzero latent-path starts (engineering/active/17-corpus-optimizer-recovery) |
+| sphere start | canonical | settled (_archive/sphere-chart-sanity) |
 | fallback trigger | backend status, not the verdict | open |
-| optimizer coordinates | sample units refined by the start's information, means centered, for ML, GLS, least squares and FIML on every scalar backend | settled 2026-09-26 (engineering/17: primary and secondary gains from both starts, unit-invariant under rescaling) |
+| optimizer coordinates | sample units refined by the start's information, means centered, for ML, GLS, least squares and FIML on every scalar backend | settled 2026-09-26 (engineering/active/17-corpus-optimizer-recovery: primary and secondary gains from both starts, unit-invariant under rescaling) |
 | nonlinear equality constraints | error unless SLSQP or IPOPT is selected | open: route automatically (SLSQP solves the one corpus case) |
-| rejected | covariance continuation (engineering/02), Fisher scoring or IRLS as default (engineering/03), multistart as default (engineering/12) | settled |
+| rejected | covariance continuation (_archive/near-singular-ml-continuation), Fisher scoring or IRLS as default (engineering/banked/03-irls-ernst-convergence), multistart as default (engineering/evidence/12-psd-ml-basin-audit) | settled |
 
 ## Rules for a decision study
 
@@ -300,7 +300,7 @@ studies. The first entries, from existing evidence:
 ## Where it lives
 
 Built so far: the judge (step 0 of the plan). The other parts exist only as
-prototypes inside `experiments/engineering/17-corpus-optimizer-recovery`: the
+prototypes inside `experiments/engineering/active/17-corpus-optimizer-recovery`: the
 corpus slice and its problem classes (`R/inputs.R`, `R/classify_problems.R`),
 configurations crossed over starts, optimizers and coordinates
 (`R/test_coordinate_scaling.R`), the unit-rescaling transform with an
@@ -332,7 +332,7 @@ Experiments may not depend on each other, so the shared parts sit below them:
 1. The register, filled from existing evidence as in the table above, with
    provisional and open entries marked honestly.
 2. Benchmark set v0 from problems that already exist: the corpus cases of
-   engineering/17, the research/47, Ernst, weak-marker, high-`R^2`,
+   engineering/active/17-corpus-optimizer-recovery, the research/47, Ernst, weak-marker, high-`R^2`,
    collinear-predictor and stress families, the constructed problems, and the
    benchmark cases. Classes are tagged from existing evidence, and left
    untagged where there is none.
@@ -345,7 +345,7 @@ Experiments may not depend on each other, so the shared parts sit below them:
 6. First uses, in order (the ML, GLS and PSD-ML promotion now runs in
    decisions/01-optimizer-defaults; the later routes are in the speculative
    backlog):
-   - rerun engineering/17 and 18 on the set; they should agree;
+   - rerun engineering/active/17-corpus-optimizer-recovery and 18 on the set; they should agree;
    - decide the complete-data ML optimizer (open);
    - validate the structural start pass that the backlog already prioritizes
      (equivalent spellings, units, identification, the full corpus).

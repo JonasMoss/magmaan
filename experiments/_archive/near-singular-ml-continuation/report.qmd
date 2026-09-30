@@ -1,0 +1,199 @@
+---
+title: "Near-Singular ML Continuation"
+format: html
+---
+
+## What Was Fit
+
+For a sample covariance matrix `S`, the continuation path fits a sequence of
+ordinary ML problems to blended covariance matrices,
+
+```text
+S_lambda = (1 - lambda) S + lambda T(S),
+```
+
+where `T(S)` is the chosen shrinkage target. The wrapper calls the tuning
+parameter `alpha`, but it is the same object as `lambda` here.
+
+The default sequence is:
+
+```text
+0.50 -> 0.20 -> 0.10 -> 0.05 -> 0.01 -> 0.00
+```
+
+The final `0.00` stage is appended automatically when `include_endpoint =
+TRUE`. That final stage is the original ML problem. Each stage is a full ML fit,
+and its parameter vector is used as the start value for the next stage, so this
+is a hot-started chain of multiple fits.
+
+The comparison grid now tries three targets:
+
+```text
+diagonal         T(S) = diag(S)
+scaled_identity  T(S) = mean(diag(S)) I
+identity         T(S) = I
+```
+
+and four fixed lambda profiles:
+
+```text
+legacy    0.50, 0.20, 0.10, 0.05, 0.01, 0
+light     0.10, 0.05, 0.02, 0.01, 0.005, 0
+endpoint  0.20, 0.10, 0.05, 0.025, 0.0125, 0.006, 0.003, 0.001, 0
+dense     0.50, 0.35, 0.25, 0.18, 0.13, 0.09, 0.06, 0.04, 0.025, 0.015, 0.008, 0
+```
+
+## How To Read The Tables
+
+`baseline_ml` is one direct ML fit on the original sample covariance.
+`ridge_continuation` is the hot-started sequence above.
+
+`attempts` is the number of attempted fits. `ok` means the wrapper returned a
+fit object instead of an error. `converged` means the terminal audit accepted
+the final point as stationary, using magmaan's lavaan-style default
+`||projected gradient||_inf <= 0.001`. `optimizer_converged` is narrower: it
+means the backend itself reported a clean stop. A line-search salvage can fail
+that optimizer flag while still passing the audit. `line_search_failures`
+counts trapped hard L-BFGS line-search errors. `line_search_salvaged` counts
+non-clean backend stops whose returned point passed the audit.
+`median_total_f_evals` is the median number of objective evaluations, counting
+all stages for continuation.
+
+The paired table is often the most interpretable one. `baseline_only` means the
+direct fit converged and continuation did not. `continuation_only` means
+continuation rescued a replicate that direct ML did not converge on. `neither`
+means both failed.
+
+## Toy Smoke Run
+
+This is the artificial near-singular one-factor generator from
+`run_experiment.R`. It is useful as a quick smoke test, not as the main evidence.
+
+```{r}
+fits_path <- file.path("results", "fits.csv")
+summary_path <- file.path("results", "summary.csv")
+if (!file.exists(fits_path) || !file.exists(summary_path)) {
+  stop("Run `Rscript run_experiment.R` first.")
+}
+fits <- read.csv(fits_path)
+summary <- read.csv(summary_path)
+summary
+```
+
+```{r}
+fits[order(fits$replicate, fits$method),
+     c("replicate", "method", "sample_min_eigen", "sample_condition",
+       "ok", "converged", "optimizer_converged", "optimizer_status",
+       "fmin", "audit_grad_inf_norm", "audit_stationarity_rhs",
+       "total_f_evals", "elapsed_sec", "error")]
+```
+
+## Convergence-Note Designs
+
+This section uses the same convergence-simulation factories and seed rule as
+`papers/convergence-note/pilot/scripts/run_convergence_sims.R`, with
+`optimizer = "nlopt-lbfgs"` and control
+`max_iter = 5000, ftol = 1e-10, gtol = 1e-7`.
+
+```{r}
+cn_summary_path <- file.path("results", "convergence_note_summary.csv")
+cn_paired_path <- file.path("results", "convergence_note_paired.csv")
+if (!file.exists(cn_summary_path) || !file.exists(cn_paired_path)) {
+  cat("Run `Rscript run_convergence_note_comparison.R` to populate this section.")
+} else {
+  cn_summary <- read.csv(cn_summary_path)
+  cn_paired <- read.csv(cn_paired_path)
+  cn_summary[, c("design", "method", "lambda_profile", "target",
+                 "converged_rate", "optimizer_converged_rate",
+                 "line_search_failures", "line_search_salvaged",
+                 "median_total_f_evals", "median_audit_grad_inf_norm")]
+}
+```
+
+```{r}
+if (exists("cn_paired")) {
+  cn_paired[, c("design", "lambda_profile", "target", "both_converged",
+                "baseline_only", "continuation_only", "neither",
+                "median_fmin_diff_cont_minus_base")]
+}
+```
+
+```{r}
+if (exists("cn_summary")) {
+  cont <- cn_summary[cn_summary$method == "ridge_continuation", ]
+  top <- do.call(
+    rbind,
+    lapply(split(cont, cont$design), function(x) {
+      x[order(-x$converged_rate, x$median_total_f_evals), ][1L, ]
+    })
+  )
+  top[, c("design", "lambda_profile", "target", "converged_rate",
+          "line_search_failures", "median_total_f_evals",
+          "median_audit_grad_inf_norm")]
+}
+```
+
+```{r, results='asis'}
+if (exists("cn_summary") && exists("cn_paired")) {
+  baseline <- cn_summary[cn_summary$method == "baseline_ml", ]
+  continuation <- cn_summary[cn_summary$method == "ridge_continuation", ]
+  best <- do.call(
+    rbind,
+    lapply(split(continuation, continuation$design), function(x) {
+      x[order(-x$converged_rate, x$median_total_f_evals), ][1L, ]
+    })
+  )
+  pct <- function(x) paste0(round(100 * x), "%")
+  cat(
+    "In this run, direct ML converged in ",
+    pct(min(baseline$converged_rate)), " to ",
+    pct(max(baseline$converged_rate)),
+    " of replicates across designs. The best continuation profile per design ",
+    "converged in ",
+    pct(min(best$converged_rate)), " to ",
+    pct(max(best$converged_rate)),
+    " by the terminal-audit criterion. Across all continuation scenarios, ",
+    "paired rescues (`continuation_only`) were ",
+    pct(min(cn_paired$continuation_only)), " to ",
+    pct(max(cn_paired$continuation_only)),
+    ", while paired losses (`baseline_only`) were ",
+    pct(min(cn_paired$baseline_only)), " to ",
+    pct(max(cn_paired$baseline_only)),
+    ".\n",
+    sep = ""
+  )
+}
+```
+
+## Conclusion
+
+This experiment does not support covariance continuation as a default
+convergence aid for the current ML path. The idea is simple and attractive:
+solve a slightly regularized covariance problem, then hot-start ordinary ML
+from there. In these simulations, however, the extra stages mostly add more
+places for L-BFGS to fail.
+
+The most useful outcome is diagnostic. Using magmaan's terminal audit changes
+the story relative to raw optimizer return codes: some fits that look like
+clean optimizer stops are not stationary by the lavaan-style gradient check.
+So future convergence studies should continue reporting audit convergence, not
+only backend status.
+
+Among the continuation variants, lighter lambda paths were generally better
+than the original coarse path, and `scaled_identity` was the most consistent
+target. Raw identity was sometimes competitive, but not enough to change the
+overall conclusion. The best continuation variant still trailed direct ML on
+the convergence-note designs and required more objective evaluations.
+
+The practical decision is to close this branch of the experiment for now. Keep
+the code as frontier research tooling, but do not promote it as a recommended
+estimation strategy. More promising next directions are different starts,
+bounded or screened multi-start portfolios, and cost-normalized optimizer
+comparisons using the same terminal-audit criterion.
+
+
+## Archived on 30 September 2026
+
+Closed as a default-convergence proposal: the tested paths added cost without
+improving convergence. Reopen only for a concrete unresolved problem under the
+current starts and verdict; compare all stages at equal total cost.

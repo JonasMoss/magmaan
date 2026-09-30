@@ -1,0 +1,1139 @@
+---
+title: "Sphere reference fits: a small exploratory pilot"
+params:
+  run: reference-pilot
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+read_result <- function(name) {
+  path <- file.path("results", params$run, paste0(name, ".csv"))
+  if (!file.exists(path)) stop("Missing results: run Rscript run_experiment.R --pilot")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+s <- read_result("summary"); refs <- read_result("references"); metadata <- read_result("metadata")
+probe_path <- file.path("results", params$run, "witness_probe.csv")
+probe <- if (file.exists(probe_path)) read.csv(probe_path) else NULL
+count <- function(domain, label) sum(refs$domain == domain & refs$reference_label == label)
+tab <- function(x) knitr::kable(x, row.names = FALSE, digits = 3)
+```
+
+## Question
+
+Can a small collection of sphere fits provide useful reference solutions for
+ML and PSD-ML, while keeping local numerical accuracy, chart problems and
+uncertainty about the best solution separate? Can those references explain
+ordinary-route failures without changing the estimator used in a paper?
+
+## Short answer
+
+**Latest rerun:** shared normalization does not improve target recovery on the
+120 retained challenge draws. ML and direct PSD recover the same targets;
+two-stage PSD loses three in the later batch. The [executive summary](executive-summary.html)
+contains the compact comparison; see [normalization revisit](#normalization-revisit)
+for controls and reproduction. Earlier reference-building results follow.
+
+Of the nine inspected spherical endpoints, two are near-pole failures in the
+requested marker chart. The other seven now have numerical evidence of finite
+local minima in the original marker identification. Five refine directly to
+stable points; one requires the better starting point found earlier; the last
+has an exceptionally flat but finite minimum, confirmed at 60 and 90 decimal
+digits. Six refined points pass the library's ordinary-precision accuracy check.
+The very flat case still fails that check and should remain a numerical failure,
+not be called nonattainment. None of this proves global optimality.
+
+All seven finite ML witnesses have negative primitive variance components.
+That is separate from chart availability and numerical accuracy, and excludes
+them as PSD-ML solutions. In the separate retained fresh PSD batch, FABIN3-auto
+plus positive spectral starts matches 51/60 sphere references under either
+scaling choice. The remaining search gap and the requested-chart rejection gate
+still block promotion. Marker changes in this study are diagnostic only;
+automatic substitution of the user's markers is not the adopted policy.
+
+A retrospective check of three sample-only, single-fit start selectors finds no
+clear replacement for the current starts. The strongest signed spectral rule
+adds two reference matches on the later 60 draws in ordinary ML with either
+backend, but loses two previously successful fits and brings no net gain on the
+earlier 60. Selecting by the lowest initial discrepancy performs worse. All
+three rules miss the finite negative-X witness above. Keep the current starts;
+this small check does not establish that they are optimal.
+
+```{r results='asis'}
+if (!is.null(probe)) {
+  p <- probe[1, ]
+  cat(sprintf(paste0("The targeted follow-up supplies a concrete counterexample to calling failed multistarts ",
+    "\"no estimate\": on %s draw %d at N=%d, lavaan finds a screened objective of %.6f. ",
+    "%d sphere backend(s) recover a screened candidate when started there. ",
+    "The original finite portfolio missed a point the sphere route can represent.\n"),
+    p$design, p$rep, p$n, p$witness_objective, sum(probe$label == "screened_candidate")))
+}
+```
+
+## Evidence
+
+### Can a single sample-based start do better?
+
+The layered measurement construction initially keeps the latent covariance
+positive. That suggests a general possible improvement for unrestricted ML:
+let the observed correlations choose a negative variance direction when they
+support one. This is inapplicable to PSD-ML, whose domain excludes those points.
+
+We checked three deterministic rules on all 120 retained draws. The first uses,
+for each factor, the eigenvector of its standardized off-diagonal correlation
+matrix with the largest absolute eigenvalue, retaining that eigenvalue's sign.
+It constructs one spectral start with strength 0.5. The second keeps the route's
+constructor start whenever both selected signs are positive, and otherwise uses
+the same signed spectral start. The third evaluates the initial ML discrepancy
+of the four existing spectral vectors and chooses the smallest. It evaluates
+starting points, not fitted endpoints. Each rule requires only one optimization;
+none changes the requested markers or uses a sphere solution to initialize an
+ordinary fit.
+
+Selections were computed from regenerated sample moments before reading any
+fit outcomes. We then looked up the already saved fit for the chosen start,
+so no optimization was rerun. Both batches have already been inspected: these
+are retrospective engineering checks, not fresh confirmation data. The ordinary
+comparison is layered/native with information scaling; the sphere comparison
+is canonical with diagonal scaling and polishing disabled.
+
+```{r}
+selection <- read.csv(file.path("results", "single-start-selection", "summary.csv"))
+a <- selection[selection$batch == "fresh", ]
+a <- a[order(a$route, a$backend, a$policy), ]
+tab(data.frame(Route=a$route, Backend=a$backend, Rule=a$policy,
+  `Constructor matches`=a$baseline_hit, `Selected matches`=a$selected_hit,
+  Gains=a$gain, Losses=a$loss, check.names=FALSE))
+```
+
+These counts use the frozen reference-hit screen, including its historical
+magnitude cutoff; they measure continuity with the earlier experiment, not a
+new convergence verdict. Of the later 60 draws, 55 have a reference under that
+screen. Library convergence verdicts and every gain/loss are retained separately
+in the paired results, along with summaries by population.
+
+The strongest signed rule gives a small ordinary-route gain on the later batch,
+but exchanges four gains for two losses with each backend. On the earlier batch
+it exchanges one gain for one loss. For sphere it loses three net matches on the
+earlier batch and gains two on the later one. Keeping the constructor when both
+signs are positive does not remove those tradeoffs. Lowest initial discrepancy
+loses matches on both batches and both routes: a better initial objective does
+not reliably identify a better destination.
+
+Most tellingly, all three rules choose a negative-Y start for the inspected
+fresh weak-marker N=20 draw 1. None reaches its better finite negative-X minimum.
+The local correlation signal misses the sign needed by the jointly fitted model.
+Thus negative directions matter, but this check does not supply a reliable
+sample-only rule for choosing them. A model-wide moment construction retaining
+signed latent covariances is a possible future investigation; it would need to
+handle structural paths and observed-covariance positivity together and is not
+a small clipping change. We do not promote a new start rule on this evidence.
+The pole rejection policy and the very flat finite minimum remain separate
+issues that a starting-value change need not cure.
+
+### What became of the other seven?
+
+We checked the seven endpoints that pass the study's marker-proximity test
+using an independent high-precision calculation of the same unrestricted
+Gaussian ML objective. The original markers x1 and y1 stay fixed at 1. Both
+the saved sphere endpoint and the best locally checked point found earlier
+were used as starting points. The calculation retains the starting sign of
+X's variance while refining, so a trajectory is not silently carried through
+a singular regression representation. It is a local diagnostic, not a new
+production fitter or an exhaustive search.
+
+The derivative formulas agree with independent numerical differentiation at
+high precision. Every retained finite witness has a positive definite observed
+covariance, a vanishing gradient to the stated numerical precision, and positive
+curvature in every free parameter direction. These are strong numerical local
+minimum checks, not exact-arithmetic or global-optimality proofs. The resulting
+points reproduce the library's objective in the original marker chart to
+less than 1e-14 and all pass the explicit 1e-4 chart-proximity check.
+
+```{r}
+finite <- read.csv(file.path("results", "open-case-conclusions", "finite_witnesses.csv"))
+accuracy <- read.csv(file.path("results", "open-case-conclusions", "library_crosscheck.csv"))
+finite <- merge(finite, accuracy[c("case_id","accuracy_status","accuracy_passed")], by="case_id", sort=FALSE)
+tab(data.frame(Batch=finite$batch, Design=finite$design, N=finite$n, Draw=finite$rep,
+  Objective=finite$objective, `Largest loading`=finite$max_loading,
+  `Ordinary-precision accuracy`=ifelse(finite$accuracy_passed,"Pass","Ill-conditioned"),check.names=FALSE))
+```
+
+Five saved spherical endpoints refine directly to the same finite minimum as
+the earlier checked point. Their large or negative variance components do not
+by themselves indicate a runaway path. Two cases need a more specific explanation:
+
+**Fresh weak-marker N=20 draw 1: the sphere had followed a losing path.**
+Sign-preserving continuation from that endpoint approaches X variance zero,
+while the regression coefficient and compensating disturbance grow without
+bound numerically. The continuation reaches X variance about 2e-32 and a
+regression magnitude above 5e30 before stopping; its objective is about
+0.2920422 and its gradient has not vanished. The previously found negative-X-
+variance point instead refines to a finite local minimum at 0.2917589, with
+regression about 6.33 in the requested marker chart. Both sphere backends
+recover it when started from that witness. This identifies a missed basin,
+not nonattainment of the entire problem. It does not establish what other
+paths or minima exist.
+
+**Development weak-marker N=100 draw 2: a very flat finite minimum.**
+Simply increasing ordinary refinement effort made little progress. Holding
+the y3 loading fixed and optimizing the remaining parameters shows the objective
+first decreasing and then increasing. Solving for the bottom of that local
+profile gives loading 740.4555345 and objective 0.0246899172027636. A subsequent
+unrestricted gradient/curvature check confirms a finite numerical local minimum;
+60- and 90-digit calculations agree. This is evidence against interpreting the
+investigated branch as an endlessly improving large-loading sequence.
+
+```{r}
+profile <- read.csv(file.path("results", "delicate-loading-profile", "summary.csv"))
+minimum <- read.csv(file.path("results", "delicate-finite-minimum", "summary.csv"))
+plot(profile$fixed_y3_loading, (profile$objective-minimum$objective)*1e9,
+  log="xy", type="b", pch=19, xlab="Fixed y3 loading (y1 marker = 1)",
+  ylab="Objective above local minimum (× 10⁹)")
+abline(v=minimum$max_loading, lty=2, col="steelblue")
+```
+
+The ordinary-precision library still reports this point as ill-conditioned,
+with an accuracy-condition measure around 5e12, even when supplied the refined
+point. It should remain rejected or unresolved on numerical accuracy grounds.
+Finding the minimum at high precision does not make routine parameter estimates
+or inference reliable. The other six refined witnesses pass that accuracy check.
+All seven are improper ML points; none may be substituted for a PSD fit.
+
+### Requested-chart failure: the 184,000-loading example
+
+**Decision:** reject the fresh weak-marker N=100 draw 4 endpoint in the requested
+identification. Do not automatically switch its marker. Report that the fitted
+point is too close to a pole of the requested marker chart to return as an
+accepted fit in that chart. The alternative-marker point and implied covariance
+may be retained for diagnosis, and the user can explicitly choose a different
+identification.
+
+The saved normalized chart level is 5.44e-6. The existing translation tolerance
+1e-6 admits it; the already-reported study threshold 1e-4 rejects it. The new
+required-failure check confirms this using the saved point without optimization
+or marker changes. The 1e-4 value is an explicit study check, not a newly adopted
+library-wide tolerance. A general near-pole acceptance criterion still needs
+validation before promotion.
+
+Of the other eight saved endpoints, development weak-marker N=20 draw 4 also
+fails that proximity check (level 1.15e-6) and already fails sphere stationarity.
+The other seven pass it; their negative variance components and, in two cases,
+failed/unresolved accuracy are separate issues. Passing this proximity check
+does not establish that a solution is regular, proper or globally optimal.
+We should therefore not call all nine “poles,” nor claim that the seven are
+proved free of every identification problem.
+
+Suggested failure explanation for the named case: “The requested marker is
+extremely weak relative to the other indicators at the fitted point. Fixing its
+loading to 1 produces extremely large parameter estimates. The fit is rejected
+in this identification; no marker was changed automatically.”
+
+### Looking at the same spherical point in familiar coordinates
+
+This inspection does not fit anything again. It takes each case's lowest-objective
+evaluable saved sphere endpoint and translates it to the original marker, a
+better-loaded marker, and ordinary std.lv. Successful translations preserve the
+implied covariance and objective to numerical precision. “No” for std.lv means
+that this same point cannot be expressed there; it is not a new failed fit.
+
+```{r}
+translations <- read.csv(file.path("results", "sphere-translations-inspected", "summary.csv"))
+first <- translations[translations$chart == "first_marker", ]
+strong <- translations[translations$chart == "strongest_marker", ]
+std <- translations[translations$chart == "std_lv", ]
+stopifnot(identical(first$case_id, strong$case_id), identical(first$case_id, std$case_id))
+tab(data.frame(Batch=first$batch, Design=first$design, N=first$n, Draw=first$rep,
+  `Largest loading, first marker`=first$max_abs_loading,
+  `Largest loading, better marker`=strong$max_abs_loading,
+  `Negative variance rows`=strong$negative_variances,
+  `std.lv possible`=ifelse(std$translated,"Yes","No"),
+  `Local checks passed`=ifelse(first$source_local_checked,"Yes","No"),check.names=FALSE))
+```
+
+Here `X` denotes the exogenous latent variance, `Y` the disturbance variance in
+`Y ~ X`, and lowercase indicator names denote their residual variances. In this
+regression model, std.lv fixes X's variance and Y's disturbance variance to +1.
+A real rescaling cannot change a negative variance into a positive one. Negative
+indicator residuals, by contrast, do not themselves prevent std.lv translation.
+
+Three concrete examples explain most of what to look for:
+
+- **High-R2, development N=20 draw 4:** with better markers, loadings are at
+  most 1 and the regression is about 0.53. Y's disturbance variance is about
+  -0.377, almost cancelling the explained variance and leaving total variance
+  about 0.0021. The point is locally checked but improper; enormous standardized
+  ratios do not mean enormous unstandardized parameters here.
+- **Weak marker, fresh N=100 draw 4:** the largest loading falls from about
+  184,000 to 1 after changing markers. That dramatic loading was a coordinate
+  issue. The negative Y disturbance (about -27.7 under the better marker) and
+  large residual compensation remain. Translation clarifies the point but does
+  not make it an admissible covariance model.
+- **Weak marker, development N=100 draw 2:** std.lv translation works, with a
+  largest loading about 12.6, but x3 and y3 have negative residual variances.
+  The largest absolute indicator residual variance is about 168 times that
+  indicator's sample variance. This endpoint also has unresolved local accuracy,
+  so it warrants further numerical inspection.
+
+All nine saved endpoints have negative primitive variance components. This is
+allowed by the unrestricted observed-covariance ML objective, but excluded by
+PSD-ML. Six pass the local accuracy checks; the other three are retained as
+endpoints to inspect, not accepted estimates. Translation alone does not tell
+us whether a path is runaway or whether the endpoint is globally optimal.
+
+```{r results='asis'}
+pt <- read.csv(file.path("results", "sphere-translations-inspected", "parameters.csv"))
+for (i in first$case_id) {
+  x <- first[first$case_id == i, ]
+  cat(sprintf("\n<details><summary>%s, %s, N=%d, draw %d: parameter tables</summary>\n\n",
+    x$batch, x$design, x$n, x$rep))
+  z <- pt[pt$case_id == i, ]
+  for (chart in c("first_marker", "strongest_marker", "std_lv")) {
+    q <- z[z$chart == chart, c("lhs", "op", "rhs", "est")]
+    cat(sprintf("\n**%s**\n\n", gsub("_", " ", chart)))
+    if (nrow(q)) cat(as.character(knitr::kable(q, digits=6, row.names=FALSE)), sep="\n") else
+      cat("This point cannot be translated to positive std.lv.\n")
+    cat("\n\n")
+  }
+  cat("</details>\n\n")
+}
+```
+
+### Inspecting the unresolved draws
+
+The inspection selects all four development and five retained fresh ML problems
+with no screened sphere reference. It fits nine combinations of marker
+indicators, effect coding, positive std.lv and the sphere, with L-BFGS and PORT.
+The four spectral starting points are transported across charts; their implied
+covariances are checked for agreement before fitting. Native constructors are
+separate arms. Positive std.lv cannot represent negative latent disturbance
+variances, so unavailable starts are recorded rather than silently changed.
+Failure in that sign-restricted chart is not failure of unrestricted ML.
+
+For each optimizer, the lowest-objective evaluable endpoint in the marker,
+effect-coded, std.lv and sphere families is continued at tighter tolerances
+with budgets of 1,000, 10,000 and 50,000. These are allowed budgets, not evidence
+that the optimizer used every evaluation. The inspection retains covariance
+drift, objective, local accuracy and both the old extent and a new diagnostic
+of scale-invariant component magnitudes. Neither magnitude statistic is a
+proof of runaway or nonattainment.
+
+```{r}
+escape <- read.csv(file.path("results", "unresolved-identifications", "candidate_evidence.csv"))
+tab(data.frame(Batch=escape$batch, Design=escape$design, N=escape$n, Draw=escape$rep,
+  Objective=escape$objective, `Old extent`=escape$std_extent,
+  `Component extent`=escape$component_extent, check.names=FALSE))
+```
+
+These are the lowest-objective locally checked candidates in this inspection,
+not certified global optima. The magnitude-only screen still labels seven of
+these `screened_extreme`; the original records are preserved.
+
+- Development weak-marker N=20 draw 4 and fresh weak-marker N=20 draw 1 now
+  pass the original screen. Marker charts find lower finite candidates than
+  the sphere attempts in this inspection. Those sphere attempts can show
+  large components on losing paths without establishing nonattainment of the
+  problem itself.
+- Both high-R2 development cases have moderate component magnitudes, around
+  1.1–1.3, despite old standardized extents of roughly 18 and 177. A small
+  total latent variance makes standardized ratios large; the fitted primitive
+  components need not diverge. Multiple charts recover the same objective.
+- Fresh Ernst N=20 draw 1 and weak-marker N=20 draw 4, N=100 draw 1, and N=100
+  draw 4 have stable locally checked candidates with component magnitudes
+  around 13–28. Their large signed variance components remain finite in the
+  continuations. These are improper ML candidates, not PSD candidates.
+- Development weak-marker N=100 draw 2 remains delicate. Several charts give
+  almost the same objective, around 0.024689918, while representative component
+  magnitudes range roughly from 125 to 169 and local-check outcomes differ.
+  The best evaluable endpoint is not the best locally checked endpoint.
+  Stagnation at tighter tolerances does not resolve finite attainment here.
+
+The component diagnostic uses loading energies (squared loadings divided by
+sample indicator variances) to scale latent total/disturbance covariances and
+structural paths; residual contributions are scaled by indicator variances.
+Unlike the old standardized extent, it never divides by a fitted latent total
+variance. Both statistics are reported, and neither replaces the accuracy check.
+The retained candidate parameters and implied covariances permit inspection
+without rerunning the optimizers.
+
+The practical conclusion is to separate magnitude flags from local accuracy
+and from evidence about attainment. We do not need every unrestricted ML
+problem to have a solution, and making PSD solve a different constrained
+problem cannot answer whether ML attains its infimum. However, the original
+five missing fresh references cannot be described collectively as five
+nonconvergent or apparently nonattained fits.
+
+### Known geometry before promotion
+
+Five deterministic covariance witnesses isolate behavior from sampling noise.
+The requested identification is the first marker except for the std.lv case.
+The alternative chart always fixes the second indicator, selected before any
+fit. ML uses L-BFGS and PORT with native layered and feasible-to-construct signed
+spectral starts; PSD uses SLSQP with FABIN3 automatic transport and positive
+spectral starts under both no and diagonal preconditioning. The sphere uses its
+canonical start with polishing disabled. Its internal scaling is recorded
+separately from ordinary ML's information scaling.
+
+```{r}
+g <- read.csv(file.path("results", "geometry-witnesses", "fits.csv"))
+geom_names <- c("interior", "marker_pole", "residual_face", "stdlv_pole", "nonattainment")
+recovery <- function(name, route, domain) {
+  z <- g[g$design == name & g$route == route & g$domain == domain, ]
+  if (any(z$screened & z$matches_covariance)) "Yes" else "No"
+}
+tab(data.frame(Case=c("Interior", "Marker pole", "Zero residual variance", "std.lv pole", "ML nonattainment"),
+  `Requested ML`=vapply(geom_names, recovery, "", route="requested", domain="ML"),
+  `Requested PSD`=vapply(geom_names, recovery, "", route="requested", domain="PSD"),
+  `Alternative marker ML / PSD`=vapply(geom_names, function(n) paste(recovery(n,"alternate_marker","ML"), recovery(n,"alternate_marker","PSD"),sep=" / "), ""),
+  `Sphere ML / PSD`=vapply(geom_names, function(n) paste(recovery(n,"sphere","ML"), recovery(n,"sphere","PSD"),sep=" / "), ""),
+  check.names=FALSE))
+```
+
+“Yes” requires both the local endpoint screen and a maximum covariance error,
+standardized by the target indicator variances, below 1e-6. It means exact-target
+recovery to this tolerance, not simply a convergence flag. The table deliberately
+shows no recovery for PSD on the last row: that target is outside the PSD model,
+so PSD must minimize a different, strictly positive discrepancy.
+
+At the marker pole the first loading is zero while the other indicators share
+nonzero covariance. The original marker cannot represent this point. Its
+spectral construction explicitly returns `start_unavailable`; choosing a
+representable chart permits fitting. At the std.lv pole the endogenous latent's
+disturbance variance is zero, whereas the requested identification fixes it at
+one. Ordinary fits report convergence and pass the local screen at finite
+approximations, but their standardized covariance gaps range from about 3e-6
+(PSD) to 2e-4 (ML). Alternative-marker and sphere gaps are below 3e-8. Thus
+convergence and a small discrepancy do not establish finite attainment in the
+requested chart. Successful alternative fits retain a translation-failure or
+near-boundary flag for that original chart.
+
+The zero-residual witness attains zero discrepancy with an observed covariance
+that is still positive definite. Every tested PSD configuration recovers it;
+a primitive covariance boundary is therefore not a failed fit. The numerical
+face nomination uses a 1e-7 threshold on scaled primitive eigenvalues, with
+PSD feasibility and accuracy assessed separately. The scale is invariant to
+indicator units and latent rescaling for these simple-structure models; it is
+not a general boundary certificate.
+
+#### A nonattainment witness, independently of optimization
+
+For a one-factor model with diagonal residual covariance, consider
+
+$$
+S=\begin{pmatrix}1&0.3&0.4\\0.3&1&0\\0.4&0&1\end{pmatrix}.
+$$
+
+The nonzero covariances $s_{12}=\lambda_1\lambda_2\phi$ and
+$s_{13}=\lambda_1\lambda_3\phi$ force all three loadings and $\phi$ to be
+nonzero at a finite solution. Then $s_{23}=\lambda_2\lambda_3\phi$ cannot
+be zero. No finite factor parameters reproduce $S$, even with signed variances.
+Yet the sequence
+
+$$
+\lambda(t)=(t,0.3/t,0.4/t)^\top,\qquad
+\phi=1,\qquad \theta_i(t)=1-\lambda_i(t)^2
+$$
+
+keeps the diagonal and first two covariances fixed while
+$s_{23}(t)=0.12/t^2\to0$. Its observed covariance is positive definite for
+$t\ge1$. Since the Gaussian covariance discrepancy is nonnegative and vanishes
+only at equality, its infimum is zero and is not attained. This is a proved
+closure/nonattainment example; no claim about a particular differential-geometric
+fold type is needed. The stored sequence and checks verify the covariance map
+and the library's half-discrepancy convention independently of optimization.
+
+For $t>1$ this sequence has a negative first residual variance. PSD excludes it.
+All ten tested PSD attempts across the requested, alternative and sphere routes
+instead agree at a boundary candidate with reported discrepancy 0.009509003 and
+$s_{23}\simeq0.12$. Their agreement and local checks are not a global-optimality
+proof. No unrestricted ML attempt passes the local screen on this witness.
+
+### Fresh PSD reference coverage
+
+The retained fresh batch now has a separate PSD reference pool: canonical,
+positive spectral and three reproducible random sphere starts under each of
+the two preconditioning choices. The ordinary arms run independently on every
+draw, with no reference-selected retries. All 60 draws have screened sphere
+references: 58 reached by multiple start recipes and two by only one. All are
+marker-representable at 1e-6; 42 draws have a matching reference candidate near
+a PSD face under the numerical nomination above.
+
+```{r}
+psd <- read.csv(file.path("results", "psd-fresh", "summary.csv"))
+tab(data.frame(Preconditioning=psd$preconditioning,
+  `FABIN3-auto matches`=psd$fabin3_hit, `Positive spectral matches`=psd$spectral_hit,
+  `Combined matches`=psd$portfolio_hit, `Any screened candidate`=psd$any_screened,
+  check.names=FALSE))
+```
+
+Counts are out of 60. Both settings leave eight draws with screened but inferior
+ordinary candidates and one with no screened ordinary candidate. No ordinary
+candidate improves on the sphere reference. This is evidence for a remaining
+search problem, not evidence that these nine datasets lack a PSD solution.
+The references remain best observed candidates with a marker-chart accuracy
+cross-check; they do not replace the missing sphere-native assessment. The
+batch was already used in the direct-start comparison, so it is not a new
+held-out decision study.
+
+### What a spectral start does
+
+A start is an initial guess for every parameter. Each indicator block supplies
+a correlation pattern. The positive recipe chooses a loading direction that
+captures positive shared variation. The negative recipe chooses an alternative
+direction suited to a negative latent variance. Changing direction changes the
+relative loadings. The construction adjusts residual variances so the implied
+observed covariance is positive definite at the start.
+
+Each factor receives one of those two guesses. Regressions and between-factor
+covariances start at zero. The optimizer then estimates all free parameters
+normally: the initial signs are not constraints, and every recipe targets the
+same ML objective. Negative latent variances can be allowed by ML while the
+observed covariance remains positive definite; such endpoints may be
+substantively inadmissible and are flagged separately. These recipes are not
+being proposed for PSD estimation.
+
+### Direct ordinary-chart starts
+
+The direct probe constructs every start from the sample covariance and runs
+all recipes on every draw. It reads saved sphere references only after fitting;
+no sphere endpoint, reference-selected marker, or reference-dependent retry
+enters this portfolio. The spectral directions are converted algebraically to
+the requested marker units: divide each loading by its marker loading and
+multiply the latent variance by the squared marker loading. A zero marker
+component would prevent that conversion; none occurred in these runs.
+
+ML uses native layered starts plus four spectral alternatives, under information
+scaling, separately with L-BFGS and PORT. PSD uses FABIN3 with automatic std.lv
+transport plus the positive spectral alternative, under SLSQP with either no
+preconditioning or diagonal preconditioning. Negative-variance recipes are
+excluded from PSD. Each batch contains 60 draws from the original three
+populations; the fresh batch is the previously retained start-study batch,
+not a newly independent confirmation after this probe.
+
+```{r}
+direct <- read.csv(file.path("results", "direct-starts-information", "summary.csv"))
+d <- direct[direct$reference_available > 0, ]
+tab(data.frame(Batch=d$batch, Domain=d$domain, Backend=d$backend,
+  Scaling=d$preconditioning, `Available references`=d$reference_available,
+  `Constructor matches`=d$constructor_hit, `Portfolio matches`=d$portfolio_hit,
+  check.names=FALSE))
+```
+
+Counts are out of 60 draws per batch. A match requires the existing endpoint
+screen and objective agreement with the saved domain-specific reference.
+No screened ordinary point improved on an available reference in this run.
+The constructor is layered for ML and FABIN3 with automatic transport for PSD.
+At the time of this direct run, the fresh PSD arms produced screened candidates
+on 59/60 draws under either scaling choice, but had no sphere reference pool.
+Those frozen match counts remain unavailable; the later PSD-specific run above
+adds an independent reference comparison on the same draws. Raw attempts and starting vectors stay
+local; the paired rows, summaries and reference classifications are retained.
+
+The earlier reference-informed diagnostic is separate: translating a known
+sphere endpoint recovered all 16 ML misses per backend and all six PSD misses
+with references. That establishes that those points can be reached from a
+known solution; it does not establish a sample-only recipe. Historical files
+labelled `default` describe the then-used constructor and settings, not a
+stable or recommended configuration. New ordinary probes name these settings
+explicitly.
+
+### What happened to fold / pole / fine?
+
+There is no inferred fold/pole/fine partition for the random-draw batches.
+The later deterministic geometry witnesses above supply known cases instead. The retained chart flag is
+proximity to the requested marker-chart boundary, at tolerances 1e-4, 1e-6 and
+1e-8. Numerical accuracy, parameter extent and PSD admissibility are separate
+flags. At 1e-6, all 56 development ML references, all 55 fresh ML references,
+and all 60 development PSD references are representable. The remaining four
+and five ML problems have no screened sphere reference and remain unresolved.
+A representable candidate is not a proof of a global optimum or of good
+behavior in every chart. The ordinary probe does not measure std.lv proximity.
+
+Thus the recovered misses with finite representable references provide evidence
+of start/optimization trouble. They do not support labelling those targets
+marker poles. A near-boundary flag alone would only nominate a possible pole;
+a fold would require separate evidence that the limiting covariance is not
+attained in any relevant chart. Failed multistarts and an extreme endpoint
+cannot supply that conclusion.
+
+### Expansion to new model families
+
+The expansion uses Gaussian data, weak first indicators, unequal residual
+variances, and N=30/100 with 20 draws per cell. New families are one factor with
+five indicators (including a negative loading), two correlated factors with
+four indicators each (mixed loading signs), and a three-factor regression chain
+with three indicators per factor. Families and recipes were fixed before this
+run. These models expand structural scope but still have simple measurement
+structure, no equality constraints, and no missing data.
+
+```{r}
+expanded <- read.csv(file.path("results", "expanded-families", "summary.csv"))
+x <- expanded[expanded$backend == "both", c("design", "portfolio", "matches_best_observed")]
+x <- reshape(x, idvar="design", timevar="portfolio", direction="wide")
+x <- x[c("design", paste0("matches_best_observed.", c("canonical", "single_negative", "all_signed", "positive_control")))]
+names(x) <- c("Family (40 problems)", "Canonical", "+ Single negatives", "+ All negative subsets", "+ Positive control")
+tab(x)
+```
+
+All entries pool the same two backends and compare against the full portfolio's
+best screened objective. Canonical plus every nonempty negative subset uses
+2^k starts for k factors; retaining the positive spectral control uses 2^k+1.
+That is 6, 10 and 18 fits per problem for these one-, two- and three-factor
+families with both backends. The full expansion uses 1,360 fits; recorded fitting
+and endpoint-assessment time totals about 54 seconds on this machine. The three-factor full portfolio takes about 21 times
+the canonical fitting time. Every draw's coverage and timing are retained in
+`expanded-families/coverage.csv`.
+
+The positive control's unique improvement is one-factor N=30 draw 1: PORT
+finds a screened objective of 0.190643 versus canonical's 0.199426. The lower
+point is inadmissible by the substantive variance screen, but remains a valid
+candidate for unconstrained ML. This also shows why starts are search choices,
+not declarations of endpoint admissibility. PORT alone reaches all 118 expanded
+references, versus 117 for L-BFGS; this small result does not select a backend.
+
+The two unresolved problems differ. One-factor N=30 draw 10 has locally screened
+endpoints excluded only by the extent rule. Three-factor N=100 draw 6 has no
+endpoint passing the full local screen. Neither is labelled nonexistent. Across
+the expansion, 97 references have support from multiple start recipes and 21
+from just one; the latter merit inspection before stronger reference claims.
+
+### How often a reference is found
+
+All datasets remain in the denominator. ML and PSD references are built
+separately, using sphere attempts only. Repetition means different start
+recipes reached the best observed objective; two optimizers from the same
+start do not suffice.
+
+```{r}
+a <- aggregate(list(Datasets = refs$rep), refs[c("design", "domain", "reference_label")], length)
+names(a)[1:3] <- c("Design", "Domain", "Reference evidence")
+tab(a)
+```
+
+### Which sphere configurations reach the reference
+
+The same random starting points are supplied to each configuration on a draw.
+Each configuration has canonical and layered starts, plus
+`r metadata$value[metadata$key == "random_starts"]` random starts.
+The random starts have positive disturbances but varying loading signs and
+latent paths. Their limited distribution does not exhaust possible basins.
+The table pools starts and the two sample sizes within each design, so its
+attempts are repeated fits, not independent datasets. Screening time is included.
+
+```{r}
+z <- s[s$route == "sphere", ]
+z$screened <- z$fits * (z$label == "screened_candidate")
+z$matched <- z$fits * (z$comparison == "matches_sphere_reference")
+a <- aggregate(cbind(fits, screened, matched) ~ design + domain + backend + preconditioning, z, sum)
+names(a) <- c("Design", "Domain", "Optimizer", "PSD scaling", "Attempts", "Screened", "At reference")
+tab(a)
+```
+
+### Ordinary fits compared with the sphere reference
+
+These attempts never define the sphere reference. A better ordinary endpoint is
+retained as evidence that the sphere search missed something; the reference is
+not silently replaced. Every finite returned ordinary endpoint is checked in
+the same strongest-indicator chart. Its original convergence flag is retained
+separately in the raw results.
+
+```{r}
+z <- s[s$route != "sphere", ]
+a <- aggregate(fits ~ domain + route + backend + comparison, z, sum)
+names(a) <- c("Domain", "Route", "Optimizer", "Comparison", "Attempts")
+tab(a)
+```
+
+The ordinary PSD route remains ordinary PSD-ML. Sphere is an auxiliary
+engineering reference: this study does not introduce sphere fitting into the
+ordinary estimator, change paper protocols, or count a sphere rescue as an
+ordinary-route success. A paper can report ordinary performance against a
+best-observed numerical reference while describing that reference transparently.
+
+### Purposeful starts: loading direction matters
+
+The missed lavaan witness has a negative X-factor variance. The pilot's random
+starts used positive latent variances. For this witness, merely making X's
+starting variance negative fails; changing its loading direction to the
+smallest-eigenvalue direction succeeds with either initial variance sign.
+Thus the sign alone does not explain the miss. These are ML starts: negative
+latent variances are outside the PSD estimator's domain.
+
+The follow-up uses each factor's within-block correlation matrix with its
+diagonal removed. A positive factor uses its largest-eigenvalue direction;
+a negative factor uses its smallest. Both start with standardized variance
+magnitude 0.5, zero structural regression, and residual variances chosen to
+preserve observed diagonal variances. The implied observed covariance is
+positive definite for either sign. The first follow-up used only the original
+two-factor design. The expansion applies the same construction to other simple
+structures; extension to general SEM remains open.
+
+Four spectral recipes (both positive, negative X, negative Y, both negative)
+were tested with canonical starts under both ML backends. The recipes were
+fixed before the fresh run; the recommendation to drop the all-positive recipe
+is a retrospective simplification, still needing confirmation. Fresh means new
+random draws of the same three populations, not held-out model families.
+
+```{r}
+start_tables <- lapply(c("development", "fresh"), function(phase) {
+  path <- file.path("results", paste0("start-", phase), "coverage_summary.csv")
+  if (!file.exists(path)) stop("Missing start evidence: run scripts/tune_starts.R and scripts/summarize_starts.R")
+  x <- read.csv(path)
+  x <- x[x$backend == "both", ]
+  aggregate(x[c("matches_best_observed", "attempts")], x[c("phase", "portfolio")], sum)
+})
+x <- do.call(rbind, start_tables)
+names(x) <- c("Batch (60 problems)", "Start portfolio", "Best observed reached", "Fits")
+tab(x)
+```
+
+Coverage means at least one endpoint matches the best screened objective in
+that batch's reference pool. Development references additionally retain the
+original pilot candidates; fresh references use only the new portfolio. The
+canonical figure is therefore 45/60 on development against the expanded pool,
+versus 46 against the older pilot pool. Adding both single-negative recipes
+reaches 54 development and 52 fresh references; the double-negative recipe
+adds two and three, respectively. Neither backend dominates: each alone reaches
+54/60 fresh references with the full portfolio; together they reach 55/60.
+The retained `coverage.csv` gives every paired case, backend and fit cost.
+
+Three of the original nine missing references already had endpoints passing
+the local checks but excluded by the extent screen. All three remain excluded.
+Of the other six, five now have a screened candidate, leaving weak-marker
+N=20 draw 4 unresolved. The development reference pool now has 50 repeated,
+six single-start and four missing references. The fresh pool has 38 repeated,
+17 single-start and five missing references. Supporting starts are recipes,
+not independent replications; agreement by two backends alone is not repetition.
+
+A canonical fit can pass the screen and still miss a better observed solution.
+Therefore a retry triggered only by failed convergence would miss some of this
+benefit. Keep the small portfolio as an exploratory reference search before
+trying to invent an adaptive retry rule. No additional optimizer or termination
+machinery was needed for these recoveries.
+
+## Caveats
+
+- This is exploratory development data, not a held-out default-selection run.
+  The initial pilot has three two-factor models, N = 20 and 100, ten draws per
+  cell, complete Gaussian data, one group and native units. Both latents must
+  be covered by the sphere transformation. No conclusions extend to uncovered
+  structures, FIML, DWLS or barrier fitting.
+- Fits use unit-free sphere coordinates with user-chart polishing disabled.
+  The current route still finalizes in the original chart when possible; a
+  finalization error can therefore hide an otherwise usable sphere endpoint.
+  Such attempts remain errors, never evidence that no solution exists.
+- The strongest-indicator assessment is a local Newton cross-check, not an
+  intrinsic sphere certificate or an identification proof. PSD checks use the
+  PSD domain. Original-chart verdicts do not decide the reference screen.
+- A first-order sphere check, norm residual at most 1e-6, finite consistent
+  objectives, and the local Newton budget .01 must pass. PSD also requires
+  covariance admissibility. These are an explicit exploratory screen, not a
+  replacement library verdict. Nonpositive curvature, unavailable accuracy and
+  excessive Newton distance are recorded separately in the raw evidence.
+- Standardized extent above 10 is an **extreme-parameter screen**. Such points
+  remain recorded but are excluded from the main reference pool. They are not
+  called runaways. A finite improper optimum can be ML's best answer; being
+  improper alone never excludes an ML candidate. A validated escape diagnostic
+  and threshold-sensitivity study remain open.
+- Objective agreement uses 1e-6 times one plus the absolute reference objective.
+  Equal objectives need not imply equal parameters or the same basin. The
+  number of observed objective levels is not a count of local minima.
+- The marker diagnostic is evaluated at each endpoint, not at a known optimum.
+  A level below 1e-6 means numerical proximity to the requested chart's boundary,
+  not a proven zero loading. Levels and classifications at 1e-4, 1e-6 and 1e-8
+  are retained. No chart condition is counted as convergence on its own.
+- Sphere may remove identification poles while other parameter escape paths
+  persist. Neither unsuccessful multistarts nor an ML objective below the PSD
+  objective proves nonattainment.
+
+## Reproduce
+
+The single-start selection check reuses raw fits from `direct_starts.R` and
+`tune_starts.R` (development and fresh phases). Its small selections, paired
+outcomes, summaries, and metadata are frozen for reading the report:
+
+```sh
+Rscript scripts/select_single_start.R --help
+Rscript scripts/select_single_start.R --smoke
+Rscript scripts/select_single_start.R
+```
+
+
+The high-precision diagnostic scripts require Python with `mpmath`; they are
+study-local checks of the six-indicator, two-factor covariance model only.
+
+```sh
+cd experiments/engineering/active/15-sphere-reference-fits
+Rscript scripts/check_labels.R
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --pilot
+Rscript scripts/probe_reference_gap.R reference-pilot
+Rscript scripts/tune_starts.R --phase witness
+Rscript scripts/tune_starts.R --phase development
+Rscript scripts/tune_starts.R --phase fresh
+Rscript scripts/direct_starts.R
+Rscript scripts/probe_geometry.R
+Rscript scripts/check_geometry.R
+Rscript scripts/psd_fresh.R
+Rscript scripts/inspect_unresolved.R
+Rscript scripts/check_escape.R
+Rscript scripts/translate_sphere.R
+Rscript scripts/check_requested_chart.R
+Rscript scripts/export_open_cases.R
+python3 scripts/refine_open_cases.py
+python3 scripts/profile_delicate.py
+python3 scripts/resolve_profile_minimum.py
+python3 scripts/resolve_profile_minimum.py --digits 90 --run-id delicate-finite-minimum-90
+python3 scripts/check_open_cases.py
+Rscript scripts/check_open_case_translation.R
+# Optional reference-informed diagnostic; requires retained raw pilot/start fits:
+Rscript scripts/probe_ordinary.R --run-id ordinary-explicit
+Rscript scripts/summarize_starts.R
+Rscript scripts/check_expansion.R
+Rscript scripts/expand_starts.R --smoke
+Rscript scripts/expand_starts.R
+quarto render report.qmd
+# Optional small paired unit check; a distinct run, not default-selection evidence:
+Rscript run_experiment.R --smoke --transforms native,x0.01,x100 --no-lavaan --run-id reference-units
+```
+
+The runner refuses to overwrite a completed run; choose a fresh `--run-id` for
+reruns and render it with `quarto render report.qmd -P run:NAME`. The seed base
+is separate for smoke and pilot profiles. Raw fits, endpoint parameter tables,
+random starts and comparison rows stay local under `results/`. Small pilot
+summaries, per-problem references, paired start coverage and metadata are frozen with the source so
+the report can be rendered without rerunning fits. The start-follow-up sections
+always show the frozen development/fresh and expanded-family batches. Witness and development
+runners require the original pilot raw fits, regenerated by the pilot command;
+the fresh runner does not. Metadata identifies the
+installed package and source checkout; a dirty checkout is recorded explicitly.
+
+## Label contract
+
+Labels describe the evidence collected, never a mathematical existence claim.
+The raw columns retain the ingredients so a later screen can be compared without
+rewriting the original run.
+
+| Label | Meaning | Does not imply |
+| --- | --- | --- |
+| `screened_candidate` | Endpoint passes the stated numerical and extent screen | A certified local minimum, identification, or global optimality |
+| `screened_extreme` | Local checks pass, but standardized extent exceeds 10 or is undefined | A proven runaway; a finite optimum is impossible |
+| `accuracy_failed` | Available Newton distance exceeds its budget | No better start or backend can solve the problem |
+| `accuracy_unresolved` | Curvature/conditioning does not support the requested accuracy assessment; consult `audit_status` | Every unresolved case has the same mechanism |
+| `sphere_first_order_failed` / `sphere_norm_failed` | The driven first-order or unit-norm check fails | The endpoint is a local optimum at a pole |
+| `partial_sphere` | At least one relevant latent did not use the sphere | This attempt is a pole-free reference |
+| `nonfinite_objective` / `objective_disagreement` / `psd_infeasible` | A finite, consistently evaluated point in the requested domain was not established | A valid reference candidate |
+| `assessment_unavailable` / `call_error` | Endpoint assessment or fitting could not return the required evidence | Nonexistence |
+| `single_start_best_observed` | Best screened sphere objective has one supporting start recipe | An unreliable point by definition, or a unique minimum |
+| `repeated_best_observed` | At least two start recipes reach that objective within tolerance | Independent replications or exhaustive search |
+| `no_screened_reference` | The finite portfolio supplies no qualifying reference | An unattainable problem |
+| `near_chart_boundary` | Endpoint's original marker-chart level is below the declared tolerance | A mathematically exact pole or failed sphere optimization |
+| `better_than_sphere_reference` | Screened ordinary endpoint improves on the sphere reference | The ordinary endpoint is globally optimal |
+| `above_sphere_reference` | Screened endpoint has a worse objective | It lies in a distinct basin; convergence failed |
+| `matches_sphere_reference` | Screened endpoint agrees in objective within tolerance | Equality of parameter estimates |
+| `not_screened` / `no_sphere_reference` | Comparison lacks a qualifying endpoint or a sphere reference | Inferiority to a known optimum |
+
+## Current choice and next step
+
+The current engineering setup is a small sphere portfolio, strongest-indicator
+cross-check, and separate original-chart diagnostics. Alternatives compared are
+L-BFGS versus PORT for ML, and diagonal versus no PSD scaling with SLSQP.
+A configuration deserves a larger follow-up only if it repeatedly finds the
+best screened candidates without concentrating unresolved outcomes in a design;
+this pilot does not select a library default.
+
+The targeted witness follow-up is selected after inspecting the pilot; it is
+not part of the original reference pool. Both recoveries are recorded in
+`witness_probe.csv`. The unit smoke run separately retains paired rescalings;
+it is too small to establish general unit invariance.
+
+Retain the positive spectral control alongside canonical and signed alternatives:
+the new-family run refutes dropping it universally. The exhaustive sign portfolio
+remains an exploratory reference tool for at most three factors. Before adding
+more starts, inspect the 21 single-start references and the two unresolved cases.
+Developing a cheaper selection rule is open; changing only one factor at a time
+already loses ten references here. A sphere-native assessment remains necessary for stronger local
+accuracy claims. Preserve the existing
+ordinary-parameterization comparisons for PSD work. Any production promotion
+requires a fresh decision study with criteria written before its run.
+
+This study was renamed from `15-sphere-local-convergence` on 2026-09-27.
+Historical `results/full` and `results/smoke` are preserved but are not read by
+this report. The former `no_estimate` classification combined failed alternative
+fits with an objective below PSD; it was heuristic and must not be used as
+proof of nonexistence. Historical sources remain available in Git history.
+
+## Normalization revisit
+
+A paired single-start rerun on the 120 retained draws compares normalization
+explicitly off/on, with the same current library judge in both arms. No sphere
+optimization, retries or endpoint-derived starts occur. ML uses layered/native
+starts with L-BFGS and PORT, information scaling; PSD uses FABIN3/auto, SLSQP and
+diagonal preconditioning. Two-stage PSD first uses L-BFGS/information. All have
+5,000 evaluations, relative objective tolerance 1e-12 and parameter tolerance
+1e-10; PSD floor and feasibility tolerance are 1e-6. The sample seed rules and
+library fingerprint are in the frozen metadata.
+
+ML targets use the saved reference plus the seven refined finite witnesses;
+the two known near-pole cases are excluded from recovery denominators and
+reported separately. PSD targets use the earlier pilot and retained fresh PSD
+references. A target hit requires the current fit verdict, requested-marker
+accuracy, chart translation at the explicit study tolerance 1e-4, and an
+objective no higher than the target by more than 1e-6 times one plus its absolute
+value. PSD additionally requires admissibility. Better objectives are flagged
+separately; neither of the two lower-objective PORT endpoints passes accuracy.
+The historical extent/strong-marker screen is retained as a separate column,
+not the acceptance rule. Thus the new totals need not reproduce old screening
+counts (such as 35 versus 36 ML hits). Compare the two current arms to isolate
+normalization; do not interpret differences from older runs as its effect.
+
+There are no target-hit gains or losses for either ML backend or direct PSD.
+Two-stage loses three later-batch targets: Ernst N=20 draws 1 and 3, high-R²
+N=20 draw 7. Two exhaust the PSD budget; Ernst draw 3 reaches a worse local
+solution. Direct PSD also loses one certified fit that was already above its
+reference, so unchanged target counts do not mean every outcome is unchanged.
+PORT gains three certified fits in the later batch, all above their targets.
+Every changed verdict, acceptance or material objective is retained in
+`results/normalization-revisit/changes.csv`; per-family counts are in
+`by_family.csv`. The compact results table is in the executive summary.
+
+All seven high-precision witnesses reproduce their saved objectives when
+re-evaluated with the current library. Six pass requested-marker accuracy and
+one remains ill-conditioned. The two saved near-pole endpoints are still
+rejected at the study tolerance 1e-4 and admitted at 1e-6; neither sample yields
+a certified ML fit in this rerun. This is not evidence that a general production
+chart gate is implemented, or that these samples cannot have other solutions.
+
+These saved batches are development evidence, not fresh held-out validation.
+No algorithms were tuned during this comparison. Reproduce from this folder
+with the current ML/PSD normalization implementation installed:
+
+```sh
+Rscript scripts/normalization_revisit.R --smoke
+Rscript scripts/normalization_revisit.R
+Rscript scripts/check_normalization_witnesses.R
+```
+
+The runner refuses to overwrite results; use a fresh `--run-id NAME` and pass
+that name to the witness checker when rerunning. Full fits and parameters remain
+local, while compact summaries and all changes are tracked. The two-stage
+regressions and the remaining finite-reference misses are the next diagnostic
+targets; this run does not promote spectral starts or multistart.
+
+## Two-stage handoff investigation
+
+The [short two-stage report](two-stage-summary.html) summarizes the follow-up.
+The three later-batch regressions were replayed with their original controls.
+Both ordinary endpoints were then supplied explicitly to PSD with normalization
+off/on, alongside independent FABIN3-auto controls, at budgets of 5,000 and
+25,000. Every combination is retained; these diagnostic fits are not a new
+multistart policy. No sphere reference enters a start.
+
+All six ordinary endpoints were returned and used as warm starts. Ernst draw 1
+and high-R² draw 7 fail ordinary accuracy under both normalizations; Ernst draw 3
+passes accuracy but is inadmissible. The standalone PSD fits reproduce the
+wrapper outcomes at the same endpoint, normalization and budget. This supports
+handoff/path sensitivity rather than an unexplained wrapper discrepancy.
+
+For Ernst draw 1, either endpoint reaches the PSD target 0.13842345 with
+normalization off; with it on, both exhaust 5,000 evaluations and eventually
+return objective 0.22897031 at the larger budget. A cold FABIN3-auto start reaches
+the target under either normalization. For Ernst draw 3, the old ordinary
+endpoint leads to PSD objective 0.39193273 under both normalizations. The new
+ordinary endpoint has a better unrestricted objective (0.33911821 versus
+0.37150774), yet leads to the worse PSD objective 0.40385641 under both
+normalizations, as does the cold start. This loss is endpoint selection, not a
+failure of PSD accuracy at the returned local solution.
+
+For high-R² draw 7, the old endpoint reaches 0.35601702 only with PSD
+normalization off; turning it on reaches 0.39103251. The new endpoint exhausts
+5,000 under either normalization, then returns 0.44965490 at the larger budget.
+The cold start reaches 0.36575495 under either normalization. The extended-budget
+Ernst/high-R² paths have loadings in the millions and are not recovered targets;
+a finite return or convergence flag alone does not justify accepting those
+requested-chart endpoints. The study's target comparison remains separate.
+
+A retrospective rule permits warm starts only from certified ordinary fits;
+rejected ordinary estimates instead use the original FABIN3-auto start. This
+was checked on all 120 normalized cases, using the saved direct-PSD fit as that
+counterfactual. The library fingerprint is verified, and every current two-stage
+verdict and returned objective is replay-checked against the saved run. Ten
+handoffs change. Earlier-batch target recovery stays 54/60 (one gain and one
+loss); later-batch recovery rises 46→47/60 (one gain). Gains: earlier Ernst
+N=20 draw 9 and later Ernst N=20 draw 1. Loss: earlier weak-marker N=100 draw 9.
+Per-family outcomes and every pair are saved. This is not held-out evidence and
+does not justify promoting the rule. No production code is changed.
+
+Reproduce using the same library as the saved normalization revisit:
+
+```sh
+Rscript scripts/probe_two_stage.R
+Rscript scripts/check_two_stage_handoff.R
+```
+
+Both refuse to overwrite an existing directory; use a fresh `--run-id NAME`.
+Frozen evidence is under `results/two-stage-probe/` and
+`results/two-stage-handoff/`. Keep the current handoff while two-stage remains
+provisional; broader start/PSD-boundary work is separate from normalization.
+
+## Independent PSD fallback
+
+The user's intended policy is ordinary-first acceptance followed, when needed,
+by PSD with its own start. It does not reuse ordinary estimates, even when
+ordinary ML converges but is inadmissible. This differs from the earlier
+certified-only handoff probe, which still warmed PSD from converged inadmissible
+ordinary solutions. The [current short report](two-stage-summary.html) presents
+this exact policy, superseding its earlier handoff recommendation.
+
+All 120 saved challenge datasets were fitted explicitly under normalization.
+Ordinary ML uses FABIN3-auto, L-BFGS/information; its convergence and admissibility
+verdicts decide whether PSD is needed. PSD independently constructs FABIN3-auto
+starts in an unchanged model, with SLSQP/diagonal, without receiving ordinary
+parameters. Controls remain 5,000 evaluations, relative objective tolerance
+1e-12, parameter tolerance 1e-10, and PSD floor/feasibility tolerance 1e-6. These
+starts match the previous comparison; choosing a different ordinary start is
+outside this isolated handoff test. Final target judging retains PSD accuracy
+and the requested-chart check at 1e-4, without a magnitude cutoff.
+
+Ordinary ML is accepted on 34 datasets (18 earlier, 16 later); 86 require PSD.
+Every cold fallback reproduces the saved direct PSD return status, verdict,
+acceptance and objective. Accepted ordinary fits also reproduce their saved
+ordinary-first results. All 120 final acceptance and target-hit statuses agree
+with direct PSD; the maximum objective difference across returned pairs is
+9.41e-14 (rounded upward). Earlier target recovery is 54/60 and later 47/60,
+versus 54/60 and 46/60 for the warm-start route. The gains are earlier Ernst
+N=20 draw 9 and later Ernst N=20 draw 1; the loss is earlier weak-marker N=100
+draw 9. Per-family counts and every stage are preserved. The fact that the
+previous certified-only candidate had the same hit counts is an observed result,
+not an equivalence between those policies.
+
+Independent fallback is a reasonable candidate and warm starts are not required
+by the mathematics. These development results do not establish a universal
+advantage or a speed benefit: 34 PSD calls are avoided, but the other 86 cases
+incur an additional ordinary attempt. Production warm-start behavior is unchanged;
+a future API/policy change should expose this distinction explicitly.
+
+With the library and raw comparisons from the normalization revisit available:
+
+```sh
+Rscript scripts/check_two_stage_cold.R --smoke
+Rscript scripts/check_two_stage_cold.R
+```
+
+Use a fresh `--run-id NAME` for reruns. The runner checks the library fingerprint
+and reproducibility against the saved direct and warm fits. Frozen evidence is
+in `results/two-stage-cold/`; full fitted parameters remain local. No reference
+solution enters a starting point, and no retries or multistart are used.
+
+## Two-stage timing
+
+The [short timing report](timing-summary.html) compares direct PSD,
+independent two-stage, and the existing warm-start two-stage on all 120 retained
+cases. A single R process with single-threaded math warms every case/method,
+then measures all six method orders per case across six rounds. Case order is
+shuffled deterministically each round; five calls form each timed block,
+for 10,800 timed policy calls. Model/sample preparation, manual garbage
+collection, warmup and result verification are outside measured blocks.
+Failures remain in the timing. Every block's final result reproduces the saved
+verdict and objective. The original fixed starts, normalization, tolerances and
+5,000-evaluation budgets are unchanged.
+
+Per-case costs are medians of six block-average wall times. Their sums give
+estimated costs per 120-case pass: direct 0.553 s, independent two-stage 0.703 s,
+and warm two-stage 0.839 s. Independent is about 27% slower than direct and 16%
+faster than warm; warm is about 52% slower than direct. Independent and direct
+retain the same target recovery, while warm has different gains and losses.
+On the 34 ordinary-accepted cases, mean independent time is 0.35 ms versus
+0.96 ms direct. On the other 86, independent costs 8.03 ms versus 6.06 ms direct.
+That mix explains why the shortcut does not pay overall. Weak-marker cases
+dominate total cost. Per-family, per-case, path and round summaries are frozen
+under `results/two-stage-timing/`; raw block measurements stay local.
+
+Absolute round totals drift upward during the run, but direct PSD is fastest
+in every round. Use the per-round ratios and repeated costs rather than one
+pass as the evidence. Wall and process-CPU totals closely agree. These are
+end-to-end R-accessible workflows on an Intel Core i7-1355U, including automatic
+starts, library diagnostics and returned R objects. Independent fallback uses
+up to two library calls, while warm fallback is orchestrated natively. The
+result is not an isolated C++ timing or a prediction for a future integrated
+independent-fallback API, large models or a representative user workload.
+
+Independent fallback remains a reasonable policy, but it is not a speed
+optimization for this saved difficult-case mix. No production policy changes.
+Reproduce with the same library fingerprint and saved two-stage-cold results:
+
+```sh
+Rscript scripts/time_two_stage.R --smoke
+Rscript scripts/time_two_stage.R
+```
+
+Use a fresh `--run-id NAME` to rerun. The runner prints elapsed time and an ETA,
+checks all saved outcomes outside timed blocks, and records timing scope and
+platform metadata. Rendering the report performs no fitting.
+
+## Normalization timing
+
+The [updated timing summary](timing-summary.html) answers the absolute-speed and
+normalization-off/on questions. It adds standalone ordinary ML with the saved
+layered/native start and repeats direct, independent two-stage and warm two-stage
+under both normalization settings. Two-stage starts remain FABIN3-auto; all
+optimizers and budgets are unchanged. Four serial rounds rotate the four routes
+through every position once per case and alternate normalization order. Three
+calls per timed block give 11,520 policy calls, excluding warmup. Preparation,
+manual garbage collection and verification remain outside timing. Every block's
+last outcome matches its saved return status, objective and convergence flag.
+
+Typical (median) milliseconds per fit, off→on: ordinary ML 0.47→0.48, direct
+PSD 1.07→1.09, independent two-stage 1.38→1.42, warm two-stage 1.37→1.37.
+Means including difficult/failed fits are 2.06→1.96, 4.22→4.81, 5.33→6.06 and
+5.40→7.22 ms respectively. Thus normalization's aggregate cost ratio is 0.95
+for ML, 1.14 for direct PSD, 1.14 for independent two-stage and 1.34 for warm
+two-stage. Per-round ratios retain the same direction: ML 0.941–0.953,
+direct 1.125–1.148, independent 1.127–1.146 and warm 1.332–1.383.
+
+These are full-fit timing changes, not isolated normalization overhead.
+Direct PSD's 70.52 ms extra bank cost is dominated by 67.30 ms on one newly
+failing case: later weak-marker N=20 draw 2 takes 1.46→68.76 ms. It missed the
+reference under both settings. The total on cases certified in both settings
+falls by 0.27 ms; old failures add 3.50 ms. Normalized direct PSD's six failures
+consume 400.0 of its 577.0 ms total, about 69%. Its median is 1.09 ms, 95th
+percentile 14.86 ms and slowest 68.76 ms. This explains the gap between typical
+and mean times. The warm route's three newly failed cases similarly contribute
+195.75 ms of its 217.88 ms increase. All outcome-dependent costs are retained;
+no failed fit is removed to improve a timing comparison.
+
+The results concern small six-indicator, two-factor covariance models with
+prepared samples/models, no inference, and the current R-accessible workflows
+on an Intel Core i7-1355U with single-threaded math. They do not predict large-
+model, missing-data, multigroup or full user-call runtimes. Independent fallback
+still incurs up to two library calls versus native warm orchestration.
+No production policy or controls changed. Prior timing figures remain frozen
+as a separate run; modest absolute differences across runs are expected.
+
+Reproduce with the saved normalization-revisit comparisons and same library:
+
+```sh
+Rscript scripts/time_normalization.R --smoke
+Rscript scripts/time_normalization.R
+```
+
+Use a fresh `--run-id NAME` when rerunning. Frozen per-case, per-family,
+convergence-status, aggregate and repeat summaries are under
+`results/normalization-timing/`; raw measured blocks stay local. Model/sample
+preparation, extra audits and report rendering are not timed.
+
+
+## Activity after the engineering review
+
+Active. Normalized complete-data ML and direct PSD remain the current routes;
+independent PSD fallback is an exploratory alternative. The next checks are a
+requested-chart rejection criterion that distinguishes poles from finite improper
+minima, and a fresh comparison of fallback handoffs. The retained cases are
+development witnesses, not held-out default-selection evidence.

@@ -191,7 +191,7 @@ Two-stage is not promoted in place of direct PSD.
 | ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
 | ML and GLS optimizer | NLopt L-BFGS | provisional: PORT certifies more but returns about eight times as many runaways; reopen once the verdict flags runaways | lane ml-gls, runs 2 and 3 |
 | verdict on runaway paths | the Newton check accepts divergent-path points | open: scoring has a runaway rule (extent > 10); the library verdict does not | lane ml-gls, runs 2 and 3 |
-| optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/17; lane ml-gls invariance |
+| optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
@@ -204,7 +204,7 @@ Two-stage is not promoted in place of direct PSD.
 
 - **The problems are held out.**
   - 51 test populations and one control: research/47,
-    engineering/15's weak marker and high $R^2$, Boomsma (1985), Wolf et al.
+    engineering/active/15-sphere-reference-fits's weak marker and high $R^2$, Boomsma (1985), Wolf et al.
     (2013), Chen et al. (2001) with four fitted models, and ten
     equality-constrained models. The control is Ernst, used in the 2026-09-22
     start work.
@@ -223,7 +223,7 @@ Two-stage is not promoted in place of direct PSD.
 - **Limits.**
   - The data are multivariate normal and complete, and all groups are single.
   - FIML, least squares, ordinal routes and lavaan are not covered; the
-    textbook corpus is engineering/17's evidence.
+    textbook corpus is engineering/active/17-corpus-optimizer-recovery's evidence.
   - Counts of fits are descriptive; paired wins and losses on the same draws
     carry the comparisons.
 

@@ -265,7 +265,7 @@ execution follows the estimator priority programme above.
   metric, evaluation point, moment covariance, centering, normalization) before
   coding, including the misspecified-larger-model case.
 - **M — experiment: weight choice in the score tests.** Complete-data ML is
-  settled by experiment engineering/16: keep expected information throughout.
+  settled by experiment _archive/complete-ml-global-test-geometry: keep expected information throughout.
   Remaining: the least-squares estimators. Compare score tests
   built with the estimator's own weight against alternative weights (for
   example the normal-theory weight at the fitted model, or the full ADF weight
@@ -321,7 +321,7 @@ execution follows the estimator priority programme above.
 
 Starting values, optimizer defaults and backends, and the convergence verdict.
 Most open items come from real models: the source-verified textbook corpus
-(engineering/17 and engineering/19) and the covariance-honest-sem banks. A
+(engineering/active/17-corpus-optimizer-recovery and engineering/active/19-newton-verdict-migration) and the covariance-honest-sem banks. A
 failure that turns out to be a model-setup gap belongs to its estimator's
 section: the categorical corpus saddles are under
 [Categorical models](#categorical-models-gaps-found-on-the-textbook-corpus).
@@ -348,7 +348,7 @@ section: the categorical corpus saddles are under
   (markers, effect coding, pinned variances, cross-block loading equalities), and
   a GLS latent-level fit of paths and latent covariances from sign-generic
   moment magnitudes. Means come last, then a unit-weighted constraint projection
-  and a PD repair. On the 608 engineering/17 ML/GLS pairs with one engine it
+  and a PD repair. On the 608 engineering/active/17-corpus-optimizer-recovery ML/GLS pairs with one engine it
   raises accepted, best-matching fits from 287/238 to 298/297 (ML PORT/L-BFGS)
   and 286/280 to 303/302 (GLS), gaining 113 and losing 4 case fits; every loss
   starts lower and fails in the optimizer. The simple/FABIN misread of a zero disturbance as a std.lv
@@ -363,7 +363,7 @@ section: the categorical corpus saddles are under
   constructor. A latent whose scale is set by a fixed variance (std.lv, phantom
   unit variance) has a sign-reflection symmetry. A start on its fixed subspace
   (every sign-odd free parameter at zero) has exactly zero gradient there, and
-  L-BFGS, PORT, SLSQP and nlminb never leave it. engineering/17 measured gradient 0
+  L-BFGS, PORT, SLSQP and nlminb never leave it. engineering/active/17-corpus-optimizer-recovery measured gradient 0
   and second derivatives from -1.9 to -17 on the phantom, second-order and
   Table 7.6 paths. *Check:* give each free parameter a character over
   (latent, block) in GF(2): a loading of j gets e_j, a path or covariance
@@ -374,9 +374,9 @@ section: the categorical corpus saddles are under
   parameter and every flipped parameter starts at zero. Run it on every supplied
   start (including user and lavaan-compatibility vectors) and report it.
   *Escape:* when the terminal curvature audit finds a negative eigenvalue (all
-  12 engineering/17 ML trap endpoints), step along the eigenvector with a line
+  12 engineering/active/17-corpus-optimizer-recovery ML trap endpoints), step along the eigenvector with a line
   search on the original objective and refit; schedule with the Newton-check
-  work. Validate on the engineering/17 trap cases with the simple constructor.
+  work. Validate on the engineering/active/17-corpus-optimizer-recovery trap cases with the simple constructor.
 
 ### Optimizer failures on the textbook corpus
 
@@ -389,7 +389,7 @@ section: the categorical corpus saddles are under
   `estimate/coordinates.hpp`). This fixes the Kline Roth PORT early stops and
   replaces the old ML-only L-BFGS/SLSQP scaling, whose phantom latents took the
   block-mean SD because their unit loadings are structural cells. Evidence:
-  `engineering/17`, section "Optimizer coordinates".
+  `engineering/active/17-corpus-optimizer-recovery`, section "Optimizer coordinates".
 - **S — optimizer coordinates for the remaining routes.** Still in raw
   coordinates: ordinal and mixed ordinal fits (mixed models keep continuous
   columns in data units), CatML, two-level ML, the frontier pairwise
@@ -413,7 +413,7 @@ section: the categorical corpus saddles are under
   backend status, or PORT (whose trust region backs off) as the ordinary default.
 - **S — starts that are not unit-equivariant.** Under a per-variable change of
   units, the auto-transported FABIN3 start moves on 148 of the 239
-  unit-invariant engineering/17 pairs, and on higher-order and cross-group
+  unit-invariant engineering/active/17-corpus-optimizer-recovery pairs, and on higher-order and cross-group
   models in `coordinates_test.cpp`. The layered start moves on 32: Geiser's
   latent autoregressive and state-trait models, Newsom 3.1c, 5.5b and 9.4,
   Little's Table 7.6 and 3.7 models, the Chapter 10 MTMM, Guo's invariance
@@ -424,7 +424,7 @@ section: the categorical corpus saddles are under
   backend cannot take nonlinear `==` constraints, instead of failing. They
   record it in `Estimates::substituted_backend` (R `fit$optimizer_substituted`);
   see the optimizer controls reference. This fixes Mplus User's Guide ex6.17,
-  the one engineering/17 pair where lavaan succeeded and magmaan errored.
+  the one engineering/active/17-corpus-optimizer-recovery pair where lavaan succeeded and magmaan errored.
   From the layered start, SLSQP reaches the best objective (ML 0.001234678,
   GLS 0.001227317) and passes the Newton check. PORT also gained an explicit
   iteration budget, `port.max_iter`.
@@ -445,7 +445,7 @@ section: the categorical corpus saddles are under
   with a generic solver failure on 12 cases (the 2-by-3 invariance models, the
   Chapter 6 card-sorting simplex, Figure 3b) and stops at a worse stationary solution
   on the Chapter 3.11 phantom model. The current-interface optimizer study
-  (`engineering/17-corpus-optimizer-recovery`) is a different, wider protocol;
+  (`engineering/active/17-corpus-optimizer-recovery`) is a different, wider protocol;
   do not substitute its counts for this historical test. At the current phantom
   endpoint, L-BFGS, PORT and SLSQP have small gradients but nonpositive curvature;
   the fit audit rejects it. A verified-solution restart passes at the lower
@@ -491,7 +491,7 @@ section: the categorical corpus saddles are under
   off; lavaan reaches 1e-16, and started at lavaan's estimates magmaan stays
   there, so the model is right. The R path's Newton check accepts the same
   kind of endpoint (fmin 4.5e-9, d = 0.0023, condition number 3.8e5;
-  engineering/19): within magmaan's accuracy budget the fit has converged, and
+  engineering/active/19-newton-verdict-migration): within magmaan's accuracy budget the fit has converged, and
   the parameter gap is the ridge's flatness. It is the one non-semantic case
   among the known gaps of `textbook_ordinal_golden_test.cpp`. Decide how the
   golden gates ill-conditioned cases (a tighter stopping rule, or parameter
@@ -516,7 +516,7 @@ section: the categorical corpus saddles are under
     L-BFGS stays, pending the next item.
 - **TODO — spectral starts in the next defaults study (banked 2026-09-27).**
   Retain the sample-only recipes and evidence from
-  [engineering/15](../../experiments/engineering/15-sphere-reference-fits/report.qmd).
+  [engineering/active/15-sphere-reference-fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
   Unrestricted ML candidates include positive and signed spectral directions;
   PSD candidates include only the positive construction. Compare explicitly
   against layered/native with information scaling for ordinary ML, and
@@ -547,7 +547,7 @@ section: the categorical corpus saddles are under
 - **High — separate chart failures, parameter escape and numerical failures
   before revisiting the optimizer (2026-09-27).** The next step is the light
   sphere reference study in
-  [engineering/15](../../experiments/engineering/15-sphere-reference-fits/report.qmd),
+  [engineering/active/15-sphere-reference-fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd),
   alongside the start-unit and PSD-clamp fixes below. The current ML/PSD
   defaults remain shipped choices, open to revision; PORT promotion is not
   the predetermined outcome.
@@ -589,7 +589,7 @@ section: the categorical corpus saddles are under
     the wrong sign), which the determinacy penalty favours, and PORT stops
     there at nonpositive curvature. Keep the barrier's start pinned apart from
     the ML default.
-  - L-BFGS still stalls in line searches (Boomsma, engineering/15, Wolf).
+  - L-BFGS still stalls in line searches (Boomsma, engineering/active/15-sphere-reference-fits, Wolf).
 - **High — barrier start at ×0.01 in equality-constrained models.** Found by
   lane barrier-ml: the default fails 2,653 of the constrained family's
   attainable ×0.01 fits (L-BFGS 506, layered start 132). The start transport
@@ -744,7 +744,7 @@ section: the categorical corpus saddles are under
   speculative backlog with their triggers.
 - **High — remaining Newton-verdict controls and coverage.** The shipped
   contract is in [terminal-audit.md](../design/terminal-audit.md#authoritative-fit-verdict-2026-09-12);
-  the rollout evidence is engineering/19. Remaining:
+  the rollout evidence is engineering/active/19-newton-verdict-migration. Remaining:
   - Adopt complete-data ML's stopping controls for FIML and the least-squares
     fitters after a corpus run (on the corpus they rescue 4 of 6 near misses
     and 4 of 5 FIML non-minima).
@@ -1176,7 +1176,7 @@ The evidence, with sources and run provenance, is logged in
   `conditional.x`: Mplus ex3.4, 3.12, 3.13, 3.14, 5.16, 5.17, Muthén ex8.29_2
   and Newsom 2024 ex4.2b. magmaan has no conditional path, yet the R path fits
   the four single-group User's Guide models anyway and ends at saddles far above lavaan's
-  objective (engineering/19): 2.6 on ex3.12 and ex3.13, 1.6 on ex3.14, and
+  objective (engineering/active/19-newton-verdict-migration): 2.6 on ex3.12 and ex3.13, 1.6 on ex3.14, and
   0.93 against 0 on the just-identified ex3.4, which any consistent setup fits
   exactly. So the R path's handling of the covariates (`fixed.x`, joint versus
   conditional moments) is wrong, not only missing. On the two single-group
@@ -1187,7 +1187,7 @@ The evidence, with sources and run provenance, is logged in
 - **S — `ordered` with `group:` blocks in the R interface.**
   `magmaanlab::fit_model()` with `ordered` and a model written in `group:`
   blocks stops in `data_ordinal_stats_from_df()` ("model/data group count
-  mismatch"; UG ex5.19). engineering/19 leaves out the multi-group
+  mismatch"; UG ex5.19). engineering/active/19-newton-verdict-migration leaves out the multi-group
   categorical cases for this reason.
 - **M — mixed ordinal/continuous fits stop above lavaan's objective.** Five
   corpus cases mix ordinal and continuous indicators without covariates. The
@@ -1642,7 +1642,7 @@ when they next change.
   checks all pass, fixed-zero reduced-LISREL structure, a shared residual
   variance, an optional SLSQP/IPOPT interior cross-check, and the R result
   contract.
-  Experiment engineering/11 supplies the first timing panel for ordinary L-BFGS, direct
+  Experiment _archive/psd-ml-timing supplies the first timing panel for ordinary L-BFGS, direct
   PSD-SLSQP, and an ordinary-audit/warm-refit policy. On its deterministic
   interior CFA scaling cases, direct PSD fitting cost about 2.5x/6.9x/59x
   ordinary NTML at 3/6/12 indicators; an independent `p=12` replay gave 60x.
@@ -1708,7 +1708,7 @@ when they next change.
      disturbance, and the Geiser joint-indefinite quadratic growth covariance
      (regenerated from the corrected Geiser model). The full scan remains
      advisory and outside default CI.
-  3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments engineering/11
+  3. **Completed 2026-07-30.** The opt-in IPOPT extensions to experiments _archive/psd-ml-timing
      and research/42 compare the same lifted model across backends. In the
      30-repetition deterministic panel, SLSQP and IPOPT reached the same
      admissible optima in all nine cases, but direct IPOPT cost a median 75.7x
@@ -1726,8 +1726,8 @@ when they next change.
      principled finite-domain formulation and reuse solver/factorization setup;
      exact Lagrangian Hessians plus callback-stage and reliable IPOPT iteration
      telemetry are secondary follow-ups.
-  4. **Completed 2026-07-30.** Experiment engineering/12
-     (`experiments/engineering/12-psd-ml-basin-audit/`) implements the self-contained
+  4. **Completed 2026-07-30.** Experiment engineering/evidence/12-psd-ml-basin-audit
+     (`experiments/engineering/evidence/12-psd-ml-basin-audit/`) implements the self-contained
      multistart audit on the \(N=10,20,50\) stress cells. The pilot screened
      1,000 datasets per cell and replayed the prespecified 100-dataset random
      core plus default failures and extreme estimates with at most 13 starts.
@@ -1759,7 +1759,7 @@ when they next change.
      do not run the 1,000-replication full profile absent a new precision need.
   6. **Possible compact-multistart follow-up.** Design and validate a smaller
      deterministic portfolio on fresh held-out replications before exposing an
-     optional methods-developer R audit/refit helper. In experiment engineering/12's pilot,
+     optional methods-developer R audit/refit helper. In experiment engineering/evidence/12-psd-ml-basin-audit's pilot,
      the cumulative best-attained hit rates at \(N=10,20,50\) were
      76%/94%/100% for the default alone, 90%/97%/100% after adding the PSD
      restart and one moderate perturbation, 99%/100%/100% after eight starts,
@@ -1851,7 +1851,7 @@ when they next change.
      the simulated estimates within 0.19 SE at `lambda = 0.25`. Engineering
      (resolved 2026-09-25): the barrier fits that failed in NLopt L-BFGS line
      search converge under PORT, now the barrier default (experiment
-     engineering/18). The failures shared by every optimizer are Ernst
+     _archive/barrier-optimizer). The failures shared by every optimizer are Ernst
      marker-chart fits near a marker pole. Lane barrier-ml (decisions/02,
      2026-09-27) kept FABIN3 + PORT as the default against the layered start
      and L-BFGS. Remaining, for `papers/sem-barrier`: score it on the research/48
@@ -1896,7 +1896,7 @@ when they next change.
   agreement for all three objectives, repairs one exact-fit ULS Heywood case,
   and gates the R result schema. The broader stress program is specified below;
   it reuses NTML only as an anchor rather than silently copying the much larger
-  experiments engineering/11--76 onto every estimator.
+  the archived PSD timing and retained basin/stress studies onto every estimator.
 
   Ordered computational queue (point estimation only). PSD two-level ML and
   native FC-SEM are deliberately outside this extension: they are independent
@@ -1973,7 +1973,7 @@ when they next change.
   fit until an explicit boundary-aware policy is available.
 
 - **L — execute the broader covariance-honest point-estimation stress track.**
-  The independent `experiments/engineering/13-psd-estimator-stress/` leaf now owns the
+  The independent `experiments/engineering/active/13-psd-estimator-stress/` leaf now owns the
   common structural geometries, paired ordinary/PSD fits, selective restart
   logic, and result schema. Its first two-replication smoke completed 128 fit
   attempts across eight registered families: all 125 returned fits matched an
@@ -2114,7 +2114,7 @@ when they next change.
      not silently substituted or called an optimizer failure.
 
   Keep corpus breadth in a separate advisory
-  `cpp/tests/checks/psd_estimator_corpus/` runner rather than letting experiment engineering/13
+  `cpp/tests/checks/psd_estimator_corpus/` runner rather than letting experiment engineering/active/13-psd-estimator-stress
   depend on the tests leaf. Reuse the 97 continuous sample-statistic summaries
   for LS/GMM where applicable, the 17 FIML fixtures plus the two raw-data bfi
   parity cases, the 20 ordinal and two mixed-ordinal fixtures, and the existing
@@ -2128,7 +2128,7 @@ when they next change.
   recomputation for every family; FIML-to-ML and all-observed NT-ML2S-to-ML
   reductions; groupwise objective additivity; and unchanged Stage-1 objects for
   ML2S, ordinal, mixed, and CatML. SLSQP is the production path. Use IPOPT only
-  on a small regular interior cross-check because experiments engineering/11--74 already
+  on a small regular interior cross-check because the archived PSD timing and retained basin studies already
   show that its non-finite callback handling is a poor match to the lifted ML
   formulation. Promote each newly discovered deterministic failure to the
   smallest suitable unit/golden fixture, and keep the stochastic/corpus scan
@@ -3013,7 +3013,7 @@ Remaining work:
 ## Sphere chart / global latent-scale gauge (frontier)
 
 **Current investigation (2026-09-27):**
-[engineering/15-sphere-reference-fits](../../experiments/engineering/15-sphere-reference-fits/report.qmd)
+[engineering/active/15-sphere-reference-fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
 replaces the old local-convergence study's active protocol. Historical results
 are preserved. The 60-dataset pilot yields repeated best-observed candidates on
 46 ML and 59 PSD problems; nine ML problems have no screened reference, and
@@ -3093,7 +3093,7 @@ Six of seven saved finite witnesses still pass requested-marker accuracy;
 L-BFGS reaches one and PORT two, with no normalization gain. The flat loading-740
 witness remains ill-conditioned. Both saved near-pole endpoints still fail the
 study 1e-4 check but pass 1e-6; no production gate is implied. Preserve all
-changed outcomes in engineering/15's normalization-revisit evidence and use its
+changed outcomes in engineering/active/15-sphere-reference-fits's normalization-revisit evidence and use its
 executive summary for the current result. No spectral/multistart promotion.
 
 **Two-stage regressions investigated (2026-09-27):** fixed ordinary endpoints
@@ -3106,7 +3106,7 @@ A general certified-only warm-start rule checked on all 120 saved draws changes
 ten handoffs: earlier 54→54 targets (one gain/one loss), later 46→47 (one gain).
 Do not promote from this retrospective tradeoff; preserve the current handoff
 and keep two-stage provisional. Evidence and loss identities are in
-engineering/15's two-stage summary. No magnitude gate or multistart added.
+engineering/active/15-sphere-reference-fits's two-stage summary. No magnitude gate or multistart added.
 
 **Exact independent-fallback policy checked (2026-09-27, user clarification):**
 ordinary ML is accepted only when converged and PSD-admissible; otherwise PSD
@@ -3119,7 +3119,7 @@ reasonable candidate; warm starts are not required. No timing advantage or
 held-out superiority established. **Remaining:** expose independent versus warm
 fallback explicitly if adopting the user's intended policy; the current C++/R
 fallback still warms from usable ordinary estimates. The exact test is
-engineering/15's two-stage-cold evidence and updated two-stage summary.
+engineering/active/15-sphere-reference-fits's two-stage-cold evidence and updated two-stage summary.
 
 **Two-stage timing completed (2026-09-27):** six balanced-order rounds,
 five calls per timed block, serial single-thread math on the 120 retained cases.
@@ -3209,7 +3209,7 @@ Remaining work, tiered:
   `case_rerun()` / `modification_indices_lrt()`. (`robust_nested_lrt()` takes
   two fits and never refits.)
 - **Done 2026-09-23.** Deterministic sanity experiment
-  (`experiments/engineering/14-sphere-chart-sanity`):
+  (`experiments/_archive/sphere-chart-sanity`):
   - **Recovery.** 37 models / 68 fits across ML, ULS, GLS, WLS, FIML and
     PSD-ML reproduce the ordinary fit, including SEs, robust SEs, the
     standardized solution, fit measures, MIs and `:=`. Both routes are equally
@@ -3226,7 +3226,7 @@ Remaining work, tiered:
 - **Open.** Promote to `magmaan(chart = "sphere")` once the author decides the
   surface (plan decision D1). The FIML goldens run through the sphere seam
   too; FIML case 0014 is flat enough that the sweep uses a 1e-4 theta
-  tolerance there (same objective to 1e-10). Found by experiment engineering/14 and to
+  tolerance there (same objective to 1e-10). Found by experiment _archive/sphere-chart-sanity and to
   settle before promotion:
   - **Done 2026-09-23 — sphere-native (canonical) start.** The only
     effective dependence of the sphere route on how the user wrote the
@@ -3267,7 +3267,7 @@ Remaining work, tiered:
         N = 20 error rate from 5% to 14%.
     - **Fallback.** Explicit `start()` values or `control$start` select the
       user start. `fit$gauge$start` records which start was used.
-    - **Evidence (experiment engineering/14 rerun).**
+    - **Evidence (experiment _archive/sphere-chart-sanity rerun).**
       - Sphere ML, ULS and GLS recover 24/24 populations in the
         identifications that hold them. PSD recovers 21/21.
       - The earlier user-start run missed once each in ULS and GLS.
@@ -3299,7 +3299,7 @@ Remaining work, tiered:
     intercepts release around the same time (the "M/L — continuous scalar
     `group.equal` release" entry in the ordinal invariance section: group
     2+ latent means stay fixed, npar 60 against lavaan's 63). Invariance
-    users are a main audience of a sphere default, and experiment engineering/14 had to
+    users are a main audience of a sphere default, and experiment _archive/sphere-chart-sanity had to
     free those means by hand.
   - **Done 2026-09-23 — the driven ML run is scaled like `fit_ml`.**
     - **The bug.** `fit_ml_sphere` switched off the sample-based coordinate
@@ -3321,7 +3321,7 @@ Remaining work, tiered:
       no units. At data scale 0.1 the unscaled driven run fails, while the
       scaled one matches `fit_ml`.
     - **Unchanged elsewhere.**
-      - Experiment engineering/14 is unchanged: recovery 68/68 and every population
+      - Experiment _archive/sphere-chart-sanity is unchanged: recovery 68/68 and every population
         recovered or flagged. Cross-identification agreement is 1e-12, and
         1e-7 on PoliticalDemocracy, where it was 6e-7.
       - The Ernst probe moves by at most 2.5 points in any cell.
@@ -3382,7 +3382,7 @@ Remaining work, tiered:
         points without established attainment.
       - At N = 10, no fit from any start converged in 14 to 15% of draws.
     - **Parked (author, 2026-09-23).** Global optimality is a later,
-      separate question. Experiment engineering/15 judges convergence to a local
+      separate question. Experiment engineering/active/15-sphere-reference-fits judges convergence to a local
       optimum. The probe stays in the paper repo as the seed of a future
       experiment. When it is picked up, decide:
       - whether a single start's miss rate is acceptable for a default
@@ -3391,8 +3391,8 @@ Remaining work, tiered:
         starts, best objective);
       - for PSD, whether a face-aware start is feasible (a research
         question).
-- **Done 2026-09-23 — experiment engineering/15, small version**
-  (`experiments/engineering/15-sphere-reference-fits`, about 70 s).
+- **Done 2026-09-23 — experiment engineering/active/15-sphere-reference-fits, small version**
+  (`experiments/engineering/active/15-sphere-reference-fits`, about 70 s).
   - **Setup.** ML and PSD-ML; the Ernst, weak-marker and high-R² populations;
     N = 10 to 100; 200 replications. Ordinary and sphere routes, each under
     marker and std.lv.
@@ -3439,8 +3439,8 @@ Remaining work, tiered:
 - General runaway-ridge detection from both routes is deferred to
   [the speculative backlog](speculative.md#runaway-estimates-and-nonattainment-diagnostics);
   the concrete sphere-status reporting fix above remains active.
-- **v1, M. Step two: expand experiment engineering/15 to the full Ernst-type
-  simulation.** This follows experiment engineering/14 and uses the canonical start.
+- **v1, M. Step two: expand experiment engineering/active/15-sphere-reference-fits to the full Ernst-type
+  simulation.** This follows experiment _archive/sphere-chart-sanity and uses the canonical start.
   - **Designs:**
     - the Ernst SEM and CFA forms (3 indicators, loadings 1/.8/.6, beta in
       {0, .25, .5});
@@ -3490,7 +3490,7 @@ Remaining work, tiered:
     The likelihood keeps improving toward an improper solution.
   - **Sphere PSD fails.** Outside the theorem (structural cases such as the
     mediation chain), or a genuine optimizer failure.
-  - **Evidence (experiment engineering/15).** Refitting in the other ordinary
+  - **Evidence (experiment engineering/active/15-sphere-reference-fits).** Refitting in the other ordinary
     identification is not a complete remedy. In 26 of 2400 PSD draws (weak
     marker and high R²) neither the ordinary marker nor the ordinary std.lv
     fit succeeds, while the sphere does.
@@ -4309,10 +4309,9 @@ oracle from `cpp/tests/tools/regen_robust_score.R`, and the advisory
   `inference::frontier`, reconstructing the LS weight in glue (ULS identity / GLS
   normal-theory / WLS explicit) and taking `bread`/`moments`/`cov` plus the raw
   fitting data for the empirical meat. The `bread/moments/cov` -> `InferenceSpec`
-  parsers moved to the shared `r-package/src/internal.hpp`. Concrete consumer:
-  `experiments/engineering/04-robust-score-modification-indices` (ordinal DWLS + continuous
-  GLS misspecification demo, with the exact `c -> 1` reductions as correctness
-  gates). Still open / only-when-needed: a C++ `api::frontier` entry point taking
+  parsers moved to the shared `r-package/src/internal.hpp`. The original engineering demonstration was removed on 2026-09-30;
+  its ordinal DWLS/continuous GLS scaling and exact `c -> 1` reductions are
+  maintained in `score_robust_test.cpp` and `score_robust_golden_test.cpp`. Still open / only-when-needed: a C++ `api::frontier` entry point taking
   `api::Fit` for the LS tiers (the api `Fit`'s `EstimatorSpec.weight` is empty for
   GLS/DWLS, so it would have to recompute the weight; the ML `api::frontier`
   robust overloads already exist). The R path sidesteps this by reconstructing the
@@ -5190,7 +5189,7 @@ work lives in [`speculative.md`](speculative.md). Open work:
   and `benchmarks/inference_reuse.R` (mean-of-15 over `proc.time()`/`system.time()`,
   whose ~0.5 ms quantisation is a quarter of the ~2 ms workloads they time),
   `benchmarks/r/bench_mi_lrt.R` (3 reps, no warmup), `benchmarks/r/run_benchmark.R`
-  (`bench::mark`, whole-fit only), `experiments/engineering/11-psd-ml-timing`
+  (`bench::mark`, whole-fit only), `experiments/_archive/psd-ml-timing`
   (already batch-calibrated with `--repeats/--warmups`, just not on the shared
   helper), and `experiments/research/08-ordinal-stage2-pairwise`. Convert the
   C++ benches to include `timing/timing.hpp` first — that is mechanical. Do
@@ -5285,12 +5284,11 @@ work lives in [`speculative.md`](speculative.md). Open work:
   landed for `papers/pairwise-robust-sem/` and `experiments/08`/`09`. The
   remaining pairwise μ ACOV and pairwise Browne-unbiased items live in
   [`speculative.md`](speculative.md).
-- **M.** Extend the near-singular ML continuation experiment
-  (`experiments/engineering/02-near-singular-ml-continuation`) beyond the first
-  diagonal-ridge path: the first target/profile grid compares diagonal,
-  scaled-identity, and raw-identity targets over several fixed lambda sequences;
-  remaining work is direct ML vs ULS/GLS-start ladders and explicit
-  cost-normalized budgets on rank-near-deficient sample covariance cases.
+- **Closed 2026-09-30.** The covariance-continuation study is archived at
+  `experiments/_archive/near-singular-ml-continuation/`: its tested target/profile
+  grid added cost and did not improve convergence. No further run is queued;
+  reconsider only for a concrete failure under the current starts and verdict.
+
 - **Done 2026-06-15.** All three Geiser GLS/ULS parity exceptions are closed
   (`cpp/tests/golden/geiser_golden_test.cpp`, regression note in the test ledger):
   (1) manifest fixed.x path models (`manifest_regression`, `manifest_path`,
@@ -5513,7 +5511,7 @@ Remaining:
 - **S — `fit_model()` with `<~` fails opaquely.** Composite syntax passed to
   `fit_model()` (and so to `frontier_fit_sphere()`) ends in a non-finite
   objective from the optimizer. It should route to, or point at,
-  `magmaan_fcsem()` (found by experiment engineering/14).
+  `magmaan_fcsem()` (found by experiment _archive/sphere-chart-sanity).
 
 Deferred beyond the lavaan-validated single-group ML slice: ordinal composites,
 FIML/LS composites, robust corrections for composites, and composite

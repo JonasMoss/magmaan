@@ -53,7 +53,7 @@ See [`cpp/tests/fixtures/DATASETS.md`](../../cpp/tests/fixtures/DATASETS.md).
   `cpp/tests/tools/` (`build_*_corpus.R`, `regen_*_corpus*.R`,
   `regen_little_newsom_fixtures.R`, `regen_textbook_case_fixtures.R`, etc.).
 - **Research experiments**: `experiments/showcases/01-lavaan-parity/` and
-  `experiments/engineering/01-complete-data-estimator-speed/`. These entry points detect
+  `experiments/_archive/complete-data-estimator-speed/`. These entry points detect
   the corpus via `experiments/_support/R/helpers.R::corpus_available()` and skip
   (or fail with a clear message) when it is absent.
 

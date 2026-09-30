@@ -11,6 +11,16 @@ replacement ergonomics. Multilevel SEM is no longer wholesale out of scope:
 two-level random-intercept normal-theory ML is landed (see the two-level ML
 capability below); 3+ levels and random slopes remain out of scope.
 
+
+Engineering studies now live under `experiments/engineering/{active,banked,evidence}/`.
+The collection index owns activity and reopening triggers: four unresolved
+implementation studies remain active, four ideas are banked, and the completed
+PSD basin audit is retained as paper evidence. Settled probes are archived; the
+robust-score demonstration was removed after its checks became maintained tests.
+The ordinal observed-score omega studies share one leaf with separate target
+and sampling result trees; RBM estimation risk is research/53.
+
+
 ## Repository layout
 
 The C++ project is self-contained under `cpp/` (source, headers, tests,
@@ -156,7 +166,7 @@ and bound-active SB equivalence are independently checked. These diagnostics
 support investigating feasible moment underestimation on nonflat spectra;
 they do not promote corrected MV or change inference policy.
 
-The corrected-corpus optimizer study (`engineering/17-corpus-optimizer-recovery`)
+The corrected-corpus optimizer study (`engineering/active/17-corpus-optimizer-recovery`)
 compares current ordinary ML/GLS starts across L-BFGS settings, PORT, SLSQP, and
 explicit recovery, retaining backend status, fit verdict, objective quality,
 preparation exclusions and wall-clock censoring separately. It is advisory and
@@ -187,7 +197,7 @@ sign-generic moment magnitudes for variance-carrying paths, then means, a
 unit-weighted constraint projection and PD repair. It is identification- and
 spelling-invariant in its implied start covariance and equivariant under
 observed rescaling on the unit-test models, but not yet on 32 of 239
-unit-invariant corpus pairs (engineering/17). On the 608-pair engineering/17 scan it gains
+unit-invariant corpus pairs (engineering/active/17-corpus-optimizer-recovery). On the 608-pair engineering/active/17-corpus-optimizer-recovery scan it gains
 113 and loses 4 case fits across ML/GLS × PORT/L-BFGS; the losses are optimizer
 terminations from lower start objectives. Simple/FABIN no longer read a zero
 disturbance as a std.lv scale. Trait-state blocks whose latent covariance only
@@ -276,7 +286,7 @@ ML and fallback results remain mixed. Saved-point inspection identifies 23 old
 mixed-unit fallback solutions accepted despite indefinite covariance blocks;
 caller-unit admissibility scale robustness remains open. All convergence and
 objective regressions are retained in the optimizer-defaults study.
-The separate engineering/15 challenge rerun (120 saved draws, 960 fits) finds
+The separate engineering/active/15-sphere-reference-fits challenge rerun (120 saved draws, 960 fits) finds
 no target-recovery gains for layered/native ML or FABIN3-auto direct PSD.
 Later-batch two-stage PSD loses three targets (two budget failures and a worse
 local solution); six of seven saved finite ML witnesses still pass direct
@@ -455,7 +465,7 @@ makes `d` free of units. The verdict requires a positive-definite implied
 Sigma only for likelihood objectives. On the textbook corpus the change
 rejects 56 of 833 FIML/GLS/ULS/DWLS fits the first-order check accepted, each a
 stationary point that is not a minimum, a stop far from the optimum, or a
-near miss of the budget (experiment engineering/19). The ordinal and mixed
+near miss of the budget (experiment engineering/active/19-newton-verdict-migration). The ordinal and mixed
 least-squares fits (bounded, SNLLS, full-threshold, PSD) carry it too, with
 their exact Hessian and the Gauss-Newton sandwich metric
 `sum_b n_b Delta_b' W_b Delta_b`, and so do the multi-information barrier
@@ -705,7 +715,7 @@ the ordinary criterion at the penalized estimate. Standard errors are ordinary
 information SEs at that point. The default is `lambda = 0.25` (`eta = 1.25`).
 Both wrappers default to the PORT optimizer: NLopt L-BFGS stalls in its line
 search where the optimum hugs a face, and PORT's trust region does not
-(experiment engineering/18).
+(experiment _archive/barrier-optimizer).
 Experiment research/47 found that any `lambda > 0` removes all improper, boundary, and
 failed fits, that `lambda = 0.25` matches or beats PSD-ML accuracy with near-PSD-ML
 chi-square and Wald calibration at `N = 50`, and that the originally proposed
@@ -732,7 +742,7 @@ variances (marker, sphere) the domain check, not the barrier value, keeps
 estimates proper. The default target stays `joint` until the paper experiments
 (`papers/sem-barrier`) settle it.
 
-The exploratory sphere reference study (`engineering/15-sphere-reference-fits`,
+The exploratory sphere reference study (`engineering/active/15-sphere-reference-fits`,
 renamed from the local-convergence study on 2026-09-27) uses canonical, layered
 and three random starts on 60 datasets from three two-factor designs at N=20/100.
 It compares ML L-BFGS/PORT and PSD SLSQP with/without diagonal scaling, with
@@ -871,7 +881,7 @@ parameters by about 1e-10. A marker at a pole (|l(a)| below `pole_tol`),
 or a fixed-variance latent whose sphere-chart variance falls below `pole_tol`
 times its fixed value (the std.lv pole, for example an endogenous latent with a
 vanishing residual variance), returns `user_chart = false` with the sphere
-report. Experiment engineering/14 checks the R surface deterministically: 68
+report. Experiment _archive/sphere-chart-sanity checks the R surface deterministically: 68
 fits of 37 models reproduce the ordinary results and lavaan, exact population
 moments are recovered in every identification that holds them and flagged in
 every one that does not, and translations between identifications match the
@@ -1084,7 +1094,7 @@ deferred. Inference at fitted covariance boundaries remains out
 of scope. PSD two-level ML and native FC-SEM are not part of the supported
 covariance-honest extension.
 
-Experiment engineering/13 (`experiments/engineering/13-psd-estimator-stress/`) now supplies the common
+Experiment engineering/active/13-psd-estimator-stress (`experiments/engineering/active/13-psd-estimator-stress/`) now supplies the common
 cross-estimator validation harness. Its first smoke profile covers continuous
 ML/ULS/GLS/fixed-WLS/fitted-weight GMM, FIML, all five ML2S Stage-2 policies,
 ordinal and mixed delta/theta LS, CatML, a near-residual-boundary geometry, and
@@ -1100,7 +1110,7 @@ rejected as intended. These counts validate the harness only; stochastic rates,
 larger structural geometries, conditioning, basin behavior, and scaling remain
 the planned pilot work.
 
-The first evidence-bearing Experiment engineering/13 tranche now covers 23 sparse
+The first evidence-bearing Experiment engineering/active/13-psd-estimator-stress tranche now covers 23 sparse
 continuous complete-data cells with 100 replications each: the one-factor
 residual boundary and sample-size axes, correlated residual and latent
 covariance blocks varied separately plus one joint-boundary cell, and a latent
@@ -1131,13 +1141,13 @@ returns required the PSD normal cone to pass relative to the ambient audit; 43
 passed the lifted audit but not the common cone audit, with no reverse cases.
 All 23,506 returned fits had finite gradients and completed both normal
 projections. The weights retained the requested spectra and full effective
-ranks. The remaining Experiment engineering/13 work is calibrated missing-data/categorical
+ranks. The remaining Experiment engineering/active/13-psd-estimator-stress work is calibrated missing-data/categorical
 stress and targeted multistart/corpus validation rather than more replication
 of the continuous structural panel; those estimator families already have
 smoke anchors.
 
 The optional IPOPT backend has now been measured against the required SLSQP
-backend in experiments engineering/11 and research/42. It agrees on the deterministic admissible
+backend in experiments _archive/psd-ml-timing and research/42. It agrees on the deterministic admissible
 optima but is roughly 40 times slower backend-to-backend on the small interior
 CFA panel, and it returned fewer usable fits in the paired \(N=10\) stress
 cell. Most failures were `Invalid_Number_Detected`. This is consistent with a
@@ -1152,7 +1162,7 @@ would require a principled finite-domain formulation, not merely looser
 convergence tolerances.
 
 The terminal audit establishes feasible KKT stationarity, not global
-optimality. Experiment engineering/12 therefore treats the smallest objective found across
+optimality. Experiment engineering/evidence/12-psd-ml-basin-audit therefore treats the smallest objective found across
 a prespecified multistart portfolio as “best attained,” never as a proved
 global maximum. In its 100-dataset random cores, the default PSD fit hit that
 reference in 76%, 94%, and 100% at \(N=10,20,50\). Most misses were already
@@ -3766,7 +3776,7 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   `robust_ordinal_ij` (including DWLS/WLS estimated-weight influence). This is
   the canonical DWLS ordinal-omega proving slice; it is exposed in R through
   `magmaan_core$measures_reliability_ordinal_observed_omega` and has a smoke
-  calibration probe in `experiments/engineering/07-ordinal-observed-omega-dwls`. Multi-group
+  calibration probe in `experiments/engineering/banked/07-ordinal-observed-omega`. Multi-group
   pooling semantics and small-sample/profile-LR corrections remain separate
   follow-ups.
   Complete mixed ordinal/polyserial fixed-weight ULS now has

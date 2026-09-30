@@ -2,7 +2,7 @@
 
 ## Current reproduction (2026-09-25)
 
-The corrected-corpus optimizer experiment (`engineering/17-corpus-optimizer-recovery`)
+The corrected-corpus optimizer experiment (`engineering/active/17-corpus-optimizer-recovery`)
 reran `newsom_2015_ex5_4` and `newsom_2015_ex5_4c` on a pinned engine including the
 start-policy and parameter-reporting fixes (`35ed8471`). Ordinary L-BFGS, PORT,
 and SLSQP all return accepted GLS fits at matching objectives. L-BFGS's terminal

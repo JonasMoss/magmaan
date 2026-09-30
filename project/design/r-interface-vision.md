@@ -87,7 +87,7 @@ Retain the diagnostic point and implied covariance where available; choosing
 a different identification is an explicit user action.
 
 The concrete promotion witness is the retained fresh weak-marker N=100 draw 4
-in engineering/15: a marker loading near 184,000 becomes 1 under a different
+in engineering/active/15-sphere-reference-fits: a marker loading near 184,000 becomes 1 under a different
 marker, while the fitted covariance is unchanged. This endpoint must fail in
 the requested chart. It is a numerical near-pole case, not a proof of an exact
 pole or of nonattainment in every chart. The general rejection criterion is
@@ -184,13 +184,13 @@ Global tests against the saturated model:
   uses a different weight from the estimator, the nuisance part no longer
   vanishes, and the test must use the effective score explicitly. Which
   sensitivity and score weight the policy uses is settled by experiment
-  (engineering/16 for complete-data ML; see the backlog).
+  (_archive/complete-ml-global-test-geometry for complete-data ML; see the backlog).
 - Statistic and calibration are labelled separately; the spectrum or trace
   and numerical diagnostics are retained.
 - Geometry of the global tests, by estimator:
   - Complete-data ML: expected information for the score sensitivity, the score
     metric and the LR spectrum, with the empirical Gamma. Experiment
-    engineering/16 (FMG 2024 two-factor designs, 14,000 fits) found
+    _archive/complete-ml-global-test-geometry (FMG 2024 two-factor designs, 14,000 fits) found
     expected-information score PEBA4 within 2.0 to 7.2% rejection in all 32
     cells; observed sensitivity drove the score test to 0% rejection as p grew,
     an observed score metric was often not positive definite and far too
@@ -224,7 +224,7 @@ Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26):
   directions with its expected information (the efficient score), and the
   expected-information metric. The projection keeps the statistic meaningful
   where the restricted fit is not stationary, as at a PSD boundary. It mirrors
-  the global score test (engineering/16); a calibration study of its own is
+  the global score test (_archive/complete-ml-global-test-geometry); a calibration study of its own is
   still missing (backlog).
 
 Where observed information matters: under the global null the observed and

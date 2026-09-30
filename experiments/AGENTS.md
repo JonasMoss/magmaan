@@ -34,8 +34,10 @@ rule below, which still holds for individual `NN-` folders.
 Store experiments under the matching purpose folder: `decisions/`, `showcases/`,
 `replications/` (including reference studies), `research/`, or `engineering/`.
 `_archive/` holds retired studies and `_support/` remains the shared harness.
-Each individual experiment is the dependency leaf, not its category directory;
-two studies in the same category may not reference each other.
+Engineering adds one activity directory: `engineering/active/`,
+`engineering/banked/`, or `engineering/evidence/`. Each individual experiment
+is the dependency leaf, not its category or activity directory; two studies
+in the same activity may not reference each other.
 
 Group the index by primary purpose: **showcase**, **replication/reference study**,
 **research**, or **engineering check**. This is navigation metadata, independent
@@ -49,8 +51,10 @@ Also retain these two axes in the index:
   published author-year simulation), `paper-sim` (a pipeline a paper's results
   depend on; never delete), `benchmark` (speed or statistical efficiency), `probe`
   (a one-off engineering diagnostic).
-- **Lifecycle** - `active` (still rerun, extended, or load-bearing), `complete`
-  (finished, retained in its category for reference value), `archived` (inert).
+- **Lifecycle** - `active` (still rerun or extended), `banked` (no run queued;
+  a named consumer or reopening trigger is required), `complete` (finished,
+  retained for reference or paper evidence), `archived` (inert). Paper evidence
+  can remain load-bearing while its investigation is complete.
 
 ## Decisions set library defaults
 
@@ -85,6 +89,17 @@ Exploratory checks that inform a decision stay in `engineering/`.
 
 ## Engineering is a live decision workspace
 
+Engineering is organized by activity, with stable study numbers across the
+three directories:
+
+- `active/`: an unresolved implementation choice and a concrete next check.
+- `banked/`: a retained idea with an explicit reopening trigger, no queued run.
+- `evidence/`: completed evidence required by a paper; preserve its design,
+  results and reproduction path. Do not merge it into a development sample.
+
+The collection index records the current question, next check or reopening
+trigger. Moving a study between activities keeps its number.
+
 Engineering studies should support current implementation choices: default
 estimators, optimizers, starts, scaling, convergence rules, or performance
 tradeoffs. Keep each study focused on one decision and record the current default,
@@ -92,7 +107,9 @@ alternatives, acceptance criteria, latest evidence, and a reopening trigger.
 A recurring benchmark belongs here when it can change an active decision.
 
 When the decision is settled, preserve its contract in maintained tests and
-project docs, then archive the study. Do not infer that an inherited `active`
+project docs, then archive the study, or retain paper-supporting work in
+`evidence/`. Delete a redundant probe only after naming the maintained tests
+that cover its findings; record that deletion in the collection index. Do not infer that an inherited `active`
 label already meets this standard; review the inventory during the next cleanup.
 Research may remain exploratory, with evolving questions and trial scripts;
 do not force it into the engineering decision format. Keep its evidence and
@@ -101,7 +118,8 @@ reproduction paths, and never discard paper-supporting pipelines as cleanup.
 ## Numbering and archives
 
 Number live studies from `01` independently within each purpose category.
-Use the next free number in that category when adding a study. Numbers are local
+Use the next free number in that category when adding a study; engineering
+uses one sequence across its activity directories. Numbers are local
 navigation, not stable identifiers: cite a category-qualified slug, and update
 paths and the index whenever a deliberate renumbering is requested.
 
@@ -118,7 +136,7 @@ replications use `author-year[-topic]`, for example `02-rhemtulla-2012`.
 
 ```text
 experiments/
-  <category>/NN-topic-slug/
+  <category>/NN-topic-slug/              # engineering: engineering/<activity>/NN-topic-slug/
     report.qmd
     run_experiment.R
     .gitignore

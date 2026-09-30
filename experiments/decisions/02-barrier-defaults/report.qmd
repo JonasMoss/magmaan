@@ -71,7 +71,7 @@ a few fits.
   because $\log\det Q$ is largest (zero) where a factor disappears. The penalty
   itself pulls toward the set, which is the non-disappearance condition of the
   sem-barrier paper's attainment result showing up in practice.
-- **L-BFGS stalls, as engineering/18 found.** With the default start it loses
+- **L-BFGS stalls, as _archive/barrier-optimizer found.** With the default start it loses
   `r f0(nrow(dl))` test fits against PORT: `r f0(ls_fail(dl))` line-search
   failures, and the rest uncertified stops. With the layered start both
   problems add up (`r f0(nrow(ll))` losses).
@@ -100,7 +100,7 @@ unless it is made to stay away from vanishing latent variances.
 | Default | Current value | Status after this run | Evidence |
 |---|---|---|---|
 | barrier start | transported FABIN3 (pinned apart from the ML default) | settled: keep. The layered start fails rule 1 or 2 in five of six test families | lane barrier-ml, run 2026-09-27 |
-| barrier optimizer | PORT | settled for now: L-BFGS fails rules 1 and 2 in three test families (line-search stalls) | lane barrier-ml; engineering/18 |
+| barrier optimizer | PORT | settled for now: L-BFGS fails rules 1 and 2 in three test families (line-search stalls) | lane barrier-ml; _archive/barrier-optimizer |
 | barrier start at $\times 0.01$ in constrained models | transport falls back to native FABIN3, PORT stops at the start | open: a units bug, to fix before the next run | lane barrier-ml failures |
 | verdict at marker poles | the Newton check certifies PORT points far toward a marker pole | open: scoring has a pole rule (chart extent > 1000), the verdict does not | lane barrier-ml runaways |
 | barrier weight $\lambda$ | 0.25 | not decided here; the sem-barrier paper owns it | none |
@@ -124,7 +124,7 @@ names(out)[-(1:2)] <- arms
 tab(out)
 ```
 
-- The default leads in Boomsma, engineering/15 and Wolf, and ties Chen. In
+- The default leads in Boomsma, engineering/active/15-sphere-reference-fits and Wolf, and ties Chen. In
   research/47 FABIN3 with L-BFGS is five fits ahead, within its rule. In the
   equality-constrained family the default's losses are the $\times 0.01$
   fallback above. Outside that family

@@ -165,7 +165,8 @@ only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
   `magmaan.experiments` harness package: depends on core/r-package only, carries
   **no SEM logic** and **no paper/experiment-specific references**); `benchmarks/`
   (shared benchmark harness that experiments may consume).
-- **T3 leaves / sinks**: each `papers/<name>/`, each `experiments/<category>/<NN>-*/`, and
+- **T3 leaves / sinks**: each `papers/<name>/`, each `experiments/<category>/<NN>-*/` (engineering inserts an activity
+  directory: `engineering/{active,banked,evidence}/<NN>-*/`), and
   `cpp/tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
   references a sibling leaf. `papers/_archive/` contains frozen retired paper
   trees; it is historical material, not an active T3 leaf or dependency source.
@@ -181,7 +182,8 @@ Invariants (enforced by `cpp/tests/tools/check_layering.sh`, run via
    `papers/A/` (each paper is its own nested git repo, gitignored by the outer
    repo). Trees moved under `papers/_archive/` are excluded from active-leaf
    scanning, while references to that archive from active code remain forbidden.
-3. **Experiments are endpoints**: an `experiments/<category>/<NN>/` references no paper and
+3. **Experiments are endpoints**: an experiment leaf (including
+   `engineering/<activity>/<NN>-*/`) references no paper and
    no other experiment; the only shared experiment sibling is
    `experiments/_support`. Experiments may consume `benchmarks/` and the optional textbook corpus.
 4. **No sibling-leaf edges**: paper-to-paper, experiment-to-experiment (except

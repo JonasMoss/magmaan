@@ -230,7 +230,7 @@ units, information diagonal, center and scale for a model and start.
 `OptimOptions::coordinate_scaling` defaults to `Information` in `OptimOptions{}`
 and in `ml_optim_options()`, so every route with the layer searches in
 information coordinates unless a caller selects `SampleUnits` or `None`
-(2026-09-26, engineering/17: on the 608 ML/GLS corpus pairs and on a panel with
+(2026-09-26, engineering/active/17-corpus-optimizer-recovery: on the 608 ML/GLS corpus pairs and on a panel with
 each observed variable multiplied by a power of ten between $10^{-2}$ and
 $10^{2}$, it is the best or tied rule for L-BFGS and PORT from the layered start
 and for L-BFGS from the current start; PORT from the current start loses a few

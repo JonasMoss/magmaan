@@ -60,7 +60,7 @@ far along an escape path without certifying attainment.
 
 The 2026-09-24 Emmett five-factor investigation found one of 16 L-BFGS
 starts passing at d = .008 with communality 33; three more stopped at
-.014–.018. Experiment engineering/15 also found accepted fits with a
+.014–.018. Experiment engineering/active/15-sphere-reference-fits also found accepted fits with a
 standardized loading, residual ratio or factor correlation above 10,
 typically 30–1000: 31.5% of ordinary std.lv Ernst draws and 44.5–54% of
 weak-marker draws, with fewer on the sphere and ordinary marker routes.
@@ -118,7 +118,7 @@ requires a rigorous bound. No further runs or implementation are currently queue
 see the roadmap) covers measurement blocks by FABIN/triad/IV shape rules, the
 latent covariance by a weighted least-squares mapping, and the structural part
 by a small latent-level least-squares fit. Four alternatives were weighed on
-2026-09-25 (engineering/17 diagnosis) and not built:
+2026-09-25 (engineering/active/17-corpus-optimizer-recovery diagnosis) and not built:
 
 - **Per-cell rule patches.** Replace constant latent-variance starts with
   data-derived ones, give variance-carrying latent paths nonzero starts, and
@@ -143,7 +143,7 @@ by a small latent-level least-squares fit. Four alternatives were weighed on
 
 **Alternative already available.** The layered constructor, plus the existing
 simple/FABIN/Guttman/Bentler/James-Stein constructors, explicit start vectors,
-and the verified-solution restart used in engineering/17.
+and the verified-solution restart used in engineering/active/17-corpus-optimizer-recovery.
 
 **Build if.** MIIV: the layered constructor misses or degrades a supported
 model family because its measurement or structural shape rules are biased
@@ -203,7 +203,7 @@ SE remain speculative.
 **Alternative already available.** Covariance-space conditioning already covers
 the convergence case: `data::frontier` covariance shrinkage (`S_a = (1-λ)S + λT`),
 `estimate::frontier::fit_ml_ridge_continuation()` (warm-started continuation to
-α=0), and the `experiments/engineering/02-near-singular-ml-continuation` target/λ grid. Hard
+α=0), and the `experiments/_archive/near-singular-ml-continuation` target/λ grid. Hard
 parameter bounds are De Jonckere & Rosseel (2022) bounded estimation (the hard
 sibling of the log-barrier); Bayesian priors on θ are the MAP version. lavaan
 bounded estimation and `regsem` cover the practical case on a refit.
@@ -212,14 +212,14 @@ bounded estimation and `regsem` cover the practical case on a refit.
 regularization specifically, i.e. a case where covariance conditioning is
 insufficient, or where an honest (non-circular) structural-shrinkage estimator
 with a valid GOF test is required, most naturally a moment-space-vs-parameter-space
-convergence/bias/MSE study extending experiment engineering/02. Sequencing: the variance
+convergence/bias/MSE study extending experiment _archive/near-singular-ml-continuation. Sequencing: the variance
 log-barrier first (smallest delta over bounded estimation, reuses its bound
 computation), then the structured Gaussian penalty, then the penalized-sandwich
 SE + effective-df. The ρ selector and the non-standard inference are research-tier
 ([[feedback-shortcut-variants]]). Do not ship the De Jonckere & Rosseel (2023)
 model-based *covariance* target as core: it biases the GOF toward the fitted
 model (shrinking S toward a model-shaped target); if added at all it belongs in
-experiment engineering/02's target menu with that caveat documented.
+experiment _archive/near-singular-ml-continuation's target menu with that caveat documented.
 
 ### Regularized H1 references for two-stage and nested SEM
 
@@ -881,7 +881,7 @@ observed integer category-score covariance induced by thresholds and a latent-re
 correlation matrix, and `estimate::frontier::ordinal_observed_omega` applies that to a
 single-group all-ordinal DWLS/WLS/ULS fit with a complete IJ-sandwich delta SE. This
 addresses the "can the ordinal/DWLS stack report an observed-score reliability metric?"
-infrastructure question, but not the literal Green-Yang/Flora target. Experiment engineering/08
+infrastructure question, but not the literal Green-Yang/Flora target. Experiment engineering/banked/07-ordinal-observed-omega
 (`ordinal-omega-target-audit`) compares this covariance omega to the direct one-factor
 ordinal true-score target `Var(sum E[Y_j | eta]) / Var(sum Y_j)`: tau-equivalent
 equal-threshold cells match, equal-threshold congeneric cells are nearly identical, and
@@ -890,7 +890,7 @@ settle the Bell-style misspecification bias study, omega_ho/maximal-reliability 
 extensions, multi-group target definition, direct Green-Yang/Flora coefficient
 implementation, or small-sample/profile-LR corrections. R exposure landed immediately
 after as `magmaan_core$measures_reliability_ordinal_observed_omega`, with
-`experiments/engineering/07-ordinal-observed-omega-dwls` as the initial smoke/calibration probe.
+`experiments/engineering/banked/07-ordinal-observed-omega` as the initial smoke/calibration probe.
 The no-integration latent-response/polychoric sibling is also exposed in R as
 `magmaan_core$measures_reliability_ordinal_polychoric_omega`: it applies
 `omega_multidim` to `stats$R[[group]]` and reuses the ordinal `NACOV` correlation
@@ -1506,7 +1506,7 @@ candidates:
 [decisions/01-optimizer-defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd)
 covers the ML, GLS and PSD-ML defaults. It has one lane per route, its own
 simulated populations, unit transforms and scoring, the library verdict as
-judge, and pre-registered criteria. engineering/17 holds the corpus prototypes
+judge, and pre-registered criteria. engineering/active/17-corpus-optimizer-recovery holds the corpus prototypes
 (classes, crossed arms, rescaling, lavaan under the shared judge).
 
 **Build if.**

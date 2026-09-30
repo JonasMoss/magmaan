@@ -1,0 +1,99 @@
+---
+title: "Ordinal observed-score omega: target and uncertainty"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+required <- c("results/target/target_summary.csv", "results/target/metadata.csv",
+              "results/sampling/simulation_summary.csv", "results/sampling/metadata.csv")
+if (!all(file.exists(required))) {
+  stop("Missing results. From this directory run: Rscript run_experiment.R --smoke")
+}
+target <- read.csv(required[[1]])
+target_meta <- read.csv(required[[2]])
+sampling <- read.csv(required[[3]])
+sampling_meta <- read.csv(required[[4]])
+worst <- target[which.max(target$abs_difference), ]
+```
+
+## Question
+
+What does ordinal observed-score covariance omega estimate, and do its delta
+intervals cover that target in correctly specified ordinal data?
+
+## Short answer
+
+Covariance omega and direct one-factor true-score reliability are different
+targets. In the retained `r target_meta$n_cells`-cell population audit, their
+largest absolute difference is `r sprintf("%.4f", worst$abs_difference)`:
+covariance omega `r sprintf("%.4f", worst$current_covariance_omega)` against
+direct reliability `r sprintf("%.4f", worst$direct_true_score_omega)`.
+
+The separate sampling check has `r sampling_meta$reps` replicates per threshold
+regime at N = `r sampling_meta$n`. Its covariance-target coverage is
+`r paste(sprintf("%s: %.1f%%", sampling$regime, 100 * sampling$coverage_95), collapse = "; ")`.
+That check does not establish coverage for direct true-score reliability.
+
+## Evidence
+
+### Population targets
+
+```{r}
+# Keep the largest discrepancies; the full grid remains in results/target/.
+x <- head(target[order(-target$abs_difference), ], 4)
+x <- x[c("loading_pattern", "threshold_pattern", "current_covariance_omega",
+         "direct_true_score_omega", "difference")]
+names(x) <- c("Loadings", "Thresholds", "Covariance Omega", "Direct Reliability", "Difference")
+x[] <- lapply(x, function(v) if (is.numeric(v)) round(v, 4) else v)
+knitr::kable(x, row.names = FALSE)
+```
+
+The gap comes from item true-score variances: the covariance coefficient
+reconstructs them from between-item covariances, while direct reliability
+integrates conditional expected category scores.
+
+### Sampling behavior for covariance omega
+
+```{r}
+x <- sampling[c("regime", "reps", "failures", "bias", "mean_se", "sd_value", "coverage_95")]
+names(x) <- c("Thresholds", "Replicates", "Failures", "Bias", "Mean SE", "Sampling SD", "95% Coverage")
+x[] <- lapply(x, function(v) if (is.numeric(v)) round(v, 4) else v)
+knitr::kable(x, row.names = FALSE)
+```
+
+## Caveats
+
+The population audit assumes one-factor probit responses, local independence
+and integer category scores. The sampling target is a large Monte Carlo
+category-score covariance. Both studies use correct-model data; neither covers
+misspecification, nonnormal latent responses, multi-group pooling or direct-target
+intervals. Small runs establish execution, not calibrated coverage.
+
+The former engineering/07 sampling study and engineering/08 target audit were
+merged on 30 September 2026. Their historical CSVs and metadata are unchanged
+under `results/sampling/` and `results/target/`; they are not pooled.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --lane target
+Rscript run_experiment.R --lane sampling --reps 200 --n 500 --n-pop 500000
+quarto render report.qmd
+```
+
+## Activity
+
+Banked; no run is queued. Reopen for a named consumer of direct true-score
+reliability or a specified coverage study. Keep the direct and covariance targets
+explicit before extending inference. The polychoric-omega studies address a
+separate latent-response target.
