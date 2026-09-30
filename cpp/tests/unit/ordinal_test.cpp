@@ -670,6 +670,56 @@ bool matrix_matches_with_nan(const Eigen::MatrixXd& lhs,
 
 }  // namespace
 
+TEST_CASE("categorical preparation rejects fixed covariates and retains joint models") {
+  using namespace magmaan;
+  auto parsed = parse::Parser::parse("y ~ x\ny | t1\nx | t1\n");
+  REQUIRE(parsed.has_value());
+  data::OrdinalStats ordinal;
+  ordinal.R = {Eigen::MatrixXd::Identity(2, 2)};
+  ordinal.threshold_ov = {{0, 1}};
+  data::MixedOrdinalStats mixed;
+  mixed.R = ordinal.R;
+  mixed.mean = {Eigen::VectorXd::Zero(2)};
+  mixed.ordered = {{1, 0}};
+  mixed.thresholds = {Eigen::VectorXd::Zero(1)};
+  mixed.threshold_ov = {{0}};
+  mixed.threshold_level = {{1}};
+  mixed.moments = {(Eigen::Vector4d() << 0.0, 0.0, 1.0, 0.0).finished()};
+  mixed.n_obs = {100};
+  mixed.n_levels = {{2, 0}};
+
+  for (bool fixed_x : {true, false}) {
+    CAPTURE(fixed_x);
+    spec::BuildOptions opts;
+    opts.fixed_x = fixed_x;
+    opts.meanstructure = true;
+    auto built = spec::build(*parsed, opts);
+    REQUIRE(built.has_value());
+    auto check = [&](const auto& result) {
+      CHECK(result.has_value() == !fixed_x);
+      if (fixed_x) {
+        REQUIRE_FALSE(result.has_value());
+        CHECK(result.error().kind == FitError::Kind::NumericIssue);
+        CHECK(result.error().detail.find("conditional moments") != std::string::npos);
+      }
+    };
+    auto pt = *built;
+    check(estimate::prepare_ordinal_delta_partable(pt, ordinal));
+    pt = *built;
+    check(estimate::prepare_ordinal_delta_partable(
+        pt, data::ordinal_moments_from_stats(ordinal)));
+    pt = *built;
+    check(estimate::prepare_mixed_ordinal_delta_partable(pt, mixed));
+    if (fixed_x) {
+      // The cached mixed route prepares its model through the moments overload.
+      auto rep = model::build_matrix_rep(*built);
+      REQUIRE(rep.has_value());
+      check(estimate::mixed_ordinal_start_values(
+          *built, *rep, data::mixed_ordinal_moments_from_stats(mixed), {}));
+    }
+  }
+}
+
 TEST_CASE("Ordinal workspace adapters split moments from Gamma cache") {
   magmaan::data::OrdinalStats stats;
   Eigen::MatrixXd R(2, 2);

@@ -72,6 +72,15 @@ FitError make_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
 }
 
+fit_expected<void> validate_categorical_covariates(const spec::LatentStructure& pt) {
+  if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto exo) { return exo != 0; })) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "categorical models with fixed observed covariates are unsupported: "
+        "conditional moments (conditional.x) are not implemented"));
+  }
+  return {};
+}
+
 PostError make_post_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
 }
@@ -3881,6 +3890,9 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
                                 spec::Starts* starts,
                                 const std::vector<std::int8_t>* row_user) {
+  if (auto v = validate_categorical_covariates(pt); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
   auto ordered_or = ordered_indicator_layout(pt, stats);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
@@ -4133,6 +4145,9 @@ prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalStats& stats,
                                       spec::Starts* starts,
                                       const std::vector<std::int8_t>* row_user) {
+  if (auto v = validate_categorical_covariates(pt); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
   auto ordered_or = ordered_indicator_layout(pt, stats);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
@@ -4315,6 +4330,9 @@ fit_expected<void>
 prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalMoments& moments,
                                       spec::Starts* starts) {
+  if (auto v = validate_categorical_covariates(pt); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
   auto ordered_or = ordered_indicator_layout(pt, moments);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;

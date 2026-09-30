@@ -220,6 +220,8 @@ struct OrdinalMisspecFitMeasures {
 // default. Null (the default) preserves the unconditional-forcing behavior,
 // which is correct for partables synthesized in C++ (nested-test H0/H1 pairs,
 // PSD probes) rather than parsed from a user's model syntax.
+// Categorical preparation rejects fixed observed covariates (exo rows):
+// conditional moments are not implemented. Joint random-x models are retained.
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,

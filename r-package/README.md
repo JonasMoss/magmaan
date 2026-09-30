@@ -133,6 +133,11 @@ with N-divisor covariances. Empirical continuous weights need raw observations;
 otherwise supply `W` explicitly. The prepared weight exposes `$W` for inspection
 and for post-fit functions taking an explicit weight.
 
+Fixed observed covariates are unsupported because conditional moments
+(`conditional.x`) are not implemented. Such models fail explicitly. Setting
+`fixed_x = FALSE` specifies a joint random-covariate model and changes the
+statistical model; it does not request conditional estimation.
+
 For categorical models, declare the category schema once:
 
 ```r

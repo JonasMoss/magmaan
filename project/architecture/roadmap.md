@@ -4670,6 +4670,15 @@ failures.
   parameterization; remaining lavaan parity is fixture-backed for the covered
   ordinal slices and smoke-tested where lavaan fixture coverage is not yet
   available.
+- Categorical models with fixed observed covariates (`exo` rows) are explicitly
+  unsupported: conditional moments (`conditional.x`) are not implemented.
+  C++ preparation rejects these models, including cached moment routes; R
+  fit/data/augmentation helpers reject them before constructing marginal
+  statistics or entering the fitter. Explicit joint random-x models
+  (`fixed_x = FALSE`) retain their existing path. Regressions cover direct and
+  precomputed-data routes, staged model preparation, PSD dispatch, and a
+  lavaan-matched joint-model regression slope; they do not establish broader
+  mixed-model parameter-table parity.
 - WLS ordinal point estimates and standard chi-square are lavaan-backed.
   Robust WLS scaled-test reporting remains shape-only because lavaan rejects
   Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the

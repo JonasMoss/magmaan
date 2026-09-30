@@ -148,6 +148,13 @@ as_magmaan_model_spec <- function(model) {
   stop("expected a magmaan model spec, model syntax string, or partable data.frame")
 }
 
+.validate_categorical_covariates <- function(pt, caller) {
+  if (any(pt$exo != 0L, na.rm = TRUE)) {
+    stop(caller, "(): categorical models with fixed observed covariates are unsupported: ",
+         "conditional moments (conditional.x) are not implemented", call. = FALSE)
+  }
+}
+
 .model_spec_has_meanstructure <- function(spec) {
   if (isTRUE(spec$options$meanstructure)) return(TRUE)
   pt <- spec$partable
@@ -351,6 +358,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   model <- as_magmaan_model_spec(model)
   ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
   if (!length(ordered)) stop("data_ordinal_stats_from_df(): `ordered` must name ordered variables")
+  .validate_categorical_covariates(model$partable, "data_ordinal_stats_from_df")
 
   group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
   if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
@@ -448,6 +456,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   model <- as_magmaan_model_spec(model)
   ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
   if (!length(ordered)) stop(caller, "(): `ordered` must name ordered variables")
+  .validate_categorical_covariates(model$partable, caller)
 
   group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
   if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
@@ -573,6 +582,7 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
   model <- as_magmaan_model_spec(model)
   ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
   if (!length(ordered)) stop("data_mixed_ordinal_stats_from_df(): `ordered` must name ordered variables")
+  .validate_categorical_covariates(model$partable, "data_mixed_ordinal_stats_from_df")
 
   group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
   if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
@@ -700,6 +710,7 @@ data_mixed_ordinal_stats_hybrid_fiml_from_df <- function(x, model, ordered = NUL
 
 augment_ordinal_partable <- function(model, ordinal_stats) {
   pt0 <- partable_arg(model)
+  .validate_categorical_covariates(pt0, "augment_ordinal_partable")
   parameterization <- attr(pt0, "magmaan.parameterization", exact = TRUE) %||% "delta"
   # `group.equal` families lavaan_lavaanify stamped as enum indices (Loadings 0,
   # Thresholds 1, ...). When thresholds are equated across groups, lavaan's
@@ -816,6 +827,7 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
 
 augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   pt <- partable_arg(model)
+  .validate_categorical_covariates(pt, "augment_mixed_ordinal_partable")
   parameterization <- attr(pt, "magmaan.parameterization", exact = TRUE) %||% "delta"
   ge <- attr(pt, "magmaan.group_equal", exact = TRUE)
   release_thresholds <- !is.null(ge) && (1L %in% as.integer(ge))
@@ -2408,6 +2420,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")
+  if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
   if (!is.null(cluster)) {
     if (!identical(estimator, "ML")) {
