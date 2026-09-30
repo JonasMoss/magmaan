@@ -59,6 +59,9 @@ struct ClusterSampleStats {
 // `cluster_id[r]` the 0-based cluster of row r, and `within_cols` / `between_cols`
 // select the within / between observed columns (v1: identical — every observed
 // variable decomposes into a within and a between part).
+// Returns `NumericIssue` for malformed inputs, non-finite selected observations,
+// or non-finite computed statistics (including arithmetic overflow). Unselected
+// columns are ignored; finite singular statistics are valid outputs.
 post_expected<ClusterSampleStats>
 cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
                      const std::vector<std::int32_t>& cluster_id,
@@ -75,6 +78,7 @@ cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
 // variable set). Cluster labels need only be unique *within* each group; the
 // per-group reduction never compares labels across groups. The single-group
 // builder is the `X_by_group.size() == 1` special case.
+// Errors identify the failing block using its zero-based index.
 post_expected<ClusterSampleStats>
 cluster_sample_stats_multigroup(
     const std::vector<Eigen::MatrixXd>& X_by_group,

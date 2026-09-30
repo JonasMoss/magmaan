@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <random>
+#include <string>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -61,6 +62,52 @@ Eigen::MatrixXd sample_mvn(std::mt19937& rng, const Eigen::VectorXd& mu,
 }
 
 }  // namespace
+
+TEST_CASE("pairwise_sample_stats: numeric overflow returns a block error") {
+  Eigen::MatrixXd X(3, 1);
+  SUBCASE("marginal means overflow") { X.setConstant(1e308); }
+  SUBCASE("covariance products overflow") { X << -1e200, 0.0, 1e200; }
+  SUBCASE("covariance accumulation overflows") { X << -1e154, 0.0, 1e154; }
+  magmaan::data::RawData raw;
+  raw.X = {Eigen::MatrixXd::Ones(3, 1), X};
+  auto result = magmaan::data::pairwise_sample_stats(raw);
+  CHECK_FALSE(result.has_value());
+  if (!result) {
+    CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+    CHECK(result.error().detail.find("block 1") != std::string::npos);
+  }
+}
+
+TEST_CASE("pairwise_sample_stats: numeric validation preserves missingness and singular moments") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(4, 2);
+  X << 1.0, 2.0, 1.0, 2.0, nan, 2.0, 1.0, nan;
+  magmaan::data::RawData raw;
+  raw.X = {X};
+  auto inferred = magmaan::data::pairwise_sample_stats(raw);
+  REQUIRE(inferred.has_value());
+  if (!inferred) return;
+  CHECK(inferred->S[0].isZero());
+  CHECK(inferred->mean[0](0) == 1.0);
+  CHECK(inferred->mean[0](1) == 2.0);
+
+  raw.mask = {X.array().isFinite().cast<std::uint8_t>()};
+  raw.X[0](2, 0) = std::numeric_limits<double>::infinity();
+  raw.X[0](3, 1) = 1e308;
+  auto masked = magmaan::data::pairwise_sample_stats(raw);
+  REQUIRE(masked.has_value());
+  if (!masked) return;
+  CHECK((masked->S[0] - inferred->S[0]).norm() == 0.0);
+  CHECK((masked->mean[0] - inferred->mean[0]).norm() == 0.0);
+  CHECK((masked->n_pair[0] - inferred->n_pair[0]).norm() == 0);
+
+  raw.mask.clear();
+  raw.X = {Eigen::MatrixXd(3, 1)};
+  raw.X[0] << -1e100, 0.0, 1e100;
+  auto large = magmaan::data::pairwise_sample_stats(raw);
+  REQUIRE(large.has_value());
+  if (large) CHECK(large->S[0](0, 0) == doctest::Approx(2e200 / 3.0));
+}
 
 TEST_CASE("gamma_nt_pairwise: complete-data degeneracy matches gamma_nt") {
   std::mt19937 rng(20260601);

@@ -137,6 +137,11 @@ pairwise_sample_stats(const RawData& raw) {
       }
     }
 
+    if (!mean.allFinite() || !S.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_sample_stats: block " + std::to_string(b) +
+              " has non-finite computed means or covariance"));
+    }
     out.mean.push_back(std::move(mean));
     out.S.push_back(std::move(S));
     out.pi_hat.push_back(std::move(pi_hat));

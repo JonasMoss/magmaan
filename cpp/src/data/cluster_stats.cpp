@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace magmaan::data {
@@ -57,6 +59,14 @@ cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
     return std::unexpected(PostError{
         PostError::Kind::NumericIssue,
         "data::cluster_sample_stats: column selector out of range"});
+  }
+  for (std::int32_t c : within_cols) {
+    if (!X.col(static_cast<Eigen::Index>(c)).allFinite()) {
+      return std::unexpected(PostError{
+          PostError::Kind::NumericIssue,
+          "data::cluster_sample_stats: non-finite observations in selected column " +
+              std::to_string(c)});
+    }
   }
 
   const Eigen::Index p = static_cast<Eigen::Index>(within_cols.size());
@@ -136,10 +146,21 @@ cluster_sample_stats(const Eigen::Ref<const Eigen::MatrixXd>& X,
   g.p_between = p;  // v1: shared observed set
   g.grand_mean = grand_sum / static_cast<double>(n_rows);
   g.within_scatter = std::move(ssw);
+  if (!g.grand_mean.allFinite() || !g.within_scatter.allFinite()) {
+    return std::unexpected(PostError{
+        PostError::Kind::NumericIssue,
+        "data::cluster_sample_stats: non-finite grand mean or within scatter"});
+  }
 
   // size_patterns ordered by ascending cluster size (map iteration order).
   g.size_patterns.reserve(by_size.size());
   for (auto& [d, pat] : by_size) {
+    if (!pat.sum_cluster_mean.allFinite() || !pat.sum_cluster_mean_cp.allFinite()) {
+      return std::unexpected(PostError{
+          PostError::Kind::NumericIssue,
+          "data::cluster_sample_stats: non-finite cluster-mean moments for cluster size " +
+              std::to_string(d)});
+    }
     g.size_patterns.push_back(std::move(pat));
   }
 
@@ -177,7 +198,12 @@ cluster_sample_stats_multigroup(
   for (std::size_t g = 0; g < X_by_group.size(); ++g) {
     auto cs_g = cluster_sample_stats(X_by_group[g], cluster_id_by_group[g],
                                      within_cols, between_cols);
-    if (!cs_g) return std::unexpected(cs_g.error());
+    if (!cs_g) {
+      auto error = std::move(cs_g.error());
+      error.detail = "data::cluster_sample_stats_multigroup: block " +
+          std::to_string(g) + ": " + error.detail;
+      return std::unexpected(std::move(error));
+    }
     out.groups.push_back(std::move(cs_g->groups.front()));
   }
   out.within_ov_index = within_cols;

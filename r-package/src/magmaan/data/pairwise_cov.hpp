@@ -48,7 +48,9 @@ struct PairwiseSampleStats {
 // generalisation of `sample_stats_from_raw` for the pairwise setting.
 //
 // Returns `NumericIssue` if any block has < 2 rows, zero columns, a variable
-// with no observed values, or a variable pair with no joint observations.
+// with no observed values, a variable pair with no joint observations,
+// non-finite observed values under an explicit mask, or non-finite computed
+// means/covariances (including arithmetic overflow).
 post_expected<PairwiseSampleStats>
 pairwise_sample_stats(const RawData& raw);
 

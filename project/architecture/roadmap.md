@@ -83,6 +83,16 @@ availability claims. Existing entry points and numerical defaults are unchanged.
 
 ## Current State
 
+Pairwise and cluster sample-summary builders now return `PostError::NumericIssue`
+for non-finite computed statistics, including overflow from finite observations.
+Cluster input checks cover only selected columns; output checks cover the grand
+mean, within scatter, and every size-pattern cluster-mean sum and cross-product.
+Multigroup cluster errors identify the failing block. Pairwise missingness
+inference and explicit masks are preserved, and finite singular summaries remain
+valid. Regressions cover non-finite selected observations, mean/product/sum
+overflow, between-moment overflow with zero within scatter, unused cluster
+columns, missing-value placeholders, and later-block error attribution.
+
 Pairwise normal-theory Gamma now uses the same observation rule as pairwise
 sample summaries: an explicit mask when supplied, otherwise finite raw entries.
 The dense metric, streamed expected-information bread, and reduced Gamma all

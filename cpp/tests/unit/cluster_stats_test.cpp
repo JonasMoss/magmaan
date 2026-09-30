@@ -14,6 +14,8 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -47,6 +49,69 @@ unpack(const std::array<std::array<double, NCol>, NRows>& rows) {
 constexpr double kTol = 1e-9;
 
 }  // namespace
+
+TEST_CASE("cluster_stats: numeric validation rejects non-finite selected observations") {
+  for (double bad : {std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::infinity(),
+                     -std::numeric_limits<double>::infinity()}) {
+    CAPTURE(bad);
+    Eigen::MatrixXd X = Eigen::MatrixXd::Ones(4, 3);
+    X(2, 1) = bad;
+    auto result = cluster_sample_stats(X, {0, 0, 1, 1}, {2, 1}, {2, 1});
+    CHECK_FALSE(result.has_value());
+    if (!result) {
+      CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+      CHECK(result.error().detail.find("column 1") != std::string::npos);
+    }
+  }
+}
+
+TEST_CASE("cluster_stats: numeric validation rejects overflowing sufficient statistics") {
+  Eigen::MatrixXd X(4, 1);
+  std::vector<std::int32_t> id = {0, 0, 1, 1};
+  SUBCASE("cluster means overflow") { X.setConstant(1e308); }
+  SUBCASE("within scatter overflows") { X << -1e200, 1e200, -1e200, 1e200; }
+  SUBCASE("cluster mean cross-products overflow with zero within scatter") {
+    X.setConstant(1e200);
+  }
+  SUBCASE("accumulated cluster mean cross-products overflow") {
+    X << 8e153, 8e153, -8e153, -8e153;
+    id = {0, 1, 2, 3};
+  }
+  auto result = cluster_sample_stats(X, id, {0}, {0});
+  CHECK_FALSE(result.has_value());
+  if (!result) CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+}
+
+TEST_CASE("cluster_stats: selected columns allow unused non-finite values and singular moments") {
+  Eigen::MatrixXd X(4, 3);
+  X.col(0).setConstant(std::numeric_limits<double>::quiet_NaN());
+  X(1, 0) = std::numeric_limits<double>::infinity();
+  X.col(1).setConstant(7.0);
+  X.col(2).setConstant(9.0);
+  auto result = cluster_sample_stats(X, {0, 0, 1, 1}, {2, 1}, {2, 1});
+  REQUIRE(result.has_value());
+  if (!result) return;
+  const auto& g = result->groups[0];
+  CHECK(g.grand_mean(0) == 9.0);
+  CHECK(g.grand_mean(1) == 7.0);
+  CHECK(g.within_scatter.isZero());
+  CHECK(g.size_patterns[0].sum_cluster_mean_cp.allFinite());
+  CHECK(g.size_patterns[0].sum_cluster_mean_cp(0, 1) == 126.0);
+}
+
+TEST_CASE("cluster_stats: numeric multigroup errors identify the failing block") {
+  Eigen::MatrixXd X = Eigen::MatrixXd::Ones(4, 1);
+  SUBCASE("non-finite observation") { X(2, 0) = std::numeric_limits<double>::quiet_NaN(); }
+  SUBCASE("between cross-product overflow") { X.setConstant(1e200); }
+  auto result = cluster_sample_stats_multigroup(
+      {Eigen::MatrixXd::Ones(4, 1), X}, {{0, 0, 1, 1}, {0, 0, 1, 1}}, {0}, {0});
+  CHECK_FALSE(result.has_value());
+  if (!result) {
+    CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
+    CHECK(result.error().detail.find("block 1") != std::string::npos);
+  }
+}
 
 TEST_CASE("cluster_stats: hand-built balanced data matches by-hand values") {
   // Two variables, three clusters of size two. Tiny enough that SSW, the
