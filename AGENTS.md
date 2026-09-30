@@ -94,7 +94,7 @@ Dependencies flow down; each paper, experiment and the test tree is a leaf.
 - Interfaces/harnesses: `r-package/` depends on core; `r-magmaan/` on
   `r-package/`; `experiments/_support/` on core/bindings, with no SEM logic or
   paper/experiment-specific references; `benchmarks/` is the shared benchmark harness.
-- Leaves: each `papers/<name>/`, each numbered experiment (engineering adds
+- Leaves: each `papers/<name>/`, each numbered experiment (research and engineering add
   `active/`, `banked/`, or `evidence/`), and `cpp/tests/`. No sibling-leaf
   imports or reads. Experiments may consume `_support`, benchmarks and the
   optional textbook corpus. Shared statistical primitives belong in core or

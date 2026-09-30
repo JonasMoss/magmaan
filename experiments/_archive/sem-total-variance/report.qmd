@@ -385,7 +385,7 @@ The isolated legacy runtime probe can be repeated from the repository root:
 
 ```sh
 # Repeat for geometry, cost, backconvert, structural, convergence, inference.
-/usr/bin/time -p Rscript experiments/research/46-latent-metric-geometry/run_experiment.R \
+/usr/bin/time -p Rscript experiments/research/banked/46-latent-metric-geometry/run_experiment.R \
   --arms cost --p 6 --curv-p 6 --bc-p 6 --lambda1 0.3 --struct-b 0.9 \
   --conv-n 50 --reps 1 --backends nlopt-lbfgs --results-dir /tmp/latent-metric-cost
 ```

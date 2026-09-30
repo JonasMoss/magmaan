@@ -13,7 +13,7 @@ study-local `AGENTS.md` and its report/design before changing an existing study.
 ## Dependencies and ownership
 
 Each numbered study is an independent leaf, including studies in the same
-category or engineering activity. No paper/sibling imports or result reads.
+category or activity directory. No paper/sibling imports or result reads.
 Allowed inputs are core, bindings, `_support`, benchmarks and the optional
 textbook corpus. `_support` owns path/seed/metadata/I/O/formatting mechanics,
 with no SEM logic or study-specific statistical decisions. Shared statistical
@@ -37,14 +37,18 @@ or an archive move.
 Engineering uses `active/` (unresolved implementation choice and next check),
 `banked/` (explicit reopening trigger), and `evidence/` (completed paper evidence).
 Record current default, alternatives, acceptance criteria, latest evidence and
-reopening trigger. Research can remain exploratory; do not impose the engineering
+reopening trigger. Research uses the same activity directories: `active/` for
+concrete remaining research checks and ongoing paper pipelines, `banked/` for
+ideas with named reopening triggers, and `evidence/` for completed reference
+answers and frozen results. Preserve different estimands when merging arms.
+Research can remain exploratory; do not impose the engineering
 decision format on it. Review inherited lifecycle labels before treating them
 as current. Once a decision settles, preserve its contract in tests/project docs
 before archiving; delete a redundant probe only after naming its maintained
 replacement checks and recording the deletion in the index.
 
-Number live studies from `01` independently per category; engineering uses one
-sequence across all three activities. Use the next free number. Activity moves
+Number live studies from `01` independently per category; research and
+engineering each use one sequence across their three activities. Use the next free number. Activity moves
 keep the number; deliberate renumbering updates the index and paths. Cite the
 category-qualified slug, since numbers are navigation, not stable IDs.
 Archives use `_archive/<slug>/` without numbers. Preserve sources/results and

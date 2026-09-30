@@ -18,7 +18,17 @@ implementation studies remain active, four ideas are banked, and the completed
 PSD basin audit is retained as paper evidence. Settled probes are archived; the
 robust-score demonstration was removed after its checks became maintained tests.
 The ordinal observed-score omega studies share one leaf with separate target
-and sampling result trees; RBM estimation risk is research/53.
+and sampling result trees; RBM estimation risk is research/banked/53.
+
+Research studies now use `experiments/research/{active,banked,evidence}/`: 16
+active studies (including protected ongoing paper pipelines), 16 banked ideas
+with named reopening triggers, and 9 retained evidence studies. The collection
+index records findings, scope limits and concrete next checks. Gaussian and
+stress polychoric-omega delta coverage share one leaf, with different targets
+and unchanged historical results in separate lanes. Four predecessor checks
+are archived. Frozen interval and calibration summaries retain their original
+metadata and source fingerprints; navigation changes do not change inference
+policy or authorize resuming incompatible checkpoints.
 
 ## Repository layout
 
@@ -38,8 +48,8 @@ task-specific references loaded only as needed. `CLAUDE.md` imports the adjacent
 instructions. The tracked-content guard allows repository skills under `.agents/`
 while excluding agent configuration/session files.
 
-Experiments are grouped by purpose under `experiments/{showcases,replications,
-research,engineering}/`; `_archive/` and `_support/` remain at collection level.
+Experiments are grouped by purpose under `experiments/{decisions,showcases,
+replications,research,engineering}/`; `_archive/` and `_support/` remain at collection level.
 Numbering starts at 01 within each live category; archived folders use unnumbered
 slugs. Each study remains an independent leaf, including within a category.
 Engineering is a live workspace for current implementation/default decisions;
@@ -1203,7 +1213,7 @@ optimum (two frozen synthetic specifications on Little's NegAFF data, not
 Little's models), a negative structural disturbance, and a joint-indefinite
 covariance whose individual variances are positive (both Geiser).
 
-Experiment research/43 (`experiments/research/43-psd-ml-repair-risk/`) turns those four
+Experiment research/43 (`experiments/research/active/43-psd-ml-repair-risk/`) turns those four
 geometries into a compact repair-anatomy panel and adds a controlled
 near-boundary risk path. The Gaussian DGP fixes three unit-loading,
 single-indicator residual variances at 0.2 and varies the eigenvalues of the
@@ -1221,7 +1231,7 @@ they support the explicit audit/refit policy and show why fitted boundary rank
 must remain descriptive rather than being treated as automatic rank selection.
 
 The paired small-sample convergence benchmark
-`experiments/research/42-psd-ml-small-n-convergence/` uses the six-indicator SEM and
+`experiments/research/evidence/42-psd-ml-small-n-convergence/` uses the six-indicator SEM and
 sample-size grid shared by De Jonckere--Rosseel and Ernst et al. In the
 1,000-replication run, audit convergence at \(N=10\) was 54.1% for ordinary
 L-BFGS NTML and 96.8% for direct PSD-ML. Against ordinary SLSQP on the same
@@ -2647,7 +2657,7 @@ an unconstrained gradient test to constrained solutions.
   moments, leaving a 1-3% trace gap to robust.two.stage that grew with
   non-normality; the unstructured weight - the convention lavaan two-stage forces
   and FIML FMG already used - closed it exactly.) Calibration evidence is in
-  `experiments/research/05-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
+  `experiments/research/active/05-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
   `experiments/replications/08-savalei-falk-2014-test-map` establishes that these modern
   defaults are **not** the finite-sample configurations used by Savalei and Falk
   (2014): their EQS runs selected analytic observed information (`SE=EXACT`) and
@@ -2853,7 +2863,7 @@ an unconstrained gradient test to constrained solutions.
   meat.
   Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
   coverage lives in `cpp/tests/unit/ordinal_test.cpp`; the advisory calibration
-  probe is `experiments/research/07-ordinal-pd-gamma`.
+  probe is `experiments/_archive/ordinal-pd-gamma`.
 
 ### Two-level (multilevel) ML
 
@@ -3665,7 +3675,7 @@ are in the [backlog](../backlog/todo.md#continuous-moment-quadratic-weight-follo
   more sensitive to the same LS-weight gap. Configural→thresholds is explicitly
   recorded as a df=0 equivalence (same χ²/df; lavaan cannot form a positive-df
   `lavTestLRT` there). The Mplus Demo WLSMV DIFFTEST probe
-  (`experiments/research/10-mplus-demo-wlsmv-difftest`) now gates the same shared
+  (`experiments/research/evidence/10-mplus-demo-wlsmv-difftest`) now gates the same shared
   released-delta moment Jacobian for the explicit 38-parameter scalar model
   under pairwise missing ordinal data: overlap-Gamma magmaan gives scaled-shifted
   Δχ² `22.365850` / Δdf 22 / p `0.438242`, matching Mplus Demo DIFFTEST
@@ -4670,15 +4680,6 @@ failures.
   parameterization; remaining lavaan parity is fixture-backed for the covered
   ordinal slices and smoke-tested where lavaan fixture coverage is not yet
   available.
-- Categorical models with fixed observed covariates (`exo` rows) are explicitly
-  unsupported: conditional moments (`conditional.x`) are not implemented.
-  C++ preparation rejects these models, including cached moment routes; R
-  fit/data/augmentation helpers reject them before constructing marginal
-  statistics or entering the fitter. Explicit joint random-x models
-  (`fixed_x = FALSE`) retain their existing path. Regressions cover direct and
-  precomputed-data routes, staged model preparation, PSD dispatch, and a
-  lavaan-matched joint-model regression slope; they do not establish broader
-  mixed-model parameter-table parity.
 - WLS ordinal point estimates and standard chi-square are lavaan-backed.
   Robust WLS scaled-test reporting remains shape-only because lavaan rejects
   Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the

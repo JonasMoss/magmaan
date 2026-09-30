@@ -279,7 +279,7 @@ Correctness rests on three kinds of evidence:
 3. **Evidence for each policy choice.** Every default cites the experiment or
    paper that supports it. For example, SB and PEBA4 replace lavaan's MLR
    Yuan-Bentler-Mplus test because they are better calibrated; the FIML
-   comparison is `experiments/research/04-fiml-fmg-vs-mlr/`.
+   comparison is `experiments/research/active/04-fiml-fmg-vs-mlr/`.
 
 ## Frontier methods in the ordinary package
 

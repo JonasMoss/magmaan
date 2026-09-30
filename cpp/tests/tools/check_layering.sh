@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Dependency-layering checker. The repo is a layered DAG; leaves are sinks.
-# Leaves: each papers/<name>/, each numbered experiment (engineering adds an
+# Leaves: each papers/<name>/, each numbered experiment (research and engineering add an
 # active/banked/evidence directory), benchmarks/, cpp/tests/.
 # A leaf consumes only lower tiers (core = cpp/include/ cpp/src/ r-package/ r-magmaan/, plus the
 # shared experiments/_support and build artifacts) and never references a
@@ -48,7 +48,7 @@ DENY_RE="$(deny_list | grep -vix magmaan | sort -u | paste -sd'|' -)"
 # Tokens that denote a leaf reference. Path forms catch source()/file.path()/
 # #include/sys.source; the quoted-"papers" form catches indirection like
 # repo_path("papers", ...); the pkg:: form catches paper namespaces.
-TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/engineering/(active|banked|evidence)/[A-Za-z0-9._-]+|experiments/(decisions|showcases|replications|research|engineering)/[A-Za-z0-9._-]+|experiments/[A-Za-z0-9._-]+|[\"'](papers|private)[\"']|benchmarks/|cpp/tests/|(${DENY_RE}):::?"
+TOKEN_RE="papers/[A-Za-z0-9._-]+|private/[A-Za-z0-9._-]*|experiments/(research|engineering)/(active|banked|evidence)/[A-Za-z0-9._-]+|experiments/(decisions|showcases|replications|research|engineering)/[A-Za-z0-9._-]+|experiments/[A-Za-z0-9._-]+|[\"'](papers|private)[\"']|benchmarks/|cpp/tests/|(${DENY_RE}):::?"
 
 # --- classify a file into a zone (sets Z and SELF) ----------------------------
 classify_zone() {
@@ -58,7 +58,7 @@ classify_zone() {
     justfile|cpp/CMakeLists.txt|cpp/cmake/*)     Z=ORCH ;;
     experiments/_support/*)              Z=SUPPORT ;;
     experiments/_archive/*)              Z=EXP; SELF="experiments/_archive" ;;
-    experiments/engineering/active/*|experiments/engineering/banked/*|experiments/engineering/evidence/*)
+    experiments/research/active/*|experiments/research/banked/*|experiments/research/evidence/*|experiments/engineering/active/*|experiments/engineering/banked/*|experiments/engineering/evidence/*)
       Z=EXP; SELF="$(printf '%s' "$1" | cut -d/ -f1-4)" ;;
     experiments/decisions/*|experiments/showcases/*|experiments/replications/*|experiments/research/*|experiments/engineering/*)
       Z=EXP; SELF="$(printf '%s' "$1" | cut -d/ -f1-3)" ;;
