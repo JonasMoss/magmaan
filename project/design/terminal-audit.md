@@ -54,7 +54,7 @@ The required checks are:
    `criterion` records which check decided.
    Decision 2026-09-25: every iterative estimator gets this check at fit
    time, with the Newton step measured in standard-error units
-   ([newton-verdict-plan.md](newton-verdict-plan.md)). Landed the same day
+   (rollout evidence: engineering/19). Landed the same day
    for FIML (ordinary, pattern NTML, PSD; observed-information metric) and
    every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM,
    SNLLS, their PSD versions; exact Hessian, normal-theory sandwich metric

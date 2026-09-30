@@ -4002,6 +4002,26 @@ gradient counts unchanged. The talk-side harness `private/oslo-psychometric-gath
 benchmark_ordinal_whitening.R` (outside this repository) is the before/after harness and prints both the
 element-wise parity check and the fitted exponent pair.
 
+The 2026-09-17 paired timing check (three-factor CFA, N=1000) recorded:
+
+| Indicators | Before (ms) | After (ms) | Speedup |
+|---|---|---|---|
+| 12 | 1.5 | 0.7 | 2.1x |
+| 20 | 10.4 | 2.8 | 3.7x |
+| 30 | 66.7 | 7.2 | 9.3x |
+| 40 | 307.6 | 24.4 | 12.6x |
+| 50 | 838.4 | 52.1 | **16.1x** |
+
+Against lavaan, the pipeline speedup was 21.7x at p=12 and 13.0x at p=50;
+estimation-only speedup was 18.6x and 3.7x, respectively. These are timings
+from that validation run. The fused callback change alone was within timing
+noise: the removed residual-only evaluation was about 200x cheaper than the
+remaining Jacobian evaluation, so the predicted independent 2x gain did not
+materialize. The profiled workspace also detects the structurally zero
+threshold/correlation coupling once and skips its products. Remaining weight
+storage and workspace cleanup lives in the
+[backlog](../backlog/todo.md#ordinal-weight-storage-and-workspace-cleanup).
+
 #### Cross-products (OPG) information performance
 
 `inference::casewise_scores` / `information_cross_products` no longer form the

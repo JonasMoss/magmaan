@@ -226,7 +226,7 @@ this protocol done by hand.
 2026-09-25, except two-level; CatML stays first-order).** Until then the
 Newton check, which also rejects stationary points with nonpositive curvature,
 was part of the default verdict only for complete-data ML
-([newton-verdict-plan.md](newton-verdict-plan.md), engineering/19).
+([terminal-audit.md](terminal-audit.md#authoritative-fit-verdict-2026-09-12), engineering/19).
 engineering/17 showed the cost: of the twelve Little models where ML's
 check rejects a PORT endpoint for nonpositive curvature, nine are accepted
 under GLS at a worse objective. A judge that differs by estimator makes
@@ -324,9 +324,11 @@ Experiments may not depend on each other, so the shared parts sit below them:
 
 ### Build now (v1)
 
-0. The Newton metric in the default verdict of every iterative estimator,
-   as above, with analytic Hessians. Plan:
-   [newton-verdict-plan.md](newton-verdict-plan.md).
+0. The Newton metric in the default verdict, with analytic Hessians, is
+   delivered for the supported families. Contract:
+   [terminal-audit.md](terminal-audit.md#authoritative-fit-verdict-2026-09-12);
+   remaining controls and coverage are in the
+   [backlog](../backlog/todo.md#optimization-and-convergence).
 1. The register, filled from existing evidence as in the table above, with
    provisional and open entries marked honestly.
 2. Benchmark set v0 from problems that already exist: the corpus cases of

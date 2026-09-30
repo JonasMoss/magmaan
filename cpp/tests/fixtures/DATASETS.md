@@ -91,7 +91,7 @@ If you redistribute this repository, keep this file with it.
   for their cases, never raw casewise rows. The textbook data those statistics
   were computed from are publicly downloadable from the books' companion sites;
   the original files live in the optional corpus mount (see
-  [`project/reference/textbook-corpus.md`](../../project/reference/textbook-corpus.md)), not in this repository.
+  [`project/reference/textbook-corpus.md`](../../../project/reference/textbook-corpus.md)), not in this repository.
   `paper_corpus/` is derived from a public OSF project.
   `cpp/tests/fixtures/textbook_ordinal/` carries derived ordinal moments of
   categorical textbook models: per block the thresholds, polychoric
