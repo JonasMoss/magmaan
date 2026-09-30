@@ -1,5 +1,13 @@
 # magmaan TODO
 
+- **Closed 2026-09-30 — research estimator pruning.** Removed ML ridge
+  continuation, automatic marker/std.lv fitting, adaptive composites, MI4,
+  empirical-Bayes DLS selection, fitted-weight GMM/profile/audit adapters,
+  PNTML and the dedicated GLSpw fitter. Pairwise moments and their inference
+  primitives remain estimator-independent MCAR inputs; ordinary fixed-weight
+  fitting composes them without a special estimator label. General user-facing
+  pairwise moment/inference routing belongs to the estimator-axis work below.
+
 ## Next: barrier fitting normalization
 
 - [ ] **L — extend the shared ML/PSD normalization to barrier fitting.** This
@@ -373,7 +381,7 @@ section: the categorical corpus saddles are under
 - **Optimizer coordinates — DONE (2026-09-26), follow-ups below.** Every
   scalar backend (PORT, L-BFGS, SLSQP and their fallback, TNEWTON, VAR2,
   BOBYQA, IPOPT) now searches complete-data ML, GLS, the moment least-squares
-  family, pairwise GLS, the constrained ML/GMM entries and FIML in
+  family, pairwise-moment fixed-weight fitting, the constrained ML/GMM entries and FIML in
   unit-equivariant coordinates, information-refined sample units by default
   ([optimizer controls](../reference/optimizer-controls.md#optimizer-coordinates-2026-09-25),
   `estimate/coordinates.hpp`). This fixes the Kline Roth PORT early stops and
@@ -518,8 +526,8 @@ section: the categorical corpus saddles are under
   fresh problems, per-family gains and losses, and the revised chart/accuracy
   checks rather than treating magnitude alone as failure.
 - **High — the layered start stalls on Geiser's latent AR cross-lagged model.**
-  This is a loss of the new default found by the R examples
-  (`r-package/examples/auto_identification_frontier.R`; data in
+  This is a loss of the new default found by the former automatic-identification example
+  (removed on 2026-09-30; data in
   `cpp/tests/fixtures/geiser/gls_reference.json`, case
   `latent_ar_cross_lagged_extended`, marker identification, $N = 569$, $p = 12$).
   - From the layered start, the start objective is 0.66 against 3.10 for
@@ -1647,9 +1655,7 @@ when they next change.
 - **M/L — extend covariance-honest point estimation estimator by estimator.**
   The lift is now internally estimator-neutral and the first non-ML slice is
   landed: `fit_gmm_psd` covers continuous ULS and caller-fixed WLS/ADF weights,
-  `fit_gls_psd` builds the ordinary sample-based GLS weight once, and
-  `fit_gmm_fitted_weight_psd` refreshes the expected-information weight between
-  PSD inner solves. R has explicit ULS/GLS/WLS and fitted-weight frontier
+  `fit_gls_psd` builds the ordinary sample-based GLS weight once, and R has explicit ULS/GLS/WLS frontier
   wrappers. The correctness seed finite-differences
   the lifted fixed-weight objective and links, checks ordinary/PSD interior
   agreement for all three objectives, repairs one exact-fit ULS Heywood case,
@@ -1662,14 +1668,6 @@ when they next change.
   large architecture projects, not blockers for the supported MatrixRep
   estimator family.
 
-  1. **Done 2026-08-19 — expected-information fitted/iterated continuous GMM.**
-     `fit_gmm_fitted_weight_psd` reuses the PSD fixed-weight inner solve in the
-     existing outer loop, freezes `W(theta_k)` throughout each inner solve, and
-     refreshes it only between solves. It reevaluates the terminal objective
-     under `W(theta_hat)` and has C++/R reduction, update, objective-consistency,
-     and repair gates. Empirical WLS/DWLS/fixed-`a` DLS updates remain separate:
-     they need raw-data weight builders and an explicit estimated-weight policy,
-     not a new value of the current sample-statistics enum.
   2. **Done 2026-08-19 — FIML.**
      `estimate::fiml::frontier::fit_fiml_psd` feeds the lifted moments and
      analytic Jacobians through the existing immutable pattern cache and
@@ -3758,9 +3756,9 @@ decisions in the simulation backlog.
 The current "estimator" surface mixes several axes in one string. The
 development tiers require covariance domain and penalty to be explicit alongside
 discrepancy, moments, algorithm and post-fit inference. C++ emits
-**26 distinct `fit$estimator` labels** (`ML ULS GLS WLS DWLS FIML ML2S GLSpw
+multiple `fit$estimator` labels (`ML ULS GLS WLS DWLS FIML ML2S
 ML-Fisher ML-Fisher-SNLLS ML-IRLS ML-IRLS-SNLLS ULS-SNLLS GLS-SNLLS WLS-SNLLS
-PNTML SAM FCSEM-ML RBM-*×5 noniterative*×3`) while `api::EstimatorKind` has
+SAM FCSEM-ML RBM-*×5 noniterative*×3`) while `api::EstimatorKind` has
 **7** entries. The gap is a cross-product:
 
 1. **Discrepancy** — what F is: `MomentQuadratic(W)`, normal likelihood,
@@ -4515,8 +4513,7 @@ work until a concrete downstream consumer appears.
   (one-level or double) is anti-correlated with need (caps ~0.85, and is `B`-invariant).
   Analytic functional gradients landed (11x faster constrained fits), and the
   C++/R seed now covers ordinary, robust-scaled, misspec-scaled, and
-  misspec-mixture parameter profiles for complete-data ML, continuous GMM /
-  fitted-weight GMM, direct FIML, ML2S-NT, ordinal, and mixed ordinal, plus
+  misspec-mixture parameter profiles for complete-data ML, continuous fixed-weight GMM, direct FIML, ML2S-NT, ordinal, and mixed ordinal, plus
   ordinal polychoric-omega profiles.
   The ordinal-specific calibration lane now has a working note
   (`ordinal_profile_lrt_finite_sample_calibration.tex`) and experiment research/25
@@ -4597,8 +4594,7 @@ work until a concrete downstream consumer appears.
   The composite-weight axis also landed: `auto` resolves to `unit` for legacy
   `guttman_lavaan` and `standardized` for `guttman_aligned`,
   `unit` uses incidence weights, `standardized` uses `diag(S)^-1/2 Z` and is
-  included in the map Jacobian, and explicit `adaptive` preserves the retired
-  H-aligned data-dependent compatibility path.
+  included in the map Jacobian, and the adaptive compatibility selector was removed on 2026-09-30.
   **Communality and score admissibility machinery landed; constants remain a
   calibration task.**
   The aligned map supports explicit `raw`, `hard`, and smooth `soft`
@@ -4617,7 +4613,7 @@ work until a concrete downstream consumer appears.
   `delta_n=floor0*n^-rate`, and include the spectral repair in analytic SEs.
   Hard activation/tie boundaries retain the finite-difference fallback; soft
   repeated eigenvalues use the invariant soft projector. Legacy
-  `guttman_lavaan` and explicit `adaptive` reject non-raw conditioning. C++ and
+  `guttman_lavaan` rejects non-raw conditioning. C++ and
   R fit/inference surfaces retain the exact configuration and per-block
   raw/repaired score eigenvalues, normalized eigenvalues, intensity, floor
   violation, minimum score variance, and marker diagnostic. Existing R fits
@@ -4709,7 +4705,7 @@ work until a concrete downstream consumer appears.
   (commit e873d1d) made the gmm-free names canonical (communality
   `triad_mean`/`triad_pooled`/`triad_ls`/`extended_triad_ls`/`triad_wls`/
   `triad_wls_joint`; estimator `guttman_lavaan`/`guttman_aligned`;
-  composite `adaptive`) but kept every old string as an accepted input
+  composite `adaptive`); the adaptive selector was subsequently removed on 2026-09-30
   alias and left loose ends. A later cleanup pass should: (1) decide a
   removal point for the deprecated aliases (`ar`, `rs`, `gmm_block`,
   `gmm_full`, `anchor_triad_ls`, `ilm`, `anchor_ilm`, `guttman`,
@@ -4721,7 +4717,7 @@ work until a concrete downstream consumer appears.
   deliberately: bare `guttman` still resolves to legacy `guttman_lavaan`
   (decide whether it should instead point at the recommended
   `guttman_aligned`). The aligned default is now `standardized`; explicit
-  `adaptive` remains the old-behavior compatibility spelling. Not in scope:
+  The retired `adaptive` selector was removed on 2026-09-30. Not in scope:
   the `estimate::gmm` namespace and
   "GMM" solver prose stay (they name the weighted solve, not a method).
   Trigger: when a downstream compatibility window is chosen for alias removal.

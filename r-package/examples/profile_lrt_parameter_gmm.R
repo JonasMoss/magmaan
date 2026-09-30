@@ -27,12 +27,6 @@ lrt_robust <- core$frontier_profile_lrt_parameter_gmm(
 lrt_misspec <- core$frontier_profile_lrt_parameter_gmm(
   fit, free_id, target, raw_data = X, reference = "misspec_mixture"
 )
-lrt_fitw <- core$frontier_profile_lrt_parameter_gmm_fitted_weight(
-  fit, free_id, target
-)
-lrt_fitw_robust <- core$frontier_profile_lrt_parameter_gmm_fitted_weight(
-  fit, free_id, target, raw_data = X, robust = TRUE
-)
 ci <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-4, statistic_tol = 1e-4
@@ -46,15 +40,6 @@ ci_misspec <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-5, statistic_tol = 1e-5,
   raw_data = X, reference = "misspec_mixture"
-)
-ci_fitw <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
-  fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
-  root_tol = 1e-4, statistic_tol = 1e-4
-)
-ci_fitw_robust <- core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight(
-  fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
-  root_tol = 1e-5, statistic_tol = 1e-5,
-  raw_data = X, robust = TRUE
 )
 
 fit_gls <- fit_model(model, dat, estimator = "GLS")
@@ -125,14 +110,6 @@ stopifnot(
   is.finite(lrt_misspec$misspec_scaling_factor),
   lrt_misspec$misspec_scaling_factor > 0,
   length(lrt_misspec$misspec_eigvals) == 1L,
-  is.finite(lrt_fitw$T),
-  lrt_fitw$df == 1L,
-  abs(lrt_fitw$constrained_value - target) < 1e-5,
-  is.finite(lrt_fitw_robust$scaling_factor),
-  lrt_fitw_robust$scaling_factor > 0,
-  abs(lrt_fitw_robust$T - lrt_fitw$T) < 1e-8,
-  abs(lrt_fitw_robust$T_scaled -
-        lrt_fitw_robust$T / lrt_fitw_robust$scaling_factor) < 1e-8,
   ci$lower < fit$theta[free_id],
   ci$upper > fit$theta[free_id],
   abs(ci$lower_profile$T - ci$cutoff) < 1e-3,
@@ -145,14 +122,6 @@ stopifnot(
   ci_misspec$upper > fit$theta[free_id],
   abs(ci_misspec$lower_profile$T - ci_misspec$lower_cutoff) < 3e-3,
   abs(ci_misspec$upper_profile$T - ci_misspec$upper_cutoff) < 3e-3,
-  ci_fitw$lower < ci_fitw$estimate,
-  ci_fitw$upper > ci_fitw$estimate,
-  ci_fitw_robust$lower < ci_fitw_robust$estimate,
-  ci_fitw_robust$upper > ci_fitw_robust$estimate,
-  abs(ci_fitw_robust$lower_profile$T_scaled -
-        ci_fitw_robust$cutoff) < 1e-3,
-  abs(ci_fitw_robust$upper_profile$T_scaled -
-        ci_fitw_robust$cutoff) < 1e-3,
   abs(lrt_gls_estw$T - lrt_gls_robust$T) < 1e-8,
   is.finite(lrt_gls_estw$scaling_factor),
   lrt_gls_estw$scaling_factor > 0,
@@ -182,13 +151,10 @@ print(lrt_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
                    "scaling_factor")])
 print(lrt_misspec[c("parameter", "target", "p_value_misspec_mixture",
                     "misspec_scaling_factor")])
-print(lrt_fitw_robust[c("parameter", "target", "T_scaled", "p_value_scaled",
-                        "scaling_factor")])
 print(ci[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(ci_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(ci_misspec[c("parameter", "estimate", "lower", "upper",
                    "lower_cutoff", "upper_cutoff")])
-print(ci_fitw_robust[c("parameter", "estimate", "lower", "upper", "cutoff")])
 print(lrt_gls_estw[c("parameter", "target", "T_scaled", "p_value_scaled",
                      "scaling_factor")])
 print(ci_gls_estw[c("parameter", "estimate", "lower", "upper", "cutoff")])

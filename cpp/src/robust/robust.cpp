@@ -580,7 +580,7 @@ build_u_factor_shared(spec::LatentStructure                       pt,
     blk.S          = samp.S[b];
     // M_moments_for_mu: the μ-block of the bread always uses Σ̂_b (Structured)
     // / S_b (Unstructured); for Pairwise we fall back to Σ̂_b for the μ-block,
-    // consistent with `fit_gls_pairwise`'s convention.
+    // using the sample-based mean-block approximation.
     const Eigen::MatrixXd& W_moments =
         (moments == WeightMoments::Unstructured) ? blk.S : blk.Sigma_hat;
     Eigen::MatrixXd G_b;

@@ -479,15 +479,15 @@ TEST_CASE("residual-restricted map exposes the composite weight axis") {
   samp.S = {S};
   samp.n_obs = {500};
 
-  auto fit_aligned = ef::fit_noniterative_cfa_restricted(
+  auto fit_unit = ef::fit_noniterative_cfa_restricted(
       b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
+      ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Unit);
   auto fit_std = ef::fit_noniterative_cfa_restricted(
       b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
       ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Standardized);
-  REQUIRE_OK(fit_aligned);
+  REQUIRE_OK(fit_unit);
   REQUIRE_OK(fit_std);
-  CHECK((fit_aligned->theta - fit_std->theta).cwiseAbs().maxCoeff() > 1e-6);
+  CHECK((fit_unit->theta - fit_std->theta).cwiseAbs().maxCoeff() > 1e-6);
 
   auto eqc = magmaan::estimate::build_eq_constraints(b.pt);
   REQUIRE_OK(eqc);
@@ -594,10 +594,10 @@ TEST_CASE("residual-restricted analytic Jacobian matches accurate finite differe
 
   auto Ja = ef::estimator_map_jacobian_restricted(
       b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      2e-2, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
+      2e-2, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Unit);
   auto Jfd = finite_difference_restricted_jacobian(
       b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      0, 2e-6, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Adaptive);
+      0, 2e-6, ef::CommunalityMethod::TriadWls, ef::CompositeWeight::Unit);
   REQUIRE_OK(Ja);
   REQUIRE_OK(Jfd);
   CHECK((*Ja - *Jfd).cwiseAbs().maxCoeff() < 4e-5);

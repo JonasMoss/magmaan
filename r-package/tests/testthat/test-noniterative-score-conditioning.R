@@ -85,7 +85,7 @@ test_that("nested pseudo-LRT rejects mismatched score conditioning", {
     "score conditioning configurations differ")
 })
 
-test_that("non-raw score conditioning rejects legacy and adaptive maps", {
+test_that("non-raw score conditioning rejects legacy maps and removed composite selectors", {
   set.seed(20260713)
   X <- matrix(rnorm(300L * 6L), 300L, 6L)
   colnames(X) <- paste0("x", 1:6)
@@ -102,7 +102,7 @@ test_that("non-raw score conditioning rejects legacy and adaptive maps", {
     fit_noniterative_cfa(
       pt, ss, estimator = "guttman_aligned", composite = "adaptive",
       score_conditioning = "soft"),
-    "not supported for adaptive")
+    "unknown Guttman composite weight")
 })
 
 test_that("fixed-diagonal H repair is recorded as a point-fit feasibility map", {

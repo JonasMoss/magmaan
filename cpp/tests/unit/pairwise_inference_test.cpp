@@ -124,8 +124,8 @@ Fixture build_missing_fixture(std::uint32_t seed) {
   auto x0 = magmaan::estimate::simple_start_values(fx.model.pt, fx.model.rep,
                                                    fx.samp, {});
   REQUIRE(x0.has_value());
-  auto fit = magmaan::estimate::fit_gls_pairwise(fx.model.pt, fx.model.rep,
-                                                  fx.raw, fx.pw, *x0);
+  auto fit = magmaan::estimate::fit_gls(fx.model.pt, fx.model.rep,
+                                         fx.samp, *x0);
   REQUIRE(fit.has_value());
   fx.est = std::move(*fit);
   return fx;

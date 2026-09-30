@@ -223,17 +223,6 @@ enum class ScalarProfileReference {
   MisspecMixture,
 };
 
-enum class GmmFittedWeightKind {
-  ExpectedInformation,
-};
-
-struct GmmFittedWeightOptions {
-  GmmFittedWeightKind kind = GmmFittedWeightKind::ExpectedInformation;
-  int max_outer = 20;
-  double theta_tol = 1e-7;
-  double fmin_tol = 1e-10;
-};
-
 struct GmmProfileRobustOptions {
   bool estimated_weight = false;
   ContinuousLsIJWeightMode ij_weight_mode = ContinuousLsIJWeightMode::Fixed;
@@ -342,18 +331,6 @@ fit_gls_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
             Backend backend = Backend::NloptSlsqp,
             OptimOptions opts = {}, PsdFitOptions psd_opts = {});
 
-// Iterated expected-information GMM over the covariance-honest domain. At
-// outer iterate theta_k, W(theta_k) is frozen while fit_gmm_psd solves the
-// inner problem; derivatives through the weight update are intentionally not
-// part of this fixed-point policy.
-fit_expected<Estimates>
-fit_gmm_fitted_weight_psd(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& samp, const Eigen::VectorXd& x0,
-    GmmFittedWeightOptions fitted_opts = {},
-    Backend backend = Backend::NloptSlsqp,
-    OptimOptions opts = {}, PsdFitOptions psd_opts = {});
-
 // Profile-LR test of H0: g(θ) = target against the already-fitted unrestricted
 // ML estimate. This is intentionally only the ordinary χ²_1 reference; robust
 // Satorra scaling and small-sample/Bartlett factors are separate policies.
@@ -424,59 +401,6 @@ profile_lrt_parameter_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
                           ScalarProfileReference reference =
                               ScalarProfileReference::RobustScaled);
 
-// Fitted-weight moment-quadratic profile helpers. The current fitted-weight
-// policy refreshes the normal-theory expected-information weight W(θ) in an
-// outer fixed-point loop, then solves each frozen-weight subproblem with the
-// same constrained scalar optimizer as the fixed-weight GMM seed. This is an
-// optimization policy only; robust scaling treats the final W(theta) as the
-// profile metric. Misspec/weight-derivative and Bartlett reference scaling
-// remain separate layers.
-fit_expected<Estimates>
-fit_gmm_fitted_weight(spec::LatentStructure pt, const model::MatrixRep& rep,
-                      const SampleStats& samp, const Eigen::VectorXd& x0,
-                      GmmFittedWeightOptions fitted_opts = {},
-                      Bounds bounds = {},
-                      Backend backend = Backend::NloptSlsqp,
-                      OptimOptions opts = {});
-
-fit_expected<Estimates>
-fit_gmm_fitted_weight_constrained(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& samp, const Eigen::VectorXd& x0,
-    ExtraNonlinearEqConstraints extra,
-    GmmFittedWeightOptions fitted_opts = {},
-    Bounds bounds = {},
-    Backend backend = Backend::NloptSlsqp,
-    OptimOptions opts = {});
-
-fit_expected<ScalarProfileLrtResult>
-profile_lrt_scalar_gmm_fitted_weight(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& samp,
-    const Estimates& unrestricted_start,
-    ScalarFunctional functional, double target,
-    GmmFittedWeightOptions fitted_opts = {},
-    Bounds bounds = {},
-    Backend backend = Backend::NloptSlsqp,
-    OptimOptions opts = {},
-    double constraint_tol = 1e-6,
-    const data::RawData* robust_raw = nullptr,
-    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
-
-fit_expected<ScalarProfileLrtResult>
-profile_lrt_parameter_gmm_fitted_weight(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& samp,
-    const Estimates& unrestricted_start,
-    Eigen::Index parameter, double target,
-    GmmFittedWeightOptions fitted_opts = {},
-    Bounds bounds = {},
-    Backend backend = Backend::NloptSlsqp,
-    OptimOptions opts = {},
-    double constraint_tol = 1e-6,
-    const data::RawData* robust_raw = nullptr,
-    ScalarProfileReference reference = ScalarProfileReference::RobustScaled);
-
 fit_expected<ScalarProfileCiResult>
 profile_lrt_ci_parameter_ml(spec::LatentStructure pt,
                             const model::MatrixRep& rep,
@@ -504,20 +428,6 @@ profile_lrt_ci_parameter_gmm(spec::LatentStructure pt,
                              double constraint_tol = 1e-6,
                              const data::RawData* robust_raw = nullptr,
                              GmmProfileRobustOptions robust_options = {});
-
-fit_expected<ScalarProfileCiResult>
-profile_lrt_ci_parameter_gmm_fitted_weight(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& samp,
-    const Estimates& unrestricted_start,
-    Eigen::Index parameter,
-    GmmFittedWeightOptions fitted_opts = {},
-    ScalarProfileCiOptions ci_options = {},
-    Bounds bounds = {},
-    Backend backend = Backend::NloptSlsqp,
-    OptimOptions opts = {},
-    double constraint_tol = 1e-6,
-    const data::RawData* robust_raw = nullptr);
 
 }  // namespace frontier
 
@@ -607,41 +517,16 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
 // Moment quadratic with the normal-theory (GLS) weight, built once from S.
 //
 // Pairwise / incomplete-data note: handing `samp.S = Ŝ^pw` (Van Praag
-// pairwise covariance from `data::pairwise_sample_stats`) here is the
-// Σ-only-weight pairwise GLS convention (Savalei-Bentler 2005,
-// Gold-Bentler-Kim 2003): the weight is `Γ_NT(Ŝ^pw)⁻¹`, ignoring that the
-// asymptotic ACOV of `√n vech(Ŝ^pw − Σ)` is actually `Γ_NT^pw = Ω ∘ Γ_NT`
-// with `Ω_{a,b} = π_{a,b}/(π_a π_b)`. Consistent but asymptotically
-// suboptimal under MAR; trace-identity form survives because W is Σ-only.
-// For the asymptotically efficient alternative — Γ_NT^pw-weighted, quadratic
-// form, slightly more expensive per iteration — see `fit_gls_pairwise`
-// below. Both reduce to the same fit on complete data.
+// pairwise covariance from `data::pairwise_sample_stats`) here uses the
+// ordinary sample-based GLS metric. Pairwise moments are estimator-independent
+// inputs under MCAR. A missingness-adjusted fixed metric can instead be built
+// from `data::gamma_nt_pairwise` and supplied to `fit_gmm`; post-fit inference
+// must account for the pairwise moments' sampling law.
 fit_expected<Estimates>
 fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
         Bounds bounds = {}, Backend backend = Backend::NloptLbfgs,
         OptimOptions opts = {});
-
-// Pairwise GLS with the Γ_NT^pw-weighted quadratic. Breaks the trace
-// identity — the Hadamard product `Ω ∘` doesn't commute with the
-// `2·Σ·H·Σ` operator — but uses the asymptotically efficient weight under
-// MAR. Materializes `Γ_NT^pw = E_R[diag(A/π̂)·Γ_NT(Ŝ^pw)·diag(A/π̂)]` once
-// (pattern-grouped over the K distinct missingness patterns,
-// O(K·p*²) + O(p*³)), inverts to W^pw, hands to `fit_gmm`. Per-iteration
-// cost goes from O(p³) trace to O(p⁴) quadratic — modest constant; setup
-// stays outside the optimizer loop. The Σ-only counterpart is to run
-// `fit_gls` above with `samp.S = pw.S`. Cov-block uses Γ_NT^pw weight;
-// μ-block (when the model has a mean structure) keeps the Σ-only mean
-// weight `Ŝ^pw⁻¹` until the pairwise μ ACOV gets its own treatment.
-// Complete-data degeneracy: `fit_gls` and `fit_gls_pairwise` produce the
-// same fit when there's no missingness.
-fit_expected<Estimates>
-fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
-                 const data::RawData& raw,
-                 const data::PairwiseSampleStats& pw,
-                 const Eigen::VectorXd& x0,
-                 Bounds bounds = {}, Backend backend = Backend::NloptLbfgs,
-                 OptimOptions opts = {});
 
 // Golub–Pereyra profiled fit: eliminates the conditionally-linear parameters
 // (Θ, Ψ, ν, α) analytically, optimizes only the nonlinear block (Λ, Β). Fails

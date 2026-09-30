@@ -55,8 +55,8 @@ The required checks are:
    Decision 2026-09-25: every iterative estimator gets this check at fit
    time, with the Newton step measured in standard-error units
    (rollout evidence: engineering/active/19-newton-verdict-migration). Landed the same day
-   for FIML (ordinary, pattern NTML, PSD; observed-information metric) and
-   every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM,
+   for FIML (ordinary, PSD; observed-information metric) and
+   every moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM,
    SNLLS, their PSD versions; exact Hessian, normal-theory sandwich metric
    `d^2 = (H s)' Omega^{-1} (H s)`), then for the ordinal and mixed
    least-squares fits (exact Hessian, Gauss-Newton sandwich metric) and the
@@ -385,7 +385,7 @@ analytic/retained derivative agreement and normalization, early EM termination,
 raw negative curvature despite repaired inference information, all Stage-2
 weight policies, missing/mismatched handoff records, separate solver-stop policy,
 and transformed inputs. R bindings, automatically captured fit-input records,
-propagated numerical accuracy and outer fitted-weight iterations remain follow-ups.
+propagated numerical accuracy  remain follow-ups.
 
 ## Coverage by applicable check
 
@@ -398,7 +398,6 @@ the explicit report composes these checks independently of fit finalization.
 | --- | --- | --- | --- |
 | Complete-data ML, Fisher/IRLS | Yes | Analytic | Fit/post-fit ML parity tested |
 | Fixed LS/GMM, GLS, expanded SNLLS | Yes, Newton at fit time (2026-09-25) | Analytic exact, sandwich metric; requested GN | Broader constraint/domain regression combinations |
-| Fitted-weight GMM | Yes, final frozen weight | Reconstruction adapter | Outer weight-update convergence |
 | FIML | Yes, Newton at fit time (2026-09-25) | Analytic | Broader missingness/group combinations |
 | ML2S | Yes, Stage 2; explicit Stage-1 endpoint and composed report | Analytic Stage 1; all five Stage-2 policies | Automatic fit-input capture and R reports |
 | Ordinal/mixed LS, including profiled fits | Yes, full coordinates; Newton at fit time (2026-09-25) | Delta/theta; analytic exact, Gauss-Newton sandwich metric; requested GN | Broader group/profile combinations |
@@ -420,7 +419,7 @@ need an invented optimization convergence test.
 Validation anchors are `cpp/tests/unit/newton_accuracy_test.cpp` (quadratic
 identities, equality reduction, PSD face curvature, multi-group ML, retained
 factorization) and `cpp/tests/unit/newton_adapters_test.cpp` (each listed adapter,
-all five ML2S policies, frozen fitted weights away from an optimum, unequal-group
+all five ML2S policies, fixed weights away from an optimum, unequal-group
 LS normalization, delta/theta mixed LS, and unsupported/unavailable cases).
 These are representative checks, not an exhaustive Cartesian product of model,
 constraint, domain and estimator choices. Thin R access to the full retained
@@ -439,7 +438,6 @@ feasibility, admissibility and first-order evidence remain separate checks.
 | --- | --- | --- |
 | Complete-data ML | `audit_newton_ml` | Analytic observed information |
 | ML2S Stage 2 | `audit_newton_ml2s` | NT uses analytic ML; ULS/DWLS/ADF/DLS use fixed-weight LS |
-| Fitted-weight GMM | `audit_newton_gmm_fitted_weight` | Final expected-information weight reconstructed once and frozen |
 | ULS | `audit_newton_uls` | Exact analytic (`gmm::moment_quadratic_hessian`), sandwich metric; optional Gauss-Newton |
 | GLS | `audit_newton_gls` | Same, using the sample-based NT weight |
 | WLS/DWLS/GMM | `audit_newton_wls` / `audit_newton_gmm` | Same, with the supplied fixed weight |
@@ -452,17 +450,7 @@ feasibility, admissibility and first-order evidence remain separate checks.
 | Multi-information penalized ML / FIML | `audit_newton_penalized_ml` / `audit_newton_penalized_fiml` | Gradient differences including the actual penalty |
 | Other supplied smooth objectives | `audit_newton_objective` | Gradient differences of the supplied original full-theta objective |
 
-For fitted-weight GMM, supply the final frozen estimation weight to
-`audit_newton_gmm`, or reconstruct it at the supplied final theta with
-`audit_newton_gmm_fitted_weight`. Differentiating an updating weight would audit
-another objective. `audit_newton_ml2s` consumes the already computed
-`SaturatedMoments`, including ACOV for DWLS/ADF/DLS, with the original Stage-2
-weight kind and fixed DLS mixing parameter. It never reruns Stage 1. CatML does not reuse the raw
-covariance-ML Hessian: its gradient includes the covariance-to-correlation map.
-Only its explicitly Stage-1 threshold coordinates are removed from the solve;
-unidentified model directions are never dropped based on the Hessian spectrum.
-Nonlinear equalities and interacting box/singular-PSD geometry remain unsupported.
-Pass actual bounds and domain explicitly; no variance bounds are inferred.
+
 
 Derivatives retain the objective kind, curvature source, native-to-total
 multiplier, N, theta and full Hessian. LS also retains native whitened residuals

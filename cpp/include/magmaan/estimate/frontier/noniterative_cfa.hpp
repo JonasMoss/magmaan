@@ -49,7 +49,6 @@ enum class CompositeWeight : std::uint8_t {
   EstimatorDefault,  // GuttmanLavaan -> Unit; GuttmanAligned -> Standardized
   Unit,              // Z: unit-weight sums of raw indicators
   Standardized,      // diag(S)^-1/2 Z: unit-weight sums of standardized indicators
-  Adaptive,          // H Z (Z'HZ)^-1, Gram-aligned before regression (data-dependent; retired)
 };
 
 enum class ScoreConditioningPolicy : std::uint8_t { Raw, Hard, Soft };

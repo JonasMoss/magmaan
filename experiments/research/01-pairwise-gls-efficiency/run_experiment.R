@@ -3,7 +3,7 @@
 # Experiment research/01 — pairwise GLS efficiency.
 # Two estimators on the Savalei-Bentler 2005 Study-0 CFA design under MCAR:
 #   Σ-only weight   — fit_gls(samp.S = Ŝ_pw)        (literature default)
-#   Γ_NT^pw weight  — fit_gls_pairwise(raw, pw)     (asymptotically efficient)
+#   Γ_NT^pw weight  — fit_wls(sample_pw, solve(Gamma_pw))     (MCAR-adjusted fixed-weight quadratic)
 # Outcome: trace of empirical θ̂ MSE summed over free parameters, per cell.
 
 .support_helpers <- function() {
@@ -345,7 +345,7 @@ true_theta <- function(partable, design) {
 
 # Fit all five estimators on one (X, mask) pair:
 #   sigma — fit_gls with samp.S = Ŝ_pw                  (Σ-only weight)
-#   gamma — fit_gls_pairwise(raw, pw)                   (Γ_NT^pw weight)
+#   gamma — fit_wls(sample_pw, solve(Gamma_pw))                   (Γ_NT^pw weight)
 #   ml    — fit_ml      with samp.S = Ŝ_pw              (Savalei-Bentler 2005
 #                                                        pairwise covariance ML;
 #                                                        asymptotically first-order
@@ -389,7 +389,7 @@ fit_triple <- function(X, mask, partable, n_par) {
     error = function(e) na_theta)
   t2 <- Sys.time()
   gamma_or <- tryCatch(pull_theta(
-    magmaanlab::magmaan_core$estimate_gls_pairwise(partable, X, mask)),
+    magmaanlab::magmaan_core$estimate_wls(partable, sample_pw, solve(G_pw))),
     error = function(e) na_theta)
   t3 <- Sys.time()
   ml_or <- tryCatch(pull_theta(

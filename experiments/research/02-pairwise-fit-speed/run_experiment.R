@@ -4,7 +4,7 @@
 # Time the three pairwise estimators studied in experiment research/01:
 #   GLSpw_Sigma   — fit_gls(samp.S = Ŝ_pw)
 #   PairwiseML    — fit_ml(samp.S = Ŝ_pw)
-#   GLSpw_Gamma   — fit_gls_pairwise(raw, pw)
+#   GLSpw_Gamma   — fit_wls(sample_pw, solve(Gamma_pw))
 # Two textbook-style CFA designs, two missingness mechanisms, microbenchmark.
 
 .support_helpers <- function() {
@@ -160,7 +160,9 @@ main <- function() {
       bench <- microbenchmark::microbenchmark(
         sigma = magmaanlab::magmaan_core$estimate_gls(partable, sample_pw),
         ml    = magmaanlab::magmaan_core$estimate_ml(partable, sample_pw),
-        gamma = magmaanlab::magmaan_core$estimate_gls_pairwise(partable, Xk, mk),
+        gamma = magmaanlab::magmaan_core$estimate_wls(
+          partable, sample_pw,
+          solve(magmaanlab::magmaan_core$data_gamma_nt_pairwise(Xk, mk)[[1L]])),
         times = opts$times, unit = "ms"
       )
       # microbenchmark returns nanoseconds in $time; convert to milliseconds.

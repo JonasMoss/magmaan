@@ -1,15 +1,10 @@
 library(magmaanlab)
 library(lavaan)
 
-# Pairwise GLS, two variants:
-#   estimate_gls       (literature default; Σ-only weight Γ_NT(Ŝ^pw)⁻¹) —
-#                      Savalei-Bentler 2005 / Gold-Bentler-Kim 2003. Trace
-#                      identity, consistent, asymptotically suboptimal under
-#                      MAR.
-#   estimate_gls_pairwise (Γ_NT^pw weight) — breaks the trace identity,
-#                      asymptotically efficient under MAR.
-# Both reduce to the same fit on complete data; they diverge under
-# missingness — the gap that motivates a downstream efficiency study.
+# Pairwise MCAR moments are a general data input. This example compares
+# ordinary sample-weight GLS with WLS using a fixed inverse pairwise Gamma.
+# Both reduce to the same fit on complete data; missingness changes the metric.
+# Inference must use the pairwise moments' sampling covariance.
 
 set.seed(20260605)
 n <- 600
@@ -39,7 +34,8 @@ sample_full <- list(
   nobs = pw_full$nobs
 )
 fit_a <- magmaan_core$estimate_gls(partable, sample_full)
-fit_b <- magmaan_core$estimate_gls_pairwise(partable, X_full)
+fit_b <- magmaan_core$estimate_wls(
+  partable, sample_full, solve(magmaan_core$data_gamma_nt_pairwise(X_full)[[1L]]))
 free_a <- fit_a$partable$est[fit_a$partable$free > 0L]
 free_b <- fit_b$partable$est[fit_b$partable$free > 0L]
 cmplt_diff <- max(abs(free_a - free_b))
@@ -55,7 +51,7 @@ cat(sprintf("complete-data Γ_NT^pw: symmetry residual %.3e, min eig %.3f\n",
             G_full_sym, G_full_min_eig))
 stopifnot(G_full_sym < 1e-12, G_full_min_eig > 0)
 
-# ---- MAR data: the two variants diverge ------------------------------------
+# ---- MCAR data: the two variants diverge ------------------------------------
 # Drop ~12% MCAR per column, never leaving a row fully blank.
 X <- X_full
 miss_rate <- 0.12
@@ -71,11 +67,12 @@ pw <- magmaan_core$data_pairwise_sample_stats(X, mask)
 sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
 
 fit_a_miss <- magmaan_core$estimate_gls(partable, sample_pw)
-fit_b_miss <- magmaan_core$estimate_gls_pairwise(partable, X, mask)
+fit_b_miss <- magmaan_core$estimate_wls(
+  partable, sample_pw, solve(magmaan_core$data_gamma_nt_pairwise(X, mask)[[1L]]))
 free_a_miss <- fit_a_miss$partable$est[fit_a_miss$partable$free > 0L]
 free_b_miss <- fit_b_miss$partable$est[fit_b_miss$partable$free > 0L]
 miss_diff <- max(abs(free_a_miss - free_b_miss))
-cat(sprintf("MAR-data θ̂ disagreement: %.3e (non-trivial; both consistent, weights differ)\n",
+cat(sprintf("MCAR-data θ̂ disagreement: %.3e (non-trivial; both consistent, weights differ)\n",
             miss_diff))
 
 # ---- Materialized Γ_NT^pw under missingness --------------------------------

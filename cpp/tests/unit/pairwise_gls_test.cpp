@@ -215,51 +215,7 @@ TEST_CASE("gamma_nt_pairwise: malformed summaries return NumericIssue") {
   if (!result) CHECK(result.error().kind == magmaan::PostError::Kind::NumericIssue);
 }
 
-TEST_CASE("fit_gls_pairwise: complete-data fit matches fit_gls") {
-  std::mt19937 rng(20260602);
-  auto model = build_cfa();
-  const Eigen::Index p = 3;
-
-  // Pick a "true" Σ via the model — start at a θ that makes a clean SEM.
-  const Eigen::VectorXd mu = Eigen::VectorXd::Zero(p);
-  Eigen::MatrixXd Sigma(p, p);
-  // f loadings 1.0, 0.8, 0.9; var(f) = 1.5; residual variances 0.7, 0.6, 0.5.
-  const double l1 = 1.0, l2 = 0.8, l3 = 0.9;
-  const double psi = 1.5;
-  Eigen::Vector3d theta_res(0.7, 0.6, 0.5);
-  Eigen::Vector3d lam(l1, l2, l3);
-  Sigma = psi * (lam * lam.transpose());
-  Sigma.diagonal() += theta_res;
-
-  Eigen::MatrixXd X = sample_mvn(rng, mu, Sigma, 400);
-
-  // Complete-data path.
-  magmaan::data::RawData raw;
-  raw.X.push_back(X);
-  auto pw = magmaan::data::pairwise_sample_stats(raw);
-  REQUIRE(pw.has_value());
-
-  // fit_gls with samp.S = pw.S (Σ-only weight, the literature convention).
-  magmaan::data::SampleStats samp;
-  samp.S = pw->S;
-  samp.mean = pw->mean;
-  samp.n_obs = pw->n_obs;
-  auto x0 = magmaan::estimate::simple_start_values(model.pt, model.rep, samp, {});
-  REQUIRE(x0.has_value());
-  auto fit_a = magmaan::estimate::fit_gls(model.pt, model.rep, samp, *x0);
-  REQUIRE(fit_a.has_value());
-
-  // fit_gls_pairwise with the Γ_NT^pw weight.
-  auto fit_b = magmaan::estimate::fit_gls_pairwise(model.pt, model.rep, raw,
-                                                    *pw, *x0);
-  REQUIRE(fit_b.has_value());
-
-  // On complete data, the two W matrices coincide, so the fits agree.
-  REQUIRE(fit_a->theta.size() == fit_b->theta.size());
-  CHECK((fit_a->theta - fit_b->theta).cwiseAbs().maxCoeff() < 1e-6);
-}
-
-TEST_CASE("fit_gls_pairwise: missing-data sanity") {
+TEST_CASE("pairwise MCAR moments compose with ML, GLS, ULS and fixed-weight WLS") {
   std::mt19937 rng(20260603);
   auto model = build_cfa();
   const Eigen::Index p = 3;
@@ -309,9 +265,18 @@ TEST_CASE("fit_gls_pairwise: missing-data sanity") {
   auto x0 = magmaan::estimate::simple_start_values(model.pt, model.rep, samp, {});
   REQUIRE(x0.has_value());
 
-  auto fit = magmaan::estimate::fit_gls_pairwise(model.pt, model.rep, raw,
-                                                 *pw, *x0);
-  REQUIRE(fit.has_value());
-  CHECK(fit->theta.allFinite());
-  CHECK(fit->fmin >= 0.0);
+  Eigen::MatrixXd W = G.llt().solve(
+      Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  auto weight = magmaan::estimate::gmm::dense_weight(
+      {W}, magmaan::FitError::Kind::NumericIssue, "pairwise MCAR metric");
+  REQUIRE(weight.has_value());
+  for (const auto& fit : {
+      magmaan::estimate::fit_ml(model.pt, model.rep, samp, *x0),
+      magmaan::estimate::fit_gls(model.pt, model.rep, samp, *x0),
+      magmaan::estimate::fit_gmm(model.pt, model.rep, samp, *x0),
+      magmaan::estimate::fit_gmm(model.pt, model.rep, samp, *x0, *weight)}) {
+    REQUIRE(fit.has_value());
+    CHECK(fit->theta.allFinite());
+    CHECK(fit->fmin >= 0.0);
+  }
 }

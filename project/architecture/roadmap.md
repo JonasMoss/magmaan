@@ -92,6 +92,24 @@ availability claims. Existing entry points and numerical defaults are unchanged.
 
 ## Current State
 
+On 2026-09-30 the research surface was pruned: ML ridge continuation,
+automatic marker/std.lv fitting, adaptive Guttman composites, MI4/structured
+fourth-moment weights, empirical-Bayes DLS selection, fitted-weight GMM and its
+profile/audit adapters, PNTML, and the dedicated GLSpw fitter were removed.
+Fixed-scalar DLS, ordinary fixed-weight GMM/WLS, the start transport pipeline,
+and sphere/gauge coordinates remain supported. Archived experiments retain
+historical source references; rerunning them requires their original revision.
+
+Pairwise handling is a moment/data axis under MCAR, independent of the fitting
+discrepancy. `data::pairwise_sample_stats` supplies covariances and marginal
+means that can be composed as `SampleStats` with ML, ULS, GLS or caller-fixed
+WLS/GMM, subject to each objective's domain. `data::gamma_nt_pairwise` and the
+pairwise casewise/reduced-Gamma inference primitives remain available. A fixed
+weight can be built from that Gamma and passed to ordinary GMM/WLS; it has no
+separate estimator label. Pairwise sampling covariance is still required for
+inference: supplying moments does not make complete-data SEs or test statistics
+valid, nor establish general MAR consistency.
+
 Pairwise and cluster sample-summary builders now return `PostError::NumericIssue`
 for non-finite computed statistics, including overflow from finite observations.
 Cluster input checks cover only selected columns; output checks cover the grand
@@ -473,9 +491,8 @@ fits carry the covariance-domain version (`newton_accuracy_ml_psd`): at a
 boundary point the Newton step is restricted to the face of the PSD cone the
 estimate lies on (null directions with positive multipliers held, the face's
 curvature 2 tr(M dC C^+ dC) added), so PSD fits are judged by d <= .01
-everywhere. Since 2026-09-25 FIML (ordinary, pattern NTML and PSD) and every
-moment-quadratic fit (GLS, ULS, WLS, DWLS, GMM, fitted-weight GMM at its final
-weight, SNLLS, and their PSD versions) carry the same check with the exact
+everywhere. Since 2026-09-25 FIML (ordinary and PSD) and every
+moment-quadratic fit (GLS, ULS, WLS, DWLS and fixed-weight GMM, SNLLS, and their PSD versions) carry the same check with the exact
 analytic Hessian of their objective: FIML measures the step with its observed
 information, the least-squares fits with the normal-theory sandwich
 (`d^2 = G' Omega^{-1} G`, Omega the variance of the total gradient), which
@@ -520,9 +537,7 @@ compose those stages. Existing ML summary wrappers use the same implementation.
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
 all-ordinal and mixed-ordinal LS, CatML, two-level ML, and multi-information
-penalized complete-data ML/FIML. Fitted-weight GMM consumes the final frozen
-weight explicitly, or reconstructs the expected-information weight once at the
-final theta via `audit_newton_gmm_fitted_weight`. `audit_newton_ml2s` reuses
+penalized complete-data ML/FIML. `audit_newton_ml2s` reuses
 retained Stage-1 moments for NT Stage-2 ML and ULS/DWLS/ADF/DLS Stage-2 LS;
 neither adapter certifies the outer iteration or Stage-1 convergence. Focused
 tests cover all five policies, frozen weights away from an optimum and
@@ -933,7 +948,7 @@ partable) and `fit$options$chart = "sphere"`. It signals a classed
 user chart does not hold the point. `frontier_reidentify(fit, model)` wraps
 `reidentify`. `case_rerun()` and `modification_indices_lrt()` refit sphere fits
 through the sphere. Since 2026-09-27 every exported frontier fitter (PSD,
-barrier, PSD fallback, LS/FIML/ML2S/ordinal PSD, pattern NTML) and
+barrier, PSD fallback, LS/FIML/ML2S/ordinal PSD) and
 `fit_twolevel()` return a finalized `magmaan_fit` carrying
 `fit$options$route` (the fitter and its non-data arguments), as do
 `fit_model(psd = TRUE)` fits. So `vcov()` and `residuals()` apply as for
@@ -957,7 +972,7 @@ separate requirement for ordinary fits. Status is passed, failed, or unchecked.
 R's `fit$converged` projects this to TRUE, FALSE, or NA and exposes the component
 verdict, objective values/tolerance, and existing geometric residuals.
 
-The common audit is wired for continuous ML and fixed/fitted-weight GMM/LS,
+The common audit is wired for continuous ML and fixed-weight GMM/LS,
 FIML, their PSD counterparts, Fisher/IRLS, two-level ML, ML2S Stage 2, ordinary/profiled ordinal and mixed
 ordinal LS, and CatML. Continuous SNLLS audits eliminated covariance/mean
 coordinates, including all-linear closed-form fits. Profiled ordinal fits
@@ -1015,18 +1030,7 @@ cover the lifted fixed-weight gradient and link Jacobian by central finite
 differences, ordinary/PSD agreement at interior ULS, GLS, and nonidentity-WLS
 optima, a ULS negative-residual repair, and the three R result contracts.
 
-`estimate::frontier::fit_gmm_fitted_weight_psd` now reuses the same PSD
-fixed-weight inner solve in the existing expected-information fixed-point loop.
-At outer iterate `theta_k`, the model-implied normal-theory weight `W(theta_k)`
-is held fixed throughout the constrained inner optimization and refreshed only
-between solves; the algorithm does not differentiate through the weight. The
-reported objective is reevaluated with `W(theta_hat)` after the outer loop. R
-exposes the policy as `frontier_fit_gmm_fitted_weight_psd()` and labels it
-`expected_information_fixed_point`. Focused gates establish ordinary/PSD
-agreement at an interior misspecified fixed point, a nontrivial first weight
-update, final-weight objective consistency, negative-residual repair, and the R
-result contract. Empirical WLS/DWLS/DLS updates need raw-data weight builders
-and are not implied by this sample-statistics-only policy.
+
 
 `estimate::fiml::frontier::fit_fiml_psd` applies the same covariance lift to
 raw-data FIML. It reuses `FIMLPack` unchanged, evaluates the existing
@@ -1053,27 +1057,7 @@ omits the ordinary ML2S covariance/test correction because boundary inference
 has no automatic policy. Focused gates cover all five fixed Stage-2 policies,
 interior reduction, unchanged Stage 1, and an improper-solution repair.
 
-`estimate::fiml::frontier::PatternNTML` is a distinct two-stage normal-theory
-objective rather than another `TwoStageWeight`. It retains the raw
-observed-pattern counts and coordinate selectors, replaces each pattern's
-empirical moments by the corresponding marginal of one saturated Gaussian-FIML
-Stage-1 estimate, and minimizes the resulting frequency-weighted sum of
-Gaussian marginal discrepancies. `fit_pattern_ntml()` accepts either retained
-`FIMLPack`/`SaturatedMoments` inputs or raw data, while
-`pattern_ntml_information_blocks()` builds its local saturated-moment metric as
-a sum of analytic pattern-normal expected-information pullbacks. The first
-inference contract is deliberately model-based: the Stage-1 law is the inverse
-of that same expected information, giving unit `U*Gamma` eigenvalues and unit
-scaling. This makes the complete-data reduction exactly NTML and gives the same
-first-order influence as direct FIML under normal MCAR. Although projecting a
-consistent saturated FIML target preserves point consistency under ignorable
-MAR, the pattern-count-only information is not claimed efficient or inferentially
-valid for general MAR. R exposes the method as
-`frontier_fit_pattern_ntml()`, retains `stage1` and `raw_data`, and attaches the
-normal-theory covariance and chi-square fields under `fit$pntml`. C++ and R
-gates cover complete-data identity, MCAR analytic gradients, Stage-1 reuse, and
-unit-spectrum inference; experiment research/44 iteration 15 records the first paired
-normal complete/MCAR plumbing smoke.
+
 
 `estimate::frontier::fit_ordinal_psd` and `fit_mixed_ordinal_psd` now compose
 the same lift with the existing all-ordinal and mixed continuous/ordinal
@@ -1114,7 +1098,7 @@ covariance-honest extension.
 
 Experiment engineering/active/13-psd-estimator-stress (`experiments/engineering/active/13-psd-estimator-stress/`) now supplies the common
 cross-estimator validation harness. Its first smoke profile covers continuous
-ML/ULS/GLS/fixed-WLS/fitted-weight GMM, FIML, all five ML2S Stage-2 policies,
+ML/ULS/GLS/fixed-WLS, FIML, all five ML2S Stage-2 policies,
 ordinal and mixed delta/theta LS, CatML, a near-residual-boundary geometry, and
 an expected non-PD CatML input rejection. Each returned criterion is recomputed
 independently in R, input objects are fingerprinted before and after fitting,
@@ -1354,12 +1338,8 @@ an unconstrained gradient test to constrained solutions.
   `2N(fmin_constrained - fmin_unrestricted)`. The moment-quadratic sibling,
   `fit_gmm_constrained()` plus `profile_lrt_scalar_gmm()` /
   `profile_lrt_parameter_gmm()`, applies the same programmatic constraint path
-  to a caller-fixed ULS/GLS/WLS/DWLS/DLS weight. The fitted-weight companion
-  `fit_gmm_fitted_weight()` / `fit_gmm_fitted_weight_constrained()` refreshes
-  the expected-information weight `W(θ)` in an outer fixed-point loop and the
-  fitted-weight profile helper compares the unrestricted and constrained fits
-  under the same policy. The first CI-inversion seed,
-  `profile_lrt_ci_parameter_{ml,gmm,gmm_fitted_weight}()`, bisects the df-1
+  to a caller-fixed ULS/GLS/WLS/DWLS/DLS weight. The first CI-inversion seed,
+  `profile_lrt_ci_parameter_{ml,gmm}()`, bisects the df-1
   profile statistic and returns root diagnostics. The complete-data ML and
   caller-fixed GMM parameter helpers also accept raw data for opt-in profile
   reference tiers: `RobustScaled` keeps ordinary `T`/`p_value` and adds the
@@ -1371,11 +1351,7 @@ an unconstrained gradient test to constrained solutions.
   score meat; caller-fixed GMM routes it through the continuous-LS observed
   bread plus fixed-weight or IJ estimated-weight meat, including the supported
   sample-normal-theory, empirical-WLS, empirical-DWLS, and fixed-`a` DLS IJ
-  weight families. The fitted-weight GMM
-  parameter helpers rebuild the final expected-information weight `W(theta)` at
-  each constrained endpoint and treat that as the profile metric for both
-  robust and misspecification references; complete derivative-of-weight
-  corrections remain research policy. R exposes the parameter special cases as
+  weight families. R exposes the parameter special cases as
   `frontier_profile_lrt_parameter_*` and
   `frontier_profile_lrt_ci_parameter_*`, with `reference=` selecting the
   target. The all-ordinal frontier companion,
@@ -1422,12 +1398,7 @@ an unconstrained gradient test to constrained solutions.
   `frontier_profile_lrt_{parameter,ci}_ml2s_nt`, and
   `frontier_profile_lrt_{parameter,ci}_mixed_ordinal`, with `reference=`
   selecting the endpoint statistic used by CI inversion.
-- A frontier complete-data ML covariance-continuation path fits
-  `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
-  identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and
-  ending at `alpha = 0` by default. The C++ primitive is
-  `estimate::frontier::fit_ml_ridge_continuation()` and the R research surface
-  is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
+
 - Frontier non-iterative CFA inference (2026-07) turns closed-form CFA
   estimators into delta-method-inferable ones. `estimate::frontier::
   noniterative_cfa_theta` maps `sigma -> theta` and returns a complete
@@ -1439,9 +1410,7 @@ an unconstrained gradient test to constrained solutions.
   `auto` resolves to `unit` for `guttman_lavaan` and to `standardized` for
   `guttman_aligned`; `unit` uses incidence weights,
   `standardized` uses `diag(S)^-1/2 Z` and is rebuilt from the live covariance
-  in every map evaluation, and `adaptive` uses the existing H-aligned
-  data-dependent weights as an explicit retired compatibility path. Aligned
-  maps read loadings from the own-composite regression
+  in every map evaluation. Aligned maps read loadings from the own-composite regression
   `K_if = (HB)_if / Q_ff` (the least-squares simple-structure fit; 2026-09-29),
   not the multiple regression `HB Q^-1` that `guttman_lavaan` keeps, and report
   residual variances as the communality split `diag(S) - diag(H)`.
@@ -1477,7 +1446,7 @@ an unconstrained gradient test to constrained solutions.
   raw/repaired eigenvalues, normalized eigenvalues, intensity, floor violation,
   score variance, and marker diagnostics, so post-fit inference reconstructs
   the identical map. Conditioning remains `raw` by default, is rejected for
-  legacy `guttman_lavaan` and explicit `adaptive`. The retired engineering/10
+  legacy `guttman_lavaan` . The retired engineering/10
   screen calibrated hard and smooth score repairs jointly with the
   communality-clamp finalists; its 24-cell/300-rep run (2026-07-10) produced no
   survivor (findings kept in the guttman-inference paper's notes since
@@ -1577,7 +1546,7 @@ an unconstrained gradient test to constrained solutions.
   point-estimator lane consumes the blockwise triad-GMM rule. The
   residual-restricted Guttman map can also select any least-squares-form
   H-diagonal rule (`triad_ls`, `extended_triad_ls`, `triad_wls`, `triad_wls_joint`) and
-  any composite weight (`unit`, `standardized`, `adaptive`), reusing both
+  any composite weight (`unit`, `standardized`), reusing both
   choices in its restricted analytic-first Jacobian and grouped inference;
   AR/RS remain
   low-level H-estimation diagnostics because they are not constraint-compatible
@@ -3412,28 +3381,14 @@ of the optimizer stop. A returned estimate need not pass that verdict.
 - Distributionally weighted least squares (DLS) is available as an explicit
   weight-matrix builder over the existing moment-quadratic LS surface. The
   fixed-scalar builder mixes covariance-moment Gamma matrices between
-  normal-theory GLS and empirical ADF/WLS endpoints, while
-  `empirical_bayes_dls_mixing_scalar()` estimates a global reliability-style
-  scalar from the observed `Gamma_ADF - Gamma_NT` departure and casewise
-  fourth-moment product noise, following the empirical-Bayes weight-selection
-  direction of Du and Wu (2024). `empirical_bayes_dls_weight()` then delegates
-  to the same DLS builder, so modification-index and weighted-moment sandwich
-  paths consume the result exactly like any supplied WLS weight. Local
-  simulation checks live under `cpp/tests/checks/dls/`. The mixed/structured Gamma
+  normal-theory GLS and empirical ADF/WLS endpoints. The mixed Gamma
   is inverted through a strict eigen-gated SPD inverse
   (`detail::symmetric_inverse_pd_gated`, `tol = 1e-10·max(1,λmax)`): a
   numerically rank-deficient fourth-moment Gamma returns an explicit
   `FitError::NumericIssue` with dim / numerical rank / rcond / smallest
   eigenvalue rather than a barely-PD inverse that would later trip the terminal
   stationarity audit.
-- Model-implied fourth-order / structured-ADF weights are available as an
-  explicit `estimate::frontier::structured_gamma_weight()` builder for
-  complete-data, covariance-only pure CFA. The builder estimates independent
-  factor/uniqueness fourth cumulants from raw data, builds the structured
-  covariance-moment Gamma, inverts it, and returns an ordinary `gmm::Weight`
-  for the existing WLS path. The raw structured Gamma matrix is also exposed so
-  paper-local R code can inspect or regularize it before inversion. It is a
-  paper-facing frontier helper, not a new estimator or default.
+
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 
@@ -3443,7 +3398,7 @@ of the optimizer stop. A returned estimate need not pass that verdict.
 NormalTheory blocks. NormalTheory stores a p×p Cholesky factor of A and applies
 `blockdiag(A⁻¹, ½ Dᵀ(A⁻¹ ⊗ A⁻¹)D)` without a dense moment-weight factor.
 GLS uses A=S; Fisher/IRLS uses A=Σ(theta_k). Empirical DWLS weights are diagonal;
-pairwise GLS, DLS and structured empirical Gamma weights remain dense.
+Pairwise normal-theory Gamma and fixed-scalar DLS weights remain dense.
 `BlockWeight::to_dense()` fills NT entries by the closed-form vech-pair identity
 in O(p⁴), replacing the former O(p⁷) sequence of sparse-basis GEMMs.
 

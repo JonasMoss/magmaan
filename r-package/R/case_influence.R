@@ -41,7 +41,7 @@
 .case_route_fitters <- c(
   "fit_model", "frontier_fit_ml_psd", "frontier_fit_ml_psd_fallback",
   "frontier_fit_ml_multiinfo", "frontier_fit_uls_psd", "frontier_fit_gls_psd",
-  "frontier_fit_wls_psd", "frontier_fit_gmm_fitted_weight_psd")
+  "frontier_fit_wls_psd")
 
 # The leave-one-out refit: the same chart for sphere fits, the same route
 # (constraint, penalty, optimizer settings) for fits that record one, else the

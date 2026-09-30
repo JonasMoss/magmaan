@@ -274,8 +274,7 @@ TEST_CASE("standardized composite weights are exact and inferable") {
   REQUIRE_OK(ev);
 
   for (auto composite : {ef::CompositeWeight::Unit,
-                         ef::CompositeWeight::Standardized,
-                         ef::CompositeWeight::Adaptive}) {
+                         ef::CompositeWeight::Standardized}) {
     INFO("composite ordinal: " << static_cast<int>(composite));
     auto th = ef::noniterative_cfa_theta(
         b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
@@ -484,17 +483,6 @@ TEST_CASE("aligned score conditioning preserves raw compatibility and resolves a
   CHECK((std_default->array() == std_raw->array()).all());
   CHECK((std_default->array() == aligned_auto->array()).all());
 
-  raw.floor0 = -123.0;
-  raw.rate_exp = -4.0;
-  auto adaptive_compat = ef::noniterative_cfa_theta(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      ef::CompositeWeight::Adaptive, {}, raw);
-  auto adaptive_default = ef::noniterative_cfa_theta(
-      b.pt, b.rep, *ev, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      ef::CompositeWeight::Adaptive);
-  REQUIRE_OK(adaptive_compat);
-  REQUIRE_OK(adaptive_default);
-  CHECK((adaptive_compat->array() == adaptive_default->array()).all());
 }
 
 TEST_CASE("hard and soft score conditioning attain the normalized floor") {
@@ -599,9 +587,7 @@ TEST_CASE("score conditioning is scale equivariant and validates its scope") {
   CHECK_FALSE(ef::fit_noniterative_cfa(
       b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanLavaan,
       ef::CompositeWeight::Unit, {}, hard).has_value());
-  CHECK_FALSE(ef::fit_noniterative_cfa(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      ef::CompositeWeight::Adaptive, {}, hard).has_value());
+
 }
 
 TEST_CASE("fixed-diagonal H conditioning repairs the aligned proxy for point fits") {
@@ -640,9 +626,7 @@ TEST_CASE("fixed-diagonal H conditioning repairs the aligned proxy for point fit
   CHECK_FALSE(ef::fit_noniterative_cfa(
       b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanLavaan,
       ef::CompositeWeight::Unit, {}, {}, hard).has_value());
-  CHECK_FALSE(ef::fit_noniterative_cfa(
-      b.pt, b.rep, samp, ef::NonIterativeEstimator::GuttmanAligned,
-      ef::CompositeWeight::Adaptive, {}, {}, hard).has_value());
+
 }
 
 TEST_CASE("conditioned analytic Jacobians match central differences and inference") {
@@ -740,8 +724,7 @@ TEST_CASE("analytic configural Jacobian matches central finite differences") {
   for (auto which : {ef::NonIterativeEstimator::GuttmanLavaan,
                      ef::NonIterativeEstimator::GuttmanAligned}) {
     for (auto composite : {ef::CompositeWeight::Unit,
-                           ef::CompositeWeight::Standardized,
-                           ef::CompositeWeight::Adaptive}) {
+                           ef::CompositeWeight::Standardized}) {
       INFO("estimator ordinal: " << static_cast<int>(which));
       INFO("composite ordinal: " << static_cast<int>(composite));
       auto Ja = ef::estimator_map_jacobian_analytic(

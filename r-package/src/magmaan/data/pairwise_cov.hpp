@@ -54,7 +54,7 @@ struct PairwiseSampleStats {
 post_expected<PairwiseSampleStats>
 pairwise_sample_stats(const RawData& raw);
 
-// Van-Praag-style normal-theory ACOV under MAR — the missing-data analogue
+// Van-Praag-style normal-theory ACOV under MCAR — the missing-data analogue
 // of `gamma_nt(Σ)`. Returns one p*×p* matrix per block,
 //
 //   Γ_NT^pw[a, b] = (π_{a,b} / (π_a · π_b)) · Γ_NT(Σ̂_pw)[a, b],
@@ -74,12 +74,12 @@ pairwise_sample_stats(const RawData& raw);
 // π̂_diag ≡ 1, so
 // the sum collapses to `gamma_nt(Σ̂_pw[b])` exactly.
 //
-// Used as the asymptotically-efficient GLS weight by
-// `estimate::fit_gls_pairwise`. The Σ-only fallback (running the existing
-// `fit_gls` on `pw.S` as if it were a complete-data covariance) skips this
-// entirely and uses `Γ_NT(Σ̂_pw)⁻¹` directly — the Savalei-Bentler 2005 /
-// Gold-Bentler-Kim 2003 literature convention, simpler and consistent but
-// asymptotically suboptimal under MAR.
+// This is an estimator-independent sampling covariance for pairwise moments.
+// It can supply post-fit inference or be inverted into a caller-fixed weight
+// for `estimate::fit_gmm`. Ordinary ML/ULS/GLS and other moment discrepancies
+// can consume the same pairwise S and marginal means through SampleStats;
+// their complete-data inference formulas do not automatically apply.
+// General MAR consistency is not established by this MCAR construction.
 //
 // Missingness follows `pairwise_sample_stats`: use the supplied mask, or infer
 // it from finite raw entries. Raw data and summaries must describe the same

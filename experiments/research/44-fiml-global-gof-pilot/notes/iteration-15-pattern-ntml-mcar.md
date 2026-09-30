@@ -1,5 +1,8 @@
 # Iteration 15: patternwise normal-theory ML under MCAR
 
+Historical record: PNTML and its smoke driver were removed from the library on
+2026-09-30. The results below describe the original implementation revision.
+
 ## Question
 
 Can the saturated Gaussian-FIML estimate be projected onto the structured SEM

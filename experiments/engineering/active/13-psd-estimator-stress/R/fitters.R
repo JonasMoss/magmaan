@@ -332,15 +332,7 @@ run_continuous_task <- function(context, data, control) {
          function(fit) quadratic_objective(stats, magmaan_core$model_implied(fit), fixed_weight)),
     list("psd_wls", "psd", "wls", "fixed_wls", TRUE,
          function() frontier_fit_wls_psd(spec, stats, W = fixed_weight, optimizer = "nlopt-slsqp", control = control),
-         function(fit) quadratic_objective(stats, magmaan_core$model_implied(fit), fixed_weight)),
-    list("psd_fitted_gmm", "unpaired", "", "fitted_gmm", TRUE,
-         function() frontier_fit_gmm_fitted_weight_psd(spec, stats, optimizer = "nlopt-slsqp", control = control),
-         function(fit) {
-           implied <- magmaan_core$model_implied(fit)
-           weights <- lapply(implied$sigma, normal_theory_weight,
-                             include_mean = include_mean)
-           quadratic_objective(stats, implied, weights)
-         })
+         function(fit) quadratic_objective(stats, magmaan_core$model_implied(fit), fixed_weight))
   )
   if (identical(context$fit_plan, "fixed_wls")) {
     definitions <- definitions[vapply(definitions, function(d) {

@@ -1309,10 +1309,7 @@ inline magmaan::estimate::gmm::Weight dense_weight_or_stop(
 }
 
 // Per-block dense matrices -> R, with the same one-block-unwraps convention.
-// For things that are genuinely a list of matrices rather than a weight — e.g.
-// `structured_gamma_matrix`, which returns Gamma itself. That used to be routed
-// through the weight path purely because `gmm::Weight` happened to be the same
-// type; it is not a weight and should not pretend to be one.
+// Gamma blocks are moment covariance matrices, separate from weights.
 inline SEXP dense_blocks_to_r(const std::vector<Eigen::MatrixXd>& blocks) {
   if (blocks.size() == 1) return Rcpp::wrap(blocks[0]);
   Rcpp::List out(static_cast<R_xlen_t>(blocks.size()));

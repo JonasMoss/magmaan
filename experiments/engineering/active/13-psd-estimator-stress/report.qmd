@@ -11,6 +11,10 @@ execute:
   message: false
 ---
 
+
+The fitted-weight GMM arm was removed on 2026-09-30. Stored runs retain that
+historical arm; current runs use the remaining registered objectives.
+
 ```{r setup}
 override <- Sys.getenv("MAGMAAN_EXPERIMENT_RESULTS", unset = "")
 roots <- c(

@@ -67,7 +67,6 @@ magmaan_add_test_target(magmaan_test_spec spec
   unit/matrix_rep_test.cpp
   unit/model_evaluator_test.cpp
   unit/fcsem_evaluator_test.cpp
-  unit/auto_identification_test.cpp
   golden/lexer_golden_test.cpp
   golden/parser_golden_test.cpp
   golden/lavaanify_golden_test.cpp
@@ -77,7 +76,6 @@ magmaan_add_test_target(magmaan_test_spec spec
 set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_test.cpp
   unit/ml_irls_test.cpp
-  unit/ml_continuation_test.cpp
   unit/rbm_test.cpp
   unit/rbm_fd_test.cpp
   unit/sam_test.cpp
@@ -122,7 +120,6 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/detail_linalg_test.cpp
   unit/dls_weight_test.cpp
   unit/gls_scalar_objective_test.cpp
-  unit/structured_gamma_weight_test.cpp
   unit/twolevel_test.cpp
   golden/fit_theta_golden_test.cpp
   golden/ls_golden_test.cpp

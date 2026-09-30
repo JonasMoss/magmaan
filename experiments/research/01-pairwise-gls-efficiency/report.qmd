@@ -69,8 +69,7 @@ Five estimators fit a CFA on incomplete continuous data:
   GLS with the Σ-only weight `Γ_NT(Ŝ_pw)⁻¹`.
 - **Pairwise ML** — `fit_ml(samp.S = Ŝ_pw)`; Savalei-Bentler (2005) /
   Gold-Bentler-Kim (2003) pairwise covariance ML.
-- **Γ_NT^pw GLS** — `fit_gls_pairwise(raw, pw)`; the asymptotically
-  efficient pairwise quadratic form with `W = (Γ_NT^pw)⁻¹`.
+- **Γ_NT^pw GLS** — `fit_wls(sample_pw, solve(Gamma_pw))`; the MCAR-adjusted pairwise quadratic form with `W = (Γ_NT^pw)⁻¹`.
 - **Two-stage ML** — `estimate_two_stage_em(raw, kind = "ml")`; Stage 1
   saturated EM (μ̂_em, Σ̂_em), Stage 2 complete-data ML on the EM
   moments. Savalei-Bentler (2009) point-estimate form.

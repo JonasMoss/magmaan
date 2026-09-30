@@ -296,29 +296,6 @@ TEST_CASE("Newton adapters: a profiled LS fit is audited in full coordinates") {
   CHECK(a->diagnostics.passed);
 }
 
-TEST_CASE("Newton adapters: fitted weight is frozen at the audit point") {
-  auto m = model_for("x1 ~~ x1 + x2 + x3\nx2 ~~ x2 + x3\nx3 ~~ x3");
-  auto s = sample3();
-  auto theta = estimate::simple_start_values(m.pt, m.rep, s, {});
-  REQUIRE(theta.has_value());
-  auto ev = model::ModelEvaluator::build(m.pt, m.rep);
-  REQUIRE(ev.has_value());
-  auto w = estimate::gmm::expected_information_weight(*ev, s, *theta);
-  REQUIRE(w.has_value());
-  auto a = nf::audit_newton_gmm_fitted_weight(m.pt, m.rep, s, *theta);
-  auto direct = nf::audit_newton_gmm(m.pt, m.rep, s, *theta, *w);
-  REQUIRE(a.has_value()); REQUIRE(direct.has_value());
-  check_artifacts(*a);
-  CHECK(a->derivatives.hessian.isApprox(direct->derivatives.hessian, 1e-12));
-  // The saturated model is linear: the frozen-weight Hessian is exactly J'J
-  // even away from the optimum. Differentiating the weight would violate this.
-  CHECK(a->derivatives.hessian.isApprox(400 *
-      a->derivatives.whitened_jacobian.transpose() * a->derivatives.whitened_jacobian, 1e-8));
-  CHECK(a->derivatives.gradient.norm() > 1);
-  CHECK_FALSE(nf::audit_newton_gmm_fitted_weight(m.pt, m.rep, s, *theta,
-      static_cast<nf::GmmFittedWeightKind>(99)).has_value());
-}
-
 TEST_CASE("Newton adapters: ML2S reuses moments for all five Stage-2 policies") {
   auto m = model_for("x1 ~~ x1 + x2\nx2 ~~ x2", true);
   data::SampleStats s;

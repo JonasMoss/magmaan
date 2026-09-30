@@ -1653,32 +1653,6 @@ frontier_fit_wls_psd <- function(
   .finish_frontier_fit(fit, model, fit$estimator %||% "WLS", "frontier_fit_wls_psd", .route_args(environment(), sys.function()), missing)
 }
 
-# Frontier expected-information fitted-weight GMM over PSD primitive LISREL
-# covariance matrices. The weight is frozen within each inner optimization and
-# refreshed between inner solves; no derivative through W(theta) is taken.
-frontier_fit_gmm_fitted_weight_psd <- function(
-    model, data, optimizer = "nlopt-slsqp", control = NULL,
-    max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error")) {
-  missing <- match.arg(missing)
-  if (is.character(model) && length(model) == 1L) {
-    model <- model_spec(model)
-  }
-  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
-  fit <- frontier_fit_gmm_fitted_weight_psd_impl(
-    partable_arg(model), sample_stats_arg(data),
-    optimizer = optimizer, control = control,
-    max_outer = max_outer, theta_tol = theta_tol, fmin_tol = fmin_tol,
-    start_eigen_floor = start_eigen_floor,
-    feasibility_tol = feasibility_tol
-  )
-  fit <- attach_complete_raw_data(fit, data)
-  .finish_frontier_fit(fit, model, fit$estimator %||% "GMM", "frontier_fit_gmm_fitted_weight_psd", .route_args(environment(), sys.function()), missing)
-}
-
-# Normal-theory ML via local Fisher scoring. This is a damped expected-
-# information step on the true ML objective, not a frozen GLS inner solve.
 fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml_fisher")
   fit <- fit_ml_fisher_impl(partable_arg(model), sample_stats_arg(data),
@@ -1725,25 +1699,6 @@ fit_ml_irls_snlls <- function(model, data, optimizer = "port-nls",
                                 optimizer = optimizer, control = control, bounds = b)
   attach_complete_raw_data(fit, data)
 }
-
-frontier_fit_ml_ridge_continuation <- function(
-    model, data, optimizer = "nlopt-lbfgs", control = NULL, bounds = NULL,
-    alphas = NULL, target = c("diagonal", "scaled_identity", "identity"),
-    include_endpoint = TRUE, diagonal_floor = 1e-8,
-    missing = c("listwise", "error")) {
-  target <- match.arg(target)
-  missing <- match.arg(missing)
-  b <- bounds_arg(bounds, model, data, "frontier_fit_ml_ridge_continuation")
-  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
-  frontier_fit_ml_ridge_continuation_impl(
-    partable_arg(model), sample_stats_arg(data),
-    optimizer = optimizer, control = control, bounds = b,
-    alphas = alphas, target = target,
-    include_endpoint = isTRUE(include_endpoint),
-    diagonal_floor = diagonal_floor
-  )
-}
-
 sam <- function(model, data,
                 method = c("local", "global"),
                 mapping = c("ml", "gls", "uls"),
@@ -1841,27 +1796,6 @@ fit_fiml <- function(model, data,
 # Frontier two-stage patternwise normal-theory ML. The saturated FIML moments
 # may be supplied once and reused across models fitted to the same raw pattern
 # layout. Null/correct-specification inference is attached as `$pntml`.
-frontier_fit_pattern_ntml <- function(
-    model, data, optimizer = "nlopt-lbfgs-slsqp-fallback", control = NULL,
-    stage1 = NULL) {
-  if (is.character(model) && length(model) == 1L) {
-    model <- model_spec(model, meanstructure = TRUE)
-  } else if (inherits(model, "magmaan_model_spec") &&
-             !.model_spec_has_meanstructure(model)) {
-    model <- .rebuild_model_spec(
-      model, overrides = list(meanstructure = TRUE),
-      caller = "frontier_fit_pattern_ntml"
-    )
-  }
-  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  fit <- frontier_fit_pattern_ntml_impl(
-    partable_arg(model), fiml_data_arg(data), optimizer = optimizer,
-    control = control, stage1 = stage1
-  )
-  .finish_frontier_fit(fit, model, fit$estimator %||% "FIML",
-                       "frontier_fit_pattern_ntml", .route_args(environment(), sys.function()))
-}
-
 # Frontier raw-data FIML over PSD primitive LISREL covariance matrices.
 # Inference for boundary solutions is intentionally outside this estimator's
 # current validation contract.

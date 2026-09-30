@@ -250,7 +250,7 @@ build_u_factor(spec::LatentStructure        pt,
 // `Pairwise` here — the other two values route to the existing 5-arg overload.
 //
 // The μ-block of the bread (when `has_means`) keeps the existing
-// `LLT(Σ̂_b)` convention — same compromise as `fit_gls_pairwise`'s μ-block
+// `LLT(Σ̂_b)` convention — the sample-based mean-block approximation
 // weight. The pairwise μ ACOV is still in `project/backlog/speculative.md`.
 post_expected<UFactor>
 build_u_factor(spec::LatentStructure                pt,

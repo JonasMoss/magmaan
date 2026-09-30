@@ -77,20 +77,12 @@ frontier_fit_wls_psd_impl <- function(partable, sample_stats, W, optimizer = NUL
     .Call(`_magmaanlab_frontier_fit_wls_psd_impl`, partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol)
 }
 
-frontier_fit_gmm_fitted_weight_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_gmm_fitted_weight_psd_impl`, partable, sample_stats, optimizer, control, max_outer, theta_tol, fmin_tol, start_eigen_floor, feasibility_tol)
-}
-
 frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
     .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
 }
 
 frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, ij_weight = NULL, dls_a = 0.5, reference = NULL) {
     .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust, estimated_weight, ij_weight, dls_a, reference)
-}
-
-frontier_profile_lrt_parameter_gmm_fitted_weight_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_fitted_weight_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, max_outer, theta_tol, fmin_tol, raw_data, robust, reference)
 }
 
 frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
@@ -103,10 +95,6 @@ frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.
 
 frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, ij_weight = NULL, dls_a = 0.5, reference = NULL) {
     .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, estimated_weight, ij_weight, dls_a, reference)
-}
-
-frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, max_outer = 20L, theta_tol = 1e-7, fmin_tol = 1e-10, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, max_outer, theta_tol, fmin_tol, raw_data, robust, reference)
 }
 
 frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
@@ -173,10 +161,6 @@ fit_ml_irls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, con
     .Call(`_magmaanlab_fit_ml_irls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-frontier_fit_ml_ridge_continuation_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL, alphas = NULL, target = "diagonal", include_endpoint = TRUE, diagonal_floor = 1e-8) {
-    .Call(`_magmaanlab_frontier_fit_ml_ridge_continuation_impl`, partable, sample_stats, optimizer, control, bounds, alphas, target, include_endpoint, diagonal_floor)
-}
-
 frontier_sam_impl <- function(partable, sample_stats, raw_data = NULL, method = "local", mapping = "ml", se = "twostep", lambda_correction = TRUE, alpha_correction = 0L, meanstructure = FALSE, mm_optimizer = NULL, struc_optimizer = NULL, mm_control = NULL, struc_control = NULL) {
     .Call(`_magmaanlab_frontier_sam_impl`, partable, sample_stats, raw_data, method, mapping, se, lambda_correction, alpha_correction, meanstructure, mm_optimizer, struc_optimizer, mm_control, struc_control)
 }
@@ -209,10 +193,6 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaanlab_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
-frontier_fit_pattern_ntml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, stage1 = NULL) {
-    .Call(`_magmaanlab_frontier_fit_pattern_ntml_impl`, partable, raw_data, optimizer, control, stage1)
-}
-
 frontier_fit_fiml_psd_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaanlab_frontier_fit_fiml_psd_impl`, partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol)
 }
@@ -231,10 +211,6 @@ regularize_saturated_stage1_impl <- function(stage1, regularization = NULL) {
 
 fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaanlab_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
-}
-
-fit_gls_pairwise_impl <- function(partable, X, mask = NULL, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_gls_pairwise_impl`, partable, X, mask, optimizer, control, bounds)
 }
 
 fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
@@ -359,14 +335,6 @@ fit_start_values <- function(partable, sample_stats, start = NULL, transport = N
 
 fit_coordinate_map <- function(partable, sample_stats, start, scaling = "sample_units", center_locations = TRUE) {
     .Call(`_magmaanlab_fit_coordinate_map`, partable, sample_stats, start, scaling, center_locations)
-}
-
-estimate_structured_gamma <- function(fit, raw_data) {
-    .Call(`_magmaanlab_estimate_structured_gamma`, fit, raw_data)
-}
-
-estimate_structured_gamma_weight <- function(fit, raw_data) {
-    .Call(`_magmaanlab_estimate_structured_gamma_weight`, fit, raw_data)
 }
 
 model_implied <- function(fit) {
@@ -603,18 +571,6 @@ infer_nt_moment_quadratic <- function(fit, implied) {
 
 infer_nt_moment_quadratic_sample <- function(sample_stats, implied) {
     .Call(`_magmaanlab_infer_nt_moment_quadratic_sample`, sample_stats, implied)
-}
-
-frontier_is_std_lv_admissible_impl <- function(marker_partable, std_lv_partable) {
-    .Call(`_magmaanlab_frontier_is_std_lv_admissible_impl`, marker_partable, std_lv_partable)
-}
-
-frontier_partable_marker_to_std_lv_impl <- function(marker_partable) {
-    .Call(`_magmaanlab_frontier_partable_marker_to_std_lv_impl`, marker_partable)
-}
-
-frontier_backconvert_std_lv_to_marker_impl <- function(marker_partable, std_lv_est) {
-    .Call(`_magmaanlab_frontier_backconvert_std_lv_to_marker_impl`, marker_partable, std_lv_est)
 }
 
 frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {

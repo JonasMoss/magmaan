@@ -72,7 +72,6 @@ frontier_ml2s_information_choices <- frontier_ml2s_information_choices_impl
 frontier_fiml_information_choices <- frontier_fiml_information_choices_impl
 estimate_uls <- fit_uls_impl
 estimate_gls <- fit_gls_impl
-estimate_gls_pairwise <- fit_gls_pairwise_impl
 estimate_wls <- fit_wls_impl
 estimate_dwls_ordinal <- fit_dwls_ordinal_impl
 estimate_wls_ordinal <- fit_wls_ordinal_impl
@@ -97,9 +96,6 @@ estimate_start_values <- fit_start_values
 estimate_coordinate_map <- fit_coordinate_map
 frontier_fcsem_model_spec <- fcsem_model_spec_impl
 frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
-frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
-frontier_backconvert_std_lv_to_marker <- backconvert_std_lv_to_marker_impl
-frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
 frontier_guttman_h <- frontier_guttman_h_impl
 frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
@@ -114,7 +110,6 @@ frontier_sam <- frontier_sam_impl
 frontier_dls_weight <- frontier_dls_weight_impl
 frontier_profile_lrt_parameter_ml <- frontier_profile_lrt_parameter_ml_impl
 frontier_profile_lrt_parameter_gmm <- frontier_profile_lrt_parameter_gmm_impl
-frontier_profile_lrt_parameter_gmm_fitted_weight <- frontier_profile_lrt_parameter_gmm_fitted_weight_impl
 frontier_profile_lrt_parameter_ordinal <- frontier_profile_lrt_parameter_ordinal_impl
 frontier_profile_lrt_parameter_fiml <- frontier_profile_lrt_parameter_fiml_impl
 frontier_profile_lrt_parameter_ml2s <- frontier_profile_lrt_parameter_ml2s_impl
@@ -122,7 +117,6 @@ frontier_profile_lrt_parameter_ml2s_nt <- frontier_profile_lrt_parameter_ml2s_nt
 frontier_profile_lrt_parameter_mixed_ordinal <- frontier_profile_lrt_parameter_mixed_ordinal_impl
 frontier_profile_lrt_ci_parameter_ml <- frontier_profile_lrt_ci_parameter_ml_impl
 frontier_profile_lrt_ci_parameter_gmm <- frontier_profile_lrt_ci_parameter_gmm_impl
-frontier_profile_lrt_ci_parameter_gmm_fitted_weight <- frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl
 frontier_profile_lrt_ci_parameter_ordinal <- frontier_profile_lrt_ci_parameter_ordinal_impl
 frontier_profile_lrt_ci_parameter_fiml <- frontier_profile_lrt_ci_parameter_fiml_impl
 frontier_profile_lrt_ci_parameter_ml2s <- frontier_profile_lrt_ci_parameter_ml2s_impl
@@ -383,7 +377,6 @@ magmaan_core <- local({
       "estimate_two_stage_em",
       "estimate_uls",
       "estimate_gls",
-      "estimate_gls_pairwise",
       "estimate_wls",
       "estimate_dwls_ordinal",
       "estimate_wls_ordinal",
@@ -401,8 +394,6 @@ magmaan_core <- local({
       "estimate_bounds_loading",
       "estimate_start_values",
       "estimate_coordinate_map",
-      "estimate_structured_gamma",
-      "estimate_structured_gamma_weight",
       "fiml_observed_vcov",
       "estimate_fiml_robust_mlr",
       "estimate_two_stage_em_ml_inference",
@@ -568,30 +559,23 @@ magmaan_core <- local({
       "frontier_fcsem_standard_errors",
       "frontier_fcsem_fit_measures",
       "frontier_fcsem_standardized_rows",
-      "frontier_is_std_lv_admissible",
-      "frontier_backconvert_std_lv_to_marker",
-      "frontier_fit_ml_auto_identification",
       "frontier_fit_ml_psd",
       "frontier_fit_ml_psd_fallback",
       "frontier_fit_sphere",
       "frontier_reidentify",
-      "frontier_fit_pattern_ntml",
       "frontier_fit_ml2s_psd",
       "frontier_ml2s_information_choices",
       "frontier_fiml_information_choices",
       "frontier_fit_uls_psd",
       "frontier_fit_gls_psd",
       "frontier_fit_wls_psd",
-      "frontier_fit_gmm_fitted_weight_psd",
       "frontier_fit_catml_psd",
-      "frontier_fit_ml_ridge_continuation",
       "frontier_rbm",
       "frontier_sam",
       "frontier_dls_weight",
       "frontier_guttman_h",
       "frontier_profile_lrt_parameter_ml",
       "frontier_profile_lrt_parameter_gmm",
-      "frontier_profile_lrt_parameter_gmm_fitted_weight",
       "frontier_profile_lrt_parameter_ordinal",
       "frontier_profile_lrt_parameter_fiml",
       "frontier_profile_lrt_parameter_ml2s",
@@ -599,7 +583,6 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_mixed_ordinal",
       "frontier_profile_lrt_ci_parameter_ml",
       "frontier_profile_lrt_ci_parameter_gmm",
-      "frontier_profile_lrt_ci_parameter_gmm_fitted_weight",
       "frontier_profile_lrt_ci_parameter_ordinal",
       "frontier_profile_lrt_ci_parameter_fiml",
       "frontier_profile_lrt_ci_parameter_ml2s",
@@ -684,7 +667,6 @@ magmaan_core <- local({
       "bounds_wide_impl",
       "bounds_loading_impl",
       "fit_fiml_impl",
-      "frontier_fit_pattern_ntml_impl",
       "fiml_fit_measures_impl",
       "fit_uls_impl",
       "fit_gls_impl",
@@ -707,15 +689,12 @@ magmaan_core <- local({
       "frontier_fit_uls_psd_impl",
       "frontier_fit_gls_psd_impl",
       "frontier_fit_wls_psd_impl",
-      "frontier_fit_gmm_fitted_weight_psd_impl",
       "frontier_fit_catml_psd_impl",
-      "frontier_fit_ml_ridge_continuation_impl",
       "frontier_rbm_impl",
       "frontier_sam_impl",
       "frontier_dls_weight_impl",
       "frontier_profile_lrt_parameter_ml_impl",
       "frontier_profile_lrt_parameter_gmm_impl",
-      "frontier_profile_lrt_parameter_gmm_fitted_weight_impl",
       "frontier_profile_lrt_parameter_ordinal_impl",
       "frontier_profile_lrt_parameter_fiml_impl",
       "frontier_profile_lrt_parameter_ml2s_impl",
@@ -723,7 +702,6 @@ magmaan_core <- local({
       "frontier_profile_lrt_parameter_mixed_ordinal_impl",
       "frontier_profile_lrt_ci_parameter_ml_impl",
       "frontier_profile_lrt_ci_parameter_gmm_impl",
-      "frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl",
       "frontier_profile_lrt_ci_parameter_ordinal_impl",
       "frontier_profile_lrt_ci_parameter_fiml_impl",
       "frontier_profile_lrt_ci_parameter_ml2s_impl",
@@ -735,9 +713,6 @@ magmaan_core <- local({
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",
       "fcsem_standardized_rows_impl",
-      "is_std_lv_admissible_impl",
-      "backconvert_std_lv_to_marker_impl",
-      "fit_ml_auto_identification_impl",
       "fit_start_values",
       "fit_coordinate_map",
       "fit_sample_stats",
@@ -784,7 +759,6 @@ magmaan_core <- local({
       "infer_pairwise_casewise_contributions",
       "data_pairwise_sample_stats",
       "data_gamma_nt_pairwise",
-      "fit_gls_pairwise_impl",
       "infer_empirical_gamma",
       "infer_gamma_nt",
       "infer_continuous_ls_robust",

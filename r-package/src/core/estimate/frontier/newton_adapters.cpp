@@ -257,19 +257,6 @@ fit_expected<NewtonAudit> audit_newton_gmm(
   return finish(pt, rep, ls_derivatives(*problem, theta, total_n(sample.n_obs),
       NewtonObjectiveKind::LeastSquares, opts), opts);
 }
-fit_expected<NewtonAudit> audit_newton_gmm_fitted_weight(
-    spec::LatentStructure pt, const model::MatrixRep& rep, const SampleStats& sample,
-    const Eigen::VectorXd& theta, GmmFittedWeightKind kind, NewtonAdapterOptions opts) {
-  if (auto ok = validate(pt, theta, opts, true); !ok) return std::unexpected(ok.error());
-  if (kind != GmmFittedWeightKind::ExpectedInformation)
-    return std::unexpected(error("unknown fitted-weight kind"));
-  if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok) return std::unexpected(ok.error());
-  auto ev = evaluator(pt, rep);
-  if (!ev) return std::unexpected(ev.error());
-  auto weight = gmm::expected_information_weight(*ev, sample, theta);
-  if (!weight) return std::unexpected(weight.error());
-  return audit_newton_gmm(std::move(pt), rep, sample, theta, *weight, std::move(opts));
-}
 
 fit_expected<NewtonAudit> audit_newton_ml2s(
     spec::LatentStructure pt, const model::MatrixRep& rep,

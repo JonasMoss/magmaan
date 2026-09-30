@@ -43,8 +43,6 @@ composite_weight_name(CompositeWeight composite) {
       return "unit";
     case CompositeWeight::Standardized:
       return "standardized";
-    case CompositeWeight::Adaptive:
-      return "adaptive";
   }
   return "auto";
 }
@@ -98,9 +96,6 @@ resolve_block_score_conditioning(
     if (which != NonIterativeEstimator::GuttmanAligned)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "score conditioning is supported only for guttman_aligned"});
-    if (resolved == CompositeWeight::Adaptive)
-      return std::unexpected(FitError{FitError::Kind::NumericIssue,
-          "score conditioning is not supported for adaptive composites"});
     if (resolved != CompositeWeight::Unit &&
         resolved != CompositeWeight::Standardized)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -139,9 +134,6 @@ resolve_block_h_conditioning(
     if (which != NonIterativeEstimator::GuttmanAligned)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
           "H conditioning is supported only for guttman_aligned"});
-    if (resolved == CompositeWeight::Adaptive)
-      return std::unexpected(FitError{FitError::Kind::NumericIssue,
-          "H conditioning is not supported for adaptive composites"});
     if (resolved != CompositeWeight::Unit &&
         resolved != CompositeWeight::Standardized)
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -863,7 +855,7 @@ estimator_h_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 
 fit_expected<Eigen::MatrixXd>
 composite_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-                 const Eigen::MatrixXd& H, CompositeWeight composite,
+                 CompositeWeight composite,
                  const char* label) {
   const Eigen::MatrixXd Z = incidence_matrix(L);
   switch (composite) {
@@ -887,17 +879,6 @@ composite_matrix(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       }
       return B;
     }
-    case CompositeWeight::Adaptive: {
-      const Eigen::MatrixXd incidence_score_cov = Z.transpose() * H * Z;
-      auto incidence_inv = invert_full_rank(incidence_score_cov, label);
-      if (!incidence_inv.has_value()) return std::unexpected(incidence_inv.error());
-
-      const Eigen::MatrixXd prelim_loading = H * Z * (*incidence_inv);
-      const Eigen::MatrixXd gram = prelim_loading.transpose() * prelim_loading;
-      auto gram_inv = invert_full_rank(gram, label);
-      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-      return prelim_loading * (*gram_inv);
-    }
   }
   return std::unexpected(FitError{FitError::Kind::NumericIssue,
       std::string(label) + ": unknown composite weight"});
@@ -917,7 +898,7 @@ fit_expected<ScoreBlock> standardized_score_block(const CfaBlockLayout& L,
   const Eigen::Index n_h2_clamped = H_or->n_h2_clamped;
   Eigen::MatrixXd H = std::move(H_or->H);
   auto B_or = composite_matrix(
-      L, S, H, resolve_composite_weight(which, composite), "Guttman metric map");
+      L, S, resolve_composite_weight(which, composite), "Guttman metric map");
   if (!B_or.has_value()) return std::unexpected(B_or.error());
   Eigen::MatrixXd B = std::move(*B_or);
 
@@ -1101,8 +1082,7 @@ estimator_h_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S
 
 fit_expected<MatrixDirection>
 composite_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-                             const Eigen::MatrixXd& dS, const Eigen::MatrixXd& H,
-                             const Eigen::MatrixXd& dH, CompositeWeight composite,
+                             const Eigen::MatrixXd& dS, CompositeWeight composite,
                              const char* label) {
   const Eigen::MatrixXd Z = incidence_matrix(L);
   switch (composite) {
@@ -1123,24 +1103,6 @@ composite_matrix_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
         B.row(i) /= std::sqrt(sii);
         dB.row(i) = -0.5 * B.row(i) * dS(i, i) / sii;
       }
-      return MatrixDirection{std::move(B), std::move(dB)};
-    }
-    case CompositeWeight::Adaptive: {
-      const Eigen::MatrixXd G = Z.transpose() * H * Z;
-      auto Ginv = invert_full_rank(G, label);
-      if (!Ginv.has_value()) return std::unexpected(Ginv.error());
-      const Eigen::MatrixXd dG = Z.transpose() * dH * Z;
-      const Eigen::MatrixXd dGinv = -(*Ginv) * dG * (*Ginv);
-
-      const Eigen::MatrixXd P = H * Z * (*Ginv);
-      const Eigen::MatrixXd dP = dH * Z * (*Ginv) + H * Z * dGinv;
-      const Eigen::MatrixXd gram = P.transpose() * P;
-      auto gram_inv = invert_full_rank(gram, label);
-      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-      const Eigen::MatrixXd dgram = dP.transpose() * P + P.transpose() * dP;
-      const Eigen::MatrixXd dgram_inv = -(*gram_inv) * dgram * (*gram_inv);
-      Eigen::MatrixXd B = P * (*gram_inv);
-      Eigen::MatrixXd dB = dP * (*gram_inv) + P * dgram_inv;
       return MatrixDirection{std::move(B), std::move(dB)};
     }
   }
@@ -1293,9 +1255,6 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
 
   const Eigen::MatrixXd Z = incidence_matrix(L);
   Eigen::MatrixXd B;
-  Eigen::MatrixXd gls_Ginv;
-  Eigen::MatrixXd gls_P;
-  Eigen::MatrixXd gls_gram_inv;
   switch (resolved) {
     case CompositeWeight::EstimatorDefault:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -1314,19 +1273,6 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
         B.row(i) /= std::sqrt(sii);
       }
       break;
-    case CompositeWeight::Adaptive: {
-      const Eigen::MatrixXd G = Z.transpose() * h->H * Z;
-      auto Ginv = invert_full_rank(G, label);
-      if (!Ginv.has_value()) return std::unexpected(Ginv.error());
-      gls_Ginv = std::move(*Ginv);
-      gls_P = h->H * Z * gls_Ginv;
-      const Eigen::MatrixXd gram = gls_P.transpose() * gls_P;
-      auto gram_inv = invert_full_rank(gram, label);
-      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-      gls_gram_inv = std::move(*gram_inv);
-      B = gls_P * gls_gram_inv;
-      break;
-    }
   }
 
   const Eigen::MatrixXd Qraw = B.transpose() * h->H * B;
@@ -1395,20 +1341,6 @@ fit_block_jacobian_batched(const CfaBlockLayout& L,
             dB_nonzero = true;
           }
           break;
-        case CompositeWeight::Adaptive: {
-          const Eigen::MatrixXd dHZ = dH_times(col, r, c, Z);
-          const Eigen::MatrixXd dG = Z.transpose() * dHZ;
-          const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
-          const Eigen::MatrixXd dP =
-              dHZ * gls_Ginv + h->H * Z * dGinv;
-          const Eigen::MatrixXd dgram =
-              dP.transpose() * gls_P + gls_P.transpose() * dP;
-          const Eigen::MatrixXd dgram_inv =
-              -gls_gram_inv * dgram * gls_gram_inv;
-          dB = dP * gls_gram_inv + gls_P * dgram_inv;
-          dB_nonzero = true;
-          break;
-        }
         case CompositeWeight::EstimatorDefault:
           return std::unexpected(FitError{FitError::Kind::NumericIssue,
               "Guttman batched Jacobian: unresolved composite weight"});
@@ -1510,9 +1442,6 @@ fit_block_jacobian_from_h_batched_columns(
 
   const Eigen::MatrixXd Z = incidence_matrix(L);
   Eigen::MatrixXd B;
-  Eigen::MatrixXd gls_Ginv;
-  Eigen::MatrixXd gls_P;
-  Eigen::MatrixXd gls_gram_inv;
   switch (resolved) {
     case CompositeWeight::EstimatorDefault:
       return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -1531,19 +1460,6 @@ fit_block_jacobian_from_h_batched_columns(
         B.row(i) /= std::sqrt(sii);
       }
       break;
-    case CompositeWeight::Adaptive: {
-      const Eigen::MatrixXd G = Z.transpose() * H * Z;
-      auto Ginv = invert_full_rank(G, label);
-      if (!Ginv.has_value()) return std::unexpected(Ginv.error());
-      gls_Ginv = std::move(*Ginv);
-      gls_P = H * Z * gls_Ginv;
-      const Eigen::MatrixXd gram = gls_P.transpose() * gls_P;
-      auto gram_inv = invert_full_rank(gram, label);
-      if (!gram_inv.has_value()) return std::unexpected(gram_inv.error());
-      gls_gram_inv = std::move(*gram_inv);
-      B = gls_P * gls_gram_inv;
-      break;
-    }
   }
 
   const Eigen::MatrixXd Qraw = B.transpose() * H * B;
@@ -1585,18 +1501,6 @@ fit_block_jacobian_from_h_batched_columns(
   Eigen::MatrixXd dPhi = Eigen::MatrixXd::Zero(nfac * nfac, pstar);
   Eigen::MatrixXd dpsi = Eigen::MatrixXd::Zero(nvar, pstar);
 
-  const auto dH_times = [&](Eigen::Index col, const DirectCovColumn& direct,
-                            const Eigen::MatrixXd& X) {
-    Eigen::MatrixXd out = X;
-    for (Eigen::Index i = 0; i < nvar; ++i)
-      out.row(i) *= dH_diag(i, col);
-    if (has_direct_cov_column(direct) && direct.row != direct.col) {
-      out.row(direct.row) += X.row(direct.col);
-      out.row(direct.col) += X.row(direct.row);
-    }
-    return out;
-  };
-
   for (Eigen::Index col = 0; col < pstar; ++col) {
     const DirectCovColumn direct =
         direct_cols[static_cast<std::size_t>(col)];
@@ -1620,39 +1524,6 @@ fit_block_jacobian_from_h_batched_columns(
         dQraw.noalias() += dBrow.transpose() * HB.row(direct.row);
         dQraw.noalias() += HB.row(direct.row).transpose() * dBrow;
         dHB.noalias() += H.col(direct.row) * dBrow;
-      }
-    } else {
-      Eigen::MatrixXd dB;
-      bool dB_nonzero = false;
-      switch (resolved) {
-        case CompositeWeight::Adaptive: {
-          const Eigen::MatrixXd dHZ = dH_times(col, direct, Z);
-          const Eigen::MatrixXd dG = Z.transpose() * dHZ;
-          const Eigen::MatrixXd dGinv = -gls_Ginv * dG * gls_Ginv;
-          const Eigen::MatrixXd dP = dHZ * gls_Ginv + H * Z * dGinv;
-          const Eigen::MatrixXd dgram =
-              dP.transpose() * gls_P + gls_P.transpose() * dP;
-          const Eigen::MatrixXd dgram_inv =
-              -gls_gram_inv * dgram * gls_gram_inv;
-          dB = dP * gls_gram_inv + gls_P * dgram_inv;
-          dB_nonzero = true;
-          break;
-        }
-        case CompositeWeight::EstimatorDefault:
-        case CompositeWeight::Unit:
-        case CompositeWeight::Standardized:
-          return std::unexpected(FitError{FitError::Kind::NumericIssue,
-              std::string(label) + ": unresolved composite weight"});
-      }
-
-      const Eigen::MatrixXd dH_B = dH_times(col, direct, B);
-      dQraw = B.transpose() * dH_B;
-      dHB = dH_B;
-      if (dB_nonzero) {
-        const Eigen::MatrixXd HdB = H * dB;
-        dQraw.noalias() += dB.transpose() * HB;
-        dQraw.noalias() += HB.transpose() * dB;
-        dHB.noalias() += HdB;
       }
     }
     auto dQ_or =
@@ -1722,7 +1593,7 @@ fit_block_directional(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
                           ? "Guttman map"
                           : "Guttman GLS-aligned map";
   auto B = composite_matrix_directional(
-      L, S, dS, H->value, H->deriv, resolved, label);
+      L, S, dS, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
   return regression_block_directional(L, S, dS, H->value, H->deriv, B->value,
                                       B->deriv, label, score_conditioning,
@@ -2047,31 +1918,6 @@ regression_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
 }
 
 std::expected<BlockGuttman, FitError>
-guttman_aligned_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
-                      const AdmissibilityClamp& clamp,
-                      const ResolvedScoreConditioning& score_conditioning,
-                      const ResolvedHConditioning& h_conditioning) {
-  const Eigen::Index nfac = L.n_factor();
-  auto H = estimator_h_matrix(
-      L, S, NonIterativeEstimator::GuttmanAligned, clamp, h_conditioning);
-  if (!H.has_value()) return std::unexpected(H.error());
-  auto B = composite_matrix(
-      L, S, H->H, CompositeWeight::Adaptive, "Guttman GLS-aligned map");
-  if (!B.has_value()) return std::unexpected(B.error());
-
-  auto out = regression_block(L, S, H->H, *B, "Guttman GLS-aligned map",
-                              score_conditioning,
-                              LoadingRegression::OwnComposite);
-  if (!out.has_value()) return std::unexpected(out.error());
-  if (out->Phi.rows() != nfac || out->Lambda.cols() != nfac)
-    return std::unexpected(FitError{FitError::Kind::NumericIssue,
-        "Guttman GLS-aligned map: output factor dimension mismatch"});
-  out->n_h2_clamped = H->n_h2_clamped;
-  out->h_conditioning = H->h_conditioning;
-  return out;
-}
-
-std::expected<BlockGuttman, FitError>
 guttman_aligned_block_from_h(const CfaBlockLayout& L,
                                  const Eigen::MatrixXd& S,
                                  const Eigen::MatrixXd& H,
@@ -2082,7 +1928,7 @@ guttman_aligned_block_from_h(const CfaBlockLayout& L,
                                  const HConditioningDiagnostics& h_conditioning = {},
                                  const LoadingProjector* proj = nullptr) {
   const Eigen::Index nfac = L.n_factor();
-  auto B = composite_matrix(L, S, H, composite, label);
+  auto B = composite_matrix(L, S, composite, label);
   if (!B.has_value()) return std::unexpected(B.error());
   auto out = regression_block(L, S, H, *B, label, score_conditioning,
                               LoadingRegression::OwnComposite, proj);
@@ -2124,9 +1970,6 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
       }
       break;
     case NonIterativeEstimator::GuttmanAligned:
-      if (resolved == CompositeWeight::Adaptive)
-        return guttman_aligned_block(L, S, clamp, score_conditioning,
-                                     h_conditioning);
       break;
   }
   auto H = estimator_h_matrix(L, S, which, clamp, h_conditioning);
@@ -2134,7 +1977,7 @@ fit_block(const CfaBlockLayout& L, const Eigen::MatrixXd& S,
   const char* label = (which == NonIterativeEstimator::GuttmanLavaan)
                           ? "Guttman map"
                           : "Guttman GLS-aligned map";
-  auto B = composite_matrix(L, S, H->H, resolved, label);
+  auto B = composite_matrix(L, S, resolved, label);
   if (!B.has_value()) return std::unexpected(B.error());
   auto out = regression_block(
       L, S, H->H, *B, label, score_conditioning, loading_regression_for(which));
@@ -4060,7 +3903,7 @@ estimator_map_jacobian_restricted_block_analytic_impl(
                      samp.S[b](i, i) * (*dh2)(col_offsets[b] + i);
         }
         auto B = composite_matrix_directional(
-            layouts[b], samp.S[b], dS[b], H[b], dH, resolved, label);
+            layouts[b], samp.S[b], dS[b], resolved, label);
         if (!B.has_value()) return std::unexpected(B.error());
         auto db = regression_block_directional(
             layouts[b], samp.S[b], dS[b], H[b], dH, B->value, B->deriv,

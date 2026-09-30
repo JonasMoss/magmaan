@@ -55,8 +55,11 @@ partable <- lavaan::lavaanify("f =~ x1 + x2 + x3 + x4 + x5",
                               fixed.x = FALSE, auto.var = TRUE,
                               auto.fix.first = TRUE, auto.cov.lv.x = TRUE)
 
-# Fit via Γ_NT^pw GLS — the bread we want the U-factor to use.
-fit <- magmaan_core$estimate_gls_pairwise(partable, Xm, mask)
+# Compose pairwise moments with a fixed missingness-adjusted WLS metric.
+pw <- magmaan_core$data_pairwise_sample_stats(Xm, mask)
+sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
+Gamma_pw <- magmaan_core$data_gamma_nt_pairwise(Xm, mask)[[1L]]
+fit <- magmaan_core$estimate_wls(partable, sample_pw, solve(Gamma_pw))
 cat(sprintf("fit converged: estimator = %s; fmin = %.6f\n",
             fit$estimator, fit$fmin))
 

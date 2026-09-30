@@ -60,19 +60,11 @@ fit_expected<NewtonAudit> audit_newton_objective(
     double n_obs, double native_to_total, NewtonAdapterOptions options = {});
 
 // Fixed-weight full-model LS. Empty weight = ULS; full/diagonal supplied
-// weights = WLS/DWLS/GMM. For fitted-weight GMM pass the FINAL frozen weight,
-// exactly as in its estimating equation, not a function of perturbed theta.
+// weights = WLS/DWLS/GMM.
 fit_expected<NewtonAudit> audit_newton_gmm(
     spec::LatentStructure pt, const model::MatrixRep& rep,
     const SampleStats& sample, const Eigen::VectorXd& theta,
     const gmm::Weight& weight = {}, NewtonAdapterOptions options = {});
-// Reconstruct the final expected-information weight once, then hold it fixed
-// throughout differentiation. This does not audit the outer weight iteration.
-fit_expected<NewtonAudit> audit_newton_gmm_fitted_weight(
-    spec::LatentStructure pt, const model::MatrixRep& rep,
-    const SampleStats& sample, const Eigen::VectorXd& theta,
-    GmmFittedWeightKind kind = GmmFittedWeightKind::ExpectedInformation,
-    NewtonAdapterOptions options = {});
 
 // Reuse supplied Stage-1 moments without running EM. Nt audits Stage-2 ML;
 // all other kinds audit the corresponding fixed-weight moment quadratic.

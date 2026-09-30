@@ -867,42 +867,6 @@ TEST_CASE("frontier continuous profile LRT supports robust scaling and scaled CI
   CHECK(gmm_misspec->misspec_eigvals(0) ==
         doctest::Approx(gmm_misspec->misspec_scaling_factor));
 
-  auto fitw_plain =
-      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
-          pt, rep, samp, gmm, k_x2, gmm_target, {},
-          magmaan::estimate::Bounds{},
-          magmaan::estimate::Backend::NloptSlsqp, opts);
-  REQUIRE(fitw_plain.has_value());
-  auto fitw_robust =
-      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
-          pt, rep, samp, gmm, k_x2, gmm_target, {},
-          magmaan::estimate::Bounds{},
-          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw);
-  REQUIRE_MESSAGE(fitw_robust.has_value(),
-      "fitted-weight GMM robust profile LRT failed: "
-          << (fitw_robust.has_value() ? "" : fitw_robust.error().detail));
-  CHECK(fitw_robust->T == doctest::Approx(fitw_plain->T).epsilon(1e-8));
-  CHECK(std::isfinite(fitw_robust->scaling_factor));
-  CHECK(fitw_robust->scaling_factor > 0.0);
-  CHECK(fitw_robust->T_scaled ==
-        doctest::Approx(fitw_robust->T / fitw_robust->scaling_factor));
-  CHECK(fitw_robust->p_value_scaled == doctest::Approx(
-      magmaan::inference::chi2_pvalue(fitw_robust->T_scaled, 1)));
-  auto fitw_misspec =
-      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
-          pt, rep, samp, gmm, k_x2, gmm_target, {},
-          magmaan::estimate::Bounds{},
-          magmaan::estimate::Backend::NloptSlsqp, opts, 1e-6, &raw,
-          magmaan::estimate::frontier::ScalarProfileReference::MisspecMixture);
-  REQUIRE_MESSAGE(fitw_misspec.has_value(),
-      "fitted-weight GMM misspec profile LRT failed: "
-          << (fitw_misspec.has_value() ? "" : fitw_misspec.error().detail));
-  CHECK(fitw_misspec->T == doctest::Approx(fitw_plain->T).epsilon(1e-8));
-  CHECK(fitw_misspec->misspec_scaling_factor > 0.0);
-  REQUIRE(fitw_misspec->misspec_eigvals.size() == 1);
-  CHECK(fitw_misspec->misspec_eigvals(0) ==
-        doctest::Approx(fitw_misspec->misspec_scaling_factor));
-
   magmaan::estimate::frontier::ScalarProfileCiOptions ci_opts;
   ci_opts.reference =
       magmaan::estimate::frontier::ScalarProfileReference::RobustScaled;
@@ -1080,38 +1044,6 @@ TEST_CASE("frontier profile_lrt_parameter_gmm reports the ordinary df-1 statisti
   CHECK(lrt->T == doctest::Approx(
       2.0 * static_cast<double>(samp.n_obs[0]) *
       (lrt->fmin_constrained - est.fmin)));
-  CHECK(lrt->p_value == doctest::Approx(
-      magmaan::inference::chi2_pvalue(lrt->T, 1)));
-  CHECK(lrt->df == 1);
-}
-
-TEST_CASE("frontier profile_lrt_parameter_gmm_fitted_weight reports the ordinary df-1 statistic") {
-  auto samp = fixture_samp_3();
-  auto pt = must_lavaanify("f =~ x1 + x2 + x3");
-  auto rep = build_matrix_rep(pt).value();
-  magmaan::optim::OptimOptions opts;
-  opts.max_iter = 3000;
-  auto start = magmaan::test::fit_gmm(
-      pt, rep, samp, {}, magmaan::estimate::Bounds{},
-      magmaan::estimate::Backend::NloptSlsqp, opts).value();
-
-  auto ev = ModelEvaluator::build(pt, rep).value();
-  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
-  REQUIRE(k_x2 >= 0);
-  const double target = 0.95 * start.theta(k_x2);
-
-  auto lrt = magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
-      pt, rep, samp, start, k_x2, target, {},
-      magmaan::estimate::Bounds{}, magmaan::estimate::Backend::NloptSlsqp,
-      opts);
-  REQUIRE_MESSAGE(lrt.has_value(), "fitted-weight parameter GMM profile LRT failed: "
-      << (lrt.has_value() ? std::string{} : lrt.error().detail));
-
-  CHECK(lrt->constrained_value == doctest::Approx(target).epsilon(1e-7));
-  CHECK(std::abs(lrt->constraint_residual) < 1e-7);
-  CHECK(lrt->T == doctest::Approx(
-      2.0 * static_cast<double>(samp.n_obs[0]) *
-      (lrt->fmin_constrained - lrt->fmin_unrestricted)));
   CHECK(lrt->p_value == doctest::Approx(
       magmaan::inference::chi2_pvalue(lrt->T, 1)));
   CHECK(lrt->df == 1);

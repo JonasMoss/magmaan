@@ -99,14 +99,10 @@ profile_scale <- function(profile, robust) {
 }
 
 ci_methods <- data.frame(
-  estimator = c(rep("ULS", 4L), rep("GLS", 3L), rep("WLS", 3L)),
-  profile_weight = c(
-    "fixed", "fixed", "fitted", "fitted",
-    "fixed", "fixed", "fixed",
-    "fixed", "fixed", "fixed"
-  ),
+  estimator = c(rep("ULS", 2L), rep("GLS", 3L), rep("WLS", 3L)),
+  profile_weight = rep("fixed", 8L),
   reference = c(
-    "ordinary", "robust_fixed", "ordinary", "robust_fixed",
+    "ordinary", "robust_fixed",
     "ordinary", "robust_fixed", "robust_estimated_weight",
     "ordinary", "robust_fixed", "robust_estimated_weight"
   ),
@@ -209,24 +205,6 @@ run_fixed_ci <- function(fit, weight, k, step, X, reference, ci_control) {
   }
   do.call(core$frontier_profile_lrt_ci_parameter_gmm, args)
 }
-
-run_fitted_ci <- function(fit, k, step, X, reference, ci_control) {
-  robust <- is_robust_reference(reference)
-  args <- list(
-    fit = fit,
-    parameter = k,
-    initial_step = step,
-    control = ci_control,
-    root_tol = if (robust) 1e-5 else 1e-4,
-    statistic_tol = if (robust) 1e-5 else 1e-4
-  )
-  if (robust) {
-    args$raw_data <- X
-    args$robust <- TRUE
-  }
-  do.call(core$frontier_profile_lrt_ci_parameter_gmm_fitted_weight, args)
-}
-
 fit_and_test_ci <- function(n, rep_id) {
   X <- draw_t_data(n, seed_base + 200000L * n + rep_id, df = ci_df)
   dat <- as.data.frame(X)
@@ -250,12 +228,8 @@ fit_and_test_ci <- function(n, rep_id) {
     for (i in seq_len(nrow(methods))) {
       method <- methods[i, ]
       out <- tryCatch({
-        if (identical(method$profile_weight, "fitted")) {
-          run_fitted_ci(fit, k, step, X, method$reference, ci_control)
-        } else {
-          run_fixed_ci(fit, fit_info$weight, k, step, X,
-                       method$reference, ci_control)
-        }
+        run_fixed_ci(fit, fit_info$weight, k, step, X,
+                     method$reference, ci_control)
       }, error = function(e) e)
       if (inherits(out, "error")) {
         fail_rows[[length(fail_rows) + 1L]] <- data.frame(

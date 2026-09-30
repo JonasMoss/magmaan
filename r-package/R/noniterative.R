@@ -67,9 +67,7 @@ guttman_h <- function(S, blocks,
 #'   `"guttman"` and `"guttman_gls_aligned"` are still accepted as aliases.
 #' @param composite Composite weights used by the Guttman regression:
 #'   `"auto"` preserves the estimator default, `"unit"` uses incidence weights,
-#'   `"standardized"` uses incidence weights after indicator standardization,
-#'   and `"adaptive"` uses the aligned data-dependent weights (retired; the old
-#'   name `"gls_aligned"` is still accepted).
+#'   and `"standardized"` uses incidence weights after indicator standardization.
 #' @param admissibility Communality admissibility policy: `"raw"` leaves the
 #'   closed-form estimate unchanged, `"hard"` clips it to the symmetric box,
 #'   and `"soft"` applies the smooth box map.

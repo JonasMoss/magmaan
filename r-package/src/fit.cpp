@@ -42,7 +42,6 @@
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/measures/residuals.hpp"
 #include "magmaan/measures/reliability.hpp"
-#include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/twolevel.hpp"
@@ -52,10 +51,8 @@
 #include "magmaan/estimate/frontier/communality.hpp"
 #include "magmaan/estimate/frontier/noniterative_cfa.hpp"
 #include "magmaan/robust/frontier/noniterative_inference.hpp"
-#include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/gmm/dls_weight.hpp"
-#include "magmaan/estimate/gmm/structured_gamma_weight.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/inference/score.hpp"
 
@@ -442,100 +439,6 @@ const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
        : status == OptimStatus::FalseConvergence   ? "false_convergence"
        : status == OptimStatus::BudgetExhausted    ? "budget_exhausted"
                                                     : "unknown";
-}
-
-const char* continuation_target_to_r(
-    magmaan::estimate::frontier::MlContinuationTarget target) {
-  using Target = magmaan::estimate::frontier::MlContinuationTarget;
-  switch (target) {
-    case Target::Diagonal:
-      return "diagonal";
-    case Target::ScaledIdentity:
-      return "scaled_identity";
-    case Target::Identity:
-      return "identity";
-  }
-  return "unknown";
-}
-
-magmaan::estimate::frontier::MlContinuationTarget
-continuation_target_from_string(const std::string& target) {
-  std::string key = target;
-  for (char& ch : key) {
-    if (ch == '-') ch = '_';
-    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-  }
-  using Target = magmaan::estimate::frontier::MlContinuationTarget;
-  if (key.empty() || key == "diagonal" || key == "diag") {
-    return Target::Diagonal;
-  }
-  if (key == "scaled_identity" || key == "scale_identity") {
-    return Target::ScaledIdentity;
-  }
-  if (key == "identity" || key == "raw_identity") return Target::Identity;
-  Rcpp::stop("magmaan: continuation target must be 'diagonal' or "
-             "'scaled_identity' or 'identity' (got '%s')", target.c_str());
-}
-
-Rcpp::List continuation_to_r(
-    const magmaan::estimate::frontier::MlRidgeContinuationResult& result,
-    magmaan::estimate::frontier::MlContinuationTarget target) {
-  const R_xlen_t n = static_cast<R_xlen_t>(result.steps.size());
-  Rcpp::IntegerVector step(n), iterations(n), f_evals(n), g_evals(n);
-  Rcpp::NumericVector alpha(n), min_ev(n), max_ev(n), condition(n), fmin(n),
-      grad_norm(n);
-  Rcpp::LogicalVector converged(n), sigma_pd_all(n);
-  Rcpp::CharacterVector optimizer_status(n), common_status(n);
-
-  Eigen::Index npar = 0;
-  if (!result.steps.empty()) npar = result.steps.front().estimates.theta.size();
-  Eigen::MatrixXd theta_path(n, npar);
-
-  for (R_xlen_t i = 0; i < n; ++i) {
-    const auto& s = result.steps[static_cast<std::size_t>(i)];
-    step[i] = static_cast<int>(i + 1);
-    alpha[i] = s.alpha;
-    min_ev[i] = s.min_sample_eigen;
-    max_ev[i] = s.max_sample_eigen;
-    condition[i] = s.sample_condition;
-    fmin[i] = s.estimates.fmin;
-    iterations[i] = s.estimates.iterations;
-    f_evals[i] = s.estimates.f_evals;
-    g_evals[i] = s.estimates.g_evals;
-    grad_norm[i] = s.estimates.grad_inf_norm;
-    converged[i] = common_converged_value(s.estimates);
-    common_status[i] = fit_check_to_r(magmaan::estimate::fit_verdict(s.estimates).status);
-    sigma_pd_all[i] = s.estimates.diagnostics.sigma_pd_all;
-    optimizer_status[i] = optim_status_to_r(s.estimates.optimizer_status);
-    if (s.estimates.theta.size() == npar) {
-      theta_path.row(i) = s.estimates.theta.transpose();
-    }
-  }
-
-  Rcpp::DataFrame path = Rcpp::DataFrame::create(
-      Rcpp::_["step"] = step,
-      Rcpp::_["alpha"] = alpha,
-      Rcpp::_["min_sample_eigen"] = min_ev,
-      Rcpp::_["max_sample_eigen"] = max_ev,
-      Rcpp::_["sample_condition"] = condition,
-      Rcpp::_["converged"] = converged,
-      Rcpp::_["convergence_status"] = common_status,
-      Rcpp::_["optimizer_status"] = optimizer_status,
-      Rcpp::_["fmin"] = fmin,
-      Rcpp::_["grad_norm"] = grad_norm,
-      Rcpp::_["iterations"] = iterations,
-      Rcpp::_["f_evals"] = f_evals,
-      Rcpp::_["g_evals"] = g_evals,
-      Rcpp::_["sigma_pd_all"] = sigma_pd_all,
-      Rcpp::_["stringsAsFactors"] = false);
-
-  return Rcpp::List::create(
-      Rcpp::_["target"] = continuation_target_to_r(target),
-      Rcpp::_["path"] = path,
-      Rcpp::_["theta"] = Rcpp::wrap(theta_path),
-      Rcpp::_["total_iterations"] = result.total_iterations,
-      Rcpp::_["total_f_evals"] = result.total_f_evals,
-      Rcpp::_["total_g_evals"] = result.total_g_evals);
 }
 
 std::vector<std::string>
@@ -3191,48 +3094,6 @@ Rcpp::List frontier_fit_wls_psd_impl(
       "frontier_fit_wls_psd", "WLS");
 }
 
-// Expected-information fitted-weight GMM over PSD primitive LISREL covariance
-// matrices. Each inner solve freezes W(theta_k); the outer loop refreshes it.
-//
-// [[Rcpp::export]]
-Rcpp::List frontier_fit_gmm_fitted_weight_psd_impl(
-    SEXP partable, Rcpp::List sample_stats,
-    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-    int max_outer = 20,
-    double theta_tol = 1e-7,
-    double fmin_tol = 1e-10,
-    double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
-  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
-      partable_from_arg(partable, "frontier_fit_gmm_fitted_weight_psd");
-  magmaan::spec::Starts starts = std::move(parsed.starts);
-  Ctx ctx = ctx_from_sample_stats(
-      std::move(parsed.structure), std::move(parsed.names), sample_stats);
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend =
-      optimizer.isNull()
-          ? magmaan::estimate::Backend::NloptSlsqp
-          : backend_from_optimizer_arg(optimizer);
-  magmaan::estimate::frontier::GmmFittedWeightOptions fitted_opts;
-  fitted_opts.max_outer = max_outer;
-  fitted_opts.theta_tol = theta_tol;
-  fitted_opts.fmin_tol = fmin_tol;
-  magmaan::estimate::frontier::PsdFitOptions psd_opts;
-  psd_opts.start_eigen_floor = start_eigen_floor;
-  psd_opts.feasibility_tol = feasibility_tol;
-
-  auto e_or = magmaan::estimate::frontier::fit_gmm_fitted_weight_psd(
-      ctx.pt, ctx.rep, ctx.samp, x0, fitted_opts, backend,
-      optim_opts_from(control), psd_opts);
-  if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::Estimates est = std::move(*e_or);
-  Rcpp::List out = fit_result(
-      ctx, est, &starts, "GMM_FITTED_WEIGHT");
-  out["weight_policy"] = "expected_information_fixed_point";
-  return out;
-}
-
 namespace {
 
 double nan_if_not_finite(double x) {
@@ -3291,16 +3152,6 @@ bool scalar_reference_needs_sandwich(
   return reference == ScalarProfileReference::RobustScaled ||
          reference == ScalarProfileReference::MisspecScaled ||
          reference == ScalarProfileReference::MisspecMixture;
-}
-
-magmaan::estimate::frontier::GmmFittedWeightOptions
-fitted_weight_options_from_args(int max_outer, double theta_tol,
-                                double fmin_tol) {
-  magmaan::estimate::frontier::GmmFittedWeightOptions out;
-  out.max_outer = max_outer;
-  out.theta_tol = theta_tol;
-  out.fmin_tol = fmin_tol;
-  return out;
 }
 
 struct OmegaBlockSpec {
@@ -3717,68 +3568,6 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
   return scalar_profile_lrt_to_list(ctx, *r_or, parameter, estimator.c_str());
 }
 
-// frontier_profile_lrt_parameter_gmm_fitted_weight() - fitted-weight
-// moment-quadratic profile statistic. The current fitted-weight policy refreshes
-// W(theta) as the expected-information weight in an outer fixed-point loop.
-//
-// [[Rcpp::export]]
-Rcpp::List frontier_profile_lrt_parameter_gmm_fitted_weight_impl(
-    Rcpp::List fit,
-    int parameter,
-    double target,
-    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6,
-    int max_outer = 20,
-    double theta_tol = 1e-7,
-    double fmin_tol = 1e-10,
-    SEXP raw_data = R_NilValue,
-    bool robust = false,
-    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
-  Ctx ctx = ctx_from_fit(fit);
-  const magmaan::estimate::Estimates est = est_from_fit(fit);
-  const std::string estimator = fit.containsElementNamed("estimator")
-      ? Rcpp::as<std::string>(fit["estimator"]) : "";
-  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
-    Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight() requires a "
-               "continuous ULS/GLS/WLS fit, got estimator '%s'",
-               estimator.c_str());
-  }
-  if (parameter <= 0 ||
-      parameter > static_cast<int>(ctx.pt.n_free())) {
-    Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight(): parameter "
-               "index %d is outside 1..%d", parameter,
-               static_cast<int>(ctx.pt.n_free()));
-  }
-  const magmaan::estimate::Backend backend =
-      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
-                         : backend_from_optimizer_arg(optimizer);
-  auto fitted_opts = fitted_weight_options_from_args(
-      max_outer, theta_tol, fmin_tol);
-  const auto reference_mode = scalar_reference_from_nullable(
-      reference, robust, "frontier_profile_lrt_parameter_gmm_fitted_weight()");
-  std::unique_ptr<magmaan::data::RawData> raw_holder;
-  if (scalar_reference_needs_sandwich(reference_mode)) {
-    if (Rf_isNull(raw_data)) {
-      Rcpp::stop("frontier_profile_lrt_parameter_gmm_fitted_weight() "
-                 "robust/misspec reference requires raw_data");
-    }
-    raw_holder = std::make_unique<magmaan::data::RawData>(
-        complete_raw_from_arg(ctx.rep, raw_data));
-  }
-  auto r_or =
-      magmaan::estimate::frontier::profile_lrt_parameter_gmm_fitted_weight(
-          ctx.pt, ctx.rep, ctx.samp, est,
-          static_cast<Eigen::Index>(parameter - 1), target,
-          fitted_opts, bounds_from_nullable(bounds), backend,
-          optim_opts_from(control), constraint_tol, raw_holder.get(),
-          reference_mode);
-  if (!r_or.has_value()) stop_fit(r_or.error());
-  return scalar_profile_lrt_to_list(ctx, *r_or, parameter,
-                                    "GMM-fitted-weight");
-}
-
 // frontier_profile_lrt_parameter_ordinal() - ordinary df-1 profile statistic
 // for one all-ordinal ULS/DWLS/WLS free parameter. `parameter` is the 1-based
 // free-parameter ordinal from the prepared ordinal fit partable.
@@ -3967,71 +3756,6 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
       constraint_tol, raw_holder.get(), robust_opts);
   if (!r_or.has_value()) stop_fit(r_or.error());
   return scalar_profile_ci_to_list(ctx, *r_or, parameter, estimator.c_str());
-}
-
-// [[Rcpp::export]]
-Rcpp::List frontier_profile_lrt_ci_parameter_gmm_fitted_weight_impl(
-    Rcpp::List fit,
-    int parameter,
-    double level = 0.95,
-    double lower = NA_REAL,
-    double upper = NA_REAL,
-    double initial_step = NA_REAL,
-    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    double constraint_tol = 1e-6,
-    double root_tol = 1e-5,
-    double statistic_tol = 1e-6,
-    int max_outer = 20,
-    double theta_tol = 1e-7,
-    double fmin_tol = 1e-10,
-    SEXP raw_data = R_NilValue,
-    bool robust = false,
-    Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
-  Ctx ctx = ctx_from_fit(fit);
-  const magmaan::estimate::Estimates est = est_from_fit(fit);
-  const std::string estimator = fit.containsElementNamed("estimator")
-      ? Rcpp::as<std::string>(fit["estimator"]) : "";
-  if (estimator != "ULS" && estimator != "GLS" && estimator != "WLS") {
-    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight() requires "
-               "a continuous ULS/GLS/WLS fit, got estimator '%s'",
-               estimator.c_str());
-  }
-  if (parameter <= 0 ||
-      parameter > static_cast<int>(ctx.pt.n_free())) {
-    Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight(): "
-               "parameter index %d is outside 1..%d", parameter,
-               static_cast<int>(ctx.pt.n_free()));
-  }
-  const magmaan::estimate::Backend backend =
-      optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
-                         : backend_from_optimizer_arg(optimizer);
-  auto fitted_opts = fitted_weight_options_from_args(
-      max_outer, theta_tol, fmin_tol);
-  auto ci_opts = profile_ci_options_from_args(
-      level, lower, upper, initial_step, root_tol, statistic_tol);
-  ci_opts.reference = scalar_reference_from_nullable(
-      reference, robust,
-      "frontier_profile_lrt_ci_parameter_gmm_fitted_weight()");
-  std::unique_ptr<magmaan::data::RawData> raw_holder;
-  if (scalar_reference_needs_sandwich(ci_opts.reference)) {
-    if (Rf_isNull(raw_data)) {
-      Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm_fitted_weight() "
-                 "robust/misspec reference requires raw_data");
-    }
-    raw_holder = std::make_unique<magmaan::data::RawData>(
-        complete_raw_from_arg(ctx.rep, raw_data));
-  }
-  auto r_or =
-      magmaan::estimate::frontier::profile_lrt_ci_parameter_gmm_fitted_weight(
-          ctx.pt, ctx.rep, ctx.samp, est,
-          static_cast<Eigen::Index>(parameter - 1), fitted_opts, ci_opts,
-          bounds_from_nullable(bounds), backend, optim_opts_from(control),
-          constraint_tol, raw_holder.get());
-  if (!r_or.has_value()) stop_fit(r_or.error());
-  return scalar_profile_ci_to_list(ctx, *r_or, parameter,
-                                   "GMM-fitted-weight");
 }
 
 // [[Rcpp::export]]
@@ -5074,53 +4798,6 @@ Rcpp::List fit_ml_irls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
                           std::string(magmaan::estimate::backend_name(backend)).c_str());
 }
 
-// frontier_fit_ml_ridge_continuation() — complete-data ML through a covariance
-// continuation path, warm-starting each stage from the previous fit.
-//
-// [[Rcpp::export]]
-Rcpp::List frontier_fit_ml_ridge_continuation_impl(
-    SEXP partable, Rcpp::List sample_stats,
-    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
-    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
-    Rcpp::Nullable<Rcpp::NumericVector> alphas = R_NilValue,
-    std::string target = "diagonal",
-    bool include_endpoint = true,
-    double diagonal_floor = 1e-8) {
-  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
-      partable_from_arg(partable, "frontier_fit_ml_ridge_continuation");
-  magmaan::spec::Starts starts = std::move(parsed.starts);
-  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
-                                  std::move(parsed.names), sample_stats);
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
-
-  magmaan::estimate::frontier::MlRidgeContinuationOptions cont;
-  if (alphas.isNotNull()) {
-    Rcpp::NumericVector av(alphas.get());
-    cont.alphas.clear();
-    cont.alphas.reserve(static_cast<std::size_t>(av.size()));
-    for (R_xlen_t i = 0; i < av.size(); ++i) cont.alphas.push_back(av[i]);
-  }
-  cont.target = continuation_target_from_string(target);
-  cont.include_endpoint = include_endpoint;
-  cont.diagonal_floor = diagonal_floor;
-
-  auto fit_or = magmaan::estimate::frontier::fit_ml_ridge_continuation(
-      ctx.pt, ctx.rep, ctx.samp, x0, bounds_from_nullable(bounds), backend,
-      optim_opts_from(control), cont);
-  if (!fit_or.has_value()) stop_fit(fit_or.error());
-
-  magmaan::estimate::frontier::MlRidgeContinuationResult fit =
-      std::move(*fit_or);
-  Ctx final_ctx = ctx;
-  final_ctx.samp = fit.final_sample_stats;
-  Rcpp::List out = fit_result(final_ctx, fit.final, &starts, "ML");
-  out["frontier_method"] = "ml_ridge_continuation";
-  out["continuation"] = continuation_to_r(fit, cont.target);
-  return out;
-}
-
 magmaan::estimate::frontier::SamMethod
 sam_method_from_string(std::string x) {
   for (char& ch : x) {
@@ -5725,112 +5402,6 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   return out;
 }
 
-// Patternwise normal-theory ML (PNTML). Stage 1 is the saturated Gaussian-FIML
-// estimate. Stage 2 evaluates each observed-data pattern's Gaussian discrepancy
-// at the corresponding marginal of those common saturated moments. The raw
-// pattern layout therefore remains part of the objective even though no raw
-// observation enters Stage 2 directly.
-//
-// [[Rcpp::export]]
-Rcpp::List frontier_fit_pattern_ntml_impl(
-    SEXP partable, SEXP raw_data,
-    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> stage1 = R_NilValue) {
-  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
-      partable_from_arg(partable, "frontier_fit_pattern_ntml");
-  magmaan::spec::Starts starts = std::move(parsed.starts);
-
-  Ctx ctx;
-  ctx.pt = std::move(parsed.structure);
-  ctx.names = std::move(parsed.names);
-  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
-  if (!rep_or.has_value()) stop_model(rep_or.error());
-  ctx.rep = std::move(*rep_or);
-  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty()) {
-    Rcpp::stop("magmaan: model has no observed variables");
-  }
-  ctx.meanstructure = has_meanstructure(ctx.pt);
-  if (!ctx.meanstructure) {
-    Rcpp::stop("magmaan: frontier_fit_pattern_ntml() requires a mean structure");
-  }
-
-  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
-  if (auto e = magmaan::estimate::fiml::validate_fiml_fixed_x_missing_policy(
-          ctx.pt, raw); !e.has_value()) {
-    stop_fit(e.error());
-  }
-  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
-  if (!pack_or.has_value()) stop_fit(pack_or.error());
-
-  SaturatedMoments sm;
-  if (stage1.isNotNull()) {
-    if (!magmaanr::saturated_target_from_list(Rcpp::List(stage1.get()), sm)) {
-      Rcpp::stop("magmaan: frontier_fit_pattern_ntml() needs stage1 with "
-                 "mean/cov/n_obs");
-    }
-  } else {
-    auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
-        raw, *pack_or, fiml_h1_opts_from(control));
-    if (!h1_or.has_value()) stop_fit(h1_or.error());
-    sm.mean = h1_or->mu;
-    sm.cov = h1_or->sigma;
-    sm.warnings = h1_or->warnings;
-    sm.n_obs.reserve(raw.X.size());
-    for (const Eigen::MatrixXd& X : raw.X) {
-      sm.n_obs.push_back(static_cast<std::int64_t>(X.rows()));
-    }
-  }
-
-  auto target_or =
-      magmaan::estimate::fiml::frontier::pattern_ntml_target(*pack_or, sm);
-  if (!target_or.has_value()) stop_fit(target_or.error());
-
-  ctx.samp.S = sm.cov;
-  ctx.samp.mean = sm.mean;
-  ctx.samp.n_obs = sm.n_obs;
-  ctx.ov_names = ctx.rep.ov_names[0];
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend =
-      fiml_backend_from_optimizer_arg(optimizer);
-  auto est_or = magmaan::estimate::fiml::frontier::fit_pattern_ntml(
-      ctx.pt, ctx.rep, raw, x0, *pack_or, sm, backend,
-      optim_opts_from(control));
-  if (!est_or.has_value()) stop_fit(est_or.error());
-  const magmaan::estimate::Estimates est = std::move(*est_or);
-
-  auto inf_or = magmaan::estimate::fiml::frontier::pattern_ntml_inference(
-      ctx.pt, ctx.rep, est, *target_or, sm);
-  if (!inf_or.has_value()) stop_post(inf_or.error());
-  const auto& inf = *inf_or;
-  Rcpp::List correction = Rcpp::List::create(
-      Rcpp::_["vcov"] = Rcpp::wrap(inf.vcov),
-      Rcpp::_["se"] = Rcpp::wrap(inf.se),
-      Rcpp::_["eigvals"] = Rcpp::wrap(inf.eigvals),
-      Rcpp::_["chisq"] = inf.chisq,
-      Rcpp::_["chisq_scaled"] = inf.chisq_scaled,
-      Rcpp::_["scaling_factor"] = inf.scaling_factor,
-      Rcpp::_["trace_ugamma"] = inf.trace_ugamma,
-      Rcpp::_["df"] = inf.df,
-      Rcpp::_["ntotal"] = static_cast<double>(inf.ntotal));
-  correction["chisq.scaled"] = inf.chisq_scaled;
-  correction["chisq.scaling.factor"] = inf.scaling_factor;
-
-  Rcpp::List out = fit_result(ctx, est, &starts, "PNTML");
-  out["stage1"] = saturated_moments_to_r(sm);
-  out["raw_data"] =
-      fiml_raw_to_r(raw, ctx.rep.ov_names, ctx.names.group_labels);
-  out["stage2_objective"] = "pattern_ntml";
-  out["pntml"] = correction;
-  out["vcov"] = correction["vcov"];
-  out["se"] = correction["se"];
-  out["chisq"] = inf.chisq;
-  out["df"] = inf.df;
-  out["chisq_scaled"] = inf.chisq_scaled;
-  out["scaling_factor"] = inf.scaling_factor;
-  return out;
-}
-
 // Raw-data FIML with PSD primitive LISREL covariance matrices. The Cholesky
 // lift is internal; the returned fit retains the ordinary partable parameters.
 //
@@ -6056,77 +5627,6 @@ Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ULS");
-}
-
-// fit_gls_pairwise() — composes fit_gls_pairwise(pt, rep, raw, pw, x0,
-// bounds, backend). Pairwise covariance from raw incomplete data with the
-// Γ_NT^pw weight (asymptotically efficient under MAR; breaks the trace
-// identity); see fit.hpp for the design context. `X` is a numeric matrix
-// (single group) or a list of per-group matrices; `mask` is an optional
-// logical matrix / list of logical matrices.
-//
-// [[Rcpp::export]]
-Rcpp::List fit_gls_pairwise_impl(SEXP partable, SEXP X,
-                                 SEXP mask = R_NilValue,
-                                 Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-                                 Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
-                                 Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
-  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_pairwise");
-  magmaan::spec::Starts starts = std::move(parsed.starts);
-
-  Ctx ctx;
-  ctx.pt = std::move(parsed.structure);
-  ctx.names = std::move(parsed.names);
-  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
-  if (!rep_or.has_value()) stop_model(rep_or.error());
-  ctx.rep = std::move(*rep_or);
-  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
-    Rcpp::stop("magmaan: model has no observed variables");
-
-  // Reorder raw columns to the model's observed-variable order using the
-  // existing FIML helper, then re-pack into a plain RawData via the shared
-  // raw_from_data_args path (handles mask layout and NA detection uniformly).
-  magmaan::data::RawData raw_reordered = fiml_raw_from_arg(ctx.rep, X);
-  // Pack the reordered data back into the X/mask format expected by
-  // raw_from_data_args — easier than threading both reorder and the
-  // multi-block parsing through a single helper.
-  const std::size_t nb = raw_reordered.X.size();
-  Rcpp::List X_list(static_cast<R_xlen_t>(nb));
-  Rcpp::List mask_list(static_cast<R_xlen_t>(nb));
-  for (std::size_t b = 0; b < nb; ++b) {
-    X_list[static_cast<R_xlen_t>(b)] = Rcpp::wrap(raw_reordered.X[b]);
-    if (b < raw_reordered.mask.size()) {
-      const auto& Mb = raw_reordered.mask[b];
-      Rcpp::LogicalMatrix Mr(Mb.rows(), Mb.cols());
-      for (Eigen::Index i = 0; i < Mb.rows(); ++i)
-        for (Eigen::Index j = 0; j < Mb.cols(); ++j)
-          Mr(i, j) = Mb(i, j) != 0;
-      mask_list[static_cast<R_xlen_t>(b)] = Mr;
-    }
-  }
-  SEXP X_arg = X_list;
-  SEXP mask_arg = raw_reordered.mask.empty() ? R_NilValue : SEXP(mask_list);
-  magmaan::data::RawData raw = raw_from_data_args(X_arg, mask_arg);
-
-  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
-  if (!pw_or.has_value()) stop_post(pw_or.error());
-
-  // Layout / sample-stats packing for the standard ctx_from_* path.
-  ctx.samp.S = pw_or->S;
-  ctx.samp.mean = pw_or->mean;
-  ctx.samp.n_obs = pw_or->n_obs;
-  ctx.ov_names = ctx.rep.ov_names[0];
-  ctx.meanstructure = has_meanstructure(ctx.pt);
-  if (!ctx.meanstructure) ctx.samp.mean.clear();
-
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
-  auto e_or = magmaan::estimate::fit_gls_pairwise(
-      ctx.pt, ctx.rep, raw, *pw_or, x0, bounds_from_nullable(bounds),
-      backend, optim_opts_from(control));
-  if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::Estimates est = std::move(*e_or);
-  return fit_result(ctx, est, &starts, "GLSpw");
 }
 
 // fit_gls() — composes fit_gls(pt, rep, samp, x0, bounds, backend). The
@@ -7151,41 +6651,6 @@ Rcpp::List fit_coordinate_map(SEXP partable, Rcpp::List sample_stats,
       Rcpp::_["center"] = Rcpp::wrap(map->center),
       Rcpp::_["scale"] = Rcpp::wrap(map->scale),
       Rcpp::_["alpha"] = Rcpp::wrap(alpha));
-}
-
-// estimate_structured_gamma() — explicit MI4 / structured-ADF Gamma builder.
-// Returns Gamma itself so paper-local R code can inspect, regularize, or invert
-// it before passing a weight to the existing WLS path.
-//
-// [[Rcpp::export]]
-SEXP estimate_structured_gamma(Rcpp::List fit, SEXP raw_data) {
-  Ctx ctx = ctx_from_fit(fit);
-  const magmaan::estimate::Estimates est = est_from_fit(fit);
-  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-
-  auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
-  if (!ev_or.has_value()) stop_model(ev_or.error());
-  auto G_or = magmaan::estimate::frontier::structured_gamma_matrix(
-      *ev_or, ctx.rep, ctx.samp, raw, est.theta);
-  if (!G_or.has_value()) stop_fit(G_or.error());
-  return dense_blocks_to_r(*G_or);
-}
-
-// estimate_structured_gamma_weight() — explicit MI4 / structured-ADF working
-// weight builder. Returns only W, which is passed to the existing WLS path.
-//
-// [[Rcpp::export]]
-SEXP estimate_structured_gamma_weight(Rcpp::List fit, SEXP raw_data) {
-  Ctx ctx = ctx_from_fit(fit);
-  const magmaan::estimate::Estimates est = est_from_fit(fit);
-  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-
-  auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
-  if (!ev_or.has_value()) stop_model(ev_or.error());
-  auto W_or = magmaan::estimate::frontier::structured_gamma_weight(
-      *ev_or, ctx.rep, ctx.samp, raw, est.theta);
-  if (!W_or.has_value()) stop_fit(W_or.error());
-  return weight_to_r(*W_or);
 }
 
 // model_implied() — mirrors ModelEvaluator::build(pt, rep).sigma(est.theta).
@@ -9844,98 +9309,6 @@ Rcpp::List infer_nt_moment_quadratic_sample(Rcpp::List sample_stats,
       Rcpp::_["covariance"] = s_or->covariance);
 }
 
-// ---- frontier: marker <-> std_lv identification swap --------------------
-// Exposed to R only via the `frontier_*` aliases in r-package/R/zzz_core.R.
-// Implementation lives in src/model/auto_identification.cpp.
-
-namespace {
-
-magmaan::compat::lavaan::LavaanParTable lavaan_pt_from_df(
-    Rcpp::DataFrame df) {
-  auto col = [&](const char* nm) -> SEXP {
-    if (!df.containsElementNamed(nm))
-      Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
-    return df[nm];
-  };
-  Rcpp::IntegerVector id(col("id")), user(col("user")), block(col("block")),
-      group(col("group")), freev(col("free")), exo(col("exo"));
-  Rcpp::NumericVector ustart(col("ustart"));
-  std::vector<std::string> lhs   = Rcpp::as<std::vector<std::string>>(col("lhs"));
-  std::vector<std::string> opstr = Rcpp::as<std::vector<std::string>>(col("op"));
-  std::vector<std::string> rhs   = Rcpp::as<std::vector<std::string>>(col("rhs"));
-  std::vector<std::string> label = Rcpp::as<std::vector<std::string>>(col("label"));
-  std::vector<std::string> plab  = Rcpp::as<std::vector<std::string>>(col("plabel"));
-
-  const std::size_t m = static_cast<std::size_t>(id.size());
-  magmaan::compat::lavaan::LavaanParTable lvpt;
-  lvpt.id.resize(m); lvpt.user.resize(m); lvpt.lhs.resize(m); lvpt.op.resize(m);
-  lvpt.rhs.resize(m); lvpt.block.resize(m); lvpt.group.resize(m);
-  lvpt.free.resize(m); lvpt.exo.resize(m); lvpt.ustart.resize(m);
-  lvpt.label.resize(m); lvpt.plabel.resize(m);
-  for (std::size_t i = 0; i < m; ++i) {
-    const R_xlen_t ri = static_cast<R_xlen_t>(i);
-    lvpt.id[i]     = id[ri];
-    lvpt.user[i]   = static_cast<std::int8_t>(user[ri]);
-    lvpt.lhs[i]    = lhs[i];
-    lvpt.op[i]     = op_from_string(opstr[i]);
-    lvpt.rhs[i]    = rhs[i];
-    lvpt.block[i]  = block[ri];
-    lvpt.group[i]  = group[ri];
-    lvpt.free[i]   = freev[ri];
-    lvpt.exo[i]    = static_cast<std::int8_t>(exo[ri]);
-    lvpt.ustart[i] = ustart[ri];
-    lvpt.label[i]  = label[i];
-    lvpt.plabel[i] = plab[i];
-  }
-  return lvpt;
-}
-
-}  // namespace
-
-// [[Rcpp::export]]
-Rcpp::List frontier_is_std_lv_admissible_impl(
-    Rcpp::DataFrame marker_partable,
-    Rcpp::Nullable<Rcpp::DataFrame> std_lv_partable) {
-  const auto marker_pt = lavaan_pt_from_df(marker_partable);
-  magmaan::model::AdmissibilityVerdict v;
-  if (std_lv_partable.isNotNull()) {
-    const auto std_lv_pt = lavaan_pt_from_df(std_lv_partable.get());
-    v = magmaan::model::is_std_lv_admissible(marker_pt, std_lv_pt);
-  } else {
-    v = magmaan::model::is_std_lv_admissible(marker_pt);
-  }
-  return Rcpp::List::create(Rcpp::_["admissible"] = v.admissible,
-                            Rcpp::_["reason"]    = v.reason);
-}
-
-// [[Rcpp::export]]
-Rcpp::DataFrame frontier_partable_marker_to_std_lv_impl(
-    Rcpp::DataFrame marker_partable) {
-  const auto marker_pt = lavaan_pt_from_df(marker_partable);
-  const auto std_lv_pt = magmaan::model::partable_marker_to_std_lv(marker_pt);
-  return magmaanr::partable_df_from_lavaan(std_lv_pt);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericVector frontier_backconvert_std_lv_to_marker_impl(
-    Rcpp::DataFrame marker_partable,
-    Rcpp::NumericVector std_lv_est) {
-  const auto marker_pt = lavaan_pt_from_df(marker_partable);
-  const std::size_t n = marker_pt.size();
-  if (static_cast<std::size_t>(std_lv_est.size()) != n) {
-    Rcpp::stop("frontier_backconvert: length(std_lv_est) (%d) != partable rows (%d)",
-               static_cast<int>(std_lv_est.size()), static_cast<int>(n));
-  }
-  Eigen::Map<const Eigen::VectorXd> est_map(
-      &std_lv_est[0], static_cast<Eigen::Index>(n));
-  const Eigen::VectorXd out =
-      magmaan::model::backconvert_std_lv_to_marker(marker_pt, est_map);
-  Rcpp::NumericVector r_out(static_cast<R_xlen_t>(n));
-  for (std::size_t i = 0; i < n; ++i)
-    r_out[static_cast<R_xlen_t>(i)] = out[static_cast<Eigen::Index>(i)];
-  return r_out;
-}
-
 // ---------------------------------------------------------------------------
 // Non-iterative CFA estimators: goodness-of-fit, nested tests, standard errors.
 // Thin glue over estimate::frontier + robust::frontier (see the C++ headers and
@@ -10065,11 +9438,8 @@ magmaan::estimate::frontier::CompositeWeight composite_which(const std::string& 
   if (k == "standardized" || k == "standardised" || k == "std" ||
       k == "correlation")
     return ef::CompositeWeight::Standardized;
-  if (k == "adaptive" || k == "gls_aligned" || k == "gls-aligned" ||
-      k == "aligned")
-    return ef::CompositeWeight::Adaptive;
   Rcpp::stop("magmaan: unknown Guttman composite weight '%s' "
-             "(accepted: auto, unit, standardized, adaptive)",
+             "(accepted: auto, unit, standardized)",
              s.c_str());
 }
 

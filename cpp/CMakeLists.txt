@@ -91,7 +91,6 @@ add_library(magmaan STATIC
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
   src/model/fcsem_evaluator.cpp
-  src/model/auto_identification.cpp
   src/data/raw_data.cpp
   src/data/pairwise_cov.cpp
   src/data/cluster_stats.cpp
@@ -108,7 +107,6 @@ add_library(magmaan STATIC
   src/estimate/twolevel_fit.cpp
   src/estimate/backend_strings.cpp
   src/estimate/nt.cpp
-  src/estimate/ml_continuation.cpp
   src/estimate/rbm.cpp
   src/estimate/sam.cpp
   src/estimate/fiml.cpp
@@ -144,7 +142,6 @@ add_library(magmaan STATIC
   src/estimate/gmm/moment_quadratic.cpp
   src/estimate/gmm/gp.cpp
   src/estimate/gmm/dls_weight.cpp
-  src/estimate/gmm/structured_gamma_weight.cpp
   src/api/sem.cpp
   src/api/policy.cpp
   src/inference/inference.cpp

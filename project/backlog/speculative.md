@@ -1,5 +1,12 @@
 # Speculative backlog
 
+Research-surface pruning on 2026-09-30 removed fitted-weight GMM and its
+profile/audit adapters, PNTML, EB-DLS selection, MI4, adaptive composites,
+ML ridge continuation and automatic identification fitting. Progress entries
+below that discuss those APIs are historical evidence, not available surfaces
+or active implementation plans. Pairwise MCAR moments remain a general data
+axis composed with the retained discrepancy and inference primitives.
+
 Items we may never need but want to keep findable. Each entry names the gap,
 the cheaper alternative that already covers the practical case, and the
 specific condition under which we'd actually build the item. Unlike
