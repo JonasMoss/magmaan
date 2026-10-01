@@ -316,6 +316,22 @@ for skew/kurt (scale/location invariant) but is the same pattern.
 
 Open work only; landed generator slices are inventoried in the roadmap.
 
+- **M, research; then a note to Yves Rosseel.** lavaan's default nested
+  restriction (`lavTestLRT(method = "satorra.2000")`, `A.method = "delta"`,
+  as in semTests <= 1.0.0) takes the H1 Jacobian at the H1 estimate and the H0
+  Jacobian at the H0 estimate. The points are O(n^-1/2) apart, so the
+  restriction matrix and the reference spectrum carry an O(n^-1/2) error: up
+  to .014 in p at n = 300 on the sem-score-tests textbook battery (one normal
+  draw per model). Evaluating the H1 Jacobian at the H0 solution makes the
+  delta construction exact for any parameter-map nesting, so it equals
+  `A.method = "exact"` and also covers H0s that omit a path, which lavaan's
+  exact method refuses. magmaan's restriction map is already exact. semTests
+  now defaults to the same-point construction, with `A.method = "legacy"` for
+  the old one (branch `same-point-restriction`, 2026-10-01). Before writing to
+  Yves, run an experiment: Type I and size-adjusted power of SB, SS and pEBA
+  with the delta and the exact restriction, over the textbook battery and the
+  FMG designs, to show whether the difference matters next to the
+  O(n^-1/2) noise in Gamma.
 - **DONE 2026-06-14.** Elliptical diagnostics/goldens for Student-t,
   contaminated normal, slash, and finite scale mixtures: public C++ diagnostics
   report radial scale moments, covariance normalization, kurtosis inflation, and
