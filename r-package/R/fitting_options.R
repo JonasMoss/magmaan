@@ -32,3 +32,26 @@
   control$fitting_options <- options
   control
 }
+
+# Arguments of fit_model() that describe the model rather than how it is fitted.
+# A refit supplies its own model, so these are never replayed from a route.
+.model_structure_args <- c("groups", "ordered", "parameterization")
+
+# Arguments that refit a fit_model() fit. Every other recorded argument is
+# replayed, so fitting options and arguments added later carry over without
+# changes here; `overrides` replace recorded values. Fits without a
+# fit_model() route refit with their estimator. A numeric start vector is
+# positional and does not survive a model with different parameters.
+.refit_args <- function(fit, overrides = list(), model_changed = TRUE) {
+  route <- fit$options$route
+  args <- if (identical(route$fitter, "fit_model")) route$args else
+    c(list(estimator = toupper(fit$estimator %||% "ML")),
+      if (isTRUE(fit$options$psd)) list(psd = TRUE))
+  args <- args[setdiff(names(args), .model_structure_args)]
+  if (model_changed && is.numeric(args$control$start)) {
+    args$control$start <- NULL
+    if (!length(args$control)) args$control <- NULL
+  }
+  args[names(overrides)] <- overrides
+  args
+}

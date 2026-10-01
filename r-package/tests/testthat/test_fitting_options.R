@@ -137,7 +137,8 @@ test_that("fitting options reject unknown versions, conflicts and unsupported so
   m <- "f =~ x1+x2+x3"
   expect_error(fit_model(m, d, options = list(preset = "lavaan")), "supported fitting preset")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.3")), "supported fitting preset")
-  expect_error(fit_model(m, d, options = list(convergence = "magmaan")), "convergence must be")
+  expect_error(fit_model(m, d, options = list(convergence = "strict")), "convergence must be")
+  expect_equal(suppressWarnings(fit_model(m, d, options = list(convergence = "default")))$fitting$effective$convergence, "newton")
   expect_error(fit_model(m, d, options = list(convergence = "lavaan-0.7.2")), "requires the PORT")
   expect_error(fit_model(m, d, options = list(wut = "newton")), "unknown fitting option")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), optimizer = "port"), "conflicts")
@@ -148,4 +149,112 @@ test_that("fitting options reject unknown versions, conflicts and unsupported so
   expect_error(fit_model("f =~ x1 + a*x2 + a*x3", d, options = list(preset = "lavaan-0.7.2")), "constraints")
   expect_error(fit_model("f =~ x1 + a*x2 + a*x3", d,
       options = list(optimizer = "port", convergence = "lavaan-0.7.2")), "constraints")
+})
+
+# Records every fit_model() call that a refit makes inside the package.
+.record_refits <- function(env = parent.frame()) {
+  calls <- new.env()
+  calls$args <- list()
+  real <- magmaanlab::fit_model
+  testthat::local_mocked_bindings(fit_model = function(model, data, ...) {
+    calls$args[[length(calls$args) + 1L]] <- list(...)
+    real(model, data, ...)
+  }, .package = "magmaanlab", .env = env)
+  calls
+}
+
+# A refit must replay every recorded argument except the ones it overrides
+# and the model-structure arguments it rebuilds from the model.
+.expect_replayed <- function(refit_args, anchor, overridden = character()) {
+  recorded <- anchor$options$route$args
+  skip_names <- c(getFromNamespace(".model_structure_args", "magmaanlab"), overridden)
+  for (name in setdiff(names(recorded), skip_names))
+    expect_identical(refit_args[[name]], recorded[[name]], label = name)
+}
+
+test_that("every fit_model() fit records the arguments it was given as its route", {
+  d <- lavaan::HolzingerSwineford1939
+  fit <- fit_model("f =~ x1+x2+x3+x4", d, optimizer = "port", std_lv = TRUE)
+  expect_identical(fit$options$route$fitter, "fit_model")
+  expect_setequal(names(fit$options$route$args), "optimizer")
+  expect_identical(fit$options$route$args$optimizer, "port")
+  # Every formal argument is recordable; omitted ones stay omitted.
+  args <- setdiff(names(formals(fit_model)), c("model", "data", "..."))
+  route_args <- getFromNamespace(".route_args", "magmaanlab")
+  env <- list2env(stats::setNames(as.list(seq_along(args)), args))
+  expect_setequal(names(route_args(env, fit_model, supplied = args)), args)
+})
+
+test_that("modification-index refits replay every fitting argument", {
+  .fitting_oracle()
+  d <- lavaan::HolzingerSwineford1939
+  anchor <- fit_model("f =~ x1+x2+x3+x4", d, options = list(preset = "lavaan-0.7.2"))
+  calls <- .record_refits()
+  suppressWarnings(modification_indices_lrt(anchor, d, candidates = "covariances"))
+  expect_gt(length(calls$args), 0L)
+  for (args in calls$args) {
+    .expect_replayed(args, anchor, c("groups", "group_equal", "group_partial", "W"))
+    expect_identical(args$options, list(preset = "lavaan-0.7.2"))
+  }
+  # A fit without options keeps its other choices too, e.g. its optimizer.
+  plain <- fit_model("f =~ x1+x2+x3+x4", d, optimizer = "port")
+  calls <- .record_refits()
+  suppressWarnings(modification_indices_lrt(plain, d, candidates = "covariances"))
+  expect_gt(length(calls$args), 0L)
+  for (args in calls$args) expect_identical(args$optimizer, "port")
+})
+
+test_that("equality-release refits replay every fitting argument", {
+  d <- lavaan::HolzingerSwineford1939
+  options <- list(starts = "fabin3", optimizer = "port", convergence = "newton")
+  anchor <- fit_model("f =~ x1+x2+x3+x4", d, groups = "school",
+      group_equal = "loadings", options = options)
+  calls <- .record_refits()
+  score_tests_lrt(anchor, d, candidates = "loadings")
+  expect_gt(length(calls$args), 0L)
+  for (args in calls$args) {
+    .expect_replayed(args, anchor, c("groups", "group_equal", "group_partial", "W"))
+    expect_identical(args$options, options)
+  }
+})
+
+test_that("case reruns keep the anchor's fitting setup", {
+  .fitting_oracle()
+  d <- lavaan::HolzingerSwineford1939
+  anchor <- fit_model("f =~ x1+x2+x3+x4", d, options = list(preset = "lavaan-0.7.2"))
+  reruns <- case_rerun(anchor, d, to_rerun = 1:2)
+  expect_true(all(reruns$converged))
+  for (refit in reruns$rerun) {
+    expect_identical(refit$fitting$requested, anchor$fitting$requested)
+    expect_identical(refit$fitting$effective, anchor$fitting$effective)
+    .expect_replayed(refit$options$route$args, anchor)
+  }
+})
+
+test_that("explicit numeric starts are reported as explicit", {
+  d <- lavaan::HolzingerSwineford1939
+  base <- fit_model("f =~ x1+x2+x3+x4", d)
+  fit <- fit_model("f =~ x1+x2+x3+x4", d, control = list(start = base$theta),
+      options = list(optimizer = "port"))
+  expect_identical(fit$start$method, "explicit")
+})
+
+test_that("fitting options reject every unsupported route, including pairwise moments", {
+  d <- lavaan::HolzingerSwineford1939
+  m <- "f =~ x1+x2+x3+x4"
+  lavaan_options <- list(preset = "lavaan-0.7.2")
+  expect_error(fit_model(m, d, cluster = "school", options = lavaan_options), "ordinary complete")
+  expect_error(fit_model(m, d, ordered = c("x1", "x2", "x3", "x4"), estimator = "DWLS",
+      options = lavaan_options), "ordinary complete")
+  expect_error(fit_model(m, d, estimator = "ML2S", options = lavaan_options), "ordinary complete")
+  expect_error(fit_model(m, d, covariance = "barrier", options = lavaan_options), "ordinary complete")
+  incomplete <- d
+  incomplete$x1[1:5] <- NA
+  pairwise <- fit_model(m, incomplete, missing = "pairwise")$pairwise_stats
+  expect_false(is.null(pairwise))
+  expect_error(fit_model(m, pairwise, options = lavaan_options), "ordinary complete")
+  expect_error(fit_model("f =~ x1 + a*x2 + a*x3 + x4", d,
+      options = list(starts = "lavaan-0.7.2")), "constraints")
+  expect_error(fit_model(m, d, groups = "school", group_equal = "loadings",
+      options = list(starts = "lavaan-0.7.2")), "constraints")
 })

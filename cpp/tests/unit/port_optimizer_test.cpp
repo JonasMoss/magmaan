@@ -178,6 +178,29 @@ TEST_CASE("PortOptimizer — budget exhaustion at non-stationary iterate "
   CHECK(out->fmin > 1e-3);   // still far from the optimum
 }
 
+TEST_CASE("PortOptimizer — the evaluation limit is a budget stop, not false convergence") {
+  // PORT's IV(1)=9 is its function-evaluation limit (drmngb.c:479), the
+  // sibling of the iteration limit IV(1)=10.
+  auto f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    const double a = 1.0 - x[0];
+    const double b = x[1] - x[0] * x[0];
+    g.resize(2);
+    g[0] = -2.0 * a - 400.0 * x[0] * b;
+    g[1] = 200.0 * b;
+    return a * a + 100.0 * b * b;
+  };
+  magmaan::optim::OptimOptions opts;
+  opts.port.max_eval = 4;
+  opts.port.max_iter = 1000;
+  PortOptimizer opt(opts);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize(f, x0);
+  REQUIRE(out.has_value());
+  CHECK(out->raw_status == 9);
+  CHECK(out->status == magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK(out->fmin > 1e-3);
+}
+
 TEST_CASE("PortOptimizer — ftol is forwarded (looser tolerance does no more work)") {
   // opts.ftol (> 0) reaches PORT's relative-function-convergence tolerance
   // v[kV_RfcTol]. A loose tolerance must stop earlier and at a less-optimal

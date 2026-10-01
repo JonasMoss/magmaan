@@ -72,10 +72,10 @@ enum PortStatus : int {
   PORT_OK_BOTH    = 5,
   PORT_OK_AFCONV  = 6,
   PORT_OK_SINGCONV = 7,
-  PORT_FAIL_NOISY = 8,
-  PORT_FAIL_FALSE = 9,
-  PORT_FAIL_BUDGET = 10,
-  PORT_FAIL_ITER_BUDGET = 11,
+  PORT_FAIL_FALSE_CONV = 8,  // false convergence: gradient/function inconsistent
+  PORT_FAIL_EVAL_LIMIT = 9,  // function-evaluation limit (drmngb.c:479)
+  PORT_FAIL_ITER_LIMIT = 10, // iteration limit (drmngb.c:429)
+  PORT_STOPX = 11,           // external stop hook; stopx.c never requests it
 };
 
 // PORT IV / V subscript layout (Fortran 1-based, mapped to C 0-based).
@@ -335,10 +335,11 @@ PortOptimizer::minimize(Objective f,
       // The audit fills `grad_inf_norm`; the status stays SingularConvergence.
       opt_status = OptimStatus::SingularConvergence;
       break;
-    case PORT_FAIL_NOISY:
-      // IV(1)=8 fires when PORT's internal consistency check between the
-      // trust-region model's predicted reduction and the actual reduction
-      // judges the gradient inconsistent with the function value — precisely
+    case PORT_FAIL_FALSE_CONV:
+      // IV(1)=8, PORT's false convergence, fires when its internal
+      // consistency check between the trust-region model's predicted
+      // reduction and the actual reduction judges the gradient inconsistent
+      // with the function value — precisely
       // the floating-point cancellation signature near a near-perfect-fit
       // optimum. The audit's geometric stationarity verdict is sharper than
       // PORT's heuristic: stationary iterates promote to LineSearchSalvaged
@@ -349,14 +350,9 @@ PortOptimizer::minimize(Objective f,
       opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
                                 : OptimStatus::NoisyObjective;
       break;
-    case PORT_FAIL_FALSE:
-      // IV(1)=9: PORT's step-length floor; same disposition.
-      opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
-                                : OptimStatus::FalseConvergence;
-      break;
-    case PORT_FAIL_BUDGET:
-    case PORT_FAIL_ITER_BUDGET:
-      // IV(1)=10: max_iter or max_fevals hit. Under uniform-stop (paper
+    case PORT_FAIL_EVAL_LIMIT:
+    case PORT_FAIL_ITER_LIMIT:
+      // IV(1)=9 or 10: max_fevals or max_iter hit. Under uniform-stop (paper
       // §D, ftol = 0), this fires routinely at iterates the audit confirms
       // as stationary — the audit is the gate, not PORT's RFCTOL.
       opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
@@ -589,9 +585,9 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
     case PORT_OK_SINGCONV:
       opt_status = OptimStatus::SingularConvergence;
       break;
-    case PORT_FAIL_NOISY:
-    case PORT_FAIL_FALSE:
-    case PORT_FAIL_BUDGET:
+    case PORT_FAIL_FALSE_CONV:
+    case PORT_FAIL_EVAL_LIMIT:
+    case PORT_FAIL_ITER_LIMIT:
       // PORT IV(1) = 8 / 9 / 10. Same disposition as the scalar drmngb
       // adapter above (sibling switch arms): hand the iterate back tagged
       // so R-level callers can read fmin / theta and the audit-parity
@@ -600,9 +596,8 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
       // the -1 sentinel below), so the salvage-to-LineSearchSalvaged
       // shortcut the drmngb path uses does not apply here — that's the
       // caller's job. See dev/audits/convergence-audit-notes.md §3.2.
-      opt_status = final_status == PORT_FAIL_NOISY  ? OptimStatus::NoisyObjective
-                 : final_status == PORT_FAIL_FALSE  ? OptimStatus::FalseConvergence
-                                                    : OptimStatus::BudgetExhausted;
+      opt_status = final_status == PORT_FAIL_FALSE_CONV ? OptimStatus::NoisyObjective
+                                                        : OptimStatus::BudgetExhausted;
       break;
     default:
       return std::unexpected(make_err(FitError::Kind::LineSearchFailed,

@@ -379,8 +379,10 @@ print.magmaan_score_lrt <- function(x, ...) {
 # ---- shared helpers ---------------------------------------------------------
 
 # Refit a model derived from `fit`'s anchor: append `extra_syntax` rows and/or
-# add `extra_partial` group_partial tokens, preserving the anchor's estimator,
-# grouping, group_equal, existing group_partial, and model options.
+# add `extra_partial` group_partial tokens, preserving the anchor's grouping,
+# group_equal, existing group_partial and model options, and every recorded
+# fit_model() argument (estimator, constraint, penalty, weights, optimizer and
+# fitting options, including ones added later).
 .lrt_refit <- function(fit, data, extra_syntax = "", extra_partial = NULL,
                        weight = NULL) {
   model <- fit$model
@@ -426,15 +428,16 @@ print.magmaan_score_lrt <- function(x, ...) {
                                 caller = route$fitter)
     return(.route_refit_fun(fit)(spec, data))
   }
+  # Replay every recorded fit_model() argument (constraint, penalty, weights,
+  # optimizer, fitting options), changing only the model.
   do.call(fit_model, c(
-    list(model = syntax, data = data,
-         estimator = toupper(fit$estimator %||% "ML"),
-         groups = fit$group_var,
-         group_equal = model$group_equal,
-         group_partial = if (length(partial)) partial else NULL),
-    if (!is.null(weight)) list(W = weight),  # continuous WLS augmented refit
-    if (isTRUE(fit$options$psd)) list(psd = TRUE),
-    mo))
+    list(model = syntax, data = data),
+    .refit_args(fit, c(
+      list(groups = fit$group_var,
+           group_equal = model$group_equal,
+           group_partial = if (length(partial)) partial else NULL),
+      if (!is.null(weight)) list(W = weight),  # continuous WLS augmented refit
+      mo))))
 }
 
 .lrt_group_data <- function(fit, data) {

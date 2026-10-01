@@ -1286,7 +1286,8 @@ Rcpp::List fit_result(Ctx& ctx,
     out["verdict"] = verdict;
     if (!est.fitting->attempts.empty()) out["start"] = Rcpp::List::create(
         Rcpp::_["theta"] = Rcpp::wrap(est.fitting->attempts.front().start),
-        Rcpp::_["method"] = est.fitting->setup.starts);
+        Rcpp::_["method"] = est.fitting->explicit_start ? std::string("explicit")
+                                                         : est.fitting->setup.starts);
   }
   if (est.substituted_backend)
     out["optimizer_substituted"] =

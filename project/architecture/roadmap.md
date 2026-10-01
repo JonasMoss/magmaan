@@ -210,13 +210,14 @@ barrier covariance/tests/intervals are distinct inference contracts.
 Penalizing saturated Stage-1 FIML differs from penalizing the final SEM.
 Latent determinacy is zero without genuine latents: a Stage-1 penalty needs an
 observed-covariance target, uncertainty propagation and a separate H1-reference
-contract. The
-[ordinary API proposal](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api)
-selects friendly `covariance = "unrestricted" | "psd" | "barrier"`, with
-barrier/start overrides in `options`. Implementation/migration remain pending;
-internal domain constraints and penalties remain independent. Opt-in experimental
-barrier fitting is requested before complete development; barrier-specific
-hardening and validated inference remain 0.0.2 work.
+contract. The adopted
+[ordinary API](../design/r-interface-vision.md#ordinary-api) selects friendly
+`covariance = "unrestricted" | "psd" | "barrier"`, with λ through
+`barrier(lambda)`, the penalty target fixed by magmaan, and start overrides in
+`options`. Implementation/migration remain pending; internal domain
+constraints and penalties remain independent. Experimental barrier fitting is
+exposed before complete development; barrier-specific hardening and validated
+inference remain 0.0.2 work.
 
 The [active composition queue](../backlog/todo.md#shared-fitting-composition)
 owns dependency order and remaining gates. Foundation work in progress is not
@@ -763,11 +764,22 @@ The pinned failure gate retains the oracle's original-covariance preflight
 across all retries, including its driven-coordinate early return.
 `Estimates::selected_verdict` makes C++/R consumers and ordinary-policy gating
 agree; common diagnostics remain independently inspectable. Fits retain requested
-and resolved settings, numeric controls, starts/scales and attempt selection;
-refits preserve the setup. The first gate is ordinary complete continuous ML
-without equality constraints, with zero/infinite bounds only. Other versions
-and unsupported sources error. Constrained, FIML and all-ordinal parity gates
-remain in the active backlog; inference conventions and default fits are unchanged.
+and resolved settings, numeric controls, starts/scales and attempt selection.
+Every `fit_model()` fit records all of its arguments as its route, and every
+refit (modification-index and equality-release likelihood-ratio refits, case
+reruns) replays them, overriding only the model; arguments and options added
+later carry over without changes. Lavaan acceptance on magmaan's own PORT
+search is judged with `lavaan_acceptance_gradient()` in lavaan's units; the
+lavaan search reproduces the same measurement. Every lavaan component,
+including starts alone, rejects equality constraints. The first gate is
+ordinary complete continuous ML without equality constraints, with
+zero/infinite bounds only. Other versions and unsupported sources, including
+pairwise-moment input, error. Retry parity covers a standardized retry
+exactly; ill-conditioned retries match starts, coordinates and verdicts but
+not endpoints. Constrained, FIML and all-ordinal parity gates remain in the
+active backlog; inference conventions and default fits are unchanged. PORT
+status codes follow its source: 8 false convergence (reported as a noisy
+objective), 9 evaluation limit and 10 iteration limit (both budget stops).
 
 `estimate/frontier/ml2s_audit.hpp` adds standalone saturated-likelihood endpoint
 reports and composed ML2S reports for all five Stage-2 weight policies. Stage 1
@@ -4579,17 +4591,19 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   retained observations when available; FIML requires its own retained data.
   These wrappers compose existing C++ inference primitives and do not change
   the ordinary-user inference policy.
-- Ordinary API proposal (2026-10-01), not implemented:
-  [`magmaan_model()` then `magmaan()`](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api)
+- Ordinary API adopted 2026-10-01, not implemented:
+  [`magmaan_model()` then `magmaan()`](../design/r-interface-vision.md#ordinary-api)
   separates immutable native model/schema preparation from repeated fitting.
-  Grouped/ordinal skeleton frames declare levels; each dataset refreshes moments,
-  thresholds, weights and starts. The proposed fit takes model, data, estimator,
-  covariance policy, inference and options. `fixed.x`, `missing` and `cluster`
-  disappear from the ordinary call; structural choices belong to construction,
-  start/barrier overrides to options. Barriers are exposed experimentally with
-  explicit unavailable inference until their own gates pass. Mean-layout and
-  compatibility decisions and adapter work remain open; the following entries
-  describe current runtime.
+  Grouped/ordinal skeleton frames declare levels; each dataset refreshes
+  moments, thresholds, weights and starts. The fit takes model, data,
+  estimator, covariance policy, inference and options; structural choices
+  belong to construction and optimization details to `options`. Every model
+  carries a mean structure. `fixed.x`, `missing`, `cluster` and
+  `meanstructure` leave the ordinary call (fixed-x rationale in the
+  [scope](../scope.md#ordinary-fixed-x-decision)). Barriers are exposed
+  experimentally as `covariance = barrier(lambda)` with explicit unavailable
+  inference until their own gates pass. Migration and adapter work remain
+  open; the following entries describe current runtime.
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`

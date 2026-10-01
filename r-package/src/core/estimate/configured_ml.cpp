@@ -34,6 +34,21 @@ fit_expected<void> supported(const spec::LatentStructure& pt) {
     return std::unexpected(invalid("fitting options currently require complete continuous ML"));
   return {};
 }
+// The pinned lavaan conventions are gated without equality or inequality
+// constraints: merged free slots, active linear constraints or nonlinear ones.
+fit_expected<void> unconstrained(const spec::LatentStructure& pt) {
+  auto con = build_eq_constraints(pt);
+  std::vector<bool> seen(ix(pt.n_free()), false);
+  bool merged = false;
+  for (int slot : pt.free) if (slot > 0) {
+    const auto k = ix(slot - 1);
+    merged = merged || seen[k];
+    seen[k] = true;
+  }
+  if (!con || con->active() || merged || !pt.nl_constraints.empty())
+    return std::unexpected(invalid("lavaan-0.7.2 conventions currently exclude equality/inequality constraints; their coordinate and augmented-Lagrangian parity gates are pending"));
+  return {};
+}
 optim::OptimOptions lavaan_controls() {
   optim::OptimOptions out;
   out.normalize_sample = false;
@@ -117,6 +132,7 @@ fit_expected<FittingSetup> resolve_fitting_options(const FittingOptions& request
   if (request.convergence) out.convergence = *request.convergence;
   if (out.starts == "magmaan" || out.starts == "default") out.starts = "layered";
   if (out.optimizer == "magmaan" || out.optimizer == "default") out.optimizer = "nlopt-lbfgs";
+  if (out.convergence == "magmaan" || out.convergence == "default") out.convergence = "newton";
   if (out.starts != lavaan_version && out.starts != "layered" && out.starts != "fabin3" &&
       out.starts != "scaled-fabin" && out.starts != "simple")
     return std::unexpected(invalid("unknown starts convention: " + out.starts));
@@ -139,6 +155,8 @@ fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& sample, const spec::Starts& hints, bool simple) {
   if (auto ok = supported(pt); !ok) return std::unexpected(ok.error());
+  // Rows sharing a free slot would otherwise take the last row's start.
+  if (auto ok = unconstrained(pt); !ok) return std::unexpected(ok.error());
   if (sample.S.size() != ix(pt.n_groups()) || rep.cell_for_row.size() != pt.size())
     return std::unexpected(invalid("lavaan starts: sample/model block mismatch"));
   auto fabin = fabin_start_values(pt, rep, sample, {}, FabinVariant::Fabin3, true);
@@ -214,22 +232,33 @@ fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
     }
   }
   // An exogenous single-indicator latent starts with variance max(Sii-theta, .05).
+  // As in the oracle, a latent is endogenous when it is regressed on anything
+  // or is itself an indicator of another latent (a first-order factor of a
+  // higher-order model). theta is the indicator residual's user value: its
+  // fixed value, else its start hint, else 1.
   if (!simple) for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.op[i] != parse::Op::Covariance || pt.lhs_var[i] != pt.rhs_var[i] ||
         !latent(pt, pt.lhs_var[i]) || pt.free[i] <= 0) continue;
     const int v = pt.lhs_var[i];
     int indicator = -1, count = 0;
     bool endogenous = false;
-    for (std::size_t j = 0; j < pt.size(); ++j) if (pt.group[j] == pt.group[i] && pt.lhs_var[j] == v) {
+    for (std::size_t j = 0; j < pt.size(); ++j) {
+      if (pt.group[j] != pt.group[i]) continue;
+      if (pt.op[j] == parse::Op::Measurement && pt.rhs_var[j] == v) endogenous = true;
+      if (pt.lhs_var[j] != v) continue;
       if (pt.op[j] == parse::Op::Regression) endogenous = true;
       if (pt.op[j] == parse::Op::Measurement) { indicator = pt.rhs_var[j]; ++count; }
     }
     if (endogenous || count != 1 || observed(pt, indicator) < 0) continue;
     double theta = 1.0;
-    for (std::size_t j = 0; j < pt.size(); ++j)
-      if (pt.group[j] == pt.group[i] && pt.op[j] == parse::Op::Covariance &&
-          pt.lhs_var[j] == indicator && pt.rhs_var[j] == indicator && pt.free[j] == 0 && std::isfinite(pt.fixed_value[j]))
-        theta = pt.fixed_value[j];
+    for (std::size_t j = 0; j < pt.size(); ++j) {
+      if (pt.group[j] != pt.group[i] || pt.op[j] != parse::Op::Covariance ||
+          pt.lhs_var[j] != indicator || pt.rhs_var[j] != indicator) continue;
+      if (pt.free[j] == 0 && std::isfinite(pt.fixed_value[j])) theta = pt.fixed_value[j];
+      else if (pt.free[j] > 0 && ix(pt.free[j] - 1) < hints.hint.size() &&
+               std::isfinite(hints.hint[ix(pt.free[j] - 1)]))
+        theta = hints.hint[ix(pt.free[j] - 1)];
+    }
     const int o = observed(pt, indicator);
     start(pt.free[i] - 1) = std::max(sample.S[ix(pt.group[i] - 1)](o, o) - theta, 0.05);
   }
@@ -237,6 +266,38 @@ fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
     if (std::isfinite(hints.hint[ix(k)])) start(k) = hints.hint[ix(k)];
   if (!start.allFinite()) return std::unexpected(invalid("lavaan starts are nonfinite"));
   return start;
+}
+
+fit_expected<double> lavaan_acceptance_gradient(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const SampleStats& sample,
+    const Eigen::VectorXd& theta, const Bounds& bounds,
+    const Eigen::VectorXd& scale) {
+  if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok) return std::unexpected(ok.error());
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return std::unexpected(invalid(ev.error().detail));
+  auto prob = ml_objective(*ev, sample);
+  if (!prob) return std::unexpected(prob.error());
+  const Eigen::VectorXd s = scale.size() ? scale : Eigen::VectorXd::Ones(theta.size());
+  if (s.size() != theta.size() || (!bounds.empty() &&
+      (bounds.lower.size() != theta.size() || bounds.upper.size() != theta.size())))
+    return std::unexpected(invalid("lavaan acceptance gradient: dimension mismatch"));
+  Eigen::VectorXd g;
+  const double inf = std::numeric_limits<double>::infinity();
+  if (!std::isfinite(prob->f(theta, g)) || g.size() != theta.size()) return inf;
+  double out = 0.0;
+  for (Eigen::Index j = 0; j < theta.size(); ++j) {
+    // The oracle skips coordinates exactly at either bound. A coordinate
+    // round trip may move theta by a few ulps, so equality is relative here.
+    auto at = [&](double b) {
+      return std::isfinite(b) && std::abs(theta(j) - b) <=
+          8 * std::numeric_limits<double>::epsilon() * std::max(1.0, std::abs(b));
+    };
+    if (!bounds.empty() && (at(bounds.lower(j)) || at(bounds.upper(j)))) continue;
+    const double gz = g(j) / s(j);
+    if (!std::isfinite(gz)) return inf;
+    out = std::max(out, std::abs(gz));
+  }
+  return out;
 }
 
 fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
@@ -248,24 +309,15 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
   if (auto ok = supported(pt); !ok) return std::unexpected(ok.error());
   const bool lavaan_search = setup->optimizer == lavaan_version;
   const bool lavaan_convergence = setup->convergence == lavaan_version;
-  if (lavaan_search || lavaan_convergence) {
-    auto con = build_eq_constraints(pt);
-    std::vector<bool> seen(ix(pt.n_free()), false);
-    bool merged = false;
-    for (int slot : pt.free) if (slot > 0) {
-      const auto k = ix(slot - 1);
-      merged = merged || seen[k];
-      seen[k] = true;
-    }
-    if (!con || con->active() || merged || !pt.nl_constraints.empty())
-      return std::unexpected(invalid("lavaan-0.7.2 search/acceptance currently excludes equality/inequality constraints; their coordinate and augmented-Lagrangian parity gates are pending"));
-  }
+  if (lavaan_search || lavaan_convergence || setup->starts == lavaan_version)
+    if (auto ok = unconstrained(pt); !ok) return std::unexpected(ok.error());
   auto x0 = explicit_start.size() ? fit_expected<Eigen::VectorXd>(explicit_start) : initial(pt, rep, sample, *setup, hints);
   if (!x0) return std::unexpected(x0.error());
   if (x0->size() != pt.n_free() || !x0->allFinite())
     return std::unexpected(invalid("configured ML start has wrong size or nonfinite values"));
   FittingReport report;
   report.setup = *setup;
+  report.explicit_start = explicit_start.size() > 0;
   if (!lavaan_search) {
     auto backend = backend_from_string(setup->optimizer);
     if (!backend) return std::unexpected(backend.error());
@@ -276,7 +328,14 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
     attempt.controls = ml_optim_options();
     attempt.raw_status = est->audit.raw_backend_status;
     attempt.gradient_max = est->audit.backend_gradient_max;
-    if (lavaan_convergence) select_verdict(*est, lavaan_accepts(attempt.raw_status, attempt.gradient_max));
+    if (lavaan_convergence) {
+      // The native search ran in normalized, rescaled coordinates; lavaan's
+      // rule judges its own unnormalized objective in parameter units.
+      auto g = lavaan_acceptance_gradient(pt, rep, sample, est->theta, bounds);
+      if (!g) return std::unexpected(g.error());
+      attempt.gradient_max = *g;
+      select_verdict(*est, lavaan_accepts(attempt.raw_status, attempt.gradient_max));
+    }
     attempt.accepted = fit_verdict(*est).status == FitCheck::Passed;
     attempt.iterations = est->iterations;
     attempt.fmin = est->fmin;
@@ -356,10 +415,12 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
       attempt.error = result.error().detail;
       attempt.fmin = std::numeric_limits<double>::quiet_NaN();
       report.attempts.push_back(std::move(attempt));
-      // lavaan retains the starting candidate when an attempt errors. Its
-      // convergence is false even if that point passes a numerical audit.
-      auto est = evaluate_at(pt, rep, sample, *start, Estimator::ML, {}, bounds);
+      // lavaan keeps the model's original start values, with no objective
+      // value, when an attempt errors; its convergence is false even if that
+      // point passes a numerical audit.
+      auto est = evaluate_at(pt, rep, sample, *x0, Estimator::ML, {}, bounds);
       if (!est) return std::unexpected(est.error());
+      est->fmin = std::numeric_limits<double>::quiet_NaN();
       select_verdict(*est, false);
       selected = std::move(*est);
       report.selected_attempt = report.attempts.size() - 1;
@@ -371,8 +432,10 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
     est->f_evals = result->f_evals;
     est->g_evals = result->g_evals;
     est->optimizer_status = result->status;
-    est->audit = result->audit;
-    est->grad_inf_norm = result->grad_inf_norm;
+    // The audit stays in parameter units; PORT's own audit is in the driven
+    // (possibly standardized) coordinates. Only its raw verdict carries over.
+    est->audit.raw_backend_status = result->audit.raw_backend_status;
+    est->audit.backend_gradient_max = result->audit.backend_gradient_max;
     attempt.raw_status = result->audit.raw_backend_status;
     attempt.gradient_max = result->audit.backend_gradient_max;
     attempt.iterations = result->iterations;

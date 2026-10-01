@@ -69,7 +69,25 @@ ordinary-user estimator or inference default.
   attempt and separate native diagnostics; reject unsupported combinations.
   **Check:** pinned offline components and installed-version R comparisons of
   starts, search, final gradients, soft failures and retries, not just easy
-  estimates. Inference conventions remain magmaan's policy.
+  estimates. Inference conventions remain magmaan's policy. Consumer:
+  simulation studies that need lavaan-identical fitting. Retry parity so far:
+  a ×100 rescale matches lavaan's standardized retry exactly; at ×1000 and
+  ×10⁵ starts, coordinates and verdicts match, but endpoints depend on
+  floating-point paths (fixture `fitting/lavaan_0_7_2.json`).
+
+- [ ] **M/L — decide how magmaan's verdict relates to inference under a
+  non-native acceptance rule.** Under a compatibility preset such as
+  `lavaan-0.7.2`, the selected acceptance rule sets `converged` and gates
+  ordinary inference. This is deliberate: simulations compared with lavaan
+  need lavaan-identical outcomes. magmaan's common Newton verdict remains in
+  the fit diagnostics, and the two can disagree. On exact-fit moments with x1
+  scaled by 1000 and x3 by 1/1000, lavaan 0.7.2 accepts a standardized-retry
+  endpoint with fmin 0.276 (same fixture). Decide whether the inference status
+  reports both verdicts, adds a detail when they disagree, or gates on both,
+  without changing lavaan-identical estimates or `converged`. Expect threading
+  through `api::policy_fit_state` and the ordinary summary. **Check:**
+  disagreement cases in both directions, unchanged lavaan-identical fits, and
+  documentation of the verdict that gates inference.
 
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
@@ -191,19 +209,22 @@ here track that work; completing the 0.1.0 gates does not complete it.
 0.0.1 prioritizes ordinary and PSD inference in supported primary workflows.
 Ordinary SEs are not automatically valid at singular PSD endpoints; require
 validated sampling contracts or explicit unsupported results. Barrier-specific
-covariance, tests and intervals belong to the 0.0.2 section below. Opt-in
-experimental fitting exposure is requested in the ordinary API proposal;
-availability does not claim validated inference.
+covariance, tests and intervals belong to the 0.0.2 section below. The
+adopted ordinary API exposes barrier fitting experimentally as
+`covariance = barrier(lambda)`; availability does not claim validated
+inference.
 
 ### ML and FIML
 
-- [ ] **S/M — remove the ordinary fixed-x option under the proposed API.**
-  Ordinary construction uses the joint random-X contract; reject incompatible
-  supplied fixed-x specs instead of silently replacing their model. Preserve
-  compiled/lab compatibility conventions. Coordinate with the reusable-model
-  task below. **Check:** random-X partable/fitting parity, direct/deferred and
-  nested inference gates, typed rejection and retained metadata. General
-  fixed-design inference remains
+- [ ] **S/M — remove the ordinary fixed-x option under the adopted API.**
+  Decided in the [scope](../scope.md#ordinary-fixed-x-decision): ordinary
+  construction uses the joint random-X model. Reject lab specifications built
+  with `fixed_x = TRUE`, with instructions, instead of silently replacing their
+  model. Preserve compiled/lab compatibility conventions. Coordinate with the
+  ordinary API task below. **Check:** random-X partable/fitting parity, ML
+  estimates unchanged and LS changes as documented, direct/deferred and nested
+  inference gates, typed rejection and retained metadata. General fixed-design
+  inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 
 - [x] **M — accept nested pairs written by dropping or fixing parameters.**
@@ -428,20 +449,29 @@ structural-path enumeration remains a separate model-builder contract.
 
 ### API and R boundary
 
-- [ ] **M/L — implement the ordinary reusable-model proposal.** Add
-  `magmaan_model()` and fit immutable prepared models through the smaller
-  `magmaan(model, data, estimator, covariance, inference, options)` surface.
-  Support zero-row grouped/ordinal schema frames; keep native structural
-  preparation outside repeated fits. Move start/barrier overrides into options;
-  resolve mean-layout defaults and versioned argument migration. Missing-data
-  handling belongs to the estimator; preserve row provenance. Expose implemented
-  barriers experimentally, with unavailable inference until their separate gates
-  pass. Extend prepared adapters instead of rebuilding partables per draw.
-  **Check:** fresh/prepared parity, structural-preparation counters, changed-data
-  starts/thresholds, schema/fixed-x rejection, option precedence, barrier
-  zero-weight/normalization and inference refusal, worker reconstruction, and
+- [ ] **M/L — implement the adopted ordinary API.** Add
+  `magmaan_model(model, prototype, ordered, group, group.equal, group.partial,
+  identification, parameterization)` and fit immutable prepared models through
+  `magmaan(model, data, estimator, covariance, inference, options)`. Support
+  zero-row grouped/ordinal schema frames; keep native structural preparation
+  outside repeated fits. Every ordinary model carries a mean structure.
+  `covariance` takes `"unrestricted"`, `"psd"`, `"barrier"` or
+  `barrier(lambda)`; barrier fits are experimental (one session message,
+  recorded and printed status, typed unavailable inference). Merge the top-level
+  `start` and `options$starts` into `options$start` with one documented
+  vocabulary, removing today's `"fabin3"` clash. Remove `fixed.x`, `missing`,
+  `cluster` and `meanstructure` from the ordinary call, with a versioned
+  migration; preserve row provenance. The syntax shortcut errors on undeclared
+  ordered factors. Refits already replay every recorded `fit_model()` argument
+  (2026-10-01). Extend prepared adapters instead of rebuilding partables per
+  draw. **Check:** fresh/prepared parity, structural-preparation counters,
+  changed-data starts/thresholds, schema, ordered-factor and fixed-x rejection,
+  mean-structure invariance of the other estimates, SEs and tests, option
+  precedence and start vocabulary, barrier λ validation, zero-λ reduction,
+  session message and inference refusal, the documented distinction between
+  changing the covariance domain and the objective, worker reconstruction, and
   separately timed small-model setup/data/fit/inference. See the
-  [proposal](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api).
+  [design](../design/r-interface-vision.md#ordinary-api).
 
 #### EQS language extension
 
@@ -509,7 +539,7 @@ complete; the source milestones remain unimplemented.
   gates. Run `just vendor` after canonical C++ changes, never edit mirrors.
 - [ ] **M — integrate EQS into r-magmaan later.** Start after C++/lab language
   and round-trip gates pass. Accept validated EQS specifications through the
-  ordinary reusable-model constructor, retain schema/parameter identities and
+  ordinary model constructor `magmaan_model()`, retain schema/parameter identities and
   use the existing ordinary inference policy. **Check:** repeated simulation
   fits, worker reconstruction, prepared parity and explicit unsupported-policy
   results. Do not expand fitting/inference scope or change ordinary defaults.
@@ -567,14 +597,6 @@ shared primitives or promotes an ordinary-user default.
   Preserve inputs; a model barrier does not repair indefinite polychoric/pairwise
   moments. Saturated Stage-1 penalties require a separate target, propagation
   and H1-reference contract; latent determinacy is zero without genuine latents.
-
-- [ ] **S/M — settle friendly covariance-policy naming and migration.** The
-  ordinary API proposal selects `covariance = "unrestricted" | "psd" |
-  "barrier"` to replace `psd`, with barrier overrides in `options`. Finalize
-  existing-call migration alongside reusable-model implementation. Internally
-  domain constraints and penalties stay independent.
-  **Check:** explicit combinations, compatibility/refit metadata and documented
-  distinction between changing the covariance domain and changing the objective.
 
 - [ ] **S — expose effective pEBA block counts.** A requested pEBA-4 is clamped
   to the test df and can coincide with scaled-shifted at df=1 while keeping its
@@ -781,8 +803,9 @@ entry points and regression gates.
   law, target-map derivatives and actual penalized estimating equation; retain
   structural-parameter and threshold uncertainty explicitly. Define scaling/
   domain and inference before claiming DWLS penalty inference or validated
-  ordinary-user inference. Experimental fitting exposure is requested separately
-  by the ordinary API proposal and reports unavailable inference.
+  ordinary-user inference. The adopted ordinary API exposes fitting
+  experimentally as `covariance = barrier(lambda)` and reports unavailable
+  inference.
   **Check:** independent derivatives, fixed-penalty limits,
   regular/boundary covariance, global/nested tests and interval calibration,
   with explicit unsupported components. Reuse correlation-ML criterion

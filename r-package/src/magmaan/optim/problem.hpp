@@ -86,8 +86,8 @@ struct ConstrainedScalarProblem {
 // unrecoverable line-search abort. This enum refines the *success* path so a
 // caller can tell a clean stationary stop from a salvaged or singular one.
 //
-// The `NoisyObjective` / `FalseConvergence` / `BudgetExhausted` triplet
-// returns iterates PORT would otherwise refuse (IV(1) = 8 / 9 / 10). Near
+// `NoisyObjective` and `BudgetExhausted` return iterates PORT would otherwise
+// refuse (IV(1) = 8, and 9 / 10). Near
 // SEM optima, PORT's internal consistency check between the trust-region
 // model's predicted reduction and the actual reduction fires on
 // floating-point cancellation noise rather than on a real optimization
@@ -100,11 +100,13 @@ enum class OptimStatus {
   Converged,            // clean stop: (projected) gradient norm under tolerance
   LineSearchSalvaged,   // line search aborted, but the iterate was stationary
   SingularConvergence,  // PORT singular convergence (IV(1)=7): Hessian singular
-  NoisyObjective,       // PORT IV(1)=8: predicted vs actual reduction disagree;
-                        //   typically floating-point noise near tight optima
-  FalseConvergence,     // PORT IV(1)=9: step length below PORT's resolvable
-                        //   precision; the iterate may still be near a minimum
-  BudgetExhausted,      // PORT IV(1)=10 or analogous: max_iter hit; with the
+  NoisyObjective,       // PORT IV(1)=8 (false convergence): predicted vs actual
+                        //   reduction disagree; typically floating-point noise
+                        //   near tight optima
+  FalseConvergence,     // a step-length floor stop distinct from noise; no
+                        //   current backend reports it
+  BudgetExhausted,      // PORT IV(1)=9 / 10 or analogous: evaluation or
+                        //   iteration limit hit; with the
                         //   uniform-stop discipline (paper dev/todo.md §D),
                         //   common signature of an iterate the audit will
                         //   still confirm as stationary

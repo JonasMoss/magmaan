@@ -2375,6 +2375,11 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                     stage1_regularization = NULL, psd = FALSE,
                     covariance = NULL, barrier = NULL, weight = NULL,
                     options = NULL) {
+  # Every argument the caller supplied, recorded as the fit's route before any
+  # normalization, so refits replay arguments added later without changes.
+  # Omitted arguments stay omitted: some defaults depend on missing().
+  route_args <- .route_args(environment(), sys.function(),
+                            supplied = names(as.list(match.call()))[-1L])
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
@@ -2434,6 +2439,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     control$start <- NULL
     if (!length(control)) control <- NULL
   }
+  # A start table now lives in the spec as keyed hints; a refit supplies its
+  # own spec, so the route keeps the remaining controls only.
+  if ("control" %in% names(route_args)) route_args["control"] <- list(control)
   pairwise_stats <- pairwise_raw <- NULL
   supplied_weight <- !is.null(W)
   done <- function(fit) {
@@ -2452,23 +2460,18 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     fit$options$covariance <- covariance
     fit$options$barrier <- barrier
-    if (!is.null(options)) fit$options$route <- list(fitter = "fit_model", args = list(
-      estimator = estimator, options = options, optimizer = optimizer,
-      control = control, bounds = bounds, missing = missing))
-    # A PSD fit is refitted through fit_model() with the same constraint and
-    # optimizer settings; ordinary fits keep their callers' estimator refit.
-    if (psd || !is.null(barrier) || !is.null(pairwise_stats) || estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$options$route <- list(fitter = "fit_model", args = list(
-      estimator = estimator, covariance = covariance, barrier = barrier,
-      optimizer = optimizer, control = control, W = if (supplied_weight) W else NULL, missing = missing,
-      parameterization = parameterization, stage2_weight = stage2_weight,
-      dls_a = dls_a, stage1_regularization = stage1_regularization))
+    # Every fit_model() fit refits through fit_model() with all of its
+    # arguments: constraint, penalty, weights, optimizer and fitting options.
+    fit$options$route <- list(fitter = "fit_model", args = route_args)
     fit
   }
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")
+  pairwise_moments <- is.list(data) && !is.data.frame(data) &&
+    !is.null(data$pi_hat) && !is.null(data$n_pair)
   if (!is.null(options) && (estimator != "ML" || ordinal_requested || psd ||
-      !is.null(barrier) || !is.null(cluster) || missing == "pairwise"))
+      !is.null(barrier) || !is.null(cluster) || missing == "pairwise" || pairwise_moments))
     stop("fitting options currently require ordinary complete continuous ML")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
@@ -2615,8 +2618,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
 
-  if (is.list(data) && !is.data.frame(data) && !is.null(data$pi_hat) && !is.null(data$n_pair))
-    missing <- "pairwise"
+  if (pairwise_moments) missing <- "pairwise"
   if (identical(missing, "pairwise")) {
     if (is.data.frame(data)) {
       pairwise_raw <- df_to_fiml_data(data, spec, group = group_var)
@@ -2754,8 +2756,11 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
 # arguments other than the model and the data. Refit-based methods
 # (case_rerun(), the likelihood-ratio refits) read it, so a PSD or penalized
 # fit is refitted with its own constraint or penalty, never as plain ML.
-.route_args <- function(env = parent.frame(), fun = sys.function(sys.parent())) {
-  mget(setdiff(names(formals(fun)), c("model", "data", "...")), envir = env)
+.route_args <- function(env = parent.frame(), fun = sys.function(sys.parent()),
+                        supplied = NULL) {
+  keep <- setdiff(names(formals(fun)), c("model", "data", "..."))
+  if (!is.null(supplied)) keep <- intersect(keep, supplied)
+  mget(keep, envir = env)
 }
 
 # Finish a frontier fit as a first-class magmaan_fit carrying its route.
@@ -2783,14 +2788,16 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
 }
 
 # A function(model, data) that refits the way `fit` was fitted, from its
-# route; NULL when the fit has no route (ordinary fits keep their callers'
-# estimator-based refit).
+# route; NULL when the fit has no route (fits from the lower-level fitters keep
+# their callers' estimator-based refit). The model must have the anchor's
+# parameters; .refit_args() serves refits that change them.
 .route_refit_fun <- function(fit) {
   r <- fit$options$route
   if (is.null(r)) return(NULL)
   f <- get(r$fitter, envir = asNamespace("magmaanlab"))
+  args <- if (identical(r$fitter, "fit_model")) .refit_args(fit, model_changed = FALSE) else r$args
   function(model, data) {
-    out <- do.call(f, c(list(model, data), r$args))
+    out <- do.call(f, c(list(model, data), args))
     if (is.null(r$extract)) out else out[[r$extract]]
   }
 }

@@ -6,14 +6,29 @@ stopifnot(gsub("-", ".", trimws(readLines("cpp/tests/fixtures/lavaan_version.txt
 lambda <- c(1, .8, .6, .9)
 s <- tcrossprod(lambda) + diag(.7, 4)
 dimnames(s) <- list(paste0("x", 1:4), paste0("x", 1:4))
+# `rescale` multiplies x1 and divides x3 by k, so the pinned search accepts
+# only a standardized retry (k = 100, 1000) or no attempt at all (k = 1e5).
+# At k = 1000 lavaan accepts fmin = 0.276 on exact-fit moments. For k >= 1000
+# the endpoints depend on floating-point paths (`endpoint_parity = FALSE`):
+# starts, coordinates and verdicts stay comparable, estimates do not.
 cases <- list(
   list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE),
   list(model = "f =~ x1+x2+x3+x4", std_lv = TRUE),
   list(model = "x4 ~ x1+x2+x3", std_lv = FALSE),
-  list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE, invalid_start = TRUE))
+  list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE, invalid_start = TRUE),
+  list(model = "f1 =~ x1\nx1 ~~ 0.3*x1\ng =~ f1 + x2 + x3 + x4", std_lv = FALSE),
+  list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE, rescale = 100),
+  list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE, rescale = 1000, endpoint_parity = FALSE),
+  list(model = "f =~ x1+x2+x3+x4", std_lv = FALSE, rescale = 1e5, endpoint_parity = FALSE))
 for (i in seq_along(cases)) {
   case <- cases[[i]]
-  args <- list(model = case$model, sample.cov = s, sample.nobs = 200,
+  si <- s
+  if (!is.null(case$rescale)) {
+    d <- diag(c(case$rescale, 1, 1 / case$rescale, 1))
+    si <- d %*% s %*% d
+    dimnames(si) <- dimnames(s)
+  }
+  args <- list(model = case$model, sample.cov = si, sample.nobs = 200,
       sample.cov.rescale = FALSE, std.lv = case$std_lv, fixed.x = FALSE,
       meanstructure = FALSE, se = "none", test = "none")
   if (isTRUE(case$invalid_start)) {
@@ -25,6 +40,7 @@ for (i in seq_along(cases)) {
   cases[[i]] <- c(case, list(sample_cov = unname(lv@SampleStats@cov[[1]]), n = 200,
       parameters = pt[pt$free > 0L, c("lhs", "op", "rhs", "start", "est")],
       fmin = as.numeric(lv@optim$fx), optimizer_x = as.numeric(lv@optim$x),
+      parscale = as.numeric(lv@optim$parscale),
       converged = lavaan::lavInspect(lv, "converged")))
 }
 dir.create("cpp/tests/fixtures/fitting", showWarnings = FALSE)

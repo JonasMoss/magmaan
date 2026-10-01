@@ -45,6 +45,7 @@ struct FittingReport {
   FittingSetup setup;
   std::vector<FittingAttempt> attempts;
   std::size_t selected_attempt = 0;
+  bool explicit_start = false; // values were supplied, not constructed
 };
 
 fit_expected<FittingSetup> resolve_fitting_options(const FittingOptions&);
