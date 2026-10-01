@@ -217,6 +217,10 @@ score_tests <- function(fit, data = NULL, ...) {
 # term beyond lavaan's global SB scalar. It applies to estimated second-stage
 # weights (continuous GLS/WLS, ordinal/categorical DWLS/WLS), needs the fitting
 # `data` for the continuous tier, and is not available for ML or mixed-ordinal.
+# FIML uses observed information and observed-pattern casewise score meat;
+# omitted bread/information select 'observed'. It uses retained raw observations
+# unless `data` is supplied. Expected information, alternative covariance/moment
+# recipes and second-stage weights are unsupported and rejected explicitly.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         bread = "expected",
                                         moments = "structured",
@@ -227,6 +231,10 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         information = "expected",
                                         estimated_weight = FALSE) {
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices_robust()")
+  if (identical(fit$estimator, "FIML")) {
+    if (missing(bread)) bread <- "observed"
+    if (missing(information)) information <- "observed"
+  }
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_modification_indices_robust(
@@ -240,6 +248,7 @@ score_tests_robust <- function(fit, data = NULL, weight = NULL,
                                bread = "expected", moments = "structured",
                                cov = "empirical", estimated_weight = FALSE) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests_robust()")
+  if (identical(fit$estimator, "FIML") && missing(bread)) bread <- "observed"
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_score_tests_robust(

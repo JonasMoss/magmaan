@@ -8325,7 +8325,7 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 
 // ── Robust (generalized / Satorra-Bentler-scaled) MI & score tests ──────────
 // Frontier mirror of inference_modification_indices/_score_tests, routed to the
-// *_robust entry points: inference::frontier for continuous ML/ULS/GLS/WLS,
+// *_robust entry points: inference::frontier for continuous ML/FIML/ULS/GLS/WLS,
 // estimate::frontier for ordinal/mixed. Each row keeps the ordinary `mi` and
 // adds `mi_scaled = mi / scaling_factor` (the same DataFrame columns the
 // non-robust sweep already emits).
@@ -8339,6 +8339,44 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 // ordinary statistic. Full-WLS collapses regardless (W = Gamma^-1).
 
 namespace {
+
+void validate_fiml_robust_score_options(
+    const std::string& bread, const std::string& moments,
+    const std::string& cov, SEXP weight, bool estimated_weight) {
+  if (bread != "observed") {
+    Rcpp::stop("magmaan: FIML robust MI/release requires bread='observed'; "
+               "expected-information bread is unsupported");
+  }
+  if (moments != "structured" || cov != "empirical") {
+    Rcpp::stop("magmaan: FIML robust MI/release uses observed-pattern casewise "
+               "score covariance; only moments='structured', cov='empirical' "
+               "are supported");
+  }
+  if (!Rf_isNull(weight) || estimated_weight) {
+    Rcpp::stop("magmaan: FIML robust MI/release has no second-stage weight; "
+               "weight and estimated_weight are unsupported");
+  }
+}
+
+// A caller-supplied data block must not borrow the fitted missingness cache:
+// its patterns and sufficient statistics can differ even at the same dimensions.
+const FimlPack& fiml_robust_score_pack(
+    Rcpp::List fit, SEXP raw_arg, const magmaan::data::RawData& raw,
+    std::unique_ptr<FimlPack>& owned) {
+  if (Rf_isNull(raw_arg)) return fiml_pack_for_fit(fit, raw, owned);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) stop_fit(pack.error());
+  owned = std::make_unique<FimlPack>(std::move(*pack));
+  return *owned;
+}
+
+SEXP fiml_robust_score_data(Rcpp::List fit, SEXP raw_arg) {
+  if (!Rf_isNull(raw_arg)) return raw_arg;
+  if (fit.containsElementNamed("raw_data") && !Rf_isNull(fit["raw_data"])) {
+    return fit["raw_data"];
+  }
+  Rcpp::stop("magmaan: FIML robust MI/release requires fit$raw_data or data=");
+}
 
 // Estimation weight for a continuous LS fit (empty for ULS; ML carries none and
 // is handled by the caller via the weight-free overloads).
@@ -8717,6 +8755,19 @@ Rcpp::DataFrame inference_modification_indices_robust(
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
         estimated_weight);
+  } else if (estimator == "FIML") {
+    validate_fiml_robust_score_options(bread, moments, cov, weight,
+                                     estimated_weight);
+    if (information != "observed") {
+      Rcpp::stop("magmaan: FIML robust modification indices require "
+                 "information='observed'; expected-statistic information "
+                 "is unsupported");
+    }
+    const auto rd = fiml_raw_from_arg(ctx.rep, fiml_robust_score_data(fit, raw));
+    std::unique_ptr<FimlPack> owned_pack;
+    const auto& pack = fiml_robust_score_pack(fit, raw, rd, owned_pack);
+    out = magmaan::inference::frontier::modification_indices_fiml_robust(
+        ctx.pt, ctx.rep, rd, est, pack, base);
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
     magmaan::inference::frontier::RobustScoreOptions opts;
@@ -8822,6 +8873,14 @@ Rcpp::DataFrame inference_score_tests_robust(
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
         estimated_weight);
+  } else if (estimator == "FIML") {
+    validate_fiml_robust_score_options(bread, moments, cov, weight,
+                                     estimated_weight);
+    const auto rd = fiml_raw_from_arg(ctx.rep, fiml_robust_score_data(fit, raw));
+    std::unique_ptr<FimlPack> owned_pack;
+    const auto& pack = fiml_robust_score_pack(fit, raw, rd, owned_pack);
+    out = magmaan::inference::frontier::score_tests_fiml_robust(
+        ctx.pt, ctx.rep, rd, est, pack);
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
     magmaan::inference::frontier::RobustScoreOptions opts;

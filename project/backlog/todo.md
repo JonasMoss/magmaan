@@ -310,7 +310,7 @@ projection/reference law before exposure. This adds no ordinary-user default.
 | Remaining family | Existing MI/release basis | Weight/covariance completion |
 | --- | --- | --- |
 | Complete-data ML | Expected/observed information; robust core and R paths | Gate matching information/bread, structured/unstructured supported NT covariance, empirical/Browne and caller-Gamma choices; reject unsupported moment-source combinations |
-| Direct FIML | Analytic observed MI/release and robust core; expected geometry gates identification | Wire robust R dispatch; preserve the observed-statistic convention and observed-pattern meat; make unsupported expected-statistic/second-stage-weight choices explicit |
+| Direct FIML | Analytic observed MI/release, robust core and R dispatch; expected geometry gates identification | Observed statistic/bread and observed-pattern casewise meat; expected-statistic, alternative covariance/moment and second-stage-weight choices explicitly rejected; broader convention/calibration work remains above |
 | Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: retain the fitting recipe, covariance source, a and weight influence; audit sensitivity/nuisance projection under misspecification |
 | All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; close ordinary-rank and adapter gaps |
 | Prepared all-ordinal correlation-ML | Retained catML fitting and shared association-target composition work; LS MI is not an ML-target score contract | Gate the active association Jacobian, saturated-threshold/NACOV transport and matching ML information before MI/release exposure; follow the shared fitting contract |
@@ -322,14 +322,6 @@ scope and need their own covariance law; direct composite-likelihood, two-level
 SEM, SAM, mixed-data and noniterative expansion are outside this slice.
 Automatic absent-row enumeration covers cross-loadings and covariances;
 structural-path enumeration remains a separate model-builder contract.
-
-- [ ] **S — dispatch FIML robust MI/release bindings explicitly.** The R
-  robust-MI wrapper currently routes FIML through complete-data LS machinery;
-  passing missing observations fails with a non-finite-data error. Wire the
-  existing observed-information C++ FIML robust MI/release entries and reject
-  unsupported convention combinations explicitly. **Check:** raw/retained-data
-  agreement, marker exclusion and identified candidate controls; verify both
-  wrapper dispatches rather than changing the C++ formulas.
 
 - [ ] **S — honor continuous-WLS MI covariance selection.** The fixed-weight
   R robust MI/release dispatch currently forces model-implied covariance for

@@ -2350,6 +2350,15 @@ an unconstrained gradient test to constrained solutions.
   multi-group via the same block-stacked Hessian / casewise-score layout used by
   `fiml_robust_mlr`. FIML has no batch augmentation, so this uses the one-by-one
   robust sweep.
+  R binding completion (2026-10-01): `modification_indices_robust()` and
+  `score_tests_robust()` dispatch direct FIML to these entries. Omitted
+  bread/information select observed; explicit expected information, alternative
+  covariance/moment recipes, supplied weights and estimated-weight mode are
+  rejected. Retained raw data reuse the fitted missingness pack; explicit data
+  (including masks/group blocks) rebuild their pack, without an H1 EM. Binding
+  gates cover retained/rebuilt/explicit-data agreement, unequal groups, equality
+  releases, marker exclusion versus identified fixed loadings, and indicator
+  units in `test_fiml_robust_score.R` and `test-score-rank.R`.
   Oracle: FIML/MLR release-score fixture 0009 (`information.observed` /
   `lavScores`, θ-space assembly, c ≈ 2.16 on heavy-tailed + MCAR data) plus a
   non-robust-`mi` match and a c → 1 normal-data anchor in

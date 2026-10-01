@@ -27,11 +27,9 @@ test_that("MI tables exclude identification releases across indicator units", {
       expect_true(all(mi$op == "~~" & mi$lhs != mi$rhs))
       expect_setequal(key(mi), key(reference))
       expect_equal(mi$mi, reference$mi[match(key(mi), key(reference))], tolerance = 1e-4)
-      if (!missing) {
-        robust <- modification_indices_robust(fit, data = d)
-        expect_setequal(key(robust), key(mi))
-        expect_equal(robust$mi, mi$mi, tolerance = 1e-8)
-      }
+      robust <- modification_indices_robust(fit, data = d)
+      expect_setequal(key(robust), key(mi))
+      expect_equal(robust$mi, mi$mi, tolerance = 1e-8)
     }
   }
 })
