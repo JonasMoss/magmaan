@@ -3034,8 +3034,10 @@ lr_test_satorra2000_continuous_ls(
 
   Eigen::MatrixXd A_alpha;
   if (a_method == robust::SatorraAMethod::Exact) {
-    auto restr_or = robust::restriction_alpha_from_K(*con1, *con0);
-    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    auto embedding = robust::embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+        est_H0.theta,*con1,*con0);
+    if (!embedding) return std::unexpected(embedding.error());
+    auto restr_or = &embedding->restriction;
     A_alpha = std::move(restr_or->A);
   } else {
     auto D0_or = delta_alpha(pt_H0, rep_H0, est_H0, *con0,

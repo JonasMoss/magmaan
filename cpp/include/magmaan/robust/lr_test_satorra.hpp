@@ -134,7 +134,7 @@ lr_test_satorra_bentler2010_from_data(
 // structure's GOF scaling evaluated at the H0 estimates, the positivity fix).
 // They mirror the complete-data `_from_data` engines and are intended as
 // baseline comparison columns (the lavaan SB2001 statistic and its positivity
-// fix). 2010 requires same-parameter nesting (theta_H0 injectable into H1).
+// fix). 2010 uses the shared null embedding to inject theta_H0 into H1.
 post_expected<LRSatorraBentlerDiffResult>
 lr_test_satorra_bentler2001_fiml_from_data(
     const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,

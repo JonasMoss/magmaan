@@ -93,6 +93,9 @@ struct ModelError {
 struct PostError {
   enum class Kind : std::uint8_t {
     InfoMatrixSingular,       // Fisher information not invertible (under-identified / collinear free params)
+    NotNested,                // affine null is not contained in the alternative
+    UnsupportedNesting,       // parameter correspondence unavailable for this route
+    BoundaryNesting,          // nesting is not interior (singular tangent or covariance)
     BootstrapFailed,          // resampling step could not produce a usable replicate set
     NumericIssue,             // upstream numerical failure (non-PD Σ at θ̂, evaluator build, ...)
   };

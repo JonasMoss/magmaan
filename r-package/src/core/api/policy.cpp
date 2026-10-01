@@ -19,6 +19,8 @@ std::string_view reason_name(InferenceReason reason) noexcept {
     case InferenceReason::UnsupportedModel: return "unsupported_model";
     case InferenceReason::NumericFailure:   return "numeric_failure";
     case InferenceReason::NotNested:        return "not_nested";
+    case InferenceReason::UnsupportedNesting: return "unsupported_nesting";
+    case InferenceReason::BoundaryNesting:  return "boundary_nesting";
   }
   return "unknown";
 }
@@ -138,7 +140,14 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
   }
   auto hypothesis = robust::frontier::prepare_ntml_hypothesis(std::move(null),
                                                               std::move(alternative));
-  if (!hypothesis) return unavailable(InferenceReason::NotNested, hypothesis.error().detail);
+  if (!hypothesis) {
+    const auto kind=hypothesis.error().kind;
+    const auto reason=kind==PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
+        : kind==PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting
+        : kind==PostError::Kind::NotNested ? InferenceReason::NotNested
+        : InferenceReason::NumericFailure;
+    return unavailable(reason,hypothesis.error().detail);
+  }
   calibrate(robust::frontier::ntml_quadratic(**hypothesis, true), out.score);
   calibrate(robust::frontier::ntml_quadratic(**hypothesis, false), out.lr);
   // A negative difference means the alternative stopped above the null's

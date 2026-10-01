@@ -1257,9 +1257,10 @@ lr_test_pairwise_ordinal_composite(
 
   Eigen::MatrixXd A_alpha;
   if (a_method == robust::SatorraAMethod::Exact) {
-    auto restr = robust::restriction_alpha_from_K(*con1, *con0);
-    if (!restr.has_value()) return std::unexpected(restr.error());
-    A_alpha = std::move(restr->A);
+    auto embedding = robust::embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+        fit_H0.estimates.theta,*con1,*con0);
+    if (!embedding) return std::unexpected(embedding.error());
+    A_alpha = std::move(embedding->restriction.A);
   } else {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "lr_test_pairwise_ordinal_composite: delta A-method is not implemented for composite likelihood"));

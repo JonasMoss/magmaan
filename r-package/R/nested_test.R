@@ -11,8 +11,9 @@
 #'   `magmaan_model_spec` for the less-restricted model. Supplying the model
 #'   avoids fitting H1 because a score test uses only H1's tangent and H0's
 #'   estimates.
-#' @param fit_H0 More-restricted affine nested fit over the same parameter
-#'   slots, estimator, and observations.
+#' @param fit_H0 More-restricted nested fit with paths dropped, fixed or
+#'   constrained, using the same estimator and observations. Interior moment
+#'   reparameterizations are evaluated at a common null point.
 #' @param data Raw fitting data for complete-data ML. Direct FIML uses the
 #'   observed-data sample stored on both fits, so this argument must be omitted.
 #' @param n_flips Number of random multiplier transformations.
@@ -378,8 +379,8 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'
 #' @param fit_H1 Less-restricted fitted magmaan model, ordinarily returned by
 #'   [fit_model()].
-#' @param fit_H0 More-restricted fit (same lavaanified partable shape,
-#'   differing only in constraint rows / shared labels).
+#' @param fit_H0 More-restricted fit, with paths dropped, fixed or constrained.
+#'   Interior reparameterizations through moments are supported for ML/FIML.
 #' @param data Raw complete data for complete-data fits: either a data.frame
 #'   whose columns include the observed variables of `fit_H1` (single-group
 #'   case), or a list of per-group matrices in the same block order the fit was
@@ -422,8 +423,8 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   restriction map from the H1 fit) or `"2001"` (Satorra-Bentler 2001
 #'   `U_D = U0 - U1`, the difference of the two single-model projectors;
 #'   `semTests::ugamma_nested(., "2001")`). `"2001"` is implemented for FIML and
-#'   ML2S fits only and, unlike `"2000"`, accepts non-`==`-constrained nesting
-#'   (different parameter counts); its spectrum can carry negative eigenvalues.
+#'   ML2S fits only; its spectrum can carry negative eigenvalues. `"2000"`
+#'   accepts dropped/fixed paths through the shared exact null embedding.
 #' @param h1_reference_regularization FIML restriction-map tests only. `NULL`
 #'   or `FALSE` keeps the raw saturated-H1 reference. `TRUE` applies the
 #'   frontier condition-cap defaults. A list may set `condition_max`,

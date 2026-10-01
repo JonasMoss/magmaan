@@ -280,47 +280,40 @@ post_expected<const Eigen::MatrixXd*> ntml_score_sandwich(NTMLFit& fit, Informat
   slot = rows->transpose()* *rows;
   return &*slot;
 }
-namespace {
-bool same_ambient(const NTMLFit& a, const NTMLFit& b) {
-  if (a.rep.ov_names != b.rep.ov_names || a.rep.lv_names != b.rep.lv_names ||
-      a.pt.n_free() != b.pt.n_free() || a.rep.form != b.rep.form) return false;
-  using Entry = std::tuple<int,int,int,int,int,double>;
-  auto entries = [](const NTMLFit& fit) {
-    std::vector<Entry> out;
-    for (std::size_t i = 0; i < fit.rep.cell_for_row.size(); ++i) {
-      const auto& c = fit.rep.cell_for_row[i];
-      if (c.used) out.emplace_back(static_cast<int>(c.mat),c.block,c.row,c.col,
-          fit.pt.free[i],fit.pt.free[i] ? 0.0 : fit.pt.fixed_value[i]);
-    }
-    for (const auto& c : fit.rep.structural_cells)
-      out.emplace_back(static_cast<int>(c.mat),c.block,c.row,c.col,0,c.value);
-    std::sort(out.begin(),out.end()); return out;
-  };
-  return entries(a) == entries(b);
-}
-}
 post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
     std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative) {
   if (!null_fit || !alternative || null_fit->data != alternative->data)
-    return std::unexpected(invalid("NTML hypothesis: fits must share one prepared inference dataset"));
-  if (!same_ambient(*null_fit,*alternative))
-    return std::unexpected(invalid("NTML hypothesis: exact nesting requires matching ambient parameter slots and numeric model"));
+    return std::unexpected(PostError{PostError::Kind::NotNested,
+        "NTML hypothesis: fits must share one prepared inference dataset"});
   auto c0 = build_eq_constraints(null_fit->pt), c1 = build_eq_constraints(alternative->pt);
   if (!c0) return std::unexpected(c0.error());
   if (!c1) return std::unexpected(c1.error());
-  auto restriction = restriction_alpha_from_K(*c1,*c0);
-  if (!restriction) return std::unexpected(restriction.error());
-  if (!restriction->A.rows()) return std::unexpected(invalid("NTML hypothesis: no restrictions released"));
+  auto embedding = embed_nested_null(alternative->pt,alternative->rep,
+      null_fit->pt,null_fit->rep,null_fit->estimates.theta,*c1,*c0,true,
+      &alternative->estimates.theta);
+  if (!embedding) return std::unexpected(embedding.error());
+  if (!embedding->restriction.A.rows()) return std::unexpected(PostError{PostError::Kind::NotNested,
+        "NTML hypothesis: no restrictions released"});
   auto out = std::make_shared<NTMLHypothesis>();
   out->null_fit = std::move(null_fit); out->alternative = std::move(alternative);
-  out->restriction = std::move(*restriction); return out;
+  out->restriction = std::move(embedding->restriction);
+  if (!embedding->same_ambient) {
+    auto estimates=out->null_fit->estimates;
+    estimates.theta=std::move(embedding->theta);
+    auto evaluated=prepare_ntml_fit(out->null_fit->data,
+        embedded_null_structure(out->alternative->pt,embedding->null_constraints),
+        out->alternative->rep,std::move(estimates));
+    if (!evaluated) return std::unexpected(evaluated.error());
+    out->embedded_null=std::move(*evaluated);
+  }
+  return out;
 }
 post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& h, bool score) {
   auto& slot = score ? h.score : h.lr;
   if (slot) return slot;
   if (!score) for (const auto& entry : h.null_fit->nested_lr)
     if (entry.first == h.alternative) { slot=entry.second; return slot; }
-  NTMLFit& fit = score ? *h.null_fit : *h.alternative;
+  NTMLFit& fit = score ? *(h.embedded_null ? h.embedded_null : h.null_fit) : *h.alternative;
   auto info = ntml_information(fit); if (!info) return std::unexpected(info.error());
   auto wd = weighted_delta(fit); if (!wd) return std::unexpected(wd.error());
   auto c1 = build_eq_constraints(h.alternative->pt); if (!c1) return std::unexpected(c1.error());

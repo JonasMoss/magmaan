@@ -1641,11 +1641,16 @@ lr_test_satorra_bentler2010_from_data(
     int                          df_H0,
     int                          df_H1,
     GammaSource                  gamma) {
-  if (theta_H0_full.size() != theta_H0_for_H0.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "lr_test_satorra_bentler2010_from_data: H0 theta cannot be injected "
-        "into H1 because the full parameter vectors have different sizes"));
-  }
+  auto con1=estimate::build_eq_constraints(pt_H1);
+  auto con0=estimate::build_eq_constraints(pt_H0);
+  if (!con1) return std::unexpected(con1.error());
+  if (!con0) return std::unexpected(con0.error());
+  auto embedding=embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+      theta_H0_for_H0,*con1,*con0,true,
+      theta_H0_full.size()==pt_H1.n_free() ? &theta_H0_full : nullptr);
+  if (!embedding) return std::unexpected(embedding.error());
+  const auto& common_point=embedding->same_ambient ? theta_H0_full : embedding->theta;
+
   auto samp_or = data::sample_stats_from_raw(raw);
   if (!samp_or.has_value()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1851,10 +1856,10 @@ lr_test_satorra2000_from_data(
   // ── 2. Derive A_α (the restriction in H1's α-space) ─────────────────────
   Eigen::MatrixXd A_alpha;
   if (options.a_method == SatorraAMethod::Exact) {
-    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
-    if (!restr_or.has_value()) {
-      return std::unexpected(restr_or.error());
-    }
+    auto embedding = embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+        theta_H0_full,K_H1,K_H0,true,&theta_H1_full);
+    if (!embedding) return std::unexpected(embedding.error());
+    auto restr_or = &embedding->restriction;
     A_alpha = std::move(restr_or->A);
   } else {
     auto ev0_or = model::ModelEvaluator::build(pt_H0, rep_H0);
@@ -2252,8 +2257,10 @@ lr_test_satorra2000_fiml_from_data_impl(
 
   Eigen::MatrixXd A_alpha;
   if (a_method == SatorraAMethod::Exact && !has_nonlinear) {
-    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
-    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    auto embedding = embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+        theta_H0_full,K_H1,K_H0,true,&theta_H1_full);
+    if (!embedding) return std::unexpected(embedding.error());
+    auto restr_or = &embedding->restriction;
     A_alpha = std::move(restr_or->A);
   } else {
     estimate::Estimates est_H0;
@@ -2534,8 +2541,10 @@ lr_test_satorra2000_ml2s_from_data(
 
   Eigen::MatrixXd A_alpha;
   if (a_method == SatorraAMethod::Exact && !has_nonlinear) {
-    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
-    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    auto embedding = embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+        theta_H0_full,K_H1,K_H0,true,&theta_H1_full);
+    if (!embedding) return std::unexpected(embedding.error());
+    auto restr_or = &embedding->restriction;
     A_alpha = std::move(restr_or->A);
   } else {
     estimate::Estimates est_H0;
@@ -2849,17 +2858,20 @@ lr_test_satorra_bentler2010_missing_impl(
     const data::RawData& raw,
     double T_H0, double T_H1, int df_H0, int df_H1,
     bool two_stage, double h_step) {
-  if (theta_H0_full.size() != theta_H0_for_H0.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "lr_test_satorra_bentler2010 (missing): H0 theta cannot be injected "
-        "into H1 because the full parameter vectors have different sizes "
-        "(SB2010 needs same-parameter nesting; use ud_method='2001' for the "
-        "non-nested difference spectrum)."));
-  }
+  auto con1=estimate::build_eq_constraints(pt_H1);
+  auto con0=estimate::build_eq_constraints(pt_H0);
+  if (!con1) return std::unexpected(con1.error());
+  if (!con0) return std::unexpected(con0.error());
+  auto embedding=embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+      theta_H0_for_H0,*con1,*con0,true,
+      theta_H0_full.size()==pt_H1.n_free() ? &theta_H0_full : nullptr);
+  if (!embedding) return std::unexpected(embedding.error());
+  const auto& common_point=embedding->same_ambient ? theta_H0_full : embedding->theta;
+
   auto c0_or = single_model_missing_scale(pt_H0, rep_H0, theta_H0_for_H0, raw,
                                           df_H0, two_stage, h_step);
   if (!c0_or.has_value()) return std::unexpected(c0_or.error());
-  auto c10_or = single_model_missing_scale(pt_H1, rep_H1, theta_H0_full, raw,
+  auto c10_or = single_model_missing_scale(pt_H1, rep_H1, common_point, raw,
                                            df_H1, two_stage, h_step);
   if (!c10_or.has_value()) return std::unexpected(c10_or.error());
   return lr_test_satorra_bentler2010(T_H0, T_H1, df_H0, df_H1, *c0_or, *c10_or);

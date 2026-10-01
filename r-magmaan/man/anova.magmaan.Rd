@@ -22,9 +22,9 @@ A data frame with one row per test, of class \code{magmaan_anova}.
 \description{
 Likelihood-ratio and score tests of the restricted fit against the other,
 each calibrated with SB and PEBA4, as the global tests are. The restricted
-model must be the other model plus equality constraints on its parameters,
-such as a shared label or \code{b == 0}, fitted to the same observations with
-the same estimator and \code{psd} setting. For a single restriction, a Wald test
+model may constrain, fix or drop paths from the other model (for example,
+a shared label, \code{b == 0}, or a loading fixed to zero), fitted to the same
+observations with the same estimator and \code{psd} setting. For a single restriction, a Wald test
 is the z-statistic of a defined parameter such as \code{d := a - b} in
 \code{coef(summary(fit))}.
 }

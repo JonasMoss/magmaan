@@ -118,9 +118,9 @@ TEST_CASE("restriction_alpha_from_K: rejects non-nested pair") {
   K0 << 0, 0,
         1, 0,
         0, 1;
-  // Even though dim(H0) = dim(H1), H0 is not a sub-manifold.  With m = 0
-  // the helper short-circuits *before* checking inclusion, so make r0 < r1
-  // to exercise the inclusion check.
+  // Equal dimensions do not imply identical affine models.
+  auto equal_dimension = magmaan::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
+  CHECK_FALSE(equal_dimension.has_value());
   Eigen::MatrixXd K0_lower(3, 1);
   K0_lower << 0, 0, 1;
   auto r = magmaan::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0_lower));
@@ -155,4 +155,25 @@ TEST_CASE("restriction_alpha_from_K: random K_H1·M = K_H0 round-trip") {
         < 1e-10);
   // Annihilates the projection of K_H0 onto K_H1.
   CHECK((r->A * (K1.transpose() * K0)).norm() < 1e-10);
+}
+
+TEST_CASE("restriction_alpha_from_K: affine offset outside H1 is not nested") {
+  Eigen::MatrixXd K1(3, 2), K0(3, 1);
+  K1 << 1, 0, 0, 1, 0, 0;
+  K0 << 1, 0, 0;
+  Eigen::Vector3d offset(0, 0, 1);
+  auto result = magmaan::robust::restriction_alpha_from_K(make_eq(K1),make_eq(K0,offset));
+  REQUIRE_FALSE(result.has_value());
+  CHECK(result.error().kind == magmaan::PostError::Kind::NotNested);
+}
+
+TEST_CASE("restriction_alpha_from_K: a nonzero fixed path retains its affine value") {
+  const Eigen::MatrixXd K1=Eigen::MatrixXd::Identity(3,3);
+  Eigen::MatrixXd K0(3,2);
+  K0 << 0,0, 1,0, 0,1;
+  const Eigen::Vector3d offset(0.25,0,0);
+  auto result=magmaan::robust::restriction_alpha_from_K(make_eq(K1),make_eq(K0,offset));
+  REQUIRE(result.has_value());
+  CHECK((result->A*offset-result->b).norm()<1e-12);
+  CHECK((result->A*K0).norm()<1e-12);
 }

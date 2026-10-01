@@ -261,9 +261,10 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #'
 #' Likelihood-ratio and score tests of the restricted fit against the other,
 #' each calibrated with SB and PEBA4, as the global tests are. The restricted
-#' model must be the other model plus equality constraints on its parameters,
-#' such as a shared label or `b == 0`, fitted to the same observations with
-#' the same estimator and `psd` setting. For a single restriction, a Wald test
+#' model may constrain, fix or drop paths from the other model (for example,
+#' a shared label, `b == 0`, or a loading fixed to zero), fitted to the same
+#' observations with the same estimator and `psd` setting. For a single
+#' restriction, a Wald test
 #' is the z-statistic of a defined parameter such as `d := a - b` in
 #' `coef(summary(fit))`.
 #'
@@ -292,7 +293,7 @@ anova.magmaan <- function(object, ...) {
     swapped <- magmaanlab::policy_nested(b, a)
     if (identical(swapped$lr$reason, "not_nested")) {
       stop("anova(): the models are not nested: the restricted model must be the ",
-           "other model plus equality constraints on its parameters (",
+           "other model with paths dropped, fixed or constrained (",
            res$lr$detail, ")", call. = FALSE)
     }
     res <- swapped

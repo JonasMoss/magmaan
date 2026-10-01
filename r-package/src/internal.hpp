@@ -149,6 +149,9 @@ inline const char* post_error_kind(lv::PostError::Kind k) {
   using K = lv::PostError::Kind;
   switch (k) {
     case K::InfoMatrixSingular: return "InfoMatrixSingular";
+    case K::NotNested:          return "NotNested";
+    case K::UnsupportedNesting: return "UnsupportedNesting";
+    case K::BoundaryNesting:    return "BoundaryNesting";
     case K::BootstrapFailed:    return "BootstrapFailed";
     case K::NumericIssue:       return "NumericIssue";
   }

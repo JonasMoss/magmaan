@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
+#include "../oracle.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,6 +21,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/prepared_ntml.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -431,4 +433,168 @@ TEST_CASE("policy nested tests: gating and nesting") {
   auto elsewhere = api::policy_nested_ml(prepare_on(*other, build("f =~ x1 + a*x2 + a*x3 + x4", false)),
                                          {}, alt, {});
   CHECK(elsewhere.score.reason == api::InferenceReason::NotNested);
+}
+
+TEST_CASE("policy nested embedding: omitted, fixed and equality paths share null geometry") {
+  std::mt19937 rng(817u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 350, Eigen::Vector4d::Zero()));
+  auto data = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(data.has_value());
+  const auto named_model = [](const std::string& syntax) {
+    auto parsed = magmaan::parse::Parser::parse(syntax);
+    REQUIRE(parsed.has_value());
+    magmaan::spec::LatentNames names;
+    auto pt = magmaan::spec::build(*parsed, {}, nullptr, &names);
+    REQUIRE(pt.has_value());
+    auto rep = magmaan::model::build_matrix_rep(*pt, &names);
+    REQUIRE(rep.has_value());
+    return Model{*pt, *rep};
+  };
+  const std::string base = "f =~ x1 + x2 + x3 + x4";
+  auto alt = prepare_on(*data, named_model(base + "\nx1 ~~ x2"));
+  auto null = prepare_on(*data, named_model(base));
+  auto expected = api::policy_nested_ml(null, {}, alt, {});
+  REQUIRE(expected.score.reason == api::InferenceReason::Available);
+  REQUIRE(expected.lr.reason == api::InferenceReason::Available);
+  // Evaluate exactly the same fitted point in all spellings. This isolates
+  // inference invariance from optimizer tolerances in independent fits.
+  for (const std::string tail : {"\nx1 ~~ 0*x2", "\nx1 ~~ a*x2\na == 0"}) {
+    auto model = named_model(base + tail);
+    auto c1 = magmaan::estimate::build_eq_constraints(model.pt);
+    auto c0 = magmaan::estimate::build_eq_constraints(null->pt);
+    REQUIRE(c1.has_value()); REQUIRE(c0.has_value());
+    auto embedding = magmaan::robust::embed_nested_null(model.pt, model.rep,
+        null->pt, null->rep, null->estimates.theta, *c1, *c0);
+    REQUIRE(embedding.has_value());
+    auto estimates = null->estimates;
+    estimates.theta = embedding->theta;
+    auto spelling = ntml::prepare_ntml_fit(*data, model.pt, model.rep, estimates);
+    REQUIRE(spelling.has_value());
+    auto result = api::policy_nested_ml(*spelling, {}, alt, {});
+    if (tail.find("a == 0")!=std::string::npos) {
+      auto hypothesis=ntml::prepare_ntml_hypothesis(*spelling,alt);
+      REQUIRE(hypothesis.has_value());
+      CHECK_FALSE((*hypothesis)->embedded_null);
+      auto alternative_constraints=magmaan::estimate::build_eq_constraints(alt->pt);
+      REQUIRE(alternative_constraints.has_value());
+      auto before=magmaan::robust::restriction_alpha_from_K(*alternative_constraints,*c1);
+      REQUIRE(before.has_value());
+      CHECK((before->A-(*hypothesis)->restriction.A).norm()==0.0);
+      CHECK((before->b-(*hypothesis)->restriction.b).norm()==0.0);
+    }
+    for (bool score : {true, false}) {
+      const auto& x = score ? result.score : result.lr;
+      const auto& y = score ? expected.score : expected.lr;
+      REQUIRE(x.reason == api::InferenceReason::Available);
+      CHECK(std::abs(x.statistic-y.statistic) < 1e-10);
+      CHECK((x.eigenvalues-y.eigenvalues).norm() < 1e-10);
+      CHECK(std::abs(x.p_sb-y.p_sb) < 1e-10);
+      CHECK(std::abs(x.p_peba4-y.p_peba4) < 1e-10);
+    }
+  }
+}
+
+TEST_CASE("policy nested embedding: reparameterized null and boundary have typed outcomes") {
+  const auto named_model = [](const std::string& syntax, bool std_lv) {
+    auto parsed = magmaan::parse::Parser::parse(syntax);
+    REQUIRE(parsed.has_value());
+    magmaan::spec::LatentNames names;
+    magmaan::spec::BuildOptions opts;
+    opts.std_lv = std_lv;
+    auto pt = magmaan::spec::build(*parsed, opts, nullptr, &names);
+    REQUIRE(pt.has_value());
+    auto rep = magmaan::model::build_matrix_rep(*pt, &names);
+    REQUIRE(rep.has_value());
+    return Model{*pt, *rep};
+  };
+  auto alt = named_model("f =~ x1 + x2 + x3 + x4", false);
+  auto null = named_model("g =~ x1 + a*x2 + a*x3 + x4", true);
+  std::mt19937 rng(163u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 350, Eigen::Vector4d::Zero()));
+  auto data = ntml::prepare_ntml_data(raw, false);
+  REQUIRE(data.has_value());
+  auto h1 = prepare_on(*data, alt), h0 = prepare_on(*data, null);
+  auto c1 = magmaan::estimate::build_eq_constraints(alt.pt);
+  auto c0 = magmaan::estimate::build_eq_constraints(null.pt);
+  REQUIRE(c1.has_value()); REQUIRE(c0.has_value());
+  auto unsupported = magmaan::robust::embed_nested_null(alt.pt,alt.rep,
+      null.pt,null.rep,h0->estimates.theta,*c1,*c0);
+  REQUIRE_FALSE(unsupported.has_value());
+  CHECK(unsupported.error().kind == magmaan::PostError::Kind::UnsupportedNesting);
+  auto same_point = magmaan::robust::embed_nested_null(alt.pt,alt.rep,
+      null.pt,null.rep,h0->estimates.theta,*c1,*c0,true,&h1->estimates.theta);
+  REQUIRE(same_point.has_value());
+  CHECK(same_point->through_moments);
+  auto policy = api::policy_nested_ml(h0,{},h1,{});
+  CHECK(policy.lr.reason == api::InferenceReason::Available);
+  CHECK(policy.score.reason == api::InferenceReason::Available);
+
+  auto two = named_model("f =~ x1 + x2\ng =~ x3 + x4", true);
+  auto one = named_model("h =~ x1 + x2 + x3 + x4", true);
+  auto single = prepare_on(*data,one);
+  auto ct = magmaan::estimate::build_eq_constraints(two.pt);
+  auto cs = magmaan::estimate::build_eq_constraints(one.pt);
+  REQUIRE(ct.has_value()); REQUIRE(cs.has_value());
+  auto boundary = magmaan::robust::embed_nested_null(two.pt,two.rep,
+      one.pt,one.rep,single->estimates.theta,*ct,*cs,true);
+  REQUIRE_FALSE(boundary.has_value());
+  CHECK(boundary.error().kind == magmaan::PostError::Kind::BoundaryNesting);
+}
+
+TEST_CASE("policy nested embedding: frozen lavaan dropped-loading score and exact LR") {
+  auto fixture = magmaan::test::read_fixture(magmaan::test::fixtures_dir()+"/nested_embedding.json");
+  REQUIRE(fixture.has_value());
+  const auto j=nlohmann::json::parse(*fixture,nullptr,false);
+  REQUIRE_FALSE(j.is_discarded());
+  magmaan::data::RawData raw;
+  raw.X.push_back(magmaan::test::matrix_from_json(j["X"]));
+  auto data=ntml::prepare_ntml_data(raw,false);
+  REQUIRE(data.has_value());
+  const auto model_fit = [&](const std::string& syntax,const nlohmann::json& rows,double fmin) {
+    auto parsed=magmaan::parse::Parser::parse(syntax);
+    REQUIRE(parsed.has_value());
+    magmaan::spec::LatentNames names;
+    auto pt=magmaan::spec::build(*parsed,{},nullptr,&names);
+    REQUIRE(pt.has_value());
+    auto rep=magmaan::model::build_matrix_rep(*pt,&names);
+    REQUIRE(rep.has_value());
+    magmaan::estimate::Estimates est;
+    est.theta=Eigen::VectorXd::Zero(pt->n_free()); est.fmin=fmin;
+    for (std::size_t i=0;i<pt->size();++i) {
+      if (pt->free[i]==0) continue;
+      for (const auto& row:rows) {
+        if (row["lhs"]==names.row_lhs[i] && row["rhs"]==names.row_rhs[i] &&
+            row["op"]==magmaan::parse::to_string(pt->op[i]) && row["group"]==pt->group[i])
+          est.theta(pt->free[i]-1)=row["est"].get<double>();
+      }
+    }
+    auto fit=ntml::prepare_ntml_fit(*data,*pt,*rep,est);
+    REQUIRE(fit.has_value());
+    return *fit;
+  };
+  auto alt=model_fit(j["model_H1"].get<std::string>(),j["rows_H1"],j["fmin_H1"].get<double>());
+  const std::string base=j["model_H0"].get<std::string>();
+  for (const std::string tail:{"", "\nvisual =~ 0*x9", "\nvisual =~ a*x9\na == 0"}) {
+    auto null=model_fit(base+tail,j["rows_H0"],j["fmin_H0"].get<double>());
+    auto result=api::policy_nested_ml(null,{},alt,{});
+    REQUIRE(result.score.reason==api::InferenceReason::Available);
+    REQUIRE(result.lr.reason==api::InferenceReason::Available);
+    CHECK(std::abs(result.score.statistic-j["score"].get<double>())<1e-5);
+    CHECK(std::abs(result.lr.statistic-j["lr"].get<double>())<1e-10);
+    auto c1=magmaan::estimate::build_eq_constraints(alt->pt);
+    auto c0=magmaan::estimate::build_eq_constraints(null->pt);
+    REQUIRE(c1.has_value()); REQUIRE(c0.has_value());
+    auto lr=magmaan::robust::lr_test_satorra2000_from_data(
+        alt->pt,alt->rep,alt->estimates.theta,*c1,
+        null->pt,null->rep,null->estimates.theta,*c0,raw.X,
+        {raw.X[0].colwise().mean().transpose()},
+        {static_cast<std::int32_t>(raw.X[0].rows())},{1.0},
+        2.0*static_cast<double>(raw.X[0].rows())*null->estimates.fmin,
+        2.0*static_cast<double>(raw.X[0].rows())*alt->estimates.fmin,
+        1,0,{});
+    REQUIRE(lr.has_value());
+    CHECK(std::abs(lr->T_scaled-j["lr_scaled_expected"].get<double>())<1e-5);
+  }
 }

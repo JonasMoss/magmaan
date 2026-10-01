@@ -24,7 +24,9 @@ enum class InferenceReason {
   Saturated,         // zero degrees of freedom: no global test exists
   UnsupportedModel,  // outside the policy's model class (e.g. fixed x)
   NumericFailure,    // singular information or a failed decomposition
-  NotNested,         // the null is not the alternative plus equality constraints
+  NotNested,         // the null is not contained in the alternative
+  UnsupportedNesting, // nesting through moments requires an unsupported correspondence
+  BoundaryNesting,   // no regular interior nested-test reference
 };
 
 std::string_view reason_name(InferenceReason reason) noexcept;
@@ -66,10 +68,11 @@ struct PolicyInference {
 };
 
 // Nested tests of `null` against `alternative`, which must be fits to one
-// prepared dataset in the same parameter slots, the null adding equality
-// constraints: the likelihood-ratio statistic (the difference of the two fit
-// statistics) and the score statistic at the null, whose restriction
-// directions are projected against the null's own directions, so it keeps its
+// prepared dataset, with the null dropping, fixing or constraining alternative
+// paths (or nesting through an interior moment parameterization). The
+// likelihood-ratio statistic is the difference of the two fit statistics;
+// the score uses H1 at the embedded null, whose restriction directions are
+// projected against the lifted null nuisance tangent, so it keeps its
 // meaning at a PSD boundary null. Each is calibrated with SB and PEBA4 from
 // the restriction's UGamma spectrum.
 struct PolicyNested {

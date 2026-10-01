@@ -2009,8 +2009,10 @@ an unconstrained gradient test to constrained solutions.
   not thread-safe; prepared inputs must remain immutable.
 
   R `prepare_inference_data` provides a shared dataset to `prepare_inference`.
-  `prepare_hypothesis` owns an exact affine nested pair with matching ambient
-  parameter slots. `inference_quadratic` produces global score/ML GOF or nested
+  `prepare_hypothesis` owns an exact nested pair. Parameter-key embedding
+  expresses dropped or fixed H0 paths as affine restrictions in H1's slots;
+  existing same-slot affine pairs retain their calculation path.
+  `inference_quadratic` produces global score/ML GOF or nested
   score/exact H1-anchored Satorra–2000 LR without invoking a test wrapper;
   `inference_rows` returns its casewise rows (a score statistic is the squared
   norm of their column sums, and their crossproduct is the spectrum's reduced
@@ -2981,7 +2983,8 @@ an unconstrained gradient test to constrained solutions.
   semTests on complete data (single + multi-group). The scalar two-constant
   baselines also exist for FIML/ML2S: `nestedTest(method =
   "satorra.bentler.2001"/"2010")` (the trace-based SB2001 and the M10 positivity
-  fix; 2010 needs same-parameter nesting). NOTE: under missing data,
+  fix; 2010 embeds the restricted point into the alternative slots). NOTE:
+  under missing data,
   `lavInspect("UGamma")` uses a non-official normalization; magmaan matches
   lavaan's *official* scaling factor / `trace.UGamma` (1e-7), so validate the
   spectrum against complete-data semTests, not the missing-data `lavInspect`.
@@ -4669,7 +4672,24 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `api::policy_nested_ml()`, exposed as `magmaanlab::policy_nested()` and
   `magmaan::anova()`: the likelihood-ratio difference and the efficient score
   at the restricted fit, each with SB and PEBA4, for a restricted model that
-  adds equality constraints on the same parameters. SB matches lavaan's
+  drops, fixes or constrains alternative paths. The shared inference-side
+  `robust::embed_nested_null` matches formula keys including group and level,
+  lifts the null's affine constraints and estimate into H1, and verifies its
+  implied covariance and mean moments to relative tolerance 1e-10. Omission
+  defaults to zero only for loadings, regressions and off-diagonal covariances;
+  intercepts, means, variances, thresholds and scales need resolved rows.
+  The model triple (`LatentStructure`, `LatentNames`, `Starts`) and its
+  partable projection are unchanged. Score inference uses H1 derivatives at
+  the embedded null point, with the lifted null nuisance tangent. ML/FIML
+  moment reparameterizations use a damped analytic moment fit of H1 to H0's
+  fitted moments and both Jacobians at that solution; tangent inclusion and
+  interior rank/covariance checks are required. Other estimators support the
+  key embedding and return typed `unsupported_nesting` for unavailable
+  correspondences. Singular tangent/factor-covariance nestings return
+  `boundary_nesting`. The shared map also feeds complete-data/FIML/ML2S exact
+  Satorra-2000, ordinal/mixed-ordinal, pairwise-composite, continuous weighted
+  inference and the SB2010 null-point injection. Mixed-point delta remains
+  the lavaan compatibility option. SB matches lavaan's
   `satorra.2000` with the exact restriction map. A model without free
   parameters is evaluated at its fixed values instead of optimized
   (`evaluate_fixed` in `estimate/fit.cpp`), passes the verdict vacuously, and

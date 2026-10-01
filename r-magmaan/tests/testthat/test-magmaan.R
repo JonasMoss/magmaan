@@ -337,7 +337,9 @@ test_that("anova() refuses pairs it cannot compare", {
   f1 <- magmaan(cfa, d, inference = FALSE)
   other <- magmaan("visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ 0*textual", d,
                    inference = FALSE)
-  expect_error(anova(f1, other), "not nested")
+  fixed <- anova(f1, other)
+  expect_equal(fixed$df, c(1L, 1L))
+  expect_true(all(is.finite(fixed$p.sb)))
   expect_error(anova(f1, magmaan(cfa, d[-1, ], inference = FALSE)), "same observations")
   expect_error(anova(f1, magmaan(cfa, d, psd = TRUE, inference = FALSE)), "psd setting")
   expect_error(anova(f1), "exactly two")

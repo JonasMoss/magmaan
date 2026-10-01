@@ -2135,7 +2135,7 @@ void attach_ordinal_parameter_values(Rcpp::List& out, const Ctx& ctx,
       ctx.pt, ctx.rep, est.theta,
       ordinal_parameterization_from_string(parameterization));
   if (!values) stop_post(values.error());
-  Rcpp::DataFrame pt = out["partable"];
+  Rcpp::DataFrame pt = Rcpp::as<Rcpp::DataFrame>(out["partable"]);
   Rcpp::NumericVector estimates = pt["est"];
   for (Eigen::Index i = 0; i < values->size(); ++i) estimates[i] = (*values)(i);
   pt["est"] = estimates;
@@ -2156,7 +2156,7 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   // test (which rebuilds each structure via ctx_from_fit) re-applies the
   // Wu-Estabrook release; from_lavaan_partable would otherwise drop them.
   if (!ctx.pt.group_equal.empty()) {
-    Rcpp::DataFrame pt_out = out["partable"];
+    Rcpp::DataFrame pt_out = Rcpp::as<Rcpp::DataFrame>(out["partable"]);
     stamp_group_equal_attr(pt_out, ctx.pt.group_equal);
     out["partable"] = pt_out;
   }

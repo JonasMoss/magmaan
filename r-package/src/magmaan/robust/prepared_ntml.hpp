@@ -45,6 +45,7 @@ struct NTMLFit {
 };
 struct NTMLHypothesis {
   std::shared_ptr<NTMLFit> null_fit, alternative;
+  std::shared_ptr<NTMLFit> embedded_null; // H1 evaluation at H0, when slots differ
   RestrictionAlpha restriction;
   std::shared_ptr<NTMLQuadratic> score, lr;
 };

@@ -269,8 +269,9 @@ policy_inference <- function(fit, data = NULL) {
 
 # magmaan's nested tests of fit_H0 against fit_H1, as applied by the
 # ordinary-user package's anova(): the likelihood-ratio and score statistics,
-# each with SB and PEBA4. fit_H0 must be fit_H1's model plus equality
-# constraints (same parameters), fitted to the same observations.
+# each with SB and PEBA4. fit_H0 may drop, fix or constrain fit_H1's paths,
+# fitted to the same observations; interior moment reparameterizations are
+# evaluated at a common null point.
 policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("policy_nested(): supply two fitted magmaan models")

@@ -2609,45 +2609,6 @@ post_expected<SaturatedFlipGeometry> saturated_flip_geometry(
   return out;
 }
 
-post_expected<void> validate_same_null_point(
-    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
-    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
-    const Estimates& est_H0) {
-  auto ev1 = build_eval(pt_H1, rep_H1);
-  if (!ev1.has_value()) return std::unexpected(ev1.error());
-  auto ev0 = build_eval(pt_H0, rep_H0);
-  if (!ev0.has_value()) return std::unexpected(ev0.error());
-  auto m1 = ev1->evaluate(est_H0.theta, false, false);
-  if (!m1.has_value()) return std::unexpected(model_to_post(m1.error()));
-  auto m0 = ev0->evaluate(est_H0.theta, false, false);
-  if (!m0.has_value()) return std::unexpected(model_to_post(m0.error()));
-  if (m1->moments.sigma.size() != m0->moments.sigma.size() ||
-      m1->moments.mu.size() != m0->moments.mu.size()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: H1 and H0 imply different block layouts"));
-  }
-  for (std::size_t b = 0; b < m1->moments.sigma.size(); ++b) {
-    const auto& s1 = m1->moments.sigma[b];
-    const auto& s0 = m0->moments.sigma[b];
-    const double scale = std::max({1.0, s1.norm(), s0.norm()});
-    if (s1.rows() != s0.rows() || s1.cols() != s0.cols() ||
-        (s1 - s0).norm() > 1e-8 * scale) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "score_flip_test: H0 estimate is not the same numeric point in H1"));
-    }
-    if (!m1->moments.mu.empty()) {
-      const auto& u1 = m1->moments.mu[b];
-      const auto& u0 = m0->moments.mu[b];
-      const double uscale = std::max({1.0, u1.norm(), u0.norm()});
-      if (u1.size() != u0.size() || (u1 - u0).norm() > 1e-8 * uscale) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "score_flip_test: H0 and H1 mean structures differ at the null point"));
-      }
-    }
-  }
-  return {};
-}
-
 struct FlipQuadratic {
   double statistic = 0.0;
   double min_eigenvalue = 0.0;
@@ -2800,13 +2761,8 @@ nested_score_components(spec::LatentStructure pt_H1,
         "score_flip_test: fixed-X models are not supported"));
   }
   if (est_H0.diagnostics.active_bounds_full.any_active()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+    return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
         "score_flip_test: boundary null fits are not supported"));
-  }
-  if (pt_H1.n_free() != pt_H0.n_free() ||
-      est_H0.theta.size() != static_cast<Eigen::Index>(pt_H0.n_free())) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "score_flip_test: H1/H0 must share the same ambient parameter slots"));
   }
   const SampleStats& start_stats =
       fiml_pack == nullptr ? *samp : fiml_pack->start_stats;
@@ -2818,29 +2774,28 @@ nested_score_components(spec::LatentStructure pt_H1,
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  if (auto e = validate_same_null_point(pt_H1, rep_H1, pt_H0, rep_H0, est_H0);
-      !e.has_value()) {
-    return std::unexpected(e.error());
-  }
-
   auto con1 = build_eq_constraints(pt_H1);
   if (!con1.has_value()) return std::unexpected(con1.error());
   auto con0 = build_eq_constraints(pt_H0);
   if (!con0.has_value()) return std::unexpected(con0.error());
-  auto restriction = robust::restriction_alpha_from_K(*con1, *con0);
-  if (!restriction.has_value()) return std::unexpected(restriction.error());
+  auto embedding = robust::embed_nested_null(pt_H1,rep_H1,pt_H0,rep_H0,
+      est_H0.theta,*con1,*con0,true);
+  if (!embedding) return std::unexpected(embedding.error());
+  Estimates embedded_est=est_H0;
+  embedded_est.theta=embedding->theta;
+  const auto* restriction=&embedding->restriction;
   const Eigen::Index df = restriction->A.rows();
   if (df < 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score_flip_test: model pair has no released restrictions"));
   }
   const Eigen::MatrixXd D = con1->K() * restriction->A.transpose();
-  const Eigen::MatrixXd& K = con0->K();
+  const Eigen::MatrixXd& K = embedding->null_constraints.K();
 
   FlipInformationStrata strata;
   if (fiml_pack == nullptr) {
     auto info_blocks = information_expected_per_case_blocks(
-        pt_H1, rep_H1, *samp, est_H0);
+        pt_H1, rep_H1, *samp, embedded_est);
     if (!info_blocks.has_value()) return std::unexpected(info_blocks.error());
     if (info_blocks->size() != raw.X.size()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -2855,7 +2810,7 @@ nested_score_components(spec::LatentStructure pt_H1,
     }
   } else {
     auto pattern_info = fiml_flip_information_strata(
-        pt_H1, rep_H1, raw, *fiml_pack, est_H0);
+        pt_H1, rep_H1, raw, *fiml_pack, embedded_est);
     if (!pattern_info.has_value()) {
       return std::unexpected(pattern_info.error());
     }
@@ -2876,10 +2831,10 @@ nested_score_components(spec::LatentStructure pt_H1,
   if (observed_sensitivity) {
     post_expected<Eigen::MatrixXd> observed;
     if (fiml_pack == nullptr) {
-      observed = information_observed_analytic(pt_H1, rep_H1, *samp, est_H0);
+      observed = information_observed_analytic(pt_H1, rep_H1, *samp, embedded_est);
     } else {
       observed = estimate::fiml::fiml_observed_information(
-          pt_H1, rep_H1, raw, est_H0, *fiml_pack);
+          pt_H1, rep_H1, raw, embedded_est, *fiml_pack);
     }
     if (!observed.has_value()) return std::unexpected(observed.error());
     if (observed->rows() != npar || observed->cols() != npar) {
@@ -2898,7 +2853,7 @@ nested_score_components(spec::LatentStructure pt_H1,
     fiml_pack = &*owned_pack;
   }
   auto score_rows = estimate::fiml::fiml_casewise_deviance_scores(
-      pt_H1, rep_H1, raw, *fiml_pack, est_H0);
+      pt_H1, rep_H1, raw, *fiml_pack, embedded_est);
   if (!score_rows.has_value()) return std::unexpected(score_rows.error());
   const Eigen::MatrixXd scores = -0.5 * *score_rows;
   if (strata.row_stratum.size() != static_cast<std::size_t>(scores.rows())) {

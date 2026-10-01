@@ -4,6 +4,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/model/matrix_rep.hpp"
 
 namespace magmaan::robust {
 
@@ -50,6 +51,7 @@ struct RestrictionAlpha {
 //   • the range-inclusion residual ‖K_H1·M − K_H0‖_F exceeds the threshold
 //     `tol_range_F`, i.e. H0 is *not* a sub-model of H1;
 //   • the resulting null-space dimension fails to match `r1 − r0`.
+// An affine offset outside H1 returns `PostError::Kind::NotNested`.
 //
 // Tolerance default 1e-8 is conservative for typical SVD numerical noise on
 // orthonormal K matrices (~1e-14 per entry) scaled up to r·npar entries.
@@ -58,6 +60,35 @@ restriction_alpha_from_K(const EqConstraints& K_H1,
                          const EqConstraints& K_H0,
                          double               tol_range_F = 1e-8,
                          double               tol_singular = 1e-9);
+
+// Inference-side embedding: the model triple is never changed. Constraints
+// and the null estimate are expressed in H1's slots, matching formula rows by
+// variable names, operator, group and level. Only loadings, regressions and
+// off-diagonal covariances have a zero default when absent. Every accepted
+// embedding must reproduce the null's implied covariance and mean moments.
+// ML/FIML callers may enable a same-point moment fit when keys cannot match;
+// theta_H1 supplies its starting point. Other callers leave that fallback off
+// and receive UnsupportedNesting for unavailable parameter correspondences.
+struct NestedEmbedding {
+  EqConstraints null_constraints;
+  Eigen::VectorXd theta;
+  RestrictionAlpha restriction;
+  bool same_ambient = false;
+  bool through_moments = false;
+};
+post_expected<NestedEmbedding> embed_nested_null(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0,
+    const EqConstraints& K_H1, const EqConstraints& K_H0,
+    bool allow_moment_nesting = false,
+    const Eigen::VectorXd* theta_H1 = nullptr);
+
+// Numeric inference copy for evaluation in H1's ambient space with the
+// embedded H0 nuisance constraints. Names, starts and fitted objects remain
+// owned by the original model triple.
+spec::LatentStructure embedded_null_structure(
+    const spec::LatentStructure& pt_H1, const EqConstraints& embedded);
 
 // lavaan-style `A.method = "delta"` restriction: derive A from the column
 // spaces of the H1/H0 moment Jacobians, both already projected into their
