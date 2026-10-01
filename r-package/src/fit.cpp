@@ -3023,6 +3023,49 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
   return out;
 }
 
+// Shared non-mixed moment discrepancy plus the model barrier.
+// [[Rcpp::export]]
+Rcpp::List fit_moments_barrier_impl(
+    SEXP partable, Rcpp::List sample_stats, std::string estimator = "ML",
+    SEXP W = R_NilValue, std::string target = "joint", double weight = 0.25,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
+  auto parsed = partable_from_arg(partable, "fit_moments_barrier");
+  auto starts = std::move(parsed.starts);
+  auto ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  const auto x0 = start_values_or_stop(ctx, starts, "scaled-fabin", nullptr, nullptr, control);
+  auto options = multiinfo_options_from(1.25, R_NilValue, target);
+  options.weight = weight;
+  const auto backend = optimizer.isNull() ? magmaan::estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
+  magmaan::fit_expected<magmaan::estimate::frontier::PenalizedFit> fit;
+  if (estimator == "ML") {
+    if (!Rf_isNull(W)) Rcpp::stop("magmaan: ML barrier uses no LS weight");
+    fit = magmaan::estimate::frontier::fit_ml_multiinfo(ctx.pt, ctx.rep, ctx.samp, x0, options,
+        {}, backend, optim_opts_from(control, magmaan::estimate::ml_optim_options()));
+  } else {
+    magmaan::estimate::gmm::Weight w;
+    if (estimator == "WLS") {
+      if (Rf_isNull(W)) Rcpp::stop("magmaan: WLS barrier requires W");
+      w = wls_from_arg(W, ctx.samp.S.size());
+    } else if (estimator == "GLS") {
+      if (!Rf_isNull(W)) Rcpp::stop("magmaan: GLS builds its own weight");
+      auto evaluator = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+      if (!evaluator) stop_model(evaluator.error());
+      auto metric = magmaan::estimate::gmm::normal_theory_weight(*evaluator, ctx.samp, x0);
+      if (!metric) stop_fit(metric.error());
+      w = std::move(*metric);
+    } else if (estimator != "ULS" || !Rf_isNull(W)) Rcpp::stop("magmaan: invalid barrier discrepancy/weight");
+    fit = magmaan::estimate::frontier::fit_gmm_multiinfo(ctx.pt, ctx.rep, ctx.samp, x0,
+        std::move(w), options, backend, optim_opts_from(control, magmaan::estimate::ml_optim_options()));
+  }
+  if (!fit) stop_fit(fit.error());
+  auto out = fit_result(ctx, fit->estimates, &starts, estimator.c_str());
+  out["penalty"] = multiinfo_penalty_to_r(ctx, *fit);
+  out["covariance_policy"] = "barrier";
+  out["penalty_inference"] = "not_validated";
+  return out;
+}
+
 namespace {
 
 enum class PsdGmmKind { Uls, Gls, Wls };
@@ -6204,6 +6247,48 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
       ctx, stats, est, &starts, estimator.c_str(),
       parameterization_name.c_str());
   out["covariance_policy"] = "psd";
+  return out;
+}
+
+// All-ordinal ML/LS plus the same model barrier, preserving Stage-1 objects.
+// [[Rcpp::export]]
+Rcpp::List fit_ordinal_barrier_impl(
+    SEXP partable, Rcpp::List ordinal_stats, std::string estimator = "ML",
+    std::string target = "joint", double weight = 0.25,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
+  auto parsed = partable_from_arg(partable, "fit_ordinal_barrier");
+  auto starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure); ctx.names = std::move(parsed.names);
+  ctx.pt.group_equal = group_equal_attr(partable);
+  const auto parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
+  const auto stats = ordinal_stats_from_arg(ordinal_stats);
+  const bool ml = estimator == "ML";
+  if (ml) {
+    auto valid = magmaan::estimate::validate_ordinal_association_model(ctx.pt, &ctx.names.row_user);
+    if (!valid) stop_fit(valid.error());
+  }
+  auto prepared = magmaan::estimate::prepare_ordinal_partable(ctx.pt, stats,
+      ml ? magmaan::estimate::OrdinalParameterization::Delta : parameterization,
+      &starts, &ctx.names.row_user);
+  if (!prepared) stop_fit(prepared.error());
+  auto rep = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep) stop_model(rep.error());
+  ctx.rep = std::move(*rep); ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.samp.S = stats.R; ctx.samp.n_obs = stats.n_obs; ctx.meanstructure = has_meanstructure(ctx.pt);
+  auto options = multiinfo_options_from(1.25, R_NilValue, target); options.weight = weight;
+  const auto backend = optimizer.isNull() ? magmaan::estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
+  const auto weights = ml ? magmaan::estimate::OrdinalWeightKind::DWLS : ordinal_weight_from_estimator(estimator, "ordinal barrier");
+  auto fit = magmaan::estimate::frontier::fit_ordinal_multiinfo(ctx.pt, ctx.rep, stats,
+      ordinal_starts_or_stop(ctx, stats, starts), ml, weights, parameterization,
+      options, backend, optim_opts_from(control), &ctx.names.row_user);
+  if (!fit) stop_fit(fit.error());
+  auto out = ordinal_fit_result(ctx, stats, fit->estimates, &starts, estimator.c_str(), parameterization_name.c_str());
+  out["ordinal_stats"] = ordinal_stats; out["thresholds"] = ordinal_stats["thresholds"]; out["polychoric"] = ordinal_stats["R"];
+  out["penalty"] = multiinfo_penalty_to_r(ctx, *fit);
+  out["covariance_policy"] = "barrier"; out["penalty_inference"] = "not_validated";
   return out;
 }
 
@@ -10388,8 +10473,11 @@ Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
                                  std::string estimator,
                                  Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
                                  Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  return prepared::fit(model, data, weight, estimator, optimizer, control, bounds);
+                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+                                 std::string covariance = "unrestricted",
+                                 std::string barrier_target = "joint", double barrier_weight = 0.25) {
+  return prepared::fit(model, data, weight, estimator, optimizer, control, bounds,
+                       covariance, barrier_target, barrier_weight);
 }
 
 #include "score_primitives.hpp"

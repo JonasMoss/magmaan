@@ -20,6 +20,10 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
 # NULL preserves historical numerical defaults; model/robust are legacy aliases.
 vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   fit <- object
+  if (identical(fit$penalty_inference, "not_validated") ||
+      identical(fit$composition$moment_source, "pairwise_mcar")) {
+    stop("vcov(): this fit requires its own sampling/inference contract", call. = FALSE)
+  }
   sam <- inherits(fit, "magmaan_sam_fit")
   noniterative <- .is_noniterative(fit)
   estimator <- toupper(fit$estimator %||% "")

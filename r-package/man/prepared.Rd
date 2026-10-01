@@ -11,7 +11,8 @@ prepare_model(model, ..., prototype = NULL)
 prepare_data(model, data, kind = NULL, missing = c("error", "listwise"))
 prepare_weight(data, method = c("DWLS", "WLS", "ULS"), W = NULL, full = TRUE)
 estimate(model, data, estimator = NULL, weight = NULL,
-         optimizer = NULL, control = NULL, bounds = NULL)
+         optimizer = NULL, control = NULL, bounds = NULL,
+         covariance = NULL, psd = FALSE, barrier = NULL)
 }
 \arguments{
 \item{model}{Model syntax or a model specification for \code{prepare_model};
@@ -32,13 +33,20 @@ order. Otherwise empirical weights are constructed from raw observations.}
 FALSE requests only the DWLS diagonal (or no Gamma for ULS). WLS needs full
 Gamma regardless. DWLS does not invert full Gamma.}
 \item{estimator}{Continuous ML, ULS, GLS, WLS or DWLS; FIML for raw data;
-ULS, DWLS or WLS for ordinal data; DWLS or WLS for mixed data. Default follows
+ML, ULS, DWLS or WLS for ordinal data; DWLS or WLS for mixed data. Default follows
 the weight, or otherwise the data kind.}
 \item{weight}{Optional prepared weight from this dataset. WLS/DWLS prepare a
 weight internally if omitted.}
 \item{optimizer, control}{Existing native optimizer name and control list.}
 \item{bounds}{Explicit lower/upper bound list in free-parameter order. Not
 supported by the prepared FIML path.}
+\item{covariance}{Non-mixed model covariance policy: \code{"unrestricted"},
+\code{"psd"} or \code{"barrier"}. NULL follows \code{psd}.}
+\item{psd}{Compatible spelling for \code{covariance = "psd"}. Explicit
+contradictory requests are rejected.}
+\item{barrier}{Options for barrier fitting: a list with \code{target}
+(\code{"joint"} or \code{"determinacy"}) and \code{weight} (default 0.25).
+The weight is finite and non-negative; zero disables the penalty.}
 }
 \value{Preparation returns immutable, process-local handles. A prepared model
 exposes its specification; a weight exposes \code{W} for continuous data and
@@ -49,6 +57,14 @@ requires new data and weight preparation, but reuses the model. Category levels,
 group order, observable order and mean-structure convention must remain
 compatible. Group labels must be declared explicitly. Covariances supplied as
 sample moments use divisor N.
+
+The covariance policy changes final model fitting without repairing supplied
+moments. A barrier minimizes \code{f - weight / N * P}, with \code{fmin}
+retaining the unpenalized discrepancy and \code{penalty$penalized_fmin}
+recording the fitted objective. Positive-weight barriers replace additional
+bounds. Their general sampling/inference contract is not yet validated.
+Ordinal ML fits associations with Stage-1 thresholds held fixed; it does not
+provide Gaussian likelihood or generic post-fit sampling inference.
 
 FIML retains its missingness pack but does not compute saturated H1 during
 estimation. Categorical inference needs full Gamma; obtain it separately with

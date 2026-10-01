@@ -57,6 +57,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -192,7 +193,7 @@ struct PenalizedFit {
   double weight = 0.0;           // λ
   double n_total = 0.0;          // N used in the ½F scaling
   double penalized_fmin = 0.0;   // fmin − (λ/N)·P at θ̃
-  MultiInfoPenaltyReport penalty;
+  MultiInfoPenaltyReport penalty; // value may be NaN outside the barrier when weight=0
   bool start_repaired = false;   // x0 had to be moved into the barrier domain
 };
 
@@ -205,6 +206,29 @@ fit_ml_multiinfo(spec::LatentStructure pt, const model::MatrixRep& rep,
                  MultiInfoPenaltyOptions options = {}, Bounds bounds = {},
                  Backend backend = Backend::NloptLbfgs,
                  optim::OptimOptions opts = ml_optim_options());
+
+// Fixed moment-quadratic weight plus the same model penalty. Empty weight is
+// ULS; GLS callers build normal_theory_weight once before entering this route.
+// The penalty makes this a scalar problem, including for LS discrepancies.
+fit_expected<PenalizedFit>
+fit_gmm_multiinfo(spec::LatentStructure pt, const model::MatrixRep& rep,
+                  const data::SampleStats& samp, const Eigen::VectorXd& x0,
+                  gmm::Weight weight = {}, MultiInfoPenaltyOptions options = {},
+                  Backend backend = Backend::NloptLbfgs,
+                  optim::OptimOptions opts = ml_optim_options());
+
+// All-ordinal association ML (ml=true) or existing ordinal LS. ML conditions
+// on saturated Stage-1 thresholds; LS retains its threshold estimands. Input
+// moments and weights are unchanged. Mixed/polyserial data are not supported.
+fit_expected<PenalizedFit>
+fit_ordinal_multiinfo(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const data::OrdinalStats& stats, const Eigen::VectorXd& x0,
+                      bool ml, OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+                      OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+                      MultiInfoPenaltyOptions options = {},
+                      Backend backend = Backend::NloptLbfgs,
+                      optim::OptimOptions opts = {},
+                      const std::vector<std::int8_t>* row_user = nullptr);
 
 }  // namespace magmaan::estimate::frontier
 

@@ -977,6 +977,15 @@ inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit,
   if (!fit.containsElementNamed("theta"))
     Rcpp::stop("magmaan: not a fit object (missing theta) — pass the result of fit_fit()");
   magmaan::estimate::Estimates e;
+  if (!allow_association && fit.containsElementNamed("penalty_inference") &&
+      Rcpp::as<std::string>(fit["penalty_inference"]) == "not_validated")
+    Rcpp::stop("magmaan: penalized sampling/inference contract is not validated for this fitting composition");
+  if (!allow_association && fit.containsElementNamed("composition")) {
+    Rcpp::List composition = fit["composition"];
+    if (composition.containsElementNamed("moment_source") &&
+        Rcpp::as<std::string>(composition["moment_source"]) == "pairwise_mcar")
+      Rcpp::stop("magmaan: pairwise MCAR fits require their own sampling/inference contract");
+  }
   if (fit.containsElementNamed("association")) {
     if (!allow_association) {
       Rcpp::stop("magmaan: this post-fit operation is not available for ordinal "

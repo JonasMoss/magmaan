@@ -2362,7 +2362,8 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                     se = "none", test = "none",
                     W = NULL, optimizer = NULL, control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5,
-                    stage1_regularization = NULL, psd = FALSE) {
+                    stage1_regularization = NULL, psd = FALSE,
+                    covariance = NULL, barrier = NULL) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
@@ -2384,6 +2385,13 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   if (!is.logical(psd) || length(psd) != 1L || is.na(psd)) {
     stop("fit_model(): `psd` must be TRUE or FALSE")
   }
+  covariance_options <- .covariance_options(covariance, psd, !missing(psd), barrier)
+  covariance <- covariance_options$covariance
+  psd <- covariance_options$psd
+  barrier <- covariance_options$barrier
+  if (!is.null(barrier) && !bounds_is_none(bounds))
+    stop("fit_model(): barrier fitting does not accept additional bounds")
+  barrier_optimizer <- optimizer %||% "port"
   if (psd && !bounds_is_none(bounds)) {
     stop("fit_model(): `psd = TRUE` replaces `bounds`; supply only one of them")
   }
@@ -2405,14 +2413,26 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     control$start <- NULL
     if (!length(control)) control <- NULL
   }
+  pairwise_stats <- pairwise_raw <- NULL
   done <- function(fit) {
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
     fit$options$psd <- psd
+    source <- if (identical(estimator, "ML2S")) "saturated_fiml" else if (identical(estimator, "FIML")) "raw_observed" else if (isTRUE(fit$ordinal)) "polychoric" else if (isTRUE(fit$mixed_ordinal)) "mixed_polyserial" else if (identical(missing, "pairwise")) "pairwise_mcar" else "complete_continuous"
+    fit <- .finish_covariance_fit(fit, source, covariance, barrier,
+        optimizer %||% if (psd) "nlopt-slsqp" else if (!is.null(barrier)) "port" else "nlopt-lbfgs")
+    if (!is.null(pairwise_stats)) {
+      fit$pairwise_stats <- pairwise_stats
+      fit$pairwise_raw <- pairwise_raw
+    }
+    fit$options$covariance <- covariance
+    fit$options$barrier <- barrier
     # A PSD fit is refitted through fit_model() with the same constraint and
     # optimizer settings; ordinary fits keep their callers' estimator refit.
-    if (psd) fit$options$route <- list(fitter = "fit_model", args = list(
-      estimator = estimator, psd = TRUE, optimizer = optimizer, control = control,
-      W = W, missing = missing, parameterization = parameterization))
+    if (psd || !is.null(barrier) || !is.null(pairwise_stats)) fit$options$route <- list(fitter = "fit_model", args = list(
+      estimator = estimator, covariance = covariance, barrier = barrier,
+      optimizer = optimizer, control = control, W = W, missing = missing,
+      parameterization = parameterization, stage2_weight = stage2_weight,
+      dls_a = dls_a, stage1_regularization = stage1_regularization))
     fit
   }
 
@@ -2428,7 +2448,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     if (ordinal_requested) {
       stop("fit_model(): two-level (cluster = ) does not support ordinal data in v1")
     }
-    if (psd) stop("fit_model(): `psd = TRUE` is not available for two-level fits")
+    if (psd || !is.null(barrier)) stop("fit_model(): covariance policies are not available for two-level fits")
     if (!is.data.frame(data)) {
       stop("fit_model(): two-level (cluster = ) requires a data.frame `data`")
     }
@@ -2447,7 +2467,10 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       stop("fit_model(): `bounds` are not currently supported for estimator = 'FIML'")
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
-    fit <- if (psd) {
+    fit <- if (!is.null(barrier)) {
+      frontier_fit_fiml_multiinfo(spec, data, optimizer = barrier_optimizer, control = control,
+                                   target = barrier$target, weight = barrier$weight)
+    } else if (psd) {
       frontier_fit_fiml_psd(spec, data, optimizer = psd_optimizer, control = control)
     } else {
       fit_fiml(spec, data, optimizer = optimizer, control = control)
@@ -2460,7 +2483,12 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       stop("fit_model(): estimator = 'ML2S' currently supports continuous raw data only")
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
-    fit <- if (psd) {
+    fit <- if (!is.null(barrier)) {
+      estimate_two_stage_em_impl(partable_arg(spec), fiml_data_arg(data), kind = "ml",
+        optimizer = barrier_optimizer, control = control, covariance_policy = "barrier",
+        barrier = barrier, stage1_regularization = stage1_regularization,
+        stage2_weight = stage2_weight, dls_a = dls_a)
+    } else if (psd) {
       frontier_fit_ml2s_psd(spec, data, optimizer = psd_optimizer, control = control,
                             stage1_regularization = stage1_regularization,
                             stage2_weight = stage2_weight, dls_a = dls_a)
@@ -2501,6 +2529,12 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
+      if (!is.null(barrier)) {
+        if (!is.null(W)) stop("fit_model(): ordinal barrier uses the selected ordinal weight, not W")
+        return(done(fit_ordinal_barrier_impl(augment_ordinal_partable(spec, data), data,
+          estimator = estimator, target = barrier$target, weight = barrier$weight,
+          optimizer = barrier_optimizer, control = control)))
+      }
       if (identical(estimator, "ML")) {
         if (!bounds_is_none(bounds) || !is.null(W)) {
           stop("fit_model(): ordinal association ML does not accept bounds or LS weights")
@@ -2524,6 +2558,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (!is.null(barrier)) stop("fit_model(): mixed/polyserial barrier fitting is deferred")
       if (identical(estimator, "ML")) {
         stop("fit_model(): association ML currently requires all-ordinal data; mixed/polyserial ML is unsupported")
       }
@@ -2551,7 +2586,23 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     stop("fit_model(): DWLS requires ordered variables; pass `ordered =` or a categorical data object")
   }
 
-  if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
+  if (is.list(data) && !is.data.frame(data) && !is.null(data$pi_hat) && !is.null(data$n_pair))
+    missing <- "pairwise"
+  if (identical(missing, "pairwise")) {
+    if (is.data.frame(data)) {
+      pairwise_raw <- df_to_fiml_data(data, spec, group = group_var)
+      pairwise_stats <- data_pairwise_sample_stats(pairwise_raw$X)
+      for (b in seq_along(pairwise_stats$S)) {
+        dimnames(pairwise_stats$S[[b]]) <- list(pairwise_raw$ov_names[[b]], pairwise_raw$ov_names[[b]])
+        names(pairwise_stats$mean[[b]]) <- pairwise_raw$ov_names[[b]]
+      }
+      data <- pairwise_stats
+    } else if (!is.null(data$pi_hat) && !is.null(data$n_pair)) pairwise_stats <- data
+    else stop("fit_model(): pairwise fitting needs raw data or pairwise moment provenance")
+  } else if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
+  if (!is.null(barrier)) return(done(attach_complete_raw_data(fit_moments_barrier_impl(partable_arg(spec),
+      sample_stats_arg(data), estimator = estimator, W = W, target = barrier$target,
+      weight = barrier$weight, optimizer = barrier_optimizer, control = control), data)))
   if (identical(estimator, "WLS") && is.null(W)) {
     stop("fit_model(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
   }

@@ -272,6 +272,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_moments_barrier_impl
+Rcpp::List fit_moments_barrier_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, SEXP W, std::string target, double weight, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaanlab_fit_moments_barrier_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP WSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
+    Rcpp::traits::input_parameter< std::string >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< double >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_moments_barrier_impl(partable, sample_stats, estimator, W, target, weight, optimizer, control));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_fit_uls_psd_impl
 Rcpp::List frontier_fit_uls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
 RcppExport SEXP _magmaanlab_frontier_fit_uls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
@@ -1236,6 +1254,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
     rcpp_result_gen = Rcpp::wrap(frontier_fit_ordinal_psd_impl(partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_ordinal_barrier_impl
+Rcpp::List fit_ordinal_barrier_impl(SEXP partable, Rcpp::List ordinal_stats, std::string estimator, std::string target, double weight, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaanlab_fit_ordinal_barrier_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP estimatorSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< std::string >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< double >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ordinal_barrier_impl(partable, ordinal_stats, estimator, target, weight, optimizer, control));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2467,8 +2502,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // prepared_estimate_impl
-Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaanlab_prepared_estimate_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP weightSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string covariance, std::string barrier_target, double barrier_weight);
+RcppExport SEXP _magmaanlab_prepared_estimate_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP weightSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP covarianceSEXP, SEXP barrier_targetSEXP, SEXP barrier_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2479,7 +2514,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(prepared_estimate_impl(model, data, weight, estimator, optimizer, control, bounds));
+    Rcpp::traits::input_parameter< std::string >::type covariance(covarianceSEXP);
+    Rcpp::traits::input_parameter< std::string >::type barrier_target(barrier_targetSEXP);
+    Rcpp::traits::input_parameter< double >::type barrier_weight(barrier_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_estimate_impl(model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4241,6 +4279,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_fit_fiml_sphere_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_sphere_impl, 9},
     {"_magmaanlab_frontier_reidentify_impl", (DL_FUNC) &_magmaanlab_frontier_reidentify_impl, 3},
     {"_magmaanlab_frontier_fit_ml_multiinfo_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_multiinfo_impl, 8},
+    {"_magmaanlab_fit_moments_barrier_impl", (DL_FUNC) &_magmaanlab_fit_moments_barrier_impl, 8},
     {"_magmaanlab_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_uls_psd_impl, 6},
     {"_magmaanlab_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_gls_psd_impl, 6},
     {"_magmaanlab_frontier_fit_wls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_wls_psd_impl, 7},
@@ -4298,6 +4337,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_uls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_uls_ordinal_impl, 5},
     {"_magmaanlab_fit_wls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_ordinal_impl, 5},
     {"_magmaanlab_frontier_fit_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ordinal_psd_impl, 8},
+    {"_magmaanlab_fit_ordinal_barrier_impl", (DL_FUNC) &_magmaanlab_fit_ordinal_barrier_impl, 7},
     {"_magmaanlab_fit_ml_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_ml_ordinal_impl, 7},
     {"_magmaanlab_fit_ordinal_stage2_impl", (DL_FUNC) &_magmaanlab_fit_ordinal_stage2_impl, 7},
     {"_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl, 7},
@@ -4384,7 +4424,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},
     {"_magmaanlab_prepared_data_impl", (DL_FUNC) &_magmaanlab_prepared_data_impl, 4},
     {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 4},
-    {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 7},
+    {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 10},
     {"_magmaanlab_prepare_inference_impl", (DL_FUNC) &_magmaanlab_prepare_inference_impl, 3},
     {"_magmaanlab_score_rows_impl", (DL_FUNC) &_magmaanlab_score_rows_impl, 2},
     {"_magmaanlab_score_components_impl", (DL_FUNC) &_magmaanlab_score_components_impl, 4},

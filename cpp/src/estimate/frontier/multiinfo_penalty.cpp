@@ -34,7 +34,7 @@ FreeCells free_cells(const std::vector<model::ParamLocation>& locations,
                 BoolMatrix::Constant(m, m, false),
                 BoolMatrix::Constant(p, m, false)};
   for (const auto& loc : locations) {
-    if (static_cast<std::size_t>(loc.block) != block) continue;
+    if (loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != block) continue;
     switch (loc.mat) {
       case MatId::Psi:
         out.psi(loc.row, loc.col) = out.psi(loc.col, loc.row) = true;
@@ -495,7 +495,7 @@ multiinfo_penalty_hessian(const MultiInfoPenaltyLayout& layout,
     std::vector<RamCell> cells;
     for (Eigen::Index k = 0; k < q; ++k) {
       const auto& loc = layout.locations[static_cast<std::size_t>(k)];
-      if (static_cast<std::size_t>(loc.block) != b) continue;
+      if (loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != b) continue;
       RamCell cell;
       switch (loc.mat) {
         case MatId::Psi: cell = {true, loc.row, loc.col}; break;
@@ -606,6 +606,7 @@ multiinfo_penalty(const MultiInfoPenaltyLayout& layout,
   out.gradient = Eigen::VectorXd::Zero(theta.size());
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
     const auto& loc = layout.locations[static_cast<std::size_t>(k)];
+    if (loc.row < 0 || loc.col < 0) continue;  // Stage-1/LS threshold coordinate
     const std::size_t b = static_cast<std::size_t>(loc.block);
     const Eigen::Index m = layout.blocks[b].m;
     const BlockGradient& g = grads[b];
@@ -752,6 +753,17 @@ multiinfo_penalized_problem(const optim::ScalarProblem& base,
       return std::numeric_limits<double>::infinity();
     }
     if (scale == 0.0) return f;
+    // LS discrepancies do not themselves require a PD observed covariance.
+    // Determinacy conditions on that block, so enforce its domain here too.
+    auto moments = ev.sigma(theta);
+    if (!moments) { grad.setZero(); return std::numeric_limits<double>::infinity(); }
+    for (const auto& sigma : moments->sigma) {
+      Eigen::LLT<Eigen::MatrixXd> chol(sigma);
+      if (chol.info() != Eigen::Success) {
+        grad.setZero();
+        return std::numeric_limits<double>::infinity();
+      }
+    }
     auto pen = multiinfo_penalty(layout, ev, theta, true);
     if (!pen.has_value()) {
       grad.setZero();

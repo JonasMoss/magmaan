@@ -1138,6 +1138,9 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL, weight = NULL,
 #' @export
 fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
                          data = NULL) {
+  if (identical(fit$penalty_inference, "not_validated") ||
+      identical(fit$composition$moment_source, "pairwise_mcar"))
+    stop("fit_measures(): this fitting composition has no validated sampling/inference contract")
   if (!is.null(fit$association)) {
     stop("fit_measures(): ordinal association ML requires a validated Stage-1 ",
          "sampling/inference contract; Gaussian likelihood and fit-test measures ",

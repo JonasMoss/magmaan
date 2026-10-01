@@ -33,6 +33,8 @@ covariances using normal-theory or empirical moment covariance.}
 Unsupported combinations raise an error. Defaults are \code{sandwich_expected}
 for continuous/categorical iterative fits, \code{information_observed} for
 FIML, \code{delta_nt} for non-iterative CFA, and \code{stored} for SAM.
+Shared barrier compositions and pairwise MCAR fits reject this interface
+pending their own sampling/inference contracts.
 
 Legacy \code{model} selects the historical default. Legacy \code{robust}
 selects \code{sandwich_observed}, except for non-iterative CFA

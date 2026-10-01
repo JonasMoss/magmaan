@@ -2702,15 +2702,21 @@ finish_multiinfo(Estimates est, const optim::ScalarProblem& base,
         "penalized estimate"));
   }
   auto report = frontier::multiinfo_penalty_report(layout, ev, est.theta);
-  if (!report.has_value()) return std::unexpected(report.error());
+  if (!report.has_value() && weight != 0.0) return std::unexpected(report.error());
   frontier::PenalizedFit out;
   out.weight = weight;
   out.n_total = n_total;
-  out.penalized_fmin = unpenalized - weight / n_total * report->value;
+  out.penalized_fmin = weight == 0.0 ? unpenalized : unpenalized - weight / n_total * report->value;
   out.start_repaired = repaired;
   est.fmin = unpenalized;
   out.estimates = std::move(est);
-  out.penalty = std::move(*report);
+  if (report) out.penalty = std::move(*report);
+  else {
+    // Disabling the penalty preserves the base domain, including improper
+    // solutions where a log-determinant penalty report is undefined.
+    out.penalty.target = layout.target;
+    out.penalty.value = std::numeric_limits<double>::quiet_NaN();
+  }
   return out;
 }
 
@@ -2723,6 +2729,27 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
                            MultiInfoPenaltyOptions options, Bounds bounds,
                            Backend backend, OptimOptions opts) {
   constexpr const char* who = "fit_ml_multiinfo";
+  if (opts.normalize_sample && ml_normalization_supported(pt, rep)) {
+    auto normalized = normalize_ml_model(pt, rep, samp);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (x0.size() != normalized->parameter_units.size())
+      return std::unexpected(fit_err(FitError::Kind::InvalidStartValues, "barrier start size mismatch"));
+    const Eigen::VectorXd start = x0.cwiseQuotient(normalized->parameter_units);
+    if (!bounds.empty()) {
+      if (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size())
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue, "barrier bounds size mismatch"));
+      bounds.lower.array() /= normalized->parameter_units.array();
+      bounds.upper.array() /= normalized->parameter_units.array();
+    }
+    opts.normalize_sample = false;
+    auto out = fit_ml_multiinfo(std::move(normalized->structure), normalized->representation,
+        normalized->sample, start, options, std::move(bounds), backend, opts);
+    if (out) {
+      out->estimates.theta.array() *= normalized->parameter_units.array();
+      out->estimates.sample_normalized = true;
+    }
+    return out;
+  }
   auto weight = multiinfo_penalty_weight(options);
   if (!weight.has_value()) return std::unexpected(weight.error());
   auto pre = prelude(pt, rep, samp, x0, who);
@@ -2756,6 +2783,142 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
 }
 
 fit_expected<frontier::PenalizedFit>
+frontier::fit_gmm_multiinfo(spec::LatentStructure pt, const model::MatrixRep& rep,
+                            const SampleStats& samp, const Eigen::VectorXd& x0,
+                            gmm::Weight weight, MultiInfoPenaltyOptions options,
+                            Backend backend, OptimOptions opts) {
+  constexpr const char* who = "fit_gmm_multiinfo";
+  if (opts.normalize_sample && ml_normalization_supported(pt, rep)) {
+    auto normalized = normalize_ml_model(pt, rep, samp);
+    auto variables = driven::variable_units(pt, rep, samp);
+    auto evaluator = model::ModelEvaluator::build(pt, rep);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (!variables) return std::unexpected(variables.error());
+    if (!evaluator) return std::unexpected(model_to_fit(evaluator.error(), who));
+    if (x0.size() != normalized->parameter_units.size())
+      return std::unexpected(fit_err(FitError::Kind::InvalidStartValues, "barrier start size mismatch"));
+    auto moments = evaluator->sigma(x0);
+    if (!moments) return std::unexpected(model_to_fit(moments.error(), who));
+    if (!weight.empty() && weight.size() != samp.S.size())
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue, "barrier weight block count mismatch"));
+    gmm::Weight normalized_weight;
+    for (std::size_t b = 0; b < samp.S.size(); ++b) {
+      const auto& sd = variables->observed[b];
+      const Eigen::Index p = sd.size();
+      const bool means = b < moments->mu.size() && moments->mu[b].size() > 0;
+      Eigen::VectorXd units((means ? p : 0) + detail::vech_len(p));
+      Eigen::Index k = 0;
+      if (means) { units.head(p) = sd; k = p; }
+      for (Eigen::Index c = 0; c < p; ++c)
+        for (Eigen::Index r = c; r < p; ++r) units(k++) = sd(r) * sd(c);
+      const auto W = weight.empty() ? gmm::BlockWeight::identity(units.size()) : weight[b];
+      if (W.rows() != units.size())
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue, "barrier weight dimension mismatch"));
+      if (W.kind() == gmm::BlockWeight::Kind::Identity || W.kind() == gmm::BlockWeight::Kind::Diagonal) {
+        normalized_weight.push_back(gmm::BlockWeight::diagonal(W.to_dense().diagonal().cwiseProduct(units.cwiseProduct(units))));
+      } else {
+        const Eigen::MatrixXd dense = units.asDiagonal() * W.to_dense() * units.asDiagonal();
+        auto transformed = gmm::BlockWeight::dense(dense, FitError::Kind::NumericIssue, who);
+        if (!transformed) return std::unexpected(transformed.error());
+        normalized_weight.push_back(std::move(*transformed));
+      }
+    }
+    const Eigen::VectorXd start = x0.cwiseQuotient(normalized->parameter_units);
+    opts.normalize_sample = false;
+    auto out = fit_gmm_multiinfo(std::move(normalized->structure), normalized->representation,
+        normalized->sample, start, std::move(normalized_weight), options, backend, opts);
+    if (out) {
+      out->estimates.theta.array() *= normalized->parameter_units.array();
+      out->estimates.sample_normalized = true;
+    }
+    return out;
+  }
+  auto lambda = multiinfo_penalty_weight(options);
+  if (!lambda) return std::unexpected(lambda.error());
+  auto pre = prelude(pt, rep, samp, x0, who);
+  if (!pre) return std::unexpected(pre.error());
+  auto residuals = gmm::residuals(pre->ev, samp, x0, weight);
+  if (!residuals) return std::unexpected(residuals.error());
+  const auto base = optim::scalarize(*residuals);
+  auto layout = multiinfo_penalty_layout(pre->ev, x0, options.target);
+  if (!layout) return std::unexpected(layout.error());
+  double total = 0;
+  for (auto n : samp.n_obs) total += static_cast<double>(n);
+  const auto penalized = multiinfo_penalized_problem(base, *layout, pre->ev, *lambda, total);
+  auto start = multiinfo_start(penalized, *layout, pre->con, samp.S, x0, who);
+  if (!start) return std::unexpected(start.error());
+  auto est = drive_ml_scalar(pt, rep, *pre, samp, penalized, start->theta, Bounds{}, backend, opts, who);
+  if (!est) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, Bounds{});
+  attach_geometric_stationarity(*est, pt, *pre, Bounds{}, penalized);
+  auto hessian = gmm::moment_quadratic_hessian(pre->ev, samp, est->theta, weight);
+  post_expected<Eigen::MatrixXd> h = hessian
+      ? post_expected<Eigen::MatrixXd>(*hessian)
+      : std::unexpected(PostError{PostError::Kind::NumericIssue, hessian.error().detail});
+  attach_newton_accuracy_penalized(*est, pt, rep, penalized, *layout, pre->ev,
+      *lambda, total, h, NewtonObjectiveKind::PenalizedMl);
+  return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *lambda, total, start->repaired, who);
+}
+
+fit_expected<frontier::PenalizedFit>
+frontier::fit_ordinal_multiinfo(spec::LatentStructure pt, const model::MatrixRep& rep,
+                                const data::OrdinalStats& stats, const Eigen::VectorXd& x0,
+                                bool ml, OrdinalWeightKind weights,
+                                OrdinalParameterization parameterization,
+                                MultiInfoPenaltyOptions options, Backend backend,
+                                OptimOptions opts, const std::vector<std::int8_t>* row_user) {
+  constexpr const char* who = "fit_ordinal_multiinfo";
+  if (ml) {
+    auto valid = validate_ordinal_association_model(pt, row_user);
+    if (!valid) return std::unexpected(valid.error());
+  }
+  auto prepared = prepare_ordinal_partable(pt, stats,
+      ml ? OrdinalParameterization::Delta : parameterization, nullptr, row_user);
+  if (!prepared) return std::unexpected(prepared.error());
+  SampleStats sample;
+  sample.S = stats.R; sample.n_obs = stats.n_obs;
+  auto pre = prelude(pt, rep, sample, x0, who);
+  if (!pre) return std::unexpected(pre.error());
+  std::optional<OrdinalAssociationLayout> association;
+  Eigen::VectorXd initial = x0;
+  if (ml) {
+    auto layout = ordinal_association_layout(pt, rep, stats, x0);
+    if (!layout) return std::unexpected(layout.error());
+    association = std::move(*layout);
+    pre->con = association->constraints;
+    initial = association->theta;
+  }
+  fit_expected<optim::ScalarProblem> base_or;
+  if (ml) base_or = ml_objective(pre->ev, sample, model::MomentTarget::Correlation);
+  else {
+    auto ls = full_ordinal_problem(*pre, pt, rep, stats, initial, weights, parameterization);
+    if (!ls) return std::unexpected(ls.error());
+    base_or = optim::scalarize(*ls);
+  }
+  if (!base_or) return std::unexpected(base_or.error());
+  const auto base = std::move(*base_or);
+  auto lambda = multiinfo_penalty_weight(options);
+  if (!lambda) return std::unexpected(lambda.error());
+  auto layout = multiinfo_penalty_layout(pre->ev, initial, options.target);
+  if (!layout) return std::unexpected(layout.error());
+  double total = 0;
+  for (auto n : stats.n_obs) total += static_cast<double>(n);
+  const auto penalized = multiinfo_penalized_problem(base, *layout, pre->ev, *lambda, total);
+  auto start = multiinfo_start(penalized, *layout, pre->con, sample.S, initial, who);
+  if (!start) return std::unexpected(start.error());
+  auto est = drive_ml_scalar(pt, rep, *pre, sample, penalized, start->theta, Bounds{}, backend, opts, who);
+  if (!est) return std::unexpected(est.error());
+  attach_diagnostics(*est, pt, *pre, Bounds{});
+  attach_geometric_stationarity(*est, pt, *pre, Bounds{}, penalized);
+  if (association) {
+    auto info = ordinal_association_info(pre->ev, *association, est->theta);
+    if (!info) return std::unexpected(info.error());
+    est->association = *info;
+  }
+  return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *lambda, total, start->repaired, who);
+}
+
+fit_expected<frontier::PenalizedFit>
 fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
                                    const data::RawData& raw,
@@ -2767,6 +2930,43 @@ fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
   constexpr const char* who = "fit_fiml_multiinfo";
   if (auto ok = fiml::validate_fiml_fixed_x_missing_policy(pt, raw);
       !ok.has_value()) return std::unexpected(ok.error());
+  if (opts.normalize_sample && ml_normalization_supported(pt, rep)) {
+    auto normalized = normalize_ml_model(pt, rep, pack.start_stats);
+    auto units = driven::variable_units(pt, rep, pack.start_stats);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (!units) return std::unexpected(units.error());
+    if (x0.size() != normalized->parameter_units.size())
+      return std::unexpected(fit_err(FitError::Kind::InvalidStartValues, "FIML barrier start size mismatch"));
+    auto normalized_raw = raw;
+    for (std::size_t b = 0; b < raw.X.size(); ++b)
+      normalized_raw.X[b].array().rowwise() /= units->observed[b].transpose().array();
+    auto normalized_pack = fiml::fiml_pack(normalized_raw);
+    if (!normalized_pack) return std::unexpected(normalized_pack.error());
+    const Eigen::VectorXd start = x0.cwiseQuotient(normalized->parameter_units);
+    if (!bounds.empty()) {
+      if (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size())
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue, "FIML barrier bounds size mismatch"));
+      bounds.lower.array() /= normalized->parameter_units.array();
+      bounds.upper.array() /= normalized->parameter_units.array();
+    }
+    opts.normalize_sample = false;
+    auto out = fit_fiml_multiinfo(std::move(normalized->structure), normalized->representation,
+        normalized_raw, start, *normalized_pack, options, std::move(bounds), backend, opts);
+    if (out) {
+      out->estimates.theta.array() *= normalized->parameter_units.array();
+      out->estimates.sample_normalized = true;
+      // Raw FIML differs by an observation-pattern Jacobian constant. Report
+      // the caller-unit likelihood while retaining normalized optimizer audits.
+      auto evaluator = model::ModelEvaluator::build(pt, rep);
+      if (!evaluator) return std::unexpected(model_to_fit(evaluator.error(), who));
+      const auto base = full_fiml_problem(*evaluator, raw, pack.cache, fiml::FIML{});
+      Eigen::VectorXd scratch;
+      out->estimates.fmin = base.f(out->estimates.theta, scratch);
+      out->penalized_fmin = out->weight == 0.0 ? out->estimates.fmin
+          : out->estimates.fmin - out->weight / out->n_total * out->penalty.value;
+    }
+    return out;
+  }
   auto weight = estimate::frontier::multiinfo_penalty_weight(options);
   if (!weight.has_value()) return std::unexpected(weight.error());
   auto pre = prelude(pt, rep, pack.start_stats, x0, who);

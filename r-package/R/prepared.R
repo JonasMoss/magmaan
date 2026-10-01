@@ -144,7 +144,8 @@ prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS"), W = NULL, ful
 
 #' Estimate using reusable model, data and optional weight handles
 estimate <- function(model, data, estimator = NULL, weight = NULL,
-                     optimizer = NULL, control = NULL, bounds = NULL) {
+                     optimizer = NULL, control = NULL, bounds = NULL,
+                     covariance = NULL, psd = FALSE, barrier = NULL) {
   stopifnot(inherits(model, "magmaan_prepared_model"),
             inherits(data, "magmaan_prepared_data"))
   if (!identical(model$categories, data$model$categories) ||
@@ -165,8 +166,12 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   if (is.null(weight) && estimator %in% c("DWLS", "WLS")) weight <- prepare_weight(data, estimator)
   if (!is.null(bounds) && (!is.list(bounds) || is.character(bounds)))
     stop("estimate(): supply explicit bounds (e.g. bounds_standard())")
+  covariance_options <- .covariance_options(covariance, psd, !missing(psd), barrier)
+  covariance <- covariance_options$covariance
+  barrier <- covariance_options$barrier
   fit <- prepared_estimate_impl(model$native, data$native, if (is.null(weight)) NULL else weight$native,
-                                estimator, optimizer, control, bounds)
+                                estimator, optimizer, control, bounds, covariance,
+                                barrier$target %||% "joint", barrier$weight %||% 0.25)
   if (data$kind == "moments" && !is.null(data$X)) {
     fit$raw_data <- structure(list(X = data$X, ov_names = model$ov_names,
                                   group_var = model$spec$group_var,
@@ -174,6 +179,16 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
                                   nobs = vapply(data$X, nrow, integer(1))),
                              class = c("magmaan_complete_data", "list"))
   }
-  finalize_magmaan_fit(fit, model$spec, estimator,
+  fit <- finalize_magmaan_fit(fit, model$spec, estimator,
                       if (data$kind == "raw") "fiml" else data$missing, "none", "none")
+  source <- switch(data$kind, ordinal = "polychoric", mixed = "mixed_polyserial", raw = "raw_observed", "complete_continuous")
+  fit <- .finish_covariance_fit(fit, source, covariance, barrier,
+      optimizer %||% if (covariance == "psd") "nlopt-slsqp" else if (covariance == "barrier") "port" else "nlopt-lbfgs")
+  fit$options$covariance <- covariance
+  fit$options$barrier <- barrier
+  if (covariance != "unrestricted") fit$options$route <- list(fitter = "fit_model", args = list(
+    estimator = estimator, covariance = covariance, barrier = barrier,
+    optimizer = optimizer, control = control, missing = if (data$kind == "raw") "listwise" else data$missing,
+    W = if (data$kind == "moments" && !is.null(weight)) weight$W else NULL))
+  fit
 }

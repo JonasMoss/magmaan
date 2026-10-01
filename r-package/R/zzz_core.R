@@ -692,6 +692,8 @@ magmaan_core <- local({
       "frontier_fit_gls_psd_impl",
       "frontier_fit_wls_psd_impl",
       "fit_ml_ordinal_impl",
+      "fit_moments_barrier_impl",
+      "fit_ordinal_barrier_impl",
       "frontier_rbm_impl",
       "frontier_sam_impl",
       "frontier_dls_weight_impl",

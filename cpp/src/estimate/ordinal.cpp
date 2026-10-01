@@ -1538,9 +1538,11 @@ weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
   // NACOV inverse is involved; the residual is the raw moment residual s − σ.
   if (kind == OrdinalWeightKind::ULS) {
     WhitenFactors out;
-    out.reserve(stats.NACOV.size());
-    for (const auto& G : stats.NACOV)
-      out.push_back(WhitenFactor::identity(G.rows()));
+    out.reserve(stats.R.size());
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const auto p = stats.R[b].rows();
+      out.push_back(WhitenFactor::identity(stats.thresholds[b].size() + p * (p - 1) / 2));
+    }
     return out;
   }
   const bool dwls = kind == OrdinalWeightKind::DWLS;
@@ -9782,8 +9784,26 @@ ordinal_ls_problem_transformed(
         FitError::Kind::InvalidStartValues,
         "ordinal_ls_problem_transformed: invalid transformed-coordinate contract"));
   }
-  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+  // This builder consumes moments and a fitting weight, not sampling Gamma.
+  // Prepared fit-only ULS/DWLS intentionally do not materialize full NACOV.
+  // Inference entry points retain the stricter validate_stats contract.
+  if (auto v = validate_moments(data::ordinal_moments_from_stats(stats), rep); !v.has_value()) {
     return std::unexpected(v.error());
+  }
+  if (weights != OrdinalWeightKind::ULS) {
+    const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+    if (Ws.size() != stats.R.size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal_ls_problem_transformed: weight block count mismatch"));
+    }
+    for (std::size_t b = 0; b < Ws.size(); ++b) {
+      const auto p = stats.R[b].rows();
+      const auto mdim = stats.thresholds[b].size() + p * (p - 1) / 2;
+      if (Ws[b].rows() != mdim || Ws[b].cols() != mdim || !matrix_all_finite(Ws[b])) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "ordinal_ls_problem_transformed: weight dimension or finiteness mismatch"));
+      }
+    }
   }
   auto layout = make_threshold_layout(pt, rep, stats);
   if (!layout.has_value()) return std::unexpected(layout.error());

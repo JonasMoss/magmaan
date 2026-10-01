@@ -18,6 +18,9 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/optim/optimizers.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -979,4 +982,134 @@ TEST_CASE("determinacy-penalized FIML matches penalized ML on complete data") {
   REQUIRE_OK(fiml);
   CHECK((ml->estimates.theta - fiml->estimates.theta).cwiseAbs().maxCoeff() < 1e-4);
   CHECK(ml->penalty.value == doctest::Approx(fiml->penalty.value).epsilon(1e-5));
+}
+
+
+TEST_CASE("shared barriers preserve fixed quadratic criteria and zero-weight reduction") {
+  const auto pt = lavaanify(kTwoFactorCorr);
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  auto S = population_sigma(pt, *rep); S(0, 5) += .08; S(5, 0) += .08;
+  const auto sample = stats_from(S, 150);
+  auto start = magmaan::estimate::simple_start_values(pt, *rep, sample); REQUIRE_OK(start);
+  auto evaluator = ModelEvaluator::build(pt, *rep); REQUIRE_OK(evaluator);
+  auto gls = magmaan::estimate::gmm::normal_theory_weight(*evaluator, sample, *start); REQUIRE_OK(gls);
+  const Eigen::Index q = S.rows() * (S.rows() + 1) / 2;
+  std::vector<magmaan::estimate::gmm::Weight> weights{{}, *gls,
+      {magmaan::estimate::gmm::BlockWeight::diagonal(Eigen::VectorXd::LinSpaced(q, .7, 1.3))}};
+  for (auto target : {magmaan::estimate::frontier::PenaltyTarget::Joint,
+                       magmaan::estimate::frontier::PenaltyTarget::Determinacy}) {
+    MultiInfoPenaltyOptions options; options.target = target;
+    for (const auto& weight : weights) {
+      auto fit = magmaan::estimate::frontier::fit_gmm_multiinfo(pt, *rep, sample, *start, weight, options);
+      REQUIRE_OK(fit);
+      auto residuals = magmaan::estimate::gmm::residuals(*evaluator, sample, fit->estimates.theta, weight);
+      REQUIRE_OK(residuals);
+      auto scalar = magmaan::optim::scalarize(*residuals);
+      Eigen::VectorXd gradient = Eigen::VectorXd::Zero(start->size());
+      CHECK(fit->estimates.fmin == doctest::Approx(scalar.f(fit->estimates.theta, gradient)).epsilon(1e-9));
+      CHECK(fit->penalized_fmin == doctest::Approx(fit->estimates.fmin - fit->weight / fit->n_total * fit->penalty.value).epsilon(1e-10));
+      CHECK(fit->estimates.sample_normalized);
+      auto zero = options; zero.weight = 0;
+      auto reduced = magmaan::estimate::frontier::fit_gmm_multiinfo(pt, *rep, sample, *start, weight, zero);
+      auto ordinary = magmaan::estimate::fit_gmm(pt, *rep, sample, *start, weight);
+      REQUIRE_OK(reduced); REQUIRE_OK(ordinary);
+      CHECK(reduced->estimates.fmin == doctest::Approx(ordinary->fmin).epsilon(1e-6));
+    }
+  }
+}
+
+TEST_CASE("normalized barriers preserve affine constraints and penalized objectives") {
+  const auto pt = lavaanify("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  const auto sample = stats_from(population_sigma(pt, *rep), 100);
+  auto start = magmaan::estimate::simple_start_values(pt, *rep, sample); REQUIRE_OK(start);
+  auto normalized = magmaan::estimate::normalize_ml_model(pt, *rep, sample); REQUIRE_OK(normalized);
+  const Eigen::VectorXd normalized_start = start->cwiseQuotient(normalized->parameter_units);
+  magmaan::optim::OptimOptions opts = magmaan::estimate::ml_optim_options();
+  auto original = fit_ml_multiinfo(pt, *rep, sample, *start, {}, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  opts.normalize_sample = false;
+  auto transformed = fit_ml_multiinfo(normalized->structure, normalized->representation,
+      normalized->sample, normalized_start, {}, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_OK(original); REQUIRE_OK(transformed);
+  CHECK((original->estimates.theta - transformed->estimates.theta.cwiseProduct(normalized->parameter_units)).norm() < 1e-10);
+  CHECK(original->penalized_fmin == doctest::Approx(transformed->penalized_fmin).epsilon(1e-12));
+  CHECK(original->estimates.diagnostics.lin_eq_residual_inf < 1e-10);
+}
+
+TEST_CASE("zero-weight barriers retain ordinary improper solutions") {
+  const auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  Eigen::Matrix3d S; S << 1,.9,.6, .9,1,.5, .6,.5,1;
+  const auto sample = stats_from(S, 100);
+  auto start = magmaan::estimate::simple_start_values(pt, *rep, sample); REQUIRE_OK(start);
+  for (auto target : {magmaan::estimate::frontier::PenaltyTarget::Joint,
+                      magmaan::estimate::frontier::PenaltyTarget::Determinacy}) {
+    MultiInfoPenaltyOptions options; options.target = target; options.weight = 0;
+    auto fit = fit_ml_multiinfo(pt, *rep, sample, *start, options);
+    REQUIRE_OK(fit);
+    CHECK(fit->estimates.fmin < 1e-10);
+    CHECK(fit->penalized_fmin == fit->estimates.fmin);
+    CHECK(std::isnan(fit->penalty.value));
+    auto am = ModelEvaluator::build(pt, *rep); REQUIRE_OK(am);
+    auto matrices = am->assembled(fit->estimates.theta); REQUIRE_OK(matrices);
+    CHECK(matrices->blocks[0].Theta.diagonal().minCoeff() < 0);
+  }
+}
+
+TEST_CASE("ordinal barriers ignore threshold cells and preserve ML saturated thresholds") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2");
+  magmaan::data::OrdinalStats stats;
+  Eigen::Vector4d load(.75, .65, .55, .45);
+  Eigen::MatrixXd R = load * load.transpose(); R.diagonal().setOnes();
+  R(0, 1) += .02; R(1, 0) += .02;
+  stats.R = {R}; stats.n_obs = {400}; stats.n_levels = {{3,3,3,3}};
+  Eigen::VectorXd thresholds(8); thresholds << -.5,.5,-.4,.6,-.3,.7,-.2,.8;
+  stats.thresholds = {thresholds}; stats.threshold_ov = {{0,0,1,1,2,2,3,3}};
+  stats.threshold_level = {{1,2,1,2,1,2,1,2}};
+  stats.NACOV = {Eigen::MatrixXd::Identity(14,14)};
+  stats.W_dwls = stats.W_wls = stats.NACOV;
+  REQUIRE_OK(magmaan::estimate::prepare_ordinal_delta_partable(pt, stats));
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {}); REQUIRE_OK(start);
+  auto evaluator = ModelEvaluator::build(pt, *rep); REQUIRE_OK(evaluator);
+  for (auto target : {magmaan::estimate::frontier::PenaltyTarget::Joint,
+                       magmaan::estimate::frontier::PenaltyTarget::Determinacy}) {
+    auto layout = multiinfo_penalty_layout(*evaluator, *start, target); REQUIRE_OK(layout);
+    auto penalty = multiinfo_penalty(*layout, *evaluator, *start, true); REQUIRE_OK(penalty);
+    auto hessian = magmaan::estimate::frontier::multiinfo_penalty_hessian(*layout, *evaluator, *start); REQUIRE_OK(hessian);
+    for (std::size_t r = 0; r < pt.size(); ++r) if (pt.op[r] == magmaan::parse::Op::Threshold) {
+      const auto k = pt.free[r] - 1;
+      CHECK(penalty->gradient(k) == 0);
+      CHECK(hessian->row(k).isZero(0));
+    }
+    MultiInfoPenaltyOptions options; options.target = target;
+    for (bool ml : {false, true}) {
+      auto fit = magmaan::estimate::frontier::fit_ordinal_multiinfo(pt, *rep, stats, *start,
+          ml, magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::OrdinalParameterization::Delta, options);
+      REQUIRE_OK(fit);
+      CHECK(std::isfinite(fit->penalized_fmin));
+      if (ml) { REQUIRE(fit->estimates.association); CHECK(fit->estimates.association->df == 2); }
+      Eigen::Index k = 0;
+      for (std::size_t r = 0; r < pt.size(); ++r) if (pt.op[r] == magmaan::parse::Op::Threshold)
+        CHECK(fit->estimates.theta(pt.free[r] - 1) == doctest::Approx(thresholds(k++)).epsilon(1e-10));
+    }
+    for (auto weight : {magmaan::estimate::OrdinalWeightKind::ULS,
+                        magmaan::estimate::OrdinalWeightKind::DWLS}) {
+      auto fit_only = stats;
+      fit_only.NACOV.clear();
+      if (weight == magmaan::estimate::OrdinalWeightKind::ULS) {
+        fit_only.W_dwls.clear(); fit_only.W_wls.clear();
+      }
+      auto full = magmaan::estimate::frontier::fit_ordinal_multiinfo(pt, *rep, stats, *start,
+          false, weight, magmaan::estimate::OrdinalParameterization::Delta, options);
+      auto lean = magmaan::estimate::frontier::fit_ordinal_multiinfo(pt, *rep, fit_only, *start,
+          false, weight, magmaan::estimate::OrdinalParameterization::Delta, options);
+      REQUIRE_OK(full); REQUIRE_OK(lean);
+      CHECK((full->estimates.theta - lean->estimates.theta).norm() < 1e-10);
+      auto psd = magmaan::estimate::frontier::fit_ordinal_psd(pt, *rep, fit_only, {}, weight, *start);
+      REQUIRE_OK(psd);
+      CHECK(std::isfinite(psd->fmin));
+    }
+  }
 }

@@ -328,6 +328,41 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   `nlopt-slsqp`. There is no automatic chart selection or targeted
   restart. A passing numerical verdict checks feasibility and stationarity;
   it does not certify a local or global optimum at singular boundaries.
+- Non-mixed `fit_model()` and prepared `estimate()` accept
+  `covariance = "unrestricted"`, `"psd"`, or `"barrier"`. `psd = TRUE`
+  remains compatible with `covariance = "psd"`. For example:
+
+  ```r
+  fit_model(spec, data, estimator = "ML", covariance = "barrier",
+            barrier = list(target = "determinacy", weight = 0.25))
+  ```
+
+  `target = "joint"` selects the joint multi-information barrier;
+  `"determinacy"` selects the latent conditional-variance barrier. PSD fitting
+  changes the covariance domain. A barrier changes the objective to
+  `f - weight / N * P`, with positive weight keeping the search inside its
+  domain. Zero weight disables the penalty; its report can be undefined at an
+  improper ordinary solution. `fit$fmin` retains the unpenalized discrepancy;
+  `fit$penalty$penalized_fmin` records the fitted objective. Optimizer audits
+  refer to that fitted objective.
+
+  | Moment source | Discrepancies with PSD and either barrier |
+  | --- | --- |
+  | Complete continuous or pairwise MCAR moments | ML, ULS, GLS, explicit-weight WLS |
+  | All-ordinal polychorics | ML, ULS, DWLS, WLS |
+  | Saturated continuous FIML/EM (`ML2S`) | ML or fixed ULS/DWLS/ADF/DLS Stage 2 |
+  | Direct continuous FIML | Observed-pattern likelihood |
+
+  Continuous pairwise fitting uses `missing = "pairwise"` and retains
+  `pairwise_stats` and raw missingness provenance. Provided pairwise moments
+  retain that provenance automatically. ML2S retains its full `stage1` object;
+  the model policy applies only to Stage 2. Polychorics, thresholds and their
+  available sampling objects are preserved. No input-moment repair is implied.
+  `fit$composition` records the moment source/target, discrepancy, covariance
+  domain, penalty and algorithm, and refits retain those choices. General
+  barrier and pairwise sampling inference is not yet validated: SE/test and
+  likelihood-based fit-measure helpers reject these compositions. Mixed
+  barrier composition and two-level covariance policies remain unsupported.
 - `frontier_fit_ml_psd_fallback(model, data)` explicitly tries ordinary
   L-BFGS first and accepts it only if both the common accuracy verdict and
   covariance admissibility pass. Otherwise it runs PSD-SLSQP once. Finite

@@ -69,6 +69,10 @@ frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, w
     .Call(`_magmaanlab_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds, target)
 }
 
+fit_moments_barrier_impl <- function(partable, sample_stats, estimator = "ML", W = NULL, target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
+    .Call(`_magmaanlab_fit_moments_barrier_impl`, partable, sample_stats, estimator, W, target, weight, optimizer, control)
+}
+
 frontier_fit_uls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaanlab_frontier_fit_uls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol)
 }
@@ -295,6 +299,10 @@ fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, cont
 
 frontier_fit_ordinal_psd_impl <- function(partable, ordinal_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaanlab_frontier_fit_ordinal_psd_impl`, partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
+}
+
+fit_ordinal_barrier_impl <- function(partable, ordinal_stats, estimator = "ML", target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
+    .Call(`_magmaanlab_fit_ordinal_barrier_impl`, partable, ordinal_stats, estimator, target, weight, optimizer, control)
 }
 
 fit_ml_ordinal_impl <- function(partable, ordinal_stats, psd = FALSE, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
@@ -641,8 +649,8 @@ prepared_weight_impl <- function(data, method, W, full) {
     .Call(`_magmaanlab_prepared_weight_impl`, data, method, W, full)
 }
 
-prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds)
+prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL, covariance = "unrestricted", barrier_target = "joint", barrier_weight = 0.25) {
+    .Call(`_magmaanlab_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight)
 }
 
 prepare_inference_impl <- function(fit, raw, shared_data = NULL) {

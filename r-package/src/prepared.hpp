@@ -254,7 +254,8 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
 
 Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string method,
                Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control,
-               Rcpp::Nullable<Rcpp::List> bounds) {
+               Rcpp::Nullable<Rcpp::List> bounds, std::string covariance,
+               std::string target, double penalty_weight) {
   const auto& m = get<Model>(model_ptr, "magmaan_prepared_model");
   const auto& d = get<Data>(data_ptr, "magmaan_prepared_data");
   if (d.names != m.ctx.rep.ov_names || d.meanstructure != m.ctx.meanstructure)
@@ -266,8 +267,26 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     if (w->method != method) Rcpp::stop("magmaan: estimator and weight method disagree");
   }
   Ctx ctx = m.ctx; ctx.samp = d.sample;
-  const auto backend = backend_from_optimizer_arg(optimizer);
-  const auto opts = optim_opts_from(control);
+  if (covariance != "unrestricted" && covariance != "psd" && covariance != "barrier")
+    Rcpp::stop("magmaan: invalid covariance policy");
+  if (covariance != "unrestricted" && bounds.isNotNull())
+    Rcpp::stop("magmaan: covariance policy does not accept additional bounds");
+  if (d.kind == "mixed" && covariance != "unrestricted")
+    Rcpp::stop("magmaan: prepared mixed covariance composition is deferred");
+  const auto backend = optimizer.isNull() && covariance == "psd" ? estimate::Backend::NloptSlsqp :
+      optimizer.isNull() && covariance == "barrier" ? estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
+  const auto opts = covariance == "barrier" ? optim_opts_from(control, estimate::ml_optim_options()) : optim_opts_from(control);
+  auto penalty_options = multiinfo_options_from(1.25, R_NilValue, target);
+  penalty_options.weight = penalty_weight;
+  std::optional<estimate::frontier::PenalizedFit> penalty;
+  auto decorate = [&](Rcpp::List out) {
+    out["covariance_policy"] = covariance;
+    if (penalty) {
+      out["penalty"] = multiinfo_penalty_to_r(ctx, *penalty);
+      out["penalty_inference"] = "not_validated";
+    }
+    return out;
+  };
   const auto bnd = bounds_from_nullable(bounds);
   auto plan = data::ordinal_weight_plan(data::OrdinalWorkspacePurpose::FitOnly,
       method == "ULS" ? data::OrdinalEstimatorKind::ULS :
@@ -285,7 +304,17 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     if (method != "ML" && method != "ULS" && !w) Rcpp::stop("magmaan: ordinal LS requires a prepared weight");
     ctx.samp.S = s.R; ctx.samp.n_obs = s.n_obs; ctx.meanstructure = false;
     auto x0 = ordinal_starts_or_stop(ctx, s, m.starts);
-    e = method == "ML"
+    const auto parameterization = m.parameterization == "theta" ? estimate::OrdinalParameterization::Theta : estimate::OrdinalParameterization::Delta;
+    const auto weights = method == "ML" ? estimate::OrdinalWeightKind::DWLS : ordinal_weight_from_estimator(method, "prepared covariance fit");
+    if (covariance == "barrier") {
+      auto fit = estimate::frontier::fit_ordinal_multiinfo(ctx.pt, ctx.rep, s, x0,
+          method == "ML", weights, parameterization, penalty_options, backend, opts);
+      if (!fit) stop_fit(fit.error());
+      penalty = std::move(*fit); e = penalty->estimates;
+    } else if (covariance == "psd") {
+      e = method == "ML" ? estimate::frontier::fit_ml_psd(ctx.pt, ctx.rep, s, x0, backend, opts)
+          : estimate::frontier::fit_ordinal_psd(ctx.pt, ctx.rep, s, {}, weights, x0, backend, opts, parameterization);
+    } else e = method == "ML"
         ? estimate::frontier::fit_ml(ctx.pt, ctx.rep, s, x0, backend, opts)
         : estimate::fit_ordinal_bounded(ctx.pt, ctx.rep,
             data::ordinal_moments_from_stats(s), &cache, bnd, plan, x0, backend, opts);
@@ -296,7 +325,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
       composition["algorithm"] = std::string(estimate::backend_name(backend));
       out["composition"] = composition;
     }
-    return out;
+    return decorate(out);
   }
   if (d.kind == "mixed") {
     const auto& s = w ? w->mixed : d.mixed;
@@ -312,19 +341,41 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
   const auto x0 = start_values_or_stop(ctx, m.starts, "fabin3", nullptr, nullptr, control);
   if (d.kind == "raw") {
     if (method != "FIML" || bounds.isNotNull()) Rcpp::stop("magmaan: raw data supports FIML without bounds");
-    e = estimate::fit_fiml(ctx.pt, ctx.rep, d.raw, x0, *d.pack,
+    if (covariance == "barrier") {
+      auto fit = estimate::fiml::frontier::fit_fiml_multiinfo(ctx.pt, ctx.rep, d.raw, x0,
+          *d.pack, penalty_options, {}, backend, opts);
+      if (!fit) stop_fit(fit.error());
+      penalty = std::move(*fit); e = penalty->estimates;
+    } else if (covariance == "psd") e = estimate::fiml::frontier::fit_fiml_psd(ctx.pt, ctx.rep, d.raw, x0, *d.pack, backend, opts);
+    else e = estimate::fit_fiml(ctx.pt, ctx.rep, d.raw, x0, *d.pack,
                           fiml_backend_from_optimizer_arg(optimizer), opts);
     if (!e) stop_fit(e.error());
     Rcpp::List out = fiml_fit_result(ctx, d.raw, *e, &m.starts);
     out["fiml_pack"] = fiml_pack_xptr(*d.pack);
-    return out;
+    return decorate(out);
   }
-  if (method == "ML") e = estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
+  if (covariance != "unrestricted") {
+    estimate::gmm::Weight metric = w ? w->continuous : estimate::gmm::Weight{};
+    if (method == "GLS") {
+      auto evaluator = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+      if (!evaluator) stop_model(evaluator.error());
+      auto W = estimate::gmm::normal_theory_weight(*evaluator, ctx.samp, x0);
+      if (!W) stop_fit(W.error());
+      metric = std::move(*W);
+    }
+    if (covariance == "barrier") {
+      auto fit = method == "ML" ? estimate::frontier::fit_ml_multiinfo(ctx.pt, ctx.rep, ctx.samp, x0, penalty_options, {}, backend, opts)
+          : estimate::frontier::fit_gmm_multiinfo(ctx.pt, ctx.rep, ctx.samp, x0, metric, penalty_options, backend, opts);
+      if (!fit) stop_fit(fit.error());
+      penalty = std::move(*fit); e = penalty->estimates;
+    } else e = method == "ML" ? estimate::frontier::fit_ml_psd(ctx.pt, ctx.rep, ctx.samp, x0, backend, opts)
+        : estimate::frontier::fit_gmm_psd(ctx.pt, ctx.rep, ctx.samp, x0, metric, backend, opts);
+  } else if (method == "ML") e = estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
   else if (method == "GLS") e = estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
   else if (method == "ULS" || method == "WLS" || method == "DWLS")
     e = estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0, w ? w->continuous : estimate::gmm::Weight{}, bnd, backend, opts);
   else Rcpp::stop("magmaan: unsupported prepared estimator");
   if (!e) stop_fit(e.error());
-  return fit_result(ctx, *e, &m.starts, method.c_str());
+  return decorate(fit_result(ctx, *e, &m.starts, method.c_str()));
 }
 } // namespace prepared

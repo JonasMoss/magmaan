@@ -24,7 +24,8 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        stage1_regularization = NULL,
                                        stage2_weight = "nt",
                                        dls_a = 0.5,
-                                       covariance_policy = c("ordinary", "psd"),
+                                       covariance_policy = c("ordinary", "psd", "barrier"),
+                                       barrier = NULL,
                                        start_eigen_floor = 1e-6,
                                        feasibility_tol = 1e-6) {
   kind <- match.arg(kind)
@@ -74,7 +75,15 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   # lavaan robust.two.stage path.
   weighted_stage2 <- identical(kind, "ml") && !identical(stage2_weight, "nt")
 
-  fit <- if (identical(covariance_policy, "psd") && weighted_stage2) {
+  fit <- if (identical(covariance_policy, "barrier")) {
+    barrier <- .covariance_options("barrier", barrier = barrier)$barrier
+    W <- if (weighted_stage2) two_stage_stage2_weight_blocks_impl(em,
+      stage2_weight = stage2_weight, dls_a = dls_a) else NULL
+    fit_moments_barrier_impl(partable, sample_stats,
+      estimator = if (weighted_stage2) "WLS" else if (identical(kind, "ml")) "ML" else "GLS",
+      W = W, target = barrier$target, weight = barrier$weight,
+      optimizer = optimizer, control = control)
+  } else if (identical(covariance_policy, "psd") && weighted_stage2) {
     W <- two_stage_stage2_weight_blocks_impl(em, stage2_weight = stage2_weight,
                                              dls_a = dls_a)
     frontier_fit_wls_psd_impl(
@@ -111,17 +120,16 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   fit$stage2_weight <- stage2_weight
   fit$stage2_dls_a <- dls_a
   if (identical(covariance_policy, "psd")) fit$covariance_policy <- "psd"
-  fit$stage1 <- list(
-    mean = em$mean, cov = em$cov, n_obs = em$n_obs,
-    warnings = em$warnings,
-    acov = em$acov)
-  if (!is.null(em$H)) fit$stage1$H <- em$H
-  if (!is.null(em$J)) fit$stage1$J <- em$J
+  fit$stage1 <- em
   if (!is.null(stage1_raw)) {
     fit$stage1_raw <- stage1_raw
     fit$stage1_regularization <- stage1_regularization_diagnostics
   }
   fit$raw_data <- raw_data
+  fit <- .finish_covariance_fit(fit, "saturated_fiml",
+      if (identical(covariance_policy, "ordinary")) "unrestricted" else covariance_policy,
+      barrier = if (identical(covariance_policy, "barrier")) barrier else NULL,
+      algorithm = optimizer %||% if (identical(covariance_policy, "psd")) "nlopt-slsqp" else "nlopt-lbfgs")
   if (identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
     correction <- estimate_two_stage_em_ml_inference(
       fit, raw_data, h_step = h_step,
