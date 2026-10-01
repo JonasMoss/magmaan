@@ -1,15 +1,17 @@
 Package: magmaan
 Title: Structural Equation Modeling with One Justified Default Policy
-Version: 0.0.1
+Version: 0.1.0
 Authors@R:
     person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
 License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: magmaanlab, stats
+Imports: magmaanlab (>= 0.1.0), stats
 Suggests: testthat (>= 3.0.0), lavaan
 Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
 Description: One call estimates a structural equation model and computes
     inference under a single documented policy chosen by magmaan, with lavaan
     model syntax and a few familiar options. Pure R: all computation happens in
     'magmaanlab', the methods-development package over the magmaan C++ core,
     which also offers every alternative convention. Not CRAN-bound.
+Config/roxygen2/version: 8.0.0

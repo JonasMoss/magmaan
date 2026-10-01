@@ -1351,9 +1351,9 @@ an unconstrained gradient test to constrained solutions.
   `api::model_from_eqs` lower explicit single-group continuous equations,
   variances and covariances into the existing model triple. Fixed/free values,
   starts, error ownership, default-zero covariances and explicit identification
-  are preserved; EQS job/estimator settings are not imported. Both R packages
-  expose the same `eqs_model()` constructor; ordinary fitting also accepts
-  model specs with identification/model options owned by the constructor.
+  are preserved; EQS job/estimator settings are not imported. The lab exposes
+  `eqs_model()`; EQS remains excluded from the ordinary-user simulation
+  prerelease, with future adoption undecided.
   The [EQS contract](../grammar/eqs.md) defines the subset, unsupported cases
   and evidence limits. Offline pinned-lavaan fixtures gate rows, starts, ML
   estimates, implied covariance, expected SEs, df and chi-square; R tests
@@ -4462,6 +4462,22 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `magmaan_inference_unavailable` condition carrying that reason.
   Its tests check parameter rows and free estimates against lavaan for ML,
   `std.lv`, multi-group `group.equal`, syntax intercepts and ordinal DWLS.
+  The 0.1.0 simulation prerelease (2026-10-01) accepts lavaan syntax and
+  lavaan-backed saved specs, inheriting ordered variables, parameterization
+  and grouping before validation; conflicting explicit options error. EQS
+  and partable-only specs stay lab-only. Per-group row counts use the resolved
+  grouping. Defined estimates are evaluated through the C++ evaluator during
+  lab fit reconstruction even without inference; uncertainty remains absent.
+  Confidence arguments are checked and unchecked convergence stays distinct
+  from failure. Help pages and the ordinary README specify simulation
+  extraction and version-pinning contracts; the matched lab dependency is
+  versioned 0.1.0 too.
+  Release verification: 189 ordinary-package assertions and 82 focused lab
+  assertions pass; the ordinary source archive has a clean `R CMD check`.
+  The compiled source archive installs without CMake or a prebuilt core,
+  exercising the bundled `nloptr` fallback. Its native sources match the frozen
+  release projection. Both packages are distributed as source archives for
+  the local `v0.1.0` simulation prerelease; broader inference is not a gate.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as
   `magmaanlab::policy_inference(fit)` and run by `magmaan::infer()`. The

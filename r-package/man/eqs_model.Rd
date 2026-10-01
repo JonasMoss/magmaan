@@ -12,8 +12,8 @@ letters, \code{!} comments, ranges and an optional \code{/END} are accepted.}
 to the first name, \code{V2} to the second, etc. Without names, the data should
 have columns named \code{V1}, \code{V2}, etc.}
 }
-\value{A \code{magmaan_model_spec} for \code{fit_model()}, \code{prepare_model()}
-or \code{magmaan::magmaan()}. \code{eqs_source} retains the original input;
+\value{A \code{magmaan_model_spec} for \code{fit_model()} and \code{prepare_model()}.
+\code{eqs_source} retains the original input;
 \code{syntax} is its explicit lavaan projection for rebuilding and refitting.}
 \details{This initial subset supports single-group continuous covariance models.
 Every equation has one distinct error variable with a fixed unit coefficient:

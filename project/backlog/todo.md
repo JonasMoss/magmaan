@@ -169,25 +169,11 @@ matched `magmaanlab` for simulations. Completion is API correctness and a
 reproducible install; broader estimator or inference coverage is not a release
 gate. EQS remains lab-only; ordinary-user adoption is undecided.
 
-- [ ] **S — resolve saved-model options before ordinary validation.** Inherit
-  ordered variables, parameterization and grouping from lavaan-backed specs;
-  reject conflicting call options and categorical ML consistently. **Check:**
-  equivalent syntax/spec calls, ordinal DWLS/pairwise fits, conflicts and
-  accurate per-group row counts. Exclude EQS from the ordinary surface.
-- [ ] **S — retain defined estimates without inference.** Evaluate `:=` through
-  the shared C++ evaluator during fit reconstruction, independently of SEs.
-  **Check:** deferred/unsupported inference, chained definitions, fixed values
-  and lavaan agreement; no fabricated uncertainty.
-- [ ] **S — document and harden simulation extraction.** Specify coefficient
-  order, parameter/test tables, convergence and unavailable-component reasons;
-  validate interval arguments and preserve unchecked convergence. Generate
-  ordinary-package help pages. **Check:** regression tests, RDS round trips
-  and ordinary-package `R CMD check`.
-- [ ] **M — freeze and validate the matched prerelease.** Assign distinct
-  package versions and the compatible lab dependency baseline, record release
-  notes, install both source archives independently of the checkout, then tag
-  the committed snapshot. **Check:** portable compiled install, ordinary tests,
-  structural guards and recorded versions/commit for simulation consumers.
+The 0.1.0 API hardening and local release gates are complete, recorded in
+the [roadmap](../architecture/roadmap.md#r-bindings-and-public-namespace-transition)
+and package release notes. Completed checklist items have been folded into
+those records. Remaining inference expansion stays under the workflows below;
+it is not required to use this prerelease for supported simulations.
 
 ## Primary inference workflows
 

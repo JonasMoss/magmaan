@@ -61,6 +61,13 @@ no fitting default or compatibility contract.
 - `meanstructure = "default"` follows lavaan: a mean structure for multiple
   groups, ordered variables, FIML and ML2S, and syntax with an intercept. With
   that rule the lab reproduces lavaan's parameter rows in each case.
+- The 0.1.0 simulation prerelease accepts lavaan syntax and saved specs carrying
+  lavaan syntax. Ordered variables, parameterization and grouping are inherited
+  from a spec before validation; explicit conflicts error. EQS and partable-only
+  specifications stay lab-only, with ordinary EQS adoption undecided.
+- Defined estimates are retained during fit reconstruction independently of
+  inference. The ordinary README and help pages specify simulation extraction;
+  consumers pin the ordinary package and compiled dependency together.
 
 ## The ordinary-user call
 

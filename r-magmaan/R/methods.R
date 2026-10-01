@@ -25,24 +25,59 @@
   pt[order(pt$free), , drop = FALSE]
 }
 
+#' Inspect a magmaan fit
+#'
+#' `coef(fit)` returns free estimates in the same order as the rows and columns
+#' of `vcov(fit)`. `coef(summary(fit))` returns the full parameter table.
+#' `vcov()` and `confint()` raise a `magmaan_inference_unavailable` condition
+#' when covariance inference is unavailable; its `component` and `reason`
+#' fields identify the missing result. `nobs()` counts observations used,
+#' summed over groups.
+#'
+#' @param object,x A magmaan fit or its summary, as appropriate.
+#' @param parm Parameter names or positive integer indices; omitted for all
+#'   free parameters. Indices distinguish parameters with repeated labels.
+#' @param level One confidence level strictly between zero and one.
+#' @param test Interval test, currently only `"wald"`.
+#' @param ... Unused.
+#' @return `coef()` returns a named numeric vector for fits and a data frame
+#'   for summaries. `vcov()` returns the parameter covariance matrix;
+#'   `confint()` a matrix with two columns; `nobs()` the total count.
+#'   Printing returns its input invisibly.
+#' @name magmaan_methods
 #' @export
 coef.magmaan <- function(object, ...) {
   pt <- .free_rows(object$lab)
   stats::setNames(pt$est, .param_names(pt, length(object$lab$nobs)))
 }
 
+#' @rdname magmaan_methods
 #' @export
 vcov.magmaan <- function(object, ...) {
   .inference_result(object, "covariance", "vcov()")
 }
 
+#' @rdname magmaan_methods
 #' @export
 confint.magmaan <- function(object, parm, level = 0.95, test = "wald", ...) {
   .check_test(test, "confint()")
+  .check_level(level, "confint()")
   V <- .inference_result(object, "covariance", "confint()")
   est <- coef(object)
-  if (!missing(parm)) est <- est[parm]
-  half <- stats::qnorm(1 - (1 - level) / 2) * sqrt(diag(V)[names(est)])
+  index <- seq_along(est)
+  if (!missing(parm)) {
+    if (is.character(parm)) {
+      index <- match(parm, names(est))
+      if (anyNA(index)) stop("confint(): unknown parameter name", call. = FALSE)
+    } else if (is.numeric(parm) && !is.complex(parm) && !anyNA(parm) &&
+               all(is.finite(parm) & parm == floor(parm) & parm >= 1 & parm <= length(est))) {
+      index <- as.integer(parm)
+    } else {
+      stop("confint(): `parm` must contain parameter names or positive integer indices within coef(fit)", call. = FALSE)
+    }
+  }
+  est <- est[index]
+  half <- stats::qnorm(1 - (1 - level) / 2) * sqrt(diag(V)[index])
   out <- cbind(est - half, est + half)
   pct <- paste0(format(100 * c((1 - level) / 2, 1 - (1 - level) / 2),
                        trim = TRUE, scientific = FALSE, digits = 3), " %")
@@ -79,6 +114,7 @@ fitted.magmaan <- function(object, ...) {
   stats::setNames(lapply(groups, one), lab$group_labels)
 }
 
+#' @rdname magmaan_methods
 #' @export
 nobs.magmaan <- function(object, ...) {
   sum(object$lab$nobs)
@@ -126,7 +162,8 @@ nobs.magmaan <- function(object, ...) {
 .converged_label <- function(lab) {
   if (isTRUE(lab$converged)) return("yes")
   status <- lab$verdict$status %||% lab$optimizer_status
-  paste0("no", if (!is.null(status)) paste0(" (", status, ")") else "")
+  state <- if (identical(lab$converged, FALSE)) "no" else "unchecked"
+  paste0(state, if (!is.null(status)) paste0(" (", status, ")") else "")
 }
 
 .rows_label <- function(fit) {
@@ -142,6 +179,7 @@ nobs.magmaan <- function(object, ...) {
   sprintf("%d used of %d rows; %d %s", used, total, deleted, how)
 }
 
+#' @rdname magmaan_methods
 #' @export
 print.magmaan <- function(x, ...) {
   cat("magmaan fit\n")
@@ -168,16 +206,20 @@ print.magmaan <- function(x, ...) {
 #' @return An object of class `summary.magmaan`.
 #' @export
 summary.magmaan <- function(object, level = 0.95, ...) {
+  .check_level(level, "summary()")
   structure(list(fit = object, coefficients = .parameter_table(object, level = level),
                  tests = .global_tests(object), level = level),
             class = "summary.magmaan")
 }
 
+#' @rdname magmaan_methods
 #' @export
 coef.summary.magmaan <- function(object, ...) {
   object$coefficients
 }
 
+#' @rdname magmaan_methods
+#' @param digits Number of digits printed after the decimal point.
 #' @export
 print.summary.magmaan <- function(x, digits = 3, ...) {
   fit <- x$fit
@@ -273,6 +315,9 @@ anova.magmaan <- function(object, ...) {
             psd_boundary = isTRUE(res$psd_boundary))
 }
 
+#' @rdname anova.magmaan
+#' @param x A nested-test result.
+#' @param digits Number of digits printed after the decimal point.
 #' @export
 print.magmaan_anova <- function(x, digits = 3, ...) {
   cat("Nested tests of ", attr(x, "restricted"), " (restricted) against ",
@@ -291,4 +336,13 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
 # likelihood-ratio inversion without changing calls.
 .check_test <- function(test, caller) {
   .check_choice(test, "test", "wald", planned = "lr", caller = caller)
+}
+
+.check_level <- function(level, caller) {
+  if (!is.numeric(level) || is.complex(level) || length(level) != 1L || is.na(level) ||
+      !is.finite(level) || level <= 0 || level >= 1) {
+    stop(paste0(caller, ": `level` must be one number strictly between zero and one"),
+         call. = FALSE)
+  }
+  invisible(level)
 }

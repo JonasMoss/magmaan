@@ -20,21 +20,27 @@
 #' the concept is the same.
 #'
 #' @param model lavaan model syntax, one string, or a model specification from
-#'   `magmaanlab::model_spec()` or [eqs_model()].
+#'   `magmaanlab::model_spec()` carrying lavaan syntax.
 #' @param data A data frame of raw observations.
 #' @param estimator `"ML"`, `"FIML"`, `"ML2S"`, `"GLS"` or `"ULS"` for
 #'   continuous variables; `"DWLS"`, `"WLS"` or `"ULS"` for variables declared
 #'   in `ordered`.
-#' @param ordered Names of the ordered (categorical) variables.
-#' @param group Name of the grouping column.
+#' @param ordered Names of the ordered (categorical) variables. Inherited from
+#'   a model specification when omitted; an explicit value must agree with it.
+#' @param group Name of the grouping column. Inherited from a model
+#'   specification when omitted; an explicit value must agree with it.
 #' @param group.equal,group.partial Cross-group equality constraints, as in
 #'   lavaan.
 #' @param cluster Name of the cluster column for two-level ML.
 #' @param identification `"marker"` (first loading fixed to one) or `"std.lv"`
 #'   (latent variances fixed to one).
 #' @param parameterization `"delta"` or `"theta"`, for ordered variables.
+#'   Inherited from a model specification when omitted; an explicit value must
+#'   agree with it.
 #' @param meanstructure `"default"`, `TRUE` or `FALSE`.
-#' @param fixed.x Treat exogenous observed covariates as fixed.
+#' @param fixed.x Treat exogenous observed covariates as fixed. The ordinary
+#'   inference policy does not yet support fixed observed covariates; their
+#'   estimates are retained with unsupported inference components.
 #' @param missing How rows with missing values are deleted: `"listwise"`
 #'   (default) or `"pairwise"` (ordered variables only). Use `estimator =
 #'   "FIML"` or `"ML2S"` to use incomplete rows.
@@ -51,6 +57,34 @@
 #'   lavaan's `start = fit`; the others keep the default start.
 #' @param inference Compute inference now. With `FALSE`, call [infer()] later.
 #' @return An object of class `magmaan`.
+#' @section Simulation extraction:
+#' `coef(fit)` is a named vector in free-parameter order, aligned with both
+#' dimensions of `vcov(fit)`. Equality constraints can produce repeated labels;
+#' use numeric indices to distinguish those entries. `coef(summary(fit))` is a
+#' data frame with `lhs`, `op`, `rhs`, `label`, logical `free`, `est`, `se`,
+#' `z`, `pvalue`, `ci.lower`, and `ci.upper`; multi-group fits also have `group`.
+#' Defined estimates are available independently of inference.
+#'
+#' `fit$rows` has `group`, `rows`, `used`, and `deleted` per group.
+#' `as_lab_fit(fit)$converged` is `TRUE`, `FALSE`, or `NA` for an unchecked fit;
+#' use `isTRUE()` to count successful fits. `fit$inference` is `NULL` before
+#' inference. Otherwise `fit$inference$status` has `component`, `available`,
+#' `reason`, and `detail` for covariance, global score, and global LR.
+#' Reasons include `available`, `not_converged`, `saturated`,
+#' `unsupported_model`, and `numeric_failure`.
+#'
+#' `summary(fit)$tests` is `NULL` when no global test is available, otherwise a
+#' data frame with `test`, `statistic`, `df`, `p.sb`, `p.peba4`, and `sb.scale`.
+#' Store both package versions with simulation results. Saved fits retain their
+#' estimates and inference; reusing them with another package version is not a
+#' compatibility promise.
+#' @examples
+#' if (requireNamespace("lavaan", quietly = TRUE)) {
+#'   fit <- magmaan("visual =~ x1 + x2 + x3",
+#'                  lavaan::HolzingerSwineford1939)
+#'   coef(fit)
+#'   coef(summary(fit))
+#' }
 #' @export
 magmaan <- function(model, data,
                     estimator = "ML",
@@ -64,6 +98,9 @@ magmaan <- function(model, data,
                     psd = FALSE,
                     start = "default",
                     inference = TRUE) {
+  supplied_ordered <- !missing(ordered)
+  supplied_parameterization <- !missing(parameterization)
+  supplied_group <- !missing(group)
   is_spec <- inherits(model, "magmaan_model_spec")
   if (!is_spec && (!is.character(model) || length(model) != 1L || is.na(model))) {
     stop("magmaan(): `model` must be lavaan model syntax in one string or a model specification", call. = FALSE)
@@ -71,6 +108,9 @@ magmaan <- function(model, data,
   if (!is.data.frame(data)) {
     stop("magmaan(): `data` must be a data frame of raw observations; ",
          "summary-statistic input is available in magmaanlab", call. = FALSE)
+  }
+  if (is_spec && (!is.null(model$eqs_source) || is.null(model$syntax))) {
+    stop("magmaan(): model specifications must carry lavaan syntax; use magmaanlab::fit_model() for EQS or partable-only specifications", call. = FALSE)
   }
   if (is_spec && (!missing(identification) || !missing(fixed.x) ||
                   !missing(meanstructure) || !is.null(group.equal) ||
@@ -88,6 +128,23 @@ magmaan <- function(model, data,
   missing <- .check_choice(missing, "missing", c("listwise", "pairwise"))
   start <- .check_start(start)
   ordered <- .check_ordered(ordered)
+  if (is_spec) {
+    spec_ordered <- .check_ordered(model$ordered)
+    if (supplied_ordered && !setequal(ordered, spec_ordered)) {
+      stop("magmaan(): `ordered` conflicts with the model specification; set it in the model constructor", call. = FALSE)
+    }
+    if (supplied_parameterization && !identical(parameterization, model$parameterization)) {
+      stop("magmaan(): `parameterization` conflicts with the model specification; set it in the model constructor", call. = FALSE)
+    }
+    spec_group <- model$group_var
+    if (identical(spec_group, "")) spec_group <- NULL
+    if (supplied_group && !identical(group, spec_group)) {
+      stop("magmaan(): `group` conflicts with the model specification; set it in the model constructor", call. = FALSE)
+    }
+    ordered <- if (length(spec_ordered)) spec_ordered else NULL
+    parameterization <- model$parameterization
+    group <- spec_group
+  }
   .check_estimator_data(estimator, ordered, missing)
   group <- .check_column(group, "group", data)
   cluster <- .check_column(cluster, "cluster", data)
@@ -210,7 +267,7 @@ as_lab_fit <- function(fit) {
 .start_control <- function(start, estimator, psd, ordered, cluster) {
   if (is.data.frame(start)) return(list(start = start))
   if (identical(start, "default")) return(NULL)
-  if (!is.null(ordered) || !is.null(cluster)) {
+  if (length(ordered) || !is.null(cluster)) {
     stop("magmaan(): start = \"fabin3\" is not available with `ordered` or `cluster`",
          call. = FALSE)
   }

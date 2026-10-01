@@ -2657,6 +2657,13 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
   fit$group_var <- spec$group_var %||% fit$group_var %||% ""
   fit$group_labels <- spec$group_labels %||% fit$group_labels %||% character()
   class(fit) <- c("magmaan_fit", "list")
+  if (any(fit$partable$op == ":=")) {
+    # Estimates of definitions do not depend on inference. Reuse the C++
+    # evaluator with zero covariance and retain only its values, never its SEs.
+    defined <- compute_defined(spec, fit, matrix(0, length(fit$theta), length(fit$theta)))
+    rows <- fit$partable$op == ":="
+    fit$partable$est[rows] <- defined$est[match(fit$partable$lhs[rows], defined$lhs)]
+  }
   .warn_fit_admissibility(fit)
   fit
 }

@@ -1,6 +1,6 @@
 Package: magmaanlab
 Title: Methods-development R bindings for the magmaan C++ SEM library
-Version: 0.0.1
+Version: 0.1.0
 Authors@R:
     person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
 License: MIT + file LICENSE

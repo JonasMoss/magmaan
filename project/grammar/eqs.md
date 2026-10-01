@@ -57,10 +57,10 @@ already-lowered rows; it is not an independent semantic translator.
 
 ## R usage
 
-Both packages expose the same `eqs_model()` constructor:
+The methods-development package exposes `eqs_model()`:
 
 ```r
-model <- eqs_model('
+model <- magmaanlab::eqs_model('
 /EQUATIONS
 V1 = 1*F1 + E1;
 V2 = .7*F1 + E2;
@@ -69,19 +69,16 @@ V3 = .8*F1 + E3;
 F1 = 1;
 E1-E3 = .5*;
 ', observed_names = c('x1', 'x2', 'x3'))
-fit <- magmaan::magmaan(model, data)
-# Methods-development estimate-only route:
 fit <- magmaanlab::fit_model(model, data, estimator = 'ML')
 ```
 
 `observed_names` is in EQS data-column order: Vn maps to its nth entry.
 Without that argument, data columns retain V-number names. Supply the actual
-EQS column order; latent names remain F-number names. The returned ordinary
+EQS column order; latent names remain F-number names. The returned
 model specification retains `eqs_source` and an explicit lavaan projection in
 `syntax` for existing rebuild/refit helpers. Prepared-model construction and
-ordinary fitting accept the same spec. When supplying a spec to `magmaan()`,
-identification, fixed.x, meanstructure and equality options belong in its
-constructor rather than the fitting call.
+lab fitting accept the same spec. EQS is excluded from the ordinary-user
+`magmaan` simulation prerelease; future adoption there remains undecided.
 
 ## Evidence and limits
 
@@ -111,7 +108,7 @@ example deliberately has nonzero sample cross-factor covariances. A structural
 example includes an observed predictor, a disturbance, predictor/factor
 covariance and correlated measurement errors.
 
-Binding integration tests additionally compare installed lavaan, and ordinary
-package tests exercise the shared constructor. These establish lowering and
+Binding integration tests additionally compare installed lavaan. These
+establish lowering and
 shared-engine correctness for the supported subset. They are not a live EQS
 parser or numerical oracle, and no full EQS compatibility claim is made.

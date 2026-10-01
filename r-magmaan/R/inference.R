@@ -66,7 +66,10 @@ infer <- function(fit) {
                               "the fit was made with inference = FALSE; call infer(fit)"))
   }
   row <- inf$status[inf$status$component == component, , drop = FALSE]
-  if (!nrow(row) || !isTRUE(row$available)) {
+  if (!nrow(row)) {
+    stop(.inference_condition(caller, component, "unknown", "no component status was retained"))
+  }
+  if (!isTRUE(row$available)) {
     stop(.inference_condition(caller, component, row$reason %||% "unknown",
                               row$detail %||% ""))
   }

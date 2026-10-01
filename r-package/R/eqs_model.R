@@ -9,8 +9,8 @@
 #' @param observed_names Optional names in EQS data-column order: `V1` maps to
 #'   the first name, `V2` to the second, and so on. Without names, data columns
 #'   should be named `V1`, `V2`, etc.
-#' @return A `magmaan_model_spec` usable in `fit_model()`, `prepare_model()` and
-#'   `magmaan::magmaan()`. Original EQS text is retained as `eqs_source`;
+#' @return A `magmaan_model_spec` usable in `fit_model()` and `prepare_model()`.
+#'   Original EQS text is retained as `eqs_source`;
 #'   `syntax` contains the equivalent explicit lavaan specification for refits.
 #' @export
 eqs_model <- function(syntax, observed_names = NULL) {
