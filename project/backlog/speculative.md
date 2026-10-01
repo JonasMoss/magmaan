@@ -211,6 +211,87 @@ covariances agree numerically. This retains the tested ML raw default and the
 prospective FIML raw comparator; it does not select an ordinary FIML default.
 The [fixed-allocation covariance formula](../scope.md#group-allocation-and-likelihood-score-covariance)
 is settled separately; its ordinary extension remains banked above.
+
+#### Banked centering register
+
+This register collects the centering decisions and their limits for reuse in
+magmaan and the R package semTests. A settled identity, a provisional default
+retention and a deferred implementation have different meanings. None queues
+another generic centering experiment.
+
+| Component or choice | Banked rule | Status and scope |
+| --- | --- | --- |
+| Observed test score and estimating equations | Preserve the original observed score and fits; centering changes covariance contributions only. Never reconstruct the test numerator by summing centered rows. | Contract shared by all arms of the decision study. |
+| Parameter-score sandwich | Retain raw likelihood-score cross-products in the tested regular ML slice and as the prospective FIML comparator. At an exact stationary unconstrained interior fit, globally centered and raw parameter-score meats coincide. | Algebraic stationary identity; numerical agreement confirmed. Wald coverage remains a separate validation problem. |
+| Complete-data ML global/nested score reference | Retain raw projected likelihood-score meat in the tested normal/skewed, N=80/300 families. | Provisional retention after 32,000 confirming datasets; no qualifying global-centering benefit. This does not establish equivalence for released test directions. |
+| Prospective FIML score reference | Retain raw as the comparator separately within expected- and observed-sensitivity strata, with their quadratic metric held fixed. | No qualifying centering benefit in 32,000 MCAR/MAR datasets. Absolute calibration remains open; no ordinary FIML default is selected. |
+| Fixed-allocation sampling groups | Use within-group covariance contributions when repeated sampling holds group counts fixed; between-group score-mean differences do not enter that conditional covariance. | Population formula settled under independent within-group sampling and the scope contract. Ordinary support is deferred under the fixed-design entry above; test calibration remains separate. |
+| Joint iid sampling of group labels | Retain between-group score-mean variation in the covariance. A `group` argument or observed counts alone do not select conditional fixed-allocation inference. | Sampling-law distinction settled; use the declared target, not a package flag, to choose the formula. |
+| Random missingness patterns | Do not automatically apply the fixed-allocation group-centering rule to pattern labels. Any pattern-centering reference needs its own observation-law and influence justification. | Sampling-law guard. Within-pattern centering was not a candidate in this study; no blanket equivalence or calibration claim. |
+| Established moment/influence covariances | Retain method-specific empirical Gamma/NACOV, WLS/DWLS/DLS covariance recipes, noniterative delta and Stage-1 influence maps, moment-based robust SE/GOF and global/nested LR-reference formulas, including Satorra--2000. | Redesign banked under [moment-covariance centering alternatives](#moment-covariance-centering-alternatives); existing formulas, normalization and regression/parity gates remain. |
+| Centering before versus after a common linear score projection | Either placement gives the same projected centered rows when the score rows, centering operator and projection are held fixed. | Algebraic identity, not an additional default-selection experiment; implementation agreement is subject to floating-point roundoff. |
+
+For likelihood-score rows $S$ with $N$ observations and column mean $\bar s$,
+the unnormalized Gram identity is
+
+$$
+S^{\mathsf T}S-(CS)^{\mathsf T}(CS)=N\bar s\bar s^{\mathsf T},
+\qquad C=I_N-\mathbf 1\mathbf 1^{\mathsf T}/N.
+$$
+
+With divisor $N$, the difference is instead $\bar s\bar s^{\mathsf T}$.
+Zero total parameter score therefore gives equality of these meats and of
+sandwich covariances when the same bread is used. This
+requires the relevant stationary parameter coordinates; released test-direction
+scores under H0 need not sum to zero. Constraints, active bounds, penalties and
+nonstationary endpoints do not inherit the unconstrained identity without their
+own influence/geometry contract.
+
+For the group-allocation rule, let $m_g=E_g[s(Z;\theta^*)]$ and
+$\sum_g w_gm_g=0$ at the population approximation target. Then
+
+$$
+B_{\mathrm{fixed}}=\sum_g w_g\operatorname{Cov}_g(s),
+\qquad
+B_{\mathrm{joint}}=B_{\mathrm{fixed}}+\sum_g w_gm_gm_g^{\mathsf T}.
+$$
+
+The fixed-allocation law uses fixed count proportions and independent sampling
+within a finite number of groups, each with growing sample size; the joint iid
+law uses population group probabilities. The two formulas agree when every
+group score mean vanishes. Assumptions, the published reference and the checked
+example are retained in the [scope contract](../scope.md#group-allocation-and-likelihood-score-covariance).
+
+For a single linear projection $P$ shared by all rows,
+
+$$
+C(SP)=(CS)P.
+$$
+
+This follows from matrix associativity and also holds when $C$ is block-diagonal
+within-group centering. $P$ may be estimated from the sample, but the same
+realized $P$ must be used on both sides. The identity does not justify
+recomputing the projection, changing its evaluation point or information
+geometry, or interchanging centering with arbitrary row-dependent or nonlinear
+operations. Choose the placement for clarity and numerical implementation;
+an identity check suffices rather than a calibration study of the two placements.
+
+**Reuse in semTests:** carry over these formulas, sampling assumptions and
+scoped decisions, not an unverified claim about that package's current behavior.
+Map likelihood scores versus moment influences, parameter versus released
+directions, structured versus saturated evaluation points, sensitivity/metric,
+projection, score units, divisors and group-allocation law before applying a
+rule. Verify the preserved numerator, covariance, statistic and calibration
+spectrum/p-values in the corresponding implementation. Lavaan convention parity
+and population calibration remain separate checks. The magmaan confirmation
+does not validate a different semTests construction automatically.
+
+**Still open:** finite-sample covariance corrections, FIML sensitivity/metric
+validation and absolute score/LR calibration, Wald interval accuracy, and
+constraint/boundary/penalty or unsupported MI/release inference contracts.
+These have their own active or deferred owners; the centering register neither
+settles them nor schedules new work on them.
+
 **Gap:** evidence that global centering improves a particular supported
 likelihood-score covariance or calibration. The observed-sensitivity FIML
 calibration and Wald coverage gaps remain active in [todo.md](todo.md#ml-and-fiml);
