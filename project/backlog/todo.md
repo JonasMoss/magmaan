@@ -75,6 +75,16 @@ moment-target foundation; that extraction can proceed alongside normalization.
   failures and rescaled fits. A larger evaluation budget alone is insufficient.
   See [corpus recovery](../../experiments/engineering/active/17-corpus-optimizer-recovery/report.qmd).
 
+- [ ] **M — equality constraints that fully determine a block stall the ML fit.**
+  Effects coding (each factor's loadings average 1) plus tau-equivalence (the
+  loadings equal) fixes every loading of the factor at 1 through `==` rows.
+  On Little (2013) Table 10.3 (24 indicators, 8 factors) magmaan's L-BFGS and
+  PORT fits both stop at the start, unconverged, with $\chi^2 \approx 73{,}000$,
+  while lavaan converges to $\chi^2 = 271$ on the same draw. Found by the
+  sem-score-tests calibration study, where the case is supplement-only.
+  **Check:** that model's restricted fit converges to lavaan's optimum, and the
+  constraint projection handles constraints that pin parameters completely.
+
 - [ ] **M — diagnose the layered-start Geiser latent-AR loss.** The fixture
   `latent_ar_cross_lagged_extended` stalls above the reference objective with
   L-BFGS and PORT; FABIN3 and std.lv succeed. **Check:** explain the valley/start
@@ -151,6 +161,33 @@ moment-target foundation; that extraction can proceed alongside normalization.
   Promote deterministic defects to tests. Secondary breadth is consumer-gated;
   two-level and native FC-SEM stay excluded. Evidence:
   [PSD stress](../../experiments/engineering/active/13-psd-estimator-stress/report.qmd).
+
+## R simulation prerelease
+
+Scope adopted 2026-10-01: prepare a versioned ordinary-user `magmaan` and
+matched `magmaanlab` for simulations. Completion is API correctness and a
+reproducible install; broader estimator or inference coverage is not a release
+gate. EQS remains lab-only; ordinary-user adoption is undecided.
+
+- [ ] **S — resolve saved-model options before ordinary validation.** Inherit
+  ordered variables, parameterization and grouping from lavaan-backed specs;
+  reject conflicting call options and categorical ML consistently. **Check:**
+  equivalent syntax/spec calls, ordinal DWLS/pairwise fits, conflicts and
+  accurate per-group row counts. Exclude EQS from the ordinary surface.
+- [ ] **S — retain defined estimates without inference.** Evaluate `:=` through
+  the shared C++ evaluator during fit reconstruction, independently of SEs.
+  **Check:** deferred/unsupported inference, chained definitions, fixed values
+  and lavaan agreement; no fabricated uncertainty.
+- [ ] **S — document and harden simulation extraction.** Specify coefficient
+  order, parameter/test tables, convergence and unavailable-component reasons;
+  validate interval arguments and preserve unchecked convergence. Generate
+  ordinary-package help pages. **Check:** regression tests, RDS round trips
+  and ordinary-package `R CMD check`.
+- [ ] **M — freeze and validate the matched prerelease.** Assign distinct
+  package versions and the compatible lab dependency baseline, record release
+  notes, install both source archives independently of the checkout, then tag
+  the committed snapshot. **Check:** portable compiled install, ordinary tests,
+  structural guards and recorded versions/commit for simulation consumers.
 
 ## Primary inference workflows
 
