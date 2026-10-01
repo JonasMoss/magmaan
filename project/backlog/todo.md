@@ -5,10 +5,12 @@ Accepted implementation work, ordered by workflow. The
 the [test ledger](../validation/test_ledger.md) and linked studies own evidence.
 Remove completed items after their durable record exists.
 
-**Scope adopted 2026-09-30:** single-level ML, FIML and ordinal/mixed DWLS,
-with PSD covariance constraints and the multi-information barrier alongside
-them. Secondary estimators retain correctness gates; extensions need a concrete
-consumer or inexpensive reuse of primary work. Two-level SEM, SAM and composites
+**Scope adopted 2026-09-30; release priorities amended 2026-10-01:** single-level
+ML, FIML and ordinal/mixed DWLS in their supported slices. **0.0.1 focuses on
+ordinary and PSD estimation and inference; barrier-specific hardening and
+inference follow in 0.0.2.** Secondary estimators retain correctness gates;
+extensions need a concrete consumer or inexpensive reuse of primary work.
+Two-level SEM, SAM and composites
 have **no scheduled expansion work**, including inside shared normalization,
 start, preparation and inference programmes. Existing APIs/tests remain.
 
@@ -19,9 +21,10 @@ misspecification and categorical conditional-moment expansion are
 retain their correctness gates.
 
 The existing limited-information correlation-ML capability (currently catML)
-is retained and folded into shared fitting composition. Common moment targets
-and model penalties are near-term work; this does not establish new ordinary-
-user defaults or promise inference for every combination. See the
+is retained and folded into shared fitting composition. Common ordinary/PSD
+fitting serves 0.0.1; remaining model-penalty work follows in 0.0.2. This does
+not establish new ordinary-user defaults or promise inference for every
+combination. See the
 [composition contract](../architecture/roadmap.md#shared-fitting-composition).
 
 [Speculative work](speculative.md) is a trigger register, not a second queue.
@@ -35,33 +38,19 @@ Effort: **S** bounded fix/fixture/wrapper · **M** focused implementation and
 validation · **L** cross-module semantics. Every task states its completion
 check; evidence links own detailed protocols and historical results.
 
-## Next: barrier fitting normalization
+## Release plan
 
-- [ ] **L — normalize the whole barrier fit.** Reuse the shared complete-data
-  ML/PSD transformation for model/data, automatic and supplied starts, fixed
-  values, means, groups, labels, affine equalities and supported bounds.
-  Establish penalty/strength/schedule transport so changed units preserve the
-  statistical criterion, up to accounted additive constants. Transport
-  derivatives, repairs, stopping/audit geometry, warm starts and applicable
-  post-fit artifacts; return caller units. **Check:** same-point criterion,
-  derivative and constraint identities, complete fits under uniform/mixed units,
-  groups, equalities, boundaries and poles, with every regression retained.
-  Preserve requested identification, avoid double normalization; nonlinear
-  equalities remain outside this slice. See
-  [normalization contract](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27)
-  and [barrier defaults](../../experiments/decisions/02-barrier-defaults/report.qmd).
+| Milestone | Focus |
+| --- | --- |
+| **0.0.1 — current** | Ordinary and PSD estimation and inference: shared starts/units/constraints, reliable convergence and admissibility, PSD finalization/stress gaps, and validated parameter covariance, tests and intervals in supported primary slices |
+| **0.0.2 — following** | Barrier-specific fitting hardening and inference: stricter domains, near-face curvature, factor disappearance, fallback/pole regressions and penalty-specific sampling/exposure contracts |
 
-- [ ] **M — fix barrier fallback units and near-pole verdicts.** At ×0.01 in
-  equality-constrained models, `native-fabin-fallback` supplies wrongly scaled
-  starts; extreme accepted marker-chart endpoints also need chart-proximity
-  diagnosis. **Check:** replay retained failures, then a fresh paired lane with
-  losses retained. Chart extent is not proof of nonattainment; do not change
-  markers automatically. Evidence: barrier defaults and
-  [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
-
-Barrier normalization remains the next requested fitting task. The dependency
-order inside [shared composition](#shared-fitting-composition) starts with the
-moment-target foundation; that extraction can proceed alongside normalization.
+Continue with [fitting reliability](#fitting-reliability) and
+[primary inference](#primary-inference-workflows). Shared fixes required by
+ordinary/PSD routes remain 0.0.1 work even when barriers benefit. Existing
+barrier code/tests remain; barrier-only validation is not a 0.0.1 release gate.
+Mixed-data expansion remains deferred, and no milestone label promotes a new
+ordinary-user estimator or inference default.
 
 ## Fitting reliability
 
@@ -182,6 +171,11 @@ here track that work; completing the 0.1.0 gates does not complete it.
 
 ## Primary inference workflows
 
+0.0.1 prioritizes ordinary and PSD inference in supported primary workflows.
+Ordinary SEs are not automatically valid at singular PSD endpoints; require
+validated sampling contracts or explicit unsupported results. Barrier-specific
+covariance, tests, intervals and exposure belong to the 0.0.2 section below.
+
 ### ML and FIML
 
 - [ ] **S — make the ordinary fixed-x policy restriction explicit.** The policy
@@ -200,7 +194,7 @@ here track that work; completing the 0.1.0 gates does not complete it.
   pattern centering, and saturated from structured evaluation points. Keep the
   observed test score unchanged. **Check:** first derive stationary-fit
   equivalence and the required sampling covariance for groups, missingness,
-  constraints, PSD boundaries and penalties; compare centered/raw calibration
+  constraints and PSD boundaries; compare centered/raw calibration
   only where the formulas differ, with size, coverage, matched-null power and
   numerical failures reported. Separate convention-matched lavaan parity from
   ordinary-policy evidence before changing defaults. Reopening established
@@ -215,8 +209,9 @@ here track that work; completing the 0.1.0 gates does not complete it.
   meets the registered criteria in that scope; group-centered score calibration
   fails at N=80 (6.2% rejection, Wilson interval 5.2–7.3%). Keep the score baseline
   provisional. Next: specify and gate fixed-group covariance treatment in core;
-  confirm the remaining ML/prospective-FIML families with fresh draws. Boundary/
-  penalty contracts remain open; missingness patterns are not sampling groups.
+  confirm the remaining ML/prospective-FIML families with fresh draws. Boundary
+  contracts remain open; penalty-specific inference follows in 0.0.2.
+  Missingness patterns are not sampling groups.
 
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score
@@ -267,20 +262,6 @@ here track that work; completing the 0.1.0 gates does not complete it.
   **Check:** convention-matched values and target-regime/grouped calibration.
   Evidence: [test map](../../experiments/replications/08-savalei-falk-2014-test-map/report.qmd)
   and [calibration policy](../validation/calibration-parity.md).
-
-- [ ] **L — establish applicable barrier inference and exposure contracts.**
-  After normalized fitting, distinguish penalized-estimate covariance from
-  ordinary inverse information, and single-face displacement tests from a
-  general multi-face reference law. Use each moment source's Gamma/influence
-  law, target-map derivatives and actual penalized estimating equation; retain
-  structural-parameter and threshold uncertainty explicitly. Define scaling/
-  domain and inference before claiming DWLS penalty inference or ordinary-user
-  exposure. **Check:** independent derivatives, fixed-penalty limits,
-  regular/boundary covariance, global/nested tests and interval calibration,
-  with explicit unsupported components. Reuse correlation-ML criterion
-  evaluation at DWLS fits for robust RMSEA without implying ML refitting.
-  Ordinary SEs are not automatically valid at singular PSD endpoints. See the
-  composition contract and the research index's barrier studies.
 
 ### Ordinal and mixed DWLS
 
@@ -353,7 +334,7 @@ shared primitives or promotes an ordinary-user default.
   wrappers only after replacement gates pass. Mixed/polyserial ML needs its
   own moments/mean/scale contract; removed research APIs are not migration targets.
 
-- [ ] **L — compose model penalties with retained fitting routes.** Generalize
+- [ ] **L — finish remaining model-penalty compositions (0.0.2).** Extend
   the scalar penalty wrapper/finalization across continuous ML/ULS/GLS/fixed
   WLS, pairwise MCAR and saturated-FIML moments, ordinal/mixed discrepancies and
   the direct observed-pattern FIML likelihood. Integrate derivatives, admissible
@@ -514,6 +495,50 @@ shared primitives or promotes an ordinary-user default.
   **Check:** clean-source reproducibility and matched computation. General new
   grids and paper timing programmes are deferred. See benchmark guide and
   [speed attribution](../../experiments/showcases/06-speed-attribution/report.qmd).
+
+## 0.0.2: barrier fitting and inference
+
+- [ ] **L — finish whole-barrier normalization and stress validation.** Extend
+  and validate the shared complete-data ML/PSD transformation for model/data,
+  automatic and supplied starts, fixed
+  values, means, groups, labels, affine equalities and supported bounds.
+  Establish penalty/strength/schedule transport so changed units preserve the
+  statistical criterion, up to accounted additive constants. Transport
+  derivatives, repairs, stopping/audit geometry, warm starts and applicable
+  post-fit artifacts; return caller units. **Check:** same-point criterion,
+  derivative and constraint identities, complete fits under uniform/mixed units,
+  groups, equalities, boundaries and poles, with every regression retained.
+  Preserve requested identification, avoid double normalization; nonlinear
+  equalities remain outside this slice. See
+  [normalization contract](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27)
+  and [barrier defaults](../../experiments/decisions/02-barrier-defaults/report.qmd).
+
+- [ ] **M — fix barrier fallback units and near-pole verdicts.** At ×0.01 in
+  equality-constrained models, `native-fabin-fallback` supplies wrongly scaled
+  starts; extreme accepted marker-chart endpoints also need chart-proximity
+  diagnosis. **Check:** replay retained failures, then a fresh paired lane with
+  losses retained. Chart extent is not proof of nonattainment; do not change
+  markers automatically. Evidence: barrier defaults and
+  [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
+
+Barrier-specific work follows the 0.0.1 ordinary/PSD milestone. The existing
+shared fitting baseline is recorded in the
+[composition merge update](estimator-composition.new.md); reconcile completed
+slices when folding that record into this backlog. Retain current barrier
+entry points and regression gates.
+
+- [ ] **L — establish applicable barrier inference and exposure contracts.**
+  After normalized fitting, distinguish penalized-estimate covariance from
+  ordinary inverse information, and single-face displacement tests from a
+  general multi-face reference law. Use each moment source's Gamma/influence
+  law, target-map derivatives and actual penalized estimating equation; retain
+  structural-parameter and threshold uncertainty explicitly. Define scaling/
+  domain and inference before claiming DWLS penalty inference or ordinary-user
+  exposure. **Check:** independent derivatives, fixed-penalty limits,
+  regular/boundary covariance, global/nested tests and interval calibration,
+  with explicit unsupported components. Reuse correlation-ML criterion
+  evaluation at DWLS fits for robust RMSEA without implying ML refitting.
+  See the composition contract and the research index's barrier studies.
 
 ## Related work
 

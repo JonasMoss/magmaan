@@ -82,7 +82,8 @@ remain historical evidence, with sources and local results preserved.
 
 ## Estimator development priorities
 
-Adopted 2026-09-27; active scope narrowed 2026-09-30. Development priority applies
+Adopted 2026-09-27; active scope narrowed 2026-09-30; release priorities
+updated 2026-10-01. Development priority applies
 to complete workflows:
 estimation, convergence and admissibility diagnostics, parameter covariance,
 global and nested tests, intervals, and the R interface. It is independent of
@@ -92,7 +93,7 @@ availability, and the decision to make a method a default.
 | Development tier | Initial scope | Commitment |
 | --- | --- | --- |
 | **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and ordinal/mixed DWLS | First priority for reliable, efficient estimation and complete inference workflows |
-| **Priority frontier** | PSD covariance constraints and the multi-information barrier | Develop alongside primary classical workflows with estimator-specific validation; secondary expansion needs a concrete consumer or inexpensive shared benefit |
+| **Priority frontier** | PSD covariance constraints; multi-information barriers in the following release | PSD estimation and inference accompany primary classical workflows in 0.0.1; barrier-specific hardening and inference follow in 0.0.2, with estimator-specific validation |
 | **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
 | **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
 
@@ -128,8 +129,21 @@ implemented and validated, implemented with limited validation, planned,
 unsupported, and inapplicable components; these tiers alone make no new
 availability claims. Existing entry points and numerical defaults are unchanged.
 
-The active queue is organized around barrier normalization, fitting reliability,
-primary inference workflows, API/performance and validation/maintenance. Tasks
+Release direction adopted 2026-10-01: **0.0.1 focuses on ordinary and PSD
+estimation and inference in supported primary workflows**. Prioritize shared
+starts, units, constraints, convergence/admissibility, PSD finalization and
+sampling-law validation. Explicitly reject unvalidated inference, including
+singular PSD endpoints; fitting support alone does not establish inference.
+**0.0.2 owns barrier-specific hardening and inference**: stricter starting
+domains, near-face curvature, factor disappearance, fallback units, marker
+poles and penalty-specific sampling/exposure contracts. Existing barrier
+implementation and regression gates remain; barrier-only work is not a 0.0.1
+release requirement. Shared fixes needed by ordinary/PSD fitting stay in 0.0.1
+even when they also improve barriers. Mixed-data expansion remains deferred.
+
+The active queue is organized around ordinary/PSD fitting reliability,
+primary inference workflows, API/performance, validation/maintenance and the
+0.0.2 barrier programme. Tasks
 state a result and completion check; completed work and run histories live in
 the maintained contracts, test ledger and experiment reports. Simulation has its
 own backlog, research activity belongs to the experiment index, and paper-local
@@ -142,9 +156,10 @@ Direction recorded 2026-09-30. Retain the limited-information capability
 currently called catML: normal-theory ML discrepancy on Stage-1 polychoric
 moments and model-implied correlations, with saturated thresholds. Consolidate
 its moment-target map and ML kernel rather than maintaining a separate
-estimator identity. This shared composition work has near-term priority
-alongside barrier normalization; existing frontier status, entry points and
-ordinary-user defaults remain until validated replacement/migration decisions.
+estimator identity. Shared ordinary/PSD composition serves the 0.0.1 focus;
+remaining barrier-specific work follows in 0.0.2. Existing frontier status,
+entry points and ordinary-user defaults remain until validated replacement or
+migration decisions.
 
 Composition distinguishes **moment source**, **model target**,
 **discrepancy/weight**, **covariance domain**, **model penalty** and **algorithm**.
@@ -441,7 +456,7 @@ is dominated by one newly failed budget-limited case, not routine per-fit
 scaling overhead. The six normalized PSD failures consume 69% of its bank time.
 Normalization can still change which local solution is found. Barrier, FIML,
 multilevel and nonlinear-equality fitting retain their existing paths, and the
-complete cross-route programme remains at the top of the backlog. The direct
+remaining cross-route programme follows the release priorities above. The direct
 versus ordinary-then-PSD route decision is unchanged.
 The complete-data ML barrier fitter (`frontier_fit_ml_multiinfo`) keeps
 transported FABIN3 with PORT after lane barrier-ml

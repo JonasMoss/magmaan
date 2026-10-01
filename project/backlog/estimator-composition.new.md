@@ -8,6 +8,18 @@ completion record for the maintainer editing those documents; fold it into
 them and remove it after the implementation and validation below are recorded
 there.
 
+## Release sequencing decision
+
+Adopted 2026-10-01 after shared-weight fitting landed: 0.0.1 focuses on
+ordinary and PSD estimation and inference in supported primary workflows.
+Barrier-specific optimization/stress hardening and inference are scheduled for
+0.0.2. Shared fixes needed by ordinary/PSD routes remain 0.0.1 even when they
+benefit barriers. Retain the implemented barrier compositions and regression
+gates; their existence does not make barrier inference a 0.0.1 release gate.
+Mixed-data expansion remains deferred. This decision is recorded in the
+maintained roadmap and active TODO; retain it when merging the completion
+record below.
+
 ## Foundation implementation
 
 `model::MomentTarget` distinguishes covariance and correlation targets.
