@@ -1,0 +1,6 @@
+"route","base_statistic","correction_geometry","paper_target","reason"
+"Savalei-Falk robust FIML","observed-data H1-H0 likelihood ratio","analytic observed information at structured H0","yes","Equation 6 and EQS SE=EXACT/MISSING=ML"
+"magmaan/lavaan current MLR","observed-data H1-H0 likelihood ratio","Mplus/Yuan-Bentler H1-minus-H0 trace approximation","no","modern trace-difference target used by experiment 77"
+"magmaan FIML FMG-SB","observed-data H1-H0 likelihood ratio","saturated-H1 observed information","no","common saturated-H1 metric, not Equation 6"
+"Savalei-Falk robust two-stage","(n-1) times Stage-2 ML discrepancy","observed Stage-1 sandwich plus observed complete-data H","yes","Equations 2-4 and EQS SE=EXACT/MISSING=TS"
+"magmaan/lavaan current ML2S","(n-1) times Stage-2 ML discrepancy","observed Stage-1 sandwich plus unstructured-H1 NT metric","no","matches current lavaan robust.two.stage, which forces unstructured H1"

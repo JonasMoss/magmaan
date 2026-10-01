@@ -1,0 +1,122 @@
+---
+title: "Ordinal functional inference: delta and fitted-profile lanes"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+read_evidence <- function(name) {
+  path <- file.path("results", "overview", name)
+  if (!file.exists(path)) stop("Missing retained summary: ", path,
+                               "; recover original CSVs and run scripts/summarize.R")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+show_table <- function(x, digits = 3) knitr::kable(x, digits = digits, row.names = FALSE)
+```
+
+## Question
+
+How do delta and profile intervals behave for ordinal functionals, and which
+target and numerical failures explain their apparent calibration?
+
+## Short answer
+
+Keep one **active ordinal-functional-inference study** with two distinct targets.
+The delta lane studies fit-free polychoric omega; the profile lane studies omega
+of a fitted DWLS one-factor approximation. The substantive local runs support
+continued work on sparse-category failures and profile endpoints. A promising
+pointwise test does not establish a usable confidence interval.
+
+The next check is a focused endpoint audit with failures, connectedness and
+independent pseudo-target precision recorded. No pooled comparison or default
+selection is justified by these different models and targets.
+
+## Evidence
+
+### Delta lane: Gaussian target and stress pseudo-targets
+
+The four-indicator delta coverage run has **200 attempts per cell**, $N=50,100,250$
+and balanced/extreme thresholds. The retained output is beyond smoke size:
+
+```{r delta}
+x <- read_evidence("delta_gaussian.csv")
+show_table(x[, c("regime", "n", "reps", "failures", "coverage_95", "bias", "mean_width_95")])
+```
+
+The separate 200-attempt stress run uses skewed latent factors, $t$ innovations
+and local dependence. Coverage below is around each fit-free pseudo-target,
+estimated from an independent large sample of size 100,000, rather than an
+assumed generating reliability:
+
+```{r delta-stress}
+x <- read_evidence("delta_stress.csv")
+show_table(x[, c("dgp", "cuts", "n", "reps", "failures", "target_pseudo", "coverage_pseudo_95")])
+```
+
+### Profile lane: fitted target and failed inversion
+
+The profile model has six indicators with a different loading schedule. Its
+pseudo-target is the functional of the fitted DWLS approximation; the sample
+polychoric target is retained as a distinct comparator. Under misspecification
+these differ even within the same population.
+
+The retained main stress run has **100 attempts per cell at $N=50$**, two
+misspecified DGPs and extreme thresholds. Ordinary, robust-scaled and
+misspecification-scaled pointwise tests share a cell but may have different
+availability. Inversion was requested only for selected references:
+
+```{r profile}
+x <- read_evidence("profile_inversion.csv")
+show_table(x[, c("dgp", "reference", "reps", "usable", "reference_coverage_95",
+                 "ci_attempted", "ci_successful", "ci_failures", "ci_coverage_95")])
+```
+
+For strong local dependence, misspecification-scaled pointwise acceptance is
+about .924 on 92 usable fits, whereas CI inversion fails on **91 of 92 attempts**.
+The remaining single interval's conditional coverage of 1 says nothing about
+calibration. Endpoint residuals and pointwise/interval disagreements are retained
+in [the overview](results/overview/profile_inversion.csv), alongside targets.
+
+A separate **300-attempt** pointwise-only grid covers $N=25,35,50,75$ and
+extreme/sparse thresholds. At $N=25$ some cells lose nearly two thirds of fits.
+The [full table](results/overview/profile_pointwise.csv) records each reference's
+usable denominator. Those outputs are not endpoint-coverage evidence.
+
+## Caveats
+
+Pseudo-target Monte Carlo error needs independent confirmation and enters neither
+lane as known truth. Sparse categories affect both the summary estimator and its
+influence calculation. The $t_3$ stress law has finite variance but lacks the
+fourth moments used by some normality-based arguments; an empirical success
+there cannot establish those arguments. Conditional coverage among available
+fits must stay separate from attempted-fit and endpoint availability.
+
+The remaining work is to isolate numerical endpoint failures and the validity
+of the local quadratic/reference law before enlarging a grid or choosing a
+correction. Different indicator counts, weights, targets and seed schedules
+remain lane-specific.
+
+## Reproduce
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane delta-coverage --help
+Rscript run_experiment.R --lane delta-stress --help
+Rscript run_experiment.R --lane profile --help
+Rscript run_experiment.R --lane delta-coverage --smoke --reps 2 --n-grid 100 \
+  --results-dir /tmp/ordinal_delta_check
+Rscript run_experiment.R --lane profile --smoke --reps 2 --n-grid 100 \
+  --dgp one_factor --cut-regimes balanced --pseudo-n 2000 --ci \
+  --results-dir /tmp/ordinal_profile_check
+Rscript scripts/summarize.R
+```
+
+Historical metadata and result files are unchanged under `results/delta` and
+`results/profile`. [Source hashes](results/overview/sources.csv) identify the
+retained summaries. Rendering performs no fits or simulations.

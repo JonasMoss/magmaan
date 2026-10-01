@@ -257,7 +257,7 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler
   variants from SB labels and retain FMG missing-data oracle limitations.
   **Check:** convention-matched values and target-regime/grouped calibration.
-  Evidence: [test map](../../experiments/replications/08-savalei-falk-2014-test-map/report.qmd)
+  Evidence: [definitions and matrix fingerprints](../../experiments/replications/08-savalei-falk-2014-test-conventions/report.qmd)
   and [calibration policy](../validation/calibration-parity.md).
 
 ### All-ordinal DWLS

@@ -30,9 +30,9 @@ robust-score demonstration was removed after its checks became maintained tests.
 The ordinal observed-score omega studies share one leaf with separate target
 and sampling result trees; RBM estimation risk is research/banked/53.
 
-Research studies use `experiments/research/{active,banked,evidence}/`: 12
-active studies (including protected paper pipelines), 10 banked ideas and
-4 retained evidence studies. Three consolidated showcases retain scalar
+Research studies use `experiments/research/{active,banked,evidence}/`: 8
+active studies (including protected paper pipelines), 11 banked ideas and
+5 retained evidence studies. Three consolidated showcases retain scalar
 intervals (normal/robust), reliability targets (coefficient/Bell examples),
 and robust test calibration (battery/mechanisms/diagnostics). The finite-sample
 GOF probes share one banked study with distinct DGPs. Redundant ordinal probes
@@ -44,8 +44,15 @@ Dedicated pairwise efficiency/speed/composite probes have been removed at the
 user's request; existing API regression gates remain. FIML global tests now share
 research/active/44 (SEM, geometry and banked legacy lanes), while nested invariance
 shares research/active/06 (calibration, score-flips, pilot power and oracle lanes).
-Parameter-information research/39 remains separate. Generating-model nonnormal
-MAR stress is not automatically a FIML pseudo-null; the reports state the target
+Parameter-information research/39 is completed evidence and remains separate.
+Alpha–omega equality is banked with its nonregularity derivations; covariance-
+functional intervals use a general name. Bifactor and reliability profile
+applications share banked research/18, while delta and fitted-profile ordinal
+inference share active research/22 with distinct targets and failure accounting.
+Savalei–Falk definitions and matrix fingerprints share one active reference
+study; numerical similarity still does not identify the original EQS statistic.
+Generating-model nonnormal MAR stress is not automatically a FIML pseudo-null;
+the reports state the target
 and numerical-availability limits. The collection index owns reopening conditions.
 Frozen evidence, original metadata and interval source fingerprints remain unchanged. Navigation
 changes do not change policy or authorize incompatible checkpoint resumption.
@@ -2813,14 +2820,16 @@ an unconstrained gradient test to constrained solutions.
   `experiments/research/active/44-fiml-global-tests/lanes/two-stage`; only a ten-rep
   local smoke survives there. Substantive SEM calibration and its target limits
   are summarized in that study's parent report. A separate literature reconstruction in
-  `experiments/replications/08-savalei-falk-2014-test-map` establishes that these modern
-  defaults are **not** the finite-sample configurations used by Savalei and Falk
-  (2014): their EQS runs selected analytic observed information (`SE=EXACT`) and
-  structured-model residual projections for robust FIML, with the corresponding
-  observed-information two-stage correction. The current MLR trace-difference,
-  FIML saturated-H1 FMG metric, and ML2S unstructured-H1 metric remain correctly
-  named for their existing oracles; a future paper replication must add explicit
-  paper-era routes rather than relabel any of them.
+  `experiments/replications/08-savalei-falk-2014-test-conventions` separates
+  modern oracle targets from Savalei and Falk's (2014) written conventions.
+  The article describes analytic observed information (`SE=EXACT`) and
+  structured-model residual projections, with an observed-information
+  two-stage correction. Numerical rejection fingerprints instead favor
+  expected-information-like FIML choices; original EQS 6.1 identity is still
+  unresolved. The current MLR trace-difference, FIML saturated-H1 FMG metric
+  and ML2S unstructured-H1 metric retain their existing oracle meanings.
+  Any paper-era route needs independent same-data matrix/trace validation;
+  numerical similarity must not relabel a current route as an exact replication.
   Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry

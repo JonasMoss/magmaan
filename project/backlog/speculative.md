@@ -221,7 +221,7 @@ their own validation; removed ridge continuation is not an alternative.
 ML2S stage-one references; a reference-only change differs from input shrinkage.
 **Available:** fail-closed guards, unregularized routes and explicit frontier
 stage-one regularization with retained raw inputs. See
-[test map](../../experiments/replications/08-savalei-falk-2014-test-map/report.qmd).
+[test map](../../experiments/replications/08-savalei-falk-2014-test-conventions/report.qmd).
 **Build if:** a named regularized-reference project validates bias, coverage,
 size and reference-law effects on frozen hard cells and fresh draws. Do not
 present oracle value agreement as calibration or silently change the estimator.
@@ -394,6 +394,17 @@ primitives; current quantities must keep distinct targets/names.
 **Build if:** a named reliability consumer needs a new target and its point/
 SE/misspecification behavior is validated. See ordinal reliability and the roadmap.
 
+### Nonregular alpha–omega equality tests
+
+**Gap:** a calibrated second-order test of a bounded coefficient contrast at
+an interior null where its first-order gradient vanishes.
+**Available:** structural equal-loading Wald/score/LR tests and retained
+[derivations](../../experiments/research/banked/03-deng-chan-2017-alpha-omega/report.qmd).
+The eight-rep main smoke does not validate size or an Imhof correction.
+**Build if:** a named nonregular-functional consumer or methods paper needs this
+contrast; independently validate estimator-specific quadratic laws under the
+stated sampling regime before a substantive run. No run is queued.
+
 ### Maximal reliability / corrected coefficient H for bifactor models
 
 **Gap:** additional first-class bifactor/maximal-reliability reporting and
@@ -406,8 +417,9 @@ independent target validation. Avoid duplicating a quantity already exposed.
 
 **Gap:** a stable operational correction across bounded reliability functionals.
 **Available:** explicit profile primitives, Wald/delta intervals and retained
-profile studies. Evidence: [profile study](../../experiments/research/active/20-profile-lr-reliability-ci/report.qmd)
-and the research index's ordinal calibration studies.
+profile studies. Evidence: [profile study](../../experiments/research/banked/18-bounded-functional-intervals/report.qmd)
+and the distinct active ordinal-functional study. The bifactor and generic
+reliability applications now share that banked leaf; no run is queued.
 **Build if:** a named reliability workflow requires calibrated profile intervals;
 validate boundary mass, corrections, centering, failures and endpoint cost on
 fresh data. Neither oracle factors nor per-dataset bootstrap success imply a default.
@@ -415,7 +427,9 @@ fresh data. Neither oracle factors nor per-dataset bootstrap success imply a def
 ### Small-sample distribution-free intervals for covariance functionals (Kauermann-Carroll)
 
 **Gap:** general variance-of-variance/effective-df intervals.
-**Available:** retained delta/Wald inference and study-local prototypes.
+**Available:** retained delta/Wald inference and
+[study-local covariance-functional prototypes](../../experiments/research/banked/19-covariance-functional-intervals/report.qmd),
+with correlation and alpha demonstrations. The limited 300-rep grid is exploratory.
 **Build if:** a named covariance-functional consumer has demonstrably inadequate
 ordinary coverage and the correction passes held-out target-regime checks.
 

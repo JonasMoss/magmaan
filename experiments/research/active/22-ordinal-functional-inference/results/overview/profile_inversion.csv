@@ -1,0 +1,7 @@
+"dgp","regime","n","reference","reps","usable","failures","target","sample_polychoric_target","reference_coverage_95","ci_attempted","ci_successful","ci_failures","ci_coverage_95","ci_lrt_disagreements","max_abs_ci_endpoint_gap"
+"strong_local_dependence","threshold_extreme",50,"misspec_scaled",100,92,8,0.889772508032726,0.882426600669532,0.923913043478261,92,1,91,1,0,0.00170905434664448
+"strong_local_dependence","threshold_extreme",50,"ordinary",100,92,8,0.889772508032726,0.882426600669532,0.652173913043478,0,0,0,,,
+"strong_local_dependence","threshold_extreme",50,"robust_scaled",100,92,8,0.889772508032726,0.882426600669532,0.934782608695652,92,85,7,0.929411764705882,0,0.337109241790088
+"two_factor","threshold_extreme",50,"misspec_scaled",100,87,13,0.803059617230975,0.789609928249734,0.931034482758621,87,0,87,,,
+"two_factor","threshold_extreme",50,"ordinary",100,94,6,0.803059617230975,0.789609928249734,0.553191489361702,0,0,0,,,
+"two_factor","threshold_extreme",50,"robust_scaled",100,94,6,0.803059617230975,0.789609928249734,0.893617021276596,94,76,18,0.934210526315789,0,0.546176752908456

@@ -1,0 +1,130 @@
+---
+title: "Intervals for bounded fitted functionals"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+read_evidence <- function(name) {
+  path <- file.path("results", "overview", name)
+  if (!file.exists(path)) stop("Missing retained summary: ", path,
+                               "; recover original CSVs and run scripts/summarize.R")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+show_table <- function(x, digits = 3) knitr::kable(x, digits = digits, row.names = FALSE)
+```
+
+## Question
+
+Which interval constructions remain worth pursuing for bounded fitted functionals,
+and what prevents their small-sample correction from being operational?
+
+## Short answer
+
+This **banked** study consolidates bifactor maximal-reliability intervals and the
+generic reliability profile engine. Oracle rescaling can rescue acceptance rates
+in selected near-ceiling cases, but the feasible correction is weaker and actual
+endpoint inversion needs separate validation. Reopen for a named bounded-functional
+consumer that requires calibrated intervals; existing delta/Wald and uncorrected
+profile primitives remain the cheaper choices.
+
+The `bifactor` and `profile` lanes keep different models, coefficients, seeds,
+fit exclusions and run metadata. They answer a shared construction question;
+their results are never pooled.
+
+## Evidence
+
+### Delta intervals and bifactor constraints
+
+The bifactor lane retains general/group maximal reliability, analytic gradients,
+model-based and sandwich delta intervals, logit transformations, bias correction,
+Cornish–Fisher, bootstrap and constrained-LR diagnostics. The retained main grid
+has **40 attempts per cell at $N=100$**, not the larger historical design. Coverage
+is conditional on admissible usable fits; the attempts and usable counts are
+essential parts of the result.
+
+```{r bifactor}
+x <- read_evidence("bifactor_intervals.csv")
+show_table(x[, c("p", "coef", "dist", "n", "method", "attempts", "reps_ok", "coverage")])
+```
+
+The separate $N=50$, 18-indicator normal LR diagnostic has 200 attempts per cell,
+with only about half usable. Its `cov_*` fields measure **acceptance at the true
+functional**, not successful endpoint construction:
+
+```{r bifactor-lr}
+show_table(read_evidence("bifactor_pointwise.csv"))
+```
+
+The Bartlett factor is the cell mean of the same true-value LR statistics.
+This oracle uses information unavailable to a single dataset and is evaluated
+on the same Monte Carlo draws; it supplies a diagnostic, not a deployable recipe.
+
+### Generic profile construction and oracle roots
+
+The profile lane constrains a scalar functional of fitted loadings/residuals and
+inverts the normal-theory likelihood-ratio test. Its examples cover one-factor
+omega/H and bifactor total/hierarchical omega. H, general-factor maximal reliability
+and total-score omega have different estimands and cannot be interchanged.
+
+Eight dataset–functional pairs ($N=200$, two seeds) remain from the semlbci smoke
+comparison. A bound is eligible for parity only if the constrained LR residual
+is finite and within .02 for both engines:
+
+```{r parity}
+show_table(read_evidence("parity.csv"), digits = 8)
+```
+
+One semlbci pair fails its own root check. Agreement on the other seven is
+numerical construction evidence, not coverage calibration.
+
+The separate $N=50$ diagnostics retain their own attempted/usable denominators:
+
+```{r profile-calibration}
+show_table(read_evidence("profile_pointwise.csv"))
+```
+
+For bifactor H, ordinary true-value acceptance is about .526 on 173 usable fits
+out of 200 attempts; oracle rescaling reaches .971, while null-bootstrap rescaling
+reaches .803. The omega examples behave differently. These are pointwise tests;
+end-to-end CI availability, connectedness, endpoint accuracy and cost remain
+unproved. The older `coverage.csv`, double-bootstrap and Lawley outputs remain
+separate historical diagnostics, with their original metadata.
+
+## Caveats
+
+Fit selection, boundary mass, biased estimates, correction noise and unstable
+bootstrap fits can each change inference. Resampling is a comparator with its
+own failures, not a universal gold standard. The retained secondary runs are
+not one common grid; current CSVs do not establish all sample sizes described by
+older drafts. A consumer-driven reopening should prespecify an operational
+correction, held-out targets and full endpoint evaluation, including failures.
+The generic parameter-profile study remains independent.
+
+## Reproduce
+
+The parent runner dispatches to lane-local modules. Inspect lane-specific help
+before selecting a run; all commands accept fresh `--results-dir` paths.
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane bifactor --help
+Rscript run_experiment.R --lane profile --help
+Rscript run_experiment.R --lane bifactor --reps 2 --ns 100 \
+  --results-dir /tmp/bounded_bifactor_check
+Rscript run_experiment.R --lane profile --seeds 1 --ns 200 --funcs H_1f \
+  --results-dir /tmp/bounded_profile_check
+Rscript run_experiment.R --check lr --help
+Rscript scripts/summarize.R
+```
+
+Other `--check` lanes retain bias, bootstrap, Cornish–Fisher, sampling, coverage,
+Lawley and double-bootstrap diagnostics. Original results live under
+`results/bifactor` and `results/profile`; [source hashes](results/overview/sources.csv)
+make the frozen overview auditable. Rendering reads only these compact summaries.

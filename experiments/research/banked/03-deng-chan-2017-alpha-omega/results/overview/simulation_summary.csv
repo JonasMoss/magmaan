@@ -1,0 +1,4 @@
+"population","dist","N","p","alpha_pop","omega_1f","gap","reject_wald_nm","reject_wald_sw","reject_imhof_nm","reject_imhof_sw","reject_wald_equal","reject_satorra_scaled","reject_satorra_mixture","reject_score","n_rel_ok","n_wald_ok","n_st_ok"
+"tau","normal",250,6,0.852173913043478,0.852173913043478,-3.33066907387547e-16,0,0,0,0,0,0,0,0,8,8,8
+"congeneric","normal",250,6,0.812131659753273,0.819371868771212,0.00724020901793909,1,1,1,1,1,1,1,1,8,8,8
+"misspecified","normal",250,6,0.864100769769069,0.82295311406578,-0.0411476557032893,0.125,0.125,0.25,0.25,0.5,0.5,0.5,0.375,8,8,8

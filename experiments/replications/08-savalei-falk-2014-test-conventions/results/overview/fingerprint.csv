@@ -1,0 +1,6 @@
+"route","cells","min_usable","max_usable","rmse_percentage_points"
+"fiml_expected_hybrid",6,1000,1000,2.97349401658498
+"fiml_saturated_expected",6,1000,1000,3.87943294825416
+"fiml_literal_observed_proxy",6,947,1000,8.53446134992136
+"ml2s_source_n_minus_1",6,999,1000,1.84949931913529
+"ml2s_source_n",6,999,1000,2.32508577512734

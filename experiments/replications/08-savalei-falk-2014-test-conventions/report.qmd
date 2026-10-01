@@ -1,0 +1,121 @@
+---
+title: "Savalei–Falk (2014): test conventions and numerical fingerprints"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+read_evidence <- function(name) {
+  path <- file.path("results", "overview", name)
+  if (!file.exists(path)) stop("Missing retained summary: ", path,
+                               "; recover original CSVs and run scripts/summarize.R")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+show_table <- function(x, digits = 3) knitr::kable(x, digits = digits, row.names = FALSE)
+```
+
+## Question
+
+Which published conventions and numerical matrix choices explain the
+Savalei–Falk robust FIML and two-stage tests, and what still blocks exact replication?
+
+## Short answer
+
+This **active reference study** combines the definitions audit and numerical
+matrix investigation. The written observed-information convention and the
+closest empirical rejection-rate fingerprint differ. The expected-information
+hybrid fits six MCAR targets best among the displayed candidates; all-saturated
+expected information fits the harsh MAR target better. Neither identifies the
+paper-era EQS 6.1 statistic exactly.
+
+The next gate is an independent same-data matrix/trace reference plus original
+EQS output or source. The full 192-cell published design is preserved as a
+reference, not a queued simulation.
+
+## Evidence
+
+### Definitions lane
+
+The exact-fit null is a structured CFA mean/covariance model, with saturated
+observed-data moments as $H_1$. Direct FIML scales the raw likelihood ratio;
+two-stage uses $(n-1)F_{ML}$ after Stage-1 saturated EM. Means are freely estimated
+and cancel from the degrees of freedom. `SE=EXACT` is described by the article
+as analytic observed information; that statement does not identify every
+finite-sample matrix used internally by the robust statistic.
+
+The [published conventions](design/published_conventions.md) retain the formulas,
+loading and deletion maps, df conventions and proposed matrix checks. The
+[matrix conventions](design/matrix_conventions.md) distinguish the public EQS
+manual, the article and the expected-information-like numerical fingerprint.
+The publications and manual are evidence for their written formulas; current
+lavaan reconstructions are secondary sentinels, not EQS oracles.
+
+A deterministic six-indicator MAR routing witness distinguishes implementations
+on one sample. Its [retained table](results/overview/routing_witness.csv) is a
+wiring check, not Monte Carlo evidence or a paper replication cell.
+
+### Matrices lane
+
+The runner crosses 48 FIML and 32 ML2S matrix settings, with named MLR kept
+separate. Six MCAR cells retain 1,000 attempts each, matching $N=200,400,600$
+and excess kurtosis 7/15. The paper targets are approximate graph readings from
+1,000 replications. RMSE is in percentage points:
+
+```{r fingerprint}
+show_table(read_evidence("fingerprint.csv"))
+```
+
+The table reports usable counts because indefinite information/projectors and
+other failures differ by route. Selecting a close fingerprint after seeing
+these targets is exploratory; rejection-rate similarity cannot prove an
+information-matrix identity. Both Monte Carlo and graph-reading uncertainty
+limit interpretation of small differences.
+
+The exact paper MAR-L/kurtosis-7 diagnostic tells a different part of the story:
+
+```{r mar}
+show_table(read_evidence("mar_comparison.csv"))
+```
+
+Its FIML paper target is .633. The saturated-expected candidate reaches .619,
+while the six-cell-winning hybrid reaches .572. The written observed proxy is
+farther away and loses fits. The source-style two-stage $(n-1)$ numerator is
+closer than the $n$ alternative. Four diagnostic cells are retained separately;
+none constitutes the full published grid.
+
+## Caveats
+
+The selected Fleishman root, excess-kurtosis convention and joint distribution
+are substantive DGP choices. Alternative roots remain recorded. Conditional
+MAR deletion proceeds set by set; infeasible candidate samples are regenerated
+as documented by the runner. A generating exact-fit model under that selection
+law is not automatically an estimator-level pseudo-null.
+
+Original EQS 6.1 source/output is unavailable. The public manual predates its
+two-stage implementation and cannot independently certify its numerator.
+The literal observed route remains a proxy for the written formula. The retained
+metadata's short resume time covers reused cells and is not a full-run benchmark.
+No current library route or inference default changes here.
+
+## Reproduce
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane definitions --audit \
+  --results-dir /tmp/savalei_falk_definitions_check
+Rscript run_experiment.R --lane matrices --smoke --reps 1 --cores 1 \
+  --results-dir /tmp/savalei_falk_matrices_check
+Rscript scripts/summarize.R
+```
+
+Inspect each lane's `--help` for its focused designs. Historical sources,
+raw/checkpoint trees, published maps and frozen matrix summaries retain their
+seed schedules and identities. [Source hashes](results/overview/sources.csv)
+identify the inputs to this compact report. New runs use fresh output directories;
+source-fingerprint resume guards stay strict after the move.

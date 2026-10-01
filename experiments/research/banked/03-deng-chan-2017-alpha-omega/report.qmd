@@ -1,0 +1,98 @@
+---
+title: "Alpha–omega equality: retained nonregularity derivations"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+read_evidence <- function(name) {
+  path <- file.path("results", "overview", name)
+  if (!file.exists(path)) stop("Missing retained summary: ", path,
+                               "; recover original CSVs and run scripts/summarize.R")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+show_table <- function(x, digits = 3) knitr::kable(x, digits = digits, row.names = FALSE)
+```
+
+## Question
+
+What can be learned from the nonregular contrast between coefficient alpha and
+fitted one-factor omega at tau-equivalence?
+
+## Short answer
+
+The first-order Wald contrast is singular at the interior equal-loading null.
+Its second-order reference is a useful mathematical idea, but the retained main
+run has only **eight replications per cell**. It cannot establish nominal size
+or show that an Imhof reference fixes calibration. This study is **banked**.
+Reopen for a named nonregular-functional testing consumer or a methods paper;
+equal-loading Wald, score and LR tests are the cheaper existing alternative.
+
+## Evidence
+
+For a one-factor model with local independence, write $L=\sum_i\lambda_i$ and
+$V=L^2+\sum_i\theta_i$. Then
+
+$$
+\omega-\alpha=
+\frac{p\sum_i\lambda_i^2-L^2}{(p-1)V}\geq0.
+$$
+
+At equal loadings the numerator and its gradient vanish. A first-order delta
+variance therefore collapses; under an interior regular parameter estimator,
+$N(\widehat\omega-\widehat\alpha)$ has a quadratic-form limit rather than an
+ordinary first-order normal limit. Its eigenvalues depend on the estimator's
+sampling covariance. The derivations retain the assumptions and show why a
+normal-theory covariance cannot simply be substituted for nonnormal inference:
+[second-order reference](design/alpha_omega_second_order.md),
+[nonnormal delta map](design/alpha_delta_nonnormality.md), and
+[ULS identity](design/alpha_uls_identity.md).
+
+A deterministic ULS tau-model check agrees with sample alpha:
+
+```{r identity}
+show_table(read_evidence("validation_identity.csv"), digits = 10)
+```
+
+The local main metadata records $N=250$, $p=6$, normal draws, eight replications
+and bootstrap size 200. The table includes the alternative as a wiring check;
+rejection proportions this coarse are not calibration evidence.
+
+```{r smoke}
+x <- read_evidence("simulation_summary.csv")
+show_table(x[, c("population", "dist", "N", "p", "n_rel_ok", "n_wald_ok", "n_st_ok",
+                 "reject_wald_nm", "reject_imhof_nm", "reject_score")])
+```
+
+The Holzinger–Swineford demonstration uses three-item subscales from lavaan's
+public teaching data. It is not a reproduction of the original 26-item
+Deng–Chan data. The bootstrap comparison is a diagnostic on one dataset.
+
+## Caveats
+
+The nonregular result concerns this contrast, estimator and interior null;
+it does not supply a boundary law or a general reliability-testing policy.
+The proposed larger indicator/sample-size and nonnormal design in `R/populations.R`
+is preserved but has no queued run. The redundant corrective-note draft was
+folded into this report and the mathematical derivations. Core functional and
+structural-test APIs are unchanged.
+
+## Reproduce
+
+From this directory, inspect `Rscript run_experiment.R --help`. A cheap fresh
+verification run is:
+
+```bash
+Rscript run_experiment.R --reps 2 --N 250 --boot-B 2 \
+  --cells population=tau,dist=normal --results-dir /tmp/alpha_omega_check
+Rscript scripts/summarize.R
+```
+
+The summary command reads the retained originals, not the temporary smoke run.
+[Source hashes](results/overview/sources.csv) document the compact evidence.

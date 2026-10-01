@@ -1,0 +1,81 @@
+---
+title: "Small-sample intervals for covariance functionals"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+read_evidence <- function(name) {
+  path <- file.path("results", "overview", name)
+  if (!file.exists(path)) stop("Missing retained summary: ", path,
+                               "; recover original CSVs and run scripts/summarize.R")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+show_table <- function(x, digits = 3) knitr::kable(x, digits = digits, row.names = FALSE)
+```
+
+## Question
+
+Can an effective-df reference and a variance-stabilizing transform address
+different small-sample errors in intervals for covariance functionals?
+
+## Short answer
+
+Keep this as a **banked covariance-functional interval study**. Correlation and
+alpha are demonstrations of a broader idea: an influence-kurtosis effective-df
+$t$ reference changes tail thickness, while Fisher $z$ or logit changes interval
+asymmetry. The retained 300-replication grid is exploratory evidence, not a
+distribution-free guarantee or an adopted interval recipe.
+
+## Evidence
+
+The runner estimates casewise influence for a covariance functional, its robust
+delta SE and effective degrees of freedom from influence kurtosis. It compares
+ordinary Wald (`wald`), effective-df $t$ (`kc`), transformed Wald (`twald`), and
+transformed effective-df $t$ (`tkc`). Transform choice is functional-specific:
+Fisher $z$ for correlation and logit for alpha. Their effects need not compose
+well for every population.
+
+The local run has 300 attempts per cell, $N=20,100$, correlation $0,.9$, and
+normal/contaminated laws; the alpha population is about .852. Failure/nonfinite
+interval handling remains in the original runner. The full compact table keeps
+both missed tails and interval width alongside coverage:
+
+```{r intervals}
+x <- read_evidence("coverage.csv")
+show_table(x[, c("quantity", "param", "n", "law", "method", "reps", "coverage",
+                 "miss_lower", "miss_upper", "mean_width")])
+```
+
+At 95% coverage, 300 independent usable draws give a binomial MCSE of roughly
+1.3 percentage points. Differences of a few points here need fresh confirmation.
+
+## Caveats
+
+Influence-based robust intervals still need the relevant finite moments and a
+stable covariance estimator. Heavy-tail and near-boundary behavior may defeat
+both corrections. The run's historical `smoke` label and its limited design
+remain in the metadata. No general default follows from these cells.
+
+Reopen for a named covariance-functional consumer with demonstrably inadequate
+ordinary coverage, then evaluate one prespecified recipe on independent
+heavy-tail and boundary cases. Existing delta/Wald inference is the cheaper
+available approach until that trigger is met.
+
+## Reproduce
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --reps 10 --ns 20 --rhos 0,0.9 \
+  --results-dir /tmp/covariance_intervals_check
+Rscript scripts/summarize.R
+```
+
+The runner now honors `--results-dir`; historical results stay untouched.
+[Source hashes](results/overview/sources.csv) identify the retained evidence.

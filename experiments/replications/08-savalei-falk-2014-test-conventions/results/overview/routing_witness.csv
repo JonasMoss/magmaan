@@ -1,0 +1,7 @@
+"route","implementation","target_relation","base_statistic","corrected_statistic","df","scaling_factor","trace","p_value","missing_rate","n"
+"current MLR","lavaan 0.7.2","experiment 77 comparator; not the paper statistic",19.3701926768399,16.4952162422594,9,1.174291527456,10.568623747104,0.0572331758075226,0.15,300
+"paper-FIML configuration proxy","lavaan 0.7.2","closest current lavaan reconstruction; secondary sentinel only",19.3701926768399,12.4157556528797,9,1.56012998470594,14.0411698623535,0.190872482674847,0.15,300
+"current robust.two.stage","lavaan 0.7.2","current ML2S oracle; not the paper observed-H configuration",26.3460870162917,10.659985141287,9,2.47149378419406,22.2434440577465,0.299736911823676,0.15,300
+"current MLR","magmaan 0.0.1","experiment 77 comparator; not the paper statistic",19.3701926275044,16.4952418412736,9,1.17428970207864,10.5686073187078,0.057232711501028,0.15,300
+"FIML FMG-SB","magmaan 0.0.1","saturated-H1 metric; not the paper statistic",19.3701926275044,11.5303242863108,9,1.67993476562506,15.1194128906255,0.241100151223392,0.15,300
+"current ML2S","magmaan 0.0.1","current robust.two.stage oracle; not exact paper target",26.3461652765047,10.6599854612862,9,2.47150105149635,22.2435094634672,0.299736888530353,0.15,300
