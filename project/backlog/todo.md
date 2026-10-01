@@ -60,6 +60,17 @@ ordinary-user estimator or inference default.
 
 ### Optimization and convergence
 
+- [ ] **M — extend the pinned lavaan fitting setup beyond its initial ML gate.**
+  Independent starts/search/acceptance and the `lavaan-0.7.2` preset are wired
+  for ordinary complete continuous ML; `newton` retains the native common
+  verdict with internal thresholds. Gate pure-merge/general affine and
+  augmented-Lagrangian coordinates, nonzero bounds and constrained retries,
+  then primary FIML and all-ordinal DWLS. Retain effective controls, every
+  attempt and separate native diagnostics; reject unsupported combinations.
+  **Check:** pinned offline components and installed-version R comparisons of
+  starts, search, final gradients, soft failures and retries, not just easy
+  estimates. Inference conventions remain magmaan's policy.
+
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
   Assess safeguarded backtracking or adapter recovery while retaining caller

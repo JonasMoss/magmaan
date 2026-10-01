@@ -13,7 +13,7 @@ magmaan serves two audiences over one C++ core.
 
 - **Ordinary users** write one call. It estimates the model and computes
   inference under a single policy that magmaan chooses and justifies. The
-  package has a few familiar options and no compatibility conventions:
+  package has a few familiar options and no inference compatibility conventions:
   no MLR, no WLSMV, no switches for information matrices, standard-error types
   or test corrections. Choosing well is magmaan's job, not the user's.
 - **Power users** (methods developers, including magmaan's authors) get the
@@ -261,7 +261,7 @@ magmaan(model, data,
         missing = "listwise",
         psd = FALSE,
         start = "default",
-        inference = TRUE)
+        inference = TRUE, options = NULL)
 ```
 
 Naming rule: use lavaan's name where the concept is identical, and a new name
@@ -270,6 +270,35 @@ only where lavaan's name is poor or magmaan's meaning differs. A lavaan user's
 works as typed. lavaan's `ordered = TRUE` (every endogenous observed variable)
 is deferred; the scaffold asks for the names. This makes the ordinary package dot-case while the lab stays snake_case,
 a deliberate trade for users moving from lavaan.
+
+### Advanced fitting choices
+
+Adopted 2026-10-01: per-call `options` separates `starts`, `optimizer` and
+`convergence` for simulation comparisons. `convergence = "newton"` names
+magmaan's existing common verdict (Newton where supported, first-order
+fallback otherwise); thresholds remain internal. This does not change the
+ordinary inference policy or default fitting behavior.
+
+`options = list(preset = "lavaan-0.7.2")` supplies all three pinned conventions.
+Explicit components replace preset defaults and the fit reports a modified
+preset. There is no implicit current/installed-version alias. Resolution and
+fitting live in C++; R validates argument shapes. The first gate covers
+ordinary complete continuous ML without equality constraints; FIML, ordinal,
+PSD, pairwise, two-level and general constrained parity remain explicit gaps.
+Only zero/infinite bounds are initially supported by the versioned search.
+Unknown versions and unsupported routes error.
+
+The lavaan start convention uses native-identification FABIN3, observed-only
+OLS starts, predictor sample moments and single-indicator latent starts.
+The search uses pinned PORT controls, start-magnitude scaling, R's unbounded
+driver where applicable, and standardized/simple-start retries. Lavaan
+acceptance requires raw PORT success plus its exactly bound-masked optimizer
+gradient test. `fit$fitting` (`as_lab_fit(fit)$fitting` in the ordinary package)
+retains requested/effective components, numeric controls, starts, scales and
+attempts. The selected verdict controls `converged` and inference gating;
+the common diagnostic verdict remains available independently. Refits retain
+the fitting setup. A supplied start table is an input; competing named start
+constructors error.
 
 ### Requested identification is part of the result contract
 

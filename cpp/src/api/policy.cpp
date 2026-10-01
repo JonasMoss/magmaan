@@ -24,7 +24,7 @@ std::string_view reason_name(InferenceReason reason) noexcept {
 
 PolicyFitState policy_fit_state(const estimate::Estimates& estimates) {
   const auto& diagnostics = estimates.diagnostics;
-  const auto verdict = estimate::common_fit_verdict(diagnostics);
+  const auto verdict = estimate::fit_verdict(estimates);
   PolicyFitState state;
   state.converged = verdict.status != estimate::FitCheck::Failed;
   state.psd_boundary = verdict.domain == estimate::StationarityDomain::Psd &&

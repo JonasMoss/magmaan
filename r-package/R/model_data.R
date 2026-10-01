@@ -1340,7 +1340,12 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
 # `control = list(...)` of solver tuning knobs (the union of OptimOptions and
 # Ceres extras; see the C++ `Backend` enum docstring for the supported strings).
 fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
-                   bounds = NULL) {
+                   bounds = NULL, options = NULL) {
+  if (!is.null(options)) {
+    if (inherits(data, "magmaan_ordinal_data")) stop("fitting options currently require complete continuous ML")
+    control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
+    optimizer <- NULL
+  }
   if (inherits(data, "magmaan_ordinal_data")) {
     if (!bounds_is_none(bounds)) stop("fit_ml(): ordinal association ML does not accept bounds")
     return(fit_ml_ordinal_impl(augment_ordinal_partable(model, data), data,
@@ -1349,7 +1354,12 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
   b <- bounds_arg(bounds, model, data, "fit_ml")
   fit <- fit_ml_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control, bounds = b)
-  attach_complete_raw_data(fit, data)
+  fit <- attach_complete_raw_data(fit, data)
+  if (!is.null(options)) fit$options$route <- list(fitter = "fit_ml", args = list(
+      options = control$fitting_options,
+      control = if (!is.null(control$start)) list(start = control$start) else NULL,
+      bounds = bounds))
+  fit
 }
 
 # Frontier ML over PSD primitive LISREL covariance matrices.
@@ -2363,7 +2373,8 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                     W = NULL, optimizer = NULL, control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5,
                     stage1_regularization = NULL, psd = FALSE,
-                    covariance = NULL, barrier = NULL, weight = NULL) {
+                    covariance = NULL, barrier = NULL, weight = NULL,
+                    options = NULL) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
@@ -2441,6 +2452,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     fit$options$covariance <- covariance
     fit$options$barrier <- barrier
+    if (!is.null(options)) fit$options$route <- list(fitter = "fit_model", args = list(
+      estimator = estimator, options = options, optimizer = optimizer,
+      control = control, bounds = bounds, missing = missing))
     # A PSD fit is refitted through fit_model() with the same constraint and
     # optimizer settings; ordinary fits keep their callers' estimator refit.
     if (psd || !is.null(barrier) || !is.null(pairwise_stats) || estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$options$route <- list(fitter = "fit_model", args = list(
@@ -2453,6 +2467,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
     inherits(data, "magmaan_mixed_ordinal_data")
+  if (!is.null(options) && (estimator != "ML" || ordinal_requested || psd ||
+      !is.null(barrier) || !is.null(cluster) || missing == "pairwise"))
+    stop("fitting options currently require ordinary complete continuous ML")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
   if (!is.null(cluster)) {
@@ -2634,7 +2651,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
   fit <- switch(computational,
                 ML = fit_ml(spec, data, optimizer = optimizer,
-                            control = control, bounds = bounds),
+                            control = control, bounds = bounds, options = options),
                 ULS = fit_uls(spec, data, optimizer = optimizer,
                               control = control, bounds = bounds),
                 GLS = fit_gls(spec, data, optimizer = optimizer,

@@ -17,6 +17,7 @@ roadmap; see `docs/architecture/roadmap.md`.
 | `cport/*.c`, `cport/f2c.h` (75 files) | [`ampl/asl`](https://github.com/ampl/asl) at `src/examples/PORT/cport/` | master @ 2025-11-23 | BSD-3-Clause (see `LICENSE-AMPL`) | NL2SOL + SUMSL/HUMSL bounded explicit-gradient cores, helper library, `f2c.h` |
 | `drmnfb_routines.c` | [`fermi-lat/optimizers`](https://github.com/fermi-lat/optimizers) at `src/drmnfb_routines.c` | master @ 2026-04-14 | BSD-3-Clause-equivalent (see `LICENSE-fermi-lat`) | SUMSL bounded finite-difference variant: `drmnfb_` + `ds3grd_` |
 | `port_io.c` | written here | — | project license | No-op stubs for `s_wsfe`, `e_wsfe`, `do_fio`, `do_lio`, replacing libf2c's libI77 so iteration prints silently |
+| `cport/drmng.c` | [Netlib PORT DRMNG](https://netlib.org/port/drmng.f), retrieved 2026-10-01 | Fortran SHA256 `58d9c2b21580c4739cb36e3b4a717d8e1c02c61aef75387160321977d6ed3fd9`; translated with `f2c -A` 20240504, trailing whitespace normalized | Netlib publicly available SUMSL/TOMS 611 carve-out described below | Unbounded explicit-gradient driver used by R's `nlminb` when all bounds are infinite |
 | `f2c_intrinsics.c` | written here, helpers per netlib `libf2c/libF77/` | — | project license + AT&T permissive notice for the algorithmic content | `pow_dd`, `s_copy` — the subset of libF77 PORT actually calls |
 
 ## Why two upstream sources
@@ -33,7 +34,9 @@ The publicly-available subset of Netlib PORT is split functionally:
   in closed form.
 
 magmaan supplies analytic gradients, so the *explicit-gradient* `drmngb_` is
-what `Backend::Port` calls in practice. `drmnfb_` is kept in the vendored set
+the ordinary `Backend::Port` driver. The versioned lavaan fitting setup uses
+`drmng_` for unbounded searches, matching R's bounded/unbounded dispatch.
+`drmnfb_` is kept in the vendored set
 for two reasons: it costs us nothing additional (one ~17 KB file, no extra
 helper symbols), and it gives future code a clean fall-back when a model
 without analytic gradients needs PORT-style trust-region behaviour.

@@ -56,6 +56,16 @@
 #'   several groups) gives the start of every free parameter it matches, as
 #'   lavaan's `start = fit`; the others keep the default start.
 #' @param inference Compute inference now. With `FALSE`, call [infer()] later.
+#' @param options Advanced fitting choices, a named list with `starts`,
+#'   `optimizer`, `convergence`, and/or `preset`. `convergence = "newton"`
+#'   selects magmaan's existing full-model verdict, with internal thresholds.
+#'   `preset = "lavaan-0.7.2"` selects the pinned lavaan starts, PORT search,
+#'   and acceptance rule; explicit components override the preset. Currently
+#'   available for ordinary complete continuous ML without equality constraints.
+#'   Other versions and unsupported routes error. Supplied start tables remain
+#'   inputs; a named `start` constructor cannot conflict with these options.
+#'   Inspect `as_lab_fit(fit)$fitting` for resolved settings and attempts.
+#'   Inference continues to use magmaan's policy.
 #' @return An object of class `magmaan`.
 #' @section Simulation extraction:
 #' `coef(fit)` is a named vector in free-parameter order, aligned with both
@@ -97,7 +107,7 @@ magmaan <- function(model, data,
                     missing = "listwise",
                     psd = FALSE,
                     start = "default",
-                    inference = TRUE) {
+                    inference = TRUE, options = NULL) {
   supplied_ordered <- !missing(ordered)
   supplied_parameterization <- !missing(parameterization)
   supplied_group <- !missing(group)
@@ -167,7 +177,8 @@ magmaan <- function(model, data,
     list(model = model, data = data, estimator = estimator, groups = group,
          cluster = cluster, ordered = ordered, parameterization = parameterization,
          missing = if (estimator %in% c("FIML", "ML2S")) "listwise" else missing,
-         psd = psd, control = .start_control(start, estimator, psd, ordered, cluster)),
+         psd = psd, control = .start_control(start, estimator, psd, ordered, cluster),
+         options = options),
     model_options))
 
   fit <- structure(

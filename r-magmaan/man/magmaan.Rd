@@ -20,7 +20,8 @@ magmaan(
   missing = "listwise",
   psd = FALSE,
   start = "default",
-  inference = TRUE
+  inference = TRUE,
+  options = NULL
 )
 }
 \arguments{
@@ -74,6 +75,17 @@ several groups) gives the start of every free parameter it matches, as
 lavaan's \code{start = fit}; the others keep the default start.}
 
 \item{inference}{Compute inference now. With \code{FALSE}, call \code{\link[=infer]{infer()}} later.}
+
+\item{options}{Advanced fitting choices, a named list with \code{starts},
+\code{optimizer}, \code{convergence}, and/or \code{preset}. \code{convergence = "newton"}
+selects magmaan's existing full-model verdict, with internal thresholds.
+\code{preset = "lavaan-0.7.2"} selects the pinned lavaan starts, PORT search,
+and acceptance rule; explicit components override the preset. Currently
+available for ordinary complete continuous ML without equality constraints.
+Other versions and unsupported routes error. Supplied start tables remain
+inputs; a named \code{start} constructor cannot conflict with these options.
+Inspect \code{as_lab_fit(fit)$fitting} for resolved settings and attempts.
+Inference continues to use magmaan's policy.}
 }
 \value{
 An object of class \code{magmaan}.

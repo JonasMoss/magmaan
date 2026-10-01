@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/configured_ml.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
@@ -68,6 +69,70 @@ namespace {
 // can call them.
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a);
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
+
+magmaan::estimate::FittingOptions fitting_options_from(const Rcpp::List& value) {
+  check_optim_control_names(value, {"preset", "starts", "optimizer", "convergence"});
+  magmaan::estimate::FittingOptions out;
+  auto read = [&](const char* name, std::optional<std::string>& target) {
+    if (!value.containsElementNamed(name)) return;
+    SEXP x = value[name];
+    if (TYPEOF(x) != STRSXP || Rf_length(x) != 1 || STRING_ELT(x, 0) == NA_STRING)
+      Rcpp::stop("options$%s must be one nonmissing string", name);
+    target = Rcpp::as<std::string>(x);
+  };
+  read("preset", out.preset); read("starts", out.starts);
+  read("optimizer", out.optimizer); read("convergence", out.convergence);
+  return out;
+}
+
+Rcpp::List fitting_report_to_r(const magmaan::estimate::FittingReport& report) {
+  const auto& setup = report.setup;
+  Rcpp::List request = Rcpp::List::create();
+  auto add = [&](const char* name, const std::optional<std::string>& value) {
+    if (value) request[name] = *value;
+  };
+  add("preset", setup.requested.preset); add("starts", setup.requested.starts);
+  add("optimizer", setup.requested.optimizer); add("convergence", setup.requested.convergence);
+  Rcpp::List attempts(report.attempts.size());
+  for (std::size_t j = 0; j < report.attempts.size(); ++j) {
+    const auto& a = report.attempts[j];
+    const auto& c = a.controls;
+    Rcpp::List port = Rcpp::List::create();
+    auto real = [&](const char* name, const std::optional<double>& v) { if (v) port[name] = *v; };
+    real("rel_f_tol", c.port.rel_f_tol); real("abs_f_tol", c.port.abs_f_tol);
+    real("x_tol", c.port.x_tol); real("false_conv_tol", c.port.false_conv_tol);
+    real("step_min", c.port.step_min); real("step_max", c.port.step_max);
+    if (c.port.max_eval) port["max_eval"] = *c.port.max_eval;
+    if (c.port.max_iter) port["max_iter"] = *c.port.max_iter;
+    attempts[j] = Rcpp::List::create(
+        Rcpp::_["start"] = Rcpp::wrap(a.start),
+        Rcpp::_["optimizer_start"] = Rcpp::wrap(a.optimizer_start),
+        Rcpp::_["parameter_scale"] = Rcpp::wrap(a.parameter_scale),
+        Rcpp::_["port_scale"] = Rcpp::wrap(a.port_scale),
+        Rcpp::_["simple_start"] = a.simple_start,
+        Rcpp::_["standardized"] = a.standardized,
+        Rcpp::_["accepted"] = a.accepted,
+        Rcpp::_["raw_status"] = a.raw_status,
+        Rcpp::_["iterations"] = a.iterations,
+        Rcpp::_["fmin"] = a.fmin,
+        Rcpp::_["gradient_max"] = a.gradient_max,
+        Rcpp::_["error"] = a.error,
+        Rcpp::_["controls"] = Rcpp::List::create(
+            Rcpp::_["max_iter"] = c.max_iter, Rcpp::_["ftol"] = c.ftol,
+            Rcpp::_["gtol"] = c.gtol, Rcpp::_["port"] = port,
+            Rcpp::_["normalize_sample"] = c.normalize_sample,
+            Rcpp::_["coordinate_scaling"] = magmaan::estimate::coordinate_scaling_name(c.coordinate_scaling),
+            Rcpp::_["center_locations"] = c.center_locations));
+  }
+  return Rcpp::List::create(
+      Rcpp::_["requested"] = request,
+      Rcpp::_["effective"] = Rcpp::List::create(
+          Rcpp::_["starts"] = setup.starts, Rcpp::_["optimizer"] = setup.optimizer,
+          Rcpp::_["convergence"] = setup.convergence),
+      Rcpp::_["modified_preset"] = setup.modified_preset,
+      Rcpp::_["selected_attempt"] = report.attempts.empty() ? NA_INTEGER : static_cast<int>(report.selected_attempt + 1),
+      Rcpp::_["attempts"] = attempts);
+}
 magmaan::estimate::gmm::Weight continuous_ls_weight(
     const Ctx& ctx, const magmaan::estimate::Estimates& est,
     const std::string& estimator, SEXP weight, const char* call);
@@ -1007,6 +1072,8 @@ Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
     active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
   return Rcpp::List::create(
       Rcpp::_["stationary"]       = a.stationary,
+      Rcpp::_["raw_backend_status"] = a.raw_backend_status,
+      Rcpp::_["backend_gradient_max"] = a.backend_gradient_max,
       Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
       Rcpp::_["raw_grad_inf_norm"] = a.raw_grad_inf_norm,
       Rcpp::_["grad_scaled_inf"]  = a.grad_scaled_inf,
@@ -1207,6 +1274,20 @@ Rcpp::List fit_result(Ctx& ctx,
   out["grad_norm"]        = est.grad_inf_norm;
   out["audit"]            = audit_to_r(est.audit);
   out["diagnostics"]      = diagnostics_to_r(est.diagnostics);
+  if (est.fitting) {
+    out["fitting"] = fitting_report_to_r(*est.fitting);
+    Rcpp::List verdict = common_verdict_to_r(est.diagnostics);
+    const auto v = magmaan::estimate::fit_verdict(est);
+    verdict["status"] = fit_check_to_r(v.status);
+    verdict["stationarity"] = fit_check_to_r(v.stationarity);
+    verdict["objective"] = fit_check_to_r(v.objective);
+    verdict["policy"] = est.fitting->setup.convergence;
+    if (est.selected_verdict) verdict["criterion"] = "optimizer_gradient";
+    out["verdict"] = verdict;
+    if (!est.fitting->attempts.empty()) out["start"] = Rcpp::List::create(
+        Rcpp::_["theta"] = Rcpp::wrap(est.fitting->attempts.front().start),
+        Rcpp::_["method"] = est.fitting->setup.starts);
+  }
   if (est.substituted_backend)
     out["optimizer_substituted"] =
         std::string(magmaan::estimate::backend_name(*est.substituted_backend));
@@ -2461,6 +2542,20 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("fitting_options")) {
+      check_optim_control_names(ctl, {"fitting_options", "start"});
+      if (optimizer.isNotNull()) Rcpp::stop("select optimizer through fitting options");
+      auto options = fitting_options_from(Rcpp::as<Rcpp::List>(ctl["fitting_options"]));
+      Eigen::VectorXd explicit_start;
+      if (ctl.containsElementNamed("start")) explicit_start = Rcpp::as<Eigen::VectorXd>(ctl["start"]);
+      auto est = magmaan::estimate::fit_ml_configured(ctx.pt, ctx.rep, ctx.samp,
+          options, starts, explicit_start, bounds_from_nullable(bounds));
+      if (!est) stop_fit(est.error());
+      return fit_result(ctx, *est, &starts, "ML");
+    }
+  }
   std::string start_policy = "layered";
   std::string start_fallback_reason = "none";
 

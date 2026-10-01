@@ -129,6 +129,10 @@ struct PortControls {
   std::optional<double> false_conv_tol = {}; // V(XFTOL)
   std::optional<int> max_eval = {}; // IV(MXFCAL), separate from max_iter
   std::optional<int> max_iter = {}; // IV(MXITER); overrides the legacy max_iter
+  std::optional<double> step_min = {}, step_max = {}; // V(LMAX0), V(LMAXS)
+  // Profile-owned search details. Empty scale gives PORT's identity scale.
+  Eigen::VectorXd scale = {};
+  bool unbounded_routine = false; // use DRMNG when all bounds are infinite
 };
 
 struct IpoptControls {
@@ -233,6 +237,9 @@ struct TerminalAuditOptions {
 // `OptimResult` and surfaced to R as the nested `fit$audit` sub-record. Never
 // produces a `FitError` — observation only.
 struct TerminalAudit {
+  // Raw backend evidence survives independent re-auditing of coordinates.
+  int raw_backend_status = 0;
+  double backend_gradient_max = -1.0;
   bool        stationary       = false;
   // Infinity norm used for the stationarity verdict: the box-projected
   // objective gradient for an unconstrained problem and the box-projected
@@ -279,6 +286,7 @@ struct OptimOutput {
   // `= {}` keeps existing `OptimOutput{...}` aggregate-inits passing under
   // `-Wmissing-field-initializers`.
   TerminalAudit   audit         = {};
+  int raw_status = 0;
 };
 
 // Optimizer output. `x` is in the driven parameter space; the caller applies

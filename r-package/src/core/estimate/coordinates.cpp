@@ -513,8 +513,12 @@ run_in_coordinates(const optim::ScalarProblem& problem, const CoordinateMap& map
   if (!out) return out;
   out->x = map.center + map.scale.cwiseProduct(out->x);
   const Box box = audit_box(bounds, problem.n_param);
+  const int raw_status = out->audit.raw_backend_status;
+  const double backend_gradient = out->audit.backend_gradient_max;
   out->audit = optim::audit_terminal_iterate(problem.f, out->x, out->fmin,
                                              box.lower, box.upper);
+  out->audit.raw_backend_status = raw_status;
+  out->audit.backend_gradient_max = backend_gradient;
   out->grad_inf_norm = out->audit.grad_inf_norm;
   return out;
 }
@@ -551,8 +555,12 @@ run_in_coordinates(const optim::ScalarProblem& problem,
   original.constraint_lower = Eigen::VectorXd::Zero(n_constraint);
   original.constraint_upper = Eigen::VectorXd::Zero(n_constraint);
   const Box box = audit_box(bounds, problem.n_param);
+  const int raw_status = out->audit.raw_backend_status;
+  const double backend_gradient = out->audit.backend_gradient_max;
   out->audit = optim::audit_equality_constrained_terminal_iterate(
       original, out->x, out->fmin, box.lower, box.upper);
+  out->audit.raw_backend_status = raw_status;
+  out->audit.backend_gradient_max = backend_gradient;
   out->grad_inf_norm = out->audit.grad_inf_norm;
   return out;
 }

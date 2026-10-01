@@ -186,7 +186,7 @@ fabin_start_values(const spec::LatentStructure& pt,
                    const model::MatrixRep& rep,
                    const SampleStats& samp,
                    const spec::Starts& starts,
-                   FabinVariant variant) {
+                   FabinVariant variant, bool lavaan_convention) {
   // FABIN replaces only the free loadings; everything else is the simple
   // scheme. The baseline also applies user hints, which still win below.
   auto base = simple_start_values(pt, rep, samp, starts);
@@ -206,11 +206,19 @@ fabin_start_values(const spec::LatentStructure& pt,
     if (b >= facs.size()) continue;
     const std::size_t col = static_cast<std::size_t>(c.col);
 
+    // FABIN is undefined for a factor with any latent indicator. The native
+    // constructor may warm its observed subset; lavaan's convention skips it.
+    if (lavaan_convention && pt.op[i] == parse::Op::Measurement &&
+        pt.rhs_var[i] >= 0 && pt.is_user_latent[static_cast<std::size_t>(pt.rhs_var[i])]) {
+      const auto pos = pt.lv_ext_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      if (pos >= 0) facs[b][static_cast<std::size_t>(pos)].ok = false;
+    }
+
     // std.lv: a latent variance fixed at a positive value. A disturbance fixed
     // at zero (phantom-scaled latent) sets no scale.
     if (c.mat == model::MatId::Psi && c.row == c.col && pt.free[i] == 0) {
       if (col < facs[b].size() && std::isfinite(pt.fixed_value[i]) &&
-          pt.fixed_value[i] > 0.0) {
+          (lavaan_convention ? pt.fixed_value[i] == 1.0 : pt.fixed_value[i] > 0.0)) {
         facs[b][col].std_lv = true;
       }
       continue;
@@ -223,7 +231,7 @@ fabin_start_values(const spec::LatentStructure& pt,
     ind.free_idx = pt.free[i] > 0 ? pt.free[i] - 1 : -1;
     f.indicators.push_back(ind);
     if (pt.free[i] == 0 && !std::isnan(pt.fixed_value[i]) &&
-        pt.fixed_value[i] < 0.0) {
+        pt.fixed_value[i] < 0.0 && (!lavaan_convention || f.indicators.size() == 1)) {
       f.marker_negative = true;
     }
   }
@@ -239,7 +247,7 @@ fabin_start_values(const spec::LatentStructure& pt,
       std::size_t ref = 0;
       bool found_marker = false;
       for (std::size_t k = 0; k < f.indicators.size(); ++k) {
-        if (f.indicators[k].free_idx < 0) {  // fixed loading
+        if (!lavaan_convention && f.indicators[k].free_idx < 0) {  // fixed loading
           ref = k;
           found_marker = true;
           break;

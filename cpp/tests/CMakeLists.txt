@@ -76,6 +76,7 @@ magmaan_add_test_target(magmaan_test_spec spec
   golden/fit_implied_golden_test.cpp)
 
 set(MAGMAAN_ESTIMATE_TEST_SOURCES
+  unit/configured_ml_test.cpp
   unit/ml_test.cpp
   unit/ml_irls_test.cpp
   unit/rbm_test.cpp

@@ -750,6 +750,25 @@ can both be reassessed. Focused tests verify fit/post-fit parity, missing checks
 policy differences, domain feasibility and reassessment without recomputation.
 The detailed contract and example are in `project/design/terminal-audit.md`.
 
+The advanced per-call fitting setup (2026-10-01) separates start construction,
+search and acceptance in `estimate/configured_ml.hpp`. Both R packages expose
+it through `options`; `newton` names the existing common verdict, while the
+pinned `lavaan-0.7.2` preset selects native FABIN3/OLS starts, PORT controls and
+start scaling, bounded/unbounded R dispatch, standardized/simple-start retries,
+and raw-termination plus exactly bound-masked gradient acceptance. Component
+overrides are reported as a modified preset. Thresholds remain internal.
+Frozen fixtures and live 0.7.2 comparisons cover CFA identification, observed
+and latent regressions, higher-order/single-indicator models and unequal groups.
+The pinned failure gate retains the oracle's original-covariance preflight
+across all retries, including its driven-coordinate early return.
+`Estimates::selected_verdict` makes C++/R consumers and ordinary-policy gating
+agree; common diagnostics remain independently inspectable. Fits retain requested
+and resolved settings, numeric controls, starts/scales and attempt selection;
+refits preserve the setup. The first gate is ordinary complete continuous ML
+without equality constraints, with zero/infinite bounds only. Other versions
+and unsupported sources error. Constrained, FIML and all-ordinal parity gates
+remain in the active backlog; inference conventions and default fits are unchanged.
+
 `estimate/frontier/ml2s_audit.hpp` adds standalone saturated-likelihood endpoint
 reports and composed ML2S reports for all five Stage-2 weight policies. Stage 1
 retains structured per-block EM stopping/repair telemetry in `FIMLH1` and

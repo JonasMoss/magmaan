@@ -11,6 +11,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/fitting_options.hpp"
 #include "magmaan/estimate/frontier/dls_weight.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/constraints.hpp"
@@ -95,11 +96,15 @@ struct Estimates {
 
   std::optional<AssociationFitInfo> association = {};
 
+  // Selected acceptance is separate from the always-retained common audit.
+  std::optional<FitVerdict> selected_verdict = {};
+  std::optional<FittingReport> fitting = {};
+
 };
 
-// Consumers use this common verdict; optimizer_status explains termination.
+// Consumers use the selected verdict; optimizer_status explains termination.
 inline FitVerdict fit_verdict(const Estimates& estimates) {
-  return common_fit_verdict(estimates.diagnostics);
+  return estimates.selected_verdict.value_or(common_fit_verdict(estimates.diagnostics));
 }
 
 // Optimizer backend selector for the convenience composers below.

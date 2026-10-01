@@ -68,7 +68,8 @@ fabin_start_values(const spec::LatentStructure& pt,
                    const model::MatrixRep& rep,
                    const SampleStats& samp,
                    const spec::Starts& starts = {},
-                   FabinVariant variant = FabinVariant::Fabin3);
+                   FabinVariant variant = FabinVariant::Fabin3,
+                   bool lavaan_convention = false);
 
 // Guttman/MGM start-value producer — Guttman's (1952) multiple-group method
 // for CFA factor loadings. Like `fabin_start_values`, equals the simple scheme

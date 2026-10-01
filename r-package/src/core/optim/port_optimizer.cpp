@@ -30,6 +30,8 @@ extern "C" {
 int drmngb_(double *b, double *d, double *fx, double *g,
             int *iv, int *liv, int *lv, int *n,
             double *v, double *x);
+int drmng_(double *d, double *fx, double *g, int *iv, int *liv,
+           int *lv, int *n, double *v, double *x);
 int divset_(int *alg, int *iv, int *liv, int *lv, double *v);
 
 // NL2SOL with simple bounds (TOMS 573). Same reverse-comm IV(1) family as
@@ -74,6 +76,7 @@ enum PortStatus : int {
   PORT_FAIL_NOISY = 8,
   PORT_FAIL_FALSE = 9,
   PORT_FAIL_BUDGET = 10,
+  PORT_FAIL_ITER_BUDGET = 11,
 };
 
 // PORT IV / V subscript layout (Fortran 1-based, mapped to C 0-based).
@@ -116,6 +119,16 @@ std::optional<std::string> configure_controls(
   if (c.x_tol) v[32] = *c.x_tol;
   if (c.false_conv_tol) v[33] = *c.false_conv_tol;
   if (c.max_eval) iv[kIv_MxFCal] = *c.max_eval;
+  if (c.step_min) {
+    if (!std::isfinite(*c.step_min) || *c.step_min <= 0)
+      return "PORT step_min must be finite and positive";
+    v[34] = *c.step_min;
+  }
+  if (c.step_max) {
+    if (!std::isfinite(*c.step_max) || *c.step_max <= 0)
+      return "PORT step_max must be finite and positive";
+    v[35] = *c.step_max;
+  }
   return {};
 }
 
@@ -156,6 +169,15 @@ PortOptimizer::minimize(Objective f,
   // each x component; identity is the standard default and matches what
   // R's `nlminb` does when the caller leaves `scale = 1`.
   std::vector<double> d(nu, 1.0);
+  if (opts_.port.scale.size()) {
+    if (opts_.port.scale.size() != n || !opts_.port.scale.allFinite() ||
+        (opts_.port.scale.array() <= 0).any())
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "PORT scale must have one finite positive value per coordinate"));
+    std::copy(opts_.port.scale.data(), opts_.port.scale.data() + n, d.begin());
+  }
+  const bool unbounded = opts_.port.unbounded_routine &&
+      !lower.array().isFinite().any() && !upper.array().isFinite().any();
   std::vector<double> g(nu, 0.0);
   // Bounds are stored as interleaved (lower, upper) pairs in PORT's
   // documented layout (drmngb.c:84 "b.... VECTOR OF LOWER AND UPPER
@@ -238,9 +260,13 @@ PortOptimizer::minimize(Objective f,
           iv[kIv_NIter], fx));
     }
 
-    drmngb_(b.data(), d.data(), &fx, g.data(),
-            iv.data(), &liv_arg, &lv_arg, &n_arg,
-            v.data(), x.data());
+    if (unbounded)
+      drmng_(d.data(), &fx, g.data(), iv.data(), &liv_arg, &lv_arg,
+             &n_arg, v.data(), x.data());
+    else
+      drmngb_(b.data(), d.data(), &fx, g.data(),
+              iv.data(), &liv_arg, &lv_arg, &n_arg,
+              v.data(), x.data());
 
     const int status = iv[kIv_Status];
 
@@ -330,6 +356,7 @@ PortOptimizer::minimize(Objective f,
                                 : OptimStatus::FalseConvergence;
       break;
     case PORT_FAIL_BUDGET:
+    case PORT_FAIL_ITER_BUDGET:
       // IV(1)=10: max_iter or max_fevals hit. Under uniform-stop (paper
       // §D, ftol = 0), this fires routinely at iterates the audit confirms
       // as stationary — the audit is the gate, not PORT's RFCTOL.
@@ -351,6 +378,18 @@ PortOptimizer::minimize(Objective f,
   OptimOutput out{std::move(x), f_final, n_iter,
                   iv[kIv_NFCall], iv[kIv_NGCall], opt_status, a.grad_inf_norm};
   out.audit = std::move(a);
+  out.raw_status = final_status;
+  out.audit.raw_backend_status = final_status;
+  f(out.theta_hat, grad_buf);
+  double gradient_max = 0.0;
+  for (Eigen::Index j = 0; j < n; ++j) {
+    // lavaan excludes coordinates exactly at either bound, irrespective of
+    // gradient sign. This differs from the common projected-gradient audit.
+    if (out.theta_hat(j) == lower(j) || out.theta_hat(j) == upper(j)) continue;
+    if (!std::isfinite(grad_buf(j))) { gradient_max = std::numeric_limits<double>::infinity(); break; }
+    gradient_max = std::max(gradient_max, std::abs(grad_buf(j)));
+  }
+  out.audit.backend_gradient_max = gradient_max;
   return out;
 }
 
