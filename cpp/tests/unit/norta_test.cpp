@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 #include <string>
@@ -358,6 +359,92 @@ TEST_CASE("Pearson Type IV marginals feed independent generation") {
   REQUIRE(X_or->rows() == 16);
   REQUIRE(X_or->cols() == 1);
   CHECK(X_or->array().isFinite().all());
+}
+
+TEST_CASE("Pearson Type IV rejection draws match validated quantiles") {
+  auto raw = magmaan::test::read_fixture(
+      magmaan::test::fixtures_dir() + "/sim/pearson_moment_match.json");
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+  constexpr Eigen::Index n = 200000;
+  constexpr int grid_size = 512;
+  for (const auto& c : fixture["cases"]) {
+    if (c["pearson_type"].get<int>() != 4) continue;
+    CAPTURE(c["id"].get<std::string>());
+    magmaan::sim::MomentMatchSpec spec;
+    spec.family = magmaan::sim::MomentMatchFamily::Pearson;
+    spec.mean = c["mean"].get<double>();
+    spec.sd = c["sd"].get<double>();
+    spec.shape.skewness = c["skewness"].get<double>();
+    spec.shape.excess_kurtosis = c["excess_kurtosis"].get<double>();
+    auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
+    REQUIRE(fit_or.has_value());
+    const auto& marginal = fit_or->marginal;
+    std::vector<double> quantiles;
+    for (int i = 1; i < grid_size; ++i) {
+      auto q_or = magmaan::sim::marginal_quantile(
+          marginal, static_cast<double>(i) / grid_size);
+      REQUIRE(q_or.has_value());
+      quantiles.push_back(*q_or);
+    }
+    // Exercise both the column loop and scalar draws in a mixed-family row.
+    for (bool mixed : {false, true}) {
+      CAPTURE(mixed);
+      std::vector<magmaan::sim::MarginalSpec> marginals{marginal};
+      if (mixed) marginals.push_back(magmaan::sim::MarginalSpec::standard_normal());
+      std::mt19937_64 rng(20261001), repeat_rng(20261001);
+      auto x_or = magmaan::sim::simulate_independent_matrix(n, marginals, rng);
+      auto repeat_or = magmaan::sim::simulate_independent_matrix(n, marginals, repeat_rng);
+      REQUIRE(x_or.has_value());
+      REQUIRE(repeat_or.has_value());
+      CHECK((x_or->array() == repeat_or->array()).all());
+      CHECK(rng == repeat_rng);
+      const double mean = x_or->col(0).mean();
+      const double sd = std::sqrt(
+          (x_or->col(0).array() - mean).square().sum() / (n - 1));
+      CHECK(std::abs(mean - spec.mean) < 0.02 * spec.sd);
+      CHECK(std::abs(sd - spec.sd) < 0.04 * spec.sd);
+
+      std::vector<double> sorted(x_or->col(0).data(), x_or->col(0).data() + n);
+      std::sort(sorted.begin(), sorted.end());
+      double grid_distance = 0.0;
+      for (int i = 1; i < grid_size; ++i) {
+        const double p = static_cast<double>(i) / grid_size;
+        const auto count = std::upper_bound(
+            sorted.begin(), sorted.end(), quantiles[static_cast<std::size_t>(i - 1)]) -
+            sorted.begin();
+        grid_distance = std::max(grid_distance,
+                                std::abs(static_cast<double>(count) / n - p));
+      }
+      // Monotonicity bounds the full KS distance by the grid distance plus
+      // 1/512, including both tails. DKW gives false failure probability
+      // <= 2 exp(-2 n (0.008 - 1/512)^2) < 9e-7 per sample.
+      CHECK(grid_distance + 1.0 / grid_size < 0.008);
+    }
+  }
+}
+
+TEST_CASE("Pearson Type IV rejection handles a nearly flat theta kernel") {
+  // As m approaches one with nu=0, theta approaches Uniform(-pi/2, pi/2).
+  // This exercises the rectangle-only envelope when a drop of one is beyond
+  // the representable support; the raw distribution approaches Cauchy(0,1).
+  const auto marginal = magmaan::sim::MarginalSpec::pearson(
+      4, std::nextafter(1.0, 2.0), 0.0, 0.0, 1.0);
+  constexpr Eigen::Index n = 40000;
+  std::mt19937_64 rng(20261002);
+  auto x_or = magmaan::sim::simulate_independent_matrix(n, {marginal}, rng);
+  REQUIRE(x_or.has_value());
+  std::vector<double> sorted(x_or->data(), x_or->data() + n);
+  std::sort(sorted.begin(), sorted.end());
+  double distance = 0.0;
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double p = 0.5 + std::atan(sorted[static_cast<std::size_t>(i)]) /
+                              std::acos(-1.0);
+    distance = std::max({distance, p - static_cast<double>(i) / n,
+                         static_cast<double>(i + 1) / n - p});
+  }
+  CHECK(distance < 0.02);
 }
 
 TEST_CASE("Johnson moment matcher matches SuppDists goldens") {

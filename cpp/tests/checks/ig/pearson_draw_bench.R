@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-suppressPackageStartupMessages(library(magmaan))
+suppressPackageStartupMessages(library(magmaanlab))
 
 args <- commandArgs(trailingOnly = TRUE)
 get_arg <- function(name, default) {
@@ -52,7 +52,7 @@ build_population_2factor <- function(p, interfactor = 0.5) {
   list(Sigma = Sigma, p = p)
 }
 pop <- build_population_2factor(p)
-core <- magmaan::magmaan_core
+core <- magmaanlab::magmaan_core
 
 cal <- core$sim_ig_calibrate(
   pop$Sigma, rep(3, pop$p), rep(21, pop$p),
@@ -97,4 +97,43 @@ if (file.exists(covsim_path)) {
   ))
 } else {
   cat(sprintf("covsim source not found at %s; skipped comparison\n", covsim_path))
+}
+
+# Foldnes-Gronneberg longitudinal IG3: two of ten Cholesky sources are IV.
+# Keep this population local to the check; no paper files are read.
+k <- 5L
+loadings <- cbind(c(rep(0.7, k), rep(0, k)), c(rep(0, k), rep(0.7, k)))
+residual <- diag(rep(0.51, 2L * k))
+for (j in seq_len(k)) residual[j, k + j] <- residual[k + j, j] <- 0.15 * 0.51
+sigma <- loadings %*% matrix(c(1, 0.3, 0.3, 1), 2L) %*% t(loadings) + residual
+type4_cal <- core$sim_ig_calibrate(
+  sigma, rep(2, 2L * k), rep(10, 2L * k),
+  root = "cholesky", generator_family = "pearson"
+)
+types <- vapply(type4_cal$generator_marginals, `[[`, integer(1), "pearson_type")
+stopifnot(sum(types == 4L) == 2L)
+time_type4 <- vapply(seq_len(rounds), function(i) {
+  system.time(core$sim_ig_draw(
+    type4_cal, n = n, reps = reps, seed_base = seed_base + 3000L * i
+  ))[["elapsed"]]
+}, numeric(1))
+cat(sprintf("longitudinal IG3: p=10 n=%d reps=%d (2 type IV, 8 type VI)\n", n, reps))
+cat(sprintf("magmaan median warm: %.4f s total, %.6f s/rep\n",
+            median(time_type4[-1L]), median(time_type4[-1L]) / reps))
+
+# Single-source IG isolates draw cost at each family, with enough values to
+# resolve sub-microsecond costs using R's elapsed timer.
+for (excess in c(10, 7)) {
+  scalar_cal <- core$sim_ig_calibrate(
+    matrix(1), 2, excess, root = "cholesky", generator_family = "pearson"
+  )
+  scalar_n <- max(n, 100000L)
+  times <- vapply(seq_len(rounds), function(i) {
+    system.time(core$sim_ig_draw(
+      scalar_cal, n = scalar_n, reps = 1L, seed_base = seed_base + 4000L * i
+    ))[["elapsed"]]
+  }, numeric(1))
+  cat(sprintf("type %d: %.3f microseconds/value (%d values)\n",
+              scalar_cal$generator_marginals[[1L]]$pearson_type,
+              1e6 * median(times[-1L]) / scalar_n, scalar_n))
 }

@@ -166,8 +166,18 @@ Implemented policy:
 - GSL is not the core blocker for magmaan. PearsonDS uses GSL only for the
   complex log-gamma normalization in the density, and also ships a no-GSL C
   fallback for that normalization.
-- The simulation path needs quantiles, not density evaluation. The implemented
-  CDF computes a normalized finite integral after
+- Independent draws (including IG and mixed-family independent marginals) use
+  exact rejection on the theta scale. For `m > 1`, the log-kernel is concave;
+  its mode is `atan(-nu / (2*m - 2))`. Devroye's two-exponential-tail envelope
+  (1986, *Non-Uniform Random Variate Generation*, VII.2.6, pp. 299–301;
+  [published algorithm](https://luc.devroye.org/chapter_seven.pdf)) combines the
+  mode-height rectangle with log-density tangents near a drop of one. Mode,
+  peak and envelope constants are computed once per marginal per matrix draw.
+  Acceptance evaluates the original kernel, so neither a normalizing integral
+  nor an approximate quantile enters the draws. Type IV seeded streams change;
+  runs without Type IV retain their existing streams.
+- NORTA and copula z/uniform transforms still need true quantiles. Their CDF
+  computes a normalized finite integral after
   `theta = atan((x - location) / scale)`:
 
 ```text
@@ -192,8 +202,20 @@ Validation:
   `(skew=1, excess=2)`, `(skew=1, excess=5)`, `(skew=2, excess=10)`,
   `(skew=3, excess=30)`, and a negative-skew mirror.
 - `cpp/tests/unit/norta_test.cpp` checks fitted Type IV parameters and quantiles
-  against PearsonDS 1.3.2 and includes a direct `simulate_independent_matrix()`
-  transform smoke.
+  against PearsonDS 1.3.2. For each Type IV fixture, 200,000 fixed-seed draws
+  through both the column and mixed-family scalar paths match those quantiles:
+  a full KS upper bound below 0.008 (512-point grid plus its spacing), mean
+  within 0.02 SD and SD within 4%, with exact seed repeatability.
+- `cpp/tests/checks/ig/pearson_draw_bench.R` includes the longitudinal IG3
+  Cholesky population (two IV and eight VI sources) and isolated IV/VI costs.
+  Portable `just r-install` measurement (2026-10-01; GCC `-O2`): the 1,000-row,
+  p=10 reproducer averaged 0.00167 s over 100 calls (PearsonDS: 0.00278 s).
+  The advisory check with `--n=1000 --p=10 --reps=100 --rounds=5` measured
+  0.00174 s per longitudinal replication, 0.090 microseconds/value for IV and
+  0.140 for VI (isolated 100,000-value draws, warm medians).
+- The quantile solver remains unchanged, including per-call normalization.
+  It is used by NORTA/copula quantile transforms, not independent draws;
+  caching normalization is separate follow-up work if those paths need speed.
 - Keep the fixture oracle in R/PearsonDS only. Do not add PearsonDS, gsl, or R
   package dependencies to the C++ core.
 
@@ -248,14 +270,17 @@ seconds per null/power DGP, while the full four-worker experiment finished in
 This again confirms that high-dimensional PL calibration is the setup
 bottleneck and belongs outside per-replication timing.
 
-**Why IG draws are slow: generator family.** `make_cell_sampler` requests
-`generator_family = "pearson"` (chosen to mirror the lavaan/R IG reference). The
-Pearson draw applies a per-element inverse CDF (`normal_cdf` then an inverse
+**Historical draw bottleneck (resolved for Pearson draws, 2026-10-01).**
+`make_cell_sampler` requests `generator_family = "pearson"` (chosen to mirror
+the lavaan/R IG reference). At the time of this study, the Pearson draw applied
+a per-element inverse CDF (`normal_cdf` then an inverse
 beta/gamma/Student-t, or the iterative Type IV quantile) -- O(N*p) numeric
 inversions per dataset. The Tukey g-and-h and Johnson SU families instead have
 *closed-form* draw transforms (`((exp(gZ)-1)/g) exp(hZ^2/2)` and
-`sinh((Z-gamma)/delta)`), so their draws are ~100x cheaper. The right default for
-speed is a closed-form family.
+`sinh((Z-gamma)/delta)`), which were ~100x cheaper in that study.
+Direct RNGs now cover the closed-form Pearson
+types, and exact theta-scale rejection covers Type IV; this timing argument
+no longer calls for a generator-family change.
 
 **Why we cannot just switch families (today):**
 - **Tukey g-and-h cannot represent the targets.** For skew 2-3 the `g` that sets
@@ -299,9 +324,8 @@ the quadrature SB solve, and any single failed marginal aborts the whole IG
 calibrate. So **experiment showcases/03 stays on Pearson** for now; Johnson IG needs a
 robust SB moment-fit too (no elementary closed form -- candidates: AS99
 Hill-Holder SB branch, or higher/adaptive quadrature that returns its best fit
-instead of throwing). The orthogonal lever for IG draw speed is to spline the
-Pearson inverse-CDF once per marginal at calibration (keeps lavaan-matching
-fidelity, family-agnostic) rather than inverting per element at draw time.
+instead of throwing). Pearson IG draw speed is now handled by direct RNGs and
+exact Type IV rejection; an inverse-CDF spline is unnecessary for that path.
 
 **General lesson (carry forward).** Hand-rolled numerical integration in the sim
 calibration (`marginal_moments`, the bivariate-copula and PLSIM quadratures) is a
@@ -401,8 +425,8 @@ Open work only; landed generator slices are inventoried in the roadmap.
 - **S/M.** A robust Johnson SB moment-fit (no elementary closed form) so the
   Johnson family becomes a usable closed-form IG generator: candidates are the
   AS99 Hill-Holder SB branch or higher/adaptive quadrature that returns its best
-  fit instead of throwing. Orthogonal IG draw-speed lever: spline the Pearson
-  inverse-CDF once per marginal at calibration. (See the 2026-06-01 IG note.)
+  fit instead of throwing. Pearson IG draws already use direct RNGs and exact
+  Type IV rejection. (See the Pearson Type IV section.)
 - **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
   correlation maps when marginal specs repeat, expose/interpolate the
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an

@@ -164,6 +164,104 @@ double pearson_type4_quantile(double p,
   return location + scale * std::tan(theta);
 }
 
+struct PearsonIvSampler {
+  double alpha = 0.0;
+  double nu = 0.0;
+  double mode = 0.0;
+  double log_peak = 0.0;
+  double left = 0.0;
+  double right = 0.0;
+  double left_scale = 0.0;
+  double right_scale = 0.0;
+
+  double log_density(double theta) const noexcept {
+    return -nu * theta + alpha * std::log(std::cos(theta)) - log_peak;
+  }
+
+  template <typename Rng>
+  double draw(const MarginalSpec& m, Rng& rng) const {
+    constexpr double half_pi = 0.5 * std::numbers::pi;
+    const double width = right - left;
+    const double area = width + left_scale + right_scale;
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    for (;;) {
+      const double u = uniform(rng) * area;
+      double theta;
+      double log_hat = 0.0;
+      if (u < width) {
+        theta = left + u;
+      } else if (u < width + right_scale) {
+        log_hat = std::log((u - width) / right_scale);
+        theta = right - right_scale * log_hat;
+      } else {
+        log_hat = std::log((u - width - right_scale) / left_scale);
+        theta = left + left_scale * log_hat;
+      }
+      // The proposal tails extend beyond the finite support; reject there.
+      if (!(theta > -half_pi && theta < half_pi)) continue;
+      const double v = uniform(rng);
+      if (v > 0.0 && std::log(v) + log_hat <= log_density(theta)) {
+        return m.pearson_p3 + m.pearson_p4 * std::tan(theta);
+      }
+    }
+  }
+};
+
+sim_expected<PearsonIvSampler> pearson_type4_sampler(const MarginalSpec& m) {
+  // Devroye (1986), Non-Uniform Random Variate Generation, VII.2.6,
+  // Theorem 2.6 and the two-exponential-tail algorithm (pp. 299-301):
+  // https://luc.devroye.org/chapter_seven.pdf
+  // log f is concave since (log f)'' = -alpha / cos(theta)^2 < 0.
+  // Its tangents and the mode height therefore dominate f everywhere.
+  // Touching at log f = log f(mode)-1 minimizes the envelope area.
+  // No normalizing constant or approximate inverse CDF enters the draws.
+  constexpr double half_pi = 0.5 * std::numbers::pi;
+  PearsonIvSampler sampler;
+  sampler.alpha = 2.0 * m.pearson_p1 - 2.0;
+  sampler.nu = m.pearson_p2;
+  sampler.mode = std::atan2(-sampler.nu, sampler.alpha);
+  sampler.log_peak = -sampler.nu * sampler.mode +
+                     sampler.alpha * std::log(std::cos(sampler.mode));
+  if (!std::isfinite(sampler.alpha) || !std::isfinite(sampler.log_peak) ||
+      !(sampler.mode > -half_pi && sampler.mode < half_pi)) {
+    return std::unexpected(make_err(SimError::Kind::NumericIssue,
+                                   "Pearson IV: non-finite rejection envelope"));
+  }
+  for (bool is_left : {true, false}) {
+    const double boundary = is_left ? -half_pi : half_pi;
+    double inner = sampler.mode;
+    double outer = std::nextafter(boundary, inner);
+    double& edge = is_left ? sampler.left : sampler.right;
+    double& scale = is_left ? sampler.left_scale : sampler.right_scale;
+    if (sampler.log_density(outer) > -1.0) {
+      // An almost flat side can reach the support before a representable
+      // drop of one. The mode-height rectangle alone bounds that side.
+      edge = boundary;
+      continue;
+    }
+    for (int iter = 0; iter < 64; ++iter) {
+      const double theta = 0.5 * (inner + outer);
+      if (theta == inner || theta == outer) break;
+      if (sampler.log_density(theta) > -1.0) inner = theta;
+      else outer = theta;
+    }
+    const double slope = -sampler.nu - sampler.alpha * std::tan(outer);
+    scale = (is_left ? 1.0 : -1.0) / slope;
+    // Use the evaluated height, rather than assuming the root is exact:
+    // root-finding accuracy affects efficiency, not the target density.
+    edge = outer - sampler.log_density(outer) / slope;
+    if (!(scale > 0.0) || !std::isfinite(scale) || !std::isfinite(edge)) {
+      return std::unexpected(make_err(SimError::Kind::NumericIssue,
+                                     "Pearson IV: invalid rejection tangent"));
+    }
+  }
+  if (!(sampler.right > sampler.left)) {
+    return std::unexpected(make_err(SimError::Kind::NumericIssue,
+                                   "Pearson IV: invalid rejection interval"));
+  }
+  return sampler;
+}
+
 sim_expected<GaussHermite> gauss_hermite(int n) {
   if (n < 8) {
     return std::unexpected(make_err(
@@ -582,7 +680,9 @@ double beta_variate(double a, double b, Rng& rng) {
 }
 
 template <typename Rng>
-double pearson_raw_random(const MarginalSpec& m, Rng& rng) {
+double pearson_raw_random(const MarginalSpec& m,
+                          const PearsonIvSampler& iv_sampler,
+                          Rng& rng) {
   switch (m.pearson_type) {
     case 0: {
       std::normal_distribution<double> normal(0.0, 1.0);
@@ -599,16 +699,8 @@ double pearson_raw_random(const MarginalSpec& m, Rng& rng) {
       std::gamma_distribution<double> gamma(m.pearson_p1, std::abs(scale));
       return m.pearson_p2 + std::copysign(gamma(rng), scale);
     }
-    case 4: {
-      std::uniform_real_distribution<double> uniform(
-          std::numeric_limits<double>::min(),
-          1.0 - std::numeric_limits<double>::epsilon());
-      return pearson_type4_quantile(uniform(rng),
-                                    m.pearson_p1,
-                                    m.pearson_p2,
-                                    m.pearson_p3,
-                                    m.pearson_p4);
-    }
+    case 4:
+      return iv_sampler.draw(m, rng);
     case 5: {
       const double scale = m.pearson_p3;
       std::gamma_distribution<double> gamma(m.pearson_p1,
@@ -634,9 +726,10 @@ template <typename Rng>
 sim_expected<double>
 draw_standardized_marginal(const MarginalSpec& m,
                            const MarginalMoments& moments,
+                           const PearsonIvSampler& iv_sampler,
                            Rng& rng) {
   if (m.kind == MarginalKind::Pearson) {
-    const double raw = pearson_raw_random(m, rng);
+    const double raw = pearson_raw_random(m, iv_sampler, rng);
     if (!std::isfinite(raw)) {
       return std::unexpected(make_err(
           SimError::Kind::NumericIssue,
@@ -719,16 +812,10 @@ fill_pearson_column(Eigen::MatrixXd& X,
       return {};
     }
     case 4: {
-      std::uniform_real_distribution<double> uniform(
-          std::numeric_limits<double>::min(),
-          1.0 - std::numeric_limits<double>::epsilon());
+      auto sampler_or = pearson_type4_sampler(m);
+      if (!sampler_or.has_value()) return std::unexpected(sampler_or.error());
       for (Eigen::Index row = 0; row < X.rows(); ++row) {
-        if (auto ok = assign_raw(row,
-                                 pearson_type4_quantile(uniform(rng),
-                                                        m.pearson_p1,
-                                                        m.pearson_p2,
-                                                        m.pearson_p3,
-                                                        m.pearson_p4));
+        if (auto ok = assign_raw(row, sampler_or->draw(m, rng));
             !ok.has_value()) return ok;
       }
       return {};
@@ -2799,11 +2886,20 @@ simulate_independent_matrix(Eigen::Index n,
     return X;
   }
 
+  std::vector<PearsonIvSampler> iv_samplers(marginals.size());
+  for (std::size_t j = 0; j < marginals.size(); ++j) {
+    if (marginals[j].kind == MarginalKind::Pearson &&
+        marginals[j].pearson_type == 4) {
+      auto sampler_or = pearson_type4_sampler(marginals[j]);
+      if (!sampler_or.has_value()) return std::unexpected(sampler_or.error());
+      iv_samplers[j] = *sampler_or;
+    }
+  }
   for (Eigen::Index row = 0; row < n; ++row) {
     for (Eigen::Index j = 0; j < p; ++j) {
       const auto idx = static_cast<std::size_t>(j);
       auto y_or = draw_standardized_marginal(
-          marginals[idx], moments[idx], rng);
+          marginals[idx], moments[idx], iv_samplers[idx], rng);
       if (!y_or.has_value()) return std::unexpected(y_or.error());
       X(row, j) = marginals[idx].mean + marginals[idx].sd * *y_or;
     }
