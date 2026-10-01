@@ -20,15 +20,19 @@ robust-score demonstration was removed after its checks became maintained tests.
 The ordinal observed-score omega studies share one leaf with separate target
 and sampling result trees; RBM estimation risk is research/banked/53.
 
-Research studies now use `experiments/research/{active,banked,evidence}/`: 16
-active studies (including protected ongoing paper pipelines), 16 banked ideas
-with named reopening triggers, and 9 retained evidence studies. The collection
-index records findings, scope limits and concrete next checks. Gaussian and
-stress polychoric-omega delta coverage share one leaf, with different targets
-and unchanged historical results in separate lanes. Four predecessor checks
-are archived. Frozen interval and calibration summaries retain their original
-metadata and source fingerprints; navigation changes do not change inference
-policy or authorize resuming incompatible checkpoints.
+Research studies use `experiments/research/{active,banked,evidence}/`: 16
+active studies (including protected paper pipelines), 12 banked ideas and
+4 retained evidence studies. Three consolidated showcases retain scalar
+intervals (normal/robust), reliability targets (coefficient/Bell examples),
+and robust test calibration (battery/mechanisms/diagnostics). The finite-sample
+GOF probes share one banked study with distinct DGPs. Redundant ordinal probes
+were removed after naming maintained regression checks; the unrun fixed-rank
+flip harness is replaced by a trigger entry in the speculative backlog.
+The Bell main population targets reproduce, while historical alternative-CFA
+sensitivity fits need convergence/objective revalidation (see the active backlog).
+The collection index owns findings and reopening conditions. Frozen evidence,
+original metadata and interval source fingerprints remain unchanged. Navigation
+changes do not change policy or authorize incompatible checkpoint resumption.
 
 ## Repository layout
 
@@ -2151,20 +2155,12 @@ an unconstrained gradient test to constrained solutions.
   families. Their matched-null powers lay between roughly 0.22 and 0.24, versus
   0.21 for the flips, at only 200 null draws per cell; this is illustrative
   evidence rather than a method ranking.
-  Experiment research/34 is the implemented fixed-rank calibration frontier prompted by
-  those findings; its substantive run is intentionally still pending. It fixes
-  `G=8` and `df=28`, tests the same `x2:x5` loading equalities at p=5 and p=20,
-  and leaves `x6:x20` group-specific in the latter model. The broad 128-cell
-  null screen crosses average group n=50/100/200/400, balanced versus roughly
-  1:3 allocation, homogeneous versus alternating factor/residual information,
-  and normal/VM/IG/PL data. A calibrated 32-cell null/power focus uses the
-  normal and PL corners at n=50/100. Its checkpointed local/Modal harness saves
-  cellwise Wilson intervals, cross-cell calibration dispersion, paired
-  effective/standardized decisions and variance shifts, phase timings, and
-  nominal plus matched-null power. Thus p=5 versus p=20 isolates nuisance
-  dimension at fixed test rank; it does not answer the separate few-versus-many
-  restrictions question. No substantive outcome is recorded until the result
-  bundle is run and audited.
+  The former research/34 fixed-rank frontier had no local substantive results
+  and its unused harness has been retired. Its p=5 versus p=20 nuisance-dimension
+  question at G=8, df=28 is now a consumer-gated hypothesis in
+  `project/backlog/speculative.md#fixed-rank-flip-standardization`, with cheaper
+  effective-flip/score alternatives and historical remote identifiers. It is
+  not a queued simulation; maintained flip methods and dense-oracle gates remain.
   Experiment research/35 is the first concrete residual/RLS-flip GOF derivation, kept
   leaf-local pending calibration. For one complete covariance block it forms
   model-centred saturated covariance contributions and projects them through
@@ -2940,8 +2936,8 @@ an unconstrained gradient test to constrained solutions.
   correlation Gamma; robust reporting keeps the observed pairwise Gamma as the
   meat.
   Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
-  coverage lives in `cpp/tests/unit/ordinal_test.cpp`; the advisory calibration
-  probe is `experiments/_archive/ordinal-pd-gamma`.
+  coverage lives in `cpp/tests/unit/ordinal_test.cpp`. The redundant construction
+  probe was removed; its smoke outputs were not calibration evidence.
 
 ### Two-level (multilevel) ML
 

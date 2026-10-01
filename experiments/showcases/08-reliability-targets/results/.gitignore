@@ -1,0 +1,6 @@
+*
+!.gitignore
+!bell/
+!sampling-history/
+!coefficients/
+!verification/

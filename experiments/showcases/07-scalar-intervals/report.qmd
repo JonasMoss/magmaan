@@ -1,0 +1,147 @@
+---
+title: "Scalar confidence intervals"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+For interior complete-data ML parameters, when do score and profile-LR
+intervals improve on Wald intervals, and what do robustness and inversion cost?
+
+## Short answer
+
+**The benefit depends on the parameter and sampling distribution.** In the
+normal N=100 correlation pilot, expected-information Wald covered 88.5%,
+score 93.0% and profile LR 92.0%, against nominal 95%. The paired gains were
+4.5 and 3.5 percentage points (Monte Carlo SE 1.6 and 1.5 points). Loading
+coverage did not establish a method ranking.
+
+In the larger robust study's skewed N=100 correlation cell, Score-E covered
+94.9% of valid intervals, versus 89.6% for Wald-O. Counting failed inversions
+against all attempts reduced Score-E to 92.6%; LR-E reached 93.8% conditional
+coverage and 90.8% successful-and-covering. All three undercovered the skewed
+loading. Expected-information inversion cost about 26–33 times as much as
+Wald. The normal Bartlett pilot did not establish a benefit large enough to
+justify its noise and cost. These separate evidence sets do not change the
+ordinary-user inference policy.
+
+## Evidence
+
+```{r setup}
+read_result <- function(lane, name) {
+  p <- file.path("results", lane, "frozen", name)
+  if (!file.exists(p)) stop("Missing frozen artifact: ", p,
+    "; see Reproduce. Rendering never runs the experiment.")
+  read.csv(p, stringsAsFactors = FALSE)
+}
+normal <- read_result("normal", "main_summary.csv")
+robust <- read_result("robust", "summary.csv")
+bartlett <- read_result("normal", "bartlett-pilot_summary.csv")
+stability <- read_result("normal", "stability.csv")
+```
+
+### Normal sampling
+
+There are 200 paired datasets per N and two targets: a loading and a factor
+correlation, in an eight-indicator two-factor model. All 4,800 ordinary
+intervals completed, with no truth-test/inversion disagreements. The paired
+comparison carries the uncertainty stated above; differences of a point or
+two in this pilot should not be treated as a general ranking.
+
+```{r}
+z <- normal[normal$method %in% c("wald_expected", "score_expected", "lr"), ]
+k <- unique(z[, c("target", "n")]); k <- k[order(k$target, k$n), ]
+tab <- k
+for (m in c("wald_expected", "score_expected", "lr"))
+  tab[[m]] <- vapply(seq_len(nrow(k)), function(i)
+    100 * z$coverage[z$target == k$target[i] & z$n == k$n[i] & z$method == m], numeric(1))
+names(tab) <- c("Target", "N", "Wald (%)", "Score (%)", "LR (%)")
+knitr::kable(tab, digits = 1, row.names = FALSE)
+```
+
+### Robust sampling
+
+The robust study has 500 paired datasets per cell, N=100/300/1000 and normal,
+elliptical t10 and heterogeneous-Gamma innovations: 3,000 datasets and 6,000
+intervals per method. Wald-O uses observed information; Score-E and LR-E use
+expected information at candidate restrictions, with uncentered empirical
+score second moments. The O/E alternatives change information choice, not
+sampling. Nonnormal score and LR statistics use candidate-specific robust
+scaling; they are not the normal lane's reference tests.
+
+```{r}
+z <- robust[robust$n == 100 & robust$distribution == "heterogeneous_gamma" &
+              robust$method %in% c("wald_O", "score_E", "lr_E"), ]
+knitr::kable(data.frame(Target = z$target, Method = z$method,
+  Attempted = z$attempts, Valid = z$valid,
+  `Coverage (%)` = 100*z$coverage, `MC SE (points)` = 100*z$coverage_mcse,
+  `Successful and covering (%)` = 100*z$successful_covering_rate,
+  `Mean seconds` = z$mean_seconds, check.names = FALSE),
+  digits = c(0,0,0,0,1,1,1,3), row.names = FALSE,
+  caption = "Difficult N=100 skewed cells; coverage conditions on valid intervals.")
+```
+
+Expected-information score and LR had 15 and 18 inversion failures; observed
+information had 148 and 211. One observed-LR cell failed in 24.2% of attempts.
+Failure-conditioned coverage can therefore give an optimistic comparison.
+Frozen paired/common-valid tables distinguish coverage gains from different
+success sets. A finite search grid does not prove globally connected sets.
+
+### Normal Bartlett pilot
+
+The candidate-specific correction uses 399 resamples on 50 N=100 loading
+datasets. Both ordinary and corrected LR gave 47 successful covering intervals
+out of 50 attempts. Bartlett gained one covering interval among 49 common-valid
+cases, too little to establish a benefit. Endpoint checks on the first ten
+datasets use 1,999 resamples and an independent bootstrap stream.
+
+```{r}
+z <- bartlett[bartlett$method %in% c("lr", "lr_bartlett"), ]
+knitr::kable(data.frame(Method = z$method, Valid = z$valid,
+  `Coverage (%)` = 100*z$coverage,
+  `Successful and covering (%)` = 100*z$successful_covering,
+  `Mean seconds` = z$mean_seconds, check.names = FALSE), digits = 2,
+  row.names = FALSE)
+```
+
+Of the `r sum(stability$valid)` valid endpoint comparisons,
+`r sum(stability$unstable[stability$valid])` moved by more than 5% of ordinary
+LR width. Bootstrap correction noise remains part of the inference problem.
+
+## Caveats
+
+These designs concern interior parameters in a specified small CFA. They do
+not settle boundary, missing-data, ordinal or covariance-functional intervals.
+Normal and robust lanes retain their original statistical definitions, seeds,
+source/package fingerprints and failure rules. Their rates are not pooled.
+Timing describes the recorded implementations and machine.
+
+Full prespecified designs are retained in [normal](design/normal.md) and
+[robust](design/robust.md). Frozen CSVs include paired contrasts, failure reasons,
+endpoint diagnostics and provenance.
+
+## Reproduce
+
+From this directory:
+
+```sh
+Rscript run_experiment.R --lane normal --help
+Rscript run_experiment.R --lane normal --smoke --output fresh-smoke
+Rscript run_experiment.R --lane robust --help
+Rscript run_experiment.R --lane robust --smoke --output /tmp/robust-intervals
+quarto render report.qmd
+```
+
+Use each lane's original runner to extend its prespecified grid, and its
+`scripts/summarize.R` (normal) or `scripts/freeze_results.R` (robust) to publish
+summaries only after auditing a new run. Rendering reads only this study's
+`results/{normal,robust}/frozen/`. Original source fingerprints remain intact;
+frozen evidence came from research/50 and research/51.

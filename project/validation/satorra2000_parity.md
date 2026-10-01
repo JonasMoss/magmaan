@@ -334,7 +334,7 @@ Two further limits of the lavaan comparator, both from
 - It requires `estimator` `ML` or `MLM`, so ordinal and continuous-LS pairs have
   no lavaan-native nested FMG comparator either.
 
-Evidence: `experiments/_archive/score-vs-lrt/diagnose_trace_sb_nested.R`, which also
+Evidence: `experiments/showcases/09-robust-test-calibration/lanes/diagnostics/diagnose_trace_sb_nested.R`, which also
 records that `pEBA4` collapses onto `pall` exactly when `df_diff <= 4` (the
 EBA-j blocks become singletons once `j >= m`), so a nested design meant to
 exercise pEBA4 as a distinct method needs `df_diff > 4`.

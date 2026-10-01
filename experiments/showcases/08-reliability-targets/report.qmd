@@ -1,0 +1,140 @@
+---
+title: "Reliability coefficients and their targets"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Which population quantity do covariance coefficients and fitted omega target,
+and how much can misspecification change their relationship to reliability?
+
+## Short answer
+
+**A coefficient's probability limit is not automatically generating
+reliability.** In the correct one-factor example, SG covariance omega and
+fitted omega recover unit-score reliability (0.843), while alpha and lambda6
+have different population values. Fitting one factor to the two-factor
+example gives omega 0.713, versus generating reliability 0.820; the covariance
+functionals have other limits. A confidence interval can accurately target a
+functional that is not the reliability the analyst intended.
+
+The broader Bell-inspired population examples demonstrate this distinction
+across misspecified structures and plausible CFA choices. These deterministic
+examples show target differences without finite-sample noise. They do not
+estimate coverage, sampling bias or which model an analyst can identify from data.
+
+## Evidence
+
+```{r setup}
+read_result <- function(lane, name) {
+  p <- file.path("results", lane, name)
+  if (!file.exists(p)) stop("Missing ", p, "; run the corresponding lane before rendering.")
+  read.csv(p, stringsAsFactors = FALSE)
+}
+targets <- read_result("coefficients", "population_targets.csv")
+bias <- read_result("bell", "omega_bias.csv")
+sensitivity <- read_result("bell", "cfa_sensitivity_summary.csv")
+```
+
+### Covariance functionals versus a fitted one-factor target
+
+Both six-indicator populations have unit marginal variances. The one-factor
+loadings are .85/.75/.70/.65/.60/.55. In the second example loadings form two
+blocks (.85/.75/.65 and .80/.70/.60), with factor correlation .35.
+Generating reliability is common unit-weighted total variance divided by
+observed total variance. Covariance-only coefficients are evaluated directly
+at the population covariance; fitted omega uses the ML one-factor pseudo-target.
+
+```{r}
+knitr::kable(data.frame(Population = targets$population_label,
+  Coefficient = targets$method, `Population value` = targets$target_functional,
+  `Generating reliability` = targets$true_reliability,
+  Difference = targets$target_functional-targets$true_reliability,
+  check.names = FALSE), digits = 3, row.names = FALSE)
+```
+
+The demo retains the populations from former research/16, with one fitted-omega
+point target instead of duplicate rows labelled by SE method. SE conventions
+do not change that target. The old small sampling pilot is retained under
+`results/sampling-history/` for provenance; it is not used as calibration
+evidence. Formulas, gradients and delta calculations are maintained in tests.
+
+### Bell-inspired misspecification and sensitivity
+
+The second lane evaluates functionals at population covariance matrices for
+one-factor, two-factor, bifactor and residual-dependence structures, at low
+and high reliability. Its truth is reliability attributable to the generating
+main factor, distinct from the preceding demo's total common-score target.
+It compares one-factor ML/ULS/GLS omega, observed-total
+and model-implied denominators, and SG covariance omega. The table shows worst
+absolute population differences for primary ML and SG variants, by structure.
+
+```{r}
+z <- bias[(bias$estimator == "ML" & bias$omega_variant == "omega_u_model_implied") |
+            bias$estimator == "closed_form", ]
+tab <- do.call(rbind, lapply(split(z, interaction(z$population, z$estimator)), function(x) {
+  w <- x[which.max(abs(x$bias)), ]
+  data.frame(Population = w$population_label, Estimator = w$estimator,
+    `Reliability setting` = w$reliability_level, `Worst absolute difference` = abs(w$bias),
+    check.names = FALSE)
+}))
+knitr::kable(tab, digits = 3, row.names = FALSE)
+```
+
+A second set fits several CFA structures to each covariance. Their spread is
+a historical model-sensitivity illustration, not a confidence interval.
+
+```{r}
+z <- sensitivity[sensitivity$reliability_level == "low", ]
+knitr::kable(data.frame(Population = z$population_label,
+  `Generating reliability` = z$true_reliability,
+  `One-factor difference` = z$one_factor_bias,
+  `Omega range across models` = z$omega_range,
+  `Smallest absolute difference` = z$min_abs_bias, check.names = FALSE),
+  digits = 3, row.names = FALSE)
+```
+
+Main-factor reliability, total common-score reliability and fitted one-factor
+omega must be distinguished. The `congeneric_diagnostics.csv` controls inspect
+rank-one/tetrad closeness; a small discrepancy or CFA spread alone does not
+identify the desired reliability quantity.
+
+## Caveats
+
+The Bell lane is a population reconstruction and extension inspired by Bell
+et al. (2024), rather than a finite-N replication. Its exact population formulas
+and estimator/denominator definitions remain in the runner. Population fitting
+uses a large nominal n to evaluate the ML limit, not a million-observation
+Monte Carlo experiment. Different estimators' discrepancy numbers are not
+interchangeable fit tests.
+
+A fresh population smoke on the current installed package reproduced the
+main one-factor/SG comparison within $10^{-6}$ and its generating targets
+exactly, but some alternative CFA fits failed or reached different estimates.
+The model-sensitivity table above therefore reports the frozen historical
+fits, not a verified current-package model-selection result. Before using
+that extension for a new claim, revalidate convergence, admissibility and
+objective agreement for each alternative CFA. The compact reproduction audit
+is retained under `results/verification/`; full fresh outputs stay local. Changing the model changes the functional even
+with valid standard errors. Neither lane settles near-boundary interval calibration.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --lane coefficients --smoke
+Rscript run_experiment.R --lane bell --smoke --results-dir /tmp/reliability-bell
+quarto render report.qmd
+```
+
+Coefficients writes targets under `results/coefficients/`. Bell outputs came
+from research/17 and remain under `results/bell/`. The Bell smoke command
+computes the same deterministic population study in a fresh directory. Use
+`--lane NAME --help` for commands; rendering only reads local CSVs.

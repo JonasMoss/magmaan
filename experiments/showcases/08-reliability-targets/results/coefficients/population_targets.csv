@@ -1,0 +1,9 @@
+"population","population_label","method","target_functional","target_kind","true_reliability"
+"one_factor","Correct one-factor","alpha",0.839097744360902,"covariance functional",0.842606516290727
+"one_factor","Correct one-factor","lambda6",0.819345170839808,"covariance functional",0.842606516290727
+"one_factor","Correct one-factor","spearman_guttman_omega",0.842606516290727,"covariance functional",0.842606516290727
+"one_factor","Correct one-factor","fitted_omega",0.84260651629077,"one-factor ML pseudo-target",0.842606516290727
+"two_factor_fit_as_one","Two-factor fit as one","alpha",0.737943205519012,"covariance functional",0.820150810203754
+"two_factor_fit_as_one","Two-factor fit as one","lambda6",0.761038768593655,"covariance functional",0.820150810203754
+"two_factor_fit_as_one","Two-factor fit as one","spearman_guttman_omega",0.766132400128349,"covariance functional",0.820150810203754
+"two_factor_fit_as_one","Two-factor fit as one","fitted_omega",0.713245415575058,"one-factor ML pseudo-target",0.820150810203754

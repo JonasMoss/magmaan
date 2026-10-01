@@ -1,0 +1,6 @@
+artifact,rows,max_numeric_difference,changed_non_numeric_fields
+omega_bias.csv,56,5.636999469982307e-07,0
+population_targets.csv,8,0,0
+congeneric_diagnostics.csv,8,0,0
+cfa_sensitivity_summary.csv,8,0.048126050576352,3
+cfa_reliability.csv,26,0.08022773440951696,40

@@ -166,9 +166,7 @@ present oracle value agreement as calibration or silently change the estimator.
 **Gap:** an ordinary-user LR/score interval policy with robust small-sample
 calibration, domain recovery and acceptable constrained-refit cost.
 **Available:** Wald policy intervals, explicit profile primitives and
-[normal](../../experiments/research/evidence/50-normal-parameter-intervals/report.qmd)/
-[robust interval](../../experiments/research/evidence/51-robust-parameter-intervals/report.qmd)
-studies; `confint(test="lr")` remains reserved.
+the consolidated [normal/robust scalar-interval showcase](../../experiments/showcases/07-scalar-intervals/report.qmd); `confint(test="lr")` remains reserved.
 **Build if:** a policy decision is explicitly commissioned with held-out
 coverage/failure/cost criteria. Reconcile centering conventions and boundary
 failures before changing defaults; existing studies alone do not adopt a method.
@@ -207,6 +205,24 @@ flip and permutation studies.
 policy. Require nuisance-singularity, allocation, sparse-category and matched-
 power checks; a fixed-statistics shuffle is not a raw-label test. Any ridge or
 shrinkage rescue defines a separate tuned method.
+
+### Fixed-rank flip standardization
+
+**Gap:** whether nuisance dimension, unequal allocation or heterogeneous
+information makes flip-specific standardization useful at fixed test rank.
+**Available:** effective flips, score-SB/pEBA4 and the maintained dense-covariance
+oracle in `cpp/tests/unit/score_robust_test.cpp`; the completed homogeneous
+illustration does not justify standardization from rank alone.
+**Build if:** a named grouped-invariance consumer exposes a size/power or
+variance-displacement gain large enough to justify standardization cost.
+Start with paired controls at G=8, df=28, p=5 versus p=20 and small unequal
+groups; validate moments and matched-null power before widening a grid.
+
+The former research/34 harness was retired without local substantive results.
+Its proposed broad 128-cell and focused 32-cell designs are historical, not
+queued work. Legacy remote identifiers were app `exp34-flip-calibration-frontier`
+and volume `exp64-flip-results`; inspect any remote artifacts before claiming
+that no results ever existed. The library methods and regression gates remain.
 
 ### `spectral_truncate` weight policy for degenerate ADF/WLS Γ̂
 

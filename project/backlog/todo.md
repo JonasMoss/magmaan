@@ -189,7 +189,7 @@ moment-target foundation; that extraction can proceed alongside normalization.
   information checks reject the identified Kline Lynam model. Judge rank in
   normalized/whitened geometry. **Check:** rescaling a variable by 100 preserves
   the statistic, with genuine singular controls. Evidence:
-  [calibration battery](../../experiments/research/evidence/52-robust-calibration-battery/report.qmd).
+  [calibration battery](../../experiments/showcases/09-robust-test-calibration/report.qmd).
 
 - [ ] **L — bring FIML into the ordinary policy.** Compose adopted observed-H0
   sensitivity and expected metric, with distinct score/LR SB and PEBA4 spectra.
@@ -373,6 +373,15 @@ shared primitives or promotes an ordinary-user default.
   numeric-policy contracts. See the roadmap's continuous-weight implementation.
 
 ## Validation and maintenance
+
+- [ ] **S — revalidate the retained Bell alternative-CFA controls.** The
+  consolidated reliability showcase reproduces generating targets and main
+  one-factor comparisons, but current-package population smoke changes some
+  alternative-CFA solutions/convergence relative to the frozen sensitivity
+  examples. **Check:** separate each model's convergence/admissibility from its
+  objective and reliability target; independently verify any claimed optimum
+  before extending or using model spread as evidence. Keep historical results
+  distinct. See [reliability targets](../../experiments/showcases/08-reliability-targets/report.qmd).
 
 ### Capability inventory
 

@@ -1,0 +1,133 @@
+---
+title: "Finite-sample goodness-of-fit references"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Can Hotelling or projected Satterthwaite references improve finite-sample
+calibration of centered robust SEM scores, and when does the improvement persist?
+
+## Short answer
+
+**Hotelling is promising in the available grids; the projected empirical
+shape correction remains unproved.** The rank/sample-ratio grid extends the
+five-degree-of-freedom pilot, but Hotelling is not exact for estimated SEM
+covariance scores. In the projected lane's VM transition, replacing the
+same-sample shape estimate with an independent replicate did not reveal a
+consistent coupling benefit; both projected empirical versions remained
+conservative. Higher-order moments and fitted nuisance effects remain unresolved.
+
+This study is banked. Reopen for a named finite-sample GOF consumer with an
+independent influence/moment validation. The lanes retain different ranks,
+innovation moments and historical runs; they are not one pooled simulation.
+
+## Evidence
+
+```{r setup}
+read_lane <- function(lane, candidates) {
+  paths <- file.path("results", lane, candidates)
+  good <- paths[file.exists(file.path(paths,"method_summary.csv"))]
+  if (!length(good)) stop("Missing ",lane," results; run that lane's smoke command.")
+  path <- good[[1L]]
+  list(path=path, summary=read.csv(file.path(path,"method_summary.csv")))
+}
+p <- read_lane("projected",c("pilot","smoke"))
+h <- read_lane("hotelling",c("full","probe","smoke"))
+summarize <- function(z, methods) {
+  z <- z[z$method %in% methods & is.finite(z$rejection_rate),]
+  do.call(rbind,lapply(split(z,interaction(z$distribution,z$method)),function(x)
+    data.frame(Distribution=x$distribution[1],Method=unname(c(score_chisq_centered="Centered chi-square",
+        hotelling_gaussian="Hotelling",score_hotelling="Hotelling",
+        satterthwaite_normal_projected="Normal-reference projected",
+        satterthwaite_empirical_projected="Empirical projected",
+        score_chisq_centered_matched="Centered chi-square",hotelling_gaussian_matched="Hotelling",
+        satterthwaite_empirical_projected_matched="Same-sample projected",
+        satterthwaite_independent_projected="Independent projected",
+        fmg_peba4_rls="pEBA4 RLS")[x$method[1]]),Cells=nrow(x),
+      `Mean absolute error (points)`=100*mean(abs(x$rejection_rate-.05)),
+      `Minimum rejection (%)`=100*min(x$rejection_rate),
+      `Maximum rejection (%)`=100*max(x$rejection_rate),
+      `Minimum valid draws`=min(x$n_valid),check.names=FALSE)))
+}
+```
+
+### Projected shape: fixed residual rank
+
+The pilot fixes q=5 and varies N=30/60/120/240 under normal and Vale–Maurelli
+innovations (skewness 2, excess kurtosis 7). The projected correction uses
+normal-reference, DGP-oracle or empirical shape estimates. An oracle or
+independent-replication shape is a diagnostic, not implementable single-sample
+inference. The current report reads `r p$path`.
+
+```{r}
+knitr::kable(summarize(p$summary,c("score_chisq_centered","hotelling_gaussian",
+  "satterthwaite_normal_projected","satterthwaite_empirical_projected")),
+  digits=2,row.names=FALSE)
+```
+
+```{r}
+path <- file.path("results","projected","transition","method_summary.csv")
+if (file.exists(path)) {
+  z <- read.csv(path)
+  knitr::kable(summarize(z,c("score_chisq_centered_matched","hotelling_gaussian_matched",
+    "satterthwaite_empirical_projected_matched","satterthwaite_independent_projected")),
+    digits=2,row.names=FALSE,caption="VM transition: independent replicate isolates shape/numerator dependence.")
+}
+```
+
+### Hotelling: rank and sample-to-rank ratio
+
+The grid crosses q=2/5/9/20 and N=30/60/120/240 under normal and a more severe
+Vale–Maurelli DGP (skewness 3, excess kurtosis 21). It reads `r h$path`.
+Cellwise Wilson intervals, valid denominators and failure reasons remain
+in each lane's CSVs. Descriptive mean absolute errors are averages of cell
+errors, not pooled rejection estimates.
+
+```{r}
+knitr::kable(summarize(h$summary,c("score_chisq_centered","score_hotelling",
+  "fmg_peba4_rls")),digits=2,row.names=FALSE)
+```
+
+## Caveats and methods
+
+For fitted-model projected covariance contributions $\psi_i\in\mathbb R^q$,
+use $\widehat B_c=(n-1)^{-1}\sum_i(\psi_i-\bar\psi)(\psi_i-\bar\psi)^\mathsf T$
+and $Q_c=n\bar\psi^\mathsf T\widehat B_c^{-1}\bar\psi$.
+The asymptotic reference is $\chi_q^2$; ordinary Hotelling replaces it by
+$(n-q)Q_c/[q(n-1)]\dot\sim F_{q,n-q}$.
+
+Hotelling's exact reference requires iid Gaussian vectors with suitable
+mean/covariance assumptions. SEM covariance contributions are quadratic in
+observations and use fitted nuisance parameters; normal observed data do not
+establish exactness. The projected Satterthwaite calculation examines
+denominator shape, without proving a complete nuisance-influence expansion.
+Empirical shape involves noisy higher (up to eighth) moments; same-sample
+and independent estimates are diagnostic controls. Raw OPG, centered
+covariance and working-RLS spectra have different conventions.
+
+Smoke verifies execution and identities, not rankings. The pilot/full artifacts
+have substantive replication counts, but these exploratory grids have no
+policy-selection or power claim. Different VM moment targets remain explicit.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --lane projected --help
+Rscript run_experiment.R --lane projected --smoke --results-dir /tmp/gof-projected
+Rscript run_experiment.R --lane hotelling --help
+Rscript run_experiment.R --lane hotelling --smoke --results-dir /tmp/gof-hotelling
+quarto render report.qmd
+```
+
+Former research/40 and /41 sources and outputs remain in their lanes. The
+report reads only `results/{projected,hotelling}/`, preferring pilot/full to
+smoke. Preserve seeds and method definitions; verify moves in fresh directories.

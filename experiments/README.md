@@ -8,11 +8,11 @@ have no numeric prefix. Conventions are in [AGENTS.md](AGENTS.md).
 | Purpose | Studies | Activity |
 |---------|--------:|----------|
 | [Decisions](#decisions) | 2 | Maintained registers and held-out evidence for library defaults. |
-| [Showcases](#showcases) | 6 | Capabilities, parity and performance demonstrations. |
+| [Showcases](#showcases) | 9 | Capabilities, parity and performance demonstrations. |
 | [Replications](#replications-and-reference-studies) | 9 | Published results and reference reconstructions. |
-| [Research](#research) | 41 | 16 active, 16 banked, 9 retained evidence studies. |
+| [Research](#research) | 32 | 16 active, 12 banked, 4 retained evidence studies. |
 | [Engineering](#engineering-checks) | 9 | 4 active, 4 banked, 1 completed paper-evidence study. |
-| [Archive](#archived) | 18 | Settled investigations and predecessors, with sources/results retained. |
+| [Archive](#archived) | 16 | Settled investigations and predecessors, with sources/results retained. |
 
 ## Engineering cleanup, 30 September 2026
 
@@ -56,17 +56,15 @@ answer. They do not change the statistical design or library defaults.
   stress (former research/23) now form [polychoric omega](research/active/22-ordinal-polychoric-omega/report.qmd).
   One runner selects `--lane coverage|stress`; historical outputs stay in
   separate subdirectories. Their generating and pseudo-true targets remain distinct.
-- **Archived:** the ordinal overlap-Gamma construction check (07), the completed
-  flip illustration (33), the FIML flip pilot (36), and the initial score-versus-LR
-  comparison (45). The wider stress/battery studies retain the current questions;
-  the earlier sources and results remain reproducible under `_archive/`.
-  The trace-only SB diagnostic in the last archive remains useful maintainer evidence.
+- **First-pass archives:** the flip illustration (33) and FIML pilot (36)
+  remain under `_archive/`. The second pass below removes redundant ordinal
+  probes and extracts the useful diagnostics from the earlier score/LR comparison.
 - **Banked:** exploratory permutations, flips, covariance-functional corrections
   and geometry ideas now have a named trigger in the table below. A promising
   result does not automatically queue another simulation.
 - **Protected:** paper pipelines remain independent; frozen normal/robust interval
-  and robust-calibration summaries stay unchanged. No unique research evidence
-  was deleted. Merging removed the second omega folder and duplicate narrative.
+  and robust-calibration summaries stay unchanged. Merging removed duplicate
+  navigation and narrative while keeping each design and its original evidence.
 
 The active work has four main threads: functional/profile intervals, incomplete-data
 inference, PSD/barrier estimation, and heterogeneous spectral calibration. The
@@ -81,6 +79,39 @@ placement is not a claim that all promised grids were executed. Research/06 has
 5,000-replication six-indicator null artifacts despite its draft-style report;
 its larger-model and power design remains unfinished. Do not overwrite frozen
 artifacts or relax resume fingerprints to reuse them after navigation changes.
+
+## Research consolidation, 1 October 2026
+
+- **Scalar intervals:** former research/50 and /51 form
+  [showcase/07](showcases/07-scalar-intervals/report.qmd), with separate normal
+  and robust lanes, original prespecified designs and unchanged frozen sources/results.
+- **Reliability targets:** former research/16 and /17 form
+  [showcase/08](showcases/08-reliability-targets/report.qmd). Keep the deterministic
+  coefficient targets and Bell-style population examples; the old 30-rep sampling
+  pilot stays as local provenance, not coverage evidence. Formula/gradient/delta
+  correctness is maintained in [reliability tests](../cpp/tests/unit/reliability_test.cpp).
+- **Robust calibration:** former research/52, /38 and selected /45 diagnostics
+  form [showcase/09](showcases/09-robust-test-calibration/report.qmd): a frozen
+  null-size battery, homogeneous spectral controls and correctness/timing checks.
+  The overlapping /45 comparison runner is removed; all its original local
+  outputs remain under `results/diagnostics/`. Heterogeneous-tail research/49
+  remains active and independent.
+- **Finite-sample GOF:** research/40 and /41 form one
+  [banked study](research/banked/40-finite-sample-gof/report.qmd). Projected-shape
+  and Hotelling lanes retain their different ranks, innovation moments and outputs.
+  Reopen for a concrete consumer plus independent moment/nuisance-influence validation.
+- **Deleted:** former research/07 and /08 ordinal probes, whose local smoke
+  outputs do not support calibration comparisons. Overlap influence and shared
+  ULS/DWLS/WLS/NT/DLS stage-two construction are maintained in
+  [ordinal unit tests](../cpp/tests/unit/ordinal_test.cpp) and
+  [pairwise ordinal golden checks](../cpp/tests/golden/ordinal_golden_test.cpp).
+- **Retired without local results:** research/34's unrun flip-standardization
+  pipeline. Its hypothesis, cheaper alternatives, reopening trigger and legacy
+  remote identifiers now live in the
+  [speculative backlog](../project/backlog/speculative.md#fixed-rank-flip-standardization).
+
+Consolidation is navigation and evidence maintenance; it does not select a new
+library default. Results from different targets/DGPs are never pooled.
 
 ## Decisions
 
@@ -104,6 +135,10 @@ Demonstrate magmaan capabilities, agreement with lavaan/other references, or a c
 | 04 | [foldnes-moss-gronneberg-2026](showcases/04-foldnes-moss-gronneberg-2026/report.qmd) | replication | active | Can magmaan reproduce the full FMG goodness-of-fit machinery versus lavaan and semTests? |
 | 05 | [fiml-measurement-invariance-fmg](showcases/05-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |
 | 06 | [speed-attribution](showcases/06-speed-attribution/report.qmd) | benchmark | active | How much of matched ML + GOF/Wald runtime is preparation, fitting, or inference, and which comparisons pass numerical agreement before a public speed claim? |
+
+| 07 | [scalar-intervals](showcases/07-scalar-intervals/report.qmd) | probe | complete | How do Wald, score and profile-LR scalar intervals compare under normal and nonnormal sampling, accounting for failures and cost? |
+| 08 | [reliability-targets](showcases/08-reliability-targets/report.qmd) | benchmark | complete | Which population quantity do covariance coefficients and fitted omega target, and how does misspecification change that target? |
+| 09 | [robust-test-calibration](showcases/09-robust-test-calibration/report.qmd) | benchmark | complete | How do robust score and LR tests calibrate across models and DGPs, and what do spectral and correctness controls explain? |
 
 ## Replications and reference studies
 
@@ -148,30 +183,26 @@ Concrete remaining checks and protected ongoing paper pipelines.
 | 48 | [multiinfo-jeffreys-posterior](research/active/48-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? | Paper pipeline: posterior accuracy depends on functional, prior and ESS; recover substantive outputs and finish joint/Q/path comparisons (local main run: smoke). |
 | 49 | [spectral-tail-calibration](research/active/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? | IG oracle spectra can calibrate while estimated moments fail; investigate heterogeneous spectral estimation bias and failure conditioning. |
 
-### Banked research ideas (16)
+### Banked research ideas (12)
 
 No queued run. Reopen for the named consumer or validation trigger.
 
 | # | Experiment | Kind | Lifecycle | Question | Finding / next check or reopening trigger |
 |--:|------------|------|-----------|----------|------------------------------------------|
-| 08 | [ordinal-stage2-pairwise](research/banked/08-ordinal-stage2-pairwise/report.qmd) | benchmark | banked | When pairwise ordinal Gamma is reused, how do ULS/DWLS/WLS/NT/DLS stage-two estimators compare on p-values, SE diagnostics, and runtime? | Stage-two estimators reuse the same moments; reopen for a named ordinal estimator decision and a full grid (local run: 2 reps). |
 | 09 | [rmsea-like-catml-dwls](research/banked/09-rmsea-like-catml-dwls/report.qmd) | probe | banked | Does lavaan's categorical robust RMSEA behave as a consistent CATML-at-DWLS criterion-at-estimator statistic under ordinal misspecification? | CATML-at-DWLS targets a hybrid criterion; reopen for a named RMSEA consumer and a large-N pseudo-target check (local run: smoke). |
 | 11 | [chen-ordinal-fmg-pvalues](research/banked/11-chen-ordinal-fmg-pvalues/report.qmd) | probe | banked | Is the WLSMV pairwise-missing scalar Type-I inflation a defect of the test/p-value family or of the missing-data mechanism (MCAR vs MAR)? | Reported MAR inflation points to biased polychorics; reopen for stronger missingness/bias diagnostics and recover the substantive run (local output: 3 reps). |
 | 14 | [mixed-fiml-pairwise-efficiency](research/banked/14-mixed-fiml-pairwise-efficiency/report.qmd) | benchmark | banked | Under item missingness in mixed continuous/ordinal SEM, does a continuous-FIML first stage (pairwise x FIML) buy efficiency and reduce MAR bias over fully pairwise statistics, and on which parameter block? | Only the continuous block changes under the FIML hybrid; reopen for a mixed-data estimator consumer and a full run (local output: 4 reps). |
-| 16 | [reliability-lambda6](research/banked/16-reliability-lambda6/report.qmd) | benchmark | banked | How do alpha, Guttman's lambda6, covariance omega, and fitted NT omega compare for total-score reliability under correct and misspecified one-factor summaries? | Functionals have different population targets; reopen for a family-wide reliability interval consumer and nonnormal/misspecified coverage (local output: 30-rep smoke). |
 | 18 | [li-savalei-2026-maximal-reliability-ci](research/banked/18-li-savalei-2026-maximal-reliability-ci/report.qmd) | replication | banked | Can you put a trustworthy confidence interval around bifactor maximal reliability, the inference Li & Savalei (2026) leave open? | Oracle Bartlett repairs near-ceiling coverage but is not a feasible interval; reopen when the functional-profile project needs bifactor boundary validation. |
 | 19 | [alpha-kc-coverage](research/banked/19-alpha-kc-coverage/report.qmd) | benchmark | banked | A distribution-free interval for a covariance functional (alpha, correlation) has two small-N defects: does the Kauermann-Carroll effective-df t fix the two-sided coverage deficit (variance-of-variance, flat in rho) while a variance-stabilizing transform (Fisher z / logit) fixes the skew-driven left/right imbalance (growing in rho), and do the two compose? | KC t and transforms address different defects; reopen for one practical interval recipe across covariance functionals, with heavy-tail confirmation. |
 | 31 | [permutation-measurement-invariance](research/banked/31-permutation-measurement-invariance/report.qmd) | probe | banked | Can fully recomputed pivotal score or Wald label permutations calibrate continuous metric-invariance tests under heterogeneous group populations, and can a Hotelling reference change the permutation-score test? | Score permutation improves the unequal-allocation pivot; reopen for a named ordinal-invariance consumer after estimator-specific influence/pivotality validation. The continuous result does not establish ordinal permutation validity. |
 | 32 | [standardized-flip-score](research/banked/32-standardized-flip-score/report.qmd) | probe | banked | Do nuisance-effective and flip-specifically standardized score flips calibrate continuous metric-invariance tests at small N? | Centered Mammen is promising; reopen for fresh confirmation beyond complete-data affine rank-eight ML or a concrete meat-shrinkage consumer. |
-| 34 | [flip-calibration-frontier](research/banked/34-flip-calibration-frontier/report.qmd) | probe | banked | At fixed test rank, when do nuisance dimension, allocation, information geometry, and sample size make flip standardization worthwhile? | Fixed-rank geometry/allocation is a distinct question; reopen only for targeted corners where standardization changes calibration enough to pay its cost. |
 | 35 | [residual-flip-gof-probe](research/banked/35-residual-flip-gof-probe/report.qmd) | probe | banked | Can efficient residual-score flipping calibrate single-model SEM goodness of fit without an ad hoc regularizer? | Residual-score flip algebra works, but high rank causes failure/miscalibration; reopen for a low/moderate-rank consumer or a separately justified shrinkage method. |
 | 37 | [fiml-flip-stress](research/banked/37-fiml-flip-stress/report.qmd) | probe | banked | Across generator family, sample size, missingness mechanism, and restriction rank, where do direct-FIML effective and standardized score flips remain calibrated? | The broad and hard-cell FIML runs replace the pilot; reopen for a concrete incomplete-data flip consumer or a new rank/missingness failure regime. |
-| 40 | [projected-score-satterthwaite](research/banked/40-projected-score-satterthwaite/report.qmd) | probe | banked | Can a projected Satterthwaite effective denominator improve calibration of an already-pivotal robust SEM goodness-of-fit score, and is the empirical rule's apparent success genuine self-normalization or moment-estimation bias? | Projected denominator correction and same-sample bias need separation; reopen for independent shape estimation at a named small-N GOF target. |
-| 41 | [hotelling-robust-gof-grid](research/banked/41-hotelling-robust-gof-grid/report.qmd) | probe | banked | Does the ordinary-Hotelling reference improve a centered pivotal SEM goodness-of-fit score across residual rank and sample-to-rank ratio, relative to its chi-square limit and SB/MV/pEBA4 corrections of the working RLS score? | Hotelling is a finite-sample improvement, not an exact SEM law; reopen when sample-to-rank correction is a concrete inference requirement. |
+| 40 | [finite-sample-gof](research/banked/40-finite-sample-gof/report.qmd) | probe | banked | Can Hotelling or projected Satterthwaite references improve finite-sample robust-score calibration? | Separate residual-rank/DGP lanes; reopen for a named GOF consumer with independently validated nuisance influence and moments. |
 | 46 | [latent-metric-geometry](research/banked/46-latent-metric-geometry/report.qmd) | benchmark | banked | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? | CFA chart conditioning does not settle structural scaling; reopen for matched starts and genuinely near-Heywood structural populations (local run: smoke). |
 | 53 | [rbm-estimation-risk](research/banked/53-rbm-estimation-risk/report.qmd) | probe | banked | When do post-hoc and integrated reduced-bias corrections improve error, and when do tails or fit failures erase that gain? | 5,000-rep N=30 evidence exposes correction tails; reopen for a concrete RBM admissibility/estimation-risk consumer or nonnormal/FIML extension. |
 
-### Retained research evidence (9)
+### Retained research evidence (4)
 
 Completed reference answers and frozen studies, with their scope limits.
 
@@ -180,12 +211,7 @@ Completed reference answers and frozen studies, with their scope limits.
 | 10 | [mplus-demo-wlsmv-difftest](research/evidence/10-mplus-demo-wlsmv-difftest/report.qmd) | probe | complete | Does Mplus Demo WLSMV DIFFTEST for a demo-sized ordinal pairwise-missing invariance model match lavaan/magmaan Satorra-2000 statistics? | Demo DIFFTEST agrees to rounding after matching scalar constraints; limited demo-sized oracle evidence, with local Mplus needed to rerun. |
 | 12 | [misspec-robust-se](research/evidence/12-misspec-robust-se/report.qmd) | probe | complete | Does the observed-Hessian ("robust" regime) bread recover the true sampling SD of ordinal DWLS estimates under structural misspecification, while coinciding with the conventional SE under the null? | Full estimated-weight IJ, rather than bread alone, repairs the misspecified DWLS example; evidence remains local to the stated models/targets. |
 | 13 | [ordinal-dwls-profile-lrt](research/evidence/13-ordinal-dwls-profile-lrt/report.md) | paper-sim | complete | Does the standard scaled difference test for nested all-ordinal DWLS models stay calibrated when the larger model is misspecified, and does the estimated-weight profile law restore calibration? | On the exact pseudo-null, fixed-weight rejection rises to 10.5% while estimated-weight stays near 4.2%; retain the C++ calibration pipeline. |
-| 17 | [bell-omega-bias](research/evidence/17-bell-omega-bias/report.qmd) | benchmark | complete | At Bell-style population moments, how biased is ordinary one-factor omega under misspecification for ML, ULS, GLS, and the Spearman-Guttman covariance form? | Population-moment evidence: model sensitivity is descriptive, not an identified bias estimator; retain Bell cells and higher-order extension. |
-| 38 | [score-test-calibration-drivers](research/evidence/38-score-test-calibration-drivers/report.qmd) | probe | complete | What governs the calibration of the mean-scaled (Satorra–Bentler) non-normal score test — restriction df, structural information geometry, or eigenvalue-spectrum dispersion — and how do the spectrum-aware and sign-flip variants compare? | Homogeneous-tail df/geometry controls explain SB behavior; heterogeneous kurtosis is outside this answer. Retain the mechanism evidence. |
 | 42 | [psd-ml-small-n-convergence](research/evidence/42-psd-ml-small-n-convergence/report.qmd) | benchmark | complete | On the De Jonckere–Rosseel / Ernst small-N SEM design, does covariance-honest NTML converge more reliably than ordinary NTML? | Completed small-N PSD convergence evidence, including equality-KKT telemetry; preserve the paper pipeline and attribution controls. |
-| 50 | [normal-parameter-intervals](research/evidence/50-normal-parameter-intervals/report.qmd) | probe | complete | Do normal-theory Wald, score and profile-LR parameter intervals calibrate, and is candidate-specific bootstrap Bartlett inversion feasible? | Frozen normal-interval and Bartlett feasibility evidence; no reliable practical correction gain in the pilot. Preserve fingerprints and precision checks. |
-| 51 | [robust-parameter-intervals](research/evidence/51-robust-parameter-intervals/report.qmd) | probe | complete | How do robust Wald, score and profile-LR scalar intervals compare in coverage, width, failures and cost under non-normality? | Frozen 3,000-dataset scalar-interval evidence; expected score gains are limited by target, validity and cost. No general interval-policy conclusion. |
-| 52 | [robust-calibration-battery](research/evidence/52-robust-calibration-battery/report.qmd) | benchmark | complete | Across textbook SEMs, sample sizes and non-normal data including discretized 5-point items analysed by ML, which of SB, MV, MV-UG, corrected MV and pEBA4 applied to the score, LR and RLS statistics keeps nominal size for global and nested tests? | Frozen 5,000-rep/cell null battery; score corrections improve several families, but IG remains unresolved. No power claim. |
 
 ## Engineering checks
 
@@ -235,10 +261,8 @@ carry no queued work. Reopen only for a named failure, consumer or changed decis
 | [complete-ml-global-test-geometry](_archive/complete-ml-global-test-geometry/report.qmd) | Supports expected information for complete-data ML global tests. Reopen for a named misspecification, power or model-family counterexample. |
 | [barrier-optimizer](_archive/barrier-optimizer/report.qmd) | Exploratory evidence for PORT; the maintained default decision is decisions/02. |
 
-| [ordinal-pd-gamma](_archive/ordinal-pd-gamma/report.qmd) | Former research/07 construction probe: overlap-Gamma mechanics are maintained in core; wider estimator/reference studies carry the current questions. Local artifacts are smoke evidence. |
-| [fmg-score-flip-illustration](_archive/fmg-score-flip-illustration/report.qmd) | Former research/33 completed published-design illustration: high restriction rank alone did not justify expensive standardization; fixed-rank geometry remains banked in research/34. |
+| [fmg-score-flip-illustration](_archive/fmg-score-flip-illustration/report.qmd) | Former research/33 completed published-design illustration: high restriction rank alone did not justify expensive standardization; fixed-rank geometry is parked in the speculative backlog. |
 | [fiml-score-flip-probe](_archive/fiml-score-flip-probe/report.qmd) | Former research/36 pilot, superseded by research/37's broad screen and independent hard-cell confirmation. Retains the original power arm and construction evidence. |
-| [score-vs-lrt](_archive/score-vs-lrt/report.qmd) | Former research/45 paired initial comparison; research/52 carries the broader null battery. Primitive timing and the trace-only SB diagnostic remain available here. |
 
 `_support/` (path, metadata, and I/O helpers; no SEM logic) is the only shared
 sibling an experiment may consume. Use category-qualified slugs in references. Numeric prefixes are local ordering,

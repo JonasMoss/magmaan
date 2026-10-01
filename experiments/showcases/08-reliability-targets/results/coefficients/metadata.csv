@@ -1,0 +1,8 @@
+"key","value"
+"scope","deterministic population targets; no coverage"
+"source","former research/16 populations"
+"package_version","0.0.1"
+"r_version","R version 4.6.1 (2026-06-24)"
+"command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=/home/jonas/Files/research/magmaan/experiments/showcases/08-reliability-targets/lanes/coefficients/run_experiment.R --args --smoke"
+"source_md5","34da32b339af4f758fa88a55da9620f2"
+"seed","none; deterministic"

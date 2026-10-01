@@ -1,0 +1,158 @@
+---
+title: "Robust test calibration"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+How do robust score and LR tests calibrate across SEMs and sampling
+distributions, and which spectral or computational controls explain the differences?
+
+## Short answer
+
+**Score SB and pEBA4 performed better than their LR counterparts in the frozen
+null-size battery, especially at small N and high residual rank.** Across
+48 nested-test cells, score SB rejected 3.6–5.8% and score pEBA4 2.8–5.5% at
+nominal 5%; LR reached 6.6–17.7% at N=100 with those calibrations. These rates
+are close to nominal in the tested designs, not a general exactness result.
+
+Global tests remain sensitive to heterogeneous innovations: score pEBA4
+reached 12.3% and score SB 14.1% in the worst IG cells. Homogeneous-kurtosis
+controls explain why changing rank or clean information geometry alone did
+not recreate that failure. Correctness and timing diagnostics accompany the
+statistical evidence. No new inference default follows from this consolidation.
+
+## Evidence
+
+```{r setup}
+read_result <- function(lane, name) {
+  p <- file.path("results", lane, name)
+  if (!file.exists(p)) stop("Missing result: ", p, "; see Reproduce.")
+  read.csv(p, stringsAsFactors = FALSE)
+}
+battery <- read_result("battery", "frozen/summary.csv")
+failures <- read_result("battery", "frozen/failures.csv")
+dfs <- read_result("drivers", "df_sweep.csv")
+structure <- read_result("drivers", "structure.csv")
+checks <- read_result("diagnostics", "trace-sb-nested/checks.csv")
+```
+
+### Broad frozen battery
+
+Seven textbook-derived population models, N=100/300/1000 and four generators
+(normal, homogeneous Vale–Maurelli, independent heterogeneous innovations,
+and five-point discretization) give 84 global and 48 nested cells, with 5,000
+replications per cell. Score and LR calibrations use their respective own
+null-fit spectra; controls include lavaan RLS and MV-family corrections.
+
+```{r}
+z <- battery[battery$subset == "converged" &
+  battery$arm %in% c("score_own_sb", "score_own_peba4", "lr_own_sb", "lr_own_peba4"), ]
+tab <- do.call(rbind, lapply(split(z, interaction(z$test,z$arm)), function(x)
+  data.frame(Test=ifelse(x$test[1]=="gof","Global fit","Nested"),
+    Arm=unname(c(score_own_sb="Score SB",score_own_peba4="Score pEBA4",
+      lr_own_sb="LR SB",lr_own_peba4="LR pEBA4")[x$arm[1]]), Cells=nrow(x),
+    `Minimum rejection (%)`=100*min(x$reject_05),
+    `Maximum rejection (%)`=100*max(x$reject_05),
+    `Mean absolute error (points)`=100*mean(abs(x$reject_05-.05)),check.names=FALSE)))
+knitr::kable(tab, digits=1,row.names=FALSE,
+  caption="Ranges over all generators, models and N; averages describe cell errors, not pooled rejection.")
+```
+
+For global normal/discretized data, score SB rejected 4.3–6.2% and score
+pEBA4 3.2–6.0%. LR-SB and LR-pEBA4 reached 20.8% and 15.8% at N=100 in the
+18-indicator longitudinal model (df=102). MV-family score corrections tended
+to conservatism; corrected MV did not outperform pEBA4 under heterogeneous
+innovations. Five-point Gaussian-copula discretization behaved similarly to
+normal data here, which is not a result about arbitrary ordinal DGPs.
+
+With 5,000 valid draws, a 5% rejection estimate has Monte Carlo SE about
+0.31 percentage points (roughly ±0.6 points for a marginal 95% interval).
+Cell ranges span many comparisons and are not simultaneous confidence bounds.
+Rates condition on convergence: about 9.4% of N=100 second-order CFA fits and
+2% of Worland SEM fits did not converge. Frozen failure and admissible-only
+summaries allow a separate audit of that selection.
+
+### Mechanism controls
+
+Controls use homogeneous nonnormality and vary tested rank (1–28), information
+geometry and residual conditioning. They have 300 rank-sweep and 240 structure
+replications per cell, not extra replications for the battery. Eigenvalue
+dispersion governs the information a mean-only SB correction omits: for a
+weighted chi-square limit its variance relative to the equal-eigenvalue
+reference involves $1+\mathrm{CV}(\lambda)^2$. Rank one removes spectral-shape
+mismatch in that limit; it does not make the fitted finite-sample test exact.
+
+```{r}
+z <- dfs[dfs$distribution == "vm", ]
+methods <- c(score_sb="Score SB",score_peba4="Score pEBA4",flip_effective="Effective flip")
+cols <- c("#0072B2","#D55E00","#555555")
+plot(range(z$df_obs),c(0,.12),type="n",xlab="Restriction rank",ylab="Rejection at nominal 5%")
+abline(h=.05,lty=2,col="grey50")
+for (i in seq_along(methods)) {
+  o <- order(z$df_obs)
+  lines(z$df_obs[o],z[[names(methods)[i]]][o],type="b",col=cols[i],pch=i)
+}
+legend("topright",legend=unname(methods),col=cols,pch=seq_along(methods),lty=1,bty="n")
+```
+
+Clean rank and structure changes did not break SB in these controls. The
+near-Heywood case exposed boundary conditioning and also degraded flips.
+These homogeneous designs do not validate concentrated directional kurtosis;
+heterogeneous spectral calibration remains an independent research question.
+
+### Correctness and cost diagnostics
+
+Extracted predecessor diagnostics compare trace-only SB with spectral SB,
+match nested statistics/pEBA4 against lavaan, and separate setup, fitting,
+projection and calibration cost. Frozen checks are deterministic agreement
+evidence, rather than another null-size or power grid.
+
+```{r}
+cols <- c("sb_trace_vs_spectral", "sb_spectral_vs_lavaan",
+          "nested_Tdiff_vs_lavaan", "nested_peba4_delta_vs_lavaan")
+knitr::kable(data.frame(Check=cols,
+  `Largest absolute difference`=formatC(vapply(checks[cols], max, numeric(1), na.rm=TRUE),format="e",digits=2),
+  check.names=FALSE),row.names=FALSE)
+```
+
+Phase timings, wrapper checks and matched correctness gates remain under
+`results/diagnostics/`. Historical comparison outputs are retained for
+provenance; the overlapping score-versus-LR simulation runner is retired.
+An optional FIML diagnostic is a convention investigation, not parity before
+its discrepancy is resolved.
+
+## Caveats
+
+This is exploratory null-size evidence. It gives no power ranking, does not
+settle larger-model misspecification and does not repair heterogeneous global
+calibration. Driver designs differ from the battery. Timing is machine/package
+dependent. Keep statistical and failure conventions intact when extending a lane.
+
+Source populations retain their model definitions and optional corpus builder.
+Frozen metadata retain original study numbers (research/52, /38 and former
+/45), which describe the original runs.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --lane battery --plan
+Rscript run_experiment.R --lane battery --smoke --output /tmp/calibration-battery
+Rscript run_experiment.R --lane drivers --reps 1 --flips 9 --max-cells 1 --results-dir /tmp/calibration-drivers
+Rscript run_experiment.R --lane diagnostics --check trace --smoke --no-time
+quarto render report.qmd
+```
+
+Use `--lane NAME --help` for commands. Trace smoke writes the diagnostics
+lane's `results/trace-sb-nested/`; copy the self-contained diagnostics lane
+to a temporary directory for verification without replacing frozen evidence.
+Additional checks are `runtime`, `setup`, `calibration` and `validation`.
+Rendering performs no fits or simulation.

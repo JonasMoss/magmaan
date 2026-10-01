@@ -1,0 +1,4 @@
+*
+!.gitignore
+!population_targets.csv
+!metadata.csv
