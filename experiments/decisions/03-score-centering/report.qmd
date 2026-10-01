@@ -10,7 +10,7 @@ execute:
 ---
 
 ```{r setup}
-run_id <- Sys.getenv('SCORE_CENTERING_RUN', 'pilot')
+run_id <- Sys.getenv('SCORE_CENTERING_RUN', 'ml_confirmation')
 root <- file.path('results', 'score-centering', run_id)
 rd <- function(name) {
   path <- file.path(root, paste0(name, '.csv'))
@@ -22,6 +22,8 @@ meta <- rd('metadata'); rates <- rd('rates'); cov <- rd('covariance')
 pairs <- rd('paired'); checks <- rd('checks'); decisions <- rd('decisions')
 value <- function(key) meta$value[match(key, meta$key)]
 percent <- function(x) sprintf('%.1f%%', 100 * x)
+pilot_root <- file.path('results', 'score-centering', 'pilot')
+pilot_rates <- read.csv(file.path(pilot_root, 'rates.csv'), stringsAsFactors = FALSE)
 confirm_root <- file.path('results', 'score-centering', 'group_confirmation')
 confirm <- function(name) {
   path <- file.path(confirm_root, paste0(name, '.csv'))
@@ -40,9 +42,9 @@ tab <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
 
 | Choice | Current value | Status |
 |:--|:--|:--|
-| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Current joint-sampling baseline; fixed allocation has a different target |
+| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Stationary equivalence confirmed; skewed-data Wald coverage remains open |
 | Fixed-allocation score covariance | Within-group centered covariance rows | Formula settled; ordinary-policy extension banked |
-| ML global/nested score reference | Uncentered efficient scores, expected geometry | Open centered/raw decision |
+| ML global/nested score reference | Uncentered efficient scores, expected geometry | Retain raw under the registered rule in tested regular ML families |
 | Ordinary FIML inference | Unsupported | Prospective evidence only |
 | Established moment-covariance and LR centering | Retained method-specific formulas | Redesign banked |
 
@@ -56,28 +58,73 @@ information matrices and observed score. The
 
 ## Short answer
 
-**A universal never-center rule fails for fixed groups with different population
-score means.** In the independently specified grouped mean model, the true
-parameter variance is exactly $1/N$. Raw and globally centered score meats have
-an asymptotic variance ratio of 1.12; centering within the sampling groups removes
-that extra term. This conclusion follows from the sampling covariance identity,
-not from selecting an arm on simulation results.
+**Retain uncentered score references for the tested regular complete-data ML
+families.** Independent confirmation used 32,000 datasets across global/nested
+tests, normal/skewed innovations and N=80/300. Globally centering covariance rows
+changed null rejection by at most 0.75 percentage points, with identical empirical
+matched-null power in all SB/PEBA4 comparisons. It did not meet the preregistered
+benefit or noninferiority conditions for a default change. Fits, information,
+projection and observed statistics were held fixed; no default changes.
 
-The 8,000-draw independent grouped confirmation found a variance ratio of
-**1.118 for raw/global centering versus 0.994 for within-group centering** at
-N=300. Within-group parameter covariance meets the registered criteria in this
-scope. The centered score test does not: at N=80 it rejects 6.2% under the null,
-with a 95% interval of 5.2–7.3%, failing the calibration rule. Matched-null power
-is similar. Fixing the sampling covariance alone does not settle small-sample
-reference calibration.
+Parameter covariances were numerically identical across arms, but both Wald
+intervals undercovered in skewed-data cells: nested null coverage at N=80 was
+90.3% (95% Wilson interval 88.9–91.5%). This is a separate covariance/interval
+validation task; score centering cannot correct it.
 
-The broader 3,600-draw pilot covers normal/skewed ML and MCAR/MAR FIML.
-**It cannot choose a package default**; full independent confirmation remains
-open. Stationary single-group parameter scores have approximately zero means,
-whereas released test directions carry an observed signal. FIML evidence is
-prospective, split by sensitivity geometry. No package default is changed.
+The fixed-allocation covariance formula is settled separately: within-group
+centering removes score-mean terms that are absent from conditional sampling
+variance. Its ordinary-policy extension remains banked. The 3,600-draw pilot also
+covers prospective MCAR/MAR FIML; that lane still needs independent confirmation.
+PSD boundary and penalty inference are outside this grid.
 
 ## Evidence
+
+### ML confirmation does not justify switching to global centering
+
+Each null and power cell contains 2,000 usable pairs. The following slice shows
+PEBA4 null rejection; all raw and centered SB/PEBA4 null Wilson intervals lie
+inside the registered 3–7% band. The full rates, coverage, failures and paired
+uncertainty are frozen in this run's CSVs.
+
+```{r ml-confirmation}
+z <- rates[rates$lane == 'ml' & rates$family != 'grouped_mean' &
+  rates$role == 'null' & rates$method == 'peba4', ]
+a <- z[z$arm == 'raw', c('family', 'n', 'rejection')]
+b <- z[z$arm == 'global', c('family', 'n', 'rejection', 'lower', 'upper')]
+w <- merge(a, b, by = c('family', 'n'), suffixes = c('_raw', '_centered'))
+labels <- c(global_normal = 'Global, normal', global_skew = 'Global, skewed',
+            nested_normal = 'Nested, normal', nested_skew = 'Nested, skewed')
+tab(data.frame(Family = unname(labels[w$family]), N = w$n,
+  'Raw rejection' = percent(w$rejection_raw),
+  'Centered rejection' = percent(w$rejection_centered),
+  'Centered 95% interval' = paste(percent(w$lower), percent(w$upper), sep = '–'),
+  check.names = FALSE))
+```
+
+The registered benefit rule requires a paired 95% interval establishing at least
+a one-percentage-point reduction in absolute size error in some cell. No cell
+meets it. Absolute-size-error losses against raw were global normal N=300
+(+0.10 points SB, +0.20 PEBA4), global skewed N=300 (+0.05 both), and global
+skewed N=80 (+0.75 SB). The global N=80 SB paired upper bounds also exceed the
+allowed one-point worsening margin (normal +1.001, skewed +1.05).
+
+Matched-null power estimates are identical across arms in every comparison;
+the lowest paired bootstrap bound for the difference is −0.15 percentage
+points, within the registered two-point loss allowance. Both candidate components
+are `not_eligible` in the frozen decision table. The implied outcome is to retain
+raw provisionally in the tested scope, without claiming a blanket calibration
+guarantee across models or sampling laws.
+
+### Stationary parameter covariance agrees; Wald coverage needs investigation
+
+The maximum raw/global parameter-covariance discrepancy is
+`r format(max(cov$max_covariance_gap[cov$arm == 'global']), scientific=TRUE, digits=3)`
+on the runner's comparison scale. Known-target Wald intervals are therefore the
+same. Both arms fail the coverage rule in several cells, most visibly under
+skewed innovations: nested null N=80 coverage is 90.3%, and nested power N=80
+coverage is 90.25%. Finite-sample covariance bias, estimate bias and interval
+calibration require separate checks against the declared population targets.
+The nominal-size result for score tests does not establish Wald interval coverage.
 
 ### Disposition of the fixed-allocation case
 
@@ -90,7 +137,7 @@ moments for joint sampling of group labels. No further experiment is needed to
 choose between those two population formulas. Finite-sample reference
 calibration remains separate; the N=80 result cannot make raw covariance correct
 for a fixed-allocation target. The original criteria and frozen decision outcomes
-are retained. The other ML/FIML calibration lanes remain active.
+are retained. Prospective FIML calibration and excluded inference regimes remain open.
 
 The grouped nested test targets the best-fitting shared mean, not equality of
 the two true group means. Both nested models retain the wrong shared-mean
@@ -148,16 +195,13 @@ and +0.2 at N=300; the lower bootstrap bounds are about −1.2 percentage points
 These comparisons meet the registered power-loss rule, but do not establish a
 power gain. The group-centered parameter covariance is eligible in the tested
 scope; neither centered score reference is eligible. Raw remains the provisional
-score baseline in the primary joint-sampling scope, with calibration still open.
+score baseline in the primary joint-sampling scope, as assessed above.
 This provisional baseline is not a fixed-allocation recommendation.
 
-### Broader pilot: differences need confirming
+### FIML pilot still needs independent confirmation
 
-Across the single-group pilot fits, globally centering parameter scores changes
-covariance matrices by at most
-`r format(max(cov$max_covariance_gap[cov$family != 'grouped_mean' & cov$arm == 'global']), scientific=TRUE, digits=3)`
-relative to the comparison scale. This supports the expected stationary-fit
-equivalence. Score-test reference changes require their own comparison.
+The pilot uses 100 draws per cell. Its FIML lane remains prospective and cannot
+choose an ordinary-package default.
 
 The following pilot slice shows PEBA4 null rejection at N=80. FIML uses observed
 sensitivity here; its expected-sensitivity comparator and both methods at N=300
@@ -165,9 +209,9 @@ remain in the per-cell CSVs. The paired tables also report SB and matched-null
 power, with bootstrap uncertainty including re-estimation of null thresholds.
 
 ```{r score-evidence}
-slice <- rates[rates$role == 'null' & rates$n == 80 & rates$method == 'peba4' &
-  ((rates$lane == 'ml' & rates$geometry == 'expected') |
-   (rates$lane == 'fiml' & rates$geometry == 'observed')), ]
+slice <- pilot_rates[pilot_rates$role == 'null' & pilot_rates$n == 80 &
+  pilot_rates$method == 'peba4' & pilot_rates$lane == 'fiml' &
+  pilot_rates$geometry == 'observed', ]
 wide <- reshape(slice[, c('family', 'arm', 'rejection')], idvar = 'family',
                 timevar = 'arm', direction = 'wide')
 names(wide) <- sub('rejection.', '', names(wide), fixed = TRUE)
@@ -175,12 +219,10 @@ for (name in setdiff(names(wide), 'family')) wide[[name]] <- percent(wide[[name]
 tab(wide)
 ```
 
-The registered decision outcomes for the broader run are
-`r paste(unique(decisions$status), collapse = ', ')`. Precision, availability,
-coverage, per-cell calibration and matched-power conditions must all be assessed
-before changing a tested score-reference default. Full rates, Wilson intervals,
-paired comparisons and every failure are retained in `rates.csv`,
-`covariance.csv`, `paired.csv`, `decisions.csv` and `failures.csv` for this run.
+Pilot outcomes remain `open_pilot_only`; they do not choose FIML defaults.
+Precision, availability, coverage, per-cell calibration and matched-power
+conditions need independent confirmation before changing a prospective FIML
+reference. Full summaries and failures are retained separately for each run.
 
 ### Construction and baseline checks
 
@@ -195,15 +237,16 @@ covariance, the test statistic and both p-values against elementary Gaussian
 mean formulas. All 24,000 arm rows pass; the largest estimate gap is
 `r format(max(oracle$estimate_gap), scientific=TRUE, digits=3)` and the largest
 variance gap is `r format(max(oracle$variance_gap), scientific=TRUE, digits=3)`.
-Neither run has a failed fit or unavailable covariance/test.
+Neither confirmation has a failed fit or unavailable covariance/test.
 The runner retains convergence failures and unavailable inference instead of
 counting them as successful non-rejections. There are `r checks$fit_failures`
 failed larger/unrestricted fits. Median task time is
 `r sprintf('%.3f', checks$median_task_seconds)` seconds; the runner prints elapsed
 wall time and a confirmation cost estimate. The broader pilot took about two
-minutes and the grouped confirmation about four minutes with four workers.
-The full 36-cell, 2,000-draw confirmation is estimated at roughly 35–40 minutes
-on this machine.
+minutes, grouped confirmation about four minutes, and ML confirmation 342 seconds
+(5.7 minutes), each with four workers. The native-binary and source hashes stayed
+unchanged throughout the ML run; all 32,000 seeds were checked as unused and
+every frozen rejection rate was reconstructed from retained raw rows.
 
 ## Caveats
 
@@ -233,6 +276,7 @@ Rscript run_experiment.R --smoke --library PATH
 Rscript run_experiment.R --kind pilot --reps 100 --run-id pilot --library PATH
 Rscript run_experiment.R --kind confirmation --reps 2000 --families grouped_mean --run-id group_confirmation --library PATH
 Rscript scripts/validate_grouped_results.R group_confirmation
+Rscript run_experiment.R --kind confirmation --reps 2000 --families global_normal,global_skew,nested_normal,nested_skew --run-id ml_confirmation --library PATH
 quarto render report.qmd
 # Fresh confirming draws; estimate cost from the pilot before launching:
 Rscript run_experiment.R --kind confirmation --reps 2000 --run-id confirmation --library PATH

@@ -4575,8 +4575,15 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   retains between-group score-mean variation. The ordinary fixed-allocation
   extension is [banked](../backlog/speculative.md#fixed-design-inference-under-mean-misspecification),
   with no queued experiment to choose that formula. Promotion needs a named
-  consumer and native contract/regression gates. Broader ML/FIML score
-  confirmation and boundary/penalty cases remain open. Random missingness
+  consumer and native contract/regression gates. Regular complete-data ML
+  confirmation (32,000 datasets) retains the raw reference under the registered
+  rule: centering changes null rejection by at most 0.75 percentage points and
+  empirical matched-null power is identical, with no qualifying size-error
+  benefit. All nominal-size Wilson intervals are inside 3–7%, but two global
+  N=80 SB paired noninferiority bounds exceed the one-point margin. Parameter
+  covariances agree numerically; skewed nested N=80 Wald null coverage is 90.3%
+  (95% Wilson interval 88.9–91.5%), a separate active validation issue. Prospective
+  FIML confirmation and excluded boundary/penalty cases remain open. Random missingness
   patterns must not inherit the fixed-group centering rule.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as

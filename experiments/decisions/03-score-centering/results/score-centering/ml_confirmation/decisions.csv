@@ -1,0 +1,3 @@
+"lane","geometry","arm","component","enough_pairs","no_extra_failures","calibrated","coverage_ok","oracle_ok","matched_power_ok","benefit","status"
+"ml","expected","global","parameter_covariance",TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,FALSE,"not_eligible"
+"ml","expected","global","score_calibration",TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,FALSE,"not_eligible"

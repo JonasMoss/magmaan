@@ -215,10 +215,22 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   finite-sample calibration. The latter centered score reference fails at N=80
   (6.2% rejection, Wilson interval 5.2–7.3%); this does not reopen the settled
   fixed-allocation covariance formula or select raw for that conditional target.
-  Next: confirm the remaining ML/prospective-FIML families with fresh draws.
-  Keep the primary score baseline provisional. Boundary
+  Independent ML confirmation (32,000 draws) retains raw in the tested regular
+  complete-data families: no registered one-point size-error benefit, at most
+  0.75-point rejection shifts, and identical empirical matched-null power.
+  Next: confirm prospective FIML with fresh draws and check the excluded
+  constraint/boundary regimes. Keep the broader score policy provisional. Boundary
   contracts remain open; penalty-specific inference follows in 0.0.2.
   Missingness patterns are not sampling groups.
+
+- [ ] **M — investigate ML sandwich/Wald undercoverage in skewed-data controls.**
+  The [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
+  finds 90.3% coverage for the known loading target in nested skewed N=80 nulls
+  (95% Wilson interval 88.9–91.5%); raw and centered covariances agree numerically.
+  **Check:** point-estimate bias, empirical estimator variance versus reported
+  sandwich variance, and larger-N/normal controls with independent uncertainty.
+  Verify the native covariance construction before selecting any finite-sample
+  interval correction; score-test nominal size does not validate Wald coverage.
 
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score

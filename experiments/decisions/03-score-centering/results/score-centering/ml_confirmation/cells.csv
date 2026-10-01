@@ -1,0 +1,17 @@
+"family","lane","test","innovation","missing","n","role","cell_id"
+"global_normal","ml","global","normal","none",80,"null",1
+"global_normal","ml","global","normal","none",300,"null",2
+"global_normal","ml","global","normal","none",80,"power",3
+"global_normal","ml","global","normal","none",300,"power",4
+"global_skew","ml","global","skew","none",80,"null",5
+"global_skew","ml","global","skew","none",300,"null",6
+"global_skew","ml","global","skew","none",80,"power",7
+"global_skew","ml","global","skew","none",300,"power",8
+"nested_normal","ml","nested","normal","none",80,"null",9
+"nested_normal","ml","nested","normal","none",300,"null",10
+"nested_normal","ml","nested","normal","none",80,"power",11
+"nested_normal","ml","nested","normal","none",300,"power",12
+"nested_skew","ml","nested","skew","none",80,"null",13
+"nested_skew","ml","nested","skew","none",300,"null",14
+"nested_skew","ml","nested","skew","none",80,"power",15
+"nested_skew","ml","nested","skew","none",300,"power",16
