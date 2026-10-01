@@ -192,6 +192,29 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
   Changing the fitting default requires a separate evidence-backed decision.
 
+- [ ] **M — accept nested pairs written by dropping or fixing parameters.**
+  `policy_nested()` and the exact `robust_nested_lrt()` restriction require the
+  two fits to share their free-parameter slots, so H0 may differ from H1 only by
+  equality constraints (`a == b`, `r == 0`). An H0 that omits a path, fixes it
+  (`0*x9`), or reparameterizes H1 is reported as `not_nested` (score and LR NaN
+  with that reason; the exact restriction errors on the npar mismatch), although
+  the pair is nested. That is how most users write a nested comparison. Fix in
+  two layers. (1) Embed H0 in H1's slots by parameter keys
+  (lhs/op/rhs/group/block): an H1 slot that H0 fixes or omits becomes a
+  constraint at H0's value (zero when omitted), which reduces these cases to
+  the exact restriction. (2) Without a parameter correspondence, locate the H1
+  point that reproduces H0's fitted moments (a zero-discrepancy fit of H1 to
+  them, started at the H1 estimate) and take the restriction from both
+  Jacobians there; this same-point delta is exact for any parameter-map
+  nesting. The score test needs the same embedding. semTests'
+  `same-point-restriction` branch does (1) for the delta restriction. Boundary
+  nestings (one factor against two with correlation one) are not interior and
+  should be refused with a boundary reason, not `not_nested`. The mixed-point
+  `SatorraAMethod::Delta` stays the lavaan-parity option. **Check:** the
+  dropped-path, fixed-zero and equality-written versions of one pair give
+  identical score, LR and spectra, matching lavaan `A.method = "exact"` where
+  lavaan accepts the pair.
+
 - [ ] **M — settle remaining likelihood-score calibration in the primary sampling scope.**
   Retain uncentered score second moments as the baseline for ML/FIML
   parameter sandwiches and global/nested score-test calibration under joint
