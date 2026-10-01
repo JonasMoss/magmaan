@@ -33,7 +33,16 @@ PolicyFitState policy_fit_state(const estimate::Estimates& estimates) {
   state.psd_boundary = verdict.domain == estimate::StationarityDomain::Psd &&
                        diagnostics.newton_accuracy.checked &&
                        !diagnostics.newton_accuracy.covariance_interior;
+  if (estimates.selected_verdict) {
+    const auto native = estimate::common_fit_verdict(diagnostics).status;
+    if (native != estimate::FitCheck::Unchecked)
+      state.native_converged = native == estimate::FitCheck::Passed;
+  }
   return state;
+}
+
+bool verdict_disagreement(const PolicyFitState& state) noexcept {
+  return state.native_converged && *state.native_converged != state.converged;
 }
 
 PolicyInference policy_unavailable(InferenceReason reason, std::string detail) {
@@ -83,11 +92,14 @@ void set_unavailable(PolicyTest& test, InferenceReason reason, const std::string
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state) {
   if (!state.converged) {
-    return policy_unavailable(InferenceReason::NotConverged,
-                              "the fit did not pass its convergence verdict");
+    auto out = policy_unavailable(InferenceReason::NotConverged,
+                                  "the fit did not pass its convergence verdict");
+    out.verdict_disagreement = verdict_disagreement(state);
+    return out;
   }
   PolicyInference out;
   out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
   if (fit.estimates.theta.size() == 0) {
     // Fixed parameters have no uncertainty; all saturated-moment directions
     // still contribute to the global tests below.
@@ -129,6 +141,8 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& alternative_state) {
   PolicyNested out;
   out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
+  out.verdict_disagreement =
+      verdict_disagreement(null_state) || verdict_disagreement(alternative_state);
   auto unavailable = [&](InferenceReason reason, const std::string& detail) {
     set_unavailable(out.score, reason, detail);
     set_unavailable(out.lr, reason, detail);

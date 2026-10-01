@@ -733,8 +733,8 @@ ntml_covariance_impl <- function(context, robust) {
     .Call(`_magmaanlab_ntml_covariance_impl`, context, robust)
 }
 
-policy_inference_impl <- function(context, converged, psd_boundary) {
-    .Call(`_magmaanlab_policy_inference_impl`, context, converged, psd_boundary)
+policy_inference_impl <- function(context, state) {
+    .Call(`_magmaanlab_policy_inference_impl`, context, state)
 }
 
 policy_nested_impl <- function(null_context, alternative_context, null_state, alternative_state) {

@@ -81,7 +81,12 @@
 #' inference. Otherwise `fit$inference$status` has `component`, `available`,
 #' `reason`, and `detail` for covariance, global score, and global LR.
 #' Reasons include `available`, `not_converged`, `saturated`,
-#' `unsupported_model`, and `numeric_failure`.
+#' `unsupported_model`, and `numeric_failure`. `fit$inference$convergence`
+#' has `rule` (the acceptance rule that set `converged`, `"newton"` by
+#' default), `converged`, `magmaan` (magmaan's own check: `"passed"`,
+#' `"failed"` or `"unchecked"`), and `disagree`. Under a compatibility rule
+#' such as `preset = "lavaan-0.7.2"`, `disagree` is `TRUE` when the rule and
+#' magmaan's check reach different verdicts; inference follows the rule.
 #'
 #' `summary(fit)$tests` is `NULL` when no global test is available, otherwise a
 #' data frame with `test`, `statistic`, `df`, `p.sb`, `p.peba4`, and `sb.scale`.

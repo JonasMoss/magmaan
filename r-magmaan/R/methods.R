@@ -160,6 +160,12 @@ nobs.magmaan <- function(object, ...) {
 }
 
 .converged_label <- function(lab) {
+  rule <- lab$fitting$effective$convergence
+  if (!is.null(rule) && !identical(rule, "newton")) {
+    return(sprintf("%s, by the %s rule (magmaan's check: %s)",
+                   if (isTRUE(lab$converged)) "yes" else "no", rule,
+                   lab$diagnostics$verdict$status %||% "unchecked"))
+  }
   if (isTRUE(lab$converged)) return("yes")
   status <- lab$verdict$status %||% lab$optimizer_status
   state <- if (identical(lab$converged, FALSE)) "no" else "unchecked"
@@ -242,6 +248,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   }
   inf <- fit$inference
   if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")
+  if (isTRUE(inf$convergence$disagree)) cat("\n", .verdict_note(inf$convergence), "\n", sep = "")
   if (!is.null(inf) && !all(inf$status$available)) {
     cat("\nUnavailable inference\n")
     s <- inf$status[!inf$status$available, , drop = FALSE]
@@ -256,6 +263,24 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 .boundary_note <- paste(
   "The PSD estimate lies on the boundary of the covariance space. The inference",
   "assumes the population is interior (every covariance matrix positive definite).")
+
+# A compatibility acceptance rule and magmaan's own convergence check disagree.
+.verdict_note <- function(convergence) {
+  rule <- convergence$rule
+  if (isTRUE(convergence$converged)) {
+    paste0("Note: the ", rule, " rule accepted this fit, but magmaan's convergence\n",
+           "check rejects it (as_lab_fit(fit)$diagnostics$verdict). Estimates and\n",
+           "inference follow the ", rule, " rule. Refit with magmaan's default\n",
+           "fitting options to use its own search and check.")
+  } else {
+    paste0("Note: the ", rule, " rule rejected this fit, but magmaan's convergence\n",
+           "check accepts it. Inference is unavailable, following the ", rule, " rule.")
+  }
+}
+
+.nested_verdict_note <- paste(
+  "Note: for at least one fit, a compatibility convergence rule and magmaan's",
+  "convergence check disagree; the tests follow the selected rule.")
 
 #' Compare two nested magmaan fits
 #'
@@ -313,7 +338,8 @@ anova.magmaan <- function(object, ...) {
   structure(out, class = c("magmaan_anova", "data.frame"),
             restricted = labels[[null]], alternative = labels[[3L - null]],
             unavailable = reasons[nzchar(reasons)],
-            psd_boundary = isTRUE(res$psd_boundary))
+            psd_boundary = isTRUE(res$psd_boundary),
+            verdict_disagreement = isTRUE(res$verdict_disagreement))
 }
 
 #' @rdname anova.magmaan
@@ -330,6 +356,7 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   u <- attr(x, "unavailable")
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")
+  if (isTRUE(attr(x, "verdict_disagreement"))) cat(.nested_verdict_note, "\n")
   invisible(x)
 }
 

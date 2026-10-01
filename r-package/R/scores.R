@@ -246,25 +246,38 @@ inference_reuse <- function(context) {
 # computed under another convention.
 policy_inference <- function(fit, data = NULL) {
   if (!inherits(fit, "magmaan_fit")) stop("policy_inference(): supply a fitted magmaan model")
+  state <- .policy_state(fit)
   estimator <- toupper(fit$estimator %||% "")
   if (!identical(estimator, "ML") || !is.null(fit$nclusters)) {
     return(.policy_unavailable("unsupported_model",
-      "the inference policy covers single-level complete-data ML so far"))
+      "the inference policy covers single-level complete-data ML so far", state))
   }
   context <- tryCatch(prepare_inference(fit, data), error = function(e) e)
   if (inherits(context, "error")) {
-    return(.policy_unavailable("unsupported_model", conditionMessage(context)))
+    return(.policy_unavailable("unsupported_model", conditionMessage(context), state))
   }
-  state <- .policy_state(fit)
-  policy_inference_impl(context$native, state[[1]], state[[2]])
+  policy_inference_impl(context$native, state)
 }
 
-# Converged, and a PSD estimate on the cone boundary (inference is computed
-# there under an interior population, and flagged).
+# Converged by the selected acceptance rule; a PSD estimate on the cone
+# boundary (inference is computed there under an interior population, and
+# flagged); and magmaan's own check when a compatibility rule decided
+# convergence (NA when magmaan's check decided or did not run). Mirrors
+# api::policy_fit_state(), because inference contexts rebuild estimates
+# without their diagnostics.
 .policy_state <- function(fit) {
+  rule <- fit$fitting$effective$convergence
+  native <- if (is.null(rule) || identical(rule, "newton")) NA else
+    switch(fit$diagnostics$verdict$status %||% "", passed = TRUE, failed = FALSE, NA)
   c(isTRUE(fit$converged),
     identical(fit$verdict$domain, "psd") &&
-      identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE))
+      identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE),
+    native)
+}
+
+# Mirrors api::verdict_disagreement() for results returned before C++.
+.verdict_disagreement <- function(state) {
+  !is.null(state) && !is.na(state[[3]]) && state[[3]] != state[[1]]
 }
 
 # magmaan's nested tests of fit_H0 against fit_H1, as applied by the
@@ -275,9 +288,12 @@ policy_inference <- function(fit, data = NULL) {
 policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("policy_nested(): supply two fitted magmaan models")
+  states <- list(H0 = .policy_state(fit_H0), H1 = .policy_state(fit_H1))
   unsupported <- function(detail) {
     t <- .policy_unavailable("unsupported_model", detail)$score
-    list(score = t, lr = t, psd_boundary = FALSE)
+    list(score = t, lr = t, psd_boundary = FALSE,
+         verdict_disagreement = .verdict_disagreement(states$H0) ||
+           .verdict_disagreement(states$H1))
   }
   for (fit in list(fit_H1, fit_H0)) {
     if (!identical(toupper(fit$estimator %||% ""), "ML") || !is.null(fit$nclusters))
@@ -290,14 +306,14 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
     list(H0 = prepare_inference(fit_H0, shared), H1 = prepare_inference(fit_H1, shared))
   }, error = function(e) e)
   if (inherits(contexts, "error")) return(unsupported(conditionMessage(contexts)))
-  policy_nested_impl(contexts$H0$native, contexts$H1$native,
-                     .policy_state(fit_H0), .policy_state(fit_H1))
+  policy_nested_impl(contexts$H0$native, contexts$H1$native, states$H0, states$H1)
 }
 
-.policy_unavailable <- function(reason, detail) {
+.policy_unavailable <- function(reason, detail, state = NULL) {
   test <- list(available = FALSE, reason = reason, detail = detail,
                statistic = NA_real_, df = 0L, sb_scale = NA_real_,
                p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric())
   list(covariance = NULL, covariance_available = FALSE, covariance_reason = reason,
-       covariance_detail = detail, score = test, lr = test, psd_boundary = FALSE)
+       covariance_detail = detail, score = test, lr = test, psd_boundary = FALSE,
+       verdict_disagreement = .verdict_disagreement(state))
 }

@@ -316,9 +316,13 @@ defaults.
   carry over without further work.
 - Under a compatibility preset, the selected acceptance rule sets `converged`
   and gates inference, because simulations compared with lavaan need
-  lavaan-identical outcomes. magmaan's common verdict remains in the fit
-  diagnostics. Whether it should also affect the reported inference status is
-  an open [backlog question](../backlog/todo.md#optimization-and-convergence).
+  lavaan-identical outcomes. magmaan's own check still runs on every fit.
+  Decided 2026-10-01: when the two disagree, nothing is recomputed; the
+  converged line of `print()`, a `summary()` note and an `anova()` note report
+  it, and `fit$inference$convergence` records the rule, both verdicts and
+  `disagree`. Example: exact-fit moments with x1 scaled by 1000 and x3 by
+  1/1000, where lavaan 0.7.2 accepts a non-stationary endpoint with
+  fmin 0.276.
 
 ### Implementation and remaining decisions
 
@@ -400,9 +404,9 @@ acceptance requires raw PORT success plus its exactly bound-masked optimizer
 gradient test. `fit$fitting` (`as_lab_fit(fit)$fitting` in the ordinary package)
 retains requested/effective components, numeric controls, starts, scales and
 attempts. The selected verdict controls `converged` and inference gating;
-the common diagnostic verdict remains available independently. Case reruns
-retain the fitting setup; likelihood-ratio refits for modification indices and
-equality releases do not yet, and replaying every fitting argument is pending.
+the common diagnostic verdict remains available independently, and a
+disagreement between them is reported without changing either. Every refit
+replays the fit's recorded fitting arguments.
 A supplied start table is an input; competing named start constructors error.
 The ordinary API merges `options$starts` and the top-level `start` into
 `options$start` ([options](#options)).

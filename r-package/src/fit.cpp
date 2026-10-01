@@ -10870,10 +10870,21 @@ Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
 // inference context. The fit state comes from the R fit because the context
 // rebuilds estimates without their convergence diagnostics.
 //
+// The R fit state: converged by the selected rule, a PSD boundary estimate,
+// and magmaan's own check (NA when it decided or did not run).
+static magmaan::api::PolicyFitState policy_state_from(const Rcpp::LogicalVector& s) {
+  magmaan::api::PolicyFitState out;
+  out.converged = s.size() > 0 && s[0] == TRUE;
+  out.psd_boundary = s.size() > 1 && s[1] == TRUE;
+  if (s.size() > 2 && !Rcpp::LogicalVector::is_na(s[2])) out.native_converged = s[2] == TRUE;
+  return out;
+}
+
 // [[Rcpp::export]]
-Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary) {
+Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
   auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   using magmaan::api::InferenceReason;
+  const auto fit_state = policy_state_from(state);
   magmaan::api::PolicyInference out;
   if (c.estimator != "ML") {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
@@ -10882,8 +10893,9 @@ Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the inference policy requires random x, affine equality constraints and no active bounds");
   } else {
-    out = magmaan::api::policy_inference_ml(*c.ntml, {converged, psd_boundary});
+    out = magmaan::api::policy_inference_ml(*c.ntml, fit_state);
   }
+  out.verdict_disagreement = magmaan::api::verdict_disagreement(fit_state);
   const bool has_cov = out.covariance_reason == InferenceReason::Available;
   return Rcpp::List::create(
       Rcpp::_["covariance"] = has_cov ? Rcpp::RObject(Rcpp::wrap(out.covariance)) : Rcpp::RObject(R_NilValue),
@@ -10892,7 +10904,8 @@ Rcpp::List policy_inference_impl(SEXP context, bool converged, bool psd_boundary
       Rcpp::_["covariance_detail"] = out.covariance_detail,
       Rcpp::_["score"] = policy_test_list(out.score),
       Rcpp::_["lr"] = policy_test_list(out.lr),
-      Rcpp::_["psd_boundary"] = out.psd_boundary);
+      Rcpp::_["psd_boundary"] = out.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
 }
 
 // policy_nested_impl() — mirrors api::policy_nested_ml() on two prepared
@@ -10905,6 +10918,8 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
   auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
   auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
   using magmaan::api::InferenceReason;
+  const auto null_fit = policy_state_from(null_state);
+  const auto alternative_fit = policy_state_from(alternative_state);
   magmaan::api::PolicyNested out;
   if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
     const std::string detail =
@@ -10915,12 +10930,14 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
       t->detail = detail;
     }
   } else {
-    out = magmaan::api::policy_nested_ml(a.ntml, {bool(null_state[0]), bool(null_state[1])},
-                                         b.ntml, {bool(alternative_state[0]), bool(alternative_state[1])});
+    out = magmaan::api::policy_nested_ml(a.ntml, null_fit, b.ntml, alternative_fit);
   }
+  out.verdict_disagreement = magmaan::api::verdict_disagreement(null_fit) ||
+                             magmaan::api::verdict_disagreement(alternative_fit);
   return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
                             Rcpp::_["lr"] = policy_test_list(out.lr),
-                            Rcpp::_["psd_boundary"] = out.psd_boundary);
+                            Rcpp::_["psd_boundary"] = out.psd_boundary,
+                            Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
 }
 
 // [[Rcpp::export]]

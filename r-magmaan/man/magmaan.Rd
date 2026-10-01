@@ -110,7 +110,12 @@ use \code{isTRUE()} to count successful fits. \code{fit$inference} is \code{NULL
 inference. Otherwise \code{fit$inference$status} has \code{component}, \code{available},
 \code{reason}, and \code{detail} for covariance, global score, and global LR.
 Reasons include \code{available}, \code{not_converged}, \code{saturated},
-\code{unsupported_model}, and \code{numeric_failure}.
+\code{unsupported_model}, and \code{numeric_failure}. \code{fit$inference$convergence}
+has \code{rule} (the acceptance rule that set \code{converged}, \code{"newton"} by
+default), \code{converged}, \code{magmaan} (magmaan's own check: \code{"passed"},
+\code{"failed"} or \code{"unchecked"}), and \code{disagree}. Under a compatibility rule
+such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \code{TRUE} when the rule and
+magmaan's check reach different verdicts; inference follows the rule.
 
 \code{summary(fit)$tests} is \code{NULL} when no global test is available, otherwise a
 data frame with \code{test}, \code{statistic}, \code{df}, \code{p.sb}, \code{p.peba4}, and \code{sb.scale}.

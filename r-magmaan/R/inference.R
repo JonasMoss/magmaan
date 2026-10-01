@@ -33,7 +33,8 @@ infer <- function(fit) {
   )
   # A PSD estimate on the cone boundary: computed, valid for an interior
   # population (project/design/r-interface-vision.md, Availability).
-  out <- list(status = status, psd_boundary = isTRUE(res$psd_boundary))
+  out <- list(status = status, psd_boundary = isTRUE(res$psd_boundary),
+              convergence = .convergence_record(lab, res))
   if (isTRUE(res$covariance_available)) {
     V <- res$covariance
     nm <- names(coef(fit))
@@ -46,6 +47,16 @@ infer <- function(fit) {
   if (isTRUE(res$score$available)) out$global_score <- res$score
   if (isTRUE(res$lr$available)) out$global_lr <- res$lr
   out
+}
+
+# The rule that decided convergence, magmaan's own check and whether they
+# disagree. They can disagree only under a compatibility rule such as the
+# lavaan-0.7.2 preset; inference then follows the selected rule.
+.convergence_record <- function(lab, res) {
+  list(rule = lab$fitting$effective$convergence %||% "newton",
+       converged = isTRUE(lab$converged),
+       magmaan = lab$diagnostics$verdict$status %||% NA_character_,
+       disagree = isTRUE(res$verdict_disagreement))
 }
 
 # Condition raised when a caller asks for an inference result that does not
@@ -77,6 +88,11 @@ infer <- function(fit) {
 }
 
 .inference_label <- function(fit) {
+  label <- .inference_status_label(fit)
+  if (isTRUE(fit$inference$convergence$disagree)) paste0(label, "; see the convergence note") else label
+}
+
+.inference_status_label <- function(fit) {
   inf <- fit$inference
   if (is.null(inf)) return("not computed; call infer(fit)")
   s <- inf$status

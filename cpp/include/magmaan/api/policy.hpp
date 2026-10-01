@@ -7,6 +7,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -36,9 +37,18 @@ std::string_view reason_name(InferenceReason reason) noexcept;
 struct PolicyFitState {
   bool converged = true;
   bool psd_boundary = false;
+  // magmaan's own convergence check when a non-native acceptance rule (a
+  // compatibility preset) decided `converged`; unset when magmaan's check
+  // decided or did not run. Inference follows `converged` either way.
+  std::optional<bool> native_converged = {};
 };
 
 PolicyFitState policy_fit_state(const estimate::Estimates& estimates);
+
+// The selected acceptance rule and magmaan's own check disagree. Nothing is
+// recomputed for it: callers report the disagreement next to results that
+// follow the selected rule.
+bool verdict_disagreement(const PolicyFitState& state) noexcept;
 
 // One test statistic with its calibrations: a global test against the
 // saturated model, or a nested test of a null against an alternative.
@@ -64,6 +74,7 @@ struct PolicyInference {
   // ordinary estimators coincide with probability tending to one, so the
   // regular limits apply. Callers report that assumption.
   bool psd_boundary = false;
+  bool verdict_disagreement = false;  // see verdict_disagreement()
 };
 
 // Nested tests of `null` against `alternative`, which must be fits to one
@@ -77,6 +88,7 @@ struct PolicyInference {
 struct PolicyNested {
   PolicyTest score, lr;
   bool psd_boundary = false;  // either fit is a PSD estimate on the boundary
+  bool verdict_disagreement = false;  // for either fit
 };
 
 // All components unavailable for one reason.

@@ -268,6 +268,60 @@ TEST_CASE("lavaan acceptance on the native PORT search is judged in lavaan's uni
   CHECK(*off == doctest::Approx(fd_max).epsilon(1e-5));
 }
 
+TEST_CASE("policy state reports when lavaan's rule and magmaan's check disagree") {
+  using namespace magmaan::estimate;
+  Eigen::Vector4d lambda(1, .8, .6, .9);
+  Eigen::Matrix4d s = lambda * lambda.transpose();
+  s.diagonal().array() += .7;
+  FittingOptions preset;
+  preset.preset = "lavaan-0.7.2";
+  auto plain = fixture("f =~ x1+x2+x3+x4", s);
+  auto agree = fit_ml_configured(plain.pt, plain.rep, plain.sample, preset);
+  REQUIRE(agree);
+  auto state = magmaan::api::policy_fit_state(*agree);
+  CHECK(state.converged);
+  REQUIRE(state.native_converged);
+  CHECK(*state.native_converged);
+  CHECK_FALSE(magmaan::api::verdict_disagreement(state));
+  // The oracle's moments with x1 scaled by 1000 and x3 by 1/1000: lavaan's
+  // rule accepts a standardized-retry endpoint at fmin 0.276 on exact-fit
+  // moments, and magmaan's check rejects it. The endpoint is path-sensitive,
+  // so the test reads the oracle's own matrix.
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) + "/fitting/lavaan_0_7_2.json");
+  REQUIRE(in.good());
+  auto root = nlohmann::json::parse(in, nullptr, false);
+  REQUIRE_FALSE(root.is_discarded());
+  Eigen::Matrix4d scaled_s = Eigen::Matrix4d::Zero();
+  bool found = false;
+  for (const auto& c : root["cases"]) {
+    if (c.value("rescale", 0.0) != 1000.0) continue;
+    for (int i = 0; i < 4; ++i) for (int j = 0; j < 4; ++j)
+      scaled_s(i, j) = c["sample_cov"][static_cast<std::size_t>(i)][static_cast<std::size_t>(j)].get<double>();
+    found = true;
+  }
+  REQUIRE(found);
+  auto scaled = fixture("f =~ x1+x2+x3+x4", scaled_s);
+  auto accepted = fit_ml_configured(scaled.pt, scaled.rep, scaled.sample, preset);
+  REQUIRE(accepted);
+  CHECK(accepted->fmin > 0.2);
+  state = magmaan::api::policy_fit_state(*accepted);
+  CHECK(state.converged);
+  REQUIRE(state.native_converged);
+  CHECK_FALSE(*state.native_converged);
+  CHECK(magmaan::api::verdict_disagreement(state));
+  // The reverse direction: the rule rejects a point magmaan's check accepts.
+  agree->selected_verdict->status = FitCheck::Failed;
+  state = magmaan::api::policy_fit_state(*agree);
+  CHECK_FALSE(state.converged);
+  CHECK(magmaan::api::verdict_disagreement(state));
+  // Under magmaan's own rule there is no second verdict to disagree with.
+  FittingOptions native;
+  native.convergence = "newton";
+  auto own = fit_ml_configured(plain.pt, plain.rep, plain.sample, native);
+  REQUIRE(own);
+  CHECK_FALSE(magmaan::api::policy_fit_state(*own).native_converged);
+}
+
 TEST_CASE("lavaan ML retains original-covariance rejection across retries") {
   using namespace magmaan::estimate;
   Eigen::Vector4d lambda(1, .8, .6, .9);

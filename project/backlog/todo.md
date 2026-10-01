@@ -75,20 +75,6 @@ ordinary-user estimator or inference default.
   ×10⁵ starts, coordinates and verdicts match, but endpoints depend on
   floating-point paths (fixture `fitting/lavaan_0_7_2.json`).
 
-- [ ] **M/L — decide how magmaan's verdict relates to inference under a
-  non-native acceptance rule.** Under a compatibility preset such as
-  `lavaan-0.7.2`, the selected acceptance rule sets `converged` and gates
-  ordinary inference. This is deliberate: simulations compared with lavaan
-  need lavaan-identical outcomes. magmaan's common Newton verdict remains in
-  the fit diagnostics, and the two can disagree. On exact-fit moments with x1
-  scaled by 1000 and x3 by 1/1000, lavaan 0.7.2 accepts a standardized-retry
-  endpoint with fmin 0.276 (same fixture). Decide whether the inference status
-  reports both verdicts, adds a detail when they disagree, or gates on both,
-  without changing lavaan-identical estimates or `converged`. Expect threading
-  through `api::policy_fit_state` and the ordinary summary. **Check:**
-  disagreement cases in both directions, unchanged lavaan-identical fits, and
-  documentation of the verdict that gates inference.
-
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
   Assess safeguarded backtracking or adapter recovery while retaining caller

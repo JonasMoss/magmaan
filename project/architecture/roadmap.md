@@ -780,6 +780,12 @@ not endpoints. Constrained, FIML and all-ordinal parity gates remain in the
 active backlog; inference conventions and default fits are unchanged. PORT
 status codes follow its source: 8 false convergence (reported as a noisy
 objective), 9 evaluation limit and 10 iteration limit (both budget stops).
+A compatibility acceptance rule keeps deciding `converged` and inference, and
+magmaan's common verdict still runs. `api::PolicyFitState::native_converged`
+and `api::verdict_disagreement()` carry a disagreement between them into
+policy inference and nested results without changing either; the ordinary
+package records `fit$inference$convergence` and prints notes. The witness is
+the rescaled exact-fit fixture case that lavaan 0.7.2 accepts at fmin 0.276.
 
 `estimate/frontier/ml2s_audit.hpp` adds standalone saturated-likelihood endpoint
 reports and composed ML2S reports for all five Stage-2 weight policies. Stage 1
