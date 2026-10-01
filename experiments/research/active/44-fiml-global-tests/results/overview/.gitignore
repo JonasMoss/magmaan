@@ -1,0 +1,9 @@
+*
+!.gitignore
+!legacy_scope.csv
+!ml2s_bases.csv
+!provenance.csv
+!pseudo_null.csv
+!sem_cells.csv
+!sem_metadata.csv
+!sem_overview.csv

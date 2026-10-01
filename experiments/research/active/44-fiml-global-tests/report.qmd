@@ -1,0 +1,170 @@
+---
+title: "FIML and two-stage global tests"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Which global goodness-of-fit tests remain useful under nonnormal incomplete
+data, and which information geometry should a FIML score test use?
+
+## Short answer
+
+The representative SEM panel favors the FIML score family over scalar-robust
+and spectrum-adjusted likelihood-ratio tests, but does not establish uniform
+calibration. Across 55 justified-null cells, FIML score pEBA4 rejected
+1.4–7.4% at a nominal 5%, compared with 4.8–36.0% for LR pEBA4 and
+4.8–89.2% for the scalar-robust comparator. Each cell attempted 500 fits.
+The paired ML2S score pEBA4 arm was less stable (3.0–16.2%).
+
+A separate exact pseudo-null diagnostic supports observed-H0 sensitivity with
+an expected metric: it rejected 4.0% in 1,000 attempts where expected-H0
+geometry rejected zero. This is the prospective primary construction; the
+source-based latent-model publication design still needs freezing. The older
+FIML-versus-MLR and two-stage comparisons have only ten-replication local
+outputs and remain banked designs, not additional calibration evidence.
+
+```{r}
+read_overview <- function(name) {
+  path <- file.path("results", "overview", paste0(name, ".csv"))
+  if (!file.exists(path)) stop("Missing retained overview: ", path,
+    "; restore the tracked CSV or, with original runs present, run Rscript scripts/summarize.R.")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+percent <- function(x) sprintf("%.1f%%", 100*x)
+range_percent <- function(lo, hi) paste(percent(lo), percent(hi), sep="–")
+```
+
+## Evidence
+
+### Global SEM calibration
+
+The retained panel crosses five latent models, five normal/VM/IG generators,
+complete data, 30% MCAR and 30% MAR, and FIML/ML2S. It has 75,000 attempted
+fits at N=200. Its directory name contains “n200-500”; metadata specifies
+N=200 and **500 replications**, not two sample sizes. The table excludes
+nonnormal MAR, leaving 55 cells per estimator with a justified estimator-level
+null. Rates are conditional on usable results; unavailable calls are counted
+separately. Score results also require the prespecified tangent rank.
+
+```{r}
+s <- read_overview("sem_overview")
+knitr::kable(data.frame(
+  Estimator=s$estimator, Test=s$method,
+  `Rejection range`=range_percent(s$min_rate,s$max_rate),
+  `Mean absolute error`=percent(s$mean_cell_error),
+  `Minimum usable / cell`=paste0(s$min_usable," / ",s$attempts_per_cell),
+  `Unavailable calls`=s$unavailable, check.names=FALSE))
+```
+
+Mean absolute error weights cells equally; it is descriptive, not a pooled
+size estimate or decision criterion. The entire panel recorded four fit
+failures, 447 FMG failures, four flip failures and five finite calls with
+non-nominal geometry. Different tests have different usable denominators.
+The approximately 86-minute wall time is historical, not a current benchmark.
+At 500 usable replications, a 5% rejection rate has Monte Carlo standard
+error about one percentage point. Full cell rates and denominators are in
+`results/overview/sem_cells.csv`.
+
+### Sensitivity and metric are separate choices
+
+Four independent standardized exponentials supply an exact zero-covariance
+pseudo-null. The first variable is always observed; logistic selection on it
+jointly removes the other three. This isolates nonnormal MAR without assuming
+that an arbitrary generating-model covariance is the FIML pseudo-target.
+The retained slice uses N=2,000, selection slope 5 and 1,000 attempts per
+construction.
+
+```{r}
+p <- read_overview("pseudo_null")
+knitr::kable(data.frame(Geometry=p$geometry,
+  `Rejection (pEBA4)`=percent(p$reject_peba4),
+  `Usable / attempted`=paste0(p$usable," / ",p$attempted), check.names=FALSE))
+```
+
+Observed-H0 here changes sensitivity; “expected metric” specifies the
+projection metric. Observed-H1 and expected-H0 are retained diagnostics.
+This targeted result does not prove every latent-model MAR null. The
+[pseudo-null design](design/pseudo_null_information.md) and
+[score geometry appendix](design/lrt_score_information_geometry.md)
+preserve the derivation and wider historical checks.
+
+### Two-stage statistic versus reference law
+
+The retained ML2S diagnostic compares the ML discrepancy and residual
+least-squares statistic while holding the estimated UΓ reference spectrum
+fixed. Seven justified-null cells per N each have 10,000 usable replications;
+nonnormal MAR remains a separate estimand-stress arm. The largest paired
+rejection differences shrink with N, but changing the statistic alone does
+not uniformly repair small-sample calibration. For IG2 complete data at
+N=120, pEBA4 rejection is 8.72% versus 8.81%.
+
+```{r}
+b <- read_overview("ml2s_bases")
+knitr::kable(data.frame(N=b$n, Cells=b$cells,
+  `Usable / cell`=b$min_usable,
+  `Largest SB difference`=percent(b$max_sb_size_difference),
+  `Largest pEBA4 difference`=percent(b$max_peba4_size_difference),
+  `Largest mixture difference`=percent(b$max_all_size_difference),check.names=FALSE))
+```
+
+Differences are percentage points between paired rejection rates, not errors
+relative to 5%. The [two-stage design](design/two_stage_rls.md) retains the
+smaller predecessor check; this table reads the later 10,000-replication run.
+
+## Caveats
+
+Nonnormal MAR can move the Gaussian-FIML pseudo-target away from the
+unconditional generating covariance. Those panel cells are stress tests
+until a model-specific pseudo-null is established, and are excluded above.
+The affine covariance screen additionally includes infinite-moment, MNAR and
+positivity-violation controls; it cannot establish latent-model validity.
+
+The legacy-MLR lane retains a distinct two-group GOF/nested/power design;
+the two-stage lane retains a one-factor estimator comparison. Their local
+outputs are single ten-replication nonnormal-MAR cells. Neither supports a
+method ranking. Reopen either only for a named paper question with a frozen
+null and new substantive run. No older grid is queued by this consolidation.
+
+The active next step is the [prospective SEM design](design/prospective_sem.md):
+freeze source adaptations, observation laws, estimator-level pseudo-nulls,
+numerical screening and power contrasts before a publication run. Completed
+multiplier comparisons and full-observed-metric failures remain diagnostics.
+Nothing here changes ordinary-user inference defaults. Parameter SEs have a
+different target and remain in research/39.
+
+## Reproduce
+
+Render the retained overview without the large ignored raw trees:
+
+```sh
+quarto render experiments/research/active/44-fiml-global-tests/report.qmd
+```
+
+From this study directory, inspect the parent command reference or smoke the
+paired SEM route into a fresh absolute directory:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane sem --help
+Rscript run_experiment.R --lane sem --smoke --models one_factor_6 \
+  --distributions normal --missingness mcar_30 --max-cells 2 \
+  --results-dir /tmp/fiml-global-fresh
+Rscript run_experiment.R --lane two-stage --help
+Rscript run_experiment.R --lane legacy-mlr --help
+```
+
+`--lane screen` selects the completed affine control. `--check` selects the
+crossing, pseudo-null, pseudo-target, H1-quadratic, ML2S-RLS, MLR-parity or
+power-calibration diagnostic; consult its source/help before a run.
+`Rscript scripts/summarize.R` rebuilds the compact overview **only when the
+original local runs are present**. `results/overview/provenance.csv` records
+input paths and hashes. Original seeds, checkpoint metadata and cloud IDs
+are preserved; moved source fingerprints cannot resume old checkpoints.

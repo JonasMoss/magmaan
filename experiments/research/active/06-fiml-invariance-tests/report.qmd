@@ -1,0 +1,163 @@
+---
+title: "FIML and two-stage measurement-invariance tests"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+How well do robust difference tests and direct FIML score tests calibrate
+measurement-invariance restrictions under nonnormal incomplete data?
+
+## Short answer
+
+Spectrum corrections improve on naive difference tests, but do not settle
+small-sample invariance testing. In the six-indicator, 5,000-replication null
+study, FIML pEBA4 rejection ranged from 5.6–24.7% for weak and 5.6–35.6%
+for strict restrictions across complete/MCAR and normal-MAR cells. Severe
+nonnormality still exposes substantial inflation.
+
+The separate direct-FIML score screen and independent hard-cell confirmation
+favor score pEBA4 over effective or standardized flips. In the confirmation's
+eight complete/MCAR or normal-MAR cells, score pEBA4 rejected 4.3–6.7%,
+whereas effective flips reached 12.3%. Standardization supplied little gain.
+These are distinct designs, not pooled replications. Scalar nesting,
+larger-model coverage and size-matched power remain unfinished; multiplier
+expansion is banked pending a concrete consumer.
+
+```{r}
+read_overview <- function(name) {
+  path <- file.path("results", "overview", paste0(name, ".csv"))
+  if (!file.exists(path)) stop("Missing retained overview: ", path,
+    "; restore the tracked CSV or, with original runs present, run Rscript scripts/summarize.R.")
+  read.csv(path, stringsAsFactors = FALSE)
+}
+percent <- function(x) sprintf("%.1f%%", 100*x)
+range_percent <- function(lo, hi) paste(percent(lo), percent(hi), sep="–")
+```
+
+## Evidence
+
+### Difference-test calibration
+
+The executed study has a one-factor, six-indicator model at total N=400,
+seven normal/VM/IG/PL generator families, balanced or 1:3 allocation, and
+complete/MCAR/MAR patterns. Metadata records 70 completed generating cells
+with 5,000 attempts, each evaluated with FIML and ML2S. The table includes
+46 justified-null cells per estimator and step; nonnormal MAR is excluded.
+Weak and strict restrictions are the implemented nested comparisons.
+
+```{r}
+c <- read_overview("calibration")
+c <- c[c$method %in% c("SB","pEBA4"),]
+knitr::kable(data.frame(Estimator=c$estimator, Restriction=c$step, Test=c$method,
+  `Rejection range`=range_percent(c$min_rate,c$max_rate),
+  `Mean absolute error`=percent(c$mean_cell_error),
+  `Usable / cell`=paste0(c$min_valid,"–",c$max_valid," / 5000"), check.names=FALSE))
+```
+
+Naive rates reach 89.4% for FIML weak and 97.7% for FIML strict restrictions;
+full summaries remain in `results/overview/calibration.csv`. Rejection is
+conditional on a usable test; failures are not accepted as nonrejections.
+A 5% rate with 5,000 usable replications has Monte Carlo standard error about
+0.3 percentage points. The recorded run took 209.4 minutes.
+
+The [population design](design/calibration_populations.md) preserves the
+Brace–Savalei-inspired larger-model and power plan. Its proposed p=8/16/30
+grid is **not** the executed six-indicator grid. The old `cells.csv` also
+records that intended design rather than the actual run. Historical power
+outputs remain under `results/calibration/_archive_pre_typeI/`; they are a
+separate earlier run, not size-matched power for this null study.
+
+### Direct-FIML score tests
+
+The score-flips lane screens 240 cells with 500 attempts and 199 signs,
+then independently confirms 11 predefined hard cells with 2,000 attempts
+and 999 signs. Restriction ranks are 1/3/5. Its generators, sample sizes
+and missingness laws differ from the difference-test lane. The table separates
+nonnormal-MAR stress cells and reports only the eight justified-null hard
+cells. Full region-separated summaries are in
+`results/overview/flip_stress.csv`.
+
+```{r}
+f <- read_overview("flip_stress")
+f <- f[f$profile=="confirm" & f$region=="complete/MCAR or normal MAR",]
+labels <- c(flip_effective="Effective flip",flip_standardized="Standardized flip",
+  score_sb="Score SB",score_peba4="Score pEBA4",nested_peba4_ml="Nested LR pEBA4")
+knitr::kable(data.frame(Test=unname(labels[f$method]),
+  `Mean cell rejection`=percent(f$mean_cell_rate),
+  `Rejection range`=range_percent(f$min_rate,f$max_rate),
+  `Usable / cell`=paste0(f$min_valid,"–",f$max_valid," / 2000"),check.names=FALSE))
+```
+
+These deliberately difficult cells are not a representative average. Flip
+versus nested-test availability differs; the conditional rejection rates
+cannot be read as a common denominator. The 12-worker screen and confirmation
+took about 14.3 and 10.8 minutes. Median standardization cost increased to
+94.8 ms at 999 signs, versus 12.1 ms for effective sign sums. There is no
+independent evidence here for promoting standardized flips as a default.
+
+### Oracle and pilot controls
+
+The former showcase is now the oracle lane. Its three-replication local
+normal-complete smoke checks numerical LR and UΓ agreement with lavaan:
+
+```{r}
+o <- read_overview("oracle_checks")
+knitr::kable(data.frame(Quantity=o$metric, Comparisons=o$comparisons,
+  `Maximum absolute difference`=format(o$max_abs_difference,digits=3),check.names=FALSE))
+```
+
+This checks implementation conventions; it cannot establish test size.
+Maintained C++ golden/unit gates remain the correctness authority. The former
+archived pilot retains its unique loading-power arm and paired controls in
+`results/pilot/` and `results/overview/pilot_power.csv`. Its 100-replication
+results are illustrative, and its seed base overlaps the later screen. It
+is not an additional independent confirmation sample.
+
+## Caveats
+
+A generating-model invariance restriction under nonnormal MAR need not be a
+restriction on the Gaussian-FIML pseudo-target. Those cells remain estimand
+stress until independently justified. Information choices for parameter SEs,
+global exact fit and nested constraints are different scientific questions.
+This report joins overlapping nested-test evidence without claiming their
+nulls or geometries are interchangeable.
+
+The active work is valid metric-to-scalar nesting with released latent means,
+a frozen larger-model null design, and size-matched power. Preserve completed
+screen/confirmation evidence; reopen multiplier development only for a named
+incomplete-data score consumer or a new rank/missingness failure regime.
+No new estimator or inference default is selected by this reorganization.
+
+## Reproduce
+
+The report renders from the small tracked overview:
+
+```sh
+quarto render experiments/research/active/06-fiml-invariance-tests/report.qmd
+```
+
+From this study directory, inspect lane help and run fresh smoke outputs:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --lane calibration --help
+Rscript run_experiment.R --lane calibration --smoke \
+  --results-dir /tmp/fiml-invariance-fresh
+Rscript run_experiment.R --lane score-flips --help
+Rscript run_experiment.R --lane oracle --help
+Rscript run_experiment.R --lane pilot --help
+```
+
+`Rscript scripts/summarize.R` rebuilds the retained overview only with the
+original runs present. Source paths and hashes are in
+`results/overview/provenance.csv`. Every lane keeps its historical populations,
+seeds, failure records and metadata. Source fingerprints changed when paths
+moved; do not relax checkpoint guards or overwrite historical results.

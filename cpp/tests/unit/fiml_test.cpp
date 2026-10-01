@@ -1844,7 +1844,7 @@ TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group metric matches the un
   // blocks. With the weight restored, the FIML saturated spectrum and the
   // complete-data unstructured spectrum agree to ~1e-6 here, and the production
   // Structured FMG path matches lavaan across configural/metric/scalar in
-  // experiments/showcases/05-fiml-measurement-invariance-fmg.
+  // experiments/research/active/06-fiml-invariance-tests/lanes/oracle.
   auto built = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
   Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
   theta0.setConstant(0.6);

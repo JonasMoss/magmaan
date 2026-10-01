@@ -186,7 +186,8 @@ so the reduced UΓ spectrum (SB scaling, FMG p-values, robust difference test) w
 off by up to ~1% for models with both unequal group sizes and a cross-group
 equality constraint. Masked for single-group, equal-group, and configural cases.
 Guard: `cpp/tests/unit/fiml_test.cpp` (metric-invariance Unstructured degeneracy
-~1e-6); `experiments/showcases/05-fiml-measurement-invariance-fmg --lavaan-parity`.
+~1e-6); the consolidated invariance runner with `--lane oracle --lavaan-parity`
+(`experiments/research/active/06-fiml-invariance-tests/run_experiment.R`).
 Scope: Expected bread only (the FMG path); the Observed-bread spectrum tail is
 left as-is. `robust_se` uses its own w_b-weighted bread and was unaffected.
 

@@ -1,0 +1,564 @@
+# Technical appendix: lrt ugamma estimation
+
+Preserved method derivation and code examples from the predecessor study;
+the parent report owns current conclusions. Code fences are examples, not
+an executable reporting pipeline. Historical outputs are under `../results/global/`.
+
+
+## Short answer
+
+For a single-model likelihood-ratio goodness-of-fit test, the population
+matrix whose nonzero eigenvalues determine the robust reference law is
+
+$$
+\boxed{\mathcal A_{\mathrm{LR}}=U\Gamma.}
+$$
+
+Here $U$ removes the model-tangent directions from the LRT curvature and
+$\Gamma$ is the asymptotic covariance of the unrestricted saturated-moment
+estimator. Although $U\Gamma$ is generally nonsymmetric, it has $d$ real,
+nonnegative, nonzero eigenvalues under the regular null. The LRT converges to
+the corresponding weighted chi-square law.
+
+There are then two different finite-sample strategies:
+
+1. A **common-coordinate projection estimator** constructs
+   $\widehat U\widehat\Gamma$. This estimates the large matrix, or an
+   equivalent $d\times d$ symmetric reduction, and therefore supplies the
+   whole spectrum. Satorra--Bentler (SB) scaling is just the mean-eigenvalue
+   reduction of that spectrum.
+2. The **Yuan--Bentler/Mplus split estimator** separately estimates an H1 trace
+   and an H0 trace and subtracts them. It estimates the scalar
+   $\operatorname{tr}(U\Gamma)$, but its finite-sample ingredients do not
+   identify a unique $U\Gamma$ matrix. A whole spectrum is available only
+   after replacing the split construction by a common-coordinate projection.
+
+This note derives both statements and records the estimation choices used by
+magmaan. It concerns the LRT only; no score-test statistic is considered.
+
+## Population construction in saturated coordinates
+
+### Hypothesis and tangent space
+
+Let $\eta\in\mathbb R^m$ collect the unrestricted means and unique covariance
+elements of the working Gaussian model. Let
+
+$$
+\mathcal M_0=\{\eta(\theta):\theta\in\Theta_0\}
+$$
+
+be the moment surface allowed by the restricted SEM. The null is the
+Gaussian-likelihood pseudo-null
+
+$$
+H_0:\quad \eta_1^*\in\mathcal M_0,
+$$
+
+where $\eta_1^*$ is the population optimum of the unrestricted working
+likelihood. At a regular null point, let
+
+$$
+K
+=\left.
+  \frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
+ \right|_{\theta=\theta_0^*}
+\in\mathbb R^{m\times r},
+\qquad
+d=m-r,
+$$
+
+after collapsing equality constraints to locally free parameter coordinates.
+The columns of $K$ span the SEM tangent. Choose
+$D\in\mathbb R^{m\times d}$ with orthonormal columns spanning its ordinary
+Euclidean complement:
+
+$$
+K^{\mathsf T}D=0,
+\qquad
+D^{\mathsf T}D=I_d.
+$$
+
+Only the two column spaces matter; the particular bases do not.
+
+### Sensitivity, variability, and saturated ACOV
+
+Let $s_i(\eta)=\partial\ell_i(\eta)/\partial\eta$ be the saturated-coordinate
+working-likelihood contribution. At the pseudo-null define
+
+$$
+H
+=-E\left\{
+  \frac{\partial s_i(\eta_1^*)}{\partial\eta^{\mathsf T}}
+ \right\},
+\qquad
+J
+=E\{s_i(\eta_1^*)s_i(\eta_1^*)^{\mathsf T}\}.
+$$
+
+Thus $H$ is saturated sensitivity and $J$ is actual saturated contribution
+variability. The unrestricted estimator has asymptotic covariance
+
+$$
+\boxed{\Gamma=H^{-1}JH^{-1}.}
+$$
+
+In the classical moment-structure presentation, $\Gamma$ is defined directly
+as the asymptotic covariance of the sample moments and need not be introduced
+through likelihood contributions [[Satorra, 1989](references.md#satorra1989); [Satorra, 2000](references.md#satorra2000)]. The
+representation above is the same object in saturated working-likelihood
+coordinates. It is especially useful for FIML because both $H$ and $J$ can be
+formed from observed-pattern likelihood contributions.
+
+### The residual projector and LRT curvature
+
+Define the $H$-orthogonal residual projector
+
+$$
+P
+=I-K(K^{\mathsf T}HK)^{-1}K^{\mathsf T}H
+$$
+
+and set
+
+$$
+G=PD.
+$$
+
+The columns of $G$ span the same $d$-dimensional residual space as $P$, but
+provide nonredundant coordinates. Because $P$ is the $H$-orthogonal projector
+onto that space,
+
+$$
+P
+=G(G^{\mathsf T}HG)^{-1}G^{\mathsf T}H.
+$$
+
+The residual LRT curvature is therefore
+
+$$
+\boxed{
+U=HP
+ =H-HK(K^{\mathsf T}HK)^{-1}K^{\mathsf T}H
+ =HG(G^{\mathsf T}HG)^{-1}G^{\mathsf T}H.
+}
+$$
+
+$P$ is generally not symmetric in Euclidean coordinates, whereas $U=HP$ is
+symmetric positive semidefinite with rank $d$.
+
+### The large matrix and the reduced spectrum
+
+Substitution of $\Gamma=H^{-1}JH^{-1}$ yields exactly the form of interest:
+
+$$
+\boxed{
+U\Gamma
+=HG(G^{\mathsf T}HG)^{-1}G^{\mathsf T}JH^{-1}.
+}
+$$
+
+This is the large $m\times m$ LRT reference operator. Its $d$ nonzero
+eigenvalues coincide with the eigenvalues of the reduced matrix
+
+$$
+\boxed{
+\mathcal R
+=(G^{\mathsf T}HG)^{-1}(G^{\mathsf T}JG).
+}
+$$
+
+Equivalently, they are the generalized eigenvalues satisfying
+
+$$
+(G^{\mathsf T}JG)v
+=\lambda(G^{\mathsf T}HG)v.
+$$
+
+The reduced matrix need not itself be symmetric, but it is similar to the
+symmetric positive-semidefinite matrix
+
+$$
+(G^{\mathsf T}HG)^{-1/2}
+(G^{\mathsf T}JG)
+(G^{\mathsf T}HG)^{-1/2}.
+$$
+
+This $d\times d$ reduction is normally what should be estimated and
+diagonalized. Constructing the dense $m\times m$ product is mathematically
+unnecessary.
+
+## The LRT, its whole spectrum, and SB scaling
+
+The base statistic is the actual likelihood-height difference
+
+$$
+T_{\mathrm{LR}}
+=2\{\ell_n(\widehat\eta_1)
+      -\ell_n(\eta(\widehat\theta_0))\}.
+$$
+
+Under the regular pseudo-null and distributional misspecification,
+
+$$
+T_{\mathrm{LR}}
+\overset{d}{\longrightarrow}
+\sum_{j=1}^d\lambda_j\chi_{1,j}^2,
+\qquad
+\lambda_j=\operatorname{eig}_j(U\Gamma).
+$$
+
+The **whole-spectrum** plug-in reference distribution retains every
+$\lambda_j$. SB instead keeps only their mean [[Satorra, 1989](references.md#satorra1989)]:
+
+$$
+c_{\mathrm{SB}}
+=\frac{1}{d}\sum_{j=1}^d\lambda_j
+=\frac{\operatorname{tr}(U\Gamma)}{d},
+\qquad
+T_{\mathrm{SB}}
+=\frac{T_{\mathrm{LR}}}{c_{\mathrm{SB}}}
+\overset{\mathrm{ref}}{\sim}\chi_d^2.
+$$
+
+Thus SB is not a different estimator of model fit. It is a one-number
+approximation to the weighted reference law of the same LRT. Estimating the
+whole spectrum first permits SB, mean-and-variance corrections, eigenvalue
+pooling, or the plug-in mixture to be computed from one common object.
+
+## Estimating the whole operator by projection
+
+### Generic common-coordinate estimator
+
+Choose a saturated-coordinate reference point and estimate
+
+$$
+\widehat H_{\mathrm{ref}},
+\qquad
+\widehat J_{\mathrm{ref}},
+\qquad
+\widehat\Gamma_{\mathrm{ref}}
+=\widehat H_{\mathrm{ref}}^{-1}
+ \widehat J_{\mathrm{ref}}
+ \widehat H_{\mathrm{ref}}^{-1}.
+$$
+
+Estimate the restricted tangent by
+
+$$
+\widehat K
+=\left.
+  \frac{\partial\eta(\theta)}{\partial\theta^{\mathsf T}}
+ \right|_{\widehat\theta_0}.
+$$
+
+Then form
+
+$$
+\widehat P
+=I-\widehat K
+ (\widehat K^{\mathsf T}\widehat H_{\mathrm{ref}}\widehat K)^{-1}
+ \widehat K^{\mathsf T}\widehat H_{\mathrm{ref}},
+$$
+
+$$
+\widehat U
+=\widehat H_{\mathrm{ref}}\widehat P,
+\qquad
+\boxed{
+\widehat{\mathcal A}_{\mathrm{LR}}
+=\widehat U\widehat\Gamma_{\mathrm{ref}}.
+}
+$$
+
+The complete estimated spectrum consists of the $d$ nonzero eigenvalues of
+$\widehat{\mathcal A}_{\mathrm{LR}}$. A numerically preferable calculation
+uses either the $d\times d$ generalized eigenproblem or the symmetric
+reduction
+
+$$
+\widehat\Gamma_{\mathrm{ref}}^{1/2}
+\widehat U
+\widehat\Gamma_{\mathrm{ref}}^{1/2}.
+$$
+
+The estimated SB factor is then simply
+
+$$
+\widehat c_{\mathrm{SB}}
+=\frac1d\operatorname{tr}
+  (\widehat U\widehat\Gamma_{\mathrm{ref}})
+=\frac1d\sum_{j=1}^d\widehat\lambda_j.
+$$
+
+This construction makes every estimation choice visible:
+
+| Choice | Examples | What it changes |
+|---|---|---|
+| Reference point for curvature | saturated H1; restricted H0 | finite-sample $\widehat H_{\mathrm{ref}}$ |
+| Curvature estimator | observed Hessian; working expected information | projection metric $\widehat U$ |
+| Variability estimator | empirical outer product; normal-theory; bias-corrected fourth moments | $\widehat\Gamma$ and the spectrum |
+| Tangent evaluation | normally $\widehat\theta_0$ | excluded directions |
+| Base statistic | LR; another asymptotically equivalent discrepancy | the scalar being calibrated |
+
+The pieces need not be numerically equal or evaluated at an identical estimate
+to define a consistent plug-in procedure. They must, however, converge under
+the null to the population objects used in one coherent derivation. Most
+importantly, the procedure explicitly constructs one residual projection and
+one saturated ACOV in a common coordinate system. That is what makes a whole
+spectrum well defined.
+
+These displays use per-observation $H$ and $J$, so $\Gamma$ is the ACOV of
+$\sqrt n(\widehat\eta_1-\eta_1^*)$. An implementation can instead store summed
+information and the finite-sample covariance of $\widehat\eta_1$. If
+
+$$
+\widehat H_{\mathrm{sum}}=n\widehat H,
+\qquad
+\widehat\Gamma_{\widehat\eta}=n^{-1}\widehat\Gamma,
+$$
+
+then
+
+$$
+\widehat U_{\mathrm{sum}}
+\widehat\Gamma_{\widehat\eta}
+=\widehat U\widehat\Gamma.
+$$
+
+The eigenvalues are unchanged. Magmaan's FIML saturated-moment object uses
+this summed-information/finite-sample-ACOV convention internally.
+
+### Direct moment-space notation
+
+Not every implementation needs to factor $\Gamma$ into $H^{-1}JH^{-1}$.
+Suppose $V$ is the moment-discrepancy weight and $\Gamma$ is estimated directly
+as the ACOV of the sample moments. Then the same construction is
+
+$$
+U(V,K)
+=V-VK(K^{\mathsf T}VK)^{-1}K^{\mathsf T}V,
+$$
+
+followed by the spectrum of
+
+$$
+U(V,K)\Gamma.
+$$
+
+This is the standard covariance-structure form. The likelihood-coordinate
+form above is its special case with $V=H$ and
+$\Gamma=H^{-1}JH^{-1}$. Consequently, an implementation that works directly
+with $V$ and empirical fourth-moment $\Gamma$ is not “missing” a score
+variability matrix $J$; $J$ has already been absorbed into the direct estimate
+of $\Gamma$.
+
+## The Yuan--Bentler/Mplus H1-minus-H0 trace
+
+### Population trace identity
+
+The trace of the large matrix can be written without constructing $U$. From
+the formulas above,
+
+$$
+\begin{aligned}
+\operatorname{tr}(U\Gamma)
+&=\operatorname{tr}(H^{-1}J)\\
+&\quad-
+\operatorname{tr}\left\{
+ (K^{\mathsf T}HK)^{-1}(K^{\mathsf T}JK)
+\right\}.
+\end{aligned}
+$$
+
+Define the tangent-coordinate quantities
+
+$$
+H_{\theta,0}=K^{\mathsf T}HK,
+\qquad
+J_{\theta,0}=K^{\mathsf T}JK.
+$$
+
+Then
+
+$$
+\boxed{
+\operatorname{tr}(U\Gamma)
+=\operatorname{tr}(H^{-1}J)
+-\operatorname{tr}(H_{\theta,0}^{-1}J_{\theta,0}).
+}
+$$
+
+The first term is the unrestricted H1 contribution and the second is the
+restricted tangent contribution. Under working normality they reduce to $m$
+and $r$, respectively, leaving $d=m-r$.
+
+### The finite-sample split estimator
+
+The Yuan--Bentler/Mplus FIML construction estimates the two population terms
+separately [[Yuan & Bentler, 2000](references.md#yuan_bentler2000)]:
+
+$$
+\widehat\tau_1
+=\operatorname{tr}
+  (\widehat H_{\eta,1}^{-1}\widehat J_{\eta,1}),
+\qquad
+\widehat\tau_0
+=\operatorname{tr}
+  (\widehat H_{\theta,0}^{-1}\widehat J_{\theta,0}),
+$$
+
+and uses
+
+$$
+\boxed{
+\widehat c_{\mathrm{YB}}
+=\frac{\widehat\tau_1-\widehat\tau_0}{d},
+\qquad
+T_{\mathrm{YB}}
+=\frac{T_{\mathrm{LR}}}{\widehat c_{\mathrm{YB}}}.
+}
+$$
+
+Here the saturated H1 matrices are evaluated at $\widehat\eta_1$, whereas the
+restricted matrices are evaluated in model-parameter coordinates at
+$\widehat\theta_0$. The population trace identity motivates the subtraction.
+In finite samples, however, the separately estimated restricted matrices need
+not satisfy
+
+$$
+\widehat H_{\theta,0}
+=\widehat K^{\mathsf T}\widehat H_{\eta,1}\widehat K,
+\qquad
+\widehat J_{\theta,0}
+=\widehat K^{\mathsf T}\widehat J_{\eta,1}\widehat K.
+$$
+
+For example, the restricted observed Hessian contains the second-order
+curvature of the nonlinear SEM moment map at H0, while the projected H1
+quantity on the right uses one saturated H1 curvature and only the first-order
+tangent map.
+
+### Why the split does not determine a whole spectrum
+
+The scalar $\widehat\tau_1-\widehat\tau_0$ does not identify a unique matrix.
+Its two terms live naturally in spaces of different dimensions—$m$ saturated
+coordinates and $r$ model coordinates—and infinitely many $m\times m$
+matrices have the same trace. One could choose an arbitrary left inverse of
+$\widehat K$ to embed the H0 term into saturated space, but the resulting
+eigenvalues would depend on that arbitrary embedding and need not form a
+nonnegative rank-$d$ LRT spectrum.
+
+Therefore there is no canonical “Yuan--Bentler split-spectrum estimator” whose
+mean is the Mplus-style factor. The split estimator is intentionally scalar.
+
+If the projected identities are imposed by definition—replace the separately
+estimated H0 matrices with
+
+$$
+\widehat H_{\theta,0}^{\mathrm{proj}}
+=\widehat K^{\mathsf T}\widehat H_{\eta,1}\widehat K,
+\qquad
+\widehat J_{\theta,0}^{\mathrm{proj}}
+=\widehat K^{\mathsf T}\widehat J_{\eta,1}\widehat K,
+$$
+
+—then the trace subtraction is exactly
+$\operatorname{tr}(\widehat U\widehat\Gamma_1)$ and the full spectrum is
+well defined. But this is precisely the common-coordinate projection
+construction; it is no longer the separately estimated Mplus trace recipe.
+
+## What magmaan estimates
+
+### FIML Yuan--Bentler/Mplus route
+
+The FIML compatibility routine
+`estimate_fiml_robust_mlr()`{.literal-code} uses the scalar split:
+
+- the base statistic is the actual restricted-versus-saturated FIML LRT;
+- $\widehat H_{\eta,1}$ is the analytic observed saturated information at the
+  EM H1 moments;
+- $\widehat J_{\eta,1}$ is the outer product of saturated observed-pattern
+  likelihood contributions at H1;
+- $\widehat H_{\theta,0}$ is the analytic observed restricted-model Hessian,
+  including the nonlinear moment-map curvature term;
+- $\widehat J_{\theta,0}$ is the outer product of restricted-model casewise
+  contributions at H0;
+- the routine returns $\widehat\tau_1$, $\widehat\tau_0$, their difference,
+  and the mean-scaled LRT.
+
+It does not return a $d$-dimensional LRT spectrum because that spectrum is not
+identified by the split calculation.
+
+### FIML projection/FMG route
+
+The FIML spectrum routine
+`infer_fiml_fmg_spectrum()`{.literal-code} uses the common-coordinate
+projection:
+
+$$
+\widehat H_1
+=\text{saturated observed H1 information},
+\qquad
+\widehat J_1
+=\text{saturated empirical H1 variability},
+$$
+
+$$
+\widehat\Gamma_1
+=\widehat H_1^{-1}\widehat J_1\widehat H_1^{-1},
+$$
+
+$$
+\widehat U
+=\widehat H_1
+-\widehat H_1\widehat K
+ (\widehat K^{\mathsf T}\widehat H_1\widehat K)^{-1}
+ \widehat K^{\mathsf T}\widehat H_1.
+$$
+
+It returns all $d$ nonzero eigenvalues of
+$\widehat U\widehat\Gamma_1$. The implementation diagonalizes an equivalent
+symmetric reduction rather than the nonsymmetric dense product. FIML SB is
+then the average of these same eigenvalues. The other FMG corrections act on
+the same spectrum, not on separately re-estimated $H$ and $J$ objects.
+
+Thus the FIML SB projection route does exactly what the population display
+suggests: it estimates the large operator, computationally through a reduced
+representation. Its trace and the Mplus-style H1-minus-H0 trace target the same
+population number under the pseudo-null, but they are distinct finite-sample
+estimators.
+
+### Complete-data ML and two-stage routes
+
+The other magmaan spectrum paths use the direct moment-space form
+$U(V,K)\Gamma$:
+
+| Route | Projection metric $V$ | Saturated ACOV $\Gamma$ | Output |
+|---|---|---|---|
+| Complete-data ML/FMG with an ML base | normal-theory weight, by default at the structured fitted moments | empirical casewise moment ACOV, or the requested bias-corrected version | full spectrum; SB is its mean |
+| FIML/FMG | saturated observed H1 information | saturated EM sandwich ACOV $\widehat H_1^{-1}\widehat J_1\widehat H_1^{-1}$ | full spectrum; SB is its mean |
+| Two-stage ML/FMG | expected normal-theory weight at the unrestricted EM moments | Stage-1 EM sandwich ACOV | full spectrum; SB is its mean |
+
+For complete-data calls, an LRT construction must explicitly select the ML
+base—for example `SB_ML`{.literal-code} in the current test-name interface.
+The unsuffixed complete-data FMG name defaults to the RLS base. Under FIML and
+two-stage ML, only the respective LR/ML base is supported.
+
+These projection routes may use different consistent plug-in conventions for
+$V$ and $\Gamma$; they do not require a literal matched pair of estimated
+likelihood $H$ and $J$. What they share is more important: each defines one
+projection operator and one ACOV in the same saturated moment space, and hence
+one estimable whole spectrum.
+
+## Takeaways
+
+1. The population “big matrix” is $U\Gamma$.
+2. Its nonzero spectrum can be estimated without ever materializing that big
+   matrix, using a $d\times d$ symmetric or generalized-eigenvalue reduction.
+3. SB retains only $\operatorname{tr}(U\Gamma)/d$; whole-spectrum corrections
+   retain more of the same reference operator.
+4. Magmaan's FMG routes estimate the spectrum through a common residual
+   projection.
+5. Magmaan's Yuan--Bentler/Mplus MLR route estimates the trace through separate
+   H1 and H0 sandwich terms. That scalar split does not, by itself, define a
+   unique finite-sample spectrum.

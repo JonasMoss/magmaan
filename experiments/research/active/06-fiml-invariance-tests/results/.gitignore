@@ -1,0 +1,7 @@
+*
+!.gitignore
+!calibration/
+!score-flips/
+!pilot/
+!oracle/
+!overview/

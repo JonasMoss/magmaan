@@ -1,0 +1,3 @@
+"lane","reps","cell_filter","scope"
+"legacy-mlr","10","truth=h0,dist=pl2,mech=MAR,rate=0.3","single smoke cell; nonnormal MAR stress, not calibration evidence"
+"two-stage","10","dist=pl2,mech=MAR,rate=0.3","single smoke cell; nonnormal MAR stress, not calibration evidence"

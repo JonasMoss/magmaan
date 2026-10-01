@@ -1,0 +1,4 @@
+"n","cells","min_usable","max_sb_size_difference","max_peba4_size_difference","max_all_size_difference"
+120,7,10000,0.0877,0.0837,0.0657
+500,7,10000,0.012,0.0113,0.0067
+1000,7,10000,0.0062,0.00609999999999999,0.00259999999999999

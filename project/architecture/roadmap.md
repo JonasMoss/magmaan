@@ -24,14 +24,14 @@ capability below); 3+ levels and random slopes remain out of scope.
 
 Engineering studies now live under `experiments/engineering/{active,banked,evidence}/`.
 The collection index owns activity and reopening triggers: four unresolved
-implementation studies remain active, four ideas are banked, and the completed
+implementation studies remain active, three ideas are banked, and the completed
 PSD basin audit is retained as paper evidence. Settled probes are archived; the
 robust-score demonstration was removed after its checks became maintained tests.
 The ordinal observed-score omega studies share one leaf with separate target
 and sampling result trees; RBM estimation risk is research/banked/53.
 
-Research studies use `experiments/research/{active,banked,evidence}/`: 16
-active studies (including protected paper pipelines), 12 banked ideas and
+Research studies use `experiments/research/{active,banked,evidence}/`: 12
+active studies (including protected paper pipelines), 10 banked ideas and
 4 retained evidence studies. Three consolidated showcases retain scalar
 intervals (normal/robust), reliability targets (coefficient/Bell examples),
 and robust test calibration (battery/mechanisms/diagnostics). The finite-sample
@@ -40,8 +40,14 @@ were removed after naming maintained regression checks; the unrun fixed-rank
 flip harness is replaced by a trigger entry in the speculative backlog.
 The Bell main population targets reproduce, while historical alternative-CFA
 sensitivity fits need convergence/objective revalidation (see the active backlog).
-The collection index owns findings and reopening conditions. Frozen evidence,
-original metadata and interval source fingerprints remain unchanged. Navigation
+Dedicated pairwise efficiency/speed/composite probes have been removed at the
+user's request; existing API regression gates remain. FIML global tests now share
+research/active/44 (SEM, geometry and banked legacy lanes), while nested invariance
+shares research/active/06 (calibration, score-flips, pilot power and oracle lanes).
+Parameter-information research/39 remains separate. Generating-model nonnormal
+MAR stress is not automatically a FIML pseudo-null; the reports state the target
+and numerical-availability limits. The collection index owns reopening conditions.
+Frozen evidence, original metadata and interval source fingerprints remain unchanged. Navigation
 changes do not change policy or authorize incompatible checkpoint resumption.
 
 ## Repository layout
@@ -2091,7 +2097,7 @@ an unconstrained gradient test to constrained solutions.
   influence rather than raw likelihood-score rows. The R
   `global_score_flip_test()` wrapper dispatches `estimator = "ML2S"` to this
   route and rejects regularized or non-NT two-stage fits.
-  Experiment research/44's 20,000-fit representative-SEM null gate found mean cell
+  Experiment research/44 (now `fiml-global-tests`, global lane)'s 20,000-fit representative-SEM null gate found mean cell
   rejection .058 across 40 normal/VM/IG complete/MCAR cells (range
   .018--.122; 33/40 in [.025,.075]). Twenty-five finite calls lost numerical
   tangent rank and were strongly rejection-prone; downstream experiments must
@@ -2203,7 +2209,7 @@ an unconstrained gradient test to constrained solutions.
   normal/PL. Thus the algebraic GOF bridge survives, but broad core promotion
   does not: the next gate is a larger low/moderate-rank n/df calibration, not a
   regularized high-rank default.
-  Experiment research/36 extends the nested score construction to direct FIML and probes
+  Former research/36 (now research/06's pilot lane) extends direct-FIML nested scores and probes
   the published FIML--FMG two-group, six-indicator configural-to-metric design
   (`df=5`) at group-1 n=50/100/200, 0/15/30% MCAR, normal/severe PL data, and
   null/loading-power truths (36 cells, 100 replications, 199 signs). Basic,
@@ -2216,11 +2222,10 @@ an unconstrained gradient test to constrained solutions.
   pEBA4 rejected 0.038/0.060 under normal/PL, whereas nested-LR pEBA4 rejected
   0.035/0.185. Across 3,600 attempts there were 27 fit failures and 29 further
   nested-battery conditioning failures, but zero flip failures conditional on a
-  successful fit; the four-worker run took 41.9 seconds. The next gate is a
-  larger reduced-grid null run, with nuisance-effective flip primary and the
-  standardized arm retained only as a diagnostic before restriction rank or
-  MAR is varied.
-  Experiment research/37 completes that gate with a 240-cell null atlas: normal and
+  successful fit; the four-worker run took 41.9 seconds. The subsequent screen
+  below supersedes the proposed larger null gate. Its unique power control is
+  retained, with no independent replication claim from overlapping seed bases.
+  Former research/37 (now research/06's score-flips lane) completed a 240-cell atlas: normal and
   severe VM/IG/PL data, group-1 n=50/100/200/400 (group 2 at 70%), complete,
   15/30% MCAR, paper-style 30% MAR, stronger logistic 30% MAR, and loading-
   equality ranks 1/3/5. Its 500-attempt, 199-sign screen reuses one configural
@@ -2244,7 +2249,11 @@ an unconstrained gradient test to constrained solutions.
   pattern standardization is not the missing correction. Score SB's 0.0526
   aggregate is retained only as empirical error cancellation: at ranks 3/5 its
   p-values differ from pEBA4 by about 0.0048/0.0063 while the score-spectrum
-  coefficient of variation averages 0.57/0.72.
+  coefficient of variation averages 0.57/0.72. These historical aggregates include
+  nonnormal MAR, whose generating-model restrictions are not independently proved
+  FIML pseudo-nulls. The consolidated report separates those stress cells from
+  complete/MCAR and normal-MAR calibration. Further flip expansion is banked
+  pending a named incomplete-data consumer or new rank/missingness regime.
 - The same scaling in the moment metric for the LS estimator tiers (2026-06).
   Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
   `{modification_indices,score_tests}_robust` overloads taking the
@@ -2753,8 +2762,10 @@ an unconstrained gradient test to constrained solutions.
   (The U-metric weight was previously built from the *structured* model-implied
   moments, leaving a 1-3% trace gap to robust.two.stage that grew with
   non-normality; the unstructured weight - the convention lavaan two-stage forces
-  and FIML FMG already used - closed it exactly.) Calibration evidence is in
-  `experiments/research/active/05-fiml-twostage-fmg-chisq`. A separate literature reconstruction in
+  and FIML FMG already used - closed it exactly.) The historical comparison runner is
+  `experiments/research/active/44-fiml-global-tests/lanes/two-stage`; only a ten-rep
+  local smoke survives there. Substantive SEM calibration and its target limits
+  are summarized in that study's parent report. A separate literature reconstruction in
   `experiments/replications/08-savalei-falk-2014-test-map` establishes that these modern
   defaults are **not** the finite-sample configurations used by Savalei and Falk
   (2014): their EQS runs selected analytic observed information (`SE=EXACT`) and
@@ -2874,7 +2885,7 @@ an unconstrained gradient test to constrained solutions.
   (configural -> metric -> scalar: cross-group loading/intercept equality plus
   mean structure), for both the GOF spectrum and the nested restriction map, by
   C++ algebra cases in `cpp/tests/unit/fiml_test.cpp` and by
-  `experiments/showcases/05-fiml-measurement-invariance-fmg`, whose `--lavaan-parity` run
+  `experiments/research/active/06-fiml-invariance-tests/lanes/oracle`, whose `--lavaan-parity` run
   reproduces lavaan's FIML LRT chi-square (~1e-7) and, on complete data, the full
   unstructured UGamma eigenvalue spectrum (~1e-5) across all three invariance
   levels and normal / heavy-tailed / MCAR cells. That audit also found and fixed

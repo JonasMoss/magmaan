@@ -296,8 +296,11 @@ Correctness rests on three kinds of evidence:
    followed by `infer()` equals the default call.
 3. **Evidence for each policy choice.** Every default cites the experiment or
    paper that supports it. For example, SB and PEBA4 replace lavaan's MLR
-   Yuan-Bentler-Mplus test because they are better calibrated; the FIML
-   comparison is `experiments/research/active/04-fiml-fmg-vs-mlr/`.
+   Yuan-Bentler-Mplus test because of the recorded calibration evidence. FIML
+   evidence and its distinct pseudo-null/geometry limits are in
+   `experiments/research/active/44-fiml-global-tests/report.qmd` and
+   `experiments/research/active/06-fiml-invariance-tests/report.qmd`; the older
+   ten-replication FIML/MLR lane cannot independently justify a default.
 
 ## Frontier methods in the ordinary package
 

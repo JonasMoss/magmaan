@@ -460,6 +460,18 @@ commitment from existing full-SEM fit-index machinery.
 
 ## Pairwise and spectrum performance
 
+The dedicated pairwise efficiency/speed and mixed-hybrid experiments
+(research/01, /02, /14), plus engineering/05's composite-nested probe, were
+removed on 1 October 2026 at the user's request. Their small local outputs did
+not establish method rankings or Type-I calibration. Supported moments,
+casewise influence, composite Godambe/nested tests and hybrid construction
+remain regression-gated in pairwise/ordinal unit and golden tests.
+**Available:** current supported MCAR moment routes, ordinal composite tests,
+FIML/ML2S and the shared benchmark harness.
+**Build if:** a named estimator consumer needs an efficiency, missingness-bias
+or calibration comparison with a frozen target and sufficient replications.
+No dedicated pairwise simulation is queued by the surviving APIs.
+
 ### Pairwise observed-bread streaming and mean inference
 
 **Gap:** observed-bread inference still materializes pairwise Gamma; additional

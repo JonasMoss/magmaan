@@ -1,0 +1,6 @@
+"n","beta","geometry","attempted","usable","reject_peba4"
+2000,5,"expected-H0",1000,1000,0
+2000,5,"observed-H0",1000,1000,0.043
+2000,5,"observed-H0/expected-metric",1000,1000,0.04
+2000,5,"observed-H1",1000,1000,0
+2000,5,"observed-H1/expected-metric",1000,1000,0

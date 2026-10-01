@@ -243,7 +243,12 @@ here track that work; completing the 0.1.0 gates does not complete it.
   Extend evaluation-point-specific influence reuse and grouped coverage.
   **Check:** all-observed ML reduction, missing-data covariance/global/nested
   calibration and typed component-level unsupported reasons; missing inference
-  must not refuse a fit. See the R interface vision.
+  must not refuse a fit. Evidence lives in the consolidated
+  [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd)
+  and [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd).
+  Freeze publication-model adaptations and estimator-level nulls before larger
+  grids; preserve scalar-nesting and size-matched-power gaps. Legacy smoke
+  comparisons and completed flip expansion do not queue new runs. See the R interface vision.
 
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler

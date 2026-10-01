@@ -1,0 +1,5 @@
+"metric","comparisons","max_abs_difference"
+"fiml_chisq",3,4.55891324691038e-10
+"fiml_ugamma_spectrum_maxabs",3,1.34772416005013e-07
+"fiml_ugamma_trace",3,2.66311396046603e-07
+"ml_ugamma_spectrum_maxabs",3,7.23075600284062e-07
