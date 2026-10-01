@@ -1454,7 +1454,7 @@ frontier_fit_ml_psd_fallback <- function(
 #
 # The default optimizer is PORT: its trust region rejects steps across a face
 # where the line searches of NLopt's L-BFGS family stall (experiment
-# engineering/18).
+# _archive/barrier-optimizer).
 frontier_fit_ml_multiinfo <- function(
     model, data, eta = 1.25, weight = NULL, optimizer = "port",
     control = NULL, bounds = NULL, missing = c("listwise", "error"),
