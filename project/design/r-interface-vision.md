@@ -294,12 +294,21 @@ Otherwise it stays in the lab.
 - **In now:** `psd = TRUE` (PSD fits exist for ML, FIML, ML2S, ULS, GLS, WLS,
   ordinal and mixed data) and PEBA4, which is part of the policy.
 - **Candidates:** `identification = "sphere"`, the closed-form CFA estimator
-  and catML (currently only a PSD frontier fit).
+  and the retained correlation-target ML capability currently called catML.
+  Its shared fitting/metadata replacement is near-term lab work; ordinary-user
+  exposure still requires the gates above.
 - **Priority frontier, currently lab-only:** the multi-information barrier.
   Ordinary-user exposure requires its argument and inference contracts plus
   the evidence above; development priority alone does not promote it.
 - **Other lab-only methods:** robust ordinal estimation, FC-SEM, flip tests
   and simulation.
+
+The proposed `covariance = "unrestricted" | "psd" | "barrier"` spelling is an
+open naming and compatibility decision, not an available argument. Internal
+domain constraints and penalties remain independent. Correlation-ML fitting
+retains ordinal sampling provenance; it does not inherit Gaussian raw-data
+likelihood or automatic continuous-ML inference. See
+[shared composition](../architecture/roadmap.md#shared-fitting-composition).
 
 ## Starting point
 

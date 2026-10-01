@@ -74,7 +74,7 @@ availability, and the decision to make a method a default.
 | **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and ordinal/mixed DWLS | First priority for reliable, efficient estimation and complete inference workflows |
 | **Priority frontier** | PSD covariance constraints and the multi-information barrier | Develop alongside primary classical workflows with estimator-specific validation; secondary expansion needs a concrete consumer or inexpensive shared benefit |
 | **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
-| **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators, catML and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
+| **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
 
 The first two tiers form the main development programme. A frontier method
 may receive more attention than a classical method with a stable API. Lower
@@ -115,6 +115,53 @@ the maintained contracts, test ledger and experiment reports. Simulation has its
 own backlog, research activity belongs to the experiment index, and paper-local
 planning belongs to the independent paper. Neither an implemented method nor
 an active research study creates an obligation to expand the library surface.
+
+### Shared fitting composition
+
+Direction recorded 2026-09-30. Retain the limited-information capability
+currently called catML: normal-theory ML discrepancy on Stage-1 polychoric
+moments and model-implied correlations, with saturated thresholds. Consolidate
+its moment-target map and ML kernel rather than maintaining a separate
+estimator identity. This shared composition work has near-term priority
+alongside barrier normalization; existing frontier status, entry points and
+ordinary-user defaults remain until validated replacement/migration decisions.
+
+Composition distinguishes **moment source**, **model target**,
+**discrepancy/weight**, **covariance domain**, **model penalty** and **algorithm**.
+Moment sources include complete continuous, pairwise MCAR, saturated-FIML and
+polychoric/polyserial inputs in their supported slices. Provenance retains
+sampling covariance/influence; an S matrix alone is not an inference contract.
+Direct observed-data FIML retains its pattern-likelihood composer. Mixed ordinal
+ML does not follow automatically from all-ordinal correlation-ML support.
+
+Model barriers should compose with applicable retained discrepancy/moment
+combinations and direct FIML. Preserve input moments unless a separately
+requested Stage-1 transformation changes them. PSD constrains fitted primitive
+covariance blocks; a barrier changes the objective and protects the faces
+specified by its target. Neither repairs indefinite input moments for an
+inverse/log-determinant criterion. Penalized sum-of-squares need an optimizer
+that handles the changed scalar objective.
+
+Store unpenalized discrepancy and penalized objective separately, audit the
+actual optimized objective, and retain penalty target, strength and
+normalization. Each combination needs its own domain/strength and sampling-law
+validation. Gaussian log-likelihood/AIC/BIC claims do not follow from applying
+the ML discrepancy to estimated ordinal moments. Interior, PSD-boundary and
+barrier covariance/tests/intervals are distinct inference contracts.
+
+Penalizing saturated Stage-1 FIML differs from penalizing the final SEM.
+Latent determinacy is zero without genuine latents: a Stage-1 penalty needs an
+observed-covariance target, uncertainty propagation and a separate H1-reference
+contract. The proposed friendly `covariance = "unrestricted" | "psd" |
+"barrier"` remains a naming/migration choice; internal domain constraints and
+penalties remain independent.
+
+The [active composition queue](../backlog/todo.md#shared-fitting-composition)
+owns dependency order and remaining gates. Foundation work in progress is not
+reported here as completed support; its owner must record validation before
+closing the task. Further pruning requires individual consumer/dependency
+decisions and preserves shared primitives; parking SAM/FC-SEM expansion does
+not authorize deleting their existing surfaces.
 
 ## Current State
 

@@ -36,6 +36,16 @@ entry points. ML2S and other specialized migration requires a concrete consumer
 or inexpensive reuse. See the [development priorities](../architecture/roadmap.md#estimator-development-priorities)
 and [trigger register](../backlog/speculative.md#parked-model-families).
 
+The near-term [composition queue](../backlog/todo.md#shared-fitting-composition)
+adds moment-source and model-target ownership to this preparation contract.
+Prepared all-ordinal moments will compose with the shared correlation-ML
+criterion, replacing separate catML routing only after validation. Preserve
+Stage-1 thresholds and sampling covariance/influence, remove inactive model
+coordinates explicitly, and reconstruct the same target/domain/penalty on
+refit. Mixed/polyserial ML needs its own contract; pending common dispatch is
+not current support. A final-model barrier leaves inputs unchanged, while a
+Stage-1 penalty changes their estimation and requires separate propagation.
+
 ## Finding
 
 Both the interface and the Oslo benchmark contributed to the ordinal timing

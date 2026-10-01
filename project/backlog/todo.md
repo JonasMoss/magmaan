@@ -12,6 +12,12 @@ consumer or inexpensive reuse of primary work. Two-level SEM, SAM and composites
 have **no scheduled expansion work**, including inside shared normalization,
 start, preparation and inference programmes. Existing APIs/tests remain.
 
+The existing limited-information correlation-ML capability (currently catML)
+is retained and folded into shared fitting composition. Common moment targets
+and model penalties are near-term work; this does not establish new ordinary-
+user defaults or promise inference for every combination. See the
+[composition contract](../architecture/roadmap.md#shared-fitting-composition).
+
 [Speculative work](speculative.md) is a trigger register, not a second queue.
 [Simulation](simulation.md) owns generator detail. The
 [experiment index](../../experiments/README.md) owns study activity, evidence
@@ -46,6 +52,10 @@ check; evidence links own detailed protocols and historical results.
   losses retained. Chart extent is not proof of nonattainment; do not change
   markers automatically. Evidence: barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
+
+Barrier normalization remains the next requested fitting task. The dependency
+order inside [shared composition](#shared-fitting-composition) starts with the
+moment-target foundation; that extraction can proceed alongside normalization.
 
 ## Fitting reliability
 
@@ -198,11 +208,16 @@ check; evidence links own detailed protocols and historical results.
 - [ ] **L — establish applicable barrier inference and exposure contracts.**
   After normalized fitting, distinguish penalized-estimate covariance from
   ordinary inverse information, and single-face displacement tests from a
-  general multi-face reference law. Define scaling/domain and inference before
-  any DWLS penalty extension or ordinary-user exposure. **Check:** independent
-  derivatives, fixed-penalty limits, regular/boundary calibration and explicit
-  unsupported components. Ordinary SEs are not automatically valid at singular
-  PSD endpoints. See the roadmap and the research index's barrier studies.
+  general multi-face reference law. Use each moment source's Gamma/influence
+  law, target-map derivatives and actual penalized estimating equation; retain
+  structural-parameter and threshold uncertainty explicitly. Define scaling/
+  domain and inference before claiming DWLS penalty inference or ordinary-user
+  exposure. **Check:** independent derivatives, fixed-penalty limits,
+  regular/boundary covariance, global/nested tests and interval calibration,
+  with explicit unsupported components. Reuse correlation-ML criterion
+  evaluation at DWLS fits for robust RMSEA without implying ML refitting.
+  Ordinary SEs are not automatically valid at singular PSD endpoints. See the
+  composition contract and the research index's barrier studies.
 
 ### Ordinal and mixed DWLS
 
@@ -252,13 +267,60 @@ check; evidence links own detailed protocols and historical results.
 
 ### API and R boundary
 
-- [ ] **L — decompose estimator specifications into actual axes.** Separate
-  discrepancy, moments/data, covariance domain, penalty and algorithm; inference
-  stays explicit. Consolidate enums, R validation/defaults, stored labels and
-  post-fit allowlists. Pairwise MCAR moments compose with retained objectives/
-  inference without a separate estimator label. **Check:** staged/convenience
-  equivalence, consistent errors/labels, unchanged numerics and thin R wrappers.
-  Removed research APIs are not migration targets.
+#### Shared fitting composition
+
+Dependency order: moment-target foundation → ordinal association contract →
+dispatcher/metadata → shared model penalties → sampling/inference gates. The
+last gate is tracked under primary inference above. Current catML entry points
+remain until equivalent replacement routes are validated; no task here removes
+shared primitives or promotes an ordinary-user default.
+
+- [ ] **M — complete and validate the moment-target foundation.** Extract
+  covariance-to-correlation values/Jacobians into model code and compose
+  covariance/correlation targets with one ML objective builder. Route ordinary
+  and PSD catML through the shared map/kernel; preserve existing two-argument
+  ML calls and results. **Check:** independent finite-difference derivatives,
+  observation-unit invariance, input/domain errors and correlation-ML plus
+  barrier composition. Foundation work is in progress; API presence alone is
+  not completion. See the composition contract.
+
+- [ ] **L — define the ordinal association-model contract.** Keep Stage-1
+  thresholds saturated in this slice; remove inactive threshold/mean/scale
+  coordinates from optimization and derive df from active association-Jacobian
+  rank. Reject unsupported threshold/mean/released-scale constraints. Share
+  correlation projections used by ordinal measures while preserving delta/theta
+  semantics. **Check:** identification, overidentified/grouped/constrained
+  controls and unchanged Stage-1 moments before expanding coverage.
+
+- [ ] **L — unify fitting dispatch and composition metadata.** Separate moment
+  source, model target, discrepancy/weight, covariance domain, model penalty and
+  algorithm. Enable ML on prepared all-ordinal moments, ordinary or PSD, in C++
+  and `fit_model()`; refits must reconstruct the same composition. Consolidate
+  enums, R validation/defaults, stored labels and post-fit allowlists. Preserve
+  or explicitly reject operations using provenance; moments alone do not supply
+  an inference contract. **Check:** staged/convenience/refit equivalence,
+  metadata/errors, unchanged numerics and thin R wrappers. Retire separate catML
+  wrappers only after replacement gates pass. Mixed/polyserial ML needs its
+  own moments/mean/scale contract; removed research APIs are not migration targets.
+
+- [ ] **L — compose model penalties with retained fitting routes.** Generalize
+  the scalar penalty wrapper/finalization across continuous ML/ULS/GLS/fixed
+  WLS, pairwise MCAR and saturated-FIML moments, ordinal/mixed discrepancies and
+  the direct observed-pattern FIML likelihood. Integrate derivatives, admissible
+  starts, equalities, units and verdicts; validate primary combinations first.
+  Store unpenalized discrepancy and penalized objective separately and audit
+  the latter. **Check:** per-combination domain, strength/normalization and
+  reduction identities; penalized sum-of-squares may require scalar optimization.
+  Preserve inputs; a model barrier does not repair indefinite polychoric/pairwise
+  moments. Saturated Stage-1 penalties require a separate target, propagation
+  and H1-reference contract; latent determinacy is zero without genuine latents.
+
+- [ ] **S/M — settle friendly covariance-policy naming and migration.** The
+  proposed `covariance = "unrestricted" | "psd" | "barrier"` replaces an
+  overloaded `psd` option, but exact naming and existing-call migration remain
+  open. Internally domain constraints and penalties stay independent.
+  **Check:** explicit combinations, compatibility/refit metadata and documented
+  distinction between changing the covariance domain and changing the objective.
 
 - [ ] **S — expose effective pEBA block counts.** A requested pEBA-4 is clamped
   to the test df and can coincide with scaled-shifted at df=1 while keeping its
@@ -321,6 +383,18 @@ check; evidence links own detailed protocols and historical results.
 ## Validation and maintenance
 
 ### Capability inventory
+
+- [ ] **S/M — review retained research capabilities one decision at a time.**
+  Candidates: continuous/mixed covariance shrinkage; robust ordinal/polyserial
+  menus and pair-local diagnostics; noniterative CFA clamps/conditioning/H
+  repair; fixed-scalar DLS and Stage-2/IJ adapters; Fisher/Fisher-SNLLS/IRLS
+  routes; ordinal pairwise composite likelihood; mixed pairwise/FIML hybrids
+  and regularized Stage 1; RBM; SAM/LSAM, native FC-SEM and the main noniterative
+  CFA menu as separate decisions. **Check:** concrete consumers, shared
+  dependencies, evidence and a bounded keep/consolidate/remove decision.
+  Recording this list does not authorize removals. Retain ordinary moment/Gamma,
+  score/IJ and other shared primitives; review recorded noniterative no-go screens
+  separately from estimator maps. Parking expansion is not code deletion.
 
 - [ ] **S/M — inventory validated primary capabilities.** Record model/data
   slice, domain, penalty, algorithm, API tier and evidence for estimation,
