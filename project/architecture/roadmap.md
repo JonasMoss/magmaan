@@ -1840,6 +1840,25 @@ an unconstrained gradient test to constrained solutions.
   edge cases fall back to the conservative one-candidate path. The sandwich
   helper also accepts precomputed casewise contributions (`Zc`) for callers that
   reuse the same raw-data meat.
+  One-dimensional NT and robust candidate tests judge efficient-information
+  rank relative to the marginal and nuisance-removed information terms
+  (`I_eff > 1e-10 max(|I_dd|, |I_da I_aa^-1 I_ad|)`), rather than an absolute
+  information floor. The robust bread uses the cancellation bound
+  `g' A1 g > 1e-12 |g|' |A1| |g|`. These homogeneous checks exclude
+  identification-only releases without rejecting identified directions merely
+  because their parameter units make information small. Observed-information
+  workers first check candidate rank in expected-information tangent geometry:
+  residual-gradient curvature on a nonlinear identification orbit at nearby
+  parameter values must not create a hypothesis. This gate covers fixed and
+  equality releases without changing the information used for their statistics.
+  Gates cover the batched ML sweep across nearby fits, observation counts and
+  units; the original FIML
+  robust-MI normal-data witness now requires marker exclusion, and R MI tables
+  are compared with live lavaan for complete/missing data across indicator units.
+  Ordinary FIML MI/equality releases also use the existing analytic observed
+  information, matching the robust path: a fixed finite-difference step could
+  otherwise manufacture curvature in redundant directions. Their `h_step`
+  argument remains validated for compatibility and no longer tunes information.
   Validated four ways (lavaan implements no robust score test to diff against):
   exact reduction-to-NT, independent A1/B1 re-assembly, an R-internals oracle
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
@@ -4816,9 +4835,9 @@ failures.
 - FIML with missing observed exogenous variables under `fixed.x = TRUE`
   remains unsupported.
 - FIML score tests and modification indices use observed-pattern gradients
-  plus a finite-difference observed information matrix; fixture parity is
-  against lavaan's observed-information score output for the covered fixed-row
-  and equality-release cases.
+  plus analytic observed information with relative efficient-rank checks;
+  fixture parity is against lavaan's observed-information score output for the
+  covered fixed-row and equality-release cases.
 - Delta and theta parameterizations are supported for all-ordinal and mixed
   continuous/ordinal DWLS/WLS point estimates. Ordinal robust reporting,
   modification indices, score tests, and standardized reporting use the fitted

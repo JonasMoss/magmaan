@@ -225,13 +225,6 @@ here track that work; completing the 0.1.0 gates does not complete it.
   [scores](../../r-package/examples/scores.R) and
   [inference reuse](../../r-package/examples/inference_reuse.R).
 
-- [ ] **S — exclude identification-only score candidates reliably.** A freed
-  marker's efficient information is zero, but rounding can make
-  `score_for_coordinate_robust` admit it under an absolute cutoff.
-  **Check:** identification-only restrictions stay excluded across nearby
-  fits/units; genuine low-information restrictions retain a justified relative
-  rank check. Preserve the FIML robust-MI witness and identified controls.
-
 - [ ] **M — make Satorra-2000 rank checks unit invariant.** Unscaled pooled
   information checks reject the identified Kline Lynam model. Judge rank in
   normalized/whitened geometry. **Check:** rescaling a variable by 100 preserves
@@ -249,6 +242,14 @@ here track that work; completing the 0.1.0 gates does not complete it.
   Freeze publication-model adaptations and estimator-level nulls before larger
   grids; preserve scalar-nesting and size-matched-power gaps. Legacy smoke
   comparisons and completed flip expansion do not queue new runs. See the R interface vision.
+
+- [ ] **S — dispatch FIML robust MI/release bindings explicitly.** The R
+  robust-MI wrapper currently routes FIML through complete-data LS machinery;
+  passing missing observations fails with a non-finite-data error. Wire the
+  existing observed-information C++ FIML robust MI/release entries and reject
+  unsupported convention combinations explicitly. **Check:** raw/retained-data
+  agreement, marker exclusion and identified candidate controls; verify both
+  wrapper dispatches rather than changing the C++ formulas.
 
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler

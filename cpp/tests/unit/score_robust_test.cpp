@@ -226,6 +226,73 @@ TEST_CASE("frontier robust MI: model-implied Expected bread reduces to NT") {
   }
 }
 
+TEST_CASE("frontier robust MI: marker excluded across nearby fits and units") {
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  for (double units : {0.1, 1.0, 10.0}) {
+    SampleStats samp;
+    samp.S = {units * units * four_indicator_sample_cov()};
+    samp.n_obs = {400};
+    auto est = magmaan::test::fit(h.pt, h.rep, samp);
+    REQUIRE(est.has_value());
+    for (double displacement : {-1e-7, 0.0, 1e-7}) {
+      auto nearby = *est;
+      nearby.theta *= 1.0 + displacement;
+      for (int n : {400, 100000000}) {
+        CAPTURE(units);
+        CAPTURE(displacement);
+        CAPTURE(n);
+        samp.n_obs = {n};
+        for (auto bread : {rob::Information::Expected, rob::Information::Observed}) {
+          CAPTURE(bread);
+          auto result = inf::frontier::modification_indices_robust(
+              h.pt, h.rep, samp, nearby,
+              robust_opts(bread,
+                          inf::ScoreCandidateSet::WithAbsentRows));
+          REQUIRE(result.has_value());
+          // All six residual covariances are identified. The sole fixed loading
+          // is the marker and must never acquire a test through cancellation.
+          REQUIRE(result->rows.size() == 6);
+          for (const auto& row : result->rows) {
+            CHECK(row.candidate.op == magmaan::parse::Op::Covariance);
+            CHECK(row.candidate.lhs_var != row.candidate.rhs_var);
+            CHECK(row.information > 0.0);
+            if (bread == rob::Information::Expected) {
+              CHECK(row.scaling_factor == doctest::Approx(1.0).epsilon(1e-8));
+            } else {
+              CHECK(std::isfinite(row.scaling_factor));
+              CHECK(row.scaling_factor > 0.0);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST_CASE("frontier robust MI: fixed loading is testable with fixed latent variance") {
+  auto h = build("f =~ x1 + x2 + x3 + x4\nf ~~ 1*f");
+  SampleStats samp;
+  samp.S = {four_indicator_sample_cov()};
+  samp.n_obs = {400};
+  auto est = magmaan::test::fit(h.pt, h.rep, samp);
+  REQUIRE(est.has_value());
+  for (auto bread : {rob::Information::Expected, rob::Information::Observed}) {
+    auto result = inf::frontier::modification_indices_robust(
+        h.pt, h.rep, samp, *est,
+        robust_opts(bread, inf::ScoreCandidateSet::FixedRowsOnly));
+    REQUIRE(result.has_value());
+    bool loading_present = false;
+    for (const auto& row : result->rows) {
+      if (row.candidate.op == magmaan::parse::Op::Measurement) {
+        loading_present = true;
+        CHECK(row.information > 0.0);
+        CHECK(row.mi > 0.0);
+      }
+    }
+    CHECK(loading_present);
+  }
+}
+
 TEST_CASE("frontier robust MI: gamma_hat = Gamma_NT meat equals model-implied") {
   auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
   SampleStats samp;
@@ -1195,9 +1262,9 @@ TEST_CASE("frontier robust ordinal score test multi-group: DWLS scales finite") 
 
 // ── FIML robust tier ─────────────────────────────────────────────────────────
 // The robust path shares the candidate enumeration and the NT score/information
-// with the non-robust FIML MI, so the unscaled `mi` must match (the only
-// difference is analytic vs central-difference info, so to the FD floor). The
-// scale of the sandwich meat (B1 = ¼·scoresᵀscores against A1 = (N/2)·H) is
+// with the non-robust FIML MI, so the unscaled `mi` must match. Both now use
+// analytic observed information. The scale of the sandwich meat
+// (B1 = ¼·scoresᵀscores against A1 = (N/2)·H) is
 // pinned by c → 1 on a correctly specified large-n normal model — a wrong
 // constant (2× or ½×) would push c far from 1 — and exactly by golden 0009.
 
@@ -1219,10 +1286,19 @@ TEST_CASE("frontier FIML robust MI: unscaled mi matches the non-robust FIML MI")
                                                              *est, mi_opts);
   REQUIRE(rob.has_value());
   REQUIRE(rob->rows.size() == nt->rows.size());
-  REQUIRE(rob->rows.size() > 0);
+  REQUIRE(rob->rows.size() == 6);
+  auto nt_other_step = inf::modification_indices_fiml(
+      h.pt, h.rep, raw, *est, mi_opts, inf::FIML{}, 1e-2);
+  REQUIRE(nt_other_step.has_value());
+  REQUIRE(nt_other_step->rows.size() == nt->rows.size());
+  auto invalid_step = inf::modification_indices_fiml(
+      h.pt, h.rep, raw, *est, mi_opts, inf::FIML{}, 0.0);
+  REQUIRE_FALSE(invalid_step.has_value());
+  CHECK(invalid_step.error().kind == magmaan::PostError::Kind::NumericIssue);
   for (std::size_t i = 0; i < rob->rows.size(); ++i) {
     CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
-          1e-4 * (1.0 + std::abs(nt->rows[i].mi)));
+          1e-8 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(nt_other_step->rows[i].mi == nt->rows[i].mi);
     CHECK(rob->rows[i].df == 1);
     CHECK(std::isfinite(rob->rows[i].scaling_factor));
     CHECK(rob->rows[i].scaling_factor > 0.0);
@@ -1247,17 +1323,28 @@ TEST_CASE("frontier FIML robust MI: scaling approaches 1 on large-n normal data"
   auto rob = inf::frontier::modification_indices_fiml_robust(h.pt, h.rep, raw,
                                                              *est, mi_opts);
   REQUIRE(rob.has_value());
-  REQUIRE(rob->rows.size() > 0);
+  REQUIRE(rob->rows.size() == 6);
+  for (double displacement : {-1e-6, 1e-6}) {
+    auto nearby = *est;
+    nearby.theta *= 1.0 + displacement;
+    auto candidate_tests = inf::frontier::modification_indices_fiml_robust(
+        h.pt, h.rep, raw, nearby, mi_opts);
+    REQUIRE(candidate_tests.has_value());
+    REQUIRE(candidate_tests->rows.size() == 6);
+    for (const auto& row : candidate_tests->rows) {
+      CHECK(row.candidate.op != magmaan::parse::Op::Measurement);
+      CHECK(row.information > 0.0);
+    }
+  }
   // Per-candidate c is a noisy 4th-moment-driven ratio, so anchor the *mean*
   // (variance ~1/rows lower) at 1; a wrong B1/A1 scale constant (2× or ½×)
   // would instead push every row to |c−1| ≈ 1 or ½, which max_dev catches.
-  // The freed marker loading is unidentified: its statistic is numerically
-  // zero and its c a ratio of two zeros, whether or not rounding admits it.
+  // Freeing the sole marker changes identification, not the fitted moments.
   double sum_c = 0.0;
   double max_dev = 0.0;
   std::size_t used = 0;
   for (const auto& r : rob->rows) {
-    if (r.mi < 1e-10) continue;
+    CHECK(r.candidate.op != magmaan::parse::Op::Measurement);
     ++used;
     sum_c += r.scaling_factor;
     max_dev = std::max(max_dev, std::abs(r.scaling_factor - 1.0));
@@ -2348,6 +2435,35 @@ TEST_CASE("frontier score flips: grouped variance matches dense case oracle") {
       dense.noalias() += adjusted.transpose() * J[b] * adjusted;
     }
     CHECK((grouped - dense).norm() < 1e-12 * (1.0 + dense.norm()));
+  }
+}
+
+TEST_CASE("score primitives: efficient rank uses relative information across units") {
+  // The candidate duplicates the nuisance except for delta units of genuinely
+  // new information. Scaling its parameter coordinate must not change rank.
+  for (double units : {1e-8, 1.0, 1e8}) {
+    for (double delta : {0.0, 1e-14, 1e-6}) {
+      CAPTURE(units);
+      CAPTURE(delta);
+      Eigen::Matrix2d information;
+      information << 1.0, units, units, units * units * (1.0 + delta);
+      Eigen::Vector2d score(0.0, units * delta);
+      Eigen::Matrix<double, 2, 1> nuisance;
+      nuisance << 1.0, 0.0;
+      const Eigen::Vector2d direction(0.0, 1.0);
+      auto result = inf::frontier::score_for_direction_robust(
+          {}, score, information, information, 2.0 * information,
+          nuisance, direction);
+      if (delta < 1e-10) {
+        REQUIRE_FALSE(result.has_value());
+        CHECK(result.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
+      } else {
+        REQUIRE(result.has_value());
+        CHECK(result->mi == doctest::Approx(delta).epsilon(1e-8));
+        CHECK(result->scaling_factor == doctest::Approx(2.0));
+        CHECK(result->epc * units == doctest::Approx(1.0).epsilon(1e-8));
+      }
+    }
   }
 }
 

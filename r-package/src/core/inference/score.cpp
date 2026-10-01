@@ -224,6 +224,24 @@ post_expected<Eigen::MatrixXd> invert_symmetric(const Eigen::MatrixXd& A,
   return Eigen::MatrixXd(ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols())));
 }
 
+// A Schur complement can be a small difference of large information terms.
+// Judge its rank against those terms, not against an absolute information unit.
+bool positive_efficient_information(double efficient, double marginal,
+                                    double removed) {
+  const double scale = std::max(std::abs(marginal), std::abs(removed));
+  return std::isfinite(efficient) && std::isfinite(scale) &&
+         efficient > 1e-10 * scale;
+}
+
+bool positive_bread_quadratic(double value, const Eigen::MatrixXd& bread,
+                             const Eigen::VectorXd& direction) {
+  // The absolute contraction bounds cancellation in g'Ag and transforms with
+  // the same squared units as the quadratic under parameter rescaling.
+  const Eigen::VectorXd abs_direction = direction.cwiseAbs();
+  const double scale = abs_direction.dot(bread.cwiseAbs() * abs_direction);
+  return std::isfinite(value) && std::isfinite(scale) && value > 1e-12 * scale;
+}
+
 post_expected<ScoreTestResult>
 score_for_direction(const ScoreCandidate& candidate,
                     const Eigen::VectorXd& score_full,
@@ -239,7 +257,8 @@ score_for_direction(const ScoreCandidate& candidate,
 
   const Eigen::VectorXd I_d = info_full * direction;
   double score_eff = direction.dot(score_full);
-  double info_eff = direction.dot(I_d);
+  const double marginal_info = direction.dot(I_d);
+  double removed_info = 0.0;
 
   if (K_nuisance.cols() > 0) {
     const Eigen::MatrixXd I_aa =
@@ -249,13 +268,14 @@ score_for_direction(const ScoreCandidate& candidate,
     auto Iaa_inv = invert_symmetric(I_aa, "score tests nuisance information");
     if (!Iaa_inv.has_value()) return std::unexpected(Iaa_inv.error());
     score_eff -= I_ab.dot((*Iaa_inv) * score_a);
-    info_eff -= I_ab.dot((*Iaa_inv) * I_ab);
+    removed_info = I_ab.dot((*Iaa_inv) * I_ab);
   }
 
-  const double tol = 1e-10 * std::max<double>(1.0, std::abs(info_eff));
-  if (!(info_eff > tol) || !std::isfinite(score_eff)) {
+  const double info_eff = marginal_info - removed_info;
+  if (!positive_efficient_information(info_eff, marginal_info, removed_info) ||
+      !std::isfinite(score_eff)) {
     return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-        "score tests: efficient information is not positive"));
+        "score tests: efficient information is numerically singular"));
   }
 
   ScoreTestResult out;
@@ -318,7 +338,8 @@ score_for_coordinate_robust(const ScoreCandidate& candidate,
 
   const Eigen::VectorXd I_d = info_full.col(coord);
   double score_eff = score_full(coord);
-  double info_eff = info_full(coord, coord);
+  const double marginal_info = info_full(coord, coord);
+  double removed_info = 0.0;
   Eigen::VectorXd g = Eigen::VectorXd::Zero(q);
   g(coord) = 1.0;
 
@@ -326,20 +347,21 @@ score_for_coordinate_robust(const ScoreCandidate& candidate,
     const Eigen::VectorXd I_ab = nuisance.K.transpose() * I_d;
     const Eigen::VectorXd Iaa_Iab = nuisance.Iaa_inv * I_ab;
     score_eff -= I_ab.dot(nuisance.Iaa_score_a);
-    info_eff -= I_ab.dot(Iaa_Iab);
+    removed_info = I_ab.dot(Iaa_Iab);
     g.noalias() -= nuisance.K * Iaa_Iab;
   }
 
-  const double tol_info = 1e-10 * std::max<double>(1.0, std::abs(info_eff));
-  if (!(info_eff > tol_info) || !std::isfinite(score_eff)) {
+  const double info_eff = marginal_info - removed_info;
+  if (!positive_efficient_information(info_eff, marginal_info, removed_info) ||
+      !std::isfinite(score_eff)) {
     return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-        "score tests: efficient information is not positive"));
+        "score tests: efficient information is numerically singular"));
   }
 
   const double bread_q = g.dot(A1 * g);
   const double meat_q = g.dot(B1 * g);
-  const double tol_bread = 1e-12 * std::max<double>(1.0, std::abs(bread_q));
-  if (!(bread_q > tol_bread) || !std::isfinite(meat_q) || !(meat_q > 0.0)) {
+  if (!positive_bread_quadratic(bread_q, A1, g) ||
+      !std::isfinite(meat_q) || !(meat_q > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
         "robust score tests: sandwich quadratic form is not positive"));
   }
@@ -357,6 +379,62 @@ score_for_coordinate_robust(const ScoreCandidate& candidate,
   out.mi_scaled = out.mi / c;
   out.p_value = chi2_pvalue(out.mi_scaled, out.df);
   return out;
+}
+
+struct RankProjection {
+  Eigen::MatrixXd information;
+  NuisanceProjection nuisance;
+};
+
+post_expected<std::optional<RankProjection>>
+prepare_rank_projection(std::optional<Eigen::MatrixXd> information,
+                        const Eigen::MatrixXd& K) {
+  if (!information) return std::optional<RankProjection>{};
+  auto nuisance = prepare_nuisance_projection(
+      Eigen::VectorXd::Zero(information->rows()), *information, K,
+      "score tests identification information");
+  if (!nuisance.has_value()) return std::unexpected(nuisance.error());
+  return std::optional<RankProjection>{
+      RankProjection{std::move(*information), std::move(*nuisance)}};
+}
+
+bool identified_direction(const std::optional<RankProjection>& rank,
+                          const Eigen::VectorXd& direction) {
+  if (!rank) return true;
+  const Eigen::VectorXd I_d = rank->information * direction;
+  const double marginal = direction.dot(I_d);
+  if (rank->nuisance.K.cols() == 0) {
+    return positive_efficient_information(marginal, marginal, 0.0);
+  }
+  const Eigen::VectorXd I_ab = rank->nuisance.K.transpose() * I_d;
+  const double removed = I_ab.dot(rank->nuisance.Iaa_inv * I_ab);
+  return positive_efficient_information(marginal - removed, marginal, removed);
+}
+
+bool identified_coordinate(const std::optional<RankProjection>& rank,
+                           Eigen::Index coord) {
+  if (!rank) return true;
+  const double marginal = rank->information(coord, coord);
+  if (rank->nuisance.K.cols() == 0) {
+    return positive_efficient_information(marginal, marginal, 0.0);
+  }
+  const Eigen::VectorXd I_ab =
+      rank->nuisance.K.transpose() * rank->information.col(coord);
+  const double removed = I_ab.dot(rank->nuisance.Iaa_inv * I_ab);
+  return positive_efficient_information(marginal - removed, marginal, removed);
+}
+
+// Observed curvature includes residual-gradient terms on nonlinear gauge
+// orbits. Identification instead concerns the first-order moment tangent,
+// measured by expected information, even at nearby parameter values.
+template <class Evaluator>
+post_expected<std::optional<RankProjection>>
+prepare_candidate_rank(const Evaluator& evaluator,
+                       const spec::LatentStructure& pt, const Estimates& est,
+                       const Eigen::MatrixXd& K) {
+  auto information = evaluator.rank_information(pt, est);
+  if (!information.has_value()) return std::unexpected(information.error());
+  return prepare_rank_projection(std::move(*information), K);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -501,34 +579,19 @@ evaluate_augmented_fiml(const spec::LatentStructure& pt,
   auto ev = build_eval(pt, rep);
   if (!ev.has_value()) return std::unexpected(ev.error());
 
-  auto gradient_at = [&](const Eigen::VectorXd& theta)
-      -> post_expected<Eigen::VectorXd> {
-    auto eval = ev->evaluate(theta, true, true);
-    if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-    auto vg = discrepancy.value_gradient(raw, pack.cache, eval->moments,
-                                         eval->J_sigma, eval->J_mu);
-    if (!vg.has_value()) return std::unexpected(fit_to_post(vg.error()));
-    return vg->gradient;
-  };
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  auto vg = discrepancy.value_gradient(raw, pack.cache, eval->moments,
+                                      eval->J_sigma, eval->J_mu);
+  if (!vg.has_value()) return std::unexpected(fit_to_post(vg.error()));
+  score_full = -0.5 * n_total * vg->gradient;
 
-  auto g0 = gradient_at(est.theta);
-  if (!g0.has_value()) return std::unexpected(g0.error());
-  score_full = -0.5 * n_total * *g0;
-
-  const Eigen::Index p = est.theta.size();
-  info_full = Eigen::MatrixXd::Zero(p, p);
-  for (Eigen::Index k = 0; k < p; ++k) {
-    Eigen::VectorXd xp = est.theta;
-    Eigen::VectorXd xm = est.theta;
-    xp(k) += h_step;
-    xm(k) -= h_step;
-    auto gp = gradient_at(xp);
-    if (!gp.has_value()) return std::unexpected(gp.error());
-    auto gm = gradient_at(xm);
-    if (!gm.has_value()) return std::unexpected(gm.error());
-    info_full.col(k) = 0.5 * n_total * ((*gp - *gm) / (2.0 * h_step));
-  }
-  info_full = 0.5 * (info_full + info_full.transpose());
+  // A fixed finite-difference step can give an identification-only direction
+  // positive curvature. Use the same analytic information as the robust path;
+  // h_step remains validated for source compatibility, as in FIML information.
+  auto info = estimate::fiml::fiml_observed_information(pt, rep, raw, est, pack);
+  if (!info.has_value()) return std::unexpected(info.error());
+  info_full = std::move(*info);
   return {};
 }
 
@@ -590,6 +653,9 @@ fixed_parameter_tests(spec::LatentStructure pt,
     if (con0->K().rows() > 0) {
       K_aug.topRows(con0->K().rows()) = con0->K();
     }
+    auto rank = prepare_candidate_rank(eval_score_info, aug_pt, aug_est, K_aug);
+    if (!rank.has_value()) return std::unexpected(rank.error());
+    if (!identified_direction(*rank, direction)) continue;
     auto r = score_for_direction(cand, score_full, info_full, K_aug, direction);
     if (r.has_value()) out.rows.push_back(*r);
   }
@@ -619,9 +685,13 @@ equality_release_tests(spec::LatentStructure pt,
     return std::unexpected(e.error());
   }
 
+  auto rank = prepare_candidate_rank(eval_score_info, pt, est, con->K());
+  if (!rank.has_value()) return std::unexpected(rank.error());
+
   for (Eigen::Index r = 0; r < con->A_eq.rows(); ++r) {
     auto d = release_direction(*con, r);
     if (!d.has_value()) return std::unexpected(d.error());
+    if (!identified_direction(*rank, *d)) continue;
     ScoreCandidate cand;
     cand.kind = ScoreCandidateKind::EqualityRelease;
     cand.row = static_cast<std::size_t>(r);
@@ -674,6 +744,9 @@ fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
     if (con0->K().rows() > 0) {
       K_aug.topRows(con0->K().rows()) = con0->K();
     }
+    auto rank = prepare_candidate_rank(eval_robust, aug_pt, aug_est, K_aug);
+    if (!rank.has_value()) return std::unexpected(rank.error());
+    if (!identified_direction(*rank, direction)) continue;
     auto r = frontier::score_for_direction_robust(cand, score_full, info_full,
                                                   A1, B1, K_aug, direction);
     if (r.has_value()) out.rows.push_back(*r);
@@ -734,10 +807,14 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
       score_full, info_full, K_aug, "robust score tests nuisance information");
   if (!nuisance.has_value()) return std::unexpected(nuisance.error());
 
+  auto rank = prepare_candidate_rank(eval_robust, aug_pt, aug_est, K_aug);
+  if (!rank.has_value()) return std::unexpected(rank.error());
+
   ScoreTestTable out;
   out.rows.reserve(candidates.size());
   for (std::size_t i = 0; i < candidates.size(); ++i) {
     const Eigen::Index coord = base_q + static_cast<Eigen::Index>(i);
+    if (!identified_coordinate(*rank, coord)) continue;
     auto r = score_for_coordinate_robust(candidates[i].candidate, score_full,
                                          info_full, A1, B1, *nuisance, coord);
     if (r.has_value()) out.rows.push_back(*r);
@@ -768,9 +845,13 @@ equality_release_tests_robust(spec::LatentStructure pt,
     return std::unexpected(e.error());
   }
 
+  auto rank = prepare_candidate_rank(eval_robust, pt, est, con->K());
+  if (!rank.has_value()) return std::unexpected(rank.error());
+
   for (Eigen::Index r = 0; r < con->A_eq.rows(); ++r) {
     auto d = release_direction(*con, r);
     if (!d.has_value()) return std::unexpected(d.error());
+    if (!identified_direction(*rank, *d)) continue;
     ScoreCandidate cand;
     cand.kind = ScoreCandidateKind::EqualityRelease;
     cand.row = static_cast<std::size_t>(r);
@@ -787,6 +868,16 @@ struct ContinuousMlEvaluator {
   const SampleStats& samp;
   ScoreInformation information;
   double score_scale;
+
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure& pt, const Estimates& est) const {
+    if (information == ScoreInformation::Expected) {
+      return std::optional<Eigen::MatrixXd>{};
+    }
+    auto info = information_expected(pt, rep, samp, est);
+    if (!info.has_value()) return std::unexpected(info.error());
+    return std::optional<Eigen::MatrixXd>{std::move(*info)};
+  }
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
@@ -815,6 +906,16 @@ struct RobustMlEvaluator {
   double score_scale;
   const RawData* raw = nullptr;
   const Eigen::MatrixXd* gamma_hat = nullptr;
+
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure& pt, const Estimates& est) const {
+    if (information == ScoreInformation::Expected) {
+      return std::optional<Eigen::MatrixXd>{};
+    }
+    auto info = information_expected(pt, rep, samp, est);
+    if (!info.has_value()) return std::unexpected(info.error());
+    return std::optional<Eigen::MatrixXd>{std::move(*info)};
+  }
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
@@ -868,6 +969,11 @@ struct ContinuousLsEvaluator {
   estimate::gmm::Weight weight;
   double n_total;
 
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure&, const Estimates&) const {
+    return std::optional<Eigen::MatrixXd>{};
+  }
+
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
     return with_fixed_row_freed(std::move(pt), row, samp, rep);
@@ -899,6 +1005,11 @@ struct RobustLsEvaluator {
   estimate::ContinuousLsIJWeightMode ij_mode =
       estimate::ContinuousLsIJWeightMode::Fixed;
   estimate::frontier::DlsWeightOptions dls_opts{};
+
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure&, const Estimates&) const {
+    return std::optional<Eigen::MatrixXd>{};
+  }
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
@@ -962,6 +1073,15 @@ struct FimlEvaluator {
   double h_step;
   const estimate::fiml::FIMLPack* pack = nullptr;
 
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure& pt, const Estimates& est) const {
+    auto info = pack == nullptr
+        ? estimate::fiml::fiml_expected_information(pt, rep, raw, est, discrepancy)
+        : estimate::fiml::fiml_expected_information(pt, rep, raw, est, *pack);
+    if (!info.has_value()) return std::unexpected(info.error());
+    return std::optional<Eigen::MatrixXd>{std::move(*info)};
+  }
+
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
     if (pack != nullptr) {
@@ -997,6 +1117,13 @@ struct RobustFimlEvaluator {
   const model::MatrixRep& rep;
   const RawData& raw;
   const estimate::fiml::FIMLPack& pack;
+
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure& pt, const Estimates& est) const {
+    auto info = estimate::fiml::fiml_expected_information(pt, rep, raw, est, pack);
+    if (!info.has_value()) return std::unexpected(info.error());
+    return std::optional<Eigen::MatrixXd>{std::move(*info)};
+  }
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
@@ -1472,8 +1599,8 @@ score_for_direction_robust(const ScoreCandidate& candidate,
 
   const double bread_q = g.dot(A1 * g);
   const double meat_q = g.dot(B1 * g);
-  const double tol = 1e-12 * std::max<double>(1.0, std::abs(bread_q));
-  if (!(bread_q > tol) || !std::isfinite(meat_q) || !(meat_q > 0.0)) {
+  if (!positive_bread_quadratic(bread_q, A1, g) ||
+      !std::isfinite(meat_q) || !(meat_q > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
         "robust score tests: sandwich quadratic form is not positive"));
   }

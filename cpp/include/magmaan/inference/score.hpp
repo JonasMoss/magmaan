@@ -128,6 +128,8 @@ modification_indices(spec::LatentStructure pt,
                      const estimate::gmm::Weight& weight,
                      const ModificationIndexOptions& options);
 
+// FIML MI and equality-release tests use analytic observed information.
+// h_step is retained and validated for compatibility; it no longer tunes it.
 post_expected<ScoreTestTable>
 modification_indices_fiml(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
@@ -178,6 +180,7 @@ score_tests(spec::LatentStructure pt,
             const Estimates& est,
             const estimate::gmm::Weight& weight);
 
+// Uses the same analytic observed information and compatibility h_step as MI.
 post_expected<ScoreTestTable>
 score_tests_fiml(spec::LatentStructure pt,
                  const model::MatrixRep& rep,
