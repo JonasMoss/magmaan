@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -68,7 +69,10 @@ and excess kurtosis 7/15. The paper targets are approximate graph readings from
 1,000 replications. RMSE is in percentage points:
 
 ```{r fingerprint}
-show_table(read_evidence("fingerprint.csv"))
+x <- read_evidence("fingerprint.csv")
+show_table(data.frame(Route=gsub("_"," ",x$route), Cells=x$cells,
+  `Usable / cell`=paste0(x$min_usable,"–",x$max_usable),
+  `RMSE (points)`=x$rmse_percentage_points, check.names=FALSE), digits=1)
 ```
 
 The table reports usable counts because indefinite information/projectors and
@@ -80,7 +84,10 @@ limit interpretation of small differences.
 The exact paper MAR-L/kurtosis-7 diagnostic tells a different part of the story:
 
 ```{r mar}
-show_table(read_evidence("mar_comparison.csv"))
+x <- read_evidence("mar_comparison.csv")
+show_table(data.frame(Route=gsub("_"," ",x$route), Attempts=x$attempted, Usable=x$usable,
+  `Rejection (%)`=100*x$rejection, `Paper (%)`=100*x$paper_rejection,
+  check.names=FALSE), digits=1)
 ```
 
 Its FIML paper target is .633. The saturated-expected candidate reaches .619,

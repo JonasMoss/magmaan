@@ -1,49 +1,98 @@
 ---
-title: "Parameter Profile-LR Small-N Probe"
+title: "Scalar parameter profiles: normal ML and nonnormal fixed-weight inference"
 format:
   html:
     toc: true
+    embed-resources: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
 ---
 
-```{r}
-lrt_summary <- read.csv("results/profile_lrt_summary.csv")
-lrt_failures <- read.csv("results/profile_lrt_failures.csv")
-ci_summary <- read.csv("results/profile_ci_summary.csv")
-ci_failures <- read.csv("results/profile_ci_failures.csv")
-metadata <- read.csv("results/metadata.csv")
-knitr::kable(metadata)
-```
-
-## ML LRT Calibration
-
-```{r}
-knitr::kable(lrt_summary, digits = 4)
-```
-
-The target is the true loading of `x2` in a correctly specified one-factor normal-theory ML model. `mean_T` should be near 1 under the ordinary `chi^2_1` reference; `type1_05` should be near 0.05. This probe is only the interior-parameter baseline for the new C++ scalar/profile-LR surface.
-
-## Robust CI Coverage
-
-```{r}
-knitr::kable(ci_summary, digits = 4)
-```
-
-The CI branch uses multivariate `t(5)` data scaled to the same population covariance and inverts the continuous GMM profile-LR surface for the `x2` loading. ULS uses fixed profile weights; the fitted-weight GMM route was removed on 2026-09-30. GLS and WLS add fixed-profile ordinary, fixed robust, and estimated-weight robust references, where `robust_estimated_weight` routes the scale through the complete IJ weight influence. This is a non-normal stress check for the continuous robust profile machinery; it is not a Bartlett or small-sample correction.
-
-## Failures
-
-```{r}
-if (nrow(lrt_failures)) {
-  cat("ML LRT failures\n\n")
-  knitr::kable(head(lrt_failures, 20))
-} else {
-  cat("No ML LRT failures recorded.\n")
+```{r setup}
+read_result <- function(name) {
+  path <- file.path("results", name)
+  if (!file.exists(path)) stop("Missing retained output: ", path,
+    "; see Reproduce and use a fresh --out-dir for new runs.")
+  read.csv(path, stringsAsFactors=FALSE)
 }
-cat("\n\n")
-if (nrow(ci_failures)) {
-  cat("Robust CI failures\n\n")
-  knitr::kable(head(ci_failures, 20))
-} else {
-  cat("No robust CI failures recorded.\n")
-}
+lrt <- read_result("profile_lrt_summary.csv")
+ci_all <- read_result("profile_ci_summary.csv")
+ci <- ci_all[ci_all$profile_weight == "fixed", ]
+meta <- read_result("metadata.csv")
 ```
+
+## Question
+
+Do interior scalar parameter profiles calibrate under normal ML and under
+nonnormal sampling with fixed GLS/WLS/ULS profile weights?
+
+## Short answer
+
+The retained normal ML loading test rejects 5.0–5.5% in four 200-attempt cells.
+Nonnormal confidence intervals remain method-dependent: at $N=500$, the
+complete-IJ references cover 91.3% for GLS and 88.8% for WLS on 80 usable
+attempts each. This is an **active calibration study**, not a settled interval
+policy. The fitted-weight ULS arm was retired; its historical rows are retained
+as provenance and excluded from the current comparison.
+
+## Evidence
+
+Both lanes target the `x2` loading (.8) in the same four-indicator model.
+Normal ML tests the true loading through a constrained likelihood ratio.
+The CI lane uses multivariate $t_5$ draws scaled to the same population covariance.
+
+```{r normal}
+knitr::kable(data.frame(`N range`=paste(range(lrt$n),collapse="–"),
+  Cells=nrow(lrt), `Usable tests`=sum(lrt$reps), Failures=sum(lrt$failures),
+  `Rejection range (%)`=paste(sprintf("%.1f",100*range(lrt$type1_05)),collapse="–"),
+  check.names=FALSE), row.names=FALSE)
+```
+
+The CI table is a selected $N=500$ slice. `ordinary` uses the unscaled profile;
+`robust_fixed` uses the fixed-weight influence; `robust_estimated_weight`
+uses the complete IJ for the estimator's weight influence. All displayed
+profiles hold their weights fixed during inversion.
+
+```{r nonnormal}
+x <- ci[ci$n == 500, ]
+knitr::kable(data.frame(Estimator=x$estimator, Reference=gsub("_"," ",x$reference),
+  Usable=x$reps, Failures=x$failures, `Coverage (%)`=100*x$coverage,
+  `Mean width`=x$mean_width, `Mean endpoint error`=x$mean_endpoint_error,
+  check.names=FALSE), digits=3, row.names=FALSE)
+```
+
+The original summaries retain all $N=100,200,500$ cells and each reference's
+failure count. Successful-output counts are conditional denominators, not all
+attempts. `profile_ci_summary.csv` also retains the retired `profile_weight=fitted`
+rows; do not use them to describe the current fixed-weight API. The raw failure
+CSVs retain stage and error information.
+
+## Caveats
+
+With 200 usable tests, a 5% rejection rate has MCSE about 1.5 percentage points;
+with 80 usable intervals, 95% coverage has MCSE about 2.4 points. These are
+exploratory cells, and estimated references differ in width, failures and root
+accuracy. The current metadata records 200 ML and 80 CI attempts per cell;
+future runs must preserve that distinction. No Bartlett correction, boundary
+law or generic misspecified-model guarantee is established here.
+
+The next check is independent fixed-profile coverage with endpoint accuracy
+and numerical availability reported separately; no correction should be chosen
+from a pooled estimator/reference average.
+
+## Reproduce
+
+From this directory:
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --smoke --reps 2 --n-grid 50 --ci-reps 1 \
+  --ci-n-grid 100 --out-dir /tmp/parameter_profile_check
+quarto render report.qmd
+```
+
+A new verification run writes to its own output directory. Rendering reads only
+this study's retained `results/` and never fits or simulates.

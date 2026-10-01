@@ -1,6 +1,14 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
+if (any(args %in% c("--help", "-h"))) {
+  cat("Usage: Rscript run_experiment.R [--smoke] [--reps N] [--n-grid CSV]\n",
+      "  [--ci-reps N] [--ci-n-grid CSV] [--ci-df DF] [--seed-base S]\n",
+      "  [--out-dir DIR]\n",
+      "Fresh output example: --smoke --reps 2 --ci-reps 1 --out-dir /tmp/profile_check\n",
+      sep = "")
+  quit(save = "no")
+}
 has_flag <- function(flag) any(args == flag)
 arg_value <- function(flag, default) {
   hit <- match(flag, args)

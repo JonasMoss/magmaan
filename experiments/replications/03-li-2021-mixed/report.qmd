@@ -15,8 +15,7 @@ execute:
 input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
                        error = function(e) "")
 candidate_dirs <- unique(c(getwd(), dirname(input_path)))
-result_candidates <- unique(c(file.path(candidate_dirs, "results"),
-                              candidate_dirs))
+result_candidates <- file.path(candidate_dirs, "results")
 hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 rd <- function(name) {
@@ -62,16 +61,17 @@ categories, distribution shape, and sample size?
 
 ## Short answer
 
-magmaan reproduces Li's central findings. **DWLS recovers categorical-indicator
-loadings essentially unbiased; MLR underestimates them**, with the bias largest
-at few categories and asymmetric thresholds and shrinking as categories or `N`
-grow. The two estimators are comparable on continuous-indicator loadings,
-inter-factor correlations and structural paths. DWLS's mean-and-variance
-adjusted χ² controls Type I error close to nominal; MLR's robust χ² tends to
-over-reject at small `N` / few categories.
+The retained local output is **ten attempts per cell across eight smoke cells**.
+It cannot establish the paper's estimator rankings, nominal Type-I error or
+same-data lavaan parity; the metadata records that parity was not requested.
+The broader mixed-data design and its candidate comparisons remain available,
+but quantitative confirmation requires the original substantive artifacts or
+an independent prespecified run.
 
-Both estimators match lavaan (WLSMV / MLM `standardizedSolution`) on the same
-data: MLR to ~1e-6, DWLS loadings/paths to ~1e-2 (see parity table).
+All numerical comparisons below describe the retained pilot draws. A small
+bias or a zero-failure cell is not a guarantee, and generating-model truth
+alone does not establish the same estimator-level null for continuous-code
+and polychoric routes.
 
 ## Design
 
@@ -226,8 +226,7 @@ if (!is.null(parity) && nrow(parity)) {
 ## Caveats
 
 - Default `--reps` is small for iteration; rejection rates and biases are noisy
-  until `--reps` is large (Li uses 1000). Per repo style, no Monte-Carlo error
-  bars are reported.
+  until `--reps` is large (Li uses 1000). Monte Carlo precision must be reported before making calibration claims.
 - Estimates are standardized via magmaan's ordinal-aware `standardize_all`
   (lavaan `std.all`). For DWLS the categorical-indicator loadings use the
   unit-variance latent-response scale; structural paths and endogenous-factor

@@ -15,8 +15,7 @@ execute:
 input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
                        error = function(e) "")
 candidate_dirs <- unique(c(getwd(), dirname(input_path)))
-result_candidates <- unique(c(file.path(candidate_dirs, "results"),
-                              candidate_dirs))
+result_candidates <- file.path(candidate_dirs, "results")
 hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 read_csv_safely <- function(name) {
@@ -44,7 +43,22 @@ dist_pretty <- function(d) {
 }
 ```
 
-This experiment reproduces the simulation in
+## Question
+
+Do the standard-error methods and goodness-of-fit adjustments reproduce the
+Maydeu-Olivares comparison under its nonnormal and misspecified CFA designs?
+
+## Short answer
+
+The retained run has **ten attempts per cell** across 54 cells. It is a broad
+wiring pilot, not a substantive replication of SE calibration or Type-I error.
+The tables describe the retained draws; they do not justify method rankings
+or a new inference default. Same-data oracle checks, where recorded, address
+numerical agreement separately from Monte Carlo calibration.
+
+## Design
+
+This experiment implements the simulation design in
 **Maydeu-Olivares (2017), "Maximum Likelihood Estimation of Structural
 Equation Models for Continuous Data: Standard Errors and Goodness of Fit"**
 against magmaan's own ML inference. The paper compares seven standard-error
@@ -179,8 +193,9 @@ if (!is.null(parity) && nrow(parity) > 0L) {
 ## Notes and caveats
 
 - Default `--reps 10` is for fast iteration; the rejection rates and bias
-  estimates are noisy at this size. The paper uses `--reps 1000`. Per
-  internal style, no Monte-Carlo error bars are reported.
+  estimates are noisy at this size. The paper uses `--reps 1000`.
+  Ten usable attempts give a binomial MCSE of about 6.9 percentage points
+  at nominal 5%; substantive calibration requires explicit precision.
 - Threshold sets are produced by numerical moment-matching with
   deterministic restarts — the table is reproducible across runs.
 - Categories may be empty for extreme distributions at small `N` — in the

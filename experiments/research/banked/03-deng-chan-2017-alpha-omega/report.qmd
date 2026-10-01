@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -57,7 +58,9 @@ normal-theory covariance cannot simply be substituted for nonnormal inference:
 A deterministic ULS tau-model check agrees with sample alpha:
 
 ```{r identity}
-show_table(read_evidence("validation_identity.csv"), digits = 10)
+x <- read_evidence("validation_identity.csv")
+show_table(data.frame(Dataset=x$dataset, Alpha=x$alpha, `ULS omega`=x$omega_uls_tau,
+  `Absolute difference`=format(x$abs_diff, scientific=TRUE), check.names=FALSE), digits=6)
 ```
 
 The local main metadata records $N=250$, $p=6$, normal draws, eight replications
@@ -66,8 +69,9 @@ rejection proportions this coarse are not calibration evidence.
 
 ```{r smoke}
 x <- read_evidence("simulation_summary.csv")
-show_table(x[, c("population", "dist", "N", "p", "n_rel_ok", "n_wald_ok", "n_st_ok",
-                 "reject_wald_nm", "reject_imhof_nm", "reject_score")])
+show_table(data.frame(Population=x$population, N=x$N,
+  `Usable coefficient fits`=x$n_rel_ok, `Usable Wald fits`=x$n_wald_ok,
+  `Usable structural tests`=x$n_st_ok, check.names=FALSE))
 ```
 
 The Holzinger–Swineford demonstration uses three-item subscales from lavaan's

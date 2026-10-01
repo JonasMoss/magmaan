@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -44,13 +45,17 @@ well for every population.
 
 The local run has 300 attempts per cell, $N=20,100$, correlation $0,.9$, and
 normal/contaminated laws; the alpha population is about .852. Failure/nonfinite
-interval handling remains in the original runner. The full compact table keeps
-both missed tails and interval width alongside coverage:
+interval handling remains in the original runner. The displayed $N=20$ contaminated slice keeps
+both missed tails and interval width alongside coverage. The
+[full summary](results/overview/coverage.csv) retains the other sample size and normal controls:
 
 ```{r intervals}
 x <- read_evidence("coverage.csv")
-show_table(x[, c("quantity", "param", "n", "law", "method", "reps", "coverage",
-                 "miss_lower", "miss_upper", "mean_width")])
+x <- x[x$n == 20 & x$law == "contaminated", ]
+x$functional <- ifelse(x$quantity == "alpha", "Alpha", paste0("Correlation ",x$param))
+show_table(data.frame(Functional=x$functional, Method=x$method, Attempts=x$reps,
+  `Coverage (%)`=100*x$coverage, `Miss lower (%)`=100*x$miss_lower,
+  `Miss upper (%)`=100*x$miss_upper, `Mean width`=x$mean_width, check.names=FALSE), digits=1)
 ```
 
 At 95% coverage, 300 independent usable draws give a binomial MCSE of roughly

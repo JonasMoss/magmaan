@@ -15,8 +15,7 @@ execute:
 input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
                        error = function(e) "")
 candidate_dirs <- unique(c(getwd(), dirname(input_path)))
-result_candidates <- unique(c(file.path(candidate_dirs, "results"),
-                              candidate_dirs))
+result_candidates <- file.path(candidate_dirs, "results")
 hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 read_csv_safely <- function(name) {
@@ -74,14 +73,15 @@ rejection rates, and convergence/improper-solution rates.
 
 ## Short answer
 
-The classic result reproduces. With **two categories**, continuous ML factor
-loadings are substantially biased toward zero regardless of sample size, while
-cat-LS recovers them accurately. ML's loading bias shrinks as categories
-increase and is small by **five categories**. cat-LS estimates loadings
-accurately throughout (under the normal underlying distribution simulated here).
-The factor correlation is well recovered by both, except cat-LS overestimates it
-with binary data at small `N`. The cost of treating ordinal data as continuous
-is concentrated at two to four categories.
+The current local output is **ten attempts per cell across six smoke cells**.
+It demonstrates that categorical least squares and continuous-code ML can be
+compared on matched draws, but cannot confirm general bias, coverage or
+category-count cutoffs. A claim that the classic result reproduces needs the
+substantive original run or an independent prespecified confirmation.
+
+Every numerical comparison below is a descriptive pilot summary. At nominal
+5%, ten usable draws give a binomial MCSE of about 6.9 percentage points;
+Type-I calibration and method rankings remain unestablished by this run.
 
 ```{r}
 knitr::kable(meta, row.names = FALSE)

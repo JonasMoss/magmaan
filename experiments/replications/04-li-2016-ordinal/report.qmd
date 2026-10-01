@@ -15,8 +15,7 @@ execute:
 input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
                        error = function(e) "")
 candidate_dirs <- unique(c(getwd(), dirname(input_path)))
-result_candidates <- unique(c(file.path(candidate_dirs, "results"),
-                              candidate_dirs))
+result_candidates <- file.path(candidate_dirs, "results")
 hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 rd <- function(name) {
@@ -37,19 +36,12 @@ pct  <- function(x, d = 1) ifelse(is.na(x), "", sprintf(paste0("%.", d, "f"), 10
 num3 <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
 fam_lab <- c(loading = "λ loadings", factor_cor = "φ inter-factor",
              gamma = "γ paths", beta = "β paths")
+meta_value <- function(key) meta$value[match(key,meta$key)]
+run_reps <- as.integer(meta_value("reps"))
+is_smoke <- identical(toupper(meta_value("smoke")), "TRUE")
 shape_lab <- c(sym = "symmetric", slight = "slightly asym.",
                moderate = "moderately asym.")
 ```
-
-This experiment replicates **Cheng-Hsien Li (2016), "The Performance of ML,
-DWLS, and ULS Estimation With Robust Corrections in Structural Equation Models
-With Ordinal Variables", *Psychological Methods* 21(3):369-387** against
-magmaan. Li's population model is the same five-factor structural model used in
-Li (2021) (experiment replications/03), but here *all 20 indicators are ordinal*. Li's three
-estimators are fit on identical categorized data per replicate: **DWLS** (lavaan
-WLSMV) and **ULS** (lavaan ULSMV), both on the polychoric correlations, and
-**ML** (robust ML treating the integer codes as continuous). The fitted model is
-correctly specified, so χ² rejection rates are Type I error rates.
 
 ## Question
 
@@ -61,20 +53,30 @@ vary?
 
 ## Short answer
 
-magmaan reproduces Li's central contrasts. **DWLS and ULS recover loadings and
-structural paths with smaller bias than ML, and the gap widens with
-asymmetry**; ML's downward bias on loadings is its signature failure, while DWLS
-and ULS track each other closely. ML's robust standard errors are at least as
-well calibrated as the LS estimators'. But on the fit statistic the order
-reverses: **the DWLS and ULS mean-and-variance adjusted χ² control Type I error
-close to nominal, while robust ML over-rejects at small N and few categories**,
-only catching up by N ≈ 1000 — Li's headline finding.
+The retained local run has **`r run_reps` attempts per cell** across
+`r meta_value("n_cells")` cells (`r if (is_smoke) "smoke" else "selected run"`).
+It does not establish the paper's estimator rankings, nominal Type-I error,
+or same-data lavaan parity; the current metadata says parity was not requested.
+Recover the original substantive artifacts or run a prespecified confirmation
+before treating the replication as a calibrated comparison.
 
-All three estimators match lavaan on the same data (`standardizedSolution`;
-WLSMV for DWLS, ULSMV for ULS, MLM for ML) to the tolerances in the parity
-table (~1e-6 for the LS estimators' loadings/paths).
+The larger 84-cell paper design is preserved below. Planned $N=500$ summaries
+are displayed only if that sample size is actually present; absent design
+slices are not zero bias or evidence of convergence.
 
 ## Design
+
+This experiment attempts to replicate **Cheng-Hsien Li (2016), "The Performance of ML,
+DWLS, and ULS Estimation With Robust Corrections in Structural Equation Models
+With Ordinal Variables", *Psychological Methods* 21(3):369-387** against
+magmaan. Li's population model is the same five-factor structural model used in
+Li (2021) (experiment replications/03), but here *all 20 indicators are ordinal*. Li's three
+estimators are fit on identical categorized data per replicate: **DWLS** (lavaan
+WLSMV) and **ULS** (lavaan ULSMV), both on the polychoric correlations, and
+**ML** (robust ML treating the integer codes as continuous). The generating latent-response model is correctly specified. Treating
+integer category codes as continuous can change the population approximation,
+so a generating null alone does not establish an exact-fit null for every route.
+
 
 ```{r}
 knitr::kable(meta, row.names = FALSE)
@@ -110,7 +112,7 @@ Averaged over replicates and same-family parameters; negative = underestimate.
 Li's "trivial bias" band is |RB| < 5%, "substantial" is > 10%.
 
 ```{r}
-if (!is.null(sparam)) {
+if (!is.null(sparam) && any(sparam$N == 500)) {
   d <- sparam[sparam$N == 500 & sparam$param_type %in%
                 c("loading", "gamma", "beta"), ]
   d$family <- fam_lab[d$param_type]
@@ -130,14 +132,14 @@ if (!is.null(sparam)) {
 }
 ```
 
-The signature contrast: **ML's loading and path bias grows with asymmetry while
-DWLS and ULS stay near zero and track each other.** Bias attenuates with more
-categories and larger N for all three.
+The local smoke does not contain the planned $N=500$ slice. The complete
+retained rows remain in `results/summary_param.csv`; they are diagnostics,
+not evidence for a broad bias ranking.
 
 ### Standard-error relative bias and coverage
 
 ```{r}
-if (!is.null(sparam)) {
+if (!is.null(sparam) && any(sparam$shape == "moderate" & sparam$N == 500)) {
   d <- sparam[sparam$shape == "moderate" & sparam$N == 500, ]
   d$family <- fam_lab[d$param_type]
   d$se_rel_bias <- pct(d$se_rel_bias); d$coverage <- num3(d$coverage)
@@ -175,8 +177,9 @@ if (!is.null(schi2)) {
 }
 ```
 
-DWLS-MV and ULS-MV sit near .05 across the grid; ML-MV runs high at small N and
-pulls toward nominal as N grows.
+The retained small-run rejection rates do not establish nominal size or
+a sample-size trend. Reference conventions and failures must be checked
+separately before a substantive replication claim.
 
 ### Convergence and improper solutions
 
@@ -219,8 +222,9 @@ if (!is.null(parity) && nrow(parity)) {
 ## Caveats
 
 - Default `--reps` is small for iteration; rejection rates and biases are noisy
-  until `--reps` is large (Li uses 500). Per repo style, no Monte-Carlo error
-  bars are reported.
+  until `--reps` is large (Li uses 500). With ten usable attempts, 5% rejection
+  has binomial MCSE about 6.9 percentage points. Small-run proportions should
+  not be used to select a method.
 - Estimates are standardized to lavaan's `std.all` metric; for the polychoric
   LS estimators the loadings use the unit-variance latent-response scale and
   structural paths are rescaled by the model-implied latent SDs.
@@ -229,8 +233,8 @@ if (!is.null(parity) && nrow(parity)) {
   scaled-shifted, so the per-rep p-values differ by a parameterization
   (compared, not the statistics).
 - At small N the 20-indicator polychoric weight matrix is often singular; DWLS
-  and ULS (diagonal / identity weight) are unaffected and match lavaan
-  WLSMV / ULSMV.
+  and ULS use diagonal / identity weights, but category sparsity and fit
+  failures remain possible. Parity must be established by the separate checks.
 
 ## Reproduce
 

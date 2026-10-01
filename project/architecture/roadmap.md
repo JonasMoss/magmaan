@@ -52,10 +52,13 @@ inference share active research/22 with distinct targets and failure accounting.
 Savalei–Falk definitions and matrix fingerprints share one active reference
 study; numerical similarity still does not identify the original EQS statistic.
 Generating-model nonnormal MAR stress is not automatically a FIML pseudo-null;
-the reports state the target
-and numerical-availability limits. The collection index owns reopening conditions.
+the reports state the target and numerical-availability limits.
+The collection index owns reopening conditions.
 Frozen evidence, original metadata and interval source fingerprints remain unchanged. Navigation
 changes do not change policy or authorize incompatible checkpoint resumption.
+The final artifact audit limits Chen missingness, latent-chart and early
+replication claims to their retained pilot/smoke runs. The active parameter-profile report excludes
+retired fitted-weight rows; local missing artifacts are listed in the index.
 
 ## Repository layout
 

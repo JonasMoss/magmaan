@@ -1,6 +1,6 @@
 ---
 title: "Where does SEM runtime go?"
-subtitle: "Experiment showcases/08 · continuous ML pilot"
+subtitle: "Experiment showcases/06 · continuous ML pilot"
 format:
   html:
     toc: true

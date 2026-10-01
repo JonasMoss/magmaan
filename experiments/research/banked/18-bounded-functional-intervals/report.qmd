@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -30,7 +31,9 @@ and what prevents their small-sample correction from being operational?
 This **banked** study consolidates bifactor maximal-reliability intervals and the
 generic reliability profile engine. Oracle rescaling can rescue acceptance rates
 in selected near-ceiling cases, but the feasible correction is weaker and actual
-endpoint inversion needs separate validation. Reopen for a named bounded-functional
+endpoint inversion needs separate validation. For bifactor H at $N=50$,
+ordinary true-value acceptance is .526, oracle-rescaled acceptance .971 and
+null-bootstrap acceptance .803 on 173 of 200 attempts. Reopen for a named bounded-functional
 consumer that requires calibrated intervals; existing delta/Wald and uncorrected
 profile primitives remain the cheaper choices.
 
@@ -47,11 +50,15 @@ model-based and sandwich delta intervals, logit transformations, bias correction
 Cornish–Fisher, bootstrap and constrained-LR diagnostics. The retained main grid
 has **40 attempts per cell at $N=100$**, not the larger historical design. Coverage
 is conditional on admissible usable fits; the attempts and usable counts are
-essential parts of the result.
+essential parts of the result. The displayed slice is normal general-factor
+reliability; group-factor and nonnormal cells remain in
+[the full summary](results/overview/bifactor_intervals.csv).
 
 ```{r bifactor}
 x <- read_evidence("bifactor_intervals.csv")
-show_table(x[, c("p", "coef", "dist", "n", "method", "attempts", "reps_ok", "coverage")])
+x <- x[x$coef == "gen" & x$dist == "normal", ]
+show_table(data.frame(Indicators=x$p, Method=x$method, Attempts=x$attempts,
+  Usable=x$reps_ok, `Coverage (%)`=100*x$coverage, check.names=FALSE), digits=1)
 ```
 
 The separate $N=50$, 18-indicator normal LR diagnostic has 200 attempts per cell,
@@ -59,7 +66,10 @@ with only about half usable. Its `cov_*` fields measure **acceptance at the true
 functional**, not successful endpoint construction:
 
 ```{r bifactor-lr}
-show_table(read_evidence("bifactor_pointwise.csv"))
+x <- read_evidence("bifactor_pointwise.csv")
+show_table(data.frame(Coefficient=x$coef, Attempts=x$attempts, Usable=x$reps_ok,
+  `Mean LR`=x$mean_LR, `Ordinary acceptance (%)`=100*x$cov_chi2,
+  `Oracle acceptance (%)`=100*x$cov_bartlett, check.names=FALSE), digits=1)
 ```
 
 The Bartlett factor is the cell mean of the same true-value LR statistics.
@@ -78,7 +88,11 @@ comparison. A bound is eligible for parity only if the constrained LR residual
 is finite and within .02 for both engines:
 
 ```{r parity}
-show_table(read_evidence("parity.csv"), digits = 8)
+x <- read_evidence("parity.csv")
+show_table(data.frame(Pairs=x$datasets_functionals, `Engine root failures`=x$engine_bad_roots,
+  `Oracle root failures`=x$oracle_bad_roots, `Both valid`=x$both_valid,
+  `Maximum bound difference`=format(x$max_bound_difference_both_valid, scientific=TRUE),
+  check.names=FALSE))
 ```
 
 One semlbci pair fails its own root check. Agreement on the other seven is
@@ -87,7 +101,10 @@ numerical construction evidence, not coverage calibration.
 The separate $N=50$ diagnostics retain their own attempted/usable denominators:
 
 ```{r profile-calibration}
-show_table(read_evidence("profile_pointwise.csv"))
+x <- read_evidence("profile_pointwise.csv")
+show_table(data.frame(Functional=x$functional, Population=x$pop, Attempts=x$attempts,
+  Usable=x$reps, `Ordinary (%)`=100*x$cov_nt, `Oracle (%)`=100*x$cov_bart_oracle,
+  `Null bootstrap (%)`=100*x$cov_bart_null, check.names=FALSE), digits=1)
 ```
 
 For bifactor H, ordinary true-value acceptance is about .526 on 173 usable fits

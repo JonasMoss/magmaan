@@ -41,7 +41,7 @@ rbind_fill <- function(xs) {
 }
 
 parse_args <- function(args) {
-  out <- list(reps = 100L, n_total = 1000L, missing_rate = c(0, .50),
+  out <- list(results_dir = NULL, reps = 100L, n_total = 1000L, missing_rate = c(0, .50),
               thresholds = "symmetric", pd_gamma = "overlap",
               missing_mechanism = "mar",
               seed_base = 20260620L, smoke = FALSE)
@@ -52,9 +52,11 @@ parse_args <- function(args) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--n-total N[,N]] ",
           "[--missing-rate P[,P]] [--thresholds symmetric,asymmetric] ",
           "[--pd-gamma overlap[,nominal]] ",
-          "[--missing-mechanism mar[,mcar]] [--seed-base S] [--smoke]\n",
+          "[--missing-mechanism mar[,mcar]] [--seed-base S] [--results-dir DIR] [--smoke]\n",
           sep = "")
       quit(save = "no", status = 0L)
+    } else if (a == "--results-dir") {
+      i <- i + 1L; out$results_dir <- args[[i]]
     } else if (a == "--reps") {
       i <- i + 1L; out$reps <- as.integer(args[[i]])
     } else if (startsWith(a, "--reps=")) {
@@ -139,7 +141,8 @@ set_single_threaded_math()
 require_pkg("magmaanlab")
 suppressPackageStartupMessages(library(magmaanlab))
 
-res_dir <- ensure_results_dir()
+res_dir <- cfg$results_dir %||% experiment_path("results")
+dir.create(res_dir, recursive=TRUE, showWarnings=FALSE)
 ov <- paste0("v", 1:10)
 loading <- .60
 model <- paste0("f =~ ", paste(ov, collapse = " + "))

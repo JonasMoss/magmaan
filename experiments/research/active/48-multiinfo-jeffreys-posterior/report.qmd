@@ -137,6 +137,12 @@ posterior itself a better estimator than the barrier?
 
 ## Short answer
 
+**Evidence limit:** the current local output has `r max(fits$rep)` replications
+per cell. The comparisons below are exploratory descriptions of those draws,
+not evidence that a posterior estimator dominates, a weight is optimal, or
+credible intervals have calibrated coverage. Recover substantive artifacts and
+check effective sample sizes before using them to guide an estimator policy.
+
 The barrier tracks the objective posterior only if λ depends on the kind of
 improper direction. On residual variances λ = `r bv$lambda` reproduces the
 Jeffreys posterior mean almost exactly (root-mean-square distance
@@ -145,7 +151,7 @@ is closest (`r num(bc$gap)`), and λ = 1 overshoots. The posterior pushes
 variances well off the wall but moves correlations only a little. The default
 λ = 0.25 moves both less than the posterior does.
 
-The posterior is also the better estimator. At N = `r n_small` the Jeffreys
+Within these retained draws, the posterior has the smaller reported errors. At N = `r n_small` the Jeffreys
 posterior median was the most accurate method or within
 `r num(max(excess))` RMSE of it in every design. No single barrier weight
 manages that. λ = 1 is the best weight on the Heywood-prone variances

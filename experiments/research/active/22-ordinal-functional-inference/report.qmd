@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     embed-resources: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -31,7 +32,9 @@ Keep one **active ordinal-functional-inference study** with two distinct targets
 The delta lane studies fit-free polychoric omega; the profile lane studies omega
 of a fitted DWLS one-factor approximation. The substantive local runs support
 continued work on sparse-category failures and profile endpoints. A promising
-pointwise test does not establish a usable confidence interval.
+pointwise test does not establish a usable confidence interval: in the retained
+strong-local-dependence cell, misspecification-scaled pointwise acceptance is
+.924 but 91 of 92 CI inversions fail.
 
 The next check is a focused endpoint audit with failures, connectedness and
 independent pseudo-target precision recorded. No pooled comparison or default
@@ -46,18 +49,28 @@ and balanced/extreme thresholds. The retained output is beyond smoke size:
 
 ```{r delta}
 x <- read_evidence("delta_gaussian.csv")
-show_table(x[, c("regime", "n", "reps", "failures", "coverage_95", "bias", "mean_width_95")])
+x <- x[x$n == 50, ]
+show_table(data.frame(Thresholds=x$regime, N=x$n, Attempts=x$reps,
+  Failures=x$failures, `Coverage (%)`=100*x$coverage_95, Bias=x$bias,
+  `Mean width`=x$mean_width_95, check.names=FALSE))
 ```
 
-The separate 200-attempt stress run uses skewed latent factors, $t$ innovations
+The $N=50$ slice is displayed above; the [full Gaussian table](results/overview/delta_gaussian.csv)
+retains every sample size. The separate 200-attempt stress run uses skewed latent factors, $t$ innovations
 and local dependence. Coverage below is around each fit-free pseudo-target,
 estimated from an independent large sample of size 100,000, rather than an
 assumed generating reliability:
 
 ```{r delta-stress}
 x <- read_evidence("delta_stress.csv")
-show_table(x[, c("dgp", "cuts", "n", "reps", "failures", "target_pseudo", "coverage_pseudo_95")])
+x <- x[x$n == 50 & x$cuts == "balanced", ]
+show_table(data.frame(Population=x$dgp, Attempts=x$reps, Failures=x$failures,
+  `Pseudo-target`=x$target_pseudo, `Coverage (%)`=100*x$coverage_pseudo_95,
+  check.names=FALSE))
 ```
+
+The table shows balanced thresholds at $N=50$; [the full stress grid](results/overview/delta_stress.csv)
+keeps extreme thresholds and larger sample sizes.
 
 ### Profile lane: fitted target and failed inversion
 
@@ -73,8 +86,11 @@ availability. Inversion was requested only for selected references:
 
 ```{r profile}
 x <- read_evidence("profile_inversion.csv")
-show_table(x[, c("dgp", "reference", "reps", "usable", "reference_coverage_95",
-                 "ci_attempted", "ci_successful", "ci_failures", "ci_coverage_95")])
+x <- x[x$dgp == "strong_local_dependence", ]
+show_table(data.frame(Reference=x$reference, `Usable / attempts`=paste0(x$usable," / ",x$reps),
+  `Pointwise acceptance (%)`=100*x$reference_coverage_95,
+  `CI successes / attempts`=paste0(x$ci_successful," / ",x$ci_attempted),
+  check.names=FALSE), digits=1)
 ```
 
 For strong local dependence, misspecification-scaled pointwise acceptance is
