@@ -1,0 +1,17 @@
+"family","lane","test","innovation","missing","n","role","cell_id"
+"fiml_global_mcar","fiml","global","normal","mcar",80,"null",21
+"fiml_global_mcar","fiml","global","normal","mcar",300,"null",22
+"fiml_global_mcar","fiml","global","normal","mcar",80,"power",23
+"fiml_global_mcar","fiml","global","normal","mcar",300,"power",24
+"fiml_global_mar","fiml","global","normal","mar",80,"null",25
+"fiml_global_mar","fiml","global","normal","mar",300,"null",26
+"fiml_global_mar","fiml","global","normal","mar",80,"power",27
+"fiml_global_mar","fiml","global","normal","mar",300,"power",28
+"fiml_nested_mcar","fiml","nested","normal","mcar",80,"null",29
+"fiml_nested_mcar","fiml","nested","normal","mcar",300,"null",30
+"fiml_nested_mcar","fiml","nested","normal","mcar",80,"power",31
+"fiml_nested_mcar","fiml","nested","normal","mcar",300,"power",32
+"fiml_nested_mar","fiml","nested","normal","mar",80,"null",33
+"fiml_nested_mar","fiml","nested","normal","mar",300,"null",34
+"fiml_nested_mar","fiml","nested","normal","mar",80,"power",35
+"fiml_nested_mar","fiml","nested","normal","mar",300,"power",36

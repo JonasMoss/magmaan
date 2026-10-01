@@ -4562,7 +4562,7 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   unfinished: remaining bugs need fixing, and coverage of the main estimators
   and inferential procedures needs completing and validating before a finished
   release; the active backlog tracks that work.
-- The active [score-centering decision study](../../experiments/decisions/03-score-centering/report.qmd)
+- The banked [score-centering decision study](../../experiments/decisions/03-score-centering/report.qmd)
   (2026-10-01) records a fixed-allocation grouped-mean counterexample to universal
   raw likelihood-score meat. Independent confirmation (8,000 draws) and
   closed-form replay find N=300 parameter-variance ratios 1.118 raw/global versus
@@ -4583,7 +4583,17 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   N=80 SB paired noninferiority bounds exceed the one-point margin. Parameter
   covariances agree numerically; skewed nested N=80 Wald null coverage is 90.3%
   (95% Wilson interval 88.9–91.5%), a separate active validation issue. Prospective
-  FIML confirmation and excluded boundary/penalty cases remain open. Random missingness
+  FIML confirmation adds 32,000 fresh MCAR/MAR datasets with no qualifying
+  centering benefit in either sensitivity stratum and matched-null power changes
+  at most 0.10 points. Observed-sensitivity N=80 global PEBA4 rejection is
+  0.8–1.8%; nested MCAR rejection rises from 6.5% raw to 7.25% centered. Both
+  strata retain raw as a comparator, without selecting an ordinary FIML default.
+  Stationary covariances agree, but nested MCAR N=80 null Wald coverage is 92.35%
+  (Wilson interval 91.10–93.44%), failing the registered coverage condition.
+  The [likelihood-score bank](../backlog/speculative.md#likelihood-score-centering-alternatives)
+  owns reopening; no further generic centering comparison is queued. Absolute
+  FIML calibration/interval validation and excluded boundary/penalty cases remain
+  open under their existing backlog owners. Random missingness
   patterns must not inherit the fixed-group centering rule.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as

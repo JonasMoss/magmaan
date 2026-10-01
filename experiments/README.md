@@ -23,7 +23,15 @@ Pre-registered studies whose results set library defaults; see
 |--:|------------|------|-----------|----------|
 | 01 | [optimizer-defaults](decisions/01-optimizer-defaults/report.qmd) | benchmark | active | Which start, optimizer and PSD route should each estimation route use by default, judged by the library verdict on held-out simulated problems? |
 | 02 | [barrier-defaults](decisions/02-barrier-defaults/report.qmd) | benchmark | active | Which start and optimizer should the complete-data ML barrier fitter use by default, judged by the library verdict on held-out simulated problems? |
-| 03 | [score-centering](decisions/03-score-centering/report.qmd) | probe | active | Where do uncentered, globally centered or within-group likelihood-score meats give justified parameter covariance and analytic score calibration for ML and prospective FIML? |
+| 03 | [score-centering](decisions/03-score-centering/report.qmd) | probe | banked | Where do uncentered, globally centered or within-group likelihood-score meats give justified parameter covariance and analytic score calibration for ML and prospective FIML? |
+
+**Score-centering bank:** retain raw for tested regular ML and as the prospective
+FIML comparator; 72,000 confirming datasets establish no qualifying global-centering
+benefit and a separate fixed-allocation covariance identity. Criteria and evidence
+remain in the decision study. No queued comparison; reopen for a named component
+with a demonstrated covariance defect or centering-specific benefit under the
+[likelihood-score trigger](../project/backlog/speculative.md#likelihood-score-centering-alternatives).
+FIML calibration and interval validation remain active in the primary backlog.
 
 ## Showcases
 

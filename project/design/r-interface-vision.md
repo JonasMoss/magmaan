@@ -217,11 +217,16 @@ Global tests against the saturated model:
   [decision study](../../experiments/decisions/03-score-centering/report.qmd)
   confirmed 32,000 independent datasets (normal/skewed, N=80/300): centering
   supplied no qualifying size-error benefit and empirical matched-null power
-  was identical. This retention is scoped; FIML and excluded inference regimes
-  remain open, and the fixed-allocation formula follows the
+  was identical. Another 32,000 prospective MCAR/MAR FIML datasets supply no
+  qualifying centering benefit in either sensitivity stratum; this retains the
+  raw comparator without selecting an ordinary FIML default. The comparison is
+  [banked with a reopening trigger](../backlog/speculative.md#likelihood-score-centering-alternatives).
+  Absolute FIML calibration and excluded inference regimes remain open;
+  the fixed-allocation formula follows the
   [sampling contract](../scope.md#group-allocation-and-likelihood-score-covariance).
   Stationary parameter covariances agree across centering arms, but skewed-data
-  Wald undercoverage needs separate validation before claiming interval accuracy.
+  Wald undercoverage and the FIML MCAR N=80 coverage gap need separate
+  validation before claiming interval accuracy.
 - Geometry of the global tests, by estimator:
   - Complete-data ML: expected information for the score sensitivity, the score
     metric and the LR spectrum, with the empirical Gamma. Experiment

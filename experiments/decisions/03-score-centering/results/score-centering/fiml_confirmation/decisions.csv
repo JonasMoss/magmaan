@@ -1,0 +1,5 @@
+"lane","geometry","arm","component","enough_pairs","no_extra_failures","calibrated","coverage_ok","oracle_ok","matched_power_ok","benefit","status"
+"fiml","expected","global","parameter_covariance",TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,FALSE,"not_eligible"
+"fiml","expected","global","score_calibration",TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,FALSE,"not_eligible"
+"fiml","observed","global","parameter_covariance",TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,FALSE,"not_eligible"
+"fiml","observed","global","score_calibration",TRUE,TRUE,FALSE,FALSE,TRUE,TRUE,FALSE,"not_eligible"

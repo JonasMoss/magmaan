@@ -215,7 +215,7 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   identical score, LR and spectra, matching lavaan `A.method = "exact"` where
   lavaan accepts the pair.
 
-- [ ] **M — settle remaining likelihood-score calibration in the primary sampling scope.**
+- [ ] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**
   Retain uncentered score second moments as the baseline for ML/FIML
   parameter sandwiches and global/nested score-test calibration under joint
   population sampling. The
@@ -226,8 +226,10 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   saturated from structured evaluation points. Preserve the observed test score.
   **Check:** stationary-fit equivalence and covariance/projection contracts for
   missingness, constraints and PSD boundaries; compare centered/raw calibration
-  only where the formulas differ, with size, coverage, matched-null power and
-  numerical failures reported. Separate convention-matched lavaan parity from
+  only for a component that meets the
+  [bank's reopening trigger](speculative.md#likelihood-score-centering-alternatives),
+  with size, coverage, matched-null power and numerical failures reported.
+  Separate convention-matched lavaan parity from
   ordinary-policy evidence before changing defaults. Reopening established
   moment-covariance recipes is
   [banked](speculative.md#moment-covariance-centering-alternatives); multiplier
@@ -241,12 +243,16 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   Independent ML confirmation (32,000 draws) retains raw in the tested regular
   complete-data families: no registered one-point size-error benefit, at most
   0.75-point rejection shifts, and identical empirical matched-null power.
-  Next: confirm prospective FIML with fresh draws and check the excluded
-  constraint/boundary regimes. Keep the broader score policy provisional. Boundary
-  contracts remain open; penalty-specific inference follows in 0.0.2.
+  Prospective FIML confirmation adds 32,000 fresh MCAR/MAR datasets, separately
+  under expected and observed sensitivity: no qualifying centering benefit,
+  matched-null power differences at most 0.10 points, and stationary covariance
+  agreement. Observed-sensitivity calibration remains unresolved; it belongs to
+  FIML integration below. The centering comparison is now banked in place, with
+  no queued extension. Check excluded constraint/boundary component contracts
+  independently; penalty-specific inference follows in 0.0.2.
   Missingness patterns are not sampling groups.
 
-- [ ] **M — investigate ML sandwich/Wald undercoverage in skewed-data controls.**
+- [ ] **M — investigate ML/FIML sandwich and Wald coverage gaps.**
   The [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
   finds 90.3% coverage for the known loading target in nested skewed N=80 nulls
   (95% Wilson interval 88.9–91.5%); raw and centered covariances agree numerically.
@@ -254,6 +260,10 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   sandwich variance, and larger-N/normal controls with independent uncertainty.
   Verify the native covariance construction before selecting any finite-sample
   interval correction; score-test nominal size does not validate Wald coverage.
+  The same study's prospective FIML MCAR nested N=80 null coverage is 92.35%
+  (Wilson interval 91.10–93.44%), failing the registered coverage condition.
+  Retain this normal incomplete-data control in covariance/interval validation;
+  raw and centered arms agree, so this is not evidence of a centering defect.
 
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score
@@ -286,6 +296,11 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   must not refuse a fit. Evidence lives in the consolidated
   [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd)
   and [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd).
+  The banked [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
+  adds 32,000 normal MCAR/MAR datasets: observed-sensitivity N=80 global PEBA4
+  rejects only 0.8–1.8% across raw/centered arms, while nested MCAR rejects
+  6.5% raw and 7.25% centered. Check finite-sample geometry/calibration against
+  independent references; changing covariance centering does not resolve this.
   Freeze publication-model adaptations and estimator-level nulls before larger
   grids; preserve scalar-nesting and size-matched-power gaps. Legacy smoke
   comparisons and completed flip expansion do not queue new runs. See the R interface vision.

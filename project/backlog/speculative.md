@@ -197,17 +197,48 @@ accuracy or runtime benefit. See [optimizer controls](../reference/optimizer-con
 
 ## Estimation and inference
 
+### Likelihood-score centering alternatives
+
+**Banked 2026-10-01; no queued comparison.** The preregistered
+[decision study](../../experiments/decisions/03-score-centering/report.qmd)
+retains its criteria, runners and frozen evidence in `experiments/decisions/03-score-centering/`,
+indexed as banked under [Decisions](../../experiments/README.md#decisions).
+Independent confirmation covers 32,000 regular ML, 32,000 prospective MCAR/MAR
+FIML and 8,000 fixed-group datasets. Global centering supplies no qualifying
+size-error benefit in ML or either FIML sensitivity stratum, with matched-null
+power differences at most 0.10 percentage points. Stationary parameter
+covariances agree numerically. This retains the tested ML raw default and the
+prospective FIML raw comparator; it does not select an ordinary FIML default.
+The [fixed-allocation covariance formula](../scope.md#group-allocation-and-likelihood-score-covariance)
+is settled separately; its ordinary extension remains banked above.
+**Gap:** evidence that global centering improves a particular supported
+likelihood-score covariance or calibration. The observed-sensitivity FIML
+calibration and Wald coverage gaps remain active in [todo.md](todo.md#ml-and-fiml);
+this comparison does not settle constraints, boundaries, penalties or arbitrary
+misspecified nested models.
+**Available:** retain raw likelihood-score second moments, the existing explicit
+lab projection-centering option and established moment-covariance recipes.
+Validate inference components against their own targets without scheduling
+another generic centering grid.
+**Build if:** a named supported inference component has a reproducible case or
+independent derivation showing a wrong raw-score sampling covariance, or a
+centering-specific calibration/numerical benefit. First derive the target and
+evaluation-point influence; preserve the observed score and compare on the same
+fits with fresh paired confirmation. A calibration/coverage failure alone does
+not establish a centering defect. Fixed-allocation support follows its own trigger.
+
 ### Moment-covariance centering alternatives
 
 Banked 2026-10-01: reconsidering established moment-covariance recipes is
-outside the active likelihood-score centering decision.
+separate from the banked likelihood-score comparison above.
 **Gap:** evidence for changing the centering already built into empirical
 Gamma/NACOV and moment-influence covariances: continuous WLS/DWLS/DLS weights
 and inference, noniterative delta inference, complete-data moment-based robust
 SE/GOF routes, and global/nested LR moment references (including Satorra--2000).
 This also covers revisiting already-derived Stage-1 moment/influence covariance
-maps; direct score OPG choices at saturated versus structured points remain in
-the [active score-covariance decision](todo.md#primary-inference-workflows).
+maps; direct score OPG choices at saturated versus structured points follow the
+[likelihood-score bank](#likelihood-score-centering-alternatives) and the active
+component contracts in [todo.md](todo.md#primary-inference-workflows).
 **Available:** retain each method's existing covariance/influence definition,
 normalization and regression/parity gates. The fact that a covariance uses
 centered contributions does not require a new centered/raw experiment.

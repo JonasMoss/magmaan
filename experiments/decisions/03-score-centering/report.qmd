@@ -22,8 +22,16 @@ meta <- rd('metadata'); rates <- rd('rates'); cov <- rd('covariance')
 pairs <- rd('paired'); checks <- rd('checks'); decisions <- rd('decisions')
 value <- function(key) meta$value[match(key, meta$key)]
 percent <- function(x) sprintf('%.1f%%', 100 * x)
-pilot_root <- file.path('results', 'score-centering', 'pilot')
-pilot_rates <- read.csv(file.path(pilot_root, 'rates.csv'), stringsAsFactors = FALSE)
+fiml_root <- file.path('results', 'score-centering', 'fiml_confirmation')
+fiml <- function(name) {
+  path <- file.path(fiml_root, paste0(name, '.csv'))
+  if (!file.exists(path)) stop('Missing ', path,
+    '; run the FIML confirmation shown under Reproduce')
+  read.csv(path, stringsAsFactors = FALSE)
+}
+fiml_rates <- fiml('rates'); fiml_cov <- fiml('covariance')
+fiml_pairs <- fiml('paired'); fiml_checks <- fiml('checks')
+fiml_decisions <- fiml('decisions'); fiml_meta <- fiml('metadata')
 confirm_root <- file.path('results', 'score-centering', 'group_confirmation')
 confirm <- function(name) {
   path <- file.path(confirm_root, paste0(name, '.csv'))
@@ -46,6 +54,7 @@ tab <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
 | Fixed-allocation score covariance | Within-group centered covariance rows | Formula settled; ordinary-policy extension banked |
 | ML global/nested score reference | Uncentered efficient scores, expected geometry | Retain raw under the registered rule in tested regular ML families |
 | Ordinary FIML inference | Unsupported | Prospective evidence only |
+| Prospective FIML centering | Raw comparator retained within each geometry | No qualifying centering benefit; observed-sensitivity calibration remains open |
 | Established moment-covariance and LR centering | Retained method-specific formulas | Redesign banked |
 
 ## Question
@@ -71,11 +80,18 @@ intervals undercovered in skewed-data cells: nested null coverage at N=80 was
 90.3% (95% Wilson interval 88.9–91.5%). This is a separate covariance/interval
 validation task; score centering cannot correct it.
 
+**The additional 32,000-dataset FIML confirmation supplies no qualifying
+centering benefit**, separately under expected and observed sensitivity.
+Matched-null power changed by at most 0.10 percentage points. Observed-sensitivity
+global tests remain conservative, and centering worsens nested MCAR size at
+N=80. This does not select an ordinary FIML default or settle sensitivity geometry.
+
 The fixed-allocation covariance formula is settled separately: within-group
-centering removes score-mean terms that are absent from conditional sampling
-variance. Its ordinary-policy extension remains banked. The 3,600-draw pilot also
-covers prospective MCAR/MAR FIML; that lane still needs independent confirmation.
-PSD boundary and penalty inference are outside this grid.
+centering removes score-mean terms absent from conditional sampling variance.
+Its ordinary-policy extension remains banked. Further centering comparisons are
+now [banked with a reopening trigger](../../../project/backlog/speculative.md#likelihood-score-centering-alternatives);
+FIML calibration and interval validation remain active. PSD boundary and penalty
+inference are outside this grid.
 
 ## Evidence
 
@@ -137,7 +153,7 @@ moments for joint sampling of group labels. No further experiment is needed to
 choose between those two population formulas. Finite-sample reference
 calibration remains separate; the N=80 result cannot make raw covariance correct
 for a fixed-allocation target. The original criteria and frozen decision outcomes
-are retained. Prospective FIML calibration and excluded inference regimes remain open.
+are retained. Absolute FIML calibration and excluded inference regimes remain open.
 
 The grouped nested test targets the best-fitting shared mean, not equality of
 the two true group means. Both nested models retain the wrong shared-mean
@@ -198,31 +214,78 @@ scope; neither centered score reference is eligible. Raw remains the provisional
 score baseline in the primary joint-sampling scope, as assessed above.
 This provisional baseline is not a fixed-allocation recommendation.
 
-### FIML pilot still needs independent confirmation
+### FIML confirmation does not justify centering or validate the prospective geometry
 
-The pilot uses 100 draws per cell. Its FIML lane remains prospective and cannot
-choose an ordinary-package default.
+The extension uses 2,000 fresh datasets per cell, separately reporting expected
+and observed sensitivity with the same expected quadratic metric. Ordinary FIML
+inference remains unsupported; raw is the native default comparator in each
+stratum. This comparison holds geometry fixed and cannot choose between geometries.
 
-The following pilot slice shows PEBA4 null rejection at N=80. FIML uses observed
-sensitivity here; its expected-sensitivity comparator and both methods at N=300
-remain in the per-cell CSVs. The paired tables also report SB and matched-null
-power, with bootstrap uncertainty including re-estimation of null thresholds.
+The following slice shows PEBA4 null rejection at N=80. Both methods, N=300,
+coverage and every loss against raw are retained in the frozen
+[rates](results/score-centering/fiml_confirmation/rates.csv),
+[covariance](results/score-centering/fiml_confirmation/covariance.csv) and
+[paired comparisons](results/score-centering/fiml_confirmation/paired.csv).
 
-```{r score-evidence}
-slice <- pilot_rates[pilot_rates$role == 'null' & pilot_rates$n == 80 &
-  pilot_rates$method == 'peba4' & pilot_rates$lane == 'fiml' &
-  pilot_rates$geometry == 'observed', ]
-wide <- reshape(slice[, c('family', 'arm', 'rejection')], idvar = 'family',
-                timevar = 'arm', direction = 'wide')
-names(wide) <- sub('rejection.', '', names(wide), fixed = TRUE)
-for (name in setdiff(names(wide), 'family')) wide[[name]] <- percent(wide[[name]])
-tab(wide)
+```{r fiml-evidence}
+z <- fiml_rates[fiml_rates$role == 'null' & fiml_rates$n == 80 &
+  fiml_rates$method == 'peba4', ]
+a <- z[z$arm == 'raw', c('family', 'geometry', 'rejection')]
+b <- z[z$arm == 'global', c('family', 'geometry', 'rejection', 'lower', 'upper')]
+w <- merge(a, b, by = c('family', 'geometry'), suffixes = c('_raw', '_centered'))
+labels <- c(fiml_global_mcar = 'Global, MCAR', fiml_global_mar = 'Global, MAR',
+            fiml_nested_mcar = 'Nested, MCAR', fiml_nested_mar = 'Nested, MAR')
+tab(data.frame(Family = unname(labels[w$family]), Sensitivity = w$geometry,
+  'Raw rejection' = percent(w$rejection_raw),
+  'Centered rejection' = percent(w$rejection_centered),
+  'Centered 95% interval' = paste(percent(w$lower), percent(w$upper), sep = '–'),
+  check.names = FALSE))
 ```
 
-Pilot outcomes remain `open_pilot_only`; they do not choose FIML defaults.
-Precision, availability, coverage, per-cell calibration and matched-power
-conditions need independent confirmation before changing a prospective FIML
-reference. Full summaries and failures are retained separately for each run.
+Centering changes null rejection by at most one percentage point (expected
+global MAR, N=80, SB: 3.9% to 4.9%). That cell's paired size-error interval is
+−1.35 to +0.45 points, so it does not establish the required one-point benefit.
+No other cell meets that benefit rule. The expected-sensitivity candidate passes
+the size and power conditions but remains `not_eligible` without a qualifying
+benefit. Its raw global and nested MAR N=80 PEBA4 Wilson lower bounds fall below
+3%; retaining the raw comparator is not a claim that every baseline cell passes.
+
+All absolute-size-error losses are small but retained: expected MCAR global
+N=80 (+0.45 points SB), expected MCAR nested N=80/300 (+0.45/+0.20 points,
+both methods), and observed nested MCAR N=80/300 (+0.75/+0.25 points) and MAR
+N=80/300 (+0.30/+0.05 points), both methods. Observed nested MCAR N=80 centering
+raises rejection from 6.5% to 7.25%, with a 6.19–8.47% Wilson interval and paired
+worsening upper bounds of +1.05 points SB and +1.10 PEBA4. Observed global
+MCAR/MAR tests reject only 1.5%/0.8% raw and 1.8%/1.0% centered at N=80;
+centering does not solve their conservatism. The observed candidate fails the
+calibration conditions. Both strata's score-calibration decisions are `not_eligible`.
+
+Matched-null power differences range from −0.10 to +0.05 percentage points;
+the lowest paired bootstrap bound is −0.15 points. Parameter covariances agree
+to a maximum discrepancy of
+`r format(max(fiml_cov$max_covariance_gap), scientific=TRUE, digits=3)`
+on the runner's comparison scale. Nested MCAR N=80 null Wald coverage is 92.35%
+(Wilson interval 91.10–93.44%), failing the registered coverage condition for
+both arms. These results retain raw provisionally as a comparator; they leave
+absolute calibration and interval accuracy open, not an ordinary FIML default.
+
+### Bank and reopening conditions
+
+Recorded 2026-10-01 after the ML, grouped and FIML confirmations: this decision
+study is **banked in place**, with no queued centered/raw run. Its stable location
+is indexed under [Decisions](../../README.md#decisions), and
+[Likelihood-score centering alternatives](../../../project/backlog/speculative.md#likelihood-score-centering-alternatives)
+owns the reopening trigger. Keep the current raw baseline and explicit lab
+centering option. The fixed-allocation formula follows its separate scope contract.
+
+Reopen a bounded comparison for a named supported inference component when a
+reproducible case or independent derivation implicates raw score meat in a wrong
+sampling covariance, or identifies a centering-specific calibration/numerical
+benefit. Derive the covariance target first, preserve the observed test score,
+and require fresh paired confirmation. A miscalibrated test or undercovered Wald
+interval alone does not implicate centering. FIML policy integration/calibration,
+Wald validation and excluded constraint/boundary contracts remain active under
+their existing backlog owners; banking this comparison does not validate them.
 
 ### Construction and baseline checks
 
@@ -237,7 +300,7 @@ covariance, the test statistic and both p-values against elementary Gaussian
 mean formulas. All 24,000 arm rows pass; the largest estimate gap is
 `r format(max(oracle$estimate_gap), scientific=TRUE, digits=3)` and the largest
 variance gap is `r format(max(oracle$variance_gap), scientific=TRUE, digits=3)`.
-Neither confirmation has a failed fit or unavailable covariance/test.
+None of the three confirmations has a failed fit or unavailable covariance/test.
 The runner retains convergence failures and unavailable inference instead of
 counting them as successful non-rejections. There are `r checks$fit_failures`
 failed larger/unrestricted fits. Median task time is
@@ -247,6 +310,13 @@ minutes, grouped confirmation about four minutes, and ML confirmation 342 second
 (5.7 minutes), each with four workers. The native-binary and source hashes stayed
 unchanged throughout the ML run; all 32,000 seeds were checked as unused and
 every frozen rejection rate was reconstructed from retained raw rows.
+FIML confirmation took 309 seconds (5.2 minutes), also with four workers and
+32,000 previously unused seeds. Its maximum Gram/projection/numerator identity
+gap is `r format(max(fiml_checks[, c('max_gram_identity_gap', 'max_projection_gap', 'max_numerator_gap')]), scientific=TRUE, digits=3)`.
+Its source and native hashes stayed unchanged, every rejection rate was replayed
+from raw rows, and observed statistics were identical across centering arms
+within each sensitivity geometry. FIML has no ordinary-policy parity comparator;
+the zero policy-gap fields in its checks are placeholders, not evidence of parity.
 
 ## Caveats
 
@@ -258,6 +328,8 @@ not reopen established moment Gamma/NACOV or LR-reference recipes. The grouped
 algebraic witness does not establish which single-group spectral calibration has
 better finite-sample behavior.
 
+All three confirmations use the same frozen 0.1.0 prerelease native binary;
+these results describe that implementation rather than later source edits.
 The actual loaded package paths, versions and native-binary hashes are recorded.
 Repository HEAD is separate provenance; it is not asserted to be the source of an
 arbitrarily installed binary. Failed construction identities block interpretation.
@@ -277,10 +349,8 @@ Rscript run_experiment.R --kind pilot --reps 100 --run-id pilot --library PATH
 Rscript run_experiment.R --kind confirmation --reps 2000 --families grouped_mean --run-id group_confirmation --library PATH
 Rscript scripts/validate_grouped_results.R group_confirmation
 Rscript run_experiment.R --kind confirmation --reps 2000 --families global_normal,global_skew,nested_normal,nested_skew --run-id ml_confirmation --library PATH
+Rscript run_experiment.R --kind confirmation --reps 2000 --families fiml_global_mcar,fiml_global_mar,fiml_nested_mcar,fiml_nested_mar --run-id fiml_confirmation --library PATH
 quarto render report.qmd
-# Fresh confirming draws; estimate cost from the pilot before launching:
-Rscript run_experiment.R --kind confirmation --reps 2000 --run-id confirmation --library PATH
-SCORE_CENTERING_RUN=confirmation quarto render report.qmd
 ```
 
 Each run directory is immutable. `--summarize --run-id ID` rescans its existing
