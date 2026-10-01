@@ -7,6 +7,8 @@ is stable enough to describe without rewriting the story every week.
 
 ## Layout
 
+- [`scope.md`](scope.md) - adopted statistical targets, sampling boundaries and
+  conditions for reopening banked extensions.
 - `architecture/` - current implementation state and design contracts.
 - `backlog/` - accepted remaining work and known failures:
   - `todo.md` - the active SEM/parser/estimation backlog (open work only).
@@ -17,7 +19,8 @@ is stable enough to describe without rewriting the story every week.
     surfaced by the Newsom corpus.
 - `grammar/` - normative parser grammar and lexer notes.
 - `validation/` - parity, benchmark, and diagnostic validation plans.
-- `design/` - proposals, audits, and non-binding sketches.
+- `design/` - interface vision, design decisions, proposals and audits; each
+  document states its adoption status.
 - `reference/` - policies for local-only resources and external source mirrors.
 - `assets/` - small checked-in assets used by repository docs.
 

@@ -22,7 +22,9 @@ for the design.
 
 * **Language:** C++23 core, built with `-fno-exceptions -fno-rtti`. Failures are values (`std::expected`), not exceptions.
 
-* **Scope:** Estimation and inference for linear SEM, from the lavaan-parity core to frontier (non-lavaan) methods.
+* **Scope:** Linear SEM and inference for population approximation parameters;
+  see the [statistical scope](project/scope.md) for sampling assumptions and
+  banked extensions, from the lavaan-parity core to frontier methods.
 
 * **Philosophy:** `lavaan` is the oracle for the parity core, failures are values, APIs stay explicit and composable, no virtual functions on the hot path.
 

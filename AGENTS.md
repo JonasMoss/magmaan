@@ -13,7 +13,9 @@ Read applicable nested `AGENTS.md` files before editing their directories:
 and [papers](papers/AGENTS.md). `CLAUDE.md` files import the corresponding
 `AGENTS.md`; keep one source of instructions per directory.
 
-[project/architecture/roadmap.md](project/architecture/roadmap.md) owns current
+[project/scope.md](project/scope.md) owns statistical targets and sampling-law
+boundaries. [project/architecture/roadmap.md](project/architecture/roadmap.md)
+owns current
 implementation state and contracts. [project/backlog/todo.md](project/backlog/todo.md)
 owns accepted SEM/parser/estimation work; [simulation.md](project/backlog/simulation.md)
 owns simulation state, priorities and its decision log. Before structural changes,

@@ -12,6 +12,12 @@ consumer or inexpensive reuse of primary work. Two-level SEM, SAM and composites
 have **no scheduled expansion work**, including inside shared normalization,
 start, preparation and inference programmes. Existing APIs/tests remain.
 
+The [statistical scope](../scope.md) adopts population approximation targets
+under joint observation sampling. General fixed-design inference under mean
+misspecification and categorical conditional-moment expansion are
+[banked](speculative.md#covariates-and-sampling); existing compatibility routes
+retain their correctness gates.
+
 The existing limited-information correlation-ML capability (currently catML)
 is retained and folded into shared fitting composition. Common moment targets
 and model penalties are near-term work; this does not establish new ordinary-
@@ -150,11 +156,14 @@ moment-target foundation; that extraction can proceed alongside normalization.
 
 ### ML and FIML
 
-- [ ] **M — complete ML policy inference for fixed-x models.** The policy
+- [ ] **S — make the ordinary fixed-x policy restriction explicit.** The policy
   geometry requires random X while ordinary fitting defaults to `fixed.x=TRUE`.
-  Define conditional geometry or an explicit policy restriction. **Check:**
-  moments, covariance, global/nested tests and data ownership; never silently
-  substitute a joint model. See [R interface vision](../design/r-interface-vision.md).
+  Audit component dispatch and document unsupported inference consistently in
+  direct/deferred calls, covariance and global/nested reports. **Check:** typed
+  reasons, retained fits/data and supported random-X controls; never silently
+  substitute a joint model. General fixed-design inference is
+  [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
+  Changing the fitting default requires a separate evidence-backed decision.
 
 - [ ] **S — test fully specified models under the policy.** Complete the
   zero-direction geometry (identity U factor) and nontrivial global test for
@@ -229,13 +238,6 @@ moment-target foundation; that extraction can proceed alongside normalization.
   reductions, independent influence derivatives, jackknife controls and
   misspecified-larger-model calibration. Alternative score weights need a
   recorded decision study before adoption.
-
-- [ ] **M — implement conditional categorical moments.** Fixed observed
-  covariates (`exo` rows) are explicitly refused by C++/R preparation;
-  `fixed_x=FALSE` remains a distinct joint model. Build conditional stage-one
-  moments, sampling covariance and stage-two model before removing the guard.
-  **Check:** eight covariate corpus cases and direct/staged/cached routes against
-  conditional references. See [translation audit](../validation/textbook-translation-audit.md).
 
 - [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
   passes the accuracy budget but differs in raw parameters. **Check:** a

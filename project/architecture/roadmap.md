@@ -4,6 +4,16 @@ This document summarizes the current implementation state and architectural
 contracts for magmaan. It is not the active backlog. Remaining work lives in
 [project/backlog/todo.md](../backlog/todo.md).
 
+The [statistical scope](../scope.md) owns population targets and sampling-law
+boundaries. Adopted 2026-10-01: primary inference targets population
+approximations under joint observation sampling, including random covariates.
+General fixed-design inference under mean misspecification and categorical
+conditional-moment expansion are [banked](../backlog/speculative.md#covariates-and-sampling).
+Conditional fitting can support random-X inference; compatibility options do
+not by themselves establish its sampling guarantee. Existing APIs, fitting
+defaults and parity gates remain in force. The ordinary fixed-x policy
+restriction remains an active clarity/correctness task.
+
 Out of scope for this track: Bayesian SEM, latent
 interactions/mixtures, EFA, inequality constraints (and active-bound
 inference), and end-user lavaan
@@ -4776,6 +4786,8 @@ failures.
   available.
 - Categorical models with fixed observed covariates (`exo` rows) are explicitly
   unsupported: conditional moments (`conditional.x`) are not implemented.
+  This extension is [banked](../backlog/speculative.md#conditional-categorical-moments-with-observed-covariates)
+  pending a named consumer and a target/sampling/inference contract.
   C++ preparation rejects these models, including cached moment routes; R
   fit/data/augmentation helpers reject them before constructing marginal
   statistics or entering the fitter. Explicit joint random-x models

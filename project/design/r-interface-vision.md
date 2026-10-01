@@ -27,6 +27,16 @@ rule that R owns argument handling and presentation while C++ owns the
 statistics, including the ordinary-user policy itself. Neither package holds a
 second SEM implementation.
 
+The [statistical scope](../scope.md) owns the policy's target and sampling law:
+population approximation parameters under joint observation sampling, including
+random covariates. Conditional fitting can serve this target. General
+fixed-design inference under mean misspecification is banked, as is categorical
+conditional-moment expansion. For models with fixed observed covariates, the
+existing `fixed.x = TRUE` fitting default does not establish ordinary-policy
+support; unsupported inference remains
+explicit until a separately validated route exists. This scope decision changes
+no fitting default or compatibility contract.
+
 ## Two packages
 
 | Package | Audience | Contents | Promise |
@@ -153,7 +163,8 @@ Parameter uncertainty:
 
 - Covariance: the sandwich with observed-information bread and empirical score
   covariance, H^-1 J H^-1 / n. It is consistent for the pseudo-true parameter
-  under misspecification; an expected-information bread is not. For estimators
+  under misspecification in the scope's regular joint-sampling regime; an
+  expected-information bread is not generally consistent there. For estimators
   whose weight is estimated from the data (GLS, WLS, DWLS), the covariance
   includes the weight-estimation influence, which vanishes under a correct
   model but not under misspecification.

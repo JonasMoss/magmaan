@@ -1,6 +1,6 @@
 # Speculative backlog
 
-Deferred possibilities, reviewed 2026-09-30. This is a **trigger register**:
+Deferred possibilities, reviewed 2026-10-01. This is a **trigger register**:
 none of these entries schedules implementation, a simulation or API promotion.
 Promote a bounded slice to [todo.md](todo.md) only for a named downstream
 consumer, with an explicit result and completion check. Existing APIs and
@@ -51,6 +51,47 @@ unsupported dispatcher calls can use its explicit entry point.
 **Build if:** a concrete consumer needs the extension or repeatedly hits an
 opaque dispatcher failure. Broader support needs independent parameterization
 and parity contracts; it is not part of primary workflow completion.
+
+## Covariates and sampling
+
+Banked 2026-10-01 under the [statistical scope](../scope.md). Conditional
+fitting can serve random-X population inference; the two entries below have
+different targets and must not be promoted as one generic fixed-x feature.
+
+### Fixed-design inference under mean misspecification
+
+**Gap:** a conditional-on-design target, assumptions that make its variance
+estimable, and covariance/global/nested inference under nonlinear mean
+misspecification. Ordinary residual sandwiches do not provide a general
+conditional-variance guarantee.
+**Available:** validated random-X population inference for supported models;
+existing lab fixed-x estimation and compatibility conventions in their tested
+slices. When conditional fixed-design uncertainty is required, report the
+inference limitation rather than reinterpret the target or silently refit.
+**Build if:** a named study needs a specific fixed-design estimand and supplies
+additional structure (for example replication or a restricted conditional
+mean). Agree the design sequence, response law and requested components;
+derive the variance and test references independently. Calibration must
+distinguish heteroskedasticity, nonlinear mean misspecification and noiseless
+controls. This is outside primary workflow completion.
+
+### Conditional categorical moments with observed covariates
+
+**Gap:** conditional stage-one thresholds/intercepts/slopes and residual
+moments, their sampling covariance/influence, and the corresponding stage-two
+model. Fixed observed covariates (`exo` rows) are currently refused by C++/R
+preparation, including cached moment routes.
+**Available:** explicit joint `fixed_x=FALSE` fitting when its different target
+and moment assumptions are appropriate, or an external conditional fitter.
+The rejection guard remains; marginal statistics are not a substitute for
+conditional statistics. See the
+[translation audit](../validation/textbook-translation-audit.md).
+**Build if:** a concrete consumer needs conditional categorical estimation.
+Specify whether inference targets a random-X population functional or a
+fixed-design parameter, and validate the relevant influence law. Reopen only
+the bounded slice: the eight covariate corpus cases and direct/staged/cached
+routes provide compatibility gates, with independent target-regime controls
+for any inference claim. This does not reactivate general fixed-design inference.
 
 ## Optimizers and coordinates
 
