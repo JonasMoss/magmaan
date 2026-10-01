@@ -192,14 +192,17 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
   Changing the fitting default requires a separate evidence-backed decision.
 
-- [ ] **M — settle likelihood-score covariance centering for the ordinary policy.**
-  Use uncentered score second moments as the baseline hypothesis for ML/FIML
-  parameter sandwiches and global/nested score-test calibration. Distinguish
-  raw likelihood scores from centered moment influences, global from group/
-  pattern centering, and saturated from structured evaluation points. Keep the
-  observed test score unchanged. **Check:** first derive stationary-fit
-  equivalence and the required sampling covariance for groups, missingness,
-  constraints and PSD boundaries; compare centered/raw calibration
+- [ ] **M — settle remaining likelihood-score calibration in the primary sampling scope.**
+  Retain uncentered score second moments as the baseline for ML/FIML
+  parameter sandwiches and global/nested score-test calibration under joint
+  population sampling. The
+  [fixed-allocation covariance formula](../scope.md#group-allocation-and-likelihood-score-covariance)
+  is settled; its ordinary-policy extension is
+  [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
+  Keep raw likelihood scores distinct from centered moment influences and
+  saturated from structured evaluation points. Preserve the observed test score.
+  **Check:** stationary-fit equivalence and covariance/projection contracts for
+  missingness, constraints and PSD boundaries; compare centered/raw calibration
   only where the formulas differ, with size, coverage, matched-null power and
   numerical failures reported. Separate convention-matched lavaan parity from
   ordinary-policy evidence before changing defaults. Reopening established
@@ -208,13 +211,12 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   promotion remains under the banked robust-score-flip entry.
   The preregistered [score-centering decision study](../../experiments/decisions/03-score-centering/report.qmd)
   compares paired meats on the same fits. Its 3,600-draw pilot and independent
-  8,000-draw fixed-group confirmation refute universal raw meat: at N=300,
-  raw/global parameter-variance ratios are 1.118 versus 0.994 within groups
-  (exact target 1/N, independently replayed). Group-centered parameter covariance
-  meets the registered criteria in that scope; group-centered score calibration
-  fails at N=80 (6.2% rejection, Wilson interval 5.2–7.3%). Keep the score baseline
-  provisional. Next: specify and gate fixed-group covariance treatment in core;
-  confirm the remaining ML/prospective-FIML families with fresh draws. Boundary
+  8,000-draw fixed-group confirmation separate a sampling-law identity from
+  finite-sample calibration. The latter centered score reference fails at N=80
+  (6.2% rejection, Wilson interval 5.2–7.3%); this does not reopen the settled
+  fixed-allocation covariance formula or select raw for that conditional target.
+  Next: confirm the remaining ML/prospective-FIML families with fresh draws.
+  Keep the primary score baseline provisional. Boundary
   contracts remain open; penalty-specific inference follows in 0.0.2.
   Missingness patterns are not sampling groups.
 

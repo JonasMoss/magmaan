@@ -40,7 +40,8 @@ tab <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
 
 | Choice | Current value | Status |
 |:--|:--|:--|
-| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Provisional; fixed-group covariance defect confirmed |
+| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Current joint-sampling baseline; fixed allocation has a different target |
+| Fixed-allocation score covariance | Within-group centered covariance rows | Formula settled; ordinary-policy extension banked |
 | ML global/nested score reference | Uncentered efficient scores, expected geometry | Open centered/raw decision |
 | Ordinary FIML inference | Unsupported | Prospective evidence only |
 | Established moment-covariance and LR centering | Retained method-specific formulas | Redesign banked |
@@ -77,6 +78,25 @@ whereas released test directions carry an observed signal. FIML evidence is
 prospective, split by sensitivity geometry. No package default is changed.
 
 ## Evidence
+
+### Disposition of the fixed-allocation case
+
+Recorded 2026-10-01 after inspecting results: the fixed-allocation covariance
+formula is settled by the sampling law, and its ordinary-policy extension is
+[banked](../../../project/backlog/speculative.md#fixed-design-inference-under-mean-misspecification).
+The [scope contract](../../../project/scope.md#group-allocation-and-likelihood-score-covariance)
+distinguishes within-group covariance for fixed allocation from raw score second
+moments for joint sampling of group labels. No further experiment is needed to
+choose between those two population formulas. Finite-sample reference
+calibration remains separate; the N=80 result cannot make raw covariance correct
+for a fixed-allocation target. The original criteria and frozen decision outcomes
+are retained. The other ML/FIML calibration lanes remain active.
+
+The grouped nested test targets the best-fitting shared mean, not equality of
+the two true group means. Both nested models retain the wrong shared-mean
+assumption; the additional restriction fixes that approximation mean at zero.
+It therefore illustrates inference within misspecified models, not a correctly
+specified full-model null.
 
 ### Grouped parameter covariance has an independent target
 
@@ -128,7 +148,8 @@ and +0.2 at N=300; the lower bootstrap bounds are about −1.2 percentage points
 These comparisons meet the registered power-loss rule, but do not establish a
 power gain. The group-centered parameter covariance is eligible in the tested
 scope; neither centered score reference is eligible. Raw remains the provisional
-score baseline, with calibration still open.
+score baseline in the primary joint-sampling scope, with calibration still open.
+This provisional baseline is not a fixed-allocation recommendation.
 
 ### Broader pilot: differences need confirming
 

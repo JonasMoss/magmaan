@@ -65,6 +65,48 @@ dependent designs and design-based survey or randomization inference are not
 implied by a robust covariance label. Ergodicity alone does not specify a
 central limit theorem or an estimable variance.
 
+### Group allocation and likelihood-score covariance
+
+Settled 2026-10-01: the sampling law determines whether between-group score
+means belong in uncertainty. This is a covariance identity, not a centering
+parameter to select by simulation. Let $w_g=n_g/N$ and
+$m_g=E_g[s(Z;\theta^*)]$, with $\sum_g w_g m_g=0$ at the population
+approximation target. For independent observations, identically distributed
+within each of a fixed finite number of groups, with fixed counts and
+$n_g\to\infty$, the per-observation covariance
+of the summed score is
+
+$$
+B_{\mathrm{fixed}}=\sum_g w_g\operatorname{Cov}_g(s).
+$$
+
+It is consistently estimated by cross-products of score rows centered within
+each sampling group. With iid sampling of the whole unit, including its group
+label, $w_g$ instead denotes the population group probability; the covariance
+includes variation in group composition:
+
+$$
+B_{\mathrm{joint}}
+=\sum_g w_g E_g[ss^\mathsf{T}]
+=B_{\mathrm{fixed}}+\sum_g w_g m_gm_g^\mathsf{T}.
+$$
+
+Raw score cross-products consistently estimate the latter at the target. The
+two formulas agree when every group score mean is zero, including under a
+correctly specified likelihood. Centering covariance rows leaves the estimating
+equations and observed test score unchanged. Correct covariance alone does not
+settle finite-sample score reference calibration. This distinction is consistent
+with [Abadie, Imbens and Zheng (2014), Section 2](https://economics.mit.edu/sites/default/files/publications/Inference%20for%20Misspecified%20Models%20With%20Fixed.pdf);
+the [grouped experiment](../experiments/decisions/03-score-centering/report.qmd)
+provides an independently checked example.
+
+Supplying `group` or observing group counts does not by itself choose conditional
+fixed-allocation inference. The primary joint-sampling scope is unchanged.
+The fixed-allocation extension is
+[banked](backlog/speculative.md#fixed-design-inference-under-mean-misspecification),
+with its covariance formula settled. Random missingness patterns are not fixed
+sampling groups and do not inherit this centering rule.
+
 ## Covariates, conditional fitting and fixed design
 
 Three distinctions determine scope:

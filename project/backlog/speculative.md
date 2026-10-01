@@ -67,9 +67,22 @@ different targets and must not be promoted as one generic fixed-x feature.
 estimable, and covariance/global/nested inference under nonlinear mean
 misspecification. Ordinary residual sandwiches do not provide a general
 conditional-variance guarantee.
+**Settled replicated-group case:** for independent sampling within groups with
+fixed counts, covariance uses within-group centered likelihood-score rows;
+joint iid sampling of group labels retains between-group score-mean variation.
+The [scope contract](../scope.md#group-allocation-and-likelihood-score-covariance)
+and [score-centering evidence](../../experiments/decisions/03-score-centering/report.qmd)
+settle this formula. Ordinary fixed-allocation support remains banked; no further
+centering-selection experiment is queued for this case. A named multi-group
+consumer can reopen this bounded slice without reopening general fixed design.
+Its implementation needs native covariance/regression gates and separate
+finite-sample calibration of any requested tests.
 **Available:** validated random-X population inference for supported models;
 existing lab fixed-x estimation and compatibility conventions in their tested
-slices. When conditional fixed-design uncertainty is required, report the
+slices. For the replicated-group case, methods developers can compose lab
+score rows, within-group covariance and native parameter-covariance primitives,
+as in the retained experiment. When conditional fixed-design uncertainty is
+required through the ordinary policy, report the
 inference limitation rather than reinterpret the target or silently refit.
 **Build if:** a named study needs a specific fixed-design estimand and supplies
 additional structure (for example replication or a restricted conditional

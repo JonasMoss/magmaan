@@ -4557,10 +4557,15 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   0.994 within groups, against the exact 1/N target. Within-group parameter
   covariance meets the registered criteria in this scope; centered score
   calibration fails the N=80 acceptance rule (6.2% rejection, 95% Wilson interval
-  5.2–7.3%). Package defaults are unchanged. Fixed-group covariance treatment
-  needs a core contract/regression gate; broader ML/FIML score confirmation and
-  boundary/penalty cases remain open. Random missingness patterns must not inherit
-  this fixed-group centering rule.
+  5.2–7.3%). Package defaults are unchanged. The
+  [sampling-law covariance formula](../scope.md#group-allocation-and-likelihood-score-covariance)
+  is settled: fixed allocation uses within-group covariance; joint sampling
+  retains between-group score-mean variation. The ordinary fixed-allocation
+  extension is [banked](../backlog/speculative.md#fixed-design-inference-under-mean-misspecification),
+  with no queued experiment to choose that formula. Promotion needs a named
+  consumer and native contract/regression gates. Broader ML/FIML score
+  confirmation and boundary/penalty cases remain open. Random missingness
+  patterns must not inherit the fixed-group centering rule.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as
   `magmaanlab::policy_inference(fit)` and run by `magmaan::infer()`. The
