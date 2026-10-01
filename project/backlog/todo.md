@@ -237,12 +237,6 @@ moment-target foundation; that extraction can proceed alongside normalization.
   **Check:** eight covariate corpus cases and direct/staged/cached routes against
   conditional references. See [translation audit](../validation/textbook-translation-audit.md).
 
-- [ ] **M — localize mixed-model objective discrepancies.** Compare thresholds,
-  means, scales, residual rows and DWLS weights for Newsom 2015 ex5.3a/ex5.3b/
-  ex5.7a and 2024 ex5.8b. **Check:** compact NACOV fixtures with continuous
-  means/variances, same-point criteria and fitted moments. Accepted higher
-  objectives need setup checks before optimizer diagnosis. See translation audit.
-
 - [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
   passes the accuracy budget but differs in raw parameters. **Check:** a
   justified information-metric gate or tighter stop, with independently checked

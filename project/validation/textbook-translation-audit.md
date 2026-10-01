@@ -370,28 +370,49 @@ saddle of magmaan's own objective, far above lavaan's minimum.
   ex8.29_2, Newsom 2024 ex4.2b) fail in stage 1 instead ("mixed ordinal
   stage-1 information matrix is not positive definite").
 
-**Mixed ordinal/continuous fits are accepted above lavaan's minimum.** All
-five mixed cases without covariates converge and pass the Newton check.
+**Mixed ordinal/continuous objective gaps were model-setup differences.**
+Rechecked against installed lavaan 0.7.2 on 2026-10-01. The four Newsom
+cases reproduce the earlier objectives when `auto_cov_y = FALSE`, the
+`model_spec()` default. Their reference `sem()` calls enable `auto.cov.y`:
+final-wave outcomes have automatically added disturbance covariances. The
+old comparison omitted those rows, so it compared different models.
 
-| case | parameterization | ordinal / continuous | R path | lavaan | ratio | d |
-|---|---|---|---|---|---|---|
-| Mplus ex5.3 | delta | 3 / 3 | 0.000947 | 0.000946 | 1.00 | 9.0e-8 |
-| Newsom 2015 ex5.3a | theta | 8 / 6 | 0.1207 | 0.0744 | 1.62 | 4.9e-5 |
-| Newsom 2015 ex5.3b | theta | 8 / 11 | 0.1849 | 0.1456 | 1.27 | 9.9e-5 |
-| Newsom 2015 ex5.7a | delta | 8 / 16 | 0.3848 | 0.3027 | 1.27 | 2.4e-4 |
-| Newsom 2024 ex5.8b | delta | 8 / 28 | 1.2163 | 1.0817 | 1.12 | 3.6e-4 |
+With `auto_cov_y = TRUE`, all four DWLS fits agree with lavaan. The table
+reports magmaan's fmin multiplied by `(N - 1) / N`, matching lavaan's
+categorical reporting convention (N = 574).
 
-Minima this far above lavaan's, well inside the accuracy budget, mean magmaan
-minimizes a different objective. Both parameterizations are affected and the
-small Mplus model is not, so the mixed path works in the simple case.
-Candidates, in the order to check:
-1. The stage-1 statistics magmaan estimates from raw data (polyserial
-   correlations, continuous means and variances). Compare them with
-   `lavInspect(fit, "sampstat")`.
-2. The DWLS weight's continuous block (`lavInspect(fit, "wls.v")`).
-3. Scale and residual-variance semantics for mixed longitudinal models.
-Evaluating magmaan's objective at lavaan's estimates separates the model
-from the data side.
+| case | parameterization | ordinal / continuous | aligned R fmin | lavaan fmin | omitted covariance rows |
+|---|---|---|---|---|---|
+| Newsom 2015 ex5.3a | theta | 8 / 6 | 0.07444481 | 0.07444482 | `w2dep ~~ w2vst` |
+| Newsom 2015 ex5.3b | theta | 8 / 11 | 0.1455562 | 0.1455562 | `w2dep ~~ w2vst` |
+| Newsom 2015 ex5.7a | delta | 8 / 16 | 0.3027435 | 0.3027436 | `w2posaff ~~ w2vst` |
+| Newsom 2024 ex5.8b | delta | 8 / 28 | 1.081702 | 1.081702 | all three pairs among `w3posaff`, `w3dep`, `w3vst` |
+
+The original Mplus ex5.3 control already agreed; its model has no omitted
+terminal-outcome covariance. This localization does not change the builder's
+explicit `auto_cov_y` convention or exempt any lavaan comparison.
+
+After aligning moment rows by variable/operator, the largest absolute raw-data
+component differences across these cases are 1.31e-6 in the moment vector,
+3.70e-6 in full NACOV, and 8.53e-7 in the DWLS weight. Means agree within
+5e-15; thresholds within 1e-8. These differences cannot explain the earlier
+12–62% objective gaps. Covariance pair orientation is immaterial when
+matching parameter rows.
+
+The complete-table check also found a reporting defect: delta residual rows
+stored on observed-variable phantom latents in the reduced representation
+remained at the preparation value 1. `ordinal_parameter_values()` now
+reconstructs these `Psi` residuals from the observed response variance, as it
+already does for `Theta` residuals. Theta estimates and scales agree; fixed
+preparation values remain unchanged.
+
+`cpp/tests/fixtures/textbook_mixed/` freezes derived moments, the NACOV
+and DWLS diagonals, and the full oracle tables for these four cases. The
+C++ gate checks automatic covariance rows, same-point fitted moments and
+criteria, complete parameter reporting, and refits away from the oracle
+endpoint. R integration gates check reduced mixed models under delta and
+theta against live lavaan, including staged fits. Full-WLS and robust
+inference parity for these textbook cases remain outside this DWLS gate.
 
 **Newsom 2024 ex1.3c is a flat ridge, not a failure.** In this saturated theta
 model, the C++ lane's L-BFGS stops at fmin 5.8e-9 from lavaan's starts, with

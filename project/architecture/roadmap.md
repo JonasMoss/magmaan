@@ -482,6 +482,8 @@ ordinal/mixed delta/theta reporting; independent checks cover mean/covariance
 invariance, constraint sums, residual-plus-explained variance, and unit variance
 after response scaling. Nonpositive or nonfinite theta response variances fail
 explicitly instead of producing invalid reported scales.
+Delta reconstruction also covers residuals stored in `Psi` on observed-variable
+phantom latents in reduced models; it uses observed indices for implied variances.
 
 Explicit single-level `group:` headers select separate group templates in
 header order instead of being interpreted as levels and replicated across
@@ -3992,7 +3994,14 @@ are in the [backlog](../backlog/todo.md#continuous-moment-quadratic-weight-follo
   already computed the traces.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
-  NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. Mixed delta SNLLS now
+  NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. Four Newsom longitudinal
+  mixed DWLS cases have compact derived-moment/NACOV-diagonal oracle fixtures
+  under `textbook_mixed/`, with gates for same-point criteria, fitted moments,
+  complete tables and refits. Their previously reported objective gaps came
+  from omitted terminal-outcome covariances: `model_spec()` requires explicit
+  `auto_cov_y = TRUE` to match those `sem()` calls. Categorical fmin comparisons
+  apply lavaan's `(N - 1) / N` reporting factor. These gates do not validate
+  textbook full-WLS or robust inference. Mixed delta SNLLS now
   has a materialized-stats full-threshold entry point,
   `estimate::fit_mixed_ordinal_snlls_full_thresholds()`, that profiles the
   conditionally linear threshold, mean, variance, and covariance parameters

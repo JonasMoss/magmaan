@@ -97,6 +97,9 @@ If you redistribute this repository, keep this file with it.
   categorical textbook models: per block the thresholds, polychoric
   correlations, their NACOV and the DWLS weight. No casewise rows are
   included (`cpp/tests/tools/regen_textbook_ordinal_fixtures.R`).
+  `cpp/tests/fixtures/textbook_mixed/` similarly carries derived mixed moments
+  and NACOV/DWLS diagonals for four Newsom longitudinal cases, with no casewise
+  rows (`cpp/tests/tools/regen_textbook_mixed_fixtures.R`).
 
 ### Additional paper examples (aggregate inputs only)
 

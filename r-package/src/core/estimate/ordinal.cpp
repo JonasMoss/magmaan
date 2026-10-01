@@ -3897,10 +3897,13 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
       continue;
     }
     const auto& cell = rep.cell_for_row[i];
-    // Subtract the explained variance in the evaluator's own representation,
-    // including structural regressions and observed-variable phantom latents.
-    if (cell.used && cell.mat == model::MatId::Theta)
-      values(static_cast<Eigen::Index>(i)) += 1.0 - moments->sigma[static_cast<std::size_t>(cell.block)](cell.row, cell.row);
+    // Reduced representations put observed residuals in Psi on phantom
+    // latents. The implied variance is still indexed by the observed variable.
+    if (cell.used && (cell.mat == model::MatId::Theta || cell.mat == model::MatId::Psi)) {
+      const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      values(static_cast<Eigen::Index>(i)) += 1.0 -
+          moments->sigma[static_cast<std::size_t>(cell.block)](ov, ov);
+    }
   }
   return values;
 }
