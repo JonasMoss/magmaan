@@ -349,9 +349,12 @@ Open work only; landed generator slices are inventoried in the roadmap.
   draw per model). Evaluating the H1 Jacobian at the H0 solution makes the
   delta construction exact for any parameter-map nesting, so it equals
   `A.method = "exact"` and also covers H0s that omit a path, which lavaan's
-  exact method refuses. magmaan's restriction map is already exact. semTests
-  now defaults to the same-point construction, with `A.method = "legacy"` for
-  the old one (branch `same-point-restriction`, 2026-10-01). Before writing to
+  exact method refuses. magmaan defaults to the exact restriction; its
+  `SatorraAMethod::Delta` (complete-data, FIML, ordinal, pairwise) is the
+  lavaan-parity mixed-point construction, and would get the same-point fix if
+  the experiment shows the difference matters. semTests now defaults to the
+  same-point construction, with `A.method = "legacy"` for the old one (branch
+  `same-point-restriction`, 2026-10-01). Before writing to
   Yves, run an experiment: Type I and size-adjusted power of SB, SS and pEBA
   with the delta and the exact restriction, over the textbook battery and the
   FMG designs, to show whether the difference matters next to the
