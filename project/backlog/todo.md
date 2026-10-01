@@ -193,6 +193,21 @@ here track that work; completing the 0.1.0 gates does not complete it.
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
   Changing the fitting default requires a separate evidence-backed decision.
 
+- [ ] **M — settle likelihood-score covariance centering for the ordinary policy.**
+  Use uncentered score second moments as the baseline hypothesis for ML/FIML
+  parameter sandwiches and global/nested score-test calibration. Distinguish
+  raw likelihood scores from centered moment influences, global from group/
+  pattern centering, and saturated from structured evaluation points. Keep the
+  observed test score unchanged. **Check:** first derive stationary-fit
+  equivalence and the required sampling covariance for groups, missingness,
+  constraints, PSD boundaries and penalties; compare centered/raw calibration
+  only where the formulas differ, with size, coverage, matched-null power and
+  numerical failures reported. Separate convention-matched lavaan parity from
+  ordinary-policy evidence before changing defaults. Reopening established
+  moment-covariance recipes is
+  [banked](speculative.md#moment-covariance-centering-alternatives); multiplier
+  promotion remains under the banked robust-score-flip entry.
+
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score
   arms fare better; heterogeneous-spectrum global calibration remains unresolved.

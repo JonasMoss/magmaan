@@ -181,6 +181,27 @@ accuracy or runtime benefit. See [optimizer controls](../reference/optimizer-con
 
 ## Estimation and inference
 
+### Moment-covariance centering alternatives
+
+Banked 2026-10-01: reconsidering established moment-covariance recipes is
+outside the active likelihood-score centering decision.
+**Gap:** evidence for changing the centering already built into empirical
+Gamma/NACOV and moment-influence covariances: continuous WLS/DWLS/DLS weights
+and inference, noniterative delta inference, complete-data moment-based robust
+SE/GOF routes, and global/nested LR moment references (including Satorra--2000).
+This also covers revisiting already-derived Stage-1 moment/influence covariance
+maps; direct score OPG choices at saturated versus structured points remain in
+the [active score-covariance decision](todo.md#primary-inference-workflows).
+**Available:** retain each method's existing covariance/influence definition,
+normalization and regression/parity gates. The fact that a covariance uses
+centered contributions does not require a new centered/raw experiment.
+**Build if:** a reproducible defect or named consumer establishes that an
+existing recipe targets the wrong sampling covariance, or a specific alternative
+has a justified statistical benefit. Derive the target and influence law first;
+validate the affected estimates when Gamma also determines fitting weights.
+This banks centering redesign, not primary estimator/inference completion or
+fixes to established covariance formulas.
+
 ### Penalized ML for small-sample convergence and structure (parameter-space)
 
 **Gap:** new variance/structural penalties, selection rules and penalized
@@ -236,6 +257,9 @@ or demonstrates an unstable result. Preserve dense mixture weights where needed;
 analytic sign counts and cheap diagnostic gates need independent proofs.
 
 ### Robust score flips and ordinal permutation
+
+Centered-versus-raw multiplier promotion remains banked here; the ordinary
+policy's analytic likelihood-score covariance decision is active in TODO.
 
 **Gap:** new standardized-flip promotion, robust MI scope and proof of raw-label
 permutation validity for heterogeneous ordinal invariance nulls.
