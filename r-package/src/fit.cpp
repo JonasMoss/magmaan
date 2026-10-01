@@ -3023,6 +3023,51 @@ Rcpp::List frontier_fit_ml_multiinfo_impl(
   return out;
 }
 
+// Frozen complete-continuous weight selection, shared with prepared fitting.
+// [[Rcpp::export]]
+Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats,
+                                    std::string method, SEXP raw_data = R_NilValue,
+                                    double dls_a = 0.5) {
+  auto parsed = partable_from_arg(partable, "fixed_moment_weight");
+  auto starts = std::move(parsed.starts);
+  auto ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  auto evaluator = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!evaluator) stop_model(evaluator.error());
+  std::optional<magmaan::data::RawData> raw;
+  if (!Rf_isNull(raw_data)) {
+    raw = fiml_raw_from_arg(ctx.rep, raw_data); raw->mask.clear();
+    for (const auto& X : raw->X) if (!X.allFinite()) Rcpp::stop("magmaan: fixed weights require complete observations");
+  }
+  auto weight = magmaan::estimate::gmm::fixed_moment_weight(*evaluator, ctx.samp,
+      start_values_or_stop(ctx, starts, "simple"), ordinal_stage2_weight_from_string(method),
+      raw ? &*raw : nullptr, {.a = dls_a});
+  if (!weight) stop_fit(weight.error());
+  std::vector<Eigen::MatrixXd> blocks;
+  for (const auto& block : *weight) blocks.push_back(block.to_dense());
+  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks));
+}
+
+// Select fitting weights while retaining ordinal moments and sampling Gamma.
+// [[Rcpp::export]]
+Rcpp::List ordinal_fixed_weight_stats_impl(Rcpp::List ordinal_stats,
+                                           std::string method, SEXP W = R_NilValue,
+                                           double dls_a = 0.5) {
+  auto stats = ordinal_stats_from_arg(ordinal_stats);
+  if (Rf_isNull(W)) {
+    auto selected = magmaan::estimate::frontier::ordinal_stats_with_stage2_weight(stats,
+        ordinal_stage2_weight_from_string(method), {.a = dls_a});
+    if (!selected) stop_post(selected.error());
+    stats = std::move(*selected);
+  } else if (method == "DWLS") stats.W_dwls = wls_dense_from_arg(W, stats.R.size());
+  else if (method == "WLS") stats.W_wls = wls_dense_from_arg(W, stats.R.size());
+  else Rcpp::stop("magmaan: supplied W requires WLS or DWLS");
+  // Preserve the exact R Stage-1 object; only the consumed weight slot changes.
+  Rcpp::List out = Rcpp::clone(ordinal_stats);
+  if (!Rf_isNull(W) && method == "DWLS") out["W_dwls"] = Rcpp::wrap(stats.W_dwls);
+  else out["W_wls"] = Rcpp::wrap(stats.W_wls);
+  return out;
+}
+
 // Shared non-mixed moment discrepancy plus the model barrier.
 // [[Rcpp::export]]
 Rcpp::List fit_moments_barrier_impl(
@@ -10464,8 +10509,9 @@ SEXP prepared_data_impl(SEXP model, SEXP X, std::string kind, Rcpp::List ordered
 }
 
 // [[Rcpp::export]]
-Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full) {
-  return prepared::weight(data, method, W, full);
+Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full,
+                                SEXP model, double dls_a = 0.5) {
+  return prepared::weight(data, method, W, full, model, dls_a);
 }
 
 // [[Rcpp::export]]

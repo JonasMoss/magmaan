@@ -7,6 +7,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/problem.hpp"
@@ -91,6 +92,17 @@ fit_expected<Weight>
 expected_information_weight(const model::ModelEvaluator& ev,
                             const data::SampleStats& samp,
                             const Eigen::VectorXd& theta);
+
+// Common complete-continuous fixed-weight menu. ULS needs no Gamma; NT uses
+// sample moments; DWLS/WLS/DLS additionally need complete raw observations.
+// Mean rows follow the evaluator. No fitting or inference is performed here.
+fit_expected<Weight>
+fixed_moment_weight(const model::ModelEvaluator& ev,
+                    const data::SampleStats& samp,
+                    const Eigen::VectorXd& theta0,
+                    FixedWeightKind kind,
+                    const data::RawData* raw = nullptr,
+                    FixedWeightOptions options = {});
 
 // Exact Hessian of the moment-quadratic objective at θ, in full θ and on the
 // TOTAL scale: N ∇²F with F = Σ_b (n_b/N) ½ r_bᵀ W_b r_b, r_b = σ_b(θ) − s_b.

@@ -348,8 +348,9 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 
   | Moment source | Discrepancies with PSD and either barrier |
   | --- | --- |
-  | Complete continuous or pairwise MCAR moments | ML, ULS, GLS, explicit-weight WLS |
-  | All-ordinal polychorics | ML, ULS, DWLS, WLS |
+  | Complete continuous | ML; fixed ULS, GLS, DWLS, WLS/ADF, DLS or supplied W |
+  | Pairwise MCAR continuous moments | ML, ULS, GLS, supplied-weight WLS/DWLS |
+  | All-ordinal polychorics | ML; the same fixed-weight menu as complete continuous |
   | Saturated continuous FIML/EM (`ML2S`) | ML or fixed ULS/DWLS/ADF/DLS Stage 2 |
   | Direct continuous FIML | Observed-pattern likelihood |
 
@@ -363,6 +364,27 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   barrier and pairwise sampling inference is not yet validated: SE/test and
   likelihood-based fit-measure helpers reject these compositions. Mixed
   barrier composition and two-level covariance policies remain unsupported.
+- Complete continuous and all-ordinal data share the frozen weight choices
+  `"uls"`, `"nt"`/`"gls"`, `"dwls"`, `"adf"`/`"wls"`, and `"dls"`.
+  Use `fit_model(spec, data, estimator = "WLS", weight = "dls", dls_a = .3)`
+  or prepared `estimate(model, data, weight = "dls", dls_a = .3)`.
+  `prepare_weight(data, "dls", dls_a = .3)` creates a reusable handle. Existing
+  ULS/GLS/DWLS/WLS spellings select the corresponding weight; `estimator = "DLS"`
+  selects the fixed-a mixture. `W` supplies a full WLS or diagonal DWLS metric
+  for either moment source. Continuous WLS without W now builds empirical
+  Gamma from retained complete rows. Summaries alone need supplied W for
+  empirical weights. The weight stays fixed throughout optimization.
+
+  The common menu refers to the moment source's own Gamma. Ordinal NT retains
+  the existing empirical threshold-covariance block, normal-theory correlation
+  block and zero threshold–correlation cross-blocks. DLS mixes that Gamma with
+  the observed full Gamma before inversion; `dls_a = 0` and `1` recover NT
+  and ADF respectively. This is a quadratic fit; ML remains its own
+  discrepancy. `composition$weight` identifies the selected metric and
+  `weight_frozen` records its fitting convention. Fitter labels such as WLS
+  identify the underlying quadratic route; `options$estimator` retains the
+  selected estimator spelling. These additions do not supply new estimated-weight
+  influence corrections or ordinary-user inference defaults.
 - `frontier_fit_ml_psd_fallback(model, data)` explicitly tries ordinary
   L-BFGS first and accepts it only if both the common accuracy verdict and
   covariance admissibility pass. Otherwise it runs PSD-SLSQP once. Finite

@@ -827,17 +827,8 @@ profile_lrt_ci_parameter_mixed_ordinal(
 // comparisons: callers can build pairwise/listwise ordinal moments and Gamma
 // once, then refit the SEM with several stage-2 weights without re-estimating
 // thresholds, polychorics, or the observed Gamma.
-enum class OrdinalStage2Weight {
-  Uls,   // identity
-  Dwls,  // diag(Gamma_observed)^-1
-  Wls,   // Gamma_observed^-1 (ADF/full WLS)
-  Nt,    // normal-theory/GLS-like association block
-  Dls,   // ((1-a) Gamma_NT + a Gamma_observed)^-1
-};
-
-struct OrdinalStage2DlsOptions {
-  double a = 0.5;
-};
+using OrdinalStage2Weight = gmm::FixedWeightKind;
+using OrdinalStage2DlsOptions = gmm::FixedWeightOptions;
 
 post_expected<std::vector<Eigen::MatrixXd>>
 ordinal_stage2_weight_blocks(const data::OrdinalStats& stats,

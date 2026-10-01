@@ -272,6 +272,35 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fixed_moment_weight_impl
+Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats, std::string method, SEXP raw_data, double dls_a);
+RcppExport SEXP _magmaanlab_fixed_moment_weight_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP methodSEXP, SEXP raw_dataSEXP, SEXP dls_aSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(fixed_moment_weight_impl(partable, sample_stats, method, raw_data, dls_a));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ordinal_fixed_weight_stats_impl
+Rcpp::List ordinal_fixed_weight_stats_impl(Rcpp::List ordinal_stats, std::string method, SEXP W, double dls_a);
+RcppExport SEXP _magmaanlab_ordinal_fixed_weight_stats_impl(SEXP ordinal_statsSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP dls_aSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_fixed_weight_stats_impl(ordinal_stats, method, W, dls_a));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_moments_barrier_impl
 Rcpp::List fit_moments_barrier_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, SEXP W, std::string target, double weight, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
 RcppExport SEXP _magmaanlab_fit_moments_barrier_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP WSEXP, SEXP targetSEXP, SEXP weightSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
@@ -2488,8 +2517,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // prepared_weight_impl
-Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full);
-RcppExport SEXP _magmaanlab_prepared_weight_impl(SEXP dataSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP fullSEXP) {
+Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full, SEXP model, double dls_a);
+RcppExport SEXP _magmaanlab_prepared_weight_impl(SEXP dataSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP fullSEXP, SEXP modelSEXP, SEXP dls_aSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2497,7 +2526,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
     Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
     Rcpp::traits::input_parameter< bool >::type full(fullSEXP);
-    rcpp_result_gen = Rcpp::wrap(prepared_weight_impl(data, method, W, full));
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_weight_impl(data, method, W, full, model, dls_a));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4279,6 +4310,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_fit_fiml_sphere_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_sphere_impl, 9},
     {"_magmaanlab_frontier_reidentify_impl", (DL_FUNC) &_magmaanlab_frontier_reidentify_impl, 3},
     {"_magmaanlab_frontier_fit_ml_multiinfo_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_multiinfo_impl, 8},
+    {"_magmaanlab_fixed_moment_weight_impl", (DL_FUNC) &_magmaanlab_fixed_moment_weight_impl, 5},
+    {"_magmaanlab_ordinal_fixed_weight_stats_impl", (DL_FUNC) &_magmaanlab_ordinal_fixed_weight_stats_impl, 4},
     {"_magmaanlab_fit_moments_barrier_impl", (DL_FUNC) &_magmaanlab_fit_moments_barrier_impl, 8},
     {"_magmaanlab_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_uls_psd_impl, 6},
     {"_magmaanlab_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_gls_psd_impl, 6},
@@ -4423,7 +4456,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_scalar_impl, 6},
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},
     {"_magmaanlab_prepared_data_impl", (DL_FUNC) &_magmaanlab_prepared_data_impl, 4},
-    {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 4},
+    {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 6},
     {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 10},
     {"_magmaanlab_prepare_inference_impl", (DL_FUNC) &_magmaanlab_prepare_inference_impl, 3},
     {"_magmaanlab_score_rows_impl", (DL_FUNC) &_magmaanlab_score_rows_impl, 2},

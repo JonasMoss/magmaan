@@ -1,5 +1,23 @@
 # Covariance domain and penalty are distinct internal choices. The friendly
 # policy selects one; legacy psd= remains a compatible spelling.
+.fixed_weight_method <- function(weight) {
+  key <- match.arg(tolower(weight), c("uls", "nt", "gls", "dwls", "wls", "adf", "dls", "custom"))
+  switch(key, uls = "ULS", nt = "GLS", gls = "GLS", dwls = "DWLS", dls = "DLS", "WLS")
+}
+
+.fixed_weight_options <- function(method, W = NULL, dls_a = 0.5) {
+  if (!is.null(W) && !method %in% c("WLS", "DWLS")) stop("supplied W requires WLS or DWLS")
+  if (method == "DWLS" && !is.null(W)) {
+    blocks <- if (is.matrix(W)) list(W) else W
+    if (!is.list(blocks) || any(vapply(blocks, function(x)
+      !is.matrix(x) || nrow(x) != ncol(x) || any(x[row(x) != col(x)] != 0), logical(1))))
+      stop("DWLS requires diagonal W")
+  }
+  if (method == "DLS" && (!is.numeric(dls_a) || length(dls_a) != 1L ||
+      !is.finite(dls_a) || dls_a < 0 || dls_a > 1)) stop("dls_a must be finite and in [0, 1]")
+  invisible(NULL)
+}
+
 .covariance_options <- function(covariance, psd = FALSE, psd_supplied = FALSE, barrier = NULL) {
   if (!is.logical(psd) || length(psd) != 1L || is.na(psd)) stop("psd must be TRUE or FALSE")
   if (is.null(covariance)) covariance <- if (psd) "psd" else "unrestricted"
@@ -30,6 +48,12 @@
   composition$discrepancy <- if (identical(source, "saturated_fiml")) {
     switch(fit$stage2_weight %||% "nt", nt = "ML", uls = "ULS", dwls = "DWLS", "WLS")
   } else fit$estimator
+  if (fit$estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) {
+    composition$weight <- fit$moment_weight %||% switch(fit$estimator,
+        ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+    composition$weight_frozen <- TRUE
+    if (identical(composition$weight, "dls")) composition$dls_a <- fit$stage2_dls_a
+  }
   composition$covariance_domain <- if (identical(covariance, "barrier")) {
     if (barrier$weight == 0) "unrestricted" else "barrier_interior"
   } else covariance

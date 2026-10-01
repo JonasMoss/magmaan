@@ -125,33 +125,35 @@ prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwis
 #'
 #' For categorical data full=TRUE also retains Gamma for existing post-fit
 #' inference functions. full=FALSE prepares only the diagonal needed by DWLS.
-#' Continuous weights use empirical Gamma, or an explicit W in model moment order.
-prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS"), W = NULL, full = TRUE) {
+#' Fixed weights use source-specific NT/empirical Gamma, or W in model moment order.
+prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"), W = NULL, full = TRUE,
+                           dls_a = 0.5) {
   stopifnot(inherits(data, "magmaan_prepared_data"))
-  method <- match.arg(method)
+  if (identical(tolower(method[1L]), "custom") && is.null(W)) stop("custom weight requires W")
+  method <- .fixed_weight_method(tolower(method[1L]))
+  .fixed_weight_options(method, W, dls_a)
   if (length(full) != 1L || is.na(full) || !is.logical(full)) stop("prepare_weight(): full must be TRUE or FALSE")
-  if (data$kind == "moments" && method == "DWLS" && !is.null(W)) {
-    blocks <- if (is.matrix(W)) list(W) else W
-    if (!is.list(blocks) || any(vapply(blocks, function(x)
-      !is.matrix(x) || nrow(x) != ncol(x) || any(x[row(x) != col(x)] != 0), logical(1))))
-      stop("prepare_weight(): DWLS requires diagonal W")
-  }
-  prepared <- prepared_weight_impl(data$native, method, W, full)
+  prepared <- prepared_weight_impl(data$native, method, W, full, data$model$native, dls_a)
   .prepared_object(native = prepared$native, data = data, method = method, full = full,
-                   W = prepared$W, stats = prepared$stats,
+                   W = prepared$W, stats = prepared$stats, supplied = !is.null(W), dls_a = dls_a,
                    class = "magmaan_prepared_weight")
 }
 
 #' Estimate using reusable model, data and optional weight handles
 estimate <- function(model, data, estimator = NULL, weight = NULL,
                      optimizer = NULL, control = NULL, bounds = NULL,
-                     covariance = NULL, psd = FALSE, barrier = NULL) {
+                     covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5) {
   stopifnot(inherits(model, "magmaan_prepared_model"),
             inherits(data, "magmaan_prepared_data"))
   if (!identical(model$categories, data$model$categories) ||
       !identical(model$spec$group_labels, data$model$spec$group_labels) ||
       !identical(model$kind, data$model$kind))
     stop("estimate(): model/data schemas differ")
+  if (is.character(weight)) {
+    if (identical(tolower(weight), "custom")) stop("custom weight requires prepare_weight(data, W = ...)")
+    weight <- prepare_weight(data, .fixed_weight_method(weight), dls_a = dls_a)
+    if (is.null(estimator) || toupper(estimator) %in% c("ULS", "GLS", "DWLS", "WLS", "ADF", "DLS")) estimator <- weight$method
+  }
   if (!is.null(weight)) {
     stopifnot(inherits(weight, "magmaan_prepared_weight"))
     if (!identical(weight$data, data)) stop("estimate(): weight belongs to another dataset")
@@ -160,10 +162,12 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   }
   if (is.null(estimator)) estimator <- switch(data$kind, raw = "FIML", ordinal = "DWLS", mixed = "DWLS", "ML")
   estimator <- toupper(estimator)
-  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "DWLS", "WLS"),
-                    mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS"))
+  if (identical(estimator, "ADF")) estimator <- "WLS"
+  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "GLS", "DWLS", "WLS", "DLS"),
+                    mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS", "DLS"))
   if (length(estimator) != 1L || !estimator %in% allowed) stop("estimate(): unsupported estimator for this data kind")
-  if (is.null(weight) && estimator %in% c("DWLS", "WLS")) weight <- prepare_weight(data, estimator)
+  if (is.null(weight) && (estimator %in% c("DWLS", "WLS", "DLS") ||
+      (data$kind == "ordinal" && estimator == "GLS"))) weight <- prepare_weight(data, estimator, dls_a = dls_a)
   if (!is.null(bounds) && (!is.list(bounds) || is.character(bounds)))
     stop("estimate(): supply explicit bounds (e.g. bounds_standard())")
   covariance_options <- .covariance_options(covariance, psd, !missing(psd), barrier)
@@ -172,6 +176,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   fit <- prepared_estimate_impl(model$native, data$native, if (is.null(weight)) NULL else weight$native,
                                 estimator, optimizer, control, bounds, covariance,
                                 barrier$target %||% "joint", barrier$weight %||% 0.25)
+  if (data$kind == "moments" && !is.null(weight)) fit$W <- weight$W
   if (data$kind == "moments" && !is.null(data$X)) {
     fit$raw_data <- structure(list(X = data$X, ov_names = model$ov_names,
                                   group_var = model$spec$group_var,
@@ -181,14 +186,20 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   }
   fit <- finalize_magmaan_fit(fit, model$spec, estimator,
                       if (data$kind == "raw") "fiml" else data$missing, "none", "none")
+  if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
+    if (!is.null(weight) && isTRUE(weight$supplied)) "custom" else switch(estimator,
+      ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+  if (estimator == "DLS") fit$stage2_dls_a <- weight$dls_a
   source <- switch(data$kind, ordinal = "polychoric", mixed = "mixed_polyserial", raw = "raw_observed", "complete_continuous")
   fit <- .finish_covariance_fit(fit, source, covariance, barrier,
       optimizer %||% if (covariance == "psd") "nlopt-slsqp" else if (covariance == "barrier") "port" else "nlopt-lbfgs")
   fit$options$covariance <- covariance
   fit$options$barrier <- barrier
-  if (covariance != "unrestricted") fit$options$route <- list(fitter = "fit_model", args = list(
+  if (covariance != "unrestricted" || estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$options$route <- list(fitter = "fit_model", args = list(
     estimator = estimator, covariance = covariance, barrier = barrier,
     optimizer = optimizer, control = control, missing = if (data$kind == "raw") "listwise" else data$missing,
-    W = if (data$kind == "moments" && !is.null(weight)) weight$W else NULL))
+    W = if (!is.null(weight) && isTRUE(weight$supplied)) {
+      if (data$kind == "moments") weight$W else if (estimator == "DWLS") weight$stats$W_dwls else weight$stats$W_wls
+    } else NULL, dls_a = weight$dls_a %||% dls_a))
   fit
 }

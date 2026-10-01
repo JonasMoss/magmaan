@@ -399,6 +399,33 @@ TEST_CASE("dls_weight: fit_gmm converges with the DLS weight") {
   CHECK(out->f_evals > 0);
 }
 
-// ============================================================================
-// Empirical-Bayes scalar selection.
-// ============================================================================
+TEST_CASE("fixed moment weights share the continuous menu and DLS endpoints") {
+  using Kind = est::gmm::FixedWeightKind;
+  const auto raw = make_raw(500);
+  for (bool means : {false, true}) {
+    const auto model = build_model("f =~ x1 + x2 + x3", means);
+    auto sample = magmaan::data::sample_stats_from_raw(raw); REQUIRE(sample);
+    if (!means) sample->mean.clear();
+    auto ev = ModelEvaluator::build(model.pt, model.rep); REQUIRE(ev);
+    auto start = est::simple_start_values(model.pt, model.rep, *sample); REQUIRE(start);
+    auto uls = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Uls); REQUIRE(uls);
+    CHECK(uls->front().is_identity());
+    auto nt = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Nt); REQUIRE(nt);
+    auto reference_nt = est::gmm::normal_theory_weight(*ev, *sample, *start); REQUIRE(reference_nt);
+    CHECK(max_block_diff(*nt, *reference_nt) < 1e-12);
+    auto diagonal = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Dwls, &raw); REQUIRE(diagonal);
+    CHECK(diagonal->front().kind() == est::gmm::BlockWeight::Kind::Diagonal);
+    auto gamma = means ? magmaan::data::empirical_gamma_with_means(raw.X[0]) : magmaan::data::empirical_gamma(raw.X[0]);
+    REQUIRE(gamma);
+    CHECK((diagonal->front().to_dense().diagonal() - gamma->diagonal().cwiseInverse()).norm() < 1e-12);
+    auto adf = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Wls, &raw); REQUIRE(adf);
+    const auto q = gamma->rows();
+    CHECK((adf->front().to_dense() * *gamma - Eigen::MatrixXd::Identity(q,q)).norm() < 1e-10);
+    auto dls0 = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Dls, &raw, {.a=0}); REQUIRE(dls0);
+    auto dls1 = est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Dls, &raw, {.a=1}); REQUIRE(dls1);
+    CHECK(max_block_diff(*dls0, *nt) < 1e-10);
+    CHECK(max_block_diff(*dls1, *adf) < 1e-10);
+    CHECK_FALSE(est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Wls));
+    CHECK_FALSE(est::gmm::fixed_moment_weight(*ev, *sample, *start, Kind::Dls, &raw, {.a=1.1}));
+  }
+}

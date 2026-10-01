@@ -139,22 +139,27 @@ SEXP dataset(SEXP model_ptr, SEXP X, std::string kind, Rcpp::List ordered) {
   return handle(std::move(d), "magmaan_prepared_data");
 }
 
-Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
+Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
+                  SEXP model_ptr, double dls_a) {
   const auto& d = get<Data>(data_ptr, "magmaan_prepared_data");
   Weight w; w.method = method;
   // Dense per-block W for the R-visible return. Stays empty on the ordinal /
   // mixed paths, which is what `Rcpp::wrap` saw before too (an empty list).
   std::vector<Eigen::MatrixXd> W_dense;
-  if (method != "DWLS" && method != "WLS" && method != "ULS") Rcpp::stop("magmaan: weight method must be ULS, DWLS or WLS");
+  if (method != "DWLS" && method != "WLS" && method != "ULS" && method != "GLS" && method != "DLS")
+    Rcpp::stop("magmaan: weight method must be ULS, GLS, DWLS, WLS or DLS");
   if (d.kind == "ordinal" || d.kind == "mixed") {
-    if (!Rf_isNull(W)) Rcpp::stop("magmaan: custom ordinal weights are not supported here");
+    if (d.kind == "mixed" && (method == "GLS" || method == "DLS" || !Rf_isNull(W)))
+      Rcpp::stop("magmaan: mixed fixed-weight expansion is deferred");
+    if (!Rf_isNull(W) && method != "WLS" && method != "DWLS")
+      Rcpp::stop("magmaan: custom ordinal W requires WLS or DWLS");
     const auto plan = data::ordinal_weight_plan(data::OrdinalWorkspacePurpose::FitOnly,
                                                data::OrdinalEstimatorKind::DWLS);
     if (d.kind == "ordinal") {
       if (method == "ULS" && !full) {
         w.ordinal = d.ordinal;
-      } else if (full || method == "WLS") {
-        auto s = data::ordinal_stats_from_integer_data(d.raw.X, method == "WLS");
+      } else if (full || !Rf_isNull(W) || method == "WLS" || method == "GLS" || method == "DLS") {
+        auto s = data::ordinal_stats_from_integer_data(d.raw.X, method == "WLS" && Rf_isNull(W));
         if (!s) stop_post(s.error());
         w.ordinal = std::move(*s);
         w.cache = data::ordinal_gamma_cache_from_stats(w.ordinal);
@@ -163,6 +168,19 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
         if (!ws) stop_post(ws.error());
         w.ordinal = d.ordinal; copy_weights(ws->gamma_cache, w.ordinal);
         w.cache = std::move(ws->gamma_cache);
+      }
+      if (!Rf_isNull(W)) {
+        auto blocks = wls_dense_from_arg(W, w.ordinal.R.size());
+        if (method == "DWLS") w.ordinal.W_dwls = std::move(blocks);
+        else w.ordinal.W_wls = std::move(blocks);
+        w.cache = data::ordinal_gamma_cache_from_stats(w.ordinal);
+      } else if (method == "GLS" || method == "DLS") {
+        auto s = estimate::frontier::ordinal_stats_with_stage2_weight(w.ordinal,
+            method == "GLS" ? estimate::gmm::FixedWeightKind::Nt : estimate::gmm::FixedWeightKind::Dls,
+            {.a = dls_a});
+        if (!s) stop_post(s.error());
+        w.ordinal = std::move(*s);
+        w.cache = data::ordinal_gamma_cache_from_stats(w.ordinal);
       }
       w.ordinal.ov_names = d.names;
     } else {
@@ -182,65 +200,35 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full) {
       w.mixed.ov_names = d.names;
     }
   } else if (d.kind == "moments") {
-    // Two forms are kept deliberately. `dense` is what the validation below
-    // checks and what R gets back, exactly as before. `w.continuous` carries the
-    // *structured* gmm::BlockWeight the fit consumes — Identity for ULS and
-    // Diagonal for DWLS instead of a q x q matrix, which is the point of the
-    // BlockWeight retype. Materializing `dense` is not a regression: this
-    // function already returned dense blocks to R.
-    std::vector<Eigen::MatrixXd> dense;
-    std::vector<Eigen::VectorXd> dwls_diag;  // non-empty ⇒ derived DWLS path
-    if (method == "ULS") {
-      if (!Rf_isNull(W)) Rcpp::stop("magmaan: ULS does not accept a custom W");
-      for (const auto& S : d.sample.S) {
-        const auto p = S.rows();
-        const auto size = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
-        dense.emplace_back(Eigen::MatrixXd::Identity(size, size));
-      }
-    } else if (!Rf_isNull(W)) dense = wls_dense_from_arg(W, d.sample.S.size());
-    else {
-      if (d.raw.X.empty()) Rcpp::stop("magmaan: empirical weights require raw data or explicit W");
-      for (const auto& X : d.raw.X) {
-        auto gamma = d.meanstructure ? data::empirical_gamma_with_means(X) : data::empirical_gamma(X);
-        if (!gamma) stop_post(gamma.error());
-        if (method == "DWLS") {
-          if (!gamma->diagonal().allFinite() || (gamma->diagonal().array() <= 0).any())
-            Rcpp::stop("magmaan: non-positive Gamma diagonal");
-          Eigen::VectorXd dinv = gamma->diagonal().cwiseInverse();
-          dense.emplace_back(dinv.asDiagonal());
-          dwls_diag.push_back(std::move(dinv));
-        } else {
-          Eigen::LLT<Eigen::MatrixXd> llt(*gamma);
-          if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: empirical Gamma is not positive definite");
-          dense.push_back(llt.solve(Eigen::MatrixXd::Identity(gamma->rows(), gamma->cols())));
-        }
-      }
+    if (!Rf_isNull(W)) {
+      if (method != "WLS" && method != "DWLS") Rcpp::stop("magmaan: custom W requires WLS or DWLS");
+      W_dense = wls_dense_from_arg(W, d.sample.S.size());
+    } else {
+      if (d.raw.X.empty() && method != "ULS" && method != "GLS")
+        Rcpp::stop("magmaan: empirical weights require raw data or explicit W");
+      const auto& model = get<Model>(model_ptr, "magmaan_prepared_model");
+      auto evaluator = lvm::ModelEvaluator::build(model.ctx.pt, model.ctx.rep);
+      if (!evaluator) stop_model(evaluator.error());
+      auto x0 = estimate::simple_start_values(model.ctx.pt, model.ctx.rep, d.sample);
+      if (!x0) stop_fit(x0.error());
+      auto metric = estimate::gmm::fixed_moment_weight(*evaluator, d.sample, *x0,
+          ordinal_stage2_weight_from_string(method), d.raw.X.empty() ? nullptr : &d.raw,
+          {.a = dls_a});
+      if (!metric) stop_fit(metric.error());
+      w.continuous = std::move(*metric);
+      for (const auto& block : w.continuous) W_dense.push_back(block.to_dense());
     }
-    if (dense.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
-    for (std::size_t b = 0; b < dense.size(); ++b) {
+    if (W_dense.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
+    for (std::size_t b = 0; b < W_dense.size(); ++b) {
       const auto p = d.sample.S[b].rows();
-      const auto size = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
-      const auto& Wb = dense[b];
-      if (Wb.rows() != size || Wb.cols() != size || !Wb.allFinite() || !Wb.isApprox(Wb.transpose()))
+      const auto q = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
+      if (W_dense[b].rows() != q || W_dense[b].cols() != q || !W_dense[b].allFinite() ||
+          !W_dense[b].isApprox(W_dense[b].transpose()))
         Rcpp::stop("magmaan: W must be finite, symmetric and match the moment dimensions");
-      // gmm::dense_weight would accept a positive *semi*definite block. This
-      // surface has always required positive definite, so keep the stricter
-      // check here rather than silently inheriting the looser one.
-      Eigen::LLT<Eigen::MatrixXd> llt(Wb);
+      Eigen::LLT<Eigen::MatrixXd> llt(W_dense[b]);
       if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: W must be positive definite");
     }
-    if (method == "ULS") {
-      for (const auto& Wb : dense)
-        w.continuous.push_back(estimate::gmm::BlockWeight::identity(Wb.rows()));
-    } else if (!dwls_diag.empty()) {
-      for (const auto& dg : dwls_diag)
-        w.continuous.push_back(estimate::gmm::BlockWeight::diagonal(dg));
-    } else {
-      // User-supplied W, or an empirical dense Gamma inverse.
-      w.continuous =
-          magmaanr::dense_weight_or_stop(dense, "magmaan: prepare_weight W");
-    }
-    W_dense = std::move(dense);
+    if (!Rf_isNull(W)) w.continuous = dense_weight_or_stop(W_dense, "magmaan: prepare_weight W");
   } else Rcpp::stop("magmaan: weights require moment data");
   // Keep the dataset alive and reject accidentally reusing its weight elsewhere.
   Rcpp::List out = Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(W_dense));
@@ -305,7 +293,9 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     ctx.samp.S = s.R; ctx.samp.n_obs = s.n_obs; ctx.meanstructure = false;
     auto x0 = ordinal_starts_or_stop(ctx, s, m.starts);
     const auto parameterization = m.parameterization == "theta" ? estimate::OrdinalParameterization::Theta : estimate::OrdinalParameterization::Delta;
-    const auto weights = method == "ML" ? estimate::OrdinalWeightKind::DWLS : ordinal_weight_from_estimator(method, "prepared covariance fit");
+    const auto weights = method == "ML" ? estimate::OrdinalWeightKind::DWLS :
+        method == "GLS" || method == "DLS" ? estimate::OrdinalWeightKind::WLS :
+        ordinal_weight_from_estimator(method, "prepared covariance fit");
     if (covariance == "barrier") {
       auto fit = estimate::frontier::fit_ordinal_multiinfo(ctx.pt, ctx.rep, s, x0,
           method == "ML", weights, parameterization, penalty_options, backend, opts);
@@ -319,7 +309,9 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
         : estimate::fit_ordinal_bounded(ctx.pt, ctx.rep,
             data::ordinal_moments_from_stats(s), &cache, bnd, plan, x0, backend, opts);
     if (!e) stop_fit(e.error());
-    auto out = ordinal_fit_result(ctx, s, *e, &m.starts, method.c_str(), m.parameterization.c_str());
+    const auto label = method == "GLS" || method == "DLS" ? "WLS" : method.c_str();
+    auto out = ordinal_fit_result(ctx, s, *e, &m.starts, label, m.parameterization.c_str());
+    if (method == "GLS" || method == "DLS") out["ordinal_computational_weight"] = "WLS";
     if (e->association) {
       Rcpp::List composition = out["composition"];
       composition["algorithm"] = std::string(estimate::backend_name(backend));
@@ -356,7 +348,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
   }
   if (covariance != "unrestricted") {
     estimate::gmm::Weight metric = w ? w->continuous : estimate::gmm::Weight{};
-    if (method == "GLS") {
+    if (method == "GLS" && !w) {
       auto evaluator = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
       if (!evaluator) stop_model(evaluator.error());
       auto W = estimate::gmm::normal_theory_weight(*evaluator, ctx.samp, x0);
@@ -371,11 +363,12 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     } else e = method == "ML" ? estimate::frontier::fit_ml_psd(ctx.pt, ctx.rep, ctx.samp, x0, backend, opts)
         : estimate::frontier::fit_gmm_psd(ctx.pt, ctx.rep, ctx.samp, x0, metric, backend, opts);
   } else if (method == "ML") e = estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
-  else if (method == "GLS") e = estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
-  else if (method == "ULS" || method == "WLS" || method == "DWLS")
+  else if (method == "GLS" && !w) e = estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0, bnd, backend, opts);
+  else if (method == "ULS" || method == "WLS" || method == "DWLS" || method == "GLS" || method == "DLS")
     e = estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0, w ? w->continuous : estimate::gmm::Weight{}, bnd, backend, opts);
   else Rcpp::stop("magmaan: unsupported prepared estimator");
   if (!e) stop_fit(e.error());
-  return decorate(fit_result(ctx, *e, &m.starts, method.c_str()));
+  return decorate(fit_result(ctx, *e, &m.starts,
+      method == "DWLS" || method == "DLS" ? "WLS" : method.c_str()));
 }
 } // namespace prepared

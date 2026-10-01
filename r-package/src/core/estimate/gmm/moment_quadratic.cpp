@@ -20,8 +20,10 @@
 #include "magmaan/optim/problem.hpp"
 
 #include "magmaan/data/raw_data.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 
 #include "detail_second_order.hpp"
+#include "detail_linalg.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate::gmm {
@@ -736,6 +738,50 @@ moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
         std::string(who) + ": non-finite gradient variance"));
   }
   return Omega;
+}
+
+fit_expected<Weight>
+fixed_moment_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
+                    const Eigen::VectorXd& theta0, FixedWeightKind kind,
+                    const data::RawData* raw, FixedWeightOptions options) {
+  constexpr const char* who = "fixed_moment_weight";
+  if (kind == FixedWeightKind::Nt) return normal_theory_weight(ev, samp, theta0);
+  if (kind == FixedWeightKind::Dls) {
+    if (!raw) return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fixed_moment_weight: DLS requires complete raw observations"));
+    return frontier::dls_weight(ev, samp, *raw, theta0, options);
+  }
+  auto moments = ev.sigma(theta0);
+  if (!moments) return std::unexpected(model_err(moments.error(), who));
+  if (auto shapes = validate_common_shapes(samp, *moments, who); !shapes)
+    return std::unexpected(shapes.error());
+  const auto layout = make_layout(samp, *moments);
+  if (kind != FixedWeightKind::Uls && (!raw || !raw->mask.empty() || raw->X.size() != samp.S.size()))
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fixed_moment_weight: empirical weights require complete raw observations"));
+  Weight out;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const auto p = samp.S[b].rows();
+    const auto q = layout.block_rows[b];
+    if (kind == FixedWeightKind::Uls) { out.push_back(BlockWeight::identity(q)); continue; }
+    if (raw->X[b].cols() != p || b >= samp.n_obs.size() || raw->X[b].rows() != samp.n_obs[b])
+      return std::unexpected(make_err(FitError::Kind::NumericIssue, "fixed_moment_weight: raw shape mismatch"));
+    auto gamma = layout.has_means ? data::empirical_gamma_with_means(raw->X[b]) : data::empirical_gamma(raw->X[b]);
+    if (!gamma) return std::unexpected(make_err(FitError::Kind::NumericIssue, gamma.error().detail));
+    if (kind == FixedWeightKind::Dwls) {
+      if (!gamma->diagonal().allFinite() || (gamma->diagonal().array() <= 0).any())
+        return std::unexpected(make_err(FitError::Kind::NumericIssue, "fixed_moment_weight: non-positive Gamma diagonal"));
+      out.push_back(BlockWeight::diagonal(gamma->diagonal().cwiseInverse()));
+    } else if (kind == FixedWeightKind::Wls) {
+      auto inverse = detail::symmetric_inverse_pd_gated(*gamma);
+      if (!inverse.ok) return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fixed_moment_weight: observed Gamma is rank deficient"));
+      auto weight = BlockWeight::dense(inverse.inverse, FitError::Kind::NumericIssue, who);
+      if (!weight) return std::unexpected(weight.error());
+      out.push_back(std::move(*weight));
+    } else return std::unexpected(make_err(FitError::Kind::NumericIssue, "fixed_moment_weight: invalid kind"));
+  }
+  return out;
 }
 
 }  // namespace magmaan::estimate::gmm

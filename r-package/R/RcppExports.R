@@ -69,6 +69,14 @@ frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, w
     .Call(`_magmaanlab_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds, target)
 }
 
+fixed_moment_weight_impl <- function(partable, sample_stats, method, raw_data = NULL, dls_a = 0.5) {
+    .Call(`_magmaanlab_fixed_moment_weight_impl`, partable, sample_stats, method, raw_data, dls_a)
+}
+
+ordinal_fixed_weight_stats_impl <- function(ordinal_stats, method, W = NULL, dls_a = 0.5) {
+    .Call(`_magmaanlab_ordinal_fixed_weight_stats_impl`, ordinal_stats, method, W, dls_a)
+}
+
 fit_moments_barrier_impl <- function(partable, sample_stats, estimator = "ML", W = NULL, target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
     .Call(`_magmaanlab_fit_moments_barrier_impl`, partable, sample_stats, estimator, W, target, weight, optimizer, control)
 }
@@ -645,8 +653,8 @@ prepared_data_impl <- function(model, X, kind, ordered) {
     .Call(`_magmaanlab_prepared_data_impl`, model, X, kind, ordered)
 }
 
-prepared_weight_impl <- function(data, method, W, full) {
-    .Call(`_magmaanlab_prepared_weight_impl`, data, method, W, full)
+prepared_weight_impl <- function(data, method, W, full, model, dls_a = 0.5) {
+    .Call(`_magmaanlab_prepared_weight_impl`, data, method, W, full, model, dls_a)
 }
 
 prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL, covariance = "unrestricted", barrier_target = "joint", barrier_weight = 0.25) {

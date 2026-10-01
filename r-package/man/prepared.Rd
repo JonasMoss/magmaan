@@ -9,10 +9,11 @@ estimation weights and estimation. Inference is requested separately.}
 \usage{
 prepare_model(model, ..., prototype = NULL)
 prepare_data(model, data, kind = NULL, missing = c("error", "listwise"))
-prepare_weight(data, method = c("DWLS", "WLS", "ULS"), W = NULL, full = TRUE)
+prepare_weight(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
+               W = NULL, full = TRUE, dls_a = 0.5)
 estimate(model, data, estimator = NULL, weight = NULL,
          optimizer = NULL, control = NULL, bounds = NULL,
-         covariance = NULL, psd = FALSE, barrier = NULL)
+         covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5)
 }
 \arguments{
 \item{model}{Model syntax or a model specification for \code{prepare_model};
@@ -26,17 +27,23 @@ order. No empirical moments or starts are retained from it.}
 \code{"mixed"}. Default follows the model schema.}
 \item{missing}{Reject missing observations or delete incomplete rows for moment
 data. Raw FIML data retain missingness.}
-\item{method}{Weight method: DWLS, WLS or ULS.}
-\item{W}{Optional continuous weight matrix or per-group list in model moment
+\item{method}{Fixed weight: ULS, GLS/NT, DWLS, WLS/ADF or DLS for complete
+continuous and all-ordinal data. Lower-case weight names are also accepted.
+Mixed data retain DWLS/WLS.}
+\item{W}{Optional weight matrix or per-group list in model moment
 order. Otherwise empirical weights are constructed from raw observations.}
 \item{full}{For categorical data, retain full Gamma for post-fit inference.
-FALSE requests only the DWLS diagonal (or no Gamma for ULS). WLS needs full
-Gamma regardless. DWLS does not invert full Gamma.}
-\item{estimator}{Continuous ML, ULS, GLS, WLS or DWLS; FIML for raw data;
-ML, ULS, DWLS or WLS for ordinal data; DWLS or WLS for mixed data. Default follows
+FALSE requests only the DWLS diagonal (or no Gamma for ULS) when W is omitted.
+GLS, DLS, WLS and supplied ordinal weights retain full Gamma.
+DWLS does not invert full Gamma.}
+\item{estimator}{Continuous or all-ordinal ML, ULS, GLS, DWLS, WLS or DLS;
+FIML for raw data; DWLS or WLS for mixed data. Default follows
 the weight, or otherwise the data kind.}
-\item{weight}{Optional prepared weight from this dataset. WLS/DWLS prepare a
-weight internally if omitted.}
+\item{weight}{Optional prepared weight from this dataset, or a shared weight
+name: \code{"uls"}, \code{"nt"}, \code{"dwls"}, \code{"adf"}, or \code{"dls"}.
+Required weights are prepared internally if omitted.}
+\item{dls_a}{Fixed DLS mixing scalar in [0, 1]. Zero selects NT and one ADF.
+When a prepared weight is supplied its stored scalar governs.}
 \item{optimizer, control}{Existing native optimizer name and control list.}
 \item{bounds}{Explicit lower/upper bound list in free-parameter order. Not
 supported by the prepared FIML path.}

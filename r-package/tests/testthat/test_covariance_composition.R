@@ -168,3 +168,85 @@ test_that("ML and direct FIML barriers preserve units and report the caller-unit
     }
   }
 })
+
+test_that("complete continuous and all-ordinal data share the fixed-weight menu", {
+  continuous <- covariance_composition_data()
+  ordinal <- as.data.frame(lapply(continuous, function(x) ordered(cut(x, c(-Inf,-.5,.5,Inf)))))
+  for (categorical in c(FALSE, TRUE)) {
+    d <- if (categorical) ordinal else continuous
+    spec <- model_spec("f =~ x1 + x2 + x3 + x4", ordered = if (categorical) names(d) else NULL,
+      meanstructure = FALSE)
+    model <- prepare_model(spec, prototype = if (categorical) d else NULL)
+    data <- prepare_data(model, d)
+    for (kind in c("uls", "nt", "dwls", "adf", "dls")) {
+      weight <- prepare_weight(data, kind, dls_a = .3)
+      selected <- estimate(model, data, weight = kind, dls_a = .3)
+      for (policy in c("unrestricted", "psd", "barrier")) {
+        fit <- fit_model(spec, d, estimator = "WLS", weight = kind, dls_a = .3, covariance = policy)
+        staged <- estimate(model, data, weight = weight, covariance = policy)
+        expect_equal(staged$fmin, fit$fmin, tolerance = 1e-6)
+        expect_identical(staged$composition, fit$composition)
+        expect_identical(fit$composition$weight, kind)
+        expect_true(fit$composition$weight_frozen)
+        if (policy == "unrestricted") expect_equal(selected$fmin, fit$fmin, tolerance = 1e-6)
+        if (!categorical && policy == "unrestricted") {
+          reference <- magmaan_core$infer_continuous_ls_robust(staged, staged$raw_data$X,
+            weight = staged$W, bread = "expected", gamma = "empirical")$vcov
+          expect_equal(vcov(staged), reference, tolerance = 0)
+        }
+        expect_equal(covariance_refit(fit, spec, d)$theta, fit$theta, tolerance = 1e-7)
+        expect_equal(covariance_refit(staged, spec, d)$theta, fit$theta, tolerance = 1e-5)
+        if (categorical && kind %in% c("nt", "dls")) {
+          expect_equal(fit$ordinal_stats$NACOV, fit$stage1_ordinal$NACOV, tolerance = 0)
+          expect_equal(lapply(fit$polychoric, unname), lapply(fit$stage1_ordinal$R, unname), tolerance = 0)
+          expect_equal(fit$thresholds, fit$stage1_ordinal$thresholds, tolerance = 0)
+        }
+      }
+    }
+    for (policy in c("unrestricted", "psd", "barrier")) {
+      nt <- fit_model(spec, d, estimator = "GLS", covariance = policy)
+      adf <- fit_model(spec, d, estimator = "WLS", covariance = policy)
+      zero <- fit_model(spec, d, estimator = "DLS", dls_a = 0, covariance = policy)
+      one <- fit_model(spec, d, estimator = "DLS", dls_a = 1, covariance = policy)
+      expect_equal(zero$fmin, nt$fmin, tolerance = 1e-6)
+      expect_equal(one$fmin, adf$fmin, tolerance = 1e-6)
+    }
+  }
+})
+
+test_that("both moment sources accept supplied full and diagonal fitting weights", {
+  continuous <- covariance_composition_data()
+  ordinal <- as.data.frame(lapply(continuous, function(x) ordered(cut(x, c(-Inf,-.5,.5,Inf)))))
+  for (categorical in c(FALSE, TRUE)) {
+    d <- if (categorical) ordinal else continuous
+    spec <- model_spec("f =~ x1 + x2 + x3 + x4", ordered = if (categorical) names(d) else NULL,
+      meanstructure = FALSE)
+    model <- prepare_model(spec, prototype = if (categorical) d else NULL)
+    data <- prepare_data(model, d)
+    q <- if (categorical) 14L else 10L
+    diagonal <- diag(seq(.7, 1.3, length.out = q))
+    full <- diagonal + matrix(.05, q, q)
+    for (method in c("WLS", "DWLS")) for (policy in c("unrestricted", "psd", "barrier")) {
+      W <- if (method == "WLS") full else diagonal
+      fit <- fit_model(spec, d, estimator = method, W = W, covariance = policy)
+      weight <- prepare_weight(data, method, W = W)
+      staged <- estimate(model, data, weight = weight, covariance = policy)
+      expect_equal(fit$fmin, staged$fmin, tolerance = 1e-6)
+      expect_identical(fit$composition$weight, "custom")
+      expect_identical(fit$composition, staged$composition)
+      expect_equal(covariance_refit(staged, spec, d)$theta, fit$theta, tolerance = 1e-5)
+      if (policy == "unrestricted") {
+        lean <- estimate(model, data, weight = prepare_weight(data, method, W = W, full = FALSE))
+        expect_equal(lean$fmin, fit$fmin, tolerance = 1e-6)
+      }
+      if (categorical) {
+        selected <- if (method == "DWLS") fit$ordinal_stats$W_dwls else fit$ordinal_stats$W_wls
+        expect_equal(selected[[1L]], W, tolerance = 0)
+        expect_equal(fit$ordinal_stats$NACOV, fit$stage1_ordinal$NACOV, tolerance = 0)
+      }
+    }
+    expect_error(fit_model(spec, d, estimator = "DWLS", W = full), "diagonal")
+    expect_error(fit_model(spec, d, estimator = "DLS", dls_a = Inf), "finite")
+    expect_error(fit_model(spec, d, estimator = "ML", weight = "dwls"), "moment-quadratic")
+  }
+})

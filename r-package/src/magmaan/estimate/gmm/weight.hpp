@@ -43,6 +43,14 @@
 
 namespace magmaan::estimate::gmm {
 
+// Frozen moment metrics across continuous, ordinal and saturated-FIML sources.
+// NT is a quadratic metric here; it is not the nonlinear ML discrepancy.
+enum class FixedWeightKind { Nt, Uls, Dwls, Wls, Adf = Wls, Dls };
+
+struct FixedWeightOptions {
+  double a = 0.5;  // DLS mixes Gamma: (1-a) Gamma_NT + a Gamma_observed.
+};
+
 class BlockWeight {
  public:
   enum class Kind { Identity, Diagonal, Dense, NormalTheory };

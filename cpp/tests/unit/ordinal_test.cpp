@@ -1748,6 +1748,31 @@ TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
   CHECK_FALSE(snlls_cache.blocks[0].has_full);
   CHECK_FALSE(snlls_cache.blocks[0].has_dwls_weight);
 
+  // A fit-only cache must consume its fitting W, not invert sampling Gamma.
+  auto supplied = *stats;
+  const auto q = supplied.NACOV[0].rows();
+  supplied.W_dwls[0] = Eigen::VectorXd::LinSpaced(q, 0.7, 1.3).asDiagonal();
+  auto supplied_cache = magmaan::data::ordinal_gamma_cache_from_stats(supplied);
+  auto supplied_reference = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, supplied, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(supplied_reference);
+  auto supplied_bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &supplied_cache, {}, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto supplied_profiled = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, &supplied_cache, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto supplied_full_thresholds = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+      *pt, *mr, moments, &supplied_cache, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(supplied_bounded); REQUIRE(supplied_profiled); REQUIRE(supplied_full_thresholds);
+  for (const auto* fit : {&*supplied_bounded, &*supplied_profiled, &*supplied_full_thresholds}) {
+    CHECK(fit->fmin == doctest::Approx(supplied_reference->fmin).epsilon(1e-8));
+    CHECK((fit->theta - supplied_reference->theta).cwiseAbs().maxCoeff() < 2e-5);
+  }
+  CHECK(supplied_cache.blocks[0].gamma.isApprox(stats->NACOV[0], 0.0));
+
   auto wls_plan = magmaan::data::ordinal_weight_plan(
       magmaan::data::OrdinalWorkspacePurpose::FitOnly,
       magmaan::data::OrdinalEstimatorKind::WLS);

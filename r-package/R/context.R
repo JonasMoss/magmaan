@@ -100,6 +100,10 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   }
   raw <- raw_data_arg(fit, data, caller = "vcov")
   if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
+  if (estimator %in% c("ULS", "GLS", "WLS")) {
+    return(magmaan_core$infer_continuous_ls_robust(fit, raw, weight = fit$W,
+      bread = bread, gamma = "empirical")$vcov)
+  }
   magmaan_core$robust_se_raw_fit(fit, raw, bread = bread)$vcov
 }
 

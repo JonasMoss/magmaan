@@ -28,9 +28,7 @@ namespace magmaan::estimate::frontier {
 // surfaces, exactly like a hand-built WLS weight. It does not change any
 // default. With meanstructure, the mix applies to the full stacked
 // [mean; vech(cov)] Gamma.
-struct DlsWeightOptions {
-  double a = 0.5;   // mixing scalar in [0, 1]
-};
+using DlsWeightOptions = gmm::FixedWeightOptions;
 
 // Build the per-block DLS weight over the `[mean ; vech(cov)]` moment layout,
 // aligned with `gmm::residuals` / `gmm::normal_theory_weight`. `ev` + `theta0`

@@ -619,14 +619,9 @@ two_stage_saturated_gamma_influence(const RawData& raw, std::size_t block,
 // NT weighting is blind to the missingness pattern that governs Γ_FIML; it is
 // only licensed when Γ_FIML ≈ Γ_NT (complete, near-normal data). The non-NT
 // members are frontier research surface; Nt is the lavaan-parity default.
-enum class TwoStageWeight { Nt, Uls, Dwls, Adf, Dls };
+using TwoStageWeight = gmm::FixedWeightKind;
 
-struct TwoStageDlsOptions {
-  double a = 0.5;  // DLS mixing scalar in [0, 1]; ignored unless kind == Dls.
-  // (An empirical-Bayes choice of `a` from the Γ_FIML-vs-Γ_NT departure needs
-  // casewise saturated-score fourth moments not carried by `SaturatedMoments`;
-  // left as a future hook. Callers pass a fixed `a` for now.)
-};
+using TwoStageDlsOptions = gmm::FixedWeightOptions;
 
 // Bread used in the Stage-2 robust sandwich. Expected is the lavaan
 // robust.two.stage/default path; Observed is the misspecification-robust

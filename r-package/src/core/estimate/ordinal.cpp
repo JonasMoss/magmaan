@@ -1656,7 +1656,8 @@ full_weight_factors(const data::OrdinalMoments& moments,
     const Eigen::Index p = moments.R[b].rows();
     const Eigen::Index mdim =
         moments.thresholds[b].size() + p * (p - 1) / 2;
-    const Eigen::VectorXd diagonal = fit_plus_inference
+    const bool supplied_weight = cache->blocks[b].has_dwls_weight;
+    const Eigen::VectorXd diagonal = supplied_weight
                                          ? cache->blocks[b].w_dwls.diagonal()
                                          : cache->blocks[b].diagonal;
     if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
@@ -1666,7 +1667,7 @@ full_weight_factors(const data::OrdinalMoments& moments,
     }
     Eigen::VectorXd factor(mdim);
     for (Eigen::Index k = 0; k < mdim; ++k) {
-      const double v = fit_plus_inference ? diagonal(k) : 1.0 / diagonal(k);
+      const double v = supplied_weight ? diagonal(k) : 1.0 / diagonal(k);
       if (!std::isfinite(v) || v <= 0.0) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             "fit_ordinal_snlls_full_thresholds: DWLS diagonal is not positive in block " +
@@ -2023,7 +2024,10 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
     const Eigen::Index p = moments.R[b].rows();
     const Eigen::Index nth = moments.thresholds[b].size();
     const Eigen::Index mdim = nth + p * (p - 1) / 2;
-    const Eigen::VectorXd& diagonal = cache->blocks[b].diagonal;
+    const auto& block = cache->blocks[b];
+    // Sampling Gamma and a supplied fitting metric are separate inputs.
+    const Eigen::VectorXd diagonal = block.has_dwls_weight
+        ? block.w_dwls.diagonal().eval() : block.diagonal;
     if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "fit_ordinal_bounded: cached Gamma diagonal dimension mismatch in block " +
@@ -2038,7 +2042,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
             "fit_ordinal_bounded: cached Gamma diagonal is not positive in block " +
                 std::to_string(b)));
       }
-      const double w = 1.0 / v;
+      const double w = block.has_dwls_weight ? v : 1.0 / v;
       W(k) = w;
       factor(k) = std::sqrt(w);
     }

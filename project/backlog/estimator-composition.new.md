@@ -235,3 +235,59 @@ and the FIML missingness-pattern likelihood constant. The compiled suite
 retains its documented multi-group two-level oracle skip and two existing
 covariance-admissibility warnings. Vendored core files and generated exports
 are synchronized; layering, tracked-file and whitespace guards pass.
+
+## Shared complete-continuous and ordinal fixed weights
+
+Implementation recorded 2026-10-01. Complete continuous and all-ordinal
+fitting now share ULS, NT/GLS, DWLS, WLS/ADF, fixed-a DLS and supplied W.
+Each weight composes with unrestricted, PSD and either barrier policy.
+The common menu operates on each source's own moments and sampling Gamma;
+ordinal thresholds and correlations keep their existing moment order.
+Mixed/polyserial expansion remains deferred.
+
+Canonical C++ owns `estimate::gmm::FixedWeightKind`, `FixedWeightOptions`
+and the continuous `fixed_moment_weight()` builder. Existing ordinal and
+saturated-FIML weight names/options alias this common type. The ordinal
+builder retains its existing NT convention: empirical threshold covariance,
+normal-theory correlation covariance and zero cross blocks. DLS interpolates
+Gamma before inversion, with a=0 recovering NT and a=1 recovering ADF.
+NT denotes a quadratic weight for continuous and ordinal LS. The existing
+ML2S NT spelling still selects the ML discrepancy for compatibility.
+
+In R, `fit_model(..., estimator = "WLS", weight = "dls", dls_a = .3)` and
+prepared `estimate(..., weight = "dls", dls_a = .3)` select the same fit.
+`prepare_weight()` accepts the entire shared menu; `estimator = "DLS"` is
+also available. Existing estimator spellings select their corresponding
+weights. W supplies full WLS or diagonal DWLS weights for either source.
+Complete continuous empirical weights use retained raw rows; summary-only
+fits need supplied W. Pairwise MCAR empirical-weight construction is still
+unavailable; its existing ML/ULS/GLS and supplied-W paths remain available.
+
+Weights remain fixed during optimization. Native fitter labels identify the
+computational route (including WLS for continuous DWLS/DLS and ordinal
+GLS/DLS); `options$estimator` and `composition$weight` retain the selected
+method. Composition records `weight_frozen` and DLS a. Refits rebuild
+data-derived weights and preserve supplied weights. Ordinal selection changes
+only the consumed weight slot, retaining Stage-1 moments and sampling Gamma.
+
+The generic continuous LS `vcov()` dispatch now uses the existing weighted
+sandwich primitive with retained W, rather than the ML sandwich. This adds
+no estimated-weight influence correction or ordinary-user inference policy.
+Penalized and pairwise inference exclusions remain in force.
+
+Cached ordinal fit-only DWLS now honors an existing fitting W rather than
+rebuilding it from the sampling Gamma diagonal. Both threshold-profiled and
+full-threshold SNLLS follow this contract. Gamma remains unchanged.
+
+Validation: the final optimized shared working-tree build passed all 1,367
+tests excluding the heavy `parity` label (concurrent score work was present).
+Independent C++ checks cover the continuous metric formulas with/without means,
+DLS endpoints and supplied ordinal diagonal weights across bounded and both
+SNLLS routes. The complete/ordinal R grid covers every weight with unrestricted,
+PSD and barrier fitting, supplied full/diagonal W, prepared/string selectors,
+lean caches, refits, unchanged ordinal sampling inputs and continuous weighted
+`vcov()` dispatch. The full compiled and ordinary-user R suites pass against
+an isolated development installation, as does the prepared example. The
+compiled suite retains its documented two-level oracle skip and two existing
+covariance-admissibility warnings. Vendors and exports are synchronized;
+layering and whitespace checks pass.

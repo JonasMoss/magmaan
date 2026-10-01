@@ -2363,19 +2363,29 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                     W = NULL, optimizer = NULL, control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5,
                     stage1_regularization = NULL, psd = FALSE,
-                    covariance = NULL, barrier = NULL) {
+                    covariance = NULL, barrier = NULL, weight = NULL) {
   missing <- match.arg(missing)
   pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
   require_none_arg(test, "test", "test statistics")
   estimator <- toupper(as.character(estimator)[1L])
+  if (identical(estimator, "ADF")) estimator <- "WLS"
+  if (!is.null(weight)) {
+    if (identical(tolower(weight), "custom") && is.null(W)) stop("custom weight requires W")
+    selected <- .fixed_weight_method(weight)
+    if (estimator == "ML2S") stage2_weight <- switch(selected, GLS = "nt", WLS = "adf", tolower(selected))
+    else if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) estimator <- selected
+    else stop("weight selection requires a moment-quadratic estimator or ML2S")
+  }
+  if (identical(estimator, "ML2S") && !is.null(W)) stop("ML2S constructs weights from Stage 1; supplied W is unavailable")
+  if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) .fixed_weight_options(estimator, W, dls_a)
   if (!length(estimator) || is.na(estimator)) {
     stop("fit_model(): `estimator` must be a non-missing string")
   }
   if (estimator %in% c("MLM", "MLR")) {
     stop("fit_model(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
   }
-  allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS")
+  allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS", "DLS")
   if (!estimator %in% allowed) {
     stop("fit_model(): unsupported estimator '", estimator, "'")
   }
@@ -2414,8 +2424,13 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     if (!length(control)) control <- NULL
   }
   pairwise_stats <- pairwise_raw <- NULL
+  supplied_weight <- !is.null(W)
   done <- function(fit) {
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
+    if (!isTRUE(fit$ordinal) && estimator %in% c("DWLS", "WLS", "DLS") && !is.null(W)) fit$W <- W
+    if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
+      if (supplied_weight) "custom" else switch(estimator, ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+    if (estimator == "DLS") fit$stage2_dls_a <- dls_a
     fit$options$psd <- psd
     source <- if (identical(estimator, "ML2S")) "saturated_fiml" else if (identical(estimator, "FIML")) "raw_observed" else if (isTRUE(fit$ordinal)) "polychoric" else if (isTRUE(fit$mixed_ordinal)) "mixed_polyserial" else if (identical(missing, "pairwise")) "pairwise_mcar" else "complete_continuous"
     fit <- .finish_covariance_fit(fit, source, covariance, barrier,
@@ -2428,9 +2443,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     fit$options$barrier <- barrier
     # A PSD fit is refitted through fit_model() with the same constraint and
     # optimizer settings; ordinary fits keep their callers' estimator refit.
-    if (psd || !is.null(barrier) || !is.null(pairwise_stats)) fit$options$route <- list(fitter = "fit_model", args = list(
+    if (psd || !is.null(barrier) || !is.null(pairwise_stats) || estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$options$route <- list(fitter = "fit_model", args = list(
       estimator = estimator, covariance = covariance, barrier = barrier,
-      optimizer = optimizer, control = control, W = W, missing = missing,
+      optimizer = optimizer, control = control, W = if (supplied_weight) W else NULL, missing = missing,
       parameterization = parameterization, stage2_weight = stage2_weight,
       dls_a = dls_a, stage1_regularization = stage1_regularization))
     fit
@@ -2501,7 +2516,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     return(done(fit))
   }
 
-  if (ordinal_requested && estimator %in% c("ML", "DWLS", "WLS", "ULS")) {
+  if (ordinal_requested && estimator %in% c("ML", "GLS", "DLS", "DWLS", "WLS", "ULS")) {
     if (is.data.frame(data)) {
       ov_by_group <- model_matrix_rep(spec$partable)$ov_names
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
@@ -2510,7 +2525,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       # moment-by-moment NACOV, which dominates the whole call at even moderate
       # p (770 ms of a 1400 ms fit at p = 50, N = 1000) and is pure waste for
       # DWLS and ULS, which need the diagonal and the identity respectively.
-      want_full_wls <- identical(estimator, "WLS")
+      want_full_wls <- identical(estimator, "WLS") && is.null(W)
       # NB: DWLS and ULS do not need the dense NACOV either, and this call
       # materializes it unconditionally (490 ms of a 500 ms call at p = 50).
       # Rerouting through prepare_model/prepare_data/prepare_weight(full=FALSE)
@@ -2529,35 +2544,35 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
-      if (!is.null(barrier)) {
-        if (!is.null(W)) stop("fit_model(): ordinal barrier uses the selected ordinal weight, not W")
-        return(done(fit_ordinal_barrier_impl(augment_ordinal_partable(spec, data), data,
-          estimator = estimator, target = barrier$target, weight = barrier$weight,
-          optimizer = barrier_optimizer, control = control)))
-      }
       if (identical(estimator, "ML")) {
-        if (!bounds_is_none(bounds) || !is.null(W)) {
-          stop("fit_model(): ordinal association ML does not accept bounds or LS weights")
-        }
-        return(done(if (psd) {
-          frontier_fit_ml_psd(spec, data, optimizer = psd_optimizer, control = control)
-        } else fit_ml(spec, data, optimizer = optimizer %||% "nlopt-lbfgs", control = control)))
+        if (!bounds_is_none(bounds) || !is.null(W)) stop("fit_model(): ordinal association ML does not accept bounds or LS weights")
+        return(done(if (!is.null(barrier)) {
+          fit_ordinal_barrier_impl(augment_ordinal_partable(spec, data), data, estimator = "ML",
+            target = barrier$target, weight = barrier$weight, optimizer = barrier_optimizer, control = control)
+        } else if (psd) frontier_fit_ml_psd(spec, data, optimizer = psd_optimizer, control = control)
+        else fit_ml(spec, data, optimizer = optimizer %||% "nlopt-lbfgs", control = control)))
       }
-      if (psd) {
-        return(done(frontier_fit_ordinal_psd(spec, data, estimator = estimator,
-                                             optimizer = psd_optimizer,
-                                             control = control)))
+      original <- data
+      computational <- if (estimator %in% c("GLS", "DLS")) "WLS" else estimator
+      if (estimator %in% c("GLS", "DLS") || !is.null(W)) {
+        data <- ordinal_fixed_weight_stats_impl(data, estimator, W, dls_a)
       }
-      fit <- switch(estimator,
-                    DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer,
-                                            control = control, bounds = bounds),
-                    WLS  = fit_wls_ordinal(spec, data, optimizer = optimizer,
-                                           control = control, bounds = bounds),
-                    ULS  = fit_uls_ordinal(spec, data, optimizer = optimizer,
-                                           control = control, bounds = bounds))
+      fit <- if (!is.null(barrier)) {
+        fit_ordinal_barrier_impl(augment_ordinal_partable(spec, data), data,
+          estimator = computational, target = barrier$target, weight = barrier$weight,
+          optimizer = barrier_optimizer, control = control)
+      } else if (psd) frontier_fit_ordinal_psd(spec, data, estimator = computational,
+          optimizer = psd_optimizer, control = control)
+      else switch(computational,
+        DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds),
+        WLS = fit_wls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds),
+        ULS = fit_uls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds))
+      fit$ordinal_computational_weight <- computational
+      if (estimator %in% c("GLS", "DLS") || !is.null(W)) fit$stage1_ordinal <- original
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (estimator %in% c("GLS", "DLS") || !is.null(W)) stop("fit_model(): mixed fixed-weight expansion is deferred")
       if (!is.null(barrier)) stop("fit_model(): mixed/polyserial barrier fitting is deferred")
       if (identical(estimator, "ML")) {
         stop("fit_model(): association ML currently requires all-ordinal data; mixed/polyserial ML is unsupported")
@@ -2582,9 +2597,6 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     stop("fit_model(): ordinal estimators require a data.frame, magmaan_ordinal_data, or magmaan_mixed_ordinal_data")
   }
 
-  if (identical(estimator, "DWLS")) {
-    stop("fit_model(): DWLS requires ordered variables; pass `ordered =` or a categorical data object")
-  }
 
   if (is.list(data) && !is.data.frame(data) && !is.null(data$pi_hat) && !is.null(data$n_pair))
     missing <- "pairwise"
@@ -2600,14 +2612,16 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     } else if (!is.null(data$pi_hat) && !is.null(data$n_pair)) pairwise_stats <- data
     else stop("fit_model(): pairwise fitting needs raw data or pairwise moment provenance")
   } else if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
-  if (!is.null(barrier)) return(done(attach_complete_raw_data(fit_moments_barrier_impl(partable_arg(spec),
-      sample_stats_arg(data), estimator = estimator, W = W, target = barrier$target,
-      weight = barrier$weight, optimizer = barrier_optimizer, control = control), data)))
-  if (identical(estimator, "WLS") && is.null(W)) {
-    stop("fit_model(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
+  computational <- if (estimator %in% c("DWLS", "DLS")) "WLS" else estimator
+  if (estimator %in% c("DWLS", "WLS", "DLS") && is.null(W)) {
+    W <- fixed_moment_weight_impl(partable_arg(spec), sample_stats_arg(data), estimator,
+      raw_data = complete_raw_data(data), dls_a = dls_a)$W
   }
+  if (!is.null(barrier)) return(done(attach_complete_raw_data(fit_moments_barrier_impl(partable_arg(spec),
+      sample_stats_arg(data), estimator = computational, W = W, target = barrier$target,
+      weight = barrier$weight, optimizer = barrier_optimizer, control = control), data)))
   if (psd) {
-    fit <- switch(estimator,
+    fit <- switch(computational,
                   ML = frontier_fit_ml_psd(spec, data, optimizer = psd_optimizer,
                                            control = control),
                   ULS = frontier_fit_uls_psd(spec, data, optimizer = psd_optimizer,
@@ -2618,7 +2632,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                                              control = control))
     return(done(fit))
   }
-  fit <- switch(estimator,
+  fit <- switch(computational,
                 ML = fit_ml(spec, data, optimizer = optimizer,
                             control = control, bounds = bounds),
                 ULS = fit_uls(spec, data, optimizer = optimizer,
