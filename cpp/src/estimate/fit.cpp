@@ -786,158 +786,14 @@ psd_lifted_evaluation(
   return std::move(*eval);
 }
 
-fit_expected<model::Evaluation>
-catml_correlation_evaluation(model::Evaluation eval, const char* who) {
-  Eigen::Index total_vech = 0;
-  for (const auto& Sigma : eval.moments.sigma) {
-    total_vech += detail::vech_len(Sigma.rows());
-  }
-  if (eval.J_sigma.rows() != total_vech) {
-    return std::unexpected(fit_err(
-        FitError::Kind::NumericIssue,
-        std::string(who) + ": covariance Jacobian row count mismatch"));
-  }
-
-  model::Evaluation out;
-  out.moments.sigma.reserve(eval.moments.sigma.size());
-  out.J_sigma = Eigen::MatrixXd::Zero(eval.J_sigma.rows(),
-                                      eval.J_sigma.cols());
-  out.J_mu = Eigen::MatrixXd(0, eval.J_sigma.cols());
-
-  Eigen::Index off = 0;
-  for (std::size_t b = 0; b < eval.moments.sigma.size(); ++b) {
-    const Eigen::MatrixXd& Sigma = eval.moments.sigma[b];
-    if (Sigma.rows() != Sigma.cols()) {
-      return std::unexpected(fit_err(
-          FitError::Kind::NumericIssue,
-          std::string(who) + ": implied covariance block " +
-              std::to_string(b) + " is not square"));
-    }
-    const Eigen::Index p = Sigma.rows();
-    Eigen::VectorXd sd(p);
-    for (Eigen::Index i = 0; i < p; ++i) {
-      if (!(Sigma(i, i) > 0.0) || !std::isfinite(Sigma(i, i))) {
-        return std::unexpected(fit_err(
-            FitError::Kind::NonPositiveDefiniteSigma,
-            std::string(who) + ": implied covariance block " +
-                std::to_string(b) + " has a non-positive diagonal"));
-      }
-      sd(i) = std::sqrt(Sigma(i, i));
-    }
-
-    Eigen::MatrixXd R(p, p);
-    for (Eigen::Index c = 0; c < p; ++c) {
-      for (Eigen::Index r = c; r < p; ++r) {
-        const Eigen::Index rc = off + detail::vech_index(p, r, c);
-        if (r == c) {
-          R(r, c) = 1.0;
-          continue;
-        }
-        const double denom = sd(r) * sd(c);
-        const double rho = Sigma(r, c) / denom;
-        R(r, c) = rho;
-        R(c, r) = rho;
-        const Eigen::Index rr = off + detail::vech_index(p, r, r);
-        const Eigen::Index cc = off + detail::vech_index(p, c, c);
-        out.J_sigma.row(rc) =
-            eval.J_sigma.row(rc) / denom -
-            0.5 * rho *
-                (eval.J_sigma.row(rr) / Sigma(r, r) +
-                 eval.J_sigma.row(cc) / Sigma(c, c));
-      }
-    }
-    out.moments.sigma.push_back(std::move(R));
-    off += detail::vech_len(p);
-  }
-  return out;
-}
-
-optim::ScalarProblem
-catml_problem(const model::ModelEvaluator& ev,
-              const SampleStats& sample,
-              MlCache cache,
-              const char* who) {
-  optim::ScalarProblem prob;
-  prob.n_param = static_cast<Eigen::Index>(ev.param_locations().size());
-  prob.expand = [](const Eigen::VectorXd& theta) { return theta; };
-  prob.f = [&ev, sample, cache = std::move(cache), who](
-               const Eigen::VectorXd& theta, Eigen::VectorXd& grad) -> double {
-    auto eval = ev.evaluate(theta, true, false);
-    if (!eval.has_value()) {
-      grad = Eigen::VectorXd::Zero(theta.size());
-      return std::numeric_limits<double>::infinity();
-    }
-    auto corr = catml_correlation_evaluation(std::move(*eval), who);
-    if (!corr.has_value()) {
-      grad = Eigen::VectorXd::Zero(theta.size());
-      return std::numeric_limits<double>::infinity();
-    }
-    auto vg = ml_value_gradient(sample, cache, corr->moments,
-                                corr->J_sigma, corr->J_mu);
-    if (!vg.has_value()) {
-      grad = Eigen::VectorXd::Zero(theta.size());
-      return std::numeric_limits<double>::infinity();
-    }
-    grad = 0.5 * vg->gradient;
-    return 0.5 * vg->value;
-  };
-  return prob;
-}
-
-optim::ScalarProblem
-psd_catml_problem(const model::ModelEvaluator& ev,
-                  const model::MatrixRep& rep,
-                  const EqConstraints& con,
-                  const PsdLiftLayout& layout,
-                  const SampleStats& sample,
-                  MlCache cache,
-                  const char* who) {
-  const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
-  const auto locations = ev.param_locations();
-  const auto sigma_offset = psd_sigma_offsets(rep);
-
-  optim::ScalarProblem prob;
-  prob.n_param = n_x;
-  prob.expand = [&con, n_alpha = layout.n_alpha](const Eigen::VectorXd& x) {
-    return con.expand(x.head(n_alpha));
-  };
-  prob.f = [&ev, &rep, &con, &layout, sample, cache = std::move(cache),
-            locations, sigma_offset, n_x, who](
-               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
-    if (x.size() != n_x || !x.allFinite()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
-    auto eval = psd_lifted_evaluation(
-        ev, rep, con, layout, locations, sigma_offset, x, true, false);
-    if (!eval.has_value()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
-    auto corr = catml_correlation_evaluation(std::move(*eval), who);
-    if (!corr.has_value()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
-    auto vg = ml_value_gradient(sample, cache, corr->moments,
-                                corr->J_sigma, corr->J_mu);
-    if (!vg.has_value()) {
-      grad = Eigen::VectorXd::Zero(n_x);
-      return std::numeric_limits<double>::infinity();
-    }
-    grad = 0.5 * vg->gradient;
-    return 0.5 * vg->value;
-  };
-  return prob;
-}
-
 optim::ScalarProblem
 psd_ml_problem(const model::ModelEvaluator& ev,
                const model::MatrixRep& rep,
                const EqConstraints& con,
                const PsdLiftLayout& layout,
                const SampleStats& samp,
-               MlCache cache) {
+               MlCache cache,
+               model::MomentTarget target = model::MomentTarget::Covariance) {
   const Eigen::Index n_x = layout.n_alpha + layout.n_lift;
   const auto locations = ev.param_locations();
   const auto sigma_offset = psd_sigma_offsets(rep);
@@ -948,17 +804,26 @@ psd_ml_problem(const model::ModelEvaluator& ev,
     return con.expand(x.head(n_alpha));
   };
   prob.f = [&ev, &rep, &con, &layout, samp, cache = std::move(cache),
-            locations, sigma_offset, n_x](
+            locations, sigma_offset, n_x, target](
                const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
     if (x.size() != n_x || !x.allFinite()) {
       grad = Eigen::VectorXd::Zero(n_x);
       return std::numeric_limits<double>::infinity();
     }
     auto eval = psd_lifted_evaluation(
-        ev, rep, con, layout, locations, sigma_offset, x, true, true);
+        ev, rep, con, layout, locations, sigma_offset, x, true,
+        target == model::MomentTarget::Covariance);
     if (!eval.has_value()) {
       grad = Eigen::VectorXd::Zero(n_x);
       return std::numeric_limits<double>::infinity();
+    }
+    if (target == model::MomentTarget::Correlation) {
+      auto correlation = model::correlation_evaluation(std::move(*eval));
+      if (!correlation.has_value()) {
+        grad = Eigen::VectorXd::Zero(n_x);
+        return std::numeric_limits<double>::infinity();
+      }
+      *eval = std::move(*correlation);
     }
     auto vg = ml_value_gradient(samp, cache, eval->moments, eval->J_sigma,
                                 eval->J_mu);
@@ -1789,11 +1654,12 @@ psd_catml_derivative_probe(
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
   if (!start.has_value()) return std::unexpected(start.error());
-  auto cache = ml_prepare(sample);
+  auto cache = ml_prepare(sample, model::MomentTarget::Correlation);
   if (!cache.has_value()) return std::unexpected(cache.error());
 
-  const optim::ScalarProblem objective = psd_catml_problem(
-      pre->ev, rep, pre->con, *layout, sample, std::move(*cache), who);
+  const optim::ScalarProblem objective = psd_ml_problem(
+      pre->ev, rep, pre->con, *layout, sample, std::move(*cache),
+      model::MomentTarget::Correlation);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
   return probe_callbacks(objective, constraints, *start, layout->n_alpha,
@@ -3241,9 +3107,7 @@ catml_objective(const model::ModelEvaluator& ev, const data::OrdinalStats& stats
   SampleStats sample;
   sample.S = stats.R;
   sample.n_obs = stats.n_obs;
-  auto cache = ml_prepare(sample);
-  if (!cache) return std::unexpected(cache.error());
-  return catml_problem(ev, sample, std::move(*cache), "catml_objective");
+  return ml_objective(ev, sample, model::MomentTarget::Correlation);
 }
 
 fit_expected<Estimates>
@@ -3267,10 +3131,9 @@ fit_catml(spec::LatentStructure pt,
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto cache = ml_prepare(sample);
-  if (!cache.has_value()) return std::unexpected(cache.error());
-  const optim::ScalarProblem problem = catml_problem(
-      pre->ev, sample, std::move(*cache), who);
+  auto problem_or = ml_objective(pre->ev, sample, model::MomentTarget::Correlation);
+  if (!problem_or) return std::unexpected(problem_or.error());
+  const optim::ScalarProblem problem = std::move(*problem_or);
   auto result = compose_scalar_ml(problem, pre->con, pre->nl, x0, Bounds{},
                                   backend, opts, who);
   if (!result.has_value()) return std::unexpected(result.error());
@@ -3310,23 +3173,22 @@ fit_catml_psd(spec::LatentStructure pt,
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);
   if (!start.has_value()) return std::unexpected(start.error());
-  auto cache = ml_prepare(sample);
+  auto cache = ml_prepare(sample, model::MomentTarget::Correlation);
   if (!cache.has_value()) return std::unexpected(cache.error());
 
-  const optim::ScalarProblem problem = psd_catml_problem(
-      pre->ev, rep, pre->con, *layout, sample, std::move(*cache), who);
+  const optim::ScalarProblem problem = psd_ml_problem(
+      pre->ev, rep, pre->con, *layout, sample, std::move(*cache),
+      model::MomentTarget::Correlation);
   const PsdConstraintCallbacks constraints =
       psd_constraint_callbacks(pre->con, pre->nl, *layout);
   auto result = drive_psd_problem(
       problem, pt, *pre, *layout, constraints, *start, Bounds{}, Bounds{},
       backend, opts, psd_opts, who);
   if (!result.has_value()) return result;
-  auto full_cache = ml_prepare(sample);
-  if (full_cache.has_value()) {
-    const optim::ScalarProblem full_problem = catml_problem(
-        pre->ev, sample, std::move(*full_cache), who);
+  auto full_problem = ml_objective(pre->ev, sample, model::MomentTarget::Correlation);
+  if (full_problem) {
     attach_geometric_stationarity(
-        *result, pt, *pre, Bounds{}, full_problem, StationarityDomain::Psd);
+        *result, pt, *pre, Bounds{}, *full_problem, StationarityDomain::Psd);
   }
   result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;

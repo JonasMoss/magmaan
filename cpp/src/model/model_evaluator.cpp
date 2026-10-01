@@ -43,6 +43,69 @@ inline Eigen::Index vech_len(Eigen::Index p) noexcept {
 
 }  // namespace
 
+model_expected<Evaluation>
+correlation_evaluation(Evaluation evaluation) {
+  Eigen::Index total_vech = 0;
+  for (const auto& sigma : evaluation.moments.sigma) {
+    if (sigma.rows() != sigma.cols() || !sigma.allFinite()) {
+      return std::unexpected(make_err(ModelError::Kind::UnknownVariable,
+          "correlation target requires finite square covariance blocks"));
+    }
+    total_vech += vech_len(sigma.rows());
+  }
+  const bool with_jacobian = evaluation.J_sigma.rows() != 0;
+  if ((with_jacobian && evaluation.J_sigma.rows() != total_vech) ||
+      !evaluation.J_sigma.allFinite()) {
+    return std::unexpected(make_err(ModelError::Kind::UnknownVariable,
+        "correlation target covariance Jacobian is malformed"));
+  }
+
+  Evaluation out;
+  out.moments.sigma.reserve(evaluation.moments.sigma.size());
+  out.J_sigma = Eigen::MatrixXd::Zero(evaluation.J_sigma.rows(),
+                                      evaluation.J_sigma.cols());
+  out.J_mu = Eigen::MatrixXd(0, evaluation.J_sigma.cols());
+  Eigen::Index off = 0;
+  for (const auto& sigma : evaluation.moments.sigma) {
+    const Eigen::Index p = sigma.rows();
+    Eigen::VectorXd sd(p);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (!(sigma(i, i) > 0.0)) {
+        return std::unexpected(make_err(ModelError::Kind::NonPositiveDefinite,
+            "correlation target has a non-positive variance"));
+      }
+      sd(i) = std::sqrt(sigma(i, i));
+    }
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c + 1; r < p; ++r) {
+        const double denom = sd(r) * sd(c);
+        const double rho = sigma(r, c) / denom;
+        R(r, c) = rho;
+        R(c, r) = rho;
+        if (!with_jacobian) continue;
+        const Eigen::Index rc = off + vech_index(p, r, c);
+        const Eigen::Index rr = off + vech_index(p, r, r);
+        const Eigen::Index cc = off + vech_index(p, c, c);
+        out.J_sigma.row(rc) = evaluation.J_sigma.row(rc) / denom -
+            0.5 * rho * (evaluation.J_sigma.row(rr) / sigma(r, r) +
+                         evaluation.J_sigma.row(cc) / sigma(c, c));
+      }
+    }
+    if (!R.allFinite()) {
+      return std::unexpected(make_err(ModelError::Kind::NonPositiveDefinite,
+          "correlation target is non-finite"));
+    }
+    out.moments.sigma.push_back(std::move(R));
+    off += vech_len(p);
+  }
+  if (!out.J_sigma.allFinite()) {
+    return std::unexpected(make_err(ModelError::Kind::UnknownVariable,
+        "correlation target Jacobian is non-finite"));
+  }
+  return out;
+}
+
 model_expected<ModelEvaluator>
 ModelEvaluator::build(const spec::LatentStructure& pt, const MatrixRep& rep) {
   if (rep.dims.empty()) {

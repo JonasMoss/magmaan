@@ -31,6 +31,14 @@ struct Evaluation {
   Eigen::MatrixXd J_mu;
 };
 
+enum class MomentTarget : std::uint8_t { Covariance, Correlation };
+
+// Standardize symmetric covariance blocks and, when present, their vech
+// Jacobian. Diagonal correlation derivatives are zero. The correlation target
+// carries no mean moments; ordinal thresholds stay with the Stage-1 data.
+// Positive finite variances are required; definiteness is left to the objective.
+model_expected<Evaluation> correlation_evaluation(Evaluation evaluation);
+
 // Per-block primitive covariance matrices supplied by a caller that needs to
 // evaluate the same LISREL model on an alternative covariance
 // parameterization.  The frontier PSD-constrained estimator uses this to

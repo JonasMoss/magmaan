@@ -44,6 +44,10 @@ struct MlValueGradient {
 // sample S_b is not PD.
 fit_expected<MlCache>
 ml_prepare(const SampleStats& s);
+// Correlation-target preparation additionally validates unit diagonals and
+// excludes mean moments, without repairing or standardizing the input.
+fit_expected<MlCache>
+ml_prepare(const SampleStats& s, model::MomentTarget target);
 
 // F_ML(θ). The cache-free overload calls `ml_prepare` internally; pass a
 // cache on the hot path. Fails NonPositiveDefiniteSigma if any Σ_b is not PD.
@@ -77,6 +81,13 @@ ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
 // outlive the returned `ScalarProblem` (its closure borrows it by reference).
 fit_expected<optim::ScalarProblem>
 ml_objective(const model::ModelEvaluator& ev, const SampleStats& s);
+
+// Same discrepancy with an explicit model-moment target. Correlation input
+// must already have unit diagonals and no means. Its sampling law is supplied
+// separately by the caller; this objective grants no continuous-ML inference.
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::ModelEvaluator& ev, const SampleStats& s,
+             model::MomentTarget target);
 
 // Native FC-SEM counterpart. The value is the same normal-theory ML
 // discrepancy, but Σ(θ) is assembled by FcSemEvaluator; the first tranche uses

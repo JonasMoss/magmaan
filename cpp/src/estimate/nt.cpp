@@ -119,6 +119,31 @@ ml_prepare(const SampleStats& s) {
   return cache;
 }
 
+fit_expected<MlCache>
+ml_prepare(const SampleStats& s, model::MomentTarget target) {
+  if (target != model::MomentTarget::Covariance &&
+      target != model::MomentTarget::Correlation) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "ML input has an unknown moment target"));
+  }
+  if (target == model::MomentTarget::Correlation) {
+    for (const auto& mean : s.mean) {
+      if (mean.size() != 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "correlation ML input must not contain mean moments"));
+      }
+    }
+    for (const auto& S : s.S) {
+      if (S.rows() != S.cols() || !S.allFinite() ||
+          !S.diagonal().isApprox(Eigen::VectorXd::Ones(S.rows()), 1e-12)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "correlation ML input must have finite unit-diagonal matrices"));
+      }
+    }
+  }
+  return ml_prepare(s);
+}
+
 fit_expected<double>
 ml_value(const SampleStats& s, const model::ImpliedMoments& m) {
   auto cache = ml_prepare(s);
@@ -463,23 +488,36 @@ ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
 
 fit_expected<optim::ScalarProblem>
 ml_objective(const model::ModelEvaluator& ev, const SampleStats& s) {
-  auto cache = ml_prepare(s);
+  return ml_objective(ev, s, model::MomentTarget::Covariance);
+}
+
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::ModelEvaluator& ev, const SampleStats& s,
+             model::MomentTarget target) {
+  auto cache = ml_prepare(s, target);
   if (!cache.has_value()) return std::unexpected(cache.error());
 
   optim::ScalarProblem prob;
   prob.n_param = static_cast<Eigen::Index>(ev.n_free());
   prob.expand  = [](const Eigen::VectorXd& x) { return x; };
-  prob.f = [&ev, s, mc = std::move(*cache)](
+  prob.f = [&ev, s, mc = std::move(*cache), target](
                const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
-    auto eval = ev.evaluate(x, true, true);
+    auto eval = ev.evaluate(x, true, target == model::MomentTarget::Covariance);
     if (!eval.has_value()) {
-      grad.setZero();
+      grad = Eigen::VectorXd::Zero(x.size());
       return kInf;
+    }
+    if (target == model::MomentTarget::Correlation) {
+      eval = model::correlation_evaluation(std::move(*eval));
+      if (!eval.has_value()) {
+        grad = Eigen::VectorXd::Zero(x.size());
+        return kInf;
+      }
     }
     auto vg = ml_value_gradient(s, mc, eval->moments, eval->J_sigma,
                                 eval->J_mu);
     if (!vg.has_value()) {
-      grad.setZero();
+      grad = Eigen::VectorXd::Zero(x.size());
       return kInf;
     }
     // Objective scale: the optimiser minimises ½·F_ML so that est.fmin = ½F,

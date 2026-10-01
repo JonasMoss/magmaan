@@ -18,6 +18,7 @@
 
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/nt.hpp"
+#include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -370,4 +371,93 @@ TEST_CASE("ML: a model without free parameters is evaluated at its fixed values"
     CHECK(magmaan::estimate::fit_verdict(*est).status == magmaan::estimate::FitCheck::Passed);
     if (!gls) CHECK(est->fmin == doctest::Approx(0.5 * F).epsilon(1e-12));
   }
+}
+
+TEST_CASE("ML correlation target: value and gradient match independent reference") {
+  auto ev = must_build("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta(ev.n_free());
+  for (Eigen::Index k = 0; k < theta.size(); ++k) theta(k) = .6 + .04 * static_cast<double>(k);
+  SampleStats sample;
+  sample.S = {Eigen::MatrixXd::Constant(4, 4, .2)};
+  sample.S[0].diagonal().setOnes();
+  sample.n_obs = {400};
+  auto objective = magmaan::estimate::ml_objective(
+      ev, sample, magmaan::model::MomentTarget::Correlation);
+  REQUIRE(objective.has_value());
+
+  auto reference = [&](const Eigen::VectorXd& point) {
+    auto moments = ev.sigma(point);
+    REQUIRE(moments.has_value());
+    const auto& S = moments->sigma[0];
+    const Eigen::MatrixXd D = S.diagonal().array().sqrt().inverse().matrix().asDiagonal();
+    const Eigen::MatrixXd R = D * S * D;
+    return .5 * (std::log(R.determinant()) - std::log(sample.S[0].determinant())
+                 + (sample.S[0] * R.inverse()).trace() - 4);
+  };
+  Eigen::VectorXd gradient;
+  CHECK(objective->f(theta, gradient) == doctest::Approx(reference(theta)).epsilon(1e-12));
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    auto plus = theta; auto minus = theta;
+    constexpr double h = 1e-6;
+    plus(k) += h; minus(k) -= h;
+    CHECK(gradient(k) == doctest::Approx((reference(plus) - reference(minus)) / (2 * h))
+                              .epsilon(1e-6).scale(1.0));
+  }
+  theta.setConstant(-10);
+  CHECK_FALSE(std::isfinite(objective->f(theta, gradient)));
+  CHECK(gradient.size() == theta.size());
+  CHECK(gradient.isZero(0.0));
+}
+
+TEST_CASE("ML correlation target: invalid inputs fail without repair") {
+  auto ev = must_build("f =~ x1 + x2 + x3");
+  SampleStats sample;
+  sample.S = {Eigen::Matrix3d::Identity()}; sample.n_obs = {400};
+  sample.mean = {Eigen::Vector3d::Zero()};
+  CHECK_FALSE(magmaan::estimate::ml_objective(
+      ev, sample, magmaan::model::MomentTarget::Correlation).has_value());
+  sample.mean.clear();
+  sample.S[0](0, 0) = 2;
+  CHECK_FALSE(magmaan::estimate::ml_objective(
+      ev, sample, magmaan::model::MomentTarget::Correlation).has_value());
+  sample.S[0] << 1, .9, .7, .9, 1, .3, .7, .3, 1;
+  const Eigen::MatrixXd original = sample.S[0];
+  auto result = magmaan::estimate::ml_objective(
+      ev, sample, magmaan::model::MomentTarget::Correlation);
+  REQUIRE_FALSE(result.has_value());
+  CHECK(result.error().kind == magmaan::FitError::Kind::NonPositiveDefiniteSample);
+  CHECK(sample.S[0].isApprox(original, 0.0));
+}
+
+TEST_CASE("ML correlation target: model barrier composes with the shared objective") {
+  namespace frontier = magmaan::estimate::frontier;
+  auto ev = must_build("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta(ev.n_free());
+  for (Eigen::Index k = 0; k < theta.size(); ++k) theta(k) = .6 + .04 * static_cast<double>(k);
+  SampleStats sample;
+  sample.S = {Eigen::MatrixXd::Constant(4, 4, .2)};
+  sample.S[0].diagonal().setOnes(); sample.n_obs = {400};
+  auto base = magmaan::estimate::ml_objective(
+      ev, sample, magmaan::model::MomentTarget::Correlation);
+  REQUIRE(base.has_value());
+  auto layout = frontier::multiinfo_penalty_layout(
+      ev, theta, frontier::PenaltyTarget::Determinacy);
+  REQUIRE(layout.has_value());
+  auto problem = frontier::multiinfo_penalized_problem(*base, *layout, ev, .25, 400);
+  Eigen::VectorXd gradient;
+  const double value = problem.f(theta, gradient);
+  Eigen::VectorXd base_gradient;
+  const double unpenalized = base->f(theta, base_gradient);
+  CHECK(value > unpenalized);
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    auto plus = theta; auto minus = theta;
+    constexpr double h = 1e-6;
+    plus(k) += h; minus(k) -= h;
+    Eigen::VectorXd scratch;
+    const double fd = (problem.f(plus, scratch) - problem.f(minus, scratch)) / (2 * h);
+    CHECK(gradient(k) == doctest::Approx(fd).epsilon(1e-6).scale(1.0));
+  }
+  auto zero = frontier::multiinfo_penalized_problem(*base, *layout, ev, 0, 400);
+  CHECK(zero.f(theta, gradient) == unpenalized);
+  CHECK(gradient.isApprox(base_gradient, 0.0));
 }

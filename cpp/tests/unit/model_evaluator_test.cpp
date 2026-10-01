@@ -324,3 +324,88 @@ TEST_CASE("ModelEvaluator: rejects mismatched theta size") {
   auto sm = ev.sigma(wrong);
   CHECK_FALSE(sm.has_value());
 }
+
+TEST_CASE("Correlation target: grouped Jacobian and observation-scale invariance") {
+  using magmaan::model::correlation_evaluation;
+  magmaan::model::Evaluation evaluation;
+  Eigen::Matrix3d S;
+  S << 2.0, .4, .7, .4, 3.0, .5, .7, .5, 4.0;
+  Eigen::Matrix2d T;
+  T << 5.0, .8, .8, 2.0;
+  evaluation.moments.sigma = {S, T};
+  evaluation.moments.mu = {Eigen::Vector3d::Ones(), Eigen::Vector2d::Ones()};
+  evaluation.J_sigma = Eigen::MatrixXd::Identity(9, 9);
+  evaluation.J_mu = Eigen::MatrixXd::Ones(5, 9);
+  auto correlation = correlation_evaluation(evaluation);
+  REQUIRE(correlation.has_value());
+  CHECK(correlation->moments.mu.empty());
+  CHECK(correlation->J_mu.rows() == 0);
+
+  // Independent diagonal-matrix projection, packed in blockwise vech order.
+  auto reference = [](const std::vector<Eigen::MatrixXd>& blocks) {
+    Eigen::VectorXd result(9);
+    Eigen::Index pos = 0;
+    for (const auto& block : blocks) {
+      const Eigen::MatrixXd D = block.diagonal().array().sqrt().inverse()
+          .matrix().asDiagonal();
+      const Eigen::MatrixXd R = D * block * D;
+      for (Eigen::Index c = 0; c < R.cols(); ++c)
+        for (Eigen::Index r = c; r < R.rows(); ++r) result(pos++) = R(r, c);
+    }
+    return result;
+  };
+  Eigen::Index column = 0;
+  for (std::size_t b = 0; b < evaluation.moments.sigma.size(); ++b) {
+    const Eigen::Index p = evaluation.moments.sigma[b].rows();
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r, ++column) {
+        auto plus = evaluation.moments.sigma;
+        auto minus = plus;
+        constexpr double h = 1e-5;
+        plus[b](r, c) += h; minus[b](r, c) -= h;
+        if (r != c) { plus[b](c, r) += h; minus[b](c, r) -= h; }
+        const Eigen::VectorXd fd = (reference(plus) - reference(minus)) / (2 * h);
+        CHECK((correlation->J_sigma.col(column) - fd).cwiseAbs().maxCoeff() < 2e-10);
+        if (r == c) CHECK(correlation->J_sigma.row(column).isZero(0.0));
+      }
+    }
+  }
+
+  const std::vector<Eigen::VectorXd> units = {
+      (Eigen::Vector3d() << .02, 8, .5).finished(),
+      (Eigen::Vector2d() << 7, .03).finished()};
+  auto scaled = evaluation;
+  Eigen::Index row = 0;
+  for (std::size_t b = 0; b < units.size(); ++b) {
+    scaled.moments.sigma[b] = units[b].asDiagonal() * evaluation.moments.sigma[b]
+        * units[b].asDiagonal();
+    for (Eigen::Index c = 0; c < units[b].size(); ++c)
+      for (Eigen::Index r = c; r < units[b].size(); ++r)
+        scaled.J_sigma.row(row++) *= units[b](r) * units[b](c);
+  }
+  auto rescaled = correlation_evaluation(scaled);
+  REQUIRE(rescaled.has_value());
+  CHECK(rescaled->J_sigma.isApprox(correlation->J_sigma, 1e-12));
+  for (std::size_t b = 0; b < units.size(); ++b)
+    CHECK(rescaled->moments.sigma[b].isApprox(correlation->moments.sigma[b], 1e-12));
+
+  evaluation.J_sigma.resize(0, 0);
+  auto values = correlation_evaluation(evaluation);
+  REQUIRE(values.has_value());
+  CHECK(values->J_sigma.rows() == 0);
+  CHECK(values->moments.sigma[0].isApprox(correlation->moments.sigma[0], 0.0));
+}
+
+TEST_CASE("Correlation target: malformed Jacobians and invalid variances fail as values") {
+  magmaan::model::Evaluation evaluation;
+  evaluation.moments.sigma = {Eigen::Matrix2d::Identity()};
+  evaluation.J_sigma = Eigen::MatrixXd::Zero(2, 1);
+  CHECK_FALSE(magmaan::model::correlation_evaluation(evaluation).has_value());
+  evaluation.J_sigma.resize(0, 0);
+  evaluation.moments.sigma[0](0, 0) = 0;
+  auto result = magmaan::model::correlation_evaluation(evaluation);
+  REQUIRE_FALSE(result.has_value());
+  CHECK(result.error().kind == magmaan::ModelError::Kind::NonPositiveDefinite);
+  evaluation.moments.sigma[0].resize(2, 3);
+  CHECK_FALSE(magmaan::model::correlation_evaluation(evaluation).has_value());
+}
