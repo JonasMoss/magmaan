@@ -486,8 +486,8 @@ run_ordinal_task <- function(context, data, control) {
   if (identical(parameterization, "delta")) {
     results[[length(results) + 1L]] <- fit_record(
       context, "psd_catml", "unpaired", "", "catml", TRUE,
-      function() frontier_fit_catml_psd(
-        spec, stats, optimizer = "nlopt-slsqp", control = control
+      function() fit_model(
+        spec, stats, estimator = "ML", psd = TRUE, optimizer = "nlopt-slsqp", control = control
       ),
       function(fit) catml_objective(fit, stats), input_object = stats
     )
@@ -558,8 +558,8 @@ run_catml_nonpd_task <- function(context, data, control) {
   stats$R[[1L]] <- bad
   list(fit_record(
     context, "psd_catml_nonpd", "expected_rejection", "", "catml", TRUE,
-    function() frontier_fit_catml_psd(
-      spec, stats, optimizer = "nlopt-slsqp", control = control
+    function() fit_model(
+      spec, stats, estimator = "ML", psd = TRUE, optimizer = "nlopt-slsqp", control = control
     ),
     objective_call = NULL, input_object = stats,
     expected_outcome = "domain_rejection"

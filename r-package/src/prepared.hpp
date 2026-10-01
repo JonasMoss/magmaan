@@ -10,6 +10,7 @@ struct Model {
   std::string kind;
   std::string parameterization;
   std::vector<std::vector<std::int32_t>> levels;
+  std::optional<FitError> association_error;
 };
 struct Data {
   std::string kind;
@@ -67,6 +68,8 @@ SEXP model(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema) {
   m.starts = std::move(parsed.starts); m.kind = kind;
   m.parameterization = ordinal_parameterization_attr(partable);
   if (kind == "ordinal") {
+    auto valid = estimate::validate_ordinal_association_model(m.ctx.pt, &m.ctx.names.row_user);
+    if (!valid) m.association_error = valid.error();
     auto s = ordinal_stats_from_arg(Rcpp::List(schema.get()));
     m.levels = s.n_levels;
     auto ok = estimate::prepare_ordinal_delta_partable(m.ctx.pt, s, &m.starts);
@@ -276,13 +279,24 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
   if (d.kind == "ordinal") {
     const auto& s = w ? w->ordinal : d.ordinal;
     if (s.n_levels != m.levels) Rcpp::stop("magmaan: model/data category schemas differ");
-    if (method != "ULS" && !w) Rcpp::stop("magmaan: ordinal LS requires a prepared weight");
+    if (method == "ML" && m.association_error) stop_fit(*m.association_error);
+    if (method == "ML" && (w || bounds.isNotNull()))
+      Rcpp::stop("magmaan: ordinal association ML uses no LS weight or bounds");
+    if (method != "ML" && method != "ULS" && !w) Rcpp::stop("magmaan: ordinal LS requires a prepared weight");
     ctx.samp.S = s.R; ctx.samp.n_obs = s.n_obs; ctx.meanstructure = false;
     auto x0 = ordinal_starts_or_stop(ctx, s, m.starts);
-    e = estimate::fit_ordinal_bounded(ctx.pt, ctx.rep,
-        data::ordinal_moments_from_stats(s), &cache, bnd, plan, x0, backend, opts);
+    e = method == "ML"
+        ? estimate::frontier::fit_ml(ctx.pt, ctx.rep, s, x0, backend, opts)
+        : estimate::fit_ordinal_bounded(ctx.pt, ctx.rep,
+            data::ordinal_moments_from_stats(s), &cache, bnd, plan, x0, backend, opts);
     if (!e) stop_fit(e.error());
-    return ordinal_fit_result(ctx, s, *e, &m.starts, method.c_str(), m.parameterization.c_str());
+    auto out = ordinal_fit_result(ctx, s, *e, &m.starts, method.c_str(), m.parameterization.c_str());
+    if (e->association) {
+      Rcpp::List composition = out["composition"];
+      composition["algorithm"] = std::string(estimate::backend_name(backend));
+      out["composition"] = composition;
+    }
+    return out;
   }
   if (d.kind == "mixed") {
     const auto& s = w ? w->mixed : d.mixed;

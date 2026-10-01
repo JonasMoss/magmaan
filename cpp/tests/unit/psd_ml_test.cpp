@@ -93,6 +93,30 @@ LatentStructure ordinal_one_factor() {
       "x3 | t31 + t32");
 }
 
+magmaan::data::OrdinalStats association_stats(
+    const std::vector<Eigen::MatrixXd>& correlations) {
+  magmaan::data::OrdinalStats out;
+  for (std::size_t b = 0; b < correlations.size(); ++b) {
+    const Eigen::Index p = correlations[b].rows();
+    out.R.push_back(correlations[b]);
+    Eigen::VectorXd thresholds(2 * p);
+    std::vector<std::int32_t> ov, level;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      thresholds(2 * j) = -.5 + .1 * static_cast<double>(b);
+      thresholds(2 * j + 1) = .5 + .1 * static_cast<double>(b);
+      ov.push_back(static_cast<std::int32_t>(j));
+      ov.push_back(static_cast<std::int32_t>(j));
+      level.push_back(1); level.push_back(2);
+    }
+    out.thresholds.push_back(std::move(thresholds));
+    out.threshold_ov.push_back(std::move(ov));
+    out.threshold_level.push_back(std::move(level));
+    out.n_obs.push_back(400 + 100 * static_cast<std::int64_t>(b));
+    out.n_levels.emplace_back(static_cast<std::size_t>(p), 3);
+  }
+  return out;
+}
+
 LatentStructure mixed_ordinal_one_factor() {
   BuildOptions options;
   options.meanstructure = true;
@@ -322,11 +346,11 @@ TEST_CASE("PSD catML derivatives agree with central differences and the "
          probe->finite_difference_constraint_jacobian)
             .cwiseAbs().maxCoeff() < 3e-7);
 
-  auto ordinary = magmaan::estimate::frontier::fit_catml(
+  auto ordinary = magmaan::estimate::frontier::fit_ml(
       pt, *rep, stats, *start, Backend::NloptLbfgs, strict_options());
   REQUIRE_MESSAGE(ordinary.has_value(), "ordinary catML fit failed: "
       << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
-  auto fit = magmaan::estimate::frontier::fit_catml_psd(
+  auto fit = magmaan::estimate::frontier::fit_ml_psd(
       pt, *rep, stats, ordinary->theta, Backend::NloptSlsqp,
       strict_options());
   REQUIRE_MESSAGE(fit.has_value(), "PSD catML fit failed: "
@@ -358,7 +382,7 @@ TEST_CASE("PSD catML rejects a non-PD polychoric matrix without repairing it") {
       pt, *rep, start_stats, {});
   REQUIRE(start.has_value());
 
-  auto fit = magmaan::estimate::frontier::fit_catml_psd(
+  auto fit = magmaan::estimate::frontier::fit_ml_psd(
       pt, *rep, stats, *start, Backend::NloptSlsqp, strict_options());
   REQUIRE_FALSE(fit.has_value());
   CHECK(fit.error().kind ==
@@ -1361,4 +1385,126 @@ TEST_CASE("PSD ML coordinate scales follow observed units") {
       }
     }
   }
+}
+
+TEST_CASE("ordinal association ML freezes saturated thresholds and reports active rank") {
+  auto pt = ordinal_one_factor();
+  Eigen::Matrix3d R;
+  R << 1, .56, .48, .56, 1, .336, .48, .336, 1;
+  auto stats = association_stats({R});
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(pt, stats).has_value());
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+  for (std::size_t r = 0; r < pt.size(); ++r)
+    if (pt.op[r] == magmaan::parse::Op::Threshold) (*start)(pt.free[r] - 1) = 99;
+  auto fit = magmaan::estimate::frontier::fit_ml(pt, *rep, stats, *start,
+                                               Backend::NloptLbfgs, strict_options());
+  REQUIRE_MESSAGE(fit.has_value(), (fit ? "" : fit.error().detail));
+  REQUIRE(fit->association.has_value());
+  CHECK(fit->association->n_moments == 3);
+  CHECK(fit->association->n_coordinates == 3);
+  CHECK(fit->association->rank == 3);
+  CHECK(fit->association->df == 0);
+  CHECK(fit->theta.size() == pt.n_free());
+  CHECK(fit->fmin == doctest::Approx(0).scale(1).epsilon(1e-10));
+  Eigen::Index k = 0;
+  for (std::size_t r = 0; r < pt.size(); ++r)
+    if (pt.op[r] == magmaan::parse::Op::Threshold)
+      CHECK(fit->theta(pt.free[r] - 1) == stats.thresholds[0](k++));
+}
+
+TEST_CASE("ordinal association ML overidentification, group equalities and identification charts") {
+  const std::string syntax =
+      "f =~ x1 + l2*x2 + l3*x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2";
+  Eigen::Vector4d loading(.75, .65, .55, .45);
+  Eigen::MatrixXd R = loading * loading.transpose();
+  R.diagonal().setOnes();
+  R(0, 1) += .02; R(1, 0) += .02;
+  double single_value = 0;
+  for (bool std_lv : {false, true}) {
+    BuildOptions options;
+    options.std_lv = std_lv;
+    auto pt = lavaanify(syntax, options);
+    const auto stats = association_stats({R});
+    REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(pt, stats).has_value());
+    auto rep = build_matrix_rep(pt); REQUIRE(rep.has_value());
+    auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+    REQUIRE(start.has_value());
+    auto fit = magmaan::estimate::frontier::fit_ml(pt, *rep, stats, *start,
+                                                 Backend::NloptLbfgs, strict_options());
+    REQUIRE_MESSAGE(fit.has_value(), (fit ? "" : fit.error().detail));
+    REQUIRE(fit->association.has_value());
+    CHECK(fit->association->rank == 4);
+    CHECK(fit->association->df == 2);
+    CHECK(fit->fmin > 0);
+    if (!std_lv) single_value = fit->fmin;
+    else CHECK(fit->fmin == doctest::Approx(single_value).epsilon(1e-7));
+  }
+  BuildOptions options;
+  options.n_groups = 2;
+  options.group_equal = {magmaan::spec::GroupEqual::Loadings};
+  auto pt = lavaanify(syntax, options);
+  const auto stats = association_stats({R, R});
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(pt, stats).has_value());
+  auto rep = build_matrix_rep(pt); REQUIRE(rep.has_value());
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+  auto fit = magmaan::estimate::frontier::fit_ml(pt, *rep, stats, *start,
+                                               Backend::NloptLbfgs, strict_options());
+  REQUIRE_MESSAGE(fit.has_value(), (fit ? "" : fit.error().detail));
+  REQUIRE(fit->association.has_value());
+  CHECK(fit->association->n_moments == 12);
+  CHECK(fit->association->rank == 5);
+  CHECK(fit->association->df == 7);
+  CHECK(fit->fmin == doctest::Approx(single_value).epsilon(1e-6));
+  CHECK(fit->diagnostics.lin_eq_residual_inf < 1e-9);
+}
+
+TEST_CASE("ordinal association ML rejects inactive constraints and unidentified scales") {
+  auto pt = ordinal_one_factor();
+  Eigen::Matrix3d R;
+  R << 1, .56, .48, .56, 1, .336, .48, .336, 1;
+  const auto stats = association_stats({R});
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(pt, stats).has_value());
+  auto rep = build_matrix_rep(pt); REQUIRE(rep.has_value());
+  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+  REQUIRE(start.has_value());
+  auto constrained = pt;
+  std::int32_t threshold = -1;
+  for (std::size_t r = 0; r < pt.size(); ++r)
+    if (pt.op[r] == magmaan::parse::Op::Threshold) threshold = pt.free[r] - 1;
+  REQUIRE(threshold >= 0);
+  constrained.lin_constraint_R.assign(static_cast<std::size_t>(pt.n_free()), 0);
+  constrained.lin_constraint_R[static_cast<std::size_t>(threshold)] = 1;
+  constrained.lin_constraint_d = {(*start)(threshold)};
+  CHECK_FALSE(magmaan::estimate::ordinal_association_layout(constrained, *rep, stats, *start));
+  constrained = pt;
+  constrained.group_equal = {magmaan::spec::GroupEqual::Thresholds};
+  CHECK_FALSE(magmaan::estimate::ordinal_association_layout(constrained, *rep, stats, *start));
+  constrained = pt;
+  std::vector<std::int8_t> user(pt.size(), 0);
+  for (std::size_t r = 0; r < pt.size(); ++r) {
+    if (pt.op[r] == magmaan::parse::Op::Covariance && pt.lhs_var[r] == pt.rhs_var[r] &&
+        pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[r])] >= 0) {
+      user[r] = 1; constrained.free[r] = pt.n_free() + 1;
+      break;
+    }
+  }
+  CHECK_FALSE(magmaan::estimate::validate_ordinal_association_model(constrained, &user));
+  BuildOptions unidentified;
+  unidentified.auto_fix_first = false;
+  auto loose = lavaanify(
+      "f =~ x1 + x2 + x3\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2", unidentified);
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(loose, stats).has_value());
+  auto loose_rep = build_matrix_rep(loose); REQUIRE(loose_rep.has_value());
+  auto loose_start = magmaan::estimate::ordinal_start_values(loose, *loose_rep, stats, {});
+  REQUIRE(loose_start.has_value());
+  auto layout = magmaan::estimate::ordinal_association_layout(loose, *loose_rep, stats, *loose_start);
+  REQUIRE(layout.has_value());
+  auto evaluator = magmaan::model::ModelEvaluator::build(loose, *loose_rep);
+  REQUIRE(evaluator.has_value());
+  CHECK_FALSE(magmaan::estimate::ordinal_association_info(*evaluator, *layout, layout->theta));
 }

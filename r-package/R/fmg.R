@@ -1138,6 +1138,11 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL, weight = NULL,
 #' @export
 fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
                          data = NULL) {
+  if (!is.null(fit$association)) {
+    stop("fit_measures(): ordinal association ML requires a validated Stage-1 ",
+         "sampling/inference contract; Gaussian likelihood and fit-test measures ",
+         "are not available", call. = FALSE)
+  }
   if (.fmg_is_fiml(fit)) {
     if (!is.null(baseline)) {
       stop("fit_measures(): FIML fit measures use the FIML independence ",

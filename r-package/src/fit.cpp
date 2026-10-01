@@ -2083,6 +2083,25 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   out["ordinal_stats"] = stats_r;
   out["thresholds"] = stats_r["thresholds"];
   out["polychoric"] = stats_r["R"];
+  if (est.association) {
+    const auto& a = *est.association;
+    out["association"] = Rcpp::List::create(
+        Rcpp::_["n_moments"] = a.n_moments,
+        Rcpp::_["n_coordinates"] = a.n_coordinates,
+        Rcpp::_["rank"] = a.rank, Rcpp::_["df"] = a.df);
+    out["npar_active"] = a.n_coordinates;
+    out["df"] = a.df;
+    out["stage1_policy"] = "unchanged_polychoric";
+    out["covariance_policy"] = "unrestricted";
+    out["composition"] = Rcpp::List::create(
+        Rcpp::_["moment_source"] = "polychoric",
+        Rcpp::_["moment_target"] = "correlation",
+        Rcpp::_["discrepancy"] = "ML",
+        Rcpp::_["covariance_domain"] = "unrestricted",
+        Rcpp::_["model_penalty"] = "none",
+        Rcpp::_["thresholds"] = "saturated_stage1",
+        Rcpp::_["inference"] = "not_validated");
+  }
   return out;
 }
 
@@ -6188,32 +6207,31 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
   return out;
 }
 
-// Categorical ML on the Stage-1 polychoric matrix with PSD primitive LISREL
-// covariance blocks. Thresholds retain their saturated Stage-1 estimates.
+// ML discrepancy on Stage-1 polychoric correlations, ordinary or PSD.
 //
 // [[Rcpp::export]]
-Rcpp::List frontier_fit_catml_psd_impl(
+Rcpp::List fit_ml_ordinal_impl(
     SEXP partable, Rcpp::List ordinal_stats,
+    bool psd = false,
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
     double feasibility_tol = 1e-6) {
   const std::string parameterization_name =
       ordinal_parameterization_attr(partable);
-  if (parameterization_name != "delta") {
-    Rcpp::stop("magmaan: frontier_fit_catml_psd currently requires the "
-               "delta ordinal parameterization");
-  }
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
-      partable_from_arg(partable, "frontier_fit_catml_psd");
+      partable_from_arg(partable, "fit_ml (ordinal)");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
   ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  auto valid = magmaan::estimate::validate_ordinal_association_model(
+      ctx.pt, &ctx.names.row_user);
+  if (!valid) stop_fit(valid.error());
   auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
-      ctx.pt, stats, &starts);
+      ctx.pt, stats, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -6227,19 +6245,31 @@ Rcpp::List frontier_fit_catml_psd_impl(
   const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
-          ? magmaan::estimate::Backend::NloptSlsqp
+          ? (psd ? magmaan::estimate::Backend::NloptSlsqp
+                 : magmaan::estimate::Backend::NloptLbfgs)
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
-  auto fit_or = magmaan::estimate::frontier::fit_catml_psd(
-      ctx.pt, ctx.rep, stats, x0, backend, optim_opts_from(control), psd_opts);
+  auto fit_or = psd
+      ? magmaan::estimate::frontier::fit_ml_psd(
+          ctx.pt, ctx.rep, stats, x0, backend, optim_opts_from(control),
+          psd_opts, &ctx.names.row_user)
+      : magmaan::estimate::frontier::fit_ml(
+          ctx.pt, ctx.rep, stats, x0, backend, optim_opts_from(control), &ctx.names.row_user);
   if (!fit_or.has_value()) stop_fit(fit_or.error());
   const magmaan::estimate::Estimates est = std::move(*fit_or);
   Rcpp::List out = ordinal_fit_result(
-      ctx, stats, est, &starts, "CATML", parameterization_name.c_str());
-  out["covariance_policy"] = "psd";
-  out["stage1_policy"] = "unchanged_polychoric";
+      ctx, stats, est, &starts, "ML", parameterization_name.c_str());
+  // Preserve the supplied Stage-1 objects, including R names and metadata.
+  out["ordinal_stats"] = ordinal_stats;
+  out["thresholds"] = ordinal_stats["thresholds"];
+  out["polychoric"] = ordinal_stats["R"];
+  out["covariance_policy"] = psd ? "psd" : "unrestricted";
+  Rcpp::List composition = out["composition"];
+  composition["covariance_domain"] = psd ? "psd" : "unrestricted";
+  composition["algorithm"] = std::string(magmaan::estimate::backend_name(backend));
+  out["composition"] = composition;
   return out;
 }
 
@@ -6668,13 +6698,17 @@ Rcpp::List model_implied(Rcpp::List fit) {
     return Rcpp::List::create(Rcpp::_["sigma"]=sigma,Rcpp::_["mu"]=mu);
   }
   Ctx ctx = ctx_from_fit(fit);
-  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit, true);
   auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
   if (!ev_or.has_value()) stop_model(ev_or.error());
   const lvm::ModelEvaluator ev = std::move(*ev_or);
-  auto im_or = ev.sigma(est.theta);
-  if (!im_or.has_value()) stop_model(im_or.error());
-  const lvm::ImpliedMoments& im = *im_or;
+  auto eval = ev.evaluate(est.theta, false, false);
+  if (!eval) stop_model(eval.error());
+  if (est.association) {
+    eval = lvm::correlation_evaluation(std::move(*eval));
+    if (!eval) stop_model(eval.error());
+  }
+  const lvm::ImpliedMoments& im = eval->moments;
 
   Rcpp::List sigma(static_cast<R_xlen_t>(im.sigma.size()));
   for (std::size_t b = 0; b < im.sigma.size(); ++b)

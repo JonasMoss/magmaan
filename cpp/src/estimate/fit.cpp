@@ -1649,10 +1649,13 @@ psd_catml_derivative_probe(
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, theta_start, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
+  auto association = ordinal_association_layout(pt, rep, stats, theta_start);
+  if (!association) return std::unexpected(association.error());
+  pre->con = association->constraints;
   auto layout = build_psd_lift_layout(pt, rep, pre->con);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
-      *layout, pre->con, theta_start, options.start_eigen_floor);
+      *layout, pre->con, association->theta, options.start_eigen_floor);
   if (!start.has_value()) return std::unexpected(start.error());
   auto cache = ml_prepare(sample, model::MomentTarget::Correlation);
   if (!cache.has_value()) return std::unexpected(cache.error());
@@ -3102,23 +3105,19 @@ fit_ordinal_psd(spec::LatentStructure pt,
   return result;
 }
 
-fit_expected<optim::ScalarProblem>
-catml_objective(const model::ModelEvaluator& ev, const data::OrdinalStats& stats) {
-  SampleStats sample;
-  sample.S = stats.R;
-  sample.n_obs = stats.n_obs;
-  return ml_objective(ev, sample, model::MomentTarget::Correlation);
-}
-
 fit_expected<Estimates>
-fit_catml(spec::LatentStructure pt,
+fit_ml(spec::LatentStructure pt,
           const model::MatrixRep& rep,
           const data::OrdinalStats& stats,
           const Eigen::VectorXd& x0,
           Backend backend,
-          OptimOptions opts) {
-  constexpr const char* who = "fit_catml";
-  if (auto ok = prepare_ordinal_delta_partable(pt, stats, nullptr);
+          OptimOptions opts,
+          const std::vector<std::int8_t>* row_user) {
+  constexpr const char* who = "fit_ml (ordinal associations)";
+  if (auto ok = validate_ordinal_association_model(pt, row_user); !ok) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
       !ok.has_value()) return std::unexpected(ok.error());
   if (x0.size() != pt.n_free()) {
     return std::unexpected(fit_err(
@@ -3131,31 +3130,41 @@ fit_catml(spec::LatentStructure pt,
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
+  auto association = ordinal_association_layout(pt, rep, stats, x0);
+  if (!association) return std::unexpected(association.error());
+  pre->con = association->constraints;
   auto problem_or = ml_objective(pre->ev, sample, model::MomentTarget::Correlation);
   if (!problem_or) return std::unexpected(problem_or.error());
   const optim::ScalarProblem problem = std::move(*problem_or);
-  auto result = compose_scalar_ml(problem, pre->con, pre->nl, x0, Bounds{},
+  auto result = compose_scalar_ml(problem, pre->con, pre->nl, association->theta, Bounds{},
                                   backend, opts, who);
   if (!result.has_value()) return std::unexpected(result.error());
   attach_diagnostics(*result, pt, *pre, Bounds{});
   attach_geometric_stationarity(
       *result, pt, *pre, Bounds{}, problem);
+  auto info = ordinal_association_info(pre->ev, *association, result->theta);
+  if (!info) return std::unexpected(info.error());
+  result->association = *info;
   return result;
 }
 
 fit_expected<Estimates>
-fit_catml_psd(spec::LatentStructure pt,
+fit_ml_psd(spec::LatentStructure pt,
               const model::MatrixRep& rep,
               const data::OrdinalStats& stats,
               const Eigen::VectorXd& x0,
               Backend backend,
               OptimOptions opts,
-              PsdFitOptions psd_opts) {
-  constexpr const char* who = "fit_catml_psd";
+              PsdFitOptions psd_opts,
+              const std::vector<std::int8_t>* row_user) {
+  constexpr const char* who = "fit_ml_psd (ordinal associations)";
   if (auto ok = validate_psd_fit_options(psd_opts, who); !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  if (auto ok = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto ok = validate_ordinal_association_model(pt, row_user); !ok) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
       !ok.has_value()) return std::unexpected(ok.error());
   if (x0.size() != pt.n_free()) {
     return std::unexpected(fit_err(
@@ -3168,10 +3177,13 @@ fit_catml_psd(spec::LatentStructure pt,
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
+  auto association = ordinal_association_layout(pt, rep, stats, x0);
+  if (!association) return std::unexpected(association.error());
+  pre->con = association->constraints;
   auto layout = build_psd_lift_layout(pt, rep, pre->con);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
-      *layout, pre->con, x0, psd_opts.start_eigen_floor);
+      *layout, pre->con, association->theta, psd_opts.start_eigen_floor);
   if (!start.has_value()) return std::unexpected(start.error());
   auto cache = ml_prepare(sample, model::MomentTarget::Correlation);
   if (!cache.has_value()) return std::unexpected(cache.error());
@@ -3191,6 +3203,9 @@ fit_catml_psd(spec::LatentStructure pt,
         *result, pt, *pre, Bounds{}, *full_problem, StationarityDomain::Psd);
   }
   result->diagnostics.stationarity_domain = StationarityDomain::Psd;
+  auto info = ordinal_association_info(pre->ev, *association, result->theta);
+  if (!info) return std::unexpected(info.error());
+  result->association = *info;
   return result;
 }
 

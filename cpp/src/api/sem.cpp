@@ -821,10 +821,27 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   }
 
   if (const auto *stats = data->ordinal()) {
-    if (!is_ordinal_estimator(estimator)) {
+    if (estimator.kind != EstimatorKind::ML && !is_ordinal_estimator(estimator)) {
       return std::unexpected(make_error(
           ErrorStage::UnsupportedCombination,
-          "ordinal data require ordinal_dwls(), ordinal_wls(), or dwls()"));
+          "ordinal data require ml(), ordinal_dwls(), ordinal_wls(), or dwls()"));
+    }
+    if (estimator.kind == EstimatorKind::ML) {
+      if (estimator.bounds_mode != BoundsMode::None) {
+        return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+            "ordinal association ML does not accept bounds"));
+      }
+      if (auto ok = estimate::validate_ordinal_association_model(pt, &model->names().row_user); !ok) {
+        return std::unexpected(make_error(ErrorStage::Fit, ok.error()));
+      }
+      auto x0 = ordinal_start_values(*model, *stats, estimator);
+      if (!x0) return std::unexpected(x0.error());
+      auto est = estimate::frontier::fit_ml(
+          pt, rep, *stats, *x0, backend_from(estimator.optimizer_spec),
+          estimator.optimizer_spec.options, &model->names().row_user);
+      if (!est) return std::unexpected(make_error(ErrorStage::Fit, est.error()));
+      estimator.ordinal_moments = true;
+      return Fit(std::move(model), std::move(data), std::move(*est), std::move(estimator));
     }
     auto x0 = ordinal_start_values(*model, *stats, estimator);
     if (!x0) {
@@ -846,7 +863,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   }
 
   if (const auto *stats = data->mixed_ordinal()) {
-    if (!is_ordinal_estimator(estimator)) {
+    if (estimator.kind == EstimatorKind::ML || !is_ordinal_estimator(estimator)) {
       return std::unexpected(make_error(
           ErrorStage::UnsupportedCombination,
           "mixed ordinal data require ordinal_dwls(), ordinal_wls(), or dwls()"));
@@ -1246,6 +1263,10 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit) {
 //   - FIML (raw data)          → fiml_extras.chi2 (the LRT −2(logl−logl_sat))
 //   - ordinal / mixed          → robust_ordinal.chisq_standard (2N·fmin)
 Result<TestResult> test(const Fit &fit, TestSpec spec) {
+  if (fit.estimates().association) {
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "ordinal association ML has no validated fit-test calibration"));
+  }
   if (spec.kind != TestKind::StandardChiSquare) {
     return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
                                       "unsupported test statistic"));
@@ -1344,6 +1365,10 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
 }
 
 Result<FitMeasuresResult> fit_measures(const Fit &fit) {
+  if (fit.estimates().association) {
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "ordinal association ML has no validated likelihood or fit-test measures"));
+  }
   if (const auto *stats = fit.data().sample_stats()) {
     // Complete-data ML and continuous least-squares (ULS/GLS/WLS): the
     // baseline χ², CFI/TLI/RMSEA, SRMR and information criteria are all

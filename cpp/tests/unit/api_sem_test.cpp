@@ -602,6 +602,26 @@ TEST_CASE("api frontier score flips support a nested FIML pair") {
   CHECK(projected->statistic == doctest::Approx(global->flip.statistic_effective));
 }
 
+TEST_CASE("api ML dispatches ordinal associations without granting Gaussian inference") {
+  const auto model = magmaan::api::model_from_lavaan(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n");
+  REQUIRE_OK(model);
+  const auto stats = magmaan::data::ordinal_stats_from_integer_data({ordinal_score_block()});
+  REQUIRE_OK(stats);
+  const auto data = magmaan::api::data_from_ordinal(*model, *stats);
+  REQUIRE_OK(data);
+  const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ml());
+  REQUIRE_OK(fit);
+  CHECK(fit->estimator() == magmaan::api::EstimatorKind::ML);
+  REQUIRE(fit->estimates().association.has_value());
+  CHECK(fit->estimates().association->rank == 4);
+  CHECK(fit->estimates().association->df == 2);
+  CHECK_FALSE(magmaan::api::standard_errors(*fit, magmaan::api::expected_information()));
+  CHECK_FALSE(magmaan::api::test(*fit, magmaan::api::standard_chi_square()));
+  CHECK_FALSE(magmaan::api::fit_measures(*fit));
+}
+
 TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   const auto model = magmaan::api::model_from_lavaan(ordinal_syntax());
   REQUIRE_OK(model);

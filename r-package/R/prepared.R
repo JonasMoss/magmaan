@@ -159,7 +159,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   }
   if (is.null(estimator)) estimator <- switch(data$kind, raw = "FIML", ordinal = "DWLS", mixed = "DWLS", "ML")
   estimator <- toupper(estimator)
-  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ULS", "DWLS", "WLS"),
+  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "DWLS", "WLS"),
                     mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS"))
   if (length(estimator) != 1L || !estimator %in% allowed) stop("estimate(): unsupported estimator for this data kind")
   if (is.null(weight) && estimator %in% c("DWLS", "WLS")) weight <- prepare_weight(data, estimator)

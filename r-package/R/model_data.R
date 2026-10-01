@@ -730,7 +730,7 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
         # lavaan vetoes the release and they stay fixed like group 1.
         if (release_thresholds && b >= 2L && !binary) next
         idx <- pt$op == "~~" & pt$lhs == pt$rhs & pt$lhs == ovs[[j]] &
-          pt$group == b
+          pt$group == b & pt$user == 0L
         pt$free[idx] <- 0L
         pt$ustart[idx] <- 1.0
       }
@@ -1341,13 +1341,18 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
 # Ceres extras; see the C++ `Backend` enum docstring for the supported strings).
 fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                    bounds = NULL) {
+  if (inherits(data, "magmaan_ordinal_data")) {
+    if (!bounds_is_none(bounds)) stop("fit_ml(): ordinal association ML does not accept bounds")
+    return(fit_ml_ordinal_impl(augment_ordinal_partable(model, data), data,
+                               optimizer = optimizer, control = control))
+  }
   b <- bounds_arg(bounds, model, data, "fit_ml")
   fit <- fit_ml_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control, bounds = b)
   attach_complete_raw_data(fit, data)
 }
 
-# Frontier complete-data ML over PSD primitive LISREL covariance matrices.
+# Frontier ML over PSD primitive LISREL covariance matrices.
 # The returned fit retains the ordinary partable parameterization; the
 # Cholesky factors used by the optimizer are intentionally not exposed as
 # model parameters.
@@ -1362,6 +1367,14 @@ frontier_fit_ml_psd <- function(
     model <- model_spec(model)
   }
   if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
+  if (inherits(data, "magmaan_ordinal_data")) {
+    fit <- fit_ml_ordinal_impl(
+      augment_ordinal_partable(model, data), data, psd = TRUE,
+      optimizer = optimizer, control = control,
+      start_eigen_floor = start_eigen_floor, feasibility_tol = feasibility_tol)
+    return(.finish_frontier_fit(fit, model, "ML", "frontier_fit_ml_psd",
+                               .route_args(environment(), sys.function()), missing))
+  }
   fit <- frontier_fit_ml_psd_impl(
     partable_arg(model), sample_stats_arg(data),
     optimizer = optimizer, control = control,
@@ -2172,21 +2185,6 @@ frontier_fit_ordinal_psd <- function(
   .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_ordinal_psd", .route_args(environment(), sys.function()))
 }
 
-# Frontier categorical ML: normal-theory ML applied to the Stage-1
-# polychoric correlation matrix, with saturated thresholds and PSD primitive
-# model covariance blocks. The input polychoric matrix must itself be PD.
-frontier_fit_catml_psd <- function(
-    model, data, optimizer = "nlopt-slsqp", control = NULL,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-  pt <- augment_ordinal_partable(model, data)
-  fit <- frontier_fit_catml_psd_impl(
-    pt, data, optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
-    feasibility_tol = feasibility_tol)
-  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, fit$estimator %||% "CATML",
-                       "frontier_fit_catml_psd", .route_args(environment(), sys.function()))
-}
-
 ordinal_stage2_weight_blocks <- function(data,
                                          stage2_weight = c("dwls", "wls", "uls",
                                                            "nt", "gls", "dls",
@@ -2475,7 +2473,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     return(done(fit))
   }
 
-  if (ordinal_requested && estimator %in% c("DWLS", "WLS", "ULS")) {
+  if (ordinal_requested && estimator %in% c("ML", "DWLS", "WLS", "ULS")) {
     if (is.data.frame(data)) {
       ov_by_group <- model_matrix_rep(spec$partable)$ov_names
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
@@ -2503,6 +2501,14 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
+      if (identical(estimator, "ML")) {
+        if (!bounds_is_none(bounds) || !is.null(W)) {
+          stop("fit_model(): ordinal association ML does not accept bounds or LS weights")
+        }
+        return(done(if (psd) {
+          frontier_fit_ml_psd(spec, data, optimizer = psd_optimizer, control = control)
+        } else fit_ml(spec, data, optimizer = optimizer %||% "nlopt-lbfgs", control = control)))
+      }
       if (psd) {
         return(done(frontier_fit_ordinal_psd(spec, data, estimator = estimator,
                                              optimizer = psd_optimizer,
@@ -2518,6 +2524,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (identical(estimator, "ML")) {
+        stop("fit_model(): association ML currently requires all-ordinal data; mixed/polyserial ML is unsupported")
+      }
       if (identical(estimator, "ULS")) {
         stop("fit_model(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
       }

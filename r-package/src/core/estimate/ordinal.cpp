@@ -97,6 +97,12 @@ FitError post_to_fit(PostError e) {
   return make_err(FitError::Kind::NumericIssue, std::move(e.detail));
 }
 
+FitError model_to_fit(const ModelError& e) {
+  return make_err(e.kind == ModelError::Kind::NonPositiveDefinite
+      ? FitError::Kind::NonPositiveDefiniteSigma : FitError::Kind::NumericIssue,
+      e.detail);
+}
+
 OrdinalParameterization to_estimate_parameterization(
     data::OrdinalMomentParameterization parameterization) {
   return parameterization == data::OrdinalMomentParameterization::Theta
@@ -4165,6 +4171,169 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
 }
 
 fit_expected<void>
+validate_ordinal_association_model(
+    const spec::LatentStructure& pt,
+    const std::vector<std::int8_t>* row_user) {
+  for (auto family : pt.group_equal) {
+    if (family == spec::GroupEqual::Thresholds ||
+        family == spec::GroupEqual::Intercepts ||
+        family == spec::GroupEqual::Means) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML requires saturated thresholds and fixed means/scales; "
+          "threshold/intercept/mean group constraints are unsupported"));
+    }
+  }
+  if (!pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "ordinal ML currently supports linear equality constraints only"));
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const bool user = row_user && i < row_user->size() && (*row_user)[i] != 0;
+    if (pt.op[i] == parse::Op::ResponseScale && pt.free[i] > 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML does not support released response scales"));
+    }
+    if (user && pt.op[i] == parse::Op::Intercept &&
+        (pt.free[i] > 0 || pt.fixed_value[i] != 0.0)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML does not fit mean/intercept parameters"));
+    }
+    if (user && pt.op[i] == parse::Op::Threshold && pt.free[i] == 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML requires saturated Stage-1 thresholds, not fixed thresholds"));
+    }
+    if (user && pt.op[i] == parse::Op::Covariance &&
+        pt.lhs_var[i] >= 0 && pt.lhs_var[i] == pt.rhs_var[i] &&
+        pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])] >= 0 &&
+        (pt.free[i] > 0 || pt.fixed_value[i] != 1.0)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML uses fixed unit indicator response variances; "
+          "released or non-unit response variance constraints are unsupported"));
+    }
+  }
+  return {};
+}
+
+fit_expected<OrdinalAssociationLayout>
+ordinal_association_layout(const spec::LatentStructure& pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Eigen::VectorXd& theta) {
+  if (auto ok = validate_ordinal_association_model(pt); !ok) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = validate_moments(data::ordinal_moments_from_stats(stats), rep); !ok) {
+    return std::unexpected(ok.error());
+  }
+  if (theta.size() != pt.n_free() || !theta.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "ordinal ML starts must match the prepared full parameter vector"));
+  }
+  auto thresholds = make_threshold_layout(pt, rep, stats);
+  if (!thresholds) return std::unexpected(thresholds.error());
+  OrdinalAssociationLayout out;
+  out.theta = theta;
+  const auto n = static_cast<std::size_t>(pt.n_free());
+  std::vector<char> inactive(n, 0);
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    if (static_cast<Eigen::Index>(stats.n_levels[b].size()) != p ||
+        std::any_of(stats.n_levels[b].begin(), stats.n_levels[b].end(),
+                    [](auto count) { return count < 2; })) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML requires all indicators to be ordered with at least two categories"));
+    }
+    out.n_moments += static_cast<std::int32_t>(p * (p - 1) / 2);
+    for (std::size_t k = 0; k < thresholds->free[b].size(); ++k) {
+      const auto fr = thresholds->free[b][k];
+      const double value = stats.thresholds[b](static_cast<Eigen::Index>(k));
+      if (fr > 0) {
+        inactive[static_cast<std::size_t>(fr - 1)] = 1;
+        out.theta(fr - 1) = value;
+      } else if (std::abs(thresholds->fixed[b][k] - value) > 1e-12) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "ordinal ML requires saturated Stage-1 thresholds"));
+      }
+    }
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] == parse::Op::Intercept &&
+        (pt.free[i] > 0 || pt.fixed_value[i] != 0.0)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML requires fixed zero means/intercepts"));
+    }
+    if (pt.op[i] == parse::Op::Covariance && pt.free[i] > 0 &&
+        pt.lhs_var[i] >= 0 && pt.lhs_var[i] == pt.rhs_var[i] &&
+        pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])] >= 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML does not support released indicator response variances"));
+    }
+    if (pt.free[i] > 0 && pt.op[i] != parse::Op::Threshold &&
+        inactive[static_cast<std::size_t>(pt.free[i] - 1)]) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML cannot share a threshold and an association coordinate"));
+    }
+  }
+  auto base = build_eq_constraints(pt);
+  if (!base) return std::unexpected(post_to_fit(base.error()));
+  // Any original equality involving a saturated threshold would change the
+  // Stage-1 estimand, even when its supplied values happen to satisfy it.
+  for (std::size_t k = 0; k < n; ++k) {
+    if (inactive[k] && base->A_eq.rows() > 0 &&
+        !base->A_eq.col(static_cast<Eigen::Index>(k)).isZero(0.0)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal ML does not support constraints on saturated thresholds"));
+    }
+  }
+  spec::LatentStructure driven = pt;
+  for (std::size_t k = 0; k < n; ++k) {
+    if (!inactive[k]) continue;
+    driven.lin_constraint_R.resize(driven.lin_constraint_R.size() + n, 0.0);
+    driven.lin_constraint_R[driven.lin_constraint_R.size() - n + k] = 1.0;
+    driven.lin_constraint_d.push_back(out.theta(static_cast<Eigen::Index>(k)));
+  }
+  auto constraints = build_eq_constraints(driven);
+  if (!constraints) return std::unexpected(post_to_fit(constraints.error()));
+  out.constraints = std::move(*constraints);
+  return out;
+}
+
+fit_expected<AssociationFitInfo>
+ordinal_association_info(const model::ModelEvaluator& evaluator,
+                         const OrdinalAssociationLayout& layout,
+                         const Eigen::VectorXd& theta) {
+  auto evaluation = evaluator.evaluate(theta, true, false);
+  if (!evaluation) return std::unexpected(model_to_fit(evaluation.error()));
+  auto correlation = model::correlation_evaluation(std::move(*evaluation));
+  if (!correlation) return std::unexpected(model_to_fit(correlation.error()));
+  Eigen::MatrixXd J(layout.n_moments, correlation->J_sigma.cols());
+  Eigen::Index offset = 0;
+  Eigen::Index row = 0;
+  for (const auto& R : correlation->moments.sigma) {
+    for (Eigen::Index c = 0; c < R.cols(); ++c) {
+      for (Eigen::Index r = c + 1; r < R.rows(); ++r) {
+        J.row(row++) = correlation->J_sigma.row(offset + vech_index(R.rows(), r, c));
+      }
+    }
+    offset += vech_len(R.rows());
+  }
+  Eigen::MatrixXd active = J * layout.constraints.K();
+  for (Eigen::Index c = 0; c < active.cols(); ++c) {
+    const double norm = active.col(c).norm();
+    if (norm > 0.0) active.col(c) /= norm;
+  }
+  const auto rank = static_cast<std::int32_t>(numerical_rank(active));
+  if (rank < layout.constraints.n_alpha) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "ordinal ML association model is unidentified: active Jacobian rank " +
+        std::to_string(rank) + " is below its coordinate count " +
+        std::to_string(layout.constraints.n_alpha)));
+  }
+  return AssociationFitInfo{layout.n_moments, layout.constraints.n_alpha,
+                            rank, layout.n_moments - rank};
+}
+
+fit_expected<void>
 prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalStats& stats,
                                       spec::Starts* starts,
@@ -4549,6 +4718,10 @@ robust_ordinal(spec::LatentStructure pt,
                OrdinalWeightKind weights,
                OrdinalParameterization parameterization,
                robust::Information bread) {
+  if (est.association) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal association ML requires its own Stage-1 sampling/inference contract"));
+  }
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }

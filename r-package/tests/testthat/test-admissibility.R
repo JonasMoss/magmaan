@@ -191,7 +191,7 @@ test_that("frontier PSD ordinal fit preserves the Stage-1 polychorics", {
   expect_equal(stats$R, original_R, tolerance = 0)
 })
 
-test_that("frontier PSD catML consumes a PD polychoric matrix unchanged", {
+test_that("PSD ordinal ML consumes a PD polychoric matrix unchanged", {
   set.seed(45)
   n <- 300L
   eta <- rnorm(n)
@@ -208,13 +208,13 @@ test_that("frontier PSD catML consumes a PD polychoric matrix unchanged", {
   stats <- magmaan_core$data_ordinal_stats_from_df(dat, spec)
   original_R <- stats$R
 
-  fit <- expect_no_warning(frontier_fit_catml_psd(
-    spec, stats, control = list(max_iter = 5000L, gtol = 1e-8)
+  fit <- expect_no_warning(fit_model(
+    spec, stats, estimator = "ML", psd = TRUE, control = list(max_iter = 5000L, gtol = 1e-8)
   ))
 
   expect_true(fit$converged)
   expect_true(fit$ordinal)
-  expect_identical(fit$estimator, "CATML")
+  expect_identical(fit$estimator, "ML")
   expect_identical(fit$covariance_policy, "psd")
   expect_identical(fit$stage1_policy, "unchanged_polychoric")
   expect_true(fit$diagnostics$admissibility$admissible)

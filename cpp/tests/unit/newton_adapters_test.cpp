@@ -194,7 +194,7 @@ TEST_CASE("Newton adapters: ordinal LS and CatML distinguish thresholds and curv
   auto ls = nf::audit_newton_ordinal(m.pt, m.rep, s, *start);
   REQUIRE(ls.has_value()); check_artifacts(*ls);
   CHECK(ls->derivatives.fixed_coordinates.empty());
-  auto fit = nf::fit_catml(m.pt, m.rep, s, *start);
+  auto fit = nf::fit_ml(m.pt, m.rep, s, *start);
   REQUIRE(fit.has_value());
   auto cat = nf::audit_newton_catml(m.pt, m.rep, s, fit->theta);
   REQUIRE(cat.has_value()); check_artifacts(*cat);

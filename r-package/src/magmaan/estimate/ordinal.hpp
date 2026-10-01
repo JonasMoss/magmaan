@@ -249,6 +249,33 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
                          spec::Starts* starts = nullptr,
                          const std::vector<std::int8_t>* row_user = nullptr);
 
+// Validate the original model before ordinal preparation can pin nuisance
+// rows. Association ML supports saturated thresholds, fixed response scales
+// and linear constraints on association parameters only.
+fit_expected<void>
+validate_ordinal_association_model(
+    const spec::LatentStructure& pt,
+    const std::vector<std::int8_t>* row_user = nullptr);
+
+struct OrdinalAssociationLayout {
+  EqConstraints constraints;
+  Eigen::VectorXd theta;
+  std::int32_t n_moments = 0;
+};
+
+// On an ordinal-prepared model, freeze threshold coordinates at Stage-1
+// values and exclude them from optimization while preserving full theta.
+fit_expected<OrdinalAssociationLayout>
+ordinal_association_layout(const spec::LatentStructure& pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Eigen::VectorXd& theta);
+
+fit_expected<AssociationFitInfo>
+ordinal_association_info(const model::ModelEvaluator& evaluator,
+                         const OrdinalAssociationLayout& layout,
+                         const Eigen::VectorXd& theta);
+
 fit_expected<void>
 prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalStats& stats,
@@ -528,36 +555,31 @@ fit_ordinal_psd(spec::LatentStructure pt,
                     OrdinalParameterization::Delta,
                 PsdFitOptions psd_opts = {});
 
-// Original full-theta cML objective, shared by fitting and post-fit audits.
-// Borrows ev; stats supplies Stage-1 correlations and sample sizes.
-fit_expected<optim::ScalarProblem>
-catml_objective(const model::ModelEvaluator& ev, const data::OrdinalStats& stats);
-
-// Categorical ML (cML): fit the SEM correlation structure with the ordinary
-// normal-theory ML discrepancy, using the Stage-1 polychoric correlation
-// matrix as input. Thresholds are saturated Stage-1 quantities and therefore
-// remain at their supplied start values. The sample polychoric matrix must be
-// positive definite because the criterion contains its log determinant.
-// This is limited-information cML, not a full-information ordinal likelihood.
+// ML discrepancy on Stage-1 polychoric correlations. Threshold coordinates
+// are fixed at their saturated Stage-1 values during optimization; the full
+// prepared theta is returned. The input must be PD. This supplies neither a
+// full-information ordinal likelihood nor continuous-ML inference.
 fit_expected<Estimates>
-fit_catml(spec::LatentStructure pt,
-          const model::MatrixRep& rep,
-          const data::OrdinalStats& stats,
-          const Eigen::VectorXd& x0,
-          Backend backend = Backend::NloptLbfgs,
-          optim::OptimOptions opts = {});
+fit_ml(spec::LatentStructure pt,
+       const model::MatrixRep& rep,
+       const data::OrdinalStats& stats,
+       const Eigen::VectorXd& x0,
+       Backend backend = Backend::NloptLbfgs,
+       optim::OptimOptions opts = {},
+       const std::vector<std::int8_t>* row_user = nullptr);
 
-// The covariance-honest cML counterpart. Primitive Theta/Psi blocks are PSD
+// The covariance-honest ordinal ML counterpart. Primitive Theta/Psi blocks are PSD
 // by construction; the fitted observed correlation matrix remains in the ML
 // positive-definite domain. Stage-1 polychorics are consumed unchanged.
 fit_expected<Estimates>
-fit_catml_psd(spec::LatentStructure pt,
-              const model::MatrixRep& rep,
-              const data::OrdinalStats& stats,
-              const Eigen::VectorXd& x0,
-              Backend backend = Backend::NloptSlsqp,
-              optim::OptimOptions opts = {},
-              PsdFitOptions psd_opts = {});
+fit_ml_psd(spec::LatentStructure pt,
+           const model::MatrixRep& rep,
+           const data::OrdinalStats& stats,
+           const Eigen::VectorXd& x0,
+           Backend backend = Backend::NloptSlsqp,
+           optim::OptimOptions opts = {},
+           PsdFitOptions psd_opts = {},
+           const std::vector<std::int8_t>* row_user = nullptr);
 
 // Mixed continuous/ordinal ULS/DWLS/WLS over covariance-honest primitive SEM
 // blocks. Stage-1 thresholds, continuous moments, polyserial/polychoric

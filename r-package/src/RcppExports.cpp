@@ -1239,19 +1239,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// frontier_fit_catml_psd_impl
-Rcpp::List frontier_fit_catml_psd_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_catml_psd_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+// fit_ml_ordinal_impl
+Rcpp::List fit_ml_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, bool psd, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
+RcppExport SEXP _magmaanlab_fit_ml_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP psdSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< bool >::type psd(psdSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_catml_psd_impl(partable, ordinal_stats, optimizer, control, start_eigen_floor, feasibility_tol));
+    rcpp_result_gen = Rcpp::wrap(fit_ml_ordinal_impl(partable, ordinal_stats, psd, optimizer, control, start_eigen_floor, feasibility_tol));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4297,7 +4298,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_uls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_uls_ordinal_impl, 5},
     {"_magmaanlab_fit_wls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_ordinal_impl, 5},
     {"_magmaanlab_frontier_fit_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ordinal_psd_impl, 8},
-    {"_magmaanlab_frontier_fit_catml_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_catml_psd_impl, 6},
+    {"_magmaanlab_fit_ml_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_ml_ordinal_impl, 7},
     {"_magmaanlab_fit_ordinal_stage2_impl", (DL_FUNC) &_magmaanlab_fit_ordinal_stage2_impl, 7},
     {"_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl, 7},
     {"_magmaanlab_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_dwls_mixed_ordinal_impl, 5},

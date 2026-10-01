@@ -972,10 +972,22 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
   return ctx;
 }
 
-inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit) {
+inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit,
+                                                bool allow_association = false) {
   if (!fit.containsElementNamed("theta"))
     Rcpp::stop("magmaan: not a fit object (missing theta) — pass the result of fit_fit()");
   magmaan::estimate::Estimates e;
+  if (fit.containsElementNamed("association")) {
+    if (!allow_association) {
+      Rcpp::stop("magmaan: this post-fit operation is not available for ordinal "
+                 "association ML; its Stage-1 sampling/inference contract is "
+                 "not validated and it is not a continuous Gaussian likelihood");
+    }
+    Rcpp::List a = fit["association"];
+    e.association = magmaan::estimate::AssociationFitInfo{
+        Rcpp::as<int>(a["n_moments"]), Rcpp::as<int>(a["n_coordinates"]),
+        Rcpp::as<int>(a["rank"]), Rcpp::as<int>(a["df"])};
+  }
   e.theta = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(fit["theta"]));
   e.fmin = fit.containsElementNamed("fmin") ? Rcpp::as<double>(fit["fmin"])
                                             : std::numeric_limits<double>::quiet_NaN();

@@ -413,7 +413,10 @@ fit_expected<NewtonAudit> audit_newton_catml(
   if (auto ok = validate(pt, theta, opts, false); !ok) return std::unexpected(ok.error());
   auto ev = evaluator(pt, rep);
   if (!ev) return std::unexpected(ev.error());
-  auto problem = catml_objective(*ev, stats);
+  data::SampleStats sample;
+  sample.S = stats.R;
+  sample.n_obs = stats.n_obs;
+  auto problem = ml_objective(*ev, sample, model::MomentTarget::Correlation);
   if (!problem) return std::unexpected(problem.error());
   const double n = total_n(stats.n_obs);
   auto d = evaluate_newton_objective(*problem, theta, n, n, NewtonObjectiveKind::CatMl, opts.differences);

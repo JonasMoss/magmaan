@@ -348,10 +348,21 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   add automatic post-fit inference.
 - Covariance-honest research fits are explicit. Use
   `frontier_fit_ml2s_psd()` for saturated-EM Stage 1 followed by PSD ML or a
-  fixed ULS/DWLS/ADF/DLS Stage 2, and `frontier_fit_catml_psd()` for
-  normal-theory ML on a positive-definite Stage-1 polychoric matrix. Both
-  preserve their Stage-1 objects; neither attaches automatic boundary
-  inference.
+  fixed ULS/DWLS/ADF/DLS Stage 2. For a positive-definite Stage-1 polychoric
+  matrix, use `fit_model(spec, ordinal_stats, estimator = "ML", psd = TRUE)`;
+  omit `psd = TRUE` for the unrestricted covariance domain. The same ML
+  discrepancy fits model-implied correlations, with Stage-1 thresholds held
+  saturated and excluded from optimization. `magmaan_core$fit_ml(spec, ordinal_stats)` and
+  prepared `estimate(model, data, estimator = "ML")` use that same route.
+  Both delta and theta reporting conventions are supported. Linear loading
+  equalities are supported; threshold constraints, free means/intercepts,
+  released response scales and non-unit response variance constraints are
+  rejected. `npar_active` counts the search coordinates; `association$rank`
+  and `df` describe the local correlation Jacobian. Full threshold estimates
+  remain in the partable, and Stage-1 moments are preserved unchanged.
+  This route estimates associations; its sampling/inference contract is not
+  yet validated, so Gaussian likelihood, AIC/BIC, SE and test helpers reject
+  it. It remains a `magmaanlab` methods-development route.
 - Experimental robust moment builders are opt-in on the data step:
   `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
   `robust = "dpd"`, or `robust = "huber_residual"`. The raw primitive

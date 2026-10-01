@@ -36,6 +36,16 @@ using optim::OptimOptions;
 // (See plan: separation of concerns. Caller composes pt + Estimates.)
 enum class Backend;  // defined below; Estimates records a substituted backend
 
+// Association fitting conditions on saturated Stage-1 thresholds. Counts
+// describe the active model association map, not the stored full theta vector.
+// The criterion is not an observed-data Gaussian likelihood.
+struct AssociationFitInfo {
+  std::int32_t n_moments = 0;
+  std::int32_t n_coordinates = 0;
+  std::int32_t rank = 0;
+  std::int32_t df = 0;
+};
+
 struct Estimates {
   Eigen::VectorXd theta;     // size = pt.n_free()
   double          fmin       = 0.0;
@@ -82,6 +92,8 @@ struct Estimates {
   // theta is in caller units; diagnostics/terminal audit describe the
   // normalized fitting model when this flag is true.
   bool sample_normalized = false;
+
+  std::optional<AssociationFitInfo> association = {};
 
 };
 
