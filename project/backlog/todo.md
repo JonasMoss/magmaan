@@ -6,10 +6,13 @@ the [test ledger](../validation/test_ledger.md) and linked studies own evidence.
 Remove completed items after their durable record exists.
 
 **Scope adopted 2026-09-30; release priorities amended 2026-10-01:** single-level
-ML, FIML and ordinal/mixed DWLS in their supported slices. **0.0.1 focuses on
+ML, FIML and all-ordinal DWLS in their supported slices. **0.0.1 focuses on
 ordinary and PSD estimation and inference; barrier-specific hardening and
-inference follow in 0.0.2.** Secondary estimators retain correctness gates;
+inference and mixed continuous/ordered workflows follow in 0.0.2.** Secondary
+estimators retain correctness gates;
 extensions need a concrete consumer or inexpensive reuse of primary work.
+Noniterative work is indefinitely postponed; reopening requires an explicit
+user scope decision. Existing noniterative APIs and regression gates remain.
 Two-level SEM, SAM and composites
 have **no scheduled expansion work**, including inside shared normalization,
 start, preparation and inference programmes. Existing APIs/tests remain.
@@ -43,13 +46,14 @@ check; evidence links own detailed protocols and historical results.
 | Milestone | Focus |
 | --- | --- |
 | **0.0.1 — current** | Ordinary and PSD estimation and inference: shared starts/units/constraints, reliable convergence and admissibility, PSD finalization/stress gaps, and validated parameter covariance, tests and intervals in supported primary slices |
-| **0.0.2 — following** | Barrier-specific fitting hardening and inference: stricter domains, near-face curvature, factor disappearance, fallback/pole regressions and penalty-specific sampling/exposure contracts |
+| **0.0.2 — following** | Mixed continuous/ordered fitting and inference; barrier-specific hardening and inference: stricter domains, near-face curvature, factor disappearance, fallback/pole regressions and penalty-specific sampling/exposure contracts |
 
 Continue with [fitting reliability](#fitting-reliability) and
 [primary inference](#primary-inference-workflows). Shared fixes required by
 ordinary/PSD routes remain 0.0.1 work even when barriers benefit. Existing
 barrier code/tests remain; barrier-only validation is not a 0.0.1 release gate.
-Mixed-data expansion remains deferred, and no milestone label promotes a new
+Mixed-data completion is assigned to 0.0.2; noniterative development has no
+scheduled release. No milestone label promotes a new
 ordinary-user estimator or inference default.
 
 ## Fitting reliability
@@ -82,8 +86,9 @@ ordinary-user estimator or inference default.
 
 - [ ] **M — finish unit-equivariant starts and optimizer coordinates.** Remove
   unit-dependent FABIN/layered fallback steps; extend supported start selections
-  and fallback reports to ordinal/mixed preparation. Wire coordinates through
-  primary ordinal/mixed and relevant SNLLS/IRLS paths. **Check:** transported
+  and fallback reports to all-ordinal preparation. Wire coordinates through
+  primary all-ordinal and relevant SNLLS/IRLS paths; mixed extensions follow in
+  0.0.2. **Check:** transported
   starts and fits across units, groups, constraints and identification;
   reject unsupported selections. Exclude two-level, SAM, FC-SEM and removed
   fitted-weight/automatic-identification routes. See
@@ -142,7 +147,7 @@ ordinary-user estimator or inference default.
   adoption. Complete-data ML/PSD normalization is already enabled.
   See optimizer controls.
 
-- [ ] **L — close primary PSD stress gaps.** Localize ML, FIML and ordinal/mixed
+- [ ] **L — close primary PSD stress gaps.** Localize ML, FIML and all-ordinal
   DWLS failures using the retained harness. Keep stage-one objects unchanged;
   separate solver status, cone stationarity, admissibility and competing basins.
   **Check:** independent objective/link recomputation, interior reductions,
@@ -248,14 +253,6 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   grids; preserve scalar-nesting and size-matched-power gaps. Legacy smoke
   comparisons and completed flip expansion do not queue new runs. See the R interface vision.
 
-- [ ] **S — dispatch FIML robust MI/release bindings explicitly.** The R
-  robust-MI wrapper currently routes FIML through complete-data LS machinery;
-  passing missing observations fails with a non-finite-data error. Wire the
-  existing observed-information C++ FIML robust MI/release entries and reject
-  unsupported convention combinations explicitly. **Check:** raw/retained-data
-  agreement, marker exclusion and identified candidate controls; verify both
-  wrapper dispatches rather than changing the C++ formulas.
-
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler
   variants from SB labels and retain FMG missing-data oracle limitations.
@@ -263,7 +260,10 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   Evidence: [test map](../../experiments/replications/08-savalei-falk-2014-test-map/report.qmd)
   and [calibration policy](../validation/calibration-parity.md).
 
-### Ordinal and mixed DWLS
+### All-ordinal DWLS
+
+Mixed continuous/ordered completion is assigned to 0.0.2 below. Shared fixes
+required by an all-ordinal primary workflow remain current work.
 
 - [ ] **L — compose DWLS policy covariance and global/nested tests.** Include
   weight-estimation influence. Global score and fit-function statistics coincide
@@ -285,6 +285,102 @@ covariance, tests, intervals and exposure belong to the 0.0.2 section below.
   independently validated. **Check:** centering, finite-sample/group scaling and
   retained geometry; equal statistics do not establish equal spectra. See
   inference reuse and [workspace contract](../design/ordinal-snlls-gamma-architecture.md).
+
+### MI and release-score completion (0.0.1)
+
+Adopted 2026-10-01 after assigning mixed continuous/ordered completion to
+0.0.2 and indefinitely postponing noniterative work. This slice covers
+one-parameter modification indices and one-at-a-time equality releases in the
+lab/C++ surface. Global/nested ordinary-policy work remains above; joint
+multi-constraint tests retain their separately documented coverage. Existing
+mixed/noniterative APIs keep their regression gates.
+
+Coverage separates the fitting discrepancy/weight, score-information metric,
+sandwich sensitivity, score/moment covariance and estimation of the weight.
+Identity, normal-theory, diagonal/full empirical, DLS-mixture and caller-supplied
+weights are distinct recipes. Supplied W is fixed unless its generating recipe
+and influence are explicitly supplied. A computed number is not sufficient:
+every applicable combination needs a stated sampling contract and a gate;
+unsupported or inapplicable choices must be explicit and never silently ignored.
+Independent information/bread or alternative score-weight choices need a derived
+projection/reference law before exposure. This adds no ordinary-user default.
+
+| Remaining family | Existing MI/release basis | Weight/covariance completion |
+| --- | --- | --- |
+| Complete-data ML | Expected/observed information; robust core and R paths | Gate matching information/bread, structured/unstructured supported NT covariance, empirical/Browne and caller-Gamma choices; reject unsupported moment-source combinations |
+| Direct FIML | Analytic observed MI/release and robust core; expected geometry gates identification | Wire robust R dispatch; preserve the observed-statistic convention and observed-pattern meat; make unsupported expected-statistic/second-stage-weight choices explicit |
+| Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: retain the fitting recipe, covariance source, a and weight influence; audit sensitivity/nuisance projection under misspecification |
+| All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; close ordinary-rank and adapter gaps |
+| Prepared all-ordinal correlation-ML | Retained catML fitting and shared association-target composition work; LS MI is not an ML-target score contract | Gate the active association Jacobian, saturated-threshold/NACOV transport and matching ML information before MI/release exposure; follow the shared fitting contract |
+| Two-stage/ML2S | R NT-ML MI is a naive Stage-2 comparator; retained Stage-1 and weighted inference primitives | Corrected MI/release for NT, ULS, DWLS, ADF and DLS Stage-2 recipes, using Stage-1 influence and the applicable estimated-weight term; preserve actual ML versus quadratic discrepancy provenance |
+
+The DLS/custom-weight rows concern bounded reuse of retained weighted primitives,
+not a general DLS research programme. Pairwise moment sources retain their MCAR
+scope and need their own covariance law; direct composite-likelihood, two-level
+SEM, SAM, mixed-data and noniterative expansion are outside this slice.
+Automatic absent-row enumeration covers cross-loadings and covariances;
+structural-path enumeration remains a separate model-builder contract.
+
+- [ ] **S — dispatch FIML robust MI/release bindings explicitly.** The R
+  robust-MI wrapper currently routes FIML through complete-data LS machinery;
+  passing missing observations fails with a non-finite-data error. Wire the
+  existing observed-information C++ FIML robust MI/release entries and reject
+  unsupported convention combinations explicitly. **Check:** raw/retained-data
+  agreement, marker exclusion and identified candidate controls; verify both
+  wrapper dispatches rather than changing the C++ formulas.
+
+- [ ] **S — honor continuous-WLS MI covariance selection.** The fixed-weight
+  R robust MI/release dispatch currently forces model-implied covariance for
+  WLS, even when empirical covariance is requested. Route the requested source
+  through the shared core and preserve explicit fitting W. **Check:** empirical
+  raw versus supplied Gamma, deliberately different model-implied controls,
+  standard and estimated-weight modes, both wrapper dispatches, and clear errors
+  for unavailable sources. Do not substitute a covariance recipe silently.
+
+- [ ] **S/M — unify ordinary ordinal MI rank and candidate checks.** The separate
+  ordinary ordinal worker retains an absolute efficient-information floor while
+  the shared robust worker uses the relative check. **Check:** all-ordinal
+  identification-only and genuinely identified fixed loadings, thresholds and
+  equality releases across units, nearby fits and unequal groups; ordinary/
+  robust candidate agreement in matching metrics, delta/theta parity and fixed-
+  row/absent-row moment scales. Mixed controls follow in 0.0.2.
+
+- [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
+  retained continuous and all-ordinal weight recipes in the matrix, with stored
+  fitting W or explicit supplied W, Gamma/NACOV source, recipe/a and fixed versus
+  estimated-weight influence. Derive consistent sensitivity and nuisance
+  projection for observed/estimated-weight GMM score variants before exposing
+  them; the existing expected-metric sweep alone does not establish that regime.
+  Complete prepared all-ordinal correlation-ML MI only after the shared fitting
+  contract defines its active association coordinates and NACOV transport.
+  Audit every bread/information/covariance argument and expose applicable caller-
+  Gamma paths through thin R adapters. **Check:** independent score, sensitivity,
+  meat and weight-influence assembly; recipe endpoint reductions, retained-data
+  versus supplied-data agreement, documented unavailable cells and no ignored
+  options. No numerical recipe/default changes without evidence.
+
+- [ ] **M — add Stage-1-aware two-stage MI/release tests across weights.** Reuse
+  retained saturated moments and their joint mean/covariance influence for the
+  NT, ULS, DWLS, ADF and DLS Stage-2 choices. Propagate weight-estimation influence
+  where the recipe requires it, with fit-null versus test-evaluation provenance
+  and observed/expected sensitivity declared. Keep the naive NT-ML comparator
+  labelled separately. **Check:** all-observed reductions to the corresponding
+  complete-data estimator, incomplete/grouped influence assembly, missingness
+  pattern and unequal-group controls, DLS endpoints and typed unavailable cases.
+  This is post-fit reuse, not a wholesale prepared-ML2S migration.
+
+- [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
+  the implemented cells above in C++ and R, including means, unequal groups,
+  constraints, absent/fixed candidates and standardized EPCs. **Check:**
+  independent df=1 score/Schur/sandwich reconstruction; Gamma = W^-1 reduction;
+  correct weight-scale transport of ordinary MI/EPC and robust-statistic
+  invariance; unit/rank controls; estimated-weight case perturbations; and
+  convention-matched lavaan fixtures where applicable. Target-matched
+  misspecified nulls/local alternatives need separate calibration evidence;
+  an unproved generating-model restriction is not a pseudo-null. Keep sampling
+  groups distinct from missingness patterns and record unresolved centering
+  choices rather than silently adopting them. Each R-visible cell must agree
+  with the corresponding core contract or report its unsupported reason.
 
 ## API consistency and performance
 
@@ -331,8 +427,9 @@ shared primitives or promotes an ordinary-user default.
   or explicitly reject operations using provenance; moments alone do not supply
   an inference contract. **Check:** staged/convenience/refit equivalence,
   metadata/errors, unchanged numerics and thin R wrappers. Retire separate catML
-  wrappers only after replacement gates pass. Mixed/polyserial ML needs its
-  own moments/mean/scale contract; removed research APIs are not migration targets.
+  wrappers only after replacement gates pass. Mixed/polyserial ML's
+  moments/mean/scale contract follows in 0.0.2; removed research APIs are not
+  migration targets.
 
 - [ ] **L — finish remaining model-penalty compositions (0.0.2).** Extend
   the scalar penalty wrapper/finalization across continuous ML/ULS/GLS/fixed
@@ -372,7 +469,8 @@ shared primitives or promotes an ordinary-user default.
   estimator-specific unsupported deletion paths. See the R interface vision.
 
 - [ ] **M — finish primary invariance adapters.** Review redundant manual scalar
-  mean freeing in `continuous_invariance()`; expose mixed-model release only
+  mean freeing in `continuous_invariance()`; mixed-model release follows in
+  0.0.2 and is exposed only
   after validating its threshold/scale map. **Check:** explicit user means,
   metric-to-scalar nesting and theta/released-delta boundaries. Broader Mplus/
   mixed-pairwise compatibility is deferred. See workspace contract.
@@ -426,15 +524,15 @@ shared primitives or promotes an ordinary-user default.
 
 - [ ] **S/M — review retained research capabilities one decision at a time.**
   Candidates: continuous/mixed covariance shrinkage; robust ordinal/polyserial
-  menus and pair-local diagnostics; noniterative CFA clamps/conditioning/H
-  repair; fixed-scalar DLS and Stage-2/IJ adapters; Fisher/Fisher-SNLLS/IRLS
+  menus and pair-local diagnostics; fixed-scalar DLS and Stage-2/IJ adapters;
+  Fisher/Fisher-SNLLS/IRLS
   routes; ordinal pairwise composite likelihood; mixed pairwise/FIML hybrids
-  and regularized Stage 1; RBM; SAM/LSAM, native FC-SEM and the main noniterative
-  CFA menu as separate decisions. **Check:** concrete consumers, shared
+  and regularized Stage 1; RBM; SAM/LSAM and native FC-SEM as separate decisions.
+  Mixed-only reviews follow in 0.0.2; noniterative reviews are indefinitely
+  postponed. **Check:** concrete consumers, shared
   dependencies, evidence and a bounded keep/consolidate/remove decision.
   Recording this list does not authorize removals. Retain ordinary moment/Gamma,
-  score/IJ and other shared primitives; review recorded noniterative no-go screens
-  separately from estimator maps. Parking expansion is not code deletion.
+  score/IJ and other shared primitives. Parking expansion is not code deletion.
 
 - [ ] **S/M — inventory validated primary capabilities.** Record model/data
   slice, domain, penalty, algorithm, API tier and evidence for estimation,
@@ -496,7 +594,30 @@ shared primitives or promotes an ordinary-user default.
   grids and paper timing programmes are deferred. See benchmark guide and
   [speed attribution](../../experiments/showcases/06-speed-attribution/report.qmd).
 
-## 0.0.2: barrier fitting and inference
+## 0.0.2: mixed-data workflows and barrier inference
+
+### Mixed continuous/ordered models
+
+Existing mixed delta/theta fits and inference APIs retain their documented
+regression gates. New mixed-only work and broader completion follow in this
+release, including dependencies otherwise shared with the primary programme.
+
+- [ ] **M/L — finish mixed fitting, preparation and PSD coverage.** Extend the
+  shared starts/coordinates, moments/means/scales, association projection and
+  retained composition/weight metadata to mixed models. Complete supported
+  grouped/invariance release adapters and localize mixed-only PSD failures.
+  **Check:** delta/theta, units, groups, equalities, independent objective/Jacobian
+  gates and retained Stage-1 objects; unsupported moment/mean/scale compositions
+  remain explicit. Shared all-ordinal correctness fixes can land earlier.
+
+- [ ] **L — complete mixed policy and weighted MI/release inference.** Establish
+  the mixed covariance and weight-influence law, then extend the current
+  fixed-weight MI/release paths to justified estimated-weight and policy
+  combinations. **Check:** continuous/all-ordinal reductions where defined,
+  independent mixed influence/weight perturbations, rank/candidate consistency,
+  grouped and misspecification calibration, and core/R agreement before exposure.
+
+### Barrier fitting and inference
 
 - [ ] **L — finish whole-barrier normalization and stress validation.** Extend
   and validate the shared complete-data ML/PSD transformation for model/data,

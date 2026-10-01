@@ -19,9 +19,12 @@ derived quantities retain estimator-specific interpretations; a structural
 coefficient does not acquire a causal interpretation merely by appearing in a
 SEM.
 
-The primary programme is single-level normal-theory ML, FIML and ordinal/mixed
-DWLS, with PSD covariance constraints and the multi-information barrier
-developed alongside them. The roadmap owns the estimator tiers and supported
+The current 0.0.1 programme is single-level normal-theory ML, FIML and
+all-ordinal DWLS, with PSD covariance constraints. Mixed continuous/ordered
+completion and barrier-specific hardening/inference are assigned to 0.0.2.
+Noniterative development is indefinitely postponed and requires an explicit
+user scope decision to reopen; existing APIs and regression gates remain.
+The roadmap owns the estimator tiers and supported
 model slices. Broader model families remain governed by their existing triggers;
 this document does not expand them.
 

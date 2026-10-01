@@ -115,11 +115,18 @@ record. Accuracy failures and covariance inadmissibility remain separate causes.
 ### Estimators
 
 Development follows the [estimator tiers](../architecture/roadmap.md#estimator-development-priorities)
-adopted 2026-09-27: NTML, FIML and ordinal/mixed DWLS come first, with PSD
-and barrier developed alongside them. Priority includes inference and interface
-completion; it does not itself expose a method here or make it a default.
+adopted 2026-09-27 and narrowed 2026-10-01: NTML, FIML and all-ordinal DWLS
+come first, with PSD developed alongside them. Barrier-specific completion
+follows in 0.0.2. Priority includes inference and interface completion; it does
+not itself expose a method here or make it a default.
 The broader estimator list below records the intended surface, not equal
 implementation priority or complete policy-inference availability.
+
+Mixed continuous/ordered completion is assigned to 0.0.2. Noniterative
+development is indefinitely postponed; existing lab APIs and regression gates
+remain, with reopening requiring an explicit user scope decision. MI and
+release-score work across the remaining estimator/weight families is tracked
+in the [completion matrix](../backlog/todo.md#mi-and-release-score-completion-001).
 
 `estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
 ULS and WLS. Variables declared in `ordered`: DWLS, WLS and ULS. The data type
@@ -361,7 +368,8 @@ a `control` option for non-converging fits, and summary-statistic input.
 The steps below retain the package-split history. For remaining work, the
 [development priorities](../architecture/roadmap.md#estimator-development-priorities)
 supersedes their original ordering: finish NTML gaps and extend policy inference
-to FIML and ordinal/mixed DWLS first, with PSD and barrier work alongside them.
+to FIML and all-ordinal DWLS first, with PSD work alongside them. Mixed
+continuous/ordered and barrier-specific completion follow in 0.0.2.
 Other least-squares estimators and ML2S extend for a concrete consumer or
 inexpensive shared benefit. Two-level, SAM and composite expansion is parked;
 the historical steps below do not schedule their policy work. Broader PSD/barrier

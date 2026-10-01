@@ -8,6 +8,9 @@ regression gates remain; current capability limits belong in the
 [roadmap](../architecture/roadmap.md).
 
 Every entry records a gap, an available alternative and a build-if condition.
+Noniterative work is indefinitely postponed by the 2026-10-01 scope decision.
+Its entries require an explicit user decision to reopen; a named consumer alone
+does not activate them. Existing APIs and regression gates remain maintained.
 Evidence stays in maintained contracts, the [test ledger](../validation/test_ledger.md)
 or independent studies indexed by [experiments/README.md](../../experiments/README.md).
 Paper simulations, manuscript tasks and handoffs belong to their own projects.
@@ -422,22 +425,24 @@ ordinary coverage and the correction passes held-out target-regime checks.
 identification choices and new reference-law calibration.
 **Available:** explicit supported closed-form maps and ordinary iterative CFA;
 existing formula/derivative gates remain. See the roadmap and research index.
-**Build if:** a named consumer needs a bounded extension, with independent map
-and influence validation. Aligned-map paper reruns are paper-local work.
+**Build if:** the user explicitly reopens noniterative development, then names a
+bounded extension with independent map and influence validation. Aligned-map
+paper reruns are paper-local work and create no library commitment.
 
 ### Null-bootstrap GOF calibration for non-iterative CFA
 
 **Gap:** calibrated bootstrap reference laws for new non-iterative targets.
 **Available:** retained asymptotic/reference methods and ordinary ML inference.
-**Build if:** a concrete non-iterative workflow needs bootstrap calibration and
-can justify null construction, failures, Monte Carlo error and compute cost.
+**Build if:** the user explicitly reopens this work, and a bounded noniterative
+workflow justifies null construction, failures, Monte Carlo error and compute cost.
 
 ### Efficient leave-one-out / infinitesimal jackknife for closed-form (non-iterative) CFA
 
 **Gap:** additional influence/LOO adapters for closed-form maps.
 **Available:** explicit refits and current influence primitives.
-**Build if:** a measured large-N workflow makes refitting material and map-level
-derivatives/reconstruction can be independently validated.
+**Build if:** the user explicitly reopens this work, and a measured large-N
+workflow makes refitting material with independently validated map derivatives
+and reconstruction.
 
 ### Residual and case-influence reporting extensions
 

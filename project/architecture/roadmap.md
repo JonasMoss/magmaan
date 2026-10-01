@@ -92,10 +92,10 @@ availability, and the decision to make a method a default.
 
 | Development tier | Initial scope | Commitment |
 | --- | --- | --- |
-| **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and ordinal/mixed DWLS | First priority for reliable, efficient estimation and complete inference workflows |
+| **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and all-ordinal DWLS | 0.0.1 priority for reliable, efficient estimation and complete inference workflows; mixed continuous/ordered completion follows in 0.0.2 |
 | **Priority frontier** | PSD covariance constraints; multi-information barriers in the following release | PSD estimation and inference accompany primary classical workflows in 0.0.1; barrier-specific hardening and inference follow in 0.0.2, with estimator-specific validation |
 | **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
-| **Research collection** | DLS, robust alternatives, SAM, FC-SEM, noniterative estimators and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
+| **Research collection** | DLS, robust alternatives, SAM, FC-SEM and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
 
 The first two tiers form the main development programme. A frontier method
 may receive more attention than a classical method with a stable API. Lower
@@ -110,6 +110,16 @@ consumer and a bounded, validated scope. Broader chart development, specialist
 methods and general optimizer/benchmark expansion are likewise consumer-gated;
 concrete primary correctness failures remain active.
 The provisional secondary assignments can be revisited for a concrete use.
+
+Adopted 2026-10-01: mixed means models containing both continuous and ordered
+indicators. Their remaining fitting, inference and interface work is assigned
+to 0.0.2; all-ordinal workflows remain current. Noniterative development,
+inference expansion and capability-review work are indefinitely postponed,
+with reactivation requiring an explicit user scope decision. Retained APIs and
+regression gates preserve their documented capabilities. The
+[MI/release-score completion matrix](../backlog/todo.md#mi-and-release-score-completion-001)
+records current coverage and remaining work across estimator and weight choices;
+it schedules no new ordinary-user default or parked model-family expansion.
 
 PSD and barrier are capabilities across estimator families. PSD changes the
 covariance domain; the barrier changes the objective. Track those separately
@@ -134,16 +144,19 @@ estimation and inference in supported primary workflows**. Prioritize shared
 starts, units, constraints, convergence/admissibility, PSD finalization and
 sampling-law validation. Explicitly reject unvalidated inference, including
 singular PSD endpoints; fitting support alone does not establish inference.
-**0.0.2 owns barrier-specific hardening and inference**: stricter starting
+**0.0.2 owns mixed continuous/ordered completion and barrier-specific hardening
+and inference**: stricter starting
 domains, near-face curvature, factor disappearance, fallback units, marker
 poles and penalty-specific sampling/exposure contracts. Existing barrier
 implementation and regression gates remain; barrier-only work is not a 0.0.1
 release requirement. Shared fixes needed by ordinary/PSD fitting stay in 0.0.1
-even when they also improve barriers. Mixed-data expansion remains deferred.
+even when they also improve barriers. Existing mixed APIs retain correctness
+gates; mixed-only completion is a 0.0.2 task. Noniterative development and
+capability reviews are indefinitely postponed pending an explicit user decision.
 
 The active queue is organized around ordinary/PSD fitting reliability,
 primary inference workflows, API/performance, validation/maintenance and the
-0.0.2 barrier programme. Tasks
+0.0.2 mixed/barrier programme. Tasks
 state a result and completion check; completed work and run histories live in
 the maintained contracts, test ledger and experiment reports. Simulation has its
 own backlog, research activity belongs to the experiment index, and paper-local
@@ -3082,8 +3095,9 @@ an unconstrained gradient test to constrained solutions.
   calibration. The exploratory R package exposes the same mechanism through
   `magmaan_core$sim_ig_batch()` and the reusable
   `sim_ig_calibrate()` / `sim_ig_draw()` split. Pearson IG draws use direct
-  Pearson random generators instead of inverse-CDF transforms where closed-form
-  RNGs are available; the R wrapper additionally batches reusable Type VI
+  Pearson random generators instead of inverse-CDF transforms: closed-form
+  RNGs where available and exact theta-scale rejection for Type IV, with a
+  per-marginal log-concave envelope. The R wrapper additionally batches reusable Type VI
   Pearson IG draws through R's gamma RNG before splitting the returned samples.
 - Vale-Maurelli / Fleishman polynomial simulation is available through
   `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
