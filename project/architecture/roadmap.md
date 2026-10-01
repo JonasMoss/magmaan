@@ -210,9 +210,13 @@ barrier covariance/tests/intervals are distinct inference contracts.
 Penalizing saturated Stage-1 FIML differs from penalizing the final SEM.
 Latent determinacy is zero without genuine latents: a Stage-1 penalty needs an
 observed-covariance target, uncertainty propagation and a separate H1-reference
-contract. The proposed friendly `covariance = "unrestricted" | "psd" |
-"barrier"` remains a naming/migration choice; internal domain constraints and
-penalties remain independent.
+contract. The
+[ordinary API proposal](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api)
+selects friendly `covariance = "unrestricted" | "psd" | "barrier"`, with
+barrier/start overrides in `options`. Implementation/migration remain pending;
+internal domain constraints and penalties remain independent. Opt-in experimental
+barrier fitting is requested before complete development; barrier-specific
+hardening and validated inference remain 0.0.2 work.
 
 The [active composition queue](../backlog/todo.md#shared-fitting-composition)
 owns dependency order and remaining gates. Foundation work in progress is not
@@ -4543,6 +4547,17 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   retained observations when available; FIML requires its own retained data.
   These wrappers compose existing C++ inference primitives and do not change
   the ordinary-user inference policy.
+- Ordinary API proposal (2026-10-01), not implemented:
+  [`magmaan_model()` then `magmaan()`](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api)
+  separates immutable native model/schema preparation from repeated fitting.
+  Grouped/ordinal skeleton frames declare levels; each dataset refreshes moments,
+  thresholds, weights and starts. The proposed fit takes model, data, estimator,
+  covariance policy, inference and options. `fixed.x`, `missing` and `cluster`
+  disappear from the ordinary call; structural choices belong to construction,
+  start/barrier overrides to options. Barriers are exposed experimentally with
+  explicit unavailable inference until their own gates pass. Mean-layout and
+  compatibility decisions and adapter work remain open; the following entries
+  describe current runtime.
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`

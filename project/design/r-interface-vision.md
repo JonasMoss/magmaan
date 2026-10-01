@@ -69,7 +69,185 @@ no fitting default or compatibility contract.
   inference. The ordinary README and help pages specify simulation extraction;
   consumers pin the ordinary package and compiled dependency together.
 
-## The ordinary-user call
+## Proposal: reusable models and a smaller ordinary API
+
+Status: proposal recorded 2026-10-01, not implemented. The requested direction
+is explicit model construction before repeated fits, removal of ordinary
+`fixed.x` and `missing` arguments, and opt-in barrier fitting before its
+development and inference are complete. The signatures below replace the
+current surface only after implementation and migration checks. Defaults remain
+opinionated; `options` supplies explicit overrides, not required configuration.
+
+```r
+magmaan_model(model, prototype = NULL,
+              ordered = NULL,
+              group = NULL,
+              identification = "marker")
+
+magmaan(model, data,
+        estimator = "ML",
+        covariance = "unrestricted",
+        inference = TRUE,
+        options = NULL)
+```
+
+`magmaan_model()` is the one new public constructor. It returns an immutable
+reusable model containing the specification and native structural preparation;
+`magmaan()` returns a separate fitted result without modifying that model.
+`infer(fit)` retains its existing meaning. No `do.fit` or construction mode on
+`inference` is needed. A syntax string remains a convenient fitting input where
+ordinary defaults and the supplied dataset determine the schema; that call
+constructs internally on each invocation. Simulations use the explicit path.
+
+### Construction and schema
+
+```r
+m <- magmaan_model("f =~ y1 + y2 + y3")
+fit <- magmaan(m, observations)
+
+skeleton <- data.frame(
+  y1 = ordered(character(), levels = 1:5),
+  y2 = ordered(character(), levels = 1:5),
+  y3 = ordered(character(), levels = 1:5),
+  site = factor(character(), levels = c("A", "B"))
+)
+m <- magmaan_model("f =~ y1 + y2 + y3", prototype = skeleton,
+                   ordered = c("y1", "y2", "y3"), group = "site")
+fits <- lapply(datasets, function(d) {
+  magmaan(m, d, estimator = "DWLS", inference = FALSE)
+})
+```
+
+A single-group continuous model can be constructed without a prototype.
+Grouped and ordinal models need group identities/order and category levels/order.
+A zero-row data frame suffices when factor levels declare these completely;
+an actual dataset may also supply the schema. Declared factor levels determine
+the schema, including levels absent from the prototype's rows. For non-factor
+prototype columns, construction uses group appearance order and sorted observed
+ordinal values, and records them. Simulation authors should declare all intended
+levels rather than let one random draw determine the model's dimensions.
+`ordered` declares categorical treatment; integer-valued columns alone do not.
+Group counts in a prototype do not select a fixed-allocation sampling law.
+
+Construction uses no empirical moments, threshold estimates, sample-derived
+starts or estimation weights from the prototype. Each fit resolves columns by
+name and validates the frozen schema. New sample sizes, moments and missingness
+patterns are allowed. New groups, reordered category levels or structural
+constraints require explicit reconstruction. An empty fitting group or category
+must have a defined failure result; it must not silently remove model rows.
+
+The constructor accepts lavaan syntax, supported constructed specifications and
+compatible prepared models. Source language is metadata, not a requirement to
+carry a lavaan string. Future EQS input should enter the same validated model
+contract through its adapter; this proposal neither adds automatic language
+detection nor promises ordinary EQS support before adapter checks. Native
+FC-SEM and parked model families remain outside this constructor's ordinary slice.
+
+`LatentStructure` owns estimands, identification and constraints; `LatentNames`
+owns variable/group names, labels and plabels; `Starts` owns explicit structural
+start hints. Native matrix representation and ordinal row layout are prepared
+once. Fitting honors the same triple and its partable projection. Data-derived
+starts are refreshed, and explicit fit-time starts override hints in a local
+working copy without rebuilding or mutating the prepared structure. Numerical
+workspaces belong to individual fits. Native handles remain process-local:
+prepare once per worker, retaining portable specification/schema for rebuilding.
+
+### Fitting defaults and overrides
+
+| Input | Proposed ordinary treatment |
+| --- | --- |
+| `group`, `ordered`, identification | Construction inputs; inherited by fits |
+| `group.equal`, `group.partial` | No fit arguments; explicit syntax/constructed-model constraints carry these choices |
+| `cluster` | No ordinary argument; two-level fitting remains in the lab |
+| `fixed.x` | Removed; ordinary construction uses the joint random-X contract and rejects incompatible fixed-x specifications rather than silently converting them |
+| `missing` | Removed; the estimator determines observation handling and the fit records rows used/deleted |
+| `parameterization`, `meanstructure` | No fit overrides; resolve and retain these structural choices during construction |
+| `psd` | Replaced by the `covariance` policy selector |
+| `start` | No top-level argument; overrides belong in `options$start` |
+| Barrier strength and target | Overrides belong in `options$barrier` |
+| Start algorithm, optimizer, convergence and preset | Opinionated defaults, modified only through `options` |
+
+Missing-data defaults preserve existing listwise behavior for ML and ordinary
+DWLS; FIML uses its observed-data likelihood and ML2S its two-stage route where
+supported. Pairwise ordinal handling stays lab-only until a separate ordinary
+estimator contract is selected. Removing the argument does not expand inference
+regimes or hide deletion provenance. Existing compiled fixed-x conventions remain
+available in the lab and retain their component gates.
+
+`options$start` unifies a named start constructor, a previous fit or a parameter
+table. Omission selects the estimator's documented automatic start. Matching is
+by parameter identity and group; unmatched free parameters use the automatic
+start. Supplied starts must honor fixed values and constraints, and never modify
+the reusable model. Existing `options$starts` constructor selections and top-level
+`start` need an explicit migration to this singular spelling; competing overrides
+must error. Optimizer, convergence and pinned-preset overrides retain the existing
+fitting contract and never change the ordinary inference policy.
+
+### PSD and experimental barriers
+
+`covariance` selects `"unrestricted"`, `"psd"` or `"barrier"`. PSD imposes hard
+constraints on fitted covariance blocks; it does not include a barrier. A barrier
+changes the optimized criterion and protects the faces defined by its target.
+These are distinct policies; internal domain constraints and penalties remain
+separate compositional choices. Neither policy repairs indefinite input moments.
+
+```r
+fit_psd <- magmaan(m, observations, covariance = "psd")
+fit_barrier <- magmaan(m, observations, covariance = "barrier")
+fit_custom <- magmaan(m, observations, covariance = "barrier",
+                      options = list(barrier = list(weight = 0.5,
+                                                    target = "determinacy")))
+fit_started <- magmaan(m, observations, options = list(start = previous_fit))
+```
+
+The barrier examples require a model/estimator combination with implemented
+barrier fitting. The initial proposed defaults follow the current lab's
+multi-information barrier: target `"joint"`, weight `0.25`, with effective
+normalization `weight / n_total`. Overrides support `target = "joint"` or
+`"determinacy"` and finite non-negative `weight`. These are provisional numerical
+defaults for an explicitly selected development method, not a validated ordinary
+default. Barrier settings with another covariance policy error. Weight zero
+needs a checked unpenalized reduction and still retains requested-route metadata.
+
+Barrier exposure is opt-in and need not await complete development. Fits and
+summaries identify the method as experimental, retain the effective settings,
+unpenalized discrepancy and penalized objective, and audit the optimized objective.
+Unsupported model/estimator/target combinations error without changing methods.
+A successful barrier fit remains usable with `inference = TRUE`: covariance,
+global and nested tests and intervals are explicitly unavailable until their
+penalized-estimating-equation and sampling-law contracts are validated. Use the
+existing typed unavailable status with a penalty-specific detail; do not run
+ordinary unpenalized inference as a substitute. `infer()` and `anova()` must honor
+the same provenance. Exposure does not change the default covariance policy or
+move barrier-specific hardening/inference out of the 0.0.2 programme.
+
+### Implementation and remaining decisions
+
+Reuse the lab's prepared ownership and C++ statistical implementation. The
+ordinary package composes model/data/weight preparation and fitting internally;
+users need only construction and fitting. Extend missing adapters rather than
+turn a prepared model back into a partable for every replication.
+
+Before implementation, settle the immutable mean-layout default: a mean-capable
+ordinary model versus explicitly prepared mean/covariance layouts. FIML must
+not silently add rows to an existing model. Decide whether `ordered` should be
+inferred from ordered factors when omitted, how empty declared categories/groups
+are reported, and the versioned migration for removed arguments. These choices
+must preserve explicit structural restrictions and recorded inference targets.
+
+Acceptance gates: fresh/prepared agreement in partable, estimates, objective and
+diagnostics; zero repeated structural-preparation calls; changed datasets with
+one schema and independently refreshed starts/thresholds; skeleton-data support;
+explicit schema/fixed-x rejection; start/preset override behavior; barrier
+normalization, zero-weight reduction and inference refusal; portable metadata
+and worker reconstruction. Benchmark small repeatedly fitted models, separating
+construction, dataset preparation, fitting and requested inference. Existing
+prepared support is a foundation, not proof that all ordinary adapters exist.
+Implementation tasks belong in the [active backlog](../backlog/todo.md#api-and-r-boundary).
+
+## Current ordinary-user call
+
+The following records implemented behavior, pending the proposal above.
 
 ```r
 magmaan(model, data,
@@ -332,7 +510,9 @@ A research method enters `magmaan` when all three hold:
 2. It fits as a value of an existing argument or as one post-fit function.
 3. Its inference availability is defined.
 
-Otherwise it stays in the lab.
+Otherwise it stays in the lab, except for explicitly requested development
+exposure with unavailable inference. The proposal above requests this exception
+for barriers; it does not claim validated inference or default adoption.
 
 - **In now:** `psd = TRUE` (PSD fits exist for ML, FIML, ML2S, ULS, GLS, WLS,
   ordinal and mixed data) and PEBA4, which is part of the policy.
@@ -341,13 +521,15 @@ Otherwise it stays in the lab.
   Its shared fitting/metadata replacement is near-term lab work; ordinary-user
   exposure still requires the gates above.
 - **Priority frontier, currently lab-only:** the multi-information barrier.
-  Ordinary-user exposure requires its argument and inference contracts plus
-  the evidence above; development priority alone does not promote it.
+  The proposal above exposes fitting on implemented combinations with experimental
+  status and explicit unavailable inference, before completing its validation.
+  Current ordinary runtime has not changed.
 - **Other lab-only methods:** robust ordinal estimation, FC-SEM, flip tests
   and simulation.
 
-The proposed `covariance = "unrestricted" | "psd" | "barrier"` spelling is an
-open naming and compatibility decision, not an available argument. Internal
+The proposal above selects `covariance = "unrestricted" | "psd" | "barrier"`
+with barrier overrides in `options`; migration remains to be implemented. It is
+not yet an ordinary-package argument. Internal
 domain constraints and penalties remain independent. Correlation-ML fitting
 retains ordinal sampling provenance; it does not inherit Gaussian raw-data
 likelihood or automatic continuous-ML inference. See

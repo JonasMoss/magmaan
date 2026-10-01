@@ -179,18 +179,20 @@ here track that work; completing the 0.1.0 gates does not complete it.
 0.0.1 prioritizes ordinary and PSD inference in supported primary workflows.
 Ordinary SEs are not automatically valid at singular PSD endpoints; require
 validated sampling contracts or explicit unsupported results. Barrier-specific
-covariance, tests, intervals and exposure belong to the 0.0.2 section below.
+covariance, tests and intervals belong to the 0.0.2 section below. Opt-in
+experimental fitting exposure is requested in the ordinary API proposal;
+availability does not claim validated inference.
 
 ### ML and FIML
 
-- [ ] **S — make the ordinary fixed-x policy restriction explicit.** The policy
-  geometry requires random X while ordinary fitting defaults to `fixed.x=TRUE`.
-  Audit component dispatch and document unsupported inference consistently in
-  direct/deferred calls, covariance and global/nested reports. **Check:** typed
-  reasons, retained fits/data and supported random-X controls; never silently
-  substitute a joint model. General fixed-design inference is
+- [ ] **S/M — remove the ordinary fixed-x option under the proposed API.**
+  Ordinary construction uses the joint random-X contract; reject incompatible
+  supplied fixed-x specs instead of silently replacing their model. Preserve
+  compiled/lab compatibility conventions. Coordinate with the reusable-model
+  task below. **Check:** random-X partable/fitting parity, direct/deferred and
+  nested inference gates, typed rejection and retained metadata. General
+  fixed-design inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
-  Changing the fitting default requires a separate evidence-backed decision.
 
 - [ ] **M — accept nested pairs written by dropping or fixing parameters.**
   `policy_nested()` and the exact `robust_nested_lrt()` restriction require the
@@ -422,6 +424,21 @@ structural-path enumeration remains a separate model-builder contract.
 
 ### API and R boundary
 
+- [ ] **M/L — implement the ordinary reusable-model proposal.** Add
+  `magmaan_model()` and fit immutable prepared models through the smaller
+  `magmaan(model, data, estimator, covariance, inference, options)` surface.
+  Support zero-row grouped/ordinal schema frames; keep native structural
+  preparation outside repeated fits. Move start/barrier overrides into options;
+  resolve mean-layout defaults and versioned argument migration. Missing-data
+  handling belongs to the estimator; preserve row provenance. Expose implemented
+  barriers experimentally, with unavailable inference until their separate gates
+  pass. Extend prepared adapters instead of rebuilding partables per draw.
+  **Check:** fresh/prepared parity, structural-preparation counters, changed-data
+  starts/thresholds, schema/fixed-x rejection, option precedence, barrier
+  zero-weight/normalization and inference refusal, worker reconstruction, and
+  separately timed small-model setup/data/fit/inference. See the
+  [proposal](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api).
+
 The initial EQS model-section frontend is complete; its maintained scope and
 validation limits are in the [EQS contract](../grammar/eqs.md). Additional EQS
 syntax (notably `/MODEL`, labels and constraints) is unscheduled until requester
@@ -480,9 +497,10 @@ shared primitives or promotes an ordinary-user default.
   and H1-reference contract; latent determinacy is zero without genuine latents.
 
 - [ ] **S/M — settle friendly covariance-policy naming and migration.** The
-  proposed `covariance = "unrestricted" | "psd" | "barrier"` replaces an
-  overloaded `psd` option, but exact naming and existing-call migration remain
-  open. Internally domain constraints and penalties stay independent.
+  ordinary API proposal selects `covariance = "unrestricted" | "psd" |
+  "barrier"` to replace `psd`, with barrier overrides in `options`. Finalize
+  existing-call migration alongside reusable-model implementation. Internally
+  domain constraints and penalties stay independent.
   **Check:** explicit combinations, compatibility/refit metadata and documented
   distinction between changing the covariance domain and changing the objective.
 
@@ -690,8 +708,10 @@ entry points and regression gates.
   general multi-face reference law. Use each moment source's Gamma/influence
   law, target-map derivatives and actual penalized estimating equation; retain
   structural-parameter and threshold uncertainty explicitly. Define scaling/
-  domain and inference before claiming DWLS penalty inference or ordinary-user
-  exposure. **Check:** independent derivatives, fixed-penalty limits,
+  domain and inference before claiming DWLS penalty inference or validated
+  ordinary-user inference. Experimental fitting exposure is requested separately
+  by the ordinary API proposal and reports unavailable inference.
+  **Check:** independent derivatives, fixed-penalty limits,
   regular/boundary covariance, global/nested tests and interval calibration,
   with explicit unsupported components. Reuse correlation-ML criterion
   evaluation at DWLS fits for robust RMSEA without implying ML refitting.
