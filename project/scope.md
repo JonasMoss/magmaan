@@ -176,19 +176,35 @@ parameter and an exact-fit test address different hypotheses; robustness of
 one does not validate the other. Singular boundaries and penalized estimators
 need their own inference rather than inherited interior formulas.
 
-Current ordinary ML policy geometry requires random X; the public fitting
-interface still defaults to `fixed.x = TRUE`. For models with fixed observed
-covariates, this mismatch remains an active
-restriction/documentation task, not a commitment to build general fixed-design
-inference. Unsupported inference must be explicit, and no route may silently
-refit a joint model. Any change to the fitting default needs a separate,
-evidence-backed interface decision.
-
 Categorical conditional stage-one moments and their sampling covariance are
 not implemented. The existing rejection of categorical fixed-covariate models
 remains. That extension is banked separately from genuinely fixed-design
 inference: it could serve random-X population inference, but is not required
 to complete the currently supported primary workflows.
+
+### Ordinary fixed-x decision
+
+Decided 2026-10-01: the
+[ordinary API](design/r-interface-vision.md#ordinary-api) has no `fixed.x`
+option and always fits the joint random-X model that the ordinary policy
+geometry requires. A fixed-x fit is not a neutral numerical convention. Its
+inferential meaning rests on further assumptions, such as a correctly
+specified linear conditional mean (see the counterexample above), and an
+argument would hide them. Fixed-x inference remains a banked extension, not an
+ordinary option.
+
+The removal changes estimators differently. For ML, the structural estimates
+coincide, because the likelihood factors into the marginal of X and the
+conditional of Y given X. For least-squares estimators they generally differ:
+on a Holzinger–Swineford regression with two observed covariates, GLS and ULS
+structural estimates moved by up to 0.05 and 0.13 (checked 2026-10-01).
+
+The lab keeps its fixed-x conventions and their component gates. Ordinary
+construction rejects lab specifications built with `fixed_x = TRUE` and says
+how to rebuild them; it never silently converts a supplied fixed-x model or
+refits a joint model in its place. Until the ordinary API lands, the current
+runtime keeps `fixed.x = TRUE` as its default, with explicitly unsupported
+inference for fixed observed covariates.
 
 ## Reopening banked work
 
