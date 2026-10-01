@@ -1,0 +1,36 @@
+(* Normative EQS model-section subset. Keywords/variable IDs are case-insensitive.
+   This is a model frontend, not an EQS job-file or estimator implementation.
+   /MODEL, /LABELS, /SPECIFICATIONS, data, means, groups and constraints are
+   deliberately rejected. See eqs.md for lowering and validation contracts. *)
+eqs_model       ::= eqs_section+ ('/END')?
+eqs_section     ::= '/EQUATIONS' eqs_equation+
+                  | '/VARIANCES' eqs_variance+
+                  | '/COVARIANCES' eqs_covariance+
+eqs_header      ::= '/EQUATIONS' | '/VARIANCES' | '/COVARIANCES'
+(* Unambiguous prefixes of these headers with at least three letters work. *)
+eqs_statement   ::= eqs_equation | eqs_variance | eqs_covariance
+eqs_equation    ::= eqs_variable '=' eqs_term (('+' | '-') eqs_term)* ';'
+eqs_term        ::= ('+' | '-')? eqs_coefficient? eqs_variable
+eqs_coefficient ::= eqs_number '*'? | '*'
+eqs_variance    ::= eqs_variable_list '=' eqs_value ';'
+eqs_covariance  ::= eqs_variable_list '=' eqs_value ';'
+eqs_value       ::= ('+' | '-')? eqs_coefficient
+eqs_variable_list ::= eqs_range (',' eqs_range)*
+eqs_range       ::= eqs_variable (('-' | 'TO') eqs_variable)?
+eqs_variable    ::= [VvFfEeDd] [1-9] [0-9]*
+eqs_number      ::= ([0-9]+ ('.' [0-9]*)? | '.' [0-9]+)
+                    ([eE] ('+' | '-') [0-9]+)?
+(* A signed exponent disambiguates 1E1 (a unit path on error E1).
+   Whitespace and ! through end-of-line comments separate tokens. *)
+eqs_token       ::= eqs_variable | eqs_number | [A-Za-z]+ | '/' [A-Za-z]+
+                    | '=' | '+' | '-' | '*' | ',' | ';'
+eqs_space       ::= [ \t\r\n] | '!' [^\n]*
+(* Semantic productions, implemented after token parsing: *)
+eqs_lower       ::= eqs_equation* eqs_variance* eqs_covariance*
+eqs_flat        ::= eqs_lower
+(* Equations have exactly one distinct unit E (observed) or D (factor) error.
+   Variances/covariances refer to independent variables, including E/D. Missing
+   independent variances are free; omitted covariances are zero. Every F has
+   an observed indicator. Shared errors, nonunit error paths, error/predictor
+   and E/D covariances are outside this subset. Observed indicators cannot
+   participate in structural regressions. V999 constants are rejected. *)

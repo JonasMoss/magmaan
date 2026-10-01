@@ -350,6 +350,9 @@ magmaan_core <- local({
       "compat_lavaan_nested_lrt_satorra_bentler2010",
       "lavaan_compare_partable"
     ),
+    compat_eqs = c(
+      "eqs_model"
+    ),
     model = c(
       "model_matrix_rep",
       "model_implied"

@@ -259,6 +259,14 @@ moment-target foundation; that extraction can proceed alongside normalization.
 
 ### API and R boundary
 
+The initial EQS model-section frontend is complete; its maintained scope and
+validation limits are in the [EQS contract](../grammar/eqs.md). Additional EQS
+syntax (notably `/MODEL`, labels and constraints) is unscheduled until requester
+files establish the needed subset; full EQS job/estimator emulation is outside
+this request. Indicator variables participating in structural regressions
+currently fail explicitly at the frontend; lifting this restriction requires
+resolving their shared model-builder representation first.
+
 #### Shared fitting composition
 
 Dependency order: moment-target foundation → ordinal association contract →

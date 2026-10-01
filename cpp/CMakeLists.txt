@@ -82,11 +82,13 @@ add_library(magmaan STATIC
   src/util/version.cpp
   src/parse/lexer.cpp
   src/parse/parser.cpp
+  src/parse/eqs_parser.cpp
   src/spec/build.cpp
   src/spec/composite_expand.cpp
   src/spec/lin_constraints.cpp
   src/compat/lavaan/partable_view.cpp
   src/compat/lavaan/composite_fold.cpp
+  src/compat/eqs_model.cpp
   src/detail_linalg.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp

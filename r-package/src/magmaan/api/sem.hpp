@@ -81,6 +81,9 @@ class Model {
 public:
   static Result<Model> from_lavaan(std::string_view syntax,
                                    ModelOptions options = {});
+  static Result<Model> from_eqs(
+      std::string_view syntax,
+      const std::vector<std::string>& observed_names = {});
 
   const std::string &source() const noexcept { return source_; }
   const parse::FlatPartable &flat_partable() const noexcept { return *flat_; }
@@ -106,6 +109,9 @@ private:
 
 Result<Model> model_from_lavaan(std::string_view syntax,
                                 ModelOptions options = {});
+Result<Model> model_from_eqs(
+    std::string_view syntax,
+    const std::vector<std::string>& observed_names = {});
 
 enum class DataKind : std::uint8_t {
   SampleStats,

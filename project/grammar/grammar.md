@@ -1,5 +1,8 @@
 # magmaan model grammar — v0
 
+The alternate EQS frontend has its own normative
+[grammar](eqs_grammar.ebnf) and [lowering/validation contract](eqs.md).
+
 Source of truth for the parser. Read this in conjunction with
 [`grammar.ebnf`](grammar.ebnf) (the formal spec) and
 [`lexer.md`](lexer.md) (token classes and lexer-level rules).

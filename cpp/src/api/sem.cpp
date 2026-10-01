@@ -1,4 +1,6 @@
 #include "magmaan/api/sem.hpp"
+#include "magmaan/compat/eqs/model.hpp"
+#include "magmaan/parse/eqs_parser.hpp"
 
 #include <cmath>
 #include <limits>
@@ -304,6 +306,27 @@ Error make_error(ErrorStage stage, FitError error) {
 
 Error make_error(ErrorStage stage, PostError error) {
   return Error{stage, error.detail, std::move(error)};
+}
+
+Result<Model> Model::from_eqs(
+    std::string_view syntax, const std::vector<std::string>& observed_names) {
+  auto flat = parse::EqsParser::parse(syntax, observed_names);
+  if (!flat) return std::unexpected(make_error(ErrorStage::Parse, flat.error()));
+  ModelOptions options;
+  options.build = compat::eqs::build_options();
+  spec::Starts starts;
+  spec::LatentNames names;
+  auto structure = spec::build(*flat, options.build, &starts, &names);
+  if (!structure) return std::unexpected(make_error(ErrorStage::Model, structure.error()));
+  auto rep = model::build_matrix_rep(*structure, &names);
+  if (!rep) return std::unexpected(make_error(ErrorStage::Model, rep.error()));
+  return Model(std::string(syntax), std::move(*flat), std::move(*structure),
+               std::move(names), std::move(starts), std::move(*rep), options);
+}
+
+Result<Model> model_from_eqs(
+    std::string_view syntax, const std::vector<std::string>& observed_names) {
+  return Model::from_eqs(syntax, observed_names);
 }
 
 Result<Model> Model::from_lavaan(std::string_view syntax,

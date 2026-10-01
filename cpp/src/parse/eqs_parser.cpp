@@ -1,0 +1,423 @@
+#include "magmaan/parse/eqs_parser.hpp"
+
+#include <algorithm>
+#include <charconv>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace magmaan::parse {
+namespace {
+
+struct Token {
+  std::string text;
+  SourceSpan span;
+  bool number = false;
+};
+struct Value {
+  bool free = false;
+  std::optional<double> number = 1.0;
+};
+struct Term {
+  Token variable;
+  Value value;
+};
+struct Equation {
+  Token lhs;
+  std::vector<Term> terms;
+};
+struct Assignment {
+  std::vector<Token> variables;
+  Value value;
+  SourceSpan span;
+};
+struct OwnedRow {
+  std::string lhs;
+  Op op;
+  std::string rhs;
+  Value value;
+  SourceSpan span;
+};
+
+// production: eqs_token = eqs_variable | eqs_number | [A-Za-z]+ | ...
+bool letter(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+// production: eqs_number = ('+' | '-')? ([0-9]+ ...)
+bool digit(char c) { return c >= '0' && c <= '9'; }
+// production: eqs_token = eqs_variable | eqs_number | [A-Za-z]+ | ...
+std::string upper(std::string_view text) {
+  std::string result(text);
+  for (char& c : result) if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+  return result;
+}
+// production: eqs_variable = [VvFfEeDd] [1-9] [0-9]*
+bool variable_id(std::string_view text) {
+  if (text.size() < 2 || std::string_view("VFED").find(text[0]) == std::string_view::npos ||
+      text[1] < '1' || text[1] > '9') return false;
+  return std::all_of(text.begin() + 1, text.end(), digit);
+}
+
+class Reader {
+ public:
+  Reader(std::string_view source, const std::vector<std::string>& names)
+      : source_(source), names_(names) {}
+
+  // production: eqs_model = eqs_section+ ('/END')?
+  parse_expected<FlatPartable> read() {
+    if (source_.size() > std::numeric_limits<std::uint32_t>::max())
+      return fail({}, "EQS source is too large");
+    if (!tokenize()) return std::unexpected(*error_);
+    while (!peek().text.empty()) {
+      const auto header = take();
+      if (header.text == "/END") {
+        if (!peek().text.empty()) return fail(peek().span, "text after /END is unsupported");
+        break;
+      }
+      int section = 0;
+      if (header_is(header.text, "EQUATIONS")) section = 1;
+      if (header_is(header.text, "VARIANCES")) section = 2;
+      if (header_is(header.text, "COVARIANCES")) section = 3;
+      if (section == 0) return fail(header.span,
+          "unsupported EQS section; expected /EQUATIONS, /VARIANCES or /COVARIANCES (model sections only)");
+      if (peek().text.empty() || peek().text.starts_with('/'))
+        return fail(peek().span, "EQS section must contain a statement");
+      while (!peek().text.empty() && !peek().text.starts_with('/')) {
+        if (section == 1) {
+          if (!equation()) return std::unexpected(*error_);
+        } else if (!assignment(section == 3)) return std::unexpected(*error_);
+      }
+    }
+    return lower();
+  }
+
+ private:
+  std::string_view source_;
+  const std::vector<std::string>& names_;
+  std::vector<Token> tokens_;
+  std::size_t next_ = 0;
+  std::optional<ParseError> error_;
+  std::vector<Equation> equations_;
+  std::vector<Assignment> variances_;
+  std::vector<Assignment> covariances_;
+
+  // production: eqs_model = eqs_section+ ('/END')?
+  static std::unexpected<ParseError> fail(SourceSpan span, std::string detail) {
+    return std::unexpected(ParseError{ParseError::Kind::UnsupportedOperator, span, std::move(detail)});
+  }
+  // production: eqs_statement = eqs_equation | eqs_variance | eqs_covariance
+  bool bad(SourceSpan span, std::string detail) {
+    error_ = fail(span, std::move(detail)).error();
+    return false;
+  }
+  // production: eqs_token = eqs_variable | eqs_number | [A-Za-z]+ | ...
+  const Token& peek() const { return tokens_[next_]; }
+  // production: eqs_token = eqs_variable | eqs_number | [A-Za-z]+ | ...
+  Token take() { return tokens_[next_++]; }
+  // production: eqs_statement = eqs_equation | eqs_variance | eqs_covariance
+  bool expect(std::string_view text) {
+    if (peek().text != text) return bad(peek().span, "expected '" + std::string(text) + "' in EQS statement");
+    take();
+    return true;
+  }
+  // production: eqs_header = '/EQUATIONS' | '/VARIANCES' | '/COVARIANCES'
+  static bool header_is(std::string_view text, std::string_view full) {
+    return text.size() >= 4 && text[0] == '/' && full.starts_with(text.substr(1));
+  }
+  // production: eqs_space = [ \t\r\n] | '!' [^\n]*
+  bool tokenize() {
+    std::size_t pos = 0;
+    std::uint32_t line = 1, col = 1;
+    auto advance = [&]() {
+      if (source_[pos++] == '\n') { ++line; col = 1; } else ++col;
+    };
+    while (pos < source_.size()) {
+      const char c = source_[pos];
+      if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { advance(); continue; }
+      if (c == '!') {
+        while (pos < source_.size() && source_[pos] != '\n') advance();
+        continue;
+      }
+      const auto begin = pos;
+      SourceSpan span{static_cast<std::uint32_t>(begin), static_cast<std::uint32_t>(begin + 1), line, col};
+      bool number = false;
+      if (c == '/' || letter(c)) {
+        if (c == '/') advance();
+        while (pos < source_.size() && (letter(source_[pos]) || digit(source_[pos]))) advance();
+      } else if (digit(c) || c == '.') {
+        number = true;
+        while (pos < source_.size() && digit(source_[pos])) advance();
+        if (pos < source_.size() && source_[pos] == '.') {
+          advance();
+          while (pos < source_.size() && digit(source_[pos])) advance();
+        }
+        // An unsigned exponent is ambiguous with an adjacent E-variable.
+        if (pos + 1 < source_.size() && (source_[pos] == 'e' || source_[pos] == 'E') &&
+            (source_[pos + 1] == '+' || source_[pos + 1] == '-')) {
+          advance(); advance();
+          while (pos < source_.size() && digit(source_[pos])) advance();
+        }
+      } else if (std::string_view("=+-*,;").find(c) != std::string_view::npos) {
+        advance();
+      } else return bad(span, "unsupported character in EQS model sections");
+      span.end = static_cast<std::uint32_t>(pos);
+      const auto raw = source_.substr(begin, pos - begin);
+      const auto normalized = number ? std::string(raw) : upper(raw);
+      if (raw.starts_with('/') && normalized != "/END" &&
+          !header_is(normalized, "EQUATIONS") &&
+          !header_is(normalized, "VARIANCES") &&
+          !header_is(normalized, "COVARIANCES"))
+        return bad(span, "unsupported EQS section (model sections only): " + std::string(raw));
+      tokens_.push_back({normalized, span, number});
+    }
+    tokens_.push_back({"", {static_cast<std::uint32_t>(pos), static_cast<std::uint32_t>(pos), line, col}, false});
+    return true;
+  }
+  // production: eqs_variable = [VvFfEeDd] [1-9] [0-9]*
+  bool variable(Token& token) {
+    if (!variable_id(peek().text)) return bad(peek().span, "expected EQS variable Vn, Fn, En or Dn");
+    token = take();
+    if (token.text == "V999") return bad(token.span, "EQS V999 means/intercepts are not supported yet");
+    return true;
+  }
+  // production: eqs_number = ('+' | '-')? ([0-9]+ ...)
+  bool number(double& value) {
+    if (!peek().number) return bad(peek().span, "expected a numeric EQS coefficient");
+    const auto token = take();
+    const auto result = std::from_chars(token.text.data(), token.text.data() + token.text.size(), value);
+    if (result.ec != std::errc{} || result.ptr != token.text.data() + token.text.size() || !std::isfinite(value))
+      return bad(token.span, "malformed or nonfinite EQS coefficient");
+    return true;
+  }
+  // production: eqs_coefficient = eqs_number '*'? | '*'
+  bool coefficient(Value& value, bool required, int sign = 1) {
+    if (peek().text == "+" || peek().text == "-") {
+      if (take().text == "-") sign = -sign;
+    }
+    if (peek().number) {
+      double n = 0;
+      if (!number(n)) return false;
+      value.number = sign * n;
+      if (peek().text == "*") { take(); value.free = true; }
+      return true;
+    }
+    if (peek().text == "*") {
+      take(); value.free = true;
+      value.number = sign < 0 ? std::optional<double>(-1.0) : std::nullopt;
+      return true;
+    }
+    if (required) return bad(peek().span, "expected a fixed value or '*' in EQS assignment");
+    value.number = static_cast<double>(sign);
+    return true;
+  }
+  // production: eqs_equation = eqs_variable '=' eqs_term ... ';'
+  bool equation() {
+    Equation eq;
+    if (!variable(eq.lhs) || !expect("=")) return false;
+    if (eq.lhs.text[0] != 'V' && eq.lhs.text[0] != 'F')
+      return bad(eq.lhs.span, "only V/F variables can be dependent in an EQS equation");
+    int sign = 1;
+    while (true) {
+      Term term;
+      if (!coefficient(term.value, false, sign) || !variable(term.variable)) return false;
+      eq.terms.push_back(std::move(term));
+      if (peek().text != "+" && peek().text != "-") break;
+      sign = take().text == "-" ? -1 : 1;
+    }
+    if (!expect(";")) return false;
+    equations_.push_back(std::move(eq));
+    return true;
+  }
+  // production: eqs_range = eqs_variable (('-' | 'TO') eqs_variable)?
+  bool variable_list(std::vector<Token>& variables) {
+    while (true) {
+      Token first;
+      if (!variable(first)) return false;
+      variables.push_back(first);
+      if (peek().text == "-" || peek().text == "TO") {
+        take(); Token last;
+        if (!variable(last)) return false;
+        unsigned int a = 0, b = 0;
+        const auto ra = std::from_chars(first.text.data() + 1, first.text.data() + first.text.size(), a);
+        const auto rb = std::from_chars(last.text.data() + 1, last.text.data() + last.text.size(), b);
+        if (ra.ec != std::errc{} || rb.ec != std::errc{} || first.text[0] != last.text[0] ||
+            b < a || b - a > 10000)
+          return bad(last.span, "invalid EQS range (same variable family, ascending, at most 10001 entries)");
+        for (unsigned int i = a; i < b;) {
+          ++i;
+          std::string id = std::string(1, first.text[0]) + std::to_string(i);
+          if (id == "V999") return bad(first.span, "EQS V999 means/intercepts are not supported yet");
+          variables.push_back({std::move(id), first.span, false});
+          if (i == b) break;  // also protects the largest unsigned endpoint
+        }
+      }
+      if (peek().text != ",") return true;
+      take();
+    }
+  }
+  // production: eqs_variance = eqs_variable_list '=' eqs_value ';'
+  // production: eqs_covariance = eqs_variable_list '=' eqs_value ';'
+  bool assignment(bool covariance) {
+    Assignment statement;
+    statement.span = peek().span;
+    if (!variable_list(statement.variables) || !expect("=") ||
+        !coefficient(statement.value, true) || !expect(";")) return false;
+    if (covariance && statement.variables.size() < 2)
+      return bad(statement.span, "an EQS covariance requires at least two variables");
+    (covariance ? covariances_ : variances_).push_back(std::move(statement));
+    return true;
+  }
+
+  // production: eqs_lower = eqs_equation* eqs_variance* eqs_covariance*
+  parse_expected<FlatPartable> lower() {
+    if (equations_.empty() && variances_.empty() && covariances_.empty())
+      return fail({}, "empty EQS model");
+    std::map<std::string, Token> variables;
+    std::map<std::string, std::string> errors;
+    std::set<std::string> dependent, measured, indicators;
+    std::vector<OwnedRow> rows;
+    for (const auto& eq : equations_) {
+      if (!dependent.insert(eq.lhs.text).second) return fail(eq.lhs.span, "duplicate EQS equation");
+      variables.try_emplace(eq.lhs.text, eq.lhs);
+    }
+    for (const auto& eq : equations_) {
+      std::set<std::string> predictors;
+      bool has_error = false;
+      for (const auto& term : eq.terms) {
+        const auto& id = term.variable.text;
+        variables.try_emplace(id, term.variable);
+        if (!predictors.insert(id).second) return fail(term.variable.span, "duplicate predictor in EQS equation");
+        if (id[0] == 'E' || id[0] == 'D') {
+          if (has_error || term.value.free || term.value.number != 1.0 ||
+              (eq.lhs.text[0] == 'V' ? id[0] != 'E' : id[0] != 'D'))
+            return fail(term.variable.span, "each equation needs exactly one fixed unit E (V equation) or D (F equation) error path");
+          if (!errors.emplace(id, eq.lhs.text).second)
+            return fail(term.variable.span, "shared EQS error variables are unsupported");
+          has_error = true;
+        } else if (eq.lhs.text[0] == 'V' && id[0] == 'F') {
+          measured.insert(id);
+          indicators.insert(eq.lhs.text);
+          rows.push_back({id, Op::Measurement, eq.lhs.text, term.value, term.variable.span});
+        } else {
+          if (eq.lhs.text == id) return fail(term.variable.span, "self-regression is unsupported");
+          rows.push_back({eq.lhs.text, Op::Regression, id, term.value, term.variable.span});
+        }
+      }
+      if (!has_error) return fail(eq.lhs.span, "EQS equations without a unit error term are unsupported");
+    }
+    for (const auto& row : rows)
+      if (row.op == Op::Regression &&
+          (indicators.contains(row.lhs) || indicators.contains(row.rhs)))
+        return fail(row.span, "observed indicators participating in structural regressions are unsupported in this EQS subset");
+    for (const auto& statement : variances_)
+      for (const auto& v : statement.variables) variables.try_emplace(v.text, v);
+    for (const auto& statement : covariances_)
+      for (const auto& v : statement.variables) variables.try_emplace(v.text, v);
+
+    std::map<std::string, std::string> mapped;
+    std::set<std::string> unique_names;
+    for (const auto& [id, token] : variables) {
+      if (id[0] == 'F' && !measured.contains(id))
+        return fail(token.span, "every EQS factor must have an observed indicator in this subset");
+      if ((id[0] == 'E' || id[0] == 'D') && !errors.contains(id))
+        return fail(token.span, "EQS error variable has no owning equation");
+      if (id[0] == 'E' || id[0] == 'D') continue;
+      std::string name = id;
+      if (id[0] == 'V' && !names_.empty()) {
+        std::size_t index = 0;
+        auto r = std::from_chars(id.data() + 1, id.data() + id.size(), index);
+        if (r.ec != std::errc{} || index == 0 || index > names_.size())
+          return fail(token.span, "observed_names does not cover EQS variable " + id);
+        name = names_[index - 1];
+      }
+      if (name.empty() || !(letter(name[0]) || name[0] == '.' || name[0] == '_') ||
+          !std::all_of(name.begin(), name.end(), [](char c) { return letter(c) || digit(c) || c == '_' || c == '.'; }) ||
+          (name[0] == '.' && (name.size() == 1 || digit(name[1]))) || name == "NA" || name == "Inf" || name == "NaN")
+        return fail(token.span, "mapped EQS names must be valid lavaan identifiers");
+      if (!unique_names.insert(name).second) return fail(token.span, "mapped observed/factor names collide");
+      mapped[id] = std::move(name);
+    }
+    auto owner = [&](const std::string& id) -> std::string {
+      const auto it = errors.find(id);
+      return it == errors.end() ? id : it->second;
+    };
+    std::map<std::string, std::size_t> variance_rows;
+    // All EQS independent variables have a variance; absence of a specification
+    // does not invoke lavaan's marker/single-indicator identification policies.
+    for (const auto& [id, token] : variables) {
+      if (dependent.contains(id)) continue;
+      const auto name = owner(id);
+      variance_rows[id] = rows.size();
+      rows.push_back({name, Op::Covariance, name, {true, std::nullopt}, token.span});
+    }
+    for (const auto& statement : variances_) {
+      for (const auto& v : statement.variables) {
+        if (dependent.contains(v.text))
+          return fail(v.span, "EQS variances belong to independent variables; specify E/D for a dependent variable's residual variance");
+        auto& row = rows[variance_rows.at(v.text)];
+        row.value = statement.value;
+        row.span = v.span;
+      }
+    }
+    std::map<std::pair<std::string, std::string>, std::size_t> covariance_rows;
+    for (const auto& statement : covariances_) {
+      for (std::size_t i = 0; i < statement.variables.size(); ++i) {
+        const auto& a = statement.variables[i];
+        if (dependent.contains(a.text)) return fail(a.span, "EQS covariances refer to independent variables, including E/D errors");
+        for (std::size_t j = 0; j < i; ++j) {
+          const auto& b = statement.variables[j];
+          if (a.text == b.text) return fail(a.span, "duplicate variable in EQS covariance list");
+          const bool a_error = errors.contains(a.text), b_error = errors.contains(b.text);
+          if (a_error != b_error || (a_error && a.text[0] != b.text[0]))
+            return fail(a.span, "error/predictor and E/D cross-covariances are unsupported in this subset");
+          const auto key = std::minmax(a.text, b.text);
+          auto it = covariance_rows.find(key);
+          OwnedRow row{owner(b.text), Op::Covariance, owner(a.text), statement.value, statement.span};
+          if (it == covariance_rows.end()) {
+            covariance_rows.emplace(key, rows.size());
+            rows.push_back(std::move(row));
+          } else rows[it->second] = std::move(row);
+        }
+      }
+    }
+    return flat(rows, mapped);
+  }
+  // production: eqs_flat = eqs_lower
+  parse_expected<FlatPartable> flat(const std::vector<OwnedRow>& rows,
+                                   const std::map<std::string, std::string>& mapped) {
+    FlatPartable out;
+    out.source_text.assign(source_.begin(), source_.end());
+    std::map<std::string, std::pair<std::size_t, std::size_t>> locations;
+    for (const auto& [id, name] : mapped) {
+      locations[id] = {out.symbol_text.size(), name.size()};
+      out.symbol_text.insert(out.symbol_text.end(), name.begin(), name.end());
+    }
+    auto view = [&](const std::string& id) {
+      const auto [offset, length] = locations.at(id);
+      return std::string_view(out.symbol_text.data() + offset, length);
+    };
+    for (const auto& r : rows) {
+      Modifier modifier = r.value.free ? Modifier(Free{}) : Modifier(FixedValue{*r.value.number});
+      if (r.value.free && r.value.number) modifier = StartValue{*r.value.number};
+      out.rows.push_back({view(r.lhs), r.op, view(r.rhs), 1, out.add_modifier(std::move(modifier)), r.span});
+    }
+    return out;
+  }
+};
+
+}  // namespace
+
+// production: eqs_model = eqs_section+ ('/END')?
+parse_expected<FlatPartable> EqsParser::parse(
+    std::string_view source, const std::vector<std::string>& observed_names) {
+  return Reader(source, observed_names).read();
+}
+
+}  // namespace magmaan::parse

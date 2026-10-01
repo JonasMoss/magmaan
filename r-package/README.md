@@ -10,6 +10,11 @@ are available through the `magmaan_core` object for interactive methods work.
 
 Convenience helpers are limited to R-side composition:
 
+- `eqs_model()` parses explicit EQS equations, variances and covariances into
+  the same model specification. Supply `observed_names` in EQS data-column
+  order to map V-number variables. The initial single-group continuous subset
+  and validation limits are documented in the [EQS contract](../project/grammar/eqs.md).
+
 - `model_spec()` calls the parser/lavaanify wrapper and stores the syntax plus
   lavaanify options, including `model_type = "growth"` for lavaan-style linear
   growth defaults. `meanstructure = "default"` enables means for grouped models;

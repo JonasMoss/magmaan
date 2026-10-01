@@ -9,6 +9,10 @@ parse_parse <- function(syntax) {
     .Call(`_magmaanlab_parse_parse`, syntax)
 }
 
+eqs_model_impl <- function(syntax, observed_names = NULL) {
+    .Call(`_magmaanlab_eqs_model_impl`, syntax, observed_names)
+}
+
 lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, orthogonal = FALSE, auto_fix_first = TRUE, auto_fix_single = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, int_ov_free = TRUE, int_lv_free = FALSE, n_groups = 1L, group_var = "", group_labels = NULL, group_equal = NULL, group_partial = NULL) {
     .Call(`_magmaanlab_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels, group_equal, group_partial)
 }

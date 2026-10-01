@@ -1335,6 +1335,17 @@ an unconstrained gradient test to constrained solutions.
 
 ### Parser, lavaanify, and matrix representation
 
+- EQS model-section frontend (2026-10-01): `parse::EqsParser` and
+  `api::model_from_eqs` lower explicit single-group continuous equations,
+  variances and covariances into the existing model triple. Fixed/free values,
+  starts, error ownership, default-zero covariances and explicit identification
+  are preserved; EQS job/estimator settings are not imported. Both R packages
+  expose the same `eqs_model()` constructor; ordinary fitting also accepts
+  model specs with identification/model options owned by the constructor.
+  The [EQS contract](../grammar/eqs.md) defines the subset, unsupported cases
+  and evidence limits. Offline pinned-lavaan fixtures gate rows, starts, ML
+  estimates, implied covariance, expected SEs, df and chi-square; R tests
+  compare installed lavaan. There is no live EQS oracle.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

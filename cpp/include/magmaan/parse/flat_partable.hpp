@@ -115,7 +115,7 @@ struct Constraint {
 // === Flat partable ==========================================================
 // The direct output of the parser. The lavaanify step turns this into a
 // full LatentStructure (defaults inserted, free indices assigned, etc.). source_text
-// owns the bytes that all string_views in `rows` and `mods` point into.
+// owns source bytes; views point into it or the optional symbol_text buffer.
 //
 // source_text is std::vector<char> rather than std::string because moving a
 // FlatPartable must not invalidate the string_views in rows/mods. SSO would
@@ -129,6 +129,9 @@ struct FlatPartable {
   std::vector<Modifier>   mods;          // 1-indexed; mods[0] is a sentinel
   std::vector<Constraint> constraints;   // ==, <, >, := statements
   std::vector<char>       source_text;   // owned; heap-stable
+  // Alternate frontends can intern normalized/mapped names without changing
+  // source_text or invalidating diagnostic spans. Populate before taking views.
+  std::vector<char>       symbol_text;
   std::vector<BlockKind>  block_kinds;   // header order, parallel to 1-based row blocks
 
   FlatPartable() : mods(1) {}            // mods[0] sentinel

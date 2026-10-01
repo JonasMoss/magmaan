@@ -15,6 +15,8 @@
 #include "magmaan/error.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/eqs_parser.hpp"
+#include "magmaan/compat/eqs/model.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/compat/lavaan/composite_fold.hpp"
@@ -254,6 +256,24 @@ Rcpp::List parse_parse(std::string syntax) {
                             Rcpp::_["mods"] = mods,
                             Rcpp::_["constraints"] = constraints,
                             Rcpp::_["source"] = sv2s(fp.source()));
+}
+
+// [[Rcpp::export]]
+Rcpp::List eqs_model_impl(std::string syntax,
+                         Rcpp::Nullable<Rcpp::CharacterVector> observed_names = R_NilValue) {
+  std::vector<std::string> columns;
+  if (observed_names.isNotNull())
+    columns = Rcpp::as<std::vector<std::string>>(observed_names.get());
+  auto flat = magmaan::parse::EqsParser::parse(syntax, columns);
+  if (!flat) stop_parse(flat.error());
+  magmaan::spec::LatentNames names;
+  magmaan::spec::Starts starts;
+  auto model = magmaan::spec::build(*flat, magmaan::compat::eqs::build_options(), &starts, &names);
+  if (!model) Rcpp::stop("magmaan EQS model error: %s", model.error().detail);
+  auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
+  return Rcpp::List::create(
+      Rcpp::_["partable"] = lavaan_partable_df(pt),
+      Rcpp::_["syntax"] = magmaan::compat::eqs::to_lavaan_syntax(*flat));
 }
 
 // [[Rcpp::export]]

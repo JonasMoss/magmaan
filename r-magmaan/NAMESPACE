@@ -1,4 +1,6 @@
 export(magmaan)
+export(eqs_model)
+importFrom(magmaanlab, eqs_model)
 export(infer)
 export(as_lab_fit)
 S3method(print, magmaan)

@@ -32,6 +32,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// eqs_model_impl
+Rcpp::List eqs_model_impl(std::string syntax, Rcpp::Nullable<Rcpp::CharacterVector> observed_names);
+RcppExport SEXP _magmaanlab_eqs_model_impl(SEXP syntaxSEXP, SEXP observed_namesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type syntax(syntaxSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type observed_names(observed_namesSEXP);
+    rcpp_result_gen = Rcpp::wrap(eqs_model_impl(syntax, observed_names));
+    return rcpp_result_gen;
+END_RCPP
+}
 // lavaan_lavaanify
 Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool orthogonal, bool auto_fix_first, bool auto_fix_single, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, bool int_ov_free, bool int_lv_free, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels, Rcpp::Nullable<Rcpp::CharacterVector> group_equal, Rcpp::Nullable<Rcpp::CharacterVector> group_partial);
 RcppExport SEXP _magmaanlab_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP orthogonalSEXP, SEXP auto_fix_firstSEXP, SEXP auto_fix_singleSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP int_ov_freeSEXP, SEXP int_lv_freeSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP, SEXP group_equalSEXP, SEXP group_partialSEXP) {
@@ -4213,6 +4225,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_version", (DL_FUNC) &_magmaanlab_version, 0},
     {"_magmaanlab_parse_parse", (DL_FUNC) &_magmaanlab_parse_parse, 1},
+    {"_magmaanlab_eqs_model_impl", (DL_FUNC) &_magmaanlab_eqs_model_impl, 2},
     {"_magmaanlab_lavaan_lavaanify", (DL_FUNC) &_magmaanlab_lavaan_lavaanify, 18},
     {"_magmaanlab_model_matrix_rep", (DL_FUNC) &_magmaanlab_model_matrix_rep, 1},
     {"_magmaanlab_bounds_variance_impl", (DL_FUNC) &_magmaanlab_bounds_variance_impl, 1},

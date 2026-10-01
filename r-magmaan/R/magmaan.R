@@ -19,7 +19,8 @@
 #' under magmaan's single documented policy. Option names follow lavaan where
 #' the concept is the same.
 #'
-#' @param model lavaan model syntax, one string.
+#' @param model lavaan model syntax, one string, or a model specification from
+#'   `magmaanlab::model_spec()` or [eqs_model()].
 #' @param data A data frame of raw observations.
 #' @param estimator `"ML"`, `"FIML"`, `"ML2S"`, `"GLS"` or `"ULS"` for
 #'   continuous variables; `"DWLS"`, `"WLS"` or `"ULS"` for variables declared
@@ -63,12 +64,18 @@ magmaan <- function(model, data,
                     psd = FALSE,
                     start = "default",
                     inference = TRUE) {
-  if (!is.character(model) || length(model) != 1L || is.na(model)) {
-    stop("magmaan(): `model` must be lavaan model syntax in one string", call. = FALSE)
+  is_spec <- inherits(model, "magmaan_model_spec")
+  if (!is_spec && (!is.character(model) || length(model) != 1L || is.na(model))) {
+    stop("magmaan(): `model` must be lavaan model syntax in one string or a model specification", call. = FALSE)
   }
   if (!is.data.frame(data)) {
     stop("magmaan(): `data` must be a data frame of raw observations; ",
          "summary-statistic input is available in magmaanlab", call. = FALSE)
+  }
+  if (is_spec && (!missing(identification) || !missing(fixed.x) ||
+                  !missing(meanstructure) || !is.null(group.equal) ||
+                  !is.null(group.partial))) {
+    stop("magmaan(): identification, meanstructure, fixed.x and equality options belong in the model constructor when supplying a model specification", call. = FALSE)
   }
   estimator <- .check_estimator(estimator)
   .check_flag(psd, "psd")
@@ -94,6 +101,10 @@ magmaan <- function(model, data,
   if (identical(identification, "std.lv")) model_options$std_lv <- TRUE
   if (!is.null(group.equal)) model_options$group_equal <- group.equal
   if (!is.null(group.partial)) model_options$group_partial <- group.partial
+
+  if (is_spec) {
+    model_options <- list()
+  }
 
   lab <- do.call(magmaanlab::fit_model, c(
     list(model = model, data = data, estimator = estimator, groups = group,
