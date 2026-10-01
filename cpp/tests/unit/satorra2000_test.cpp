@@ -946,3 +946,88 @@ TEST_CASE("compute_satorra2000: rejects rank-deficient restrictions") {
   CHECK_FALSE(r.has_value());
   CHECK(r.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
 }
+
+TEST_CASE("Satorra-2000 rank gates preserve variable and parameter units") {
+  using namespace magmaan::robust;
+  std::mt19937 rng(6104u);
+  Eigen::Matrix2d Sigma;
+  Sigma << 300.0, 4.0, 4.0, 1.0;
+  for (bool means : {false, true}) {
+    const int q = means ? 5 : 3;
+    std::vector<SatorraGroup> groups;
+    for (int g = 0; g < 2; ++g) {
+      const int n = g == 0 ? 240 : 360;
+      Eigen::MatrixXd X = sample_mvn(rng, n, Sigma);
+      const Eigen::VectorXd mean = X.colwise().mean();
+      const Eigen::MatrixXd Xc = X.rowwise() - mean.transpose();
+      Eigen::MatrixXd Pi = Eigen::MatrixXd::Zero(q, 2*q);
+      Pi.middleCols(g*q, q).setIdentity();
+      groups.push_back({Pi, Xc.transpose()*Xc/n, X, mean, n/600.0, n,
+                        means ? 2 : 0});
+    }
+    // Equality of two groups' variance and covariance. Their units change by
+    // different powers, so this also exercises the restriction metric gate.
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(2, 2*q);
+    A(0, q-3) = A(1, q-2) = 1.0;
+    A(0, 2*q-3) = A(1, 2*q-2) = -1.0;
+    for (double units : {0.01, 100.0}) {
+      Eigen::Vector2d scale(units, 1.0);
+      auto rescaled = groups;
+      for (auto& g : rescaled) {
+        g.X = g.X * scale.asDiagonal();
+        g.mean = scale.asDiagonal() * g.mean;
+        g.Sigma = scale.asDiagonal() * g.Sigma * scale.asDiagonal();
+      }
+      for (auto mode : {GammaComputation::Streaming, GammaComputation::Materialized,
+                        GammaComputation::Dense}) {
+        for (auto gamma : {GammaSource::NT, GammaSource::Empirical}) {
+          INFO("means=", means, ", units=", units, ", mode=", static_cast<int>(mode));
+          auto reference = compute_satorra2000(groups, A, gamma, mode);
+          auto result = compute_satorra2000(rescaled, A, gamma, mode);
+          REQUIRE(reference.has_value());
+          if (!result) INFO(result.error().detail);
+          REQUIRE(result.has_value());
+          CHECK(result->eigenvalues.isApprox(reference->eigenvalues, 1e-8));
+          auto test = lr_test_satorra2000(4.7, *result);
+          auto expected = lr_test_satorra2000(4.7, *reference);
+          REQUIRE(test.has_value());
+          REQUIRE(expected.has_value());
+          CHECK(test->T_scaled == doctest::Approx(expected->T_scaled).epsilon(1e-8));
+        }
+      }
+    }
+  }
+
+  Eigen::Matrix3d bread;
+  bread << 2.0, 0.4, 0.2, 0.4, 1.0, 0.3, 0.2, 0.3, 1.5;
+  Eigen::Matrix3d meat = bread * bread;
+  Eigen::MatrixXd A(2, 3);
+  A << 1.0, 0.0, 0.0, 0.0, 1.0, 0.5;
+  auto reference = compute_satorra2000_from_sandwich(bread, meat, A);
+  REQUIRE(reference.has_value());
+  const Eigen::Vector3d units(1e-4, 100.0, 1.0);
+  const Eigen::Vector2d equations(1e-4, 100.0);
+  const Eigen::MatrixXd changed_A = equations.asDiagonal()*A*units.asDiagonal();
+  auto changed = compute_satorra2000_from_sandwich(
+      units.asDiagonal()*bread*units.asDiagonal(),
+      units.asDiagonal()*meat*units.asDiagonal(), changed_A);
+  REQUIRE(changed.has_value());
+  CHECK(changed->eigenvalues.isApprox(reference->eigenvalues, 1e-10));
+  const Eigen::Vector3d moment_units(100.0, 0.01, 1.0);
+  const Eigen::MatrixXd changed_Delta = moment_units.cwiseProduct(units).asDiagonal();
+  const Eigen::MatrixXd changed_V = moment_units.cwiseInverse().asDiagonal()*bread*
+                                    moment_units.cwiseInverse().asDiagonal();
+  const Eigen::MatrixXd changed_Gamma = moment_units.array().square().matrix().asDiagonal();
+  auto moment = compute_fiml_satorra2000(changed_Delta, changed_V,
+                                        changed_Gamma, changed_A);
+  REQUIRE(moment.has_value());
+  CHECK(moment->eigenvalues.isApprox(reference->eigenvalues, 1e-10));
+  // A positive-diagonal matrix with dependent columns remains singular after
+  // equilibration; the scale fix must not act as regularization.
+  bread.col(2) = bread.col(0);
+  bread.row(2) = bread.row(0).eval();
+  auto singular = compute_satorra2000_from_sandwich(
+      units.asDiagonal()*bread*units.asDiagonal(),
+      units.asDiagonal()*meat*units.asDiagonal(), changed_A);
+  CHECK_FALSE(singular.has_value());
+}

@@ -4963,6 +4963,19 @@ using lavaan as the timing denominator. When both fits are FIML,
 the retained FIML `raw_data` rather than a caller-supplied complete-data
 argument; mixed FIML/complete-data pairs and the lavaan SB2001/SB2010
 compatibility methods are rejected for this boundary.
+Satorra-2000 rank checks and solves use symmetric diagonal equilibration of
+pooled expected or observed parameter information and the restriction companion
+matrix (2026-10-01). The same congruence is applied to both matrices of the
+reduced spectral pencil; returned `C` and `S` retain their original coordinates.
+This removes measurement-unit effects without regularization or relaxing the
+singularity tolerance. The ordinary prepared NTML nested score/LR route has its
+own information and restriction-metric checks; these now use the same
+normalization, including the casewise whitening consumed by `policy_nested()`
+and `anova()`. `satorra2000_test.cpp` gates grouped covariance/mean models,
+streaming/materialized/dense spectra, moment/parameter/restriction rescaling and
+singular controls. `policy_test.cpp` carries fitted CFA points through exact
+unit transformations. `test_nested_units.R` checks both R routes for a two-group
+path model with a roughly 300-fold variance contrast and a 100-fold unit change.
 The complete-data ML restriction map handles mean structure: when either fit
 carries free intercepts / latent means the per-group moment vector is augmented
 to `[μ_g; vech(Σ_g)]` (mean rows on top), so `lr_test_satorra2000_from_data`

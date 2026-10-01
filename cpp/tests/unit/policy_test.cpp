@@ -598,3 +598,49 @@ TEST_CASE("policy nested embedding: frozen lavaan dropped-loading score and exac
     CHECK(std::abs(lr->T_scaled-j["lr_scaled_expected"].get<double>())<1e-5);
   }
 }
+
+TEST_CASE("policy nested rank checks preserve variable units") {
+  std::mt19937 rng(6105u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 400, Eigen::Vector4d::Zero()));
+  auto data = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(data.has_value());
+  auto alt = prepare_on(*data, build("f =~ x1 + x2 + x3 + x4", false));
+  auto null = prepare_on(*data, build("f =~ x1 + a*x2 + a*x3 + x4", false));
+  const auto reference = api::policy_nested_ml(null, {}, alt, {});
+  for (double units : {0.01, 100.0, 1000.0}) {
+    // Change only the units, carrying fitted points through the exact parameter
+    // transformation to keep optimizer accuracy out of the rank regression.
+    auto scaled = raw;
+    scaled.X[0].col(3) *= units;
+    auto scaled_data = ntml::prepare_ntml_data(scaled, false, ntml::ContributionStorage::Casewise);
+    REQUIRE(scaled_data.has_value());
+    auto transform = [&](const std::shared_ptr<ntml::NTMLFit>& fit) {
+      auto est = fit->estimates;
+      for (std::size_t r = 0; r < fit->pt.free.size(); ++r) {
+        const auto& cell = fit->rep.cell_for_row[r];
+        if (!cell.used || fit->pt.free[r] <= 0) continue;
+        double multiplier = 1.0;
+        // LISREL: x4's loading and residual variance carry its units.
+        if (cell.mat == magmaan::model::MatId::Lambda && cell.row == 3) multiplier = units;
+        if (cell.mat == magmaan::model::MatId::Theta && cell.row == 3 && cell.col == 3) multiplier = units*units;
+        est.theta(fit->pt.free[r]-1) *= multiplier;
+      }
+      auto out = ntml::prepare_ntml_fit(*scaled_data, fit->pt, fit->rep, est);
+      REQUIRE(out.has_value());
+      return *out;
+    };
+    const auto result = api::policy_nested_ml(transform(null), {}, transform(alt), {});
+    for (bool score : {false, true}) {
+      const auto& expected = score ? reference.score : reference.lr;
+      const auto& test = score ? result.score : result.lr;
+      INFO("units=", units, ", score=", score, ", reason=", api::reason_name(test.reason));
+      REQUIRE(expected.reason == api::InferenceReason::Available);
+      REQUIRE(test.reason == api::InferenceReason::Available);
+      CHECK(test.statistic == doctest::Approx(expected.statistic).epsilon(1e-8));
+      CHECK(test.eigenvalues.isApprox(expected.eigenvalues, 1e-8));
+      CHECK(test.p_sb == doctest::Approx(expected.p_sb).epsilon(1e-8));
+      CHECK(test.p_peba4 == doctest::Approx(expected.p_peba4).epsilon(1e-8));
+    }
+  }
+}

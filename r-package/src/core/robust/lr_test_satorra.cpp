@@ -76,13 +76,13 @@ post_expected<void> require_finite_matrix(const Eigen::MatrixBase<Derived>& A,
 
 post_expected<void> require_spd_matrix(const Eigen::MatrixXd& A,
                                        const std::string& what) {
-  const auto g = detail::symmetric_pd_gated(A);
+  const auto g = detail::symmetric_pd_gated(detail::equilibrate_symmetric(A).matrix);
   if (!g.ok) {
     const PostError::Kind kind = (!g.finite || !g.decomposed)
         ? PostError::Kind::NumericIssue
         : PostError::Kind::InfoMatrixSingular;
     return std::unexpected(make_err(kind,
-        gate_detail(what, g, "positive definite/well-conditioned")));
+        gate_detail(what + " (equilibrated)", g, "positive definite/well-conditioned")));
   }
   return {};
 }
@@ -95,7 +95,7 @@ post_expected<void> require_symmetric_nonsingular_matrix(
         what + " is not square and finite"));
   }
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
-      0.5 * (A + A.transpose()), Eigen::EigenvaluesOnly);
+      detail::equilibrate_symmetric(A).matrix, Eigen::EigenvaluesOnly);
   if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         what + " eigendecomposition failed"));
@@ -106,7 +106,7 @@ post_expected<void> require_symmetric_nonsingular_matrix(
   const double tol = 1e-10 * std::max(1.0, max_abs);
   if (min_abs <= tol) {
     return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-        what + " is singular or ill-conditioned (min |eigen| " +
+        what + " (equilibrated) is singular or ill-conditioned (min |eigen| " +
         std::to_string(min_abs) + ", max |eigen| " +
         std::to_string(max_abs) + ", tol " + std::to_string(tol) +
         ", min eigen " + std::to_string(evals.minCoeff()) +
@@ -117,10 +117,10 @@ post_expected<void> require_symmetric_nonsingular_matrix(
 
 post_expected<void> require_psd_matrix(const Eigen::MatrixXd& A,
                                        const std::string& what) {
-  const auto g = detail::symmetric_psd_gated(A);
+  const auto g = detail::symmetric_psd_gated(detail::equilibrate_symmetric(A).matrix);
   if (!g.ok) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        gate_detail(what, g, "positive semidefinite")));
+        gate_detail(what + " (equilibrated)", g, "positive semidefinite")));
   }
   return {};
 }
@@ -591,12 +591,14 @@ fiml_lavaan_restriction_core(
       !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_A1(core.A1);
+  const auto normalized_A1 = detail::equilibrate_symmetric(core.A1);
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_A1(normalized_A1.matrix);
   if (ldlt_A1.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         caller + ": H1 alpha-space bread A1 LDLT failed"));
   }
-  core.Y = ldlt_A1.solve(A_alpha.transpose());
+  core.Y = normalized_A1.scale.asDiagonal() *
+      ldlt_A1.solve(normalized_A1.scale.asDiagonal() * A_alpha.transpose());
   if (auto ok = require_finite_matrix(core.Y, caller + ": A1^{-1} A_alpha'");
       !ok.has_value()) {
     return std::unexpected(ok.error());
@@ -627,8 +629,11 @@ finish_satorra_reduced_spectrum(Eigen::MatrixXd C,
     return std::unexpected(ok.error());
   }
 
+  const auto normalized_C = detail::equilibrate_symmetric(C);
+  const Eigen::MatrixXd normalized_S = normalized_C.scale.asDiagonal() * S *
+                                       normalized_C.scale.asDiagonal();
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
-      S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+      normalized_S, normalized_C.matrix, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
   if (ges.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         caller + ": generalized eigensolver failed"));
@@ -1082,13 +1087,15 @@ compute_fiml_satorra2000_lavaan_convention_dense(
       !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  Eigen::LLT<Eigen::MatrixXd> llt_C(core_or->C);
+  const auto normalized_C = detail::equilibrate_symmetric(core_or->C);
+  Eigen::LLT<Eigen::MatrixXd> llt_C(normalized_C.matrix);
   if (llt_C.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_fiml_satorra2000_lavaan_convention_dense: companion matrix C "
         "Cholesky failed"));
   }
-  Eigen::MatrixXd U_d = D_stack * llt_C.solve(D_stack.transpose());
+  const Eigen::MatrixXd scaled_D = D_stack * normalized_C.scale.asDiagonal();
+  Eigen::MatrixXd U_d = scaled_D * llt_C.solve(scaled_D.transpose());
   if (auto ok = require_finite_matrix(
           U_d, "compute_fiml_satorra2000_lavaan_convention_dense: U matrix");
       !ok.has_value()) {
@@ -1355,7 +1362,8 @@ fiml_residual_projector_observed_bread(
   }
   Eigen::MatrixXd P = basis.transpose() * (*info_or) * basis;
   P = 0.5 * (P + P.transpose()).eval();
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  const auto normalized_P = detail::equilibrate_symmetric(P);
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(normalized_P.matrix);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         std::string(label) + ": observed alpha-space information is not "
@@ -1372,7 +1380,8 @@ fiml_residual_projector_observed_bread(
   }
 
   const Eigen::MatrixXd VD = Vsym * Delta_alpha;
-  Eigen::MatrixXd U = Vsym - VD * ldlt_P.solve(VD.transpose());
+  const Eigen::MatrixXd scaled_VD = VD * normalized_P.scale.asDiagonal();
+  Eigen::MatrixXd U = Vsym - scaled_VD * ldlt_P.solve(scaled_VD.transpose());
   U = 0.5 * (U + U.transpose()).eval();
   return U;
 }
@@ -1665,7 +1674,7 @@ lr_test_satorra_bentler2010_from_data(
     return std::unexpected(c0_or.error());
   }
   auto c10_or = single_model_satorra_bentler_scale(
-      pt_H1, rep_H1, theta_H0_full, *samp_or, raw, df_H1, gamma,
+      pt_H1, rep_H1, common_point, *samp_or, raw, df_H1, gamma,
       "lr_test_satorra_bentler2010_from_data/M10");
   if (!c10_or.has_value()) {
     return std::unexpected(c10_or.error());
@@ -2042,14 +2051,16 @@ compute_satorra2000_from_sandwich(
       !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  const auto normalized_P = detail::equilibrate_symmetric(P);
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(normalized_P.matrix);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 "
         "LDLT failed"));
   }
 
-  const Eigen::MatrixXd Y = ldlt_P.solve(A_alpha.transpose());
+  const Eigen::MatrixXd Y = normalized_P.scale.asDiagonal() *
+      ldlt_P.solve(normalized_P.scale.asDiagonal() * A_alpha.transpose());
   if (auto ok = require_finite_matrix(Y,
           "compute_satorra2000_from_sandwich: A1^{-1} A_alpha'");
       !ok.has_value()) {
@@ -2072,8 +2083,11 @@ compute_satorra2000_from_sandwich(
     return std::unexpected(ok.error());
   }
 
+  const auto normalized_C = detail::equilibrate_symmetric(C);
+  const Eigen::MatrixXd normalized_S = normalized_C.scale.asDiagonal() * S *
+                                       normalized_C.scale.asDiagonal();
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
-      S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+      normalized_S, normalized_C.matrix, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
   if (ges.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_satorra2000_from_sandwich: generalized eigensolver failed "

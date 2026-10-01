@@ -2,6 +2,7 @@
 #include "detail_linalg.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <Eigen/Eigenvalues>
 
@@ -37,6 +38,19 @@ SymmetricGateResult symmetric_eigen_gate(const Eigen::MatrixXd& A,
 }
 
 }  // namespace
+
+SymmetricEquilibration equilibrate_symmetric(const Eigen::MatrixXd& A) {
+  SymmetricEquilibration out{A, Eigen::VectorXd::Ones(A.rows())};
+  if (A.rows() != A.cols() || !A.allFinite()) return out;
+  for (Eigen::Index i = 0; i < A.rows(); ++i) {
+    double size = std::abs(A(i, i));
+    if (size == 0.0) size = A.row(i).cwiseAbs().maxCoeff();
+    if (size > 0.0) out.scale(i) = 1.0 / std::sqrt(size);
+  }
+  out.matrix = out.scale.asDiagonal() * (0.5 * (A + A.transpose())) *
+               out.scale.asDiagonal();
+  return out;
+}
 
 SymmetricGateResult symmetric_pd_gated(const Eigen::MatrixXd& A) {
   return symmetric_eigen_gate(A, true);

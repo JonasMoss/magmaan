@@ -30,6 +30,17 @@ struct SymInverseResult : SymmetricGateResult {
   Eigen::MatrixXd inverse;             // populated only when ok == true
 };
 
+struct SymmetricEquilibration {
+  Eigen::MatrixXd matrix;
+  Eigen::VectorXd scale;
+};
+
+// D A D with D_ii = 1/sqrt(|A_ii|). For positive-diagonal information this
+// removes parameter units before rank checks and solves; it introduces no ridge.
+// A zero diagonal uses its row maximum (indefinite bread), or one for a zero
+// row, so singular rows remain singular. Invalid inputs remain invalid.
+SymmetricEquilibration equilibrate_symmetric(const Eigen::MatrixXd& A);
+
 // Symmetric finite/eigendecomposition gate on 0.5*(A + Aᵀ).  `PD` requires
 // λ_min > tol; `PSD` allows rank deficiency but rejects λ_min < -tol.  These
 // helpers do not invert, so callers can guard generalized eigensolver and square

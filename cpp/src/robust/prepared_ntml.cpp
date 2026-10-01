@@ -6,6 +6,8 @@
 #include <tuple>
 #include <Eigen/Cholesky>
 
+#include "../detail_linalg.hpp"
+
 namespace magmaan::robust::frontier {
 namespace {
 PostError invalid(const char* why) { return {PostError::Kind::NumericIssue, why}; }
@@ -326,21 +328,25 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& h, 
     directions = **wd * D;
   } else {
     const Eigen::MatrixXd P = K.transpose()* **info * K;
-    Eigen::LLT<Eigen::MatrixXd> factor(P);
+    const auto normalized_P = detail::equilibrate_symmetric(P);
+    Eigen::LLT<Eigen::MatrixXd> factor(normalized_P.matrix);
     if (factor.info() != Eigen::Success || factor.rcond() < 1e-12)
       return std::unexpected(invalid("NTML LR: singular alternative information"));
-    const Eigen::MatrixXd Y = factor.solve(h.restriction.A.transpose());
+    const Eigen::MatrixXd Y = normalized_P.scale.asDiagonal() *
+        factor.solve(normalized_P.scale.asDiagonal() * h.restriction.A.transpose());
     metric = h.restriction.A * Y;
     directions = **wd * K * Y;
   }
   metric = 0.5*(metric+metric.transpose()).eval();
-  Eigen::LLT<Eigen::MatrixXd> factor(metric);
+  const auto normalized_metric = detail::equilibrate_symmetric(metric);
+  Eigen::LLT<Eigen::MatrixXd> factor(normalized_metric.matrix);
   if (factor.info() != Eigen::Success || factor.rcond() < 1e-12)
     return std::unexpected(invalid("NTML hypothesis: singular restriction metric"));
   auto rows = project(*fit.data,fit.geometry->base,directions);
   if (!rows) return std::unexpected(rows.error());
   if (score) likelihood_rows(fit,fit.geometry->base,directions,*rows);
-  Eigen::MatrixXd whitened = factor.matrixL().solve(rows->transpose()).transpose();
+  Eigen::MatrixXd whitened = factor.matrixL().solve(
+      normalized_metric.scale.asDiagonal() * rows->transpose()).transpose();
   const double statistic = score ? whitened.colwise().sum().squaredNorm()
       : inference::chi2_stat(fit.data->sample,h.null_fit->estimates) -
         inference::chi2_stat(fit.data->sample,h.alternative->estimates);

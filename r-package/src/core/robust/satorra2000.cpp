@@ -58,23 +58,23 @@ post_expected<void> require_finite_matrix(const Eigen::MatrixBase<Derived>& A,
 
 post_expected<void> require_spd_matrix(const Eigen::MatrixXd& A,
                                        const std::string& what) {
-  const auto g = detail::symmetric_pd_gated(A);
+  const auto g = detail::symmetric_pd_gated(detail::equilibrate_symmetric(A).matrix);
   if (!g.ok) {
     const PostError::Kind kind = (!g.finite || !g.decomposed)
         ? PostError::Kind::NumericIssue
         : PostError::Kind::InfoMatrixSingular;
     return std::unexpected(make_err(kind,
-        gate_detail(what, g, "positive definite/well-conditioned")));
+        gate_detail(what + " (equilibrated)", g, "positive definite/well-conditioned")));
   }
   return {};
 }
 
 post_expected<void> require_psd_matrix(const Eigen::MatrixXd& A,
                                        const std::string& what) {
-  const auto g = detail::symmetric_psd_gated(A);
+  const auto g = detail::symmetric_psd_gated(detail::equilibrate_symmetric(A).matrix);
   if (!g.ok) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        gate_detail(what, g, "positive semidefinite")));
+        gate_detail(what + " (equilibrated)", g, "positive semidefinite")));
   }
   return {};
 }
@@ -295,34 +295,16 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
       !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  const auto normalized_P = detail::equilibrate_symmetric(P);
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(normalized_P.matrix);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_satorra2000: pooled expected info P is not invertible "
         "(H1 not identified at θ̂)"));
   }
-  // LDLT.info() does not catch PSD-singular matrices.  An additional
-  // tiny-pivot check on the diagonal of D rejects under-identified H1.
-  //
-  // The threshold is *relative* to the pooled scale ‖P‖_∞: a configural
-  // multi-group fit has P block-diagonal with weights (n_g/N) ≈ 1/G, so a
-  // 1e-12-of-max pivot in a well-identified block is normal.  We use
-  // 1e-10 here to leave headroom while still catching genuine singularity.
-  {
-    const Eigen::VectorXd d_abs = ldlt_P.vectorD().cwiseAbs();
-    const double tol_pivot = 1e-10 * d_abs.maxCoeff();
-    if (d_abs.minCoeff() <= tol_pivot) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "compute_satorra2000: pooled expected info P is rank-deficient "
-          "(smallest |D| pivot " + std::to_string(d_abs.minCoeff()) +
-          " ≤ tol " + std::to_string(tol_pivot) + ", max pivot " +
-          std::to_string(d_abs.maxCoeff()) +
-          ") — H1 not identified or pooled moment Jacobian has a zero column."));
-    }
-  }
-
   // ── 3. Y = P⁻¹ · A_αᵀ   (r1 × m)
-  const Eigen::MatrixXd Y = ldlt_P.solve(A_alpha.transpose());
+  const Eigen::MatrixXd Y = normalized_P.scale.asDiagonal() *
+      ldlt_P.solve(normalized_P.scale.asDiagonal() * A_alpha.transpose());
   if (auto ok = require_finite_matrix(Y, "compute_satorra2000: P^{-1} A_alpha'");
       !ok.has_value()) {
     return std::unexpected(ok.error());
@@ -503,13 +485,15 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         !ok.has_value()) {
       return std::unexpected(ok.error());
     }
-    Eigen::LLT<Eigen::MatrixXd> llt_C(C);
+    const auto normalized_C = detail::equilibrate_symmetric(C);
+    Eigen::LLT<Eigen::MatrixXd> llt_C(normalized_C.matrix);
     if (llt_C.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "compute_satorra2000: companion matrix C Cholesky failed "
           "(dense path)"));
     }
-    Eigen::MatrixXd U_d = D_stack * llt_C.solve(D_stack.transpose());
+    const Eigen::MatrixXd scaled_D = D_stack * normalized_C.scale.asDiagonal();
+    Eigen::MatrixXd U_d = scaled_D * llt_C.solve(scaled_D.transpose());
     if (auto ok = require_finite_matrix(U_d,
             "compute_satorra2000: dense U matrix");
         !ok.has_value()) {
@@ -555,8 +539,11 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         !ok.has_value()) {
       return std::unexpected(ok.error());
     }
+    const auto normalized_C = detail::equilibrate_symmetric(C);
+    const Eigen::MatrixXd normalized_S = normalized_C.scale.asDiagonal() * S *
+                                         normalized_C.scale.asDiagonal();
     Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
-        S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+        normalized_S, normalized_C.matrix, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
     if (ges.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "compute_satorra2000: generalised eigensolver failed (C is likely "
@@ -603,8 +590,11 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         !ok.has_value()) {
       return std::unexpected(ok.error());
     }
+    const auto normalized_C = detail::equilibrate_symmetric(out.C);
+    const Eigen::MatrixXd normalized_S = normalized_C.scale.asDiagonal() * S_unbiased *
+                                         normalized_C.scale.asDiagonal();
     Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges_u(
-        S_unbiased, out.C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+        normalized_S, normalized_C.matrix, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
     if (ges_u.info() != Eigen::Success) {
       return std::unexpected(make_err(
           PostError::Kind::NumericIssue,

@@ -295,12 +295,6 @@ inference.
   [scores](../../r-package/examples/scores.R) and
   [inference reuse](../../r-package/examples/inference_reuse.R).
 
-- [ ] **M — make Satorra-2000 rank checks unit invariant.** Unscaled pooled
-  information checks reject the identified Kline Lynam model. Judge rank in
-  normalized/whitened geometry. **Check:** rescaling a variable by 100 preserves
-  the statistic, with genuine singular controls. Evidence:
-  [calibration battery](../../experiments/showcases/09-robust-test-calibration/report.qmd).
-
 - [ ] **L — bring FIML into the ordinary policy.** Compose adopted observed-H0
   sensitivity and expected metric, with distinct score/LR SB and PEBA4 spectra.
   Extend evaluation-point-specific influence reuse and grouped coverage.
