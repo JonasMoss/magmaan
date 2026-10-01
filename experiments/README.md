@@ -5,6 +5,12 @@ Experiments are grouped by purpose. Research and engineering also separate
 across activity moves; cite the slug and its current path. Archived folders
 have no numeric prefix. Conventions are in [AGENTS.md](AGENTS.md).
 
+For new work, follow [Where new work belongs](AGENTS.md#where-new-work-belongs):
+search for an existing question first, choose the purpose and activity, allocate
+a new category number above those already assigned, and register the study before
+its first run. Add runs or method lanes to an existing leaf when they serve the
+same question; speculative ideas start in the trigger register.
+
 | Purpose | Studies | Activity |
 |---------|--------:|----------|
 | [Decisions](#decisions) | 3 | Maintained registers and held-out evidence for library defaults. |
