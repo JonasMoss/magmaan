@@ -40,6 +40,12 @@ Install `magmaanlab` first (`just r-dev` or `just r-install`), then this
 package (`just r-magmaan`); `just r-magmaan-test` runs the tests.
 
 This simulation prerelease pairs `magmaan` 0.1.0 with `magmaanlab` 0.1.0.
+Development is unfinished. Remaining bugs need fixing, and coverage of the main
+estimators and inferential procedures needs completing and validating before
+a finished release. Version 0.1.0 is a snapshot for supported simulations;
+the inference limits above still apply. See the
+[remaining work](../project/backlog/todo.md#r-simulation-prerelease).
+
 Install the two source archives from the same release snapshot, compiled package
 first. The ordinary package declares the minimum compatible lab version;
 pin both versions for a simulation run.

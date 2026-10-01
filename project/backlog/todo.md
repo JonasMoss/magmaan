@@ -175,6 +175,11 @@ and package release notes. Completed checklist items have been folded into
 those records. Remaining inference expansion stays under the workflows below;
 it is not required to use this prerelease for supported simulations.
 
+The library and ordinary-user inference policy remain unfinished. Beyond this
+packaging milestone, the goal is to fix remaining bugs and complete and validate
+coverage of the main estimators and inferential procedures. The active items
+here track that work; completing the 0.1.0 gates does not complete it.
+
 ## Primary inference workflows
 
 ### ML and FIML

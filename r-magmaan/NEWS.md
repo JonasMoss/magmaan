@@ -3,6 +3,10 @@
 First simulation prerelease, paired with magmaanlab 0.1.0. The ordinary API
 accepts lavaan syntax and lavaan-backed model specifications. EQS is lab-only.
 
+Development is unfinished: remaining bugs and incomplete coverage of the main
+estimators and inferential procedures remain to be resolved and validated.
+Version 0.1.0 provides a versioned simulation snapshot, not a finished release.
+
 - Saved specifications supply ordered variables, parameterization and grouping;
   conflicting call options error before fitting. Row accounting uses the
   resolved grouping.

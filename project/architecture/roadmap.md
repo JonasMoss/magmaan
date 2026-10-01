@@ -4478,6 +4478,10 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   exercising the bundled `nloptr` fallback. Its native sources match the frozen
   release projection. Both packages are distributed as source archives for
   the local `v0.1.0` simulation prerelease; broader inference is not a gate.
+  This completes the simulation packaging milestone only. Development remains
+  unfinished: remaining bugs need fixing, and coverage of the main estimators
+  and inferential procedures needs completing and validating before a finished
+  release; the active backlog tracks that work.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as
   `magmaanlab::policy_inference(fit)` and run by `magmaan::infer()`. The

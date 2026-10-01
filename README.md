@@ -18,7 +18,13 @@ Neither package is a second SEM implementation; both sit over the same
 [project/design/r-interface-vision.md](project/design/r-interface-vision.md)
 for the design.
 
-* **Status:** alpha (v0.0.1). No API-stability promise yet; the lavaan-parity core should stabilize first.
+* **Status:** 0.1.0 simulation prerelease, paired across `magmaan` and
+  `magmaanlab`. Development is unfinished: remaining bugs need fixing, and
+  coverage of the main estimators and inferential procedures needs completing
+  and validating. The prerelease provides a versioned snapshot for supported
+  simulations; it carries no API-stability promise. See the
+  [ordinary-package coverage](r-magmaan/README.md) and
+  [remaining work](project/backlog/todo.md#r-simulation-prerelease).
 
 * **Language:** C++23 core, built with `-fno-exceptions -fno-rtti`. Failures are values (`std::expected`), not exceptions.
 
