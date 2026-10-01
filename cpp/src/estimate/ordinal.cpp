@@ -5692,50 +5692,6 @@ robust_mixed_ordinal(spec::LatentStructure pt,
 
 namespace {
 
-post_expected<Eigen::MatrixXd> invert_score_spd(const Eigen::MatrixXd& A,
-                                                std::string_view what) {
-  Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (A + A.transpose()));
-  if (ldlt.info() != Eigen::Success || !ldlt.isPositive()) {
-    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
-        std::string(what) + " is not positive definite"));
-  }
-  return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
-}
-
-post_expected<inference::ScoreTestResult>
-ordinal_score_for_direction(const inference::ScoreCandidate& candidate,
-                            const Eigen::VectorXd& score_full,
-                            const Eigen::MatrixXd& info_full,
-                            const Eigen::MatrixXd& K_nuisance,
-                            const Eigen::VectorXd& direction) {
-  const Eigen::VectorXd I_d = info_full * direction;
-  double score_eff = direction.dot(score_full);
-  double info_eff = direction.dot(I_d);
-  if (K_nuisance.cols() > 0) {
-    const Eigen::MatrixXd I_aa =
-        K_nuisance.transpose() * info_full * K_nuisance;
-    const Eigen::VectorXd I_ab = K_nuisance.transpose() * I_d;
-    const Eigen::VectorXd score_a = K_nuisance.transpose() * score_full;
-    auto inv = invert_score_spd(I_aa, "ordinal score nuisance information");
-    if (!inv.has_value()) return std::unexpected(inv.error());
-    score_eff -= I_ab.dot((*inv) * score_a);
-    info_eff -= I_ab.dot((*inv) * I_ab);
-  }
-  if (!(info_eff > 1e-10 * std::max<double>(1.0, std::abs(info_eff)))) {
-    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
-        "ordinal score efficient information is not positive"));
-  }
-  inference::ScoreTestResult out;
-  out.candidate = candidate;
-  out.score = score_eff;
-  out.information = info_eff;
-  out.mi = (score_eff * score_eff) / info_eff;
-  out.df = 1;
-  out.p_value = inference::chi2_pvalue(out.mi, 1);
-  out.epc = score_eff / info_eff;
-  return out;
-}
-
 post_expected<Eigen::MatrixXd> ordinal_null_space(const Eigen::MatrixXd& A,
                                                   Eigen::Index n_cols) {
   if (A.rows() == 0) return Eigen::MatrixXd::Identity(n_cols, n_cols);
@@ -5996,7 +5952,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     cand.group = work->pt.group[row];
     Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score.size(), con0->K().cols());
     if (con0->K().rows() > 0) K_aug.topRows(con0->K().rows()) = con0->K();
-    auto res = ordinal_score_for_direction(cand, score, info, K_aug, direction);
+    auto res = inference::score_for_direction(cand, score, info, K_aug, direction);
     if (res.has_value()) table.rows.push_back(*res);
   }
   return table;
@@ -6060,7 +6016,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
     cand.kind = inference::ScoreCandidateKind::EqualityRelease;
     cand.row = static_cast<std::size_t>(row);
     cand.op = parse::Op::EqConstraint;
-    auto res = ordinal_score_for_direction(cand, score, info, con->K(), *d);
+    auto res = inference::score_for_direction(cand, score, info, con->K(), *d);
     if (res.has_value()) table.rows.push_back(*res);
   }
   return table;

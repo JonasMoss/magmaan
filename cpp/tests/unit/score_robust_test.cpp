@@ -892,6 +892,65 @@ constexpr const char* mixed_ordinal_mg_eq_syntax =
 
 }  // namespace
 
+TEST_CASE("ordinal score rank: latent units and nearby points preserve candidates") {
+  std::mt19937 rng(20261002u);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(
+      {ordinal_three_cat_sample(rng, 700)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  auto prepared = magmaan::estimate::prepare_ordinal_delta_partable(h.pt, *stats);
+  REQUIRE(prepared.has_value());
+  inf::ModificationIndexOptions opts;
+  opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  for (auto weight : {magmaan::estimate::OrdinalWeightKind::ULS,
+                      magmaan::estimate::OrdinalWeightKind::DWLS,
+                      magmaan::estimate::OrdinalWeightKind::WLS}) {
+    auto fit = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, *stats, {}, weight);
+    REQUIRE(fit.has_value());
+    auto baseline = magmaan::estimate::modification_indices_ordinal(
+        h.pt, h.rep, *stats, *fit, weight, opts);
+    REQUIRE(baseline.has_value());
+    REQUIRE(baseline->rows.size() == 6);
+    for (double nearby : {0.0, 1e-7}) {
+      for (double units : {0.01, 1.0, 100.0}) {
+        CAPTURE(units);
+        CAPTURE(nearby);
+        auto pt = h.pt;
+        auto est = *fit;
+        est.theta(0) += nearby;
+        for (std::size_t r = 0; r < pt.size(); ++r) {
+          double factor = 1.0;
+          if (pt.op[r] == magmaan::parse::Op::Measurement) factor = units;
+          if (pt.op[r] == magmaan::parse::Op::Covariance &&
+              pt.lhs_var[r] == pt.rhs_var[r] &&
+              pt.var_role[static_cast<std::size_t>(pt.lhs_var[r])] == magmaan::spec::VarRole::Latent) {
+            factor = 1.0 / (units * units);
+          }
+          if (pt.free[r] > 0) est.theta(pt.free[r] - 1) *= factor;
+          else if (std::isfinite(pt.fixed_value[r])) pt.fixed_value[r] *= factor;
+        }
+        auto ordinary = magmaan::estimate::modification_indices_ordinal(
+            pt, h.rep, *stats, est, weight, opts);
+        auto robust = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+            pt, h.rep, *stats, est, weight, opts);
+        REQUIRE(ordinary.has_value());
+        REQUIRE(robust.has_value());
+        REQUIRE(ordinary->rows.size() == baseline->rows.size());
+        REQUIRE(robust->rows.size() == ordinary->rows.size());
+        for (std::size_t i = 0; i < ordinary->rows.size(); ++i) {
+          CHECK(ordinary->rows[i].candidate.row == baseline->rows[i].candidate.row);
+          CHECK(robust->rows[i].candidate.row == ordinary->rows[i].candidate.row);
+          CHECK(ordinary->rows[i].mi == doctest::Approx(robust->rows[i].mi));
+          if (nearby == 0.0) {
+            CHECK(ordinary->rows[i].mi == doctest::Approx(baseline->rows[i].mi));
+            CHECK(ordinary->rows[i].epc == doctest::Approx(baseline->rows[i].epc));
+          }
+        }
+      }
+    }
+  }
+}
+
 TEST_CASE("frontier robust ordinal MI: WLS + NACOV meat reduces to ordinary") {
   std::mt19937 rng(20260612u);
   auto stats =
@@ -2506,14 +2565,21 @@ TEST_CASE("score primitives: efficient rank uses relative information across uni
       auto result = inf::frontier::score_for_direction_robust(
           {}, score, information, information, 2.0 * information,
           nuisance, direction);
+      auto ordinary = inf::score_for_direction(
+          {}, score, information, nuisance, direction);
       if (delta < 1e-10) {
         REQUIRE_FALSE(result.has_value());
         CHECK(result.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
+        REQUIRE_FALSE(ordinary.has_value());
+        CHECK(ordinary.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
       } else {
         REQUIRE(result.has_value());
+        REQUIRE(ordinary.has_value());
         CHECK(result->mi == doctest::Approx(delta).epsilon(1e-8));
         CHECK(result->scaling_factor == doctest::Approx(2.0));
         CHECK(result->epc * units == doctest::Approx(1.0).epsilon(1e-8));
+        CHECK(ordinary->mi == doctest::Approx(result->mi));
+        CHECK(ordinary->epc == doctest::Approx(result->epc));
       }
     }
   }

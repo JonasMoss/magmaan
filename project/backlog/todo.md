@@ -389,7 +389,7 @@ projection/reference law before exposure. This adds no ordinary-user default.
 | Complete-data ML | Expected/observed information; robust core and R paths | Gate matching information/bread, structured/unstructured supported NT covariance, empirical/Browne and caller-Gamma choices; reject unsupported moment-source combinations |
 | Direct FIML | Analytic observed MI/release, robust core and R dispatch; expected geometry gates identification | Observed statistic/bread and observed-pattern casewise meat; expected-statistic, alternative covariance/moment and second-stage-weight choices explicitly rejected; broader convention/calibration work remains above |
 | Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R honors empirical/model-implied covariance with explicit fitting W; remaining work retains recipe/a and weight influence, audits sensitivity/nuisance projection, and exposes caller-Gamma adapters |
-| All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; close ordinary-rank and adapter gaps |
+| All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; shared relative rank is implemented, provenance/adapters remain |
 | Prepared all-ordinal correlation-ML | Retained catML fitting and shared association-target composition work; LS MI is not an ML-target score contract | Gate the active association Jacobian, saturated-threshold/NACOV transport and matching ML information before MI/release exposure; follow the shared fitting contract |
 | Two-stage/ML2S | R NT-ML MI is a naive Stage-2 comparator; retained Stage-1 and weighted inference primitives | Corrected MI/release for NT, ULS, DWLS, ADF and DLS Stage-2 recipes, using Stage-1 influence and the applicable estimated-weight term; preserve actual ML versus quadratic discrepancy provenance |
 
@@ -399,14 +399,6 @@ scope and need their own covariance law; direct composite-likelihood, two-level
 SEM, SAM, mixed-data and noniterative expansion are outside this slice.
 Automatic absent-row enumeration covers cross-loadings and covariances;
 structural-path enumeration remains a separate model-builder contract.
-
-- [ ] **S/M — unify ordinary ordinal MI rank and candidate checks.** The separate
-  ordinary ordinal worker retains an absolute efficient-information floor while
-  the shared robust worker uses the relative check. **Check:** all-ordinal
-  identification-only and genuinely identified fixed loadings, thresholds and
-  equality releases across units, nearby fits and unequal groups; ordinary/
-  robust candidate agreement in matching metrics, delta/theta parity and fixed-
-  row/absent-row moment scales. Mixed controls follow in 0.0.2.
 
 - [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
   retained continuous and all-ordinal weight recipes in the matrix, with stored

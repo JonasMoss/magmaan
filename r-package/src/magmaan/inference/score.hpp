@@ -91,6 +91,18 @@ struct ModificationIndexOptions {
   bool include_covariances = true;  // absent covariances     x ~~ y
 };
 
+// One-direction score projection shared by ML, LS and ordinal MI/release tests.
+// All inputs use the same full parameter coordinates and information scale.
+// K_nuisance spans the retained nuisance tangent. Rank is judged relative to
+// the marginal and removed information terms, so changing units does not turn
+// an identification-only release into a candidate or lose a small valid one.
+post_expected<ScoreTestResult>
+score_for_direction(const ScoreCandidate& candidate,
+                    const Eigen::VectorXd& score_full,
+                    const Eigen::MatrixXd& info_full,
+                    const Eigen::MatrixXd& K_nuisance,
+                    const Eigen::VectorXd& direction);
+
 // Normal-theory ML modification indices / score tests.
 post_expected<ScoreTestTable>
 modification_indices(spec::LatentStructure pt,

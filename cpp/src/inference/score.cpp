@@ -241,6 +241,8 @@ bool positive_bread_quadratic(double value, const Eigen::MatrixXd& bread,
   return std::isfinite(value) && std::isfinite(scale) && value > 1e-12 * scale;
 }
 
+}  // namespace
+
 post_expected<ScoreTestResult>
 score_for_direction(const ScoreCandidate& candidate,
                     const Eigen::VectorXd& score_full,
@@ -287,6 +289,8 @@ score_for_direction(const ScoreCandidate& candidate,
   out.epc = score_eff / info_eff;
   return out;
 }
+
+namespace {
 
 struct NuisanceProjection {
   Eigen::MatrixXd K;

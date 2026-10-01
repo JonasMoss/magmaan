@@ -2387,6 +2387,19 @@ an unconstrained gradient test to constrained solutions.
   release-score fixture 0012, in `regen_robust_score.R`; exact WLS/GLS
   reductions and a primitives re-assembly live in
   `cpp/tests/unit/score_robust_test.cpp`.
+- Ordinary ordinal MI/release rank completion (2026-10-01):
+  `inference::score_for_direction` exposes the existing ordinary ML/LS score
+  projection, and ordinal fixed/absent candidates and equality releases reuse
+  it. The duplicate ordinal worker and its absolute efficient-information floor
+  are removed; ordinary and robust tests now use the same relative rank gate.
+  Candidate enumeration, threshold/association moment scales and the fitting
+  discrepancy are preserved. Gates in `score_robust_test.cpp` and
+  `test_ordinal_score_rank.R` cover ULS/DWLS/WLS, latent units and nearby points,
+  delta/theta, unequal groups, identified fixed loadings versus identification
+  markers, fixed thresholds, equality releases, fixed-zero/absent rows, and
+  fitting-weight scaling with invariant robust statistics. Weighted provenance
+  and adapters remain in the MI completion matrix; mixed completion stays in
+  0.0.2.
 - Continuous-LS robust MI/release covariance dispatch (2026-10-01): the R
   wrappers honor `cov="empirical"` versus `cov="model_implied"` independently of
   the WLS estimator label, preserving explicit fitting W. Empirical covariance
