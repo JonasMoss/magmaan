@@ -8334,9 +8334,10 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 // scaling is intrinsic to W != NACOV^-1 (DWLS/ULS scale even on normal data)
 // and `bread`/`moments`/`cov` do not apply. Continuous fits build the bread from
 // the estimation weight (ULS identity / GLS normal-theory / WLS the supplied
-// `weight`) and the meat from `cov`: 'empirical'/'browne_unbiased' need the raw
-// fitting data (`raw`); 'model_implied' uses Gamma_NT(S) and collapses to the
-// ordinary statistic. Full-WLS collapses regardless (W = Gamma^-1).
+// `weight`) and the meat from `cov`: 'empirical' needs the raw fitting data;
+// 'model_implied' uses Gamma_NT from the selected moments and collapses to the
+// ordinary statistic only when W matches that Gamma inverse. Continuous LS
+// rejects Browne-unbiased covariance; estimated-weight mode requires empirical.
 
 namespace {
 
@@ -8784,8 +8785,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
         Rcpp::stop("magmaan: estimated_weight robust modification indices "
                    "require the fitting data; pass data=");
       }
-      opts.spec = spec_from(bread, moments,
-                            cov == "model_implied" ? "empirical" : cov);
+      opts.spec = spec_from(bread, moments, cov);
       opts.estimated_weight = true;
       opts.ij_weight_mode = continuous_ij_mode(estimator);
       magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
@@ -8794,8 +8794,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
       out = magmaan::inference::frontier::modification_indices_robust(
           ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
     } else {
-      const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
-      opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+      const bool model_implied = (cov == "model_implied");
+      opts.spec = spec_from(bread, moments, cov);
       if (model_implied) {
         if (is_ml) {
           out = magmaan::inference::frontier::modification_indices_robust(
@@ -8894,8 +8894,7 @@ Rcpp::DataFrame inference_score_tests_robust(
         Rcpp::stop("magmaan: estimated_weight robust score tests require the "
                    "fitting data; pass data=");
       }
-      opts.spec = spec_from(bread, moments,
-                            cov == "model_implied" ? "empirical" : cov);
+      opts.spec = spec_from(bread, moments, cov);
       opts.estimated_weight = true;
       opts.ij_weight_mode = continuous_ij_mode(estimator);
       magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
@@ -8903,8 +8902,8 @@ Rcpp::DataFrame inference_score_tests_robust(
       out = magmaan::inference::frontier::score_tests_robust(
           ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
     } else {
-      const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
-      opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+      const bool model_implied = (cov == "model_implied");
+      opts.spec = spec_from(bread, moments, cov);
       if (model_implied) {
         if (is_ml) {
           Rcpp::stop("magmaan: ML robust score tests require the fitting data "

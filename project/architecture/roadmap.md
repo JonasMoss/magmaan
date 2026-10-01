@@ -2340,6 +2340,19 @@ an unconstrained gradient test to constrained solutions.
   release-score fixture 0012, in `regen_robust_score.R`; exact WLS/GLS
   reductions and a primitives re-assembly live in
   `cpp/tests/unit/score_robust_test.cpp`.
+- Continuous-LS robust MI/release covariance dispatch (2026-10-01): the R
+  wrappers honor `cov="empirical"` versus `cov="model_implied"` independently of
+  the WLS estimator label, preserving explicit fitting W. Empirical covariance
+  needs complete fitting observations; normal-theory covariance uses the selected
+  structured/unstructured moments. A full empirical WLS weight reduces to the
+  ordinary statistic only with the matching empirical Gamma. The C++ workers
+  reject unimplemented Browne-unbiased covariance and non-empirical
+  estimated-weight covariance, including the old R model-implied-to-empirical
+  substitution. Caller-Gamma overloads remain core-only; broader weight
+  provenance/adapters stay in the MI completion matrix. Gates cover raw versus
+  supplied Gamma, means/unequal groups, diagonal/full weights, scaling transport,
+  empirical versus NT controls, estimated-weight mode and explicit unsupported
+  errors in `score_robust_test.cpp` and `test_wls_robust_covariance.R`.
 - FIML (missing-data) robust MI and equality-release score tests, the MLR corner
   (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
   build the bread A1 = (N/2)·H (the analytic observed FIML information) and the

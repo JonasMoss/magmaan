@@ -38,6 +38,14 @@ EM computation for these tests. Explicit data rebuild their missingness pack;
 omitted data reuse the retained pack when available. Alternative FIML moment or
 covariance recipes and supplied second-stage weights are rejected.
 
+Continuous ULS/GLS/WLS support empirical covariance from fitting observations,
+or model-implied normal-theory covariance from structured or unstructured
+moments. WLS preserves the supplied fitting weight for either source; the
+correction reduces to the ordinary statistic only when that weight is the
+inverse of the chosen covariance. Browne-unbiased covariance is not implemented
+for continuous LS. Estimated-weight mode requires raw observations and empirical
+covariance; other covariance choices are rejected.
+
 Identification-only releases are excluded. Ordinal and mixed-ordinal methods
 use their retained categorical moment covariance and weight conventions; the
 continuous \code{bread}, \code{moments}, and \code{cov} choices do not apply there.}

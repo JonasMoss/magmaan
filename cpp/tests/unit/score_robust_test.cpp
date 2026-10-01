@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <random>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -639,6 +640,57 @@ TEST_CASE("frontier robust LS MI: DWLS raw path scales; sandwich matches primiti
       Delta->transpose() * W_dwls * (*G) * W_dwls * (*Delta);
   CHECK((sw->A1 - A1_ref).norm() < 1e-8 * (1.0 + A1_ref.norm()));
   CHECK((sw->B1 - B1_ref).norm() < 1e-8 * (1.0 + B1_ref.norm()));
+}
+
+TEST_CASE("frontier robust LS score test: raw and supplied Gamma agree") {
+  auto h = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(20261001u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 1800,
+                                         four_indicator_sample_cov(), 7.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto gamma = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(gamma.has_value());
+  auto block = magmaan::estimate::gmm::BlockWeight::dense(
+      gamma->inverse(), magmaan::FitError::Kind::NumericIssue, "W_adf");
+  REQUIRE(block.has_value());
+  magmaan::estimate::gmm::Weight weight{*block};
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+  inf::frontier::RobustScoreOptions opts;
+  auto from_raw = inf::frontier::score_tests_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, opts);
+  auto from_gamma = inf::frontier::score_tests_robust(
+      h.pt, h.rep, *samp, std::vector<Eigen::MatrixXd>{*gamma}, *est, weight, opts);
+  REQUIRE(from_raw.has_value());
+  REQUIRE(from_gamma.has_value());
+  REQUIRE(from_raw->rows.size() == 1);
+  REQUIRE(from_gamma->rows.size() == 1);
+  CHECK(from_raw->rows[0].scaling_factor == doctest::Approx(1.0));
+  CHECK(from_raw->rows[0].mi_scaled == doctest::Approx(from_gamma->rows[0].mi_scaled));
+
+  for (bool estimated : {false, true}) {
+    opts.estimated_weight = estimated;
+    opts.spec.cov = rob::ScoreCovariance::BrowneUnbiased;
+    auto mi = inf::frontier::modification_indices_robust(
+        h.pt, h.rep, *samp, raw, *est, weight, opts);
+    auto releases = inf::frontier::score_tests_robust(
+        h.pt, h.rep, *samp, raw, *est, weight, opts);
+    REQUIRE_FALSE(mi.has_value());
+    REQUIRE_FALSE(releases.has_value());
+    CHECK(mi.error().detail.find("Browne-unbiased") != std::string::npos);
+    CHECK(releases.error().detail.find("Browne-unbiased") != std::string::npos);
+  }
+  opts.spec.cov = rob::ScoreCovariance::ModelImplied;
+  auto mi = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, opts);
+  auto releases = inf::frontier::score_tests_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, opts);
+  REQUIRE_FALSE(mi.has_value());
+  REQUIRE_FALSE(releases.has_value());
+  CHECK(mi.error().detail.find("requires empirical") != std::string::npos);
+  CHECK(releases.error().detail.find("requires empirical") != std::string::npos);
 }
 
 TEST_CASE("estimated-weight sandwich_ij: Fixed mode reduces to the fixed-weight "

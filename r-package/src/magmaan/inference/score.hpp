@@ -287,7 +287,9 @@ score_tests_robust(spec::LatentStructure pt,
 // raw, model-implied Γ_NT (per `options.spec.moments`: Structured ⇒ Γ_NT(Σ̂),
 // Unstructured ⇒ Γ_NT(S)), or caller-supplied per-block Γ̂. With the GLS
 // weight and the Γ_NT(S) meat the sandwich collapses (B1 = A1, c ≡ 1) — the
-// exact reduction-to-NT baseline. Single-group only (v1).
+// exact reduction-to-NT baseline. BrowneUnbiased covariance is not implemented;
+// estimated-weight mode requires Empirical covariance and raw observations.
+// Single- and multi-group blocks are supported.
 
 post_expected<ScoreTestTable>
 modification_indices_robust(spec::LatentStructure pt,

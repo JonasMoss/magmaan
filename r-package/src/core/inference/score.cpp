@@ -1986,11 +1986,23 @@ score_tests_robust_joint(spec::LatentStructure pt,
 
 namespace {
 
-post_expected<void> require_expected_bread_ls(const RobustScoreOptions& options) {
+post_expected<void> validate_robust_score_options_ls(
+    const RobustScoreOptions& options) {
   if (options.spec.bread != robust::Information::Expected) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust score tests: the continuous-LS tier uses the expected (Δ'WΔ) "
         "bread only"));
+  }
+  if (options.spec.cov == robust::ScoreCovariance::BrowneUnbiased) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: Browne-unbiased covariance is not implemented "
+        "for continuous LS"));
+  }
+  if (options.estimated_weight &&
+      options.spec.cov != robust::ScoreCovariance::Empirical) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: estimated-weight meat requires empirical "
+        "covariance; model-implied covariance is unsupported"));
   }
   return {};
 }
@@ -2004,7 +2016,7 @@ modification_indices_robust_ls_impl(spec::LatentStructure pt,
                                     const RobustScoreOptions& options,
                                     const RawData* raw,
                                     const std::vector<Eigen::MatrixXd>* gamma_blocks) {
-  if (auto e = require_expected_bread_ls(options); !e.has_value()) {
+  if (auto e = validate_robust_score_options_ls(options); !e.has_value()) {
     return std::unexpected(e.error());
   }
   auto n = total_n(samp);
@@ -2036,7 +2048,7 @@ score_tests_robust_ls_impl(spec::LatentStructure pt,
                            const RobustScoreOptions& options,
                            const RawData* raw,
                            const std::vector<Eigen::MatrixXd>* gamma_blocks) {
-  if (auto e = require_expected_bread_ls(options); !e.has_value()) {
+  if (auto e = validate_robust_score_options_ls(options); !e.has_value()) {
     return std::unexpected(e.error());
   }
   auto n = total_n(samp);

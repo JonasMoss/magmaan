@@ -208,10 +208,13 @@ score_tests <- function(fit, data = NULL, ...) {
 #
 # Ordinal/mixed fits use the polychoric NACOV the fit already carries, so the
 # scaling is intrinsic to the diagonal/identity weight (DWLS/ULS scale even on
-# normal data) and `bread`/`moments`/`cov` are ignored. Continuous ML/ULS/GLS
-# build the meat from `cov`: 'empirical'/'browne_unbiased' need the fitting
-# `data` (raw observations); 'model_implied' uses Gamma_NT(S) and reduces to the
-# ordinary statistic. WLS supplies its weight via `weight=` and always reduces.
+# normal data) and `bread`/`moments`/`cov` are ignored. Continuous ML/ULS/GLS/WLS
+# build the meat from `cov`: 'empirical' needs the fitting `data` (raw
+# observations); 'model_implied' uses Gamma_NT from the chosen moments.
+# WLS supplies its fitting weight via `weight=`; the ordinary statistic is
+# recovered only when that weight is the inverse of the selected Gamma.
+# Continuous LS does not implement 'browne_unbiased', and estimated-weight mode
+# requires 'empirical'; unavailable covariance choices error explicitly.
 # `estimated_weight = TRUE` routes the per-direction scaling through the complete
 # (Hall-Inoue) sandwich, which carries the data-dependent-weight IF(W-hat) meat
 # term beyond lavaan's global SB scalar. It applies to estimated second-stage
