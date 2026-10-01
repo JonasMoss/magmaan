@@ -1406,6 +1406,10 @@ an unconstrained gradient test to constrained solutions.
   and evidence limits. Offline pinned-lavaan fixtures gate rows, starts, ML
   estimates, implied covariance, expected SEs, df and chi-square; R tests
   compare installed lavaan. There is no live EQS oracle.
+  The [manual source inventory](../grammar/eqs_source_inventory.md) records
+  the full documented SEM model-language target, source pages, model-triple
+  adapter requirements and focused runtime checks for unresolved cases.
+  The inventory does not promote additional parser or fitting capabilities.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

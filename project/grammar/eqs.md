@@ -5,6 +5,11 @@ This frontend accepts model sections, not complete EQS analysis jobs. It adds
 an input language to the existing model triple and numerical implementation;
 it does not run EQS or promise reproduction of its estimator defaults.
 
+The [source inventory](eqs_source_inventory.md) extracts the documented SEM
+language rules, page references, adapter requirements and unresolved checks
+for extending this subset. It is evidence for future grammar changes, not a
+claim that the additional syntax is implemented.
+
 ## Supported subset
 
 Single-group continuous covariance models using `/EQUATIONS`, `/VARIANCES`

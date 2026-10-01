@@ -439,13 +439,51 @@ structural-path enumeration remains a separate model-builder contract.
   separately timed small-model setup/data/fit/inference. See the
   [proposal](../design/r-interface-vision.md#proposal-reusable-models-and-a-smaller-ordinary-api).
 
-The initial EQS model-section frontend is complete; its maintained scope and
-validation limits are in the [EQS contract](../grammar/eqs.md). Additional EQS
-syntax (notably `/MODEL`, labels and constraints) is unscheduled until requester
-files establish the needed subset; full EQS job/estimator emulation is outside
-this request. Indicator variables participating in structural regressions
-currently fail explicitly at the frontend; lifting this restriction requires
-resolving their shared model-builder representation first.
+The initial EQS model-section frontend is complete; its implemented scope and
+validation limits are in the [EQS contract](../grammar/eqs.md). The accepted
+extension target is the full documented EQS 6 linear SEM model language, with
+original parameter meanings preserved in the Jöreskog/LISREL model contract.
+Full EQS job execution, estimator/default emulation and numerical parity are
+outside this target. Syntax/schema recognition does not promote fitting or
+inference beyond [scope](../scope.md). EQS remains a lab frontend.
+
+- [x] **S — extract and review the model-language sources.** The maintained
+  [source inventory](../grammar/eqs_source_inventory.md) identifies exact manual
+  pages, documented versus derived rules, semantic fixture families and a small
+  runtime probe list. Well-specified rules can proceed without an EQS install;
+  ambiguous behavior must remain explicit until independently resolved.
+- [ ] **S — add labels and complete explicit-input resolution.** Resolve numeric
+  identities and aliases before ranges/parameter references; cover documented
+  IDs, duplicate-predictor recovery and line conventions. Preserve source spans,
+  original names and rebuild behavior for aliases invalid in lavaan syntax.
+- [ ] **M — add MODEL shorthand expansion.** Cover Cartesian ON, combined
+  equations, within-/cross-list COV, paired PCOV, independent-moment families,
+  distinct bare-VAR defaults, generated residuals and identification fixes.
+  Keep explicit-equation semantics separate from shorthand defaults.
+- [ ] **M — adapt parameter restrictions and SET.** Resolve directed,
+  diagonal/symmetric and group-qualified references to existing equality/linear
+  constraint machinery; represent explicit bounds and fail unsupported fit
+  routes. SET needs EQS dependent/independent pattern classification and
+  forced-free exceptions rather than broad lavaan equality-family substitution.
+- [ ] **M — add V999 means and multiple model segments.** Map constant paths
+  to existing Nu/Alpha semantics without an observed constant column; retain
+  segment-specific rows, hints and cross-group restrictions. Classify minimal
+  schema declarations separately from data and execution instructions.
+- [ ] **M — complete general linear-equation lowering.** Indicator variables
+  participating in structural regressions, nonunit/free error paths and general
+  independent-error covariances need an exact shared builder/matrix contract.
+  Preserve original estimands, references, starts and derivatives through any
+  augmentation; equivalent covariance alone cannot validate a reparameterization.
+- [ ] **S — close the remaining documented ambiguities.** Obtain targeted setup
+  outputs or independent authoritative evidence for marker ordering, alias
+  edge cases, repeated declarations, observed selection/variance repair, SET
+  exceptions and the contradictory RELIABILITY expansion. The source inventory
+  owns the probe details. HLM DEFINE lacks a complete production in this manual
+  and needs additional evidence before any scoped adapter work.
+
+Every parser milestone changes the normative EBNF first and adds independent
+semantic expectations plus convention-matched lavaan/implied-moment gates where
+applicable. None requires matching EQS's numerical fitting output.
 
 #### Shared fitting composition
 
