@@ -207,6 +207,16 @@ here track that work; completing the 0.1.0 gates does not complete it.
   moment-covariance recipes is
   [banked](speculative.md#moment-covariance-centering-alternatives); multiplier
   promotion remains under the banked robust-score-flip entry.
+  The preregistered [score-centering decision study](../../experiments/decisions/03-score-centering/report.qmd)
+  compares paired meats on the same fits. Its 3,600-draw pilot and independent
+  8,000-draw fixed-group confirmation refute universal raw meat: at N=300,
+  raw/global parameter-variance ratios are 1.118 versus 0.994 within groups
+  (exact target 1/N, independently replayed). Group-centered parameter covariance
+  meets the registered criteria in that scope; group-centered score calibration
+  fails at N=80 (6.2% rejection, Wilson interval 5.2–7.3%). Keep the score baseline
+  provisional. Next: specify and gate fixed-group covariance treatment in core;
+  confirm the remaining ML/prospective-FIML families with fresh draws. Boundary/
+  penalty contracts remain open; missingness patterns are not sampling groups.
 
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score

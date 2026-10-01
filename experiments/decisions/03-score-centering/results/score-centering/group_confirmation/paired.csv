@@ -1,0 +1,9 @@
+"family","lane","test","n","geometry","arm","method","null_pairs","power_pairs","extra_unavailable","absolute_size_error_difference","size_error_lower","size_error_upper","raw_null_cutoff","candidate_null_cutoff","raw_matched_power","candidate_matched_power","matched_power_difference","power_difference_lower"
+"grouped_mean","ml","nested",300,"expected","global","sb",2000,2000,0,-5e-04,-0.0015,0,0.0607552395654815,0.0592462920463448,0.7265,0.7265,0,0
+"grouped_mean","ml","nested",300,"expected","global","peba4",2000,2000,0,-5e-04,-0.0015,0,0.0607552395654815,0.0592462920463448,0.7265,0.7265,0,0
+"grouped_mean","ml","nested",300,"expected","group","sb",2000,2000,0,-0.00800000000000001,-0.014,0.01,0.0607552395654815,0.0452830546839337,0.7265,0.7285,0.002,-0.00949999999999995
+"grouped_mean","ml","nested",300,"expected","group","peba4",2000,2000,0,-0.00800000000000001,-0.014,0.01,0.0607552395654815,0.0452830546839337,0.7265,0.7285,0.002,-0.0125000000000001
+"grouped_mean","ml","nested",80,"expected","global","sb",2000,2000,0,-0.0025,-0.005,0.0035,0.060516451268577,0.0548881249059682,0.25,0.25,0,0
+"grouped_mean","ml","nested",80,"expected","global","peba4",2000,2000,0,-0.0025,-0.0045,0.0035,0.060516451268577,0.0548881249059682,0.25,0.25,0,0
+"grouped_mean","ml","nested",80,"expected","group","sb",2000,2000,0,0.00649999999999999,-0.0115,0.0215,0.060516451268577,0.0409985756006462,0.25,0.253,0.003,-0.00999999999999996
+"grouped_mean","ml","nested",80,"expected","group","peba4",2000,2000,0,0.00649999999999999,-0.01,0.0205125,0.060516451268577,0.0409985756006462,0.25,0.253,0.003,-0.0115375

@@ -1,0 +1,223 @@
+---
+title: "Likelihood-score covariance centering"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+run_id <- Sys.getenv('SCORE_CENTERING_RUN', 'pilot')
+root <- file.path('results', 'score-centering', run_id)
+rd <- function(name) {
+  path <- file.path(root, paste0(name, '.csv'))
+  if (!file.exists(path)) stop('Missing ', path,
+    '; run Rscript run_experiment.R --library PATH --run-id ', run_id)
+  read.csv(path, stringsAsFactors = FALSE)
+}
+meta <- rd('metadata'); rates <- rd('rates'); cov <- rd('covariance')
+pairs <- rd('paired'); checks <- rd('checks'); decisions <- rd('decisions')
+value <- function(key) meta$value[match(key, meta$key)]
+percent <- function(x) sprintf('%.1f%%', 100 * x)
+confirm_root <- file.path('results', 'score-centering', 'group_confirmation')
+confirm <- function(name) {
+  path <- file.path(confirm_root, paste0(name, '.csv'))
+  if (!file.exists(path)) stop('Missing ', path,
+    '; run the grouped confirmation and independent validator shown under Reproduce')
+  read.csv(path, stringsAsFactors = FALSE)
+}
+group_cov <- confirm('covariance'); group_rates <- confirm('rates')
+group_pairs <- confirm('paired'); group_checks <- confirm('checks')
+group_decisions <- confirm('decisions'); oracle <- confirm('oracle_checks')
+group <- group_cov[group_cov$role == 'null', ]
+tab <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
+```
+
+## Default register
+
+| Choice | Current value | Status |
+|:--|:--|:--|
+| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Provisional; fixed-group covariance defect confirmed |
+| ML global/nested score reference | Uncentered efficient scores, expected geometry | Open centered/raw decision |
+| Ordinary FIML inference | Unsupported | Prospective evidence only |
+| Established moment-covariance and LR centering | Retained method-specific formulas | Redesign banked |
+
+## Question
+
+Can magmaan use uncentered likelihood-score second moments throughout its
+parameter covariance and score-test calibration, or does the sampling law
+require a distinction? All covariance arms use the same estimates, projection,
+information matrices and observed score. The
+[criteria](criteria/score_centering.md) were committed before the pilot and confirmation draws.
+
+## Short answer
+
+**A universal never-center rule fails for fixed groups with different population
+score means.** In the independently specified grouped mean model, the true
+parameter variance is exactly $1/N$. Raw and globally centered score meats have
+an asymptotic variance ratio of 1.12; centering within the sampling groups removes
+that extra term. This conclusion follows from the sampling covariance identity,
+not from selecting an arm on simulation results.
+
+The 8,000-draw independent grouped confirmation found a variance ratio of
+**1.118 for raw/global centering versus 0.994 for within-group centering** at
+N=300. Within-group parameter covariance meets the registered criteria in this
+scope. The centered score test does not: at N=80 it rejects 6.2% under the null,
+with a 95% interval of 5.2–7.3%, failing the calibration rule. Matched-null power
+is similar. Fixing the sampling covariance alone does not settle small-sample
+reference calibration.
+
+The broader 3,600-draw pilot covers normal/skewed ML and MCAR/MAR FIML.
+**It cannot choose a package default**; full independent confirmation remains
+open. Stationary single-group parameter scores have approximately zero means,
+whereas released test directions carry an observed signal. FIML evidence is
+prospective, split by sensitivity geometry. No package default is changed.
+
+## Evidence
+
+### Grouped parameter covariance has an independent target
+
+The groups have fixed sizes $N/4$ and $3N/4$, unit observation variance, and X
+means $\mu+.6$ and $\mu-.2$. The fitted shared mean is the pooled average, whose
+approximation target is $\mu$ and whose variance is exactly $1/N$. The between-
+group squared mean displacement is $.25(.6)^2+.75(-.2)^2=.12$.
+
+At the fitted mean, with divisor $N$, the expected reported variance ratios are
+
+$$
+E[N\widehat V_{\rm raw}]=E[N\widehat V_{\rm global}]=1.12-1/N,
+\qquad E[N\widehat V_{\rm group}]=1-2/N.
+$$
+
+The second expression's small finite-sample bias is retained; this experiment
+does not introduce an $N-1$ or group degrees-of-freedom correction.
+
+```{r grouped-evidence}
+tab(data.frame(
+  N = group$n, Covariance = group$arm, Usable = group$usable,
+  'Variance / true variance' = round(group$oracle_ratio, 3),
+  'Expected ratio' = round(ifelse(group$arm == 'group', 1 - 2 / group$n, 1.12 - 1 / group$n), 3),
+  '95% interval coverage' = percent(group$coverage), check.names = FALSE))
+```
+
+The raw-versus-group difference persists with sample size. Global score-mean
+centering cannot remove it because the opposing group means cancel overall.
+This fixed-allocation example establishes a scope limit for a universal raw-meat
+policy, without generalizing group centering to random missingness patterns.
+
+### Centered grouped scores fail the small-sample acceptance rule
+
+The confirmation compares 2,000 paired null draws at each sample size. SB and
+PEBA4 coincide in this one-dimensional case. The N=80 centered interval exceeds
+the registered 7% upper limit, and its paired size-error comparison also fails
+the allowed one-percentage-point worsening rule.
+
+```{r grouped-score-evidence}
+z <- group_rates[group_rates$role == 'null' & group_rates$method == 'peba4', ]
+tab(data.frame(N = z$n, Reference = z$arm,
+  'Null rejection' = percent(z$rejection),
+  '95% Wilson interval' = paste(percent(z$lower), percent(z$upper), sep = '–'),
+  check.names = FALSE))
+```
+
+Within-group minus raw matched-null power is +0.3 percentage points at N=80
+and +0.2 at N=300; the lower bootstrap bounds are about −1.2 percentage points.
+These comparisons meet the registered power-loss rule, but do not establish a
+power gain. The group-centered parameter covariance is eligible in the tested
+scope; neither centered score reference is eligible. Raw remains the provisional
+score baseline, with calibration still open.
+
+### Broader pilot: differences need confirming
+
+Across the single-group pilot fits, globally centering parameter scores changes
+covariance matrices by at most
+`r format(max(cov$max_covariance_gap[cov$family != 'grouped_mean' & cov$arm == 'global']), scientific=TRUE, digits=3)`
+relative to the comparison scale. This supports the expected stationary-fit
+equivalence. Score-test reference changes require their own comparison.
+
+The following pilot slice shows PEBA4 null rejection at N=80. FIML uses observed
+sensitivity here; its expected-sensitivity comparator and both methods at N=300
+remain in the per-cell CSVs. The paired tables also report SB and matched-null
+power, with bootstrap uncertainty including re-estimation of null thresholds.
+
+```{r score-evidence}
+slice <- rates[rates$role == 'null' & rates$n == 80 & rates$method == 'peba4' &
+  ((rates$lane == 'ml' & rates$geometry == 'expected') |
+   (rates$lane == 'fiml' & rates$geometry == 'observed')), ]
+wide <- reshape(slice[, c('family', 'arm', 'rejection')], idvar = 'family',
+                timevar = 'arm', direction = 'wide')
+names(wide) <- sub('rejection.', '', names(wide), fixed = TRUE)
+for (name in setdiff(names(wide), 'family')) wide[[name]] <- percent(wide[[name]])
+tab(wide)
+```
+
+The registered decision outcomes for the broader run are
+`r paste(unique(decisions$status), collapse = ', ')`. Precision, availability,
+coverage, per-cell calibration and matched-power conditions must all be assessed
+before changing a tested score-reference default. Full rates, Wilson intervals,
+paired comparisons and every failure are retained in `rates.csv`,
+`covariance.csv`, `paired.csv`, `decisions.csv` and `failures.csv` for this run.
+
+### Construction and baseline checks
+
+The largest relative score-Gram identity discrepancy is
+`r format(checks$max_gram_identity_gap, scientific=TRUE, digits=3)`; the largest
+ML policy score/p-value discrepancy is
+`r format(checks$max_policy_gap, scientific=TRUE, digits=3)`; the parameter-
+covariance discrepancy is
+`r format(checks$max_covariance_policy_gap, scientific=TRUE, digits=3)`.
+The grouped confirmation's independent replay checks estimates, parameter
+covariance, the test statistic and both p-values against elementary Gaussian
+mean formulas. All 24,000 arm rows pass; the largest estimate gap is
+`r format(max(oracle$estimate_gap), scientific=TRUE, digits=3)` and the largest
+variance gap is `r format(max(oracle$variance_gap), scientific=TRUE, digits=3)`.
+Neither run has a failed fit or unavailable covariance/test.
+The runner retains convergence failures and unavailable inference instead of
+counting them as successful non-rejections. There are `r checks$fit_failures`
+failed larger/unrestricted fits. Median task time is
+`r sprintf('%.3f', checks$median_task_seconds)` seconds; the runner prints elapsed
+wall time and a confirmation cost estimate. The broader pilot took about two
+minutes and the grouped confirmation about four minutes with four workers.
+The full 36-cell, 2,000-draw confirmation is estimated at roughly 35–40 minutes
+on this machine.
+
+## Caveats
+
+This grid covers regular ML and direct FIML, two sample sizes, one fixed-allocation
+misspecified grouped mean family, normal/skewed complete-data innovations and
+normal MCAR/MAR controls. It does not validate PSD boundary or penalized inference,
+ordinal routes, arbitrary misspecified nested SEM, or growing dimension. It does
+not reopen established moment Gamma/NACOV or LR-reference recipes. The grouped
+algebraic witness does not establish which single-group spectral calibration has
+better finite-sample behavior.
+
+The actual loaded package paths, versions and native-binary hashes are recorded.
+Repository HEAD is separate provenance; it is not asserted to be the source of an
+arbitrarily installed binary. Failed construction identities block interpretation.
+The initial mechanics-only smoke started before the criteria commit (despite the original criteria header) and is
+retained as development data; it supplies no decision evidence. No default is
+changed by this report.
+
+## Reproduce
+
+Install matched magmaan/magmaanlab >=0.1.0 packages. An isolated installation can
+be selected with `--library PATH`; otherwise the normal R library is used.
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --smoke --library PATH
+Rscript run_experiment.R --kind pilot --reps 100 --run-id pilot --library PATH
+Rscript run_experiment.R --kind confirmation --reps 2000 --families grouped_mean --run-id group_confirmation --library PATH
+Rscript scripts/validate_grouped_results.R group_confirmation
+quarto render report.qmd
+# Fresh confirming draws; estimate cost from the pilot before launching:
+Rscript run_experiment.R --kind confirmation --reps 2000 --run-id confirmation --library PATH
+SCORE_CENTERING_RUN=confirmation quarto render report.qmd
+```
+
+Each run directory is immutable. `--summarize --run-id ID` rescans its existing
+local raw batches without fitting or replacing the design. Reports read only
+this study's result CSVs and never run estimation or simulation.

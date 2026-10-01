@@ -4512,6 +4512,17 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   unfinished: remaining bugs need fixing, and coverage of the main estimators
   and inferential procedures needs completing and validating before a finished
   release; the active backlog tracks that work.
+- The active [score-centering decision study](../../experiments/decisions/03-score-centering/report.qmd)
+  (2026-10-01) records a fixed-allocation grouped-mean counterexample to universal
+  raw likelihood-score meat. Independent confirmation (8,000 draws) and
+  closed-form replay find N=300 parameter-variance ratios 1.118 raw/global versus
+  0.994 within groups, against the exact 1/N target. Within-group parameter
+  covariance meets the registered criteria in this scope; centered score
+  calibration fails the N=80 acceptance rule (6.2% rejection, 95% Wilson interval
+  5.2–7.3%). Package defaults are unchanged. Fixed-group covariance treatment
+  needs a core contract/regression gate; broader ML/FIML score confirmation and
+  boundary/penalty cases remain open. Random missingness patterns must not inherit
+  this fixed-group centering rule.
 - The inference policy for single-level complete-data ML is
   `api::policy_inference_ml()` (`api/policy.hpp`), exposed as
   `magmaanlab::policy_inference(fit)` and run by `magmaan::infer()`. The
