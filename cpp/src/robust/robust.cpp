@@ -510,7 +510,8 @@ build_u_factor_shared(spec::LatentStructure                       pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "build_u_factor: dmu_dtheta failed: " + Jmu_or.error().detail));
   }
-  const bool has_means = Jmu_or->size() > 0;
+  // Fixed means retain rows even when there are no free parameter columns.
+  const bool has_means = Jmu_or->rows() > 0;
   Eigen::MatrixXd Delta_mu = has_means ? std::move(*Jmu_or)
                                        : Eigen::MatrixXd();
 
@@ -638,12 +639,16 @@ build_u_factor_shared(spec::LatentStructure                       pt,
     Eigen::Index m_cursor = 0;
     for (const auto& blk : uf.blocks) {
       if (has_means) {
-        Delta_full.block(blk.mu_off, 0, blk.p, n_free) =
-            Delta_mu.block(m_cursor, 0, blk.p, n_free);
+        if (n_free > 0) {
+          Delta_full.block(blk.mu_off, 0, blk.p, n_free) =
+              Delta_mu.block(m_cursor, 0, blk.p, n_free);
+        }
         m_cursor += blk.p;
       }
-      Delta_full.block(blk.row_offset, 0, blk.pstar, n_free) =
-          Delta_sigma.block(s_cursor, 0, blk.pstar, n_free);
+      if (n_free > 0) {
+        Delta_full.block(blk.row_offset, 0, blk.pstar, n_free) =
+            Delta_sigma.block(s_cursor, 0, blk.pstar, n_free);
+      }
       s_cursor += blk.pstar;
     }
     if (s_cursor != Delta_sigma.rows()) {
@@ -680,8 +685,12 @@ build_u_factor_shared(spec::LatentStructure                       pt,
 
   // Per-block dual-segment triangular solve A_b = L_Γ_block⁻¹·Δ_b.
   sh.A = Eigen::MatrixXd::Zero(uf.total_rows, sh.q);
-  for (const auto& blk : uf.blocks) {
-    apply_L_inv_block(blk, has_means, Delta, sh.A);
+  // Eigen's triangular solver accesses column zero even for a zero-column
+  // right-hand side; the empty Jacobian is already the required result.
+  if (sh.q > 0) {
+    for (const auto& blk : uf.blocks) {
+      apply_L_inv_block(blk, has_means, Delta, sh.A);
+    }
   }
   return sh;
 }
@@ -736,6 +745,19 @@ finish_u_factor_observed(const UFactorShared&            sh,
 post_expected<UFactor>
 finish_u_factor_expected(const UFactorShared& sh) {
   UFactor uf = sh.base;
+
+  if (sh.q == 0 && uf.total_rows > 0) {
+    // With no model directions the whitened residual projector is identity.
+    // Avoid QR/rank reductions on a matrix with no columns, then transport
+    // that full basis back through the same normal-theory metric.
+    uf.df = uf.total_rows;
+    const Eigen::MatrixXd identity = Eigen::MatrixXd::Identity(uf.total_rows, uf.total_rows);
+    uf.B = Eigen::MatrixXd::Zero(uf.total_rows, uf.total_rows);
+    for (const auto& blk : uf.blocks)
+      apply_L_invT_block(blk, uf.has_means, identity, uf.B);
+    uf.kind = UFactor::Kind::ProjectionExpected;
+    return uf;
+  }
 
   // ── Expected-info projection bread (`U = B·Bᵀ`) ─────────────────────────
   // Pooled multigroup metric: weight each block's rows of A by √w_b

@@ -1,13 +1,16 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include <Eigen/LU>
 
 #include "magmaan/api/policy.hpp"
@@ -224,19 +227,113 @@ TEST_CASE("policy: saturated models get the covariance but no global test") {
   CHECK(api::reason_name(out.lr.reason) == "saturated");
 }
 
-TEST_CASE("policy: a fully specified model has an empty covariance and no global test yet") {
-  std::mt19937 rng(8u);
-  magmaan::data::RawData raw;
-  raw.X.push_back(t_rows(rng, 120, Eigen::Vector4d::Zero()));
-  auto p = prepare(build("f =~ 1*x1 + 0.9*x2 + 0.8*x3 + 0.7*x4\nf ~~ 1*f\n"
-                         "x1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nx4 ~~ 1*x4", false),
-                   raw, false);
-  REQUIRE(p.est.theta.size() == 0);
-  auto out = api::policy_inference_ml(*p.fit, {});
-  CHECK(out.covariance_reason == api::InferenceReason::Available);
-  CHECK(out.covariance.size() == 0);
-  CHECK(out.score.reason == api::InferenceReason::UnsupportedModel);
-  CHECK(out.lr.reason == api::InferenceReason::UnsupportedModel);
+TEST_CASE("policy: fully specified global tests use all covariance and mean directions") {
+  for (bool means : {false, true}) {
+    for (int groups : {1, 2}) {
+      for (auto storage : {ntml::ContributionStorage::Casewise, ntml::ContributionStorage::Tiled}) {
+        CAPTURE(means);
+        CAPTURE(groups);
+        CAPTURE(static_cast<int>(storage));
+        std::mt19937 rng(8u);
+        magmaan::data::RawData raw;
+        raw.X.push_back(t_rows(rng, 120, Eigen::Vector4d::Constant(0.3)));
+        if (groups == 2)
+          raw.X.push_back(t_rows(rng, 170, Eigen::Vector4d::Constant(-0.4)));
+        std::string syntax = "f =~ 1*x1 + 0.9*x2 + 0.8*x3 + 0.7*x4\nf ~~ 1*f\n"
+                             "x1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nx4 ~~ 1*x4";
+        if (means) syntax += "\nx1 ~ 0.1*1\nx2 ~ -0.2*1\nx3 ~ 0.2*1\nx4 ~ -0.1*1";
+        auto p = prepare(build(syntax, means, groups), raw, means);
+        p.data->storage = storage;
+        REQUIRE(p.est.theta.size() == 0);
+        auto out = api::policy_inference_ml(*p.fit, {});
+        CHECK(out.covariance_reason == api::InferenceReason::Available);
+        CHECK(out.covariance.rows() == 0);
+        CHECK(out.covariance.cols() == 0);
+        REQUIRE(out.score.reason == api::InferenceReason::Available);
+        REQUIRE(out.lr.reason == api::InferenceReason::Available);
+
+        // Independent saturated-normal score and LR formulas. With no model
+        // directions to remove, the full moment space is tested. Construct
+        // Gamma_NT and each empirical score/moment row directly from raw X,
+        // rather than using the library's Jacobian, U or contribution helpers.
+        Eigen::Vector4d loading, mu;
+        loading << 1.0, 0.9, 0.8, 0.7;
+        mu << 0.1, -0.2, 0.2, -0.1;
+        const Eigen::Matrix4d sigma = loading * loading.transpose() + Eigen::Matrix4d::Identity();
+        const Eigen::Matrix4d inverse = sigma.inverse();
+        const int dimension = means ? 14 : 10;
+        Eigen::MatrixXd gamma = Eigen::MatrixXd::Zero(dimension, dimension);
+        if (means) gamma.topLeftCorner(4, 4) = sigma;
+        int a = means ? 4 : 0;
+        for (int j = 0; j < 4; ++j) for (int i = j; i < 4; ++i, ++a) {
+          int b = means ? 4 : 0;
+          for (int l = 0; l < 4; ++l) for (int k = l; k < 4; ++k, ++b)
+            gamma(a, b) = sigma(i, k) * sigma(j, l) + sigma(i, l) * sigma(j, k);
+        }
+        const Eigen::LLT<Eigen::MatrixXd> metric(gamma);
+        double score_reference = 0.0, lr_reference = 0.0;
+        Eigen::VectorXd score_eigen(groups * dimension), lr_eigen(groups * dimension);
+        for (int group = 0; group < groups; ++group) {
+          const auto& x = raw.X[static_cast<std::size_t>(group)];
+          const double n = static_cast<double>(x.rows());
+          const Eigen::Vector4d mean = x.colwise().mean().transpose();
+          const Eigen::MatrixXd centered = x.rowwise() - mean.transpose();
+          const Eigen::Matrix4d sample = centered.transpose() * centered / n;
+          const Eigen::Vector4d shift = means ? Eigen::Vector4d(mean - mu) : Eigen::Vector4d::Zero();
+          const Eigen::Matrix4d error = sample + shift * shift.transpose() - sigma;
+          score_reference += n * (shift.dot(inverse * shift) +
+                                  0.5 * (inverse * error * inverse * error).trace());
+          lr_reference += n * ((inverse * sample).trace() -
+                               std::log(sample.determinant() / sigma.determinant()) - 4.0 +
+                               shift.dot(inverse * shift));
+          Eigen::MatrixXd score_rows(x.rows(), dimension), lr_rows(x.rows(), dimension);
+          for (Eigen::Index row = 0; row < x.rows(); ++row) {
+            const Eigen::Vector4d z = centered.row(row).transpose();
+            const Eigen::Vector4d residual = z + shift;
+            if (means) {
+              score_rows.row(row).head(4) = residual.transpose();
+              lr_rows.row(row).head(4) = z.transpose();
+            }
+            int col = means ? 4 : 0;
+            for (int j = 0; j < 4; ++j) for (int i = j; i < 4; ++i, ++col) {
+              score_rows(row, col) = residual(i) * residual(j) - sigma(i, j);
+              lr_rows(row, col) = z(i) * z(j) - sample(i, j);
+            }
+          }
+          auto eigenvalues = [&](const Eigen::MatrixXd& rows) -> Eigen::VectorXd {
+            const Eigen::MatrixXd whitened = metric.matrixL().solve(rows.transpose());
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(whitened * whitened.transpose() / n);
+            REQUIRE(eig.info() == Eigen::Success);
+            return eig.eigenvalues();
+          };
+          score_eigen.segment(group * dimension, dimension) = eigenvalues(score_rows);
+          lr_eigen.segment(group * dimension, dimension) = eigenvalues(lr_rows);
+        }
+        std::sort(score_eigen.data(), score_eigen.data() + score_eigen.size());
+        std::sort(lr_eigen.data(), lr_eigen.data() + lr_eigen.size());
+        CHECK(out.score.statistic == doctest::Approx(score_reference).epsilon(1e-10));
+        CHECK(out.lr.statistic == doctest::Approx(lr_reference).epsilon(1e-10));
+        for (bool score : {true, false}) {
+          const auto& test = score ? out.score : out.lr;
+          const auto& eigen = score ? score_eigen : lr_eigen;
+          CHECK(test.df == groups * dimension);
+          CHECK((test.eigenvalues - eigen).norm() < 1e-10);
+          CHECK(test.sb_scale == doctest::Approx(eigen.mean()).epsilon(1e-10));
+          CHECK(test.p_sb == doctest::Approx(inf::chi2_pvalue(test.statistic / eigen.mean(), test.df)));
+          CHECK(test.p_peba4 == doctest::Approx(ntml::fmg_test(test.statistic, test.df, eigen,
+                                              {ntml::FmgMethod::Peba, 4.0, true}).p_value));
+        }
+        // With fixed means, the zero-column mean Jacobian still has rows.
+        REQUIRE(p.fit->geometry.has_value());
+        CHECK(p.fit->geometry->q == 0);
+        CHECK(p.fit->geometry->base.has_means == means);
+        CHECK(p.fit->geometry->base.total_rows == groups * dimension);
+        auto failed = api::policy_inference_ml(*p.fit, {false, false});
+        CHECK(failed.score.reason == api::InferenceReason::NotConverged);
+        CHECK(failed.lr.reason == api::InferenceReason::NotConverged);
+      }
+    }
+  }
 }
 
 TEST_CASE("policy: the fit state gates every component") {

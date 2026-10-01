@@ -266,7 +266,31 @@ test_that("a fully specified model gives its population moments", {
   expect_equal(unname(m$cov),
                unname(unclass(lavaan::fitted(lavaan::sem(pop, hs(), meanstructure = TRUE))$cov)),
                ignore_attr = TRUE)
-  expect_equal(fit$inference$status$reason, c("available", "unsupported_model", "unsupported_model"))
+  expect_equal(fit$inference$status$reason, rep("available", 3L))
+  expect_equal(dim(vcov(fit)), c(0L, 0L))
+  expect_equal(fit$inference$global_score$df, 9L)
+  expect_equal(fit$inference$global_lr$df, 9L)
+  # lavaan suppresses tests when no parameters are free; its ML objective
+  # still supplies the independently fitted LR discrepancy (2 N f_min).
+  lav <- lavaan::sem(pop, hs(), meanstructure = TRUE)
+  expect_equal(fit$inference$global_lr$statistic,
+               2 * nrow(hs()) * lavaan::lavInspect(lav, "optim")$fx,
+               tolerance = 1e-8)
+  # No fitted parameter directions: use the full saturated-normal score,
+  # including the covariance contribution from the fixed-mean discrepancy.
+  x <- as.matrix(hs()[, paste0("x", 1:3)])
+  z <- sweep(x, 2, colMeans(x))
+  sample <- crossprod(z) / nrow(x)
+  shift <- colMeans(x) - m$mean
+  inverse <- solve(m$cov)
+  error <- sample + tcrossprod(shift) - m$cov
+  score <- nrow(x) * (sum(shift * (inverse %*% shift)) +
+                      .5 * sum(diag(inverse %*% error %*% inverse %*% error)))
+  expect_equal(fit$inference$global_score$statistic, score, tolerance = 1e-8)
+  expect_true(is.finite(fit$inference$global_score$p_sb))
+  expect_true(is.finite(fit$inference$global_lr$p_peba4))
+  deferred <- infer(magmaan(pop, hs(), meanstructure = TRUE, inference = FALSE))
+  expect_equal(deferred$inference, fit$inference)
 })
 
 test_that("anova() gives nested LR and score tests with SB and PEBA4", {

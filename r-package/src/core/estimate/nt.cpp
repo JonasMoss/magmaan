@@ -326,7 +326,8 @@ ml_value_gradient(const SampleStats& s, const MlCache& cache,
   Eigen::VectorXd w(total_vech);
   w.setZero();
 
-  const bool has_means = (Jmu.size() > 0);
+  // A fixed mean structure has moment rows but no parameter columns.
+  const bool has_means = (Jmu.rows() > 0);
   Eigen::Index total_p = 0;
   if (has_means) {
     for (const auto& Sigma : m.sigma) total_p += Sigma.rows();
@@ -459,7 +460,7 @@ ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
     return std::unexpected(e.error());
   }
 
-  const bool has_means = (Jmu.size() > 0);
+  const bool has_means = (Jmu.rows() > 0);
   Eigen::VectorXd u(has_means ? total_p : 0);
   u.setZero();
   if (has_means) {

@@ -4503,7 +4503,17 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `satorra.2000` with the exact restriction map. A model without free
   parameters is evaluated at its fixed values instead of optimized
   (`evaluate_fixed` in `estimate/fit.cpp`), passes the verdict vacuously, and
-  gets an empty covariance; its global tests are not built yet. `fitted()` in
+  gets an empty covariance. Its global score and LR tests use the full moment
+  space: the zero-direction expected-information projector is identity before
+  normal-theory whitening, and fixed means retain their moment rows even with
+  no parameter columns. The ML objective also includes the fixed-mean
+  discrepancy when its mean Jacobian has zero columns. Independent
+  saturated-normal formulas and empirical
+  spectrum calculations gate covariance-only/mean-structure fits, single and
+  unequal-sized multiple groups, and casewise/tiled storage; saturated models
+  still have no global test. Ordinary R direct/deferred inference is covered,
+  including LR discrepancy parity against lavaan's fitted ML objective (lavaan
+  suppresses global tests for zero-free-parameter models). `fitted()` in
   `magmaan` returns model-implied moments, so such a model gives a population's
   moments. C++ unit tests check the
   covariance against finite-difference casewise scores, including two-group

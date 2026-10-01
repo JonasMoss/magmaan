@@ -193,11 +193,6 @@ here track that work; completing the 0.1.0 gates does not complete it.
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
   Changing the fitting default requires a separate evidence-backed decision.
 
-- [ ] **S — test fully specified models under the policy.** Complete the
-  zero-direction geometry (identity U factor) and nontrivial global test for
-  zero-free-parameter models. **Check:** independent
-  statistic/reference geometry and saturated/zero-df handling. See the vision.
-
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score
   arms fare better; heterogeneous-spectrum global calibration remains unresolved.

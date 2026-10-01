@@ -210,6 +210,34 @@ TEST_CASE("ML: mean-structure F formula matches hand calculation") {
   CHECK(*f_or == doctest::Approx(F_expected).epsilon(1e-12));
 }
 
+TEST_CASE("ML: fixed means contribute to the objective without parameter columns") {
+  auto ev = must_build("x1 ~~ 2*x1\nx1 ~ 1*1");
+  REQUIRE(ev.n_free() == 0);
+  SampleStats sample;
+  sample.S = {Eigen::MatrixXd::Constant(1, 1, 3.0)};
+  sample.mean = {Eigen::VectorXd::Constant(1, 4.0)};
+  sample.n_obs = {100};
+  const Eigen::VectorXd theta(0);
+  auto evaluation = ev.evaluate(theta, true, true);
+  REQUIRE(evaluation.has_value());
+  CHECK(evaluation->J_mu.rows() == 1);
+  CHECK(evaluation->J_mu.cols() == 0);
+  auto cache = magmaan::estimate::ml_prepare(sample);
+  REQUIRE(cache.has_value());
+  auto fused = magmaan::estimate::ml_value_gradient(sample, *cache, evaluation->moments,
+                                                     evaluation->J_sigma, evaluation->J_mu);
+  REQUIRE(fused.has_value());
+  // log(2/3) + 3/2 - 1 + (4-1)^2/2, on the full-F scale.
+  const double reference = std::log(2.0 / 3.0) + 0.5 + 4.5;
+  CHECK(fused->value == doctest::Approx(reference).epsilon(1e-12));
+  CHECK(fused->gradient.size() == 0);
+  auto objective = magmaan::estimate::ml_objective(ev, sample);
+  REQUIRE(objective.has_value());
+  Eigen::VectorXd gradient(0);
+  CHECK(objective->f(theta, gradient) == doctest::Approx(0.5 * reference).epsilon(1e-12));
+  CHECK(gradient.size() == 0);
+}
+
 TEST_CASE("ML: mean-structure gradient matches finite differences") {
   auto ev = must_build("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nf ~ 1");
   std::mt19937 rng(7);

@@ -86,22 +86,17 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
   PolicyInference out;
   out.psd_boundary = state.psd_boundary;
   if (fit.estimates.theta.size() == 0) {
-    // A fully specified model: nothing is estimated, so the covariance is
-    // empty. Its test against the saturated model needs the NTML geometry
-    // without model directions, which is not built yet (backlog).
+    // Fixed parameters have no uncertainty; all saturated-moment directions
+    // still contribute to the global tests below.
     out.covariance.resize(0, 0);
-    const std::string detail = "the model has no free parameters; the test of a "
-                               "fully specified model is not implemented yet";
-    set_unavailable(out.score, InferenceReason::UnsupportedModel, detail);
-    set_unavailable(out.lr, InferenceReason::UnsupportedModel, detail);
-    return out;
-  }
-  auto covariance = robust::frontier::ntml_score_sandwich(fit, robust::Information::Observed);
-  if (covariance) {
-    out.covariance = **covariance;
   } else {
-    out.covariance_reason = InferenceReason::NumericFailure;
-    out.covariance_detail = covariance.error().detail;
+    auto covariance = robust::frontier::ntml_score_sandwich(fit, robust::Information::Observed);
+    if (covariance) {
+      out.covariance = **covariance;
+    } else {
+      out.covariance_reason = InferenceReason::NumericFailure;
+      out.covariance_detail = covariance.error().detail;
+    }
   }
 
   // df_stat counts mean moments whenever the sample carries means; the NTML

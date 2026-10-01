@@ -91,6 +91,8 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 // geometry; under the global null the observed and expected information
 // differ by O_p(n^-1/2), and the SB and PEBA4 evidence behind the policy is
 // for this geometry.
+// A fully specified model has an empty parameter covariance and tests every
+// saturated mean/covariance direction; a saturated model has no global test.
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state);
 
