@@ -83,7 +83,127 @@ EQS column order; latent names remain F-number names. The returned
 model specification retains `eqs_source` and an explicit lavaan projection in
 `syntax` for existing rebuild/refit helpers. Prepared-model construction and
 lab fitting accept the same spec. EQS is excluded from the ordinary-user
-`magmaan` simulation prerelease; future adoption there remains undecided.
+`magmaan` simulation prerelease; ordinary-user integration is deferred until
+the C++ and lab gates below are complete.
+
+## Implementation sequence (planned)
+
+Direction adopted 2026-10-01: implement the full documented linear SEM model
+language in **C++ first**, then expose each validated increment through
+**magmaanlab**. Integration into **r-magmaan follows later** and is tracked in
+the [active backlog](../backlog/todo.md#eqs-language-extension).
+This section is a work plan; the supported subset above remains the implemented
+contract. The [source inventory](eqs_source_inventory.md) owns manual evidence
+and unresolved behavior.
+
+### C++ dependency order
+
+1. **Resolve declarations before lowering.** Extend the normative
+   `eqs_grammar.ebnf` first, then introduce an internal parsed-document stage
+   in the EQS frontend. Retain numeric variable identities, aliases, declared
+   dependent/independent roles, equation order, segments, parameter references
+   and source spans before emitting `FlatPartable`. Resolve labels/ranges and
+   documented overrides by identity, not by displayed names. Keep the existing
+   single-group entry point working; specify any new schema/options input in
+   `parse/eqs_parser.hpp`, `compat/eqs/model.hpp` and `api/sem.hpp` together.
+   Bound expansion sizes and diagnose unsupported headers at their source spans.
+   **Gate:** independent named-row/start expectations for labels, ID limits,
+   duplicate RHS recovery and lexical boundaries, including move lifetimes.
+
+2. **Prove and implement general-equation representation.** Use a small
+   independently specified linear system before broad shorthand expansion.
+   Cover an observed indicator used as a structural predictor, a nonunit/free
+   error path with fixed error variance, and error/predictor covariances.
+   Design an exact augmented LISREL mapping through the shared `spec::build`
+   and `model::build_matrix_rep` machinery. Preserve original estimands in
+   `LatentStructure`, reference/name mappings in `LatentNames`, and hints in
+   `Starts`; distinguish generated coordinates from user parameters. Do not
+   fold a free error coefficient into its variance. Shared/multiple/errorless
+   error graphs remain derived cases until language acceptance is resolved.
+   **Gate:** direct linear-system covariance/mean calculations, parameter
+   perturbations and analytic-versus-finite-difference derivatives. Existing
+   lavaan models must retain their rows and numeric behavior. Identification
+   failures belong to evaluation/fitting, not an observed-indicator syntax rule.
+
+3. **Expand MODEL into the same resolved document.** Add ON, VAR, COV, PCOV
+   and EQM recognition, retaining assignment order and source provenance.
+   Apply shorthand residual/marker rules before shared building; disable
+   competing lavaan automatic fixes. Keep explicit equations separate from
+   shorthand defaults. Add RELIABILITY only after resolving its contradictory
+   printed expansion. **Gate:** independent expansions for Cartesian/paired
+   paths, range overrides, bare-VAR fixed-one versus omitted free variances,
+   residual generation and explicit unit-variance identification. Keep ambiguous
+   marker cases unsupported until their source/runtime question is settled.
+
+4. **Add means, segment-local models and minimal schema.** Recognize V999
+   paths as intercepts and map them to Nu/Alpha without a constant data column.
+   Read GROUPS and segment boundaries; adapt existing group blocks to unequal
+   segment models rather than blindly replicating one model with `n_groups`.
+   Retain segment-local starts and explicit fixed-zero/free latent intercepts.
+   Specify ANALYSIS and CATEGORY metadata independently of data payloads and
+   estimation requests. Group count/order must agree with the supplied schema.
+   Levels remain distinct from groups; HLM/DEFINE needs additional language
+   evidence and a separately supported level contract.
+   **Gate:** direct/indirect means, asymmetric group models and starts, stable
+   observed-column mappings, and explicit refusal of unavailable fit targets.
+
+5. **Resolve restrictions after all expansions and groups.** Map directed,
+   variance, symmetric covariance and group-qualified references to original
+   parameters, using existing expression/equality/linear-constraint machinery.
+   Implement equality chains, constants, SET role classification and forced-free
+   exceptions. Preserve free/fixed semantics and validate supplied starts.
+   Parse explicit inequalities; route simple parameter bounds through supported
+   shared bounds where exact, and retain general restrictions with explicit
+   unsupported-fit diagnostics where no enforcing backend exists. The language
+   goal does not require a new optimizer or active-bound inference.
+   **Gate:** named restrictions and free-parameter counts, constrained implied
+   moments, SET exclusions and cross-group chains, plus a fit-path check that
+   no accepted restriction is silently ignored.
+
+6. **Close coverage and runtime uncertainties.** Add growth examples through
+   ordinary paths/means/restrictions and classify remaining model-envelope
+   directives. Build a supported/unsupported rule matrix keyed to inventory
+   IDs. Run the focused probes when EQS access or authoritative expansions
+   become available; keep unverified repairs identified explicitly. Full EQS
+   job execution, numerical defaults and estimator parity remain outside scope.
+
+### Lab exposure and rebuild contract
+
+After each C++ gate, extend `eqs_model()` and its thin compiled adapter; the lab
+may expose capabilities incrementally with explicit unsupported-fit results.
+It inherits numerical/inference capability checks from C++, with no R parser or
+second SEM implementation. Lab freedom does not relax parameter preservation.
+
+Before exposing aliases, means, groups or restrictions, remove the assumption
+that EQS specs can always be rebuilt from `to_lavaan_syntax(flat)`. The current
+row-only projection cannot carry the full new contract. Retain source language,
+original EQS text, resolved column/alias mappings, schema and construction
+settings. Rebuild through the EQS C++ entry point or a lossless portable triple
+with schema. A lavaan string is an optional interoperable projection only where
+it preserves all supported rows, starts and restrictions. Structural overrides
+must be checked against explicit EQS choices; do not reapply lavaan defaults.
+
+Lab gates cover construction/partable inspection, fresh versus prepared fits,
+rebuild/refit and save/reload into a fresh worker. Compare names, groups,
+constraints, explicit starts and implied covariance/means as well as estimates.
+Run installed-lavaan integration comparisons only for independently equivalent
+models and conventions. Refresh vendors after canonical C++ changes; validate
+generated exports, the fast binding loop and portable installation as applicable.
+Do not edit generated core mirrors directly.
+
+### Completion and later ordinary-user integration
+
+An increment is complete when its normative grammar, C++ lowering, model-triple
+contract, component fixtures and lab round trips agree. Parsing and fitting
+capability must be reported separately. Markers or ambiguous shorthand awaiting
+evidence cannot be advertised as full EQS compatibility. Document the rule
+matrix and remaining source gaps before declaring the language target complete.
+
+Only after these gates, extend the ordinary reusable-model constructor to
+accept validated EQS specs, preserve schema during reconstruction, and apply
+the existing ordinary inference policy. The later task must cover simulations,
+worker reconstruction and explicit refusals without changing ordinary defaults.
+No changes in `r-magmaan/` belong to the C++/lab implementation milestones.
 
 ## Evidence and limits
 

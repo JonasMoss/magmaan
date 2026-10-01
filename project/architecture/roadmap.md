@@ -1420,7 +1420,8 @@ an unconstrained gradient test to constrained solutions.
   starts, error ownership, default-zero covariances and explicit identification
   are preserved; EQS job/estimator settings are not imported. The lab exposes
   `eqs_model()`; EQS remains excluded from the ordinary-user simulation
-  prerelease, with future adoption undecided.
+  prerelease. Ordinary-user integration is deferred until the C++/lab
+  language-extension and round-trip gates pass.
   The [EQS contract](../grammar/eqs.md) defines the subset, unsupported cases
   and evidence limits. Offline pinned-lavaan fixtures gate rows, starts, ML
   estimates, implied covariance, expected SEs, df and chi-square; R tests
@@ -1429,6 +1430,11 @@ an unconstrained gradient test to constrained solutions.
   the full documented SEM model-language target, source pages, model-triple
   adapter requirements and focused runtime checks for unresolved cases.
   The inventory does not promote additional parser or fitting capabilities.
+  The [planned implementation sequence](../grammar/eqs.md#implementation-sequence-planned)
+  orders C++ resolution, general-equation representation, shorthand, means/
+  groups and restrictions, with lab exposure after each validated increment.
+  The [backlog](../backlog/todo.md#eqs-language-extension) records the later
+  `r-magmaan` task separately. This is planning, not additional implementation.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

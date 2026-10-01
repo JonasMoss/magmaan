@@ -64,7 +64,10 @@ no fitting default or compatibility contract.
 - The 0.1.0 simulation prerelease accepts lavaan syntax and saved specs carrying
   lavaan syntax. Ordered variables, parameterization and grouping are inherited
   from a spec before validation; explicit conflicts error. EQS and partable-only
-  specifications stay lab-only, with ordinary EQS adoption undecided.
+  specifications stay lab-only. EQS development proceeds in C++ and
+  `magmaanlab` first; ordinary integration is a later
+  [backlog task](../backlog/todo.md#eqs-language-extension) after language and
+  reconstruction gates pass.
 - Defined estimates are retained during fit reconstruction independently of
   inference. The ordinary README and help pages specify simulation extraction;
   consumers pin the ordinary package and compiled dependency together.
