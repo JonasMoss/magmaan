@@ -106,7 +106,7 @@ TEST_CASE("parameter reporting: effect coding matches lavaan means and constrain
   }
 }
 
-TEST_CASE("parameter reporting: ordinal residuals match lavaan independently of free ordering") {
+TEST_CASE("parameter reporting: ordinal residuals and response scales match lavaan") {
   using namespace magmaan;
   const auto fixture = reporting_fixture();
   for (const auto& item : fixture["ordinal"].items()) {
@@ -136,15 +136,28 @@ TEST_CASE("parameter reporting: ordinal residuals match lavaan independently of 
     REQUIRE(rep.has_value());
     const auto param = c["parameterization"] == "delta" ? estimate::OrdinalParameterization::Delta : estimate::OrdinalParameterization::Theta;
     const auto fixed_before = pt->fixed_value;
+    const auto free_before = pt->free;
+    const auto theta_before = theta;
     auto values = estimate::ordinal_parameter_values(*pt, *rep, theta, param);
     REQUIRE(values.has_value());
+    CHECK(pt->free == free_before);
+    CHECK(theta == theta_before);
     auto ev = model::ModelEvaluator::build(*pt, *rep);
     REQUIRE(ev.has_value());
     auto matrices = ev->assembled(theta);
     REQUIRE(matrices.has_value());
+    auto moments = ev->sigma(theta);
+    REQUIRE(moments.has_value());
     for (std::size_t i = 0; i < pt->size(); ++i) {
       CHECK((*values)(static_cast<Eigen::Index>(i)) == doctest::Approx(oracle_row(c["rows"], names, *pt, i)["est"].get<double>()).epsilon(1e-9));
       if (pt->free[i] == 0) CHECK(pt->fixed_value[i] == fixed_before[i]);
+      if (param == estimate::OrdinalParameterization::Theta &&
+          pt->op[i] == parse::Op::ResponseScale && pt->free[i] == 0) {
+        const auto block = static_cast<std::size_t>(pt->block_of(i) - 1);
+        const auto ov = pt->ov_pos[static_cast<std::size_t>(pt->lhs_var[i])];
+        const double scale = (*values)(static_cast<Eigen::Index>(i));
+        CHECK(scale * scale * moments->sigma[block](ov, ov) == doctest::Approx(1.0));
+      }
       const auto& cell = rep->cell_for_row[i];
       if (param == estimate::OrdinalParameterization::Delta && pt->free[i] == 0 &&
           cell.used && cell.mat == model::MatId::Theta && cell.row == cell.col) {
@@ -154,6 +167,44 @@ TEST_CASE("parameter reporting: ordinal residuals match lavaan independently of 
       }
     }
   }
+}
+
+TEST_CASE("parameter reporting: theta scales use response variance and retain free coordinates") {
+  using namespace magmaan;
+  auto flat = parse::Parser::parse("y ~~ v*y\ny | t1\ny ~*~ 1*y");
+  REQUIRE(flat.has_value());
+  auto pt = spec::build(*flat);
+  REQUIRE(pt.has_value());
+  auto rep = model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  Eigen::VectorXd theta = Eigen::VectorXd::Zero(pt->n_free());
+  std::size_t scale_row = pt->size();
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (pt->op[i] == parse::Op::Covariance) theta(pt->free[i] - 1) = 4.0;
+    if (pt->op[i] == parse::Op::ResponseScale) scale_row = i;
+  }
+  REQUIRE(scale_row < pt->size());
+  auto values = estimate::ordinal_parameter_values(
+      *pt, *rep, theta, estimate::OrdinalParameterization::Theta);
+  REQUIRE(values.has_value());
+  CHECK((*values)(static_cast<Eigen::Index>(scale_row)) == doctest::Approx(0.5));
+  for (double variance : {0.0, -1.0}) {
+    for (std::size_t i = 0; i < pt->size(); ++i)
+      if (pt->op[i] == parse::Op::Covariance) theta(pt->free[i] - 1) = variance;
+    CHECK_FALSE(estimate::ordinal_parameter_values(
+        *pt, *rep, theta, estimate::OrdinalParameterization::Theta).has_value());
+  }
+  for (std::size_t i = 0; i < pt->size(); ++i)
+    if (pt->op[i] == parse::Op::Covariance) theta(pt->free[i] - 1) = 4.0;
+  pt->free[scale_row] = pt->n_free() + 1;
+  theta.conservativeResize(pt->n_free());
+  theta(theta.size() - 1) = 0.7;
+  rep = model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  values = estimate::ordinal_parameter_values(
+      *pt, *rep, theta, estimate::OrdinalParameterization::Theta);
+  REQUIRE(values.has_value());
+  CHECK((*values)(static_cast<Eigen::Index>(scale_row)) == doctest::Approx(0.7));
 }
 
 TEST_CASE("parameter reporting: effect coding retains lavaan group mean identification") {

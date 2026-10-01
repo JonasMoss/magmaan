@@ -237,14 +237,6 @@ moment-target foundation; that extraction can proceed alongside normalization.
   **Check:** eight covariate corpus cases and direct/staged/cached routes against
   conditional references. See [translation audit](../validation/textbook-translation-audit.md).
 
-- [ ] **S — reconstruct fitted theta response-scale rows.** Categorical
-  theta fits currently display the prepared `~*~` value 1, whereas lavaan
-  reports the scale derived from the fitted response variance. Found while
-  validating group-block fits on a two-group HS three-indicator CFA; the
-  estimated loadings, thresholds and variances agree. **Check:** canonical
-  parameter-value reconstruction and complete fitted-table parity in both
-  categorical parameterizations; retain the numerical preparation value 1.
-
 - [ ] **M — localize mixed-model objective discrepancies.** Compare thresholds,
   means, scales, residual rows and DWLS weights for Newsom 2015 ex5.3a/ex5.3b/
   ex5.7a and 2024 ex5.8b. **Check:** compact NACOV fixtures with continuous

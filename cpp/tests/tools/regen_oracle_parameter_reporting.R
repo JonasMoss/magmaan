@@ -49,7 +49,8 @@ for (mixed in c(FALSE,TRUE)) for (grouped in c(FALSE,TRUE)) for (param in c("del
   stopifnot(lavInspect(fit,"converged"))
   id <- paste(if(mixed) "mixed" else "ordinal",if(grouped) "groups" else "single",param,sep="_")
   ord_cases[[id]] <- list(input=paste(base_model,
-    paste(paste0(ordered," | t1 + t2"),collapse="\n"),sep="\n"),
+    paste(paste0(ordered," | t1 + t2"),collapse="\n"),
+    paste(paste0(ordered," ~*~ 1*",ordered),collapse="\n"),sep="\n"),
     n_groups=if(grouped) 2L else 1L, parameterization=param, rows=rows(fit))
 }
 # group.equal is processed before effect coding: retain this ordering even

@@ -3867,8 +3867,12 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
   Eigen::VectorXd values(static_cast<Eigen::Index>(pt.size()));
   for (std::size_t i = 0; i < pt.size(); ++i) {
     values(static_cast<Eigen::Index>(i)) = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
-    if (parameterization != OrdinalParameterization::Delta || pt.free[i] > 0 ||
-        pt.op[i] != parse::Op::Covariance || pt.lhs_var[i] != pt.rhs_var[i])
+    const bool delta_residual = parameterization == OrdinalParameterization::Delta &&
+        pt.op[i] == parse::Op::Covariance;
+    const bool theta_scale = parameterization == OrdinalParameterization::Theta &&
+        pt.op[i] == parse::Op::ResponseScale;
+    if (pt.free[i] > 0 || (!delta_residual && !theta_scale) ||
+        pt.lhs_var[i] != pt.rhs_var[i])
       continue;
     bool ordered = false;
     for (std::size_t j = 0; j < pt.size(); ++j) {
@@ -3876,6 +3880,22 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
           pt.lhs_var[j] == pt.lhs_var[i]) { ordered = true; break; }
     }
     if (!ordered) continue;
+    if (theta_scale) {
+      const auto block = pt.block_of(i) - 1;
+      const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      if (block < 0 || static_cast<std::size_t>(block) >= moments->sigma.size() ||
+          ov < 0 || ov >= moments->sigma[static_cast<std::size_t>(block)].rows()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "ordinal_parameter_values: invalid response-scale row"));
+      }
+      const double variance = moments->sigma[static_cast<std::size_t>(block)](ov, ov);
+      if (!(variance > 0.0) || !std::isfinite(variance)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "ordinal_parameter_values: response variance must be finite and positive"));
+      }
+      values(static_cast<Eigen::Index>(i)) = 1.0 / std::sqrt(variance);
+      continue;
+    }
     const auto& cell = rep.cell_for_row[i];
     // Subtract the explained variance in the evaluator's own representation,
     // including structural regressions and observed-variable phantom latents.
@@ -3902,9 +3922,10 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
   // scale and indicator intercept that the single-group convention otherwise
   // pins (residual variance 1, intercept 0). The standard parameterization for
   // ordinal invariance is THETA: the released scale is the free residual
-  // variance `~~`, exactly how lavaan-theta reports it (the `~*~` row stays
-  // fixed at 1), so the moment path standardizes the released block by its
-  // implied √Σ*ᵢᵢ and no `~*~` partable projection is needed. (Under delta the
+  // variance `~~`, exactly how lavaan-theta reports it. The `~*~` preparation
+  // value stays fixed at 1; reporting derives its scale from the fitted
+  // response variance. The moment path standardizes the released block by its
+  // implied √Σ*ᵢᵢ. (Under delta the
   // released `~*~` scale is unidentified — it stays pinned at 1 with a singular
   // vcov — so delta invariance is not gated; the dormant delta released-block
   // branch in `ordinal_residuals`/`ordinal_jacobian` is kept but untested.)

@@ -2136,7 +2136,7 @@
   },
   "ordinal": {
     "ordinal_single_delta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4",
       "n_groups": 1,
       "parameterization": "delta",
       "rows": [
@@ -2377,7 +2377,7 @@
       ]
     },
     "ordinal_single_theta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4",
       "n_groups": 1,
       "parameterization": "theta",
       "rows": [
@@ -2618,7 +2618,7 @@
       ]
     },
     "ordinal_groups_delta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4",
       "n_groups": 2,
       "parameterization": "delta",
       "rows": [
@@ -3093,7 +3093,7 @@
       ]
     },
     "ordinal_groups_theta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4",
       "n_groups": 2,
       "parameterization": "theta",
       "rows": [
@@ -3568,7 +3568,7 @@
       ]
     },
     "mixed_single_delta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2",
       "n_groups": 1,
       "parameterization": "delta",
       "rows": [
@@ -3755,7 +3755,7 @@
       ]
     },
     "mixed_single_theta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2",
       "n_groups": 1,
       "parameterization": "theta",
       "rows": [
@@ -3942,7 +3942,7 @@
       ]
     },
     "mixed_groups_delta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2",
       "n_groups": 2,
       "parameterization": "delta",
       "rows": [
@@ -4309,7 +4309,7 @@
       ]
     },
     "mixed_groups_theta": {
-      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2",
+      "input": "f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2",
       "n_groups": 2,
       "parameterization": "theta",
       "rows": [

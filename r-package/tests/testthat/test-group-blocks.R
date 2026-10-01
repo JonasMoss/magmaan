@@ -24,10 +24,7 @@ test_that("ordered group blocks fit distinct templates with lavaan parity", {
     p <- fit$partable
     q <- lavaan::parTable(oracle)
     expect_setequal(key(p), key(q))
-    # Theta response-scale display is an existing separate projection gap:
-    # magmaan reports the preparation value 1, lavaan derives the fitted scale.
-    compare <- parameterization != "theta" | p$op != "~*~"
-    expect_equal(p$est[compare], q$est[match(key(p), key(q))][compare], tolerance = 1e-4)
+    expect_equal(p$est, q$est[match(key(p), key(q))], tolerance = 1e-4)
     expect_equal(p$free > 0, q$free[match(key(p), key(q))] > 0)
   }
 })

@@ -464,8 +464,10 @@ The builder applies the lavaan reference-group convention under scalar
 invariance. Covariance-only models retain loading-only coding.
 
 Ordinal and mixed fitted parameter tables derive fixed-scale delta residual
-variances through `estimate::ordinal_parameter_values`, using the fitted
-explained variance and unit response variance. The helper returns owning values
+variances and fixed theta response scales through
+`estimate::ordinal_parameter_values`. Delta residuals use the fitted explained
+variance and unit response variance; theta scales use the inverse square root
+of the fitted response variance. The helper returns owning values
 in structure-row order; it leaves preparation values, start hints, and free
 coordinates unchanged. R result constructors share this reconstruction, including
 prepared and post-fit ordinal routes. Theta residuals and free response-scale
@@ -473,7 +475,9 @@ coordinates retain their fitted values. Released-scale delta invariance remains
 outside validated coverage. Targeted pinned-lavaan fixtures cover effect-coded
 single/multigroup and scalar-invariance fits, explicit fixes, and single/multigroup
 ordinal/mixed delta/theta reporting; independent checks cover mean/covariance
-invariance, constraint sums, and residual-plus-explained variance.
+invariance, constraint sums, residual-plus-explained variance, and unit variance
+after response scaling. Nonpositive or nonfinite theta response variances fail
+explicitly instead of producing invalid reported scales.
 
 Explicit single-level `group:` headers select separate group templates in
 header order instead of being interpreted as levels and replicated across
@@ -482,8 +486,8 @@ through composite expansion. Header counts must match the requested groups;
 mixed axes and generic `block:` construction fail explicitly. `group_equal`
 matches explicit templates by parameter term even when row order/count differs.
 Frozen lavaan parser/partable fixtures and R ordinal delta/theta, mixed/continuous,
-and staged-model regressions cover grouping and estimated parameters. The
-existing theta response-scale display gap is separately tracked in the backlog.
+and staged-model regressions cover grouping and complete fitted tables,
+including theta response scales.
 The two-level `level:` path retains its existing templates and mean rules.
 
 Continuous multi-group `group.equal = "intercepts"` releases auto-added zero
