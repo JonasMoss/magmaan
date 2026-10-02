@@ -14,6 +14,13 @@ h0 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat,
 
 a <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17)
 b <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17)
+# With one complete-data information stratum, the effective direction G is
+# Fisher-orthogonal to the nuisance directions K: G' J K = 0. Thus every flip
+# has the identity variance in exact arithmetic. The two dense-product paths
+# round differently; allow O(q * epsilon) with a margin for the projection and
+# nuisance solve in this well-conditioned example, rather than requiring bits
+# to agree. This is rounding error, not Monte Carlo uncertainty.
+variance_roundoff_tol <- 64 * length(h0$theta) * .Machine$double.eps
 stopifnot(
   inherits(a, "magmaan_score_flip_test"),
   identical(a$p_basic, b$p_basic),
@@ -30,8 +37,10 @@ stopifnot(
   abs(a$statistic_sandwich - a$statistic_mean_scaled) < 1e-8,
   abs(a$p_sandwich - a$p_mean_scaled) < 1e-12,
   abs(a$p_sandwich - a$p_mixture) < 1e-12,
-  a$mean_variance_relative_shift == 0,
-  a$max_variance_relative_shift == 0,
+  a$mean_variance_relative_shift >= 0,
+  a$mean_variance_relative_shift < variance_roundoff_tol,
+  a$max_variance_relative_shift >= 0,
+  a$max_variance_relative_shift < variance_roundoff_tol,
   a$total_seconds >= a$setup_seconds + a$resampling_score_seconds +
     a$resampling_standardization_seconds + a$asymptotic_seconds
 )

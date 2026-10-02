@@ -7,6 +7,20 @@ m <- model_spec('f =~ x1 + x2 + x3 + x4')
 s <- df_to_data(x, m, scaling='n')
 ctl <- list(start='fabin2', start_transport='auto', max_iter=3000)
 expected <- magmaan_core$estimate_start_values(m$partable, s, start='fabin2', transport='auto')
+# The standalone constructor uses the supplied sample verbatim. ML and PSD ML
+# instead construct in sample-normalized coordinates by default, then return
+# starts in caller units. In this one-factor marker CFA, normalization keeps
+# the fixed loading at 1; its latent unit is the marker's observed SD.
+sample_sd <- sqrt(diag(s$S[[1]]))
+normalized_sample <- list(S=list(s$S[[1]] / tcrossprod(sample_sd)),
+                         mean=list(s$mean[[1]] / sample_sd), nobs=s$nobs)
+parameter_units <- magmaan_core$estimate_coordinate_map(
+    m$partable, s, start=expected)$units
+normalized_expected <- function(start, transport=NULL) {
+  theta <- magmaan_core$estimate_start_values(m$partable, normalized_sample,
+      start=start, transport=transport)
+  as.numeric(theta) * as.numeric(parameter_units)
+}
 check <- function(fit, expected_theta = expected) {
   stopifnot(identical(fit$start$method, 'fabin2'),
             identical(fit$start$requested_transport, 'auto'),
@@ -27,11 +41,19 @@ fitters <- list(
   wls_snlls=function(control) magmaan_core$fit_wls_snlls(m,s,diag(10),control=control))
 for (name in names(fitters)) {
   f <- fitters[[name]]
-  fit <- check(f(ctl))
+  normalized_start <- name %in% c('ml','psd')
+  expected_theta <- if (normalized_start) normalized_expected('fabin2','auto') else expected
+  fit <- check(f(ctl), expected_theta)
   default <- f(list(max_iter=3000))
-  expected_default <- magmaan_core$estimate_start_values(m$partable,s,
-      start=if (name %in% c('ml','gls')) 'layered' else if (name %in% c('psd','penalized')) 'scaled-fabin' else 'fabin3')
+  default_method <- if (name %in% c('ml','gls')) 'layered' else if (name %in% c('psd','penalized')) 'scaled-fabin' else 'fabin3'
+  # The estimator-specific constructor defaults are unchanged; compare the
+  # normalized ML/PSD defaults against the same normalized sample as above.
+  expected_default <- if (normalized_start) normalized_expected(default_method) else
+      magmaan_core$estimate_start_values(m$partable,s,start=default_method)
   stopifnot(max(abs(default$start$theta - expected_default)) < 1e-12)
+  # Disabling sample normalization restores the standalone constructor's
+  # verbatim-sample contract, without relaxing the start equality tolerance.
+  if (normalized_start) check(f(c(ctl,list(normalize_sample=FALSE))))
   explicit <- f(list(start=fit$theta, max_iter=3000))
   stopifnot(explicit$start$method == 'explicit',
             identical(as.numeric(explicit$start$theta), as.numeric(fit$theta)))
