@@ -97,6 +97,7 @@ struct PostError {
     BoundaryNesting,          // nesting is not interior (singular tangent or covariance)
     BootstrapFailed,          // resampling step could not produce a usable replicate set
     NumericIssue,             // upstream numerical failure (non-PD Σ at θ̂, evaluator build, ...)
+    UnsupportedInference,     // no inference contract for this route (e.g. a weight whose data influence is unknown)
   };
   Kind        kind   = Kind::InfoMatrixSingular;
   std::string detail = {};

@@ -31,6 +31,11 @@ struct CasewiseInfluenceIJ;
 struct WeightedMomentRBMParts;
 }  // namespace magmaan::estimate
 
+// robust.hpp includes this header through lr_test_satorra.hpp.
+namespace magmaan::robust {
+struct ParamSpaceSandwich;
+}  // namespace magmaan::robust
+
 namespace magmaan::estimate::fiml {
 
 using data::RawData;
@@ -1014,6 +1019,23 @@ struct Ml2sProfileRobustOptions {
   const FIMLPack* pack = nullptr;
   const FIMLH1* h1 = nullptr;
 };
+
+// Full-θ Stage-2 sandwich {A1, B1} in the moment metric for a two-stage fit,
+// with no equality-constraint reduction, for score tests on augmented models.
+// A1 = Σ_b (n_b/N) Δ_bᵀ V_b Δ_b with V the Stage-2 weight; B1 replaces the
+// middle V_b by V_b Γ_b V_b, with Γ_b the Stage-1 saturated-moment covariance
+// (n_b·ACOV_b). With `robust_options.estimated_weight` and a DWLS, ADF or DLS
+// weight, B1 is the IJ meat that adds the Stage-2 weight's data influence; it
+// needs raw data, the FIML pack and H1. NT and ULS weights carry no weight
+// influence. `est` must be the matching Stage-2 fit. Requires mean rows.
+post_expected<::magmaan::robust::ParamSpaceSandwich>
+ml2s_param_space_sandwich(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const SaturatedMoments& sm,
+                          const Estimates& est,
+                          TwoStageWeight kind,
+                          TwoStageDlsOptions dls = {},
+                          const Ml2sProfileRobustOptions& robust_options = {});
 
 fit_expected<estimate::frontier::ScalarProfileLrtResult>
 profile_lrt_scalar_ml2s(spec::LatentStructure pt,

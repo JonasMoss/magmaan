@@ -284,12 +284,27 @@ weighted_param_space_sandwich(const std::vector<WeightedMomentBlock>& blocks);
 post_expected<robust::ParamSpaceSandwich>
 weighted_param_space_sandwich_ij(const std::vector<WeightedMomentIJBlock>& blocks);
 
+// The estimated-weight (IJ) mode for a fit's recorded fixed-weight recipe.
+// Every estimated-weight consumer should derive its mode here rather than from
+// an estimator label: a label such as "WLS" is shared by fits whose weights
+// have different data influence. ULS has no data dependence (`Fixed`). A
+// caller-supplied weight has no recipe, so its influence is unknown and
+// estimated-weight inference is refused with `UnsupportedInference`.
+post_expected<ContinuousLsIJWeightMode>
+continuous_ls_ij_mode_for(gmm::FixedWeightKind kind, bool supplied);
+
 // Estimated-weight moment-metric sandwich {A1, B1} for a continuous moment-
 // quadratic fit, the IJ counterpart of `continuous_ls_param_space_sandwich`.
-// `weight` is the caller-fixed estimation weight (used for `Fixed`); for the
-// re-estimating modes it is ignored and the weight is rebuilt from `raw`. The
-// meat carries the weight-derivative influence so the robust score-test scaling
-// `c` reflects the estimated second-stage weight. Always full θ-space.
+// `weight` is the caller's fitting weight (used as is for `Fixed`). The
+// re-estimating modes rebuild the weight from `raw` because its influence is
+// a function of that rebuild; a non-empty `weight` must then equal the rebuild
+// (relative Frobenius difference at most 1e-6 per block) or the call fails
+// with `UnsupportedInference`, since the IJ term would otherwise describe a
+// different weight from the one that produced the estimate. An empty `weight`
+// lets the recipe define the weight. The meat carries the weight-derivative
+// influence so the robust score-test scaling `c` reflects the estimated
+// second-stage weight. Always full θ-space. The same rule applies to every
+// continuous IJ consumer (SEs, profile tests, RBM, residuals).
 post_expected<robust::ParamSpaceSandwich>
 continuous_ls_param_space_sandwich_ij(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,

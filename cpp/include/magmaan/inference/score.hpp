@@ -403,6 +403,41 @@ score_tests_fiml_robust(spec::LatentStructure pt,
                         const FIMLPack& pack,
                         FIML discrepancy = {});
 
+// ── Two-stage (ML2S) score tests ─────────────────────────────────────────────
+// One-parameter modification indices and equality-release tests for a Stage-2
+// fit to the Stage-1 saturated EM moments `sm`. `mi` is the naive statistic:
+// the Stage-2 discrepancy's score and expected information on the EM moments,
+// as if they were complete-data moments. `mi_scaled` divides it by the
+// per-direction scaling c = gᵀB1g / gᵀA1g, whose meat is the Stage-1
+// saturated-moment covariance, so missing-data uncertainty enters. With
+// `robust.estimated_weight` and a DWLS, ADF or DLS Stage-2 weight, the meat
+// also carries that weight's data influence (raw data, FIML pack and H1
+// required). NT uses the ML discrepancy with the structured normal-theory
+// bread; the other weights use the moment quadratic and require a mean
+// structure. `est` must be the matching Stage-2 fit. Only expected
+// information is supported. On complete data the tests reduce to the
+// complete-data ML and LS robust tests with the empirical Gamma.
+struct Ml2sScoreOptions {
+  estimate::fiml::TwoStageWeight weight = estimate::fiml::TwoStageWeight::Nt;
+  estimate::fiml::TwoStageDlsOptions dls{};
+  ModificationIndexOptions base{};
+  estimate::fiml::frontier::Ml2sProfileRobustOptions robust{};
+};
+
+post_expected<ScoreTestTable>
+modification_indices_ml2s(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const estimate::fiml::SaturatedMoments& sm,
+                          const Estimates& est,
+                          const Ml2sScoreOptions& options = {});
+
+post_expected<ScoreTestTable>
+score_tests_ml2s(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const estimate::fiml::SaturatedMoments& sm,
+                 const Estimates& est,
+                 const Ml2sScoreOptions& options = {});
+
 // Per-direction robust statistic worker, shared with the ordinal robust score
 // path (`estimate::frontier`): computes the NT statistic for `direction` and
 // rescales by c = gᵀB1g / gᵀA1g, with g the efficient-score direction implied

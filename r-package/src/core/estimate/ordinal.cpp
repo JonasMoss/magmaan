@@ -42,6 +42,8 @@
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/optim/reparameterize.hpp"
+
+#include "detail_linalg.hpp"
 #include "magmaan/parse/op.hpp"
 
 #include "detail_second_order.hpp"
@@ -3716,6 +3718,70 @@ ordinal_ij_block_missing(const data::OrdinalStats& stats,
   return block_has_missing;
 }
 
+// The estimated-weight channels are derivatives of diag(NACOV)^-1 (DWLS) and
+// NACOV^-1 (WLS). Ordinal NT, DLS and caller-supplied weights occupy the same
+// slots under the computational DWLS/WLS labels, but their data influence
+// differs: NT depends on the polychoric correlations, DLS inverts a mixture,
+// and a supplied weight has no known influence. Applying the NACOV channel to
+// them would describe the wrong estimator, so refuse. The reference inverse is
+// the stats builder's own routine, so a default weight compares exactly; the
+// tolerance only absorbs rounding from other builders of the same weight.
+post_expected<void>
+require_nacov_weight(const std::vector<Eigen::MatrixXd>& Ws,
+                     const std::vector<Eigen::MatrixXd>& NACOV,
+                     OrdinalWeightKind weights, const char* who) {
+  if (weights == OrdinalWeightKind::ULS) return {};
+  constexpr double kRelativeTolerance = 1e-6;
+  if (Ws.size() != NACOV.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": weight and NACOV block counts differ"));
+  }
+  for (std::size_t b = 0; b < NACOV.size(); ++b) {
+    const Eigen::MatrixXd& G = NACOV[b];
+    Eigen::MatrixXd expected;
+    if (weights == OrdinalWeightKind::DWLS) {
+      expected = Eigen::MatrixXd::Zero(G.rows(), G.cols());
+      for (Eigen::Index k = 0; k < G.rows(); ++k) {
+        if (!(G(k, k) > 0.0) || !std::isfinite(G(k, k))) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              std::string(who) + ": NACOV diagonal is not positive in block " +
+                  std::to_string(b)));
+        }
+        expected(k, k) = 1.0 / G(k, k);
+      }
+    } else {
+      ::magmaan::detail::SymInverseResult inverse =
+          ::magmaan::detail::symmetric_inverse_pd_gated(G);
+      if (!inverse.ok) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            std::string(who) + ": NACOV is not positive definite in block " +
+                std::to_string(b)));
+      }
+      expected = std::move(inverse.inverse);
+    }
+    if (Ws[b].rows() != expected.rows() || Ws[b].cols() != expected.cols()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": weight dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    const double scale =
+        std::max(expected.norm(), std::numeric_limits<double>::min());
+    const double gap = (Ws[b] - expected).norm() / scale;
+    if (!(gap <= kRelativeTolerance)) {
+      return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+          std::string(who) + ": estimated-weight inference needs the " +
+              (weights == OrdinalWeightKind::DWLS ? "DWLS weight diag(NACOV)^-1"
+                                                  : "WLS weight NACOV^-1") +
+              ", but block " + std::to_string(b) +
+              " holds a different weight (normal-theory, DLS or supplied; "
+              "relative difference " + std::to_string(gap) +
+              "). Its data influence is not implemented; use fixed-weight "
+              "inference"));
+    }
+  }
+  return {};
+}
+
 // Per-case IJ blocks (Δ_b, W_b, moment_influence, IF(Ŵ) correction) for an
 // all-ordinal DWLS/WLS fit, evaluated at `theta`/`moments` (the fitted point for
 // the SE path, the freed-candidate null for the score-test sandwich). Shared by
@@ -3738,6 +3804,11 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "robust_ordinal_ij: per-case influence functions unavailable; recompute "
         "ordinal stats (moment_influence is required for the IJ)"));
+  }
+  if (auto e = require_nacov_weight(Ws, stats.NACOV, weights,
+                                    "ordinal estimated-weight inference");
+      !e.has_value()) {
+    return std::unexpected(e.error());
   }
   std::vector<WeightedMomentIJBlock> ij_blocks;
   ij_blocks.reserve(stats.R.size());
@@ -7009,13 +7080,16 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
   return out;
 }
 
+namespace {
+
+// Unchecked: fixed-weight comparators reuse it and drop the weight channel.
 post_expected<WeightedProfileRMSEAResult>
-ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
-                           const model::MatrixRep& rep,
-                           const data::OrdinalStats& stats,
-                           const Estimates& est,
-                           OrdinalParameterization parameterization,
-                           double eig_tol) {
+ordinal_dwls_profile_rmsea_core(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const data::OrdinalStats& stats,
+                                const Estimates& est,
+                                OrdinalParameterization parameterization,
+                                double eig_tol) {
   if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
       !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
@@ -7195,6 +7269,31 @@ ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
       blocks, K, fmin, B, stats.R.size(), eig_tol);
 }
 
+// The estimated-weight channel of the DWLS profile objects is the influence of
+// diag(NACOV); see `require_nacov_weight`.
+post_expected<void> require_dwls_nacov_weight(const data::OrdinalStats& stats,
+                                              const char* who) {
+  return require_nacov_weight(stats.W_dwls, stats.NACOV,
+                              OrdinalWeightKind::DWLS, who);
+}
+
+}  // namespace
+
+post_expected<WeightedProfileRMSEAResult>
+ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalParameterization parameterization,
+                           double eig_tol) {
+  if (auto e = require_dwls_nacov_weight(stats, "ordinal_dwls_profile_rmsea");
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return ordinal_dwls_profile_rmsea_core(std::move(pt), rep, stats, est,
+                                         parameterization, eig_tol);
+}
+
 post_expected<WeightedProfileLRTResult>
 ordinal_dwls_profile_lrt(spec::LatentStructure pt_H1,
                          const model::MatrixRep& rep_H1,
@@ -7323,6 +7422,13 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
       !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
+  }
+  if (estimated_weight) {
+    if (auto e = require_dwls_nacov_weight(stats,
+                                           "ordinal_crmr_misspec_inference");
+        !e.has_value()) {
+      return std::unexpected(e.error());
+    }
   }
   if (stats.NACOV.size() != stats.R.size() ||
       stats.moment_influence.size() != stats.R.size() ||
@@ -7852,8 +7958,15 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
   // joint NACOV Γ_x (gamma), the signed bias trace, the QΓ spectrum, F (fmin),
   // N·F (chisq_standard), df, and N. RMSEA's criterion is the discrepancy F
   // itself, so the bias/Hessian objects are exactly the profile ones.
-  auto prof_or = ordinal_dwls_profile_rmsea(pt, rep, stats, est,
-                                            parameterization, eig_tol);
+  if (estimated_weight) {
+    if (auto e = require_dwls_nacov_weight(stats,
+                                           "ordinal_rmsea_misspec_inference");
+        !e.has_value()) {
+      return std::unexpected(e.error());
+    }
+  }
+  auto prof_or = ordinal_dwls_profile_rmsea_core(pt, rep, stats, est,
+                                                 parameterization, eig_tol);
   if (!prof_or.has_value()) return std::unexpected(prof_or.error());
   const WeightedProfileRMSEAResult& prof = *prof_or;
 
@@ -8094,8 +8207,15 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
   // signed bias trace Q̄_u, df, N. The profile path also validates the fit and
   // the moment_influence/int_data requirements.
   spec::LatentStructure pt_user = pt;  // profile consumes its argument
-  auto prof_or = ordinal_dwls_profile_rmsea(std::move(pt_user), rep, stats, est,
-                                            parameterization, eig_tol);
+  if (estimated_weight) {
+    if (auto e = require_dwls_nacov_weight(
+            stats, "ordinal_cfi_tli_misspec_inference");
+        !e.has_value()) {
+      return std::unexpected(e.error());
+    }
+  }
+  auto prof_or = ordinal_dwls_profile_rmsea_core(
+      std::move(pt_user), rep, stats, est, parameterization, eig_tol);
   if (!prof_or.has_value()) return std::unexpected(prof_or.error());
   const WeightedProfileRMSEAResult& prof = *prof_or;
 

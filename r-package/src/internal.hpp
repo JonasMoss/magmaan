@@ -154,6 +154,7 @@ inline const char* post_error_kind(lv::PostError::Kind k) {
     case K::BoundaryNesting:    return "BoundaryNesting";
     case K::BootstrapFailed:    return "BootstrapFailed";
     case K::NumericIssue:       return "NumericIssue";
+    case K::UnsupportedInference: return "UnsupportedInference";
   }
   return "Unknown";
 }

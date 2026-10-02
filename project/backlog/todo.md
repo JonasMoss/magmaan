@@ -422,18 +422,20 @@ structural-path enumeration remains a separate model-builder contract.
 The ordinary package does not expose MI in this release; the
 [interface vision](../design/r-interface-vision.md) defers policy MI.
 
-- [ ] **S/M — stop silent weight-recipe mismatches in robust MI.** R selects
-  the estimated-weight (IJ) mode from the estimator label alone: WLS always
-  becomes full ADF, `dls_a` is not passed, and the IJ sandwich rebuilds W from
-  raw data instead of using a supplied W. A WLS fit with a diagonal or DLS
-  supplied W therefore gets an ordinary statistic on that W and a robust scale
-  on ADF, without an error. Ordinal NT, DLS and supplied-W fits are relabelled
-  computational "WLS" and `OrdinalStats` carries no weight recipe, so the same
-  mismatch probably applies there (inferred from code, not yet reproduced).
-  Ordinal association-ML fits have no MI path and may reach the LS ordinal
-  worker under their label. **Check:** reproduce each case, then honor the
-  stored recipe or return a typed error; association-ML MI is rejected until
-  its contract exists (0.3.0).
+- [ ] **S — finish the weight-recipe fix in R.** The C++ guard landed
+  2026-10-02 (roadmap: estimated-weight recipe guard): continuous IJ consumers
+  refuse a fitting weight that differs from their recipe's rebuild, ordinal
+  IJ and DWLS profile paths refuse NT/DLS/supplied weights, and
+  `continuous_ls_ij_mode_for` maps a recorded recipe to its mode. Remaining
+  R glue: read `fit$composition$weight`, `dls_a` and the supplied flag through
+  that resolver in every `continuous_ij_mode(estimator)` caller (MI/release,
+  robust IJ SEs, profile LRTs, RBM, estimated-weight residuals); use `fit$W`
+  instead of requiring `weight =`; add `UnsupportedInference` to the R error
+  kind names; and remove or validate the `ij_weight` override (pending
+  decision). Verify whether association-ML ordinal fits can reach the LS
+  ordinal MI worker and reject them until their 0.3.0 contract. **Check:**
+  testthat cases for DWLS, DLS (non-default a), supplied-W and ordinal NT/DLS
+  fits through each R entry point, with typed errors where refused.
 
 - [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
   retained continuous and all-ordinal weight recipes in the matrix, with stored
@@ -452,21 +454,18 @@ The ordinary package does not expose MI in this release; the
   versus supplied-data agreement, documented unavailable cells and no ignored
   options. No numerical recipe/default changes without evidence.
 
-- [ ] **M — add Stage-1-aware two-stage MI/release tests across weights.** Reuse
-  retained saturated moments and their joint mean/covariance influence for the
-  NT, ULS, DWLS, ADF and DLS Stage-2 choices. Propagate weight-estimation influence
-  where the recipe requires it, with fit-null versus test-evaluation provenance
-  and observed/expected sensitivity declared. Keep the naive NT-ML comparator
-  labelled separately. **Check:** all-observed reductions to the corresponding
-  complete-data estimator, incomplete/grouped influence assembly, missingness
-  pattern and unequal-group controls, DLS endpoints and typed unavailable cases.
-  This is post-fit reuse, not a wholesale prepared-ML2S migration. Today
-  robust MI stops for ML2S and ML2S_DWLS/ADF/DLS fail in ordinary MI. Reusable
-  pieces: `two_stage_saturated_gamma_influence`, the Stage-2 weight blocks,
-  `two_stage_em_ml_inference`, `global_score_components_ml2s` and
-  `ml2s_profile_sandwich` (anonymous namespace in `fiml.cpp`; promote it to a
-  sandwich hook). NT and fixed-weight cases feed Stage-1 Gamma = n·acov to the
-  existing ML caller-Gamma and LS per-block-Gamma overloads.
+- [ ] **S — expose two-stage MI/release in R.** The C++ tier landed
+  2026-10-02 (roadmap: two-stage MI and equality-release score tests):
+  `{modification_indices,score_tests}_ml2s` report the naive Stage-2 statistic
+  and its Stage-1-aware scaling for NT, ULS, DWLS, ADF and DLS, fixed or
+  estimated weight, gated by exact complete-data reductions in one and two
+  groups. Remaining: dispatch ML2S fits from `inference_modification_indices`
+  and the robust score wrappers using the fit's Stage-1 object, `stage2_weight`
+  and `stage2_dls_a` (raw data, pack and H1 for the estimated weight); keep the
+  naive column labelled; check whether lavaan's `modindices()` on a
+  `missing = "two.stage"` fit reproduces the naive NT statistic and freeze a
+  fixture if so. **Check:** R reductions to complete-data ML/LS, MCAR controls
+  and typed errors for observed information and missing mean structure.
 
 - [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,

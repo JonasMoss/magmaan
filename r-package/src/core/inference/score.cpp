@@ -2143,6 +2143,206 @@ score_tests_robust(spec::LatentStructure pt,
                                     options, nullptr, &gamma_blocks);
 }
 
+// ── Two-stage (ML2S) tier ────────────────────────────────────────────────────
+
+namespace {
+
+// Naive Stage-2 score and information on the Stage-1 EM moments, with the
+// Stage-1-aware sandwich. NT pairs the ML score with the structured
+// normal-theory bread and the Stage-1 covariance as caller meat; the other
+// Stage-2 weights pair the moment-quadratic score with
+// `ml2s_param_space_sandwich`. Both sandwiches are full-θ, so the score-test
+// nuisance projection handles equality constraints as in the other tiers.
+struct RobustMl2sEvaluator {
+  const model::MatrixRep& rep;
+  const SampleStats& samp;  // Stage-1 EM moments
+  const estimate::fiml::SaturatedMoments& sm;
+  estimate::fiml::TwoStageWeight kind;
+  estimate::fiml::TwoStageDlsOptions dls;
+  estimate::gmm::Weight weight;  // Stage-2 weight; unused for NT
+  const Eigen::MatrixXd* nt_gamma = nullptr;
+  double n_total;
+  estimate::fiml::frontier::Ml2sProfileRobustOptions robust;
+
+  bool is_nt() const noexcept {
+    return kind == estimate::fiml::TwoStageWeight::Nt;
+  }
+
+  post_expected<std::optional<Eigen::MatrixXd>>
+  rank_information(const spec::LatentStructure&, const Estimates&) const {
+    return std::optional<Eigen::MatrixXd>{};
+  }
+
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt, std::size_t row) const {
+    return with_fixed_row_freed(std::move(pt), row, samp, rep);
+  }
+
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt,
+                 const std::vector<FixedCandidateRow>& rows) const {
+    return with_fixed_rows_freed(std::move(pt), rows, samp, rep);
+  }
+
+  post_expected<robust::ParamSpaceSandwich>
+  sandwich_for(const spec::LatentStructure& pt, const Estimates& est) const {
+    if (is_nt()) {
+      return robust::param_space_sandwich(
+          pt, rep, samp, est, *nt_gamma,
+          robust::InferenceSpec{robust::Information::Expected,
+                                robust::WeightMoments::Structured,
+                                robust::ScoreCovariance::Empirical},
+          /*reparam_constraints=*/false);
+    }
+    return estimate::fiml::frontier::ml2s_param_space_sandwich(
+        pt, rep, sm, est, kind, dls, robust);
+  }
+
+  post_expected<void>
+  evaluate(const spec::LatentStructure& pt, const Estimates& est,
+           Eigen::VectorXd& score, Eigen::MatrixXd& info,
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+    auto e = is_nt()
+        ? evaluate_augmented_ml(pt, rep, samp, est, ScoreInformation::Expected,
+                                0.5 * n_total, score, info)
+        : evaluate_augmented_ls(pt, rep, samp, est, weight, n_total, score,
+                                info);
+    if (!e.has_value()) return std::unexpected(e.error());
+    auto sw = sandwich_for(pt, est);
+    if (!sw.has_value()) return std::unexpected(sw.error());
+    A1 = std::move(sw->A1);
+    B1 = std::move(sw->B1);
+    return {};
+  }
+};
+
+SampleStats ml2s_stage1_sample_stats(const estimate::fiml::SaturatedMoments& sm) {
+  SampleStats samp;
+  samp.S = sm.cov;
+  samp.mean = sm.mean;
+  samp.n_obs = sm.n_obs;
+  return samp;
+}
+
+// The Stage-1 covariance as the caller meat of the ML sandwich: block-diagonal,
+// each block (n_b/N)·Γ_b, which is `two_stage_gamma_from_acov`'s parameter
+// convention. A model without a mean structure keeps the covariance rows,
+// the marginal Stage-1 covariance of vech(S).
+post_expected<Eigen::MatrixXd>
+ml2s_nt_caller_gamma(const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const estimate::fiml::SaturatedMoments& sm,
+                     const Estimates& est) {
+  auto full = estimate::fiml::two_stage_gamma_from_acov(sm,
+                                                        /*se_weighted=*/true);
+  if (!full.has_value()) return std::unexpected(full.error());
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto moments = ev->sigma(est.theta);
+  if (!moments.has_value()) return std::unexpected(model_to_post(moments.error()));
+  const bool has_means = std::any_of(
+      moments->mu.begin(), moments->mu.end(),
+      [](const Eigen::VectorXd& mu) { return mu.size() > 0; });
+  if (has_means) return std::move(*full);
+
+  auto vech_len = [](Eigen::Index p) { return p * (p + 1) / 2; };
+  Eigen::Index pstar_total = 0;
+  for (const auto& S : sm.cov) pstar_total += vech_len(S.rows());
+  Eigen::MatrixXd out = Eigen::MatrixXd::Zero(pstar_total, pstar_total);
+  Eigen::Index src = 0;
+  Eigen::Index dst = 0;
+  for (const auto& S : sm.cov) {
+    const Eigen::Index p = S.rows();
+    const Eigen::Index pstar = vech_len(p);
+    out.block(dst, dst, pstar, pstar) =
+        full->block(src + p, src + p, pstar, pstar);
+    src += p + pstar;
+    dst += pstar;
+  }
+  return out;
+}
+
+struct Ml2sScoreSetup {
+  estimate::gmm::Weight weight;
+  Eigen::MatrixXd nt_gamma;
+  double n_total = 0.0;
+};
+
+post_expected<Ml2sScoreSetup>
+prepare_ml2s_score(const spec::LatentStructure& pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const estimate::fiml::SaturatedMoments& sm,
+                   const Estimates& est,
+                   const Ml2sScoreOptions& options) {
+  if (options.base.information != ScoreInformation::Expected) {
+    return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+        "two-stage score tests use expected information only"));
+  }
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  Ml2sScoreSetup out;
+  out.n_total = *n;
+  if (options.weight == estimate::fiml::TwoStageWeight::Nt) {
+    auto gamma = ml2s_nt_caller_gamma(pt, rep, sm, est);
+    if (!gamma.has_value()) return std::unexpected(gamma.error());
+    out.nt_gamma = std::move(*gamma);
+  } else {
+    auto weight = estimate::fiml::two_stage_stage2_weight_structured(
+        sm, options.weight, options.dls);
+    if (!weight.has_value()) return std::unexpected(weight.error());
+    out.weight = std::move(*weight);
+  }
+  return out;
+}
+
+}  // namespace
+
+post_expected<ScoreTestTable>
+modification_indices_ml2s(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const estimate::fiml::SaturatedMoments& sm,
+                          const Estimates& est,
+                          const Ml2sScoreOptions& options) {
+  const SampleStats samp = ml2s_stage1_sample_stats(sm);
+  auto work = prepare_modification_index_model(std::move(pt), rep, options.base);
+  if (!work.has_value()) return std::unexpected(work.error());
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, samp);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto setup = prepare_ml2s_score(work->pt, work->rep, samp, sm, est, options);
+  if (!setup.has_value()) return std::unexpected(setup.error());
+  RobustMl2sEvaluator ev{work->rep, samp, sm, options.weight, options.dls,
+                         setup->weight, &setup->nt_gamma, setup->n_total,
+                         options.robust};
+  auto table = fixed_parameter_tests_robust(work->pt, work->rep, est, ev);
+  if (!table.has_value()) return std::unexpected(table.error());
+  if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return table;
+}
+
+post_expected<ScoreTestTable>
+score_tests_ml2s(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const estimate::fiml::SaturatedMoments& sm,
+                 const Estimates& est,
+                 const Ml2sScoreOptions& options) {
+  const SampleStats samp = ml2s_stage1_sample_stats(sm);
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto setup = prepare_ml2s_score(pt, rep, samp, sm, est, options);
+  if (!setup.has_value()) return std::unexpected(setup.error());
+  RobustMl2sEvaluator ev{rep, samp, sm, options.weight, options.dls,
+                         setup->weight, &setup->nt_gamma, setup->n_total,
+                         options.robust};
+  return equality_release_tests_robust(std::move(pt), rep, est, ev);
+}
+
 // ── FIML robust tier ─────────────────────────────────────────────────────────
 
 namespace {

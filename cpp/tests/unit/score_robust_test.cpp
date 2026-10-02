@@ -9,6 +9,8 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Cholesky>
@@ -794,6 +796,110 @@ TEST_CASE("frontier robust LS MI: estimated-weight DWLS meat shifts the scaling"
   }
 }
 
+TEST_CASE("frontier robust LS MI: an estimated-weight recipe must reproduce the fitting weight") {
+  // The IJ correction is the derivative of the weight its recipe rebuilds.
+  // A fit made with one weight and scaled with another recipe's influence
+  // describes neither estimator, so such calls are refused with a typed
+  // reason. The same check guards every continuous IJ consumer.
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20261002u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 1500, Sigma, 7.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  const Eigen::VectorXd theta0 = Eigen::VectorXd::Ones(h.pt.n_free());
+  using Kind = magmaan::estimate::gmm::FixedWeightKind;
+  using Mode = magmaan::estimate::ContinuousLsIJWeightMode;
+
+  auto fit_with = [&](Kind kind, double a) {
+    auto w = magmaan::estimate::gmm::fixed_moment_weight(
+        *ev, *samp, theta0, kind, &raw,
+        magmaan::estimate::gmm::FixedWeightOptions{a});
+    REQUIRE(w.has_value());
+    auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, *w);
+    REQUIRE(est.has_value());
+    return std::pair{*w, *est};
+  };
+  auto ew = [&](Mode mode, double a) {
+    inf::frontier::RobustScoreOptions opts;
+    opts.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+    opts.estimated_weight = true;
+    opts.ij_weight_mode = mode;
+    opts.dls_opts.a = a;
+    return opts;
+  };
+  auto refused = [](const auto& r) {
+    return !r.has_value() &&
+           r.error().kind == magmaan::PostError::Kind::UnsupportedInference;
+  };
+
+  // Each recipe accepts its own fitting weight.
+  for (auto [kind, mode] : {std::pair{Kind::Nt, Mode::SampleNormalTheory},
+                            std::pair{Kind::Dwls, Mode::SampleEmpiricalDwls},
+                            std::pair{Kind::Wls, Mode::SampleEmpiricalWls}}) {
+    auto [w, est] = fit_with(kind, 0.5);
+    auto mi = inf::frontier::modification_indices_robust(
+        h.pt, h.rep, *samp, raw, est, w, ew(mode, 0.5));
+    REQUIRE_MESSAGE(mi.has_value(), (mi.has_value() ? "" : mi.error().detail));
+    CHECK(mi->rows.size() > 1);
+  }
+
+  // A DWLS fit scaled with the ADF or DLS influence is refused, in MI and in
+  // the shared sandwich used by SEs.
+  auto [w_dwls, est_dwls] = fit_with(Kind::Dwls, 0.5);
+  CHECK(refused(inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, est_dwls, w_dwls,
+      ew(Mode::SampleEmpiricalWls, 0.5))));
+  CHECK(refused(inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, est_dwls, w_dwls, ew(Mode::SampleDls, 0.5))));
+  CHECK(refused(magmaan::estimate::continuous_ls_param_space_sandwich_ij(
+      h.pt, h.rep, *samp, est_dwls, w_dwls, raw, Mode::SampleEmpiricalWls)));
+
+  // DLS must use the fit's own mixing scalar.
+  auto [w_dls, est_dls] = fit_with(Kind::Dls, 0.3);
+  CHECK(inf::frontier::modification_indices_robust(
+            h.pt, h.rep, *samp, raw, est_dls, w_dls, ew(Mode::SampleDls, 0.3))
+            .has_value());
+  CHECK(refused(inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, est_dls, w_dls, ew(Mode::SampleDls, 0.5))));
+
+  // A rescaled weight is a different weight for the robust scaling.
+  auto w_scaled = w_dwls;
+  w_scaled[0] = magmaan::estimate::gmm::BlockWeight::dense(
+      2.0 * w_dwls[0].to_dense(), magmaan::FitError::Kind::NumericIssue,
+      "scaled").value();
+  CHECK(refused(inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, est_dwls, w_scaled,
+      ew(Mode::SampleEmpiricalDwls, 0.5))));
+}
+
+TEST_CASE("estimated-weight IJ mode follows the recorded weight recipe") {
+  using Kind = magmaan::estimate::gmm::FixedWeightKind;
+  using Mode = magmaan::estimate::ContinuousLsIJWeightMode;
+  const std::pair<Kind, Mode> expected[] = {
+      {Kind::Uls, Mode::Fixed},
+      {Kind::Nt, Mode::SampleNormalTheory},
+      {Kind::Dwls, Mode::SampleEmpiricalDwls},
+      {Kind::Wls, Mode::SampleEmpiricalWls},
+      {Kind::Dls, Mode::SampleDls}};
+  for (const auto& [kind, mode] : expected) {
+    auto m = magmaan::estimate::continuous_ls_ij_mode_for(kind, false);
+    REQUIRE(m.has_value());
+    CHECK(*m == mode);
+  }
+  // A supplied weight has no recipe, so its influence is unknown.
+  for (const auto& [kind, mode] : expected) {
+    (void)mode;
+    auto m = magmaan::estimate::continuous_ls_ij_mode_for(kind, true);
+    REQUIRE_FALSE(m.has_value());
+    CHECK(m.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+  }
+}
+
+
 // ── Ordinal tier ─────────────────────────────────────────────────────────────
 // The exact-reduction anchor: the full-WLS weight is the NACOV inverse, so the
 // NACOV meat collapses onto the bread (c ≡ 1) and the robust statistic equals
@@ -1139,6 +1245,82 @@ TEST_CASE("frontier robust ordinal MI: estimated-weight DWLS shifts the scaling"
       magmaan::estimate::OrdinalParameterization::Delta,
       /*estimated_weight=*/true);
   CHECK_FALSE(ew_bad.has_value());
+}
+
+TEST_CASE("frontier robust ordinal inference: estimated weight refuses NT, DLS and supplied weights") {
+  // NT, DLS and supplied ordinal weights occupy the DWLS/WLS slots under the
+  // computational labels. Their fixed-weight inference is valid; the
+  // estimated-weight channel is the NACOV influence and does not apply to
+  // them, so it is refused in MI, SEs and the DWLS profile family alike.
+  std::mt19937 rng(20261002u);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(900, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    const double nuis = norm(rng);
+    for (Eigen::Index j = 0; j < 4; ++j) {
+      const double extra = (j < 2) ? 0.40 * nuis : 0.0;
+      const double rsd = (j < 2) ? std::sqrt(0.35) : std::sqrt(0.51);
+      const double y = 0.70 * eta + extra + rsd * norm(rng);
+      X(i, j) = 1.0 + (y > -0.50) + (y > 0.45);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  const auto delta = magmaan::estimate::OrdinalParameterization::Delta;
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto refused = [](const auto& r) {
+    return !r.has_value() &&
+           r.error().kind == magmaan::PostError::Kind::UnsupportedInference;
+  };
+  auto mi = [&](const magmaan::data::OrdinalStats& s,
+                const magmaan::estimate::Estimates& est, W weights,
+                bool estimated) {
+    return magmaan::estimate::frontier::modification_indices_ordinal_robust(
+        h.pt, h.rep, s, est, weights, mi_opts, delta, estimated);
+  };
+
+  // The default WLS weight keeps its estimated-weight inference.
+  auto est_wls = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, *stats, {},
+                                                    W::WLS);
+  REQUIRE(est_wls.has_value());
+  CHECK(mi(*stats, *est_wls, W::WLS, true).has_value());
+
+  // NT and DLS weights: fixed-weight inference only.
+  using Stage2 = magmaan::estimate::frontier::OrdinalStage2Weight;
+  for (Stage2 kind : {Stage2::Nt, Stage2::Dls}) {
+    auto swapped = magmaan::estimate::frontier::ordinal_stats_with_stage2_weight(
+        *stats, kind, {0.4});
+    REQUIRE(swapped.has_value());
+    auto est = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, *swapped, {},
+                                                  W::WLS);
+    REQUIRE(est.has_value());
+    CHECK(mi(*swapped, *est, W::WLS, false).has_value());
+    CHECK(refused(mi(*swapped, *est, W::WLS, true)));
+    CHECK(refused(magmaan::estimate::robust_ordinal_ij(h.pt, h.rep, *swapped,
+                                                       *est, W::WLS)));
+  }
+
+  // A supplied DWLS weight: same rule, including the profile family, whose
+  // fixed-weight comparator stays available.
+  auto supplied = *stats;
+  supplied.W_dwls[0] *= 1.5;
+  auto est_dwls = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, supplied, {},
+                                                     W::DWLS);
+  REQUIRE(est_dwls.has_value());
+  CHECK(mi(supplied, *est_dwls, W::DWLS, false).has_value());
+  CHECK(refused(mi(supplied, *est_dwls, W::DWLS, true)));
+  CHECK(refused(magmaan::estimate::ordinal_dwls_profile_rmsea(
+      h.pt, h.rep, supplied, *est_dwls, delta)));
+  CHECK(refused(magmaan::estimate::ordinal_rmsea_misspec_inference(
+      h.pt, h.rep, supplied, *est_dwls, delta, /*estimated_weight=*/true)));
+  auto fixed_rmsea = magmaan::estimate::ordinal_rmsea_misspec_inference(
+      h.pt, h.rep, supplied, *est_dwls, delta, /*estimated_weight=*/false);
+  CHECK_MESSAGE(fixed_rmsea.has_value(),
+                (fixed_rmsea.has_value() ? "" : fixed_rmsea.error().detail));
 }
 
 TEST_CASE("frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected") {
@@ -2723,4 +2905,226 @@ TEST_CASE("prepared NTML spectrum uses the smaller row space and caches it") {
   auto dense=rob::ugamma_eigenvalues(q.rows.transpose()*q.rows); REQUIRE(dense.has_value());
   CHECK((**e-*dense).norm()<1e-12); CHECK(q.row_space);
   REQUIRE(rob::frontier::ntml_spectrum(q).has_value()); CHECK(q.spectrum_builds==1);
+}
+
+// ── Two-stage (ML2S) MI and equality-release tests ──────────────────────────
+
+namespace {
+
+// Heavy-tailed four-indicator data, optionally with MCAR cells, split into
+// blocks of the given sizes.
+magmaan::data::RawData t_cfa_raw(std::mt19937& rng,
+                                 const std::vector<Eigen::Index>& sizes,
+                                 double df, Eigen::Index period) {
+  magmaan::data::RawData raw;
+  for (Eigen::Index n : sizes) {
+    Eigen::MatrixXd X =
+        multivariate_t_sample(rng, n, four_indicator_sample_cov(), df);
+    if (period > 0) {
+      Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M =
+          Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(n, 4);
+      for (Eigen::Index i = 0; i < n; i += period) {
+        M(i, i % 4) = 0;
+        X(i, i % 4) = std::numeric_limits<double>::quiet_NaN();
+      }
+      raw.mask.push_back(M);
+    }
+    raw.X.push_back(std::move(X));
+  }
+  return raw;
+}
+
+magmaan::data::SampleStats stage1_moments(
+    const magmaan::estimate::fiml::SaturatedMoments& sm) {
+  magmaan::data::SampleStats s;
+  s.S = sm.cov;
+  s.mean = sm.mean;
+  s.n_obs = sm.n_obs;
+  return s;
+}
+
+void check_same_scores(const inf::ScoreTestTable& a,
+                       const inf::ScoreTestTable& b, double tol) {
+  REQUIRE(a.rows.size() == b.rows.size());
+  REQUIRE(!a.rows.empty());
+  for (std::size_t i = 0; i < a.rows.size(); ++i) {
+    CHECK(a.rows[i].candidate.row == b.rows[i].candidate.row);
+    CHECK(a.rows[i].mi == doctest::Approx(b.rows[i].mi).epsilon(tol));
+    CHECK(a.rows[i].scaling_factor ==
+          doctest::Approx(b.rows[i].scaling_factor).epsilon(tol));
+    CHECK(a.rows[i].mi_scaled ==
+          doctest::Approx(b.rows[i].mi_scaled).epsilon(tol));
+  }
+}
+
+}  // namespace
+
+TEST_CASE("frontier ML2S MI and releases reduce to complete-data robust tests") {
+  // Without missing data the Stage-1 EM moments are the sample moments and
+  // the Stage-1 covariance n·ACOV is the empirical Gamma, so every two-stage
+  // score test must equal the complete-data robust test with the empirical
+  // Gamma and the same Stage-2 discrepancy and weight, including the
+  // estimated-weight meat. Two groups check the per-group n_b/N weighting.
+  using TW = magmaan::estimate::fiml::TwoStageWeight;
+  const char* syntax = "f =~ x1 + a*x2 + a*x3 + x4\nx1 ~~ 0*x2";
+  for (int groups : {1, 2}) {
+    CAPTURE(groups);
+    auto h = groups == 1 ? build_mean(syntax) : build_groups_mean(syntax, 2);
+    std::mt19937 rng(20261002u + static_cast<unsigned>(groups));
+    const std::vector<Eigen::Index> sizes =
+        groups == 1 ? std::vector<Eigen::Index>{800}
+                    : std::vector<Eigen::Index>{500, 350};
+    auto raw = t_cfa_raw(rng, sizes, 7.0, 0);
+    auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+    REQUIRE(pack.has_value());
+    auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+    REQUIRE(h1.has_value());
+    auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+    REQUIRE(sm.has_value());
+    const auto stage2 = stage1_moments(*sm);
+
+    inf::frontier::Ml2sScoreOptions o;
+    o.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+    inf::frontier::RobustScoreOptions r;
+    r.base = o.base;
+    r.spec = rob::InferenceSpec{rob::Information::Expected,
+                                rob::WeightMoments::Structured,
+                                rob::ScoreCovariance::Empirical};
+
+    // NT: the ML discrepancy with the structured normal-theory bread.
+    auto est_ml = magmaan::test::fit(h.pt, h.rep, stage2);
+    REQUIRE(est_ml.has_value());
+    auto mi_ml2s = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm,
+                                                            *est_ml, o);
+    REQUIRE_MESSAGE(mi_ml2s.has_value(),
+                    (mi_ml2s.has_value() ? "" : mi_ml2s.error().detail));
+    auto mi_ml = inf::frontier::modification_indices_robust(
+        h.pt, h.rep, stage2, raw, *est_ml, r);
+    REQUIRE(mi_ml.has_value());
+    check_same_scores(*mi_ml2s, *mi_ml, 1e-7);
+    auto rel_ml2s = inf::frontier::score_tests_ml2s(h.pt, h.rep, *sm, *est_ml, o);
+    REQUIRE(rel_ml2s.has_value());
+    auto rel_ml = inf::frontier::score_tests_robust(h.pt, h.rep, stage2, raw,
+                                                    *est_ml, r);
+    REQUIRE(rel_ml.has_value());
+    check_same_scores(*rel_ml2s, *rel_ml, 1e-7);
+
+    // Moment-quadratic Stage-2 weights, fixed and estimated.
+    using Mode = magmaan::estimate::ContinuousLsIJWeightMode;
+    const std::tuple<TW, Mode, double> weights[] = {
+        {TW::Uls, Mode::Fixed, 0.5},
+        {TW::Dwls, Mode::SampleEmpiricalDwls, 0.5},
+        {TW::Adf, Mode::SampleEmpiricalWls, 0.5},
+        {TW::Dls, Mode::SampleDls, 0.4}};
+    for (const auto& [kind, mode, a] : weights) {
+      CAPTURE(static_cast<int>(kind));
+      auto w = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
+          *sm, kind, {a});
+      REQUIRE(w.has_value());
+      auto est = magmaan::test::fit_gmm(h.pt, h.rep, stage2, *w);
+      REQUIRE(est.has_value());
+      for (bool estimated : {false, true}) {
+        CAPTURE(estimated);
+        inf::frontier::Ml2sScoreOptions ok = o;
+        ok.weight = kind;
+        ok.dls.a = a;
+        ok.robust = {estimated, &raw, &*pack, &*h1};
+        inf::frontier::RobustScoreOptions rk = r;
+        rk.estimated_weight = estimated;
+        rk.ij_weight_mode = mode;
+        rk.dls_opts.a = a;
+        auto a_mi = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm,
+                                                             *est, ok);
+        REQUIRE_MESSAGE(a_mi.has_value(),
+                        (a_mi.has_value() ? "" : a_mi.error().detail));
+        auto b_mi = inf::frontier::modification_indices_robust(
+            h.pt, h.rep, stage2, raw, *est, *w, rk);
+        REQUIRE_MESSAGE(b_mi.has_value(),
+                        (b_mi.has_value() ? "" : b_mi.error().detail));
+        check_same_scores(*a_mi, *b_mi, 1e-7);
+        auto a_rel = inf::frontier::score_tests_ml2s(h.pt, h.rep, *sm, *est, ok);
+        REQUIRE(a_rel.has_value());
+        auto b_rel = inf::frontier::score_tests_robust(h.pt, h.rep, stage2, raw,
+                                                       *est, *w, rk);
+        REQUIRE(b_rel.has_value());
+        check_same_scores(*a_rel, *b_rel, 1e-7);
+      }
+    }
+  }
+}
+
+TEST_CASE("frontier ML2S MI: naive statistic plus Stage-1 scaling under missing data") {
+  // The unscaled statistic is the Stage-2 discrepancy's test on the EM
+  // moments, exactly the naive comparator; the Stage-1 covariance changes
+  // only the scaling. The estimated-weight meat moves it further for DWLS.
+  using TW = magmaan::estimate::fiml::TwoStageWeight;
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20261003u);
+  auto raw = t_cfa_raw(rng, {900}, 6.0, 3);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(sm.has_value());
+  const auto stage2 = stage1_moments(*sm);
+  inf::ModificationIndexOptions base;
+  base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+
+  auto est_ml = magmaan::test::fit(h.pt, h.rep, stage2);
+  REQUIRE(est_ml.has_value());
+  inf::frontier::Ml2sScoreOptions o;
+  o.base = base;
+  auto nt = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm, *est_ml, o);
+  REQUIRE(nt.has_value());
+  auto naive = inf::modification_indices(h.pt, h.rep, stage2, *est_ml, base);
+  REQUIRE(naive.has_value());
+  REQUIRE(nt->rows.size() == naive->rows.size());
+  for (std::size_t i = 0; i < nt->rows.size(); ++i) {
+    CHECK(nt->rows[i].mi ==
+          doctest::Approx(naive->rows[i].mi).epsilon(1e-9));
+    CHECK(std::isfinite(nt->rows[i].scaling_factor));
+    CHECK(nt->rows[i].scaling_factor > 0.0);
+  }
+
+  auto w = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
+      *sm, TW::Dwls);
+  REQUIRE(w.has_value());
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, stage2, *w);
+  REQUIRE(est.has_value());
+  inf::frontier::Ml2sScoreOptions fixed = o;
+  fixed.weight = TW::Dwls;
+  auto f = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm, *est,
+                                                    fixed);
+  REQUIRE(f.has_value());
+  auto naive_ls = inf::modification_indices(h.pt, h.rep, stage2, *est, *w, base);
+  REQUIRE(naive_ls.has_value());
+  inf::frontier::Ml2sScoreOptions ew = fixed;
+  ew.robust = {true, &raw, &*pack, &*h1};
+  auto e = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm, *est, ew);
+  REQUIRE_MESSAGE(e.has_value(), (e.has_value() ? "" : e.error().detail));
+  REQUIRE(f->rows.size() == naive_ls->rows.size());
+  REQUIRE(e->rows.size() == f->rows.size());
+  bool any_shift = false;
+  for (std::size_t i = 0; i < f->rows.size(); ++i) {
+    CHECK(f->rows[i].mi ==
+          doctest::Approx(naive_ls->rows[i].mi).epsilon(1e-9));
+    CHECK(e->rows[i].mi == doctest::Approx(f->rows[i].mi).epsilon(1e-12));
+    CHECK(std::isfinite(e->rows[i].scaling_factor));
+    if (std::abs(e->rows[i].scaling_factor - f->rows[i].scaling_factor) > 1e-3)
+      any_shift = true;
+  }
+  CHECK(any_shift);
+
+  // Unsupported requests are explicit.
+  inf::frontier::Ml2sScoreOptions observed = o;
+  observed.base.information = inf::ScoreInformation::Observed;
+  auto obs = inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm,
+                                                      *est_ml, observed);
+  REQUIRE_FALSE(obs.has_value());
+  CHECK(obs.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+  inf::frontier::Ml2sScoreOptions no_raw = fixed;
+  no_raw.robust.estimated_weight = true;
+  CHECK_FALSE(inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm, *est,
+                                                       no_raw).has_value());
 }

@@ -8187,6 +8187,70 @@ profile_ci_from_evaluator(double estimate,
 
 }  // namespace
 
+post_expected<robust::ParamSpaceSandwich>
+ml2s_param_space_sandwich(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const SaturatedMoments& sm,
+                          const Estimates& est,
+                          TwoStageWeight kind,
+                          TwoStageDlsOptions dls,
+                          const Ml2sProfileRobustOptions& robust_options) {
+  constexpr const char* who = "ml2s_param_space_sandwich";
+  SampleStats samp = sample_stats_from_saturated(sm);
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), who));
+  }
+  // The Stage-1 covariance and the Stage-2 weights span mean and covariance
+  // rows; a model without a mean structure has no matching layout here.
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto moments_or = ev_or->sigma(est.theta);
+  if (!moments_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": model evaluation failed: " +
+            moments_or.error().detail));
+  }
+  if (!ml2s_has_mean_rows(samp, *moments_or)) {
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        std::string(who) + ": the two-stage moment-quadratic sandwich needs a "
+                           "mean structure"));
+  }
+
+  if (robust_options.estimated_weight && ml2s_profile_weight_needs_ij(kind)) {
+    if (robust_options.raw == nullptr || robust_options.pack == nullptr ||
+        robust_options.h1 == nullptr) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": the estimated-weight meat needs raw data, the "
+                             "FIML pack and H1 moments"));
+    }
+    auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, *robust_options.raw,
+                                       est, *robust_options.pack,
+                                       *robust_options.h1, sm, kind, dls);
+    if (!asm_or.has_value()) return std::unexpected(asm_or.error());
+    return weighted_param_space_sandwich_ij(asm_or->blocks);
+  }
+
+  auto weight_or = two_stage_stage2_weight_structured(sm, kind, dls);
+  if (!weight_or.has_value()) return std::unexpected(weight_or.error());
+  auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_full_or.has_value()) return std::unexpected(gamma_full_or.error());
+  std::vector<Eigen::MatrixXd> gamma;
+  gamma.reserve(sm.cov.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    const Eigen::Index q = p + detail::vech_len(p);
+    gamma.push_back(gamma_full_or->block(off, off, q, q));
+    off += q;
+  }
+  return continuous_ls_param_space_sandwich(std::move(pt), rep, samp, est,
+                                            *weight_or, gamma);
+}
+
 post_expected<TwoStageInformationChoiceAudit>
 two_stage_information_choices(spec::LatentStructure pt,
                               const model::MatrixRep& rep,

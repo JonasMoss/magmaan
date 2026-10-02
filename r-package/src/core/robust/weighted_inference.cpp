@@ -1066,6 +1066,38 @@ struct ContinuousLsIjAssembly {
   gmm::Weight active_weight;
 };
 
+// The IJ correction is the derivative of the weight its recipe rebuilds from
+// the data. A caller weight that differs from that rebuild belongs to another
+// estimator (a diagonal or DLS weight under an ADF recipe, a different DLS
+// mixing scalar, a user-supplied matrix), so the correction would describe
+// the wrong weight. The comparison includes scale: the robust score scaling
+// `c` is not invariant to rescaling W. The tolerance only absorbs rounding
+// between the fitting and inference rebuilds of the same recipe.
+post_expected<void>
+require_recipe_weight(const gmm::Weight& supplied, const gmm::Weight& rebuilt,
+                      const ContinuousLsLayout& layout, const char* who) {
+  constexpr double kRelativeTolerance = 1e-6;
+  for (std::size_t b = 0; b < layout.block_rows.size(); ++b) {
+    auto Ws = weight_block(supplied, layout, b);
+    if (!Ws.has_value()) return std::unexpected(Ws.error());
+    auto Wr = weight_block(rebuilt, layout, b);
+    if (!Wr.has_value()) return std::unexpected(Wr.error());
+    const double scale =
+        std::max(Wr->norm(), std::numeric_limits<double>::min());
+    const double gap = (*Ws - *Wr).norm() / scale;
+    if (!(gap <= kRelativeTolerance)) {
+      return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+          std::string(who) + ": the fitting weight in block " +
+              std::to_string(b) +
+              " is not the weight its estimated-weight recipe rebuilds from "
+              "the data (relative difference " + std::to_string(gap) +
+              "); the weight influence would describe a different estimator. "
+              "Use the fit's own weight recipe, or fixed-weight inference"));
+    }
+  }
+  return {};
+}
+
 post_expected<ContinuousLsIjAssembly>
 build_continuous_ls_ij_blocks(const spec::LatentStructure& pt,
                               const model::MatrixRep& rep,
@@ -1112,6 +1144,12 @@ build_continuous_ls_ij_blocks(const spec::LatentStructure& pt,
     auto w_or = frontier::dls_weight(*ev_or, samp, raw, est.theta, dls_opts);
     if (!w_or.has_value()) return std::unexpected(fit_to_post(w_or.error()));
     active_weight = std::move(*w_or);
+  }
+  if (mode != ContinuousLsIJWeightMode::Fixed && !weight.empty()) {
+    if (auto e = require_recipe_weight(weight, active_weight, layout, who);
+        !e.has_value()) {
+      return std::unexpected(e.error());
+    }
   }
 
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -2578,6 +2616,27 @@ weighted_param_space_sandwich_ij(
   B1 = 0.5 * (B1 + B1.transpose()).eval();
   return robust::ParamSpaceSandwich{std::move(A1), std::move(B1),
                                     Eigen::MatrixXd(), q};
+}
+
+post_expected<ContinuousLsIJWeightMode>
+continuous_ls_ij_mode_for(gmm::FixedWeightKind kind, bool supplied) {
+  if (supplied) {
+    return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+        "estimated-weight inference: a caller-supplied weight has no recipe, "
+        "so its data influence is unknown; use fixed-weight inference"));
+  }
+  switch (kind) {
+    case gmm::FixedWeightKind::Uls: return ContinuousLsIJWeightMode::Fixed;
+    case gmm::FixedWeightKind::Nt:
+      return ContinuousLsIJWeightMode::SampleNormalTheory;
+    case gmm::FixedWeightKind::Dwls:
+      return ContinuousLsIJWeightMode::SampleEmpiricalDwls;
+    case gmm::FixedWeightKind::Wls:
+      return ContinuousLsIJWeightMode::SampleEmpiricalWls;
+    case gmm::FixedWeightKind::Dls: return ContinuousLsIJWeightMode::SampleDls;
+  }
+  return std::unexpected(make_err(PostError::Kind::NumericIssue,
+      "estimated-weight inference: unknown weight recipe"));
 }
 
 post_expected<robust::ParamSpaceSandwich>

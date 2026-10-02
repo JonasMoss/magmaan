@@ -2529,6 +2529,45 @@ an unconstrained gradient test to constrained solutions.
   supplied Gamma, means/unequal groups, diagonal/full weights, scaling transport,
   empirical versus NT controls, estimated-weight mode and explicit unsupported
   errors in `score_robust_test.cpp` and `test_wls_robust_covariance.R`.
+- Estimated-weight recipe guard (2026-10-02, C++): every continuous IJ
+  consumer (robust SEs, MI/release, profile tests, RBM, residuals) rebuilds
+  the weight from its recipe, and a non-empty caller weight must equal that
+  rebuild (relative Frobenius gap at most 1e-6 per block, scale included) or
+  the call fails with the new `PostError::Kind::UnsupportedInference`. An
+  empty weight lets a recipe-named entry point define it.
+  `estimate::continuous_ls_ij_mode_for(FixedWeightKind, supplied)` maps a
+  fit's recorded recipe to its IJ mode and refuses supplied weights, whose
+  influence is unknown. The ordinal IJ (SEs and MI) and the estimated-weight
+  DWLS profile, RMSEA, CFI/TLI and CRMR paths require `W_dwls` =
+  diag(NACOV)^-1 or `W_wls` = NACOV^-1, compared against the stats builder's
+  own inverse; NT, DLS and supplied ordinal weights keep fixed-weight
+  inference and are refused for the estimated-weight channel. Previously the
+  R glue chose the IJ mode from the estimator label, so continuous DWLS, DLS
+  and supplied-W fits (labelled WLS) received the ADF influence silently, DLS
+  used a=0.5, and ordinal NT/DLS/supplied fits received the NACOV influence.
+  Gates in `score_robust_test.cpp` cover each recipe's acceptance of its own
+  weight, cross-recipe, wrong-a and rescaled-weight refusals in MI and the
+  shared sandwich, the recipe-to-mode map, and ordinal NT/DLS/supplied
+  refusals across MI, `robust_ordinal_ij` and the profile family with the
+  fixed-weight RMSEA comparator retained. R glue still selects modes by label
+  until it reads the recorded recipe (MI completion matrix).
+- Two-stage (ML2S) MI and equality-release score tests (2026-10-02, C++):
+  `inference::frontier::{modification_indices,score_tests}_ml2s` take the
+  Stage-1 saturated moments and the matching Stage-2 fit. `mi` is the naive
+  Stage-2 statistic on the EM moments (the ML MI for NT, the moment-quadratic
+  MI with the Stage-2 weight otherwise); `mi_scaled` uses the Stage-1
+  covariance n·ACOV as meat, so missing-data uncertainty enters the scaling.
+  NT pairs the ML score with the structured normal-theory bread and the
+  Stage-1 covariance as (n_b/N)-weighted caller meat (covariance rows only for
+  models without means); ULS/DWLS/ADF/DLS use the new full-θ
+  `estimate::fiml::frontier::ml2s_param_space_sandwich`, which adds the
+  Stage-2 weight's data influence through the ML2S IJ blocks when
+  `estimated_weight` is set. Expected information only; non-NT weights need a
+  mean structure. Gates: on complete data every weight, fixed and estimated,
+  equals the complete-data ML/LS robust tests with the empirical Gamma to
+  1e-7, in one and two groups, for MI and releases; under MCAR the unscaled
+  statistic equals the naive comparator and the estimated-weight DWLS meat
+  moves the scaling. No R exposure yet.
 - FIML (missing-data) robust MI and equality-release score tests, the MLR corner
   (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
   build the bread A1 = (N/2)·H (the analytic observed FIML information) and the
