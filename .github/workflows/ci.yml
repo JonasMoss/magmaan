@@ -45,18 +45,17 @@ jobs:
           extra-packages: any::testthat
           needs: check
 
-      - name: Install R package
-        run: R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+      - uses: extractions/setup-just@v2
 
-      - name: Test FMG and nested-test contracts
-        run: |
-          Rscript -e 'testthat::test_file("r-package/tests/testthat/test-fmg.R", package = "magmaanlab")'
-          Rscript -e 'testthat::test_file("r-package/tests/testthat/test-nested-test.R", package = "magmaanlab")'
+      - name: Check both source packages (including live lavaan tests)
+        run: just jobs=2 r-cmd-check "$RUNNER_TEMP/r-check" "$RUNNER_TEMP/r-library"
 
-      - name: Install and test the ordinary-user package
-        run: |
-          R CMD INSTALL --no-byte-compile --no-docs --no-help r-magmaan
-          Rscript -e 'testthat::test_dir("r-magmaan/tests/testthat", package = "magmaan", load_package = "installed", stop_on_failure = TRUE)'
+      - name: Upload R check diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-cmd-check
+          path: ${{ runner.temp }}/r-check/*.Rcheck
 
   build-gcc:
     defaults:

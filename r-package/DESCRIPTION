@@ -6,10 +6,11 @@ Authors@R:
 License: MIT + file LICENSE
 Encoding: UTF-8
 LinkingTo: Rcpp, RcppEigen, nloptr
-Imports: Rcpp, nloptr
+Depends: R (>= 4.3.0)
+Imports: Rcpp, nloptr, stats, utils
 Suggests: testthat (>= 3.0.0), lavaan
 Config/testthat/edition: 3
-SystemRequirements: C++23, NLopt (a system NLopt, or the bundled NLopt from the
+SystemRequirements: C++23, USE_C17, NLopt (a system NLopt, or the bundled NLopt from the
     nloptr package, which is used automatically when no system NLopt is found)
 Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
     methods development and research, including frontier methods. The
@@ -18,3 +19,5 @@ Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
     QUADPACK routines) is compiled from sources vendored under cpp/src/ and linked
     against a system NLopt, so the package installs without CMake or a prebuilt
     library. Not CRAN-bound.
+Config/roxygen2/version: 8.0.0
+Roxygen: list(markdown = TRUE)

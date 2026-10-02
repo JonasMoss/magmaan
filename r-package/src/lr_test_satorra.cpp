@@ -18,8 +18,8 @@
 #include <Rcpp.h>
 #include <RcppEigen.h>
 
-#include "internal.hpp"
-#include "ntml_snapshot.hpp"
+#include "internal.h"
+#include "ntml_snapshot.h"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -245,7 +245,7 @@ magmaan::estimate::gmm::Weight continuous_ls_weight_from_arg(
     Rcpp::stop("magmaan: continuous WLS nested tests require the explicit "
                "fitting `weight`");
   }
-  // Collected dense first, then converted in one place (internal.hpp). The
+  // Collected dense first, then converted in one place (internal.h). The
   // wording below is this entry point's own and deliberately not shared.
   std::vector<Eigen::MatrixXd> out;
   const std::size_t n_blocks = ctx.samp.S.size();

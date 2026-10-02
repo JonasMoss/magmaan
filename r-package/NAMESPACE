@@ -147,3 +147,8 @@ export(policy_inference)
 export(policy_nested)
 export(convention_inference)
 export(convention_nested)
+
+# Load the NLopt fallback namespace and the utilities used by thin R wrappers.
+importFrom(nloptr, nloptr)
+importFrom(stats, pchisq, setNames, uniroot)
+importFrom(utils, modifyList)

@@ -591,11 +591,14 @@ The ordinary package does not expose MI in this release; the
   calibration evidence (DWLS, task-17; nested ML, task-43) must update its rows
   and that test together. Exit criterion 6.
 
-- [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
+- [x] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
   of hand-picked R tests; add scheduled sanitizers/optional parity and an
   interpretable coverage artifact. **Check:** clean-source portable installs
   and mount-independent default tests, avoiding unexplained percentage gates.
   See [local hardening](../validation/local_hardening.md).
+  Completed 2026-10-02: `just r-cmd-check` checks both portable source packages
+  (both Status OK, no NOTEs); primary CI uses it, and weekly/manual hardening
+  adds dev sanitizers, fixture parity and LLVM domain coverage artifacts.
 
 - [ ] **S — align versions and publish.** Set the CMake project version
   (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;

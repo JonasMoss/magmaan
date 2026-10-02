@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "internal.hpp"
+#include "internal.h"
 #include "magmaan/error.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/sim/model_implied.hpp"

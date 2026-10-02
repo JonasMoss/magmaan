@@ -39,9 +39,15 @@ work independently of this checkout. For cluster installation see
 [tools/saga/README.md](tools/saga/README.md).
 
 `just r-check` runs the fast install, R examples against lavaan, and ordinary
-package tests. CI also runs selected binding tests and the ordinary-package
-integration suite; live lavaan comparisons are permitted there. Select relevant
+package tests. CI runs portable source-tarball `R CMD check --no-manual` for both
+packages; live lavaan comparisons are permitted there. Select relevant
 checks for a focused change and validate the portable build when changing its
 packaging/toolchain path. On an R-load undefined symbol, run `just r-clean` and
 reinstall. `just vendor-check` first refreshes generated files, then checks Git
 status; it is a mutating check, not a read-only comparison.
+
+Portable `configure` resolves NLopt and enumerates vendored objects into ignored
+`src/Makevars` from `src/Makevars.in`. The dev install supplies its own Makevars
+and bypasses configure when `MAGMAAN_ROOT` is set. `USE_C17` selects R's legacy
+C compiler mode for f2c callbacks. The portable R build's PORT I/O guard raises
+an R error on internal STOP instead of terminating the process.

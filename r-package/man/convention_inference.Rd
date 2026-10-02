@@ -10,16 +10,16 @@ convention_inference(fit, convention)
 convention_nested(fit_H1, fit_H0, convention)
 }
 \arguments{
-\item{fit}{A fitted `magmaan_fit`.}
+\item{fit}{A fitted \code{magmaan_fit}.}
 
-\item{convention}{A lavaan bundle: `"ML"`, `"MLM"`, `"MLR"`, `"DWLS"`,
-`"WLSMV"`, `"ULS"`, `"ULSMV"` or `"WLS"`.}
+\item{convention}{A lavaan bundle: \code{"ML"}, \code{"MLM"}, \code{"MLR"}, \code{"DWLS"},
+\code{"WLSMV"}, \code{"ULS"}, \code{"ULSMV"} or \code{"WLS"}.}
 
 \item{fit_H1, fit_H0}{Alternative and restricted fits to the same data.}
 }
 \value{
 A list with covariance and test results, component availability and
-  convergence metadata. Nested inference returns one difference test.
+convergence metadata. Nested inference returns one difference test.
 }
 \description{
 Thin adapters to C++ compatibility composers. A convention changes the

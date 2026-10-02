@@ -102,3 +102,8 @@ each `.c` file are preserved as-is.
 
 No other modifications. Re-vendoring (from a fresh upstream pull) is a
 mechanical copy-plus-this-patch.
+
+R packaging defines `MAGMAAN_R_PORT_IO` so the unreachable internal Fortran
+STOP path raises an R error instead of aborting the R process or writing to
+stderr. Standalone builds retain the fatal diagnostic; numerical routines and
+normal no-op trace handling are unchanged.

@@ -1,6 +1,6 @@
 # DEV-ONLY Makevars — NOT shipped, NOT vendored. `just r-dev` mirrors r-package/
 # into r-package/build-rdev/ (minus the vendored core/, magmaan/, cpp/third_party/ trees) and
-# swaps this file in as r-package/build-rdev/src/Makevars, so the committed, self-contained
+# swaps this file in as r-package/build-rdev/src/Makevars, so the generated portable
 # r-package/src/Makevars is never touched. Instead of recompiling the whole
 # vendored C++ library on every install, it compiles only the R glue and links it
 # against the prebuilt opt-preset libmagmaan.a that `cmake --build` produced.

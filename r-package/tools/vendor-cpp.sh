@@ -13,7 +13,7 @@
 # Every file written here carries an @generated banner and is overwritten on the
 # next run. NEVER edit the vendored copies — edit the canonical sources and
 # re-run `just vendor`. NLopt is a SYSTEM dependency (SystemRequirements: NLopt);
-# the Makevars finds it via pkg-config. Ceres/IPOPT optimizer adapters are
+# configure finds it via pkg-config or the nloptr package. Ceres/IPOPT optimizer adapters are
 # dropped (they need external libs we don't ship); PORT + NLopt remain.
 #
 # Layout produced under <dest> (default r-package/src):

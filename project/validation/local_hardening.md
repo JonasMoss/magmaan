@@ -1,9 +1,9 @@
 # Local Hardening Program
 
 This note is the validation/tooling program for keeping magmaan navigable as an
-AI-first methods-development repo. It is intentionally local-first: no GitHub
-Actions, no badges, and no global coverage gate are required for the first
-slice. The active implementation checklist lives in
+AI-first methods-development repo. It is local-first: CI consumes the same
+maintainer commands, while coverage remains an artifact without a percentage
+gate. The active implementation checklist lives in
 [`project/backlog/todo.md`](../backlog/todo.md).
 
 The goal is not to prove correctness with one number. The goal is to make the
@@ -33,6 +33,23 @@ next.
   meant for, can. See [calibration-parity.md](calibration-parity.md).
 
 ## Local Tools
+
+### Portable R package checks
+
+`just jobs=2 r-cmd-check` builds and checks both source tarballs with
+`R CMD check --no-manual`, installing magmaanlab into an isolated check library
+before checking magmaan. Outputs default to `~/.cache/magmaan-logs/r-cmd-check`
+and the library to `~/.cache/magmaan-rlib/check`; both paths can be supplied as
+recipe arguments. Required R dependencies must already be installed. The
+portable lab package uses configure-time NLopt detection and R's C17 mode for
+the legacy f2c callbacks. Errors and warnings fail the recipe; review and record
+any remaining NOTEs.
+
+Primary CI runs this same recipe, including the packages' live lavaan tests.
+The weekly/manual `scheduled.yml` workflow runs dev-preset ASan/UBSan ctest
+(including checked-in parity fixtures), then `just coverage`. Its artifact
+contains the file report, LLVM JSON summary and a domain-level line/region map;
+there is no percentage gate. It needs no secrets or fixture regeneration.
 
 ### LLVM coverage
 
@@ -254,14 +271,12 @@ Guard: lavaanify_test.cpp checks merge semantics; corpus parity still pending.
 
 Tests become more useful when their intent survives the person who wrote them.
 
-### CI and badges later
+### CI and artifacts
 
-CI can be layered on top after the local commands are useful:
-
-1. `test-quick` on pushes and pull requests.
-2. Sanitizer validation on main or on a schedule.
-3. Heavy parity and optional optimizer lanes less frequently.
-4. Coverage as an artifact/report first, badge second.
+Primary CI runs the portable R package checks alongside the default C++ tests
+and structural guards. Weekly/manual hardening runs sanitizers and the full
+C++ coverage suite, including fixture parity, and uploads the domain summary.
+Live lavaan comparisons run in the primary R package checks.
 
 Badges should stay narrow: "main is green" is usually more honest than a broad
 coverage number. A coverage badge is only worth adding if maintainers are

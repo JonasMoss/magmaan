@@ -1,0 +1,60 @@
+name: Scheduled hardening
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPENBLAS_NUM_THREADS: 1
+  OMP_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+
+jobs:
+  hardening:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache mold lsb-release wget gnupg software-properties-common
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh 19
+          echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
+      - uses: extractions/setup-just@v2
+      - name: Sanitizer build and ctest (includes fixture parity)
+        run: |
+          cmake -S cpp --preset dev
+          nice -n 10 cmake --build cpp/build/dev --parallel 4
+          nice -n 10 ctest --test-dir cpp/build/dev --output-on-failure --output-junit "$PWD/sanitizer-results.xml"
+      - name: LLVM coverage
+        run: |
+          set -o pipefail
+          nice -n 10 just jobs=4 coverage 2>&1 | tee coverage.log
+          objects=()
+          for binary in cpp/build/coverage/tests/magmaan_test_*; do
+            if [ -x "$binary" ] && [ ! -d "$binary" ]; then
+              objects+=(--object "$binary")
+            fi
+          done
+          first="${objects[1]}"
+          llvm-cov export "$first" "${objects[@]:2}" --summary-only \
+            --instr-profile=cpp/build/coverage/coverage.profdata \
+            --ignore-filename-regex='(/_deps/|/third_party/|/tests/|/usr/)' > coverage.json
+          python3 .github/coverage_domains.py coverage.json > coverage-domains.txt
+          cat coverage-domains.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload hardening reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-reports
+          path: |
+            sanitizer-results.xml
+            coverage.log
+            coverage.json
+            coverage-domains.txt

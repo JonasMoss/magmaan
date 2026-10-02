@@ -13,11 +13,14 @@ with affine equality constraints.}
 prepare_inference_data(fit, data = NULL,
   storage = c("auto", "casewise", "tiled"))
 prepare_hypothesis(null, alternative)
-inference_quadratic(object, test = c("score", "lr"))
+inference_quadratic(object, test = c("score", "lr"),
+                    geometry = c("expected", "observed"))
 inference_covariance(context, robust = FALSE)
 inference_reuse(context)
 }
 \arguments{
+\item{geometry}{Nested-test geometry: expected information (the default) or observed information.}
+
 \item{fit}{A continuous ML fit defining the observed-variable/group layout.}
 \item{data}{Fitting observations or a prepared dataset. Defaults to retained fitting data.}
 \item{storage}{Cache centered casewise moment rows, use tiled projection, or select

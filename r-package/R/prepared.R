@@ -11,6 +11,7 @@
 #'
 #' The prototype declares variable/category/group schema only. It is never
 #' reused as data or starting values. Prepare again after structural changes.
+#' @rdname prepared
 prepare_model <- function(model, ..., prototype = NULL) {
   spec <- if (is.character(model)) model_spec(model, ...) else {
     if (length(list(...))) stop("prepare_model(): options belong in model_spec()")
@@ -106,6 +107,7 @@ prepare_model <- function(model, ..., prototype = NULL) {
 }
 
 #' Prepare one dataset, independently of estimation weights
+#' @rdname prepared
 prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwise")) {
   stopifnot(inherits(model, "magmaan_prepared_model"))
   missing <- match.arg(missing)
@@ -126,6 +128,7 @@ prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwis
 #' For categorical data full=TRUE also retains Gamma for existing post-fit
 #' inference functions. full=FALSE prepares only the diagonal needed by DWLS.
 #' Fixed weights use source-specific NT/empirical Gamma, or W in model moment order.
+#' @rdname prepared
 prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"), W = NULL, full = TRUE,
                            dls_a = 0.5) {
   stopifnot(inherits(data, "magmaan_prepared_data"))
@@ -140,6 +143,7 @@ prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
 }
 
 #' Estimate using reusable model, data and optional weight handles
+#' @rdname prepared
 estimate <- function(model, data, estimator = NULL, weight = NULL,
                      optimizer = NULL, control = NULL, bounds = NULL,
                      covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5) {

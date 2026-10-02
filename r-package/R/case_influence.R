@@ -333,6 +333,7 @@ est_change_raw <- function(rerun_out, parameters = NULL, standardized = FALSE) {
 # empirical-meat sandwich (Satorra-Bentler/MLM); "robust.huber.white" =
 # observed-bread sandwich (Yuan-Bentler/MLR). The robust regimes need the
 # refit's raw data (carried on every fit_* result).
+#' @noRd
 .case_refit_vcov <- function(refit, se) {
   if (se == "standard") return(.case_model_vcov(refit))
   if (is.null(refit$raw_data) || is.null(refit$raw_data$X)) {

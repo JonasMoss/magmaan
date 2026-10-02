@@ -48,3 +48,6 @@ r-package/src/.magmaan-build-config
 
 cpp/build-previous/
 r-package/build-rdev/
+
+# Portable R build configuration generated at install time.
+r-package/src/Makevars

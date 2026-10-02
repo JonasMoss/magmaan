@@ -20,8 +20,13 @@
  * which collides with stdlib.h's `int abs(int)` declaration. Including the
  * system headers first lets f2c.h's macro shadow them without rewriting the
  * declarations themselves. */
+#ifdef MAGMAAN_R_PORT_IO
+#include <R.h>
+#include <R_ext/Error.h>
+#else
 #include <stdio.h>
 #include <stdlib.h>
+#endif
 
 #include "f2c.h"
 
@@ -85,6 +90,14 @@ integer e_wsle(void)
  * NOT NUL-terminated, only `msg_len` characters wide. */
 void s_stop(char *msg, ftnlen len)
 {
+#ifdef MAGMAAN_R_PORT_IO
+    /* R owns termination at its boundary; numerical PORT routines are unchanged. */
+    if (msg != NULL && len > 0) {
+        Rf_error("magmaan: PORT internal STOP: %.*s", (int)len, msg);
+    } else {
+        Rf_error("magmaan: PORT internal STOP");
+    }
+#else
     if (msg != NULL && len > 0) {
         fprintf(stderr, "magmaan: vendored PORT routine invoked s_stop(\"%.*s\"); "
                         "this is a PORT internal abort (typically a malformed "
@@ -95,4 +108,5 @@ void s_stop(char *msg, ftnlen len)
               "abort, not recoverable.\n", stderr);
     }
     abort();
+#endif
 }

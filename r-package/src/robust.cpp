@@ -4,10 +4,10 @@
 // raw-data / standalone-Γ helpers, and the sandwich SEs. Composition-first: one
 // thin wrapper per C++ entry point, including build_u_factor() so the U-factor
 // is a first-class (transparent base-R list) object you build once and reduce /
-// eigensolve several ways. Shared plumbing lives in internal.hpp.
+// eigensolve several ways. Shared plumbing lives in internal.h.
 
-#include "internal.hpp"
-#include "ntml_snapshot.hpp"
+#include "internal.h"
+#include "ntml_snapshot.h"
 
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
@@ -27,7 +27,7 @@ namespace {
 
 // ---- InferenceSpec enums <-> strings ---------------------------------------
 // info_from_string / moments_from_string / cov_from_string / spec_from now live
-// in internal.hpp (namespace magmaanr), shared with fit.cpp's robust score glue.
+// in internal.h (namespace magmaanr), shared with fit.cpp's robust score glue.
 
 const char* moments_to_string(magmaan::robust::WeightMoments m) {
   switch (m) {
@@ -133,7 +133,7 @@ mean_var_to_list(const magmaan::robust::MeanVarAdjustedResult& r) {
 }
 
 // scaled_shifted_to_list / warnings_to_r / profile_lrt_to_list now live in
-// internal.hpp (namespace magmaanr) so fit.cpp's continuous-LS/FIML/ML2S
+// internal.h (namespace magmaanr) so fit.cpp's continuous-LS/FIML/ML2S
 // profile-LRT bindings can share the serializer.
 
 Rcpp::List profile_rmsea_to_list(
@@ -168,7 +168,7 @@ Rcpp::List profile_rmsea_to_list(
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
-// profile_lrt_to_list moved to internal.hpp (shared with fit.cpp).
+// profile_lrt_to_list moved to internal.h (shared with fit.cpp).
 
 Rcpp::List rmsea_inference_to_list(
     const magmaan::estimate::OrdinalRmseaInference& r) {
@@ -393,7 +393,7 @@ magmaan::robust::UFactor ufactor_from_list(Rcpp::List ul) {
 // Build a (possibly multi-block) RawData from an R raw-data argument: `X` is a
 // matrix (single group) or a list of per-group matrices; each block's columns
 // are reordered to that block's model variable order (by colnames if present,
-// else assumed already in order). Reuses the internal.hpp column-permute
+// else assumed already in order). Reuses the internal.h column-permute
 // helpers.
 magmaan::data::RawData raw_from_arg(const lvm::MatrixRep& rep, SEXP X) {
   const std::size_t n_blocks = rep.dims.size();

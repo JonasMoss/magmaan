@@ -59,7 +59,7 @@ guttman_h <- function(S, blocks,
 
 #' Fit a non-iterative CFA estimator.
 #'
-#' @param partable A magmaan/lavaan partable (as consumed by [fit_fit()]).
+#' @param partable A magmaan/lavaan parameter table.
 #' @param sample_stats A magmaan sample-statistics list (S, nobs, ...).
 #' @param estimator Non-iterative estimator. `"guttman_lavaan"` keeps the legacy
 #'   lavaan-like Spearman/incidence Guttman map (AR communality); `"guttman_aligned"`
@@ -88,7 +88,7 @@ guttman_h <- function(S, blocks,
 #' @param h_floor0 Base normalized H-eigenvalue floor.
 #' @param h_rate Sample-size exponent resolving the H floor as
 #'   `h_floor0 * nobs^(-h_rate)`.
-#' @return A magmaan fit object (same shape as [fit_fit()]), usable by the
+#' @return A magmaan fit object (same shape as [fit_model()]), usable by the
 #'   inference helpers below and by partable inspection.
 #' @export
 fit_noniterative_cfa <- function(partable, sample_stats,

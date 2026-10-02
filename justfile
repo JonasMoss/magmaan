@@ -190,8 +190,8 @@ r-install: vendor
 
 # FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
 # prebuilt opt libmagmaan.a, via a persistent r-package/build-rdev/ mirror with the dev-only
-# r-package/tools/r-makevars-dev swapped in — so the committed self-contained
-# r-package/src/Makevars is never touched. Optional backends:
+# r-package/tools/r-makevars-dev swapped in — preserving the portable
+# src/Makevars.in template. Optional backends:
 # `just r-dev ceres 1 0` or `just r-dev ipopt 0 1`.
 r-dev preset="opt" ceres="0" ipopt="0":
     #!/usr/bin/env bash
@@ -240,6 +240,30 @@ r-magmaan-test: r-magmaan
 
 # Fast dev install + the example smoke tests + the ordinary-user package tests.
 r-check: r-dev r-examples r-magmaan-test
+
+# Portable source-tarball checks; outputs and the dependency install stay outside the repo.
+r-cmd-check output_dir="$HOME/.cache/magmaan-logs/r-cmd-check" library="$HOME/.cache/magmaan-rlib/check":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$PWD"
+    mkdir -p "{{output_dir}}" "{{library}}"
+    output_dir="$(cd "{{output_dir}}" && pwd)"
+    library="$(cd "{{library}}" && pwd)"
+    export R_LIBS="$library${R_LIBS:+:$R_LIBS}"
+    export MAKEFLAGS="-j{{jobs}}" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+    cd "$output_dir"
+    for package_dir in r-package r-magmaan; do
+        package="$(sed -n 's/^Package: //p' "$root/$package_dir/DESCRIPTION")"
+        version="$(sed -n 's/^Version: //p' "$root/$package_dir/DESCRIPTION")"
+        nice -n 10 R CMD build "$root/$package_dir"
+        nice -n 10 R CMD check --no-manual "$package"_"$version".tar.gz
+        if grep -Eq '[0-9]+ (ERROR|WARNING)' "$package.Rcheck/00check.log"; then
+            exit 1
+        fi
+        if [ "$package" = magmaanlab ]; then
+            nice -n 10 R CMD INSTALL --library="$library" "$package.Rcheck/00_pkg_src/$package"
+        fi
+    done
 
 # Force-clean the in-tree R build artifacts + the dev mirror.
 r-clean:

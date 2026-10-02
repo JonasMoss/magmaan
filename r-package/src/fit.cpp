@@ -5,10 +5,10 @@
 // each take a fit object (and, where the C++ signature does, the upstream
 // results — an se result, a baseline result, implied moments) and mirror one
 // C++ function. Errors -> Rcpp::stop with magmaan's error kind + detail. Eigen
-// <-> R via RcppEigen. Shared plumbing lives in internal.hpp.
+// <-> R via RcppEigen. Shared plumbing lives in internal.h.
 
-#include "internal.hpp"
-#include "ntml_snapshot.hpp"
+#include "internal.h"
+#include "ntml_snapshot.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1485,7 +1485,7 @@ std::vector<Eigen::MatrixXd> wls_dense_from_arg(SEXP W, std::size_t n_blocks) {
 }
 
 // R supplies a genuinely dense Gamma-hat inverse, so Dense is the right
-// BlockWeight kind here; see internal.hpp for why the conversion is shared.
+// BlockWeight kind here; see internal.h for why the conversion is shared.
 magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
   return dense_weight_or_stop(wls_dense_from_arg(W, n_blocks),
                               "magmaan: WLS weights");
@@ -2432,7 +2432,7 @@ Rcpp::List stage1_regularization_diagnostics_to_r(
 // The Phase 3-era Ceres-specific option helpers were
 // retired in Phase 4 alongside the per-Ceres Rcpp shim explosion. All
 // optimizer-control fields now route through `optim_opts_from(control)` in
-// internal.hpp — the OptimOptions struct (max_iter / ftol / gtol / history)
+// internal.h — the OptimOptions struct (max_iter / ftol / gtol / history)
 // is the shared option vocabulary across magmaan's optimizer roster, and
 // Ceres-specific extras (ptol / verbose) were already dropped on the old
 // path, so the unified control list is behaviour-preserving.
@@ -10887,7 +10887,7 @@ Rcpp::List noniterative_cfa_scalar_impl(Rcpp::List fit, int ref_group = 1,
 }
 
 
-#include "prepared.hpp"
+#include "prepared.h"
 
 // [[Rcpp::export]]
 SEXP prepared_model_impl(SEXP partable, std::string kind,
@@ -10918,7 +10918,7 @@ Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
                        covariance, barrier_target, barrier_weight);
 }
 
-#include "score_primitives.hpp"
+#include "score_primitives.h"
 
 // [[Rcpp::export]]
 Rcpp::List prepare_inference_impl(Rcpp::List fit, SEXP raw, SEXP shared_data = R_NilValue) {

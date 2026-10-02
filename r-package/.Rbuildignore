@@ -8,3 +8,6 @@
 ^src/\.magmaan-build-config$
 ^tools$
 ^build-rdev$
+
+^src/Makevars$
+^\.github$
