@@ -211,19 +211,30 @@ score_tests <- function(fit, data = NULL, ...) {
 # normal data) and `bread`/`moments`/`cov` are ignored. Continuous ML/ULS/GLS/WLS
 # build the meat from `cov`: 'empirical' needs the fitting `data` (raw
 # observations); 'model_implied' uses Gamma_NT from the chosen moments.
-# WLS supplies its fitting weight via `weight=`; the ordinary statistic is
-# recovered only when that weight is the inverse of the selected Gamma.
+# WLS-computed fits (WLS/ADF, DWLS, DLS, supplied W) use the fitting weight
+# recorded in fit$W; `weight=` is needed only for fits without that record and
+# must otherwise equal it. The ordinary statistic is recovered only when the
+# weight is the inverse of the selected Gamma.
 # Continuous LS does not implement 'browne_unbiased', and estimated-weight mode
 # requires 'empirical'; unavailable covariance choices error explicitly.
 # `estimated_weight = TRUE` routes the per-direction scaling through the complete
 # (Hall-Inoue) sandwich, which carries the data-dependent-weight IF(W-hat) meat
-# term beyond lavaan's global SB scalar. It applies to estimated second-stage
-# weights (continuous GLS/WLS, ordinal/categorical DWLS/WLS), needs the fitting
-# `data` for the continuous tier, and is not available for ML or mixed-ordinal.
+# term beyond lavaan's global SB scalar. The influence follows the fit's
+# recorded weight recipe (NT, ADF, DWLS or DLS with its mixing weight; ULS has
+# none). A supplied W has no recipe, and ordinal NT/DLS weights have no derived
+# influence yet, so both are refused with UnsupportedInference. It needs the
+# fitting `data` for the continuous tier and is not available for ML or
+# mixed-ordinal.
 # FIML uses observed information and observed-pattern casewise score meat;
 # omitted bread/information select 'observed'. It uses retained raw observations
 # unless `data` is supplied. Expected information, alternative covariance/moment
 # recipes and second-stage weights are unsupported and rejected explicitly.
+# Two-stage (ML2S) fits report `mi` as the naive Stage-2 statistic on the
+# Stage-1 EM moments (attribute mi_type = "naive_stage2") and `mi.scaled` with
+# the Stage-1 moment covariance as meat. They use the recorded Stage-2 weight
+# and retained data; `data`, `weight`, observed information and non-default
+# bread/moments/cov are refused. `estimated_weight = TRUE` adds the DWLS, ADF
+# or DLS Stage-2 weight's data influence.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         bread = "expected",
                                         moments = "structured",

@@ -5934,6 +5934,16 @@ void ordinal_add_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
   }
 }
 
+// Association-ML estimates minimise another discrepancy than the LS moment
+// quadratic these score tests differentiate, and their score-test contract is
+// not derived; refuse rather than report LS statistics at ML estimates.
+post_expected<void> require_ls_ordinal_estimates(const Estimates& est) {
+  if (!est.association) return {};
+  return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+      "ordinal association ML has no modification-index or release-test "
+      "contract"));
+}
+
 template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
 post_expected<inference::ScoreTestTable>
 ordinal_modification_indices_impl(spec::LatentStructure pt,
@@ -5945,6 +5955,9 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
                                   ResidualFn residual_fn,
                                   JacobianFn jacobian_fn,
                                   PrepareFn prepare_fn) {
+  if (auto ok = require_ls_ordinal_estimates(est); !ok) {
+    return std::unexpected(ok.error());
+  }
   auto work = prepare_ordinal_modification_index_model(std::move(pt), rep,
                                                        options);
   if (!work.has_value()) return std::unexpected(work.error());
@@ -6039,6 +6052,9 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
                          ResidualFn residual_fn,
                          JacobianFn jacobian_fn,
                          PrepareFn prepare_fn) {
+  if (auto ok = require_ls_ordinal_estimates(est); !ok) {
+    return std::unexpected(ok.error());
+  }
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -6216,6 +6232,9 @@ ordinal_modification_indices_robust_impl(
     JacobianFn jacobian_fn,
     MomentJacobianFn moment_jacobian_fn,
     PrepareFn prepare_fn) {
+  if (auto ok = require_ls_ordinal_estimates(est); !ok) {
+    return std::unexpected(ok.error());
+  }
   if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -6349,6 +6368,9 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
                                 JacobianFn jacobian_fn,
                                 MomentJacobianFn moment_jacobian_fn,
                                 PrepareFn prepare_fn) {
+  if (auto ok = require_ls_ordinal_estimates(est); !ok) {
+    return std::unexpected(ok.error());
+  }
   if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
     return std::unexpected(v.error());
   }

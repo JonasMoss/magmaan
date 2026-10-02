@@ -407,10 +407,10 @@ projection/reference law before exposure. This adds no ordinary-user default.
 | --- | --- | --- |
 | Complete-data ML | Expected/observed information; robust core and R paths | Gate matching information/bread, structured/unstructured supported NT covariance, empirical/Browne and caller-Gamma choices; reject unsupported moment-source combinations |
 | Direct FIML | Analytic observed MI/release, robust core and R dispatch; expected geometry gates identification | Observed statistic/bread and observed-pattern casewise meat; expected-statistic, alternative covariance/moment and second-stage-weight choices explicitly rejected; broader convention/calibration work remains above |
-| Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R honors empirical/model-implied covariance with explicit fitting W; remaining work retains recipe/a and weight influence, audits sensitivity/nuisance projection, and exposes caller-Gamma adapters |
+| Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R uses the recorded fitting W and recipe/a for empirical/model-implied covariance and the weight influence (supplied W refused there); remaining work audits sensitivity/nuisance projection and exposes caller-Gamma adapters |
 | All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; shared relative rank is implemented, provenance/adapters remain |
 | Prepared all-ordinal association ML | Ordinary/PSD fitting through the shared association-target contract; LS MI is not an ML-target score contract | Typed rejection in 0.2.0; the contract is [0.3.0 work](#association-ml-inference) |
-| Two-stage/ML2S | R NT-ML MI is a naive Stage-2 comparator; retained Stage-1 and weighted inference primitives | Corrected MI/release for NT, ULS, DWLS, ADF and DLS Stage-2 recipes, using Stage-1 influence and the applicable estimated-weight term; preserve actual ML versus quadratic discrepancy provenance |
+| Two-stage/ML2S | Naive Stage-2 MI/release (`mi_type = "naive_stage2"`) and Stage-1-scaled MI/release for NT, ULS, DWLS, ADF and DLS, fixed or estimated weight, in C++ and R | Gated by exact complete-data reductions; remaining cells are grouped and MAR checks in the matrix item. lavaan's two-stage `modindices()` uses the unstructured information, so a fixture needs that option for the naive row |
 
 The DLS/custom-weight rows concern bounded reuse of retained weighted primitives,
 not a general DLS research programme. Pairwise moment sources retain their MCAR
@@ -422,50 +422,34 @@ structural-path enumeration remains a separate model-builder contract.
 The ordinary package does not expose MI in this release; the
 [interface vision](../design/r-interface-vision.md) defers policy MI.
 
-- [ ] **S — finish the weight-recipe fix in R.** The C++ guard landed
-  2026-10-02 (roadmap: estimated-weight recipe guard): continuous IJ consumers
-  refuse a fitting weight that differs from their recipe's rebuild, ordinal
-  IJ and DWLS profile paths refuse NT/DLS/supplied weights, and
-  `continuous_ls_ij_mode_for` maps a recorded recipe to its mode. Remaining
-  R glue: read `fit$composition$weight`, `dls_a` and the supplied flag through
-  that resolver in every `continuous_ij_mode(estimator)` caller (MI/release,
-  robust IJ SEs, profile LRTs, RBM, estimated-weight residuals); use `fit$W`
-  instead of requiring `weight =`; add `UnsupportedInference` to the R error
-  kind names; and remove or validate the `ij_weight` override (pending
-  decision). Verify whether association-ML ordinal fits can reach the LS
-  ordinal MI worker and reject them until their 0.3.0 contract. **Check:**
-  testthat cases for DWLS, DLS (non-default a), supplied-W and ordinal NT/DLS
-  fits through each R entry point, with typed errors where refused.
-
 - [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
   retained continuous and all-ordinal weight recipes in the matrix, with stored
   fitting W or explicit supplied W, Gamma/NACOV source, recipe/a and fixed versus
   estimated-weight influence. Derive consistent sensitivity and nuisance
   projection for observed/estimated-weight GMM score variants before exposing
   them; the existing expected-metric sweep alone does not establish that regime.
-  Association-ML MI is a 0.3.0 contract; reject it until then. Storing the
-  recipe, a and W on fits, carrying them into the IJ mode and exposing
-  `ij_weight`, `dls_a` and caller Gamma in R is wiring; the sensitivity and
-  nuisance projection for observed/estimated-weight score variants is the
-  genuine derivation.
+  Association-ML MI is a 0.3.0 contract; the score workers reject it until
+  then. Fits record recipe, a and W, and every R estimated-weight consumer
+  resolves its IJ mode from that record (roadmap: estimated-weight recipe
+  guard); exposing caller Gamma in R is the remaining wiring, and the
+  sensitivity and nuisance projection for observed/estimated-weight score
+  variants is the genuine derivation.
   Audit every bread/information/covariance argument and expose applicable caller-
   Gamma paths through thin R adapters. **Check:** independent score, sensitivity,
   meat and weight-influence assembly; recipe endpoint reductions, retained-data
   versus supplied-data agreement, documented unavailable cells and no ignored
   options. No numerical recipe/default changes without evidence.
 
-- [ ] **S — expose two-stage MI/release in R.** The C++ tier landed
-  2026-10-02 (roadmap: two-stage MI and equality-release score tests):
-  `{modification_indices,score_tests}_ml2s` report the naive Stage-2 statistic
-  and its Stage-1-aware scaling for NT, ULS, DWLS, ADF and DLS, fixed or
-  estimated weight, gated by exact complete-data reductions in one and two
-  groups. Remaining: dispatch ML2S fits from `inference_modification_indices`
-  and the robust score wrappers using the fit's Stage-1 object, `stage2_weight`
-  and `stage2_dls_a` (raw data, pack and H1 for the estimated weight); keep the
-  naive column labelled; check whether lavaan's `modindices()` on a
-  `missing = "two.stage"` fit reproduces the naive NT statistic and freeze a
-  fixture if so. **Check:** R reductions to complete-data ML/LS, MCAR controls
-  and typed errors for observed information and missing mean structure.
+- [ ] **S — pass `row_user` through C++ API ordinal post-fit preparation.**
+  `api::robust_ordinal`, `fit_measures`, `modification_indices` and
+  `score_tests` re-prepare ordinal fits without the `row_user` the fit used.
+  A free explicit `y1 ~~ y1` or `y1 ~ 1` gives a typed length error; a fixed
+  non-default value under theta (`y1 ~~ 0.5*y1`) or a fixed non-zero
+  intercept with means gives silently wrong inference. R prepares without
+  `row_user` on both sides and is unaffected. Found by the 2026-10-02
+  inference-policy audit. **Check:** explicit and implicit spellings agree,
+  including `y1 ~~ 0.5*y1` under theta; double preparation of a freed `~*~`
+  is idempotent.
 
 - [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,
@@ -698,7 +682,8 @@ ordinary-user default.
 
 - [ ] **S — fix remaining example assertions.** Consolidate `ml_psd_fallback.R`
   with the ridge task; diagnose `score_flip_test.R`'s
-  `mean_variance_relative_shift == 0` assertion. **Check:** meaningful current-
+  `mean_variance_relative_shift == 0` assertion and `start_policy.R`'s
+  `fit$start$theta` equality check (failing on main 2026-10-02). **Check:** meaningful current-
   contract assertions that do not conceal a discrepancy.
 
 - [ ] **S/M — export named corpus gaps.** Freeze at-theta implied moments for

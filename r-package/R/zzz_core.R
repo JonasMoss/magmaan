@@ -98,8 +98,10 @@ frontier_fcsem_model_spec <- fcsem_model_spec_impl
 frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
 frontier_guttman_h <- frontier_guttman_h_impl
+# ML2S fits use their recorded Stage-2 weight; an explicit stage2_weight or
+# dls_a must agree with it.
 frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
-                         stage2_weight = "nt", dls_a = 0.5,
+                         stage2_weight = NULL, dls_a = NULL,
                          method = c("explicit", "implicit"),
                          optimizer = NULL, control = NULL, bounds = NULL) {
   method <- match.arg(method)

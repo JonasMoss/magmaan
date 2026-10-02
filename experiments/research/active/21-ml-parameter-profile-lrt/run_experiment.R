@@ -174,17 +174,10 @@ ci_to_row <- function(ci, n, rep_id, estimator, profile_weight, reference) {
   )
 }
 
+# WLS uses the built-in ADF recipe (the inverse empirical Gamma), recorded on
+# the fit with its weight, so the estimated-weight reference knows the
+# weight's data influence; a supplied W has no recipe and is refused there.
 fit_ci_model <- function(estimator, dat, X) {
-  if (identical(estimator, "WLS")) {
-    W <- tryCatch(solve(core$robust_empirical_gamma(X)), error = function(e) e)
-    if (inherits(W, "error")) return(list(error = conditionMessage(W)))
-    fit <- tryCatch(
-      magmaanlab::fit_model(model, dat, estimator = "WLS", W = W),
-      error = function(e) e
-    )
-    if (inherits(fit, "error")) return(list(error = conditionMessage(fit)))
-    return(list(fit = fit, weight = W))
-  }
   fit <- tryCatch(
     magmaanlab::fit_model(model, dat, estimator = estimator),
     error = function(e) e

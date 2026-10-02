@@ -620,6 +620,16 @@ TEST_CASE("api ML dispatches ordinal associations without granting Gaussian infe
   CHECK_FALSE(magmaan::api::standard_errors(*fit, magmaan::api::expected_information()));
   CHECK_FALSE(magmaan::api::test(*fit, magmaan::api::standard_chi_square()));
   CHECK_FALSE(magmaan::api::fit_measures(*fit));
+  // The ordinal score workers differentiate the LS quadratic; at association-ML
+  // estimates they would report LS statistics for another estimator.
+  CHECK_FALSE(magmaan::api::modification_indices(*fit, {}));
+  CHECK_FALSE(magmaan::api::score_tests(*fit));
+  const auto robust_mi = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      fit->model().structure(), fit->model().matrix_rep(), *stats,
+      fit->estimates(), magmaan::estimate::OrdinalWeightKind::DWLS, {},
+      magmaan::estimate::OrdinalParameterization::Delta, false);
+  REQUIRE_FALSE(robust_mi.has_value());
+  CHECK(robust_mi.error().kind == magmaan::PostError::Kind::UnsupportedInference);
 }
 
 TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {

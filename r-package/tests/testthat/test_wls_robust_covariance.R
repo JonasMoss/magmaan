@@ -68,9 +68,15 @@ test_that("WLS covariance choices fail explicitly when unavailable", {
   d <- wls_robust_covariance_data()
   weight <- solve(magmaan_core$robust_empirical_gamma(as.matrix(d)))
   fit <- fit_model("f =~ x1 + c*x2 + c*x3 + x4", d, estimator = "WLS", W = weight)
+  # The built-in ADF recipe builds the same weight and records its recipe.
+  recipe <- fit_model("f =~ x1 + c*x2 + c*x3 + x4", d, estimator = "WLS")
+  expect_equal(recipe$theta, fit$theta, tolerance = 1e-10)
   for (worker in list(modification_indices_robust, score_tests_robust)) {
     expect_error(worker(fit, weight = weight), "require.*fitting data")
-    expect_error(worker(fit, data = d), "explicit.*weight")
+    # The fit records its weight, so `weight` is optional and must match it.
+    expect_equal(worker(fit, data = d), worker(fit, data = d, weight = weight),
+                 tolerance = 0)
+    expect_error(worker(fit, data = d, weight = diag(diag(weight))), "fit\\$W")
     expect_error(worker(fit, data = d, weight = weight, cov = "unknown"),
                  "`cov` must be")
     expect_error(worker(fit, data = d, weight = weight, cov = "browne_unbiased"),
@@ -80,16 +86,18 @@ test_that("WLS covariance choices fail explicitly when unavailable", {
     incomplete <- d
     incomplete$x2[1] <- NA_real_
     expect_error(worker(fit, data = incomplete, weight = weight), "non-finite")
-    estimated <- worker(fit, data = d, weight = weight, estimated_weight = TRUE)
+    # A supplied W has no recipe, so its data influence is unknown.
+    expect_error(worker(fit, data = d, estimated_weight = TRUE),
+                 "UnsupportedInference")
+    estimated <- worker(recipe, data = d, estimated_weight = TRUE)
     expect_gt(nrow(estimated), 0L)
     expect_true(all(is.finite(estimated$mi.scaled)))
-    expect_equal(estimated$mi, worker(fit, data = d, weight = weight)$mi,
-                 tolerance = 1e-8)
-    expect_error(worker(fit, weight = weight, estimated_weight = TRUE),
+    expect_equal(estimated$mi, worker(fit, data = d)$mi, tolerance = 1e-8)
+    expect_error(worker(recipe, estimated_weight = TRUE),
                  "require.*fitting data")
-    expect_error(worker(fit, data = d, weight = weight, estimated_weight = TRUE,
+    expect_error(worker(recipe, data = d, estimated_weight = TRUE,
                         cov = "model_implied"), "requires empirical")
-    expect_error(worker(fit, data = d, weight = weight, estimated_weight = TRUE,
+    expect_error(worker(recipe, data = d, estimated_weight = TRUE,
                         cov = "browne_unbiased"), "Browne-unbiased.*not implemented")
   }
 })

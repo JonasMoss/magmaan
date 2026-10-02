@@ -97,8 +97,8 @@ frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optim
     .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
 }
 
-frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, ij_weight = NULL, dls_a = 0.5, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust, estimated_weight, ij_weight, dls_a, reference)
+frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust, estimated_weight, reference)
 }
 
 frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
@@ -109,8 +109,8 @@ frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.
     .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
 }
 
-frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, ij_weight = NULL, dls_a = 0.5, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, estimated_weight, ij_weight, dls_a, reference)
+frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, estimated_weight, reference)
 }
 
 frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
@@ -181,7 +181,7 @@ frontier_sam_impl <- function(partable, sample_stats, raw_data = NULL, method = 
     .Call(`_magmaanlab_frontier_sam_impl`, partable, sample_stats, raw_data, method, mapping, se, lambda_correction, alpha_correction, meanstructure, mm_optimizer, struc_optimizer, mm_control, struc_control)
 }
 
-frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight = "nt", dls_a = 0.5, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
+frontier_rbm_impl <- function(fit, raw_data = NULL, weight = NULL, stage2_weight = NULL, dls_a = NULL, method = "explicit", optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaanlab_frontier_rbm_impl`, fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds)
 }
 
@@ -437,7 +437,7 @@ fiml_fit_measures_impl <- function(fit, robust = FALSE) {
     .Call(`_magmaanlab_fiml_fit_measures_impl`, fit, robust)
 }
 
-infer_ml2s_casewise_influence_ij_fit <- function(fit, raw_data, stage2_weight = "nt", dls_a = 0.5) {
+infer_ml2s_casewise_influence_ij_fit <- function(fit, raw_data, stage2_weight = NULL, dls_a = NULL) {
     .Call(`_magmaanlab_infer_ml2s_casewise_influence_ij_fit`, fit, raw_data, stage2_weight, dls_a)
 }
 

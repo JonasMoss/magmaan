@@ -2549,8 +2549,25 @@ an unconstrained gradient test to constrained solutions.
   weight, cross-recipe, wrong-a and rescaled-weight refusals in MI and the
   shared sandwich, the recipe-to-mode map, and ordinal NT/DLS/supplied
   refusals across MI, `robust_ordinal_ij` and the profile family with the
-  fixed-weight RMSEA comparator retained. R glue still selects modes by label
-  until it reads the recorded recipe (MI completion matrix).
+  fixed-weight RMSEA comparator retained. The R glue reads the recorded
+  recipe (2026-10-02): `fit$moment_weight` ("custom" for a supplied W),
+  `fit$stage2_dls_a` and `fit$W` resolve through `continuous_ls_ij_mode_for`
+  in MI/release, the GMM profile test and CI, RBM, estimated-weight residuals
+  and case influence, so supplied-W fits fail with `UnsupportedInference`.
+  WLS-computed fits use `fit$W`; an explicit `weight` must equal it or a
+  common positive multiple (same minimizer, kept for the weight-scale
+  transport checks). Fits without the record fall back to the label's recipe
+  under the C++ guard. The `ij_weight`/`dls_a` profile overrides are removed.
+  ML2S RBM and case influence read `stage2_weight`/`stage2_dls_a` from the fit
+  and refuse a disagreeing argument (previously `frontier_rbm()` defaulted to
+  NT and case influence dropped the DLS a). The ordinal LS score workers
+  (ordinary and robust) refuse association-ML estimates with
+  `UnsupportedInference`, closing the gap in `api::modification_indices`/
+  `score_tests`; R already refused them. testthat
+  (`test_weight_recipe_inference.R`) uses DLS(a = 1) = ADF exactly and
+  DLS(a = 0) = GLS to optimizer precision across MI, releases, residuals,
+  case influence, profile tests and RBM, plus supplied-W, ordinal NT/DLS/
+  supplied and association-ML refusals.
 - Two-stage (ML2S) MI and equality-release score tests (2026-10-02, C++):
   `inference::frontier::{modification_indices,score_tests}_ml2s` take the
   Stage-1 saturated moments and the matching Stage-2 fit. `mi` is the naive
@@ -2567,7 +2584,20 @@ an unconstrained gradient test to constrained solutions.
   equals the complete-data ML/LS robust tests with the empirical Gamma to
   1e-7, in one and two groups, for MI and releases; under MCAR the unscaled
   statistic equals the naive comparator and the estimated-weight DWLS meat
-  moves the scaling. No R exposure yet.
+  moves the scaling. R (2026-10-02): `modification_indices{,_robust}()` and
+  `score_tests{,_robust}()` dispatch ML2S fits through `$stage1`,
+  `stage2_weight`, `stage2_dls_a` and the retained raw data; the ordinary
+  wrappers return the naive statistic (now also for weighted Stage-2 fits and
+  release tests), and every ML2S table carries `mi_type = "naive_stage2"`.
+  `data`, `weight` and non-default bread/moments/cov are refused; observed
+  information is a typed `UnsupportedInference`. On complete data the R
+  tables equal the complete-data ML/LS robust tables to about 1e-14 for every
+  weight, fixed and estimated, MI and releases. lavaan's `modindices()` on a
+  `missing = "two.stage"` fit is not a fixture for the naive NT row: lavaan
+  defaults two-stage fits to `h1.information = "unstructured"`, and its MI
+  equals the score test on the EM moments with the unstructured expected
+  information (4e-13 complete, 3e-5 with missing data), 31% away from the
+  structured row on HolzingerSwineford1939.
 - FIML (missing-data) robust MI and equality-release score tests, the MLR corner
   (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
   build the bread A1 = (N/2)·H (the analytic observed FIML information) and the

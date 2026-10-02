@@ -134,11 +134,11 @@ Rcpp::List fitting_report_to_r(const magmaan::estimate::FittingReport& report) {
       Rcpp::_["attempts"] = attempts);
 }
 magmaan::estimate::gmm::Weight continuous_ls_weight(
-    const Ctx& ctx, const magmaan::estimate::Estimates& est,
+    Rcpp::List fit, const Ctx& ctx, const magmaan::estimate::Estimates& est,
     const std::string& estimator, SEXP weight, const char* call);
-magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
-    const std::string& estimator,
-    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue);
+magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode_for_fit(
+    Rcpp::List fit, const std::string& estimator,
+    magmaan::estimate::gmm::FixedWeightOptions* dls_opts = nullptr);
 
 std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
                                 const char* caller,
@@ -3698,7 +3698,9 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
 // continuous moment-quadratic free parameter. `parameter` is the 1-based
 // free-parameter ordinal from `fit$partable$free`; the C++ core receives the
 // 0-based theta index. ULS uses the identity weight, GLS rebuilds the
-// normal-theory weight, and WLS requires the caller-supplied weight.
+// normal-theory weight, and WLS-computed fits use the recorded fit$W (or the
+// caller's `weight` for fits without one). With `estimated_weight`, the weight
+// influence follows the fit's recorded recipe; a supplied W is refused.
 //
 // [[Rcpp::export]]
 Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
@@ -3713,8 +3715,6 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     bool estimated_weight = false,
-    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue,
-    double dls_a = 0.5,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -3733,7 +3733,7 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::gmm::Weight w =
-      continuous_ls_weight(ctx, est, estimator, weight,
+      continuous_ls_weight(fit, ctx, est, estimator, weight,
                            "frontier_profile_lrt_parameter_gmm");
   const auto reference_mode = scalar_reference_from_nullable(
       reference, robust, "frontier_profile_lrt_parameter_gmm()");
@@ -3745,14 +3745,8 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
                  "requires a robust/misspec reference");
     }
     robust_opts.estimated_weight = true;
-    robust_opts.ij_weight_mode = continuous_ij_mode(estimator, ij_weight);
-    if (robust_opts.ij_weight_mode ==
-            magmaan::estimate::ContinuousLsIJWeightMode::SampleDls &&
-        !(dls_a >= 0.0 && dls_a <= 1.0)) {
-      Rcpp::stop("frontier_profile_lrt_parameter_gmm() dls_a must lie in "
-                 "[0, 1]");
-    }
-    robust_opts.dls_opts.a = dls_a;
+    robust_opts.ij_weight_mode =
+        continuous_ij_mode_for_fit(fit, estimator, &robust_opts.dls_opts);
   }
   if (scalar_reference_needs_sandwich(reference_mode)) {
     if (Rf_isNull(raw_data)) {
@@ -3901,8 +3895,6 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     bool estimated_weight = false,
-    Rcpp::Nullable<Rcpp::String> ij_weight = R_NilValue,
-    double dls_a = 0.5,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -3921,7 +3913,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
       optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                          : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::gmm::Weight w =
-      continuous_ls_weight(ctx, est, estimator, weight,
+      continuous_ls_weight(fit, ctx, est, estimator, weight,
                            "frontier_profile_lrt_ci_parameter_gmm");
   auto ci_opts = profile_ci_options_from_args(
       level, lower, upper, initial_step, root_tol, statistic_tol);
@@ -3935,14 +3927,8 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
                  "estimated_weight=TRUE requires a robust/misspec reference");
     }
     robust_opts.estimated_weight = true;
-    robust_opts.ij_weight_mode = continuous_ij_mode(estimator, ij_weight);
-    if (robust_opts.ij_weight_mode ==
-            magmaan::estimate::ContinuousLsIJWeightMode::SampleDls &&
-        !(dls_a >= 0.0 && dls_a <= 1.0)) {
-      Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm() dls_a must lie in "
-                 "[0, 1]");
-    }
-    robust_opts.dls_opts.a = dls_a;
+    robust_opts.ij_weight_mode =
+        continuous_ij_mode_for_fit(fit, estimator, &robust_opts.dls_opts);
   }
   if (scalar_reference_needs_sandwich(ci_opts.reference)) {
     if (Rf_isNull(raw_data)) {
@@ -4091,6 +4077,66 @@ magmaan::estimate::fiml::TwoStageDlsOptions ml2s_dls_options_from_fit(
     dls.a = Rcpp::as<double>(fit["stage2_dls_a"]);
   }
   return dls;
+}
+
+// The recorded Stage-2 weight of an ML2S fit (fit$stage2_weight and
+// fit$stage2_dls_a). An explicit `stage2_weight` or `dls_a` argument must agree
+// with the record, because a different weight's influence does not describe
+// the fit's estimate; fits without a record use the argument (default NT).
+void ml2s_recorded_stage2(Rcpp::List fit, SEXP stage2_weight_arg,
+                          SEXP dls_a_arg, const char* call,
+                          magmaan::estimate::fiml::TwoStageWeight& kind,
+                          magmaan::estimate::fiml::TwoStageDlsOptions& dls) {
+  const bool recorded = fit.containsElementNamed("stage2_weight") &&
+                        !Rf_isNull(fit["stage2_weight"]);
+  const std::string record =
+      recorded ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  kind = magmaanr::two_stage_weight_from_arg(record);
+  if (!Rf_isNull(stage2_weight_arg)) {
+    const auto given = magmaanr::two_stage_weight_from_arg(
+        Rcpp::as<std::string>(stage2_weight_arg));
+    if (recorded && given != kind) {
+      Rcpp::stop("magmaan: %s: stage2_weight differs from the fit's recorded "
+                 "Stage-2 weight '%s'; omit it", call, record.c_str());
+    }
+    kind = given;
+  }
+  dls = ml2s_dls_options_from_fit(fit);
+  if (!Rf_isNull(dls_a_arg)) {
+    const double given = Rcpp::as<double>(dls_a_arg);
+    if (fit.containsElementNamed("stage2_dls_a") &&
+        !Rf_isNull(fit["stage2_dls_a"]) &&
+        kind == magmaan::estimate::fiml::TwoStageWeight::Dls &&
+        given != dls.a) {
+      Rcpp::stop("magmaan: %s: dls_a differs from the fit's recorded "
+                 "Stage-2 DLS weight a = %g; omit it", call, dls.a);
+    }
+    dls.a = given;
+  }
+}
+
+// The fitted Stage-2 weight of a weighted ML2S fit, rebuilt from Stage 1 as
+// the fitter built it, for the naive (complete-data-form) score sweep.
+magmaan::estimate::gmm::Weight ml2s_stage2_weight_for_fit(Rcpp::List fit) {
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    Rcpp::stop("magmaan: ML2S modification indices require fit$stage1");
+  }
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  auto w_or = magmaan::estimate::fiml::two_stage_stage2_weight_structured(
+      sm, magmaanr::two_stage_weight_from_arg(stage2_weight),
+      ml2s_dls_options_from_fit(fit));
+  if (!w_or.has_value()) stop_post(w_or.error());
+  return std::move(*w_or);
+}
+
+// ML2S score tables report `mi` as the naive Stage-2 statistic: Stage-1 EM
+// moments treated as complete-data moments. Robust tables add `mi.scaled`,
+// whose meat carries the Stage-1 missing-data uncertainty.
+Rcpp::DataFrame label_ml2s_score_table(Rcpp::DataFrame df) {
+  df.attr("mi_type") = "naive_stage2";
+  return df;
 }
 
 // [[Rcpp::export]]
@@ -5293,8 +5339,8 @@ Rcpp::List frontier_rbm_impl(
     Rcpp::List fit,
     SEXP raw_data = R_NilValue,
     SEXP weight = R_NilValue,
-    std::string stage2_weight = "nt",
-    double dls_a = 0.5,
+    SEXP stage2_weight = R_NilValue,
+    SEXP dls_a = R_NilValue,
     std::string method = "explicit",
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
@@ -5377,9 +5423,10 @@ Rcpp::List frontier_rbm_impl(
     const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
     std::unique_ptr<FimlH1> owned_h1;
     const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
-    const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+    magmaan::estimate::fiml::TwoStageWeight kind;
     magmaan::estimate::fiml::TwoStageDlsOptions dls;
-    dls.a = dls_a;
+    ml2s_recorded_stage2(fit, stage2_weight, dls_a, "frontier_rbm()", kind,
+                         dls);
     magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
         method_key == "explicit"
             ? magmaan::estimate::frontier::rbm_explicit_two_stage(
@@ -5430,14 +5477,17 @@ Rcpp::List frontier_rbm_impl(
       Rcpp::stop("magmaan: frontier_rbm() needs raw_data for continuous LS fits");
     }
     magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-    auto w = continuous_ls_weight(ctx, est, estimator, weight, "RBM");
-    const auto mode = continuous_ij_mode(estimator);
+    auto w = continuous_ls_weight(fit, ctx, est, estimator, weight, "RBM");
+    magmaan::estimate::gmm::FixedWeightOptions dls_opts;
+    const auto mode = continuous_ij_mode_for_fit(fit, estimator, &dls_opts);
     magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
         method_key == "explicit"
             ? magmaan::estimate::frontier::rbm_explicit_continuous_ls(
-                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, {}, b, opts)
+                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, dls_opts, b,
+                  opts)
             : magmaan::estimate::frontier::rbm_implicit_continuous_ls(
-                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, {}, b, opts);
+                  ctx.pt, ctx.rep, ctx.samp, est, w, raw, mode, dls_opts, b,
+                  opts);
     if (!rbm.has_value()) stop_fit(rbm.error());
     Rcpp::List out = fit_result(ctx, rbm->estimates, nullptr,
                                 ("RBM-" + estimator).c_str());
@@ -7494,8 +7544,8 @@ Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust = false) {
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ml2s_casewise_influence_ij_fit(
-    Rcpp::List fit, SEXP raw_data, std::string stage2_weight = "nt",
-    double dls_a = 0.5) {
+    Rcpp::List fit, SEXP raw_data, SEXP stage2_weight = R_NilValue,
+    SEXP dls_a = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
@@ -7503,9 +7553,10 @@ Rcpp::List infer_ml2s_casewise_influence_ij_fit(
   const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
   std::unique_ptr<FimlH1> owned_h1;
   const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
-  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  magmaan::estimate::fiml::TwoStageWeight kind;
   magmaan::estimate::fiml::TwoStageDlsOptions dls;
-  dls.a = dls_a;
+  ml2s_recorded_stage2(fit, stage2_weight, dls_a,
+                       "infer_ml2s_casewise_influence_ij_fit()", kind, dls);
   auto r_or = magmaan::estimate::fiml::two_stage_casewise_influence_ij(
       ctx.pt, ctx.rep, raw, est, pack, h1, kind, dls);
   if (!r_or.has_value()) stop_post(r_or.error());
@@ -8251,8 +8302,8 @@ Rcpp::List measures_factor_score_precision(Rcpp::List fit, SEXP raw_data) {
 }
 
 // inference_modification_indices() — mirrors inference::modification_indices()
-// for ML/FIML/continuous LS fit objects. WLS requires an explicit weight matrix
-// because current R fit lists do not retain W.
+// for ML/FIML/ML2S/continuous LS fit objects. WLS-computed fits use the
+// fitting weight recorded in fit$W; fits without one need `weight`.
 //
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_modification_indices(
@@ -8320,19 +8371,28 @@ Rcpp::DataFrame inference_modification_indices(
     out = magmaan::inference::modification_indices(
         ctx.pt, ctx.rep, ctx.samp, est, *w_or, opts);
   } else if (estimator == "WLS") {
-    if (Rf_isNull(weight)) {
-      Rcpp::stop("magmaan: WLS modification indices require explicit `weight`");
-    }
-    auto w = wls_from_arg(weight, ctx.samp.S.size());
+    auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
+                                  "modification indices");
     out = magmaan::inference::modification_indices(
         ctx.pt, ctx.rep, ctx.samp, est, w, opts);
-  } else if (estimator == "ML" || estimator.empty() || estimator == "ML2S") {
-    // ML2S: fit$S/sample_mean are the Stage-1 EM-completed moments (the fit is
-    // a Stage-2 ML on them), so ctx.samp already carries them and the one-step
-    // sweep is the normal-theory ML score test on the EM moments (the naive
-    // comparator; Stage-1 uncertainty enters only the robust lrt_p_obs column).
+  } else if (estimator == "ML" || estimator.empty()) {
     out = magmaan::inference::modification_indices(
         ctx.pt, ctx.rep, ctx.samp, est, opts);
+  } else if (is_ml2s_estimator_label(estimator)) {
+    // ML2S: fit$S/sample_mean are the Stage-1 EM moments the Stage-2 fit used,
+    // so ctx.samp carries them and the sweep is the naive Stage-2 score test
+    // on them (ML for NT, the moment quadratic with the Stage-2 weight
+    // otherwise). Stage-1 uncertainty enters only modification_indices_robust.
+    if (estimator == "ML2S") {
+      out = magmaan::inference::modification_indices(
+          ctx.pt, ctx.rep, ctx.samp, est, opts);
+    } else {
+      out = magmaan::inference::modification_indices(
+          ctx.pt, ctx.rep, ctx.samp, est, ml2s_stage2_weight_for_fit(fit),
+          opts);
+    }
+    if (!out.has_value()) stop_post(out.error());
+    return label_ml2s_score_table(score_table_df(*out, ctx.names));
   } else {
     Rcpp::stop("magmaan: modification indices are not yet exposed for estimator '%s'",
                estimator);
@@ -8341,8 +8401,8 @@ Rcpp::DataFrame inference_modification_indices(
   return score_table_df(*out, ctx.names);
 }
 
-// inference_score_tests() — mirrors inference::score_tests() for ML/FIML and
-// continuous LS fit objects. WLS requires an explicit weight matrix.
+// inference_score_tests() — mirrors inference::score_tests() for ML/FIML/ML2S
+// and continuous LS fit objects. WLS-computed fits use the recorded fit$W.
 //
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
@@ -8404,13 +8464,20 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
     out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est,
                                           *w_or);
   } else if (estimator == "WLS") {
-    if (Rf_isNull(weight)) {
-      Rcpp::stop("magmaan: WLS score tests require explicit `weight`");
-    }
-    auto w = wls_from_arg(weight, ctx.samp.S.size());
+    auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
+                                  "score tests");
     out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est, w);
   } else if (estimator == "ML" || estimator.empty()) {
     out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est);
+  } else if (is_ml2s_estimator_label(estimator)) {
+    // Naive Stage-2 release tests on the Stage-1 EM moments; see
+    // inference_modification_indices().
+    out = estimator == "ML2S"
+        ? magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est)
+        : magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est,
+                                          ml2s_stage2_weight_for_fit(fit));
+    if (!out.has_value()) stop_post(out.error());
+    return label_ml2s_score_table(score_table_df(*out, ctx.names));
   } else {
     Rcpp::stop("magmaan: score tests are not yet exposed for estimator '%s'",
                estimator);
@@ -8429,11 +8496,14 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 // Meat: ordinal/mixed use the polychoric NACOV carried by the fit, so the
 // scaling is intrinsic to W != NACOV^-1 (DWLS/ULS scale even on normal data)
 // and `bread`/`moments`/`cov` do not apply. Continuous fits build the bread from
-// the estimation weight (ULS identity / GLS normal-theory / WLS the supplied
-// `weight`) and the meat from `cov`: 'empirical' needs the raw fitting data;
-// 'model_implied' uses Gamma_NT from the selected moments and collapses to the
-// ordinary statistic only when W matches that Gamma inverse. Continuous LS
-// rejects Browne-unbiased covariance; estimated-weight mode requires empirical.
+// the estimation weight (ULS identity / GLS normal-theory / WLS-computed fits
+// the recorded fit$W or, without one, `weight`) and the meat from `cov`:
+// 'empirical' needs the raw fitting data; 'model_implied' uses Gamma_NT from
+// the selected moments and collapses to the ordinary statistic only when W
+// matches that Gamma inverse. Continuous LS rejects Browne-unbiased covariance;
+// estimated-weight mode requires empirical and takes its weight influence from
+// the fit's recorded recipe. ML2S fits use the Stage-1 moment covariance as
+// meat (modification_indices_ml2s / score_tests_ml2s).
 
 namespace {
 
@@ -8452,6 +8522,60 @@ void validate_fiml_robust_score_options(
   if (!Rf_isNull(weight) || estimated_weight) {
     Rcpp::stop("magmaan: FIML robust MI/release has no second-stage weight; "
                "weight and estimated_weight are unsupported");
+  }
+}
+
+// Two-stage (ML2S) robust MI/release inputs from the fit: the Stage-1 EM
+// moments, the recorded Stage-2 weight and DLS mixing weight, and, for an
+// estimated DWLS/ADF/DLS weight, the retained raw data with its FIML pack and
+// H1. The meat is the Stage-1 saturated-moment covariance, so the complete-data
+// `weight`, `bread`, `moments`, `cov` and `data` choices do not apply.
+struct Ml2sScoreInputs {
+  SaturatedMoments sm;
+  magmaan::inference::frontier::Ml2sScoreOptions opts;
+  std::unique_ptr<magmaan::data::RawData> raw;
+  std::unique_ptr<FimlPack> owned_pack;
+  std::unique_ptr<FimlH1> owned_h1;
+};
+
+void prepare_ml2s_score_inputs(Rcpp::List fit, const Ctx& ctx, SEXP raw_arg,
+                               SEXP weight, const std::string& bread,
+                               const std::string& moments,
+                               const std::string& cov, bool estimated_weight,
+                               Ml2sScoreInputs& in) {
+  if (!Rf_isNull(weight)) {
+    Rcpp::stop("magmaan: ML2S robust MI/release builds its Stage-2 weight "
+               "from Stage 1; omit `weight`");
+  }
+  if (!Rf_isNull(raw_arg)) {
+    Rcpp::stop("magmaan: ML2S robust MI/release uses the fit's Stage-1 "
+               "moments and retained data; omit `data`");
+  }
+  if (bread != "expected" || moments != "structured" || cov != "empirical") {
+    Rcpp::stop("magmaan: ML2S robust MI/release uses the expected Stage-2 "
+               "bread and the Stage-1 moment covariance as meat; only "
+               "bread='expected', moments='structured', cov='empirical' are "
+               "supported");
+  }
+  if (!magmaanr::saturated_from_stage1(fit, in.sm)) {
+    Rcpp::stop("magmaan: ML2S robust MI/release requires fit$stage1");
+  }
+  const std::string stage2_weight = fit.containsElementNamed("stage2_weight")
+      ? Rcpp::as<std::string>(fit["stage2_weight"]) : "nt";
+  in.opts.weight = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  in.opts.dls = ml2s_dls_options_from_fit(fit);
+  in.opts.robust.estimated_weight = estimated_weight;
+  if (estimated_weight && ml2s_weight_needs_raw_ij(in.opts.weight)) {
+    if (!fit.containsElementNamed("raw_data") || Rf_isNull(fit["raw_data"])) {
+      Rcpp::stop("magmaan: estimated_weight ML2S robust MI/release requires "
+                 "an ML2S fit carrying $raw_data");
+    }
+    in.raw = std::make_unique<magmaan::data::RawData>(
+        fiml_raw_from_arg(ctx.rep, fit["raw_data"]));
+    const FimlPack& pack = fiml_pack_for_fit(fit, *in.raw, in.owned_pack);
+    in.opts.robust.raw = in.raw.get();
+    in.opts.robust.pack = &pack;
+    in.opts.robust.h1 = &fiml_h1_for_fit(fit, *in.raw, pack, in.owned_h1);
   }
 }
 
@@ -8475,10 +8599,48 @@ SEXP fiml_robust_score_data(Rcpp::List fit, SEXP raw_arg) {
   Rcpp::stop("magmaan: FIML robust MI/release requires fit$raw_data or data=");
 }
 
+// The fitting weight of a continuous WLS-computed fit. fit_model() and
+// estimate() record it in fit$W (DWLS, ADF, DLS and supplied weights). An
+// explicit `weight` must be that record or a common positive multiple of it,
+// which has the same minimizer (the weight-scale transport checks use one):
+// score tests and sandwiches evaluated with any other weight do not describe
+// this fit's estimate.
+SEXP fitting_weight_arg(Rcpp::List fit, SEXP weight, std::size_t n_blocks,
+                        const char* call) {
+  if (!fit.containsElementNamed("W") || Rf_isNull(fit["W"])) return weight;
+  if (Rf_isNull(weight)) return fit["W"];
+  const auto given = wls_dense_from_arg(weight, n_blocks);
+  const auto recorded = wls_dense_from_arg(fit["W"], n_blocks);
+  double cross = 0.0;
+  double norm2 = 0.0;
+  bool same_shape = true;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    same_shape = same_shape && given[b].rows() == recorded[b].rows() &&
+                 given[b].cols() == recorded[b].cols();
+    if (!same_shape) break;
+    cross += (given[b].array() * recorded[b].array()).sum();
+    norm2 += recorded[b].squaredNorm();
+  }
+  const double scale = norm2 > 0.0 ? cross / norm2 : 0.0;
+  bool proportional = same_shape && scale > 0.0;
+  for (std::size_t b = 0; proportional && b < n_blocks; ++b) {
+    const Eigen::MatrixXd expected = scale * recorded[b];
+    proportional = (given[b] - expected).norm() <=
+                   1e-8 * std::max(1.0, expected.norm());
+  }
+  if (!proportional) {
+    Rcpp::stop("magmaan: %s: `weight` is not the fitting weight recorded in "
+               "fit$W (or a positive multiple of it); omit `weight`", call);
+  }
+  return weight;
+}
+
 // Estimation weight for a continuous LS fit (empty for ULS; ML carries none and
-// is handled by the caller via the weight-free overloads).
+// is handled by the caller via the weight-free overloads). WLS-computed fits
+// (WLS, DWLS, DLS, supplied W) use the recorded fit$W unless the fit predates
+// that record, in which case the caller passes `weight`.
 magmaan::estimate::gmm::Weight continuous_ls_weight(
-    const Ctx& ctx, const magmaan::estimate::Estimates& est,
+    Rcpp::List fit, const Ctx& ctx, const magmaan::estimate::Estimates& est,
     const std::string& estimator, SEXP weight, const char* call) {
   if (estimator == "ULS") return magmaan::estimate::gmm::Weight{};
   if (estimator == "GLS") {
@@ -8490,43 +8652,82 @@ magmaan::estimate::gmm::Weight continuous_ls_weight(
     return *w_or;
   }
   if (estimator == "WLS") {
-    if (Rf_isNull(weight))
-      Rcpp::stop("magmaan: WLS robust %s require an explicit `weight`", call);
-    return wls_from_arg(weight, ctx.samp.S.size());
+    const std::size_t n_blocks = ctx.samp.S.size();
+    SEXP w = fitting_weight_arg(fit, weight, n_blocks, call);
+    if (Rf_isNull(w))
+      Rcpp::stop("magmaan: WLS %s need the fitting weight; the fit records "
+                 "none in fit$W, so pass `weight`", call);
+    return wls_from_arg(w, n_blocks);
   }
   Rcpp::stop("magmaan: robust %s are not exposed for estimator '%s'", call,
              estimator.c_str());
 }
 
-// Which second-stage weight's data influence the estimated-weight continuous-LS
-// IJ meat should carry, from the fit's estimator label (ULS has a fixed weight).
-magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode(
-    const std::string& estimator,
-    Rcpp::Nullable<Rcpp::String> ij_weight) {
-  if (!ij_weight.isNull()) {
-    std::string key = Rcpp::as<std::string>(ij_weight.get());
-    for (char& ch : key) {
-      if (ch == '-' || ch == '.') ch = '_';
-      else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+// The fit's fixed-weight recipe. fit_model() and estimate() record it as
+// fit$moment_weight ("custom" for a supplied W) and, for DLS, fit$stage2_dls_a.
+// The computational label cannot carry it: DWLS, DLS and supplied-W fits all
+// fit as "WLS". Fits without the record (the direct lab fitters) fall back to
+// the label's recipe; the C++ recipe guard then refuses a fitting weight that
+// recipe does not rebuild.
+struct RecordedMomentWeight {
+  magmaan::estimate::gmm::FixedWeightKind kind =
+      magmaan::estimate::gmm::FixedWeightKind::Uls;
+  bool supplied = false;
+  double dls_a = 0.5;
+};
+
+RecordedMomentWeight recorded_moment_weight(Rcpp::List fit,
+                                            const std::string& estimator) {
+  using Kind = magmaan::estimate::gmm::FixedWeightKind;
+  std::string key;
+  if (fit.containsElementNamed("moment_weight") &&
+      !Rf_isNull(fit["moment_weight"])) {
+    key = Rcpp::as<std::string>(fit["moment_weight"]);
+  } else if (fit.containsElementNamed("composition") &&
+             TYPEOF(fit["composition"]) == VECSXP) {
+    Rcpp::List composition = fit["composition"];
+    if (composition.containsElementNamed("weight") &&
+        !Rf_isNull(composition["weight"])) {
+      key = Rcpp::as<std::string>(composition["weight"]);
     }
-    if (key == "fixed" || key == "uls")
-      return magmaan::estimate::ContinuousLsIJWeightMode::Fixed;
-    if (key == "gls" || key == "nt" || key == "normal_theory")
-      return magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
-    if (key == "wls" || key == "adf" || key == "empirical_wls")
-      return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalWls;
-    if (key == "dwls" || key == "empirical_dwls")
-      return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls;
-    if (key == "dls")
-      return magmaan::estimate::ContinuousLsIJWeightMode::SampleDls;
-    Rcpp::stop("magmaan: ij_weight must be one of fixed, nt, wls, dwls, "
-               "or dls");
   }
-  if (estimator == "GLS")
-    return magmaan::estimate::ContinuousLsIJWeightMode::SampleNormalTheory;
-  if (estimator == "WLS")
-    return magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalWls;
-  return magmaan::estimate::ContinuousLsIJWeightMode::Fixed;  // ULS
+  if (key.empty()) {
+    if (estimator == "ULS") key = "uls";
+    else if (estimator == "GLS") key = "nt";
+    else if (estimator == "WLS") key = "adf";
+  }
+  RecordedMomentWeight out;
+  if (key == "uls") out.kind = Kind::Uls;
+  else if (key == "nt") out.kind = Kind::Nt;
+  else if (key == "dwls") out.kind = Kind::Dwls;
+  else if (key == "adf" || key == "wls") out.kind = Kind::Wls;
+  else if (key == "dls") out.kind = Kind::Dls;
+  else if (key == "custom") {
+    out.kind = Kind::Wls;
+    out.supplied = true;
+  } else {
+    Rcpp::stop("magmaan: the fit records an unknown moment weight '%s'",
+               key.c_str());
+  }
+  if (fit.containsElementNamed("stage2_dls_a") &&
+      !Rf_isNull(fit["stage2_dls_a"])) {
+    out.dls_a = Rcpp::as<double>(fit["stage2_dls_a"]);
+  }
+  return out;
+}
+
+// The estimated-weight IJ mode for the fit's recorded recipe (and its DLS
+// mixing weight). A supplied weight has no recipe, so the C++ resolver refuses
+// it with UnsupportedInference.
+magmaan::estimate::ContinuousLsIJWeightMode continuous_ij_mode_for_fit(
+    Rcpp::List fit, const std::string& estimator,
+    magmaan::estimate::gmm::FixedWeightOptions* dls_opts) {
+  const RecordedMomentWeight recipe = recorded_moment_weight(fit, estimator);
+  auto mode_or =
+      magmaan::estimate::continuous_ls_ij_mode_for(recipe.kind, recipe.supplied);
+  if (!mode_or.has_value()) stop_post(mode_or.error());
+  if (dls_opts != nullptr) dls_opts->a = recipe.dls_a;
+  return *mode_or;
 }
 
 }  // namespace
@@ -8553,7 +8754,7 @@ Rcpp::List infer_continuous_ls_robust(
   }
 
   magmaan::estimate::gmm::Weight w =
-      continuous_ls_weight(ctx, est, estimator, weight,
+      continuous_ls_weight(fit, ctx, est, estimator, weight,
                            "continuous-LS inference");
   for (char& ch : gamma) {
     if (ch == '-' || ch == '.') ch = '_';
@@ -8633,7 +8834,7 @@ Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1,
   }
   // One weight shared by H1 and H0, built at the anchor (H0) theta.
   const magmaan::estimate::gmm::Weight w =
-      continuous_ls_weight(ctx0, est0, est_H0, weight, "profile LRT");
+      continuous_ls_weight(fit_H0, ctx0, est0, est_H0, weight, "profile LRT");
 
   const std::size_t G = ctx1.samp.S.size();
   if (static_cast<std::size_t>(X_per_group.size()) != G) {
@@ -8752,12 +8953,14 @@ Rcpp::List measures_standardized_residuals_estimated_weight(
                estimator.c_str());
   }
   magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-  auto wls = continuous_ls_weight(ctx, est, estimator, weight,
+  auto wls = continuous_ls_weight(fit, ctx, est, estimator, weight,
                                   "estimated_weight residuals");
+  magmaan::estimate::gmm::FixedWeightOptions dls_opts;
+  const auto mode = continuous_ij_mode_for_fit(fit, estimator, &dls_opts);
   auto r_or =
       magmaan::measures::frontier::standardized_residuals_estimated_weight(
-          ctx.pt, ctx.rep, ctx.samp, est, wls, raw,
-          continuous_ij_mode(estimator), {}, conf_level);
+          ctx.pt, ctx.rep, ctx.samp, est, wls, raw, mode, dls_opts,
+          conf_level);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_residuals_to_r(*r_or, ctx.rep.ov_names);
 }
@@ -8790,10 +8993,12 @@ Rcpp::List infer_casewise_influence_ij_fit(
                estimator.c_str());
   }
   magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-  auto wls = continuous_ls_weight(ctx, est, estimator, weight,
+  auto wls = continuous_ls_weight(fit, ctx, est, estimator, weight,
                                   "estimated_weight case influence");
+  magmaan::estimate::gmm::FixedWeightOptions dls_opts;
+  const auto mode = continuous_ij_mode_for_fit(fit, estimator, &dls_opts);
   auto r_or = magmaan::estimate::continuous_ls_casewise_influence_ij(
-      ctx.pt, ctx.rep, ctx.samp, est, wls, raw, continuous_ij_mode(estimator));
+      ctx.pt, ctx.rep, ctx.samp, est, wls, raw, mode, dls_opts);
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(
       Rcpp::Named("influence") = Rcpp::wrap(r_or->influence),
@@ -8865,6 +9070,15 @@ Rcpp::DataFrame inference_modification_indices_robust(
     const auto& pack = fiml_robust_score_pack(fit, raw, rd, owned_pack);
     out = magmaan::inference::frontier::modification_indices_fiml_robust(
         ctx.pt, ctx.rep, rd, est, pack, base);
+  } else if (is_ml2s_estimator_label(estimator)) {
+    Ml2sScoreInputs in;
+    prepare_ml2s_score_inputs(fit, ctx, raw, weight, bread, moments, cov,
+                              estimated_weight, in);
+    in.opts.base = base;
+    out = magmaan::inference::frontier::modification_indices_ml2s(
+        ctx.pt, ctx.rep, in.sm, est, in.opts);
+    if (!out.has_value()) stop_post(out.error());
+    return label_ml2s_score_table(score_table_df(*out, ctx.names));
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
     magmaan::inference::frontier::RobustScoreOptions opts;
@@ -8874,8 +9088,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
       // estimated second-stage weight; ML has none.
       if (is_ml) {
         Rcpp::stop("magmaan: estimated_weight robust modification indices need "
-                   "an estimated second-stage weight (GLS/WLS, or an ordinal "
-                   "fit), not ML");
+                   "an estimated second-stage weight (GLS, WLS, DWLS or DLS, "
+                   "or an ordinal fit), not ML");
       }
       if (Rf_isNull(raw)) {
         Rcpp::stop("magmaan: estimated_weight robust modification indices "
@@ -8883,9 +9097,10 @@ Rcpp::DataFrame inference_modification_indices_robust(
       }
       opts.spec = spec_from(bread, moments, cov);
       opts.estimated_weight = true;
-      opts.ij_weight_mode = continuous_ij_mode(estimator);
+      opts.ij_weight_mode =
+          continuous_ij_mode_for_fit(fit, estimator, &opts.dls_opts);
       magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
-      auto w = continuous_ls_weight(ctx, est, estimator, weight,
+      auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
                                     "modification indices");
       out = magmaan::inference::frontier::modification_indices_robust(
           ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
@@ -8897,7 +9112,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
           out = magmaan::inference::frontier::modification_indices_robust(
               ctx.pt, ctx.rep, ctx.samp, est, opts);
         } else {
-          auto w = continuous_ls_weight(ctx, est, estimator, weight,
+          auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
                                         "modification indices");
           out = magmaan::inference::frontier::modification_indices_robust(
               ctx.pt, ctx.rep, ctx.samp, est, w, opts);
@@ -8913,7 +9128,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
           out = magmaan::inference::frontier::modification_indices_robust(
               ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
         } else {
-          auto w = continuous_ls_weight(ctx, est, estimator, weight,
+          auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
                                         "modification indices");
           out = magmaan::inference::frontier::modification_indices_robust(
               ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
@@ -8977,14 +9192,22 @@ Rcpp::DataFrame inference_score_tests_robust(
     const auto& pack = fiml_robust_score_pack(fit, raw, rd, owned_pack);
     out = magmaan::inference::frontier::score_tests_fiml_robust(
         ctx.pt, ctx.rep, rd, est, pack);
+  } else if (is_ml2s_estimator_label(estimator)) {
+    Ml2sScoreInputs in;
+    prepare_ml2s_score_inputs(fit, ctx, raw, weight, bread, moments, cov,
+                              estimated_weight, in);
+    out = magmaan::inference::frontier::score_tests_ml2s(
+        ctx.pt, ctx.rep, in.sm, est, in.opts);
+    if (!out.has_value()) stop_post(out.error());
+    return label_ml2s_score_table(score_table_df(*out, ctx.names));
   } else {
     const bool is_ml = (estimator == "ML" || estimator.empty());
     magmaan::inference::frontier::RobustScoreOptions opts;
     if (estimated_weight) {
       if (is_ml) {
         Rcpp::stop("magmaan: estimated_weight robust score tests need an "
-                   "estimated second-stage weight (GLS/WLS, or an ordinal "
-                   "fit), not ML");
+                   "estimated second-stage weight (GLS, WLS, DWLS or DLS, or "
+                   "an ordinal fit), not ML");
       }
       if (Rf_isNull(raw)) {
         Rcpp::stop("magmaan: estimated_weight robust score tests require the "
@@ -8992,9 +9215,10 @@ Rcpp::DataFrame inference_score_tests_robust(
       }
       opts.spec = spec_from(bread, moments, cov);
       opts.estimated_weight = true;
-      opts.ij_weight_mode = continuous_ij_mode(estimator);
+      opts.ij_weight_mode =
+          continuous_ij_mode_for_fit(fit, estimator, &opts.dls_opts);
       magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
-      auto w = continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+      auto w = continuous_ls_weight(fit, ctx, est, estimator, weight, "score tests");
       out = magmaan::inference::frontier::score_tests_robust(
           ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
     } else {
@@ -9005,7 +9229,7 @@ Rcpp::DataFrame inference_score_tests_robust(
           Rcpp::stop("magmaan: ML robust score tests require the fitting data "
                      "(cov='empirical'); pass data=");
         }
-        auto w = continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+        auto w = continuous_ls_weight(fit, ctx, est, estimator, weight, "score tests");
         out = magmaan::inference::frontier::score_tests_robust(
             ctx.pt, ctx.rep, ctx.samp, est, w, opts);
       } else {
@@ -9020,7 +9244,7 @@ Rcpp::DataFrame inference_score_tests_robust(
               ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
         } else {
           auto w =
-              continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+              continuous_ls_weight(fit, ctx, est, estimator, weight, "score tests");
           out = magmaan::inference::frontier::score_tests_robust(
               ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
         }

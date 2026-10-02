@@ -58,41 +58,46 @@ ci_gls_estw <- core$frontier_profile_lrt_ci_parameter_gmm(
   raw_data = X, robust = TRUE, estimated_weight = TRUE
 )
 
-W_adf <- solve(core$robust_empirical_gamma(X))
-fit_wls <- fit_model(model, dat, estimator = "WLS", W = W_adf)
+# WLS-computed fits record their fitting weight (fit$W) and its recipe, so the
+# estimated-weight influence follows the recipe that built the weight.
+fit_wls <- fit_model(model, dat, estimator = "WLS")
 free_wls <- fit_wls$partable$free[loading_row]
 target_wls <- 0.95 * fit_wls$theta[free_wls]
 lrt_wls_robust <- core$frontier_profile_lrt_parameter_gmm(
-  fit_wls, free_wls, target_wls, weight = W_adf, raw_data = X, robust = TRUE
+  fit_wls, free_wls, target_wls, raw_data = X, robust = TRUE
 )
 lrt_wls_estw <- core$frontier_profile_lrt_parameter_gmm(
-  fit_wls, free_wls, target_wls, weight = W_adf, raw_data = X, robust = TRUE,
+  fit_wls, free_wls, target_wls, raw_data = X, robust = TRUE,
   estimated_weight = TRUE
 )
 
-Gamma_adf <- core$robust_empirical_gamma(X)
-W_dwls <- diag(1 / diag(Gamma_adf), nrow = nrow(Gamma_adf))
-fit_dwls <- fit_model(model, dat, estimator = "WLS", W = W_dwls)
+fit_dwls <- fit_model(model, dat, estimator = "DWLS")
 free_dwls <- fit_dwls$partable$free[loading_row]
 target_dwls <- 0.95 * fit_dwls$theta[free_dwls]
 lrt_dwls_estw <- core$frontier_profile_lrt_parameter_gmm(
-  fit_dwls, free_dwls, target_dwls, weight = W_dwls, raw_data = X,
-  reference = "misspec_mixture", estimated_weight = TRUE, ij_weight = "dwls"
+  fit_dwls, free_dwls, target_dwls, raw_data = X,
+  reference = "misspec_mixture", estimated_weight = TRUE
 )
 
 dls_a <- 0.35
-W_dls <- core$frontier_dls_weight(fit, X, dls_a = dls_a)
-fit_dls <- fit_model(model, dat, estimator = "WLS", W = W_dls)
+fit_dls <- fit_model(model, dat, estimator = "DLS", dls_a = dls_a)
 free_dls <- fit_dls$partable$free[loading_row]
 target_dls <- 0.95 * fit_dls$theta[free_dls]
 lrt_dls_estw <- core$frontier_profile_lrt_parameter_gmm(
-  fit_dls, free_dls, target_dls, weight = W_dls, raw_data = X,
-  reference = "misspec_mixture", estimated_weight = TRUE, ij_weight = "dls",
-  dls_a = dls_a
+  fit_dls, free_dls, target_dls, raw_data = X,
+  reference = "misspec_mixture", estimated_weight = TRUE
 )
 err_estw_without_robust <- tryCatch(
   core$frontier_profile_lrt_parameter_gmm(
     fit_gls, free_gls, target_gls, raw_data = X, estimated_weight = TRUE),
+  error = conditionMessage)
+# A supplied W has no recipe, so its data influence is unknown: the
+# estimated-weight reference is refused rather than guessed.
+fit_supplied <- fit_model(model, dat, estimator = "WLS", W = fit_wls$W)
+err_estw_supplied <- tryCatch(
+  core$frontier_profile_lrt_parameter_gmm(
+    fit_supplied, free_wls, target_wls, raw_data = X, robust = TRUE,
+    estimated_weight = TRUE),
   error = conditionMessage)
 
 stopifnot(
@@ -143,7 +148,9 @@ stopifnot(
   lrt_dls_estw$misspec_scaling_factor > 0,
   length(lrt_dls_estw$misspec_eigvals) == 1L,
   is.character(err_estw_without_robust),
-  grepl("estimated_weight", err_estw_without_robust, fixed = TRUE)
+  grepl("estimated_weight", err_estw_without_robust, fixed = TRUE),
+  is.character(err_estw_supplied),
+  grepl("UnsupportedInference", err_estw_supplied, fixed = TRUE)
 )
 
 print(lrt[c("parameter", "target", "T", "p_value")])
