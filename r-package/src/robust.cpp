@@ -805,6 +805,7 @@ Rcpp::List infer_fmg_test(double chi2_source, int df, Rcpp::NumericVector eigval
       Rcpp::_["chi2_equiv"]        = r.chi2_equiv,
       Rcpp::_["method"]            = std::string(fmg_method_to_string(r.method)),
       Rcpp::_["param"]             = r.param,
+      Rcpp::_["blocks_effective"]  = r.blocks_effective,
       Rcpp::_["lambdas_raw"]       = Rcpp::wrap(r.lambdas_raw),
       Rcpp::_["lambdas"]           = Rcpp::wrap(r.lambdas),
       Rcpp::_["lambdas_reference"] = Rcpp::wrap(r.lambdas_reference),

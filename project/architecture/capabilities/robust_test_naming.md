@@ -77,3 +77,5 @@ aliases during exploration. Low-level `magmaan_core` exposes both
 `robust_nested_lrt_restriction_map` and `compat_lavaan_nested_lrt_*` aliases
 over the same C++ primitives so methods scripts can choose the intended
 surface directly.
+
+2026-10-02: FMG `blocks_effective` and policy `peba_blocks` report actual nonempty PEBA blocks; ordinary global/nested output adds a footnote below four formed blocks without changing tails or default columns.

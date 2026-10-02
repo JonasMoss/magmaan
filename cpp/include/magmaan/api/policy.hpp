@@ -77,6 +77,7 @@ struct PolicyTest {
   double sb_scale = std::numeric_limits<double>::quiet_NaN();
   double p_sb = std::numeric_limits<double>::quiet_NaN();
   double p_peba4 = std::numeric_limits<double>::quiet_NaN();
+  int peba_blocks = 0; // actual nonempty PEBA4 blocks; zero when unavailable
   Eigen::VectorXd eigenvalues;  // ascending, length df
   // What the statistic is when the slot name does not say it: "fit_function"
   // for a least-squares global test, whose score statistic equals n F.

@@ -73,8 +73,10 @@ void calibrate_spectrum(PolicyTest& out) {
                                              {FmgMethod::SatorraBentler, 0.0, true});
   out.p_sb = sb.p_value;
   out.sb_scale = sb.lambdas.sum() / static_cast<double>(out.df);
-  out.p_peba4 = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
-                                           {FmgMethod::Peba, 4.0, true}).p_value;
+  const auto peba = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
+                                              {FmgMethod::Peba, 4.0, true});
+  out.p_peba4 = peba.p_value;
+  out.peba_blocks = peba.blocks_effective;
 }
 
 InferenceReason reason_from(const PostError& error) {
@@ -328,8 +330,10 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
   t.eigenvalues = std::move(eigenvalues);
   t.sb_scale = trace / static_cast<double>(t.df);
   t.p_sb = inference::chi2_pvalue(t.statistic / t.sb_scale, t.df);
-  t.p_peba4 = robust::frontier::fmg_test(t.statistic, static_cast<int>(k), t.eigenvalues,
-      {robust::frontier::FmgMethod::Peba, 4.0, true}).p_value;
+  const auto peba = robust::frontier::fmg_test(t.statistic, static_cast<int>(k), t.eigenvalues,
+      {robust::frontier::FmgMethod::Peba, 4.0, true});
+  t.p_peba4 = peba.p_value;
+  t.peba_blocks = peba.blocks_effective;
   t.label = "fit_function_difference";
   return out;
 }

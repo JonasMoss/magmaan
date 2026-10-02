@@ -344,7 +344,7 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
 .policy_unavailable <- function(reason, detail, state = NULL) {
   test <- list(available = FALSE, reason = reason, detail = detail,
                statistic = NA_real_, df = 0L, sb_scale = NA_real_,
-               p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric(), label = "")
+               p_sb = NA_real_, p_peba4 = NA_real_, peba_blocks = 0L, eigenvalues = numeric(), label = "")
   list(covariance = NULL, covariance_available = FALSE, covariance_reason = reason,
        covariance_detail = detail, score = test, lr = test, psd_boundary = FALSE,
        verdict_disagreement = .verdict_disagreement(state))

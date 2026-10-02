@@ -182,3 +182,24 @@ TEST_CASE("FMG nested wrapper rejects single-model approximations") {
           .method = magmaan::robust::frontier::FmgMethod::SatorraBentler});
   CHECK_FALSE(r_or.has_value());
 }
+
+TEST_CASE("FMG PEBA4 reports actual blocks without changing existing tails") {
+  using namespace magmaan::robust::frontier;
+  const int dfs[] = {1, 2, 3, 4, 5, 6, 8};
+  const int blocks[] = {1, 2, 3, 4, 3, 3, 4};
+  // Recorded from the pre-diagnostic implementation, statistic 6, spectrum 1:df.
+  const double previous[] = {0.014305878435429641, 0.13536145904726504,
+      0.38782648513584994, 0.65603121662455832, 0.84397026649053997,
+      0.94101280250265307, 0.99464862934404985};
+  for (int i = 0; i < 7; ++i) {
+    CAPTURE(dfs[i]);
+    const Eigen::VectorXd eig = Eigen::VectorXd::LinSpaced(dfs[i], 1.0, dfs[i]);
+    const auto out = fmg_test(6.0, dfs[i], eig, {FmgMethod::Peba, 4.0, true});
+    CHECK(out.blocks_effective == blocks[i]);
+    CHECK(out.p_value == doctest::Approx(previous[i]).epsilon(1e-12));
+  }
+  Eigen::VectorXd short_spectrum(2);
+  short_spectrum << 1.0, 2.0;
+  CHECK(fmg_test(6.0, 5, short_spectrum).blocks_effective == 2);
+  CHECK(fmg_test(6.0, 0, short_spectrum).blocks_effective == 0);
+}

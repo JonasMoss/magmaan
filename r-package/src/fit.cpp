@@ -11100,7 +11100,7 @@ Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
       Rcpp::_["detail"] = t.detail,
       Rcpp::_["statistic"] = t.statistic, Rcpp::_["df"] = t.df,
       Rcpp::_["sb_scale"] = t.sb_scale, Rcpp::_["p_sb"] = t.p_sb,
-      Rcpp::_["p_peba4"] = t.p_peba4,
+      Rcpp::_["p_peba4"] = t.p_peba4, Rcpp::_["peba_blocks"] = t.peba_blocks,
       Rcpp::_["eigenvalues"] = Rcpp::wrap(t.eigenvalues),
       Rcpp::_["label"] = t.label);
 }

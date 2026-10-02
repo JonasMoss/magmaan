@@ -182,7 +182,11 @@ infer <- function(fit, convention = "magmaan") {
   })
   rows <- Filter(Negate(is.null), rows)
   if (!length(rows)) return(NULL)
-  do.call(rbind, rows)
+  out <- do.call(rbind, rows)
+  tests <- Filter(Negate(is.null), inf[c("global_score", "global_lr")])
+  attr(out, "peba_blocks") <- vapply(tests,
+    function(t) as.integer(t$peba_blocks %||% 0L), integer(1))
+  out
 }
 
 .convention_test_row <- function(t) {
@@ -192,3 +196,14 @@ infer <- function(fit, convention = "magmaan") {
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
+
+.peba_note <- function(t) {
+  blocks <- attr(t, "peba_blocks")
+  if (is.null(blocks)) return(invisible(NULL))
+  reduced <- which(blocks > 0L & blocks < 4L & is.finite(t$p.peba4))
+  if (length(reduced)) {
+    notes <- unique(paste0(blocks[reduced], " eigenvalue blocks (df = ", t$df[reduced], ")"))
+    cat("PEBA4 formed ", paste(notes, collapse = "; "), ".\n", sep = "")
+  }
+  invisible(NULL)
+}

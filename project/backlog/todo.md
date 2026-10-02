@@ -275,12 +275,11 @@ population), and further PSD inference work follows in 0.3.0. The adopted
 ordinary API exposes barrier fitting experimentally as
 `covariance = barrier(lambda)` and reports its inference as unavailable.
 
-- [ ] **S — expose effective pEBA block counts.** A requested pEBA-4 is clamped
-  to the test df and can coincide with scaled-shifted at df=1 while keeping its
-  requested label. Decide an explicit diagnostic/reporting convention.
-  **Check:** low-df rows identify the effective method without changing computed
-  tails or silently mislabelling simulation cells. See the
-  [FMG example](../../r-package/examples/fmg.R).
+- [x] **S — expose effective pEBA block counts.** C++ FMG, policy and lab results
+  report actual nonempty eigenvalue blocks from the existing partition. Ordinary
+  global/nested reporting retains `p.peba4` and prints one footnote when fewer
+  than four blocks formed, including df=5 or 6 (three blocks). Computed tails
+  are unchanged; targeted checks cover df 1, 2, 3, 4, 5, 6 and 8.
 
 #### ML and FIML
 

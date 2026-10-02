@@ -43,6 +43,7 @@ struct FmgTestResult {
   Eigen::VectorXd lambdas;           // descending, after truncation
   Eigen::VectorXd lambdas_reference; // weights used by the chosen method
   int             n_truncated = 0;
+  int             blocks_effective = 0; // nonempty EBA/PEBA eigenvalue blocks
 
   FmgMethod method = FmgMethod::Peba;
   double    param  = 4.0;

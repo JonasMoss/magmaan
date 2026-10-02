@@ -262,6 +262,7 @@ TEST_CASE("policy global tests: shared geometry with SB and PEBA4") {
     auto spectrum = ntml::ntml_spectrum(**quadratic);
     REQUIRE(spectrum.has_value());
     CHECK(test.df == 2);
+    CHECK(test.peba_blocks == 2);
     CHECK(test.statistic == doctest::Approx((*quadratic)->statistic).epsilon(1e-12));
     CHECK((test.eigenvalues - **spectrum).norm() < 1e-12);
     using ntml::FmgMethod;
@@ -482,6 +483,7 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
     auto spectrum = ntml::ntml_spectrum(**quadratic);
     REQUIRE(spectrum.has_value());
     CHECK(test.df == 2);
+    CHECK(test.peba_blocks == 2);
     CHECK(test.statistic == doctest::Approx((*quadratic)->statistic).epsilon(1e-12));
     CHECK((test.eigenvalues - **spectrum).norm() < 1e-12);
     using ntml::FmgMethod;

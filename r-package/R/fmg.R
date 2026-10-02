@@ -222,6 +222,7 @@
          ug = s$ug,
          chi2_equiv = res$chi2_equiv,
          n_truncated = res$n_truncated,
+         blocks_effective = res$blocks_effective,
          eigenvalues = eigvals,
          lambdas_raw = res$lambdas_raw,
          lambdas = res$lambdas,
@@ -247,6 +248,7 @@
     ug = vapply(rows, `[[`, logical(1), "ug"),
     chi2_equiv = vapply(rows, `[[`, numeric(1), "chi2_equiv"),
     n_truncated = vapply(rows, `[[`, integer(1), "n_truncated"),
+    blocks_effective = vapply(rows, `[[`, integer(1), "blocks_effective"),
     stringsAsFactors = FALSE
   )
   scalar$eigenvalues <- I(lapply(rows, `[[`, "eigenvalues"))
@@ -331,6 +333,7 @@
          ug = FALSE,
          chi2_equiv = res$chi2_equiv,
          n_truncated = res$n_truncated,
+         blocks_effective = res$blocks_effective,
          eigenvalues = eigvals,
          lambdas_raw = res$lambdas_raw,
          lambdas = res$lambdas,
@@ -441,6 +444,7 @@
          ug = FALSE,
          chi2_equiv = res$chi2_equiv,
          n_truncated = res$n_truncated,
+         blocks_effective = res$blocks_effective,
          eigenvalues = eigvals,
          lambdas_raw = res$lambdas_raw,
          lambdas = res$lambdas,
@@ -529,6 +533,7 @@
          ug = FALSE,
          chi2_equiv = res$chi2_equiv,
          n_truncated = res$n_truncated,
+         blocks_effective = res$blocks_effective,
          eigenvalues = eigvals,
          lambdas_raw = res$lambdas_raw,
          lambdas = res$lambdas,
@@ -600,6 +605,7 @@
          ug = isTRUE(s$ug),
          chi2_equiv = res$chi2_equiv,
          n_truncated = res$n_truncated,
+         blocks_effective = res$blocks_effective,
          eigenvalues = eigvals,
          lambdas_raw = res$lambdas_raw,
          lambdas = res$lambdas,

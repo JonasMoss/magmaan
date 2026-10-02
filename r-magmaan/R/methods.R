@@ -264,6 +264,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     num <- vapply(t, is.numeric, logical(1))
     t[num] <- lapply(t[num], function(v) round(v, digits))
     print(t, row.names = FALSE)
+    .peba_note(x$tests)
   }
   inf <- fit$inference
   if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")
@@ -389,6 +390,8 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
     character(1))
   structure(out, class = c("magmaan_anova", "data.frame"),
             restricted = labels[[null]], alternative = labels[[3L - null]],
+            peba_blocks = vapply(res[c("lr", "score")],
+              function(t) as.integer(t$peba_blocks %||% 0L), integer(1)),
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
             verdict_disagreement = isTRUE(res$verdict_disagreement))
@@ -406,6 +409,7 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
   print(t, row.names = FALSE)
+  .peba_note(x)
   u <- attr(x, "unavailable")
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")

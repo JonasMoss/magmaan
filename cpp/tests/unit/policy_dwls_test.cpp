@@ -294,6 +294,9 @@ TEST_CASE("DWLS nested policy: fit-function difference with the estimated-weight
   CHECK(t.sb_scale == doctest::Approx(eig.sum() / 2.0));
   CHECK(t.p_sb == doctest::Approx(magmaan::inference::chi2_pvalue(t.statistic / t.sb_scale, 2)));
   CHECK(std::isfinite(t.p_peba4));
+  const int m = static_cast<int>(t.eigenvalues.size());
+  const int width = (m + 3) / 4;
+  CHECK(t.peba_blocks == (m + width - 1) / width);
   MESSAGE("spectrum size " << profile->spectrum_size << ", negative " << profile->negative_spectrum_size);
 
   // The roles matter: the alternative does not restrict the null.

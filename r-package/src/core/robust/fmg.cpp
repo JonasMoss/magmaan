@@ -60,11 +60,12 @@ Eigen::VectorXd top_lambdas(const Eigen::Ref<const Eigen::VectorXd>& eigvals,
 // replace every eigenvalue with its block average. EBA1 reproduces SB; EBAd
 // (j = m) reproduces the raw spectrum used by `All`.
 Eigen::VectorXd eba_lambdas(const Eigen::Ref<const Eigen::VectorXd>& lambdas,
-                            int j) {
+                            int j, int& blocks_effective) {
   const Eigen::Index m = lambdas.size();
   if (m == 0 || j <= 0) return Eigen::VectorXd::Zero(0);
   const Eigen::Index jj = static_cast<Eigen::Index>(j);
   const Eigen::Index k = (m + jj - 1) / jj;
+  blocks_effective = static_cast<int>((m + k - 1) / k);
   Eigen::VectorXd out(m);
   for (Eigen::Index i = 0; i < m; ++i) {
     const Eigen::Index col = i / k;
@@ -78,8 +79,8 @@ Eigen::VectorXd eba_lambdas(const Eigen::Ref<const Eigen::VectorXd>& lambdas,
 // pEBA-j weights: the EBA-j block averages, each pulled halfway toward the
 // global mean (the penalization that counteracts eigenvalue under/overshoot).
 Eigen::VectorXd peba_lambdas(const Eigen::Ref<const Eigen::VectorXd>& lambdas,
-                             int j) {
-  Eigen::VectorXd block = eba_lambdas(lambdas, j);
+                             int j, int& blocks_effective) {
+  Eigen::VectorXd block = eba_lambdas(lambdas, j, blocks_effective);
   if (block.size() == 0) return block;
   const double global_mean = lambdas.mean();
   return (0.5 * (block.array() + global_mean)).matrix();
@@ -216,14 +217,16 @@ fmg_test(double chi2_source,
       break;
     case FmgMethod::Eba:
       out.lambdas_reference =
-          eba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)));
+          eba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)),
+                      out.blocks_effective);
       out.p_value = (out.lambdas_reference.size() > 0)
                         ? weighted_chisq_upper(out.lambdas_reference, chi2_source)
                         : nan();
       break;
     case FmgMethod::Peba:
       out.lambdas_reference =
-          peba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)));
+          peba_lambdas(out.lambdas, static_cast<int>(std::ceil(options.param)),
+                      out.blocks_effective);
       out.p_value = (out.lambdas_reference.size() > 0)
                         ? weighted_chisq_upper(out.lambdas_reference, chi2_source)
                         : nan();
