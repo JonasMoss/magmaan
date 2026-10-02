@@ -183,9 +183,9 @@ result under an unstated convention.
   complete-ML loading/intercept/mean nested defaults are gated against installed
   lavaan 0.7.2 `lavTestLRT` (standard / SB2001, both model orders). Grouped
   ordinal ULS/ULSMV/WLS covariance/global gates cover delta/theta loading
-  equality with each group's n-minus-one normalization. Threshold equality is
-  explicitly limited: the delta free-row contract differs from lavaan;
-  theta remains ungated. Interior PSD, boundary, active-bound and degenerate
+  equality with each group's n-minus-one normalization, and theta threshold
+  equalities. Delta threshold equality stays limited because lavaan's released
+  delta scale is not identified. Interior PSD, boundary, active-bound and degenerate
   scales have separate API-specific limited/unsupported inventory entries.
   See the [inventory](../validation/capabilities.md#ordinary-reporting-conventions).
   Future FIML/ordinal nested bundles retain these test obligations; PSD hardening

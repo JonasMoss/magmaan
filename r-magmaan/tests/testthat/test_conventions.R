@@ -177,6 +177,29 @@ test_that("grouped ordinal reporting uses each group's n minus one", {
   }
 })
 
+test_that("grouped theta threshold equalities match lavaan reporting bundles", {
+  # Theta only: under delta lavaan's released ~*~ scale is not identified
+  # (see project/architecture/capabilities/ordinal_and_mixed.md).
+  d <- ordinal_hs()
+  ord <- paste0("x", 1:6)
+  for (eq in list("thresholds", c("loadings", "thresholds"),
+                  c("loadings", "thresholds", "intercepts"))) {
+    model <- magmaan_model(cfa, prototype = d, ordered = ord, group = "school",
+                          group.equal = eq, parameterization = "theta")
+    for (estimator in c("DWLS", "ULS", "WLS")) {
+      fit <- magmaan(model, d, estimator = estimator)
+      conventions <- switch(estimator, DWLS = c("DWLS", "WLSMV"),
+                            ULS = c("ULS", "ULSMV"), WLS = "WLS")
+      for (convention in conventions) {
+        lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = convention,
+          parameterization = "theta", group = "school", group.equal = eq,
+          group.label = levels(d$school))
+        convention_reference(fit, lav, convention, tolerance = 2e-3)
+      }
+    }
+  }
+})
+
 test_that("nested robust comparisons retain a saturated alternative", {
   d <- hs()
   h1 <- magmaan("x1 ~ x2 + x3", d)

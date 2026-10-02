@@ -30,11 +30,11 @@ bundles and are not replaced by policy score tests.
 | Complete continuous ML / ML | Validated | Validated: standard | Validated: standard difference | Single-group CFA; grouped loading/intercept invariance; random-X regression; nested fixed-zero covariance; matched means/group order |
 | Complete continuous ML / MLM | Validated: expected empirical sandwich | Validated: Satorra-Bentler | Validated: SB2001 | Same global/covariance slices; single-group and grouped loading/intercept/mean nested differences |
 | Complete continuous ML / MLR | Validated: observed exact-score sandwich | Validated: YB-Mplus H1-minus-H0 trace | Validated: SB2001 with MLR scales | Same global/covariance slices; single-group and grouped loading/intercept/mean nested differences; independent C++ saturated-distance/H0 numerical-score trace |
-| All-ordinal DWLS / DWLS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Unsupported | Delta/theta, single group and two unequal groups with loading equality; per-group n minus one |
+| All-ordinal DWLS / DWLS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Unsupported | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
 | All-ordinal DWLS / WLSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Unsupported | Same slices; the C++ delta engine and scaled-shifted reducer exist, but the default nested reporting bundle needs wiring and gates |
-| All-ordinal ULS / ULS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Unsupported | Delta/theta, single group and two unequal groups with loading equality; per-group n minus one |
-| All-ordinal ULS / ULSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Unsupported | Delta/theta, single group and two unequal groups with loading equality; per-group n minus one |
-| All-ordinal WLS / WLS | Validated: standard covariance | Validated: standard | Unsupported | Delta/theta, single group and two unequal groups with loading equality; per-group n minus one |
+| All-ordinal ULS / ULS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Unsupported | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
+| All-ordinal ULS / ULSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Unsupported | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
+| All-ordinal WLS / WLS | Validated: standard covariance | Validated: standard | Unsupported | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
 | FIML / ML or MLR | Unsupported | Unsupported | Unsupported | Covariance/global and nested engines already exist in C++ and the lab; ordinary bundles await composition and convention-matched gates |
 | FIML / MLM | Inapplicable | Inapplicable | Inapplicable | Rejected: MLM's missing-data handling would change estimation |
 | Continuous GLS, ULS, WLS; ML2S; mixed ordinal | Unsupported | Unsupported | Unsupported | No checked ordinary compatibility composition; see lab inventory below |
@@ -68,14 +68,15 @@ and `lavaan::lavInspect("test")`: `robust.sem` covariance with `scaled.shifted`
 tests for WLSMV/ULSMV, `robust.sem` with unscaled `standard` tests for DWLS/ULS
 (no p-value), and `standard` covariance/test for WLS. Both delta and theta
 parameterizations use unequal groups and each group's n_g minus one reporting
-normalization, with loading equality. Grouped loading/threshold equality is **limited validation** for covariance,
-intervals and global reporting across DWLS/ULS/WLS and MV bundles: a live
-lavaan 0.7.2 delta probe finds a different free-row contract (magmaan frees
-second-group residual variances; lavaan frees scaling factors and intercepts).
-Thus no like-for-like full covariance gate is retained for that slice; theta
-threshold equality also remains ungated. This requires a model-contract fix,
-not a covariance-key formatting workaround. Ordinal nested bundles remain
-unsupported, including threshold-restriction comparisons.
+normalization, with loading equality. Theta threshold equalities (thresholds;
+loadings and thresholds; loadings, thresholds and intercepts) are gated for the
+same covariance/global bundles. Delta threshold equality remains **limited
+validation**: lavaan's released `~*~` scale is not identified under delta (it
+stays at 1 with a singular covariance), while magmaan releases the second-group
+scale, so there is no like-for-like lavaan reference; see
+[ordinal and mixed capabilities](../architecture/capabilities/ordinal_and_mixed.md).
+Ordinal nested bundles remain unsupported, including threshold-restriction
+comparisons.
 
 Compare matching structural and estimation settings in lavaan, including
 `meanstructure = TRUE` and `fixed.x = FALSE` for ordinary continuous fits.
@@ -109,7 +110,7 @@ reimplementing their algorithms.
 | Ordinal compatibility `anova()` | C++ ordinal Satorra-2000, exact/delta restriction maps, scaled-shifted reducer and lab adapter | Compose the retained-fit ordinary route; match per-group reporting normalization; gate WLSMV/ULSMV defaults and probe plain DWLS/ULS/WLS nested reporting separately. Backlog: extend checked reporting conventions |
 | FIML compatibility `vcov()`, `confint()`, `summary()`, `anova()` | Standard/robust covariance, global MLR and several nested engines, with component and selected fixture gates | Bind ML/MLR to the exact covariance/global/default nested recipes, retain H1/fit context, and add complete bundles for grouped and incomplete data. Backlog: extend reporting conventions; pin FIML robust conventions |
 | Existing complete-ML compatibility tests | Single-group and grouped loading/intercept/mean nested defaults; grouped covariance/global tests | Existing complete-data bundle gates closed by task-7.1; additional regimes require separate evidence |
-| Existing ordinal compatibility tests | Single/grouped delta/theta for DWLS/ULS/WLS and MV reporting, loading equality | Threshold equality is explicitly limited above; nested routes and further mean restrictions still need their own whole-bundle gates. Backlog: extend checked reporting conventions |
+| Existing ordinal compatibility tests | Single/grouped delta/theta for DWLS/ULS/WLS and MV reporting, loading equality | Theta threshold equality is gated and delta threshold equality is limited above; nested routes and further mean restrictions still need their own whole-bundle gates. Backlog: extend checked reporting conventions |
 | Covariance domains and failures | Classical affine/no-active-bound slice; convergence and positive-penalty refusals; PSD metadata | Domain-specific limits are inventoried above; unequal-group normalization is gated for existing ordinal bundles. Wider capability inventory and PSD hardening remain separate work (hardening: 0.3.0) |
 | Ordinary FIML policy | C++ likelihood-score, covariance and LR-spectrum primitives | `policy_inference_fiml`, `policy_nested_fiml`, reusable contexts and R dispatch are missing. This is separate from lavaan compatibility. Backlog: compose the FIML policy |
 | Ordinary all-ordinal DWLS policy | IJ covariance, fixed-weight global/nested spectra and estimated-weight profile-LR primitives | Compose the adopted policy and settle its nested recipe/calibration; a joint nested score primitive is absent and remains typed unavailable for 0.2.0. Backlog: all-ordinal DWLS policy tasks |
