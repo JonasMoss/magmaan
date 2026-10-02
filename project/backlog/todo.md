@@ -335,16 +335,19 @@ ordinary API exposes barrier fitting experimentally as
   **Check:** held-out size/power/failure comparisons and explicit reporting
   criteria. Evidence: the calibration battery; do not silently change defaults.
 
-- [ ] **M — reconcile nested restrictions and reusable inference.** Fixed and
-  dropped paths embed into larger-model slots (completed 2026-10-01; see the
-  roadmap's prepared-inference contract). Diagnose
-  the structural-path constant disagreement between `score_components(H1=)`
-  and `policy_nested()`/`lavTestScore()`. Support mean-aware metric-to-scalar nesting with released
-  latent means. **Check:** Kline Worland restrictions, residual-covariance
-  controls, cross-group equalities and independent restriction maps; assess
-  larger-model misspecification calibration. See
-  [scores](../../r-package/examples/scores.R) and
-  [inference reuse](../../r-package/examples/inference_reuse.R).
+- [x] **M — reconcile nested restrictions and reusable inference** (2026-10-02).
+  The structural-path "constant disagreement" between `score_components(H1=)`
+  and `policy_nested()`/`lavTestScore()` was not about structural paths: the
+  model was covariance-only, and the complete-data score components fixed the
+  mean at zero. Profiling the mean (board TASK-44) removes it; on the
+  research/52 Worland design the pre-fix library gave 1.1313 against lavaan's
+  1.0645, the fixed one 1.0645 (regression test in `test_nested_embedding.R`).
+  Mean-aware metric-to-scalar nesting with released latent means already works
+  through the shared embedding: on HolzingerSwineford1939, metric versus
+  scalar gives lavaan's LR difference 40.059 (6 df) and configural versus
+  scalar 48.251 (12 df); `anova()` gates both in r-magmaan. Larger-model
+  misspecification calibration belongs to 'calibrate the observed nested ML
+  geometry'; FIML scalar nesting arrives with the FIML policy.
 
 - [x] **M — move the ML nested policy to observed geometry** (2026-10-02).
   `api::policy_nested_ml` passes `Information::Observed` to the nested NTML

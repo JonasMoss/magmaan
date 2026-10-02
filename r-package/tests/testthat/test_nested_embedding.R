@@ -127,3 +127,23 @@ test_that("multigroup drop/fix embedding retains group-specific constraints", {
   expect_equal(nested_numeric(robust_nested_lrt(h1, fixed, data = raw)),
                nested_numeric(robust_nested_lrt(h1, equal, data = raw)), tolerance = 1e-10)
 })
+
+test_that("covariance-only nested scores profile the mean (structural-path constants)", {
+  skip_if_not_installed("lavaan")
+  # The research/52 report: on a covariance-only structural model with two
+  # structural paths fixed to zero, score_components() disagreed with
+  # lavTestScore(). Its complete-data scores fixed the mean at zero; they now
+  # profile it, so data far from mean zero give lavaan's statistic.
+  d <- lavaan::HolzingerSwineford1939[, paste0("x", 1:9)] + 10
+  h1_syntax <- paste("visual =~ x1 + x2 + x3", "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", "speed ~ r1*visual + r2*textual", sep = "\n")
+  h0_syntax <- paste(h1_syntax, "r1 == 0", "r2 == 0", sep = "\n")
+  h1 <- fit_model(h1_syntax, d)
+  h0 <- fit_model(h0_syntax, d)
+  projected <- project_scores(score_components(prepare_inference(h0, d), H1 = model_spec(h1_syntax)))
+  shared <- prepare_inference_data(h1, d)
+  hyp <- prepare_hypothesis(prepare_inference(h0, shared), prepare_inference(h1, shared))
+  reference <- lavaan::lavTestScore(lavaan::sem(h0_syntax, d))$test$X2
+  expect_equal(projected$statistic, reference, tolerance = 1e-5)
+  expect_equal(inference_quadratic(hyp, "score")$statistic, reference, tolerance = 1e-5)
+})

@@ -211,6 +211,24 @@ test_that("the sandwich uses the fitted means, as lavaan's MLR does", {
   expect_lavaan_se(fit, lav)
 })
 
+test_that("anova() nests configural, metric and scalar invariance with released latent means", {
+  d <- hs()
+  fit <- function(eq) magmaan(magmaan_model(cfa, prototype = d, group = "school",
+                                            group.equal = eq), d)
+  configural <- fit(character())
+  metric <- fit("loadings")
+  scalar <- fit(c("loadings", "intercepts"))
+  lav <- function(eq) lavaan::cfa(cfa, d, group = "school", group.equal = eq,
+                                  group.label = levels(d$school))
+  reference <- lavaan::lavTestLRT(lav(character()), lav("loadings"), lav(c("loadings", "intercepts")))
+  for (pair in list(list(configural, metric, 2L), list(metric, scalar, 3L))) {
+    a <- anova(pair[[2]], pair[[1]])
+    expect_equal(a$statistic[1], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
+    expect_equal(a$df[1], reference[pair[[3]], "Df diff"])
+    expect_true(is.finite(a$statistic[2]) && is.finite(a$p.sb[2]))
+  }
+})
+
 test_that("the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentler", {
   d <- hs()
   lr <- magmaan(cfa, d)$inference$global_lr
