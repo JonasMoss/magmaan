@@ -118,18 +118,61 @@ test_that("nested ML conventions match lavTestLRT defaults in either order", {
   }
 })
 
+test_that("grouped ML nested defaults gate loading intercept and mean restrictions", {
+  d <- hs()
+  restrictions <- list(character(), "loadings", c("loadings", "intercepts"),
+                       c("loadings", "intercepts", "means"))
+  fits <- lapply(restrictions, function(eq) {
+    model <- magmaan_model(cfa, prototype = d, group = "school", group.equal = eq)
+    magmaan(model, d)
+  })
+  for (convention in c("ML", "MLM", "MLR")) {
+    refs <- lapply(restrictions, function(eq) lavaan::cfa(cfa, d,
+      estimator = convention, meanstructure = TRUE, fixed.x = FALSE,
+      group = "school", group.equal = eq, group.label = levels(d$school)))
+    for (i in 2:4) {
+      # lavaan 0.7.2 defaults: standard for ML, satorra.bentler.2001
+      # for MLM/MLR. The last pair releases the second group's latent means.
+      ref <- lavaan::lavTestLRT(refs[[i - 1L]], refs[[i]])
+      method <- if (convention == "ML") "standard" else "satorra.bentler.2001"
+      explicit <- lavaan::lavTestLRT(refs[[i - 1L]], refs[[i]], method = method)
+      expect_equal(ref, explicit)
+      for (order in list(c(i - 1L, i), c(i, i - 1L))) {
+        a <- anova(fits[[order[1]]], fits[[order[2]]], convention = convention)
+        expect_length(attr(a, "unavailable"), 0L)
+        expect_equal(a$statistic, ref[["Chisq diff"]][2], tolerance = 2e-4)
+        expect_equal(a$df, ref[["Df diff"]][2])
+        expect_equal(a$pvalue, ref[["Pr(>Chisq)"]][2], tolerance = 2e-4)
+      }
+    }
+  }
+})
+
 test_that("grouped ordinal reporting uses each group's n minus one", {
   d <- ordinal_hs()
   ord <- paste0("x", 1:6)
+  expect_length(unique(as.integer(table(d$school))), 2L)
   for (parameterization in c("delta", "theta")) {
     model <- magmaan_model(cfa, prototype = d, ordered = ord, group = "school",
                           group.equal = "loadings", parameterization = parameterization)
-    fit <- magmaan(model, d, estimator = "DWLS")
-    for (convention in c("DWLS", "WLSMV")) {
-      lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = convention,
-        parameterization = parameterization, group = "school", group.equal = "loadings",
-        group.label = levels(d$school))
-      convention_reference(fit, lav, convention, tolerance = 2e-3)
+    for (estimator in c("DWLS", "ULS", "WLS")) {
+      fit <- magmaan(model, d, estimator = estimator)
+      conventions <- switch(estimator, DWLS = c("DWLS", "WLSMV"),
+                            ULS = c("ULS", "ULSMV"), WLS = "WLS")
+      for (convention in conventions) {
+        # lavInspect("vcov") and lavInspect("test"): robust.sem and
+        # scaled.shifted for MV bundles; robust.sem/standard for plain
+        # DWLS/ULS (no p-value); standard/standard for WLS. lavaan's
+        # categorical reporting uses each unequal group's n_g - 1.
+        lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = convention,
+          parameterization = parameterization, group = "school", group.equal = "loadings",
+          group.label = levels(d$school))
+        convention_reference(fit, lav, convention, tolerance = 2e-3)
+        options <- lavaan::lavInspect(lav, "options")
+        expect_identical(options$se, if (estimator == "WLS") "standard" else "robust.sem")
+        test <- if (convention %in% c("WLSMV", "ULSMV")) "scaled.shifted" else "standard"
+        expect_true(test %in% options$test)
+      }
     }
   }
 })

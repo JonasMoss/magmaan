@@ -179,17 +179,17 @@ result under an unstated convention.
   consumer-gated. This does not block primary policy composition or silently
   broaden 0.2.0's exit criteria.
 
-- [ ] **S/M — close validation gaps in existing reporting bundles.** Add
-  complete-ML grouped nested default comparisons with loading/intercept
-  equalities and released means; grouped ordinal ULS/ULSMV/WLS covariance/global
-  gates and threshold-restriction coverage beyond current loading equality.
-  Inventory interior PSD, boundary, active-bound and degenerate-scale behavior
-  separately from classical unrestricted parity; add a gate or an explicit
-  unsupported/limited-validation entry for each retained slice. **Check:**
-  source/fixture and installed-lavaan evidence identify the exact API and
-  method, including group-specific n-minus-one normalization; no silent
-  fallback or unsupported promotion. Future FIML/ordinal nested bundles use
-  the same test obligations. PSD hardening remains 0.3.0.
+- [x] **S/M — close validation gaps in existing reporting bundles.** Grouped
+  complete-ML loading/intercept/mean nested defaults are gated against installed
+  lavaan 0.7.2 `lavTestLRT` (standard / SB2001, both model orders). Grouped
+  ordinal ULS/ULSMV/WLS covariance/global gates cover delta/theta loading
+  equality with each group's n-minus-one normalization. Threshold equality is
+  explicitly limited: the delta free-row contract differs from lavaan;
+  theta remains ungated. Interior PSD, boundary, active-bound and degenerate
+  scales have separate API-specific limited/unsupported inventory entries.
+  See the [inventory](../validation/capabilities.md#ordinary-reporting-conventions).
+  Future FIML/ordinal nested bundles retain these test obligations; PSD hardening
+  remains 0.3.0.
 
 - [ ] **S — decide the compatibility selector's name and reporting label.**
   The current argument is `convention = "magmaan"`. Proposed on 2026-10-02:
