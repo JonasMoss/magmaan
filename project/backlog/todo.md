@@ -522,7 +522,7 @@ The ordinary package does not expose MI in this release; the
   groups distinct from missingness patterns and record unresolved centering
   choices rather than silently adopting them. Each R-visible cell must agree
   with the corresponding core contract or report its unsupported reason.
-  Component matrix (2026-10-02): [23 estimator/recipe rows and 92 cells](../validation/mi-release-matrix.md)
+  Component matrix (2026-10-02): [23 estimator/recipe rows and 92 cells](../validation/capabilities.md#mi-and-equality-release-score-components)
   name C++/R gates or actual refusals, including unequal-group/MAR ML2S,
   continuous LS means/shared labels, ordinal recipes and adapter limits.
   GLS/WLS ordinary MI fixtures preserve raw lavaan values with explicit

@@ -2623,7 +2623,7 @@ an unconstrained gradient test to constrained solutions.
   information (4e-13 complete, 3e-5 with missing data), 31% away from the
   structured row on HolzingerSwineford1939.
 - MI/release component matrix (2026-10-02):
-  [the estimator/weight inventory](../validation/mi-release-matrix.md) names
+  [the estimator/weight inventory](../validation/capabilities.md#mi-and-equality-release-score-components) names
   C++ and R gates or actual refusals for 23 recipes and 92 cells. It adds
   unequal-group and MAR ML2S reductions, continuous LS means/shared-label
   constraints, and complete ordinal recipe/release gates. GLS/WLS fixtures
