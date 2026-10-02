@@ -1,21 +1,110 @@
 # Inference capability inventory
 
-This is the single inventory for 0.2.0 exit criterion 6. The current rows cover
-named reporting conventions and lab/C++ MI and equality-release components;
-the full policy, estimation/domain, penalty and verdict inventory remains in
-the active backlog. Evidence is component-specific:
-an existing primitive is not automatically a checked reporting bundle.
-The 2026-10-02 reporting audit below distinguishes C++, lab adapters and the
-ordinary interface; it does not complete the wider exit-criterion inventory.
+This is the single inventory for 0.2.0 exit criterion 6 and defines
+"supported" for 0.2.0. It covers the ordinary inference policy, estimation and
+verdicts, covariance domains and penalties, named lavaan reporting conventions,
+and lab/C++ MI and equality-release components. Evidence is
+component-specific: an existing primitive is not automatically a checked
+reporting bundle.
 
 States: **validated** within the named checked slice; **limited validation**
-when components exist but the required composition or regime is not fully
-gated; **unsupported** when the reporting route returns a typed reason;
-**inapplicable** when the convention does not define the component. Parity
-establishes numerical compatibility, not calibration or policy adoption.
-Unsupported describes the named API route, not the absence of a C++ algorithm
-or a limitation of lavaan. In the next table it means **not yet supported in
-ordinary magmaan compatibility reporting**.
+when components exist but the required composition, regime or calibration is
+not fully gated; **unsupported** when the route returns a typed reason (or, for
+estimation, refuses the call); **inapplicable** when the recipe or convention
+does not define the component. Parity establishes numerical compatibility, not
+calibration or policy adoption. Unsupported describes the named API route, not
+the absence of a C++ algorithm or a limitation of lavaan.
+
+## Primary inventory (0.2.0)
+
+Ordinary behaviour in these tables is gated by
+[`test_capability_inventory.R`](../../r-magmaan/tests/testthat/test_capability_inventory.R),
+which fits every estimator and covariance policy and checks each component's
+state and typed reason. The ordinary package calls the lab's
+`policy_inference()`/`policy_nested()`, which call the C++ composers
+`api::policy_inference_ml`, `policy_inference_dwls`, `policy_nested_ml` and
+`policy_nested_dwls` ([`policy.cpp`](../../cpp/src/api/policy.cpp)); the three
+tiers therefore share one dispatch. Recipes are in the
+[inference policy](../design/r-interface-vision.md#inference-policy).
+
+### Ordinary policy inference
+
+Slice: raw data, one or more groups, affine equality constraints (shared
+labels, `group.equal`, `==`), unrestricted covariance, converged fit.
+"Gate" is algebra and composition evidence; "calibration" is target-regime
+evidence for the adopted recipe (exit criterion 3).
+
+| Setup | Component | State | Gate | Calibration | Open work |
+| --- | --- | --- | --- | --- | --- |
+| Complete continuous ML (incomplete rows deleted listwise) | Covariance (observed-bread sandwich) | Validated | `policy covariance: observed-bread sandwich of casewise scores`, `... exact scores under a misspecified structured mean` (C++); ordinary `ML covariance is lavaan's observed-information sandwich` (lavaan `robust.huber.white`) | [decisions/03](../../experiments/decisions/03-score-centering/report.qmd): stationary covariances agree across centering arms; skewed-data Wald undercoverage open | Explain the coverage shortfall (task-19, exit 4) |
+| | Global score and LR (expected geometry, SB and PEBA4) | Validated | `policy global tests: shared geometry with SB and PEBA4`; ordinary `the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentler` | [complete-ml-global-test-geometry](../../experiments/_archive/complete-ml-global-test-geometry): PEBA4 score 2.0 to 7.2% in 32 cells | None |
+| | Nested LR (Satorra-2000, observed information) | Limited validation | `policy nested tests: observed geometry under a misspecified larger model`, `... coincide at exact fit`, `frozen lavaan dropped-loading score and exact LR`; ordinary invariance nesting matches lavaan's LR | Expected geometry only: [FMG 2026 Study 2 replication](../../experiments/replications/07-foldnes-moss-gronneberg-2026-study2) | Frozen calibration run of the observed geometry (task-43); small-sample LR reporting (task-20) |
+| | Nested score (observed projection, expected metric) | Limited validation | `policy nested tests: the hypothesis quadratics with SB and PEBA4`; `... complete-data FIML nested score equals the ML policy score`; first-principles score gate | One df-1 normal family (decisions/03) | Task-43; score versus LR reporting (task-20) |
+| | Wald intervals, defined parameters | Validated (with the covariance) | Ordinary `defined parameters use the policy covariance`, `confint() intervals are Wald ...` | As covariance | Task-19 |
+| All-ordinal DWLS (delta or theta) | Covariance (estimated-weight IJ sandwich) | Limited validation | `DWLS policy IJ covariance agrees with the delete-one jackknife`; `at exact fit the IJ covariance is the fixed-weight sandwich` (C++); ordinary DWLS policy test | None for the adopted recipe | Calibration decisions D1 to D3 (task-17, held) |
+| | Global fit-function statistic n F (score slot; SB and PEBA4 on the `robust_ordinal` spectrum) | Limited validation | `DWLS policy: IJ covariance and one fit-function global test`, saturated reduction | None for the adopted recipe | Task-17 |
+| | Global LR | Inapplicable | Typed `inapplicable`: DWLS has no likelihood | | |
+| | Nested fit-function difference (estimated-weight profile law) | Limited validation | `DWLS nested policy: fit-function difference ...`, `delta and theta give the same test; two groups compose`, `... approaches Satorra-2000` | None for the adopted recipe | Task-17 |
+| | Nested score | Unsupported (intentional for 0.2.0) | Typed `unsupported_model` | | Joint nested score primitive absent (task-18, decision D4) |
+| | Wald intervals, defined parameters | Limited validation (with the covariance) | As covariance | | Task-17 |
+| FIML (complete or incomplete continuous data) | Every component | Unsupported | Typed `unsupported_model`; C++ likelihood-score, observed-information, covariance and spectrum primitives exist (`fiml_golden_test.cpp`); geometry adopted from [research/44](../../experiments/research/banked/44-fiml-global-tests/report.qmd) | research/44 (global), research/06 (nested, expected sensitivity) | Compose the FIML policy (task-13, held); exit criterion 3 |
+| ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed DWLS/WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
+| Continuous WLS (ADF), mixed ULS | Estimation | Unsupported in `magmaan()` | The call errors and names `magmaanlab::estimate()` / DWLS or WLS | | Consumer-gated |
+| Two-level, SAM, composites, closed-form estimators | Every component | Not offered in `magmaan()` | Lab interfaces keep their own gates (area files) | | No 0.2.0 requirement |
+
+### Domains, penalties and fit states
+
+These rules apply to every setup above; the reason is typed per component.
+
+| Domain or state | Ordinary policy behaviour | State | Evidence |
+| --- | --- | --- | --- |
+| PSD covariance, interior estimate | Same recipes; the PSD and unrestricted estimators coincide | Validated (by reduction) | Probe in the inventory test; `covariance = "psd"` ordinary tests |
+| PSD covariance, boundary estimate | Computed for an interior population; the output says so | Limited validation | Ordinary `PSD fits on the cone boundary get inference for an interior population`; the covariance-honest interior study used normal-theory tests, and its rerun with policy components is planned |
+| Population on the PSD boundary | Chi-bar-square limits | Inapplicable (outside scope) | [Availability](../design/r-interface-vision.md#availability) |
+| `barrier(lambda)`, lambda > 0 | Estimates only; every component `penalized` | Unsupported | `policy: a penalized estimate gets no inference, before any other gate`; ordinary `barrier fits are experimental, penalized and recorded`, `barrier fits cover the primary estimators` |
+| `barrier(0)` | The unrestricted fit | As unrestricted | `magmaan()` maps lambda = 0 to unrestricted |
+| Failed convergence verdict | Every component `not_converged` | Validated typing | `policy: the fit state gates every component`; ordinary `unchecked convergence and retained fits remain inspectable` |
+| Saturated model | Covariance computed; global tests `saturated` | Validated | `policy: saturated models get the covariance but no global test`; ordinary `saturated models have a covariance but no global test` |
+| Inadmissible unrestricted estimate (improper solution) | Computed under the interior-population assumption, with an admissibility warning | Limited validation | [Availability](../design/r-interface-vision.md#availability) |
+| Active parameter bounds, nonlinear constraints | Not expressible in `magmaan()` | Inapplicable to the ordinary API | Lab only; compatibility limits below |
+
+### Estimation, verdicts and lavaan-compatible fitting
+
+| Estimator (ordinary) | Native estimation | Verdict | `preset = "lavaan-0.7.2"` |
+| --- | --- | --- | --- |
+| ML | Validated: lavaan parity goldens and ordinary `ML estimates come from magmaanlab and match lavaan` | Exact-Hessian Newton check | Validated: unrestricted, linear equalities (task-9) |
+| FIML | Validated: `fiml_golden_test.cpp` | Newton check | Validated for unrestricted and supported linear equalities: pinned MCAR/MAR fixtures, single and grouped (task-10) |
+| All-ordinal DWLS/ULS/WLS | Validated: `ordinal_golden_test.cpp`, grouped and threshold-equality gates | Newton check | Unsupported: errors (task-11) |
+| ML2S, GLS, continuous ULS, mixed DWLS/WLS | Validated by component goldens (area files) | Newton check | Unsupported: errors |
+| PSD and barrier fits | PSD: validated on the classical slice, hardening 0.3.0; barrier: experimental | Face-restricted Newton check | Unsupported: errors |
+
+Rescaled retry endpoints and their verdicts can depend on floating-point search
+paths; their gates check each endpoint under its declared acceptance rule
+(exit criterion 2). Under a compatibility rule inference follows the rule, and
+`fit$inference$convergence$disagree` records any disagreement with magmaan's
+own check.
+
+### Cross-cutting ownership
+
+- **Groups.** The policy gates above include two-group cases (grouped ML
+  covariance against lavaan's MLR sandwich, grouped global geometry, invariance
+  nesting, two-group DWLS composition); lavaan ordinal conventions use each
+  group's n minus one.
+- **Missing data.** ML, GLS, ULS and the ordinal estimators delete incomplete
+  rows listwise (reported in `fit$rows`); FIML and ML2S use them. The ordinary
+  policy has no missing-data route until the FIML policy lands.
+- **Constraints.** Affine equalities are validated; defined parameters use the
+  delta method with the active covariance. Fixed, omitted and equality-written
+  nested nulls share one null geometry (`policy nested embedding: ...`).
+- **Retained data and refits.** Inference reuses the fit's retained data and
+  geometry; `infer()` after `inference = FALSE` equals the default call;
+  `anova()` requires the same observations in the same order and both fits'
+  estimator and covariance policy; refits keep the anchor's group order.
+- **Intervals.** Wald only. `confint(test = "lr")` is rejected with a message;
+  the LR interval interface is planned and unscheduled (task-36).
+
+In the next table, unsupported means **not yet supported in ordinary magmaan
+compatibility reporting**.
 
 ## Ordinary reporting conventions
 
@@ -111,7 +200,7 @@ reimplementing their algorithms.
 | FIML compatibility `vcov()`, `confint()`, `summary()`, `anova()` | Standard/robust covariance, global MLR and several nested engines, with component and selected fixture gates | Bind ML/MLR to the exact covariance/global/default nested recipes, retain H1/fit context, and add complete bundles for grouped and incomplete data. Backlog: extend reporting conventions; pin FIML robust conventions |
 | Existing complete-ML compatibility tests | Single-group and grouped loading/intercept/mean nested defaults; grouped covariance/global tests | Existing complete-data bundle gates closed by task-7.1; additional regimes require separate evidence |
 | Existing ordinal compatibility tests | Single/grouped delta/theta for DWLS/ULS/WLS and MV reporting, loading equality | Theta threshold equality is gated and delta threshold equality is limited above; nested routes and further mean restrictions still need their own whole-bundle gates. Backlog: extend checked reporting conventions |
-| Covariance domains and failures | Classical affine/no-active-bound slice; convergence and positive-penalty refusals; PSD metadata | Domain-specific limits are inventoried above; unequal-group normalization is gated for existing ordinal bundles. Wider capability inventory and PSD hardening remain separate work (hardening: 0.3.0) |
+| Covariance domains and failures | Classical affine/no-active-bound slice; convergence and positive-penalty refusals; PSD metadata | Domain-specific limits are inventoried above, policy domains in the primary inventory; unequal-group normalization is gated for existing ordinal bundles. PSD hardening is 0.3.0 |
 | Ordinary FIML policy | C++ likelihood-score, covariance and LR-spectrum primitives | `policy_inference_fiml`, `policy_nested_fiml`, reusable contexts and R dispatch are missing. This is separate from lavaan compatibility. Backlog: compose the FIML policy |
 | Ordinary all-ordinal DWLS policy | IJ covariance, fixed-weight global/nested spectra and estimated-weight profile-LR primitives | Compose the adopted policy and settle its nested recipe/calibration; a joint nested score primitive is absent and remains typed unavailable for 0.2.0. Backlog: all-ordinal DWLS policy tasks |
 | Parameter confidence intervals | Ordinary Wald intervals and defined-parameter delta SEs; C++ and lab profile-test/CI engines for ML, FIML, ordinal and other routes | Ordinary `confint(test = "lr")` is planned but rejected. Its refit, inversion, calibration and compatibility interaction need an explicit contract and adapter. Backlog: planned LR interval interface, unscheduled |

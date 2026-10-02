@@ -139,15 +139,16 @@ A fitter's existence does not establish its inference coverage, and extending a
 penalty or constraint requires validation for each applicable combination.
 
 Priority, ordinary-user exposure, API stabilization and default adoption are
-separate decisions. PSD already has ordinary-user exposure; barrier remains
-lab-only pending its exposure and inference contract. Both retain their current
-API status. Promotion of either to a default requires recorded evidence.
+separate decisions. PSD has ordinary-user exposure with policy inference;
+`covariance = barrier(lambda)` is exposed as experimental, with estimates only
+(every inference component returns `penalized`). Promotion of either to a
+default requires recorded evidence.
 
-The [active backlog](../backlog/todo.md#release-readiness) tracks
-execution and the remaining capability inventory. The inventory will distinguish
-implemented and validated, implemented with limited validation, planned,
-unsupported, and inapplicable components; these tiers alone make no new
-availability claims. Existing entry points and numerical defaults are unchanged.
+The [capability inventory](../validation/capabilities.md#primary-inventory-020)
+(2026-10-02, exit criterion 6) records validated, limited-validation,
+unsupported and inapplicable components per setup, domain and API tier, and an
+ordinary-package test gates its states; these tiers alone make no new
+availability claims.
 
 Release plan revised 2026-10-02; the
 [active backlog](../backlog/todo.md#release-plan) owns versions and exit

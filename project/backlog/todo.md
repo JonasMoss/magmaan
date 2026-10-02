@@ -586,22 +586,14 @@ The ordinary package does not expose MI in this release; the
 
 ### Release readiness
 
-- [ ] **S/M — inventory validated primary capabilities.** Record model/data
-  slice, domain, penalty, algorithm, API tier and evidence for estimation,
-  verdict/admissibility, covariance, global/nested tests and intervals separately.
-  Use validated, limited-validation, unsupported and inapplicable states;
-  planned slices link here. **Check:** C++/R owners and ordinary-policy exposure
-  agree. [The inventory](../validation/capabilities.md) starts with reporting
-  conventions; the wider policy/domain rows remain to do. The table is 0.2.0
-  exit criterion 6. The [2026-10-02 reporting sweep](../validation/capabilities.md#reporting-gap-audit-2026-10-02)
-  distinguishes existing C++/lab algorithms from missing ordinary composers,
-  adapters and recipe gates. Finish the broader sweep of estimator × covariance
-  domain × component × API tier, including retained-data/refit ownership,
-  constraints, groups/missingness, penalties, verdicts and interval routes.
-  Every gap must name its implementation owner, evidence and existing backlog
-  task; identify intentional exclusions separately. Keep one inventory;
-  secondary breadth is consumer-gated. See
-  [development priorities](../architecture/roadmap.md#estimator-development-priorities).
+- [x] **S/M — inventory validated primary capabilities** (2026-10-02). The
+  [primary inventory](../validation/capabilities.md#primary-inventory-020)
+  records the ordinary policy per setup and component (gate, calibration, open
+  task), domains, penalties and fit states, estimation/verdict/preset state and
+  cross-cutting ownership; `test_capability_inventory.R` gates the ordinary
+  states and typed reasons. Composing a new policy (FIML, task-13) or adopting
+  calibration evidence (DWLS, task-17; nested ML, task-43) must update its rows
+  and that test together. Exit criterion 6.
 
 - [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
   of hand-picked R tests; add scheduled sanitizers/optional parity and an
