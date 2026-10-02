@@ -153,13 +153,45 @@ result under an unstated convention.
   reasons, incompatible-regime rejection and preserved estimates/default policy.
 
 - [ ] **M — extend checked reporting conventions to FIML and ordinal nested
-  tests.** FIML ML/MLR need complete covariance/global bundle gates (keep the
-  existing robust-convention question below); WLSMV/ULSMV nested tests need
-  Satorra-2000 delta plus scaled-shifted parity. Continuous LS and two-stage
-  compatibility compositions remain consumer-gated. Extend the single inventory,
-  including grouping/domain/penalty restrictions, rather than inferring support
-  from a primitive's existence. This compatibility work does not block primary
-  policy composition or silently broaden 0.2.0's exit criteria.
+  tests.** These are missing ordinary reporting compositions, not missing C++
+  algorithms or unavailable lavaan features. Reuse FIML standard/robust
+  covariance, global MLR and nested engines, and the ordinal Satorra-2000
+  exact/delta engine, scaled-shifted reducer and existing lab adapters.
+  FIML ML/MLR need covariance/global/default nested bundle gates; pin the
+  observed-information, H1 and scale recipes rather than assuming the scalar
+  SB2001 engine's spectrum-derived scales equal lavaan MLR's trace recipe.
+  WLSMV/ULSMV nested reporting needs delta plus scaled-shifted composition and
+  per-group reporting normalization; existing ordinal golden tests gate the
+  mean-scaled result. Probe plain ordinal DWLS/ULS/WLS nested reports separately.
+  **Check:** live lavaan defaults, full covariance and intervals, statistic/df/
+  p-value/scale/shift, grouped incomplete FIML and ordinal delta/theta invariance,
+  both model orders, actual nesting, saturated alternatives, convergence and
+  penalty refusals, deferred/cached/serialized reporting, and preserved
+  estimates/default policy. Extend the [inventory](../validation/capabilities.md#reporting-gap-audit-2026-10-02).
+  Continuous LS, two-stage, mixed and additional historical bundles remain
+  consumer-gated. This does not block primary policy composition or silently
+  broaden 0.2.0's exit criteria.
+
+- [ ] **S/M — close validation gaps in existing reporting bundles.** Add
+  complete-ML grouped nested default comparisons with loading/intercept
+  equalities and released means; grouped ordinal ULS/ULSMV/WLS covariance/global
+  gates and threshold-restriction coverage beyond current loading equality.
+  Inventory interior PSD, boundary, active-bound and degenerate-scale behavior
+  separately from classical unrestricted parity; add a gate or an explicit
+  unsupported/limited-validation entry for each retained slice. **Check:**
+  source/fixture and installed-lavaan evidence identify the exact API and
+  method, including group-specific n-minus-one normalization; no silent
+  fallback or unsupported promotion. Future FIML/ordinal nested bundles use
+  the same test obligations. PSD hardening remains 0.3.0.
+
+- [ ] **S — decide the compatibility selector's name and reporting label.**
+  The current argument is `convention = "magmaan"`. Proposed on 2026-10-02:
+  `lavaan_compat = NULL` for the ordinary default and an explicit historical
+  bundle such as `"MLR"` or `"WLSMV"` for reproduction/comparison. This spelling
+  is not yet adopted; compatibility must not read as an endorsed policy choice.
+  **Check:** agree the spelling/default, then update `vcov`, `confint`, `summary`,
+  `anova`, `infer`, labels, result attributes, caches, docs and tests together;
+  preserve default policy and exact bundle identity. No ingredient switches.
 
 ### lavaan-compatible fitting
 
@@ -495,7 +527,14 @@ The ordinary package does not expose MI in this release; the
   planned slices link here. **Check:** C++/R owners and ordinary-policy exposure
   agree. [The inventory](../validation/capabilities.md) starts with reporting
   conventions; the wider policy/domain rows remain to do. The table is 0.2.0
-  exit criterion 6. Keep one inventory; secondary breadth is consumer-gated. See
+  exit criterion 6. The [2026-10-02 reporting sweep](../validation/capabilities.md#reporting-gap-audit-2026-10-02)
+  distinguishes existing C++/lab algorithms from missing ordinary composers,
+  adapters and recipe gates. Finish the broader sweep of estimator × covariance
+  domain × component × API tier, including retained-data/refit ownership,
+  constraints, groups/missingness, penalties, verdicts and interval routes.
+  Every gap must name its implementation owner, evidence and existing backlog
+  task; identify intentional exclusions separately. Keep one inventory;
+  secondary breadth is consumer-gated. See
   [development priorities](../architecture/roadmap.md#estimator-development-priorities).
 
 - [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
@@ -514,6 +553,28 @@ The ordinary package does not expose MI in this release; the
 
 Work here proceeds when convenient or when a release item needs it; none of it
 gates a release unless an exit criterion names it.
+
+### Inference interface follow-ups
+
+- [ ] **S/M — compose the planned LR interval interface.** Ordinary
+  `confint(test = "lr")` currently rejects the request despite existing C++ and
+  lab profile-test/CI engines for ML, FIML and ordinal fits. After the relevant
+  policy test recipe is settled, specify its scalar/defined-parameter scope,
+  calibration, retained-data refits, covariance policy, bracketing/inversion
+  failures and interaction with explicit lavaan compatibility. **Check:**
+  endpoint statistic/cutoff gates, unit invariance, unchanged anchor fits and
+  explicit failure reasons; Wald remains the default. This is not a 0.2.0 exit
+  requirement and does not promote every lab profile route to ordinary use.
+
+- [ ] **S/M — make lab estimated-weight comparisons consistent.** Add an
+  `estimated_weight` off switch to `frontier_rbm()` so supplied-W fits can request
+  fixed-weight RBM rather than always hitting the estimated-recipe refusal.
+  Inventory and choose one documented lab default across robust MI/score,
+  residual, case-influence, GMM/ML2S profile and ordinal misspecification
+  fit-measure routes; explicit off/on currently differs between them. **Check:**
+  fixed-weight reductions, estimated-weight identities, supplied-W acceptance/
+  refusal and matched recipes across lab wrappers. Preserve numerical policy
+  defaults and evidence; a lavaan bundle is not an isolated correction switch.
 
 ### EQS language extension
 

@@ -4798,6 +4798,12 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   Complete-data ML/MLM/MLR and ordinal DWLS/WLSMV, ULS/ULSMV and WLS have
   covariance/global routes; complete-data ML has default nested difference
   tests. FIML and ordinal nested compatibility remain typed unavailable.
+  This is an ordinary reporting-interface limit: C++ and lab FIML covariance,
+  global/nested engines and ordinal Satorra-2000 adapters already exist. The
+  ordinal golden gate covers the delta mean-scaled result; the default shifted
+  reporting bundle still needs composition and whole-bundle gates. The
+  [reporting gap audit](../validation/capabilities.md#reporting-gap-audit-2026-10-02)
+  records remaining wiring separately from validation and policy composition.
   ML/MLM/MLR tests use standard/SB/YB-Mplus, with SB2001 for robust nested
   comparisons. Ordinal reporting uses per-group `n_g - 1` and re-evaluates the
   criterion at retained theta without optimizing. Live lavaan integration tests
@@ -5186,10 +5192,14 @@ friendly statistical name for nested robust likelihood-ratio work. Its default
 The restriction-map route also exposes `computation = "streaming"` versus
 `"materialized"` so paper-local benchmarks can compare the algebra without
 using lavaan as the timing denominator. When both fits are FIML,
-`robust_nested_lrt()` dispatches only to `method = "restriction_map"` and uses
-the retained FIML `raw_data` rather than a caller-supplied complete-data
-argument; mixed FIML/complete-data pairs and the lavaan SB2001/SB2010
-compatibility methods are rejected for this boundary.
+`robust_nested_lrt()` dispatches to the restriction-map or scalar
+`"lavaan_sb2001"`/`"lavaan_sb2010"` engines and uses the retained FIML
+`raw_data` rather than a caller-supplied complete-data argument. Mixed
+FIML/complete-data pairs are rejected. These scalar engines use
+spectrum-derived single-model scales; their historical names do not establish
+the ordinary lavaan MLR default bundle, which still needs convention-matched
+scale and full-report gates. The same scalar lab methods exist for NT ML2S;
+other Stage-2 weights reject them and retain the restriction-map route.
 Satorra-2000 rank checks and solves use symmetric diagonal equilibration of
 pooled expected or observed parameter information and the restriction companion
 matrix (2026-10-01). The same congruence is applied to both matrices of the
