@@ -733,6 +733,14 @@ ntml_covariance_impl <- function(context, robust) {
     .Call(`_magmaanlab_ntml_covariance_impl`, context, robust)
 }
 
+convention_inference_impl <- function(fit, context, convention, state) {
+    .Call(`_magmaanlab_convention_inference_impl`, fit, context, convention, state)
+}
+
+convention_nested_impl <- function(null_context, alternative_context, convention, null_state, alternative_state) {
+    .Call(`_magmaanlab_convention_nested_impl`, null_context, alternative_context, convention, null_state, alternative_state)
+}
+
 policy_inference_impl <- function(context, state) {
     .Call(`_magmaanlab_policy_inference_impl`, context, state)
 }

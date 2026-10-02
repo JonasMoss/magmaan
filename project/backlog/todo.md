@@ -143,6 +143,24 @@ result under an unstated convention.
   inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 
+- [x] **M — expose named downstream inference conventions** (2026-10-02).
+  `convention` on `vcov`, `confint`, `summary` and `anova`; C++ compatibility
+  composers, on-demand reporting and optional `infer(fit, convention)` caching.
+  Complete-data ML/MLM/MLR and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS
+  covariance/global recipes; ML nested defaults. The
+  [capability inventory](../validation/capabilities.md) records checked slices.
+  **Check:** installed-lavaan whole-bundle comparisons, typed unavailable
+  reasons, incompatible-regime rejection and preserved estimates/default policy.
+
+- [ ] **M — extend checked reporting conventions to FIML and ordinal nested
+  tests.** FIML ML/MLR need complete covariance/global bundle gates (keep the
+  existing robust-convention question below); WLSMV/ULSMV nested tests need
+  Satorra-2000 delta plus scaled-shifted parity. Continuous LS and two-stage
+  compatibility compositions remain consumer-gated. Extend the single inventory,
+  including grouping/domain/penalty restrictions, rather than inferring support
+  from a primitive's existence. This compatibility work does not block primary
+  policy composition or silently broaden 0.2.0's exit criteria.
+
 ### lavaan-compatible fitting
 
 Consumer: simulation studies that need lavaan-identical fitting while
@@ -282,8 +300,8 @@ ordinary API exposes barrier fitting experimentally as
   the score uses observed sensitivity at the restricted fit with the expected
   metric (the FIML nested geometry), and the Satorra-2000 spectrum uses
   observed information at the larger model; both statistics are unchanged.
-  The global ML test keeps expected information. No ordinary option: lavaan's
-  expected-information compositions stay in the lab with their parity gates.
+  The global ML test keeps expected information. Named reporting conventions
+  and explicit lab compositions retain their own lavaan parity gates.
   **Check:** finite-difference and identity gates for the observed
   projections, unchanged statistics, PSD-boundary and fixed/dropped-path
   embeddings, and a component comparison with lavaan fits using
@@ -475,7 +493,9 @@ The ordinary package does not expose MI in this release; the
   verdict/admissibility, covariance, global/nested tests and intervals separately.
   Use validated, limited-validation, unsupported and inapplicable states;
   planned slices link here. **Check:** C++/R owners and ordinary-policy exposure
-  agree. The table is 0.2.0 exit criterion 6. Keep one inventory; secondary breadth is consumer-gated. See
+  agree. [The inventory](../validation/capabilities.md) starts with reporting
+  conventions; the wider policy/domain rows remain to do. The table is 0.2.0
+  exit criterion 6. Keep one inventory; secondary breadth is consumer-gated. See
   [development priorities](../architecture/roadmap.md#estimator-development-priorities).
 
 - [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead

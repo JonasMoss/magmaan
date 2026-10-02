@@ -40,6 +40,25 @@ This package is pure R. Every computation happens in
 magmaan C++ core, which also offers every alternative convention.
 `as_lab_fit(fit)` returns the underlying magmaanlab fit.
 
+Reporting can select a named lavaan inference bundle from the same estimates:
+
+```r
+vcov(fit, convention = "MLM")
+confint(fit, convention = "MLR")
+summary(fit, convention = "MLR")
+anova(restricted_fit, fit, convention = "MLM")
+```
+
+The default is `convention = "magmaan"`. Complete-data ML accepts `"ML"`,
+`"MLM"` and `"MLR"`; ordinal DWLS accepts `"DWLS"` and `"WLSMV"`, and
+ordinal ULS accepts `"ULS"` and `"ULSMV"`. Ordinal WLS accepts `"WLS"`.
+Bundles compute on demand without refitting; `infer(fit, convention = "MLR")`
+caches an additional bundle while preserving the default policy. FIML and
+ordinal nested compatibility currently report unavailable inference. Comparisons
+with lavaan need matching model/fitting settings, including ordinary models'
+mean structure and `fixed.x = FALSE`. See the
+[capability inventory](../project/validation/capabilities.md) for checked slices.
+
 Status: for single-level complete-data ML, `magmaan()` computes the full
 inference policy: the observed-information sandwich covariance (standard
 errors, Wald tests, intervals, defined parameters) and the global score and

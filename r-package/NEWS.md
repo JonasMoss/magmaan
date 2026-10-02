@@ -1,5 +1,11 @@
 # magmaanlab 0.2.0 (in development)
 
+- `convention_inference()` and `convention_nested()` expose C++ composers for
+  named lavaan inference bundles on retained estimates, with component-level
+  unavailable reasons. Complete-data MLR uses the H1-minus-H0 trace; ordinal
+  compatibility reporting uses per-group n minus one. Existing lab primitives
+  and the ordinary package's automatic policy retain their recipes.
+
 - Estimated-weight inference follows the weight recipe a fit records
   (`fit$moment_weight`, `fit$stage2_dls_a`), not its computational estimator
   label. Continuous DWLS and DLS fits now receive their own weight influence,

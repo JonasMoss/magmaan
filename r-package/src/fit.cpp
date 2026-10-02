@@ -11076,6 +11076,7 @@ Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
   if (!v) stop_post(v.error()); return Rcpp::wrap(**v);
 }
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/conventions.hpp"
 
 namespace {
 Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
@@ -11105,6 +11106,90 @@ static magmaan::api::PolicyFitState policy_state_from(const Rcpp::LogicalVector&
   if (s.size() > 2 && !Rcpp::LogicalVector::is_na(s[2])) out.native_converged = s[2] == TRUE;
   out.penalized = s.size() > 3 && s[3] == TRUE;
   return out;
+}
+
+static magmaan::api::LavaanConvention lavaan_convention_from(const std::string& name) {
+  using C = magmaan::api::LavaanConvention;
+  for (const auto c : {C::ML, C::MLM, C::MLR, C::DWLS, C::WLSMV, C::ULS, C::ULSMV, C::WLS})
+    if (magmaan::api::convention_name(c) == name) return c;
+  Rcpp::stop("unknown lavaan inference convention: %s", name);
+  return C::ML;
+}
+
+static Rcpp::List convention_test_list(const magmaan::api::ConventionTest& t) {
+  return Rcpp::List::create(
+      Rcpp::_["available"] = t.reason == magmaan::api::InferenceReason::Available,
+      Rcpp::_["reason"] = std::string(magmaan::api::reason_name(t.reason)),
+      Rcpp::_["detail"] = t.detail, Rcpp::_["method"] = t.method,
+      Rcpp::_["statistic"] = t.statistic, Rcpp::_["unscaled_statistic"] = t.unscaled_statistic,
+      Rcpp::_["df"] = t.df, Rcpp::_["pvalue"] = t.p_value,
+      Rcpp::_["scale"] = t.scale, Rcpp::_["shift"] = t.shift);
+}
+
+// [[Rcpp::export]]
+Rcpp::List convention_inference_impl(Rcpp::List fit, SEXP context,
+    std::string convention, Rcpp::LogicalVector state) {
+  using namespace magmaan::api;
+  const auto c = lavaan_convention_from(convention);
+  const auto fit_state = policy_state_from(state);
+  ConventionInference out;
+  if (fit_state.penalized) {
+    out = convention_unavailable(c, InferenceReason::Penalized, std::string(penalized_detail), fit_state);
+  } else if (!fit_state.converged) {
+    out = convention_unavailable(c, InferenceReason::NotConverged, "the fit did not pass its convergence verdict", fit_state);
+  } else if (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) {
+    auto ctx = ctx_from_fit(fit);
+    const auto est = est_from_fit(fit);
+    const auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(fit, R_NilValue,
+        "ordinal_stats", "convention_inference"));
+    const std::string estimator = Rcpp::as<std::string>(fit["estimator"]);
+    const std::string parameterization = Rcpp::as<std::string>(fit["parameterization"]);
+    out = lavaan_inference_ordinal(std::move(ctx.pt), ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "convention_inference"),
+        ordinal_parameterization_from_string(parameterization), c, fit_state);
+  } else if (!Rf_isNull(context)) {
+    auto& ctx = score_bindings::get<score_bindings::Context>(context, "magmaan_inference_context");
+    if (ctx.estimator == "ML" && ctx.ntml) out = lavaan_inference_ml(*ctx.ntml, c, fit_state);
+    else out = convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "this lavaan convention is not checked for the fitted model", fit_state);
+  } else {
+    out = convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "this lavaan convention is not checked for the fitted model", fit_state);
+  }
+  const bool has_cov = out.covariance_reason == InferenceReason::Available;
+  return Rcpp::List::create(Rcpp::_["convention"] = out.convention,
+      Rcpp::_["covariance"] = has_cov ? Rcpp::RObject(Rcpp::wrap(out.covariance)) : Rcpp::RObject(R_NilValue),
+      Rcpp::_["covariance_available"] = has_cov,
+      Rcpp::_["covariance_reason"] = std::string(reason_name(out.covariance_reason)),
+      Rcpp::_["covariance_detail"] = out.covariance_detail,
+      Rcpp::_["test"] = convention_test_list(out.test),
+      Rcpp::_["psd_boundary"] = out.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
+}
+
+// [[Rcpp::export]]
+Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
+    std::string convention, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state) {
+  using namespace magmaan::api;
+  const auto c = lavaan_convention_from(convention);
+  const auto s0 = policy_state_from(null_state), s1 = policy_state_from(alternative_state);
+  ConventionTest out;
+  if (s0.penalized || s1.penalized) {
+    out.reason = InferenceReason::Penalized; out.detail = penalized_detail;
+  } else if (!s0.converged || !s1.converged) {
+    out.reason = InferenceReason::NotConverged; out.detail = "a fit did not pass its convergence verdict";
+  } else if (Rf_isNull(null_context) || Rf_isNull(alternative_context)) {
+    out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions cover complete-data ML so far";
+  } else {
+    auto& a = score_bindings::get<score_bindings::Context>(null_context, "magmaan_inference_context");
+    auto& b = score_bindings::get<score_bindings::Context>(alternative_context, "magmaan_inference_context");
+    if (a.estimator == "ML" && b.estimator == "ML" && a.ntml && b.ntml)
+      out = lavaan_nested_ml(a.ntml, s0, b.ntml, s1, c);
+    else { out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions cover complete-data ML so far"; }
+  }
+  return Rcpp::List::create(Rcpp::_["test"] = convention_test_list(out),
+      Rcpp::_["psd_boundary"] = s0.psd_boundary || s1.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = verdict_disagreement(s0) || verdict_disagreement(s1));
 }
 
 // [[Rcpp::export]]

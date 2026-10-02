@@ -4,16 +4,20 @@
 \alias{infer}
 \title{Compute inference for a magmaan fit}
 \usage{
-infer(fit)
+infer(fit, convention = "magmaan")
 }
 \arguments{
 \item{fit}{A \code{\link[=magmaan]{magmaan()}} fit.}
+
+\item{convention}{\code{"magmaan"} computes the default policy. A lavaan bundle
+such as \code{"MLM"}, \code{"MLR"} or \code{"WLSMV"} stores an additional convention
+for reuse by the reporting methods; it leaves the policy intact.}
 }
 \value{
 The fit with its inference results attached.
 }
 \description{
-Runs magmaan's inference policy on an existing fit without refitting. A
+Runs the selected inference bundle on an existing fit without refitting. A
 component that cannot be computed is recorded with a reason; the estimates
 remain usable.
 }

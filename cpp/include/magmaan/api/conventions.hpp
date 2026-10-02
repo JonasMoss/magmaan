@@ -1,0 +1,47 @@
+#pragma once
+
+#include "magmaan/api/policy.hpp"
+#include "magmaan/estimate/ordinal.hpp"
+
+namespace magmaan::api {
+
+// Complete compatibility bundles, evaluated at retained estimates. These names
+// select inference only; they never change the estimator or refit the model.
+enum class LavaanConvention { ML, MLM, MLR, DWLS, WLSMV, ULS, ULSMV, WLS };
+std::string_view convention_name(LavaanConvention convention) noexcept;
+
+struct ConventionTest {
+  InferenceReason reason = InferenceReason::Available;
+  std::string detail, method;
+  double statistic = std::numeric_limits<double>::quiet_NaN();
+  double unscaled_statistic = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+  double p_value = std::numeric_limits<double>::quiet_NaN();
+  // lavaan's divisor and additive shift: statistic = unscaled / scale + shift.
+  double scale = 1.0, shift = 0.0;
+};
+
+struct ConventionInference {
+  std::string convention;
+  InferenceReason covariance_reason = InferenceReason::Available;
+  std::string covariance_detail;
+  Eigen::MatrixXd covariance;
+  ConventionTest test;
+  bool psd_boundary = false, verdict_disagreement = false;
+};
+
+ConventionInference convention_unavailable(LavaanConvention convention,
+    InferenceReason reason, std::string detail, const PolicyFitState& state = {});
+ConventionInference lavaan_inference_ml(robust::frontier::NTMLFit& fit,
+    LavaanConvention convention, const PolicyFitState& state);
+ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,
+    estimate::OrdinalParameterization parameterization,
+    LavaanConvention convention, const PolicyFitState& state);
+ConventionTest lavaan_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
+    const PolicyFitState& null_state,
+    std::shared_ptr<robust::frontier::NTMLFit> alternative,
+    const PolicyFitState& alternative_state, LavaanConvention convention);
+
+}  // namespace magmaan::api

@@ -8,16 +8,65 @@
 
 #' Compute inference for a magmaan fit
 #'
-#' Runs magmaan's inference policy on an existing fit without refitting. A
+#' Runs the selected inference bundle on an existing fit without refitting. A
 #' component that cannot be computed is recorded with a reason; the estimates
 #' remain usable.
 #'
 #' @param fit A [magmaan()] fit.
+#' @param convention `"magmaan"` computes the default policy. A lavaan bundle
+#'   such as `"MLM"`, `"MLR"` or `"WLSMV"` stores an additional convention
+#'   for reuse by the reporting methods; it leaves the policy intact.
 #' @return The fit with its inference results attached.
 #' @export
-infer <- function(fit) {
+infer <- function(fit, convention = "magmaan") {
   if (!inherits(fit, "magmaan")) stop("infer(): supply a magmaan() fit", call. = FALSE)
-  fit$inference <- .policy_inference(fit)
+  convention <- .check_convention(fit, convention, "infer()")
+  if (convention == "magmaan") fit$inference <- .policy_inference(fit)
+  else fit$conventions[[convention]] <- .convention_inference(fit, convention)
+  fit
+}
+
+.check_convention <- function(fit, convention, caller) {
+  choices <- c("magmaan", "ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS")
+  convention <- .check_choice(convention, "convention", choices, caller = caller)
+  if (convention == "magmaan") return(convention)
+  compatible <- if (isTRUE(fit$lab$ordinal)) {
+    switch(fit$estimator, DWLS = c("DWLS", "WLSMV"), ULS = c("ULS", "ULSMV"), WLS = "WLS", character())
+  } else switch(fit$estimator, ML = c("ML", "MLM", "MLR"), FIML = c("ML", "MLR"),
+               ULS = "ULS", WLS = "WLS", character())
+  if (!convention %in% compatible) {
+    stop(sprintf("%s: convention = \"%s\" is incompatible with this %s fit; conventions change inference, so fit the required estimator first",
+                 caller, convention, fit$estimator), call. = FALSE)
+  }
+  convention
+}
+
+.convention_inference <- function(fit, convention) {
+  res <- magmaanlab::convention_inference(fit$lab, convention)
+  out <- list(convention = convention,
+    status = data.frame(component = c("covariance", "global_lr"),
+      available = c(res$covariance_available, res$test$available),
+      reason = c(res$covariance_reason, res$test$reason),
+      detail = c(res$covariance_detail, res$test$detail), stringsAsFactors = FALSE),
+    psd_boundary = isTRUE(res$psd_boundary), convergence = .convergence_record(fit$lab, res))
+  if (isTRUE(res$covariance_available)) {
+    out$covariance <- res$covariance
+    nm <- names(coef(fit))
+    dimnames(out$covariance) <- list(nm, nm)
+    attr(out$covariance, "convention") <- convention
+    if (any(fit$lab$partable$op == ":="))
+      out$defined <- magmaanlab::compute_defined(fit$lab$syntax, fit$lab, res$covariance)
+  }
+  if (isTRUE(res$test$available)) out$global_lr <- res$test
+  out
+}
+
+# Selecting a convention creates a local reporting view; the fit's policy and
+# any other cached convention remain intact under R's value semantics.
+.with_convention <- function(fit, convention, caller) {
+  convention <- .check_convention(fit, convention, caller)
+  if (convention != "magmaan")
+    fit$inference <- fit$conventions[[convention]] %||% .convention_inference(fit, convention)
   fit
 }
 
@@ -89,6 +138,8 @@ infer <- function(fit) {
 
 .inference_label <- function(fit) {
   label <- .inference_status_label(fit)
+  if (!is.null(fit$inference$convention))
+    label <- paste0("lavaan ", fit$inference$convention, "; ", label)
   if (isTRUE(fit$inference$convergence$disagree)) paste0(label, "; see the convergence note") else label
 }
 
@@ -111,6 +162,11 @@ infer <- function(fit) {
 .global_tests <- function(fit) {
   inf <- fit$inference
   if (is.null(inf)) return(NULL)
+  if (!is.null(inf$convention)) {
+    t <- inf$global_lr
+    if (is.null(t)) return(NULL)
+    return(.convention_test_row(t))
+  }
   rows <- lapply(c("global_score", "global_lr"), function(component) {
     t <- inf[[component]]
     if (is.null(t)) return(NULL)
@@ -122,6 +178,12 @@ infer <- function(fit) {
   rows <- Filter(Negate(is.null), rows)
   if (!length(rows)) return(NULL)
   do.call(rbind, rows)
+}
+
+.convention_test_row <- function(t) {
+  data.frame(test = t$method, statistic = t$statistic, df = t$df,
+             pvalue = t$pvalue, unscaled.statistic = t$unscaled_statistic,
+             scale = t$scale, shift = t$shift, stringsAsFactors = FALSE)
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x

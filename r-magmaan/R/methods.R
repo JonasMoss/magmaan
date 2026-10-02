@@ -39,6 +39,12 @@
 #'   free parameters. Indices distinguish parameters with repeated labels.
 #' @param level One confidence level strictly between zero and one.
 #' @param test Interval test, currently only `"wald"`.
+#' @param convention Inference bundle: `"magmaan"` (default), `"ML"`,
+#'   `"MLM"`, `"MLR"`, `"DWLS"`, `"WLSMV"`, `"ULS"`, `"ULSMV"` or
+#'   `"WLS"`, compatible with the fitted estimator. Lavaan bundles compute
+#'   on demand without refitting. For parity, compare lavaan fits with the same
+#'   model and estimation settings, including `meanstructure = TRUE` and
+#'   `fixed.x = FALSE`. Unchecked components remain unavailable.
 #' @param ... Unused.
 #' @return `coef()` returns a named numeric vector for fits and a data frame
 #'   for summaries. `vcov()` returns the parameter covariance matrix;
@@ -53,15 +59,17 @@ coef.magmaan <- function(object, ...) {
 
 #' @rdname magmaan_methods
 #' @export
-vcov.magmaan <- function(object, ...) {
+vcov.magmaan <- function(object, convention = "magmaan", ...) {
+  object <- .with_convention(object, convention, "vcov()")
   .inference_result(object, "covariance", "vcov()")
 }
 
 #' @rdname magmaan_methods
 #' @export
-confint.magmaan <- function(object, parm, level = 0.95, test = "wald", ...) {
+confint.magmaan <- function(object, parm, level = 0.95, test = "wald", convention = "magmaan", ...) {
   .check_test(test, "confint()")
   .check_level(level, "confint()")
+  object <- .with_convention(object, convention, "confint()")
   V <- .inference_result(object, "covariance", "confint()")
   est <- coef(object)
   index <- seq_along(est)
@@ -82,6 +90,7 @@ confint.magmaan <- function(object, parm, level = 0.95, test = "wald", ...) {
   pct <- paste0(format(100 * c((1 - level) / 2, 1 - (1 - level) / 2),
                        trim = TRUE, scientific = FALSE, digits = 3), " %")
   dimnames(out) <- list(names(est), pct)
+  if (!is.null(object$inference$convention)) attr(out, "convention") <- object$inference$convention
   out
 }
 
@@ -208,19 +217,22 @@ print.magmaan <- function(x, ...) {
 #' The fit, its parameter table and its global tests. `coef()` on the summary
 #' returns the parameter table: one row per model parameter, fixed and free,
 #' including defined (`:=`) parameters, with the estimate and, when inference
-#' is available, its robust standard error, z-statistic, p-value and Wald
+#' is available, its selected standard error, z-statistic, p-value and Wald
 #' interval. `coef(fit)` stays the vector of free estimates that matches
 #' `vcov(fit)`.
 #'
 #' @param object A [magmaan()] fit.
 #' @param level Confidence level of the intervals.
+#' @param convention Inference bundle, as in [vcov.magmaan()].
 #' @param ... Unused.
 #' @return An object of class `summary.magmaan`.
 #' @export
-summary.magmaan <- function(object, level = 0.95, ...) {
+summary.magmaan <- function(object, level = 0.95, convention = "magmaan", ...) {
   .check_level(level, "summary()")
-  structure(list(fit = object, coefficients = .parameter_table(object, level = level),
-                 tests = .global_tests(object), level = level),
+  view <- .with_convention(object, convention, "summary()")
+  structure(list(fit = object, inference = view$inference,
+                 coefficients = .parameter_table(view, level = level),
+                 tests = .global_tests(view), level = level),
             class = "summary.magmaan")
 }
 
@@ -235,6 +247,7 @@ coef.summary.magmaan <- function(object, ...) {
 #' @export
 print.summary.magmaan <- function(x, digits = 3, ...) {
   fit <- x$fit
+  fit$inference <- x$inference %||% fit$inference
   print(fit)
   if (nrow(fit$rows) > 1L) {
     cat("\nObservations by group\n")
@@ -300,9 +313,13 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' `coef(summary(fit))`.
 #'
 #' @param object,... Two [magmaan()] fits, in either order.
+#' @param convention `"magmaan"` (default) reports the policy's score and LR
+#'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference
+#'   test for complete-data ML; ordinal and FIML compatibility comparisons
+#'   currently report unavailable inference.
 #' @return A data frame with one row per test, of class `magmaan_anova`.
 #' @export
-anova.magmaan <- function(object, ...) {
+anova.magmaan <- function(object, ..., convention = "magmaan") {
   fits <- c(list(object), list(...))
   labels <- vapply(as.list(substitute(list(object, ...)))[-1L],
                    function(e) paste(deparse(e), collapse = ""), character(1))
@@ -317,6 +334,24 @@ anova.magmaan <- function(object, ...) {
   }
   if (!identical(a$raw_data, b$raw_data)) {
     stop("anova(): the fits must use the same observations in the same order", call. = FALSE)
+  }
+  convention <- .check_convention(fits[[1L]], convention, "anova()")
+  .check_convention(fits[[2L]], convention, "anova()")
+  if (convention != "magmaan") {
+    null <- 2L
+    res <- magmaanlab::convention_nested(a, b, convention)
+    if (identical(res$test$reason, "not_nested")) {
+      res <- magmaanlab::convention_nested(b, a, convention)
+      null <- 1L
+      if (identical(res$test$reason, "not_nested")) stop("anova(): the models are not nested", call. = FALSE)
+    }
+    t <- res$test
+    reasons <- if (isTRUE(t$available)) character() else
+      c(lr = paste0(t$reason, ": ", t$detail))
+    return(structure(.convention_test_row(t), class = c("magmaan_anova", "data.frame"),
+      convention = convention, restricted = labels[[null]], alternative = labels[[3L - null]],
+      unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
+      verdict_disagreement = isTRUE(res$verdict_disagreement)))
   }
   null <- 2L
   res <- magmaanlab::policy_nested(a, b)
@@ -355,6 +390,7 @@ anova.magmaan <- function(object, ...) {
 print.magmaan_anova <- function(x, digits = 3, ...) {
   cat("Nested tests of ", attr(x, "restricted"), " (restricted) against ",
       attr(x, "alternative"), "\n", sep = "")
+  if (!is.null(attr(x, "convention"))) cat("Inference convention: lavaan ", attr(x, "convention"), "\n", sep = "")
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))

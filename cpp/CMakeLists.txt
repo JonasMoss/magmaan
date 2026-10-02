@@ -147,6 +147,7 @@ add_library(magmaan STATIC
   src/estimate/gmm/dls_weight.cpp
   src/api/sem.cpp
   src/api/policy.cpp
+  src/api/conventions.cpp
   src/inference/inference.cpp
   src/inference/score.cpp
   src/inference/score_components.cpp

@@ -4789,6 +4789,22 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   retained observations when available; FIML requires its own retained data.
   These wrappers compose existing C++ inference primitives and do not change
   the ordinary-user inference policy.
+- Named downstream inference conventions (2026-10-02): ordinary `vcov()`,
+  `confint()`, `summary()` and `anova()` accept `convention`, defaulting to
+  `"magmaan"`. `api::lavaan_inference_ml`, `lavaan_inference_ordinal` and
+  `lavaan_nested_ml` compose retained-fit compatibility bundles; lab adapters
+  are `convention_inference()` and `convention_nested()`. The same retained
+  estimates support several bundles, optionally cached with ordinary `infer()`.
+  Complete-data ML/MLM/MLR and ordinal DWLS/WLSMV, ULS/ULSMV and WLS have
+  covariance/global routes; complete-data ML has default nested difference
+  tests. FIML and ordinal nested compatibility remain typed unavailable.
+  ML/MLM/MLR tests use standard/SB/YB-Mplus, with SB2001 for robust nested
+  comparisons. Ordinal reporting uses per-group `n_g - 1` and re-evaluates the
+  criterion at retained theta without optimizing. Live lavaan integration tests
+  gate whole bundles, and C++ tests gate covariance algebra and unsupported
+  states. The [capability inventory](../validation/capabilities.md) records
+  evidence limits. This changes the reporting contract and supersedes the
+  no-convention decision; the automatic inference policy is unchanged.
 - Ordinary API adopted 2026-10-01 and implemented 2026-10-02 (0.2.0 in
   development): [`magmaan_model()` then `magmaan(model, data, estimator,
   covariance, inference, options)`](../design/r-interface-vision.md#ordinary-api).

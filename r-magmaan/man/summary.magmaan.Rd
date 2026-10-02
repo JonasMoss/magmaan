@@ -4,12 +4,14 @@
 \alias{summary.magmaan}
 \title{Summary of a magmaan fit}
 \usage{
-\method{summary}{magmaan}(object, level = 0.95, ...)
+\method{summary}{magmaan}(object, level = 0.95, convention = "magmaan", ...)
 }
 \arguments{
 \item{object}{A \code{\link[=magmaan]{magmaan()}} fit.}
 
 \item{level}{Confidence level of the intervals.}
+
+\item{convention}{Inference bundle, as in \code{\link[=vcov.magmaan]{vcov.magmaan()}}.}
 
 \item{...}{Unused.}
 }
@@ -20,7 +22,7 @@ An object of class \code{summary.magmaan}.
 The fit, its parameter table and its global tests. \code{coef()} on the summary
 returns the parameter table: one row per model parameter, fixed and free,
 including defined (\verb{:=}) parameters, with the estimate and, when inference
-is available, its robust standard error, z-statistic, p-value and Wald
+is available, its selected standard error, z-statistic, p-value and Wald
 interval. \code{coef(fit)} stays the vector of free estimates that matches
 \code{vcov(fit)}.
 }

@@ -15,6 +15,7 @@
 #include <Eigen/LU>
 
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/conventions.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -147,6 +148,61 @@ Eigen::MatrixXd observed_bread(const Prepared& p) {
 }
 
 }  // namespace
+
+TEST_CASE("lavaan conventions preserve estimates and gate incompatible inference") {
+  std::mt19937 rng(20261002u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 300, Eigen::Vector4d::Zero()));
+  auto p = prepare(build("f =~ x1 + x2 + x3 + x4", true), raw, true);
+  const auto theta = p.fit->estimates.theta;
+  using C = api::LavaanConvention;
+  auto ml = api::lavaan_inference_ml(*p.fit, C::ML, {});
+  auto mlm = api::lavaan_inference_ml(*p.fit, C::MLM, {});
+  auto mlr = api::lavaan_inference_ml(*p.fit, C::MLR, {});
+  REQUIRE(ml.covariance_reason == api::InferenceReason::Available);
+  REQUIRE(mlm.covariance_reason == api::InferenceReason::Available);
+  REQUIRE(mlr.covariance_reason == api::InferenceReason::Available);
+  auto info = inf::information_expected(p.model.pt, p.model.rep, p.data->sample, p.est);
+  REQUIRE(info.has_value());
+  auto reference = inf::vcov(*info, p.model.pt, theta);
+  REQUIRE(reference.has_value());
+  CHECK(relative(ml.covariance, *reference) < 1e-12);
+  CHECK(relative(ml.covariance, mlm.covariance) > 0.01);
+  CHECK((p.fit->estimates.theta - theta).norm() == 0.0);
+  CHECK(ml.test.method == "standard");
+  CHECK(mlm.test.method == "satorra.bentler");
+  CHECK(mlr.test.method == "yuan.bentler.mplus");
+  CHECK(mlm.test.df == ml.test.df);
+  CHECK(mlm.test.statistic * mlm.test.scale == doctest::Approx(ml.test.statistic));
+  // Independent MLR trace: at saturated sample moments, whitened squared
+  // distances d_i give covariance-score trace (d_i^2 - 2 d_i + p)/2
+  // and mean-score trace d_i. H0 uses numerically differentiated log scores.
+  double h1_trace = 0.0;
+  for (std::size_t b = 0; b < p.raw.X.size(); ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(p.data->sample.S[b]);
+    const auto& X = p.raw.X[b];
+    double trace = 0;
+    for (Eigen::Index i = 0; i < X.rows(); ++i) {
+      const Eigen::VectorXd r = X.row(i).transpose() - p.data->sample.mean[b];
+      const double d = r.dot(llt.solve(r));
+      trace += 0.5 * (d * d + static_cast<double>(X.cols()));
+    }
+    h1_trace += trace / static_cast<double>(X.rows());
+  }
+  const Eigen::MatrixXd S = numeric_scores(p);
+  const double h0_trace = (observed_bread(p) * S.transpose() * S).trace();
+  CHECK(mlr.test.scale == doctest::Approx((h1_trace - h0_trace) / mlr.test.df).epsilon(1e-6));
+  auto incompatible = api::lavaan_inference_ml(*p.fit, C::WLSMV, {});
+  CHECK(incompatible.covariance_reason == api::InferenceReason::UnsupportedModel);
+  auto failed = api::lavaan_inference_ml(*p.fit, C::MLM, {.converged = false});
+  CHECK(failed.test.reason == api::InferenceReason::NotConverged);
+  auto penalized = api::lavaan_inference_ml(*p.fit, C::MLR, {.penalized = true});
+  CHECK(penalized.covariance_reason == api::InferenceReason::Penalized);
+  CHECK(api::lavaan_nested_ml(p.fit, {.converged = false}, p.fit, {}, C::MLM).reason
+        == api::InferenceReason::NotConverged);
+  CHECK(api::lavaan_nested_ml(p.fit, {}, p.fit, {.penalized = true}, C::MLM).reason
+        == api::InferenceReason::Penalized);
+}
 
 TEST_CASE("policy covariance: observed-bread sandwich of casewise scores") {
   std::mt19937 rng(20260925u);

@@ -13,9 +13,9 @@
 \usage{
 \method{coef}{magmaan}(object, ...)
 
-\method{vcov}{magmaan}(object, ...)
+\method{vcov}{magmaan}(object, convention = "magmaan", ...)
 
-\method{confint}{magmaan}(object, parm, level = 0.95, test = "wald", ...)
+\method{confint}{magmaan}(object, parm, level = 0.95, test = "wald", convention = "magmaan", ...)
 
 \method{nobs}{magmaan}(object, ...)
 
@@ -29,6 +29,13 @@
 \item{object, x}{A magmaan fit or its summary, as appropriate.}
 
 \item{...}{Unused.}
+
+\item{convention}{Inference bundle: \code{"magmaan"} (default), \code{"ML"},
+\code{"MLM"}, \code{"MLR"}, \code{"DWLS"}, \code{"WLSMV"}, \code{"ULS"}, \code{"ULSMV"} or
+\code{"WLS"}, compatible with the fitted estimator. Lavaan bundles compute
+on demand without refitting. For parity, compare lavaan fits with the same
+model and estimation settings, including \code{meanstructure = TRUE} and
+\code{fixed.x = FALSE}. Unchecked components remain unavailable.}
 
 \item{parm}{Parameter names or positive integer indices; omitted for all
 free parameters. Indices distinguish parameters with repeated labels.}

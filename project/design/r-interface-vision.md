@@ -15,10 +15,10 @@ magmaan serves two audiences over one C++ core.
 
 - **Ordinary users** get a small surface whose arguments are the choices that
   define the estimate. A fit estimates the model and computes inference under a
-  single policy that magmaan chooses and justifies. The package has no inference
-  compatibility conventions: no MLR, no WLSMV, no switches for information
-  matrices, standard-error types or test corrections. Choosing well is
-  magmaan's job, not the user's.
+  single policy that magmaan chooses and justifies. Reporting methods also
+  accept named lavaan inference bundles, such as `convention = "MLR"` or
+  `"WLSMV"`, for comparison on the same estimates. Choosing the default remains
+  magmaan's job. There are no separate information, SE or correction switches.
 - **Power users** (methods developers, including magmaan's authors) get the
   full composable surface: every estimator path, every information and Gamma
   convention, compatibility routes such as lavaan's MLR, and the frontier
@@ -461,8 +461,9 @@ on Likert items means not declaring them ordered. Invalid pairs error with a
 message naming the valid alternatives.
 
 lavaan names that bundle an estimator with a correction (MLM, MLR, MLMV, WLSM,
-WLSMV, ULSM, ULSMV) are rejected with a pointer to the plain estimator, since
-inference is automatic. This matches the backlog item on decomposing
+WLSMV, ULSM, ULSMV) are rejected in fitting with a pointer to the plain
+estimator and, for checked bundles, the corresponding reporting convention.
+This matches the backlog item on decomposing
 `EstimatorSpec` into its actual axes.
 
 ### Options kept, renamed and dropped
@@ -500,6 +501,52 @@ backlog gap, not a reason to change the default.
 Raw data only: the sandwich covariance and the SB and PEBA4 calibrations need
 casewise contributions. Covariance-matrix input stays in the lab, where the
 user chooses what replaces the missing empirical moments.
+
+## Reporting conventions
+
+Adopted 2026-10-02. Estimation choices stay in `magmaan()` and `options`;
+`vcov()`, `confint()`, `summary()` and `anova()` accept `convention = "magmaan"`
+by default, or one named lavaan bundle compatible with the fitted estimator and
+data regime. Names select complete recipes, rather than independent ingredient
+switches. `"MLM"`/`"MLR"` require an ML fit; `"ML"`/`"MLR"` are coherent with
+FIML, while MLM would change missing-data treatment and is rejected there.
+`"WLSMV"` requires ordinal DWLS and `"ULSMV"` requires ordinal ULS.
+
+Compatibility is computed by C++ composers on retained data, moments and
+estimates without refitting. `infer(fit, convention = "MLR")` stores an additional
+bundle for repeated reporting; the stored policy and the default reporting
+choice remain intact. A reporting call computes a local view when no matching
+bundle is cached. `coef()`, `fitted()` and `nobs()` have no convention argument.
+Covariance matrices and intervals carry a convention attribute; summaries and
+nested reports name the selected convention and actual test method.
+
+The [single capability inventory](../validation/capabilities.md) distinguishes
+primitives from checked compositions, component by component. Compatibility
+claims need convention-matched lavaan gates. They do not adopt a policy default
+or imply misspecification robustness; policy choices still need calibration or
+published evidence. Unsupported and failed components carry typed reasons, and
+an incompatible estimator/convention combination errors. There is no fallback.
+
+Parity compares the same model and fitting settings, including ordinary models'
+mean structure, random covariates (`fixed.x = FALSE` in lavaan), group order and
+observations. A reporting convention cannot change fixed-X construction, data
+deletions, the estimator or fitted weight, parameterization, starts or the
+selected convergence rule. It reproduces inference for matching fits within
+the documented tolerance, rather than promising every default lavaan call.
+
+ML uses expected inverse information and the standard global test. MLM uses the
+expected-bread empirical sandwich and Satorra-Bentler global scaling. MLR uses
+the observed-bread likelihood-score sandwich and Yuan-Bentler-Mplus's saturated
+H1-minus-H0 trace. Ordinal bundles use expected/Gauss-Newton bread, Stage-1 NACOV
+and lavaan's per-group `n_g - 1` reporting normalization; WLSMV/ULSMV select the
+scaled-shifted test. Unscaled DWLS/ULS retain the statistic with no chi-square
+p-value, as lavaan does.
+
+Comparing the policy with a lavaan bundle can change bread, meat and calibration
+as well as estimated-weight influence. A study isolating the weight correction
+must hold the other ingredients fixed through matched lab recipes. Exposing a
+compatibility bundle does not expand the 0.2.0 policy promise beyond ML, FIML
+and all-ordinal DWLS or require every lavaan variant for release.
 
 ## Inference policy
 
@@ -627,13 +674,13 @@ expected information):
   grows. Until the change and its calibration land
   ([backlog](../backlog/todo.md#ml-and-fiml)), the implementation remains
   expected.
-- **No convention option.** `anova()` takes two fits and nothing else;
-  robustness is the default, not a setting. lavaan's expected-information
-  nested tests stay lab compositions on `as_lab_fit(fit)`:
-  `robust_nested_lrt(convention = "lavaan")` and
-  `score_components(sensitivity = "expected")`. Their lavaan parity gates
-  remain, so the policy keeps a checked component even where its composition
-  no longer equals a lavaan call.
+- **Named reporting conventions (adopted 2026-10-02).** `anova()` defaults
+  to the policy and accepts `convention` for a checked lavaan bundle. Complete
+  ML uses the unscaled difference for `"ML"` and SB2001 for `"MLM"`/`"MLR"`,
+  with each model's corresponding global scaling factor. This supersedes the
+  earlier no-convention decision. Other nested compatibility cells remain
+  unavailable until their exact lavaan methods are checked; see the
+  [capability inventory](../validation/capabilities.md).
 
 Where observed information matters: under the global null the observed and
 expected Hessians differ by O_p(n^-1/2), so the global tests have the same
@@ -683,7 +730,7 @@ Correctness rests on three kinds of evidence:
    golden tests keep gating it: the observed-bread sandwich is lavaan's
    `robust.huber.white` covariance, SB on expected information is lavaan's
    `satorra.bentler`, and the fit-function statistics are lavaan's standard
-   tests. Users never see those lavaan names.
+   tests. Explicit compatibility reports use lavaan's bundle and test names.
 2. **Identical composition.** The automatic policy and the equivalent explicit
    composition of lab primitives agree exactly, and `inference = FALSE`
    followed by `infer()` equals the default call.

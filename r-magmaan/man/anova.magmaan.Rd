@@ -5,12 +5,17 @@
 \alias{print.magmaan_anova}
 \title{Compare two nested magmaan fits}
 \usage{
-\method{anova}{magmaan}(object, ...)
+\method{anova}{magmaan}(object, ..., convention = "magmaan")
 
 \method{print}{magmaan_anova}(x, digits = 3, ...)
 }
 \arguments{
 \item{object, ...}{Two \code{\link[=magmaan]{magmaan()}} fits, in either order.}
+
+\item{convention}{\code{"magmaan"} (default) reports the policy's score and LR
+tests. \code{"ML"}, \code{"MLM"} and \code{"MLR"} report lavaan's default difference
+test for complete-data ML; ordinal and FIML compatibility comparisons
+currently report unavailable inference.}
 
 \item{x}{A nested-test result.}
 

@@ -243,7 +243,8 @@ print.magmaan_model <- function(x, ...) {
 #'   `optimizer`, `convergence`, `preset` and `start = "lavaan-0.7.2"` are
 #'   available for complete continuous ML with unrestricted covariance and no
 #'   equality constraints. Inspect `as_lab_fit(fit)$fitting` for the resolved
-#'   settings and attempts. Inference always uses magmaan's policy.
+#'   settings and attempts. Fitting computes magmaan's inference policy;
+#'   reporting methods can select an explicit lavaan inference convention.
 #' @param ... Arguments removed in magmaan 0.2.0; each raises an error naming
 #'   its replacement.
 #' @return An object of class `magmaan`.
@@ -422,11 +423,13 @@ as_lab_fit <- function(fit) {
   }
   est <- toupper(estimator)
   if (est %in% names(.bundled_estimators)) {
+    reporting <- if (est %in% c("MLM", "MLR", "WLSMV", "ULSMV"))
+      sprintf("Select summary(fit, convention = \"%s\") for that inference bundle.", est) else
+      "Other corrections are available in magmaanlab."
     stop(sprintf(paste0(
       "magmaan(): estimator = \"%s\" bundles an estimator with a correction. ",
       "Use estimator = \"%s\"; magmaan() computes inference automatically. ",
-      "Other corrections are available in magmaanlab."),
-      estimator, .bundled_estimators[[est]]), call. = FALSE)
+      "%s"), estimator, .bundled_estimators[[est]], reporting), call. = FALSE)
   }
   known <- union(.continuous_estimators, .ordered_estimators)
   if (!est %in% known) {

@@ -1,5 +1,12 @@
 # magmaan 0.2.0 (in development)
 
+- Reporting methods `vcov`, `confint`, `summary` and `anova` accept named
+  lavaan bundles through `convention`, defaulting to `"magmaan"`. ML/MLM/MLR
+  and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS covariance/global recipes run
+  on retained fits; complete-data ML also has lavaan's default difference
+  tests. `infer(fit, convention)` caches an additional bundle. FIML and ordinal
+  nested compatibility remain unavailable, and incompatible choices error.
+
 The ordinary API adopted on 2026-10-01. Calls written for 0.1.0 need changes;
 each removed argument raises an error that names its replacement.
 
