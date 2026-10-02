@@ -72,6 +72,11 @@ handoffs, proposals, applications and paper evaluations belong in `private/<name
 Each is its own independent Git repository, ignored by the outer repository;
 see [private/README.md](private/README.md). Ask when ownership is genuinely unclear.
 
+Until 0.2.0 is released, papers are out of scope unless the user asks for paper
+work. Do not read, run, migrate or report on paper code, and do not let paper
+callers constrain library or API changes. Papers stay on their pinned 0.1.0
+packages and migrate after the release.
+
 Third-party papers, supplements, data and source mirrors live in ignored
 `external/` (`external/refs/` for PDFs), never in commits. Implement from formulas;
 describe oracle agreement as behavior, not as a source-code port. Exceptions:
