@@ -13,7 +13,7 @@ import mpmath as mp
 from uls_unit_reference import components, equilibrated, number, read, write
 
 
-def evaluate(sample, rows):
+def evaluate(sample, rows, retain=False):
     values = {(r['lhs'],r['op'],r['rhs']):mp.mpf(r['est']) for r in rows}
     get = lambda a,op,b:values[a,op,b]
     vx = get('X','~~','X'); beta = get('Y','~','X'); psi = get('Y','~~','Y')
@@ -27,27 +27,43 @@ def evaluate(sample, rows):
     pairs = [(i,j) for j in range(6) for i in range(j,6)]
     residual = mp.matrix([sigma[i,j]-sample[i,j] for i,j in pairs])
     J = mp.matrix([[d[i,j] for d in derivatives] for i,j in pairs])
-    g = J.T*residual; H = J.T*J
+    g = J.T*residual; correction = mp.matrix(13)
     for j in range(7):
         for i in range(j+1):
             v = mp.fsum(residual[k]*second[i,j][p] for k,p in enumerate(pairs))
-            H[i,j] += v
-            if i!=j: H[j,i] += v
+            correction[i,j] += v
+            if i!=j: correction[j,i] += v
     T = mp.eye(13)
     T[5,4]=beta; T[5,5]=vx; T[5,6]=0
     T[6,4]=beta**2; T[6,5]=2*beta*vx; T[6,6]=1
-    h = 100*T.T*H*T
-    h[4,5] += 100*(g[5]+2*beta*g[6]); h[5,4]=h[4,5]
-    h[5,5] += 200*vx*g[6]
+    correction = 100*T.T*correction*T
+    correction[4,5] += 100*(g[5]+2*beta*g[6]); correction[5,4]=correction[4,5]
+    correction[5,5] += 200*vx*g[6]
+    objective_jacobian = 10*J*T
+    h = objective_jacobian.T*objective_jacobian + correction
     G = 100*T.T*g
     Gamma = mp.matrix([[sample[i,k]*sample[j,l]+sample[i,l]*sample[j,k] for k,l in pairs] for i,j in pairs])
     omega = 100*T.T*J.T*Gamma*J*T
     distance = mp.sqrt((G.T*mp.lu_solve(omega,G))[0])
     h_min,h_condition = equilibrated(h)
     _,metric_condition = equilibrated(omega)
-    return dict(reference_distance=number(distance),reference_accurate=bool(distance<=mp.mpf('.01') and h_min>0),
+    result = dict(reference_distance=number(distance),reference_accurate=bool(distance<=mp.mpf('.01') and h_min>0),
         reference_hessian_positive=bool(h_min>0),reference_hessian_condition=number(h_condition),
         reference_metric_condition=number(metric_condition))
+    if retain:
+        # Independent sampling factor in the same column-major tensor layout
+        # as the retained core artifacts. No core derivatives are inputs.
+        L = mp.cholesky(sample); F = mp.matrix(36,21)
+        for k,(i,j) in enumerate(pairs):
+            for col in range(6):
+                for row in range(6):
+                    F[row+6*col,k] = (L[i,row]*L[j,col]+L[j,row]*L[i,col])/mp.sqrt(2)
+        R = sigma-sample; whitened = L**-1*R*(L.T**-1)
+        b = mp.matrix([10*whitened[row,col]/mp.sqrt(2) for col in range(6) for row in range(6)])
+        result['artifacts'] = dict(factor=10*F*J*T, score_residual=b, hessian=h,
+            objective_jacobian=objective_jacobian, correction=correction,
+            gradient=G, metric=omega)
+    return result
 
 
 def main():

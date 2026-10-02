@@ -336,3 +336,17 @@ uls-factor-native-replay/*
 !uls-factor-native-replay/verification_metadata.csv
 !uls-factor-native-replay/replay_comparison.csv
 !uls-factor-native-replay/replay_comparison_metadata.csv
+
+# Fixed-point uncertainty/curvature calibration. Compact independently judged
+# comparisons and sensitivity summaries are evidence; transported matrices and
+# point inputs remain local and reproducible from the retained reference bank.
+!uls-guard-calibration-v3/
+uls-guard-calibration-v3/*
+!uls-guard-calibration-v3/comparisons.csv
+!uls-guard-calibration-v3/intervals.csv
+!uls-guard-calibration-v3/guard_summary.csv
+!uls-guard-calibration-v3/negative_controls.csv
+!uls-guard-calibration-v3/metadata.csv
+!uls-guard-calibration-v3/reference_metadata.csv
+!uls-guard-calibration-v3/verification.csv
+!uls-guard-calibration-v3/verification_metadata.csv

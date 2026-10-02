@@ -815,8 +815,22 @@ rule retains 23/25 minima and rejects every inaccurate control; two weak-marker
 minima still exceed the separate Hessian cap. This is calibration evidence,
 not a new acceptance policy or a statistical regularization/default decision.
 The exact-point experiment uses explicit infinite bounds; unidentified and
-saddle rejection remain covered by owning C++ tests. The flat NTML witness and
-forward-error calibration remain open.
+saddle rejection remain covered by owning C++ tests. The flat NTML witness
+remains open. A subsequent 175-point calibration adds 75 near-budget controls.
+Distance error remains below 6.4e-7, but reverses 16 raw comparisons among 25
+nominal threshold points. Conditional intervals using independently measured
+input and projection errors cover every exact distance, decide 140 points
+without error and leave 35 unresolved. Assumed construction allowances remain
+exploratory: 8 machine epsilons misses seven input-error controls; 64 covers
+them but leaves 83 budget decisions unresolved, including one minimum. No
+acceptance policy follows. Reference-only QR of the total objective Jacobian,
+retaining the observed curvature correction, lowers the two flat Hessian
+conditions from 6.8e13/2.2e13 to 1.2/1.6; all 25 minima have condition below
+13.6 in these coordinates. The next implementation must retain that correction
+separately from J'J and transport the Newton solve through the QR coordinates,
+then calibrate construction/projection uncertainty jointly with NTML and fresh
+controls. Transforming an already rounded cross-product is insufficient;
+statistical regularization is not indicated by this coordinate evidence.
 
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,

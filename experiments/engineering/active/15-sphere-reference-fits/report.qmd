@@ -1,7 +1,8 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: uls_audit
+  lane: uls_guard
+  guard_run: uls-guard-calibration-v3
   factor_run: uls-factor-square-root-v2
   factor_baseline: uls-factor-baseline-v3
   factor_replay: uls-factor-native-replay
@@ -31,7 +32,38 @@ execute:
 
 ```{r}
 #| results: asis
-if (identical(params$lane, "uls_audit")) {
+if (identical(params$lane, "uls_guard")) {
+  read_guard <- function(name) {
+    path <- file.path("results",params$guard_run,paste0(name,".csv"))
+    if (!file.exists(path)) stop("Missing guard calibration: ",path,"; run --ordinary --uls-audit-guard")
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  v <- read_guard("verification"); sweep <- read_guard("guard_summary")
+  points <- read_guard("comparisons"); timing <- read_guard("reference_metadata")
+  refs <- points[points$target_distance==0,]
+  flat <- refs[refs$case_id %in% c(21,22),]
+  cat("## Question\n\nHow should a numerical acceptance guard account for uncertainty in the ULS Newton distance, and do the two flat Hessians require regularization?\n\n")
+  cat(sprintf("## Short answer\n\nAn uncertainty interval is needed near the acceptance budget. Among %d controls on 25 development datasets, %d are close to 0.01. The distance error remains below %.2g, but it reverses %d raw budget comparisons at points nominated to lie exactly on the threshold. Conditional intervals based on independently measured errors cover every reference distance: %d controls are decisively within budget, %d above it, and %d unresolved, with no wrong decisions.\n\n",v$points,v$near_budget_controls,v$max_distance_error,v$raw_budget_classification_errors,v$measured_within,v$measured_above,v$measured_unresolved))
+  cat(sprintf("The flat curvature has a promising coordinate remedy. In 90-digit objective-Jacobian QR coordinates, the two Hessian conditions become %.2f and %.2f, preserving the full observed correction and the ULS target. The largest condition across all 25 minima is %.1f. This nominates a stable curvature implementation before regularization; it does not establish a production error bound. The library's acceptance guard remains unchanged and passes zero controls.\n\n",flat$qr_curvature_condition[1],flat$qr_curvature_condition[2],v$max_reference_qr_curvature_condition))
+  cat("## Evidence\n\n### Distance uncertainty\n\nThe controls comprise a rounded refined minimum and six positive x1-variance perturbations nominated for distances 0.009, 0.00999, 0.01, 0.01001, 0.011 and 0.02. The exact calculation judges the actual floating-point inputs. All 16 raw classification reversals occur among the 25 nominal 0.01 controls; none occurs in the controls on either side.\n\n")
+  cat(sprintf("The largest bound using measured factor/residual construction errors and measured projection arithmetic error is %.2g. These measured errors require the independent calculation, so they cannot themselves be used by the production checker. They test the perturbation mechanism and expose the margin that a usable error model must cover.\n\n",v$max_measured_bound))
+  table <- data.frame(`Assumed relative allowance`=c("8 × machine epsilon","64 × machine epsilon","8 × rows × columns × machine epsilon"),
+    `Within budget`=sweep$within,`Above budget`=sweep$above,Unresolved=sweep$unresolved,
+    `Input allowance misses`=sweep$input_allowance_failures,`Minima within / 25`=sweep$reference_within,check.names=FALSE)
+  cat(knitr::kable(table,row.names=FALSE),sep="\n")
+  cat("\n\nEvery interval in this sensitivity sweep covers its reference distance and makes no wrong decisive classification. The 8-epsilon input-error allowance nevertheless misses the construction error for all seven points of one dataset; interval coverage alone does not validate that model. The 64-epsilon allowance covers the observed construction errors but leaves 83 controls unresolved, including one reference minimum. The larger dimensional allowance is much more conservative. These are declared numerical assumptions, not candidates selected for a new default.\n\n")
+  cat("The separation between backward error, conditioning and output error follows the [LAPACK error-analysis guidance](https://www.netlib.org/lapack/lug/node78.html). A small solve residual alone is insufficient when the factor is sensitive or when cancellation occurs in constructing the residual.\n\n### Curvature coordinates\n\n")
+  table <- data.frame(`Weak-marker case`=flat$case_id,
+    `Diagonal Hessian condition`=format(flat$reference_hessian_condition,digits=3,scientific=TRUE),
+    `QR-coordinate Hessian condition`=round(flat$qr_curvature_condition,2),check.names=FALSE)
+  cat(knitr::kable(table,row.names=FALSE),sep="\n")
+  cat(sprintf("\n\nAcross the minima, the smallest eigenvalue in these reference coordinates is %.3f. The reparameterization normalizes the objective Jacobian; it does not make statistical weak identification disappear. A synthetic saddle retains negative observed curvature despite a positive Gauss-Newton term. A zero singular-value control yields unresolved rank. Native unidentified and saddle rejection remains covered by the existing owning C++ tests.\n\n",v$min_reference_qr_curvature_eigenvalue))
+  cat("### Conditional bound and proposed implementation\n\nWrite $\\Omega=A^\\top A$, $G=A^\\top b$, and $d=\\|P_A b\\|$, where $P_A$ projects onto the factor's column space. After column scaling, suppose factor construction and QR contribute a perturbation of norm at most $\\delta_A$, residual construction contributes at most $\\delta_b$, and $\\delta_A<\\sigma_{\\min}(A)$. Then\n\n$$|d_{\\mathrm{true}}-d_{\\mathrm{computed}}|\\;\\leq\\;\\|b\\|\\frac{\\delta_A}{\\sigma_{\\min}(A)-\\delta_A}+\\delta_b,$$\n\nwith any separately measured projection arithmetic error added in the measured-error arm. The bound follows by applying the complementary projector to the perturbed full-rank factor, bounding its pseudoinverse norm by the reciprocal smallest singular value, and using the norm triangle inequality. The implementation uses Frobenius norms as upper bounds on spectral perturbations. Rank uncertainty and intervals crossing 0.01 remain unresolved.\n\n")
+  cat("For curvature, retain the total objective Jacobian $J$ and the analytic observed correction $C$, with $H=J^\\top J+C$. A full-rank QR $J=QR$ yields the congruent Hessian $I+R^{-\\top}CR^{-1}$. This preserves the observed curvature and provides a coordinate change for the Newton solve. The next core change must assemble the correction separately and solve through these coordinates; applying the transform to an already rounded cross-product Hessian cannot recover lost digits. No ridge or substitution of Gauss-Newton curvature is warranted by these results.\n\n")
+  cat(sprintf("## Caveats\n\nThis is a fixed-point calibration on the same 25 development datasets, with no optimizer calls or new statistical target. The actual parameter and sample inputs are reconstructed as binary64 values for the 90-digit reference. The sample's lower triangle is mirrored, matching the objective packing and factor Cholesky convention. Some model-implied covariances are indefinite under the explicitly unrestricted target. The reference calculations took about %.1f seconds on one math thread under nice 10. Small summaries and fingerprints are frozen; matrices and point inputs stay local and are regenerated from this leaf's frozen bank.\n\n",timing$elapsed_s))
+  cat("The measured-error arm validates a conditional numerical mechanism, not a deployable forward-error guarantee. Construction allowances, reliable curvature computation, the flat finite NTML witness and broader fresh confirmation remain open. A numerical distance interval describes uncertainty in the local audit calculation; it is not a bound on distance to a global optimum or a guarantee of inferential accuracy. Earlier square-root and search evidence remain available with `-P lane:uls_audit` and `-P lane:uls_study`.\n\n## Reproduce\n\nUse the square-root magmaanlab build, Python with mpmath 1.3.0, single-threaded math and fresh output directories.\n\n```sh\nRscript run_experiment.R --ordinary --uls-audit-guard --help\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --uls-audit-guard --smoke --run-id guard-smoke-new\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --uls-audit-guard --run-id guard-new\npython3 scripts/verify_uls_guard.py --run-dir results/guard-new\nquarto render report.qmd -P guard_run:guard-new\n```\n\n")
+  knitr::knit_exit()
+} else if (identical(params$lane, "uls_audit")) {
   read_factor <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))
     if (!file.exists(path)) stop("Missing factor-audit evidence: ",path,"; see reproduction commands")
@@ -42,7 +74,7 @@ if (identical(params$lane, "uls_audit")) {
   meta <- read_factor(params$factor_run,"metadata")
   cat("## Question\n\nCan a square-root representation compute the unrestricted ULS Newton accuracy distance reliably at the mixed-unit reference minima and at deliberately inaccurate points, without regularizing the estimator?\n\n")
   cat(sprintf("## Short answer\n\nThe square-root audit computes distances for all %d points, including all %d reference minima. The former cross-product calculation supplies %d distances and only %d at the minima. Against independent 90-digit calculations, the new largest absolute distance error is %.2g, and it makes no wrong decisions about the 0.01 distance budget across %d accurate and %d inaccurate controls.\n\n",v$factor_finite_distances,v$factor_reference_distances,v$baseline_finite_distances,v$baseline_reference_distances,v$max_absolute_distance_error,v$accurate_controls,v$inaccurate_controls))
-  cat("This repairs distance computation. The unchanged production condition guard still rejects all points, including every minimum. No statistical regularization, new optimizer, acceptance override or default change follows. The remaining work is to calibrate a guard appropriate to the factor calculation and resolve the separate very flat curvature case.\n\n## Evidence\n\n")
+  cat("This repairs distance computation. The unchanged production condition guard still rejects all points, including every minimum. No statistical regularization, new optimizer, acceptance override or default change follows. The numerical guard follow-up is available in the `uls_guard` report lane.\n\n## Evidence\n\n")
   table <- data.frame(Method=c("Cross-product / LLT","Square-root / QR"),
     `Distances / 100`=c(v$baseline_finite_distances,v$factor_finite_distances),
     `Distances at minima / 25`=c(v$baseline_reference_distances,v$factor_reference_distances),check.names=FALSE)

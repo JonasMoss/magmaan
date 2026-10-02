@@ -783,9 +783,19 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   singular metrics and objective saddles remain failures. The production
   1e12 condition guard is unchanged. A diagnostic factor-condition rule
   retains 23/25 minima without accepting an inaccurate control; two weak-marker
-  minima still exceed the Hessian cap. Next calibrate numerical forward-error
-  guards for the factor calculation and those Hessian solves, jointly with the
-  very flat finite NTML witness; this evidence selects no acceptance default. Retain the PORT curvature
+  minima still exceed the Hessian cap. The 175-point guard follow-up adds
+  75 near-budget controls: raw distance comparison flips 16 nominal threshold
+  decisions, while conditional intervals using independently measured errors
+  decide 140 correctly and leave 35 unresolved. Construction-error allowances
+  remain assumptions; a 64-epsilon sensitivity covers observed input errors
+  but leaves 83 controls unresolved. At 90 digits, objective-Jacobian QR
+  coordinates reduce the two flat Hessian conditions to 1.2/1.6 and preserve
+  all observed curvature. Next retain the analytic curvature correction
+  separately from J'J in core, implement a full-rank QR-coordinate Newton solve,
+  and calibrate forward-error guards jointly with the very flat finite NTML
+  witness and fresh controls. Do not transform a rounded cross-product and
+  assume its lost digits have been repaired. This evidence selects no
+  regularization or acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start
   sphere candidate on broader populations and ordinary units. Preserve LS-specific

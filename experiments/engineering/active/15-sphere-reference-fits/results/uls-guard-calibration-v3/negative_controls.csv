@@ -1,0 +1,3 @@
+control,result
+zero minimum singular value,unresolved_rank
+observed saddle with positive Gauss-Newton term,nonpositive_curvature
