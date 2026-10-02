@@ -114,7 +114,14 @@ add_library(magmaan STATIC
   src/estimate/sam.cpp
   src/estimate/fiml.cpp
   src/estimate/bounds.cpp
-  src/estimate/ordinal.cpp
+  src/estimate/ordinal_prepare.cpp
+  src/estimate/ordinal_moments.cpp
+  src/estimate/ordinal_curvature.cpp
+  src/estimate/ordinal_robust.cpp
+  src/estimate/ordinal_score.cpp
+  src/estimate/ordinal_measures.cpp
+  src/estimate/ordinal_nested.cpp
+  src/estimate/ordinal_fit.cpp
   src/estimate/pairwise.cpp
   src/estimate/ml_numerics.cpp
   src/estimate/coordinates.cpp

@@ -1,0 +1,1304 @@
+#include "ordinal_internal.hpp"
+
+namespace magmaan::estimate {
+
+using namespace detail_ordinal;
+
+namespace detail_ordinal {
+
+
+fit_expected<WhitenFactors>
+full_weight_factors(const data::OrdinalMoments& moments,
+                    data::OrdinalGammaCache* cache,
+                    const data::OrdinalWeightPlan& plan) {
+  WhitenFactors out;
+  out.reserve(moments.R.size());
+  if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: OrdinalWeightPlan purpose cannot be inference-only"));
+  }
+  const bool fit_plus_inference =
+      plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
+
+  if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
+    if (fit_plus_inference && cache == nullptr) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: ULS fit-plus-inference requires an OrdinalGammaCache"));
+    }
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      out.push_back(WhitenFactor::identity(mdim));
+    }
+    return out;
+  }
+
+  if (cache == nullptr) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: weighted ordinal fit requires an OrdinalGammaCache"));
+  }
+  if (cache->blocks.size() != moments.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: OrdinalGammaCache block count mismatch"));
+  }
+
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: WLS requires full Gamma"));
+    }
+    auto ok = data::ordinal_gamma_cache_ensure_wls_weights(*cache);
+    if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      const Eigen::MatrixXd& W = cache->blocks[b].w_wls;
+      if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: WLS weight dimension mismatch in block " +
+                std::to_string(b)));
+      }
+      Eigen::LLT<Eigen::MatrixXd> llt(W);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: WLS weight is not positive definite in block " +
+                std::to_string(b)));
+      }
+      out.push_back(WhitenFactor::dense(llt.matrixL()));
+    }
+    return out;
+  }
+
+  const data::OrdinalGammaMaterialization expected =
+      fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                         : data::OrdinalGammaMaterialization::Diagonal;
+  if (plan.materialization != expected) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        fit_plus_inference
+            ? "fit_ordinal_snlls_full_thresholds: DWLS fit-plus-inference requires full Gamma"
+            : "fit_ordinal_snlls_full_thresholds: DWLS fit-only requires diagonal Gamma"));
+  }
+  post_expected<void> ok =
+      fit_plus_inference ? data::ordinal_gamma_cache_ensure_dwls_weights(*cache)
+                         : data::ordinal_gamma_cache_ensure_diagonal(*cache);
+  if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index mdim =
+        moments.thresholds[b].size() + p * (p - 1) / 2;
+    const bool supplied_weight = cache->blocks[b].has_dwls_weight;
+    const Eigen::VectorXd diagonal = supplied_weight
+                                         ? cache->blocks[b].w_dwls.diagonal()
+                                         : cache->blocks[b].diagonal;
+    if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: DWLS diagonal dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    Eigen::VectorXd factor(mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = supplied_weight ? diagonal(k) : 1.0 / diagonal(k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: DWLS diagonal is not positive in block " +
+                std::to_string(b)));
+      }
+      factor(k) = std::sqrt(v);
+    }
+    out.push_back(WhitenFactor::diagonal(std::move(factor)));
+  }
+  return out;
+}
+
+
+fit_expected<std::pair<data::MixedOrdinalStats, OrdinalWeightKind>>
+mixed_stats_from_moments_cache(const data::MixedOrdinalMoments& moments,
+                               data::OrdinalGammaCache* cache,
+                               const data::OrdinalWeightPlan& plan,
+                               std::string_view context) {
+  if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(context) + ": OrdinalWeightPlan purpose cannot be inference-only"));
+  }
+  if (plan.estimator != data::OrdinalEstimatorKind::DWLS &&
+      plan.estimator != data::OrdinalEstimatorKind::WLS) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(context) + ": mixed ordinal cache-aware fitting supports DWLS/WLS"));
+  }
+  if (cache == nullptr) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(context) + ": weighted mixed ordinal fit requires an OrdinalGammaCache"));
+  }
+  if (cache->blocks.size() != moments.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(context) + ": OrdinalGammaCache block count mismatch"));
+  }
+
+  data::MixedOrdinalStats stats = stats_adapter(moments);
+  stats.NACOV.reserve(moments.R.size());
+  const bool fit_plus_inference =
+      plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
+
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": WLS requires full Gamma"));
+    }
+    auto ok = data::ordinal_gamma_cache_ensure_wls_weights(*cache);
+    if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+    stats.W_wls.reserve(moments.R.size());
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index mdim = moments.moments[b].size();
+      const auto& block = cache->blocks[b];
+      if (!block.has_full || block.gamma.rows() != mdim ||
+          block.gamma.cols() != mdim || !matrix_all_finite(block.gamma) ||
+          block.w_wls.rows() != mdim || block.w_wls.cols() != mdim ||
+          !matrix_all_finite(block.w_wls)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            std::string(context) + ": WLS cache dimension mismatch in block " +
+                std::to_string(b)));
+      }
+      stats.NACOV.push_back(block.gamma);
+      stats.W_wls.push_back(block.w_wls);
+    }
+    return std::pair{std::move(stats), OrdinalWeightKind::WLS};
+  }
+
+  const data::OrdinalGammaMaterialization expected =
+      fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                         : data::OrdinalGammaMaterialization::Diagonal;
+  if (plan.materialization != expected) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        fit_plus_inference
+            ? std::string(context) + ": DWLS fit-plus-inference requires full Gamma"
+            : std::string(context) + ": DWLS fit-only requires diagonal Gamma"));
+  }
+  post_expected<void> ok =
+      fit_plus_inference ? data::ordinal_gamma_cache_ensure_dwls_weights(*cache)
+                         : data::ordinal_gamma_cache_ensure_diagonal(*cache);
+  if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+  stats.W_dwls.reserve(moments.R.size());
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index mdim = moments.moments[b].size();
+    const auto& block = cache->blocks[b];
+    const Eigen::VectorXd diagonal = fit_plus_inference
+                                         ? block.w_dwls.diagonal()
+                                         : block.diagonal;
+    if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": DWLS diagonal dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(mdim, mdim);
+    Eigen::MatrixXd gamma = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = fit_plus_inference ? diagonal(k) : 1.0 / diagonal(k);
+      const double g = fit_plus_inference ? 1.0 / diagonal(k) : diagonal(k);
+      if (!std::isfinite(v) || v <= 0.0 || !std::isfinite(g) || g <= 0.0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            std::string(context) + ": DWLS diagonal is not positive in block " +
+                std::to_string(b)));
+      }
+      W(k, k) = v;
+      gamma(k, k) = g;
+    }
+    if (fit_plus_inference && block.has_full) {
+      stats.NACOV.push_back(block.gamma);
+    } else {
+      stats.NACOV.push_back(std::move(gamma));
+    }
+    stats.W_dwls.push_back(std::move(W));
+  }
+  return std::pair{std::move(stats), OrdinalWeightKind::DWLS};
+}
+
+
+// Joint cross-block threshold profiling. Minimizing the threshold block of
+// the weighted objective sum_b w_b * r_b' W_b r_b over the shared gamma
+// coordinate gives the normal equations
+//   A gamma = sum_b w_b H_b' ( W_tt,b (tau_hat_b - c_b) - W_tr,b d_rho,b ),
+//   A       = sum_b w_b H_b' W_tt,b H_b,
+// with w_b = n_b / N. The block sample weights do not cancel once a gamma
+// coordinate spans blocks, and block b's profiled thresholds depend on every
+// block's correlation residual through A^{-1}.
+fit_expected<ProfiledWeightWorkspace>
+build_joint_profiled_workspace(const data::OrdinalMoments& moments,
+                               const ThresholdDesign& design,
+                               MomentWeights Ws,
+                               WhitenFactors factors,
+                               std::string_view context) {
+  const std::size_t nb = moments.R.size();
+  if (design.H.size() != nb || design.c.size() != nb || Ws.size() != nb ||
+      factors.size() != nb) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(context) + ": threshold design block count mismatch"));
+  }
+  auto N = total_n_obs(moments);
+  if (!N.has_value()) return std::unexpected(N.error());
+
+  ProfiledWeightWorkspace out;
+  out.blocks.reserve(nb);
+  out.corr_offset.resize(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index nth = moments.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::Index mdim = nth + ncorr;
+    out.corr_offset[b] = out.ncorr_total;
+    out.ncorr_total += ncorr;
+    if (!Ws[b].valid(mdim)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": weight dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    if (!factors[b].valid(mdim)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": weight factor dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    if (design.H[b].rows() != nth || design.H[b].cols() != design.n_gamma ||
+        design.c[b].size() != nth) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": threshold design dimension mismatch in block " +
+              std::to_string(b)));
+    }
+  }
+
+  const Eigen::Index ng = design.n_gamma;
+  Eigen::VectorXd G_const;
+  Eigen::MatrixXd G_corr;
+  if (ng > 0) {
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(ng, ng);
+    Eigen::VectorXd r_const = Eigen::VectorXd::Zero(ng);
+    Eigen::MatrixXd R_corr = Eigen::MatrixXd::Zero(ng, out.ncorr_total);
+    for (std::size_t b = 0; b < nb; ++b) {
+      const Eigen::Index nth = moments.thresholds[b].size();
+      const Eigen::Index ncorr = Ws[b].dim() - nth;
+      const double w = static_cast<double>(moments.n_obs[b]) /
+                       static_cast<double>(*N);
+      const Eigen::MatrixXd HtW =
+          design.H[b].transpose() * Ws[b].top_left(nth);
+      A.noalias() += w * (HtW * design.H[b]);
+      r_const.noalias() +=
+          w * (HtW * (moments.thresholds[b] - design.c[b]));
+      // A diagonal weight has no threshold-by-correlation block at all, so this
+      // stays zero and the profiled thresholds decouple from the correlations.
+      if (ncorr > 0 && !Ws[b].is_diagonal()) {
+        R_corr.middleCols(out.corr_offset[b], ncorr).noalias() =
+            w * (design.H[b].transpose() * Ws[b].top_right(nth, ncorr));
+      }
+    }
+    A = 0.5 * (A + A.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt_A(A);
+    if (llt_A.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) +
+              ": threshold profiling normal matrix is not positive definite "
+              "(rank-deficient or contradictory threshold design)"));
+    }
+    G_const = llt_A.solve(r_const);
+    G_corr = llt_A.solve(R_corr);
+    if (!G_const.allFinite() || !G_corr.allFinite()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": threshold profiling solve failed"));
+    }
+  }
+
+  // A diagonal moment weight has a structurally zero threshold-by-correlation
+  // block, so R_corr -- and hence G_corr -- is exactly zero and the profiled
+  // thresholds decouple from the correlation residual. Detect that once here
+  // instead of multiplying by a zero matrix on every gradient.
+  out.corr_coupled = ng > 0 && G_corr.size() > 0 && !G_corr.isZero(0.0);
+
+  for (std::size_t b = 0; b < nb; ++b) {
+    Eigen::VectorXd intercept = design.c[b];
+    Eigen::MatrixXd from_corr;
+    if (ng > 0) {
+      intercept.noalias() += design.H[b] * G_const;
+      if (out.corr_coupled) from_corr.noalias() = design.H[b] * G_corr;
+    }
+    Eigen::VectorXd offset = intercept - moments.thresholds[b];
+    out.blocks.push_back(ProfiledWeightBlock{
+        .factor = std::move(factors[b]),
+        .threshold_offset = std::move(offset),
+        .threshold_from_corr = std::move(from_corr),
+        .threshold_intercept = std::move(intercept)});
+  }
+  return out;
+}
+
+
+fit_expected<ProfiledWeightWorkspace>
+profiled_weight_workspace(const data::OrdinalMoments& moments,
+                          const ThresholdLayout& layout,
+                          const ThresholdDesign& design,
+                          data::OrdinalGammaCache* cache,
+                          const data::OrdinalWeightPlan& plan) {
+  (void)layout;
+  if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: OrdinalWeightPlan purpose cannot be inference-only"));
+  }
+  const bool fit_plus_inference =
+      plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
+
+  MomentWeights Ws;
+  WhitenFactors factors;
+  Ws.reserve(moments.R.size());
+  factors.reserve(moments.R.size());
+
+  if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
+    const data::OrdinalGammaMaterialization expected =
+        fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                           : data::OrdinalGammaMaterialization::None;
+    if (plan.materialization != expected) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          fit_plus_inference
+              ? "fit_ordinal_bounded: ULS fit-plus-inference plan must request full Gamma"
+              : "fit_ordinal_bounded: ULS fit-only plan must request no Gamma"));
+    }
+    if (fit_plus_inference) {
+      if (cache == nullptr) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: ULS fit-plus-inference requires an OrdinalGammaCache"));
+      }
+      if (cache->blocks.size() != moments.R.size()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+      }
+      for (std::size_t b = 0; b < moments.R.size(); ++b) {
+        const Eigen::Index p = moments.R[b].rows();
+        const Eigen::Index mdim =
+            moments.thresholds[b].size() + p * (p - 1) / 2;
+        const auto& block = cache->blocks[b];
+        if (!block.has_full || block.gamma.rows() != mdim ||
+            block.gamma.cols() != mdim || !matrix_all_finite(block.gamma)) {
+          return std::unexpected(make_err(FitError::Kind::NumericIssue,
+              "fit_ordinal_bounded: ULS fit-plus-inference requires full Gamma in block " +
+                  std::to_string(b)));
+        }
+      }
+    }
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      Ws.push_back(MomentWeight::identity(mdim));
+      factors.push_back(WhitenFactor::identity(mdim));
+    }
+    return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                          std::move(factors),
+                                          "fit_ordinal_bounded");
+  }
+
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: WLS fit-only plan must request full Gamma"));
+    }
+    if (cache == nullptr) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: WLS requires an OrdinalGammaCache"));
+    }
+    if (cache->blocks.size() != moments.R.size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+    }
+    auto ok = data::ordinal_gamma_cache_ensure_wls_weights(*cache);
+    if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index nth = moments.thresholds[b].size();
+      const Eigen::Index mdim = nth + p * (p - 1) / 2;
+      const Eigen::MatrixXd& W = cache->blocks[b].w_wls;
+      if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: cached WLS weight dimension mismatch in block " +
+                std::to_string(b)));
+      }
+      Eigen::LLT<Eigen::MatrixXd> llt(W);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: cached WLS weight is not positive definite in block " +
+                std::to_string(b)));
+      }
+      Ws.push_back(MomentWeight::dense(W));
+      factors.push_back(WhitenFactor::dense(llt.matrixL()));
+    }
+    return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                          std::move(factors),
+                                          "fit_ordinal_bounded");
+  }
+
+  const data::OrdinalGammaMaterialization expected =
+      fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                         : data::OrdinalGammaMaterialization::Diagonal;
+  if (plan.materialization != expected) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        fit_plus_inference
+            ? "fit_ordinal_bounded: DWLS fit-plus-inference plan must request full Gamma"
+            : "fit_ordinal_bounded: DWLS fit-only plan must request diagonal Gamma"));
+  }
+  if (cache == nullptr) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: DWLS requires an OrdinalGammaCache"));
+  }
+  if (cache->blocks.size() != moments.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+  }
+  post_expected<void> ok =
+      fit_plus_inference ? data::ordinal_gamma_cache_ensure_dwls_weights(*cache)
+                         : data::ordinal_gamma_cache_ensure_diagonal(*cache);
+  if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index nth = moments.thresholds[b].size();
+    const Eigen::Index mdim = nth + p * (p - 1) / 2;
+    const auto& block = cache->blocks[b];
+    // Sampling Gamma and a supplied fitting metric are separate inputs.
+    const Eigen::VectorXd diagonal = block.has_dwls_weight
+        ? block.w_dwls.diagonal().eval() : block.diagonal;
+    if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: cached Gamma diagonal dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    Eigen::VectorXd W(mdim);
+    Eigen::VectorXd factor(mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = diagonal(k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: cached Gamma diagonal is not positive in block " +
+                std::to_string(b)));
+      }
+      const double w = block.has_dwls_weight ? v : 1.0 / v;
+      W(k) = w;
+      factor(k) = std::sqrt(w);
+    }
+    Ws.push_back(MomentWeight::diagonal(std::move(W)));
+    factors.push_back(WhitenFactor::diagonal(std::move(factor)));
+  }
+  return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                        std::move(factors),
+                                        "fit_ordinal_bounded");
+}
+
+
+fit_expected<WhitenFactors>
+weight_factors(const data::MixedOrdinalStats& stats, OrdinalWeightKind kind) {
+  if (kind == OrdinalWeightKind::ULS) {
+    WhitenFactors out;
+    out.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      out.push_back(WhitenFactor::identity(G.rows()));
+    return out;
+  }
+  const bool dwls = kind == OrdinalWeightKind::DWLS;
+  const auto& Ws = dwls ? stats.W_dwls : stats.W_wls;
+  WhitenFactors out;
+  out.reserve(Ws.size());
+  for (std::size_t b = 0; b < Ws.size(); ++b) {
+    if (Ws[b].size() == 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "mixed ordinal full-WLS weight unavailable in block " +
+              std::to_string(b) +
+              " (NACOV not positive definite); use DWLS"));
+    }
+    // Diagonal by construction; see weight_factors(OrdinalStats, ..).
+    if (dwls) {
+      const Eigen::VectorXd d = Ws[b].diagonal();
+      if ((d.array() <= 0.0).any() || !d.allFinite()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "mixed ordinal weight matrix is not positive definite in block " +
+                std::to_string(b)));
+      }
+      out.push_back(WhitenFactor::diagonal(d.cwiseSqrt()));
+      continue;
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "mixed ordinal weight matrix is not positive definite in block " +
+              std::to_string(b)));
+    }
+    out.push_back(WhitenFactor::dense(llt.matrixL()));
+  }
+  return out;
+}
+
+
+Eigen::VectorXd implied_thresholds(const ThresholdLayout& layout,
+                                   const Eigen::VectorXd& theta,
+                                   std::size_t b) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(layout.free[b].size()));
+  for (Eigen::Index k = 0; k < out.size(); ++k) {
+    const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+    out(k) = fr > 0 ? theta(fr - 1) : layout.fixed[b][static_cast<std::size_t>(k)];
+  }
+  return out;
+}
+
+
+Eigen::VectorXd corr_lower(const Eigen::MatrixXd& Sigma) {
+  const Eigen::Index p = Sigma.rows();
+  Eigen::VectorXd out(p * (p - 1) / 2);
+  Eigen::Index k = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out(k++) = Sigma(i, j);
+    }
+  }
+  return out;
+}
+
+
+Eigen::MatrixXd corr_jacobian(const Eigen::MatrixXd& Sigma,
+                              const Eigen::MatrixXd& J_sigma,
+                              Eigen::Index sigma_off) {
+  (void)Sigma;
+  const Eigen::Index p = Sigma.rows();
+  const Eigen::Index n_free = J_sigma.cols();
+  Eigen::MatrixXd J(p * (p - 1) / 2, n_free);
+  Eigen::Index row = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      J.row(row) = J_sigma.row(sigma_off + vech_index(p, i, j));
+      ++row;
+    }
+  }
+  return J;
+}
+
+
+// === Theta-parameterization helpers =========================================
+// Under theta the latent-response residual variances are fixed to 1, so the
+// implied total variances Σ*ᵢᵢ float; the implied moments are standardized
+// before comparison with the (always unit-variance) polychoric sample moments.
+
+// Σᵢⱼ / √(Σᵢᵢ Σⱼⱼ) over the strict lower triangle.
+Eigen::VectorXd std_corr_lower(const Eigen::MatrixXd& Sigma) {
+  const Eigen::Index p = Sigma.rows();
+  Eigen::VectorXd sd(p);
+  for (Eigen::Index i = 0; i < p; ++i) sd(i) = std::sqrt(Sigma(i, i));
+  Eigen::VectorXd out(p * (p - 1) / 2);
+  Eigen::Index k = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out(k++) = Sigma(i, j) / (sd(i) * sd(j));
+    }
+  }
+  return out;
+}
+
+
+// ∂[Σᵢⱼ/√(ΣᵢᵢΣⱼⱼ)]/∂θ over the strict lower triangle, from ∂vech(Σ)/∂θ.
+Eigen::MatrixXd std_corr_jacobian(const Eigen::MatrixXd& Sigma,
+                                  const Eigen::MatrixXd& J_sigma,
+                                  Eigen::Index sigma_off) {
+  const Eigen::Index p = Sigma.rows();
+  Eigen::MatrixXd J(p * (p - 1) / 2, J_sigma.cols());
+  Eigen::Index row = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const double sij = Sigma(i, j);
+      const double sii = Sigma(i, i);
+      const double sjj = Sigma(j, j);
+      const double inv_i = 1.0 / std::sqrt(sii);
+      const double inv_j = 1.0 / std::sqrt(sjj);
+      J.row(row) =
+          (inv_i * inv_j) * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+          (0.5 * sij * inv_i / sii * inv_j) *
+              J_sigma.row(sigma_off + vech_index(p, i, i)) -
+          (0.5 * sij * inv_i * inv_j / sjj) *
+              J_sigma.row(sigma_off + vech_index(p, j, j));
+      ++row;
+    }
+  }
+  return J;
+}
+
+
+double mixed_assoc_moment(const Eigen::MatrixXd& Sigma,
+                          const std::vector<std::int32_t>& ordered,
+                          Eigen::Index i,
+                          Eigen::Index j,
+                          OrdinalParameterization param) {
+  if (param == OrdinalParameterization::Delta) return Sigma(i, j);
+  const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+  const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+  if (oi && oj) return Sigma(i, j) / std::sqrt(Sigma(i, i) * Sigma(j, j));
+  if (oi != oj) {
+    const Eigen::Index o = oi ? i : j;
+    return Sigma(i, j) / std::sqrt(Sigma(o, o));
+  }
+  return Sigma(i, j);
+}
+
+
+Eigen::RowVectorXd mixed_assoc_jacobian_row(
+    const Eigen::MatrixXd& Sigma,
+    const Eigen::MatrixXd& J_sigma,
+    Eigen::Index sigma_off,
+    const std::vector<std::int32_t>& ordered,
+    Eigen::Index i,
+    Eigen::Index j,
+    OrdinalParameterization param) {
+  const Eigen::Index p = Sigma.rows();
+  if (param == OrdinalParameterization::Delta) {
+    return J_sigma.row(sigma_off + vech_index(p, i, j));
+  }
+  const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+  const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+  const double sij = Sigma(i, j);
+  if (oi && oj) {
+    const double sii = Sigma(i, i);
+    const double sjj = Sigma(j, j);
+    const double inv_i = 1.0 / std::sqrt(sii);
+    const double inv_j = 1.0 / std::sqrt(sjj);
+    return (inv_i * inv_j) * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+           (0.5 * sij * inv_i / sii * inv_j) *
+               J_sigma.row(sigma_off + vech_index(p, i, i)) -
+           (0.5 * sij * inv_i * inv_j / sjj) *
+               J_sigma.row(sigma_off + vech_index(p, j, j));
+  }
+  if (oi != oj) {
+    const Eigen::Index o = oi ? i : j;
+    const double soo = Sigma(o, o);
+    const double inv_o = 1.0 / std::sqrt(soo);
+    return inv_o * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+           (0.5 * sij * inv_o / soo) *
+               J_sigma.row(sigma_off + vech_index(p, o, o));
+  }
+  return J_sigma.row(sigma_off + vech_index(p, i, j));
+}
+
+
+fit_expected<Eigen::VectorXd>
+ordinal_residuals(const data::OrdinalStats& stats,
+                  const ThresholdLayout& layout,
+                  const model::ImpliedMoments& moments,
+                  const WhitenFactors& factors,
+                  const Eigen::VectorXd& theta,
+                  OrdinalParameterization param) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(N.error());
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    n_total += stats.thresholds[b].size() + p * (p - 1) / 2;
+  }
+  Eigen::VectorXd out(n_total);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::MatrixXd& Sig = moments.sigma[b];
+    Eigen::VectorXd d(nth + ncorr);
+    Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    const bool block_released =
+        b < layout.scale_free.size() &&
+        std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                    [](char c) { return c != 0; });
+    if (block_released && !theta_param) {
+      // Wu-Estabrook released block: per-indicator response scale δᵢ = Σ*ᵢᵢ^{-½}
+      // where the scale is free (δᵢ = 1 otherwise, e.g. binary-vetoed items and
+      // the reference group), with the implied indicator mean μᵢ subtracted
+      // from the thresholds. `mixed_assoc_moment(.., Theta)` keyed on the
+      // free-scale mask gives the per-pair implied polychoric δᵢδⱼΣ*ᵢⱼ.
+      std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+      for (Eigen::Index i = 0; i < p; ++i)
+        if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
+          sf[static_cast<std::size_t>(i)] =
+              layout.scale_free[b][static_cast<std::size_t>(i)];
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        const double delta = sf[static_cast<std::size_t>(ov)]
+                                 ? 1.0 / std::sqrt(Sig(ov, ov))
+                                 : 1.0;
+        it(k) = (it(k) - mu) * delta;
+      }
+      d.head(nth) = it - stats.thresholds[b];
+      Eigen::Index r = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j + 1; i < p; ++i)
+          d(nth + r++) = mixed_assoc_moment(Sig, sf, i, j,
+                                            OrdinalParameterization::Theta) -
+                         stats.R[b](i, j);
+    } else if (theta_param) {
+      // Standardize: implied thresholds (τ_θ − μᵢ)/√Σ*ᵢᵢ, implied correlations.
+      // μᵢ is the model-implied indicator mean: 0 in the reference group / when
+      // there is no mean structure, the freed group-2+ intercept under
+      // Wu-Estabrook (2016) threshold+loading invariance otherwise.
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        it(k) = (it(k) - mu) / std::sqrt(Sig(ov, ov));
+      }
+      d.head(nth) = it - stats.thresholds[b];
+      d.tail(ncorr) = std_corr_lower(Sig) - corr_lower(stats.R[b]);
+    } else {
+      // Plain delta: thresholds are τᵢ − μᵢ (no standardization — Σ*ᵢᵢ is off
+      // the objective entirely under delta, so it carries no information and
+      // is left alone). μᵢ is 0 in the reference group / when there is no
+      // mean structure, and Λα in general (the observed intercept νᵢ is
+      // always fixed to 0 for an ordinal indicator, so μᵢ ≡ Λα here).
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      if (have_mu) {
+        for (Eigen::Index k = 0; k < nth; ++k) {
+          const Eigen::Index ov =
+              stats.threshold_ov[b][static_cast<std::size_t>(k)];
+          it(k) -= moments.mu[b](ov);
+        }
+      }
+      d.head(nth) = it - stats.thresholds[b];
+      d.tail(ncorr) = corr_lower(Sig) - corr_lower(stats.R[b]);
+    }
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
+                                static_cast<double>(*N));
+    out.segment(off, d.size()) = factors[b].t_apply(sw, d);
+    off += d.size();
+  }
+  if (!out.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        "ordinal LS residuals contain non-finite values"));
+  }
+  return out;
+}
+
+
+// Raw per-block ordinal moment residual d_b = model − sample in the
+// [thresholds; lower-triangular correlations] metric, BEFORE the W-whitening
+// and sqrt(n/N) scaling that `ordinal_residuals` applies. Mirrors the per-block
+// branch of `ordinal_residuals` (keep the two in sync); used only to
+// finite-difference the misspecification-robust observed-Hessian bread.
+Eigen::VectorXd ordinal_block_residual(const data::OrdinalStats& stats,
+                                       const ThresholdLayout& layout,
+                                       const model::ImpliedMoments& moments,
+                                       const Eigen::VectorXd& theta,
+                                       OrdinalParameterization param,
+                                       std::size_t b) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  Eigen::VectorXd d(nth + ncorr);
+  Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (block_released && !theta_param) {
+    std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index i = 0; i < p; ++i)
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double delta = sf[static_cast<std::size_t>(ov)]
+                               ? 1.0 / std::sqrt(Sig(ov, ov))
+                               : 1.0;
+      it(k) = (it(k) - mu) * delta;
+    }
+    d.head(nth) = it - stats.thresholds[b];
+    Eigen::Index r = 0;
+    for (Eigen::Index j = 0; j < p; ++j)
+      for (Eigen::Index i = j + 1; i < p; ++i)
+        d(nth + r++) = mixed_assoc_moment(Sig, sf, i, j,
+                                          OrdinalParameterization::Theta) -
+                       stats.R[b](i, j);
+  } else if (theta_param) {
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      it(k) = (it(k) - mu) / std::sqrt(Sig(ov, ov));
+    }
+    d.head(nth) = it - stats.thresholds[b];
+    d.tail(ncorr) = std_corr_lower(Sig) - corr_lower(stats.R[b]);
+  } else {
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    if (have_mu) {
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        it(k) -= moments.mu[b](ov);
+      }
+    }
+    d.head(nth) = it - stats.thresholds[b];
+    d.tail(ncorr) = corr_lower(Sig) - corr_lower(stats.R[b]);
+  }
+  return d;
+}
+
+
+Eigen::MatrixXd ordinal_moment_jacobian_block(
+    const data::OrdinalStats& stats,
+    const ThresholdLayout& layout,
+    const model::ImpliedMoments& moments,
+    const Eigen::MatrixXd& J_sigma,
+    const Eigen::VectorXd& theta,
+    OrdinalParameterization param,
+    const Eigen::MatrixXd& J_mu,
+    std::size_t b,
+    Eigen::Index sigma_off,
+    Eigen::Index mu_off,
+    const Eigen::MatrixXd* J_theta) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
+  Jb.setZero();
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (block_released && !theta_param) {
+    // Released delta block: thresholds are (tau - mu) * delta_i and association
+    // moments use the same scale mask as the fitting residuals.
+    std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+      }
+    }
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    const bool have_jmu = J_mu.rows() > 0;
+    const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const bool std_i = sf[static_cast<std::size_t>(ov)] != 0;
+      const double delta = std_i ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double a = it(k) - mu;
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) += delta * J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) += delta;
+        }
+      }
+      if (have_jmu) Jb.row(k) -= delta * J_mu.row(mu_off + ov);
+      if (std_i) {
+        Jb.row(k) += (-0.5 * a * delta * delta * delta) *
+                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      }
+    }
+    Eigen::Index r = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        Jb.row(nth + r++) = mixed_assoc_jacobian_row(
+            Sig, J_sigma, sigma_off, sf, i, j,
+            OrdinalParameterization::Theta);
+      }
+    }
+  } else if (theta_param) {
+    // Threshold rows: d[(tau - mu_i) / sqrt(Sigma*_ii)] / d theta.
+    const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    const bool have_jmu = J_mu.rows() > 0;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double sii = Sig(ov, ov);
+      const double inv_sd = 1.0 / std::sqrt(sii);
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double a = it(k) - mu;
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) += inv_sd * J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) += inv_sd;
+        }
+      }
+      if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
+      Jb.row(k) += (-0.5 * a * inv_sd / sii) *
+                   J_sigma.row(sigma_off + vech_index(p, ov, ov));
+    }
+    Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
+  } else {
+    // Plain delta: d[tau - mu_i] / d theta (no standardization — see
+    // ordinal_residuals). mu_i can move even a fixed threshold's row (a free
+    // latent mean shifts the comparison without a free tau of its own).
+    const bool have_jmu = J_mu.rows() > 0;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(k) = J_theta->row(fr - 1);
+        } else {
+          Jb(k, fr - 1) = 1.0;
+        }
+      }
+      if (have_jmu) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        Jb.row(k) -= J_mu.row(mu_off + ov);
+      }
+    }
+    Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
+  }
+  return Jb;
+}
+
+
+fit_expected<Eigen::MatrixXd>
+ordinal_jacobian(const data::OrdinalStats& stats,
+                 const ThresholdLayout& layout,
+                 const model::ImpliedMoments& moments,
+                 const Eigen::MatrixXd& J_sigma,
+                 const WhitenFactors& factors,
+                 const Eigen::VectorXd& theta,
+                 OrdinalParameterization param,
+                 const Eigen::MatrixXd& J_mu,
+                 const Eigen::MatrixXd* J_theta) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(N.error());
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    n_total += stats.thresholds[b].size() + p * (p - 1) / 2;
+  }
+  Eigen::MatrixXd out(n_total, J_sigma.cols());
+  Eigen::Index out_off = 0;
+  Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::MatrixXd Jb = ordinal_moment_jacobian_block(
+        stats, layout, moments, J_sigma, theta, param, J_mu, b, sigma_off,
+        mu_off, J_theta);
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
+                                static_cast<double>(*N));
+    out.block(out_off, 0, Jb.rows(), Jb.cols()) = factors[b].t_apply(sw, Jb);
+    out_off += Jb.rows();
+    sigma_off += vech_len(p);
+    mu_off += p;
+  }
+  return out;
+}
+
+
+fit_expected<Eigen::VectorXd>
+profiled_ordinal_residuals(const data::OrdinalMoments& stats,
+                           const model::ImpliedMoments& moments,
+                           const ProfiledWeightWorkspace& weights) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(N.error());
+  auto d_corr_or = stacked_corr_residual(stats, moments, weights);
+  if (!d_corr_or.has_value()) return std::unexpected(d_corr_or.error());
+  const Eigen::VectorXd& d_corr = *d_corr_or;
+
+  Eigen::Index n_total = 0;
+  for (const auto& block : weights.blocks) n_total += block.factor.rows();
+  Eigen::VectorXd out(n_total);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const auto& block = weights.blocks[b];
+    const Eigen::Index nth = block.threshold_offset.size();
+    const Eigen::Index mdim = nth + ncorr;
+    if (!block.factor.valid(mdim) ||
+        (weights.corr_coupled &&
+         (block.threshold_from_corr.rows() != nth ||
+          block.threshold_from_corr.cols() != weights.ncorr_total))) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "profiled ordinal residuals found a weight dimension mismatch"));
+    }
+    Eigen::VectorXd d(mdim);
+    d.head(nth) = block.threshold_offset;
+    if (weights.corr_coupled)
+      d.head(nth).noalias() -= block.threshold_from_corr * d_corr;
+    d.tail(ncorr) = d_corr.segment(weights.corr_offset[b], ncorr);
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
+                                static_cast<double>(*N));
+    out.segment(off, mdim) = block.factor.t_apply(sw, d);
+    off += mdim;
+  }
+  if (!out.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        "profiled ordinal LS residuals contain non-finite values"));
+  }
+  return out;
+}
+
+
+fit_expected<Eigen::MatrixXd>
+profiled_ordinal_jacobian(const data::OrdinalMoments& stats,
+                          const model::ImpliedMoments& moments,
+                          const Eigen::MatrixXd& J_sigma,
+                          const ProfiledWeightWorkspace& weights) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(N.error());
+  if (weights.blocks.size() != stats.R.size() ||
+      weights.corr_offset.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "profiled ordinal Jacobian received mismatched weight blocks"));
+  }
+  // Stacked correlation Jacobian over all blocks, matching the stacked d_corr
+  // layout.
+  Eigen::MatrixXd J_corr(weights.ncorr_total, J_sigma.cols());
+  {
+    Eigen::Index sigma_off = 0;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index p = stats.R[b].rows();
+      const Eigen::Index ncorr = p * (p - 1) / 2;
+      J_corr.middleRows(weights.corr_offset[b], ncorr) =
+          corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
+      sigma_off += vech_len(p);
+    }
+  }
+
+  Eigen::Index n_total = 0;
+  for (const auto& block : weights.blocks) n_total += block.factor.rows();
+  Eigen::MatrixXd out(n_total, J_sigma.cols());
+  Eigen::Index out_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const auto& block = weights.blocks[b];
+    const Eigen::Index nth = block.threshold_offset.size();
+    const Eigen::Index mdim = nth + ncorr;
+    if (!block.factor.valid(mdim) ||
+        (weights.corr_coupled &&
+         (block.threshold_from_corr.rows() != nth ||
+          block.threshold_from_corr.cols() != weights.ncorr_total))) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "profiled ordinal Jacobian found a weight dimension mismatch"));
+    }
+    Eigen::MatrixXd Jp(mdim, J_sigma.cols());
+    if (weights.corr_coupled)
+      Jp.topRows(nth).noalias() = -block.threshold_from_corr * J_corr;
+    else
+      Jp.topRows(nth).setZero();
+    Jp.bottomRows(ncorr) = J_corr.middleRows(weights.corr_offset[b], ncorr);
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
+                                static_cast<double>(*N));
+    out.block(out_off, 0, mdim, J_sigma.cols()) = block.factor.t_apply(sw, Jp);
+    out_off += mdim;
+  }
+  return out;
+}
+
+
+fit_expected<Eigen::VectorXd>
+reconstruct_profiled_thresholds(const data::OrdinalStats& stats,
+                                const ThresholdLayout& layout,
+                                const model::ImpliedMoments& moments,
+                                const ProfiledWeightWorkspace& weights,
+                                const Eigen::VectorXd& theta) {
+  auto d_corr_or = stacked_corr_residual(stats, moments, weights);
+  if (!d_corr_or.has_value()) return std::unexpected(d_corr_or.error());
+  const Eigen::VectorXd& d_corr = *d_corr_or;
+  Eigen::VectorXd out = theta;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index nth = stats.thresholds[b].size();
+    if (weights.blocks[b].threshold_intercept.size() != nth ||
+        (weights.corr_coupled &&
+         (weights.blocks[b].threshold_from_corr.rows() != nth ||
+          weights.blocks[b].threshold_from_corr.cols() != weights.ncorr_total))) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "profiled ordinal reconstruction found a threshold map dimension mismatch"));
+    }
+    Eigen::VectorXd tau = weights.blocks[b].threshold_intercept;
+    if (weights.corr_coupled)
+      tau.noalias() -= weights.blocks[b].threshold_from_corr * d_corr;
+    if (!tau.allFinite()) {
+      return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+          "profiled ordinal reconstruction produced non-finite thresholds"));
+    }
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) out(fr - 1) = tau(k);
+    }
+  }
+  return out;
+}
+
+
+Eigen::Index ordinal_moment_rows(const data::OrdinalStats& stats) {
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    n_total += stats.thresholds[b].size() + p * (p - 1) / 2;
+  }
+  return n_total;
+}
+
+
+Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::VectorXd& theta,
+                                        OrdinalParameterization param,
+                                        const Eigen::MatrixXd& J_mu) {
+  Eigen::MatrixXd out(ordinal_moment_rows(stats), J_sigma.cols());
+  Eigen::Index out_off = 0;
+  Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::MatrixXd Jb = ordinal_moment_jacobian_block(
+        stats, layout, moments, J_sigma, theta, param, J_mu, b, sigma_off,
+        mu_off);
+    out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
+    out_off += Jb.rows();
+    sigma_off += vech_len(p);
+    mu_off += p;
+  }
+  return out;
+}
+
+
+Eigen::Index mixed_moment_rows(const data::MixedOrdinalStats& stats) {
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    n_total += stats.moments[b].size();
+  }
+  return n_total;
+}
+
+
+Eigen::VectorXd mixed_model_moments(const data::MixedOrdinalStats& stats,
+                                    const ThresholdLayout& layout,
+                                    const model::ImpliedMoments& moments,
+                                    const Eigen::VectorXd& theta,
+                                    std::size_t b,
+                                    OrdinalParameterization param) {
+  const Eigen::Index p = stats.R[b].rows();
+  Eigen::VectorXd out(stats.moments[b].size());
+  Eigen::Index k = 0;
+  const Eigen::Index nth = stats.thresholds[b].size();
+  Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  if (param == OrdinalParameterization::Theta) {
+    for (Eigen::Index h = 0; h < nth; ++h) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(h)];
+      it(h) /= std::sqrt(moments.sigma[b](ov, ov));
+    }
+  }
+  out.segment(k, nth) = it;
+  k += nth;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
+      const double mu = b < moments.mu.size() && moments.mu[b].size() == p
+          ? moments.mu[b](j)
+          : 0.0;
+      out(k++) = -mu;
+    }
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
+      out(k++) = moments.sigma[b](j, j);
+    }
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out(k++) = mixed_assoc_moment(moments.sigma[b], stats.ordered[b], i, j,
+                                    param);
+    }
+  }
+  return out;
+}
+
+
+Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
+                                      const ThresholdLayout& layout,
+                                      const model::ImpliedMoments& moments,
+                                      const Eigen::MatrixXd& J_sigma,
+                                      const Eigen::MatrixXd& J_mu,
+                                      const Eigen::VectorXd& theta,
+                                      OrdinalParameterization param,
+                                      const Eigen::MatrixXd* J_theta) {
+  Eigen::MatrixXd out(mixed_moment_rows(stats), J_sigma.cols());
+  Eigen::Index out_off = 0;
+  Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    Eigen::MatrixXd Jb(stats.moments[b].size(), J_sigma.cols());
+    Jb.setZero();
+    Eigen::Index row = 0;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (param == OrdinalParameterization::Theta) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double sii = moments.sigma[b](ov, ov);
+        const double inv_sd = 1.0 / std::sqrt(sii);
+        const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+        if (fr > 0) {
+          if (J_theta != nullptr) {
+            Jb.row(row) += inv_sd * J_theta->row(fr - 1);
+          } else {
+            Jb(row, fr - 1) += inv_sd;
+          }
+        }
+        Jb.row(row) += (-0.5 * it(k) * inv_sd / sii) *
+                       J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      } else if (fr > 0) {
+        if (J_theta != nullptr) {
+          Jb.row(row) = J_theta->row(fr - 1);
+        } else {
+          Jb(row, fr - 1) = 1.0;
+        }
+      }
+      ++row;
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
+        if (J_mu.rows() > 0) Jb.row(row) = -J_mu.row(mu_off + j);
+        ++row;
+      }
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
+        Jb.row(row++) = J_sigma.row(sigma_off + vech_index(p, j, j));
+      }
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        Jb.row(row++) = mixed_assoc_jacobian_row(
+            moments.sigma[b], J_sigma, sigma_off, stats.ordered[b], i, j,
+            param);
+      }
+    }
+    out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
+    out_off += Jb.rows();
+    sigma_off += vech_len(p);
+    mu_off += p;
+  }
+  return out;
+}
+
+}  // namespace detail_ordinal
+
+
+}  // namespace magmaan::estimate

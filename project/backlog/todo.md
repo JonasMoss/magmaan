@@ -785,6 +785,11 @@ ordinary-user default.
 
 ### Validation and maintenance
 
+- [x] **M — split ordinal estimation implementation (TASK-41).** Preparation,
+  moments, curvature, fitting, robust/IJ covariance, score tests, fit measures
+  and nested tests now compile separately, sharing a private internal header.
+  Public headers and numerical behavior are unchanged; vendors refreshed.
+
 - [ ] **S — revalidate the retained Bell alternative-CFA controls.** The
   consolidated reliability showcase reproduces generating targets and main
   one-factor comparisons, but current-package population smoke changes some
