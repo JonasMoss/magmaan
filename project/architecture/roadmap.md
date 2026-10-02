@@ -4170,6 +4170,15 @@ are in the [backlog](../backlog/todo.md#continuous-moment-quadratic-weight-follo
   parameterization-aware threshold and association Jacobians for robust ordinal
   reporting, modification indices, score tests, and standardized-solution
   reporting.
+- Friendly C++ `robust_ordinal`, `fit_measures`, `modification_indices` and
+  `score_tests` replay all-ordinal/mixed preparation with the fit-time
+  `LatentNames::row_user` mask, preserving explicitly fixed/free ordinal
+  residual and intercept rows. Automatic ordinal/mixed starts receive the
+  same mask, keeping their free-vector length consistent with the fitted
+  model. Lower-level callers may supply the optional mask; R retains its
+  consistent mask-free fit/post-fit preparation. The
+  lower-level IJ/Satorra paths and repeat preparation of a freed `~*~` still
+  need provenance completion (active backlog; board TASK-37).
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
   the threshold-plus-polychoric moment vector. The implementation now uses a

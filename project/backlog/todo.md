@@ -418,13 +418,6 @@ required by an all-ordinal primary workflow remain current work.
   meets the 0.2.0 exit criterion; move this item to 0.3.0 if it is not needed
   sooner.
 
-- [ ] **S — verify post-fit partable reconstruction for ordinal inference.**
-  Post-fit `robust_ordinal`, the IJ covariance and Satorra-2000 re-prepare the
-  partable without `row_user`, while the fit passes it (`cpp/src/estimate/ordinal.cpp`,
-  the post-fit preparations versus the fit call). Models with explicit `~~`
-  rows may then fail or differ. **Check:** explicit and implicit spellings of
-  the same model give identical inference, or the defect is fixed.
-
 - [ ] **M — finish primary reusable inference ownership.** Extend observed-bread
   covariance/score, delta-nesting and categorical influence adapters where
   independently validated. **Check:** centering, finite-sample/group scaling and
@@ -490,16 +483,24 @@ The ordinary package does not expose MI in this release; the
   versus supplied-data agreement, documented unavailable cells and no ignored
   options. No numerical recipe/default changes without evidence.
 
-- [ ] **S — pass `row_user` through C++ API ordinal post-fit preparation.**
+- [x] **S — preserve user-written rows in C++ API ordinal post-fit inference.**
   `api::robust_ordinal`, `fit_measures`, `modification_indices` and
-  `score_tests` re-prepare ordinal fits without the `row_user` the fit used.
-  A free explicit `y1 ~~ y1` or `y1 ~ 1` gives a typed length error; a fixed
-  non-default value under theta (`y1 ~~ 0.5*y1`) or a fixed non-zero
-  intercept with means gives silently wrong inference. R prepares without
-  `row_user` on both sides and is unaffected. Found by the 2026-10-02
-  inference-policy audit. **Check:** explicit and implicit spellings agree,
-  including `y1 ~~ 0.5*y1` under theta; double preparation of a freed `~*~`
-  is idempotent.
+  `score_tests` pass the fit-time `row_user` mask through all-ordinal and mixed
+  ordinal preparation; automatic ordinal/mixed starts use the same mask.
+  Regressions cover fixed non-default and free explicit residual variances
+  (all-ordinal theta and supported mixed delta), fit-objective consistency,
+  absent-row MI, and equivalent explicit/implicit default spellings. R glue is
+  unchanged.
+
+- [ ] **S — complete lower-level ordinal preparation provenance.** The IJ,
+  RBM/casewise and Satorra-2000 entry points still prepare without `row_user`.
+  A freed `~*~` is not idempotent: preparation transfers its free dimension to
+  `~~` and pins `~*~` to 1; a second preparation loses that release and pins
+  the auto `~~` too. Preserve the release in the model/preparation contract,
+  rather than guessing from an explicitly fixed `~*~` row. **Check:** repeat
+  preparation preserves the free set/constraints/starts, and low-level
+  inference agrees with the fitted preparation for explicit ordinal rows
+  (board TASK-37).
 
 - [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,
