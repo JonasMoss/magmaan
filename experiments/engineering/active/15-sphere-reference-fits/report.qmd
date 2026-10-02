@@ -1,7 +1,9 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: scaling
+  lane: uls
+  uls_run: uls-unit-final-60
+  uls_confirm: uls-unit-final-90
   run: ordinary-layered-pilot-v2
   units_run: ordinary-layered-units-v2
   witness_run: ordinary-layered-witnesses-v2
@@ -24,6 +26,54 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "uls")) {
+  read_uls <- function(run, name) {
+    file <- file.path("results", run, paste0(name, ".csv"))
+    if (!file.exists(file)) stop("Missing ULS evidence: ", file, "; see reproduction commands in report.qmd")
+    read.csv(file, stringsAsFactors = FALSE)
+  }
+  refs <- read_uls(params$uls_run, "reference_summary")
+  confirm <- read_uls(params$uls_confirm, "reference_summary")
+  hits <- read_uls(params$uls_run, "reference_hits")
+  summary <- read_uls(params$uls_run, "summary")
+  warm <- read_uls(params$uls_run, "warm_checks")
+  meta <- read_uls(params$uls_run, "metadata")
+  ref_meta <- read_uls(params$uls_run, "reference_metadata")
+  cat("## Question\n\nWhy does mixed-unit ULS fail in both marker and sphere charts after the unit repair that cleared NTML and GLS? Do the failures reflect search, convergence auditing, or a lack of finite minima?\n\n")
+  cat("## Short answer\n\nBoth search and auditing need work. Independent 60- and 90-digit calculations establish finite strict local ULS minima for all five datasets. Warm diagnostic fits reproduce all five in both charts, but none of those ten fits passes the unchanged production audit: the normal-theory gradient-variance metric has condition about 1e16–1e18, above its 1e12 guard, even though the objective Hessian passes that guard. Failed certification therefore does not imply nonexistence.\n\n")
+  cat("The existing PORT nonlinear least-squares backend reaches three of the five references from most cold configurations, while L-BFGS and scalar PORT do not match any reference to the joint objective/covariance tolerance. Two lower finite minima require diagnostic signed-variance starts; cold fits miss them. Three reference implied covariances are indefinite. These are minima of unrestricted ULS, not PSD fits or evidence of statistical admissibility. No optimizer default or audit threshold changes.\n\n")
+  cat("## Evidence\n\n### Finite local references and the conditioning guard\n\n")
+  table <- data.frame(Dataset = refs$case_id, Objective = signif(refs$objective, 7),
+    `Hessian condition` = format(refs$hessian_condition, digits = 3, scientific = TRUE),
+    `Gradient-variance condition` = format(refs$metric_condition, digits = 3, scientific = TRUE),
+    `Implied covariance` = ifelse(refs$sigma_min_eigenvalue > 0, "Positive definite", "Indefinite"), check.names = FALSE)
+  cat(knitr::kable(table, row.names = FALSE), sep = "\n")
+  stopifnot(all(abs(refs$objective - confirm$objective) <= 1e-14 * (1 + abs(refs$objective))))
+  cat("\n\nReference objectives agree in ordinary floating-point precision across the 60- and 90-digit calculations. Each reference has a vanishing score and positive exact profile and full Hessians. The Hessian and gradient-variance conditions use the same diagonal equilibration as the production audit, in the original marker regression chart. Its LS accuracy distance uses the sandwich metric, not Hessian curvature alone. The independent calculation resolves a positive but excessively ill-conditioned metric; ordinary floating-point factorization may instead report numerical singularity. Both prevent certification under the existing guard.\n\n")
+  cat(sprintf("Warm PORT-NLS fits reproduce %d/%d references (objective tolerance 1e-6 times 1+|f|; covariance tolerance 1e-5 after standardizing by sample SDs), with %d production passes. Their maximum covariance gap is %.2g. These imported fitted values are diagnostic warm starts constructed after the cold grid; they never enter sample-only start selection.\n\n", sum(warm$reference_match), nrow(warm), sum(warm$accepted), max(warm$standardized_sigma_gap)))
+  cat("### Cold search under a fixed ULS target\n\n")
+  selected <- summary[summary$objective_scale == 1, ]
+  base_hits <- hits[hits$objective_scale == 1, ]
+  selected$matches <- base_hits$reference_matches[match(paste(selected$chart, selected$profile), paste(base_hits$chart, base_hits$profile))]
+  profiles <- c("lbfgs", "lbfgs_more", "port", "port_more", "nls", "nls_more")
+  table <- data.frame(Profile = c("L-BFGS", "L-BFGS: longer/tighter", "PORT", "PORT: longer/tighter", "PORT-NLS", "PORT-NLS: longer/tighter"), check.names = FALSE)
+  for (chart in c("marker", "sphere")) {
+    d <- selected[selected$chart == chart, ]; d <- d[match(profiles, d$profile), ]
+    table[[paste(chart, "returned / 10")]] <- d$returned
+    table[[paste(chart, "reference matches / 10")]] <- d$matches
+  }
+  cat(knitr::kable(table, row.names = FALSE), sep = "\n")
+  cat("\n\nEach chart/profile fits five samples from two shared sample-only starts: FABIN3(auto) and layered(native). ‘Returned’ includes endpoints carried by sphere failure conditions; it is not acceptance. All 360 cold fits fail the original-target audit. PORT-NLS is the existing NL2SOL residual solver, used here as a diagnostic comparison. Longer budgets and tighter objective/step stops do not recover the two missed lower minima. In unscaled sphere ULS, shared FABIN3 also misses dataset 1; layered recovers it.\n\n")
+  cat("Multiplying the identity weight by 1e-4 or 1e-8 preserves the ULS minimizers. At 1e-8 L-BFGS returns in every configuration, but still matches none of the reference covariances jointly with objective precision. PORT-NLS matches 6/10 per chart at either smaller scale. These rescalings change absolute backend stops and the sphere pin/objective ratio; every endpoint is therefore re-evaluated under the original unscaled, unpinned ULS objective. Rescaling success cannot substitute for an original-target audit.\n\n")
+  cat("### Audit classification repair\n\nThe sphere audit previously labeled a singular or numerically unresolved gradient-variance metric as nonpositive curvature even after its Hessian had passed. It now reports ill conditioning, matching the ordinary LS audit. Separate curvature-system and accuracy-metric evidence, plus the reduced metric, are exposed in R. A rank-one sample regression demonstrates positive objective curvature with a singular sandwich metric. This repairs the failure label; genuine Hessian curvature failures, the .01 accuracy budget and the 1e12 condition cap remain unchanged.\n\n")
+  cat("## What remains\n\n1. **Optimizer options:** test objective-aware LS preconditioning or damped Gauss–Newton steps on this fixed target, against the existing PORT-NLS comparison. Retain covariance accuracy and every failed endpoint; scalar rescaling alone is insufficient.\n2. **Starts:** investigate a bounded sample-only signed-basin alternative on the two missed minima, then fresh draws. Diagnostic reference starts are not default-start evidence.\n3. **Convergence audits:** investigate stable representation and calibration of the sandwich conditioning guard, together with the retained flat NTML witness. Do not relax a threshold merely to improve pass counts.\n\n")
+  cat("## Caveats and cost\n\nThis is an exploratory five-dataset diagnosis, not a global-minimum proof or a default-selection study. The retained unit witness and four fresh regular draws use the same two-factor regression population at N=100. Indicators are multiplied by (.01, 100, 2, .3, 10, .1). ULS weights raw covariance discrepancies equally, so changing measurement units changes its statistical target; this lane fixes that mixed-unit target throughout. Means, groups, FIML, ordinal data, PSD restrictions and statistical barriers are outside this study. Signed primitive and indicator variances remain unrestricted.\n\n")
+  cat("For the independent reference, six free indicator variances match the sample diagonal exactly. Four loading ratios and three latent covariance entries minimize the fifteen remaining weighted discrepancies. Exact profile curvature and the six diagonal residual directions establish strict local curvature; the full regression Hessian independently confirms it. Refinement begins from the best finite unscaled PORT-NLS candidate. If that does not qualify, three signed-moment alternatives are retained with their failed traces. This limited diagnostic search makes no exhaustive basin or global claim. The saved decimal sample covariances are symmetrized, and the resulting reference objectives agree with the C++ original objective within 1e-8(1+|f|).\n\n")
+  elapsed <- as.numeric(meta$value[meta$key == "elapsed_s"])
+  cat(sprintf("The 360-fit cold grid took %.1f seconds locally; the 60-digit reference calculation took %.1f seconds. A separate 90-digit run repeats the grid and reference calculation. These include result handling and are not balanced speed comparisons. Compact summaries, warm checks, reference inputs/parameters, failed refinement traces and fingerprints are frozen; full cold fits and RDS objects stay local. Earlier coordinate-repair evidence remains available with `-P lane:scaling`, and the ordinary start/control pilot with `-P lane:ordinary`.\n\n", elapsed, ref_meta$elapsed_s))
+  cat("## Reproduce\n\nUse an installed magmaanlab build from this branch and Python with mpmath 1.3.0 available (for example through an isolated environment). From this study directory, first regenerate the local sample inputs with fresh run IDs:\n\n```sh\nRscript run_experiment.R --ordinary --smoke --transforms native,mixed --run-id units-new\nRscript run_experiment.R --ordinary --smoke --reps 4 --ns 100 --designs ernst --seed-base 620260004 --transforms native,mixed --run-id fresh-units-new\nRscript run_experiment.R --ordinary --uls-unit-probe --help\nRscript run_experiment.R --ordinary --uls-unit-probe --source-run units-new --fresh-run fresh-units-new --reference-digits 60 --run-id uls-new-60\nRscript run_experiment.R --ordinary --uls-unit-probe --source-run units-new --fresh-run fresh-units-new --reference-digits 90 --run-id uls-new-90\nquarto render report.qmd -P uls_run:uls-new-60 -P uls_confirm:uls-new-90\n```\n\nAdd `--smoke` to restrict the probe to the retained unit witness; `--python PATH` selects the Python environment. Frozen `covariances.csv` and `reference_starts.csv` also permit independent refinement without reconstructing R objects: copy them into a fresh local directory and run `python scripts/uls_unit_reference.py --run-dir DIRECTORY --digits 90`. Reports only read saved results.\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "scaling")) {
   read_scaling <- function(run, name) {
     file <- file.path("results", run, paste0(name, ".csv"))

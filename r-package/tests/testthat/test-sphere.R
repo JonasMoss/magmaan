@@ -66,6 +66,10 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
     expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
     expect_identical(sph$gauge$native_audit$status, "passed")
     expect_identical(sph$gauge$native_audit$newton_accuracy$metric, "sandwich")
+    expect_identical(sph$gauge$native_audit$curvature_system$status, "available")
+    expect_identical(sph$gauge$native_audit$accuracy_metric_system$status, "available")
+    expect_true(all(eigen(sph$gauge$native_audit$reduced_metric, symmetric = TRUE,
+                          only.values = TRUE)$values > 0))
   }
   miss <- dat
   miss$x2[seq(3, nrow(miss), by = 7)] <- NA

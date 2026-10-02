@@ -758,10 +758,19 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   draws. The internal gauge latents are dimensionless; LS and PORT now honor
   requested rest-coordinate scaling. The pilot loses no accepted fits; the
   hard-case replay retains two shared-FABIN3 PORT ML acceptance gains and two
-  losses, with layered ML target recovery unchanged. Next investigate mixed-unit
-  ULS under its own fixed target and those PORT curvature failures; explain the
-  shared-FABIN3 GLS worse local minimum and calibrate
-  the conditioning guard on the very flat finite witness. Preserve LS-specific
+  losses, with layered ML target recovery unchanged. The mixed-unit ULS probe
+  independently establishes five finite strict local minima at 60/90 digits;
+  warm diagnostic fits recover all five in both charts, but all ten fail the
+  unchanged sandwich conditioning guard (metric conditions 1e16–1e18, despite
+  Hessian conditions below 1e12). Three implied covariances are indefinite under
+  this unrestricted target. Existing PORT-NLS reaches three references from
+  most cold configurations; two lower signed-variance basins remain missed.
+  The sphere audit now distinguishes failed accuracy-metric factorization from
+  failed Hessian curvature, without changing acceptance. Next study LS
+  preconditioning/damped steps and bounded sample-only signed-basin starts;
+  investigate stable sandwich representation and conditioning-guard calibration
+  jointly with the very flat finite NTML witness. Retain the PORT curvature
+  failures and explain the shared-FABIN3 GLS worse local minimum. Preserve LS-specific
   warm references without treating a fitted ML point as an LS optimum.
   PSD/barriers, FIML, ordinal data and broad global-search guarantees are
   separate extensions, not prerequisites for this programme.

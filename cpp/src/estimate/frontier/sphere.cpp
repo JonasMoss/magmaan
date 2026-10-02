@@ -834,7 +834,13 @@ SphereAudit collect_sphere_audit(
         audit.metric_system = prepare_newton_system(g.reduced_metric);
         const Eigen::VectorXd correction_score = g.reduced_hessian * audit.solution.step;
         const auto metric_solution = solve_newton_system(audit.metric_system, correction_score);
-        audit.solution.status = metric_solution.status;
+        // The Hessian has already passed. A singular or numerically unresolved
+        // sandwich metric is an accuracy-scale failure, not negative curvature
+        // of the objective (same classification as the ordinary LS audit).
+        audit.solution.status = metric_solution.status == NewtonAccuracyStatus::Available
+            ? NewtonAccuracyStatus::Available : NewtonAccuracyStatus::IllConditioned;
+        if (metric_solution.status != NewtonAccuracyStatus::Available)
+          out.detail = "normal-theory gradient variance is singular or numerically unresolved";
         audit.solution.distance = metric_solution.distance;
         audit.solution.condition = std::max(audit.solution.condition, metric_solution.condition);
         audit.solution.solve_residual = std::max(audit.solution.solve_residual, metric_solution.solve_residual);

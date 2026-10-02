@@ -1215,10 +1215,27 @@ fresh regular N=100 draws yield 48/48 matched audited unit pairs per estimator.
 The 864-fit pilot gains one ULS fit and loses none. The 648-fit hard-case replay
 gains one ULS fit, with two shared-FABIN3 PORT ML acceptance gains and two losses
 at lower-objective endpoints failing curvature. Layered ML target recovery stays
-3/6, and all six qualified warm ML witnesses reproduce. Mixed-unit ULS and the
-flat-minimum conditioning guard remain unresolved. A C++ regression checks ML
+3/6, and all six qualified warm ML witnesses reproduce. Mixed-unit ULS is
+diagnosed below; the flat-minimum conditioning guard remains unresolved. A C++ regression checks ML
 and GLS objectives, covariances and native acceptance with L-BFGS/PORT. PSD and
 FIML optimizer routes are unaffected.
+
+The mixed-unit ULS lane (2026-10-02) retains 360 cold fits over five regular
+N=100 datasets, two shared sample-only starts, both charts, six optimizer
+profiles and three positive scalar weights preserving the fixed ULS minimizers.
+Independent 60/90-digit profiled and full-Hessian calculations establish five
+finite strict local minima. Existing PORT-NLS reaches three from most cold
+configurations; two lower signed-variance minima require diagnostic reference
+starts. Warm fits reproduce all five objectives and covariances in both charts,
+but all ten fail the unchanged production audit. The diagonally equilibrated
+normal-theory gradient-variance metric has condition 1e16–1e18, while the exact
+objective Hessian remains below 1e12. This distinguishes an accuracy-certification
+limitation from nonexistence and cold basin misses. Three implied covariances
+are indefinite, as permitted by unrestricted ULS; PSD targets remain separate.
+L-BFGS and scalar PORT match none of these references jointly in objective and
+covariance, even with the longer/tighter controls. Next checks concern LS
+preconditioning/damped steps, sample-only signed-basin starts and stable sandwich
+representation/guard calibration. No optimizer default or audit threshold changes.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
@@ -1305,6 +1322,14 @@ feasibility and Newton accuracy independently of backend termination. ML and
 FIML use analytic observed information; continuous GMM/ULS/WLS/GLS use their
 exact Hessian and normal-theory sandwich metric. The loading normalization's
 second derivatives enter the Hessian, and radial pin curvature is excluded.
+Once objective curvature passes, a failed gradient-variance metric solve is
+classified `IllConditioned`, matching ordinary LS, rather than inheriting that
+metric factorization's `NonpositiveCurvature` label. This changes diagnostics
+only; genuine Hessian failures and acceptance thresholds remain unchanged.
+R retains separate `curvature_system` and `accuracy_metric_system` status and
+condition evidence, together with `reduced_metric`, in `gauge$native_audit`.
+A rank-one-sample ULS regression tests full objective curvature with a singular
+sandwich metric.
 `audit_ml_sphere` recomputes this evidence without fitting or translating;
 `assess_convergence(SphereAudit, policy)` reuses the retained computation.
 First-order telemetry uses the product Euclidean metric of normalized driven

@@ -250,3 +250,31 @@ ordinary-layered-exact-v3/*
 !ordinary-layered-exact-v3/known_target_checks.csv
 !ordinary-layered-exact-v3/ls_warm_checks.csv
 !ordinary-layered-exact-v3/metadata.csv
+
+# Mixed-unit ULS local-minimum proof inputs, compact search/warm evidence and
+# failed refinement traces; full cold fits, pair checks and RDSs remain local.
+!uls-unit-final-60/
+uls-unit-final-60/*
+!uls-unit-final-60/summary.csv
+!uls-unit-final-60/audit_summary.csv
+!uls-unit-final-60/metadata.csv
+!uls-unit-final-60/reference_hits.csv
+!uls-unit-final-60/warm_checks.csv
+!uls-unit-final-60/warm_summary.csv
+!uls-unit-final-60/reference_summary.csv
+!uls-unit-final-60/reference_core_checks.csv
+!uls-unit-final-60/reference_parameters.csv
+!uls-unit-final-60/covariances.csv
+!uls-unit-final-60/reference_starts.csv
+!uls-unit-final-60/reference_attempts.csv
+!uls-unit-final-60/reference_metadata.csv
+!uls-unit-final-60/reference_trace.csv
+!uls-unit-final-90/
+uls-unit-final-90/*
+!uls-unit-final-90/metadata.csv
+!uls-unit-final-90/reference_summary.csv
+!uls-unit-final-90/reference_parameters.csv
+!uls-unit-final-90/reference_attempts.csv
+!uls-unit-final-90/reference_metadata.csv
+!uls-unit-final-90/reference_core_checks.csv
+!uls-unit-final-90/warm_summary.csv

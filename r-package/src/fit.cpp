@@ -2830,6 +2830,14 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
       Rcpp::_["reduced_hessian"] = Rcpp::wrap(computations.geometry.reduced_hessian),
       Rcpp::_["detail"] = a.detail);
   native_audit["n_obs"] = computations.derivatives.n_obs;
+  auto system = [](const magmaan::estimate::frontier::NewtonSystem& s) {
+    return Rcpp::List::create(
+        Rcpp::_["status"] = std::string(magmaan::estimate::to_string(s.status)),
+        Rcpp::_["condition"] = s.condition);
+  };
+  native_audit["curvature_system"] = system(computations.system);
+  native_audit["accuracy_metric_system"] = system(computations.metric_system);
+  native_audit["reduced_metric"] = Rcpp::wrap(computations.geometry.reduced_metric);
 
   return Rcpp::List::create(
       Rcpp::_["chart"] = "sphere",

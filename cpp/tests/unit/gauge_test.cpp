@@ -644,6 +644,31 @@ TEST_CASE("sphere audit: regular ML acceptance survives heterogeneous indicator 
   CHECK(second->report.fmin_internal == doctest::Approx(first->report.fmin_internal).epsilon(1e-9));
 }
 
+TEST_CASE("sphere LS audit: singular sandwich metric is not negative curvature") {
+  // Exact rank-one covariance: the ULS objective has full local parameter
+  // curvature, while its normal-theory score variance has rank one.
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {Eigen::Matrix4d::Ones()});
+  for (std::size_t i = 0; i < f.pt.size(); ++i) {
+    if (f.pt.free[i] <= 0) continue;
+    const auto cell = f.rep.cell_for_row[i];
+    f.x0(f.pt.free[i] - 1) = cell.mat == magmaan::model::MatId::Lambda ||
+        cell.mat == magmaan::model::MatId::Psi ? 1.0 : 0.0;
+  }
+  fr::SphereOptions sphere;
+  sphere.start = fr::SphereStart::User;
+  sphere.polish = false;
+  auto fit = fr::fit_gmm_sphere(f.pt, f.rep, f.samp, f.x0, {}, {},
+      Backend::NloptLbfgs, {}, sphere);
+  REQUIRE_OK(fit);
+  using Status = magmaan::estimate::frontier::NewtonAccuracyStatus;
+  const auto& audit = fit->report.native_audit;
+  CHECK(fit->report.fmin_internal == doctest::Approx(0).epsilon(1e-12));
+  CHECK(audit.computations.system.status == Status::Available);
+  CHECK(audit.computations.metric_system.status == Status::NonpositiveCurvature);
+  CHECK(audit.computations.solution.status == Status::IllConditioned);
+  CHECK(fit->report.native_verdict.status == magmaan::estimate::FitCheck::Failed);
+}
+
 TEST_CASE("sphere ML and GLS: sample-unit scaling uses the internal latent chart") {
   // Frozen regular N=100 development covariance. With mixed indicator units,
   // the former released-marker scale stops far from the optimum (or fails
