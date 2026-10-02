@@ -752,9 +752,15 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   The matched layered replay gains one sphere ULS and one GLS fit in the pilot
   and recovers 3/6 qualified retained ML minima versus marker's 1/6 with default
   L-BFGS. Warm diagnostic ML fits recover all six; cold search still misses
-  qualified minima. Next isolate conditioning/preconditioning and stopping on
-  the retained heterogeneous-unit sphere failures (shared layered does not
-  repair them); explain the shared-FABIN3 GLS worse local minimum and calibrate
+  qualified minima. The sphere sample-unit repair (2026-10-02) clears retained
+  mixed-unit NTML/GLS failures: 12/12 configurations per estimator, with all
+  48/48 paired configurations also passing and matching on four fresh regular
+  draws. The internal gauge latents are dimensionless; LS and PORT now honor
+  requested rest-coordinate scaling. The pilot loses no accepted fits; the
+  hard-case replay retains two shared-FABIN3 PORT ML acceptance gains and two
+  losses, with layered ML target recovery unchanged. Next investigate mixed-unit
+  ULS under its own fixed target and those PORT curvature failures; explain the
+  shared-FABIN3 GLS worse local minimum and calibrate
   the conditioning guard on the very flat finite witness. Preserve LS-specific
   warm references without treating a fitted ML point as an LS optimum.
   PSD/barriers, FIML, ordinal data and broad global-search guarantees are

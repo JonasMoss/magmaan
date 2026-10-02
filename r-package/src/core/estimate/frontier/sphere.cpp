@@ -35,6 +35,7 @@
 #include "magmaan/optim/terminal_audit.hpp"
 
 #include "../detail_backend_dispatch.hpp"
+#include "../detail_coordinates.hpp"
 
 namespace magmaan::estimate::frontier {
 
@@ -76,6 +77,7 @@ struct SphereSetup {
   Eigen::Index              n_rest = 0;
   Eigen::Index              n_u = 0;
   double                    pin_scale = 0.0;  // sqrt(2 rho)
+  SphereMetric              metric = SphereMetric::UnitFree;
   std::string               start_used = "user";
 };
 
@@ -267,6 +269,7 @@ build_setup(const spec::LatentStructure& pt, const model::MatrixRep& rep,
   }
   s->n_u = off;
   s->pin_scale = std::sqrt(2.0 * sopts.pin_weight);
+  s->metric = sopts.metric;
   return s;
 }
 
@@ -576,22 +579,42 @@ run_driven_stages(const SphereSetup& s, const optim::ParameterMap& map,
   return first;
 }
 
-// The sample-based coordinate scaling fit_ml applies to its equality-reduced
-// ML problem (ml_coordinate_scale), carried to the driven coordinates. Each
-// rest coordinate takes the scale of its kernel column. Unit directions stay
-// unscaled: they live on the unit sphere of the unit-free metric already.
-// Empty wherever fit_ml would not scale either, so a model without gauge
-// units is driven exactly like the ordinary fit.
-Eigen::VectorXd driven_ml_scale(const SphereSetup& s, const model::MatrixRep& rep,
+// Scale the rest in the internal chart's units. Unit-free loadings already
+// carry observed standard deviations through D, so their latent coordinates
+// are dimensionless. Inferring latent units from the released markers instead
+// assigns them the mean indicator SD and changes the driven problem when
+// indicator units change. Passthrough latents retain their ordinary units.
+// Beta directions stay unscaled; the radial pin has the same units already.
+Eigen::VectorXd driven_scale(const SphereSetup& s, const model::MatrixRep& rep,
                                 const SampleStats& samp, const Bounds& bounds,
                                 Backend backend, const OptimOptions& opts) {
   const bool supported = backend == Backend::NloptLbfgs ||
                          backend == Backend::NloptSlsqp ||
-                         backend == Backend::NloptLbfgsSlsqpFallback;
+                         backend == Backend::NloptLbfgsSlsqpFallback ||
+                         backend == Backend::Port;
   if (opts.coordinate_scaling == optim::CoordinateScaling::None || !supported || s.nl_int.active() || s.n_u == 0 ||
       (!bounds.empty() && s.con_int.group.empty()))
     return {};
-  auto col = ml_coordinate_scale(s.pt_int, rep, s.con_int, samp);
+  auto variables = driven::variable_units(s.pt_int, rep, samp);
+  if (!variables) return {};
+  if (s.metric == SphereMetric::UnitFree) {
+    for (const auto& unit : s.plan.units) {
+      for (const auto& member : unit.loading_rows) {
+        const auto cell = rep.cell_for_row[idx(member.front())];
+        variables->latent[idx(cell.block)](cell.col) = 1.0;
+      }
+    }
+  }
+  Eigen::VectorXd units = Eigen::VectorXd::Ones(s.pt_int.n_free());
+  for (std::size_t i = 0; i < s.pt_int.size(); ++i) {
+    const auto cell = rep.cell_for_row[i];
+    if (!cell.used || s.pt_int.free[i] <= 0) continue;
+    const double unit = driven::matrix_cell_unit(*variables, cell.mat,
+                                                 cell.row, cell.col, idx(cell.block));
+    if (!std::isfinite(unit) || unit <= 0.0) return {};
+    units(s.pt_int.free[i] - 1) = unit;
+  }
+  auto col = reduced_units(units, s.con_int);
   if (!col) return {};
   Eigen::VectorXd out = Eigen::VectorXd::Ones(s.n_u);
   for (Eigen::Index k = 0; k < s.n_rest; ++k)
@@ -984,7 +1007,7 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto ub = driven_bounds(**s, bounds, *u0, who);
   if (!ub) return std::unexpected(ub.error());
   const OptimOptions user_opts = opts;
-  const Eigen::VectorXd scale = driven_ml_scale(**s, rep, samp, bounds, backend, user_opts);
+  const Eigen::VectorXd scale = driven_scale(**s, rep, samp, bounds, backend, user_opts);
   opts.coordinate_scaling = optim::CoordinateScaling::None;
   auto r = run_driven(**s, map, &*obj, nullptr, *u0, *ub, backend, opts, who, scale);
   if (!r) return std::unexpected(r.error());
@@ -1075,7 +1098,7 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (ml) {
       const OptimOptions ml_opts = ml_optim_options();
       auto rml = run_driven(**s, map, &*ml, nullptr, *u0, *ub, backend, ml_opts, who,
-                            driven_ml_scale(**s, rep, samp, bounds, backend, ml_opts));
+                            driven_scale(**s, rep, samp, bounds, backend, ml_opts));
       if (rml && rml->x.allFinite() && std::isfinite(rml->fmin)) {
         *u0 = rml->x;
         (*s)->start_used = "canonical (via ML)";
@@ -1091,7 +1114,8 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto prob = gmm::residuals(*ev, samp, theta0, weight);
   if (!prob) return std::unexpected(prob.error());
   const optim::ScalarProblem internal_obj = optim::scalarize(*prob);
-  auto r = run_driven(**s, map, nullptr, &*prob, *u0, *ub, backend, opts, who);
+  const Eigen::VectorXd scale = driven_scale(**s, rep, samp, bounds, backend, opts);
+  auto r = run_driven(**s, map, nullptr, &*prob, *u0, *ub, backend, opts, who, scale);
   if (!r) return std::unexpected(r.error());
   const Estimator est = gls ? Estimator::GLS
                             : (weight.empty() ? Estimator::ULS : Estimator::WLS);
@@ -1108,7 +1132,9 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
       unpinned_reported_value(**s, *r), [&](const Eigen::VectorXd& theta) {
         return evaluate_newton_moment_quadratic(*ev, samp, theta, weight);
       });
-  return finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who, std::move(audit));
+  auto out = finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who, std::move(audit));
+  if (out) out->report.driven_scaled = scale.size() > 0;
+  return out;
 }
 
 }  // namespace

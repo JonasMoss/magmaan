@@ -1,11 +1,16 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: ordinary
+  lane: scaling
   run: ordinary-layered-pilot-v2
   units_run: ordinary-layered-units-v2
   witness_run: ordinary-layered-witnesses-v2
   audit_run: ordinary-layered-exact-v3
+  scaling_units: ordinary-scaling-units-v4
+  scaling_fresh: ordinary-scaling-fresh-units-v2
+  scaling_pilot: ordinary-scaling-pilot-v2
+  scaling_witnesses: ordinary-scaling-witnesses-v2
+  scaling_audit: ordinary-scaling-exact-v2
 format:
   html:
     toc: true
@@ -19,6 +24,50 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "scaling")) {
+  read_scaling <- function(run, name) {
+    file <- file.path("results", run, paste0(name, ".csv"))
+    if (!file.exists(file)) stop("Missing scaling evidence: ", file, "; see reproduction commands in report.qmd")
+    read.csv(file, stringsAsFactors = FALSE)
+  }
+  units <- read_scaling(params$scaling_units, "repair_comparison")
+  fresh <- read_scaling(params$scaling_fresh, "unit_summary")
+  fresh_checks <- read_scaling(params$scaling_fresh, "unit_checks")
+  pilot <- read_scaling(params$scaling_pilot, "repair_comparison")
+  witnesses <- read_scaling(params$scaling_witnesses, "repair_comparison")
+  changed <- read_scaling(params$scaling_witnesses, "repair_changes")
+  known <- read_scaling(params$scaling_audit, "known_target_summary")
+  warm <- read_scaling(params$scaling_audit, "warm_summary")
+  none <- read_scaling("ordinary-scaling-after-none", "summary")
+  explicit <- read_scaling("ordinary-scaling-after-sample_units", "summary")
+  cat("## Question\n\nWhy do sphere NTML and GLS fits fail after changing indicator units, even with the same layered starts? Can a small coordinate repair clear that failure while retaining the ordinary-fit audit?\n\n")
+  cat("## Short answer\n\nThe retained measurement-unit failures come from optimizer coordinates. Correcting the internal latent units and applying the requested scaling to LS and PORT raises sphere NTML passes from 2/12 to 12/12 and GLS from 1/12 to 12/12. All 48 configurations per estimator also pass on four fresh regular draws. Their objectives and implied covariances agree after undoing the unit change. The starts, stopping thresholds, evaluation budgets and .01 Newton audit are unchanged.\n\n")
+  cat("The repair is deliberately narrower than a reliability guarantee. Mixed-unit ULS still fails in both charts, and the hard-case bank retains basin and conditioning problems. Two shared-FABIN3 PORT ML fits gain acceptance and two lose it; layered-start target recovery stays at 3/6 qualified ML minima versus marker's 1/6. Those losses are retained, rather than hidden by pooled pass counts.\n\n")
+  cat("## Evidence\n\n### Measurement units\n\n")
+  table <- units[units$transform == "mixed" & units$chart == "sphere", c("estimator", "fits", "before", "after")]
+  table$fresh_pairs <- vapply(table$estimator, function(est) {
+    row <- fresh[fresh$estimator == est & fresh$chart == "sphere", ]
+    if (nrow(row)) sprintf("%d/%d", row$matched, row$pairs) else "different target"
+  }, "")
+  names(table) <- c("Estimator", "Witness configurations", "Before: passes", "After: passes", "Fresh unit pairs matched")
+  cat(knitr::kable(table, row.names = FALSE), sep = "\n")
+  cat(sprintf("\n\nThe witness and four fresh draws are regular two-factor regression samples at N=100. Each draw is fitted under three starts and four optimizer profiles, in both charts. Indicators are multiplied by (.01, 100, 2, .3, 10, .1), with paired fits sharing the underlying observations. Maximum fresh sphere objective gap is %.2g; maximum covariance gap after undoing units and standardizing by sample SDs is %.2g. These meet the existing comparison tolerances (objective 1e-6 and standardized covariance 1e-5). Marker NTML/GLS also match all 48 fresh pairs.\n\n",
+    max(fresh_checks$objective_gap[fresh_checks$chart == "sphere"]), max(fresh_checks$standardized_sigma_gap[fresh_checks$chart == "sphere"])))
+  cat("Explicit `coordinate_scaling = \"sample_units\"` gives the same 12/12 witness passes. With scaling disabled, sphere falls back to 2/12 NTML and 1/12 GLS. Before the repair, requesting sample-unit scaling left those sphere failures unchanged. Thus tighter stopping and another start were insufficient to clear this particular failure. ULS weights raw covariance discrepancies equally, so heterogeneous units change its target; its 0/12 witness and 0/48 fresh mixed-unit passes in both charts remain a separate numerical problem.\n\n")
+  cat("### What changed\n\nUnit-free sphere loadings already carry each indicator's sample SD through the loading map. The gauge latents therefore use dimensionless internal coordinates. Inferring their units from the gauge-free partable instead assigned the mean indicator SD to those latents, producing inappropriate scales for latent variances and regressions. The rest-coordinate scales now use the sphere chart's units; passthrough latents keep their ordinary units. LS and PORT now apply the existing requested scaling, which those paths previously skipped. Beta directions and the artificial radial pin retain their existing scales. The unscaled endpoint is still audited with the pin excluded.\n\n")
+  cat("This changes search paths, including where PORT stops, but introduces no start selector, retry, new backend or statistical-domain restriction. Both nonzero scaling settings use the existing sample-unit rule here; this repair does not introduce an information-based tangent preconditioner. Nonlinear constraints and unsupported bound configurations retain their previous scaling limitations. PSD and FIML routes are outside this repair.\n\n")
+  cat("### Pilot and hard-case tradeoffs\n\n")
+  cat(sprintf("The 864-fit ordinary pilot gains %d accepted sphere ULS fit and loses %d accepted fits; ML and GLS acceptance counts stay unchanged. In the 648-fit hard-case replay, sphere ULS gains %d fit. Sphere ML gains %d and loses %d configurations, all shared-FABIN3 PORT or tight-PORT arms. Every ordinary marker result reproduces.\n\n", sum(pilot$gains), sum(pilot$losses), sum(witnesses$gains[witnesses$estimator == "ULS"]), sum(witnesses$gains[witnesses$estimator == "ML"]), sum(witnesses$losses[witnesses$estimator == "ML"])))
+  losses <- changed[changed$loss, c("design", "n", "rep", "profile", "before_objective", "after_objective", "after_newton_status")]
+  names(losses) <- c("Population", "N", "Draw", "Profile", "Before objective", "After objective", "After Newton status")
+  cat(knitr::kable(losses, row.names = FALSE, digits = 6), sep = "\n")
+  cat("\n\nThose two losses reach a lower objective but fail the curvature audit. They are numerical failures; a lower objective cannot substitute for a qualified endpoint. The two ML gains occur near the flat weak-marker finite witness: nearby endpoints now pass, while its independently refined minimum still exceeds the fixed conditioning guard. This sensitivity remains unresolved. Changes are recorded in `repair_changes.csv`; the original hard-case conclusions are not replaced by a universal success claim.\n\n")
+  cat("Exact-point checks preserve the same six passing refined ML minima and one ill-conditioned finite minimum. Warm diagnostic fits still recover all six passing targets under both charts and both backends. Under default L-BFGS, shared-layered sphere cold fits still recover 3/6 qualified targets versus marker's 1/6; canonical sphere recovers 2/6. Warm LS comparisons retain their estimator-specific targets. Earlier start/control evidence remains available by rendering with `-P lane:ordinary`.\n\n")
+  cat("## What remains\n\n1. **Starts:** explain the retained finite-basin misses, including the shared-FABIN3 worse GLS local minimum; confirm any replacement on fresh problems.\n2. **Optimizer options:** investigate mixed-unit ULS under its own fixed target and the changed PORT failures; keep search and stopping evidence separate.\n3. **Audits:** calibrate the conditioning guard on the independently established flat finite witness; validate requested-chart reporting separately. A failed guard does not establish nonexistence.\n\n")
+  cat("## Limits and cost\n\nFive regular unit-change datasets and a small development bank establish a reproducible defect and repair, not broad reliability or global optimality. This covariance-only, single-group scope excludes means, cross-group/equality constraints, FIML, ordinal data, PSD and statistical barriers. The repair has an independent C++ regression for ML/GLS under L-BFGS/PORT, comparing audited endpoints, objectives and covariances. The focused C++ and R sphere suites pass. Runs took seconds locally; concurrent execution and result handling prevent a balanced speed claim. Compact summaries, paired unit checks, changed outcomes and package/source fingerprints are frozen; raw fit CSVs and RDSs stay local.\n\n")
+  cat("## Reproduce\n\nThe before rows use `bf150875`. Rebuild that revision and regenerate raw baseline grids with fresh run IDs before rebuilding this repair to use `--compare-run`; frozen summaries alone do not contain the raw endpoints. With an installed repaired magmaanlab build, from this study directory:\n\n```sh\nRscript run_experiment.R --ordinary --help\nRscript run_experiment.R --ordinary --smoke --transforms native,mixed --run-id units-new\nRscript run_experiment.R --ordinary --smoke --reps 4 --ns 100 --designs ernst --seed-base 620260004 --transforms native,mixed --run-id fresh-units-new\nRscript run_experiment.R --ordinary --smoke --transforms native,mixed --coordinate-scaling none --run-id units-none-new\nRscript run_experiment.R --ordinary --pilot --run-id pilot-new\nRscript run_experiment.R --ordinary --witnesses --run-id witnesses-new\nRscript run_experiment.R --ordinary --witness-audit --cold-run witnesses-new --run-id exact-new\nquarto render report.qmd\n```\n\nUse the identical grid and `--compare-run BEFORE_RAW_RUN` to regenerate paired gain/loss CSVs. Render the retained before-repair start study with `-P lane:ordinary`; render the older reference investigation with `-P lane:reference -P run:reference-pilot`. Rendering only reads this leaf's results.\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "ordinary")) {
   read_ordinary <- function(name, run = params$run) {
     path <- file.path("results", run, paste0(name, ".csv"))

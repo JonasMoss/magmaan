@@ -1196,11 +1196,29 @@ versus marker's 1/6. Exact-point audits preserve six passing refined finite
 minima and one ill-conditioned finite minimum; warm fits recover all six in
 both charts/backends. The very flat witness exposes conditioning-guard
 sensitivity near its minimum. Shared layered starts do not repair the
-heterogeneous-unit sphere NTML/GLS failures. The shared-FABIN3 worse GLS minimum
-also remains. These findings motivate targeted conditioning/stopping, guard
-calibration and basin recovery, with LS objectives judged separately. No
-new default or global optimum claim follows. PSD/barriers and their geometry remain
-separate; the existing defaults and audit budgets are unchanged.
+heterogeneous-unit sphere NTML/GLS failures before the coordinate repair below.
+The shared-FABIN3 worse GLS minimum also remains. These findings motivate
+targeted conditioning/stopping, guard calibration and basin recovery, with LS
+objectives judged separately. No new start default or global optimum claim
+follows. PSD/barriers and their geometry remain separate; audit budgets are unchanged.
+
+The targeted scalar sphere repair (2026-10-02) makes the optimizer rest-coordinate
+units agree with the internal unit-free loading map: gauge latents are
+dimensionless, while passthrough latents keep their identification-aware units.
+Inferring gauge-latent units from released markers had assigned the mean
+indicator SD instead. Continuous LS and PORT now honor the existing requested
+sample-unit scaling; explicit None, the radial pin, starts, stopping thresholds,
+budgets and endpoint audit remain unchanged. Both nonzero scaling modes retain
+the existing sample-unit rule, without a new information/tangent preconditioner.
+ML/GLS mixed-unit witness passes rise from 2/12 and 1/12 to 12/12 each; four
+fresh regular N=100 draws yield 48/48 matched audited unit pairs per estimator.
+The 864-fit pilot gains one ULS fit and loses none. The 648-fit hard-case replay
+gains one ULS fit, with two shared-FABIN3 PORT ML acceptance gains and two losses
+at lower-objective endpoints failing curvature. Layered ML target recovery stays
+3/6, and all six qualified warm ML witnesses reproduce. Mixed-unit ULS and the
+flat-minimum conditioning guard remain unresolved. A C++ regression checks ML
+and GLS objectives, covariances and native acceptance with L-BFGS/PORT. PSD and
+FIML optimizer routes are unaffected.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the

@@ -1,0 +1,2 @@
+"draw_id","design","n","rep","transform","seed","estimator","chart","start_id","profile","before_accepted","after_accepted","gain","loss","before_objective","after_objective","before_newton_status","after_newton_status"
+8,"weak_marker",20,2,"native",620462004,"ULS","sphere","native","lbfgs_tight",FALSE,TRUE,TRUE,FALSE,,0.231613867365444,"unavailable","available"

@@ -126,8 +126,8 @@ struct SphereReport {
   optim::TerminalAudit  driven_audit = {};
   SphereAudit           native_audit;
   ConvergenceAssessment native_verdict;
-  // Whether the driven ML run used the sample-based coordinate scaling of
-  // fit_ml (rest coordinates only). Point, gradient and audit above are in
+  // Whether the driven ML/LS run used sample-unit coordinate scaling in its
+  // internal chart (rest coordinates only). Point, gradient and audit above are in
   // unscaled driven coordinates either way.
   bool                  driven_scaled = false;
   // User-chart polish: whether it ran, its iterations, the largest relative

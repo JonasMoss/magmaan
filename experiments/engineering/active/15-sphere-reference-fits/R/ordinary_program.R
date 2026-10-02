@@ -11,6 +11,8 @@ run_ordinary_program <- function(args, here) {
     "--estimators ML,ULS,GLS --seed-base N --run-id NAME",
     "--transforms native,mixed (mixed units .01,100,2,.3,10,.1).",
     "--shared-starts fabin3,layered (native baseline always retained).",
+    "--coordinate-scaling default|none|sample_units|information (same override for both charts).",
+    "--compare-run NAME (record gains/losses against an identical earlier grid).",
     "--witnesses: replay the nine retained hard datasets, using their original seeds.",
     "--witness-audit: assess saved/refined ML points and explicitly labeled warm fits.",
     "No PSD, barriers, bounds, automatic retries, or default changes.",
@@ -20,7 +22,7 @@ run_ordinary_program <- function(args, here) {
     "endpoint/sample RDSs under results/NAME; fresh run IDs required.", sep = "\n")
   if (any(args %in% c("--help", "-h"))) { cat(usage, "\n"); return(invisible(NULL)) }
   known <- c("--ordinary", "--smoke", "--pilot", "--reps", "--ns", "--designs",
-             "--estimators", "--seed-base", "--run-id", "--transforms", "--shared-starts", "--witnesses")
+             "--estimators", "--seed-base", "--run-id", "--transforms", "--shared-starts", "--witnesses", "--coordinate-scaling", "--compare-run")
   if (any(startsWith(args, "--") & !args %in% known)) stop("unknown ordinary option")
   value <- function(k, default) {
     i <- match(k, args)
@@ -35,6 +37,11 @@ run_ordinary_program <- function(args, here) {
   estimators <- parse_csv_arg(value("--estimators", "ML,ULS,GLS"))
   transforms <- parse_csv_arg(value("--transforms", "native"))
   shared_methods <- parse_csv_arg(value("--shared-starts", "fabin3,layered"))
+  coordinate_scaling <- value("--coordinate-scaling", "default")
+  compare_run <- value("--compare-run", "")
+  if (nzchar(compare_run) && !grepl("^[A-Za-z0-9_-]+$", compare_run)) stop("invalid comparison run")
+  compare_file <- file.path(here, "results", compare_run, "fits.csv")
+  if (nzchar(compare_run) && !file.exists(compare_file)) stop("missing earlier fits: ", compare_file)
   witness_bank <- "--witnesses" %in% args
   if (witness_bank && any(args %in% c("--seed-base", "--designs", "--ns", "--reps")))
     stop("the retained witness bank fixes designs, sample sizes, replicates and seeds")
@@ -44,6 +51,7 @@ run_ordinary_program <- function(args, here) {
       !length(ns) || !length(designs) || !length(estimators) || !length(transforms) ||
       seed_base < 1 || seed_base > 2e9 || any(ns > 10000) ||
       anyDuplicated(ns) || anyDuplicated(designs) || anyDuplicated(estimators) || anyDuplicated(transforms) ||
+      !coordinate_scaling %in% c("default", "none", "sample_units", "information") ||
       !length(shared_methods) || anyDuplicated(shared_methods) || any(!shared_methods %in% c("fabin3", "layered")) ||
       any(!designs %in% names(designs_all())) || any(!estimators %in% c("ML", "ULS", "GLS")) ||
       any(!transforms %in% c("native", "mixed")) || !grepl("^[A-Za-z0-9_-]+$", run_id))
@@ -96,6 +104,9 @@ run_ordinary_program <- function(args, here) {
     first_order = "telemetry only; sphere product-Euclidean and marker model-Frobenius norms differ",
     start_design = "route-native; shared FABIN3(auto) and layered(native) vectors constructed once before fitting",
     sphere_ls_native = "existing canonical path includes an auxiliary ML fit; time includes that work",
+    coordinate_scaling_override = coordinate_scaling,
+    comparison_run = compare_run,
+    comparison_fits_md5 = if (nzchar(compare_run)) unname(tools::md5sum(compare_file)) else "none",
     optimizer_profiles = "default no options; tight f=1e-12 x=1e-10; PORT stock/tight; budgets unchanged",
     reference = "lowest locally audited objective; repeated only across both backends with implied covariance agreement",
     evidence_role = "exploratory development, not held-out default confirmation")
@@ -127,6 +138,8 @@ run_ordinary_program <- function(args, here) {
     for (j in seq_len(nrow(arms))) {
       arm <- arms[j, ]; p <- profiles[[arm$profile]]
       ctl <- p$control; target <- spec
+      if (coordinate_scaling != "default")
+        ctl <- modifyList(ctl %||% list(), list(coordinate_scaling = coordinate_scaling))
       shared <- shared_starts[[arm$start_id]]
       explicit <- arm$start_id != "native"
       if (explicit && !inherits(shared, "error")) {
@@ -171,6 +184,13 @@ run_ordinary_program <- function(args, here) {
       eta_s = elapsed / i * (nrow(grid) - i)), "progress")
   }
   fits <- do.call(rbind, rows)
+  if (all(c("native", "mixed") %in% transforms)) {
+    unit_checks <- ordinary_unit_checks(fits, out)
+    write_out(unit_checks, "unit_checks")
+    write_out(aggregate(list(pairs = rep(1L, nrow(unit_checks)),
+      both_accepted = unit_checks$both_accepted, matched = unit_checks$matched),
+      unit_checks[c("estimator", "chart")], sum), "unit_summary")
+  }
   comparisons <- ordinary_comparisons(fits, out)
   write_out(comparisons$paired, "paired"); write_out(comparisons$references, "references")
   keys <- c(if (witness_bank) "batch", "design", "n", "transform", "estimator", "chart", "start_id", "profile")
@@ -191,10 +211,55 @@ run_ordinary_program <- function(args, here) {
   write_out(changes[c("draw_id", if (witness_bank) "batch", "design", "n", "rep", "transform", "seed", "estimator", "chart",
     "start_id", "profile", "audit_status", "newton_status", "newton_distance", "objective_gap",
     "acceptance_gain", "acceptance_loss", "recovery_gain", "recovery_loss", "reference_repeated")], "changes")
+  if (nzchar(compare_run)) {
+    before <- read.csv(compare_file, stringsAsFactors = FALSE)
+    match_keys <- c("draw_id", "design", "n", "rep", "transform", "seed", "estimator", "chart", "start_id", "profile")
+    if (nrow(before) != nrow(fits) || !all(vapply(match_keys, function(key)
+      isTRUE(all.equal(before[[key]], fits[[key]])), FALSE))) stop("comparison grids differ")
+    cmp <- fits[match_keys]
+    cmp$before_accepted <- before$accepted; cmp$after_accepted <- fits$accepted
+    cmp$gain <- !before$accepted & fits$accepted; cmp$loss <- before$accepted & !fits$accepted
+    cmp$before_objective <- before$objective; cmp$after_objective <- fits$objective
+    cmp$before_newton_status <- before$newton_status; cmp$after_newton_status <- fits$newton_status
+    write_out(aggregate(list(fits = rep(1L, nrow(cmp)), before = cmp$before_accepted,
+      after = cmp$after_accepted, gains = cmp$gain, losses = cmp$loss),
+      cmp[c("transform", "estimator", "chart")], sum), "repair_comparison")
+    write_out(cmp[cmp$gain | cmp$loss, ], "repair_changes")
+  }
   meta$elapsed_s <- proc.time()[["elapsed"]] - t0; meta$completed_fits <- nrow(fits)
   write_metadata(file.path(out, "metadata.csv"), values = meta, packages = "magmaanlab")
   cat(sprintf("Wrote %d fits in %.1fs to %s\n", nrow(fits), meta$elapsed_s, out))
   invisible(fits)
+}
+
+# Undo only the known measurement-unit transform. ULS has a different target
+# after that transform, so it does not enter this invariance comparison.
+ordinary_unit_checks <- function(fits, out) {
+  keys <- c("design", "n", "rep", "seed", "estimator", "chart", "start_id", "profile")
+  key <- function(d) do.call(paste, c(d[keys], sep = ":"))
+  native <- fits[fits$transform == "native" & fits$estimator %in% c("ML", "GLS"), ]
+  mixed <- fits[fits$transform == "mixed" & fits$estimator %in% c("ML", "GLS"), ]
+  match_id <- match(key(native), key(mixed))
+  if (anyNA(match_id)) stop("unit-transform pairs differ")
+  mixed <- mixed[match_id, ]
+  inverse_scale <- 1 / c(.01, 100, 2, .3, 10, .1)
+  rows <- lapply(seq_len(nrow(native)), function(i) {
+    a <- native[i, ]; b <- mixed[i, ]; both <- a$accepted && b$accepted
+    gap <- abs(a$objective - b$objective); sigma_gap <- NA_real_
+    if (both) {
+      get_sigma <- function(d) {
+        endpoints <- readRDS(file.path(out, sprintf("endpoints_%03d.rds", d$draw_id)))
+        endpoints[[match(d$fit_id, vapply(endpoints, `[[`, 0L, "fit_id"))]]$sigma
+      }
+      restored <- get_sigma(b) * outer(inverse_scale, inverse_scale)
+      sample <- readRDS(file.path(out, sprintf("sample_%03d.rds", a$draw_id)))$sample
+      sd <- sqrt(diag(sample$S[[1]]))
+      sigma_gap <- max(abs((restored - get_sigma(a)) / outer(sd, sd)))
+    }
+    cbind(a[keys], both_accepted = both, objective_gap = gap, standardized_sigma_gap = sigma_gap,
+      matched = both && is.finite(gap) && gap <= 1e-6 * (1 + abs(a$objective)) && sigma_gap <= 1e-5)
+  })
+  do.call(rbind, rows)
 }
 
 ordinary_endpoint <- function(fit, spec, sample, estimator, chart) {

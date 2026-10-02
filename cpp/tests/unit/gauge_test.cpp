@@ -644,6 +644,59 @@ TEST_CASE("sphere audit: regular ML acceptance survives heterogeneous indicator 
   CHECK(second->report.fmin_internal == doctest::Approx(first->report.fmin_internal).epsilon(1e-9));
 }
 
+TEST_CASE("sphere ML and GLS: sample-unit scaling uses the internal latent chart") {
+  // Frozen regular N=100 development covariance. With mixed indicator units,
+  // the former released-marker scale stops far from the optimum (or fails
+  // its line search). Both targets are invariant to this change of units.
+  Eigen::Matrix<double, 6, 6> covariance;
+  covariance <<
+    2.118383711263836, .9696068218577427, .4291974363012256, .3123623074203148, .3302763415688515, .2522176722272337,
+    .9696068218577427, 1.923872404396635, .6025127712649045, .008771535716100964, .2645935837282908, .0582359508142738,
+    .4291974363012256, .6025127712649045, 1.296549585945821, .007511998082285165, .1843541227085678, -.1183772846292678,
+    .3123623074203148, .008771535716100964, .007511998082285165, 2.140010405988564, .8881556521407293, .9195580160775313,
+    .3302763415688515, .2645935837282908, .1843541227085678, .8881556521407293, 1.671330543307811, .3823610873140895,
+    .2522176722272337, .0582359508142738, -.1183772846292678, .9195580160775313, .3823610873140895, 1.220635536650093;
+  Eigen::Matrix<double, 6, 1> scale;
+  scale << .01, 100, 2, .3, 10, .1;
+  constexpr const char* syntax = "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nY ~ X";
+  std::vector<Backend> backends{Backend::NloptLbfgs};
+#ifdef MAGMAAN_WITH_PORT
+  backends.push_back(Backend::Port);
+#endif
+  for (const auto backend : backends) {
+    for (const bool gls : {false, true}) {
+      CAPTURE(static_cast<int>(backend));
+      CAPTURE(gls);
+      auto original = setup(syntax, {covariance});
+      auto changed = setup(syntax, {scale.asDiagonal() * covariance * scale.asDiagonal()});
+      original.samp.n_obs[0] = changed.samp.n_obs[0] = 100;
+      auto options = magmaan::estimate::ml_optim_options();
+      options.coordinate_scaling = magmaan::optim::CoordinateScaling::SampleUnits;
+      fr::SphereOptions sphere;
+      sphere.polish = false;
+      sphere.start = fr::SphereStart::User;
+      auto fit = [&](Fitted& f) {
+        auto start = magmaan::estimate::ml_start_values(f.pt, f.rep, f.samp);
+        REQUIRE(start.has_value());
+        return gls ? fr::fit_gls_sphere(f.pt, f.rep, f.samp, start->theta, {}, backend, options, sphere)
+                   : fr::fit_ml_sphere(f.pt, f.rep, f.samp, start->theta, {}, backend, options, sphere);
+      };
+      const auto first = fit(original);
+      const auto second = fit(changed);
+      REQUIRE_OK(first);
+      REQUIRE_OK(second);
+      CHECK(first->report.driven_scaled);
+      CHECK(second->report.driven_scaled);
+      CHECK(first->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+      CHECK(second->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+      CHECK(second->report.fmin_internal == doctest::Approx(first->report.fmin_internal).epsilon(1e-8));
+      const Eigen::MatrixXd restored = scale.cwiseInverse().asDiagonal() *
+          implied(changed.pt, changed.rep, second->estimates.theta) * scale.cwiseInverse().asDiagonal();
+      CHECK((restored - implied(original.pt, original.rep, first->estimates.theta)).cwiseAbs().maxCoeff() < 1e-5);
+    }
+  }
+}
+
 TEST_CASE("sphere ML: fixed loading ratio") {
   check_same_as_ordinary_ml(setup("f =~ x1 + 0.9*x2 + x3 + x4", {one_factor_sigma()}));
 }
