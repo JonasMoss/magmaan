@@ -1,0 +1,2 @@
+"case","cells","reps_per_cell","seed_base","replicate_tests","failures_standardized","failures_original","rejection_decisions","decisions_differing_at_05","max_abs_difference","max_relative_difference_above_1e3","git_commit","run_date"
+"mg_path5",12,200,2026092852,4800,0,0,168000,0,3.23e-06,0.000108,"a92433de19780aee3018187ef5ed12d78c232003","2026-10-02"

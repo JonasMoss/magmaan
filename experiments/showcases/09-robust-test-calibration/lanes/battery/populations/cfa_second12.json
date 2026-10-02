@@ -4,7 +4,6 @@
   "type": "second-order CFA",
   "restriction": null,
   "disc_pattern": "alternate",
-  "rescaled": false,
   "lavaan_function": "sem",
   "meanstructure": false,
   "h1": "PROBSLV  =~ P1 + P2 + P3\nCOGRES   =~ C1 + C2 + C3\nEXPREMOT =~ E1 + E2 + E3\nSOCSPT   =~ S1 + S2 + S3\nPROBFOC  =~ PROBSLV + COGRES\nEMOTFOC  =~ EXPREMOT + SOCSPT",

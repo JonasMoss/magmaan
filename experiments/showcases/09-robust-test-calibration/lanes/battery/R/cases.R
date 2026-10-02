@@ -11,12 +11,13 @@
 # items; "skewed" gives every item the right-skewed shape (repeated measures of
 # a symptom scale).
 #
-# rescale = TRUE divides each variable by its pooled population standard
-# deviation, the same factor in every group. Both hypotheses are invariant to
-# that, so calibration is unchanged; it only repairs conditioning. The source
-# variances of mg_path5 span a ratio near 300 (IQ-scale against 0-1 scales),
-# enough for robust_nested_lrt's relative rank check on the pooled information
-# to reject a well-identified model in about a fifth of the draws.
+# mg_path5 keeps the book's units: its variances span a ratio near 300
+# (IQ-scale against 0-1 scales). Before magmaan's rank checks became unit
+# invariant (2026-10-01), robust_nested_lrt rejected this well-identified model
+# in about a fifth of the draws, and the battery standardized the population to
+# avoid that. The frozen main run used that standardized population; the
+# statistics are unit invariant, and the units-standardized/units-original
+# check runs reproduce each other replicate by replicate.
 
 label_lagged_cus <- function(model, prefix = "cu") {
   lines <- strsplit(model, "\n", fixed = TRUE)[[1]]
@@ -64,7 +65,6 @@ case_specs <- function() {
          restriction = "equal residual variances (5 constraints)"),
     list(id = "mg_path5", corpus = "kline_2023_ch12_lynam_indirect",
          type = "two-group path model, means, cross-group equalities",
-         rescale = TRUE,
          h1 = function(m) m,
          h0 = function(h1) paste(h1, "b4 == b5", sep = "\n"),
          restriction = "equal achieve -> delinq path across groups (1 constraint)")

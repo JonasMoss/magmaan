@@ -4,7 +4,6 @@
   "type": "CFA, 2 factors, one correlated residual",
   "restriction": null,
   "disc_pattern": "alternate",
-  "rescaled": false,
   "lavaan_function": "sem",
   "meanstructure": false,
   "h1": "INTRUS =~ NA*Y1 + B_1*Y1 + B_2*Y2 + B_3*Y3 + B_4*Y4\nAVOID  =~ NA*Y5 + B_5*Y5 + B_6*Y6 + B_7*Y7 + B_8*Y8\nY1 ~~ THETA_1*Y1\nY2 ~~ THETA_2*Y2\nY3 ~~ THETA_3*Y3\nY4 ~~ THETA_4*Y4\nY5 ~~ THETA_5*Y5\nY6 ~~ THETA_6*Y6\nY7 ~~ THETA_7*Y7\nY8 ~~ THETA_8*Y8\nY7 ~~ THETA87*Y8\nINTRUS ~~ 1*INTRUS\nAVOID  ~~ 1*AVOID\nRELINTR := (B_1+B_2+B_3+B_4)^2 / ((B_1+B_2+B_3+B_4)^2+THETA_1+THETA_2+THETA_3+THETA_4)\nRELAVD := (B_5+B_6+B_7+B_8)^2 / ((B_5+B_6+B_7+B_8)^2+THETA_5+THETA_6+THETA_7+THETA_8+2*THETA87)",

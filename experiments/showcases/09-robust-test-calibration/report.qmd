@@ -141,6 +141,20 @@ Source populations retain their model definitions and optional corpus builder.
 Frozen metadata retain original study numbers (research/52, /38 and former
 /45), which describe the original runs.
 
+```{r units}
+units <- read_result("battery", "frozen/units_check.csv")
+```
+
+The frozen run used a standardized two-group path population (`mg_path5`),
+a workaround for a unit-dependent rank check fixed on 2026-10-01; the
+population now keeps the book's units, whose variances span a ratio near 300.
+A check with the main seeds (`r units$cells` cells, `r units$reps_per_cell`
+replications each) reproduces the standardized run in original units:
+`r units$failures_original` failures in both, `r units$decisions_differing_at_05`
+of `r format(units$rejection_decisions, big.mark = ",")` rejection decisions at
+the 5% level differ, and statistics agree within optimizer tolerance (largest
+absolute difference `r units$max_abs_difference`).
+
 ## Reproduce
 
 ```sh

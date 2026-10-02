@@ -4,7 +4,6 @@
   "type": "latent SEM, two structural equations",
   "restriction": "no effect of Risk (2 constraints)",
   "disc_pattern": "alternate",
-  "rescaled": false,
   "lavaan_function": "sem",
   "meanstructure": false,
   "h1": "Cognitive =~ verbal + visual + memory\nAchieve =~ read + math + spell\nAdjust =~ motive + harmony + stable\nRisk =~ parent + ses\nAchieve ~ Cognitive + r1*Risk\nAdjust ~ Cognitive + r2*Risk\nAdjust ~~ 0*Achieve",

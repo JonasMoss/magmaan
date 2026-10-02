@@ -40,21 +40,11 @@ build_one <- function(spec) {
          ov = colnames(S), sigma = unclass(S),
          mu = if (is.null(implied[[g]]$mean)) rep(0, ncol(S)) else unname(implied[[g]]$mean))
   })
-  if (isTRUE(spec$rescale)) {
-    pooled <- Reduce(`+`, lapply(groups, function(g) g$proportion * diag(g$sigma)))
-    scale <- sqrt(pooled)
-    groups <- lapply(groups, function(g) {
-      g$sigma <- g$sigma / outer(scale, scale)
-      g$mu <- g$mu / scale
-      g
-    })
-  }
   ms <- isTRUE(case$meta$model_options$meanstructure)
   fm <- function(f) as.list(fitMeasures(f, c("chisq", "df", "cfi", "rmsea")))
   list(id = spec$id, corpus = spec$corpus, type = spec$type,
        restriction = spec$restriction %||% NA,
        disc_pattern = spec$disc_pattern %||% "alternate",
-       rescaled = isTRUE(spec$rescale),
        lavaan_function = case$meta$lavaan_function, meanstructure = ms,
        h1 = h1, h0 = h0, source_n = sum(nobs), groups = groups,
        source_fit = list(h1 = fm(h1_fit), population_model = fm(pop_fit)))

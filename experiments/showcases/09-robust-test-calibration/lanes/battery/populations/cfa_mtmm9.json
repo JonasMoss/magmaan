@@ -4,7 +4,6 @@
   "type": "CFA, MTMM correlated uniquenesses",
   "restriction": null,
   "disc_pattern": "alternate",
-  "rescaled": false,
   "lavaan_function": "sem",
   "meanstructure": false,
   "h1": "PARANOID =~ NA*PARI + PARC + PARO\nSCHZOTYP =~ NA*SZTI + SZTC + SZTO\nSCHIZOID =~ NA*SZDI + SZDC + SZDO\nPARANOID ~~ 1*PARANOID\nSCHZOTYP ~~ 1*SCHZOTYP\nSCHIZOID ~~ 1*SCHIZOID\nPARI ~~ SZTI\nPARI ~~ SZDI\nSZTI ~~ SZDI\nPARC ~~ SZTC\nPARC ~~ SZDC\nSZTC ~~ SZDC\nPARO ~~ SZTO\nPARO ~~ SZDO\nSZTO ~~ SZDO",

@@ -4,7 +4,6 @@
   "type": "linear growth of CES-D, 6 waves, structured means",
   "restriction": "equal residual variances (5 constraints)",
   "disc_pattern": "skewed",
-  "rescaled": false,
   "lavaan_function": "growth",
   "meanstructure": true,
   "h1": " \t#model for only the first variable used as an indicator in the second-order model;\n\n\t\ti =~ 1*cesd1 + 1*cesd2 + 1*cesd3 + 1*cesd4 + 1*cesd5 + 1*cesd6\n\t\ts =~ 0*cesd1 + 1*cesd2 + 2*cesd3 + 3*cesd4 + 4*cesd5 + 5*cesd6\n\ni ~~ i\ns ~~ s\ni ~~ s\n\ni ~ 1\ns ~ 1\n\ncesd1 ~ 0*1\ncesd2 ~ 0*1\ncesd3 ~ 0*1\ncesd4 ~ 0*1\ncesd5 ~ 0*1\ncesd6 ~ 0*1 \ncesd1 ~~ v1*cesd1\ncesd2 ~~ v2*cesd2\ncesd3 ~~ v3*cesd3\ncesd4 ~~ v4*cesd4\ncesd5 ~~ v5*cesd5\ncesd6 ~~ v6*cesd6",
