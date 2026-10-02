@@ -165,7 +165,10 @@ The constructor accepts lavaan syntax, supported constructed specifications and
 compatible prepared models. Source language is metadata, not a requirement to
 carry a lavaan string. Future EQS input should enter the same validated model
 contract through its adapter; this design neither adds automatic language
-detection nor promises ordinary EQS support before adapter checks. Native
+detection nor promises ordinary EQS support before adapter checks. Mplus input
+will enter the same way; unlike EQS, ordinary Mplus support is the stated goal
+of the [Mplus plan](../grammar/mplus.md), after its stability bar and a
+decision on Mplus's conditioning on x variables. Native
 FC-SEM and parked model families remain outside this constructor's ordinary slice.
 
 `LatentStructure` owns estimands, identification and constraints; `LatentNames`

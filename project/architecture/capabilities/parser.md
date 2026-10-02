@@ -21,6 +21,11 @@
   groups and restrictions, with lab exposure after each validated increment.
   The [backlog](../../backlog/todo.md#eqs-language-extension) records the later
   `r-magmaan` task separately. This is planning, not additional implementation.
+- Mplus input frontend: planned 2026-10-02 for 0.3.0, not implemented. The
+  [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
+  linear SEM subset with Mplus's model defaults into the model triple, gates
+  meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
+  against lavaan, and targets ordinary integration after a stability bar.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

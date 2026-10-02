@@ -53,7 +53,7 @@ label (the C++ project version) is retired.
 | --- | --- |
 | **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
 | **0.2.0, current** | The adopted ordinary API; lavaan-compatible fitting through `options`, so simulations can rely on lavaan's fitting while magmaan's own optimizer work waits; ordinary-policy inference for ML, FIML and all-ordinal DWLS; MI/release-score completion across weights, including two-stage |
-| **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI |
+| **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI; a stable Mplus input frontend for the linear SEM subset |
 | **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
 
 Sphere-chart failure handling is deferred to the
@@ -1052,6 +1052,58 @@ Retain current barrier entry points and regression gates.
   with explicit unsupported components. Reuse correlation-ML criterion
   evaluation at DWLS fits for robust RMSEA without implying ML refitting.
   See the composition contract and the research index's barrier studies.
+
+### Mplus input frontend
+
+Planned 2026-10-02 in the [Mplus plan](../grammar/mplus.md), which owns the
+target, input boundary, increments, evidence and stability bar. magmaan reads a
+whole Mplus input file and lowers its linear SEM model into the model triple
+with Mplus's model defaults reproduced exactly. It imports no estimator
+conventions and adds no fitting or inference scope. Development starts now,
+alongside 0.2.0, without touching 0.2.0 release surfaces; it is not a 0.2.0
+exit criterion. Each increment merges only when complete, so every merged state
+is stable for its documented subset and rejects everything else. Board cards
+carry the label `mplus`.
+
+- [ ] **M — source inventory and grammar baseline.** Summarize the User's
+  Guide language chapters with documented/derived/unresolved classes and
+  pages; run Demo probes for unresolved defaults needed by increments 1–2;
+  write the normative EBNF for increment 1. Planner work, not a lane.
+  **Check:** every default rule of increments 1–2 is documented or
+  Demo-confirmed, and the plan's command classification is complete for the
+  inventoried options.
+- [ ] **M/L — increment 1: input file and single-group continuous models.**
+  Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
+  label lists, NAMES-order ranges and the single-group defaults; C++ lowering,
+  `api::` constructor and `magmaanlab::mplus_model()`. **Check:** independent
+  expected-row fixtures, rejection fixtures, Demo TECH1 probes, local corpus
+  match on free-parameter count and df, lab round trips and pinned-lavaan
+  numerics of the projection.
+- [ ] **M — increment 2: multiple groups.** GROUPING, group-specific sections,
+  invariance defaults and overrides. **Check:** as increment 1, including
+  asymmetric group models and group-order agreement with supplied data.
+- [ ] **M — increment 3: categorical outcomes.** Thresholds, delta/theta
+  parameterizations and their multigroup defaults; all-ordinal DWLS fits,
+  other categorical routes return unsupported-fit. **Check:** as increment 1;
+  corpus WLSMV cases match where magmaan fits them.
+- [ ] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
+  `|` statements and their defaults; NEW, equations, equalities and
+  inequalities onto existing constraint machinery; indirect effects as defined
+  parameters. **Check:** as increment 1, plus a fit-path check that no
+  accepted restriction is silently dropped.
+- [ ] **M — increment 5: data files.** Data plan in C++ (including FORMAT) and
+  `magmaanlab::mplus_data()`. Needs only increment 1. **Check:** free and
+  fixed format, summary data and missing codes against independently written
+  data frames.
+- [ ] **S/M — stability closeout.** Robustness sweep over every User's Guide
+  example input under sanitizers, coverage matrix keyed to inventory IDs, lab
+  help listing the accepted subset, test-ledger entries.
+- [ ] **M — ordinary integration.** Accept explicitly marked Mplus sources in
+  `magmaan_model()` with the ordinary inference policy. First decide how Mplus's
+  conditioning on x variables meets the
+  [ordinary fixed-x decision](../scope.md#ordinary-fixed-x-decision); route that
+  question to "Needs decision". **Check:** prepared parity, worker
+  reconstruction and explicit refusals, with no change to ordinary defaults.
 
 ## Related work
 

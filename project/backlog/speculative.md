@@ -686,6 +686,47 @@ solve; preserve the sample NT term rather than applying a scalar shift.
 **Build if:** a measured implementation beats both solves including eigenvector
 rotation/setup, with numerical equivalence. See benchmark guide.
 
+## Input languages
+
+The planned [Mplus frontend](../grammar/mplus.md) covers the linear SEM subset
+of an Mplus input file. These entries record what it deliberately leaves out.
+
+### Mplus estimation-convention preset
+
+**Gap:** reproducing Mplus's printed numbers for an imported input: MLR as
+sandwich SEs with Mplus's scaled test, FIML by default with Mplus's
+analysis-sample rules, Mplus's WLSMV expected information, its SRMR and its
+divisor conventions.
+**Available:** the imported model fitted under explicit lab estimator and
+inference choices or the ordinary policy; existing pieces include the
+Yuan-Bentler-Mplus test and lavaan's `information.expected.mplus` convention.
+**Build if:** migrating users or a named collaborator need Mplus-identical
+output and the frontend is stable. Gate each convention against shipped `.out`
+files, as the lavaan fitting preset is gated against lavaan; no ordinary default
+changes.
+
+### Mplus DEFINE and case selection
+
+**Gap:** DEFINE transformations (products, centering, standardizing, logs,
+conditional recodes, CUT) and USEOBSERVATIONS/SUBPOPULATION case selection.
+The frontend rejects them.
+**Available:** the same transformations in R before fitting.
+**Build if:** rejected DEFINE statements turn out to be the common reason
+real inputs fail, and a small, fully specified subset (for example products
+and grand-mean centering) covers most of them. Reproduce Mplus's order of
+operations relative to missing-value recoding and case selection.
+
+### Mplus TWOLEVEL input
+
+**Gap:** `TYPE = TWOLEVEL` with `%WITHIN%`/`%BETWEEN%` random intercepts.
+**Available:** magmaan's existing two-level slice through lavaan syntax; hand
+translations reproduce Mplus's H0 estimates for corpus examples, but printed
+statistics depend on Mplus's H1 EM tolerance and an unexplained
+log-likelihood offset.
+**Build if:** the parked [two-level family](#two-level-sem) is reactivated for a
+named consumer whose inputs are in Mplus. Map only onto the supported slice;
+random slopes stay out.
+
 ## Build, layout and documentation
 
 ### Namespace and header housekeeping

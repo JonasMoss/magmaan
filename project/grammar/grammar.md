@@ -2,6 +2,8 @@
 
 The alternate EQS frontend has its own normative
 [grammar](eqs_grammar.ebnf) and [lowering/validation contract](eqs.md).
+A planned Mplus input frontend (not implemented) is specified in
+[mplus.md](mplus.md); it will add its own normative grammar.
 
 Source of truth for the parser. Read this in conjunction with
 [`grammar.ebnf`](grammar.ebnf) (the formal spec) and
