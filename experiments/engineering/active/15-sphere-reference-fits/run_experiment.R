@@ -1,9 +1,19 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
+if ("--ordinary" %in% args) {
+  script <- normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))
+  here <- dirname(script)
+  source(file.path(here, "../../../_support/R/helpers.R"))
+  set_single_threaded_math()
+  for (file in c("designs.R", "fit.R", "ordinary_program.R")) source(file.path(here, "R", file))
+  run_ordinary_program(args, here)
+  quit(save = "no")
+}
 usage <- paste(
   "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]",
   "Exploratory sphere multistarts with separate accuracy, chart and extent labels.",
   "No default decision, global-optimum claim or nonexistence classification.",
+  "--ordinary: minimal unrestricted ML/ULS/GLS programme; --ordinary --help for its grid.",
   "--smoke: 1 draw per design/N, 2 random starts. --pilot: 10 draws, 3 random starts.",
   "--reps N --random-starts N --ns 20,100 --designs ernst,weak_marker,high_r2",
   "--transforms native,x0.01,x100 --seed-base N --run-id NAME",

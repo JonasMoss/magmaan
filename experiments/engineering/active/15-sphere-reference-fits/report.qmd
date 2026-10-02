@@ -1,7 +1,9 @@
 ---
-title: "Sphere reference fits: a small exploratory pilot"
+title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  run: reference-pilot
+  lane: ordinary
+  run: ordinary-pilot-v2
+  units_run: ordinary-units-v2
 format:
   html:
     toc: true
@@ -14,6 +16,51 @@ execute:
 ---
 
 ```{r}
+#| results: asis
+if (identical(params$lane, "ordinary")) {
+  read_ordinary <- function(name, run = params$run) {
+    path <- file.path("results", run, paste0(name, ".csv"))
+    if (!file.exists(path)) stop("Missing ordinary results: Rscript run_experiment.R --ordinary --pilot --run-id ", run)
+    read.csv(path, stringsAsFactors = FALSE)
+  }
+  s <- read_ordinary("summary"); a <- read_ordinary("audit_summary")
+  refs <- read_ordinary("references"); changes <- read_ordinary("changes")
+  units <- read_ordinary("summary", params$units_run)
+  metadata <- read_ordinary("metadata")
+  meta <- function(key) metadata$value[metadata$key == key][1]
+  cat("## Question\n\nCan a small complete-data NTML, ULS and GLS programme separate failures caused by starts, optimizer stopping, and endpoint accuracy, while comparing marker and sphere coordinates?\n\n")
+  cat(sprintf("## Short answer\n\nThe first development pilot gives us concrete next checks, rather than a replacement default. Across %d datasets and %d fits, changing the start sometimes improves local acceptance but also repeatedly reaches a worse GLS minimum. Tightening L-BFGS stopping is not a uniform improvement. PORT helps the ordinary marker route on this bank but loses accepted sphere fits. %d of %d dataset–estimator problems have a repeated best-observed endpoint across L-BFGS and PORT; the rest remain unresolved or supported by one backend. None is a known global optimum.\n\n",
+    length(unique(refs$draw_id)), sum(s$fits), sum(refs$reference_repeated), nrow(refs)))
+  cat("A separate unit-change smoke exposes a larger numerical gap in sphere NTML/GLS while the ordinary marker fits keep passing on the same draw. That makes coordinate conditioning and stopping interaction the first targeted follow-up. The convergence audit stays fixed during these comparisons.\n\n")
+  cat("## Evidence\n\n### Starts and optimizer controls\n\n")
+  compact <- aggregate(s[c("fits", "audited", "best_observed_hits")], s[c("chart", "start_id", "profile")], sum)
+  compact <- compact[order(compact$chart, compact$start_id, match(compact$profile, c("default", "lbfgs_tight", "port", "port_tight"))), ]
+  names(compact) <- c("Chart", "Start", "Optimizer profile", "Fits", "Local audit passes", "Best-observed matches")
+  cat(knitr::kable(compact, row.names = FALSE), sep = "\n")
+  cat("\n\nThis pooled table describes the tiny development bank, not a default ranking. Family-specific counts are retained in `summary.csv`; each family has only four draws (two at each N). Every gain and loss against the no-options fit in the same chart is retained in `changes.csv`.\n\n")
+  cat("On Ernst N=20 draw 1, the shared FABIN3 start reaches a GLS endpoint about 0.0176 above the best observed half discrepancy, across both charts and both optimizers. Its Newton distance passes comfortably. Thus the local audit and basin recovery must remain separate. Another tightened marker GLS endpoint passes the .01 local budget while remaining about 2.44e-6 above the best observed objective; an audit budget is an accuracy convention, not an objective equality test.\n\n")
+  cat("### What the audit catches\n\n")
+  audits <- aggregate(list(Fits = a$fits), a[c("chart", "newton_status", "accepted")], sum)
+  names(audits)[1:3] <- c("Chart", "Newton status", "Accepted")
+  cat(knitr::kable(audits, row.names = FALSE), sep = "\n")
+  cat("\n\nNonpositive curvature and ill conditioning stay visible; a solver's convergence flag cannot substitute for the audit. No acceptance target was relaxed. Four near-chart failures in this pilot carry failed sphere-native audits, rather than being called chart-singular optima. Backend stops, including soft exits whose iterates are discarded before the R audit, are counted in `stop_summary.csv` and preserved in local raw records.\n\n")
+  cat("### Measurement-unit smoke\n\n")
+  u <- aggregate(units[c("fits", "audited")], units[c("transform", "estimator", "chart")], sum)
+  names(u) <- c("Units", "Estimator", "Chart", "Fits", "Local audit passes")
+  cat(knitr::kable(u, row.names = FALSE), sep = "\n")
+  cat("\n\nThe two unit settings reuse one regular N=100 draw, multiplied indicator-wise by (.01, 100, 2, .3, 10, .1). NTML and GLS retain their estimator under this change. ULS weights raw covariance discrepancies equally, so its target changes; its counts are a numerical stress check, not a same-target invariance claim. The sphere NTML failures include L-BFGS line-search errors and inaccurate PORT endpoints; tight PORT recovers both starts on this draw. Sphere GLS usually returns an endpoint but fails the unchanged local accuracy budget. This does not by itself identify a derivative defect.\n\n")
+  cat("## Minimal programme\n\n")
+  cat("1. **Starts:** keep the current constructors as baseline; compare one shared sample-only FABIN3 vector, then investigate only the retained losses and gains. Do not choose a start by fitting the reference first.\n")
+  cat("2. **Optimizer options:** compare stock L-BFGS and PORT with tighter relative objective/step stops. Evaluation budgets, L-BFGS memory and internal gradient tolerance remain unchanged. Next isolate sphere coordinate/preconditioning effects on the retained unit witness before adding more backends or random starts.\n")
+  cat("3. **Convergence audits:** keep objective consistency, feasibility, positive curvature, conditioning and the .01 Newton budget fixed. Retain continuous diagnostics, failed/unchecked status and chart availability. Compare implied covariance and objectives across locally accepted endpoints, then calibrate accuracy sensitivity separately.\n\n")
+  cat("A demonstrated deterministic defect becomes a regression test and a small repair. A candidate default goes to the existing optimizer decision study with fresh held-out draws, family-specific results, every baseline loss and a cost comparison. Completing this programme does not require joint sphere/PSD boundary geometry or barrier inference.\n\n")
+  cat("## Caveats\n\nThis is a 12-dataset exploratory development pilot, not confirming evidence. It covers one covariance-only, single-group two-factor regression model under three populations, at N=20 and 100. No means, cross-group/equality constraints, FIML, ordinal data, PSD or statistical barriers are fitted. Signed primitive variances remain permitted. The sphere's artificial radial pin is excluded from its endpoint audit and reference objective.\n\n")
+  cat("All arms consume exactly the same sample covariance with divisor N. ULS uses identity weight; GLS freezes its normal-theory weight from that sample. Comparisons never pool objectives across estimators. Ordinary route-native ML/GLS starts are layered and ULS uses native FABIN3; sphere canonical LS currently includes an auxiliary ML fit. Those are route baselines, not identical initialization algorithms; the shared explicit vector is the controlled start comparison. Sphere polishing is disabled to expose the endpoint being studied.\n\n")
+  cat("Newton distances use observed information for NTML and the normal-theory sandwich metric for LS. First-order residuals are telemetry: marker and sphere residuals use different declared metrics and are not compared by a common raw-gradient cutoff. A repeated reference requires passing library audits on both backends, original-objective agreement within 1e-6(1+|f|), and standardized implied-covariance agreement within 1e-5. These exploratory matching tolerances do not alter the library's convergence criterion. A missing accepted reference is not evidence of nonattainment.\n\n")
+  cat(sprintf("The pilot took %.1f seconds in this local install, including fitting and result handling. This is not a balanced speed benchmark. Raw fit/start/pair CSVs and endpoint/sample RDSs remain local; compact summaries, references, changed outcomes and source/package fingerprints are frozen for review. Sphere evaluation counters are not exposed and stay missing rather than being inferred.\n\n", as.numeric(meta("elapsed_s"))))
+  cat("## Reproduce\n\nUse an installed magmaanlab build containing the sphere-native audit; metadata records its path, build stamp and binary/R-code hashes. From this study directory:\n\n```sh\nRscript run_experiment.R --ordinary --help\nRscript run_experiment.R --ordinary --smoke --run-id ordinary-smoke-new\nRscript run_experiment.R --ordinary --pilot --run-id ordinary-pilot-new\nRscript run_experiment.R --ordinary --smoke --transforms native,mixed --run-id ordinary-units-new\nquarto render report.qmd -P run:ordinary-pilot-new -P units_run:ordinary-units-new\n```\n\nFresh run IDs preserve failed and completed attempts. Seeds are stable under subset/reordering and paired unit transforms; smoke and pilot use different seed bases. The runner writes checkpoints per draw and prints progress every twelve fits. For the retained earlier ML/PSD reference investigation, render with `-P lane:reference -P run:reference-pilot`. Its targets and historical screens are separate.\n")
+  knitr::knit_exit()
+}
 read_result <- function(name) {
   path <- file.path("results", params$run, paste0(name, ".csv"))
   if (!file.exists(path)) stop("Missing results: run Rscript run_experiment.R --pilot")

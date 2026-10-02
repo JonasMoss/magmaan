@@ -193,3 +193,22 @@ normalization-timing/*
 !normalization-timing/round_totals.csv
 !normalization-timing/metadata.csv
 !normalization-timing/cost_changes.csv
+
+# Minimal ordinary-fit development pilot and paired unit witness: compact
+# summaries preserve the first diagnosis; raw fits/starts/endpoints stay local.
+!ordinary-pilot-v2/
+ordinary-pilot-v2/*
+!ordinary-pilot-v2/summary.csv
+!ordinary-pilot-v2/audit_summary.csv
+!ordinary-pilot-v2/stop_summary.csv
+!ordinary-pilot-v2/changes.csv
+!ordinary-pilot-v2/references.csv
+!ordinary-pilot-v2/metadata.csv
+!ordinary-units-v2/
+ordinary-units-v2/*
+!ordinary-units-v2/summary.csv
+!ordinary-units-v2/audit_summary.csv
+!ordinary-units-v2/stop_summary.csv
+!ordinary-units-v2/changes.csv
+!ordinary-units-v2/references.csv
+!ordinary-units-v2/metadata.csv

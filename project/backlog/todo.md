@@ -55,8 +55,8 @@ label (the C++ project version) is retired.
 | **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI |
 | **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
 
-Sphere-chart development remains outside 0.2.0; completing native constraint
-audits and chart failure handling is high-priority
+Sphere-chart development remains outside 0.2.0; the minimal unrestricted
+starts/search/audit programme and chart failure handling are high-priority
 [0.3.0 work](#optimization-and-convergence). Broader promotion stays in the
 [trigger register](speculative.md#sphere-chart-development). Existing PSD and
 barrier entry points, inference refusals and regression gates are unchanged in
@@ -739,6 +739,21 @@ Assigned 2026-10-02. Until these land, simulations that need dependable
 fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Optimization and convergence
+
+- [ ] **M — complete the minimal ordinary-fit reliability programme.** Start
+  with complete-data unrestricted NTML, ULS and GLS. Pair marker/sphere routes
+  on identical moments; vary route-native versus shared sample-only FABIN3
+  starts, and stock versus tighter L-BFGS/PORT stopping controls. Keep the
+  library's native Newton audit fixed and record failed/unchecked endpoints,
+  chart availability, backend stops, objective and implied-covariance gaps,
+  and cost separately. **Check:** the bounded development pilot in
+  [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd),
+  then targeted failure replays and fresh draws before any default decision.
+  First replay the retained heterogeneous-unit NTML/GLS sphere failures while
+  marker fits pass, isolating conditioning/preconditioning and stopping;
+  separately explain the shared-FABIN3 GLS worse local minimum.
+  PSD/barriers, FIML, ordinal data and broad global-search guarantees are
+  separate extensions, not prerequisites for this programme.
 
 - [ ] **M — complete sphere-native constraint geometry (high priority after
   0.2.0).** Native unpinned audits now cover ML, FIML, continuous moment-quadratic

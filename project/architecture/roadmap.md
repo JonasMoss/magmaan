@@ -1181,6 +1181,20 @@ remain unchanged. These checks use the frozen reference screen, not a new
 production acceptance policy; neither multistart nor automatic marker switching
 is adopted.
 
+The minimal ordinary-fit engineering lane (2026-10-02, within
+`engineering/active/15-sphere-reference-fits`) now separates complete-data
+unrestricted NTML/ULS/GLS starts, optimizer stopping controls and fixed native
+convergence audits. It pairs marker/sphere charts on identical N-scaled sample
+moments; compares route-native and shared sample-only FABIN3 starts under stock
+and tighter L-BFGS/PORT stops; and keeps local accuracy, requested-chart
+availability, best-observed basin recovery and cost distinct. The 12-dataset,
+576-fit development pilot retains a locally accurate but worse GLS minimum
+reached by shared FABIN3 across both charts/backends. A separate heterogeneous-unit
+smoke exposes sphere NTML/GLS failures while marker fits pass on that draw.
+These motivate targeted conditioning/stopping and start-loss replays, not a
+new default or a global optimum claim. PSD/barriers and their geometry remain
+separate; the existing defaults and audit budgets are unchanged.
+
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
 chart the optimizer walks in, not the estimator. `analyze_gauge` reads the
