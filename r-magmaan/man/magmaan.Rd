@@ -8,93 +8,86 @@ magmaan(
   model,
   data,
   estimator = "ML",
-  ordered = NULL,
-  group = NULL,
-  group.equal = NULL,
-  group.partial = NULL,
-  cluster = NULL,
-  identification = "marker",
-  parameterization = "delta",
-  meanstructure = "default",
-  fixed.x = TRUE,
-  missing = "listwise",
-  psd = FALSE,
-  start = "default",
+  covariance = "unrestricted",
   inference = TRUE,
-  options = NULL
+  options = NULL,
+  ...
 )
 }
 \arguments{
-\item{model}{lavaan model syntax, one string, or a model specification from
-\code{magmaanlab::model_spec()} carrying lavaan syntax.}
+\item{model}{A model from \code{\link[=magmaan_model]{magmaan_model()}}, or lavaan model syntax in one
+string (or a \code{magmaanlab::model_spec()} specification) as a shortcut that
+constructs the model with \code{data} as its prototype on every call. A syntax
+string has the default structural choices: one group, continuous
+variables and marker identification. Data with ordered factors need
+\code{magmaan_model(ordered = )}.}
 
 \item{data}{A data frame of raw observations.}
 
 \item{estimator}{\code{"ML"}, \code{"FIML"}, \code{"ML2S"}, \code{"GLS"} or \code{"ULS"} for
-continuous variables; \code{"DWLS"}, \code{"WLS"} or \code{"ULS"} for variables declared
-in \code{ordered}.}
+continuous variables; \code{"DWLS"}, \code{"WLS"} or \code{"ULS"} for ordered variables.
+Estimators other than FIML and ML2S delete incomplete rows listwise.}
 
-\item{ordered}{Names of the ordered (categorical) variables. Inherited from
-a model specification when omitted; an explicit value must agree with it.}
-
-\item{group}{Name of the grouping column. Inherited from a model
-specification when omitted; an explicit value must agree with it.}
-
-\item{group.equal, group.partial}{Cross-group equality constraints, as in
-lavaan.}
-
-\item{cluster}{Name of the cluster column for two-level ML.}
-
-\item{identification}{\code{"marker"} (first loading fixed to one) or \code{"std.lv"}
-(latent variances fixed to one).}
-
-\item{parameterization}{\code{"delta"} or \code{"theta"}, for ordered variables.
-Inherited from a model specification when omitted; an explicit value must
-agree with it.}
-
-\item{meanstructure}{\code{"default"}, \code{TRUE} or \code{FALSE}.}
-
-\item{fixed.x}{Treat exogenous observed covariates as fixed. The ordinary
-inference policy does not yet support fixed observed covariates; their
-estimates are retained with unsupported inference components.}
-
-\item{missing}{How rows with missing values are deleted: \code{"listwise"}
-(default) or \code{"pairwise"} (ordered variables only). Use \code{estimator = "FIML"} or \code{"ML2S"} to use incomplete rows.}
-
-\item{psd}{Constrain the model-implied covariance matrices to be positive
-semidefinite.}
-
-\item{start}{Starting values: \code{"default"}, \code{"fabin3"}, a previous
-\code{\link[=magmaan]{magmaan()}} fit, or a parameter table. By default, ML, ML2S and GLS fits
-start from the layered moment start, and all other fits, including every
-PSD fit, from FABIN3 (Hägglund, 1982). \code{"fabin3"} uses FABIN3 for ML,
-ML2S and GLS too, as magmaan did before 2026-09-26; it is not available
-with \code{ordered} or \code{cluster}, whose fits have their own starts. A fit or a
-data frame with columns \code{lhs}, \code{op}, \code{rhs} and \code{est} (and \code{group} for
-several groups) gives the start of every free parameter it matches, as
-lavaan's \code{start = fit}; the others keep the default start.}
+\item{covariance}{The covariance policy: \code{"unrestricted"}, \code{"psd"} (every
+model-implied covariance matrix positive semidefinite), or \code{"barrier"} or
+\code{\link[=barrier]{barrier()}} (a penalized estimate in the interior of the PSD domain;
+experimental).}
 
 \item{inference}{Compute inference now. With \code{FALSE}, call \code{\link[=infer]{infer()}} later.}
 
-\item{options}{Advanced fitting choices, a named list with \code{starts},
-\code{optimizer}, \code{convergence}, and/or \code{preset}. \code{convergence = "newton"}
-selects magmaan's existing full-model verdict, with internal thresholds.
-\code{preset = "lavaan-0.7.2"} selects the pinned lavaan starts, PORT search,
-and acceptance rule; explicit components override the preset. Currently
-available for ordinary complete continuous ML without equality constraints.
-Other versions and unsupported routes error. Supplied start tables remain
-inputs; a named \code{start} constructor cannot conflict with these options.
-Inspect \code{as_lab_fit(fit)$fitting} for resolved settings and attempts.
-Inference continues to use magmaan's policy.}
+\item{options}{Optimization details, a named list with any of \code{start},
+\code{optimizer}, \code{convergence} and \code{preset}; omitted entries use magmaan's
+defaults.
+\itemize{
+\item \code{start}: \code{"default"}; \code{"fabin3"}, the FABIN3 start (Hägglund, 1982),
+which ML, ML2S and GLS used before 2026-09-26 and every other fit,
+including every PSD fit, uses by default (not for ordered variables);
+\code{"lavaan-0.7.2"}, lavaan 0.7.2's starts; a previous \code{\link[=magmaan]{magmaan()}} fit; or
+a data frame with columns \code{lhs}, \code{op}, \code{rhs} and \code{est} (and \code{group} for
+several groups). A fit or table sets the start of every free parameter
+it matches, as lavaan's \code{start = fit}; the others keep the default
+start.
+\item \code{optimizer}: \code{"default"}, \code{"port"} (PORT, as R's \code{nlminb()}) or
+\code{"lavaan-0.7.2"} (lavaan 0.7.2's PORT search and retries).
+\item \code{convergence}: \code{"default"} or \code{"newton"} (magmaan's convergence check)
+or \code{"lavaan-0.7.2"} (lavaan 0.7.2's acceptance rule).
+\item \code{preset}: \code{"lavaan-0.7.2"} selects lavaan 0.7.2's start, search and
+acceptance rule; explicit entries override it.
+}
+
+\code{optimizer}, \code{convergence}, \code{preset} and \code{start = "lavaan-0.7.2"} are
+available for complete continuous ML with unrestricted covariance and no
+equality constraints. Inspect \code{as_lab_fit(fit)$fitting} for the resolved
+settings and attempts. Inference always uses magmaan's policy.}
+
+\item{...}{Arguments removed in magmaan 0.2.0; each raises an error naming
+its replacement.}
 }
 \value{
 An object of class \code{magmaan}.
 }
 \description{
 Estimates the model and, unless \code{inference = FALSE}, computes inference
-under magmaan's single documented policy. Option names follow lavaan where
-the concept is the same.
+under magmaan's single documented policy. The arguments are the choices
+that define the estimate; structural choices belong to \code{\link[=magmaan_model]{magmaan_model()}}
+and optimization details to \code{options}.
 }
+\section{Covariance policies}{
+
+\code{"psd"} constrains every model-implied covariance matrix to be positive
+semidefinite. A PSD estimate on the boundary gets inference for an interior
+population, and says so.
+
+\code{barrier(lambda)} maximizes the log-likelihood plus \code{lambda} times the sum,
+over groups, of the log determinant of the model-implied correlation matrix
+of all latent and observed variables: the log density of an LKJ(1 + lambda)
+distribution. The estimate lies in the interior of the PSD domain and
+moves by O(lambda / N) at interior points. \code{"barrier"} is \code{barrier(0.25)};
+\code{barrier(0)} is the unrestricted fit. Barrier fitting is experimental: the
+first barrier fit in a session shows a message, and the inference of every
+barrier fit with positive \code{lambda} is unavailable with reason \code{"penalized"}.
+}
+
 \section{Simulation extraction}{
 
 \code{coef(fit)} is a named vector in free-parameter order, aligned with both
@@ -102,7 +95,8 @@ dimensions of \code{vcov(fit)}. Equality constraints can produce repeated labels
 use numeric indices to distinguish those entries. \code{coef(summary(fit))} is a
 data frame with \code{lhs}, \code{op}, \code{rhs}, \code{label}, logical \code{free}, \code{est}, \code{se},
 \code{z}, \code{pvalue}, \code{ci.lower}, and \code{ci.upper}; multi-group fits also have \code{group}.
-Defined estimates are available independently of inference.
+Defined estimates are available independently of inference. Every model has
+intercepts (\code{op} is \code{"~1"}), so extract parameters by name.
 
 \code{fit$rows} has \code{group}, \code{rows}, \code{used}, and \code{deleted} per group.
 \code{as_lab_fit(fit)$converged} is \code{TRUE}, \code{FALSE}, or \code{NA} for an unchecked fit;
@@ -110,12 +104,13 @@ use \code{isTRUE()} to count successful fits. \code{fit$inference} is \code{NULL
 inference. Otherwise \code{fit$inference$status} has \code{component}, \code{available},
 \code{reason}, and \code{detail} for covariance, global score, and global LR.
 Reasons include \code{available}, \code{not_converged}, \code{saturated},
-\code{unsupported_model}, and \code{numeric_failure}. \code{fit$inference$convergence}
-has \code{rule} (the acceptance rule that set \code{converged}, \code{"newton"} by
-default), \code{converged}, \code{magmaan} (magmaan's own check: \code{"passed"},
-\code{"failed"} or \code{"unchecked"}), and \code{disagree}. Under a compatibility rule
-such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \code{TRUE} when the rule and
-magmaan's check reach different verdicts; inference follows the rule.
+\code{unsupported_model}, \code{penalized} and \code{numeric_failure}.
+\code{fit$inference$convergence} has \code{rule} (the acceptance rule that set
+\code{converged}, \code{"newton"} by default), \code{converged}, \code{magmaan} (magmaan's own
+check: \code{"passed"}, \code{"failed"} or \code{"unchecked"}), and \code{disagree}. Under a
+compatibility rule such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \code{TRUE}
+when the rule and magmaan's check reach different verdicts; inference
+follows the rule.
 
 \code{summary(fit)$tests} is \code{NULL} when no global test is available, otherwise a
 data frame with \code{test}, \code{statistic}, \code{df}, \code{p.sb}, \code{p.peba4}, and \code{sb.scale}.

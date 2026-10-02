@@ -1,10 +1,12 @@
 # Ordinary-user magmaan package
 
 This pure-R package imports `magmaanlab`; it contains no second SEM
-implementation. `magmaan(model, data, estimator, ...)` estimates and computes
-inference by default. `inference = FALSE` estimates only; `infer(fit)` adds
-inference later. Keep few options, use lavaan names for identical concepts,
-and expose no MLR/WLSMV or information/SE/test compatibility switches.
+implementation. `magmaan_model()` constructs a model and freezes its data
+schema; `magmaan(model, data, estimator, covariance, inference, options)`
+estimates and computes inference by default. `inference = FALSE` estimates
+only; `infer(fit)` adds inference later. Keep few options, use lavaan names
+for identical concepts, and expose no MLR/WLSMV or information/SE/test
+compatibility switches.
 
 The policy lives in C++ (`api::policy_inference_ml`, exposed through
 `magmaanlab::policy_inference()`). Single-level complete-data ML has the full

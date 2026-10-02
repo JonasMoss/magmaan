@@ -8,9 +8,9 @@ test_that("anova and robust nested LR preserve units in a two-group path model",
   compare <- function(units) {
     changed <- d
     changed$y <- units*changed$y
-    f1 <- magmaan(h1, changed, group = "group", fixed.x = FALSE,
+    f1 <- magmaan(magmaan_model(h1, prototype = changed, group = "group"), changed,
                   inference = FALSE)
-    f0 <- magmaan(h0, changed, group = "group", fixed.x = FALSE,
+    f0 <- magmaan(magmaan_model(h0, prototype = changed, group = "group"), changed,
                   inference = FALSE)
     ordinary <- anova(f0, f1)
     expect_length(attr(ordinary, "unavailable"), 0L)

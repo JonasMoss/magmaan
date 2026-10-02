@@ -13,11 +13,14 @@ relative_gap <- function(a, b) max(abs(a - b)) / max(1, max(abs(b)))
 
 fit_centering_model <- function(syntax, population, lane) {
   # No solver/start overrides: this is the actual ordinary-package default.
-  args <- list(model = syntax, data = population$data, meanstructure = TRUE)
-  if (is.null(population$group)) args$identification <- 'std.lv'
-  else args$group <- population$group
-  if (lane == 'fiml') args$estimator <- 'FIML'
-  magmaan::as_lab_fit(do.call(magmaan::magmaan, args))
+  # Ordinary models always carry the mean structure this study requested.
+  model <- if (is.null(population$group)) {
+    magmaan::magmaan_model(syntax, identification = 'std.lv')
+  } else {
+    magmaan::magmaan_model(syntax, prototype = population$data, group = population$group)
+  }
+  magmaan::as_lab_fit(magmaan::magmaan(model, population$data,
+                                       estimator = if (lane == 'fiml') 'FIML' else 'ML'))
 }
 
 centering_row <- function(cell, rep, seed, geometry, arm) {

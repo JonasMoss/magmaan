@@ -11,8 +11,30 @@ test_that("ordinary advanced fitting choices use the shared engine", {
       options = list(preset = "lavaan-0.7.2", convergence = "newton"))
   expect_true(as_lab_fit(hybrid)$fitting$modified_preset)
   expect_equal(as_lab_fit(hybrid)$verdict$status, as_lab_fit(hybrid)$diagnostics$verdict$status)
-  expect_error(magmaan(m, d, inference = FALSE, start = "fabin3",
-      options = list(preset = "lavaan-0.7.2")), "constructor conflicts")
-  expect_error(magmaan(m, d, inference = FALSE, psd = TRUE,
-      options = list(preset = "lavaan-0.7.2")), "ordinary complete")
+  # An explicit start overrides the preset's.
+  fabin <- magmaan(m, d, inference = FALSE,
+      options = list(preset = "lavaan-0.7.2", start = "fabin3"))
+  expect_identical(as_lab_fit(fabin)$fitting$effective$starts, "scaled-fabin")
+  expect_true(as_lab_fit(fabin)$fitting$modified_preset)
+  lavaan_start <- magmaan(m, d, inference = FALSE, options = list(start = "lavaan-0.7.2"))
+  expect_identical(as_lab_fit(lavaan_start)$fitting$effective$starts, "lavaan-0.7.2")
+  expect_identical(as_lab_fit(lavaan_start)$fitting$effective$convergence, "newton")
+  expect_error(magmaan(m, d, inference = FALSE, covariance = "psd",
+      options = list(preset = "lavaan-0.7.2")), "complete continuous ML")
+  expect_error(magmaan(m, d, inference = FALSE, estimator = "FIML",
+      options = list(start = "lavaan-0.7.2")), "complete continuous ML")
+})
+
+test_that("the lavaan preset with a mean structure follows lavaan's search", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  m <- "f =~ x1+x2+x3+x4"
+  fit <- magmaan(m, d, inference = FALSE, options = list(preset = "lavaan-0.7.2"))
+  lav <- lavaan::cfa(m, d, meanstructure = TRUE)
+  expect_identical(as_lab_fit(fit)$iterations, lavaan::lavInspect(lav, "iterations"))
+  theirs <- lavaan::parTable(lav)
+  theirs <- theirs[theirs$free > 0L, ]
+  p <- coef(summary(fit))
+  idx <- match(paste(theirs$lhs, theirs$op, theirs$rhs), paste(p$lhs, p$op, p$rhs))
+  expect_equal(p$est[idx], theirs$est, tolerance = 1e-10)
 })

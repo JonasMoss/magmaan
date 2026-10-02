@@ -4,51 +4,71 @@ hs <- function() {
 }
 cfa <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6"
 
-# Same parameter rows as lavaan, and the same free estimates, aligned by
-# (lhs, op, rhs, group).
+# Every ordinary model has a mean structure, so lavaan references use one too.
+lav_cfa <- function(model, data, ...) lavaan::cfa(model, data, meanstructure = TRUE, ...)
+
+# A parameter row's key: lhs, op, rhs and group label, so models whose groups
+# are numbered in different orders compare correctly.
+.key <- function(pt, labels) {
+  group <- if (is.null(pt$group) || !length(labels)) "" else labels[pt$group]
+  paste(pt$lhs, pt$op, pt$rhs, group)
+}
+.lav_labels <- function(lav) {
+  if (lavaan::lavInspect(lav, "ngroups") > 1L) lavaan::lavInspect(lav, "group.label") else character()
+}
+
+# Same parameter rows as lavaan, and the same free estimates.
 expect_lavaan_estimates <- function(fit, lav, tolerance = 1e-4) {
   ours <- fit$lab$partable
   theirs <- lavaan::parTable(lav)
-  key <- function(pt) paste(pt$lhs, pt$op, pt$rhs, pt$group)
   keep <- function(pt) pt[pt$op != "==", , drop = FALSE]
-  expect_setequal(key(keep(ours)), key(keep(theirs)))
+  ours_key <- .key(keep(ours), fit$lab$group_labels)
+  expect_setequal(ours_key, .key(keep(theirs), .lav_labels(lav)))
   theirs <- theirs[theirs$free > 0L, , drop = FALSE]
-  idx <- match(key(theirs), key(ours))
+  idx <- match(.key(theirs, .lav_labels(lav)), .key(ours, fit$lab$group_labels))
   expect_false(anyNA(idx))
   expect_equal(ours$est[idx], theirs$est, tolerance = tolerance)
 }
 
-# Standard errors of every lavaan free row, aligned by (lhs, op, rhs, group).
+# Standard errors of every lavaan free row.
 expect_lavaan_se <- function(fit, lav, tolerance = 1e-4) {
   p <- coef(summary(fit))
   theirs <- lavaan::parTable(lav)
   theirs <- theirs[theirs$free > 0L, , drop = FALSE]
-  group <- if (is.null(p$group)) 1L else p$group
-  idx <- match(paste(theirs$lhs, theirs$op, theirs$rhs, theirs$group),
-               paste(p$lhs, p$op, p$rhs, group))
+  idx <- match(.key(theirs, .lav_labels(lav)), .key(p, fit$lab$group_labels))
   expect_false(anyNA(idx))
   expect_equal(p$se[idx], theirs$se, tolerance = tolerance)
+}
+
+ordinal_hs <- function() {
+  d <- hs()
+  for (v in paste0("x", 1:6)) {
+    d[[v]] <- ordered(cut(d[[v]], breaks = stats::quantile(d[[v]], c(0, 1 / 3, 2 / 3, 1)),
+                          include.lowest = TRUE, labels = FALSE), levels = 1:3)
+  }
+  d
 }
 
 test_that("ML estimates come from magmaanlab and match lavaan", {
   d <- hs()
   fit <- magmaan(cfa, d)
-  lab <- magmaanlab::fit_model(cfa, d)
+  lab <- magmaanlab::fit_model(cfa, d, meanstructure = TRUE, fixed_x = FALSE)
   expect_s3_class(fit, "magmaan")
   expect_s3_class(as_lab_fit(fit), "magmaan_fit")
   expect_equal(unname(coef(fit)), lab$theta)
   expect_equal(nobs(fit), 301)
-  expect_lavaan_estimates(fit, lavaan::cfa(cfa, d))
+  expect_lavaan_estimates(fit, lav_cfa(cfa, d))
 })
 
-test_that("identification and group options follow lavaan's meaning", {
+test_that("model options follow lavaan's meaning", {
   d <- hs()
-  expect_lavaan_estimates(magmaan(cfa, d, identification = "std.lv"),
-                          lavaan::cfa(cfa, d, std.lv = TRUE))
-  fit <- magmaan(cfa, d, group = "school", group.equal = "loadings")
-  expect_lavaan_estimates(fit, lavaan::cfa(cfa, d, group = "school",
-                                           group.equal = "loadings"))
-  expect_equal(fit$rows$group, unique(as.character(d$school)))
+  expect_lavaan_estimates(magmaan(magmaan_model(cfa, identification = "std.lv"), d),
+                          lav_cfa(cfa, d, std.lv = TRUE))
+  m <- magmaan_model(cfa, prototype = d, group = "school", group.equal = "loadings")
+  fit <- magmaan(m, d)
+  expect_lavaan_estimates(fit, lav_cfa(cfa, d, group = "school", group.equal = "loadings"))
+  # Groups follow the prototype's factor levels.
+  expect_equal(fit$rows$group, levels(d$school))
   expect_true("group" %in% names(coef(summary(fit))))
   intercept <- "visual =~ x1 + x2 + x3\n x1 ~ 1"
   expect_lavaan_estimates(magmaan(intercept, d), lavaan::cfa(intercept, d))
@@ -57,39 +77,44 @@ test_that("identification and group options follow lavaan's meaning", {
 test_that("start = \"fabin3\" gives the former FABIN3 start", {
   d <- hs()
   fit <- magmaan(cfa, d, inference = FALSE)
-  old <- magmaan(cfa, d, start = "fabin3", inference = FALSE)
+  old <- magmaan(cfa, d, options = list(start = "fabin3"), inference = FALSE)
   expect_identical(as_lab_fit(fit)$ml_start_policy, "layered")
   expect_identical(as_lab_fit(old)$ml_start_policy, "transported-std-lv-fabin")
-  lab <- magmaanlab::fit_model(cfa, d, control = list(start = "scaled-fabin"))
+  lab <- magmaanlab::fit_model(cfa, d, meanstructure = TRUE, fixed_x = FALSE,
+                               control = list(start = "scaled-fabin"))
   expect_identical(unname(coef(old)), lab$theta)
   expect_equal(coef(old), coef(fit), tolerance = 1e-4)
-  gls <- magmaan(cfa, d, estimator = "GLS", start = "fabin3", inference = FALSE)
+  gls <- magmaan(cfa, d, estimator = "GLS", options = list(start = "fabin3"), inference = FALSE)
   expect_identical(unname(coef(gls)),
-                   magmaanlab::fit_model(cfa, d, estimator = "GLS",
-                                         control = list(start = "fabin3"))$theta)
-  psd <- magmaan(cfa, d, psd = TRUE, inference = FALSE)
-  expect_identical(coef(magmaan(cfa, d, psd = TRUE, start = "fabin3", inference = FALSE)),
+                   magmaanlab::fit_model(cfa, d, estimator = "GLS", meanstructure = TRUE,
+                                         fixed_x = FALSE, control = list(start = "fabin3"))$theta)
+  psd <- magmaan(cfa, d, covariance = "psd", inference = FALSE)
+  expect_identical(coef(magmaan(cfa, d, covariance = "psd", options = list(start = "fabin3"),
+                                inference = FALSE)),
                    coef(psd))
   expect_identical(as_lab_fit(psd)$ml_start_policy, "transported-std-lv-fabin")
-  expect_error(magmaan(cfa, d, start = "simple"), "must be one of")
-  expect_error(magmaan(cfa, d, start = "fabin3", cluster = "school"),
-               "not available with `ordered` or `cluster`")
+  expect_error(magmaan(cfa, d, options = list(start = "simple")), "must be one of")
+  m <- magmaan_model(cfa, prototype = ordinal_hs(), ordered = paste0("x", 1:6))
+  expect_error(magmaan(m, ordinal_hs(), estimator = "DWLS", options = list(start = "fabin3")),
+               "not available for ordered variables")
 })
 
 test_that("start = a fit or a parameter table sets the start values", {
   d <- hs()
   fit <- magmaan(cfa, d, inference = FALSE)
-  again <- magmaan(cfa, d, start = fit, inference = FALSE)
+  again <- magmaan(cfa, d, options = list(start = fit), inference = FALSE)
   expect_equal(as_lab_fit(again)$start$theta, unname(coef(fit)), tolerance = 1e-12)
   expect_equal(coef(again), coef(fit), tolerance = 1e-6)
   table <- coef(summary(fit))
   table$est[table$lhs == "visual" & table$rhs == "x2"] <- 0.3
-  partial <- magmaan(cfa, d, start = table[table$op == "=~", ], inference = FALSE)
+  partial <- magmaan(cfa, d, options = list(start = table[table$op == "=~", ]),
+                     inference = FALSE)
   x2 <- which(names(coef(fit)) == "visual=~x2")
   expect_equal(as_lab_fit(partial)$start$theta[x2], 0.3)
-  psd <- magmaan(cfa, d, psd = TRUE, start = fit, inference = FALSE)
+  psd <- magmaan(cfa, d, covariance = "psd", options = list(start = fit), inference = FALSE)
   expect_equal(as_lab_fit(psd)$start$theta, unname(coef(fit)), tolerance = 1e-12)
-  expect_error(magmaan(cfa, d, start = data.frame(lhs = "visual")), "start table needs")
+  expect_error(magmaan(cfa, d, options = list(start = data.frame(lhs = "visual"))),
+               "start table needs")
 })
 
 test_that("bundled lavaan estimator names point to the plain estimator", {
@@ -102,11 +127,12 @@ test_that("bundled lavaan estimator names point to the plain estimator", {
 
 test_that("estimator and data type must agree", {
   d <- hs()
-  expect_error(magmaan(cfa, d, estimator = "DWLS"), "declare them with `ordered")
-  expect_error(magmaan(cfa, d, ordered = "x1"), "treats every variable as continuous")
+  o <- ordinal_hs()
+  ordinal <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
+  expect_error(magmaan(cfa, d, estimator = "DWLS"), "declare them with magmaan_model")
+  expect_error(magmaan(ordinal, o), "treats every variable as continuous")
   expect_error(magmaan(cfa, d, estimator = "WLS"), "continuous WLS")
-  expect_error(magmaan(cfa, d, missing = "pairwise"), "for ordered variables")
-  expect_error(magmaan(cfa, d, identification = "sphere"), "planned")
+  expect_error(magmaan_model(cfa, identification = "sphere"), "planned")
   expect_error(magmaan(cfa, as.matrix(d[paste0("x", 1:6)])), "data frame")
 })
 
@@ -135,12 +161,9 @@ test_that("inference = FALSE defers the same policy to infer()", {
 })
 
 test_that("unsupported estimators keep their estimates and give a reason", {
-  d <- hs()
-  for (v in paste0("x", 1:6)) {
-    d[[v]] <- cut(d[[v]], breaks = stats::quantile(d[[v]], c(0, 1 / 3, 2 / 3, 1)),
-                  include.lowest = TRUE, labels = FALSE)
-  }
-  fit <- magmaan(cfa, d, estimator = "DWLS", ordered = paste0("x", 1:6))
+  o <- ordinal_hs()
+  m <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
+  fit <- magmaan(m, o, estimator = "DWLS")
   expect_true(all(fit$inference$status$reason == "unsupported_model"))
   err <- tryCatch(confint(fit), magmaan_inference_unavailable = function(e) e)
   expect_equal(err$reason, "unsupported_model")
@@ -149,22 +172,25 @@ test_that("unsupported estimators keep their estimates and give a reason", {
 })
 
 test_that("ordered variables use the categorical estimators", {
-  d <- hs()
-  for (v in paste0("x", 1:6)) {
-    d[[v]] <- cut(d[[v]], breaks = stats::quantile(d[[v]], c(0, 1 / 3, 2 / 3, 1)),
-                  include.lowest = TRUE, labels = FALSE)
-  }
+  o <- ordinal_hs()
   ord <- paste0("x", 1:6)
-  fit <- magmaan(cfa, d, estimator = "DWLS", ordered = ord)
+  m <- magmaan_model(cfa, prototype = o, ordered = ord)
+  fit <- magmaan(m, o, estimator = "DWLS")
   expect_true(isTRUE(as_lab_fit(fit)$converged))
-  expect_lavaan_estimates(fit, lavaan::cfa(cfa, d, ordered = ord, estimator = "DWLS"),
+  expect_lavaan_estimates(fit, lavaan::cfa(cfa, o, ordered = ord, estimator = "DWLS"),
                           tolerance = 1e-3)
+  # Grouped, from a zero-row schema whose factor levels declare everything.
+  grouped <- magmaan_model(cfa, prototype = o[0, c(ord, "school")], ordered = ord,
+                           group = "school")
+  fit <- magmaan(grouped, o, estimator = "DWLS")
+  expect_lavaan_estimates(fit, lavaan::cfa(cfa, o, ordered = ord, estimator = "DWLS",
+                                           group = "school"), tolerance = 1e-3)
 })
 
-test_that("psd = TRUE fits through the PSD-constrained estimator", {
+test_that("covariance = \"psd\" fits through the PSD-constrained estimator", {
   d <- hs()
-  fit <- magmaan(cfa, d, psd = TRUE)
-  expect_true(fit$psd)
+  fit <- magmaan(cfa, d, covariance = "psd")
+  expect_identical(fit$covariance$policy, "psd")
   expect_true(isTRUE(as_lab_fit(fit)$options$psd))
   expect_equal(unname(coef(fit)), unname(coef(magmaan(cfa, d))), tolerance = 1e-4)
   expect_output(print(fit), "PSD-constrained")
@@ -174,7 +200,7 @@ test_that("ML covariance is lavaan's observed-information sandwich", {
   d <- hs()
   fit <- magmaan(cfa, d)
   expect_equal(fit$inference$status$available, c(TRUE, TRUE, TRUE))
-  lav <- lavaan::cfa(cfa, d, estimator = "MLR")
+  lav <- lav_cfa(cfa, d, estimator = "MLR")
   expect_lavaan_se(fit, lav)
   p <- coef(summary(fit))
   pt <- fit$lab$partable
@@ -188,15 +214,18 @@ test_that("the sandwich uses the fitted means, as lavaan's MLR does", {
   # Scalar invariance: the fitted means differ from the sample means.
   d <- hs()
   eq <- c("loadings", "intercepts")
-  fit <- magmaan(cfa, d, group = "school", group.equal = eq)
-  lav <- lavaan::cfa(cfa, d, group = "school", group.equal = eq, estimator = "MLR")
+  fit <- magmaan(magmaan_model(cfa, prototype = d, group = "school", group.equal = eq), d)
+  # lavaan orders groups by appearance; the first group is the reference group
+  # whose latent means are fixed, so give lavaan the model's order.
+  lav <- lavaan::cfa(cfa, d, group = "school", group.equal = eq, estimator = "MLR",
+                     group.label = levels(d$school))
   expect_lavaan_se(fit, lav)
 })
 
 test_that("the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentler", {
   d <- hs()
   lr <- magmaan(cfa, d)$inference$global_lr
-  fm <- lavaan::fitMeasures(lavaan::cfa(cfa, d, test = "satorra.bentler"),
+  fm <- lavaan::fitMeasures(lav_cfa(cfa, d, test = "satorra.bentler"),
                             c("chisq", "df", "chisq.scaling.factor", "pvalue.scaled"))
   expect_equal(lr$statistic, unname(fm["chisq"]), tolerance = 1e-6)
   expect_equal(lr$df, unname(fm["df"]))
@@ -207,11 +236,59 @@ test_that("the likelihood-ratio test's SB calibration is lavaan's Satorra-Bentle
   expect_output(print(summary(magmaan(cfa, d))), "Global tests against the saturated model")
 })
 
+test_that("saturated intercepts change no other estimate, standard error or test", {
+  d <- hs()
+  fit <- magmaan(cfa, d)
+  lab <- magmaanlab::fit_model(cfa, d)
+  no_means <- magmaanlab::policy_inference(lab)
+  pt <- as_lab_fit(fit)$partable
+  expect_setequal(pt$lhs[pt$op == "~1" & pt$free > 0L], paste0("x", 1:6))
+  rows <- names(coef(fit))[!grepl("~1$", names(coef(fit)))]
+  expect_equal(unname(coef(fit)[rows]), lab$theta, tolerance = 1e-6)
+  keep <- match(rows, names(coef(fit)))
+  expect_equal(unname(vcov(fit)[keep, keep]), unname(no_means$covariance), tolerance = 1e-6)
+  for (test in c("global_lr", "global_score")) {
+    reference <- no_means[[if (test == "global_lr") "lr" else "score"]]
+    expect_equal(fit$inference[[test]]$statistic, reference$statistic, tolerance = 1e-6)
+    expect_equal(fit$inference[[test]]$df, reference$df)
+    expect_equal(fit$inference[[test]]$p_sb, reference$p_sb, tolerance = 1e-6)
+    expect_equal(fit$inference[[test]]$p_peba4, reference$p_peba4, tolerance = 1e-6)
+  }
+})
+
+test_that("observed covariates are random, with policy inference", {
+  d <- hs()
+  fit <- magmaan("x1 ~ x2 + x3", d)
+  expect_true(all(fit$inference$status$available[1]))
+  p <- coef(summary(fit))
+  expect_true(all(p$free[p$lhs %in% c("x2", "x3") & p$op == "~~"]))
+  # The ML regression coefficients are those of the fixed-x fit.
+  fixed <- magmaanlab::fit_model("x1 ~ x2 + x3", d)
+  expect_equal(unname(coef(fit)[c("x1~x2", "x1~x3")]), fixed$theta[1:2], tolerance = 1e-6)
+  expect_lavaan_se(fit, lavaan::sem("x1 ~ x2 + x3", d, meanstructure = TRUE,
+                                    fixed.x = FALSE, estimator = "MLR"))
+  # In an overidentified model, ML structural estimates are those of the
+  # fixed-x fit but least-squares estimates are not (project/scope.md).
+  latent <- "visual =~ x1 + x2 + x3\nvisual ~ x4 + x5"
+  paths <- c("visual~x4", "visual~x5")
+  fixed_est <- function(fit) fit$partable$est[fit$partable$op == "~"]
+  ml <- magmaan(latent, d, inference = FALSE)
+  expect_equal(unname(coef(ml)[paths]), fixed_est(magmaanlab::fit_model(latent, d)),
+               tolerance = 1e-5)
+  gls <- magmaan(latent, d, estimator = "GLS", inference = FALSE)
+  # lavaan's GLS uses the N - 1 sample covariance, which rescales variances
+  # but not these paths.
+  lav_gls <- lavaan::sem(latent, d, estimator = "GLS", meanstructure = TRUE, fixed.x = FALSE)
+  expect_equal(unname(coef(gls)[paths]), unname(lavaan::coef(lav_gls)[paths]), tolerance = 1e-5)
+  fixed_gls <- magmaanlab::fit_model(latent, d, estimator = "GLS")
+  expect_gt(max(abs(unname(coef(gls)[paths]) - fixed_est(fixed_gls))), 1e-3)
+})
+
 test_that("defined parameters use the policy covariance", {
   d <- hs()
   m <- "visual =~ x1 + a*x2 + b*x3\ntextual =~ x4 + x5 + x6\nab := a*b"
   p <- coef(summary(magmaan(m, d)))
-  lav <- lavaan::parameterEstimates(lavaan::cfa(m, d, estimator = "MLR"))
+  lav <- lavaan::parameterEstimates(lav_cfa(m, d, estimator = "MLR"))
   expect_equal(p$est[p$op == ":="], lav$est[lav$op == ":="], tolerance = 1e-5)
   expect_equal(p$se[p$op == ":="], lav$se[lav$op == ":="], tolerance = 1e-4)
 })
@@ -219,7 +296,7 @@ test_that("defined parameters use the policy covariance", {
 test_that("saturated models have a covariance but no global test", {
   fit <- magmaan("visual =~ x1 + x2 + x3", hs())
   expect_equal(fit$inference$status$reason, c("available", "saturated", "saturated"))
-  expect_equal(dim(vcov(fit)), c(6L, 6L))
+  expect_equal(dim(vcov(fit)), c(9L, 9L))
 })
 
 test_that("PSD fits on the cone boundary get inference for an interior population", {
@@ -229,7 +306,7 @@ test_that("PSD fits on the cone boundary get inference for an interior populatio
   d <- data.frame(y1 = f + stats::rnorm(n, 0, 0.01), y2 = 0.5 * f + stats::rnorm(n),
                   y3 = 0.4 * f + stats::rnorm(n), y4 = 0.6 * f + stats::rnorm(n))
   m <- "F =~ y1 + y2 + y3 + y4"
-  boundary <- suppressWarnings(magmaan(m, d, psd = TRUE))
+  boundary <- suppressWarnings(magmaan(m, d, covariance = "psd"))
   expect_false(isTRUE(as_lab_fit(boundary)$diagnostics$newton_accuracy$covariance_interior))
   expect_true(all(boundary$inference$status$available))
   expect_true(boundary$inference$psd_boundary)
@@ -238,26 +315,29 @@ test_that("PSD fits on the cone boundary get inference for an interior populatio
   lab <- magmaanlab::policy_inference(as_lab_fit(boundary))
   expect_equal(unname(vcov(boundary)), unname(lab$covariance))
   expect_true(lab$psd_boundary)
-  interior <- magmaan(cfa, hs(), psd = TRUE)
+  interior <- magmaan(cfa, hs(), covariance = "psd")
   expect_true(all(interior$inference$status$available))
   expect_false(interior$inference$psd_boundary)
 })
 
 test_that("fitted() gives lavaan's model-implied moments", {
   d <- hs()
-  expect_equal(fitted(magmaan(cfa, d, inference = FALSE))$cov,
-               unclass(lavaan::fitted(lavaan::cfa(cfa, d))$cov), tolerance = 1e-5,
+  one <- fitted(magmaan(cfa, d, inference = FALSE))
+  lav <- lavaan::fitted(lav_cfa(cfa, d))
+  expect_equal(one$cov, unclass(lav$cov), tolerance = 1e-5, ignore_attr = TRUE)
+  expect_equal(one$mean, unclass(lav$mean), tolerance = 1e-5, ignore_attr = TRUE)
+  m <- magmaan_model(cfa, prototype = d, group = "school")
+  mg <- fitted(magmaan(m, d, inference = FALSE))
+  lav <- lavaan::fitted(lav_cfa(cfa, d, group = "school"))
+  expect_setequal(names(mg), names(lav))
+  expect_equal(mg[["Pasteur"]]$mean, unclass(lav[["Pasteur"]]$mean), tolerance = 1e-5,
                ignore_attr = TRUE)
-  mg <- fitted(magmaan(cfa, d, group = "school", meanstructure = TRUE, inference = FALSE))
-  lav <- lavaan::fitted(lavaan::cfa(cfa, d, group = "school", meanstructure = TRUE))
-  expect_equal(names(mg), names(lav))
-  expect_equal(mg[[2]]$mean, unclass(lav[[2]]$mean), tolerance = 1e-5, ignore_attr = TRUE)
   expect_equal(rownames(mg[[1]]$cov), paste0("x", 1:6))
 })
 
 test_that("a fully specified model gives its population moments", {
   pop <- "f =~ 1*x1 + 0.8*x2 + 0.6*x3\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nx1 ~ 4*1\nx2 ~ 6*1\nx3 ~ 2*1"
-  fit <- magmaan(pop, hs(), meanstructure = TRUE)
+  fit <- magmaan(pop, hs())
   expect_true(as_lab_fit(fit)$converged)
   expect_length(coef(fit), 0L)
   m <- fitted(fit)
@@ -289,7 +369,7 @@ test_that("a fully specified model gives its population moments", {
   expect_equal(fit$inference$global_score$statistic, score, tolerance = 1e-8)
   expect_true(is.finite(fit$inference$global_score$p_sb))
   expect_true(is.finite(fit$inference$global_lr$p_peba4))
-  deferred <- infer(magmaan(pop, hs(), meanstructure = TRUE, inference = FALSE))
+  deferred <- infer(magmaan(pop, hs(), inference = FALSE))
   expect_equal(deferred$inference, fit$inference)
 })
 
@@ -306,9 +386,9 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_equal(a$df, c(2L, 2L))
   # LR: the normal-theory difference, and SB is lavaan's Satorra (2000) with
   # the exact restriction map.
-  l1 <- lavaan::cfa(m1, d, estimator = "MLM")
-  l0 <- lavaan::cfa(m0, d, estimator = "MLM")
-  nt <- lavaan::lavTestLRT(lavaan::cfa(m0, d), lavaan::cfa(m1, d))
+  l1 <- lav_cfa(m1, d, estimator = "MLM")
+  l0 <- lav_cfa(m0, d, estimator = "MLM")
+  nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
   expect_equal(a$statistic[1], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
   sb <- lavaan::lavTestLRT(l0, l1, method = "satorra.2000", A.method = "exact",
                            scaled.shifted = FALSE)
@@ -341,7 +421,8 @@ test_that("anova() refuses pairs it cannot compare", {
   expect_equal(fixed$df, c(1L, 1L))
   expect_true(all(is.finite(fixed$p.sb)))
   expect_error(anova(f1, magmaan(cfa, d[-1, ], inference = FALSE)), "same observations")
-  expect_error(anova(f1, magmaan(cfa, d, psd = TRUE, inference = FALSE)), "psd setting")
+  expect_error(anova(f1, magmaan(cfa, d, covariance = "psd", inference = FALSE)),
+               "covariance policy")
   expect_error(anova(f1), "exactly two")
   # A restriction written as a constraint on a labeled parameter is nested.
   labeled <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ c*textual"

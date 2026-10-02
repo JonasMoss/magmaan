@@ -872,7 +872,10 @@ and resolved settings, numeric controls, starts/scales and attempt selection.
 Every `fit_model()` fit records all of its arguments as its route, and every
 refit (modification-index and equality-release likelihood-ratio refits, case
 reruns) replays them, overriding only the model; arguments and options added
-later carry over without changes. Lavaan acceptance on magmaan's own PORT
+later carry over without changes. Likelihood-ratio refits rebuild their spec
+with the anchor's group labels and order rather than grouping by appearance
+in the supplied data (2026-10-02), so group-specific candidates stay in their
+groups. Lavaan acceptance on magmaan's own PORT
 search is judged with `lavaan_acceptance_gradient()` in lavaan's units; the
 lavaan search reproduces the same measurement. Every lavaan component,
 including starts alone, rejects equality constraints. The first gate is
@@ -4717,25 +4720,36 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   retained observations when available; FIML requires its own retained data.
   These wrappers compose existing C++ inference primitives and do not change
   the ordinary-user inference policy.
-- Ordinary API adopted 2026-10-01, not implemented:
-  [`magmaan_model()` then `magmaan()`](../design/r-interface-vision.md#ordinary-api)
-  separates immutable native model/schema preparation from repeated fitting.
-  Grouped/ordinal skeleton frames declare levels; each dataset refreshes
-  moments, thresholds, weights and starts. The fit takes model, data,
-  estimator, covariance policy, inference and options; structural choices
-  belong to construction and optimization details to `options`. Every model
-  carries a mean structure. `fixed.x`, `missing`, `cluster` and
-  `meanstructure` leave the ordinary call (fixed-x rationale in the
-  [scope](../scope.md#ordinary-fixed-x-decision)). Barriers are exposed
-  experimentally as `covariance = barrier(lambda)` with explicit unavailable
-  inference until their own gates pass. Migration and adapter work remain
-  open; the following entries describe current runtime.
+- Ordinary API adopted 2026-10-01 and implemented 2026-10-02 (0.2.0 in
+  development): [`magmaan_model()` then `magmaan(model, data, estimator,
+  covariance, inference, options)`](../design/r-interface-vision.md#ordinary-api).
+  `magmaan_model()` builds the lab `model_spec()` once with
+  `meanstructure = TRUE` and `fixed_x = FALSE` and freezes the data schema:
+  observed variables, group labels and order (prototype factor levels, else
+  first appearance) and ordinal categories (factor levels, else sorted values).
+  A zero-row prototype suffices. Each fit checks its data against the schema,
+  raising `magmaan_schema_error` with reason `undeclared_group`,
+  `undeclared_category`, `changed_levels`, `empty_group` or `empty_category`;
+  ordered columns are passed as factors with the declared levels and grouped
+  rows are stably reordered into the model's group order, so every lab route
+  sees one order. A syntax string or lab spec is a shortcut that constructs the
+  model with `data` as prototype and rejects undeclared ordered factors. Lab
+  specs with `fixed_x = TRUE` and exogenous observed rows are rejected.
+  `covariance = barrier(lambda)` maps to the lab joint barrier with weight
+  lambda; `barrier(0)` fits the unrestricted model and keeps its inference.
+  `options$start` (`"default"`, `"fabin3"`, `"lavaan-0.7.2"`, a fit or a
+  table) replaces `start` and `options$starts`; with engine options an explicit
+  start overrides the preset's. Removed arguments (`psd`, `start`, `fixed.x`,
+  `meanstructure`, `missing`, `cluster` and the structural arguments now on
+  `magmaan_model()`) raise errors naming their replacement. Fits still run
+  through `fit_model()` on the frozen spec: native prepared handles are not
+  yet reused, because the prepared `estimate()` path differs from
+  `fit_model()` in default starts, fitting options and routes (backlog).
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../design/r-interface-vision.md)). `magmaan()`
-  takes lavaan-named options, rejects estimator-plus-correction names such as
-  MLR and WLSMV, delegates `meanstructure` defaults to the lab, reports rows used
-  and deleted listwise, and fits through `fit_model()`. `infer()` runs the
+  rejects estimator-plus-correction names such as MLR and WLSMV, reports rows
+  used and deleted listwise, and fits through `fit_model()`. `infer()` runs the
   inference policy (next entry) and records each component (covariance,
   global score, global LR) as available or with a typed reason; for an
   unavailable component `vcov()` and `confint()` raise a
@@ -4805,8 +4819,12 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   sample mean). The global score and likelihood-ratio tests come from the
   shared expected-information NTML geometry, each calibrated with SB and PEBA4.
   Components carry typed reasons (`not_converged`, `saturated`,
-  `unsupported_model`, `numeric_failure`, `not_nested`) instead of substitute
-  results. A PSD estimate on the cone boundary gets every component, flagged
+  `unsupported_model`, `numeric_failure`, `not_nested`, `penalized`) instead
+  of substitute results. A barrier estimate with positive weight
+  (`PolicyFitState::penalized`, set by `policy_fit_state(PenalizedFit)` and by
+  the lab's `penalty_inference` marker) gets `penalized` for every component
+  and nested test, for every estimator and before the convergence gate
+  (2026-10-02). A PSD estimate on the cone boundary gets every component, flagged
   `psd_boundary`: the inference assumes an interior population (since
   2026-09-26; before, it was refused). Nested tests are
   `api::policy_nested_ml()`, exposed as `magmaanlab::policy_nested()` and

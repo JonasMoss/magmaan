@@ -110,38 +110,36 @@ result under an unstated convention.
 
 ### Ordinary API
 
-- [ ] **M/L — implement the adopted ordinary API.** Add
-  `magmaan_model(model, prototype, ordered, group, group.equal, group.partial,
-  identification, parameterization)` and fit immutable prepared models through
-  `magmaan(model, data, estimator, covariance, inference, options)`. Support
-  zero-row grouped/ordinal schema frames; keep native structural preparation
-  outside repeated fits. Every ordinary model carries a mean structure.
-  `covariance` takes `"unrestricted"`, `"psd"`, `"barrier"` or
-  `barrier(lambda)`; barrier fits are experimental (one session message,
-  recorded and printed status, typed unavailable inference). Merge the top-level
-  `start` and `options$starts` into `options$start` with one documented
-  vocabulary, removing today's `"fabin3"` clash. Remove `fixed.x`, `missing`,
-  `cluster` and `meanstructure` from the ordinary call, with a versioned
-  migration; preserve row provenance. The syntax shortcut errors on undeclared
-  ordered factors. Refits already replay every recorded `fit_model()` argument
-  (2026-10-01). Extend prepared adapters instead of rebuilding partables per
-  draw. **Check:** fresh/prepared parity, structural-preparation counters,
-  changed-data starts/thresholds, schema, ordered-factor and fixed-x rejection,
-  mean-structure invariance of the other estimates, SEs and tests, option
-  precedence and start vocabulary, barrier λ validation, zero-λ reduction,
-  session message and inference refusal, the documented distinction between
-  changing the covariance domain and the objective, worker reconstruction, and
-  separately timed small-model setup/data/fit/inference. See the
-  [design](../design/r-interface-vision.md#ordinary-api).
+- [x] **M/L — implement the adopted ordinary API surface** (2026-10-02).
+  `magmaan_model()` with frozen group/category schema and zero-row prototypes;
+  `magmaan(model, data, estimator, covariance, inference, options)` with
+  always-on means, random X, `covariance = barrier(lambda)` (session message,
+  printed status, C++ `penalized` reason), `options$start`, typed
+  `magmaan_schema_error` failures and migration errors for removed arguments.
+  Likelihood-ratio refits keep the anchor's group order. Fits run through
+  `fit_model()` on the constructed specification. See the
+  [implementation record](../design/r-interface-vision.md#implementation-and-remaining-decisions).
 
-- [ ] **S/M — remove the ordinary fixed-x option under the adopted API.**
-  Decided in the [scope](../scope.md#ordinary-fixed-x-decision): ordinary
-  construction uses the joint random-X model. Reject lab specifications built
-  with `fixed_x = TRUE`, with instructions, instead of silently replacing their
-  model. Preserve compiled/lab compatibility conventions. Coordinate with the
-  ordinary API task below. **Check:** random-X partable/fitting parity, ML
-  estimates unchanged and LS changes as documented, direct/deferred and nested
-  inference gates, typed rejection and retained metadata. General fixed-design
+- [ ] **M — fit constructed ordinary models through native prepared
+  handles.** `magmaan_model()` should own a prepared model so repeated fits
+  skip structural preparation (ordinal DWLS 9.1 → 3.5 ms in the 2026-10-01
+  timing). First close the parity gaps of the prepared `estimate()` path
+  against `fit_model()`: the layered start for continuous ML and GLS (it uses
+  FABIN3), fitting options and presets, fit-time start tables, ML2S, and the
+  recorded refit route. Native handles stay process-local and are rebuilt from
+  the portable model on workers. **Check:** fresh/prepared parity in partable,
+  estimates, objective, diagnostics and routes for every ordinary estimator
+  and covariance policy; zero repeated structural-preparation calls;
+  changed-data starts/thresholds; save/reload and worker reconstruction; and
+  separately timed construction, data preparation, fit and inference.
+
+- [x] **S/M — remove the ordinary fixed-x option under the adopted API**
+  (2026-10-02). Ordinary construction uses the joint random-X model and
+  rejects lab specifications with `fixed_x = TRUE` and observed covariates.
+  ML structural estimates match the fixed-x fit; GLS estimates of an
+  overidentified regression differ, as the
+  [scope](../scope.md#ordinary-fixed-x-decision) records. Regressions on
+  observed covariates get the ML policy's inference. General fixed-design
   inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 

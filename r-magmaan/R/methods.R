@@ -156,7 +156,15 @@ nobs.magmaan <- function(object, ...) {
 }
 
 .estimator_label <- function(fit) {
-  paste0(fit$estimator, if (isTRUE(fit$psd)) " (PSD-constrained)" else "")
+  paste0(fit$estimator, .covariance_label(fit$covariance))
+}
+
+.covariance_label <- function(covariance) {
+  switch(covariance$policy %||% "unrestricted",
+         psd = " (PSD-constrained)",
+         barrier = if (covariance$lambda == 0) ", barrier(0): the unrestricted fit" else
+           sprintf(", barrier(lambda = %s), experimental", format(covariance$lambda)),
+         "")
 }
 
 .converged_label <- function(lab) {
@@ -178,10 +186,8 @@ nobs.magmaan <- function(object, ...) {
   total <- sum(r$rows)
   deleted <- sum(r$deleted)
   if (is.na(used)) return(sprintf("%d rows supplied", total))
-  how <- switch(fit$missing,
-                fiml = "not used (no observed values)",
-                pairwise = "fully deleted",
-                "deleted listwise")
+  how <- if (fit$estimator %in% c("FIML", "ML2S")) "not used (no observed values)" else
+    "deleted listwise"
   sprintf("%d used of %d rows; %d %s", used, total, deleted, how)
 }
 
@@ -288,7 +294,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' each calibrated with SB and PEBA4, as the global tests are. The restricted
 #' model may constrain, fix or drop paths from the other model (for example,
 #' a shared label, `b == 0`, or a loading fixed to zero), fitted to the same
-#' observations with the same estimator and `psd` setting. For a single
+#' observations with the same estimator and covariance policy. For a single
 #' restriction, a Wald test
 #' is the z-statistic of a defined parameter such as `d := a - b` in
 #' `coef(summary(fit))`.
@@ -306,8 +312,8 @@ anova.magmaan <- function(object, ...) {
   a <- fits[[1L]]$lab
   b <- fits[[2L]]$lab
   if (!identical(fits[[1L]]$estimator, fits[[2L]]$estimator) ||
-      !identical(fits[[1L]]$psd, fits[[2L]]$psd)) {
-    stop("anova(): the fits must use the same estimator and psd setting", call. = FALSE)
+      !identical(unclass(fits[[1L]]$covariance), unclass(fits[[2L]]$covariance))) {
+    stop("anova(): the fits must use the same estimator and covariance policy", call. = FALSE)
   }
   if (!identical(a$raw_data, b$raw_data)) {
     stop("anova(): the fits must use the same observations in the same order", call. = FALSE)

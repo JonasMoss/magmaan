@@ -5,10 +5,9 @@ compiled package is `magmaanlab` in `r-package/`, and the pure-R `magmaan`
 package is in `r-magmaan/`. The policy composer (`api::policy_inference_ml`)
 covers single-level complete-data ML; other estimators fit but report their
 inference as `unsupported_model`. The [ordinary API](#ordinary-api) was adopted
-on 2026-10-01 and is not yet implemented; the
-[current call](#current-ordinary-user-call) records runtime until it lands. The
-remaining work is tracked in
-[todo.md](../backlog/todo.md#primary-inference-workflows).
+on 2026-10-01 and implemented on 2026-10-02 for 0.2.0, except that constructed
+models do not yet reuse native prepared handles. The remaining work is tracked
+in [todo.md](../backlog/todo.md#ordinary-api).
 
 ## Intention
 
@@ -47,10 +46,8 @@ random covariates. Conditional fitting can serve this target. General
 fixed-design inference under mean misspecification is banked, as is categorical
 conditional-moment expansion. The ordinary API therefore has no `fixed.x`
 option and always fits the joint random-X model; the
-[scope decision](../scope.md#ordinary-fixed-x-decision) records why.
-Until it lands, the current runtime keeps its `fixed.x = TRUE` default with
-explicitly unsupported inference for fixed observed covariates. Lab fixed-x
-conventions keep their compatibility contracts.
+[scope decision](../scope.md#ordinary-fixed-x-decision) records why. Lab
+fixed-x conventions keep their compatibility contracts.
 
 ## Two packages
 
@@ -91,10 +88,11 @@ conventions keep their compatibility contracts.
 
 ## Ordinary API
 
-Status: adopted 2026-10-01; implementation pending in the
-[active backlog](../backlog/todo.md#ordinary-api). The signatures below
-replace the [current call](#current-ordinary-user-call) only after
-implementation and migration checks.
+Status: adopted 2026-10-01; implemented 2026-10-02 for 0.2.0, fitting through
+`fit_model()` on the constructed specification. Prepared-handle reuse remains
+in the [active backlog](../backlog/todo.md#ordinary-api); the
+[implementation record](#implementation-and-remaining-decisions) lists the
+decisions taken while implementing.
 
 ```r
 magmaan_model(model, prototype = NULL,
@@ -306,10 +304,10 @@ defaults.
   `"lavaan-0.7.2"`, a previous fit or a parameter table. Matching is by
   parameter identity and group; unmatched free parameters use the automatic
   start. Supplied starts honor fixed values and constraints and never modify
-  the model. It replaces the current top-level `start` and `options$starts`,
-  which disagree today: for ML, `start = "fabin3"` selects scaled FABIN3 while
-  `options$starts = "fabin3"` selects native FABIN3. Lab-internal start and
-  optimizer names stay in the lab.
+  the model. It replaced 0.1.0's top-level `start` and `options$starts`,
+  which disagreed: for ML, `start = "fabin3"` selected scaled FABIN3 while
+  `options$starts = "fabin3"` selected native FABIN3; `"fabin3"` now means the
+  former. Lab-internal start and optimizer names stay in the lab.
 - Every refit (likelihood-ratio refits for modification indices and equality
   releases, case reruns) replays the anchor's complete recorded fitting
   arguments and overrides only what the refit changes, so options added later
@@ -326,62 +324,72 @@ defaults.
 
 ### Implementation and remaining decisions
 
-Reuse the lab's prepared ownership (`prepare_model()`, `prepare_data()`,
-`estimate()`) and C++ statistical implementation. The ordinary package
-composes model/data/weight preparation and fitting internally; users need only
-construction and fitting. Extend missing adapters rather than turn a prepared
-model back into a partable for every replication. A 2026-10-01 timing of the
-lab path found that reuse cut a small continuous ML fit only from 0.94 to
-0.74 ms but an ordinal DWLS fit from 9.1 to 3.5 ms; the frozen schema is the
-larger benefit.
+Implemented 2026-10-02 for 0.2.0. `magmaan_model()` builds the lab
+specification once with `meanstructure = TRUE` and `fixed_x = FALSE` and
+freezes the schema; `magmaan()` checks each dataset against it and fits
+through `fit_model()` on that specification, so its estimates are the lab
+convenience fit of the same specification. Decisions taken while implementing:
 
-Still to decide during implementation: how empty declared categories or groups
-are reported, and the versioned migration for removed arguments. Both must
-preserve explicit structural restrictions and recorded inference targets.
+- **Schema failures.** An undeclared group or category, changed factor levels,
+  a declared group without rows or a declared category without complete
+  observations in some group raises a `magmaan_schema_error` condition whose
+  `reason` is `undeclared_group`, `undeclared_category`, `changed_levels`,
+  `empty_group` or `empty_category`. Simulation code catches it by class; no
+  model row is removed. Ordered columns reach the lab as factors with the
+  declared levels.
+- **Group order.** Prototype factor levels declare it; other columns use first
+  appearance. lavaan ignores factor levels, so a factor whose levels differ
+  from its appearance order numbers groups differently from lavaan. The order
+  places group-specific modifiers such as `c(a, b)` and selects the reference
+  group whose latent means are fixed. Fitting reorders rows stably into the
+  model's order, and likelihood-ratio refits rebuild with the anchor's labels,
+  so every lab route sees one order.
+- **Migration.** Removed arguments arrive through `...` unevaluated and raise
+  an error naming their replacement and the version, 0.2.0. There is no
+  deprecation period: 0.1.0 was a pinned simulation prerelease.
+- **Barrier.** Positive λ maps to the lab's joint barrier with weight λ.
+  `barrier(0)` fits the unrestricted model and keeps its inference, while the
+  fit records the requested `barrier(0)`. The refusal is the C++ `penalized`
+  reason, checked before the convergence gate and in nested tests, for every
+  estimator.
+- **Options vocabulary.** `optimizer`: `"default"`, `"port"`,
+  `"lavaan-0.7.2"`. `convergence`: `"default"`, `"newton"`, `"lavaan-0.7.2"`.
+  `preset`: `"lavaan-0.7.2"`. An explicit `start` overrides a preset's, as the
+  other components do, and the fit reports a modified preset.
+- **Preset with means.** On Holzinger–Swineford data the `lavaan-0.7.2` preset
+  with the always-on mean structure follows lavaan with `meanstructure = TRUE`:
+  22 iterations each, estimates within $2\times10^{-15}$.
 
-Acceptance gates: fresh/prepared agreement in partable, estimates, objective
-and diagnostics; zero repeated structural-preparation calls; changed datasets
-with one schema and independently refreshed starts/thresholds; skeleton-data
-support; explicit schema, ordered-factor and fixed-x rejection; mean-structure
-invariance of the other estimates, standard errors and tests; start/preset
-override behavior; refit replay of every fitting argument; barrier λ
-validation, zero-λ reduction, the session message and inference refusal;
-portable metadata and worker reconstruction. Benchmark small repeatedly fitted
-models, separating construction, dataset preparation, fitting and requested
-inference. Existing prepared support is a foundation, not proof that all
-ordinary adapters exist.
+Native prepared reuse remains. The lab's prepared `estimate()` path cannot
+yet replace `fit_model()`: it starts continuous ML and GLS from FABIN3 instead
+of the layered start, takes no fitting options, has no ML2S route and takes
+no fit-time start table, so routing ordinary fits through it would change
+results. Extend those adapters rather than turn a prepared model back into a
+partable for every replication. A 2026-10-01 timing of the lab path found
+that reuse cut a small continuous ML fit only from 0.94 to 0.74 ms but an
+ordinal DWLS fit from 9.1 to 3.5 ms. The model object is plain R data today,
+so it serializes to workers; native handles will need process-local
+rebuilding from it.
 
-## Current ordinary-user call
+Remaining acceptance gates: fresh/prepared agreement in partable, estimates,
+objective and diagnostics; zero repeated structural-preparation calls;
+worker reconstruction of native handles; and benchmarks that separate
+construction, dataset preparation, fitting and requested inference for small
+repeatedly fitted models.
 
-The following records implemented behavior until the
-[ordinary API](#ordinary-api) lands.
-
-```r
-magmaan(model, data,
-        estimator = "ML",
-        ordered = NULL,
-        group = NULL, group.equal = NULL, group.partial = NULL,
-        cluster = NULL,
-        identification = "marker",
-        parameterization = "delta",
-        meanstructure = "default", fixed.x = TRUE,
-        missing = "listwise",
-        psd = FALSE,
-        start = "default",
-        inference = TRUE, options = NULL)
-```
+## Ordinary call conventions
 
 Naming rule: use lavaan's name where the concept is identical, and a new name
 only where lavaan's name is poor or magmaan's meaning differs. A lavaan user's
 `group = "school", group.equal = "loadings", ordered = c("y1", "y2")` then
-works as typed; under the ordinary API these are `magmaan_model()` arguments.
-lavaan's `ordered = TRUE` (every endogenous observed variable)
-is deferred; the scaffold asks for the names. This makes the ordinary package dot-case while the lab stays snake_case,
+works as typed as `magmaan_model()` arguments. lavaan's `ordered = TRUE`
+(every endogenous observed variable) is deferred; the package asks for the
+names. This makes the ordinary package dot-case while the lab stays snake_case,
 a deliberate trade for users moving from lavaan.
 
 ### Advanced fitting choices
 
-Adopted 2026-10-01: per-call `options` separates `starts`, `optimizer` and
+Adopted 2026-10-01: per-call `options` separates `start`, `optimizer` and
 `convergence` for simulation comparisons. `convergence = "newton"` names
 magmaan's existing common verdict (Newton where supported, first-order
 fallback otherwise); thresholds remain internal. This does not change the
@@ -407,9 +415,9 @@ attempts. The selected verdict controls `converged` and inference gating;
 the common diagnostic verdict remains available independently, and a
 disagreement between them is reported without changing either. Every refit
 replays the fit's recorded fitting arguments.
-A supplied start table is an input; competing named start constructors error.
-The ordinary API merges `options$starts` and the top-level `start` into
-`options$start` ([options](#options)).
+A supplied start table is an input. The ordinary `options$start` replaced the
+0.1.0 top-level `start` and `options$starts` ([options](#options)); in the
+lab, a named `control$start` still conflicts with fitting options.
 
 ### Requested identification is part of the result contract
 
@@ -459,9 +467,8 @@ inference is automatic. This matches the backlog item on decomposing
 
 ### Options kept, renamed and dropped
 
-The table describes the [ordinary API](#ordinary-api). The current runtime
-still has `psd`, `start`, `missing`, `fixed.x`, `meanstructure` and `cluster`
-arguments.
+The table describes the [ordinary API](#ordinary-api); in 0.2.0 each removed
+argument raises an error naming its replacement.
 
 | lavaan or current option | Ordinary API | Reason |
 | --- | --- | --- |
@@ -617,7 +624,7 @@ does not make that null true.
   different estimator.
 - Structural gaps (an estimator path whose policy is not yet implemented) are
   reported as unavailable, not refused, so the estimates remain usable.
-- With `covariance = "psd"` (currently `psd = TRUE`), every converged fit
+- With `covariance = "psd"`, every converged fit
   gets full inference, including one
   whose estimate lies on the boundary of the covariance space (since
   2026-09-26). When the population is interior, the PSD and ordinary
@@ -666,9 +673,9 @@ Otherwise it stays in the lab, except for explicitly requested development
 exposure with unavailable inference. The ordinary API makes this exception for
 barriers; it does not claim validated inference or default adoption.
 
-- **In now:** PSD fitting, currently `psd = TRUE` and `covariance = "psd"`
-  under the ordinary API (PSD fits exist for ML, FIML, ML2S, ULS, GLS, WLS,
-  ordinal and mixed data), and PEBA4, which is part of the policy.
+- **In now:** PSD fitting, `covariance = "psd"` (PSD fits exist for ML, FIML,
+  ML2S, ULS, GLS, WLS, ordinal and mixed data); experimental barriers,
+  `covariance = barrier(lambda)`; and PEBA4, which is part of the policy.
 - **Candidates:** `identification = "sphere"`, the closed-form CFA estimator
   and the retained correlation-target ML capability currently called catML.
   Its shared fitting/metadata replacement is near-term lab work; ordinary-user

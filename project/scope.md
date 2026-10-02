@@ -204,9 +204,9 @@ structural estimates moved by up to 0.05 and 0.13 (checked 2026-10-01).
 The lab keeps its fixed-x conventions and their component gates. Ordinary
 construction rejects lab specifications built with `fixed_x = TRUE` and says
 how to rebuild them; it never silently converts a supplied fixed-x model or
-refits a joint model in its place. Until the ordinary API lands, the current
-runtime keeps `fixed.x = TRUE` as its default, with explicitly unsupported
-inference for fixed observed covariates.
+refits a joint model in its place. The ordinary API implements this decision
+from 0.2.0 (2026-10-02); 0.1.0 kept `fixed.x = TRUE` as its default, with
+explicitly unsupported inference for fixed observed covariates.
 
 ## Reopening banked work
 

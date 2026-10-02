@@ -1,11 +1,11 @@
-test_that("saved lavaan specifications resolve options before validation", {
+test_that("saved lavaan specifications supply their structural choices", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   m <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6"
   spec <- magmaanlab::model_spec(m)
   expect_equal(coef(magmaan(spec, d, inference = FALSE)),
                coef(magmaan(m, d, inference = FALSE)))
-  expect_s3_class(magmaan(spec, d, start = "fabin3", inference = FALSE), "magmaan")
+  expect_s3_class(magmaan(spec, d, options = list(start = "fabin3"), inference = FALSE), "magmaan")
 
   ord <- paste0("x", 1:6)
   for (v in ord) {
@@ -14,40 +14,38 @@ test_that("saved lavaan specifications resolve options before validation", {
   }
   spec <- magmaanlab::model_spec(m, ordered = ord, parameterization = "theta")
   f <- magmaan(spec, d, estimator = "DWLS", inference = FALSE)
-  direct <- magmaan(m, d, estimator = "DWLS", ordered = ord,
-                    parameterization = "theta", inference = FALSE)
+  direct <- magmaan(magmaan_model(m, prototype = d, ordered = ord, parameterization = "theta"),
+                    d, estimator = "DWLS", inference = FALSE)
   expect_equal(coef(f), coef(direct))
   expect_identical(as_lab_fit(f)$parameterization, "theta")
-  expect_equal(coef(magmaan(spec, d, estimator = "DWLS", ordered = rev(ord),
-                           parameterization = "theta", inference = FALSE)), coef(f))
+  expect_equal(coef(magmaan(magmaan_model(spec, prototype = d, ordered = rev(ord),
+                                          parameterization = "theta"),
+                            d, estimator = "DWLS", inference = FALSE)), coef(f))
   expect_error(magmaan(spec, d), "treats every variable as continuous")
-  expect_error(magmaan(spec, d, estimator = "DWLS", ordered = NULL), "conflicts")
-  expect_error(magmaan(spec, d, estimator = "DWLS", parameterization = "delta"), "conflicts")
-  expect_error(magmaan(spec, d, estimator = "DWLS", start = "fabin3"), "not available")
-  d$x1[1:5] <- NA
-  pair <- magmaan(spec, d, estimator = "DWLS", missing = "pairwise", inference = FALSE)
-  expect_equal(pair$rows$used, nrow(d))
-  expect_equal(coef(pair), coef(magmaan(m, d, estimator = "DWLS", ordered = ord,
-                                       parameterization = "theta", missing = "pairwise",
-                                       inference = FALSE)))
+  expect_error(magmaan_model(spec, prototype = d, ordered = ord[-1]), "conflicts")
+  expect_error(magmaan_model(spec, prototype = d, parameterization = "delta"), "conflicts")
+  expect_error(magmaan(spec, d, estimator = "DWLS", options = list(start = "fabin3")),
+               "not available")
 })
 
-test_that("saved grouped specifications retain per-group row accounting", {
+test_that("saved grouped specifications retain their groups and row accounting", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   d$x1[1:5] <- NA
   m <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6"
-  spec <- magmaanlab::model_spec(m, group = "school",
-                                group_labels = unique(as.character(d$school)))
+  appearance <- unique(as.character(d$school))
+  spec <- magmaanlab::model_spec(m, group = "school", group_labels = appearance)
   f <- magmaan(spec, d, inference = FALSE)
-  direct <- magmaan(m, d, group = "school", inference = FALSE)
+  expect_identical(f$rows$group, appearance)
+  chr <- d
+  chr$school <- as.character(chr$school)
+  direct <- magmaan(magmaan_model(m, prototype = chr, group = "school"), d, inference = FALSE)
   expect_identical(f$rows, direct$rows)
   expect_equal(coef(f), coef(direct))
   expect_equal(sum(f$rows$deleted), 5L)
   expect_equal(sum(f$rows$used), nobs(f))
   expect_equal(f$rows$group, names(fitted(f)))
-  expect_error(magmaan(spec, d, group = NULL), "conflicts")
-  expect_error(magmaan(spec, d, group = "sex"), "conflicts")
+  expect_error(magmaan_model(spec, prototype = d, group = "sex"), "conflicts")
 })
 
 test_that("EQS and partable-only specifications stay in the lab", {
@@ -84,19 +82,6 @@ test_that("defined estimates survive deferred and unsupported inference", {
   p <- coef(summary(magmaan(fixed, d, inference = FALSE)))
   expect_equal(p$est[p$op == ":="], 0.48)
   expect_true(is.na(p$se[p$op == ":="]))
-})
-
-test_that("fixed observed covariates retain estimates and explicit unavailable inference", {
-  skip_if_not_installed("lavaan")
-  d <- lavaan::HolzingerSwineford1939
-  direct <- magmaan("x1 ~ x2", d)
-  deferred <- infer(magmaan("x1 ~ x2", d, inference = FALSE))
-  expect_equal(coef(direct), coef(deferred))
-  expect_identical(direct$inference$status, deferred$inference$status)
-  expect_true(all(direct$inference$status$reason == "unsupported_model"))
-  expect_error(vcov(direct), class = "magmaan_inference_unavailable")
-  random <- magmaan("x1 ~ x2", d, fixed.x = FALSE)
-  expect_true(random$inference$status$available[1])
 })
 
 test_that("interval arguments fail clearly and numeric selection preserves order", {

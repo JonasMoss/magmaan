@@ -2,8 +2,8 @@
 
 One call estimates a structural equation model and computes inference under a
 single policy that magmaan chooses and justifies. The model is written in
-lavaan syntax or supplied as a model specification. The options use lavaan's
-names where the concept is the same.
+lavaan syntax; structural options use lavaan's names where the concept is the
+same.
 
 ```r
 library(magmaan)
@@ -14,10 +14,26 @@ coef(fit)            # free estimates, matching vcov(fit)
 coef(summary(fit))   # the parameter table: estimates, robust SEs, z, p, intervals
 ```
 
-Saved specifications from `magmaanlab::model_spec()` must carry lavaan syntax.
-Identification, mean-structure and equality choices belong in that constructor.
-Ordered variables, parameterization and grouping are inherited from the
-specification; explicit conflicting options error. EQS remains in `magmaanlab`.
+Grouped, ordinal and repeatedly fitted models are constructed once with
+`magmaan_model()`, whose `prototype` declares groups and categories:
+
+```r
+skeleton <- data.frame(y1 = ordered(character(), levels = 1:5),
+                       y2 = ordered(character(), levels = 1:5),
+                       y3 = ordered(character(), levels = 1:5),
+                       site = factor(character(), levels = c("A", "B")))
+m <- magmaan_model("f =~ y1 + y2 + y3", prototype = skeleton,
+                   ordered = c("y1", "y2", "y3"), group = "site")
+fits <- lapply(datasets, function(d) magmaan(m, d, estimator = "DWLS"))
+```
+
+`magmaan(model, data, estimator, covariance, inference, options)` takes the
+choices that define the estimate. `covariance` is `"unrestricted"`, `"psd"`
+or `barrier(lambda)` (experimental); `options` holds optimization details such
+as `start` and the `preset = "lavaan-0.7.2"` fitting conventions. Every model
+has a mean structure and treats observed covariates as random. Saved
+specifications from `magmaanlab::model_spec()` must carry lavaan syntax; EQS
+remains in `magmaanlab`.
 
 This package is pure R. Every computation happens in
 [`magmaanlab`](../r-package/), the methods-development package over the
@@ -31,15 +47,14 @@ likelihood-ratio tests, each calibrated with SB and PEBA4. The other estimators
 fit, but their inference components report `unsupported_model`, and `vcov()`
 and `confint()` raise a `magmaan_inference_unavailable` condition. The design is
 [`project/design/r-interface-vision.md`](../project/design/r-interface-vision.md).
-Models with fixed observed covariates also report unsupported policy inference;
-the fitting default `fixed.x = TRUE` does not imply inference support for those
-models. A joint random-X model with `fixed.x = FALSE` is a different model and
-must be selected explicitly.
+Barrier fits report every inference component unavailable with reason
+`penalized`.
 
 Install `magmaanlab` first (`just r-dev` or `just r-install`), then this
 package (`just r-magmaan`); `just r-magmaan-test` runs the tests.
 
-This simulation prerelease pairs `magmaan` 0.1.0 with `magmaanlab` 0.1.0.
+The 0.1.0 simulation prerelease pairs `magmaan` 0.1.0 with `magmaanlab` 0.1.0;
+the development version carries the 0.2.0 API described here (see NEWS).
 Development is unfinished. Remaining bugs need fixing, and coverage of the main
 estimators and inferential procedures needs completing and validating before
 a finished release. Version 0.1.0 is a snapshot for supported simulations;
