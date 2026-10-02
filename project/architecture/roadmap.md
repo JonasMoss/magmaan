@@ -478,6 +478,8 @@ unit-invariant corpus pairs (engineering/active/17-corpus-optimizer-recovery). O
 terminations from lower start objectives. Simple/FABIN no longer read a zero
 disturbance as a std.lv scale. Trait-state blocks whose latent covariance only
 the structure identifies keep FABIN3.
+Observed-only blocks bypass the empty latent solve (2026-10-02); their
+layered starts retain sample means and variances, including saturated models.
 Default decisions for starts, optimizers and the PSD route are made in
 `experiments/decisions/01-optimizer-defaults`, whose report opens with the
 register of those defaults. Its criteria are committed before each run, the

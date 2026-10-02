@@ -685,6 +685,12 @@ void unpack(const SubProblem& sp, const VectorXd& x, MatrixXd& B, MatrixXd& Psi,
 
 bool latent_moments(const MatrixXd& B, const MatrixXd& Psi, MatrixXd& A, MatrixXd& Phi) {
   const Index m = B.rows();
+  // Observed-only models have an empty latent block; its moments need no solve.
+  if (m == 0) {
+    A.resize(0, 0);
+    Phi.resize(0, 0);
+    return true;
+  }
   Eigen::FullPivLU<MatrixXd> lu(MatrixXd::Identity(m, m) - B);
   if (!lu.isInvertible()) return false;
   A = lu.inverse();

@@ -139,6 +139,26 @@ constexpr std::string_view phantom_model =
 
 }  // namespace
 
+TEST_CASE("layered start: observed-only moments have no latent solve") {
+  BuildOptions options;
+  SUBCASE("variance only") { options.meanstructure = false; }
+  SUBCASE("mean and variance") { options.meanstructure = true; }
+  const Built b = build("x ~~ x", options);
+  REQUIRE(b.rep.dims.front().n_latent == 0);
+  const Eigen::MatrixXd covariance = Eigen::MatrixXd::Constant(1, 1, 2.25);
+  const Eigen::VectorXd mean = Eigen::VectorXd::Constant(1, 1.5);
+  const SampleStats sample = options.meanstructure ? stats({covariance}, {mean})
+                                                 : stats({covariance});
+  const auto report = layered_start_report(b.pt, b.rep, sample, b.starts);
+  REQUIRE(report.has_value());
+  REQUIRE(report->theta.allFinite());
+  CHECK(sigma(b, report->theta).front().isApprox(covariance, 1e-12));
+  if (options.meanstructure)
+    CHECK(mu(b, report->theta).front().isApprox(mean, 1e-12));
+  CHECK(std::isfinite(report->structural_cost_initial));
+  CHECK(std::isfinite(report->structural_cost_final));
+}
+
 TEST_CASE("layered start: a phantom-scaled model is recovered from its population covariance") {
   Built b = build(phantom_model);
   const Eigen::VectorXd t = truth(b, 1.5);
