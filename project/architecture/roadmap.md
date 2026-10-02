@@ -4969,7 +4969,14 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `api::policy_nested_ml()`, exposed as `magmaanlab::policy_nested()` and
   `magmaan::anova()`: the likelihood-ratio difference and the efficient score
   at the restricted fit, each with SB and PEBA4, for a restricted model that
-  drops, fixes or constrains alternative paths. The shared inference-side
+  drops, fixes or constrains alternative paths. Since 2026-10-02 both use
+  observed geometry (`ntml_quadratic(hypothesis, score, Information::Observed)`):
+  the score projects with the larger model's observed information at the
+  restricted fit and keeps the expected metric on the projected directions (the
+  FIML recipe, so its statistic changes too), and the Satorra-2000 LR spectrum
+  reduces through the observed information at the larger model. The expected
+  geometry, lavaan's, remains the default of `ntml_quadratic` and the lab
+  (`inference_quadratic(geometry =)`); the calibration run is open. The shared inference-side
   `robust::embed_nested_null` matches formula keys including group and level,
   lifts the null's affine constraints and estimate into H1, and verifies its
   implied covariance and mean moments to relative tolerance 1e-10. Omission
@@ -4986,8 +4993,8 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
   `boundary_nesting`. The shared map also feeds complete-data/FIML/ML2S exact
   Satorra-2000, ordinal/mixed-ordinal, pairwise-composite, continuous weighted
   inference and the SB2010 null-point injection. Mixed-point delta remains
-  the lavaan compatibility option. SB matches lavaan's
-  `satorra.2000` with the exact restriction map. A model without free
+  the lavaan compatibility option. In the expected geometry SB matches
+  lavaan's `satorra.2000` with the exact restriction map. A model without free
   parameters is evaluated at its fixed values instead of optimized
   (`evaluate_fixed` in `estimate/fit.cpp`), passes the verdict vacuously, and
   gets an empty covariance. Its global score and LR tests use the full moment
