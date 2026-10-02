@@ -25,7 +25,14 @@ vendored code. Hand-written glue lives at `src/` top level. Generated
 QUADPACK; never edit it directly. `just vendor` refreshes it.
 
 `just r-dev` is the fast loop: build `opt`, compile glue in disposable
-`build-rdev/`, link `libmagmaan.a`. `just r-install` is the portable build:
+`build-rdev/`, link `libmagmaan.a`. The mirror persists across installs: preserve
+its objects, dependency files, configuration stamp and dev Makevars so unchanged
+installs do not compile or link. Glue uses the core's compiler, ccache when available and
+`-O1 -g0`; override with `MAGMAAN_R_CXXFLAGS` for debugging/performance work.
+Compiler-generated dependencies rebuild affected glue after header changes;
+implementation-only core edits only relink the shared library.
+For C++ checks during R work, use `just test-opt` to reuse the same core rather
+than also building `fast`. `just r-install` is the portable build:
 compile the vendored core without CMake or a prebuilt library. NLopt comes from
 system pkg-config or the `nloptr` package fallback. The shipped package must
 work independently of this checkout. For cluster installation see

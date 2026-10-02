@@ -11,6 +11,27 @@ options or generation paths matter.
 disposable and the shipped Makevars is not edited. Optional backends use
 `just r-dev ceres 1 0` or `just r-dev ipopt 0 1`.
 
+The mirror persists between installs, including objects, dependency files,
+the configuration stamp and dev Makevars. Unchanged and R-only edits skip
+compilation and linking.
+Glue uses the CMake core's compiler through ccache when available, with `-O1 -g0`;
+the default core remains `opt`. Override `MAGMAAN_R_CXXFLAGS` in the environment
+for debugging or performance work. Compiler/flag changes invalidate the glue
+objects through the configuration stamp. For edits only in `r-magmaan/R/`, run
+`just r-magmaan-test` against the installed bindings without rebuilding them.
+Daily development compiles the core once in the selected preset and links that
+archive into R. The portable install uses R's configured compiler independently;
+keep that second compiler/build path for release validation and CI.
+Use `just test-opt` for C++ checks during R work to share the `opt` core rather
+than compiling another copy in `fast`.
+Compiler-generated header dependencies rebuild affected glue when canonical or
+adapter headers change; implementation-only core edits only relink R's library.
+
+If Ninja repeatedly rebuilds unchanged core objects and warns about a premature
+end of file, inspect `ninja -C cpp/build/opt -d explain magmaan`. A corrupt
+`.ninja_deps` can keep invalidating objects. With no build running, move that
+database aside and rebuild to regenerate it; retain objects and ccache.
+
 Use relevant examples/tests for a focused check. `just r-check` performs the
 fast install, all binding examples (including live lavaan comparisons), and
 ordinary-package installation/tests. `just r-magmaan-test` handles the pure-R

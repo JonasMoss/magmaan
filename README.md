@@ -83,6 +83,19 @@ self-contained R build, as a release install would do), `just r-check`
 (everything: layering, tracked-file, vendor-drift, C++ and R checks). Bare
 `just` lists every recipe.
 
+For R development, use `just r-dev` after compiled changes and then
+`just r-magmaan-test`. If only `r-magmaan/R/` changed, `just r-magmaan-test`
+is sufficient; it reuses the installed compiled dependency. If only
+`r-package/R/` changed, `just r-dev` reinstalls the bindings without compiling.
+The development mirror preserves objects, header dependencies and its
+configuration stamp, uses the core's compiler (Clang in the local presets),
+ccache when available, and compiles glue with `-O1 -g0` while retaining the
+optimized core. For glue debugging, use
+`MAGMAAN_R_CXXFLAGS='-O0 -g' just r-dev`. Use `just r-install` to validate
+the portable release build with R's configured compiler; CI also checks GCC.
+For C++ checks during R work, `just test-opt` reuses the same `opt` core as
+`just r-dev`, so there is no need to build the `fast` tree as well.
+
 
 ## License
 

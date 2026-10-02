@@ -20,11 +20,22 @@ MAGMAAN_WITH_IPOPT_R ?= 0
 MAGMAAN_IPOPT_CPPFLAGS := $(shell pkg-config --cflags ipopt 2>/dev/null)
 MAGMAAN_IPOPT_LIBS := $(shell pkg-config --libs ipopt 2>/dev/null)
 MAGMAAN_CONFIG_STAMP := .magmaan-build-config
-R_GLUE_HEADERS := $(wildcard *.hpp)
+MAGMAAN_R_CCACHE := $(shell command -v ccache 2>/dev/null)
+MAGMAAN_R_CXX ?= $(shell sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$(MAGMAAN_BUILD)/CMakeCache.txt")
+MAGMAAN_R_CXXFLAGS ?= -O1 -g0 -DNDEBUG -march=native
 
 CXX_STD       = CXX23
 PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/cpp/include -DEIGEN_MAX_ALIGN_BYTES=64
-override CXXFLAGS += -O3 -DNDEBUG -march=native
+PKG_CXXFLAGS  = -MMD -MP
+# R selects CXX23, which personal Makevars often omit when enabling ccache.
+# r-dev supplies the CMake core's compiler so development uses one toolchain.
+# Avoid wrapping an already cached command twice.
+override CXX = $(if $(findstring ccache,$(MAGMAAN_R_CXX)),,$(MAGMAAN_R_CCACHE)) $(MAGMAAN_R_CXX) $(CXX23STD)
+override SHLIB_LD = $(MAGMAAN_R_CXX) $(CXX23STD)
+# Keep the numerical core optimized; the large glue TUs need cheap compilation.
+# Override in the environment for debugging or performance work, e.g.
+# MAGMAAN_R_CXXFLAGS='-O0 -g' just r-dev.
+override CXXFLAGS = $(MAGMAAN_R_CXXFLAGS)
 # libmagmaan.a links PRIVATEly against libport.a and libnlopt.a in the C++
 # CMake build, so the static archive carries unresolved PORT/NLopt symbols.
 # The R shared object must pull them in explicitly or it fails to load with an
@@ -41,25 +52,22 @@ PKG_CPPFLAGS += -DMAGMAAN_WITH_IPOPT $(MAGMAAN_IPOPT_CPPFLAGS)
 PKG_LIBS     += $(MAGMAAN_IPOPT_LIBS)
 endif
 
-# Make sure libmagmaan.a is current before linking the
-# R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
-$(SHLIB): magmaan_lib
+# The r-dev recipe builds the core before invoking R. Real archive prerequisites
+# allow a no-op install to skip linking and ensure core changes reach the DLL.
+$(SHLIB): $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB) $(MAGMAAN_QUADPACK_LIB) $(wildcard $(MAGMAAN_NLOPT_LIB)) $(MAGMAAN_CONFIG_STAMP)
 
-.PHONY: magmaan_lib FORCE
-magmaan_lib:
-	@cmake --build "$(MAGMAAN_BUILD)" --target magmaan 2>/dev/null || \
-	  ( cd "$(MAGMAAN_ROOT)/cpp" && cmake --preset "$(MAGMAAN_PRESET)" && cmake --build --preset "$(MAGMAAN_PRESET)" --target magmaan )
+.PHONY: FORCE
 
 $(MAGMAAN_CONFIG_STAMP): FORCE
 	@tmp="$@.tmp"; \
-	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" "MAGMAAN_WITH_IPOPT_R=$(MAGMAAN_WITH_IPOPT_R)" > "$$tmp"; \
+	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" "MAGMAAN_WITH_IPOPT_R=$(MAGMAAN_WITH_IPOPT_R)" "CXX=$(CXX)" "CXXFLAGS=$(ALL_CXXFLAGS)" "CPPFLAGS=$(ALL_CPPFLAGS)" > "$$tmp"; \
 	if test -r "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
 
-# R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea
-# the R-glue objects also depend on the magmaan headers libmagmaan.a was built
-# from. So a header change in the C++ tree re-links libmagmaan.a (above) but
-# would otherwise leave a stale .o linked against the now-incompatible archive
-# (-> "undefined symbol" at load time, the exact footgun this guards). Make the
-# package objects depend on libmagmaan.a: when `magmaan_lib` re-links it, they
-# rebuild. Cheap (a handful of small TUs); a no-op when nothing changed.
-$(OBJECTS): $(MAGMAAN_LIB) $(MAGMAAN_CONFIG_STAMP) $(R_GLUE_HEADERS)
+# R only tracks .cpp -> .o. Compiler-generated dependencies also track glue and
+# canonical headers, preventing stale ABI objects without recompiling all glue
+# after implementation-only core changes. Archive changes only relink the DLL.
+$(OBJECTS): $(MAGMAAN_CONFIG_STAMP) Makevars
+# R also supplies a .cpp -> .d rule; generate dependencies during compilation
+# instead of running a separate preprocessor pass while make reads its inputs.
+$(OBJECTS:.o=.d): ;
+-include $(OBJECTS:.o=.d)

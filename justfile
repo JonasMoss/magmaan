@@ -189,7 +189,7 @@ r-install: vendor
     MAKEFLAGS="-j{{jobs}}" R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
-# prebuilt opt libmagmaan.a, via a throwaway r-package/build-rdev/ mirror with the dev-only
+# prebuilt opt libmagmaan.a, via a persistent r-package/build-rdev/ mirror with the dev-only
 # r-package/tools/r-makevars-dev swapped in — so the committed self-contained
 # r-package/src/Makevars is never touched. Optional backends:
 # `just r-dev ceres 1 0` or `just r-dev ipopt 0 1`.
@@ -199,13 +199,18 @@ r-dev preset="opt" ceres="0" ipopt="0":
     cmake -S cpp --preset {{preset}}
     cmake --build cpp/build/{{preset}} --target magmaan --parallel {{jobs}}
     root="$(pwd)"
+    compiler="$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' cpp/build/{{preset}}/CMakeCache.txt)"
+    test -n "$compiler"
     rsync -a --delete \
-        --exclude='*.o' --exclude='*.so' \
+        --exclude='*.o' --exclude='*.so' --exclude='*.d' \
+        --exclude='/src/.magmaan-build-config' --exclude='/src/Makevars' \
         --exclude='/src/core' --exclude='/src/magmaan' --exclude='/src/third_party' \
         --exclude='/build-rdev' --exclude='/tools' --exclude='/examples' --exclude='/.RData' --exclude='/.Rhistory' --exclude='/.Rproj.user' \
         r-package/ r-package/build-rdev/
-    cp r-package/tools/r-makevars-dev r-package/build-rdev/src/Makevars
-    MAGMAAN_ROOT="$root" MAGMAAN_PRESET={{preset}} \
+    if ! cmp -s r-package/tools/r-makevars-dev r-package/build-rdev/src/Makevars; then
+        cp r-package/tools/r-makevars-dev r-package/build-rdev/src/Makevars
+    fi
+    MAGMAAN_ROOT="$root" MAGMAAN_PRESET={{preset}} MAGMAAN_R_CXX="$compiler" \
         MAGMAAN_WITH_CERES_R={{ceres}} MAGMAAN_WITH_IPOPT_R={{ipopt}} \
         MAKEFLAGS="-j{{jobs}}" \
         R CMD INSTALL --no-byte-compile --no-docs --no-help r-package/build-rdev
