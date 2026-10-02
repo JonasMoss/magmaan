@@ -1,7 +1,10 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: uls_study
+  lane: uls_audit
+  factor_run: uls-factor-square-root-v2
+  factor_baseline: uls-factor-baseline-v3
+  factor_replay: uls-factor-native-replay
   study_run: uls-reliability-final-v2
   study_confirm: uls-reliability-reference-90
   uls_run: uls-unit-final-60
@@ -28,7 +31,32 @@ execute:
 
 ```{r}
 #| results: asis
-if (identical(params$lane, "uls_study")) {
+if (identical(params$lane, "uls_audit")) {
+  read_factor <- function(run,name) {
+    path <- file.path("results",run,paste0(name,".csv"))
+    if (!file.exists(path)) stop("Missing factor-audit evidence: ",path,"; see reproduction commands")
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  v <- read_factor(params$factor_run,"verification")
+  points <- read_factor(params$factor_run,"comparisons")
+  meta <- read_factor(params$factor_run,"metadata")
+  cat("## Question\n\nCan a square-root representation compute the unrestricted ULS Newton accuracy distance reliably at the mixed-unit reference minima and at deliberately inaccurate points, without regularizing the estimator?\n\n")
+  cat(sprintf("## Short answer\n\nThe square-root audit computes distances for all %d points, including all %d reference minima. The former cross-product calculation supplies %d distances and only %d at the minima. Against independent 90-digit calculations, the new largest absolute distance error is %.2g, and it makes no wrong decisions about the 0.01 distance budget across %d accurate and %d inaccurate controls.\n\n",v$factor_finite_distances,v$factor_reference_distances,v$baseline_finite_distances,v$baseline_reference_distances,v$max_absolute_distance_error,v$accurate_controls,v$inaccurate_controls))
+  cat("This repairs distance computation. The unchanged production condition guard still rejects all points, including every minimum. No statistical regularization, new optimizer, acceptance override or default change follows. The remaining work is to calibrate a guard appropriate to the factor calculation and resolve the separate very flat curvature case.\n\n## Evidence\n\n")
+  table <- data.frame(Method=c("Cross-product / LLT","Square-root / QR"),
+    `Distances / 100`=c(v$baseline_finite_distances,v$factor_finite_distances),
+    `Distances at minima / 25`=c(v$baseline_reference_distances,v$factor_reference_distances),check.names=FALSE)
+  cat(knitr::kable(table,row.names=FALSE),sep="\n")
+  cat(sprintf("\n\nThe largest new distance at a reference minimum is %.2g. The existing squared metric condition reaches %.2g; its cutoff remains 1e12. Two weak-marker minima also exceed the Hessian cutoff; the larger condition is near %.2g. A factor calculation cannot repair missing or unresolved positive curvature.\n\n",v$max_reference_distance,v$max_reference_factor_condition,v$max_reference_curvature_condition))
+  cat(sprintf("An exploratory factor-aware rule would compare the numerical cap with the factor condition, while retaining the Hessian cap, full rank, residual guard and 0.01 distance budget. It accepts %d/25 minima and %d/75 accurate controls, with %d inaccurate acceptances here. This rule is diagnostic only: the library still applies its original guard. It needs error-bound calibration and broader confirmation before becoming an acceptance policy.\n\n",v$candidate_reference_passes,v$candidate_accurate_passes,v$candidate_false_acceptances))
+  replay <- read_factor(params$factor_replay,"verification")
+  paired <- read_factor(params$factor_replay,"replay_comparison")
+  cat(sprintf("The repeated native grid retains all %d cold search outcomes and the signed-start sphere PORT-NLS portfolio still matches 25/25 references. The production audit passes remain zero. The new grid took about 50 seconds; these runs do not provide a balanced speed comparison. Fixed-point audit times were below one second per 100 points for both builds.\n\n",paired$fits))
+  cat("### What changed numerically\n\nFor the total gradient variance, retain $\\Omega=A^\\top A$ directly from the sample covariance and the moment Jacobian. Reduce the factor through the same equality or sphere tangent coordinates. Column equilibration and pivoted QR avoid forming the ill-conditioned cross-product. With the whitened residual $b$ satisfying $G=A^\\top b$, the unconstrained distance is $\\|Q^\\top b\\|$; this also avoids amplifying cancellation error in a nearly zero gradient. Box corrections retain a triangular solve for their actual correction score. The analytic observed Hessian still determines positive curvature. Rank loss fails explicitly; no pseudoinverse or ridge is substituted.\n\n")
+  cat("Owning C++ regression tests cover a rounded singular cross-product with a full-rank factor, a truly rank-deficient factor, accurate and inaccurate scores, agreement with the old calculation in well-conditioned systems, sampling-factor identities across weights/groups/means, and existing sphere saddle/unidentified controls. The study compares fixed parameter vectors; no optimizer is invoked.\n\n## Caveats\n\nThese are 25 development datasets from the preceding search study, with four points per dataset: the refined minimum and three positive x1-variance perturbations. Every point is evaluated under the original mixed-unit, unrestricted ULS target with explicit infinite bounds. Some implied covariances are indefinite; the sampling metric is built from the positive-definite sample covariance. The independent calculations evaluate the saved floating-point parameters, rather than assuming that a rounded high-precision minimum has exactly zero score.\n\n")
+  cat("The distance check is a local standard-error accuracy calculation, not a global-optimum proof. Agreement on these controls does not establish a general condition policy or a statistical inference default. The unchanged curvature and metric guards remain enforced; calibration must retain inaccurate and unidentified controls and include the flat NTML witness. The earlier sample-only signed-start search results remain available in the `uls_study` report lane.\n\n## Reproduce\n\nRun with single-threaded math under `nice -n 10`. Preserve the baseline installation and use a separate matching square-root installation. Requires Python mpmath. Choose fresh run IDs.\n\n```sh\nRscript run_experiment.R --ordinary --uls-audit-factor --smoke --run-id factor-smoke\nRscript run_experiment.R --ordinary --uls-audit-factor --run-id uls-factor-baseline-v3\n# Switch the installed magmaanlab to the square-root build.\nRscript run_experiment.R --ordinary --uls-audit-factor --run-id uls-factor-square-root-v2\npython3 scripts/verify_uls_factor.py --run-dir results/uls-factor-square-root-v2 --baseline-dir results/uls-factor-baseline-v3\nquarto render report.qmd\n```\n\n")
+  knitr::knit_exit()
+} else if (identical(params$lane, "uls_study")) {
   read_study <- function(run, name) {
     file <- file.path("results", run, paste0(name, ".csv"))
     if (!file.exists(file)) stop("Missing ULS study evidence: ", file, "; see reproduction commands in report.qmd")
@@ -72,7 +100,7 @@ if (identical(params$lane, "uls_study")) {
   cat(knitr::kable(table, row.names = FALSE), sep = "\n")
   stopifnot(all(tolower(refs$finite_local_minimum) == "true"), all(tolower(confirm$finite_local_minimum) == "true"),
     max(abs(refs$objective - confirm$objective)) <= 1e-14, all(core$audit == "failed"))
-  cat(sprintf("\n\nAll 25 references have positive exact profile and full Hessians at 90 digits. Their sandwich-metric conditions range from %.2g to %.2g; one fresh weak-marker reference also has Hessian condition above 1e12. The 60-digit pilot left two fresh refinements unresolved; the higher-precision calculation resolves them, and a separate 90-digit refinement reproduces every reference. The full cold grid also reproduces its search outcomes across runs. These are finite strict local minima, with no global-optimality claim.\n\n", min(refs$metric_condition), max(refs$metric_condition)))
+  cat(sprintf("\n\nAll 25 references have positive exact profile and full Hessians at 90 digits. Their sandwich-metric conditions range from %.2g to %.2g; two fresh weak-marker references also have Hessian condition above 1e12. The 60-digit pilot left two fresh refinements unresolved; the higher-precision calculation resolves them, and a separate 90-digit refinement reproduces every reference. The full cold grid also reproduces its search outcomes across runs. These are finite strict local minima, with no global-optimality claim.\n\n", min(refs$metric_condition), max(refs$metric_condition)))
   cat(sprintf("Point evaluation's omitted bounds argument supplies a positive-variance preset. At %d endpoints it produces a first-order pass even though the Newton evidence fails; that domain is inappropriate for this unrestricted study. Supplying explicitly infinite bounds restores the intended Newton assessment. Native fit audits remain unchanged and none pass. The correction declares the study domain; it neither fits with positive-variance constraints nor relaxes the accuracy guard. The evaluator-domain behavior is retained as a separate witness for future contract review.\n\n", transport$implicit_bound_passes))
   cat("## What remains\n\nThe search result makes signed-start sphere PORT-NLS a candidate for a broader study, not an adopted default. The next priority is stable computation and calibration of the sandwich accuracy metric: the current search can recover these reference covariances while certification remains unavailable. Then test the candidate on new populations, ordinary measurement units and both ULS/GLS targets, recording family-specific losses and the cost of the extra starts. Investigate the profiled PORT-NLS objective inconsistencies separately.\n\n")
   cat("## Caveats and cost\n\nThis exploratory study contains five retained regular N=100 problems plus ten fresh regular and ten fresh weak-marker draws. Both fresh families were chosen before running the full comparison; promising methods were compared together on them, so this is not a prespecified default-selection gate. All observations share the fixed multiplier (.01, 100, 2, .3, 10, .1). No means, groups, equality constraints, FIML, ordinal fitting, PSD constraints or statistical barriers are added. Signed primitive and residual variances are permitted; indefinite reference covariances remain visible.\n\n")

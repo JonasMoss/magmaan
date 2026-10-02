@@ -28,6 +28,7 @@
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -2837,6 +2838,14 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
   };
   native_audit["curvature_system"] = system(computations.system);
   native_audit["accuracy_metric_system"] = system(computations.metric_system);
+  const auto& factor_system = computations.metric_factor_system;
+  native_audit["accuracy_metric_factor_system"] = Rcpp::List::create(
+      Rcpp::_["status"] = std::string(magmaan::estimate::to_string(factor_system.status)),
+      Rcpp::_["condition"] = factor_system.condition,
+      Rcpp::_["factor_residual"] = factor_system.factor_residual,
+      Rcpp::_["rank"] = static_cast<int>(factor_system.rank));
+  native_audit["reduced_metric_factor"] = Rcpp::wrap(computations.geometry.reduced_metric_factor);
+  native_audit["metric_score_residual"] = Rcpp::wrap(computations.derivatives.metric_score_residual);
   native_audit["reduced_metric"] = Rcpp::wrap(computations.geometry.reduced_metric);
 
   return Rcpp::List::create(
@@ -6005,7 +6014,49 @@ Rcpp::List evaluate_at_impl(
       ctx.pt, ctx.rep, ctx.samp, theta_vec, est_enum, wls,
       bounds_from_nullable(bounds), audit_opts_from(audit_options));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  return fit_result(ctx, *e_or, &starts, estimator.c_str());
+  Rcpp::List out = fit_result(ctx, *e_or, &starts, estimator.c_str());
+  // Optional methods-development artifacts; the core owns every calculation.
+  // Recomputing explicitly requested artifacts leaves the stored verdict intact.
+  if (audit_options.isNotNull() &&
+      Rcpp::List(audit_options.get()).containsElementNamed("retain_newton_artifacts") &&
+      Rcpp::as<bool>(Rcpp::List(audit_options.get())["retain_newton_artifacts"]) &&
+      est_enum != magmaan::estimate::Estimator::ML) {
+    auto weight = wls;
+    if (est_enum == magmaan::estimate::Estimator::GLS) {
+      auto ev = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+      if (!ev) stop_model(ev.error());
+      auto nt = magmaan::estimate::gmm::normal_theory_weight(*ev, ctx.samp, theta_vec);
+      if (!nt) stop_fit(nt.error());
+      weight = std::move(*nt);
+    }
+    magmaan::estimate::frontier::NewtonAdapterOptions opts;
+    opts.active_bound_tol = audit_opts_from(audit_options).active_bound_tol;
+    opts.bounds = bounds_from_nullable(bounds);
+    if (opts.bounds.empty()) {
+      auto preset = magmaan::estimate::variance_bounds(ctx.pt);
+      if (!preset) stop_post(preset.error());
+      opts.bounds = std::move(*preset);
+    }
+    auto audit = magmaan::estimate::frontier::audit_newton_gmm(
+        ctx.pt, ctx.rep, ctx.samp, theta_vec, weight, opts);
+    if (!audit) stop_fit(audit.error());
+    const auto& a = *audit;
+    out["newton_audit"] = Rcpp::List::create(
+        Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
+        Rcpp::_["gradient"] = Rcpp::wrap(a.geometry.reduced_gradient),
+        Rcpp::_["hessian"] = Rcpp::wrap(a.geometry.reduced_hessian),
+        Rcpp::_["metric"] = Rcpp::wrap(a.geometry.reduced_metric),
+        Rcpp::_["metric_factor"] = Rcpp::wrap(a.geometry.reduced_metric_factor),
+        Rcpp::_["metric_score_residual"] = Rcpp::wrap(a.derivatives.metric_score_residual),
+        Rcpp::_["curvature_status"] = std::string(magmaan::estimate::to_string(a.system.status)),
+        Rcpp::_["curvature_condition"] = a.system.condition,
+        Rcpp::_["factor_status"] = std::string(magmaan::estimate::to_string(a.metric_factor_system.status)),
+        Rcpp::_["factor_condition"] = a.metric_factor_system.condition,
+        Rcpp::_["factor_residual"] = a.metric_factor_system.factor_residual,
+        Rcpp::_["factor_rank"] = static_cast<int>(a.metric_factor_system.rank),
+        Rcpp::_["detail"] = a.derivatives.detail);
+  }
+  return out;
 }
 
 // [[Rcpp::export]]

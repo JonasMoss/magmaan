@@ -698,3 +698,52 @@ TEST_CASE("PSD Newton normalization transports equal labels and affine constrain
     }
   }
 }
+
+TEST_CASE("Newton metric factor: projection survives a rounded singular cross-product") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 3, 2> A;
+  A << 1, 1, 0, 1e-10, 0, 0;
+  const Eigen::Vector3d b(.005, .002, 7);
+  const Eigen::Vector2d g = A.transpose() * b;
+  const auto old = nf::prepare_newton_system(A.transpose() * A);
+  CHECK(old.status == NewtonAccuracyStatus::NonpositiveCurvature);
+  const auto system = nf::prepare_newton_metric_system(A);
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  CHECK(system.rank == 2);
+  CHECK(system.condition == doctest::Approx(4e20).epsilon(1e-12));
+  const auto solution = nf::solve_newton_metric_system(system, g, b);
+  CHECK(solution.distance == doctest::Approx(std::hypot(.005, .002)).epsilon(1e-12));
+  CHECK(solution.solve_residual < 1e-15);
+  const auto guarded = nf::assess_newton_accuracy(solution);
+  CHECK(guarded.status == NewtonAccuracyStatus::IllConditioned);
+  CHECK_FALSE(guarded.passed);
+  CHECK(guarded.distance == doctest::Approx(solution.distance));
+  nf::NewtonAccuracyOptions diagnostic;
+  diagnostic.max_condition = 1e22;
+  CHECK(nf::assess_newton_accuracy(solution, diagnostic).passed);
+  const Eigen::Vector3d inaccurate(.005, .02, 7);
+  const auto bad = nf::solve_newton_metric_system(system, A.transpose() * inaccurate, inaccurate);
+  CHECK_FALSE(nf::assess_newton_accuracy(bad, diagnostic).passed);
+  // An unresolved metric must never be made to pass by dropping a direction.
+  A.col(1) = A.col(0);
+  const auto singular = nf::prepare_newton_metric_system(A);
+  CHECK(singular.status == NewtonAccuracyStatus::IllConditioned);
+  CHECK(nf::solve_newton_metric_system(singular, g).status == NewtonAccuracyStatus::IllConditioned);
+}
+
+TEST_CASE("Newton metric factor: ordinary triangular solve matches a well-conditioned metric") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 4, 2> A;
+  A << 2, -1, 1, 3, -2, 4, 1, 2;
+  const Eigen::Vector4d b(.01, -.02, .03, -.01);
+  const Eigen::Vector2d g = A.transpose() * b;
+  const auto system = nf::prepare_newton_metric_system(A);
+  const auto old = nf::solve_newton_system(nf::prepare_newton_system(A.transpose() * A), g);
+  const auto triangular = nf::solve_newton_metric_system(system, g);
+  const auto projected = nf::solve_newton_metric_system(system, g, b);
+  REQUIRE(triangular.status == NewtonAccuracyStatus::Available);
+  CHECK(triangular.distance == doctest::Approx(old.distance).epsilon(1e-12));
+  CHECK(projected.distance == doctest::Approx(old.distance).epsilon(1e-12));
+  CHECK(projected.condition == doctest::Approx(old.condition).epsilon(1e-12));
+  CHECK(nf::solve_newton_metric_system(system, Eigen::VectorXd::Ones(3)).status == NewtonAccuracyStatus::Unavailable);
+}

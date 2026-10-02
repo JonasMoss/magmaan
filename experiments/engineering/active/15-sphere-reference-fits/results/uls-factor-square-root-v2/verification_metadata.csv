@@ -1,0 +1,2 @@
+script_sha256,comparisons_sha256,baseline_sha256,criteria
+c7aed0ee63240c1df7d55cfcd029124d44068c6bc0a09e23767af12026c4bb62,bd620baf32f84c124e2c319808a02377f9550534d4f50cea96e48aaae2a9d60f,b312e7d7fe8fae84b29c99ebb25203417fa0bb2555c7808eea36173600287f93,"fixed points, 1e-5 absolute distance error, zero .01 classification errors, unchanged 1e12 guard"

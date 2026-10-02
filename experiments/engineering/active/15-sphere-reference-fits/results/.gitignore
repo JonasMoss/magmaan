@@ -313,3 +313,26 @@ uls-reliability-pilot/*
 !uls-reliability-pilot/reference_summary.csv
 !uls-reliability-pilot/reference_metadata.csv
 !uls-reliability-pilot/reference_attempts.csv
+
+# Frozen square-root audit comparisons; points/matrices are reproducible from
+# this leaf's retained reference inputs and remain local, as do failed smokes.
+!uls-factor-baseline-v3/
+uls-factor-baseline-v3/*
+!uls-factor-baseline-v3/comparisons.csv
+!uls-factor-baseline-v3/metadata.csv
+!uls-factor-baseline-v3/point_reference_metadata.csv
+!uls-factor-square-root-v2/
+uls-factor-square-root-v2/*
+!uls-factor-square-root-v2/comparisons.csv
+!uls-factor-square-root-v2/metadata.csv
+!uls-factor-square-root-v2/point_reference_metadata.csv
+!uls-factor-square-root-v2/verification.csv
+!uls-factor-square-root-v2/verification_metadata.csv
+!uls-factor-native-replay/
+uls-factor-native-replay/*
+!uls-factor-native-replay/audit_summary.csv
+!uls-factor-native-replay/metadata.csv
+!uls-factor-native-replay/verification.csv
+!uls-factor-native-replay/verification_metadata.csv
+!uls-factor-native-replay/replay_comparison.csv
+!uls-factor-native-replay/replay_comparison_metadata.csv

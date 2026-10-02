@@ -410,6 +410,10 @@ void check_moment_quadratic_hessian(const Model& m, const data::SampleStats& s,
   REQUIRE(exact.status == estimate::NewtonAccuracyStatus::Available);
   CHECK(exact.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
   CHECK(exact.metric_kind == nf::NewtonMetricKind::Sandwich);
+  CHECK((exact.metric_factor.transpose() * exact.metric_factor - exact.metric).norm() <=
+      1e-12 * (1 + exact.metric.norm()));
+  CHECK((exact.metric_factor.transpose() * exact.metric_score_residual - exact.gradient).norm() <=
+      1e-12 * (1 + exact.gradient.norm()));
   auto problem = estimate::gmm::residuals(*ev, s, x, w);
   REQUIRE(problem.has_value());
   double n = 0; for (auto nb : s.n_obs) n += static_cast<double>(nb);

@@ -740,6 +740,91 @@ moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
   return Omega;
 }
 
+fit_expected<MomentGradientFactor>
+moment_quadratic_nt_gradient_factor(const model::ModelEvaluator& ev,
+                                    const SampleStats& samp,
+                                    const Eigen::VectorXd& theta,
+                                    const Weight& weight) {
+  const char* who = "gmm::moment_quadratic_nt_gradient_factor";
+  auto pt = quadratic_point(ev, samp, theta, weight, who);
+  if (!pt) return std::unexpected(pt.error());
+  const auto& layout = pt->layout;
+  Eigen::Index rows = 0;
+  for (const auto& S : samp.S) rows += S.rows() * S.rows() + (layout.has_means ? S.rows() : 0);
+  MomentGradientFactor out;
+  out.factor.resize(rows, theta.size());
+  out.score_residual = Eigen::VectorXd::Zero(rows);
+  bool all_pd = true;
+  Eigen::Index offset = 0;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const auto& S = samp.S[b];
+    const Eigen::Index p = S.rows();
+    if (!S.allFinite() || (S.diagonal().array() < 0).any())
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(who) + ": negative sample diagonal"));
+    Eigen::VectorXd units = S.diagonal().cwiseSqrt();
+    for (Eigen::Index i = 0; i < p; ++i) if (units[i] == 0) units[i] = 1;
+    const Eigen::VectorXd inv = units.cwiseInverse();
+    const Eigen::MatrixXd C = inv.asDiagonal() * S * inv.asDiagonal();
+    Eigen::LLT<Eigen::MatrixXd> chol(C);
+    Eigen::MatrixXd L;
+    const bool pd = chol.info() == Eigen::Success;
+    if (pd) {
+      L = units.asDiagonal() * Eigen::MatrixXd(chol.matrixL());
+    } else {
+      // A semidefinite sample still has a gradient-variance factor. Clip only
+      // roundoff-sized negative eigenvalues; the later QR must reject rank
+      // loss rather than manufacture a standard-error scale.
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(C);
+      if (eig.info() != Eigen::Success || eig.eigenvalues().minCoeff() <
+          -64 * std::numeric_limits<double>::epsilon() * static_cast<double>(p) * C.norm())
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            std::string(who) + ": sample covariance is indefinite"));
+      L = units.asDiagonal() * eig.eigenvectors() *
+          eig.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
+      all_pd = false;
+    }
+    const Eigen::Index mean_rows = layout.has_means ? p : 0;
+    const Eigen::Index block_rows = mean_rows + p * p;
+    Eigen::MatrixXd F = Eigen::MatrixXd::Zero(block_rows, layout.block_rows[b]);
+    if (layout.has_means) F.topLeftCorner(p, p) = L.transpose();
+    // Cov(S_ij,S_kl) = S_ik S_jl + S_il S_jk. Symmetric tensor columns
+    // give this Gamma directly as F'F, including the vech diagonal factors.
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j; i < p; ++i) {
+        const Eigen::MatrixXd tensor = (L.row(i).transpose() * L.row(j) +
+            L.row(j).transpose() * L.row(i)) / std::sqrt(2.0);
+        F.col(mean_rows + vech_index(p, i, j)).tail(p * p) =
+            Eigen::Map<const Eigen::VectorXd>(tensor.data(), p * p);
+      }
+    }
+    const double root_n = std::sqrt(static_cast<double>(samp.n_obs[b]));
+    out.factor.middleRows(offset, block_rows).noalias() = root_n * F * pt->W[b] *
+        block_moment_jacobian(samp, pt->eval, layout, b);
+    if (pd) {
+      const Eigen::MatrixXd L_inv = L.triangularView<Eigen::Lower>().solve(
+          Eigen::MatrixXd::Identity(p, p));
+      // The objective packs the lower triangle. Mirror those exact entries:
+      // averaging upper/lower roundoff can change a nearly zero score.
+      Eigen::MatrixXd R = pt->eval.moments.sigma[b] - S;
+      R = R.selfadjointView<Eigen::Lower>();
+      const Eigen::MatrixXd white = L_inv * R * L_inv.transpose() / std::sqrt(2.0);
+      out.score_residual.segment(offset + mean_rows, p * p) = root_n *
+          Eigen::Map<const Eigen::VectorXd>(white.data(), p * p);
+      if (layout.has_means) {
+        const auto delta = block_moment_delta(samp, pt->eval.moments, layout, b);
+        out.score_residual.segment(offset, p) = root_n * L_inv * delta.head(p);
+      }
+    }
+    offset += block_rows;
+  }
+  if (!all_pd) out.score_residual.resize(0);
+  if (!out.factor.allFinite() || !out.score_residual.allFinite())
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": non-finite factor or whitened score residual"));
+  return out;
+}
+
 fit_expected<Weight>
 fixed_moment_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
                     const Eigen::VectorXd& theta0, FixedWeightKind kind,

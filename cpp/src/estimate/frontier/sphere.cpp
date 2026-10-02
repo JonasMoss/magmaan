@@ -798,6 +798,7 @@ SphereAudit collect_sphere_audit(
     audit.derivatives.gradient.resize(0);
     audit.derivatives.hessian.resize(0, 0);
     audit.derivatives.metric.resize(0, 0);
+    audit.derivatives.metric_factor.resize(0, 0);
     audit.derivatives.whitened_jacobian.resize(0, 0);
     if (full.gradient.size() == theta.size())
       audit.derivatives.gradient = jacobian.transpose() * full.gradient;
@@ -822,6 +823,8 @@ SphereAudit collect_sphere_audit(
       }
       if (full.metric_kind == NewtonMetricKind::Sandwich)
         audit.derivatives.metric = jacobian.transpose() * full.metric * jacobian;
+      if (full.metric_factor.size())
+        audit.derivatives.metric_factor = full.metric_factor * jacobian;
       auto& g = audit.geometry;
       g.status = NewtonAccuracyStatus::Available;
       g.reduced_gradient = tangent.transpose() * audit.derivatives.gradient;
@@ -831,9 +834,16 @@ SphereAudit collect_sphere_audit(
       if (full.metric_kind == NewtonMetricKind::Sandwich &&
           audit.solution.status == NewtonAccuracyStatus::Available) {
         g.reduced_metric = tangent.transpose() * audit.derivatives.metric * tangent;
-        audit.metric_system = prepare_newton_system(g.reduced_metric);
-        const Eigen::VectorXd correction_score = g.reduced_hessian * audit.solution.step;
-        const auto metric_solution = solve_newton_system(audit.metric_system, correction_score);
+        NewtonSolution metric_solution;
+        if (audit.derivatives.metric_factor.size()) {
+          g.reduced_metric_factor = audit.derivatives.metric_factor * tangent;
+          audit.metric_factor_system = prepare_newton_metric_system(g.reduced_metric_factor);
+          metric_solution = solve_newton_metric_system(audit.metric_factor_system,
+              g.reduced_gradient, full.metric_score_residual);
+        } else {
+          audit.metric_system = prepare_newton_system(g.reduced_metric);
+          metric_solution = solve_newton_system(audit.metric_system, g.reduced_gradient);
+        }
         // The Hessian has already passed. A singular or numerically unresolved
         // sandwich metric is an accuracy-scale failure, not negative curvature
         // of the objective (same classification as the ordinary LS audit).

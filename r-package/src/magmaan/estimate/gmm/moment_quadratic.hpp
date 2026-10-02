@@ -129,4 +129,18 @@ moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
                                       const Eigen::VectorXd& theta,
                                       const Weight& weight = {});
 
+// Retain Omega = A' A without forming its cross-product. If every sample
+// covariance is PD, also retain b such that the total gradient is A' b.
+// Neither the estimator nor its weight is regularized. Singular samples
+// retain a factor, but cannot supply this whitening of the residual.
+struct MomentGradientFactor {
+  Eigen::MatrixXd factor;
+  Eigen::VectorXd score_residual;
+};
+fit_expected<MomentGradientFactor>
+moment_quadratic_nt_gradient_factor(const model::ModelEvaluator& ev,
+                                    const data::SampleStats& samp,
+                                    const Eigen::VectorXd& theta,
+                                    const Weight& weight = {});
+
 }  // namespace magmaan::estimate::gmm

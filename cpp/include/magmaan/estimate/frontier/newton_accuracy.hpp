@@ -6,6 +6,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
+#include <Eigen/QR>
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"  // Estimates
@@ -87,6 +88,8 @@ struct NewtonDerivatives {
   // in full coordinates. Empty for the Hessian metric.
   NewtonMetricKind metric_kind = NewtonMetricKind::Hessian;
   Eigen::MatrixXd metric;
+  Eigen::MatrixXd metric_factor;  // A with Omega = A' A, if supplied
+  Eigen::VectorXd metric_score_residual;  // b with G = A' b, if supplied
 };
 
 // theta increments = equality_basis * tangent_basis * reduced increments.
@@ -105,6 +108,7 @@ struct NewtonGeometry {
   Eigen::VectorXd reduced_gradient;
   Eigen::MatrixXd reduced_hessian;
   Eigen::MatrixXd reduced_metric;  // B' Omega B for the sandwich metric, else empty
+  Eigen::MatrixXd reduced_metric_factor;  // A B, without a cross-product
   std::int32_t null_directions = 0;
   std::int32_t constrained_directions = 0;
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
@@ -128,6 +132,23 @@ struct NewtonSolution {
   double condition = std::numeric_limits<double>::quiet_NaN();
   double solve_residual = std::numeric_limits<double>::quiet_NaN();
 };
+
+// Column-equilibrated, pivoted QR of a metric factor. The condition remains
+// that of the metric (the squared factor condition), so existing guards keep
+// their meaning. Rank loss fails; no truncated solve or ridge is substituted.
+struct NewtonMetricSystem {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  Eigen::VectorXd scale;
+  Eigen::MatrixXd equilibrated_factor;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> factorization;
+  Eigen::Index rank = 0;
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double factor_residual = std::numeric_limits<double>::quiet_NaN();
+};
+NewtonMetricSystem prepare_newton_metric_system(const Eigen::MatrixXd& factor);
+NewtonSolution solve_newton_metric_system(
+    const NewtonMetricSystem& system, const Eigen::VectorXd& gradient,
+    const Eigen::VectorXd& score_residual = {});
 
 // Convex reduced quadratic: min g's + s'Hs/2 subject to normals*s >= lower.
 // Zero must be feasible. The base Hessian must be positive definite. Retains
@@ -183,6 +204,7 @@ struct NewtonAudit {
   NewtonSolution solution;  // distance in the derivatives' metric
   NewtonBoxSolution box;
   NewtonSystem metric_system;  // factorization of reduced_metric, sandwich only
+  NewtonMetricSystem metric_factor_system;  // preferred when a factor is supplied
   NewtonAccuracyDiagnostics diagnostics;
 };
 

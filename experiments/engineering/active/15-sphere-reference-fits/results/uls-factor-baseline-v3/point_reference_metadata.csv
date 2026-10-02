@@ -1,0 +1,2 @@
+digits,mpmath,elapsed_s,script_sha256,components_sha256,inputs_sha256,scope
+90,1.3.0,4.343010231001244,aca46c609fe64e4ea62e7118029c237de4a537ff566aeadb7ebaeaffc2eb6fa9,81e0b111ab67567f54ad1bbbaa4bd8504e376e754a221b298c66cd03c9af488d,c613e84c76001b694f7e743fd7e626b3d684fdbc75757be8c2384327749c542c;538251c45d25fc7e36d7796b9287757ae9258b6f4a601c80cde53d4746273a4d,"analytic total ULS gradient, observed Hessian, normal-theory Gamma at saved parameter vectors; no refinement"

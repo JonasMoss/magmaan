@@ -664,7 +664,7 @@ TEST_CASE("sphere LS audit: singular sandwich metric is not negative curvature")
   const auto& audit = fit->report.native_audit;
   CHECK(fit->report.fmin_internal == doctest::Approx(0).epsilon(1e-12));
   CHECK(audit.computations.system.status == Status::Available);
-  CHECK(audit.computations.metric_system.status == Status::NonpositiveCurvature);
+  CHECK(audit.computations.metric_factor_system.status == Status::IllConditioned);
   CHECK(audit.computations.solution.status == Status::IllConditioned);
   CHECK(fit->report.native_verdict.status == magmaan::estimate::FitCheck::Failed);
 }

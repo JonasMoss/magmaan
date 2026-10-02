@@ -165,6 +165,13 @@ NewtonDerivatives evaluate_newton_moment_quadratic(
   d.whitened_jacobian = std::move(*J);
   d.hessian = std::move(*H);
   d.metric = std::move(*Omega);
+  auto factor = gmm::moment_quadratic_nt_gradient_factor(ev, sample, theta, weight);
+  if (!factor) {
+    d.detail = factor.error().detail;
+    return d;
+  }
+  d.metric_factor = std::move(factor->factor);
+  d.metric_score_residual = std::move(factor->score_residual);
   d.status = NewtonAccuracyStatus::Available;
   return d;
 }

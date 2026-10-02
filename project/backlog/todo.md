@@ -775,8 +775,17 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   exact references and all native fit audits still fail certification; no
   default follows. Point checks now specify infinite bounds, preventing the
   evaluator's positive-variance preset from substituting first-order verdicts.
-  Next investigate stable sandwich representation and conditioning-guard calibration
-  jointly with the very flat finite NTML witness. Retain the PORT curvature
+  The square-root metric implementation now computes all 100 fixed-point
+  distances, including 25/25 minima, versus 48/100 and 12/25 previously.
+  Independent 90-digit point calculations agree within 6.4e-7, with zero
+  .01 distance classification errors on 75 accurate and 25 inaccurate controls.
+  Full-rank QR retains the factor through ordinary and sphere coordinates;
+  singular metrics and objective saddles remain failures. The production
+  1e12 condition guard is unchanged. A diagnostic factor-condition rule
+  retains 23/25 minima without accepting an inaccurate control; two weak-marker
+  minima still exceed the Hessian cap. Next calibrate numerical forward-error
+  guards for the factor calculation and those Hessian solves, jointly with the
+  very flat finite NTML witness; this evidence selects no acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start
   sphere candidate on broader populations and ordinary units. Preserve LS-specific

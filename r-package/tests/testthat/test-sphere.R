@@ -67,7 +67,7 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
     expect_identical(sph$gauge$native_audit$status, "passed")
     expect_identical(sph$gauge$native_audit$newton_accuracy$metric, "sandwich")
     expect_identical(sph$gauge$native_audit$curvature_system$status, "available")
-    expect_identical(sph$gauge$native_audit$accuracy_metric_system$status, "available")
+    expect_identical(sph$gauge$native_audit$accuracy_metric_factor_system$status, "available")
     expect_true(all(eigen(sph$gauge$native_audit$reduced_metric, symmetric = TRUE,
                           only.values = TRUE)$values > 0))
   }
@@ -213,4 +213,24 @@ test_that("the canonical start gives one sphere solution for every identificatio
   hinted <- frontier_fit_sphere("X =~ x1 + start(0.8)*x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X", dat)
   expect_identical(hinted$gauge$start, "user")
   expect_identical(frontier_fit_sphere(ernst, dat, start = "user")$gauge$start, "user")
+})
+
+test_that("LS point auditing retains square-root artifacts only when requested", {
+  S <- matrix(c(1.2,.4,.3,.4,1.1,.2,.3,.2,1.3),3)
+  dimnames(S) <- list(paste0('x',1:3),paste0('x',1:3))
+  spec <- model_spec('f =~ x1 + x2 + x3')
+  sample <- list(S=list(S),nobs=400L)
+  theta <- magmaan_core$estimate_start_values(spec$partable,sample)
+  bounds <- list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta)))
+  plain <- magmaan_core$evaluate_at(spec$partable,sample,theta,'ULS',bounds=bounds)
+  kept <- magmaan_core$evaluate_at(spec$partable,sample,theta,'ULS',bounds=bounds,
+    audit_options=list(retain_newton_artifacts=TRUE))
+  expect_null(plain$newton_audit)
+  expect_equal(kept$diagnostics$newton_accuracy,plain$diagnostics$newton_accuracy)
+  a <- kept$newton_audit
+  expect_equal(crossprod(a$metric_factor),a$metric,tolerance=1e-10)
+  expect_equal(as.numeric(crossprod(a$metric_factor,a$metric_score_residual)),
+    as.numeric(a$gradient),tolerance=1e-10)
+  expect_identical(a$factor_status,'available')
+  expect_identical(a$factor_rank,length(theta))
 })

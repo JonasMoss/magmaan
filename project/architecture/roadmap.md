@@ -791,6 +791,33 @@ signed Newton correction. `assess_newton_accuracy` changes runtime acceptance
 budgets without recomputation. `audit_newton_ml` and `audit_newton_derivatives`
 compose those stages. Existing ML summary wrappers use the same implementation.
 
+Complete-continuous fixed-weight LS now retains `metric_factor` with
+Omega = A'A and a whitened `metric_score_residual` with G = A'b. Geometry
+reduces the factor before a column-equilibrated pivoted QR; the unconstrained
+sandwich distance is the norm of the residual's projection onto its column
+space. Box corrections use a triangular score solve. The factor is built from
+the sample covariance, avoiding normal-theory Gamma and Omega factorization;
+the observed Hessian still controls curvature. `metric_factor_system` retains
+rank, squared factor condition (the original metric-condition convention) and
+factor residual. Rank loss fails explicitly, without ridge or truncation.
+`metric_system` remains the cross-product fallback for adapters without a
+factor; it is unprepared when the factor path is used. R sphere artifacts
+expose both systems; LS `evaluate_at` optionally retains owning artifacts via
+`audit_options = list(retain_newton_artifacts = TRUE)`.
+
+The 100-point ULS comparison in engineering/active/15-sphere-reference-fits
+recovers all distances (including 25/25 refined minima), versus 48/100 and
+12/25 from the prior cross-product solve. Independent 90-digit calculations
+agree within 6.4e-7 absolute distance, with no .01 budget classification errors
+on 75 accurate and 25 inaccurate controls. The original production guards
+remain unchanged and reject all these points. An exploratory factor-condition
+rule retains 23/25 minima and rejects every inaccurate control; two weak-marker
+minima still exceed the separate Hessian cap. This is calibration evidence,
+not a new acceptance policy or a statistical regularization/default decision.
+The exact-point experiment uses explicit infinite bounds; unidentified and
+saddle rejection remain covered by owning C++ tests. The flat NTML witness and
+forward-error calibration remain open.
+
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
 all-ordinal and mixed-ordinal LS, CatML, two-level ML, and multi-information

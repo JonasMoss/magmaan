@@ -2125,6 +2125,10 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # names accepted by `fit_*`. `audit_options` accepts the same fields as the
 # C++ `TerminalAuditOptions` struct (e.g.
 # `list(stationarity_mode = "absolute", absolute_tol = 1e-3)`).
+# For complete-data LS, `retain_newton_artifacts = TRUE` additionally returns
+# `newton_audit`: reduced curvature, sampling-metric factor, whitened score
+# residual and factor rank/condition. This recomputes owning C++ artifacts
+# without altering the stored verdict or its acceptance thresholds.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {
