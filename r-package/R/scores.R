@@ -248,7 +248,9 @@ inference_reuse <- function(context) {
 
 # magmaan's default inference policy for one fit, as applied by the
 # ordinary-user package: the observed-information sandwich covariance and the
-# global score and likelihood-ratio tests, each with SB and PEBA4. Components
+# global score and likelihood-ratio tests, each with SB and PEBA4. All-ordinal
+# DWLS uses the estimated-weight (IJ) sandwich and one global test, the
+# fit-function statistic (labelled "fit_function"); its LR is "inapplicable". Components
 # outside the policy's scope come back unavailable with a reason, never
 # computed under another convention.
 policy_inference <- function(fit, data = NULL) {
@@ -256,9 +258,15 @@ policy_inference <- function(fit, data = NULL) {
   state <- .policy_state(fit)
   if (state[[4]]) return(policy_inference_impl(NULL, state))
   estimator <- toupper(fit$estimator %||% "")
+  if (isTRUE(fit$ordinal) && identical(estimator, "DWLS")) {
+    out <- tryCatch(policy_inference_dwls_impl(fit, state), error = function(e) e)
+    if (inherits(out, "error"))
+      return(.policy_unavailable("unsupported_model", conditionMessage(out), state))
+    return(out)
+  }
   if (!identical(estimator, "ML") || !is.null(fit$nclusters)) {
     return(.policy_unavailable("unsupported_model",
-      "the inference policy covers single-level complete-data ML so far", state))
+      "the inference policy covers single-level complete-data ML and all-ordinal DWLS so far", state))
   }
   context <- tryCatch(prepare_inference(fit, data), error = function(e) e)
   if (inherits(context, "error")) {
@@ -325,7 +333,7 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
 .policy_unavailable <- function(reason, detail, state = NULL) {
   test <- list(available = FALSE, reason = reason, detail = detail,
                statistic = NA_real_, df = 0L, sb_scale = NA_real_,
-               p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric())
+               p_sb = NA_real_, p_peba4 = NA_real_, eigenvalues = numeric(), label = "")
   list(covariance = NULL, covariance_available = FALSE, covariance_reason = reason,
        covariance_detail = detail, score = test, lr = test, psd_boundary = FALSE,
        verdict_disagreement = .verdict_disagreement(state))

@@ -745,6 +745,10 @@ policy_inference_impl <- function(context, state) {
     .Call(`_magmaanlab_policy_inference_impl`, context, state)
 }
 
+policy_inference_dwls_impl <- function(fit, state) {
+    .Call(`_magmaanlab_policy_inference_dwls_impl`, fit, state)
+}
+
 policy_nested_impl <- function(null_context, alternative_context, null_state, alternative_state) {
     .Call(`_magmaanlab_policy_nested_impl`, null_context, alternative_context, null_state, alternative_state)
 }

@@ -24,8 +24,11 @@ for complete-data ML and FIML; neither includes empirical sandwich meat.}
 sandwiches with expected/Gauss--Newton or observed-Hessian bread. Available for
 continuous iterative fits and categorical fits where the corresponding core
 primitive supports the estimator, and for FIML. Categorical covariances use
-the retained categorical statistics. These are fixed-weight covariances;
-estimated-weight corrections remain separate explicit primitives.}
+the retained categorical statistics. These are fixed-weight covariances.}
+\item{\code{sandwich_ij}}{The estimated-weight (infinitesimal-jackknife)
+sandwich for all-ordinal DWLS, WLS and ULS fits: observed bread, Stage-1
+threshold and polychoric influence, and the influence of the estimated weight.
+It is the ordinary DWLS policy covariance.}
 \item{\code{delta_nt}, \code{delta_empirical}}{Non-iterative CFA delta-method
 covariances using normal-theory or empirical moment covariance.}
 \item{\code{stored}}{The covariance already computed by a SAM fit.}

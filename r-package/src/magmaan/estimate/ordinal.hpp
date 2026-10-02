@@ -314,7 +314,8 @@ robust_ordinal(spec::LatentStructure pt,
 // sandwich exactly. Requires `stats.moment_influence`; DWLS/WLS also require
 // `stats.int_data`, complete for ordinary stats or missing-coded (`-1`) for
 // pairwise-overlap observed stats, so the estimated-weight influence is not
-// silently approximated.
+// silently approximated. `row_user` is the fit-time mask, as for
+// robust_ordinal().
 post_expected<OrdinalRobustResult>
 robust_ordinal_ij(spec::LatentStructure pt,
                   const model::MatrixRep& rep,
@@ -322,7 +323,8 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   const Estimates& est,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization =
-                      OrdinalParameterization::Delta);
+                      OrdinalParameterization::Delta,
+                  const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<WeightedMomentRBMParts>
 ordinal_rbm_parts(spec::LatentStructure pt,

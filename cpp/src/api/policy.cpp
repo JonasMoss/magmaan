@@ -21,6 +21,7 @@ std::string_view reason_name(InferenceReason reason) noexcept {
     case InferenceReason::UnsupportedNesting: return "unsupported_nesting";
     case InferenceReason::BoundaryNesting:  return "boundary_nesting";
     case InferenceReason::Penalized:        return "penalized";
+    case InferenceReason::Inapplicable:     return "inapplicable";
   }
   return "unknown";
 }
@@ -62,6 +63,22 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail) {
 
 namespace {
 
+// SB and PEBA4 for a statistic with its df-length ascending spectrum.
+void calibrate_spectrum(PolicyTest& out) {
+  using robust::frontier::FmgMethod;
+  const auto sb = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
+                                             {FmgMethod::SatorraBentler, 0.0, true});
+  out.p_sb = sb.p_value;
+  out.sb_scale = sb.lambdas.sum() / static_cast<double>(out.df);
+  out.p_peba4 = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
+                                           {FmgMethod::Peba, 4.0, true}).p_value;
+}
+
+InferenceReason reason_from(const PostError& error) {
+  return error.kind == PostError::Kind::UnsupportedInference
+      ? InferenceReason::UnsupportedModel : InferenceReason::NumericFailure;
+}
+
 void calibrate(const post_expected<std::shared_ptr<robust::frontier::NTMLQuadratic>>& q,
                PolicyTest& out) {
   if (!q) {
@@ -78,13 +95,7 @@ void calibrate(const post_expected<std::shared_ptr<robust::frontier::NTMLQuadrat
   out.statistic = (*q)->statistic;
   out.df = (*q)->df;
   out.eigenvalues = **spectrum;
-  using robust::frontier::FmgMethod;
-  const auto sb = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
-                                             {FmgMethod::SatorraBentler, 0.0, true});
-  out.p_sb = sb.p_value;
-  out.sb_scale = sb.lambdas.sum() / static_cast<double>(out.df);
-  out.p_peba4 = robust::frontier::fmg_test(out.statistic, out.df, out.eigenvalues,
-                                           {FmgMethod::Peba, 4.0, true}).p_value;
+  calibrate_spectrum(out);
 }
 
 void set_unavailable(PolicyTest& test, InferenceReason reason, const std::string& detail) {
@@ -143,6 +154,68 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
   }
   calibrate(robust::frontier::ntml_quadratic(fit, true), out.score);
   calibrate(robust::frontier::ntml_quadratic(fit, false), out.lr);
+  return out;
+}
+
+PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const data::OrdinalStats& stats,
+                                      const estimate::Estimates& estimates,
+                                      estimate::OrdinalParameterization parameterization,
+                                      const PolicyFitState& state,
+                                      const std::vector<std::int8_t>* row_user) {
+  PolicyInference out;
+  if (state.penalized) {
+    out = policy_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  } else if (!state.converged) {
+    out = policy_unavailable(InferenceReason::NotConverged,
+                             "the fit did not pass its convergence verdict");
+  } else if (estimates.association) {
+    out = policy_unavailable(InferenceReason::UnsupportedModel,
+        "ordinal association ML is not a DWLS fit");
+  }
+  if (state.penalized || !state.converged || estimates.association) {
+    out.verdict_disagreement = verdict_disagreement(state);
+    return out;
+  }
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  using estimate::OrdinalWeightKind;
+  auto ij = estimate::robust_ordinal_ij(pt, rep, stats, estimates, OrdinalWeightKind::DWLS,
+                                        parameterization, row_user);
+  if (ij) {
+    out.covariance = ij->vcov;
+  } else {
+    out.covariance_reason = reason_from(ij.error());
+    out.covariance_detail = ij.error().detail;
+  }
+  out.lr.reason = InferenceReason::Inapplicable;
+  out.lr.detail = "DWLS has no likelihood; its global test is the fit-function "
+                  "statistic, reported as the score test, which it equals";
+  auto fixed = estimate::robust_ordinal(std::move(pt), rep, stats, estimates,
+                                        OrdinalWeightKind::DWLS, parameterization,
+                                        robust::Information::Expected, row_user);
+  if (!fixed) {
+    set_unavailable(out.score, reason_from(fixed.error()), fixed.error().detail);
+    return out;
+  }
+  if (fixed->df <= 0) {
+    set_unavailable(out.score, InferenceReason::Saturated,
+                    "the model has zero degrees of freedom, so there is no global test");
+    return out;
+  }
+  if (fixed->eigvals.size() > fixed->df || !fixed->eigvals.allFinite()) {
+    set_unavailable(out.score, InferenceReason::NumericFailure,
+                    "DWLS global test: invalid UGamma spectrum");
+    return out;
+  }
+  out.score.statistic = fixed->chisq_standard;
+  out.score.df = fixed->df;
+  out.score.eigenvalues = Eigen::VectorXd::Zero(fixed->df);
+  out.score.eigenvalues.tail(fixed->eigvals.size()) = fixed->eigvals;
+  std::sort(out.score.eigenvalues.data(), out.score.eigenvalues.data() + out.score.df);
+  out.score.label = "fit_function";
+  calibrate_spectrum(out.score);
   return out;
 }
 

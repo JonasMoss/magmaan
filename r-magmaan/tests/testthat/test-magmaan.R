@@ -112,12 +112,32 @@ test_that("inference = FALSE defers the same policy to infer()", {
 test_that("unsupported estimators keep their estimates and give a reason", {
   o <- ordinal_hs()
   m <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
-  fit <- magmaan(m, o, estimator = "DWLS")
+  fit <- magmaan(m, o, estimator = "ULS")
   expect_true(all(fit$inference$status$reason == "unsupported_model"))
   err <- tryCatch(confint(fit), magmaan_inference_unavailable = function(e) e)
   expect_equal(err$reason, "unsupported_model")
   expect_true(all(is.na(coef(summary(fit))$se)))
   expect_output(print(summary(fit)), "Unavailable inference")
+})
+
+test_that("all-ordinal DWLS gets the estimated-weight covariance and one global test", {
+  o <- ordinal_hs()
+  m <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
+  fit <- magmaan(m, o, estimator = "DWLS")
+  s <- fit$inference$status
+  expect_equal(s$available, c(TRUE, TRUE, FALSE))
+  expect_equal(s$reason[s$component == "global_lr"], "inapplicable")
+  lab <- as_lab_fit(fit)
+  expect_equal(unname(vcov(fit)), unname(vcov(lab, regime = "sandwich_ij")), tolerance = 1e-12)
+  tests <- coef(summary(fit))
+  expect_false(anyNA(tests$se[tests$free]))
+  g <- summary(fit)$tests
+  expect_equal(g$test, "fit function")
+  expect_true(is.finite(g$statistic) && g$df > 0)
+  out <- capture.output(print(summary(fit)))
+  expect_false(any(grepl("Unavailable inference", out)))
+  expect_true(any(grepl("Note: DWLS has no likelihood", out)))
+  expect_true(any(grepl("inference: +computed$", capture.output(print(fit)))))
 })
 
 test_that("ordered variables use the categorical estimators", {

@@ -89,7 +89,11 @@ test_that("ordinal bundles retain the estimator and match lavaan", {
                           parameterization = parameterization)
         convention_reference(fit, lav, convention, tolerance = 2e-3)
       }
-      expect_true(all(fit$inference$status$reason == "unsupported_model"))
+      s <- fit$inference$status
+      if (estimator == "DWLS") {
+        expect_equal(s$available, c(TRUE, TRUE, FALSE))
+        expect_equal(s$reason[3L], "inapplicable")
+      } else expect_true(all(s$reason == "unsupported_model"))
     }
   }
 })

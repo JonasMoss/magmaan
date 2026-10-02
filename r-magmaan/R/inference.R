@@ -147,6 +147,9 @@ infer <- function(fit, convention = "magmaan") {
   inf <- fit$inference
   if (is.null(inf)) return("not computed; call infer(fit)")
   s <- inf$status
+  # A component that does not exist for the estimator (an LR test without a
+  # likelihood) is not missing.
+  s <- s[s$available | s$reason != "inapplicable", , drop = FALSE]
   if (all(s$available))
     return(if (isTRUE(inf$psd_boundary)) "computed, assuming an interior population" else "computed")
   if (!any(s$available)) {
@@ -170,7 +173,9 @@ infer <- function(fit, convention = "magmaan") {
   rows <- lapply(c("global_score", "global_lr"), function(component) {
     t <- inf[[component]]
     if (is.null(t)) return(NULL)
-    data.frame(test = if (component == "global_score") "score" else "likelihood ratio",
+    label <- if (component == "global_lr") "likelihood ratio" else
+      if (identical(t$label, "fit_function")) "fit function" else "score"
+    data.frame(test = label,
                statistic = t$statistic, df = t$df, p.sb = t$p_sb,
                p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
                stringsAsFactors = FALSE)

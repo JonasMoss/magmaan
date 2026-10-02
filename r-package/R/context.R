@@ -34,8 +34,8 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   } else "sandwich_expected"
   if (is.null(regime)) regime <- default
   regime <- match.arg(regime, c("information_expected", "information_observed",
-    "sandwich_expected", "sandwich_observed", "delta_nt", "delta_empirical",
-    "stored", "model", "robust"))
+    "sandwich_expected", "sandwich_observed", "sandwich_ij", "delta_nt",
+    "delta_empirical", "stored", "model", "robust"))
   if (identical(regime, "model")) regime <- default
   if (identical(regime, "robust")) {
     regime <- if (sam) "stored" else if (noniterative) "delta_empirical" else "sandwich_observed"
@@ -64,6 +64,14 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   information <- regime %in% c("information_expected", "information_observed")
   bread <- if (regime %in% c("sandwich_observed", "information_observed")) "observed" else "expected"
   if (categorical) {
+    # sandwich_ij is the estimated-weight (infinitesimal-jackknife) sandwich
+    # the ordinary DWLS policy uses; the other sandwiches keep the weight fixed
+    # (sandwich_expected is lavaan's robust.sem).
+    if (identical(regime, "sandwich_ij")) {
+      if (!isTRUE(fit$ordinal)) unsupported()
+      if (is.null(fit$ordinal_stats)) stop("vcov(): ordinal fit does not carry $ordinal_stats")
+      return(infer_ordinal_robust_ij(fit, fit$ordinal_stats)$vcov)
+    }
     if (!sandwich) unsupported()
     if (isTRUE(fit$ordinal)) {
       if (is.null(fit$ordinal_stats)) stop("vcov(): ordinal fit does not carry $ordinal_stats")

@@ -2819,6 +2819,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_inference_dwls_impl
+Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state);
+RcppExport SEXP _magmaanlab_policy_inference_dwls_impl(SEXP fitSEXP, SEXP stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_inference_dwls_impl(fit, state));
+    return rcpp_result_gen;
+END_RCPP
+}
 // policy_nested_impl
 Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state);
 RcppExport SEXP _magmaanlab_policy_nested_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP) {
@@ -4504,6 +4516,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_convention_inference_impl", (DL_FUNC) &_magmaanlab_convention_inference_impl, 4},
     {"_magmaanlab_convention_nested_impl", (DL_FUNC) &_magmaanlab_convention_nested_impl, 5},
     {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 2},
+    {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 2},
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_infer_lr_test_satorra2000", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra2000, 10},

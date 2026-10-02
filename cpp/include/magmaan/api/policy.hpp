@@ -14,6 +14,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/robust/prepared_ntml.hpp"
 
@@ -29,6 +30,7 @@ enum class InferenceReason {
   UnsupportedNesting, // nesting through moments requires an unsupported correspondence
   BoundaryNesting,   // no regular interior nested-test reference
   Penalized,         // a penalized (barrier) estimate: no validated sampling contract
+  Inapplicable,      // the component does not exist for this estimator (an LR test without a likelihood)
 };
 
 std::string_view reason_name(InferenceReason reason) noexcept;
@@ -76,6 +78,9 @@ struct PolicyTest {
   double p_sb = std::numeric_limits<double>::quiet_NaN();
   double p_peba4 = std::numeric_limits<double>::quiet_NaN();
   Eigen::VectorXd eigenvalues;  // ascending, length df
+  // What the statistic is when the slot name does not say it: "fit_function"
+  // for a least-squares global test, whose score statistic equals n F.
+  std::string label;
 };
 
 struct PolicyInference {
@@ -127,6 +132,30 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 // saturated mean/covariance direction; a saturated model has no global test.
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state);
+
+// All-ordinal DWLS, delta or theta parameterization, one or more groups.
+//
+// Parameter covariance: the infinitesimal-jackknife sandwich
+// (estimate::robust_ordinal_ij): observed bread, Stage-1 threshold and
+// polychoric influence, and the influence of the estimated diagonal weight,
+// which is leading order when the model is misspecified and vanishes at
+// exact fit.
+//
+// Global test against the saturated model: the fit-function statistic n F
+// with the fixed-weight UGamma spectrum (estimate::robust_ordinal), calibrated
+// with SB and PEBA4. The objective is quadratic in the saturated moments and
+// the weight influence vanishes under the global null, so the global score
+// statistic equals n F; it is reported once, in `score`, labelled
+// "fit_function". DWLS has no likelihood, so `lr` is Inapplicable. Only plain
+// DWLS fits (weight diag(NACOV)^-1) qualify; a different weight fails the IJ
+// recipe check and is reported as UnsupportedModel.
+PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const data::OrdinalStats& stats,
+                                      const estimate::Estimates& estimates,
+                                      estimate::OrdinalParameterization parameterization,
+                                      const PolicyFitState& state,
+                                      const std::vector<std::int8_t>* row_user = nullptr);
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,

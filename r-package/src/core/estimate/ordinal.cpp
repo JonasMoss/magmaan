@@ -4894,7 +4894,8 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   const data::OrdinalStats& stats,
                   const Estimates& est,
                   OrdinalWeightKind weights,
-                  OrdinalParameterization parameterization) {
+                  OrdinalParameterization parameterization,
+                  const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -4907,7 +4908,7 @@ robust_ordinal_ij(spec::LatentStructure pt,
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {

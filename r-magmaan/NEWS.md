@@ -1,5 +1,16 @@
 # magmaan 0.2.0 (in development)
 
+- All-ordinal DWLS fits get magmaan's inference policy: standard errors from
+  the estimated-weight sandwich, which accounts for the data-dependent DWLS
+  weight, and one global test, the fit-function statistic with SB and PEBA4
+  p-values. DWLS has no likelihood, so no likelihood-ratio test is reported;
+  `summary()` says so in a note. Ordinal ULS and WLS remain without policy
+  inference.
+- `anova()` for complete-data ML uses observed information in its nested
+  tests, which stay valid when the larger model is misspecified. The score
+  statistic and both tests' reference distributions change; the
+  likelihood-ratio statistic does not.
+
 - Reporting methods `vcov`, `confint`, `summary` and `anova` accept named
   lavaan bundles through `convention`, defaulting to `"magmaan"`. ML/MLM/MLR
   and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS covariance/global recipes run

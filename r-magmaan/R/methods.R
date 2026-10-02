@@ -268,12 +268,21 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   inf <- fit$inference
   if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")
   if (isTRUE(inf$convergence$disagree)) cat("\n", .verdict_note(inf$convergence), "\n", sep = "")
-  if (!is.null(inf) && !all(inf$status$available)) {
-    cat("\nUnavailable inference\n")
-    s <- inf$status[!inf$status$available, , drop = FALSE]
-    for (i in seq_len(nrow(s))) {
-      cat("  ", s$component[i], ": ", s$reason[i],
-          if (nzchar(s$detail[i])) paste0(" (", s$detail[i], ")"), "\n", sep = "")
+  if (!is.null(inf)) {
+    # Components that do not exist for the estimator are notes, not gaps.
+    off <- inf$status[!inf$status$available, , drop = FALSE]
+    inapplicable <- off[off$reason == "inapplicable", , drop = FALSE]
+    missing <- off[off$reason != "inapplicable", , drop = FALSE]
+    if (nrow(missing)) {
+      cat("\nUnavailable inference\n")
+      for (i in seq_len(nrow(missing))) {
+        cat("  ", missing$component[i], ": ", missing$reason[i],
+            if (nzchar(missing$detail[i])) paste0(" (", missing$detail[i], ")"), "\n", sep = "")
+      }
+    }
+    if (nrow(inapplicable)) {
+      cat("\n")
+      for (i in seq_len(nrow(inapplicable))) cat("Note: ", inapplicable$detail[i], ".\n", sep = "")
     }
   }
   invisible(x)

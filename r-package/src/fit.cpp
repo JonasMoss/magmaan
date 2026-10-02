@@ -11091,7 +11091,22 @@ Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
       Rcpp::_["statistic"] = t.statistic, Rcpp::_["df"] = t.df,
       Rcpp::_["sb_scale"] = t.sb_scale, Rcpp::_["p_sb"] = t.p_sb,
       Rcpp::_["p_peba4"] = t.p_peba4,
-      Rcpp::_["eigenvalues"] = Rcpp::wrap(t.eigenvalues));
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(t.eigenvalues),
+      Rcpp::_["label"] = t.label);
+}
+
+Rcpp::List policy_inference_list(const magmaan::api::PolicyInference& out) {
+  using magmaan::api::InferenceReason;
+  const bool has_cov = out.covariance_reason == InferenceReason::Available;
+  return Rcpp::List::create(
+      Rcpp::_["covariance"] = has_cov ? Rcpp::RObject(Rcpp::wrap(out.covariance)) : Rcpp::RObject(R_NilValue),
+      Rcpp::_["covariance_available"] = has_cov,
+      Rcpp::_["covariance_reason"] = std::string(magmaan::api::reason_name(out.covariance_reason)),
+      Rcpp::_["covariance_detail"] = out.covariance_detail,
+      Rcpp::_["score"] = policy_test_list(out.score),
+      Rcpp::_["lr"] = policy_test_list(out.lr),
+      Rcpp::_["psd_boundary"] = out.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
 }
 }  // namespace
 
@@ -11216,16 +11231,47 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
     out = magmaan::api::policy_inference_ml(*c.ntml, fit_state);
   }
   out.verdict_disagreement = magmaan::api::verdict_disagreement(fit_state);
-  const bool has_cov = out.covariance_reason == InferenceReason::Available;
-  return Rcpp::List::create(
-      Rcpp::_["covariance"] = has_cov ? Rcpp::RObject(Rcpp::wrap(out.covariance)) : Rcpp::RObject(R_NilValue),
-      Rcpp::_["covariance_available"] = has_cov,
-      Rcpp::_["covariance_reason"] = std::string(magmaan::api::reason_name(out.covariance_reason)),
-      Rcpp::_["covariance_detail"] = out.covariance_detail,
-      Rcpp::_["score"] = policy_test_list(out.score),
-      Rcpp::_["lr"] = policy_test_list(out.lr),
-      Rcpp::_["psd_boundary"] = out.psd_boundary,
-      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
+  return policy_inference_list(out);
+}
+
+// policy_inference_dwls_impl() — mirrors api::policy_inference_dwls() for an
+// all-ordinal DWLS fit, from the fit's partable, estimates and retained
+// ordinal statistics. Only plain DWLS (weight diag(NACOV)^-1) qualifies;
+// Stage-2 NT/DLS, supplied-weight, ULS and WLS fits are unavailable.
+//
+// [[Rcpp::export]]
+Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state) {
+  using magmaan::api::InferenceReason;
+  const auto fit_state = policy_state_from(state);
+  auto text = [&](const char* name) {
+    return fit.containsElementNamed(name) && !Rf_isNull(fit[name])
+        ? Rcpp::as<std::string>(fit[name]) : std::string();
+  };
+  const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+  const std::string computational = text("ordinal_computational_weight");
+  const std::string recipe = text("moment_weight");
+  magmaan::api::PolicyInference out;
+  if (fit_state.penalized) {
+    out = magmaan::api::policy_unavailable(InferenceReason::Penalized,
+                                           std::string(magmaan::api::penalized_detail));
+  } else if (!ordinal || text("estimator") != "DWLS" ||
+             (!computational.empty() && computational != "DWLS") ||
+             (!recipe.empty() && recipe != "dwls")) {
+    out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
+        "the categorical inference policy covers plain all-ordinal DWLS fits");
+  } else {
+    Ctx ctx = ctx_from_fit(fit);
+    const magmaan::estimate::Estimates est = est_from_fit(fit);
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "ordinal_stats", "policy_inference"));
+    const std::string parameterization = fit.containsElementNamed("parameterization")
+        ? Rcpp::as<std::string>(fit["parameterization"])
+        : ordinal_parameterization_attr(fit["partable"]);
+    out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
+        ordinal_parameterization_from_string(parameterization), fit_state);
+  }
+  out.verdict_disagreement = magmaan::api::verdict_disagreement(fit_state);
+  return policy_inference_list(out);
 }
 
 // policy_nested_impl() — mirrors api::policy_nested_ml() on two prepared

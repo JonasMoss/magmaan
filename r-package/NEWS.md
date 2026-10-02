@@ -30,6 +30,14 @@
   default to the record and must agree with it.
 - Modification indices and score tests refuse ordinal association-ML fits in
   every interface.
+- `policy_inference()` covers all-ordinal DWLS fits: the estimated-weight
+  (IJ) covariance and one global test, the fit-function statistic labelled
+  `"fit_function"`, with the likelihood-ratio component `"inapplicable"`.
+- `vcov()` gains `regime = "sandwich_ij"` for all-ordinal fits, the
+  estimated-weight sandwich; the default stays the fixed-weight sandwich.
+- `policy_nested()` uses observed nested geometry (see the interface vision);
+  `inference_quadratic(geometry = "observed")` reproduces it, and the default
+  expected geometry keeps lavaan's Satorra-2000 and `lavTestScore()`.
 
 # magmaanlab 0.1.0
 

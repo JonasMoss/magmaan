@@ -394,17 +394,23 @@ ordinary API exposes barrier fitting experimentally as
 Mixed continuous/ordered completion is assigned to 0.3.0. Shared fixes
 required by an all-ordinal primary workflow remain current work.
 
-- [ ] **S/M — compose the DWLS policy covariance and global test.** Use the
-  IJ covariance `robust_ordinal_ij` (observed bread, Stage-1 threshold and
-  polychoric influence, estimated-weight term) and the n·F global statistic
-  with the `robust_ordinal` UGamma spectrum, calibrated with SB and PEBA4.
-  Weight influence vanishes under the global null, so the score and
-  fit-function statistics coincide and are reported once. Lift the ML-only
-  gates in `r-package/R/scores.R`, and route lab `vcov()` for categorical fits
-  deliberately (today it uses the fixed-weight `robust_ordinal`). **Check:**
-  jackknife, multi-group and theta gates for the IJ covariance (every current
-  IJ test is single-group delta), the fixed-weight reduction and lavaan WLSMV
-  agreement of the shared pieces.
+- [x] **S/M — compose the DWLS policy covariance and global test** (2026-10-02).
+  `api::policy_inference_dwls`: the IJ covariance (`robust_ordinal_ij`, which
+  now takes the fit-time `row_user`) and one global test, the fit-function
+  statistic n F with the fixed-weight `robust_ordinal` UGamma spectrum, SB and
+  PEBA4, reported in `score` with label `fit_function`; `lr` is the new typed
+  `inapplicable` reason. Only plain DWLS qualifies (Stage-2 NT/DLS, supplied
+  weights, ULS and WLS stay `unsupported_model`). R: `policy_inference()`
+  routes all-ordinal DWLS fits; the lab `vcov()` gains the explicit
+  `sandwich_ij` regime (defaults stay fixed-weight, lavaan's `robust.sem`);
+  `magmaan()` prints the test as "fit function" and the LR as a note. Gates
+  (`policy_dwls_test.cpp`): wiring against `robust_ordinal_ij`/`robust_ordinal`;
+  exact fit (saturated) reduces to the fixed-weight sandwich (1e-6);
+  stratified delete-one jackknife at n = 600 per group agrees within 4% for
+  single-group delta, two-group delta and theta (IJ 2.9/2.3/0.3% versus
+  fixed weight 4.3/4.6/1.7%; theta separates from fixed weight clearly by
+  n = 2400). Remaining: the calibration item below and lavaan WLSMV agreement
+  of the shared spectrum, which the conventions already gate.
 
 - [ ] **S/M — compose the DWLS nested likelihood-ratio-type test.**
   Fixed-weight Satorra-2000 (`lr_test_satorra2000_ordinal`, gated against
