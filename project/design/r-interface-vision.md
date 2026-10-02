@@ -576,6 +576,15 @@ Global tests against the saturated model:
 - The score test and the likelihood-ratio test, each calibrated with SB and
   PEBA4. The likelihood-ratio statistic and its df are reported because
   classical readers look for them; the normal-theory p-value is not shown.
+- **The score test is primary (decided 2026-10-02).** It comes first in
+  `summary()` and `anova()`, and the likelihood-ratio row follows with a
+  printed caveat that it tends to over-reject when N is small relative to its
+  df. Evidence: in the
+  [calibration battery](../../experiments/showcases/09-robust-test-calibration/report.qmd)
+  nested score SB/PEBA4 rejected 2.8–5.8% at nominal 5%, against up to 17.7%
+  for LR-SB/PEBA4 at N=100 (20.8% for the global LR-SB at df 102); score tests
+  generally calibrate better, most of all there. That battery used the expected
+  nested geometry; the observed-geometry run (backlog) reports both tests.
 - For fixed-weight estimators (GLS, ULS, WLS, DWLS) the objective is exactly
   quadratic in the saturated moments, so the global score statistic equals the
   fit-function statistic n F. It is reported once, labelled as the fit-function
@@ -638,7 +647,7 @@ Global tests against the saturated model:
 
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)
-tests with SB and PEBA4. The comparison checks that data, estimator and nesting
+tests with SB and PEBA4, score first. The comparison checks that data, estimator and nesting
 agree.
 
 Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26;

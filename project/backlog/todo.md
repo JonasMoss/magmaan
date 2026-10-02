@@ -333,12 +333,12 @@ ordinary API exposes barrier fitting experimentally as
   `robust.huber.white`. No small-sample correction is adopted; a bias-corrected
   meat or effective-df t reference is [banked](speculative.md#small-sample-distribution-free-intervals-for-covariance-functionals-kauermann-carroll).
 
-- [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
-  battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score
-  arms fare better; heterogeneous-spectrum global calibration remains unresolved.
-  Decide co-primary reporting, leading with score, or an evidence-backed caveat.
-  **Check:** held-out size/power/failure comparisons and explicit reporting
-  criteria. Evidence: the calibration battery; do not silently change defaults.
+- [x] **M — decide how the policy reports small-sample LR tests** (2026-10-02,
+  user decision, exit criterion 4). The score test is primary: it comes first
+  in `summary()` and `anova()`, and the likelihood-ratio row follows with a
+  printed caveat about over-rejection when N is small relative to its df.
+  Evidence and rationale are in the
+  [inference policy](../design/r-interface-vision.md#inference-policy).
 
 - [x] **M — reconcile nested restrictions and reusable inference** (2026-10-02).
   The structural-path "constant disagreement" between `score_components(H1=)`

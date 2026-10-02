@@ -265,6 +265,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     t[num] <- lapply(t[num], function(v) round(v, digits))
     print(t, row.names = FALSE)
     .peba_note(x$tests)
+    .lr_note(t)
   }
   inf <- fit$inference
   if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")
@@ -287,6 +288,14 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     }
   }
   invisible(x)
+}
+
+# Printed under policy output that shows a likelihood-ratio test.
+.lr_note <- function(t) {
+  if (any(t$test == "likelihood ratio" & is.finite(t$statistic)))
+    cat("The score test is primary; the likelihood-ratio test tends to over-reject",
+        "when N is small relative to its df.\n")
+  invisible(NULL)
 }
 
 .boundary_note <- paste(
@@ -313,8 +322,11 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 
 #' Compare two nested magmaan fits
 #'
-#' Likelihood-ratio and score tests of the restricted fit against the other,
-#' each calibrated with SB and PEBA4, as the global tests are. The restricted
+#' Score and likelihood-ratio tests of the restricted fit against the other,
+#' each calibrated with SB and PEBA4, as the global tests are. The score test
+#' is primary and comes first: it calibrates better, especially when N is
+#' small relative to the df, where the likelihood-ratio test tends to
+#' over-reject. Select rows by `test` rather than position. The restricted
 #' model may constrain, fix or drop paths from the other model (for example,
 #' a shared label, `b == 0`, or a loading fixed to zero), fitted to the same
 #' observations with the same estimator and covariance policy. For a single
@@ -375,7 +387,9 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
     res <- swapped
     null <- 1L
   }
-  rows <- lapply(c("lr", "score"), function(component) {
+  # The score test leads: it calibrates better than the likelihood ratio,
+  # especially at small N and high df (decided 2026-10-02, todo.md).
+  rows <- lapply(c("score", "lr"), function(component) {
     t <- res[[component]]
     label <- if (component == "score") "score" else
       if (identical(t$label, "fit_function_difference")) "fit-function difference" else "likelihood ratio"
@@ -385,12 +399,12 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
                stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows)
-  reasons <- vapply(res[c("lr", "score")], function(t)
+  reasons <- vapply(res[c("score", "lr")], function(t)
     if (isTRUE(t$available)) "" else paste0(t$reason, if (nzchar(t$detail)) paste0(": ", t$detail)),
     character(1))
   structure(out, class = c("magmaan_anova", "data.frame"),
             restricted = labels[[null]], alternative = labels[[3L - null]],
-            peba_blocks = vapply(res[c("lr", "score")],
+            peba_blocks = vapply(res[c("score", "lr")],
               function(t) as.integer(t$peba_blocks %||% 0L), integer(1)),
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
@@ -410,6 +424,7 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   t[num] <- lapply(t[num], function(v) round(v, digits))
   print(t, row.names = FALSE)
   .peba_note(x)
+  if (is.null(attr(x, "convention"))) .lr_note(t)
   u <- attr(x, "unavailable")
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")

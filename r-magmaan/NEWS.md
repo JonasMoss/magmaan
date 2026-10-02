@@ -1,5 +1,10 @@
 # magmaan 0.2.0 (in development)
 
+- The score test is the primary test. `anova()` now lists it first and the
+  likelihood-ratio (or fit-function difference) row second; select rows by
+  `test`, not position. When a likelihood-ratio test is shown, `summary()` and
+  `anova()` print a note that it tends to over-reject when N is small relative
+  to its df.
 - All-ordinal DWLS fits get magmaan's inference policy: standard errors from
   the estimated-weight sandwich, which accounts for the data-dependent DWLS
   weight, and one global test, the fit-function statistic with SB and PEBA4

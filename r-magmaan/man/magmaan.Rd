@@ -119,6 +119,8 @@ follows the rule.
 
 \code{summary(fit)$tests} is \code{NULL} when no global test is available, otherwise a
 data frame with \code{test}, \code{statistic}, \code{df}, \code{p.sb}, \code{p.peba4}, and \code{sb.scale}.
+The score test is primary and comes first; the likelihood-ratio row follows
+and tends to over-reject when N is small relative to its df.
 Store both package versions with simulation results. Saved fits retain their
 estimates and inference; reusing them with another package version is not a
 compatibility promise.

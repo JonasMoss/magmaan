@@ -18,7 +18,8 @@ test_that("anova and robust nested LR preserve units in a two-group path model",
     if (is.list(observed)) observed <- observed[[1L]]
     robust <- magmaanlab::robust_nested_lrt(as_lab_fit(f1), as_lab_fit(f0),
                                              data = split(changed[observed], changed$group))
-    expect_equal(ordinary$statistic[1L] / ordinary$sb.scale[1L],
+    lr <- ordinary$test == "likelihood ratio"
+    expect_equal(ordinary$statistic[lr] / ordinary$sb.scale[lr],
                  robust$T_scaled, tolerance = 1e-6)
     list(ordinary = ordinary, robust = robust)
   }

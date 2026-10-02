@@ -10,8 +10,9 @@ inventory_states <- function(fit) {
 
 nested_states <- function(f0, f1) {
   a <- anova(f0, f1)
-  setNames(ifelse(is.finite(a$statistic), "computed", "unavailable"),
-           c("lr", "score"))
+  out <- setNames(ifelse(is.finite(a$statistic), "computed", "unavailable"),
+                  c("score", "lr"))
+  out[c("lr", "score")]
 }
 
 restricted_cfa <- "visual =~ x1 + a*x2 + a*x3\ntextual =~ x4 + x5 + x6"

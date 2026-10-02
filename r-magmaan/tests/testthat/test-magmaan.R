@@ -149,15 +149,17 @@ test_that("anova() compares nested all-ordinal DWLS fits with the fit-function d
   f1 <- magmaan(m1, o, estimator = "DWLS")
   f0 <- magmaan(m0, o, estimator = "DWLS")
   a <- anova(f0, f1)
-  expect_equal(a$test, c("fit-function difference", "score"))
-  expect_equal(a$df[1], 1L)
-  expect_true(is.finite(a$p.sb[1]) && is.finite(a$p.peba4[1]))
-  expect_true(is.na(a$statistic[2]))
+  expect_equal(a$test, c("score", "fit-function difference"))
+  expect_equal(a$df[2], 1L)
+  expect_true(is.finite(a$p.sb[2]) && is.finite(a$p.peba4[2]))
+  expect_true(is.na(a$statistic[1]))
   lab <- magmaanlab::policy_nested(as_lab_fit(f1), as_lab_fit(f0))
-  expect_equal(a$statistic[1], lab$lr$statistic, tolerance = 1e-12)
+  expect_equal(a$statistic[2], lab$lr$statistic, tolerance = 1e-12)
   expect_equal(lab$lr$label, "fit_function_difference")
   expect_equal(lab$score$reason, "unsupported_model")
   expect_output(print(a), "fit-function difference")
+  # No likelihood-ratio row, so no likelihood-ratio caveat.
+  expect_false(any(grepl("score test is primary", capture.output(print(a)))))
 })
 
 test_that("ordered variables use the categorical estimators", {
@@ -223,9 +225,10 @@ test_that("anova() nests configural, metric and scalar invariance with released 
   reference <- lavaan::lavTestLRT(lav(character()), lav("loadings"), lav(c("loadings", "intercepts")))
   for (pair in list(list(configural, metric, 2L), list(metric, scalar, 3L))) {
     a <- anova(pair[[2]], pair[[1]])
-    expect_equal(a$statistic[1], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
-    expect_equal(a$df[1], reference[pair[[3]], "Df diff"])
-    expect_true(is.finite(a$statistic[2]) && is.finite(a$p.sb[2]))
+    expect_equal(a$test, c("score", "likelihood ratio"))
+    expect_equal(a$statistic[2], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
+    expect_equal(a$df[2], reference[pair[[3]], "Df diff"])
+    expect_true(is.finite(a$statistic[1]) && is.finite(a$p.sb[1]))
   }
 })
 
@@ -397,7 +400,7 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   h <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(as_lab_fit(f0), shared),
                                       magmaanlab::prepare_inference(as_lab_fit(f1), shared))
   for (k in 1:2) {
-    test <- c("lr", "score")[k]
+    test <- c("score", "lr")[k]
     cal <- magmaanlab::calibrate_quadratic(
       magmaanlab::inference_quadratic(h, test, geometry = "observed"), c("sb", "peba4"))
     expect_equal(a$statistic[k], cal$statistic[1], tolerance = 1e-10)
@@ -407,12 +410,15 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   # geometry the lab's SB is lavaan's Satorra (2000) with the exact
   # restriction map; the policy's observed geometry is not a lavaan method.
   nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
-  expect_equal(a$statistic[1], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
+  expect_equal(a$test, c("score", "likelihood ratio"))
+  expect_equal(a$statistic[2], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
   sb <- lavaan::lavTestLRT(lav_cfa(m0, d, estimator = "MLM"), lav_cfa(m1, d, estimator = "MLM"),
                            method = "satorra.2000", A.method = "exact", scaled.shifted = FALSE)
   lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr"), "sb")
   expect_equal(lab_sb$p_value, as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
   expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
+  expect_output(print(a), "The score test is primary")
+  expect_output(print(summary(f1)), "The score test is primary")
 })
 
 test_that("confint() intervals are Wald, with likelihood-ratio inversion planned", {

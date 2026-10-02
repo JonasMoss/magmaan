@@ -25,8 +25,11 @@ currently report unavailable inference.}
 A data frame with one row per test, of class \code{magmaan_anova}.
 }
 \description{
-Likelihood-ratio and score tests of the restricted fit against the other,
-each calibrated with SB and PEBA4, as the global tests are. The restricted
+Score and likelihood-ratio tests of the restricted fit against the other,
+each calibrated with SB and PEBA4, as the global tests are. The score test
+is primary and comes first: it calibrates better, especially when N is
+small relative to the df, where the likelihood-ratio test tends to
+over-reject. Select rows by \code{test} rather than position. The restricted
 model may constrain, fix or drop paths from the other model (for example,
 a shared label, \code{b == 0}, or a loading fixed to zero), fitted to the same
 observations with the same estimator and covariance policy. For a single

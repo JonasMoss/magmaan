@@ -290,6 +290,8 @@ print.magmaan_model <- function(x, ...) {
 #'
 #' `summary(fit)$tests` is `NULL` when no global test is available, otherwise a
 #' data frame with `test`, `statistic`, `df`, `p.sb`, `p.peba4`, and `sb.scale`.
+#' The score test is primary and comes first; the likelihood-ratio row follows
+#' and tends to over-reject when N is small relative to its df.
 #' Store both package versions with simulation results. Saved fits retain their
 #' estimates and inference; reusing them with another package version is not a
 #' compatibility promise.
