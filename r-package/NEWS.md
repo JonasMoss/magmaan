@@ -33,6 +33,9 @@
 - `policy_inference()` covers all-ordinal DWLS fits: the estimated-weight
   (IJ) covariance and one global test, the fit-function statistic labelled
   `"fit_function"`, with the likelihood-ratio component `"inapplicable"`.
+- `policy_nested()` compares two all-ordinal DWLS fits with the fit-function
+  difference and its estimated-weight profile reference (label
+  `"fit_function_difference"`); the nested score is unavailable.
 - `vcov()` gains `regime = "sandwich_ij"` for all-ordinal fits, the
   estimated-weight sandwich; the default stays the fixed-weight sandwich.
 - `policy_nested()` uses observed nested geometry (see the interface vision);

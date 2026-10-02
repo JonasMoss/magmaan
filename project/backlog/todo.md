@@ -413,17 +413,27 @@ required by an all-ordinal primary workflow remain current work.
   n = 2400). Remaining: the calibration item below and lavaan WLSMV agreement
   of the shared spectrum, which the conventions already gate.
 
-- [ ] **S/M — compose the DWLS nested likelihood-ratio-type test.**
-  Fixed-weight Satorra-2000 (`lr_test_satorra2000_ordinal`, gated against
-  lavaan and Mplus DIFFTEST) composes with SB/PEBA4 directly. The
-  estimated-weight law (`ordinal_dwls_profile_lrt`) kept its size under
-  misspecification in
-  [evidence 13](../../experiments/research/evidence/13-ordinal-dwls-profile-lrt/)
-  (about 4.2% where the fixed-weight test reached 10.5%), but needs a
-  reduction gate to Satorra-2000 at exact fit, a df versus `spectrum_size`
-  decision and an evaluation-point choice: Satorra-2000 uses the H1 point,
-  while the ML route moved to the common null on 2026-10-01. **Check:**
-  reductions, grouped delta/theta ladders and unit invariance.
+- [x] **S/M — compose the DWLS nested likelihood-ratio-type test** (2026-10-02).
+  `api::policy_nested_dwls`: the fit-function difference T = n(F_null −
+  F_alt) in the `lr` slot (label `fit_function_difference`) with the
+  estimated-weight profile law (`ordinal_dwls_profile_lrt`, each model's
+  profile at its own estimate over thresholds, polychorics and the DWLS
+  weight diagonal; evidence 13). Decisions: the reference is the positive
+  profile spectrum with values below 1e-8 of the largest treated as zero
+  (otherwise theta's extra scale directions change PEBA4), padded to the
+  restriction df; SB divides its full trace by the restriction df (mean
+  matching over every term; `fmg_test`'s top-df truncation would drop the
+  weight channel); PEBA4 uses the whole spectrum; negative profile
+  eigenvalues are dropped as in the validated mixture (conservative). Nesting
+  is verified with `robust::embed_nested_null` on the prepared partables. The
+  nested score is typed `unsupported_model` (no derivation). R:
+  `policy_nested()` routes two DWLS fits with identical ordinal statistics;
+  `anova()` prints "fit-function difference". Gates (`policy_dwls_test.cpp`):
+  statistic equals the difference of the global fit-function statistics; role
+  swap is refused; delta and theta give identical statistics, spectra and
+  PEBA4; two groups compose; under a true null the profile trace approaches
+  Satorra-2000's (delta 1.9% to 0.19%, theta 2.3% to 0.20% from n = 4000 to
+  64000). Calibration remains open (below).
 
 - [ ] **M — calibrate the DWLS policy.** No in-repo study covers DWLS SB versus
   PEBA4 size, global or nested; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)

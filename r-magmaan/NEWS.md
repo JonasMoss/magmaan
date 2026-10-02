@@ -4,8 +4,10 @@
   the estimated-weight sandwich, which accounts for the data-dependent DWLS
   weight, and one global test, the fit-function statistic with SB and PEBA4
   p-values. DWLS has no likelihood, so no likelihood-ratio test is reported;
-  `summary()` says so in a note. Ordinal ULS and WLS remain without policy
-  inference.
+  `summary()` says so in a note. `anova()` compares two DWLS fits with the
+  fit-function difference, whose reference distribution accounts for the
+  estimated weight; no nested score test is available for DWLS yet. Ordinal
+  ULS and WLS remain without policy inference.
 - `anova()` for complete-data ML uses observed information in its nested
   tests, which stay valid when the larger model is misspecified. The score
   statistic and both tests' reference distributions change; the

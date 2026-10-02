@@ -11274,6 +11274,53 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state)
   return policy_inference_list(out);
 }
 
+// policy_nested_dwls_impl() — mirrors api::policy_nested_dwls() for two plain
+// all-ordinal DWLS fits to the same ordinal statistics (the caller checks that
+// they are the same observations).
+//
+// [[Rcpp::export]]
+Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                   Rcpp::LogicalVector null_state,
+                                   Rcpp::LogicalVector alternative_state) {
+  const auto null_fit = policy_state_from(null_state);
+  const auto alternative_fit = policy_state_from(alternative_state);
+  auto text = [](Rcpp::List fit, const char* name) {
+    return fit.containsElementNamed(name) && !Rf_isNull(fit[name])
+        ? Rcpp::as<std::string>(fit[name]) : std::string();
+  };
+  for (Rcpp::List fit : {fit_H1, fit_H0}) {
+    const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+    const std::string computational = text(fit, "ordinal_computational_weight");
+    const std::string recipe = text(fit, "moment_weight");
+    if (!ordinal || text(fit, "estimator") != "DWLS" ||
+        (!computational.empty() && computational != "DWLS") ||
+        (!recipe.empty() && recipe != "dwls")) {
+      Rcpp::stop("the categorical nested policy covers plain all-ordinal DWLS fits");
+    }
+  }
+  auto parameterization_of = [&](Rcpp::List fit) {
+    return fit.containsElementNamed("parameterization")
+        ? Rcpp::as<std::string>(fit["parameterization"])
+        : ordinal_parameterization_attr(fit["partable"]);
+  };
+  const std::string parameterization = parameterization_of(fit_H1);
+  if (parameterization_of(fit_H0) != parameterization)
+    Rcpp::stop("the two fits use different ordinal parameterizations");
+  Ctx c1 = ctx_from_fit(fit_H1);
+  Ctx c0 = ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates e1 = est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates e0 = est_from_fit(fit_H0);
+  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+      fit_H1, R_NilValue, "ordinal_stats", "policy_nested"));
+  auto out = magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
+      std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
+      ordinal_parameterization_from_string(parameterization));
+  return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
+                            Rcpp::_["lr"] = policy_test_list(out.lr),
+                            Rcpp::_["psd_boundary"] = out.psd_boundary,
+                            Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
+}
+
 // policy_nested_impl() — mirrors api::policy_nested_ml() on two prepared
 // inference contexts that share one prepared dataset.
 //

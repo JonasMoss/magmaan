@@ -7,6 +7,8 @@
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
+#include "magmaan/robust/restriction.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 
 namespace magmaan::api {
 
@@ -216,6 +218,118 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
   std::sort(out.score.eigenvalues.data(), out.score.eigenvalues.data() + out.score.df);
   out.score.label = "fit_function";
   calibrate_spectrum(out.score);
+  return out;
+}
+
+PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+                                const model::MatrixRep& null_rep,
+                                const estimate::Estimates& null_estimates,
+                                const PolicyFitState& null_state,
+                                spec::LatentStructure alternative_pt,
+                                const model::MatrixRep& alternative_rep,
+                                const estimate::Estimates& alternative_estimates,
+                                const PolicyFitState& alternative_state,
+                                const data::OrdinalStats& stats,
+                                estimate::OrdinalParameterization parameterization) {
+  PolicyNested out;
+  out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
+  out.verdict_disagreement =
+      verdict_disagreement(null_state) || verdict_disagreement(alternative_state);
+  auto unavailable = [&](InferenceReason reason, const std::string& detail) {
+    set_unavailable(out.score, reason, detail);
+    set_unavailable(out.lr, reason, detail);
+    return out;
+  };
+  if (null_state.penalized || alternative_state.penalized)
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!null_state.converged || !alternative_state.converged)
+    return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
+  if (null_estimates.association || alternative_estimates.association)
+    return unavailable(InferenceReason::UnsupportedModel, "ordinal association ML is not a DWLS fit");
+
+  // Nesting: lift the null into the alternative's parameter space on the
+  // prepared (threshold- and scale-augmented) structures.
+  {
+    spec::LatentStructure p1 = alternative_pt, p0 = null_pt;
+    auto prepared1 = estimate::prepare_ordinal_delta_partable(p1, stats);
+    auto prepared0 = estimate::prepare_ordinal_delta_partable(p0, stats);
+    if (!prepared1 || !prepared0)
+      return unavailable(InferenceReason::NumericFailure,
+                         !prepared1 ? prepared1.error().detail : prepared0.error().detail);
+    auto c1 = estimate::build_eq_constraints(p1);
+    auto c0 = estimate::build_eq_constraints(p0);
+    if (!c1 || !c0)
+      return unavailable(InferenceReason::NumericFailure,
+                         !c1 ? c1.error().detail : c0.error().detail);
+    auto embedding = robust::embed_nested_null(p1, alternative_rep, p0, null_rep,
+        null_estimates.theta, *c1, *c0, false, &alternative_estimates.theta);
+    if (!embedding) {
+      const auto kind = embedding.error().kind;
+      return unavailable(kind == PostError::Kind::NotNested ? InferenceReason::NotNested
+          : kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
+          : kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting
+          : InferenceReason::NumericFailure, embedding.error().detail);
+    }
+    if (embedding->restriction.A.rows() == 0)
+      return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+  }
+
+  set_unavailable(out.score, InferenceReason::UnsupportedModel,
+      "no nested DWLS score test is derived; the fit-function difference test is reported");
+  auto profile = estimate::ordinal_dwls_profile_lrt(std::move(alternative_pt), alternative_rep,
+      stats, alternative_estimates, std::move(null_pt), null_rep, null_estimates,
+      parameterization);
+  if (!profile) {
+    set_unavailable(out.lr, reason_from(profile.error()), profile.error().detail);
+    return out;
+  }
+  const auto& p = *profile;
+  if (p.df_diff <= 0) {
+    set_unavailable(out.lr, InferenceReason::NotNested,
+                    "the null does not restrict the alternative");
+    return out;
+  }
+  if (!std::isfinite(p.T_diff) || !p.eigvals.allFinite()) {
+    set_unavailable(out.lr, InferenceReason::NumericFailure,
+                    "DWLS nested test: non-finite statistic or spectrum");
+    return out;
+  }
+  // Eigenvalues that are zero to working precision (they appear, for
+  // instance, from the extra scale directions of the theta parameterization)
+  // are zeros of the reference law, not terms of it; keeping them would make
+  // PEBA4 depend on the parameterization.
+  const double largest = p.eigvals.size() ? p.eigvals.maxCoeff() : 0.0;
+  std::vector<double> kept;
+  for (Eigen::Index i = 0; i < p.eigvals.size(); ++i)
+    if (p.eigvals(i) > 1e-8 * largest) kept.push_back(p.eigvals(i));
+  const Eigen::Index k = std::max<Eigen::Index>(p.df_diff, static_cast<Eigen::Index>(kept.size()));
+  Eigen::VectorXd eigenvalues = Eigen::VectorXd::Zero(k);
+  for (std::size_t i = 0; i < kept.size(); ++i)
+    eigenvalues(k - static_cast<Eigen::Index>(kept.size()) + static_cast<Eigen::Index>(i)) = kept[i];
+  std::sort(eigenvalues.data(), eigenvalues.data() + k);
+  const double trace = eigenvalues.sum();
+  if (!(trace > 0.0)) {
+    set_unavailable(out.lr, InferenceReason::NumericFailure,
+                    "DWLS nested test: the reference spectrum has no positive mass");
+    return out;
+  }
+  // A clearly negative difference means the alternative stopped above the
+  // null's optimum.
+  if (p.T_diff < -1e-8 * std::max(1.0, trace)) {
+    set_unavailable(out.lr, InferenceReason::NotConverged,
+                    "the alternative fits worse than the null (fit-function difference " +
+                    std::to_string(p.T_diff) + ")");
+    return out;
+  }
+  PolicyTest& t = out.lr;
+  t.statistic = std::max(0.0, p.T_diff);
+  t.df = p.df_diff;
+  t.eigenvalues = std::move(eigenvalues);
+  t.sb_scale = trace / static_cast<double>(t.df);
+  t.p_sb = inference::chi2_pvalue(t.statistic / t.sb_scale, t.df);
+  t.p_peba4 = robust::frontier::fmg_test(t.statistic, static_cast<int>(k), t.eigenvalues,
+      {robust::frontier::FmgMethod::Peba, 4.0, true}).p_value;
+  t.label = "fit_function_difference";
   return out;
 }
 

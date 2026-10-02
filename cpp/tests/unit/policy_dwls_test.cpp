@@ -217,3 +217,150 @@ TEST_CASE("DWLS policy IJ covariance agrees with the delete-one jackknife") {
     if (design.parameterization == OrdinalParameterization::Delta) CHECK(ij_error < fixed_error);
   }
 }
+
+namespace {
+
+const std::string kTauEquivalent =
+    "f =~ x1 + a*x2 + a*x3 + a*x4\n"
+    "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+    "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+
+// Items whose population satisfies the tau-equivalent null (x2-x4 share one
+// loading), so the null and the congeneric alternative both fit.
+Eigen::MatrixXd tau_equivalent_block(std::uint32_t seed, Eigen::Index n) {
+  std::mt19937 rng(seed);
+  std::normal_distribution<double> z(0.0, 1.0);
+  const double loading[4] = {0.80, 0.65, 0.65, 0.65};
+  Eigen::MatrixXd X(n, 4);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double eta = z(rng);
+    for (int j = 0; j < 4; ++j) {
+      const double y = loading[j] * eta + std::sqrt(1.0 - loading[j] * loading[j]) * z(rng);
+      X(i, j) = 1.0 + (y > -0.3) + (y > 0.7);
+    }
+  }
+  return X;
+}
+
+struct NestedDwls {
+  api::PolicyNested out;
+  magmaan::estimate::Estimates null_est, alt_est;
+  OrdinalModel null_model, alt_model;
+};
+
+NestedDwls nested_dwls(const magmaan::data::OrdinalStats& stats, int groups,
+                       OrdinalParameterization parameterization) {
+  NestedDwls r{{}, {}, {}, ordinal_model(kTauEquivalent, groups), ordinal_model(kOneFactor, groups)};
+  r.null_est = fit_dwls(r.null_model, stats, parameterization);
+  r.alt_est = fit_dwls(r.alt_model, stats, parameterization);
+  r.out = api::policy_nested_dwls(r.null_model.pt, r.null_model.rep, r.null_est, {},
+                                  r.alt_model.pt, r.alt_model.rep, r.alt_est, {}, stats,
+                                  parameterization);
+  return r;
+}
+
+}  // namespace
+
+TEST_CASE("DWLS nested policy: fit-function difference with the estimated-weight profile law") {
+  const Eigen::MatrixXd X = misspecified_block(5150u, 600, -0.4, 0.6);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+  const auto r = nested_dwls(*stats, 1, OrdinalParameterization::Delta);
+  const auto& t = r.out.lr;
+  REQUIRE(t.reason == api::InferenceReason::Available);
+  CHECK(t.label == "fit_function_difference");
+  CHECK(t.df == 2);
+  CHECK(r.out.score.reason == api::InferenceReason::UnsupportedModel);
+
+  auto profile = magmaan::estimate::ordinal_dwls_profile_lrt(r.alt_model.pt, r.alt_model.rep,
+      *stats, r.alt_est, r.null_model.pt, r.null_model.rep, r.null_est);
+  REQUIRE(profile.has_value());
+  CHECK(t.statistic == doctest::Approx(profile->T_diff));
+  // The statistic is the difference of the two global fit-function statistics.
+  auto g0 = magmaan::estimate::robust_ordinal(r.null_model.pt, r.null_model.rep, *stats,
+                                              r.null_est, OrdinalWeightKind::DWLS);
+  auto g1 = magmaan::estimate::robust_ordinal(r.alt_model.pt, r.alt_model.rep, *stats,
+                                              r.alt_est, OrdinalWeightKind::DWLS);
+  REQUIRE(g0.has_value()); REQUIRE(g1.has_value());
+  CHECK(t.statistic == doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
+  // The whole positive spectrum enters; SB matches its mean over the restriction df.
+  std::vector<double> kept;
+  for (Eigen::Index i = 0; i < profile->eigvals.size(); ++i)
+    if (profile->eigvals(i) > 1e-8 * profile->eigvals.maxCoeff()) kept.push_back(profile->eigvals(i));
+  Eigen::VectorXd eig = Eigen::VectorXd::Zero(std::max<Eigen::Index>(2, static_cast<Eigen::Index>(kept.size())));
+  for (std::size_t i = 0; i < kept.size(); ++i) eig(eig.size() - static_cast<Eigen::Index>(kept.size()) + static_cast<Eigen::Index>(i)) = kept[i];
+  std::sort(eig.data(), eig.data() + eig.size());
+  CHECK((t.eigenvalues - eig).norm() == 0.0);
+  CHECK(t.sb_scale == doctest::Approx(eig.sum() / 2.0));
+  CHECK(t.p_sb == doctest::Approx(magmaan::inference::chi2_pvalue(t.statistic / t.sb_scale, 2)));
+  CHECK(std::isfinite(t.p_peba4));
+  MESSAGE("spectrum size " << profile->spectrum_size << ", negative " << profile->negative_spectrum_size);
+
+  // The roles matter: the alternative does not restrict the null.
+  const auto swapped = api::policy_nested_dwls(r.alt_model.pt, r.alt_model.rep, r.alt_est, {},
+      r.null_model.pt, r.null_model.rep, r.null_est, {}, *stats, OrdinalParameterization::Delta);
+  CHECK(swapped.lr.reason != api::InferenceReason::Available);
+}
+
+TEST_CASE("DWLS nested policy: delta and theta give the same test; two groups compose") {
+  const Eigen::MatrixXd X = misspecified_block(5151u, 600, -0.4, 0.6);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+  const auto delta = nested_dwls(*stats, 1, OrdinalParameterization::Delta);
+  const auto theta = nested_dwls(*stats, 1, OrdinalParameterization::Theta);
+  REQUIRE(delta.out.lr.reason == api::InferenceReason::Available);
+  REQUIRE(theta.out.lr.reason == api::InferenceReason::Available);
+  CHECK(theta.out.lr.statistic == doctest::Approx(delta.out.lr.statistic).epsilon(1e-6));
+  REQUIRE(theta.out.lr.eigenvalues.size() == delta.out.lr.eigenvalues.size());
+  CHECK((theta.out.lr.eigenvalues - delta.out.lr.eigenvalues).norm() <
+        1e-5 * delta.out.lr.eigenvalues.norm());
+  CHECK(theta.out.lr.p_peba4 == doctest::Approx(delta.out.lr.p_peba4).epsilon(1e-5));
+
+  auto grouped = magmaan::data::ordinal_stats_from_integer_data(
+      {misspecified_block(5152u, 500, -0.4, 0.6), misspecified_block(5153u, 450, -0.2, 0.6)}, true);
+  REQUIRE(grouped.has_value());
+  const auto two = nested_dwls(*grouped, 2, OrdinalParameterization::Delta);
+  REQUIRE(two.out.lr.reason == api::InferenceReason::Available);
+  CHECK(two.out.lr.df == 5);  // x2-x4 equal within and across groups: 6 loadings -> 1
+  auto g0 = magmaan::estimate::robust_ordinal(two.null_model.pt, two.null_model.rep, *grouped,
+                                              two.null_est, OrdinalWeightKind::DWLS);
+  auto g1 = magmaan::estimate::robust_ordinal(two.alt_model.pt, two.alt_model.rep, *grouped,
+                                              two.alt_est, OrdinalWeightKind::DWLS);
+  REQUIRE(g0.has_value()); REQUIRE(g1.has_value());
+  CHECK(two.out.lr.statistic ==
+        doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
+}
+
+TEST_CASE("DWLS nested policy: under a true null the profile law approaches Satorra-2000") {
+  // The weight channel is driven by the residuals, which vanish under correct
+  // specification, so the estimated-weight spectrum converges to the
+  // fixed-weight Satorra-2000 spectrum (exact restriction map) as n grows.
+  for (const auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+  double previous = 1.0;
+  for (const Eigen::Index n : {Eigen::Index{4000}, Eigen::Index{64000}}) {
+    CAPTURE(n);
+    auto stats = magmaan::data::ordinal_stats_from_integer_data({tau_equivalent_block(61u, n)}, true);
+    REQUIRE(stats.has_value());
+    const auto r = nested_dwls(*stats, 1, parameterization);
+    REQUIRE(r.out.lr.reason == api::InferenceReason::Available);
+    auto g0 = magmaan::estimate::robust_ordinal(r.null_model.pt, r.null_model.rep, *stats,
+                                                r.null_est, OrdinalWeightKind::DWLS, parameterization);
+    auto g1 = magmaan::estimate::robust_ordinal(r.alt_model.pt, r.alt_model.rep, *stats,
+                                                r.alt_est, OrdinalWeightKind::DWLS, parameterization);
+    REQUIRE(g0.has_value()); REQUIRE(g1.has_value());
+    auto satorra = magmaan::estimate::lr_test_satorra2000_ordinal(r.alt_model.pt, r.alt_model.rep,
+        *stats, r.alt_est, r.null_model.pt, r.null_model.rep, r.null_est, OrdinalWeightKind::DWLS,
+        g0->chisq_standard, g1->chisq_standard, g0->df, g1->df,
+        magmaan::robust::SatorraAMethod::Exact, parameterization);
+    REQUIRE(satorra.has_value());
+    const Eigen::VectorXd& e = r.out.lr.eigenvalues;
+    REQUIRE(e.size() >= satorra->eigenvalues.size());
+    const double gap = std::abs(e.sum() - satorra->eigenvalues.sum()) / satorra->eigenvalues.sum();
+    MESSAGE("n " << n << ": trace gap " << gap << ", spectrum sizes " << e.size() << " vs "
+            << satorra->eigenvalues.size());
+    CHECK(gap < previous);
+    previous = gap;
+  }
+  CHECK(previous < 0.02);
+  }
+}

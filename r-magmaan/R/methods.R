@@ -376,7 +376,9 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
   }
   rows <- lapply(c("lr", "score"), function(component) {
     t <- res[[component]]
-    data.frame(test = if (component == "lr") "likelihood ratio" else "score",
+    label <- if (component == "score") "score" else
+      if (identical(t$label, "fit_function_difference")) "fit-function difference" else "likelihood ratio"
+    data.frame(test = label,
                statistic = t$statistic, df = t$df, p.sb = t$p_sb,
                p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
                stringsAsFactors = FALSE)

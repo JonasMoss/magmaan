@@ -140,6 +140,26 @@ test_that("all-ordinal DWLS gets the estimated-weight covariance and one global 
   expect_true(any(grepl("inference: +computed$", capture.output(print(fit)))))
 })
 
+test_that("anova() compares nested all-ordinal DWLS fits with the fit-function difference", {
+  o <- ordinal_hs()
+  ord <- paste0("x", 1:6)
+  m1 <- magmaan_model(cfa, prototype = o, ordered = ord)
+  m0 <- magmaan_model(paste(cfa, "visual =~ x1 + a*x2 + a*x3", sep = "\n"),
+                      prototype = o, ordered = ord)
+  f1 <- magmaan(m1, o, estimator = "DWLS")
+  f0 <- magmaan(m0, o, estimator = "DWLS")
+  a <- anova(f0, f1)
+  expect_equal(a$test, c("fit-function difference", "score"))
+  expect_equal(a$df[1], 1L)
+  expect_true(is.finite(a$p.sb[1]) && is.finite(a$p.peba4[1]))
+  expect_true(is.na(a$statistic[2]))
+  lab <- magmaanlab::policy_nested(as_lab_fit(f1), as_lab_fit(f0))
+  expect_equal(a$statistic[1], lab$lr$statistic, tolerance = 1e-12)
+  expect_equal(lab$lr$label, "fit_function_difference")
+  expect_equal(lab$score$reason, "unsupported_model")
+  expect_output(print(a), "fit-function difference")
+})
+
 test_that("ordered variables use the categorical estimators", {
   o <- ordinal_hs()
   ord <- paste0("x", 1:6)

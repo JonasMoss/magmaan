@@ -158,6 +158,34 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
                                       const PolicyFitState& state,
                                       const std::vector<std::int8_t>* row_user = nullptr);
 
+// Nested tests for two all-ordinal DWLS fits to one dataset (`stats`), with
+// `null` restricting `alternative`. Both fits must be plain DWLS.
+//
+// The `lr` slot holds the fit-function difference T = n (F_null - F_alt),
+// labelled "fit_function_difference" (DWLS has no likelihood), with the
+// estimated-weight profile reference law (estimate::ordinal_dwls_profile_lrt):
+// each model's profile at its own estimate over the extended first-stage
+// moments (thresholds, polychorics and the diagonal of the DWLS weight), so the
+// reference stays valid when the larger model is misspecified (evidence 13).
+// At exact fit the weight channel is dormant and the spectrum is the
+// fixed-weight Satorra-2000 one. `eigenvalues` is the positive profile
+// spectrum (values below 1e-8 of the largest count as zero), padded with
+// zeros to at least the restriction df; SB scales by its
+// trace over the restriction df (mean matching over every term, which a top-df
+// truncation would lose) and PEBA4 uses the whole spectrum. No nested DWLS
+// score test is derived, so `score` is UnsupportedModel. Nesting is verified
+// with the shared restriction embedding.
+PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+                                const model::MatrixRep& null_rep,
+                                const estimate::Estimates& null_estimates,
+                                const PolicyFitState& null_state,
+                                spec::LatentStructure alternative_pt,
+                                const model::MatrixRep& alternative_rep,
+                                const estimate::Estimates& alternative_estimates,
+                                const PolicyFitState& alternative_state,
+                                const data::OrdinalStats& stats,
+                                estimate::OrdinalParameterization parameterization);
+
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,
                               std::shared_ptr<robust::frontier::NTMLFit> alternative,

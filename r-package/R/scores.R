@@ -316,9 +316,20 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
          verdict_disagreement = .verdict_disagreement(states$H0) ||
            .verdict_disagreement(states$H1))
   }
+  dwls <- vapply(list(fit_H1, fit_H0), function(fit)
+    isTRUE(fit$ordinal) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))
+  if (all(dwls)) {
+    same <- function(x) identical(fit_H1$ordinal_stats[[x]], fit_H0$ordinal_stats[[x]])
+    if (!all(vapply(c("R", "thresholds", "nobs"), same, logical(1))))
+      stop("policy_nested(): the two fits must use the same observations in the same order")
+    out <- tryCatch(policy_nested_dwls_impl(fit_H1, fit_H0, states$H0, states$H1),
+                    error = function(e) e)
+    if (inherits(out, "error")) return(unsupported(conditionMessage(out)))
+    return(out)
+  }
   for (fit in list(fit_H1, fit_H0)) {
     if (!identical(toupper(fit$estimator %||% ""), "ML") || !is.null(fit$nclusters))
-      return(unsupported("the inference policy covers single-level complete-data ML so far"))
+      return(unsupported("the inference policy covers single-level complete-data ML and all-ordinal DWLS so far"))
   }
   if (is.null(data) && !identical(fit_H1$raw_data, fit_H0$raw_data))
     stop("policy_nested(): the two fits must use the same observations in the same order")
