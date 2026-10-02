@@ -21,6 +21,7 @@ std::string_view reason_name(InferenceReason reason) noexcept {
     case InferenceReason::NotNested:        return "not_nested";
     case InferenceReason::UnsupportedNesting: return "unsupported_nesting";
     case InferenceReason::BoundaryNesting:  return "boundary_nesting";
+    case InferenceReason::Penalized:        return "penalized";
   }
   return "unknown";
 }
@@ -38,6 +39,12 @@ PolicyFitState policy_fit_state(const estimate::Estimates& estimates) {
     if (native != estimate::FitCheck::Unchecked)
       state.native_converged = native == estimate::FitCheck::Passed;
   }
+  return state;
+}
+
+PolicyFitState policy_fit_state(const estimate::frontier::PenalizedFit& fit) {
+  auto state = policy_fit_state(fit.estimates);
+  state.penalized = fit.weight > 0.0;
   return state;
 }
 
@@ -91,6 +98,11 @@ void set_unavailable(PolicyTest& test, InferenceReason reason, const std::string
 
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state) {
+  if (state.penalized) {
+    auto out = policy_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+    out.verdict_disagreement = verdict_disagreement(state);
+    return out;
+  }
   if (!state.converged) {
     auto out = policy_unavailable(InferenceReason::NotConverged,
                                   "the fit did not pass its convergence verdict");
@@ -148,6 +160,9 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
     set_unavailable(out.lr, reason, detail);
     return out;
   };
+  if (null_state.penalized || alternative_state.penalized) {
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  }
   if (!null_state.converged || !alternative_state.converged) {
     return unavailable(InferenceReason::NotConverged,
                        "a fit did not pass its convergence verdict");

@@ -14,6 +14,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/robust/prepared_ntml.hpp"
 
 namespace magmaan::api {
@@ -27,6 +28,7 @@ enum class InferenceReason {
   NotNested,         // the null is not contained in the alternative
   UnsupportedNesting, // nesting through moments requires an unsupported correspondence
   BoundaryNesting,   // no regular interior nested-test reference
+  Penalized,         // a penalized (barrier) estimate: no validated sampling contract
 };
 
 std::string_view reason_name(InferenceReason reason) noexcept;
@@ -41,9 +43,21 @@ struct PolicyFitState {
   // compatibility preset) decided `converged`; unset when magmaan's check
   // decided or did not run. Inference follows `converged` either way.
   std::optional<bool> native_converged = {};
+  // The estimate maximizes a penalized likelihood with a positive weight.
+  // Its covariance and tests need a penalized-estimating-equation and
+  // sampling-law contract that is not validated, and inference for the
+  // unpenalized estimator does not apply, so every component is unavailable.
+  bool penalized = false;
 };
 
 PolicyFitState policy_fit_state(const estimate::Estimates& estimates);
+// A barrier fit. Weight zero is the unpenalized criterion.
+PolicyFitState policy_fit_state(const estimate::frontier::PenalizedFit& fit);
+
+// Why a penalized estimate has no policy inference; shared by every binding.
+inline constexpr std::string_view penalized_detail =
+    "the estimate maximizes a penalized likelihood (barrier); inference for it is "
+    "not validated, and inference for the unpenalized estimator does not apply";
 
 // The selected acceptance rule and magmaan's own check disagree. Nothing is
 // recomputed for it: callers report the disagreement next to results that

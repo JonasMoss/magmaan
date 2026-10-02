@@ -247,6 +247,7 @@ inference_reuse <- function(context) {
 policy_inference <- function(fit, data = NULL) {
   if (!inherits(fit, "magmaan_fit")) stop("policy_inference(): supply a fitted magmaan model")
   state <- .policy_state(fit)
+  if (state[[4]]) return(policy_inference_impl(NULL, state))
   estimator <- toupper(fit$estimator %||% "")
   if (!identical(estimator, "ML") || !is.null(fit$nclusters)) {
     return(.policy_unavailable("unsupported_model",
@@ -261,10 +262,11 @@ policy_inference <- function(fit, data = NULL) {
 
 # Converged by the selected acceptance rule; a PSD estimate on the cone
 # boundary (inference is computed there under an interior population, and
-# flagged); and magmaan's own check when a compatibility rule decided
-# convergence (NA when magmaan's check decided or did not run). Mirrors
-# api::policy_fit_state(), because inference contexts rebuild estimates
-# without their diagnostics.
+# flagged); magmaan's own check when a compatibility rule decided
+# convergence (NA when magmaan's check decided or did not run); and a
+# penalized (barrier) estimate with a positive weight, for which nothing is
+# computed. Mirrors api::policy_fit_state(), because inference contexts
+# rebuild estimates without their diagnostics.
 .policy_state <- function(fit) {
   rule <- fit$fitting$effective$convergence
   native <- if (is.null(rule) || identical(rule, "newton")) NA else
@@ -272,7 +274,9 @@ policy_inference <- function(fit, data = NULL) {
   c(isTRUE(fit$converged),
     identical(fit$verdict$domain, "psd") &&
       identical(fit$diagnostics$newton_accuracy$covariance_interior, FALSE),
-    native)
+    native,
+    identical(fit$penalty_inference, "not_validated") &&
+      !isTRUE(fit$composition$penalty_weight == 0))
 }
 
 # Mirrors api::verdict_disagreement() for results returned before C++.
@@ -289,6 +293,8 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("policy_nested(): supply two fitted magmaan models")
   states <- list(H0 = .policy_state(fit_H0), H1 = .policy_state(fit_H1))
+  if (states$H0[[4]] || states$H1[[4]])
+    return(policy_nested_impl(NULL, NULL, states$H0, states$H1))
   unsupported <- function(detail) {
     t <- .policy_unavailable("unsupported_model", detail)$score
     list(score = t, lr = t, psd_boundary = FALSE,

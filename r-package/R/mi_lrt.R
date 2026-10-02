@@ -428,16 +428,22 @@ print.magmaan_score_lrt <- function(x, ...) {
                                 caller = route$fitter)
     return(.route_refit_fun(fit)(spec, data))
   }
+  # The refit keeps the anchor's groups in the anchor's order. Grouping by
+  # appearance in `data` would put a group-specific candidate into another
+  # group whenever the anchor declared its labels in a different order.
+  grouped <- nzchar(fit$group_var %||% "")
+  spec <- do.call(model_spec, c(
+    list(syntax = syntax,
+         group = if (grouped) fit$group_var,
+         group_labels = if (grouped) fit$group_labels,
+         group_equal = model$group_equal,
+         group_partial = if (length(partial)) partial else NULL),
+    mo))
   # Replay every recorded fit_model() argument (constraint, penalty, weights,
   # optimizer, fitting options), changing only the model.
   do.call(fit_model, c(
-    list(model = syntax, data = data),
-    .refit_args(fit, c(
-      list(groups = fit$group_var,
-           group_equal = model$group_equal,
-           group_partial = if (length(partial)) partial else NULL),
-      if (!is.null(weight)) list(W = weight),  # continuous WLS augmented refit
-      mo))))
+    list(model = spec, data = data),
+    .refit_args(fit, if (!is.null(weight)) list(W = weight))))  # continuous WLS augmented refit
 }
 
 .lrt_group_data <- function(fit, data) {

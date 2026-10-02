@@ -218,6 +218,24 @@ test_that("equality-release refits replay every fitting argument", {
   }
 })
 
+test_that("likelihood-ratio refits keep the anchor's group order", {
+  d <- lavaan::HolzingerSwineford1939
+  m <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6"
+  declared <- rev(unique(as.character(d$school)))
+  anchor <- fit_model(model_spec(m, group = "school", group_labels = declared), d)
+  expect_identical(anchor$group_labels, declared)
+  # The same groups in the same order, from data whose appearance order is the
+  # declared one: every group-specific candidate must give the same refit.
+  reordered <- d[order(match(as.character(d$school), declared)), ]
+  reference <- fit_model(m, reordered, groups = "school")
+  expect_identical(reference$group_labels, declared)
+  a <- modification_indices_lrt(anchor, d, candidates = "loadings")
+  b <- modification_indices_lrt(reference, reordered, candidates = "loadings")
+  key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
+  expect_setequal(key(a), key(b))
+  expect_equal(a$lrt[order(key(a))], b$lrt[order(key(b))], tolerance = 1e-6)
+})
+
 test_that("case reruns keep the anchor's fitting setup", {
   .fitting_oracle()
   d <- lavaan::HolzingerSwineford1939

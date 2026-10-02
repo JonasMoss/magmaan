@@ -362,6 +362,33 @@ TEST_CASE("policy: the fit state gates every component") {
   CHECK(boundary.score.statistic == interior.score.statistic);
 }
 
+TEST_CASE("policy: a penalized estimate gets no inference, before any other gate") {
+  std::mt19937 rng(12u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 150, Eigen::Vector4d::Zero()));
+  auto p = prepare(build("f =~ x1 + x2 + x3 + x4", false), raw, false);
+  magmaan::estimate::frontier::PenalizedFit barrier;
+  barrier.estimates = p.est;
+  barrier.weight = 0.25;
+  CHECK(api::policy_fit_state(barrier).penalized);
+  // Weight zero is the unpenalized criterion, so its estimate keeps inference.
+  barrier.weight = 0.0;
+  CHECK_FALSE(api::policy_fit_state(barrier).penalized);
+  CHECK_FALSE(api::policy_fit_state(p.est).penalized);
+  // A penalized fit that also failed its verdict reports the penalty: inference
+  // would be unavailable even if it had converged.
+  for (bool converged : {true, false}) {
+    const auto out = api::policy_inference_ml(
+        *p.fit, api::PolicyFitState{.converged = converged, .penalized = true});
+    CHECK(out.covariance_reason == api::InferenceReason::Penalized);
+    CHECK(out.score.reason == api::InferenceReason::Penalized);
+    CHECK(out.lr.reason == api::InferenceReason::Penalized);
+    CHECK(out.covariance.size() == 0);
+    CHECK(api::reason_name(out.lr.reason) == "penalized");
+    CHECK(out.covariance_detail == api::penalized_detail);
+  }
+}
+
 namespace {
 
 std::shared_ptr<ntml::NTMLFit> prepare_on(const std::shared_ptr<ntml::NTMLData>& data,
@@ -424,6 +451,13 @@ TEST_CASE("policy nested tests: gating and nesting") {
   CHECK(api::reason_name(swapped.score.reason) == "not_nested");
   auto failed = api::policy_nested_ml(null, {false, false}, alt, {});
   CHECK(failed.lr.reason == api::InferenceReason::NotConverged);
+  for (bool null_penalized : {true, false}) {
+    const api::PolicyFitState penalized{.penalized = true};
+    auto out = null_penalized ? api::policy_nested_ml(null, penalized, alt, {})
+                              : api::policy_nested_ml(null, {}, alt, penalized);
+    CHECK(out.lr.reason == api::InferenceReason::Penalized);
+    CHECK(out.score.reason == api::InferenceReason::Penalized);
+  }
   auto boundary = api::policy_nested_ml(null, {true, true}, alt, {});
   CHECK(boundary.psd_boundary);
   CHECK(boundary.lr.reason == api::InferenceReason::Available);

@@ -10871,22 +10871,29 @@ Rcpp::List policy_test_list(const magmaan::api::PolicyTest& t) {
 // rebuilds estimates without their convergence diagnostics.
 //
 // The R fit state: converged by the selected rule, a PSD boundary estimate,
-// and magmaan's own check (NA when it decided or did not run).
+// magmaan's own check (NA when it decided or did not run), and a penalized
+// estimate. A penalized fit needs no context: R passes NULL, because nothing
+// is computed for it.
 static magmaan::api::PolicyFitState policy_state_from(const Rcpp::LogicalVector& s) {
   magmaan::api::PolicyFitState out;
   out.converged = s.size() > 0 && s[0] == TRUE;
   out.psd_boundary = s.size() > 1 && s[1] == TRUE;
   if (s.size() > 2 && !Rcpp::LogicalVector::is_na(s[2])) out.native_converged = s[2] == TRUE;
+  out.penalized = s.size() > 3 && s[3] == TRUE;
   return out;
 }
 
 // [[Rcpp::export]]
 Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
-  auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   using magmaan::api::InferenceReason;
   const auto fit_state = policy_state_from(state);
   magmaan::api::PolicyInference out;
-  if (c.estimator != "ML") {
+  if (fit_state.penalized) {
+    out = magmaan::api::policy_unavailable(InferenceReason::Penalized,
+                                           std::string(magmaan::api::penalized_detail));
+  } else if (auto& c = score_bindings::get<score_bindings::Context>(
+                 context, "magmaan_inference_context");
+             c.estimator != "ML") {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the inference policy covers complete-data ML so far");
   } else if (!c.ntml) {
@@ -10915,22 +10922,28 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
 Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
                               Rcpp::LogicalVector null_state,
                               Rcpp::LogicalVector alternative_state) {
-  auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
-  auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
   using magmaan::api::InferenceReason;
   const auto null_fit = policy_state_from(null_state);
   const auto alternative_fit = policy_state_from(alternative_state);
   magmaan::api::PolicyNested out;
-  if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
-    const std::string detail =
-        "nested policy tests cover complete-data ML with random x, affine equality "
-        "constraints and no active bounds";
+  auto unavailable = [&](InferenceReason reason, const std::string& detail) {
     for (auto* t : {&out.score, &out.lr}) {
-      t->reason = InferenceReason::UnsupportedModel;
+      t->reason = reason;
       t->detail = detail;
     }
+  };
+  if (null_fit.penalized || alternative_fit.penalized) {
+    unavailable(InferenceReason::Penalized, std::string(magmaan::api::penalized_detail));
   } else {
-    out = magmaan::api::policy_nested_ml(a.ntml, null_fit, b.ntml, alternative_fit);
+    auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
+    auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
+    if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
+      unavailable(InferenceReason::UnsupportedModel,
+                  "nested policy tests cover complete-data ML with random x, affine equality "
+                  "constraints and no active bounds");
+    } else {
+      out = magmaan::api::policy_nested_ml(a.ntml, null_fit, b.ntml, alternative_fit);
+    }
   }
   out.verdict_disagreement = magmaan::api::verdict_disagreement(null_fit) ||
                              magmaan::api::verdict_disagreement(alternative_fit);

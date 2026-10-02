@@ -34,6 +34,24 @@ test_that("policy_inference() reports estimators outside its scope", {
   expect_equal(uls$lr$reason, "unsupported_model")
 })
 
+test_that("penalized fits get no policy inference, for every estimator", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  for (estimator in c("ML", "FIML", "ULS")) {
+    fit <- fit_model(cfa, d, estimator = estimator, covariance = "barrier")
+    res <- policy_inference(fit)
+    expect_false(res$covariance_available)
+    expect_null(res$covariance)
+    expect_equal(c(res$covariance_reason, res$score$reason, res$lr$reason),
+                 rep("penalized", 3), label = estimator)
+  }
+  barrier <- fit_model(cfa, d, covariance = "barrier")
+  plain <- fit_model(cfa, d)
+  for (nested in list(policy_nested(plain, barrier), policy_nested(barrier, plain))) {
+    expect_equal(c(nested$lr$reason, nested$score$reason), rep("penalized", 2))
+  }
+})
+
 test_that("inference_rows() rebuilds the score statistic and its spectrum", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
