@@ -784,6 +784,13 @@ ordinary-user default.
 
 ### Validation and maintenance
 
+- [x] **M — split FIML implementation and ordinal unit tests (TASK-42).**
+  FIML preparation, curvature, Gamma influence, moments, robust reporting,
+  measures, Stage 1/2, two-stage inference, profiles, fitting and frontier
+  methods now compile separately with private shared declarations. Ordinal
+  unit tests compile by topic with shared test helpers; public headers and
+  numerical bodies are unchanged, and vendors are refreshed.
+
 - [x] **M — split ordinal estimation implementation (TASK-41).** Preparation,
   moments, curvature, fitting, robust/IJ covariance, score tests, fit measures
   and nested tests now compile separately, sharing a private internal header.

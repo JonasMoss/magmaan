@@ -175,7 +175,20 @@ magmaan_add_test_target(magmaan_test_inference inference
   golden/test_stats_golden_test.cpp)
 
 magmaan_add_test_target(magmaan_test_ordinal ordinal
-  unit/ordinal_test.cpp
+  unit/ordinal_test_helpers.cpp
+  unit/ordinal_workspace_test.cpp
+  unit/ordinal_profile_test.cpp
+  unit/ordinal_pair_test.cpp
+  unit/ordinal_gamma_test.cpp
+  unit/ordinal_measures_test.cpp
+  unit/ordinal_ij_test.cpp
+  unit/ordinal_pairwise_test.cpp
+  unit/ordinal_prepare_test.cpp
+  unit/ordinal_reporting_test.cpp
+  unit/ordinal_mixed_test.cpp
+  unit/ordinal_mixed_fit_test.cpp
+  unit/ordinal_huber_test.cpp
+  unit/ordinal_embedding_test.cpp
   golden/ordinal_golden_test.cpp
   golden/parameter_reporting_golden_test.cpp
   golden/textbook_mixed_golden_test.cpp

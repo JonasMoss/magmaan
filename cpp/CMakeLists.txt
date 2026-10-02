@@ -112,7 +112,18 @@ add_library(magmaan STATIC
   src/estimate/nt.cpp
   src/estimate/rbm.cpp
   src/estimate/sam.cpp
-  src/estimate/fiml.cpp
+  src/estimate/fiml_prepare.cpp
+  src/estimate/fiml_curvature.cpp
+  src/estimate/fiml_gamma.cpp
+  src/estimate/fiml_moments.cpp
+  src/estimate/fiml_robust.cpp
+  src/estimate/fiml_measures.cpp
+  src/estimate/fiml_stage1.cpp
+  src/estimate/fiml_stage2.cpp
+  src/estimate/fiml_two_stage.cpp
+  src/estimate/fiml_profile.cpp
+  src/estimate/fiml_fit.cpp
+  src/estimate/fiml_frontier.cpp
   src/estimate/bounds.cpp
   src/estimate/ordinal_prepare.cpp
   src/estimate/ordinal_moments.cpp
