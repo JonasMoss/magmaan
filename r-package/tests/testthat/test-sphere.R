@@ -36,6 +36,9 @@ test_that("sphere ML reproduces the ordinary ML fit", {
   expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
   expect_lt(sph$gauge$pin_residual, 1e-6)
+  expect_identical(sph$gauge$native_audit$status, "passed")
+  expect_true(sph$gauge$native_audit$converged)
+  expect_equal(sph$gauge$native_audit$fmin, sph$gauge$fmin_sphere, tolerance = 1e-10)
 })
 
 test_that("std.lv and multi-group metric invariance round-trip", {
@@ -61,6 +64,8 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
     ord <- fit_model(ernst, dat, estimator = est)
     sph <- frontier_fit_sphere(ernst, dat, estimator = est)
     expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+    expect_identical(sph$gauge$native_audit$status, "passed")
+    expect_identical(sph$gauge$native_audit$newton_accuracy$metric, "sandwich")
   }
   miss <- dat
   miss$x2[seq(3, nrow(miss), by = 7)] <- NA
@@ -69,6 +74,8 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
   sph <- frontier_fit_sphere(ernst, miss, estimator = "FIML")
   expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-4)
+  expect_identical(sph$gauge$native_audit$status, "passed")
+  expect_identical(sph$gauge$native_audit$newton_accuracy$objective, "fiml")
 
   psd <- frontier_fit_ml_psd(ernst, dat, preconditioning = "none")
   sph <- frontier_fit_sphere(ernst, dat, psd = TRUE)
@@ -88,11 +95,39 @@ test_that("a marker at a pole signals a classed condition with the sphere soluti
   expect_s3_class(cond, "magmaan_user_chart_singular")
   expect_true(cond$gauge$units$singular)
   expect_lt(abs(cond$gauge$units$direction_level), 1e-6)
+  expect_identical(cond$gauge$native_audit$status, "passed")
 
   moved <- frontier_reidentify(cond, "f =~ NA*x1 + 1*x2 + x3 + x4")
   expect_true(all(is.finite(moved$theta)))
   expect_error(frontier_reidentify(cond, "f =~ x1 + x2 + x3 + x4"),
                "does not contain")
+})
+
+test_that("an inaccurate driven stop does not claim a chart-singular optimum", {
+  # A large explicit chart tolerance makes translation unavailable at the
+  # prematurely stopped endpoint; it does not make that endpoint an optimum.
+  cond <- tryCatch(frontier_fit_sphere(ernst, ernst_sim(), pole_tol = 2,
+                                      polish = FALSE, control = list(nlopt = list(xtol_rel = 100))),
+                   magmaan_sphere_condition = function(e) e)
+  expect_s3_class(cond, "magmaan_sphere_condition")
+  expect_false(inherits(cond, "magmaan_user_chart_singular"))
+  expect_false(identical(cond$gauge$native_audit$status, "passed"))
+  expect_true(all(is.finite(cond$gauge$sphere_partable$est)))
+})
+
+test_that("an unsupported PSD-face audit does not claim a chart-singular optimum", {
+  lambda <- c(1, 0.8, 0.6, 0.7)
+  # The implied observed covariance is PD, but the unrestricted solution has
+  # a negative first residual variance, giving PSD a strongly active face.
+  S <- 1.2 * outer(lambda, lambda) + diag(c(-0.1, 0.6, 0.7, 0.4))
+  dimnames(S) <- list(paste0("x", 1:4), paste0("x", 1:4))
+  cond <- tryCatch(frontier_fit_sphere("f =~ x1 + x2 + x3 + x4",
+                     list(S = list(S), nobs = 300L), psd = TRUE, pole_tol = 2,
+                     polish = FALSE), magmaan_sphere_condition = function(e) e)
+  expect_s3_class(cond, "magmaan_sphere_audit_unavailable")
+  expect_identical(cond$gauge$native_audit$status, "unchecked")
+  expect_false(inherits(cond, "magmaan_user_chart_singular"))
+  expect_match(cond$gauge$native_audit$detail, "sphere/PSD")
 })
 
 test_that("frontier_reidentify moves a fit between identifications", {

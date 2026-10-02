@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,8 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/frontier/convergence_policy.hpp"
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/gauge.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/expected.hpp"
@@ -81,6 +84,31 @@ struct SphereOptions {
   SphereStart  start = SphereStart::Canonical;
 };
 
+// Evidence at the driven endpoint, before user-chart translation or polish.
+// Newton artifacts use driven coordinates with unit-normalized sphere radii;
+// geometry.tangent_basis removes every radial direction. The objective and
+// curvature exclude the artificial pin. First-order telemetry uses the product
+// Euclidean metric in these coordinates, not the model-Frobenius metric.
+// Unsupported constraint geometry stays unchecked under the Newton policy.
+struct SphereAudit {
+  NewtonAudit computations;
+  FitDiagnostics evidence;
+  std::string detail;
+};
+
+ConvergenceAssessment assess_convergence(
+    const SphereAudit& audit,
+    ConvergencePolicy policy = newton_convergence_policy());
+
+// Reassess an ML endpoint without fitting or translating it. `driven` must
+// come from the same model/sample/metric; reported_value is the UNPINNED
+// per-observation half-discrepancy. Bounds are in the supplied user's chart.
+fit_expected<SphereAudit> audit_ml_sphere(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& sample, const Eigen::VectorXd& driven,
+    Bounds bounds = {}, SphereOptions sphere = {},
+    std::optional<double> reported_value = std::nullopt);
+
 struct SphereReport {
   GaugePlan             plan;
   spec::LatentStructure internal_pt;      // gauge-free partable
@@ -96,6 +124,8 @@ struct SphereReport {
   int                   g_evals = 0;
   double                grad_inf_norm = -1.0;
   optim::TerminalAudit  driven_audit = {};
+  SphereAudit           native_audit;
+  ConvergenceAssessment native_verdict;
   // Whether the driven ML run used the sample-based coordinate scaling of
   // fit_ml (rest coordinates only). Point, gradient and audit above are in
   // unscaled driven coordinates either way.

@@ -18,6 +18,7 @@
 #include "magmaan/parse/op.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/ml_numerics.hpp"
@@ -654,15 +655,202 @@ run_driven(const SphereSetup& s, const optim::ParameterMap& map,
 using Finalizer =
     std::function<fit_expected<Estimates>(const Eigen::VectorXd& theta_user)>;
 
+using DerivativeCollector = std::function<NewtonDerivatives(const Eigen::VectorXd&)>;
+
+// Audit the unpinned model on the product of unit spheres and affine rest
+// coordinates. Normalizing beta changes only its unused radius, not theta.
+SphereAudit collect_sphere_audit(
+    const SphereSetup& s, const optim::ScalarProblem& objective,
+    const Eigen::VectorXd& driven, const Bounds& bounds,
+    std::optional<double> reported, const DerivativeCollector& derivatives = {},
+    StationarityDomain domain = StationarityDomain::Ambient,
+    bool covariance_interior = false) {
+  SphereAudit out;
+  auto& evidence = out.evidence;
+  evidence.stationarity_domain = domain;
+  evidence.objective.checked = true;
+  evidence.objective.reported_available = reported.has_value();
+  if (reported) evidence.objective.reported = *reported;
+  auto& geometry = evidence.geometric_stationarity;
+  geometry.feasibility_checked = true;
+  auto& audit = out.computations;
+  audit.geometry.domain = domain;
+  audit.geometry.covariance_interior = covariance_interior;
+  Eigen::VectorXd u = driven;
+  bool valid = u.size() == s.n_u && u.allFinite();
+  for (const auto& um : s.units) {
+    if (!valid) break;
+    const double radius = u.segment(um.offset, um.dim).norm();
+    valid = std::isfinite(radius) && radius > 0.0;
+    if (valid) u.segment(um.offset, um.dim) /= radius;
+  }
+  if (!valid) {
+    out.detail = "nonfinite driven point or zero sphere direction";
+    return out;
+  }
+  const Eigen::VectorXd theta = expand_u(s, u);
+  Eigen::VectorXd gradient;
+  const double f = objective.f(theta, gradient);
+  evidence.objective.recomputed = f;
+  evidence.objective.finite = theta.allFinite() && std::isfinite(f);
+  const double consistency_tol = 1e-6;
+  evidence.objective.consistency_tolerance = reported
+      ? consistency_tol * (1.0 + std::abs(*reported)) : kNaN;
+  evidence.objective.consistent = reported && evidence.objective.finite &&
+      std::isfinite(*reported) && std::abs(f - *reported) <= evidence.objective.consistency_tolerance;
+
+  bool feasible = theta.allFinite();
+  bool active_box = false;
+  if (!bounds.empty()) {
+    for (Eigen::Index k = 0; k < u.size(); ++k) {
+      feasible = feasible && u(k) >= bounds.lower(k) - 1e-8 &&
+                            u(k) <= bounds.upper(k) + 1e-8;
+      active_box = active_box || (std::isfinite(bounds.lower(k)) &&
+          u(k) <= bounds.lower(k) + 1e-8) || (std::isfinite(bounds.upper(k)) &&
+          u(k) >= bounds.upper(k) - 1e-8);
+    }
+  }
+  if (s.nl_int.active()) {
+    const auto h = s.nl_int.h(theta);
+    feasible = feasible && h.allFinite() && h.cwiseAbs().maxCoeff() <= 1e-6;
+  }
+  geometry.ambient_feasible = feasible;
+  geometry.feasible = domain == StationarityDomain::Ambient && feasible;
+  // PSD feasibility needs the actual constrained endpoint, supplied separately
+  // by its fitter; an ambient audit cannot choose a domain by its residual.
+
+  Eigen::MatrixXd tangent = Eigen::MatrixXd::Zero(
+      s.n_u, s.n_u - static_cast<Eigen::Index>(s.units.size()));
+  if (s.n_rest) tangent.topLeftCorner(s.n_rest, s.n_rest).setIdentity();
+  Eigen::Index column = s.n_rest;
+  for (const auto& um : s.units) {
+    const Eigen::VectorXd beta = u.segment(um.offset, um.dim);
+    Eigen::HouseholderQR<Eigen::MatrixXd> qr(beta);
+    const Eigen::MatrixXd orthogonal = qr.householderQ();
+    tangent.block(um.offset, column, um.dim, um.dim - 1) =
+        orthogonal.rightCols(um.dim - 1);
+    column += um.dim - 1;
+  }
+  const Eigen::MatrixXd jacobian = jacobian_u(s, u);
+  geometry.checked = true;
+  geometry.gradient_finite = gradient.size() == theta.size() && gradient.allFinite();
+  if (geometry.gradient_finite && !s.nl_int.active() &&
+      (domain == StationarityDomain::Ambient || covariance_interior)) {
+    Eigen::VectorXd projected = jacobian.transpose() * gradient;
+    if (!bounds.empty()) {
+      for (Eigen::Index k = 0; k < u.size(); ++k) {
+        if ((u(k) <= bounds.lower(k) + 1e-8 && projected(k) > 0) ||
+            (u(k) >= bounds.upper(k) - 1e-8 && projected(k) < 0)) projected(k) = 0;
+      }
+    }
+    geometry.ambient_projection_converged = true;
+    geometry.ambient_residual_l2 = projected.norm();
+    geometry.ambient_residual_inf = projected.size() ? projected.cwiseAbs().maxCoeff() : 0.0;
+    geometry.ambient_stationary = projected.norm() <= geometry.stationarity_tol;
+    if (domain == StationarityDomain::Psd) {
+      geometry.cone_projection_converged = true;
+      geometry.cone_residual_l2 = geometry.ambient_residual_l2;
+      geometry.cone_residual_inf = geometry.ambient_residual_inf;
+    }
+  }
+  audit.derivatives.theta = u;
+  audit.derivatives.objective = f;
+  audit.geometry.equality_basis = Eigen::MatrixXd::Identity(s.n_u, s.n_u);
+  audit.geometry.tangent_basis = tangent;
+  audit.geometry.status = NewtonAccuracyStatus::Unsupported;
+  audit.solution.status = NewtonAccuracyStatus::Unsupported;
+  if (!derivatives || s.nl_int.active() || active_box ||
+      (domain == StationarityDomain::Psd && !covariance_interior)) {
+    out.detail = domain == StationarityDomain::Psd && !covariance_interior
+        ? "joint sphere/PSD curvature is not implemented"
+        : (s.nl_int.active() ? "nonlinear equality Lagrangian curvature is not implemented"
+        : (active_box ? "active box/sphere Newton correction is not implemented"
+        : "native curvature adapter is not implemented for this estimator"));
+  } else if (feasible && evidence.objective.finite && geometry.gradient_finite) {
+    auto full = derivatives(theta);
+    audit.derivatives = full;
+    audit.derivatives.theta = u;
+    // Every retained derivative must index the retained driven point, even
+    // when the original adapter could collect a gradient but no curvature.
+    audit.derivatives.gradient.resize(0);
+    audit.derivatives.hessian.resize(0, 0);
+    audit.derivatives.metric.resize(0, 0);
+    audit.derivatives.whitened_jacobian.resize(0, 0);
+    if (full.gradient.size() == theta.size())
+      audit.derivatives.gradient = jacobian.transpose() * full.gradient;
+    if (full.whitened_jacobian.cols() == theta.size())
+      audit.derivatives.whitened_jacobian = full.whitened_jacobian * jacobian;
+    if (full.status == NewtonAccuracyStatus::Available) {
+      audit.derivatives.hessian = jacobian.transpose() * full.hessian * jacobian;
+      // Full chain rule for theta(beta) = D Q beta / ||beta||. Omitting
+      // this term would give Gauss-Newton-like curvature away from stationarity.
+      for (const auto& um : s.units) {
+        Eigen::VectorXd loading_gradient = Eigen::VectorXd::Zero(um.D.size());
+        for (const auto& member : um.params)
+          for (std::size_t j = 0; j < member.size(); ++j)
+            if (member[j] >= 0) loading_gradient(static_cast<Eigen::Index>(j)) += full.gradient(member[j]);
+        const Eigen::VectorXd q = um.Q.transpose() * um.D.cwiseProduct(loading_gradient);
+        const Eigen::VectorXd beta = u.segment(um.offset, um.dim);
+        const double radial = beta.dot(q);
+        audit.derivatives.hessian.block(um.offset, um.offset, um.dim, um.dim) +=
+            -q * beta.transpose() - beta * q.transpose() -
+            radial * Eigen::MatrixXd::Identity(um.dim, um.dim) +
+            3.0 * radial * beta * beta.transpose();
+      }
+      if (full.metric_kind == NewtonMetricKind::Sandwich)
+        audit.derivatives.metric = jacobian.transpose() * full.metric * jacobian;
+      auto& g = audit.geometry;
+      g.status = NewtonAccuracyStatus::Available;
+      g.reduced_gradient = tangent.transpose() * audit.derivatives.gradient;
+      g.reduced_hessian = tangent.transpose() * audit.derivatives.hessian * tangent;
+      audit.system = prepare_newton_system(g.reduced_hessian);
+      audit.solution = solve_newton_system(audit.system, g.reduced_gradient);
+      if (full.metric_kind == NewtonMetricKind::Sandwich &&
+          audit.solution.status == NewtonAccuracyStatus::Available) {
+        g.reduced_metric = tangent.transpose() * audit.derivatives.metric * tangent;
+        audit.metric_system = prepare_newton_system(g.reduced_metric);
+        const Eigen::VectorXd correction_score = g.reduced_hessian * audit.solution.step;
+        const auto metric_solution = solve_newton_system(audit.metric_system, correction_score);
+        audit.solution.status = metric_solution.status;
+        audit.solution.distance = metric_solution.distance;
+        audit.solution.condition = std::max(audit.solution.condition, metric_solution.condition);
+        audit.solution.solve_residual = std::max(audit.solution.solve_residual, metric_solution.solve_residual);
+      }
+    } else {
+      audit.solution.status = full.status;
+      out.detail = full.detail.empty() ? "original-objective derivatives unavailable" : full.detail;
+    }
+  } else {
+    audit.solution.status = NewtonAccuracyStatus::Unavailable;
+    out.detail = "point, objective, gradient or feasibility check failed";
+  }
+  audit.diagnostics = assess_newton_accuracy(audit);
+  evidence.newton_accuracy = audit.diagnostics;
+  return out;
+}
+
+double unpinned_reported_value(const SphereSetup& s, const optim::OptimResult& r) {
+  double pin = 0;
+  for (const auto& um : s.units) {
+    const double residual = r.x.segment(um.offset, um.dim).squaredNorm() - 1.0;
+    pin += 0.5 * s.pin_scale * s.pin_scale * residual * residual;
+  }
+  return r.fmin - pin;
+}
+
 // Translate the driven solution into the user's chart and finalize there.
 fit_expected<SphereFit>
 finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
        const optim::OptimResult& r, const optim::ScalarProblem& internal_obj,
        const Finalizer& finalize, const Finalizer& polish,
-       const SphereOptions& sopts, const char* who) {
+       const SphereOptions& sopts, const char* who, SphereAudit native_audit) {
   const double pole_tol = sopts.pole_tol;
   SphereFit out;
   auto& rep_out = out.report;
+  rep_out.native_audit = std::move(native_audit);
+  auto policy = newton_convergence_policy();
+  policy.require_objective_consistency = true;
+  rep_out.native_verdict = assess_convergence(rep_out.native_audit, policy);
   rep_out.plan = s->plan;
   rep_out.internal_pt = s->pt_int;
   rep_out.driven = r.x;
@@ -736,6 +924,41 @@ finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
 
 }  // namespace
 
+ConvergenceAssessment assess_convergence(const SphereAudit& audit, ConvergencePolicy policy) {
+  auto evidence = audit.evidence;
+  evidence.newton_accuracy = assess_newton_accuracy(audit.computations, policy.newton);
+  auto assessment = assess_convergence(evidence, policy);
+  if (assessment.newton.status == FitCheck::Unchecked && !audit.detail.empty())
+    assessment.newton.reason = audit.detail;
+  return assessment;
+}
+
+fit_expected<SphereAudit> audit_ml_sphere(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const SampleStats& sample, const Eigen::VectorXd& driven,
+    Bounds bounds, SphereOptions sphere, std::optional<double> reported) {
+  constexpr const char* who = "audit_ml_sphere";
+  if (bounds.lower.size() != bounds.upper.size() || (!bounds.empty() && (bounds.lower.size() != pt.n_free() ||
+      bounds.upper.size() != pt.n_free() || bounds.lower.array().isNaN().any() ||
+      bounds.upper.array().isNaN().any() || (bounds.lower.array() > bounds.upper.array()).any())))
+    return std::unexpected(sphere_err(who, "invalid user-chart bounds"));
+  auto s = build_setup(pt, rep, sample, bounds, sphere, who);
+  if (!s) return std::unexpected(s.error());
+  if (driven.size() != (*s)->n_u)
+    return std::unexpected(sphere_err(who, "driven size does not match the sphere map"));
+  auto ev = model::ModelEvaluator::build((*s)->pt_int, rep);
+  if (!ev) return std::unexpected(sphere_err(who, ev.error().detail));
+  auto objective = ml_objective(*ev, sample);
+  if (!objective) return std::unexpected(objective.error());
+  auto scratch = driven;
+  auto ub = driven_bounds(**s, bounds, scratch, who);
+  if (!ub) return std::unexpected(ub.error());
+  return collect_sphere_audit(**s, *objective, driven, *ub, reported,
+      [&](const Eigen::VectorXd& theta) {
+        return evaluate_newton_ml((*s)->pt_int, rep, sample, theta);
+      });
+}
+
 fit_expected<SphereFit>
 fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
               const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -771,7 +994,11 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer polish = [&](const Eigen::VectorXd& theta) {
     return fit_ml(pt_user, rep, samp, theta, bounds, backend, user_opts);
   };
-  auto out = finish(*s, x0, *r, *obj, finalize, polish, sphere, who);
+  auto audit = collect_sphere_audit(**s, *obj, r->x, *ub, unpinned_reported_value(**s, *r),
+      [&](const Eigen::VectorXd& theta) {
+        return evaluate_newton_ml((*s)->pt_int, rep, samp, theta);
+      });
+  auto out = finish(*s, x0, *r, *obj, finalize, polish, sphere, who, std::move(audit));
   if (out) out->report.driven_scaled = scale.size() > 0;
   return out;
 }
@@ -876,7 +1103,11 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
     return gls ? fit_gls(pt_user, rep, samp, theta, bounds, backend, opts)
                : fit_gmm(pt_user, rep, samp, theta, weight, bounds, backend, opts);
   };
-  return finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who);
+  auto audit = collect_sphere_audit(**s, internal_obj, r->x, *ub,
+      unpinned_reported_value(**s, *r), [&](const Eigen::VectorXd& theta) {
+        return evaluate_newton_moment_quadratic(*ev, samp, theta, weight);
+      });
+  return finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who, std::move(audit));
 }
 
 }  // namespace
@@ -968,7 +1199,26 @@ fit_fiml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer polish = [&](const Eigen::VectorXd& theta) {
     return fit_fiml(setup.pt_user, rep, raw, theta, fiml::FIML{}, backend, opts);
   };
-  return finish(*s, x0, *r, obj, finalize, polish, sphere, who);
+  const fiml::FIMLPack pack{*cache, *start_samp};
+  auto audit = collect_sphere_audit(**s, obj, r->x, {}, unpinned_reported_value(**s, *r),
+      [&](const Eigen::VectorXd& theta) {
+        NewtonDerivatives d;
+        d.theta = theta;
+        d.n_obs = static_cast<double>(cache->n_total);
+        d.native_to_total = d.n_obs;
+        d.objective_kind = NewtonObjectiveKind::Fiml;
+        d.curvature_kind = NewtonCurvatureKind::AnalyticObserved;
+        d.objective = obj.f(theta, d.gradient);
+        d.gradient *= d.n_obs;
+        Estimates at; at.theta = theta;
+        auto information = fiml::fiml_observed_information(setup.pt_int, rep, raw, at, pack);
+        if (information && std::isfinite(d.objective) && d.gradient.allFinite()) {
+          d.hessian = std::move(*information);
+          d.status = d.hessian.allFinite() ? NewtonAccuracyStatus::Available : NewtonAccuracyStatus::Unavailable;
+        } else d.detail = information ? "nonfinite FIML point or gradient" : information.error().detail;
+        return d;
+      });
+  return finish(*s, x0, *r, obj, finalize, polish, sphere, who, std::move(audit));
 }
 
 namespace {
@@ -1128,22 +1378,12 @@ fit_ml_psd_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
 
   // Report the terminal point in driven sphere coordinates as well.
   optim::OptimResult r;
-  r.x = Eigen::VectorXd::Zero(setup.n_u);
-  {
-    const Eigen::VectorXd& th = internal->theta;
-    if (setup.n_rest > 0) {
-      const Eigen::VectorXd alpha = setup.con_int.contract(th);
-      for (Eigen::Index k = 0; k < setup.n_rest; ++k)
-        r.x(k) = alpha(setup.rest_cols[idx(static_cast<std::int32_t>(k))]);
-    }
-    for (const auto& um : setup.units) {
-      const auto& p0 = um.params.front();
-      Eigen::VectorXd lam = Eigen::VectorXd::Zero(um.D.size());
-      for (std::size_t j = 0; j < p0.size(); ++j)
-        if (p0[j] >= 0) lam(static_cast<Eigen::Index>(j)) = th(p0[j]);
-      r.x.segment(um.offset, um.dim) = um.Q.transpose() * lam.cwiseQuotient(um.D);
-    }
-  }
+  // Normalize the loading radius by a full gauge rescaling, including latent
+  // variances/regressions. Normalizing just the loadings would change Sigma
+  // when the constrained solver leaves a small unit-norm residual.
+  auto driven = start_u_from_rows(setup, row_values(setup.pt_int, internal->theta), who);
+  if (!driven) return std::unexpected(driven.error());
+  r.x = std::move(*driven);
   r.fmin = internal->fmin;
   r.iterations = internal->iterations;
   r.f_evals = internal->f_evals;
@@ -1180,7 +1420,25 @@ fit_ml_psd_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
   Finalizer polish = [&](const Eigen::VectorXd& theta) {
     return fit_ml_psd(setup.pt_user, rep, samp, theta, backend, opts, psd_opts);
   };
-  auto out = finish(*s, x0, r, *obj_int, finalize, polish, sphere, who);
+  const auto& psd_geometry = internal->diagnostics.geometric_stationarity;
+  const bool covariance_interior = psd_geometry.feasibility_checked &&
+      psd_geometry.feasible && psd_geometry.covariance_nullity == 0;
+  auto audit = collect_sphere_audit(setup, *obj_int, r.x, {}, r.fmin,
+      [&](const Eigen::VectorXd& theta) {
+        return evaluate_newton_ml(setup.pt_int, rep, samp, theta);
+      }, StationarityDomain::Psd, covariance_interior);
+  auto& geometry = audit.evidence.geometric_stationarity;
+  geometry.feasibility_checked = internal->diagnostics.geometric_stationarity.feasibility_checked;
+  geometry.feasible = internal->diagnostics.geometric_stationarity.feasible;
+  for (const auto& um : setup.units) {
+    Eigen::VectorXd loading = Eigen::VectorXd::Zero(um.D.size());
+    const auto& params = um.params.front();
+    for (std::size_t j = 0; j < params.size(); ++j)
+      if (params[j] >= 0) loading(static_cast<Eigen::Index>(j)) = internal->theta(params[j]);
+    geometry.feasible = geometry.feasible &&
+        std::abs(loading.cwiseQuotient(um.D).norm() - 1.0) <= 1e-6;
+  }
+  auto out = finish(*s, x0, r, *obj_int, finalize, polish, sphere, who, std::move(audit));
   if (out) {
     // The sphere is an equality constraint here, not a pin: report its
     // residual in the pin slot.

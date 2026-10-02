@@ -301,6 +301,21 @@ required versus optional checks, objective mismatch, feasibility, unsupported
 bounds, nonpositive curvature, guard reassessment without callback evaluations,
 ambient versus PSD domains, LS artifact composition, and fit/post-fit ML parity.
 
+## Sphere-native endpoint audit
+
+Sphere frontier fits additionally retain an audit of the driven endpoint before
+translation or polish (`gauge$native_audit`, C++ `SphereAudit`). Its objective
+excludes the radial pin, its analytic chain rule includes loading-normalization
+curvature, and its Newton solve removes radial directions. ML/FIML use observed
+information, continuous moment-quadratic fits use their sandwich metric, and
+PSD interiors use the sphere tangent geometry. Singular PSD faces, active boxes
+and additional nonlinear equalities report unchecked until their joint geometry
+is supported. The requested-chart fit keeps its own authoritative verdict:
+polish can move the point, so that verdict and the driven-endpoint assessment
+must remain separate. A failed or unchecked native audit cannot support a
+`magmaan_user_chart_singular` optimum claim. See the
+[sphere contract](../architecture/roadmap.md).
+
 ## Two-stage convergence composition
 
 `estimate/frontier/ml2s_audit.hpp` provides `audit_saturated_endpoint`,

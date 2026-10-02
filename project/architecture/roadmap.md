@@ -1079,7 +1079,8 @@ polish disabled. Endpoints are cross-checked without refitting in a
 strongest-indicator marker chart using the existing Newton diagnostic. Full
 sphere coverage, first-order/norm checks, PSD admissibility where applicable,
 and an explicitly heuristic extent screen define candidate eligibility.
-A sphere-native curvature assessment remains missing. Repeated best-observed
+A sphere-native curvature assessment was missing in that pilot; the current
+implementation is described below. Repeated best-observed
 candidates occur on 46 ML and 59 PSD problems; nine ML problems have no screened
 reference. One has a screened lavaan point below all the original sphere
 attempts; both sphere backends recover it when started there. This confirms a
@@ -1229,7 +1230,7 @@ On the Ernst N = 10 and 20 draws, PSD-ML has several optima on different
 boundary faces in 28 to 47% of draws. There, one canonical start misses the
 best optimum in 6.5 to 16.5% of draws (the marker route in 11 to 24%). Global
 optimality is a separate, later question. Evidence for promoting the sphere
-judges convergence to a certified local optimum. `reidentify` translates any
+judges declared local numerical checks and recovery separately. `reidentify` translates any
 fit between identifications of the same model (marker on any indicator, std.lv,
 effect coding) and refuses when the target partable describes another model.
 The `sphere_route` and `sphere_route_parity` test executables compile the
@@ -1256,6 +1257,31 @@ frontier route are single-group. Out of
 scope for now: two-level, SNLLS, ordinal, composites, partial invariance via
 nested spheres, the PSD LS/FIML siblings, and Wald inference when the user
 chart is singular.
+
+Sphere-native endpoint auditing (2026-10-02) now runs before user-chart
+translation or polish. `SphereReport::native_audit` owns the unpinned objective,
+normalized driven point, total derivatives, sphere tangent basis and reduced
+Newton artifacts; `native_verdict` assesses finite objective, consistency,
+feasibility and Newton accuracy independently of backend termination. ML and
+FIML use analytic observed information; continuous GMM/ULS/WLS/GLS use their
+exact Hessian and normal-theory sandwich metric. The loading normalization's
+second derivatives enter the Hessian, and radial pin curvature is excluded.
+`audit_ml_sphere` recomputes this evidence without fitting or translating;
+`assess_convergence(SphereAudit, policy)` reuses the retained computation.
+First-order telemetry uses the product Euclidean metric of normalized driven
+coordinates, not the common full-model Frobenius metric.
+
+PSD interior endpoints use the sphere tangent audit, with feasibility taken
+from the actual constrained endpoint. Converting that endpoint to unit radii
+rescales all gauge-dependent parameters to preserve its implied covariance.
+Joint sphere/PSD curvature at singular faces, active boxes and additional
+nonlinear equalities remain explicitly unchecked. R exposes `gauge$native_audit`
+separately from the verdict on the translated/polished fit. An unavailable
+user chart signals `magmaan_user_chart_singular` only after a passing native
+audit; otherwise `magmaan_sphere_numerical_failure` or
+`magmaan_sphere_audit_unavailable` retains the endpoint and evidence. All share
+`magmaan_sphere_condition`. These are numerical assessments, not existence,
+identification or global-optimality certificates; chart thresholds are unchanged.
 
 Fit finalization supplies the authoritative common numerical verdict through
 `estimate::fit_verdict(estimates)`, independently of optimizer termination or

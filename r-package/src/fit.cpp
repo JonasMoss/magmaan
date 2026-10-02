@@ -2798,6 +2798,39 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
   Rcpp::DataFrame sphere_partable =
       partable_df(report.internal_pt, ctx.names, internal, nullptr);
 
+  const auto& a = report.native_audit;
+  const auto& v = report.native_verdict;
+  auto check = [](const magmaan::estimate::frontier::ConvergenceCheck& c) {
+    return Rcpp::List::create(Rcpp::_["status"] = fit_check_to_r(c.status),
+        Rcpp::_["required"] = c.required, Rcpp::_["reason"] = c.reason);
+  };
+  Rcpp::LogicalVector native_converged(1);
+  native_converged[0] = v.status == magmaan::estimate::FitCheck::Unchecked
+      ? NA_LOGICAL : v.status == magmaan::estimate::FitCheck::Passed;
+  const auto& computations = a.computations;
+  Rcpp::List native_audit = Rcpp::List::create(
+      Rcpp::_["status"] = fit_check_to_r(v.status),
+      Rcpp::_["converged"] = native_converged,
+      Rcpp::_["domain"] = v.domain == magmaan::estimate::StationarityDomain::Psd ? "psd" : "ambient",
+      Rcpp::_["first_order_metric"] = "sphere_product_euclidean",
+      Rcpp::_["objective"] = check(v.objective),
+      Rcpp::_["objective_consistency"] = check(v.objective_consistency),
+      Rcpp::_["feasibility"] = check(v.feasibility),
+      Rcpp::_["first_order"] = check(v.first_order),
+      Rcpp::_["newton"] = check(v.newton),
+      Rcpp::_["fmin"] = a.evidence.objective.recomputed,
+      Rcpp::_["reported_fmin"] = a.evidence.objective.reported,
+      Rcpp::_["first_order_residual"] = a.evidence.geometric_stationarity.ambient_residual_l2,
+      Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(a.evidence.newton_accuracy),
+      Rcpp::_["point"] = Rcpp::wrap(computations.derivatives.theta),
+      Rcpp::_["gradient"] = Rcpp::wrap(computations.derivatives.gradient),
+      Rcpp::_["hessian"] = Rcpp::wrap(computations.derivatives.hessian),
+      Rcpp::_["tangent_basis"] = Rcpp::wrap(computations.geometry.tangent_basis),
+      Rcpp::_["reduced_gradient"] = Rcpp::wrap(computations.geometry.reduced_gradient),
+      Rcpp::_["reduced_hessian"] = Rcpp::wrap(computations.geometry.reduced_hessian),
+      Rcpp::_["detail"] = a.detail);
+  native_audit["n_obs"] = computations.derivatives.n_obs;
+
   return Rcpp::List::create(
       Rcpp::_["chart"] = "sphere",
       Rcpp::_["metric"] = metric,
@@ -2812,6 +2845,7 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
           Rcpp::_["linear_constraints"] = report.residual.linear_constraints),
       Rcpp::_["optimizer_status"] = optim_status_to_r(report.optimizer_status),
       Rcpp::_["driven_stationary"] = report.driven_audit.stationary,
+      Rcpp::_["native_audit"] = native_audit,
       Rcpp::_["iterations"] = report.iterations,
       Rcpp::_["start"] = report.start_used,
       Rcpp::_["driven_scaled"] = report.driven_scaled,

@@ -170,11 +170,12 @@ must be opt-in and seeded; preserve requested markers. No blanket defaults grid.
 
 **Gap:** ordinary-user promotion, broader gauge theory, automatic failure-cause
 classification, chart/start attribution and new estimator/constraint charts.
-Deferred from the active queue on 2026-10-02: distinguishing requested-chart
-failures from inaccurate sphere stops. That work would validate a general
-chart gate with the retained weak-marker pole witness and require a
-clean/audited driven stop before `magmaan_user_chart_singular`, checking poles,
-finite extremes, runaways and numerical failures across units; alternative
+The native endpoint audit and remaining joint constraint geometry are
+[active high-priority work after 0.2.0](todo.md#optimization-and-convergence).
+The R condition now requires a passing native audit before
+`magmaan_user_chart_singular`; validating a general chart rejection criterion
+still needs the retained weak-marker pole witness, finite extremes and
+numerical failures across units. Alternative
 charts remain diagnostics, and failed multistarts do not establish
 nonexistence. Evidence: [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 **Available:** explicit frontier fitting/reidentification and retained chart

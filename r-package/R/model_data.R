@@ -1485,8 +1485,10 @@ frontier_fit_ml_multiinfo <- function(
 # and why, and the sphere-chart solution. When the model's chart does not
 # contain the fitted point (a marker loading of zero, or a non-positive
 # variance for a std.lv latent), the call signals a
-# `magmaan_user_chart_singular` error whose `gauge` field carries the sphere
-# solution; frontier_reidentify() re-expresses it under another
+# `magmaan_user_chart_singular` error only after a passing native audit.
+# Failed or unchecked endpoints signal a distinct `magmaan_sphere_condition`.
+# Their `gauge` field retains the point and audit; frontier_reidentify()
+# re-expresses it under another
 # identification. `psd = TRUE` composes the sphere with the covariance-honest
 # domain of frontier_fit_ml_psd(). With `polish = TRUE` (default) the ordinary
 # fit is restarted from the translated sphere solution, so the reported
@@ -1574,6 +1576,20 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
 }
 
 .stop_user_chart_singular <- function(gauge, spec, caller) {
+  audit <- gauge$native_audit
+  if (!identical(audit$status, "passed")) {
+    failed <- identical(audit$status, "failed")
+    msg <- paste0(caller, "(): the requested chart cannot report the returned ",
+                  "endpoint, and the sphere-native audit ",
+                  if (failed) "failed" else "is unchecked",
+                  ". This does not establish a chart-singular optimum. ",
+                  "The endpoint and audit are in the condition's `gauge` field.")
+    cond <- structure(
+      class = c(if (failed) "magmaan_sphere_numerical_failure" else "magmaan_sphere_audit_unavailable",
+                "magmaan_sphere_condition", "error", "condition"),
+      list(message = msg, call = NULL, gauge = gauge, model = spec))
+    stop(cond)
+  }
   units <- gauge$units
   bad <- unique(units$latent[units$singular])
   msg <- paste0(
@@ -1581,11 +1597,12 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
     "for latent(s) ", paste(bad, collapse = ", "), ": a marker loading is ",
     "numerically zero or a fixed-variance latent has a numerically zero or ",
     "negative variance, ",
-    "so estimates in this parameterization do not exist. The sphere-chart ",
-    "solution is in the condition's `gauge` field; frontier_reidentify() ",
+    "so the endpoint cannot be reported reliably in this parameterization ",
+    "at the requested chart tolerance. The audited sphere endpoint ",
+    "is in the condition's `gauge` field; frontier_reidentify() ",
     "re-expresses it under another identification.")
   cond <- structure(
-    class = c("magmaan_user_chart_singular", "error", "condition"),
+    class = c("magmaan_user_chart_singular", "magmaan_sphere_condition", "error", "condition"),
     list(message = msg, call = NULL, gauge = gauge, model = spec))
   stop(cond)
 }
@@ -1597,7 +1614,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
 # (for example `std_lv = TRUE`). Errors when the target identification does
 # not contain the point, or when `model` describes a different model.
 frontier_reidentify <- function(fit, model, ..., pole_tol = 1e-6) {
-  from <- if (inherits(fit, "magmaan_user_chart_singular")) {
+  from <- if (inherits(fit, "magmaan_sphere_condition") || inherits(fit, "magmaan_user_chart_singular")) {
     fit$gauge$sphere_partable
   } else if (is.data.frame(fit)) {
     fit

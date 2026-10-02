@@ -55,7 +55,9 @@ label (the C++ project version) is retired.
 | **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI |
 | **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
 
-Sphere-chart failure handling is deferred to the
+Sphere-chart development remains outside 0.2.0; completing native constraint
+audits and chart failure handling is high-priority
+[0.3.0 work](#optimization-and-convergence). Broader promotion stays in the
 [trigger register](speculative.md#sphere-chart-development). Existing PSD and
 barrier entry points, inference refusals and regression gates are unchanged in
 0.2.0; PSD inference keeps its current boundary contract. No milestone label
@@ -737,6 +739,19 @@ Assigned 2026-10-02. Until these land, simulations that need dependable
 fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Optimization and convergence
+
+- [ ] **M — complete sphere-native constraint geometry (high priority after
+  0.2.0).** Native unpinned audits now cover ML, FIML, continuous moment-quadratic
+  fitting and PSD interiors before chart translation. Complete joint
+  sphere/PSD curvature at singular faces and validate the requested-chart
+  rejection criterion independently of endpoint accuracy. Active boxes and
+  additional nonlinear equalities currently report unchecked; extend them
+  only with the required feasible Newton/Lagrangian geometry. **Check:**
+  retained pole, finite-improper, boundary and inaccurate-stop witnesses across
+  units and identifications; derivative/retraction checks and explicit
+  failed/unchecked R conditions. Global search and nonattainment classification
+  are separate work. See [sphere implementation](../architecture/roadmap.md)
+  and [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
