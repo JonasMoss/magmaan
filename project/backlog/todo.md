@@ -275,6 +275,24 @@ ordinary API exposes barrier fitting experimentally as
   [scores](../../r-package/examples/scores.R) and
   [inference reuse](../../r-package/examples/inference_reuse.R).
 
+- [ ] **M — move the ML nested policy to observed geometry.** Adopted
+  2026-10-02 in the [interface vision](../design/r-interface-vision.md):
+  expected information gives an inconsistent reference law when the larger
+  model is misspecified, the usual invariance case. In `api::policy_nested_ml`,
+  the score uses observed sensitivity at the restricted fit with the expected
+  metric (the FIML nested geometry), and the Satorra-2000 spectrum uses
+  observed information at the larger model; both statistics are unchanged.
+  The global ML test keeps expected information. No ordinary option: lavaan's
+  expected-information compositions stay in the lab with their parity gates.
+  **Check:** finite-difference and identity gates for the observed
+  projections, unchanged statistics, PSD-boundary and fixed/dropped-path
+  embeddings, and a component comparison with lavaan fits using
+  `information = "observed"`. Exact equality is not assumed: lavaan keeps its
+  normal-theory weight in the Satorra-2000 projector, and `lavTestScore()`
+  uses observed information for the metric too. One frozen calibration run
+  with correct and misspecified larger models (expected versus observed; size
+  and size-adjusted power) precedes release.
+
 - [ ] **M — compose the FIML policy.** The primitives exist and are mostly
   lavaan gated: the observed-information sandwich with casewise scores (the
   MLR bread and meat), global and nested score through

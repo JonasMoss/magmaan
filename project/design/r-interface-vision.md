@@ -592,7 +592,9 @@ report the analogous score and likelihood-ratio (or fit-function difference)
 tests with SB and PEBA4. The comparison checks that data, estimator and nesting
 agree.
 
-Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26):
+Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26; the
+score and LR bullets below describe the current implementation, which uses
+expected information):
 
 - **Nesting.** The restricted model is the other model plus equality
   constraints on the same parameters (shared labels, or `b == 0` on a labeled
@@ -612,12 +614,33 @@ Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26):
   where the restricted fit is not stationary, as at a PSD boundary. It mirrors
   the global score test (_archive/complete-ml-global-test-geometry); a calibration study of its own is
   still missing (backlog).
+- **Adopted change (2026-10-02): observed geometry for nested tests.** A
+  nested comparison is usually made with a misspecified larger model (the
+  invariance case). There the true Hessian contains residual terms that
+  expected information omits, so expected information gives an inconsistent
+  reference law for both statistics. The score therefore moves to observed
+  sensitivity at the restricted fit with the expected metric, as for FIML,
+  and the Satorra-2000 spectrum to observed information at the larger model.
+  The statistics are unchanged; only their reference laws change. The global
+  ML test keeps expected information: there the model is correct under the
+  null, so expected is consistent, and observed sensitivity collapses as p
+  grows. Until the change and its calibration land
+  ([backlog](../backlog/todo.md#ml-and-fiml)), the implementation remains
+  expected.
+- **No convention option.** `anova()` takes two fits and nothing else;
+  robustness is the default, not a setting. lavaan's expected-information
+  nested tests stay lab compositions on `as_lab_fit(fit)`:
+  `robust_nested_lrt(convention = "lavaan")` and
+  `score_components(sensitivity = "expected")`. Their lavaan parity gates
+  remain, so the policy keeps a checked component even where its composition
+  no longer equals a lavaan call.
 
 Where observed information matters: under the global null the observed and
 expected Hessians differ by O_p(n^-1/2), so the global tests have the same
 asymptotic law either way and the choice is a finite-sample one. For parameter
 covariance under misspecification, and for nested tests whose larger model is
-misspecified (the usual invariance-testing case), the choice is first order.
+misspecified (the usual invariance-testing case), the choice is first order;
+both now use observed information (above).
 The nested geometry must therefore be specified component by component before
 implementation: nuisance sensitivity, quadratic metric, evaluation point,
 moment covariance, centering and normalization. Do not mechanically replace
