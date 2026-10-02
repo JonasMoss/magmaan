@@ -1,7 +1,8 @@
 # magmaan TODO
 
 Accepted implementation work, ordered by release. The
-[roadmap](../architecture/roadmap.md) owns current capabilities/contracts;
+[roadmap](../architecture/roadmap.md) owns current state/contracts and indexes
+the per-area implemented capability files;
 the [test ledger](../validation/test_ledger.md) and linked studies own evidence.
 Remove completed items after their durable record exists.
 
@@ -50,7 +51,7 @@ label (the C++ project version) is retired.
 
 | Version | Content |
 | --- | --- |
-| **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/roadmap.md#r-bindings-and-public-namespace-transition) and package NEWS |
+| **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
 | **0.2.0, current** | The adopted ordinary API; lavaan-compatible fitting through `options`, so simulations can rely on lavaan's fitting while magmaan's own optimizer work waits; ordinary-policy inference for ML, FIML and all-ordinal DWLS; MI/release-score completion across weights, including two-stage |
 | **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI |
 | **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |

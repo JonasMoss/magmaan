@@ -181,7 +181,7 @@ The before/after timing plan is deliberately small:
    timing assertions in CI.
 
 Completed measurements and numerical contracts live in the
-[roadmap](../project/architecture/roadmap.md#ordinal-dwls-gamma-performance);
+[roadmap](../project/architecture/capabilities/ordinal_and_mixed.md#ordinal-dwls-gamma-performance);
 remaining work lives in the
 [active backlog](../project/backlog/todo.md#ordinal-dwls-gamma-influence-performance).
 

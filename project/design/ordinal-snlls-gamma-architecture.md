@@ -2,7 +2,7 @@
 
 This document records the shipped ordinal workspace and threshold-profile
 contracts. Implementation state is summarized in the
-[roadmap](../architecture/roadmap.md#ordinal-and-mixed-categorical-ls);
+[roadmap](../architecture/capabilities/ordinal_and_mixed.md#ordinal-and-mixed-categorical-ls);
 remaining work belongs in the [backlog](../backlog/todo.md#shared-fitting-composition).
 
 ## Model and moment boundary

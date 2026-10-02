@@ -126,7 +126,9 @@ Choose checks appropriate to the changed surface; nested guidance gives details.
 Refresh vendors with `just vendor` after canonical C++ changes.
 
 Update the roadmap when implementation state, architecture, contracts or
-validation expectations change. Update the relevant active backlog when a
+validation expectations change; capability detail lives in the area files under
+`project/architecture/capabilities/`, and the roadmap holds current state,
+contracts and the area index. Update the relevant active backlog when a
 milestone finishes, priorities change or concrete work is discovered. Keep
 simulation detail in its own backlog and only cross-domain summaries elsewhere.
 May-never-build ideas belong in [speculative.md](project/backlog/speculative.md),
