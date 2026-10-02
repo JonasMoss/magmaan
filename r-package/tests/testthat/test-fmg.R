@@ -18,7 +18,7 @@ test_that("ML2S weighted fits use the cached ML2S FMG spectrum", {
       list(
         p_value = 0.42, df = df, chi2_source = chi2_source,
         method = method, param = param, chi2_equiv = chi2_source,
-        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        n_truncated = 0L, blocks_effective = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals)
     },
     .package = "magmaanlab"
@@ -59,7 +59,7 @@ test_that("continuous least-squares fits use the C++ robust spectrum", {
       list(
         p_value = 0.31, df = df, chi2_source = chi2_source,
         method = method, param = param, chi2_equiv = chi2_source,
-        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        n_truncated = 0L, blocks_effective = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals
       )
     },
@@ -103,7 +103,7 @@ test_that("mixed-ordinal nested FMG composes the existing nested spectrum", {
       list(
         p_value = 0.27, df = df, chi2_source = chi2_source,
         method = method, param = param, chi2_equiv = chi2_source,
-        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        n_truncated = 0L, blocks_effective = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals
       )
     },
@@ -140,7 +140,7 @@ test_that("generic nested FMG uses the continuous-LS restriction spectrum", {
       list(
         p_value = 0.24, df = df, chi2_source = chi2_source,
         method = method, param = param, chi2_equiv = chi2_source,
-        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        n_truncated = 0L, blocks_effective = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals
       )
     },
@@ -176,7 +176,7 @@ test_that("nested ML FMG selects biased and unbiased spectra per test", {
       list(
         p_value = sum(eigvals) / 10, df = df, chi2_source = chi2_source,
         method = method, param = param, chi2_equiv = chi2_source,
-        n_truncated = 0L, lambdas_raw = eigvals, lambdas = eigvals,
+        n_truncated = 0L, blocks_effective = 0L, lambdas_raw = eigvals, lambdas = eigvals,
         lambdas_reference = eigvals
       )
     },
