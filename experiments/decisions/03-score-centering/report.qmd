@@ -50,7 +50,7 @@ tab <- function(x, ...) knitr::kable(x, row.names = FALSE, ...)
 
 | Choice | Current value | Status |
 |:--|:--|:--|
-| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Stationary equivalence confirmed; skewed-data Wald coverage remains open |
+| ML parameter covariance | Uncentered exact likelihood-score meat, observed bread | Stationary equivalence confirmed; small-sample Wald undercoverage explained as sandwich-variance error, no correction adopted |
 | Fixed-allocation score covariance | Within-group centered covariance rows | Formula settled; ordinary-policy extension banked |
 | ML global/nested score reference | Uncentered efficient scores, expected geometry | Retain raw under the registered rule in tested regular ML families |
 | Ordinary FIML inference | Unsupported | Prospective evidence only |
@@ -77,8 +77,10 @@ projection and observed statistics were held fixed; no default changes.
 
 Parameter covariances were numerically identical across arms, but both Wald
 intervals undercovered in skewed-data cells: nested null coverage at N=80 was
-90.3% (95% Wilson interval 88.9–91.5%). This is a separate covariance/interval
-validation task; score centering cannot correct it.
+90.3% (95% Wilson interval 88.9–91.5%). Score centering cannot correct it: a
+post-hoc decomposition attributes it to the sandwich variance (downward mean
+bias and, mostly, its spread at N=80), not to the estimate, which is close to
+unbiased and normal. No small-sample correction is adopted.
 
 **The additional 32,000-dataset FIML confirmation supplies no qualifying
 centering benefit**, separately under expected and observed sensitivity.
@@ -131,16 +133,34 @@ are `not_eligible` in the frozen decision table. The implied outcome is to retai
 raw provisionally in the tested scope, without claiming a blanket calibration
 guarantee across models or sampling laws.
 
-### Stationary parameter covariance agrees; Wald coverage needs investigation
+### Stationary parameter covariance agrees; Wald undercoverage is variance error
 
 The maximum raw/global parameter-covariance discrepancy is
 `r format(max(cov$max_covariance_gap[cov$arm == 'global']), scientific=TRUE, digits=3)`
 on the runner's comparison scale. Known-target Wald intervals are therefore the
 same. Both arms fail the coverage rule in several cells, most visibly under
 skewed innovations: nested null N=80 coverage is 90.3%, and nested power N=80
-coverage is 90.25%. Finite-sample covariance bias, estimate bias and interval
-calibration require separate checks against the declared population targets.
-The nominal-size result for score tests does not establish Wald interval coverage.
+coverage is 90.25%. The nominal-size result for score tests does not establish
+Wald interval coverage.
+
+A post-hoc decomposition of the frozen rows
+(`scripts/coverage_decomposition.R`, 2026-10-02) attributes the shortfall to
+the reported variance, not to the estimate. Point bias is at most 0.11
+empirical SDs in every cell, and removing it moves coverage by at most 1.2
+points. Intervals built with the empirical SD of the estimate cover 93.9–95.7%
+in every ML and FIML cell, so the estimator is close to normal and unbiased.
+The sandwich variance is biased downwards at N=80: its mean is 0.87–0.89 of
+the empirical variance (0.70–0.74 at the median) in the skewed cells and
+0.92–1.01 in the normal FIML cells. Its spread costs more than its mean: in the
+skewed N=80 cells a constant SE equal to the root mean reported variance would
+cover 93.5–94.6%, against the observed 90.2–91.4%; the SE's coefficient of
+variation is about 0.28 there, against 0.13–0.17 with normal data. Both effects
+shrink by N=300 (mean ratios 0.94–1.03). This is the familiar finite-sample
+behaviour of an empirical-meat sandwich under heavy tails, and the native
+construction is not implicated: it matches lavaan's `robust.huber.white`
+covariance and agrees with the empirical variance in the normal N=300 cells.
+A small-sample correction (a bias-corrected meat or a t reference with
+effective degrees of freedom) would be a policy change and is not adopted here.
 
 ### Disposition of the fixed-allocation case
 
@@ -266,8 +286,11 @@ to a maximum discrepancy of
 `r format(max(fiml_cov$max_covariance_gap), scientific=TRUE, digits=3)`
 on the runner's comparison scale. Nested MCAR N=80 null Wald coverage is 92.35%
 (Wilson interval 91.10–93.44%), failing the registered coverage condition for
-both arms. These results retain raw provisionally as a comparator; they leave
-absolute calibration and interval accuracy open, not an ordinary FIML default.
+both arms. As for ML, the decomposition above attributes it to the reported
+variance: point bias is 0.05 empirical SDs, the mean reported variance is 0.94
+of the empirical variance (0.89 at the median), and the empirical SD covers
+94.4%. These results retain raw provisionally as a comparator; they leave
+absolute calibration open, not an ordinary FIML default.
 
 ### Bank and reopening conditions
 
@@ -348,6 +371,7 @@ Rscript run_experiment.R --smoke --library PATH
 Rscript run_experiment.R --kind pilot --reps 100 --run-id pilot --library PATH
 Rscript run_experiment.R --kind confirmation --reps 2000 --families grouped_mean --run-id group_confirmation --library PATH
 Rscript scripts/validate_grouped_results.R group_confirmation
+Rscript scripts/coverage_decomposition.R
 Rscript run_experiment.R --kind confirmation --reps 2000 --families global_normal,global_skew,nested_normal,nested_skew --run-id ml_confirmation --library PATH
 Rscript run_experiment.R --kind confirmation --reps 2000 --families fiml_global_mcar,fiml_global_mar,fiml_nested_mcar,fiml_nested_mar --run-id fiml_confirmation --library PATH
 quarto render report.qmd

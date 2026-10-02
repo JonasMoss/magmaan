@@ -321,18 +321,17 @@ ordinary API exposes barrier fitting experimentally as
   independently; penalty-specific inference follows in 0.3.0.
   Missingness patterns are not sampling groups.
 
-- [ ] **M — investigate ML/FIML sandwich and Wald coverage gaps.**
-  The [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
-  finds 90.3% coverage for the known loading target in nested skewed N=80 nulls
-  (95% Wilson interval 88.9–91.5%); raw and centered covariances agree numerically.
-  **Check:** point-estimate bias, empirical estimator variance versus reported
-  sandwich variance, and larger-N/normal controls with independent uncertainty.
-  Verify the native covariance construction before selecting any finite-sample
-  interval correction; score-test nominal size does not validate Wald coverage.
-  The same study's prospective FIML MCAR nested N=80 null coverage is 92.35%
-  (Wilson interval 91.10–93.44%), failing the registered coverage condition.
-  Retain this normal incomplete-data control in covariance/interval validation;
-  raw and centered arms agree, so this is not evidence of a centering defect.
+- [x] **M — investigate ML/FIML sandwich and Wald coverage gaps** (2026-10-02,
+  documented, exit criterion 4). The shortfall is sandwich-variance error, not
+  point bias: in the [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
+  (`scripts/coverage_decomposition.R`) bias is at most 0.11 empirical SDs and
+  intervals with the empirical SD cover 93.9–95.7% in every ML/FIML cell, while
+  at N=80 the reported variance averages 0.87–0.89 of the empirical variance
+  with skewed data (0.92–1.01 normal FIML) and its spread (SE coefficient of
+  variation 0.28 versus 0.13–0.17) costs most of the 4–5 coverage points. Both
+  shrink by N=300. The native construction matches lavaan's
+  `robust.huber.white`. No small-sample correction is adopted; a bias-corrected
+  meat or effective-df t reference is [banked](speculative.md#small-sample-distribution-free-intervals-for-covariance-functionals-kauermann-carroll).
 
 - [ ] **M — decide how the policy reports small-sample LR tests.** The calibration
   battery finds substantial high-df over-rejection for LR-SB/PEBA4 while score

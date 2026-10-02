@@ -606,9 +606,11 @@ Global tests against the saturated model:
   Absolute FIML calibration and excluded inference regimes remain open;
   the fixed-allocation formula follows the
   [sampling contract](../scope.md#group-allocation-and-likelihood-score-covariance).
-  Stationary parameter covariances agree across centering arms, but skewed-data
-  Wald undercoverage and the FIML MCAR N=80 coverage gap need separate
-  validation before claiming interval accuracy.
+  Stationary parameter covariances agree across centering arms. Their N=80
+  Wald undercoverage (90–91% with skewed data, 92–93% for normal FIML) is
+  sandwich-variance error, mostly the variance estimator's spread, not point
+  bias; it shrinks by N=300 and no small-sample correction is adopted
+  (decisions/03, coverage decomposition).
 - Geometry of the global tests, by estimator:
   - Complete-data ML: expected information for the score sensitivity, the score
     metric and the LR spectrum, with the empirical Gamma. Experiment

@@ -581,6 +581,9 @@ fresh data. Neither oracle factors nor per-dataset bootstrap success imply a def
 **Available:** retained delta/Wald inference and
 [study-local covariance-functional prototypes](../../experiments/research/banked/19-covariance-functional-intervals/report.qmd),
 with correlation and alpha demonstrations. The limited 300-rep grid is exploratory.
+**Evidence (2026-10-02):** decisions/03's coverage decomposition shows ordinary
+ML/FIML Wald undercoverage at N=80 (to 90% with skewed data) comes from the
+sandwich variance, mostly its spread, which an effective-df t reference targets.
 **Build if:** a named covariance-functional consumer has demonstrably inadequate
 ordinary coverage and the correction passes held-out target-regime checks.
 
