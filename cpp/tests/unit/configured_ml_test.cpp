@@ -1,7 +1,9 @@
 #include <doctest/doctest.h>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <utility>
 #include <nlohmann/json.hpp>
 
@@ -325,6 +327,21 @@ TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients
     auto est=estimate::fit_ml_configured(*pt,*rep,sample,fitting); REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
     // REQUIRE cannot abort under -fno-exceptions. A count mismatch must
     // report failure before any fixture-indexed access to the actual attempts.
+    REQUIRE_OR_RETURN(!est->fitting->attempts.empty());
+    const auto& first_attempt = est->fitting->attempts.front();
+    const double acceptance_threshold = 1e-3;
+    const double acceptance_relative_gap =
+        (first_attempt.gradient_max - acceptance_threshold) / acceptance_threshold;
+    std::ostringstream acceptance_diagnostic;
+    acceptance_diagnostic << std::setprecision(17)
+        << "first gradient max=" << first_attempt.gradient_max
+        << ", threshold=" << acceptance_threshold
+        << ", relative gap=" << acceptance_relative_gap;
+    INFO(acceptance_diagnostic.str());
+    CAPTURE(first_attempt.raw_status);
+    CAPTURE(first_attempt.gradient_max);
+    CAPTURE(acceptance_threshold);
+    CAPTURE(acceptance_relative_gap);
     CHECK(est->fitting->attempts.size()==c["attempts"].size());
     if (est->fitting->attempts.size()!=c["attempts"].size()) continue;
     REQUIRE_OR_RETURN(!est->fitting->attempts.empty());

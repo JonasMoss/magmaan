@@ -238,9 +238,13 @@ with each actual endpoint's declared acceptance checked separately.
   The equality fixture test now explicitly returns after prerequisite failures
   and skips attempt indexing after a count mismatch under `-fno-exceptions`.
   The ×100 oracle first-attempt gradient maximum is 0.0016149511731821235
-  versus the 0.001 acceptance threshold. Opt endpoint measurement and targeted
-  validation await approval to finish the cold lane-b build (no warm build was
-  present); parity assertions and tolerances remain unchanged.
+  versus the 0.001 acceptance threshold (relative gap +0.6149511731821235).
+  Opt accepts its first attempt with PORT status 4 and gradient maximum
+  0.00094775120123813394 (relative gap -0.052248798761866076); this is not
+  knife-edge acceptance. The targeted opt configured tests report 2 passed,
+  1 failed, with no crash. **Needs decision:** authorize investigation of the
+  non-marginal optimizer endpoint divergence before adapting retry parity.
+  Parity assertions and tolerances remain unchanged.
 
 - [ ] **M — fit FIML under the lavaan preset.** lavaan builds FIML starts from
   its EM H1 moments; feed magmaan's EM H1 to the pinned start code, evaluate the
