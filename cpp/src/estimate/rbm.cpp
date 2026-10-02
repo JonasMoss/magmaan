@@ -525,11 +525,11 @@ ordinal_parts(const RBMContext& ctx, const spec::LatentStructure& pt,
               const data::OrdinalStats& stats, const Estimates& base,
               OrdinalWeightKind weights,
               OrdinalParameterization parameterization,
-              const Eigen::VectorXd& theta) {
+              const Eigen::VectorXd& theta, bool estimated_weight) {
   auto est = estimates_at(base, ctx.base_objective, theta, "rbm_ordinal");
   if (!est.has_value()) return std::unexpected(est.error());
   auto parts = ordinal_rbm_parts(pt, *ctx.rep, stats, *est, weights,
-                                 parameterization);
+                                 parameterization, estimated_weight);
   if (!parts.has_value()) {
     return std::unexpected(post_to_fit(parts.error(), "rbm_ordinal"));
   }
@@ -542,12 +542,12 @@ mixed_ordinal_parts(const RBMContext& ctx,
                     const data::MixedOrdinalStats& stats,
                     const Estimates& base, OrdinalWeightKind weights,
                     OrdinalParameterization parameterization,
-                    const Eigen::VectorXd& theta) {
+                    const Eigen::VectorXd& theta, bool estimated_weight) {
   auto est = estimates_at(base, ctx.base_objective, theta,
                           "rbm_mixed_ordinal");
   if (!est.has_value()) return std::unexpected(est.error());
   auto parts = mixed_ordinal_rbm_parts(pt, *ctx.rep, stats, *est, weights,
-                                       parameterization);
+                                       parameterization, estimated_weight);
   if (!parts.has_value()) {
     return std::unexpected(post_to_fit(parts.error(), "rbm_mixed_ordinal"));
   }
@@ -559,11 +559,11 @@ two_stage_parts(const RBMContext& ctx, const data::RawData& raw,
                 const fiml::FIMLPack& pack, const fiml::FIMLH1& h1,
                 const fiml::SaturatedMoments& sm, const Estimates& base,
                 fiml::TwoStageWeight weight, fiml::TwoStageDlsOptions dls,
-                const Eigen::VectorXd& theta) {
+                const Eigen::VectorXd& theta, bool estimated_weight) {
   auto est = estimates_at(base, ctx.base_objective, theta, "rbm_two_stage");
   if (!est.has_value()) return std::unexpected(est.error());
   auto parts = fiml::two_stage_rbm_parts(ctx.pt, *ctx.rep, raw, *est, pack, h1,
-                                         sm, weight, dls);
+                                         sm, weight, dls, estimated_weight);
   if (!parts.has_value()) {
     return std::unexpected(post_to_fit(parts.error(), "rbm_two_stage"));
   }
@@ -1054,10 +1054,10 @@ rbm_explicit_ordinal(spec::LatentStructure pt,
                             total_n(stats.n_obs), "rbm_explicit_ordinal");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
-                      &base, weights, parameterization](
+                      &base, weights, parameterization, &opts](
                          const Eigen::VectorXd& theta) mutable {
     return ordinal_parts(*ctx, pt_for_parts, stats, base, weights,
-                         parameterization, theta);
+                         parameterization, theta, opts.estimated_weight);
   };
   return explicit_impl(*ctx, base, bounds, opts, parts_at,
                        "rbm_explicit_ordinal");
@@ -1081,10 +1081,10 @@ rbm_implicit_ordinal(spec::LatentStructure pt,
                             total_n(stats.n_obs), "rbm_implicit_ordinal");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
-                      &start, weights, parameterization](
+                      &start, weights, parameterization, &opts](
                          const Eigen::VectorXd& theta) mutable {
     return ordinal_parts(*ctx, pt_for_parts, stats, start, weights,
-                         parameterization, theta);
+                         parameterization, theta, opts.estimated_weight);
   };
   return implicit_impl(*ctx, start, bounds, opts, parts_at,
                        "rbm_implicit_ordinal");
@@ -1108,10 +1108,10 @@ rbm_explicit_mixed_ordinal(spec::LatentStructure pt,
                             total_n(stats.n_obs), "rbm_explicit_mixed_ordinal");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
-                      &base, weights, parameterization](
+                      &base, weights, parameterization, &opts](
                          const Eigen::VectorXd& theta) mutable {
     return mixed_ordinal_parts(*ctx, pt_for_parts, stats, base, weights,
-                               parameterization, theta);
+                               parameterization, theta, opts.estimated_weight);
   };
   return explicit_impl(*ctx, base, bounds, opts, parts_at,
                        "rbm_explicit_mixed_ordinal");
@@ -1135,10 +1135,10 @@ rbm_implicit_mixed_ordinal(spec::LatentStructure pt,
                             total_n(stats.n_obs), "rbm_implicit_mixed_ordinal");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, pt_for_parts = std::move(pt_for_parts), &stats,
-                      &start, weights, parameterization](
+                      &start, weights, parameterization, &opts](
                          const Eigen::VectorXd& theta) mutable {
     return mixed_ordinal_parts(*ctx, pt_for_parts, stats, start, weights,
-                               parameterization, theta);
+                               parameterization, theta, opts.estimated_weight);
   };
   return implicit_impl(*ctx, start, bounds, opts, parts_at,
                        "rbm_implicit_mixed_ordinal");
@@ -1166,8 +1166,9 @@ rbm_explicit_two_stage(spec::LatentStructure pt,
                         "rbm_explicit_two_stage");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, &raw, &pack, &h1, sm = std::move(*sm), &base,
-                      weight, dls](const Eigen::VectorXd& theta) {
-    return two_stage_parts(*ctx, raw, pack, h1, sm, base, weight, dls, theta);
+                      weight, dls, &opts](const Eigen::VectorXd& theta) {
+    return two_stage_parts(*ctx, raw, pack, h1, sm, base, weight, dls,
+                           theta, opts.estimated_weight);
   };
   return explicit_impl(*ctx, base, bounds, opts, parts_at,
                        "rbm_explicit_two_stage");
@@ -1195,8 +1196,9 @@ rbm_implicit_two_stage(spec::LatentStructure pt,
                         "rbm_implicit_two_stage");
   if (!ctx.has_value()) return std::unexpected(ctx.error());
   PartsFn parts_at = [&ctx, &raw, &pack, &h1, sm = std::move(*sm), &start,
-                      weight, dls](const Eigen::VectorXd& theta) {
-    return two_stage_parts(*ctx, raw, pack, h1, sm, start, weight, dls, theta);
+                      weight, dls, &opts](const Eigen::VectorXd& theta) {
+    return two_stage_parts(*ctx, raw, pack, h1, sm, start, weight, dls,
+                           theta, opts.estimated_weight);
   };
   return implicit_impl(*ctx, start, bounds, opts, parts_at,
                        "rbm_implicit_two_stage");

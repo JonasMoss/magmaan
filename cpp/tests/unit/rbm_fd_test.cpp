@@ -567,7 +567,8 @@ TEST_CASE("RBM FD: FIML missing-data A/B/C") {
 // ===========================================================================
 
 void run_ordinal_fd_case(std::string_view label,
-                         magmaan::estimate::OrdinalWeightKind weights) {
+                         magmaan::estimate::OrdinalWeightKind weights,
+                         bool estimated_weight = true) {
   std::mt19937 rng(20260625);
   std::normal_distribution<double> norm(0.0, 1.0);
   const Eigen::Index n = 500;
@@ -596,15 +597,17 @@ void run_ordinal_fd_case(std::string_view label,
                                                 {}, weights);
   if (!est.has_value()) { FAIL(est.error().detail); return; }
 
+  mf::RBMOptions opts;
+  opts.estimated_weight = estimated_weight;
   auto expl = mf::rbm_explicit_ordinal(*built.pt, *built.rep, *stats, *est,
-                                       weights, par, {}, {});
+                                       weights, par, {}, opts);
   if (!expl.has_value()) { FAIL(expl.error().detail); return; }
 
   ScalarFn trace_at = [&](const Vec& th) {
     magmaan::estimate::Estimates e;
     e.theta = th;
     auto p = magmaan::estimate::ordinal_rbm_parts(*built.pt, *built.rep, *stats,
-                                                  e, weights, par);
+                                                  e, weights, par, estimated_weight);
     return p.has_value() ? weighted_trace(*p) : kInf;
   };
 
@@ -625,7 +628,7 @@ TEST_CASE("RBM FD: ordinal ULS A (explicit)") {
 // Mixed continuous/ordinal DWLS (estimated diagonal weight)
 // ===========================================================================
 
-TEST_CASE("RBM FD: mixed-ordinal DWLS A (explicit)") {
+void run_mixed_ordinal_fd_case(bool estimated_weight) {
   std::mt19937 rng(20260626);
   std::normal_distribution<double> norm(0.0, 1.0);
   const Eigen::Index n = 600;
@@ -653,19 +656,29 @@ TEST_CASE("RBM FD: mixed-ordinal DWLS A (explicit)") {
                                                       *stats, {}, weights);
   if (!est.has_value()) { FAIL(est.error().detail); return; }
 
+  mf::RBMOptions opts;
+  opts.estimated_weight = estimated_weight;
   auto expl = mf::rbm_explicit_mixed_ordinal(*built.pt, *built.rep, *stats, *est,
-                                             weights, par, {}, {});
+                                             weights, par, {}, opts);
   if (!expl.has_value()) { FAIL(expl.error().detail); return; }
 
   ScalarFn trace_at = [&](const Vec& th) {
     magmaan::estimate::Estimates e;
     e.theta = th;
     auto p = magmaan::estimate::mixed_ordinal_rbm_parts(*built.pt, *built.rep,
-                                                        *stats, e, weights, par);
+                                                        *stats, e, weights, par,
+                                                        estimated_weight);
     return p.has_value() ? weighted_trace(*p) : kInf;
   };
 
   check_explicit("mixed-ordinal DWLS", *expl, trace_at, est->theta, 1e-7);
+}
+
+TEST_CASE("RBM FD: mixed-ordinal DWLS A (explicit)") {
+  run_mixed_ordinal_fd_case(true);
+}
+TEST_CASE("RBM FD: mixed-ordinal DWLS fixed-weight A (explicit)") {
+  run_mixed_ordinal_fd_case(false);
 }
 
 // ===========================================================================
@@ -673,7 +686,8 @@ TEST_CASE("RBM FD: mixed-ordinal DWLS A (explicit)") {
 // ===========================================================================
 
 void run_ml2s_fd_case(std::string_view label,
-                      magmaan::estimate::fiml::TwoStageWeight kind) {
+                      magmaan::estimate::fiml::TwoStageWeight kind,
+                         bool estimated_weight = true) {
   namespace fiml = magmaan::estimate::fiml;
   auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
   Vec theta0(static_cast<Eigen::Index>(built.ev.n_free()));
@@ -698,15 +712,17 @@ void run_ml2s_fd_case(std::string_view label,
   auto est = magmaan::test::fit_gmm(*built.pt, *built.rep, samp, *w);
   if (!est.has_value()) { FAIL(est.error().detail); return; }
 
+  mf::RBMOptions opts;
+  opts.estimated_weight = estimated_weight;
   auto expl = mf::rbm_explicit_two_stage(*built.pt, *built.rep, raw, *pack, *h1,
-                                         *est, kind, dls, {}, {});
+                                         *est, kind, dls, {}, opts);
   if (!expl.has_value()) { FAIL(expl.error().detail); return; }
 
   ScalarFn trace_at = [&](const Vec& th) {
     magmaan::estimate::Estimates e;
     e.theta = th;
     auto p = fiml::two_stage_rbm_parts(*built.pt, *built.rep, raw, e, *pack, *h1,
-                                       *sm, kind, dls);
+                                       *sm, kind, dls, estimated_weight);
     return p.has_value() ? weighted_trace(*p) : kInf;
   };
 
@@ -721,4 +737,14 @@ TEST_CASE("RBM FD: ML2S Dwls A (explicit)") {
 }
 TEST_CASE("RBM FD: ML2S Adf A (explicit)") {
   run_ml2s_fd_case("ML2S Adf", magmaan::estimate::fiml::TwoStageWeight::Adf);
+}
+
+
+TEST_CASE("RBM FD: ordinal DWLS fixed-weight A (explicit)") {
+  run_ordinal_fd_case("ordinal DWLS fixed", magmaan::estimate::OrdinalWeightKind::DWLS,
+                      false);
+}
+TEST_CASE("RBM FD: ML2S Dwls fixed-weight A (explicit)") {
+  run_ml2s_fd_case("ML2S Dwls fixed", magmaan::estimate::fiml::TwoStageWeight::Dwls,
+                   false);
 }

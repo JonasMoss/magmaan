@@ -909,7 +909,10 @@
   recipe (2026-10-02): `fit$moment_weight` ("custom" for a supplied W),
   `fit$stage2_dls_a` and `fit$W` resolve through `continuous_ls_ij_mode_for`
   in MI/release, the GMM profile test and CI, RBM, estimated-weight residuals
-  and case influence, so supplied-W fits fail with `UnsupportedInference`.
+  and case influence; estimated-weight requests for supplied-W fits fail
+  with `UnsupportedInference`. As of 2026-10-02, lab switches default to
+  `estimated_weight = FALSE`, including RBM (continuous LS, ordinal/mixed
+  and ML2S); explicit TRUE retains these recipe-resolved corrections.
   WLS-computed fits use `fit$W`; an explicit `weight` must equal it or a
   common positive multiple (same minimizer, kept for the weight-scale
   transport checks). Fits without the record fall back to the label's recipe

@@ -333,7 +333,8 @@ ordinal_rbm_parts(spec::LatentStructure pt,
                   const Estimates& est,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization =
-                      OrdinalParameterization::Delta);
+                      OrdinalParameterization::Delta,
+                  bool estimated_weight = true);
 
 // Per-case one-step misspecification-robust ("complete-sandwich") parameter
 // influences for an all-ordinal DWLS/WLS/ULS(MV) fit: the categorical analogue
@@ -396,7 +397,8 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                         const Estimates& est,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization =
-                            OrdinalParameterization::Delta);
+                            OrdinalParameterization::Delta,
+                  bool estimated_weight = true);
 
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal(spec::LatentStructure pt,

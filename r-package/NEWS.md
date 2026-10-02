@@ -1,5 +1,13 @@
 # magmaanlab 0.2.0 (in development)
 
+- All lab `estimated_weight` switches now default to `FALSE`: robust
+  modification indices and score tests, residuals, case influence, GMM and
+  ML2S profile tests/intervals, and ordinal/mixed misspecification
+  RMSEA/CFI/TLI/CRMR/SRMR. `frontier_rbm()` gains the same switch for
+  continuous LS, ordinal/mixed LS and ML2S; supplied-W continuous fits work
+  with `FALSE` and refuse `TRUE`. Explicit `TRUE` retains estimated-weight
+  corrections. Ordinary inference policy defaults are unchanged.
+
 - `convention_inference()` and `convention_nested()` expose C++ composers for
   named lavaan inference bundles on retained estimates, with component-level
   unavailable reasons. Complete-data MLR uses the H1-minus-H0 trace; ordinal

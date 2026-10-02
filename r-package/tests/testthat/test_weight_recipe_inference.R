@@ -74,7 +74,8 @@ test_that("estimated-weight inference reads the recorded continuous recipe", {
                tolerance = 1e-5)
   expect_true(is.finite(profile$dls3$scaling_factor))
 
-  rbm <- lapply(fits[c("nt", "dls0")], magmaan_core$frontier_rbm, raw_data = X)
+  rbm <- lapply(fits[c("nt", "dls0")], magmaan_core$frontier_rbm, raw_data = X,
+                estimated_weight = TRUE)
   expect_equal(rbm$dls0$theta, rbm$nt$theta, tolerance = 1e-5)
 })
 
@@ -96,6 +97,17 @@ test_that("supplied weights are used as fitted but have no estimated-weight reci
   adf <- fit_model(spec, d, estimator = "WLS")
   supplied <- fit_model(spec, d, estimator = "WLS", W = adf$W)
   expect_identical(supplied$composition$weight, "custom")
+
+  rbm_fixed <- magmaan_core$frontier_rbm(
+    supplied, raw_data = as.matrix(d), estimated_weight = FALSE)
+  expect_equal(rbm_fixed$theta, magmaan_core$frontier_rbm(
+    adf, raw_data = as.matrix(d), estimated_weight = FALSE)$theta,
+    tolerance = 1e-6)
+  expect_equal(magmaan_core$frontier_rbm(
+    supplied, raw_data = as.matrix(d))$theta, rbm_fixed$theta)
+  expect_error(magmaan_core$frontier_rbm(
+    supplied, raw_data = as.matrix(d), estimated_weight = TRUE),
+    "UnsupportedInference")
 
   fixed <- modification_indices_robust(supplied, data = d)
   expect_equal(fixed$mi.scaled, modification_indices_robust(adf, data = d)$mi.scaled,
@@ -198,8 +210,8 @@ test_that("two-stage MI under missing data uses the recorded Stage-2 weight", {
   expect_error(modification_indices_robust(dls, weight = diag(20)), "omit `weight`")
 
   # Refits and case influence use the recorded Stage-2 weight.
-  expect_error(magmaan_core$frontier_rbm(dls, stage2_weight = "nt"), "recorded")
-  expect_error(magmaan_core$frontier_rbm(dls, dls_a = 0.5), "recorded")
+  expect_error(magmaan_core$frontier_rbm(dls, stage2_weight = "nt", estimated_weight = TRUE), "recorded")
+  expect_error(magmaan_core$frontier_rbm(dls, dls_a = 0.5, estimated_weight = TRUE), "recorded")
   expect_true(all(is.finite(est_change_raw_approx(dls, type = "estimated.weight"))))
 })
 
@@ -376,4 +388,20 @@ test_that("mixed ordinal MI matrix gates fixed weights and explicit refusals", {
       expect_error(worker(fit, estimated_weight = TRUE), "not yet implemented")
     }
   }
+})
+
+
+test_that("lab estimated-weight switches default to fixed weights", {
+  ns <- asNamespace("magmaanlab")
+  checked <- character()
+  for (name in ls(ns, all.names = TRUE)) {
+    worker <- get(name, envir = ns)
+    if (!is.function(worker)) next
+    args <- formals(worker)
+    if (!"estimated_weight" %in% names(args)) next
+    expect_identical(args$estimated_weight, FALSE, info = name)
+    checked <- c(checked, name)
+  }
+  expect_true("frontier_rbm" %in% checked)
+  expect_true("fit_measures_misspec" %in% checked)
 })

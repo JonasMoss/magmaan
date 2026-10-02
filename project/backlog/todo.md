@@ -620,15 +620,13 @@ gates a release unless an exit criterion names it.
   explicit failure reasons; Wald remains the default. This is not a 0.2.0 exit
   requirement and does not promote every lab profile route to ordinary use.
 
-- [ ] **S/M — make lab estimated-weight comparisons consistent.** Add an
-  `estimated_weight` off switch to `frontier_rbm()` so supplied-W fits can request
-  fixed-weight RBM rather than always hitting the estimated-recipe refusal.
-  Inventory and choose one documented lab default across robust MI/score,
-  residual, case-influence, GMM/ML2S profile and ordinal misspecification
-  fit-measure routes; explicit off/on currently differs between them. **Check:**
-  fixed-weight reductions, estimated-weight identities, supplied-W acceptance/
-  refusal and matched recipes across lab wrappers. Preserve numerical policy
-  defaults and evidence; a lavaan bundle is not an isolated correction switch.
+- [x] **S/M — make lab estimated-weight comparisons consistent.**
+  `frontier_rbm(estimated_weight = FALSE)` supports supplied-W continuous
+  fits and fixed-weight ordinal/mixed and ML2S corrections. All lab
+  estimated-weight switches default to FALSE; explicit TRUE retains the
+  recipe-resolved corrections and supplied-W refusal. NEWS lists the routes;
+  examples opt in to preserve their numerical recipes. Ordinary policy
+  defaults are unchanged.
 
 ### EQS language extension
 

@@ -34,6 +34,8 @@ struct RBMOptions {
 #endif
   optim::OptimOptions optim = {};
   bool check_admissibility = true;
+  // Drop only the weight influence; retain moment influence and observed bread.
+  bool estimated_weight = true;
   double admissibility_tol = 1e-6;
 };
 

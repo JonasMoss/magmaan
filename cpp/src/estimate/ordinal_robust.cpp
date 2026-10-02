@@ -265,7 +265,8 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
                         const Eigen::MatrixXd& Delta_full,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization,
-                        const std::vector<bool>& block_has_missing) {
+                        const std::vector<bool>& block_has_missing,
+                        bool estimated_weight) {
   if (stats.moment_influence.size() != stats.R.size() ||
       stats.NACOV.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -274,7 +275,7 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
   }
   if (auto e = require_nacov_weight(Ws, stats.NACOV, weights,
                                     "ordinal estimated-weight inference");
-      !e.has_value()) {
+      estimated_weight && !e.has_value()) {
     return std::unexpected(e.error());
   }
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -292,7 +293,7 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
     const Eigen::VectorXd d_b = ordinal_block_residual(
         stats, layout, moments, theta, parameterization, b);
     Eigen::MatrixXd correction;
-    if (weights == OrdinalWeightKind::DWLS) {
+    if (estimated_weight && weights == OrdinalWeightKind::DWLS) {
       // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
       // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
       // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
@@ -324,7 +325,7 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
         const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
         correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
       }
-    } else if (weights == OrdinalWeightKind::WLS) {
+    } else if (estimated_weight && weights == OrdinalWeightKind::WLS) {
       // Full-WLS analogue: IF(Ŵ_i) = -W IF_i(Γ̂) W, so the row correction added
       // to g_i W is d' W IF_i(Γ̂) W. `IF_i(Γ̂)` combines the data-direct
       // sandwich channel with the κ-movement channel DΓ/Dκ · IF_i(κ).
@@ -588,7 +589,8 @@ ordinal_rbm_parts(spec::LatentStructure pt,
                   const data::OrdinalStats& stats,
                   const Estimates& est,
                   OrdinalWeightKind weights,
-                  OrdinalParameterization parameterization) {
+                  OrdinalParameterization parameterization,
+                  bool estimated_weight) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -598,7 +600,8 @@ ordinal_rbm_parts(spec::LatentStructure pt,
         "ordinal_rbm_parts: per-case influence functions unavailable; "
         "recompute ordinal stats (moment_influence is required for RBM)"));
   }
-  auto missing_or = ordinal_ij_block_missing(stats, weights);
+  auto missing_or = ordinal_ij_block_missing(
+      stats, estimated_weight ? weights : OrdinalWeightKind::ULS);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
   if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
@@ -656,7 +659,7 @@ ordinal_rbm_parts(spec::LatentStructure pt,
 
   auto ij_blocks = build_ordinal_ij_blocks(
       stats, *layout_or, eval->moments, est.theta, Ws, Delta_full, weights,
-      parameterization, block_has_missing);
+      parameterization, block_has_missing, estimated_weight);
   if (!ij_blocks.has_value()) return std::unexpected(ij_blocks.error());
 
   return weighted_moment_rbm_parts(*ij_blocks, K, A);
@@ -1110,7 +1113,8 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                         const data::MixedOrdinalStats& stats,
                         const Estimates& est,
                         OrdinalWeightKind weights,
-                        OrdinalParameterization parameterization) {
+                        OrdinalParameterization parameterization,
+                  bool estimated_weight) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -1124,13 +1128,15 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
       stats.gamma_diag_influence.size() == stats.R.size();
   const bool has_full_gamma_if =
       stats.gamma_full_influence.size() == stats.R.size();
-  if (weights == OrdinalWeightKind::DWLS && !has_diag_gamma_if &&
+  if (estimated_weight && weights == OrdinalWeightKind::DWLS &&
+      !has_diag_gamma_if &&
       stats.raw_data.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_rbm_parts: DWLS estimated-weight influence unavailable; "
         "recompute mixed ordinal stats with gamma_diag_influence or raw_data"));
   }
-  if (weights == OrdinalWeightKind::WLS && !has_full_gamma_if &&
+  if (estimated_weight && weights == OrdinalWeightKind::WLS &&
+      !has_full_gamma_if &&
       stats.raw_data.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_rbm_parts: WLS estimated-weight influence unavailable; "
@@ -1206,7 +1212,7 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
         stats, *layout_or, eval->moments, est.theta, b, parameterization);
     const Eigen::VectorXd d_b = model_m - stats.moments[b];
     Eigen::MatrixXd correction;
-    if (weights == OrdinalWeightKind::DWLS) {
+    if (estimated_weight && weights == OrdinalWeightKind::DWLS) {
       Eigen::MatrixXd if_gamma;
       if (has_diag_gamma_if) {
         if_gamma = stats.gamma_diag_influence[b];
@@ -1247,7 +1253,7 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
         if (!(gkk > 0.0)) continue;
         correction.col(k) = (d_b(k) / (gkk * gkk)) * if_gamma.col(k);
       }
-    } else if (weights == OrdinalWeightKind::WLS) {
+    } else if (estimated_weight && weights == OrdinalWeightKind::WLS) {
       Eigen::MatrixXd if_gamma;
       if (has_full_gamma_if) {
         if_gamma = stats.gamma_full_influence[b];

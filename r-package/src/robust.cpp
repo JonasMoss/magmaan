@@ -1275,7 +1275,7 @@ Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1,
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
                                               Rcpp::List ordinal_stats,
-                                              bool estimated_weight = true,
+                                              bool estimated_weight = false,
                                               double conf_level = 0.90,
                                               double eig_tol = 1e-10) {
   require_dwls_fit(fit, "infer_ordinal_fit_measures_misspec()");
@@ -1300,7 +1300,7 @@ Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
                                              Rcpp::List mixed_stats,
-                                             bool estimated_weight = true,
+                                             bool estimated_weight = false,
                                              double conf_level = 0.90,
                                              double eig_tol = 1e-10) {
   require_dwls_fit(fit, "infer_mixed_ordinal_rmsea_misspec()");
@@ -1328,7 +1328,7 @@ Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
                                             Rcpp::List mixed_stats,
-                                            bool estimated_weight = true,
+                                            bool estimated_weight = false,
                                             bool srmr_denominator = false,
                                             double conf_level = 0.90,
                                             double eig_tol = 1e-10) {
@@ -1356,7 +1356,7 @@ Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
                                                Rcpp::List mixed_stats,
-                                               bool estimated_weight = true,
+                                               bool estimated_weight = false,
                                                double conf_level = 0.90,
                                                double eig_tol = 1e-10) {
   require_dwls_fit(fit, "infer_mixed_ordinal_cfi_tli_misspec()");
@@ -1383,7 +1383,7 @@ Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
 Rcpp::List infer_mixed_ordinal_fit_measures_misspec(
     Rcpp::List fit,
     Rcpp::List mixed_stats,
-    bool estimated_weight = true,
+    bool estimated_weight = false,
     double conf_level = 0.90,
     double eig_tol = 1e-10) {
   require_dwls_fit(fit, "infer_mixed_ordinal_fit_measures_misspec()");

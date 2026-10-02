@@ -834,8 +834,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_rbm_impl
-Rcpp::List frontier_rbm_impl(Rcpp::List fit, SEXP raw_data, SEXP weight, SEXP stage2_weight, SEXP dls_a, std::string method, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaanlab_frontier_rbm_impl(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP, SEXP methodSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+Rcpp::List frontier_rbm_impl(Rcpp::List fit, SEXP raw_data, SEXP weight, SEXP stage2_weight, SEXP dls_a, std::string method, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, bool estimated_weight);
+RcppExport SEXP _magmaanlab_frontier_rbm_impl(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP, SEXP methodSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP estimated_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -848,7 +848,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds));
+    Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a, method, optimizer, control, bounds, estimated_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4389,7 +4390,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_ml_irls_impl", (DL_FUNC) &_magmaanlab_fit_ml_irls_impl, 5},
     {"_magmaanlab_fit_ml_irls_snlls_impl", (DL_FUNC) &_magmaanlab_fit_ml_irls_snlls_impl, 5},
     {"_magmaanlab_frontier_sam_impl", (DL_FUNC) &_magmaanlab_frontier_sam_impl, 13},
-    {"_magmaanlab_frontier_rbm_impl", (DL_FUNC) &_magmaanlab_frontier_rbm_impl, 9},
+    {"_magmaanlab_frontier_rbm_impl", (DL_FUNC) &_magmaanlab_frontier_rbm_impl, 10},
     {"_magmaanlab_fcsem_model_spec_impl", (DL_FUNC) &_magmaanlab_fcsem_model_spec_impl, 1},
     {"_magmaanlab_fit_ml_fcsem_impl", (DL_FUNC) &_magmaanlab_fit_ml_fcsem_impl, 3},
     {"_magmaanlab_fcsem_standard_errors_impl", (DL_FUNC) &_magmaanlab_fcsem_standard_errors_impl, 1},

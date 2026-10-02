@@ -99,14 +99,16 @@ frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
 frontier_pairwise_ordinal_composite_nested <- frontier_pairwise_ordinal_composite_nested_impl
 frontier_guttman_h <- frontier_guttman_h_impl
 # ML2S fits use their recorded Stage-2 weight; an explicit stage2_weight or
-# dls_a must agree with it.
+# dls_a must agree with it. estimated_weight = FALSE holds the fitting weight
+# fixed; TRUE includes its recorded sampling influence.
 frontier_rbm <- function(fit, raw_data = NULL, weight = NULL,
                          stage2_weight = NULL, dls_a = NULL,
                          method = c("explicit", "implicit"),
-                         optimizer = NULL, control = NULL, bounds = NULL) {
+                         optimizer = NULL, control = NULL, bounds = NULL,
+                         estimated_weight = FALSE) {
   method <- match.arg(method)
   frontier_rbm_impl(fit, raw_data, weight, stage2_weight, dls_a,
-                    method, optimizer, control, bounds)
+                    method, optimizer, control, bounds, estimated_weight)
 }
 frontier_sam <- frontier_sam_impl
 frontier_dls_weight <- frontier_dls_weight_impl

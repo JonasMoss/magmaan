@@ -338,6 +338,9 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 metadata and result attributes. Explicit output says lavaan compatibility;
 the unreleased `convention` argument was renamed without an alias.
 
+2026-10-02: lab estimated-weight switches consistently default to FALSE;
+RBM exposes fixed/estimated-weight selection. Ordinary policy is unchanged.
+
 On 2026-09-30 the research surface was pruned: ML ridge continuation,
 automatic marker/std.lv fitting, adaptive Guttman composites, MI4/structured
 fourth-moment weights, empirical-Bayes DLS selection, fitted-weight GMM and its

@@ -36,7 +36,7 @@ fit <- core$fit_dwls_ordinal(
 stopifnot(isTRUE(fit$ordinal), identical(fit$estimator, "DWLS"))
 
 ## --- the consolidated table runs end to end ---------------------------------
-fm <- magmaanlab::fit_measures_misspec(fit, d)
+fm <- magmaanlab::fit_measures_misspec(fit, d, estimated_weight = TRUE)
 expected <- c("rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "rmsea.pvalue",
               "crmr", "crmr.ci.lower", "crmr.ci.upper", "crmr.pvalue",
               "srmr", "srmr.ci.lower", "srmr.ci.upper",
@@ -81,7 +81,7 @@ stopifnot(is.finite(fx$rmsea), is.finite(fx$tli))
 ## --- ordinal_stats must be supplied explicitly ------------------------------
 # A fitted object does not retain the integer data the estimated-weight
 # inference needs, so the stats are passed explicitly (like robust_ordinal()).
-err <- tryCatch(magmaanlab::fit_measures_misspec(fit),
+err <- tryCatch(magmaanlab::fit_measures_misspec(fit, estimated_weight = TRUE),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("ordinal_stats", err, fixed = TRUE))
 
@@ -105,7 +105,7 @@ mg <- magmaanlab::model_spec("f =~ x1 + 1*x2 + 1*x3 + 1*x4",
 dg <- core$data_ordinal_stats_from_df(dfg, mg)
 fitg <- core$fit_dwls_ordinal(
   mg, dg, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-fmg <- magmaanlab::fit_measures_misspec(fitg, dg)
+fmg <- magmaanlab::fit_measures_misspec(fitg, dg, estimated_weight = TRUE)
 stopifnot(fmg$baseline.df == 12L)                         # 2 groups * 6 off-diag
 stopifnot(fmg$cfi >= 0, fmg$cfi <= 1,
           fmg$rmsea.ci.lower <= fmg$rmsea.ci.upper,

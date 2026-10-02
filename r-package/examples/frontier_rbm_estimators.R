@@ -9,10 +9,10 @@ model <- "visual  =~ x1 + x2 + x3
           speed   =~ x7 + x8 + x9"
 
 fit_ml <- magmaanlab::fit_model(model, df, estimator = "ML")
-rbm_ml <- core$frontier_rbm(fit_ml, X, method = "explicit")
+rbm_ml <- core$frontier_rbm(fit_ml, X, method = "explicit", estimated_weight = TRUE)
 
 fit_uls <- magmaanlab::fit_model(model, df, estimator = "ULS")
-rbm_uls <- core$frontier_rbm(fit_uls, X, method = "explicit")
+rbm_uls <- core$frontier_rbm(fit_uls, X, method = "explicit", estimated_weight = TRUE)
 
 stopifnot(is.list(rbm_ml$rbm))
 stopifnot(is.list(rbm_uls$rbm))

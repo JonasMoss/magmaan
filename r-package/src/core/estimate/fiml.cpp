@@ -6188,7 +6188,7 @@ build_ml2s_ij_blocks(spec::LatentStructure pt,
                      const FIMLH1& h1,
                      const SaturatedMoments& sm,
                      TwoStageWeight kind,
-                     TwoStageDlsOptions dls) {
+                     TwoStageDlsOptions dls, bool estimated_weight = true) {
   SampleStats samp = sample_stats_from_saturated(sm);
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error(),
@@ -6261,7 +6261,8 @@ build_ml2s_ij_blocks(spec::LatentStructure pt,
     Eigen::MatrixXd moment_rows =
         static_cast<double>(n) *
         influence_or->block(row_off, col_off, n, qb);
-    auto correction_or = ml2s_weight_correction_block(
+    post_expected<Eigen::MatrixXd> correction_or = Eigen::MatrixXd{};
+    if (estimated_weight) correction_or = ml2s_weight_correction_block(
         raw, pack.cache, samp, residual, moment_rows, *Wb, layout, b, kind,
         dls);
     if (!correction_or.has_value()) return std::unexpected(correction_or.error());
@@ -6476,11 +6477,11 @@ two_stage_rbm_parts(spec::LatentStructure pt,
                     const FIMLPack& pack,
                     const FIMLH1& h1,
                     TwoStageWeight kind,
-                    TwoStageDlsOptions dls) {
+                    TwoStageDlsOptions dls, bool estimated_weight) {
   auto sm_or = saturated_em_moments(raw, pack, h1);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
   auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1,
-                                     *sm_or, kind, dls);
+                                     *sm_or, kind, dls, estimated_weight);
   if (!asm_or.has_value()) return std::unexpected(asm_or.error());
   return weighted_moment_rbm_parts(asm_or->blocks, asm_or->K,
                                    asm_or->observed_bread);
@@ -6495,9 +6496,9 @@ two_stage_rbm_parts(spec::LatentStructure pt,
                     const FIMLH1& h1,
                     const SaturatedMoments& sm,
                     TwoStageWeight kind,
-                    TwoStageDlsOptions dls) {
+                    TwoStageDlsOptions dls, bool estimated_weight) {
   auto asm_or = build_ml2s_ij_blocks(std::move(pt), rep, raw, est, pack, h1,
-                                     sm, kind, dls);
+                                     sm, kind, dls, estimated_weight);
   if (!asm_or.has_value()) return std::unexpected(asm_or.error());
   return weighted_moment_rbm_parts(asm_or->blocks, asm_or->K,
                                    asm_or->observed_bread);

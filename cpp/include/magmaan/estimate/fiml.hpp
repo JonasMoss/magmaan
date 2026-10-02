@@ -740,7 +740,8 @@ two_stage_rbm_parts(spec::LatentStructure pt,
                     const FIMLPack& pack,
                     const FIMLH1& h1,
                     TwoStageWeight kind = TwoStageWeight::Nt,
-                    TwoStageDlsOptions dls = {});
+                    TwoStageDlsOptions dls = {},
+                    bool estimated_weight = true);
 
 post_expected<WeightedMomentRBMParts>
 two_stage_rbm_parts(spec::LatentStructure pt,
@@ -751,7 +752,8 @@ two_stage_rbm_parts(spec::LatentStructure pt,
                     const FIMLH1& h1,
                     const SaturatedMoments& sm,
                     TwoStageWeight kind = TwoStageWeight::Nt,
-                    TwoStageDlsOptions dls = {});
+                    TwoStageDlsOptions dls = {},
+                    bool estimated_weight = true);
 
 // Fixed-misspecification profile-RMSEA / profile-LRT for the ML2S-NT
 // Stage-2 likelihood, over the saturated EM moment vector [mean; vech(cov)].

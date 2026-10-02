@@ -4150,7 +4150,7 @@ Rcpp::List frontier_profile_lrt_parameter_ml2s_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
-    bool estimated_weight = true) {
+    bool estimated_weight = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -4379,7 +4379,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
-    bool estimated_weight = true) {
+    bool estimated_weight = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -5344,15 +5344,17 @@ Rcpp::List frontier_rbm_impl(
     std::string method = "explicit",
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
-    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
+    bool estimated_weight = false) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"])
       : "";
   const std::string method_key = rbm_method_key(std::move(method));
-  const magmaan::estimate::frontier::RBMOptions opts =
+  magmaan::estimate::frontier::RBMOptions opts =
       rbm_options_from(optimizer, control);
+  opts.estimated_weight = estimated_weight;
   const magmaan::estimate::Bounds b = bounds_from_nullable(bounds);
 
   const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
@@ -5479,7 +5481,9 @@ Rcpp::List frontier_rbm_impl(
     magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
     auto w = continuous_ls_weight(fit, ctx, est, estimator, weight, "RBM");
     magmaan::estimate::gmm::FixedWeightOptions dls_opts;
-    const auto mode = continuous_ij_mode_for_fit(fit, estimator, &dls_opts);
+    const auto mode = estimated_weight
+        ? continuous_ij_mode_for_fit(fit, estimator, &dls_opts)
+        : magmaan::estimate::ContinuousLsIJWeightMode::Fixed;
     magmaan::fit_expected<magmaan::estimate::frontier::RBMResult> rbm =
         method_key == "explicit"
             ? magmaan::estimate::frontier::rbm_explicit_continuous_ls(
