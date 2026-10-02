@@ -24,7 +24,7 @@ for the design.
   and validating. The prerelease provides a versioned snapshot for supported
   simulations; it carries no API-stability promise. See the
   [ordinary-package coverage](r-magmaan/README.md) and
-  [remaining work](project/backlog/todo.md#r-simulation-prerelease).
+  [remaining work](project/backlog/todo.md#release-plan).
 
 * **Language:** C++23 core, built with `-fno-exceptions -fno-rtti`. Failures are values (`std::expected`), not exceptions.
 

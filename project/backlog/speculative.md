@@ -170,12 +170,19 @@ must be opt-in and seeded; preserve requested markers. No blanket defaults grid.
 
 **Gap:** ordinary-user promotion, broader gauge theory, automatic failure-cause
 classification, chart/start attribution and new estimator/constraint charts.
+Deferred from the active queue on 2026-10-02: distinguishing requested-chart
+failures from inaccurate sphere stops. That work would validate a general
+chart gate with the retained weak-marker pole witness and require a
+clean/audited driven stop before `magmaan_user_chart_singular`, checking poles,
+finite extremes, runaways and numerical failures across units; alternative
+charts remain diagnostics, and failed multistarts do not establish
+nonexistence. Evidence: [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 **Available:** explicit frontier fitting/reidentification and retained chart
-diagnostics. Concrete primary chart-verdict failures remain in TODO. See
-[parameterization geometry](../design/parameterization-geometry.md) and sphere references.
-**Build if:** a named consumer requires new chart support or the current
-investigation establishes a bounded, validated interface change. Broader theory,
-new grids and multistart are not prerequisites for fixing current failures.
+diagnostics. See
+[parameterization geometry](../design/parameterization-geometry.md).
+**Build if:** a named consumer requires new chart support, or a sphere-chart
+fit gives a wrong verdict in a supported workflow. Broader theory, new grids
+and multistart are not prerequisites for fixing such failures.
 
 ### Convergence bench beyond the decisions study
 

@@ -44,7 +44,7 @@ Development is unfinished. Remaining bugs need fixing, and coverage of the main
 estimators and inferential procedures needs completing and validating before
 a finished release. Version 0.1.0 is a snapshot for supported simulations;
 the inference limits above still apply. See the
-[remaining work](../project/backlog/todo.md#r-simulation-prerelease).
+[remaining work](../project/backlog/todo.md#release-plan).
 
 Install the two source archives from the same release snapshot, compiled package
 first. The ordinary package declares the minimum compatible lab version;

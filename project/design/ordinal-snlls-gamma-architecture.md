@@ -3,7 +3,7 @@
 This document records the shipped ordinal workspace and threshold-profile
 contracts. Implementation state is summarized in the
 [roadmap](../architecture/roadmap.md#ordinal-and-mixed-categorical-ls);
-remaining work belongs in the [backlog](../backlog/todo.md#api-and-r-boundary).
+remaining work belongs in the [backlog](../backlog/todo.md#shared-fitting-composition).
 
 ## Model and moment boundary
 
@@ -256,7 +256,7 @@ and fit-plus-inference workloads separately; a fit-only ULS/DWLS result must
 not hide full-Gamma work in setup.
 
 Remaining R/API polish and mixed invariance work are tracked in the
-[active backlog](../backlog/todo.md#api-and-r-boundary); Gamma-influence
+[active backlog](../backlog/todo.md#shared-fitting-composition); Gamma-influence
 performance and weight storage have their own entries. Reduced-Gamma robust
 products require a concrete size-driven consumer before promotion from the
 speculative backlog. These pointers replace the completed implementation

@@ -6,7 +6,7 @@ source evidence and validation requirements; it does not extend the implemented
 [normative grammar](eqs_grammar.ebnf) or claim EQS numerical parity.
 Implementation state belongs in the [frontend contract](eqs.md) and
 [roadmap](../architecture/roadmap.md); accepted work belongs in the
-[active backlog](../backlog/todo.md#api-and-r-boundary).
+[active backlog](../backlog/todo.md#eqs-language-extension).
 
 ## Source and reading map
 

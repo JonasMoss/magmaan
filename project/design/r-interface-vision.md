@@ -92,7 +92,7 @@ conventions keep their compatibility contracts.
 ## Ordinary API
 
 Status: adopted 2026-10-01; implementation pending in the
-[active backlog](../backlog/todo.md#api-and-r-boundary). The signatures below
+[active backlog](../backlog/todo.md#ordinary-api). The signatures below
 replace the [current call](#current-ordinary-user-call) only after
 implementation and migration checks.
 
@@ -294,7 +294,7 @@ typed reason until their penalized-estimating-equation and sampling-law
 contracts are validated, and unpenalized inference is never substituted.
 `infer()` and `anova()` honor the same provenance. Exposure does not change the
 default covariance policy or move barrier-specific hardening and inference out
-of 0.0.2.
+of 0.3.0.
 
 ### Options
 
@@ -434,17 +434,17 @@ record. Accuracy failures and covariance inadmissibility remain separate causes.
 
 Development follows the [estimator tiers](../architecture/roadmap.md#estimator-development-priorities)
 adopted 2026-09-27 and narrowed 2026-10-01: NTML, FIML and all-ordinal DWLS
-come first, with PSD developed alongside them. Barrier-specific completion
-follows in 0.0.2. Priority includes inference and interface completion; it does
+come first in 0.2.0; PSD keeps its current contract. PSD hardening and
+barrier-specific completion follow in 0.3.0. Priority includes inference and interface completion; it does
 not itself expose a method here or make it a default.
 The broader estimator list below records the intended surface, not equal
 implementation priority or complete policy-inference availability.
 
-Mixed continuous/ordered completion is assigned to 0.0.2. Noniterative
+Mixed continuous/ordered completion is assigned to 0.3.0. Noniterative
 development is indefinitely postponed; existing lab APIs and regression gates
 remain, with reopening requiring an explicit user scope decision. MI and
 release-score work across the remaining estimator/weight families is tracked
-in the [completion matrix](../backlog/todo.md#mi-and-release-score-completion-001).
+in the [completion matrix](../backlog/todo.md#mi-and-release-score-completion-020).
 
 `estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
 ULS and WLS. Variables declared in `ordered`: DWLS, WLS and ULS. The data type
@@ -719,8 +719,8 @@ a `control` option for non-converging fits, and summary-statistic input.
 The steps below retain the package-split history. For remaining work, the
 [development priorities](../architecture/roadmap.md#estimator-development-priorities)
 supersedes their original ordering: finish NTML gaps and extend policy inference
-to FIML and all-ordinal DWLS first, with PSD work alongside them. Mixed
-continuous/ordered and barrier-specific completion follow in 0.0.2.
+to FIML and all-ordinal DWLS first (0.2.0). PSD hardening, mixed
+continuous/ordered and barrier-specific completion follow in 0.3.0.
 Other least-squares estimators and ML2S extend for a concrete consumer or
 inexpensive shared benefit. Two-level, SAM and composite expansion is parked;
 the historical steps below do not schedule their policy work. Broader PSD/barrier

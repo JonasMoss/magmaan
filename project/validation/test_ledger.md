@@ -402,16 +402,20 @@ cases (Mplus User's Guide and Newsom 2015 and 2024) from derived ordinal
 moments with magmaan's DWLS estimator. The cases were verified in the corpus
 against the book's own output. For each case it compares the objective, df,
 every estimate and the implied latent-response correlations with lavaan.
-- **Passing (13):** delta and theta CFAs, longitudinal invariance models,
-  threshold-constrained models and two-group twin models, all to about
-  1e-6. ex5.19 is a reflected-loading equivalent solution.
-- **Known gaps (8), reported without failing.**
-  - Theta residual variances are forced to 1, including where the model
-    frees them (ex6.5) or fixes them at 0 (Newsom ex3.3a).
-  - Delta scale factors (`~*~`) are forced to 1.
-  - Latent means do not enter the implied thresholds: categorical growth
-    and latent change models.
-  - One optimizer stall: Newsom 2024 ex1.3c.
+- **Passing (19):** delta and theta CFAs, longitudinal invariance models,
+  threshold-constrained models, two-group twin models, freed or zero-fixed
+  theta residual variances, delta scale factors and latent means in the
+  implied thresholds, all to about 1e-6. ex5.19 is a reflected-loading
+  equivalent solution. The six partable-semantics gaps closed with the
+  ordinal partable fix of 2026-09-29.
+- **Known gaps (2), reported without failing.**
+  - Newsom 2015 ex9.2: lavaan's free-delta optimum implies negative
+    residual variances in magmaan's free-theta translation, which the default
+    variance bounds exclude (latent change model; free-delta bound relaxation
+    is consumer-gated).
+  - Newsom 2024 ex1.3c: from lavaan's starts L-BFGS stops on a flat ridge
+    of this saturated theta model (fmin 5.8e-9), within the Newton accuracy
+    budget but with different raw parameters.
 - **Diagnosis.** Failing cases are refit from lavaan's θ, which separates
   optimizer issues from model semantics.
 
@@ -557,7 +561,7 @@ passing deterministic reductions alone does not establish calibration.
 | Simulation | Distribution goldens, deterministic calibration fixtures, stochastic smokes, covsim reference cross-check | Unit tests under `sim` plus advisory checks | `cpp/tests/unit/norta_test.cpp`, `cpp/tests/unit/plsim_test.cpp`, `cpp/tests/unit/vale_maurelli_test.cpp`, `cpp/tests/checks/plsim/` (incl. `plsim_vs_covsim.R`, which validates PLSIM's covariance integral + root-find against covsim's `get_cov` to ~1e-8 via the headline get_cov-on-magmaan-marginals cross-check) | Model-implied simulation, ordinal/mixed observed-correlation calibration, and persistent caches remain open; covsim cross-checks for NORTA/Vale-Maurelli not yet added. |
 | R boundary and examples | lavaan parity through examples and R-shaped wrapper checks | `just r-check` examples plus C++ API tests | `cpp/tests/unit/api_sem_test.cpp`, `r-package/examples/*.R`, `r-package/examples/tutorial/run_all.R` | Examples are smoke tests, not exhaustive wrapper coverage; R reconstruction is sensitive around means and groups. |
 | Composite frontier | lavaan native composite fixtures and FC-SEM evaluator invariants | Unit, golden, and R frontier example tests | `cpp/tests/unit/fcsem_evaluator_test.cpp`, `cpp/tests/unit/fcsem_ml_test.cpp`, `cpp/tests/golden/composite_golden_test.cpp`, `r-package/examples/fcsem_frontier.R` | Native W/T matrix internals are intentionally unit-test diagnostics rather than a public fixture contract; multi-group and non-ML composites remain deferred. |
-| Corpus parity | lavaan-generated real-data and textbook fixtures | Heavy `parity` target and corpus-specific goldens | `cpp/tests/golden/geiser_golden_test.cpp`, `cpp/tests/golden/mplus_sem_golden_test.cpp`, `cpp/tests/golden/paper_corpus_golden_test.cpp`, `cpp/tests/golden/textbook_corpus_golden_test.cpp`, `cpp/tests/golden/textbook_ordinal_golden_test.cpp` | Corpus breadth is intentionally staged; some cases document alternate optima or unsupported syntax. The textbook ordinal lane runs 8 known-gap cases (seven ordinal partable semantics, one flat ridge where the optimizer stops early; see the categorical-models section of `project/backlog/todo.md`) as reported, non-failing checks. |
+| Corpus parity | lavaan-generated real-data and textbook fixtures | Heavy `parity` target and corpus-specific goldens | `cpp/tests/golden/geiser_golden_test.cpp`, `cpp/tests/golden/mplus_sem_golden_test.cpp`, `cpp/tests/golden/paper_corpus_golden_test.cpp`, `cpp/tests/golden/textbook_corpus_golden_test.cpp`, `cpp/tests/golden/textbook_ordinal_golden_test.cpp` | Corpus breadth is intentionally staged; some cases document alternate optima or unsupported syntax. The textbook ordinal lane runs 2 known-gap cases (a free-delta Heywood bound and a flat ridge where the optimizer stops early; see the all-ordinal sections of `project/backlog/todo.md`) as reported, non-failing checks. |
 
 ## High-Risk Map
 

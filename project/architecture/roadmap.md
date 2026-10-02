@@ -102,8 +102,8 @@ availability, and the decision to make a method a default.
 
 | Development tier | Initial scope | Commitment |
 | --- | --- | --- |
-| **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and all-ordinal DWLS | 0.0.1 priority for reliable, efficient estimation and complete inference workflows; mixed continuous/ordered completion follows in 0.0.2 |
-| **Priority frontier** | PSD covariance constraints; multi-information barriers in the following release | PSD estimation and inference accompany primary classical workflows in 0.0.1; barrier-specific hardening and inference follow in 0.0.2, with estimator-specific validation |
+| **Primary classical** | Single-level normal-theory ML (NTML, exposed as `ML`), FIML, and all-ordinal DWLS | 0.2.0: ordinary API, lavaan-compatible fitting and complete inference workflows; magmaan's own fitting reliability and mixed continuous/ordered completion follow in 0.3.0 |
+| **Priority frontier** | PSD covariance constraints; multi-information barriers in the following release | PSD keeps its current fitting and boundary-inference contract in 0.2.0; PSD finalization/stress work and barrier-specific hardening and inference follow in 0.3.0, with estimator-specific validation |
 | **Secondary classical** | GLS, continuous ADF/WLS, ULS, ordinal full WLS; provisionally ML2S and pairwise moment routes | Preserve correctness and existing support; extend for concrete users or inexpensive reuse of shared work |
 | **Research collection** | DLS, robust alternatives, SAM, FC-SEM and other specialist methods | Maintain tested, explicit contracts without promising the primary workflows' breadth |
 
@@ -123,11 +123,11 @@ The provisional secondary assignments can be revisited for a concrete use.
 
 Adopted 2026-10-01: mixed means models containing both continuous and ordered
 indicators. Their remaining fitting, inference and interface work is assigned
-to 0.0.2; all-ordinal workflows remain current. Noniterative development,
+to 0.3.0; all-ordinal workflows remain current. Noniterative development,
 inference expansion and capability-review work are indefinitely postponed,
 with reactivation requiring an explicit user scope decision. Retained APIs and
 regression gates preserve their documented capabilities. The
-[MI/release-score completion matrix](../backlog/todo.md#mi-and-release-score-completion-001)
+[MI/release-score completion matrix](../backlog/todo.md#mi-and-release-score-completion-020)
 records current coverage and remaining work across estimator and weight choices;
 it schedules no new ordinary-user default or parked model-family expansion.
 
@@ -143,30 +143,36 @@ separate decisions. PSD already has ordinary-user exposure; barrier remains
 lab-only pending its exposure and inference contract. Both retain their current
 API status. Promotion of either to a default requires recorded evidence.
 
-The [active backlog](../backlog/todo.md#capability-inventory) tracks
+The [active backlog](../backlog/todo.md#release-readiness) tracks
 execution and the remaining capability inventory. The inventory will distinguish
 implemented and validated, implemented with limited validation, planned,
 unsupported, and inapplicable components; these tiers alone make no new
 availability claims. Existing entry points and numerical defaults are unchanged.
 
-Release direction adopted 2026-10-01: **0.0.1 focuses on ordinary and PSD
-estimation and inference in supported primary workflows**. Prioritize shared
-starts, units, constraints, convergence/admissibility, PSD finalization and
-sampling-law validation. Explicitly reject unvalidated inference, including
-singular PSD endpoints; fitting support alone does not establish inference.
-**0.0.2 owns mixed continuous/ordered completion and barrier-specific hardening
-and inference**: stricter starting
-domains, near-face curvature, factor disappearance, fallback units, marker
-poles and penalty-specific sampling/exposure contracts. Existing barrier
-implementation and regression gates remain; barrier-only work is not a 0.0.1
-release requirement. Shared fixes needed by ordinary/PSD fitting stay in 0.0.1
-even when they also improve barriers. Existing mixed APIs retain correctness
-gates; mixed-only completion is a 0.0.2 task. Noniterative development and
-capability reviews are indefinitely postponed pending an explicit user decision.
+Release plan revised 2026-10-02; the
+[active backlog](../backlog/todo.md#release-plan) owns versions and exit
+criteria. One version number covers the C++ library and both R packages.
+**0.2.0 delivers the adopted ordinary API, lavaan-compatible fitting, primary
+inference and MI/release-score completion**: `options = list(preset =
+"lavaan-0.7.2")` extends to linear equality constraints, FIML and all-ordinal
+DWLS so simulations can rely on lavaan's fitting; the ordinary policy covers
+ML, FIML and all-ordinal DWLS; MI/release covers every estimator × weight cell
+including two-stage, or rejects it with a typed reason. Explicitly reject
+unvalidated inference; fitting support alone does not establish inference.
+**0.3.0 owns magmaan's own fitting reliability, mixed continuous/ordered
+completion and barrier-specific hardening and inference**: shared starts,
+units, convergence/admissibility, PSD finalization, stress and normalization;
+stricter starting domains, near-face curvature, factor disappearance, fallback
+units, marker poles and penalty-specific sampling/exposure contracts. Existing
+PSD and barrier implementation, inference refusals and regression gates
+remain, and PSD inference keeps its current boundary contract. Existing mixed
+APIs retain correctness gates. Noniterative development and capability
+reviews are indefinitely postponed pending an explicit user decision.
 
-The active queue is organized around ordinary/PSD fitting reliability,
-primary inference workflows, API/performance, validation/maintenance and the
-0.0.2 mixed/barrier programme. Tasks
+The active queue is organized by release: 0.2.0 (ordinary API,
+lavaan-compatible fitting, primary inference, MI/release completion and
+release readiness), unscheduled interface/composition/maintenance work, and
+0.3.0 (fitting reliability, PSD, mixed data and barriers). Tasks
 state a result and completion check; completed work and run histories live in
 the maintained contracts, test ledger and experiment reports. Simulation has its
 own backlog, research activity belongs to the experiment index, and paper-local
@@ -179,8 +185,8 @@ Direction recorded 2026-09-30. Retain the limited-information capability
 currently called catML: normal-theory ML discrepancy on Stage-1 polychoric
 moments and model-implied correlations, with saturated thresholds. Consolidate
 its moment-target map and ML kernel rather than maintaining a separate
-estimator identity. Shared ordinary/PSD composition serves the 0.0.1 focus;
-remaining barrier-specific work follows in 0.0.2. Existing frontier status,
+estimator identity. Remaining mixed and barrier-specific composition work
+follows in 0.3.0. Existing frontier status,
 entry points and ordinary-user defaults remain until validated replacement or
 migration decisions.
 
@@ -217,14 +223,112 @@ contract. The adopted
 `options`. Implementation/migration remain pending; internal domain
 constraints and penalties remain independent. Experimental barrier fitting is
 exposed before complete development; barrier-specific hardening and validated
-inference remain 0.0.2 work.
+inference remain 0.3.0 work.
+
+#### Implemented composition (2026-10-01)
+
+**Moment targets.** `model::MomentTarget` distinguishes covariance and
+correlation targets. `model::correlation_evaluation()` projects grouped
+covariance values and optional vech Jacobians to correlations, drops mean
+moments, and fixes unit diagonals with zero derivatives. Positive finite
+variances are required; the consuming discrepancy owns definiteness.
+`estimate::ml_objective()` accepts either target and keeps its two-argument
+covariance entry point and half-discrepancy scale. Correlation inputs must
+already have unit diagonals and no mean moments; inputs are never repaired.
+
+**Ordinal association ML.** The methods-development surface calls the former
+catML capability **ML**. `api::fit(model, ordinal_data, api::ml())` and the
+`estimate::frontier::fit_ml()` / `fit_ml_psd()` overloads on `OrdinalStats`
+dispatch to it. The separate `fit_catml()`, `fit_catml_psd()`,
+`catml_objective()` and R `frontier_fit_catml_psd()` names are removed;
+historical diagnostic formulas, Newton audit identifiers and PSD stress arm IDs
+keep their categorical-ML names. In `magmaanlab`, `fit_model(spec, data,
+estimator = "ML")` with every variable ordered, or with prepared ordinal stats,
+selects the route; `psd = TRUE` uses the same discrepancy over PSD primitive
+covariance blocks, and `frontier_fit_ml_psd()` accepts ordinal stats.
+Stage-1 thresholds are affine restrictions at their fitted values, excluded
+from the search; fixed unit residual variances supply the association gauge;
+delta/theta are reporting conventions over one correlation target. The active
+association-Jacobian rank sets df (`npar_active`, `association`); an
+unidentified association map is an error. Linear loading equalities, including
+grouped ones, are supported. Threshold constraints, mean/intercept requests,
+released response scales, non-unit response-variance constraints and nonlinear
+equalities are rejected before preparation. Provenance records moment
+source/target, discrepancy, domain, algorithm, saturated-threshold policy and
+unvalidated inference state. Gaussian likelihood/AIC/BIC and post-fit sampling
+inference are unavailable pending their own contract. Mixed/polyserial ML is
+unsupported.
+
+**Covariance policies.** `fit_model()` and prepared `estimate()` accept
+`covariance = "unrestricted" | "psd" | "barrier"`; `psd = TRUE` remains a
+compatible spelling. Barrier options select `target = "joint" |
+"determinacy"` and a finite non-negative `weight` (default 0.25);
+contradictory options and extra barrier bounds are rejected.
+
+| Moment source | Shared PSD / barrier fitting coverage |
+| --- | --- |
+| Complete continuous and pairwise MCAR moments | ML, ULS, GLS, explicit fixed-weight WLS |
+| All-ordinal polychorics | Association ML, ULS, DWLS, WLS |
+| Saturated continuous FIML/EM | ML2S with NT-ML or fixed ULS/DWLS/ADF/DLS Stage 2 |
+| Direct continuous FIML | Observed-pattern likelihood, separate raw-data route |
+
+In C++, the ML/FIML penalty entry points and
+`estimate::frontier::fit_gmm_multiinfo()` / `fit_ordinal_multiinfo()` compose
+one scalar penalty wrapper; the `api::EstimatorSpec` facade has no covariance
+option. The objective is `f - weight / N * P`. Fits keep unpenalized `fmin`
+and report `penalized_fmin`; stationarity uses the penalized objective.
+ML/FIML/GMM Newton audits include analytic penalty curvature; ordinal penalty
+routes provide geometric stationarity only. Observed Sigma must be PD for a
+positive-weight penalty, including LS routes; zero weight keeps the base
+domain, and an undefined penalty at an improper solution is NaN. Continuous
+ML, fixed-weight quadratics and direct FIML barriers use the unit-normalization
+contract: quadratic weights move with the moment units, and direct FIML
+reports the caller-unit likelihood including its missingness-pattern Jacobian
+constant. Continuous pairwise fitting is a moment source selected with
+`missing = "pairwise"`, retaining pairwise stats, overlap and missingness
+provenance. ML2S retains its complete Stage-1 object (moments, sample sizes,
+ACOV/influence, regularization provenance); PSD and barriers change only the
+final SEM fit. Refits and composition metadata retain these choices.
+
+**Shared fixed weights.** Complete continuous and all-ordinal fitting share
+ULS, NT/GLS, DWLS, WLS/ADF, fixed-a DLS and supplied W through
+`estimate::gmm::FixedWeightKind`, `FixedWeightOptions` and
+`fixed_moment_weight()`; ordinal and saturated-FIML weight names alias them.
+The ordinal NT weight uses empirical threshold covariance, normal-theory
+correlation covariance and zero cross blocks. DLS interpolates Gamma before
+inversion (a = 0 is NT, a = 1 is ADF). NT is a quadratic weight for LS; the ML2S
+`stage2_weight = "nt"` spelling still selects the ML discrepancy. R selects
+weights with `fit_model(..., estimator = "WLS", weight = "dls", dls_a = .3)`,
+prepared `estimate(..., weight = )`, `prepare_weight()` or
+`estimator = "DLS"`. Weights stay fixed during optimization although they may
+be estimated from the data; composition records `weight_frozen` and DLS a.
+Refits rebuild data-derived weights and preserve supplied ones. Pairwise MCAR
+empirical weights are unavailable. Continuous LS `vcov()` uses the weighted
+sandwich with retained W, without an estimated-weight influence term.
+
+**Limits.** General penalized and pairwise sampling inference are
+unvalidated; new compositions reject generic SE/test and likelihood-based
+fit-measure helpers instead of returning complete-data formulas.
+Mixed/polyserial ML and barriers, two-level policies, an analytic
+penalized-ordinal Newton audit, cross-route dispatcher metadata and
+penalty-inference calibration remain open.
+
+**Validation.** Each slice passed every non-`parity` C++ test in an optimized
+build (1,339 rising to 1,367 tests), including independent finite-difference
+derivatives, grouped projection, observation-unit invariance, invalid inputs,
+overidentified/grouped/loading-constrained ordinal models, fixed-weight
+criterion preservation, zero-weight reductions at improper solutions, affine
+constraint transport, threshold-free penalty derivatives, fit-only ordinal
+ULS/DWLS without sampling Gamma, and a strict L-BFGS mixed-unit gate for ML and
+direct FIML. Isolated development installations passed the full compiled and
+ordinary-user R suites with live lavaan checks, covering every tabled route
+with both barriers, prepared/convenience/refit equivalence, unchanged Stage 1
+and inference exclusions.
 
 The [active composition queue](../backlog/todo.md#shared-fitting-composition)
-owns dependency order and remaining gates. Foundation work in progress is not
-reported here as completed support; its owner must record validation before
-closing the task. Further pruning requires individual consumer/dependency
-decisions and preserves shared primitives; parking SAM/FC-SEM expansion does
-not authorize deleting their existing surfaces.
+owns remaining dependency order and gates. Further pruning requires individual
+consumer/dependency decisions and preserves shared primitives; parking
+SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
@@ -1268,8 +1372,10 @@ unchanged Stage-1 moments, ULS acceptance of indefinite Stage-1 association
 matrices, and repair of an otherwise exact mixed fit with an improper
 continuous residual variance.
 
-The separate inverse/log-determinant categorical-ML domain is now implemented
-as `estimate::frontier::fit_catml` and `fit_catml_psd`. This is
+The separate inverse/log-determinant categorical-ML domain is ordinal
+association ML: the `estimate::frontier::fit_ml()` / `fit_ml_psd()` overloads
+on `OrdinalStats` (see [shared fitting composition](#implemented-composition-2026-10-01),
+which replaced the former `fit_catml` names). This is
 limited-information cML: normal-theory ML applied to the Stage-1 polychoric
 correlation matrix under a saturated threshold structure, not a
 full-information ordinal likelihood. The implied covariance is standardized
@@ -1277,9 +1383,10 @@ to a correlation matrix with an analytic Jacobian before the ML value/gradient
 is evaluated. Because the sample polychoric log determinant is part of the
 criterion, a non-PD Stage-1 matrix is an explicit domain error and is never
 silently projected. The PSD variant constrains fitted primitive `Theta`/`Psi`
-blocks and retains the input polychorics and thresholds exactly. R exposes
-`frontier_fit_catml_psd()` with explicit `covariance_policy` and Stage-1 policy
-labels. Derivative, interior-reduction, domain-error, unchanged-Stage-1, and
+blocks and retains the input polychorics and thresholds exactly. R selects it
+through `fit_model(..., estimator = "ML")` on all-ordered data, and
+`frontier_fit_ml_psd()` accepts prepared ordinal data. Derivative,
+interior-reduction, domain-error, unchanged-Stage-1, and
 R-schema gates cover this slice; broader boundary-geometry validation remains
 deferred. Inference at fitted covariance boundaries remains out
 of scope. PSD two-level ML and native FC-SEM are not part of the supported
@@ -2405,7 +2512,7 @@ an unconstrained gradient test to constrained solutions.
   markers, fixed thresholds, equality releases, fixed-zero/absent rows, and
   fitting-weight scaling with invariant robust statistics. Weighted provenance
   and adapters remain in the MI completion matrix; mixed completion stays in
-  0.0.2.
+  0.3.0.
 - Continuous-LS robust MI/release covariance dispatch (2026-10-01): the R
   wrappers honor `cov="empirical"` versus `cov="model_implied"` independently of
   the WLS estimator label, preserving explicit fitting W. Empirical covariance

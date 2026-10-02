@@ -1,15 +1,16 @@
 # magmaan TODO
 
-Accepted implementation work, ordered by workflow. The
+Accepted implementation work, ordered by release. The
 [roadmap](../architecture/roadmap.md) owns current capabilities/contracts;
 the [test ledger](../validation/test_ledger.md) and linked studies own evidence.
 Remove completed items after their durable record exists.
 
-**Scope adopted 2026-09-30; release priorities amended 2026-10-01:** single-level
-ML, FIML and all-ordinal DWLS in their supported slices. **0.0.1 focuses on
-ordinary and PSD estimation and inference; barrier-specific hardening and
-inference and mixed continuous/ordered workflows follow in 0.0.2.** Secondary
-estimators retain correctness gates;
+**Scope adopted 2026-09-30; release plan revised 2026-10-02:** single-level
+ML, FIML and all-ordinal DWLS in their supported slices. **0.2.0 delivers the
+ordinary API, lavaan-compatible fitting for simulations and the primary
+inference workflows. magmaan's own optimizer and PSD work, mixed
+continuous/ordered workflows and barrier hardening/inference follow in
+0.3.0.** Secondary estimators retain correctness gates;
 extensions need a concrete consumer or inexpensive reuse of primary work.
 Noniterative work is indefinitely postponed; reopening requires an explicit
 user scope decision. Existing noniterative APIs and regression gates remain.
@@ -23,9 +24,9 @@ misspecification and categorical conditional-moment expansion are
 [banked](speculative.md#covariates-and-sampling); existing compatibility routes
 retain their correctness gates.
 
-The existing limited-information correlation-ML capability (currently catML)
-is retained and folded into shared fitting composition. Common ordinary/PSD
-fitting serves 0.0.1; remaining model-penalty work follows in 0.0.2. This does
+The limited-information correlation-ML capability (formerly catML) is now
+ordinal association ML within shared fitting composition; remaining
+model-penalty work follows in 0.3.0. This does
 not establish new ordinary-user defaults or promise inference for every
 combination. See the
 [composition contract](../architecture/roadmap.md#shared-fitting-composition).
@@ -43,164 +44,94 @@ check; evidence links own detailed protocols and historical results.
 
 ## Release plan
 
-| Milestone | Focus |
+Revised 2026-10-02. One version number covers the C++ library and both R
+packages, which ship together through the vendored core. The former 0.0.1
+label (the C++ project version) is retired.
+
+| Version | Content |
 | --- | --- |
-| **0.0.1 — current** | Ordinary and PSD estimation and inference: shared starts/units/constraints, reliable convergence and admissibility, PSD finalization/stress gaps, and validated parameter covariance, tests and intervals in supported primary slices |
-| **0.0.2 — following** | Mixed continuous/ordered fitting and inference; barrier-specific hardening and inference: stricter domains, near-face curvature, factor disappearance, fallback/pole regressions and penalty-specific sampling/exposure contracts |
+| **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/roadmap.md#r-bindings-and-public-namespace-transition) and package NEWS |
+| **0.2.0, current** | The adopted ordinary API; lavaan-compatible fitting through `options`, so simulations can rely on lavaan's fitting while magmaan's own optimizer work waits; ordinary-policy inference for ML, FIML and all-ordinal DWLS; MI/release-score completion across weights, including two-stage |
+| **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI |
+| **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
 
-Continue with [fitting reliability](#fitting-reliability) and
-[primary inference](#primary-inference-workflows). Shared fixes required by
-ordinary/PSD routes remain 0.0.1 work even when barriers benefit. Existing
-barrier code/tests remain; barrier-only validation is not a 0.0.1 release gate.
-Mixed-data completion is assigned to 0.0.2; noniterative development has no
-scheduled release. No milestone label promotes a new
-ordinary-user estimator or inference default.
+Sphere-chart failure handling is deferred to the
+[trigger register](speculative.md#sphere-chart-development). Existing PSD and
+barrier entry points, inference refusals and regression gates are unchanged in
+0.2.0; PSD inference keeps its current boundary contract. No milestone label
+promotes a new ordinary-user estimator or inference default without recorded
+evidence.
 
-## Fitting reliability
+### 0.2.0 exit criteria
 
-### Optimization and convergence
+0.2.0 is released when every criterion holds. A component can meet a criterion
+by returning a typed unavailable reason; it never meets one by returning a
+result under an unstated convention.
 
-- [ ] **M — extend the pinned lavaan fitting setup beyond its initial ML gate.**
-  Independent starts/search/acceptance and the `lavaan-0.7.2` preset are wired
-  for ordinary complete continuous ML; `newton` retains the native common
-  verdict with internal thresholds. Gate pure-merge/general affine and
-  augmented-Lagrangian coordinates, nonzero bounds and constrained retries,
-  then primary FIML and all-ordinal DWLS. Retain effective controls, every
-  attempt and separate native diagnostics; reject unsupported combinations.
-  **Check:** pinned offline components and installed-version R comparisons of
-  starts, search, final gradients, soft failures and retries, not just easy
-  estimates. Inference conventions remain magmaan's policy. Consumer:
-  simulation studies that need lavaan-identical fitting. Retry parity so far:
-  a ×100 rescale matches lavaan's standardized retry exactly; at ×1000 and
-  ×10⁵ starts, coordinates and verdicts match, but endpoints depend on
-  floating-point paths (fixture `fitting/lavaan_0_7_2.json`).
+1. **Ordinary API.** `magmaan_model()` and `magmaan(model, data, estimator,
+   covariance, inference, options)` work as
+   [designed](../design/r-interface-vision.md#ordinary-api), including the
+   `fixed.x`, `missing`, `cluster` and `meanstructure` removals with migration
+   messages, and the checks of the [API tasks](#ordinary-api) pass.
+2. **lavaan-compatible fitting.** `options = list(preset = "lavaan-0.7.2")`
+   fits complete-data ML with linear equality constraints (shared labels,
+   `group.equal`, `==` rows), FIML and all-ordinal DWLS, single- and
+   multi-group. Pinned fixtures match lavaan's starts, search coordinates,
+   final gradients and verdicts, and installed-lavaan R comparisons pass on a
+   named simulation-model set. Nonzero bounds, nonlinear constraints and other
+   routes error.
+3. **Primary inference.** For ML, FIML and all-ordinal DWLS, single- and
+   multi-group, the ordinary policy returns parameter covariance, global tests
+   and nested tests, or a typed unavailable reason per component. Each computed
+   component has a written recipe, an independent or convention-matched gate,
+   its exact reductions (FIML on complete data equals the ML policy) and
+   target-regime calibration evidence: existing studies or one frozen
+   confirmatory run per estimator.
+4. **Open ML/FIML validity questions settled.** The Wald coverage shortfall is
+   explained (point bias versus underestimated variance) and either fixed or
+   documented, and the small-sample LR reporting decision is recorded.
+5. **MI/release matrix.** Every estimator × weight cell of the
+   [completion matrix](#mi-and-release-score-completion-020) is gated in C++
+   and R or rejected with a typed reason, and no cell silently combines two
+   weight recipes. Two-stage MI/release use Stage-1 influence for every
+   Stage-2 weight.
+6. **Capability inventory.** One published table records, per estimator,
+   covariance domain and inference component, whether it is validated, has
+   limited validation, is unsupported or is inapplicable; C++, lab and
+   ordinary-package behavior agree with it. The table defines "supported" for
+   0.2.0.
+7. **Release mechanics.** The CMake project and both DESCRIPTION files carry
+   0.2.0 with matching NEWS. `just check`, the `parity` label and `R CMD check`
+   for both packages pass, `main` and the release tag are pushed, and CI is
+   green.
 
-- [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
-  line-search reductions can exhaust infeasible trials at the initial point.
-  Assess safeguarded backtracking or adapter recovery while retaining caller
-  controls and terminal candidates. **Check:** the
-  [domain probe](../../cpp/tests/checks/nlopt_lbfgs_domain.c), corrected corpus
-  failures and rescaled fits. A larger evaluation budget alone is insufficient.
-  See [corpus recovery](../../experiments/engineering/active/17-corpus-optimizer-recovery/report.qmd).
+## 0.2.0: ordinary API, lavaan-compatible fitting and primary inference
 
-- [ ] **M — equality constraints that fully determine a block stall the ML fit.**
-  Effects coding (each factor's loadings average 1) plus tau-equivalence (the
-  loadings equal) fixes every loading of the factor at 1 through `==` rows.
-  On Little (2013) Table 10.3 (24 indicators, 8 factors) magmaan's L-BFGS and
-  PORT fits both stop at the start, unconverged, with $\chi^2 \approx 73{,}000$,
-  while lavaan converges to $\chi^2 = 271$ on the same draw. Found by the
-  sem-score-tests calibration study, where the case is supplement-only.
-  **Check:** that model's restricted fit converges to lavaan's optimum, and the
-  constraint projection handles constraints that pin parameters completely.
+### Ordinary API
 
-- [ ] **M — diagnose the layered-start Geiser latent-AR loss.** The fixture
-  `latent_ar_cross_lagged_extended` stalls above the reference objective with
-  L-BFGS and PORT; FABIN3 and std.lv succeed. **Check:** explain the valley/start
-  failure, preserve a regression and verify corpus/held-out behavior before
-  changing defaults. Evidence: corpus recovery.
-
-- [ ] **M — finish unit-equivariant starts and optimizer coordinates.** Remove
-  unit-dependent FABIN/layered fallback steps; extend supported start selections
-  and fallback reports to all-ordinal preparation. Wire coordinates through
-  primary all-ordinal and relevant SNLLS/IRLS paths; mixed extensions follow in
-  0.0.2. **Check:** transported
-  starts and fits across units, groups, constraints and identification;
-  reject unsupported selections. Exclude two-level, SAM, FC-SEM and removed
-  fitted-weight/automatic-identification routes. See
-  [optimizer controls](../reference/optimizer-controls.md) and corpus recovery.
-
-- [ ] **M — detect reflection-trapped starts and validate saddle escape.**
-  Fixed-variance latent scales permit zero-gradient sign-reflection subspaces
-  with negative curvature. Check all starts against fixed entries/constraints;
-  assess a safeguarded original-objective step as explicit recovery. **Check:**
-  phantom, second-order and Little Table 7.6 witnesses, retaining user-start
-  and intervention reports. Evidence: corpus recovery.
-
-- [ ] **S/M — reject unidentified exact-fit ridges reliably.** The free-marker
-  CFA in `ml_psd_fallback.R` can pass a Newton check with seven parameters for
-  six moments. Add scale-free identification checking alongside local accuracy.
-  **Check:** the ridge and identified constrained controls under unit changes;
-  avoid tolerance changes that merely move the failure. See
-  [terminal audit](../design/terminal-audit.md).
-
-- [ ] **M — finish common-verdict and stopping-control integration.** Preserve
-  evaluable candidates on soft exits, report effective controls/raw reasons
-  separately from the verdict, and migrate active backend-status consumers.
-  Assess ML stopping controls for FIML/DWLS and accuracy-budget sensitivity with
-  estimated Gamma. **Check:** corpus near misses/non-minima and consistent R
-  TRUE/FALSE/NA projection; preserve failed/unchecked fits and rank diagnostics.
-  See terminal audit and
-  [Newton rollout](../../experiments/engineering/active/19-newton-verdict-migration/report.qmd).
-
-- [ ] **M — distinguish requested-chart failures from inaccurate sphere stops.**
-  Validate a general chart gate with the retained weak-marker pole witness;
-  require a clean/audited driven stop before `magmaan_user_chart_singular`.
-  **Check:** poles, finite extremes, runaways and numerical failures across units;
-  alternative charts remain diagnostics. Failed multistarts do not establish
-  nonexistence. Evidence: sphere references. Broader geometry and ordinary-user
-  promotion are [deferred](speculative.md#sphere-chart-development).
-
-### PSD and remaining normalization
-
-- [ ] **M — make caller-unit covariance audits scale robust.** Include standalone
-  audits and normalization-disabled fits. **Check:** heterogeneous units,
-  equalities, means and improper witnesses, retaining the distinction between
-  accuracy and admissibility. Replay the paired normalization losses in
-  [optimizer defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd).
-
-- [ ] **M — repair PSD finalization and retained route losses.** Diagnose std.lv
-  equal-loading lift round-trip failures and constrained-chain objective losses
-  (`eqchain_b20`), including starts and covariance-link mappings. **Check:**
-  lifted/ordinary objectives, links and equality residuals across units. Direct
-  PSD remains the ordinary route; fallback remains explicit. Any route change
-  needs a fresh decision study. Evidence: optimizer defaults.
-
-- [ ] **L — extend shared normalization to FIML.** Transport raw data/patterns,
-  fixed-x inputs, groups, models, starts, bounds, affine equalities and applicable
-  inference; return caller units. **Check:** all-observed reduction,
-  missing-pattern derivatives and unit/group/constraint round trips before
-  adoption. Complete-data ML/PSD normalization is already enabled.
-  See optimizer controls.
-
-- [ ] **L — close primary PSD stress gaps.** Localize ML, FIML and all-ordinal
-  DWLS failures using the retained harness. Keep stage-one objects unchanged;
-  separate solver status, cone stationarity, admissibility and competing basins.
-  **Check:** independent objective/link recomputation, interior reductions,
-  retained seeds and targeted confirmation with failures/cost tails reported.
-  Promote deterministic defects to tests. Secondary breadth is consumer-gated;
-  two-level and native FC-SEM stay excluded. Evidence:
-  [PSD stress](../../experiments/engineering/active/13-psd-estimator-stress/report.qmd).
-
-## R simulation prerelease
-
-Scope adopted 2026-10-01: prepare a versioned ordinary-user `magmaan` and
-matched `magmaanlab` for simulations. Completion is API correctness and a
-reproducible install; broader estimator or inference coverage is not a release
-gate. EQS remains lab-only; ordinary-user integration follows the C++/lab
-language-extension gates below.
-
-The 0.1.0 API hardening and local release gates are complete, recorded in
-the [roadmap](../architecture/roadmap.md#r-bindings-and-public-namespace-transition)
-and package release notes. Completed checklist items have been folded into
-those records. Remaining inference expansion stays under the workflows below;
-it is not required to use this prerelease for supported simulations.
-
-The library and ordinary-user inference policy remain unfinished. Beyond this
-packaging milestone, the goal is to fix remaining bugs and complete and validate
-coverage of the main estimators and inferential procedures. The active items
-here track that work; completing the 0.1.0 gates does not complete it.
-
-## Primary inference workflows
-
-0.0.1 prioritizes ordinary and PSD inference in supported primary workflows.
-Ordinary SEs are not automatically valid at singular PSD endpoints; require
-validated sampling contracts or explicit unsupported results. Barrier-specific
-covariance, tests and intervals belong to the 0.0.2 section below. The
-adopted ordinary API exposes barrier fitting experimentally as
-`covariance = barrier(lambda)`; availability does not claim validated
-inference.
-
-### ML and FIML
+- [ ] **M/L — implement the adopted ordinary API.** Add
+  `magmaan_model(model, prototype, ordered, group, group.equal, group.partial,
+  identification, parameterization)` and fit immutable prepared models through
+  `magmaan(model, data, estimator, covariance, inference, options)`. Support
+  zero-row grouped/ordinal schema frames; keep native structural preparation
+  outside repeated fits. Every ordinary model carries a mean structure.
+  `covariance` takes `"unrestricted"`, `"psd"`, `"barrier"` or
+  `barrier(lambda)`; barrier fits are experimental (one session message,
+  recorded and printed status, typed unavailable inference). Merge the top-level
+  `start` and `options$starts` into `options$start` with one documented
+  vocabulary, removing today's `"fabin3"` clash. Remove `fixed.x`, `missing`,
+  `cluster` and `meanstructure` from the ordinary call, with a versioned
+  migration; preserve row provenance. The syntax shortcut errors on undeclared
+  ordered factors. Refits already replay every recorded `fit_model()` argument
+  (2026-10-01). Extend prepared adapters instead of rebuilding partables per
+  draw. **Check:** fresh/prepared parity, structural-preparation counters,
+  changed-data starts/thresholds, schema, ordered-factor and fixed-x rejection,
+  mean-structure invariance of the other estimates, SEs and tests, option
+  precedence and start vocabulary, barrier λ validation, zero-λ reduction,
+  session message and inference refusal, the documented distinction between
+  changing the covariance domain and the objective, worker reconstruction, and
+  separately timed small-model setup/data/fit/inference. See the
+  [design](../design/r-interface-vision.md#ordinary-api).
 
 - [ ] **S/M — remove the ordinary fixed-x option under the adopted API.**
   Decided in the [scope](../scope.md#ordinary-fixed-x-decision): ordinary
@@ -213,20 +144,68 @@ inference.
   inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 
-- [x] **M — accept nested pairs written by dropping or fixing parameters.**
-  Completed 2026-10-01: one inference-side parameter-key embedding lifts fixed
-  and omitted paths into H1 slots, preserves affine offsets, and checks the
-  null's implied moments. Score paths evaluate H1 at the embedded H0 point;
-  all exact restriction-map consumers and SB2010 injection use the shared map.
-  Complete-data ML/FIML also support interior nesting through moments with
-  both tangents at a fitted common null point. Other estimator routes return
-  `unsupported_nesting` for unavailable key correspondences; singular
-  tangents/factor covariance receive `boundary_nesting`. Mixed-point delta is
-  still the lavaan-parity option. **Checks:** dropped/fixed/equality spelling
-  invariance at one numerical null point, frozen lavaan HS1939 score/exact-LR
-  references, live R ML/FIML/ordinal/weighted/multigroup gates, pairwise
-  composite and same-point/boundary controls. Independent optimizer runs
-  retain their ordinary estimate tolerance.
+### lavaan-compatible fitting
+
+Consumer: simulation studies that need lavaan-identical fitting while
+magmaan's own optimizer work waits for 0.3.0. The `lavaan-0.7.2` preset
+already pins starts, nlminb/PORT controls and scaling, the four-attempt retry
+sequence and lavaan's acceptance rule for ordinary complete continuous ML
+without equality constraints; under it the selected rule decides `converged`
+and magmaan's own check is reported beside it (2026-10-01). Inference stays on
+magmaan's policy, so lavaan-identical fitting does not imply lavaan-identical
+standard errors or tests. Retain effective controls, every attempt and
+separate native diagnostics; `options$convergence = "newton"` keeps magmaan's
+own verdict. Nonzero bounds, nonlinear constraints (lavaan's NLMINB.CONSTR
+augmented Lagrangian) and PSD, pairwise and two-level routes remain explicit
+errors under the preset. Every check compares starts, search, final
+gradients, soft failures and retries, not just easy estimates.
+
+- [ ] **M — fit linear equality constraints in lavaan's coordinates.** lavaan
+  0.7.2's default (`ceq.simple = FALSE`) turns labels and `group.equal` into
+  `==` rows and optimizes in K-reduced coordinates, K from a QR decomposition
+  of the constraint Jacobian; starts and parscale are projected through K and
+  bounds become ±Inf. magmaan's affine map θ = θ0 + Kα exists with its own
+  basis (0/1 for pure merges, per-component orthonormal otherwise), and PORT
+  is not basis invariant, so endpoint parity needs lavaan's exact QR basis,
+  including sign and column order. Pure-merge `ceq.simple = TRUE` is not
+  lavaan's default and can wait. **Check:** pinned fixtures for shared labels,
+  `group.equal` loadings/intercepts and `==` rows, matching starts,
+  coordinates, final gradients, constrained retries and verdicts, plus
+  installed-version comparisons. Retry parity so far: a ×100 rescale matches lavaan's
+  standardized retry exactly; at ×1000 and ×10⁵ starts, coordinates and
+  verdicts match, but endpoints depend on floating-point paths (fixture
+  `fitting/lavaan_0_7_2.json`).
+
+- [ ] **M — fit FIML under the lavaan preset.** lavaan builds FIML starts from
+  its EM H1 moments; feed magmaan's EM H1 to the pinned start code, evaluate the
+  FIML objective and acceptance gradient in lavaan's units, and match the
+  source of the standardized-retry scale. **Check:** MCAR/MAR fixtures and
+  live comparisons, single- and multi-group, retaining every attempt and the
+  native diagnostics.
+
+- [ ] **M — fit all-ordinal DWLS under the lavaan preset.** Pin lavaan's
+  starts (sample thresholds, unit delta scales, FABIN3 on the polychoric
+  matrix) and evaluate the DWLS objective, group weighting and acceptance
+  gradient in lavaan's units. **Check:** delta/theta, grouped and invariance
+  fixtures plus live comparisons with lavaan's WLSMV fits.
+
+### Primary inference workflows
+
+0.2.0 completes the ordinary policy for ML, FIML and all-ordinal DWLS.
+Ordinary SEs are not automatically valid at singular PSD endpoints; the policy
+keeps its current boundary contract (computed, assuming an interior
+population), and further PSD inference work follows in 0.3.0. The adopted
+ordinary API exposes barrier fitting experimentally as
+`covariance = barrier(lambda)` and reports its inference as unavailable.
+
+- [ ] **S — expose effective pEBA block counts.** A requested pEBA-4 is clamped
+  to the test df and can coincide with scaled-shifted at df=1 while keeping its
+  requested label. Decide an explicit diagnostic/reporting convention.
+  **Check:** low-df rows identify the effective method without changing computed
+  tails or silently mislabelling simulation cells. See the
+  [FMG example](../../r-package/examples/fmg.R).
+
+#### ML and FIML
 
 - [ ] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**
   Retain uncentered score second moments as the baseline for ML/FIML
@@ -262,7 +241,7 @@ inference.
   agreement. Observed-sensitivity calibration remains unresolved; it belongs to
   FIML integration below. The centering comparison is now banked in place, with
   no queued extension. Check excluded constraint/boundary component contracts
-  independently; penalty-specific inference follows in 0.0.2.
+  independently; penalty-specific inference follows in 0.3.0.
   Missingness patterns are not sampling groups.
 
 - [ ] **M — investigate ML/FIML sandwich and Wald coverage gaps.**
@@ -285,59 +264,110 @@ inference.
   **Check:** held-out size/power/failure comparisons and explicit reporting
   criteria. Evidence: the calibration battery; do not silently change defaults.
 
-- [ ] **M — reconcile nested restrictions and reusable inference.** Embed fixed
-  values (`0*`) into larger-model slots; diagnose the structural-path constant
-  disagreement between `score_components(H1=)` and `policy_nested()`/
-  `lavTestScore()`. Support mean-aware metric-to-scalar nesting with released
+- [ ] **M — reconcile nested restrictions and reusable inference.** Fixed and
+  dropped paths embed into larger-model slots (completed 2026-10-01; see the
+  roadmap's prepared-inference contract). Diagnose
+  the structural-path constant disagreement between `score_components(H1=)`
+  and `policy_nested()`/`lavTestScore()`. Support mean-aware metric-to-scalar nesting with released
   latent means. **Check:** Kline Worland restrictions, residual-covariance
   controls, cross-group equalities and independent restriction maps; assess
   larger-model misspecification calibration. See
   [scores](../../r-package/examples/scores.R) and
   [inference reuse](../../r-package/examples/inference_reuse.R).
 
-- [ ] **L — bring FIML into the ordinary policy.** Compose adopted observed-H0
-  sensitivity and expected metric, with distinct score/LR SB and PEBA4 spectra.
-  Extend evaluation-point-specific influence reuse and grouped coverage.
-  **Check:** all-observed ML reduction, missing-data covariance/global/nested
-  calibration and typed component-level unsupported reasons; missing inference
-  must not refuse a fit. Evidence lives in the consolidated
-  [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd)
-  and [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd).
-  The banked [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
-  adds 32,000 normal MCAR/MAR datasets: observed-sensitivity N=80 global PEBA4
-  rejects only 0.8–1.8% across raw/centered arms, while nested MCAR rejects
-  6.5% raw and 7.25% centered. Check finite-sample geometry/calibration against
-  independent references; changing covariance centering does not resolve this.
-  Freeze publication-model adaptations and estimator-level nulls before larger
-  grids; preserve scalar-nesting and size-matched-power gaps. Legacy smoke
-  comparisons and completed flip expansion do not queue new runs. See the R interface vision.
+- [ ] **M — compose the FIML policy.** The primitives exist and are mostly
+  lavaan gated: the observed-information sandwich with casewise scores (the
+  MLR bread and meat), global and nested score through
+  `global_score_components` / `nested_score_components`, and the FIML LR with
+  its UGamma spectrum. Add `policy_inference_fiml` / `policy_nested_fiml`
+  modelled on the ML policy, a FIML counterpart of the cached
+  `NTMLFit`/`NTMLHypothesis` contexts for evaluation-point-specific influence
+  reuse, R dispatch, and typed per-component reasons in place of today's
+  `unsupported_model` refusal. **Check:** exact reduction to the ML policy on
+  complete data, grouped and missing-pattern gates, and typed reasons; missing
+  inference never refuses a fit.
+
+- [ ] **M/L — choose and confirm the FIML score and LR geometry.** The ML
+  policy uses expected geometry for score and LR, while the FIML LR spectrum
+  uses the saturated observed-H1 metric, so all-observed reduction requires
+  aligning one of them. `fiml_residual_projector` accepts a supplied metric:
+  this is a convention choice, not a derivation. Evidence favours expected
+  sensitivity. In the [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd)
+  expected-sensitivity score PEBA4 rejected 1.4–7.4% across 55 null cells. In
+  the [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
+  (32,000 normal MCAR/MAR datasets) observed-sensitivity global PEBA4 rejected
+  0.8–1.8% at N=80 and 2.75–2.95% at N=300, against 3.6–5.1% for expected
+  sensitivity, and nested MCAR rejected 6.5% raw and 7.25% centered at N=80.
+  This supersedes the earlier "adopted observed-H0 sensitivity" wording.
+  FIML LR PEBA4 reached 36%, so LR reporting follows the small-sample LR
+  decision. **Check:** one frozen, held-out confirmatory run (grouped,
+  MCAR/MAR, nonnormal, nested including scalar invariance) reporting size,
+  size-matched power, coverage and failures before the recipe becomes the
+  policy. Freeze publication-model adaptations and estimator-level nulls first;
+  the [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd)
+  keeps its scalar-nesting and size-matched-power gaps. Changing covariance
+  centering does not resolve the finite-sample geometry question. Legacy
+  smoke comparisons and completed flip expansion do not queue new runs.
 
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler
   variants from SB labels and retain FMG missing-data oracle limitations.
   **Check:** convention-matched values and target-regime/grouped calibration.
   Evidence: [definitions and matrix fingerprints](../../experiments/replications/08-savalei-falk-2014-test-conventions/report.qmd)
-  and [calibration policy](../validation/calibration-parity.md).
+  and [calibration policy](../validation/calibration-parity.md). These
+  labels concern lavaan parity; they do not block the FIML policy.
 
-### All-ordinal DWLS
+#### All-ordinal DWLS
 
-Mixed continuous/ordered completion is assigned to 0.0.2 below. Shared fixes
+Mixed continuous/ordered completion is assigned to 0.3.0. Shared fixes
 required by an all-ordinal primary workflow remain current work.
 
-- [ ] **L — compose DWLS policy covariance and global/nested tests.** Include
-  weight-estimation influence. Global score and fit-function statistics coincide
-  for the estimator's fixed weight; report once with calibrated SB/PEBA4.
-  Specify nested sensitivity, metric, evaluation point, nuisance projection,
-  centering and group normalization before adapters. **Check:** fixed-weight
-  reductions, independent influence derivatives, jackknife controls and
-  misspecified-larger-model calibration. Alternative score weights need a
-  recorded decision study before adoption.
+- [ ] **S/M — compose the DWLS policy covariance and global test.** Use the
+  IJ covariance `robust_ordinal_ij` (observed bread, Stage-1 threshold and
+  polychoric influence, estimated-weight term) and the n·F global statistic
+  with the `robust_ordinal` UGamma spectrum, calibrated with SB and PEBA4.
+  Weight influence vanishes under the global null, so the score and
+  fit-function statistics coincide and are reported once. Lift the ML-only
+  gates in `r-package/R/scores.R`, and route lab `vcov()` for categorical fits
+  deliberately (today it uses the fixed-weight `robust_ordinal`). **Check:**
+  jackknife, multi-group and theta gates for the IJ covariance (every current
+  IJ test is single-group delta), the fixed-weight reduction and lavaan WLSMV
+  agreement of the shared pieces.
 
-- [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
-  passes the accuracy budget but differs in raw parameters. **Check:** a
-  justified information-metric gate or tighter stop, with independently checked
-  objective before removing `kKnownGaps`. Free-delta bound relaxation is
-  separately [consumer-gated](speculative.md#categorical-scope-extensions).
+- [ ] **S/M — compose the DWLS nested likelihood-ratio-type test.**
+  Fixed-weight Satorra-2000 (`lr_test_satorra2000_ordinal`, gated against
+  lavaan and Mplus DIFFTEST) composes with SB/PEBA4 directly. The
+  estimated-weight law (`ordinal_dwls_profile_lrt`) kept its size under
+  misspecification in
+  [evidence 13](../../experiments/research/evidence/13-ordinal-dwls-profile-lrt/)
+  (about 4.2% where the fixed-weight test reached 10.5%), but needs a
+  reduction gate to Satorra-2000 at exact fit, a df versus `spectrum_size`
+  decision and an evaluation-point choice: Satorra-2000 uses the H1 point,
+  while the ML route moved to the common null on 2026-10-01. **Check:**
+  reductions, grouped delta/theta ladders and unit invariance.
+
+- [ ] **M — calibrate the DWLS policy.** No in-repo study covers DWLS SB versus
+  PEBA4 size, global or nested; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
+  covers IJ coverage for one parameter under misspecification. **Check:** one
+  frozen confirmatory run across ordinal regimes (categories, threshold skew,
+  N, groups), including misspecified larger models for nested tests,
+  reporting size, coverage and failures before the recipe becomes the policy.
+
+- [ ] **L — derive a nested DWLS score test, or defer it.** No joint
+  least-squares nested score statistic exists; `score_tests_robust_joint` is
+  ML-only. Specify sensitivity, metric, nuisance projection, weight influence
+  and group normalization, then derive and calibrate; alternative score
+  weights need a recorded decision study before adoption. Until then the DWLS
+  policy reports the nested score as unavailable with a typed reason, which
+  meets the 0.2.0 exit criterion; move this item to 0.3.0 if it is not needed
+  sooner.
+
+- [ ] **S — verify post-fit partable reconstruction for ordinal inference.**
+  Post-fit `robust_ordinal`, the IJ covariance and Satorra-2000 re-prepare the
+  partable without `row_user`, while the fit passes it (`cpp/src/estimate/ordinal.cpp`,
+  the post-fit preparations versus the fit call). Models with explicit `~~`
+  rows may then fail or differ. **Check:** explicit and implicit spellings of
+  the same model give identical inference, or the defect is fixed.
 
 - [ ] **M — finish primary reusable inference ownership.** Extend observed-bread
   covariance/score, delta-nesting and categorical influence adapters where
@@ -345,10 +375,13 @@ required by an all-ordinal primary workflow remain current work.
   retained geometry; equal statistics do not establish equal spectra. See
   inference reuse and [workspace contract](../design/ordinal-snlls-gamma-architecture.md).
 
-### MI and release-score completion (0.0.1)
+With `missing` removed from the ordinary call, pairwise DWLS stays a lab route;
+the capability inventory lists its policy inference as unsupported.
+
+### MI and release-score completion (0.2.0)
 
 Adopted 2026-10-01 after assigning mixed continuous/ordered completion to
-0.0.2 and indefinitely postponing noniterative work. This slice covers
+0.3.0 and indefinitely postponing noniterative work. This slice covers
 one-parameter modification indices and one-at-a-time equality releases in the
 lab/C++ surface. Global/nested ordinary-policy work remains above; joint
 multi-constraint tests retain their separately documented coverage. Existing
@@ -370,7 +403,7 @@ projection/reference law before exposure. This adds no ordinary-user default.
 | Direct FIML | Analytic observed MI/release, robust core and R dispatch; expected geometry gates identification | Observed statistic/bread and observed-pattern casewise meat; expected-statistic, alternative covariance/moment and second-stage-weight choices explicitly rejected; broader convention/calibration work remains above |
 | Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R honors empirical/model-implied covariance with explicit fitting W; remaining work retains recipe/a and weight influence, audits sensitivity/nuisance projection, and exposes caller-Gamma adapters |
 | All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; shared relative rank is implemented, provenance/adapters remain |
-| Prepared all-ordinal correlation-ML | Retained catML fitting and shared association-target composition work; LS MI is not an ML-target score contract | Gate the active association Jacobian, saturated-threshold/NACOV transport and matching ML information before MI/release exposure; follow the shared fitting contract |
+| Prepared all-ordinal association ML | Ordinary/PSD fitting through the shared association-target contract; LS MI is not an ML-target score contract | Typed rejection in 0.2.0; the contract is [0.3.0 work](#association-ml-inference) |
 | Two-stage/ML2S | R NT-ML MI is a naive Stage-2 comparator; retained Stage-1 and weighted inference primitives | Corrected MI/release for NT, ULS, DWLS, ADF and DLS Stage-2 recipes, using Stage-1 influence and the applicable estimated-weight term; preserve actual ML versus quadratic discrepancy provenance |
 
 The DLS/custom-weight rows concern bounded reuse of retained weighted primitives,
@@ -380,14 +413,33 @@ SEM, SAM, mixed-data and noniterative expansion are outside this slice.
 Automatic absent-row enumeration covers cross-loadings and covariances;
 structural-path enumeration remains a separate model-builder contract.
 
+The ordinary package does not expose MI in this release; the
+[interface vision](../design/r-interface-vision.md) defers policy MI.
+
+- [ ] **S/M — stop silent weight-recipe mismatches in robust MI.** R selects
+  the estimated-weight (IJ) mode from the estimator label alone: WLS always
+  becomes full ADF, `dls_a` is not passed, and the IJ sandwich rebuilds W from
+  raw data instead of using a supplied W. A WLS fit with a diagonal or DLS
+  supplied W therefore gets an ordinary statistic on that W and a robust scale
+  on ADF, without an error. Ordinal NT, DLS and supplied-W fits are relabelled
+  computational "WLS" and `OrdinalStats` carries no weight recipe, so the same
+  mismatch probably applies there (inferred from code, not yet reproduced).
+  Ordinal association-ML fits have no MI path and may reach the LS ordinal
+  worker under their label. **Check:** reproduce each case, then honor the
+  stored recipe or return a typed error; association-ML MI is rejected until
+  its contract exists (0.3.0).
+
 - [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
   retained continuous and all-ordinal weight recipes in the matrix, with stored
   fitting W or explicit supplied W, Gamma/NACOV source, recipe/a and fixed versus
   estimated-weight influence. Derive consistent sensitivity and nuisance
   projection for observed/estimated-weight GMM score variants before exposing
   them; the existing expected-metric sweep alone does not establish that regime.
-  Complete prepared all-ordinal correlation-ML MI only after the shared fitting
-  contract defines its active association coordinates and NACOV transport.
+  Association-ML MI is a 0.3.0 contract; reject it until then. Storing the
+  recipe, a and W on fits, carrying them into the IJ mode and exposing
+  `ij_weight`, `dls_a` and caller Gamma in R is wiring; the sensitivity and
+  nuisance projection for observed/estimated-weight score variants is the
+  genuine derivation.
   Audit every bread/information/covariance argument and expose applicable caller-
   Gamma paths through thin R adapters. **Check:** independent score, sensitivity,
   meat and weight-influence assembly; recipe endpoint reductions, retained-data
@@ -402,7 +454,13 @@ structural-path enumeration remains a separate model-builder contract.
   labelled separately. **Check:** all-observed reductions to the corresponding
   complete-data estimator, incomplete/grouped influence assembly, missingness
   pattern and unequal-group controls, DLS endpoints and typed unavailable cases.
-  This is post-fit reuse, not a wholesale prepared-ML2S migration.
+  This is post-fit reuse, not a wholesale prepared-ML2S migration. Today
+  robust MI stops for ML2S and ML2S_DWLS/ADF/DLS fail in ordinary MI. Reusable
+  pieces: `two_stage_saturated_gamma_influence`, the Stage-2 weight blocks,
+  `two_stage_em_ml_inference`, `global_score_components_ml2s` and
+  `ml2s_profile_sandwich` (anonymous namespace in `fiml.cpp`; promote it to a
+  sandwich hook). NT and fixed-weight cases feed Stage-1 Gamma = n·acov to the
+  existing ML caller-Gamma and LS per-block-Gamma overloads.
 
 - [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,
@@ -416,36 +474,39 @@ structural-path enumeration remains a separate model-builder contract.
   groups distinct from missingness patterns and record unresolved centering
   choices rather than silently adopting them. Each R-visible cell must agree
   with the corresponding core contract or report its unsupported reason.
+  Known fixture gaps: no complete-data MLR oracle, no GLS/WLS ordinary MI
+  fixture, ordinal ULS/WLS only reduction and rank tests, and loose absolute
+  tolerances on the ordinary goldens (0.2 FIML, 0.1 DWLS, 5e-2 ULS) to tighten
+  or justify.
 
-## API consistency and performance
+### Release readiness
 
-### API and R boundary
+- [ ] **S/M — inventory validated primary capabilities.** Record model/data
+  slice, domain, penalty, algorithm, API tier and evidence for estimation,
+  verdict/admissibility, covariance, global/nested tests and intervals separately.
+  Use validated, limited-validation, unsupported and inapplicable states;
+  planned slices link here. **Check:** C++/R owners and ordinary-policy exposure
+  agree. The table is 0.2.0 exit criterion 6. Keep one inventory; secondary breadth is consumer-gated. See
+  [development priorities](../architecture/roadmap.md#estimator-development-priorities).
 
-- [ ] **M/L — implement the adopted ordinary API.** Add
-  `magmaan_model(model, prototype, ordered, group, group.equal, group.partial,
-  identification, parameterization)` and fit immutable prepared models through
-  `magmaan(model, data, estimator, covariance, inference, options)`. Support
-  zero-row grouped/ordinal schema frames; keep native structural preparation
-  outside repeated fits. Every ordinary model carries a mean structure.
-  `covariance` takes `"unrestricted"`, `"psd"`, `"barrier"` or
-  `barrier(lambda)`; barrier fits are experimental (one session message,
-  recorded and printed status, typed unavailable inference). Merge the top-level
-  `start` and `options$starts` into `options$start` with one documented
-  vocabulary, removing today's `"fabin3"` clash. Remove `fixed.x`, `missing`,
-  `cluster` and `meanstructure` from the ordinary call, with a versioned
-  migration; preserve row provenance. The syntax shortcut errors on undeclared
-  ordered factors. Refits already replay every recorded `fit_model()` argument
-  (2026-10-01). Extend prepared adapters instead of rebuilding partables per
-  draw. **Check:** fresh/prepared parity, structural-preparation counters,
-  changed-data starts/thresholds, schema, ordered-factor and fixed-x rejection,
-  mean-structure invariance of the other estimates, SEs and tests, option
-  precedence and start vocabulary, barrier λ validation, zero-λ reduction,
-  session message and inference refusal, the documented distinction between
-  changing the covariance domain and the objective, worker reconstruction, and
-  separately timed small-model setup/data/fit/inference. See the
-  [design](../design/r-interface-vision.md#ordinary-api).
+- [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
+  of hand-picked R tests; add scheduled sanitizers/optional parity and an
+  interpretable coverage artifact. **Check:** clean-source portable installs
+  and mount-independent default tests, avoiding unexplained percentage gates.
+  See [local hardening](../validation/local_hardening.md).
 
-#### EQS language extension
+- [ ] **S — align versions and publish.** Set the CMake project version
+  (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;
+  push `main` and the tags. As of 2026-10-02 `main` is 74 commits ahead of
+  `origin`, the `v0.1.0` tag and its commit are local only, and CI last ran on
+  2026-09-28. **Check:** a clean install from the pushed tag and green CI.
+
+## Unscheduled: interfaces, composition and maintenance
+
+Work here proceeds when convenient or when a release item needs it; none of it
+gates a release unless an exit criterion names it.
+
+### EQS language extension
 
 The initial EQS model-section frontend is complete; its implemented scope and
 validation limits are in the [EQS contract](../grammar/eqs.md). The accepted
@@ -521,61 +582,28 @@ Every parser milestone changes the normative EBNF first and adds independent
 semantic expectations plus convention-matched lavaan/implied-moment gates where
 applicable. None requires matching EQS's numerical fitting output.
 
-#### Shared fitting composition
+### Shared fitting composition
 
-Dependency order: moment-target foundation → ordinal association contract →
-dispatcher/metadata → shared model penalties → sampling/inference gates. The
-last gate is tracked under primary inference above. Current catML entry points
-remain until equivalent replacement routes are validated; no task here removes
-shared primitives or promotes an ordinary-user default.
+The moment-target foundation, the all-ordinal association-ML contract,
+non-mixed PSD/barrier fitting and shared fixed weights are complete; their
+contracts and validation are in the
+[roadmap](../architecture/roadmap.md#implemented-composition-2026-10-01).
+Remaining order: cross-route dispatcher metadata → mixed and penalty
+completion (0.3.0) → sampling/inference gates (0.2.0 primary inference and
+0.3.0 barriers). No task here removes shared primitives or promotes an
+ordinary-user default.
 
-- [ ] **M — complete and validate the moment-target foundation.** Extract
-  covariance-to-correlation values/Jacobians into model code and compose
-  covariance/correlation targets with one ML objective builder. Route ordinary
-  and PSD catML through the shared map/kernel; preserve existing two-argument
-  ML calls and results. **Check:** independent finite-difference derivatives,
-  observation-unit invariance, input/domain errors and correlation-ML plus
-  barrier composition. Foundation work is in progress; API presence alone is
-  not completion. See the composition contract.
-
-- [ ] **L — define the ordinal association-model contract.** Keep Stage-1
-  thresholds saturated in this slice; remove inactive threshold/mean/scale
-  coordinates from optimization and derive df from active association-Jacobian
-  rank. Reject unsupported threshold/mean/released-scale constraints. Share
-  correlation projections used by ordinal measures while preserving delta/theta
-  semantics. **Check:** identification, overidentified/grouped/constrained
-  controls and unchanged Stage-1 moments before expanding coverage.
-
-- [ ] **L — unify fitting dispatch and composition metadata.** Separate moment
-  source, model target, discrepancy/weight, covariance domain, model penalty and
-  algorithm. Enable ML on prepared all-ordinal moments, ordinary or PSD, in C++
-  and `fit_model()`; refits must reconstruct the same composition. Consolidate
-  enums, R validation/defaults, stored labels and post-fit allowlists. Preserve
-  or explicitly reject operations using provenance; moments alone do not supply
-  an inference contract. **Check:** staged/convenience/refit equivalence,
-  metadata/errors, unchanged numerics and thin R wrappers. Retire separate catML
-  wrappers only after replacement gates pass. Mixed/polyserial ML's
-  moments/mean/scale contract follows in 0.0.2; removed research APIs are not
-  migration targets.
-
-- [ ] **L — finish remaining model-penalty compositions (0.0.2).** Extend
-  the scalar penalty wrapper/finalization across continuous ML/ULS/GLS/fixed
-  WLS, pairwise MCAR and saturated-FIML moments, ordinal/mixed discrepancies and
-  the direct observed-pattern FIML likelihood. Integrate derivatives, admissible
-  starts, equalities, units and verdicts; validate primary combinations first.
-  Store unpenalized discrepancy and penalized objective separately and audit
-  the latter. **Check:** per-combination domain, strength/normalization and
-  reduction identities; penalized sum-of-squares may require scalar optimization.
-  Preserve inputs; a model barrier does not repair indefinite polychoric/pairwise
-  moments. Saturated Stage-1 penalties require a separate target, propagation
-  and H1-reference contract; latent determinacy is zero without genuine latents.
-
-- [ ] **S — expose effective pEBA block counts.** A requested pEBA-4 is clamped
-  to the test df and can coincide with scaled-shifted at df=1 while keeping its
-  requested label. Decide an explicit diagnostic/reporting convention.
-  **Check:** low-df rows identify the effective method without changing computed
-  tails or silently mislabelling simulation cells. See the
-  [FMG example](../../r-package/examples/fmg.R).
+- [ ] **M — consolidate dispatch and composition metadata across routes.**
+  Ordinal association ML (ordinary and PSD) already dispatches through C++
+  `api::fit` and `fit_model(estimator = "ML")` with full provenance, and the
+  catML wrappers are retired. Extend the same moment source / target /
+  discrepancy / domain / penalty / algorithm record to every retained route;
+  consolidate enums, R validation/defaults, stored labels and post-fit
+  allowlists. Decide whether the C++ `api::EstimatorSpec` facade gains a
+  covariance option. **Check:** staged/convenience/refit equivalence,
+  metadata/errors, unchanged numerics and thin R wrappers. Mixed/polyserial
+  ML's moments/mean/scale contract follows in 0.3.0; removed research APIs are
+  not migration targets.
 
 - [ ] **M — finish primary prepared ownership.** Reuse categorical stage-one
   score ingredients when building Gamma; make FIML H1 reuse/attachment and
@@ -590,7 +618,7 @@ shared primitives or promotes an ordinary-user default.
 
 - [ ] **M — finish primary invariance adapters.** Review redundant manual scalar
   mean freeing in `continuous_invariance()`; mixed-model release follows in
-  0.0.2 and is exposed only
+  0.3.0 and is exposed only
   after validating its threshold/scale map. **Check:** explicit user means,
   metric-to-scalar nesting and theta/released-delta boundaries. Broader Mplus/
   mixed-pairwise compatibility is deferred. See workspace contract.
@@ -629,7 +657,7 @@ shared primitives or promotes an ordinary-user default.
   `WhitenFactor`/`BlockWeight` only after documenting weight-versus-factor and
   numeric-policy contracts. See the roadmap's continuous-weight implementation.
 
-## Validation and maintenance
+### Validation and maintenance
 
 - [ ] **S — revalidate the retained Bell alternative-CFA controls.** The
   consolidated reliability showcase reproduces generating targets and main
@@ -640,27 +668,17 @@ shared primitives or promotes an ordinary-user default.
   before extending or using model spread as evidence. Keep historical results
   distinct. See [reliability targets](../../experiments/showcases/08-reliability-targets/report.qmd).
 
-### Capability inventory
-
 - [ ] **S/M — review retained research capabilities one decision at a time.**
   Candidates: continuous/mixed covariance shrinkage; robust ordinal/polyserial
   menus and pair-local diagnostics; fixed-scalar DLS and Stage-2/IJ adapters;
   Fisher/Fisher-SNLLS/IRLS
   routes; ordinal pairwise composite likelihood; mixed pairwise/FIML hybrids
   and regularized Stage 1; RBM; SAM/LSAM and native FC-SEM as separate decisions.
-  Mixed-only reviews follow in 0.0.2; noniterative reviews are indefinitely
+  Mixed-only reviews follow in 0.3.0; noniterative reviews are indefinitely
   postponed. **Check:** concrete consumers, shared
   dependencies, evidence and a bounded keep/consolidate/remove decision.
   Recording this list does not authorize removals. Retain ordinary moment/Gamma,
   score/IJ and other shared primitives. Parking expansion is not code deletion.
-
-- [ ] **S/M — inventory validated primary capabilities.** Record model/data
-  slice, domain, penalty, algorithm, API tier and evidence for estimation,
-  verdict/admissibility, covariance, global/nested tests and intervals separately.
-  Use validated, limited-validation, unsupported and inapplicable states;
-  planned slices link here. **Check:** C++/R owners and ordinary-policy exposure
-  agree. Keep one inventory; secondary breadth is consumer-gated. See
-  [development priorities](../architecture/roadmap.md#estimator-development-priorities).
 
 - [ ] **M — audit tolerances and convention exemptions.** Loose parity gates
   must not absorb known divergences. **Check:** justified tolerances, count-pinned
@@ -672,12 +690,6 @@ shared primitives or promotes an ordinary-user default.
   test/covariance checks against oracle and nominal rates. **Check:** nonnormal,
   missing and ordinal regimes with failures retained; turn deterministic defects
   into tests. See calibration policy.
-
-- [ ] **M — broaden primary CI checks.** Use appropriate `R CMD check` instead
-  of hand-picked R tests; add scheduled sanitizers/optional parity and an
-  interpretable coverage artifact. **Check:** clean-source portable installs
-  and mount-independent default tests, avoiding unexplained percentage gates.
-  See [local hardening](../validation/local_hardening.md).
 
 - [ ] **S — fix remaining example assertions.** Consolidate `ml_psd_fallback.R`
   with the ridge task; diagnose `score_flip_test.R`'s
@@ -714,7 +726,107 @@ shared primitives or promotes an ordinary-user default.
   grids and paper timing programmes are deferred. See benchmark guide and
   [speed attribution](../../experiments/showcases/06-speed-attribution/report.qmd).
 
-## 0.0.2: mixed-data workflows and barrier inference
+## 0.3.0: magmaan's own fitting, mixed data and barriers
+
+Assigned 2026-10-02. Until these land, simulations that need dependable
+fitting can use the lavaan-compatible preset from 0.2.0.
+
+### Optimization and convergence
+
+- [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
+  line-search reductions can exhaust infeasible trials at the initial point.
+  Assess safeguarded backtracking or adapter recovery while retaining caller
+  controls and terminal candidates. **Check:** the
+  [domain probe](../../cpp/tests/checks/nlopt_lbfgs_domain.c), corrected corpus
+  failures and rescaled fits. A larger evaluation budget alone is insufficient.
+  See [corpus recovery](../../experiments/engineering/active/17-corpus-optimizer-recovery/report.qmd).
+
+- [ ] **M — equality constraints that fully determine a block stall the ML fit.**
+  Effects coding (each factor's loadings average 1) plus tau-equivalence (the
+  loadings equal) fixes every loading of the factor at 1 through `==` rows.
+  On Little (2013) Table 10.3 (24 indicators, 8 factors) magmaan's L-BFGS and
+  PORT fits both stop at the start, unconverged, with $\chi^2 \approx 73{,}000$,
+  while lavaan converges to $\chi^2 = 271$ on the same draw. Found by the
+  sem-score-tests calibration study, where the case is supplement-only.
+  **Check:** that model's restricted fit converges to lavaan's optimum, and the
+  constraint projection handles constraints that pin parameters completely.
+
+- [ ] **M — diagnose the layered-start Geiser latent-AR loss.** The fixture
+  `latent_ar_cross_lagged_extended` stalls above the reference objective with
+  L-BFGS and PORT; FABIN3 and std.lv succeed. **Check:** explain the valley/start
+  failure, preserve a regression and verify corpus/held-out behavior before
+  changing defaults. Evidence: corpus recovery.
+
+- [ ] **M — finish unit-equivariant starts and optimizer coordinates.** Remove
+  unit-dependent FABIN/layered fallback steps; extend supported start selections
+  and fallback reports to all-ordinal preparation. Wire coordinates through
+  primary all-ordinal and relevant SNLLS/IRLS paths; mixed extensions follow with
+  mixed completion. **Check:** transported
+  starts and fits across units, groups, constraints and identification;
+  reject unsupported selections. Exclude two-level, SAM, FC-SEM and removed
+  fitted-weight/automatic-identification routes. See
+  [optimizer controls](../reference/optimizer-controls.md) and corpus recovery.
+
+- [ ] **M — detect reflection-trapped starts and validate saddle escape.**
+  Fixed-variance latent scales permit zero-gradient sign-reflection subspaces
+  with negative curvature. Check all starts against fixed entries/constraints;
+  assess a safeguarded original-objective step as explicit recovery. **Check:**
+  phantom, second-order and Little Table 7.6 witnesses, retaining user-start
+  and intervention reports. Evidence: corpus recovery.
+
+- [ ] **S/M — reject unidentified exact-fit ridges reliably.** The free-marker
+  CFA in `ml_psd_fallback.R` can pass a Newton check with seven parameters for
+  six moments. Add scale-free identification checking alongside local accuracy.
+  **Check:** the ridge and identified constrained controls under unit changes;
+  avoid tolerance changes that merely move the failure. See
+  [terminal audit](../design/terminal-audit.md).
+
+- [ ] **M — finish common-verdict and stopping-control integration.** Preserve
+  evaluable candidates on soft exits, report effective controls/raw reasons
+  separately from the verdict, and migrate active backend-status consumers.
+  Assess ML stopping controls for FIML/DWLS and accuracy-budget sensitivity with
+  estimated Gamma. **Check:** corpus near misses/non-minima and consistent R
+  TRUE/FALSE/NA projection; preserve failed/unchecked fits and rank diagnostics.
+  See terminal audit and
+  [Newton rollout](../../experiments/engineering/active/19-newton-verdict-migration/report.qmd).
+
+- [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
+  passes the accuracy budget but differs in raw parameters. **Check:** a
+  justified information-metric gate or tighter stop, with independently checked
+  objective before removing its `kKnownGaps` entry; Newsom 2015 ex9.2 (the
+  free-delta Heywood bound) keeps the list non-empty. Free-delta bound relaxation is
+  separately [consumer-gated](speculative.md#categorical-scope-extensions).
+
+### PSD and remaining normalization
+
+- [ ] **M — make caller-unit covariance audits scale robust.** Include standalone
+  audits and normalization-disabled fits. **Check:** heterogeneous units,
+  equalities, means and improper witnesses, retaining the distinction between
+  accuracy and admissibility. Replay the paired normalization losses in
+  [optimizer defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd).
+
+- [ ] **M — repair PSD finalization and retained route losses.** Diagnose std.lv
+  equal-loading lift round-trip failures and constrained-chain objective losses
+  (`eqchain_b20`), including starts and covariance-link mappings. **Check:**
+  lifted/ordinary objectives, links and equality residuals across units. Direct
+  PSD remains the ordinary route; fallback remains explicit. Any route change
+  needs a fresh decision study. Evidence: optimizer defaults.
+
+- [ ] **L — extend shared normalization to FIML.** Transport raw data/patterns,
+  fixed-x inputs, groups, models, starts, bounds, affine equalities and applicable
+  inference; return caller units. **Check:** all-observed reduction,
+  missing-pattern derivatives and unit/group/constraint round trips before
+  adoption. Complete-data ML/PSD normalization is already enabled.
+  See optimizer controls.
+
+- [ ] **L — close primary PSD stress gaps.** Localize ML, FIML and all-ordinal
+  DWLS failures using the retained harness. Keep stage-one objects unchanged;
+  separate solver status, cone stationarity, admissibility and competing basins.
+  **Check:** independent objective/link recomputation, interior reductions,
+  retained seeds and targeted confirmation with failures/cost tails reported.
+  Promote deterministic defects to tests. Secondary breadth is consumer-gated;
+  two-level and native FC-SEM stay excluded. Evidence:
+  [PSD stress](../../experiments/engineering/active/13-psd-estimator-stress/report.qmd).
 
 ### Mixed continuous/ordered models
 
@@ -736,6 +848,15 @@ release, including dependencies otherwise shared with the primary programme.
   combinations. **Check:** continuous/all-ordinal reductions where defined,
   independent mixed influence/weight perturbations, rank/candidate consistency,
   grouped and misspecification calibration, and core/R agreement before exposure.
+
+### Association-ML inference
+
+- [ ] **L — define association-ML MI/release and sampling inference.** Gate
+  the active association Jacobian, saturated-threshold/NACOV transport and the
+  matching ML information before exposing MI/release, covariance or tests for
+  ordinal association-ML fits. **Check:** reductions where defined,
+  independent derivatives, grouped/constrained controls and calibration; until
+  then every component is rejected with a typed reason.
 
 ### Barrier fitting and inference
 
@@ -762,11 +883,20 @@ release, including dependencies otherwise shared with the primary programme.
   markers automatically. Evidence: barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
-Barrier-specific work follows the 0.0.1 ordinary/PSD milestone. The existing
-shared fitting baseline is recorded in the
-[composition merge update](estimator-composition.new.md); reconcile completed
-slices when folding that record into this backlog. Retain current barrier
-entry points and regression gates.
+The shared barrier fitting baseline is recorded in the
+[roadmap](../architecture/roadmap.md#implemented-composition-2026-10-01).
+Retain current barrier entry points and regression gates.
+
+- [ ] **M — finish remaining model-penalty compositions (0.3.0).** Non-mixed
+  continuous, pairwise, saturated-FIML, ordinal and direct-FIML penalty fitting
+  has landed. Remaining: mixed discrepancies, an analytic penalized-ordinal
+  Newton audit (ordinal penalty routes now provide geometric stationarity
+  only), and penalized starts/verdict integration found by barrier stress work.
+  **Check:** per-combination domain, strength/normalization and reduction
+  identities. Preserve inputs; a model barrier does not repair indefinite
+  polychoric/pairwise moments. Saturated Stage-1 penalties require a separate
+  target, propagation and H1-reference contract; latent determinacy is zero
+  without genuine latents.
 
 - [ ] **L — establish applicable barrier inference and exposure contracts.**
   After normalized fitting, distinguish penalized-estimate covariance from
