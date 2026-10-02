@@ -734,6 +734,10 @@ stages retain independent optimizer controls. Ordinary ML defaults and the
 separate ordinary L-BFGS-to-SLSQP backend remain unchanged. Focused C++/R
 gates cover skipping, improper warm recovery, ordinary errors, inaccurate
 ordinary returns, and failed recovery; this is not a global-optimality policy.
+Acceptance does not yet certify local identification: the free-marker CFA
+with seven parameters for six moments can pass Newton accuracy and be selected
+by PSD recovery (board TASK-33.3). The R example retains this witness, reports
+that limitation and checks the current verdict/admissibility selection rule.
 Complete-data ML fits (ordinary, equality-constrained, PSD, Fisher scoring
 and IRLS; not penalized fits) carry the Newton accuracy check in
 `FitDiagnostics::newton_accuracy` (R `fit$diagnostics$newton_accuracy`):

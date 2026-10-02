@@ -761,11 +761,15 @@ ordinary-user default.
   missing and ordinal regimes with failures retained; turn deterministic defects
   into tests. See calibration policy.
 
-- [ ] **S — fix remaining example assertions.** Consolidate `ml_psd_fallback.R`
-  with the ridge task; diagnose `score_flip_test.R`'s
-  `mean_variance_relative_shift == 0` assertion and `start_policy.R`'s
-  `fit$start$theta` equality check (failing on main 2026-10-02). **Check:** meaningful current-
-  contract assertions that do not conceal a discrepancy.
+- [x] **S — fix remaining example assertions.** Completed 2026-10-02 (board
+  TASK-28). The complete-data score variance shift is roundoff (2.09e-16),
+  checked with a dimension-scaled machine-epsilon bound. ML/PSD starts are
+  compared with constructors on normalized samples and caller-unit transport;
+  the verbatim-sample control retains the 1e-12 vector tolerance. The PSD
+  fallback example reports the unidentified ridge limitation (TASK-33.3) and
+  checks its actual verdict/admissibility selection rule. **Check:** all three
+  examples and the fitting-options/frontier-fit R tests pass against an
+  isolated opt install; no library behavior or fit tolerance changed.
 
 - [ ] **S/M — export named corpus gaps.** Freeze at-theta implied moments for
   `newsom_2015_ex9_3` and `little_2013_ch3_fig_3_6_1indicator` so their goldens
@@ -847,7 +851,11 @@ fitting can use the lavaan-compatible preset from 0.2.0.
 
 - [ ] **S/M — reject unidentified exact-fit ridges reliably.** The free-marker
   CFA in `ml_psd_fallback.R` can pass a Newton check with seven parameters for
-  six moments. Add scale-free identification checking alongside local accuracy.
+  six moments (board TASK-33.3). The 2026-10-02 isolated opt witness is accepted
+  with Newton distance 5.54e-10, condition 8.14e10 and no reported null directions;
+  scaling all loadings by c and the factor variance by 1/c^2 preserves Sigma.
+  The example now retains and reports this limitation while checking selection.
+  Add scale-free identification checking alongside local accuracy.
   **Check:** the ridge and identified constrained controls under unit changes;
   avoid tolerance changes that merely move the failure. See
   [terminal audit](../design/terminal-audit.md).
