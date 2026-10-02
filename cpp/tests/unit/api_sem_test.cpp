@@ -9,6 +9,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -129,6 +130,28 @@ std::string ordinal_score_syntax() {
          "x2 | t1 + t2\n"
          "x3 | t1 + t2\n"
          "x4 | t1 + t2\n";
+}
+
+void check_same_score_table(const magmaan::inference::ScoreTestTable& actual,
+                            const magmaan::inference::ScoreTestTable& expected,
+                            double tolerance = 1e-10) {
+  auto a = actual.rows;
+  auto e = expected.rows;
+  const auto key = [](const magmaan::inference::ScoreTestResult& r) {
+    const auto& c = r.candidate;
+    return std::tuple(c.kind, c.op, c.lhs_var, c.rhs_var, c.group);
+  };
+  const auto less = [&](const auto& lhs, const auto& rhs) {
+    return key(lhs) < key(rhs);
+  };
+  std::sort(a.begin(), a.end(), less);
+  std::sort(e.begin(), e.end(), less);
+  REQUIRE(a.size() == e.size());
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    CHECK(key(a[i]) == key(e[i]));
+    CHECK(a[i].mi == doctest::Approx(e[i].mi).epsilon(tolerance));
+    CHECK(a[i].epc == doctest::Approx(e[i].epc).epsilon(tolerance));
+  }
 }
 
 // A one-factor ordinal model with retained true latent scores, for validating
@@ -696,6 +719,226 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   const auto bad_fs = magmaan::api::factor_scores(
       *dwls_fit, ordinal_raw, magmaan::measures::FactorScoreMethod::Regression);
   REQUIRE_FALSE(bad_fs.has_value());
+}
+
+TEST_CASE("api ordinal theta post-fit preserves explicit residual rows") {
+  using namespace magmaan;
+  const auto stats = data::ordinal_stats_from_integer_data({ordinal_score_block()});
+  REQUIRE_OK(stats);
+  const std::string syntax =
+      "f =~ 1*y1 + l*y2 + l*y3 + y4\n"
+      "f ~~ 1*f\n"
+      "y1 | t1 + t2\n"
+      "y2 | t1 + t2\n"
+      "y3 | t1 + t2\n"
+      "y4 | t1 + t2\n";
+  std::string residual;
+  SUBCASE("fixed non-default residual") { residual = "y1 ~~ 0.5*y1\n"; }
+  SUBCASE("free explicit residual") { residual = "y1 ~~ y1\n"; }
+  const auto model = api::model_from_lavaan(syntax + residual);
+  REQUIRE_OK(model);
+  const auto observed = api::data_from_ordinal(*model, *stats);
+  REQUIRE_OK(observed);
+  auto estimator = api::ordinal_dwls();
+  estimator.ordinal_parameterization = estimate::OrdinalParameterization::Theta;
+  const auto fit = api::fit(*model, *observed, estimator);
+  REQUIRE_OK(fit);
+  REQUIRE(estimate::fit_verdict(fit->estimates()).status == estimate::FitCheck::Passed);
+
+  const auto robust_result = api::robust_ordinal(*fit);
+  REQUIRE_OK(robust_result);
+  const double chisq = 2.0 * static_cast<double>(stats->n_obs[0]) *
+                       fit->estimates().fmin;
+  CHECK(robust_result->chisq_standard == doctest::Approx(chisq).epsilon(1e-12));
+  CHECK(robust_result->vcov.rows() == fit->estimates().theta.size());
+  CHECK(robust_result->vcov.allFinite());
+  const auto fm = api::fit_measures(*fit);
+  REQUIRE_OK(fm);
+  CHECK(fm->indices.rmsea == doctest::Approx(std::sqrt(
+      std::max(0.0, (chisq - robust_result->df) /
+          (static_cast<double>(robust_result->df) *
+           static_cast<double>(stats->n_obs[0]))))).epsilon(1e-12));
+  REQUIRE(fm->ordinal_srmr.has_value());
+
+  // Replay the fit objective as well: the standard statistic alone uses the
+  // stored fmin and cannot detect a fixed residual being silently reset to 1.
+  const auto objective = estimate::frontier::ordinal_ls_objective(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(objective);
+  const auto r = objective->problem.r(fit->estimates().theta);
+  REQUIRE_OK(r);
+  CHECK(0.5 * r->squaredNorm() ==
+        doctest::Approx(fit->estimates().fmin).epsilon(1e-10));
+
+  const auto mi = api::modification_indices(*fit);
+  REQUIRE_OK(mi);
+  const auto scores = api::score_tests(*fit);
+  REQUIRE_OK(scores);
+  REQUIRE_FALSE(mi->rows.empty());
+  REQUIRE_FALSE(scores->rows.empty());
+  // The explicit low-level preparation is an independent dispatch gate for
+  // fixed-row MI, equality releases, residual fit measures and robust vcov.
+  const auto expected_robust = estimate::robust_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      robust::Information::Expected, &model->names().row_user);
+  REQUIRE_OK(expected_robust);
+  CHECK((robust_result->vcov - expected_robust->vcov).norm() < 1e-12);
+  const auto expected_fm = estimate::fit_measures_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_fm);
+  CHECK(*fm->ordinal_srmr == doctest::Approx(expected_fm->srmr).epsilon(1e-12));
+  const auto expected_mi = estimate::modification_indices_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_mi);
+  check_same_score_table(*mi, *expected_mi, 1e-12);
+  inference::ModificationIndexOptions mi_options;
+  mi_options.candidates = inference::ScoreCandidateSet::WithAbsentRows;
+  const auto absent_mi = api::modification_indices(*fit, mi_options);
+  REQUIRE_OK(absent_mi);
+  const auto expected_absent_mi = estimate::modification_indices_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, mi_options, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_absent_mi);
+  CHECK(absent_mi->rows.size() > mi->rows.size());
+  check_same_score_table(*absent_mi, *expected_absent_mi, 1e-12);
+  const auto expected_scores = estimate::score_tests_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_scores);
+  check_same_score_table(*scores, *expected_scores, 1e-12);
+}
+
+TEST_CASE("api ordinal theta explicit and implicit residual defaults agree") {
+  using namespace magmaan;
+  const auto stats = data::ordinal_stats_from_integer_data({ordinal_score_block()});
+  REQUIRE_OK(stats);
+  const std::string syntax =
+      "f =~ 1*y1 + l*y2 + l*y3 + y4\n"
+      "f ~~ 1*f\n"
+      "y1 | t1 + t2\n"
+      "y2 | t1 + t2\n"
+      "y3 | t1 + t2\n"
+      "y4 | t1 + t2\n";
+  const auto implicit_model = api::model_from_lavaan(syntax);
+  REQUIRE_OK(implicit_model);
+  const auto explicit_model = api::model_from_lavaan(syntax + "y1 ~~ 1*y1\n");
+  REQUIRE_OK(explicit_model);
+  const auto observed = api::data_from_ordinal(*implicit_model, *stats);
+  REQUIRE_OK(observed);
+  auto estimator = api::ordinal_dwls();
+  estimator.ordinal_parameterization = estimate::OrdinalParameterization::Theta;
+  const auto implicit_fit = api::fit(*implicit_model, *observed, estimator);
+  REQUIRE_OK(implicit_fit);
+  const auto explicit_fit = api::fit(*explicit_model, *observed, estimator);
+  REQUIRE_OK(explicit_fit);
+  REQUIRE(estimate::fit_verdict(implicit_fit->estimates()).status == estimate::FitCheck::Passed);
+  REQUIRE(estimate::fit_verdict(explicit_fit->estimates()).status == estimate::FitCheck::Passed);
+  CHECK(explicit_fit->estimates().fmin ==
+        doctest::Approx(implicit_fit->estimates().fmin).epsilon(1e-10));
+
+  const auto implicit_robust = api::robust_ordinal(*implicit_fit);
+  REQUIRE_OK(implicit_robust);
+  const auto explicit_robust = api::robust_ordinal(*explicit_fit);
+  REQUIRE_OK(explicit_robust);
+  CHECK(explicit_robust->df == implicit_robust->df);
+  CHECK(explicit_robust->chisq_standard ==
+        doctest::Approx(implicit_robust->chisq_standard).epsilon(1e-10));
+  CHECK((explicit_robust->vcov - implicit_robust->vcov).norm() < 1e-10);
+  const auto implicit_fm = api::fit_measures(*implicit_fit);
+  REQUIRE_OK(implicit_fm);
+  const auto explicit_fm = api::fit_measures(*explicit_fit);
+  REQUIRE_OK(explicit_fm);
+  CHECK(explicit_fm->indices.cfi == doctest::Approx(implicit_fm->indices.cfi).epsilon(1e-10));
+  CHECK(explicit_fm->indices.rmsea == doctest::Approx(implicit_fm->indices.rmsea).epsilon(1e-10));
+  CHECK(*explicit_fm->ordinal_srmr == doctest::Approx(*implicit_fm->ordinal_srmr).epsilon(1e-10));
+  const auto implicit_mi = api::modification_indices(*implicit_fit);
+  REQUIRE_OK(implicit_mi);
+  const auto explicit_mi = api::modification_indices(*explicit_fit);
+  REQUIRE_OK(explicit_mi);
+  check_same_score_table(*explicit_mi, *implicit_mi);
+  const auto implicit_scores = api::score_tests(*implicit_fit);
+  REQUIRE_OK(implicit_scores);
+  const auto explicit_scores = api::score_tests(*explicit_fit);
+  REQUIRE_OK(explicit_scores);
+  check_same_score_table(*explicit_scores, *implicit_scores);
+}
+
+TEST_CASE("api mixed ordinal post-fit preserves explicit residual rows") {
+  using namespace magmaan;
+  const std::string syntax =
+      "f =~ 1*y1 + l*y2 + l*y3 + y4\n"
+      "f ~~ 1*f\n"
+      "y1 | t1 + t2\n"
+      "y2 | t1 + t2\n"
+      "y3 | t1 + t2\n";
+  std::string residual;
+  SUBCASE("fixed non-default residual") { residual = "y1 ~~ 0.5*y1\n"; }
+  SUBCASE("free explicit residual identified by a continuous variance") {
+    // Mixed delta has no ordered marginal-variance moment. Tying the free
+    // ordered residual to a continuous residual makes this dimension identified
+    // while exercising preservation of its explicit ordinal row.
+    residual = "y1 ~~ v*y1\n"
+               "y4 ~~ v*y4\n";
+  }
+  api::ModelOptions options;
+  options.build.meanstructure = true;
+  const auto model = api::model_from_lavaan(syntax + residual, options);
+  REQUIRE_OK(model);
+  const auto stats = data::mixed_ordinal_stats_from_data(
+      {ordinal_score_block()}, {{1, 1, 1, 0}});
+  REQUIRE_OK(stats);
+  const auto observed = api::data_from_mixed_ordinal(*model, *stats);
+  REQUIRE_OK(observed);
+  auto estimator = api::ordinal_dwls();
+  const auto fit = api::fit(*model, *observed, estimator);
+  REQUIRE_OK(fit);
+  REQUIRE(estimate::fit_verdict(fit->estimates()).status == estimate::FitCheck::Passed);
+  const auto robust_result = api::robust_ordinal(*fit);
+  REQUIRE_OK(robust_result);
+  CHECK(robust_result->chisq_standard == doctest::Approx(
+      2.0 * static_cast<double>(stats->n_obs[0]) * fit->estimates().fmin).epsilon(1e-12));
+  const auto expected_robust = estimate::robust_mixed_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      robust::Information::Expected, &model->names().row_user);
+  REQUIRE_OK(expected_robust);
+  CHECK((robust_result->vcov - expected_robust->vcov).norm() < 1e-12);
+  const auto fm = api::fit_measures(*fit);
+  REQUIRE_OK(fm);
+  const auto expected_fm = estimate::fit_measures_mixed_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_fm);
+  REQUIRE(fm->ordinal_srmr.has_value());
+  CHECK(*fm->ordinal_srmr == doctest::Approx(expected_fm->srmr).epsilon(1e-12));
+  const auto mi = api::modification_indices(*fit);
+  REQUIRE_OK(mi);
+  const auto expected_mi = estimate::modification_indices_mixed_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_mi);
+  REQUIRE_FALSE(mi->rows.empty());
+  check_same_score_table(*mi, *expected_mi, 1e-12);
+  const auto scores = api::score_tests(*fit);
+  REQUIRE_OK(scores);
+  const auto expected_scores = estimate::score_tests_mixed_ordinal(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(expected_scores);
+  REQUIRE_FALSE(scores->rows.empty());
+  check_same_score_table(*scores, *expected_scores, 1e-12);
 }
 
 TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {

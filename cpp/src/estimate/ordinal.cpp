@@ -4717,8 +4717,9 @@ fit_expected<Eigen::VectorXd>
 ordinal_start_values(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::OrdinalStats& stats,
-                     spec::Starts starts) {
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts);
+                     spec::Starts starts,
+                     const std::vector<std::int8_t>* row_user) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts, row_user);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -4746,8 +4747,9 @@ fit_expected<Eigen::VectorXd>
 mixed_ordinal_start_values(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
                            const data::MixedOrdinalStats& stats,
-                           spec::Starts starts) {
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, &starts);
+                           spec::Starts starts,
+                           const std::vector<std::int8_t>* row_user) {
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, &starts, row_user);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -4793,7 +4795,8 @@ robust_ordinal(spec::LatentStructure pt,
                const Estimates& est,
                OrdinalWeightKind weights,
                OrdinalParameterization parameterization,
-               robust::Information bread) {
+               robust::Information bread,
+               const std::vector<std::int8_t>* row_user) {
   if (est.association) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal association ML requires its own Stage-1 sampling/inference contract"));
@@ -4805,7 +4808,8 @@ robust_ordinal(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "OrdinalStats NACOV block count does not match MatrixRep"));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+      !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -5208,11 +5212,13 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const Estimates& est,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization,
-                     robust::Information bread) {
+                     robust::Information bread,
+                     const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr, row_user);
+      !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -6891,11 +6897,13 @@ fit_measures_ordinal(spec::LatentStructure pt,
                      const data::OrdinalStats& stats,
                      const Estimates& est,
                      OrdinalWeightKind weights,
-                     OrdinalParameterization parameterization) {
+                     OrdinalParameterization parameterization,
+                     const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+      !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -8928,11 +8936,12 @@ fit_measures_mixed_ordinal(spec::LatentStructure pt,
                            const data::MixedOrdinalStats& stats,
                            const Estimates& est,
                            OrdinalWeightKind weights,
-                           OrdinalParameterization parameterization) {
+                           OrdinalParameterization parameterization,
+                           const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -8981,10 +8990,11 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
                              OrdinalWeightKind weights,
-                             OrdinalParameterization parameterization) {
+                             OrdinalParameterization parameterization,
+                             const std::vector<std::int8_t>* row_user) {
   inference::ModificationIndexOptions options;
   return modification_indices_ordinal(std::move(pt), rep, stats, est, weights,
-                                      options, parameterization);
+                                      options, parameterization, row_user);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -8994,7 +9004,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const Estimates& est,
                              OrdinalWeightKind weights,
                              const inference::ModificationIndexOptions& options,
-                             OrdinalParameterization parameterization) {
+                             OrdinalParameterization parameterization,
+                             const std::vector<std::int8_t>* row_user) {
   auto residual_fn = [parameterization](const data::OrdinalStats& s,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
@@ -9013,8 +9024,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
                             theta, parameterization);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
-    return prepare_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_delta_partable(p, s, nullptr, row_user);
   };
   return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
                                            weights, options, residual_fn,
@@ -9027,7 +9038,8 @@ score_tests_ordinal(spec::LatentStructure pt,
                     const data::OrdinalStats& stats,
                     const Estimates& est,
                     OrdinalWeightKind weights,
-                    OrdinalParameterization parameterization) {
+                    OrdinalParameterization parameterization,
+                    const std::vector<std::int8_t>* row_user) {
   auto residual_fn = [parameterization](const data::OrdinalStats& s,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
@@ -9046,8 +9058,8 @@ score_tests_ordinal(spec::LatentStructure pt,
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
                             theta, parameterization);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
-    return prepare_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_delta_partable(p, s, nullptr, row_user);
   };
   return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
                                   residual_fn, jacobian_fn, prepare_fn);
@@ -9059,10 +9071,12 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
                                    OrdinalWeightKind weights,
-                                   OrdinalParameterization parameterization) {
+                                   OrdinalParameterization parameterization,
+                                   const std::vector<std::int8_t>* row_user) {
   inference::ModificationIndexOptions options;
   return modification_indices_mixed_ordinal(std::move(pt), rep, stats, est,
-                                            weights, options, parameterization);
+                                            weights, options, parameterization,
+                                            row_user);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -9073,7 +9087,8 @@ modification_indices_mixed_ordinal(
     const Estimates& est,
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options,
-    OrdinalParameterization parameterization) {
+    OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user) {
   auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
@@ -9092,8 +9107,8 @@ modification_indices_mixed_ordinal(
     return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
                                   theta, parameterization);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
-    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr, row_user);
   };
   return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
                                            weights, options, residual_fn,
@@ -9106,7 +9121,8 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const data::MixedOrdinalStats& stats,
                           const Estimates& est,
                           OrdinalWeightKind weights,
-                          OrdinalParameterization parameterization) {
+                          OrdinalParameterization parameterization,
+                          const std::vector<std::int8_t>* row_user) {
   auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
@@ -9125,8 +9141,8 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
     return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
                                   theta, parameterization);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
-    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr, row_user);
   };
   return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
                                   residual_fn, jacobian_fn, prepare_fn);

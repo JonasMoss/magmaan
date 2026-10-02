@@ -51,7 +51,8 @@ Result<Eigen::VectorXd> ordinal_start_values(const Model &model,
     return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
         "StartPolicy is not yet supported for ordinal starts"));
   auto x0 = estimate::ordinal_start_values(
-      model.structure(), model.matrix_rep(), stats, model.starts());
+      model.structure(), model.matrix_rep(), stats, model.starts(),
+      &model.names().row_user);
   if (!x0) {
     return std::unexpected(make_error(ErrorStage::Fit, x0.error()));
   }
@@ -68,7 +69,8 @@ Result<Eigen::VectorXd> mixed_ordinal_start_values(
     return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
         "StartPolicy is not yet supported for ordinal starts"));
   auto x0 = estimate::mixed_ordinal_start_values(
-      model.structure(), model.matrix_rep(), stats, model.starts());
+      model.structure(), model.matrix_rep(), stats, model.starts(),
+      &model.names().row_user);
   if (!x0) {
     return std::unexpected(make_error(ErrorStage::Fit, x0.error()));
   }
@@ -1233,7 +1235,8 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit) {
     auto robust = estimate::robust_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        robust::Information::Expected, &fit.model().names().row_user);
     return post_result(std::move(robust));
   }
   if (const auto *stats = fit.data().mixed_ordinal()) {
@@ -1245,7 +1248,8 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit) {
     auto robust = estimate::robust_mixed_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        robust::Information::Expected, &fit.model().names().row_user);
     return post_result(std::move(robust));
   }
   return std::unexpected(make_error(
@@ -1435,7 +1439,8 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
     auto fm = estimate::fit_measures_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     if (!fm) {
       return std::unexpected(make_error(ErrorStage::PostFit, fm.error()));
     }
@@ -1447,7 +1452,8 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
     auto fm = estimate::fit_measures_mixed_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     if (!fm) {
       return std::unexpected(make_error(ErrorStage::PostFit, fm.error()));
     }
@@ -1876,14 +1882,16 @@ modification_indices(const Fit &fit,
     auto out = estimate::modification_indices_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight, options,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().mixed_ordinal()) {
     auto out = estimate::modification_indices_mixed_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight, options,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     return post_result(std::move(out));
   }
   return std::unexpected(make_error(
@@ -1924,14 +1932,16 @@ Result<inference::ScoreTestTable> score_tests(const Fit &fit) {
     auto out = estimate::score_tests_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().mixed_ordinal()) {
     auto out = estimate::score_tests_mixed_ordinal(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization);
+        fit.estimator_spec().ordinal_parameterization,
+        &fit.model().names().row_user);
     return post_result(std::move(out));
   }
   return std::unexpected(make_error(ErrorStage::UnsupportedCombination,

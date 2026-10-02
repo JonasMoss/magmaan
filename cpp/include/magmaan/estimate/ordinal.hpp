@@ -288,6 +288,9 @@ prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
                                 spec::Starts* starts = nullptr,
                                 const std::vector<std::int8_t>* row_user = nullptr);
 
+// Post-fit calls must receive the fit-time row_user mask when preparing an
+// unprepared structure with explicitly specified ordinal variances/intercepts.
+// nullptr preserves the preparation convention of callers without that mask.
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
@@ -296,7 +299,8 @@ robust_ordinal(spec::LatentStructure pt,
                OrdinalWeightKind weights,
                OrdinalParameterization parameterization =
                    OrdinalParameterization::Delta,
-               robust::Information bread = robust::Information::Expected);
+               robust::Information bread = robust::Information::Expected,
+               const std::vector<std::int8_t>* row_user = nullptr);
 
 // Infinitesimal-jackknife (misspecification-robust, "regime = ij") covariance
 // for an all-ordinal moment-quadratic fit. Observed-Hessian bread with an IJ
@@ -364,7 +368,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta,
-                     robust::Information bread = robust::Information::Expected);
+                     robust::Information bread = robust::Information::Expected,
+                     const std::vector<std::int8_t>* row_user = nullptr);
 
 // Mixed continuous/ordinal infinitesimal-jackknife covariance. ULS is a
 // fixed-weight identity sandwich and only needs `stats.moment_influence`, so it
@@ -439,7 +444,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const Estimates& est,
                              OrdinalWeightKind weights,
                              OrdinalParameterization parameterization =
-                                 OrdinalParameterization::Delta);
+                                 OrdinalParameterization::Delta,
+                             const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
@@ -449,7 +455,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              OrdinalWeightKind weights,
                              const inference::ModificationIndexOptions& options,
                              OrdinalParameterization parameterization =
-                                 OrdinalParameterization::Delta);
+                                 OrdinalParameterization::Delta,
+                             const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
@@ -458,7 +465,8 @@ score_tests_ordinal(spec::LatentStructure pt,
                     const Estimates& est,
                     OrdinalWeightKind weights,
                     OrdinalParameterization parameterization =
-                        OrdinalParameterization::Delta);
+                        OrdinalParameterization::Delta,
+                    const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
@@ -467,7 +475,8 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const Estimates& est,
                                    OrdinalWeightKind weights,
                                    OrdinalParameterization parameterization =
-                                       OrdinalParameterization::Delta);
+                                       OrdinalParameterization::Delta,
+                                   const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
@@ -477,7 +486,8 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    OrdinalWeightKind weights,
                                    const inference::ModificationIndexOptions& options,
                                    OrdinalParameterization parameterization =
-                                       OrdinalParameterization::Delta);
+                                       OrdinalParameterization::Delta,
+                                   const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
@@ -486,7 +496,8 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const Estimates& est,
                           OrdinalWeightKind weights,
                           OrdinalParameterization parameterization =
-                              OrdinalParameterization::Delta);
+                              OrdinalParameterization::Delta,
+                          const std::vector<std::int8_t>* row_user = nullptr);
 
 // ── Robust (generalized / SB-scaled) ordinal score tests ────────────────────
 // Frontier surface (lavaan implements no robust score test): every candidate
@@ -898,12 +909,13 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
 // Start-value producers for ordinal LS. They run the partable preparation step
 // internally, so the returned vector is sized for the *prepared* partable —
 // exactly what the matching `fit_*_ordinal_bounded` rebuilds. Pass the result
-// straight in.
+// straight in, passing the same row_user mask used by the fit.
 fit_expected<Eigen::VectorXd>
 ordinal_start_values(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::OrdinalStats& stats,
-                     spec::Starts starts = {});
+                     spec::Starts starts = {},
+                     const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<Eigen::VectorXd>
 ordinal_start_values(spec::LatentStructure pt,
@@ -915,7 +927,8 @@ fit_expected<Eigen::VectorXd>
 mixed_ordinal_start_values(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
                            const data::MixedOrdinalStats& stats,
-                           spec::Starts starts = {});
+                           spec::Starts starts = {},
+                           const std::vector<std::int8_t>* row_user = nullptr);
 
 fit_expected<Eigen::VectorXd>
 mixed_ordinal_start_values(spec::LatentStructure pt,
@@ -1056,7 +1069,8 @@ fit_measures_ordinal(spec::LatentStructure pt,
                      const Estimates& est,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization =
-                         OrdinalParameterization::Delta);
+                         OrdinalParameterization::Delta,
+                     const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<OrdinalCatmlDwlsRmsea>
 catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
@@ -1271,6 +1285,7 @@ fit_measures_mixed_ordinal(spec::LatentStructure pt,
                            const Estimates& est,
                            OrdinalWeightKind weights,
                            OrdinalParameterization parameterization =
-                               OrdinalParameterization::Delta);
+                               OrdinalParameterization::Delta,
+                           const std::vector<std::int8_t>* row_user = nullptr);
 
 }  // namespace magmaan::estimate
