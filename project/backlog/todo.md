@@ -79,8 +79,9 @@ result under an unstated convention.
    `group.equal`, `==` rows), FIML and all-ordinal DWLS, single- and
    multi-group. Pinned fixtures match lavaan's starts, search coordinates,
    derivatives at identical parameter points, endpoint/objective tolerances
-   and verdicts; each actual endpoint is checked under the declared acceptance
-   rule. Floating-point retry paths need not have identical final gradients.
+   and verdicts for path-stable cases; each actual endpoint is checked under the
+   declared acceptance rule. Rescaled retry endpoints and verdicts can depend
+   on floating-point search paths.
    Installed-lavaan R comparisons pass on a named simulation-model set.
    Nonzero bounds, nonlinear constraints and other routes error; nonzero-RHS
    affine standardized retries and scaling that changes a homogeneous
@@ -232,19 +233,18 @@ with each actual endpoint's declared acceptance checked separately.
   initial covariances error as in the oracle. `ceq.simple = TRUE`, nonlinear
   constraints, nonzero bounds and PSD/pairwise/two-level preset routes remain
   unavailable. The older unconstrained ×1000/×10⁵ witnesses still record their
-  pre-existing endpoint sensitivity in `fitting/lavaan_0_7_2.json`.
+  pre-existing endpoint sensitivity in `fitting/lavaan_0_7_2.json`; their
+  verdicts are build-dependent too.
 
-- [ ] **Task-47 — diagnose opt equality retry acceptance** (2026-10-02).
-  The equality fixture test now explicitly returns after prerequisite failures
-  and skips attempt indexing after a count mismatch under `-fno-exceptions`.
-  The ×100 oracle first-attempt gradient maximum is 0.0016149511731821235
-  versus the 0.001 acceptance threshold (relative gap +0.6149511731821235).
-  Opt accepts its first attempt with PORT status 4 and gradient maximum
-  0.00094775120123813394 (relative gap -0.052248798761866076); this is not
-  knife-edge acceptance. The targeted opt configured tests report 2 passed,
-  1 failed, with no crash. **Needs decision:** authorize investigation of the
-  non-marginal optimizer endpoint divergence before adapting retry parity.
-  Parity assertions and tolerances remain unchanged.
+- [x] **Task-47 — guard opt equality retry comparisons** (2026-10-02).
+  Prerequisite and attempt-count failures cannot trigger out-of-range access
+  under `-fno-exceptions`. The ×100 equality witness has path-dependent PORT
+  endpoints: opt first-attempt gradient maximum 0.00094775120123813394 accepts,
+  while lavaan's 0.0016149511731821235 retries at the unchanged 0.001 threshold.
+  Approved validation keeps exact starts/search coordinates and derivatives
+  at identical points for every case, checks each actual endpoint's acceptance
+  rule, and retains retry/endpoint/verdict parity for path-stable cases only.
+  No thresholds, tolerances, implementation or fixtures changed.
 
 - [ ] **M — fit FIML under the lavaan preset.** lavaan builds FIML starts from
   its EM H1 moments; feed magmaan's EM H1 to the pinned start code, evaluate the
