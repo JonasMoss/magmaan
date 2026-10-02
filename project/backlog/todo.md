@@ -84,7 +84,8 @@ result under an unstated convention.
    multi-group, the ordinary policy returns parameter covariance, global tests
    and nested tests, or a typed unavailable reason per component. Each computed
    component has a written recipe, an independent or convention-matched gate,
-   its exact reductions (FIML on complete data equals the ML policy) and
+   its exact reductions where the geometry coincides (on complete data the
+   FIML covariance and LR statistic equal the ML policy's) and
    target-regime calibration evidence: existing studies or one frozen
    confirmatory run per estimator.
 4. **Open ML/FIML validity questions settled.** The Wald coverage shortfall is
@@ -284,26 +285,30 @@ ordinary API exposes barrier fitting experimentally as
   `NTMLFit`/`NTMLHypothesis` contexts for evaluation-point-specific influence
   reuse, R dispatch, and typed per-component reasons in place of today's
   `unsupported_model` refusal. **Check:** exact reduction to the ML policy on
-  complete data, grouped and missing-pattern gates, and typed reasons; missing
-  inference never refuses a fit.
+  complete data for the covariance and LR statistic, the recorded score
+  geometry below, grouped and missing-pattern gates, and typed reasons;
+  missing inference never refuses a fit.
 
-- [ ] **M/L — choose and confirm the FIML score and LR geometry.** The ML
-  policy uses expected geometry for score and LR, while the FIML LR spectrum
-  uses the saturated observed-H1 metric, so all-observed reduction requires
-  aligning one of them. `fiml_residual_projector` accepts a supplied metric:
-  this is a convention choice, not a derivation. Evidence favours expected
-  sensitivity. In the [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd)
-  expected-sensitivity score PEBA4 rejected 1.4–7.4% across 55 null cells. In
-  the [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
-  (32,000 normal MCAR/MAR datasets) observed-sensitivity global PEBA4 rejected
-  0.8–1.8% at N=80 and 2.75–2.95% at N=300, against 3.6–5.1% for expected
-  sensitivity, and nested MCAR rejected 6.5% raw and 7.25% centered at N=80.
-  This supersedes the earlier "adopted observed-H0 sensitivity" wording.
-  FIML LR PEBA4 reached 36%, so LR reporting follows the small-sample LR
-  decision. **Check:** one frozen, held-out confirmatory run (grouped,
-  MCAR/MAR, nonnormal, nested including scalar invariance) reporting size,
-  size-matched power, coverage and failures before the recipe becomes the
-  policy. Freeze publication-model adaptations and estimator-level nulls first;
+- [ ] **M — write down the FIML score and LR geometry and its reductions.**
+  The [interface vision](../design/r-interface-vision.md) records observed-H0
+  sensitivity with the expected (pattern-conditional Fisher) metric for the
+  FIML score test, from the [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd):
+  on an exact nonnormal-MAR pseudo-null (N=2,000) it rejected 4.0% where
+  expected-H0 geometry rejected 0%. Score and LR then keep separate spectra.
+  The written recipe must reconcile two further results without reopening the
+  choice by default: the study's 55-cell panel (score PEBA4 1.4–7.4%) used
+  expected sensitivity, and the
+  [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
+  found observed sensitivity conservative on normal MCAR/MAR data (global
+  PEBA4 0.8–1.8% at N=80 and 2.75–2.95% at N=300, against 3.6–5.1% for
+  expected; nested MCAR 6.5% raw at N=80). Because the ML policy uses expected
+  geometry, the FIML score does not reduce exactly to it on complete data; the
+  parameter covariance and LR statistic do. The FIML LR spectrum uses the
+  saturated observed-H1 metric. FIML LR PEBA4 reached 36%, so LR reporting
+  follows the small-sample LR decision. **Check:** a written recipe citing
+  this evidence, a per-component reduction map (exact versus asymptotic), and
+  a recorded decision on whether a frozen confirmatory run (grouped, MCAR/MAR,
+  nonnormal, nested including scalar invariance) is needed. Freeze publication-model adaptations and estimator-level nulls first;
   the [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd)
   keeps its scalar-nesting and size-matched-power gaps. Changing covariance
   centering does not resolve the finite-sample geometry question. Legacy
