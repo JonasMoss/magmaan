@@ -6,7 +6,10 @@ if ("--ordinary" %in% args) {
   source(file.path(here, "../../../_support/R/helpers.R"))
   set_single_threaded_math()
   for (file in c("designs.R", "fit.R", "ordinary_program.R")) source(file.path(here, "R", file))
-  run_ordinary_program(args, here)
+  if ("--witness-audit" %in% args) {
+    source(file.path(here, "R/witness_audit.R"))
+    run_witness_audit(args, here)
+  } else run_ordinary_program(args, here)
   quit(save = "no")
 }
 usage <- paste(

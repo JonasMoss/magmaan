@@ -1,0 +1,16 @@
+"design","estimator","chart","audit_status","newton_status","accepted","fits"
+"ernst","GLS","sphere","failed","available",FALSE,11
+"ernst","ML","sphere","failed","available",FALSE,4
+"ernst","ULS","marker","failed","ill_conditioned",FALSE,2
+"ernst","ULS","sphere","failed","ill_conditioned",FALSE,1
+"ernst","ULS","marker","failed","nonpositive_curvature",FALSE,4
+"ernst","ULS","sphere","failed","nonpositive_curvature",FALSE,7
+"ernst","ULS","marker","unavailable","unavailable",FALSE,6
+"ernst","ML","sphere","unavailable","unavailable",FALSE,6
+"ernst","ULS","sphere","unavailable","unavailable",FALSE,4
+"ernst","GLS","marker","passed","available",TRUE,24
+"ernst","ML","marker","passed","available",TRUE,24
+"ernst","ULS","marker","passed","available",TRUE,12
+"ernst","GLS","sphere","passed","available",TRUE,13
+"ernst","ML","sphere","passed","available",TRUE,14
+"ernst","ULS","sphere","passed","available",TRUE,12

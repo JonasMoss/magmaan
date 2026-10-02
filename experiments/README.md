@@ -125,7 +125,7 @@ Completed reference answers and frozen studies, with their scope limits.
 | # | Study | Kind | Current question and next check |
 |--:|-------|------|---------------------------------|
 | 13 | [PSD estimator stress](engineering/active/13-psd-estimator-stress/report.qmd) | benchmark | Where do covariance-honest estimators fail under conditioning and boundary stress? Extend the missing-data/categorical smoke anchors under the current verdict; retain all failures and cost. |
-| 15 | [Sphere reference fits](engineering/active/15-sphere-reference-fits/report.qmd) | probe | Complete-data NTML/ULS/GLS: separate starts, optimizer controls and native convergence audits in marker/sphere coordinates. Run the bounded ordinary lane before choosing recovery; chart validation and PSD/barrier work stay separate. |
+| 15 | [Sphere reference fits](engineering/active/15-sphere-reference-fits/report.qmd) | probe | Complete-data NTML/ULS/GLS: matched layered starts gain two sphere LS fits and recover more qualified retained ML minima than marker. Resolve unit conditioning/stopping, remaining basin misses and flat-minimum guard sensitivity; chart validation and PSD/barrier work stay separate. |
 | 17 | [Corpus optimizer recovery](engineering/active/17-corpus-optimizer-recovery/report.qmd) | probe | Starts and information coordinates have landed. Isolate the remaining domain/line-search failures and keep known worse local minima distinct from rejected endpoints. |
 | 19 | [Newton verdict migration](engineering/active/19-newton-verdict-migration/report.qmd) | probe | The Newton verdict has landed. Resolve the exposed categorical bad endpoints and stopping-control near misses, with every changed verdict explained. |
 

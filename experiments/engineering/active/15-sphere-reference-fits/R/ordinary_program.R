@@ -4,12 +4,15 @@ run_ordinary_program <- function(args, here) {
   usage <- paste(
     "Usage: Rscript run_experiment.R --ordinary [--smoke|--pilot] [options]",
     "Complete-data unrestricted NTML (ML), ULS and GLS; marker and sphere charts.",
-    "Axes: route-native vs shared FABIN3 starts; default/tight L-BFGS and PORT.",
-    "--smoke: regular N=100, one draw (48 fits).",
-    "--pilot: ernst,weak_marker,high_r2 at N=20,100, two draws (576 fits).",
+    "Axes: route-native vs shared FABIN3/layered starts; default/tight L-BFGS and PORT.",
+    "--smoke: regular N=100, one draw (72 fits with both shared starts).",
+    "--pilot: ernst,weak_marker,high_r2 at N=20,100, two draws (864 fits).",
     "--reps N --ns 20,100 --designs ernst,weak_marker,high_r2",
     "--estimators ML,ULS,GLS --seed-base N --run-id NAME",
     "--transforms native,mixed (mixed units .01,100,2,.3,10,.1).",
+    "--shared-starts fabin3,layered (native baseline always retained).",
+    "--witnesses: replay the nine retained hard datasets, using their original seeds.",
+    "--witness-audit: assess saved/refined ML points and explicitly labeled warm fits.",
     "No PSD, barriers, bounds, automatic retries, or default changes.",
     "All arms share ML-scaled sample covariance (divisor N); GLS weight is frozen",
     "from that sample. ULS changes target under heterogeneous unit changes.",
@@ -17,7 +20,7 @@ run_ordinary_program <- function(args, here) {
     "endpoint/sample RDSs under results/NAME; fresh run IDs required.", sep = "\n")
   if (any(args %in% c("--help", "-h"))) { cat(usage, "\n"); return(invisible(NULL)) }
   known <- c("--ordinary", "--smoke", "--pilot", "--reps", "--ns", "--designs",
-             "--estimators", "--seed-base", "--run-id", "--transforms")
+             "--estimators", "--seed-base", "--run-id", "--transforms", "--shared-starts", "--witnesses")
   if (any(startsWith(args, "--") & !args %in% known)) stop("unknown ordinary option")
   value <- function(k, default) {
     i <- match(k, args)
@@ -31,12 +34,17 @@ run_ordinary_program <- function(args, here) {
   designs <- parse_csv_arg(value("--designs", if (smoke) "ernst" else "ernst,weak_marker,high_r2"))
   estimators <- parse_csv_arg(value("--estimators", "ML,ULS,GLS"))
   transforms <- parse_csv_arg(value("--transforms", "native"))
+  shared_methods <- parse_csv_arg(value("--shared-starts", "fabin3,layered"))
+  witness_bank <- "--witnesses" %in% args
+  if (witness_bank && any(args %in% c("--seed-base", "--designs", "--ns", "--reps")))
+    stop("the retained witness bank fixes designs, sample sizes, replicates and seeds")
   seed_base <- as.integer(value("--seed-base", if (smoke) "620260001" else "620260002"))
-  run_id <- value("--run-id", if (smoke) "ordinary-smoke" else "ordinary-pilot")
+  run_id <- value("--run-id", if (witness_bank) "ordinary-witnesses" else if (smoke) "ordinary-smoke" else "ordinary-pilot")
   if (anyNA(c(reps, ns, seed_base)) || reps < 1 || reps >= 100 || any(ns <= 6) ||
       !length(ns) || !length(designs) || !length(estimators) || !length(transforms) ||
       seed_base < 1 || seed_base > 2e9 || any(ns > 10000) ||
       anyDuplicated(ns) || anyDuplicated(designs) || anyDuplicated(estimators) || anyDuplicated(transforms) ||
+      !length(shared_methods) || anyDuplicated(shared_methods) || any(!shared_methods %in% c("fabin3", "layered")) ||
       any(!designs %in% names(designs_all())) || any(!estimators %in% c("ML", "ULS", "GLS")) ||
       any(!transforms %in% c("native", "mixed")) || !grepl("^[A-Za-z0-9_-]+$", run_id))
     stop("invalid ordinary options")
@@ -60,14 +68,24 @@ run_ordinary_program <- function(args, here) {
     port_tight = list(optimizer = "port", control = list(port = list(rel_f_tol = 1e-12, x_tol = 1e-10))))
   grid <- expand.grid(design = designs, n = ns, rep = seq_len(reps), transform = transforms,
                       stringsAsFactors = FALSE)
+  if (witness_bank) {
+    witness_file <- file.path(here, "results/sphere-translations-inspected/source_endpoints.csv")
+    tasks <- read.csv(witness_file)[c("batch", "design", "n", "rep", "seed")]
+    grid <- do.call(rbind, lapply(transforms, function(tr) cbind(tasks, transform = tr)))
+    source_hash <- paste(source_hash, tools::md5sum(witness_file), sep = ";witness_input=")
+  }
   arms <- expand.grid(estimator = estimators, chart = c("marker", "sphere"),
-                      start_id = c("native", "shared_fabin3"), profile = names(profiles),
+                      start_id = c("native", paste0("shared_", shared_methods)), profile = names(profiles),
                       stringsAsFactors = FALSE)
   spec <- magmaanlab::model_spec(model_syntax)
   ref <- magmaan_cache_ref()
-  meta <- list(lane = "ordinary", profile = if (smoke) "smoke" else "pilot", seed_base = seed_base,
-    seed_rule = "base + stable design index*100000 + N*100 + rep; unit transforms share draws",
-    reps = reps, ns = ns, designs = designs, estimators = estimators, transforms = transforms,
+  meta <- list(lane = "ordinary", profile = if (witness_bank) "retained_witnesses" else if (smoke) "smoke" else "pilot",
+    seed_base = if (witness_bank) "retained CSV seeds" else seed_base,
+    seed_rule = if (witness_bank) "exact seeds in retained source_endpoints.csv; unit transforms share draws" else
+      "base + stable design index*100000 + N*100 + rep; unit transforms share draws",
+    reps = if (witness_bank) "retained case IDs" else reps,
+    ns = unique(grid$n), designs = unique(grid$design), estimators = estimators, transforms = transforms,
+    shared_methods = shared_methods, witness_bank = witness_bank,
     planned_fits = nrow(grid) * nrow(arms), source_md5 = source_hash, package_md5 = package_hash,
     git_head = ref$git_head, git_dirty = ref$git_dirty, magmaanlab_path = find.package("magmaanlab"),
     magmaanlab_built = utils::packageDescription("magmaanlab")$Built,
@@ -76,7 +94,7 @@ run_ordinary_program <- function(args, here) {
     audit_budget = .01, audit_max_condition = 1e12,
     audit_judge = "library native endpoint verdict, plus independent same-point objective consistency",
     first_order = "telemetry only; sphere product-Euclidean and marker model-Frobenius norms differ",
-    start_design = "route-native; shared auto-transported FABIN3 vector constructed once before fitting",
+    start_design = "route-native; shared FABIN3(auto) and layered(native) vectors constructed once before fitting",
     sphere_ls_native = "existing canonical path includes an auxiliary ML fit; time includes that work",
     optimizer_profiles = "default no options; tight f=1e-12 x=1e-10; PORT stock/tight; budgets unchanged",
     reference = "lowest locally audited objective; repeated only across both backends with implied covariance agreement",
@@ -86,23 +104,32 @@ run_ordinary_program <- function(args, here) {
   cat(sprintf("%d draws, %d fits; output %s\n", nrow(grid), nrow(grid) * nrow(arms), out))
   for (i in seq_len(nrow(grid))) {
     task <- grid[i, ]
-    seed <- seed_base + match(task$design, names(designs_all())) * 100000L + task$n * 100L + task$rep
+    seed <- if (witness_bank) task$seed else
+      seed_base + match(task$design, names(designs_all())) * 100000L + task$n * 100L + task$rep
+    task$seed <- NULL
     data <- draw_data(design_sigma(designs_all()[[task$design]]), task$n, seed)
     scale <- if (task$transform == "native") rep(1, 6) else c(.01, 100, 2, .3, 10, .1)
     data[] <- sweep(as.matrix(data), 2, scale, "*")
     sample <- magmaanlab::df_to_data(data, spec, scaling = "n")
     saveRDS(list(task = task, seed = seed, sample = sample), file.path(out, sprintf("sample_%03d.rds", i)))
-    shared <- tryCatch(magmaanlab::magmaan_core$estimate_start_values(
-      spec$partable, sample, start = "fabin3", transport = "auto"), error = identity)
-    if (!inherits(shared, "error")) append_csv(data.frame(draw_id = i, start_id = "shared_fabin3",
-      parameter = seq_along(shared), value = as.numeric(shared), method = attr(shared, "start_method"),
-      transport = attr(shared, "start_transport"), fallback = attr(shared, "start_fallback_reason")),
-      file.path(out, "starts.csv"))
+    shared_starts <- setNames(lapply(shared_methods, function(method)
+      tryCatch(magmaanlab::magmaan_core$estimate_start_values(spec$partable, sample,
+        start = method, transport = if (method == "layered") "native" else "auto"), error = identity)),
+      paste0("shared_", shared_methods))
+    for (name in names(shared_starts)) {
+      shared <- shared_starts[[name]]
+      if (!inherits(shared, "error")) append_csv(data.frame(draw_id = i, start_id = name,
+        parameter = seq_along(shared), value = as.numeric(shared), method = attr(shared, "start_method"),
+        transport = attr(shared, "start_transport"), fallback = attr(shared, "start_fallback_reason")),
+        file.path(out, "starts.csv"))
+    }
     draw_rows <- list(); endpoints <- list()
     for (j in seq_len(nrow(arms))) {
       arm <- arms[j, ]; p <- profiles[[arm$profile]]
       ctl <- p$control; target <- spec
-      if (arm$start_id == "shared_fabin3" && !inherits(shared, "error")) {
+      shared <- shared_starts[[arm$start_id]]
+      explicit <- arm$start_id != "native"
+      if (explicit && !inherits(shared, "error")) {
         if (arm$chart == "marker") ctl <- modifyList(ctl %||% list(), list(start = as.numeric(shared)))
         else {
           free <- target$partable$free
@@ -111,7 +138,7 @@ run_ordinary_program <- function(args, here) {
       }
       warnings <- character(); fit_t0 <- proc.time()[["elapsed"]]
       fit <- tryCatch(withCallingHandlers({
-        if (arm$start_id == "shared_fabin3" && inherits(shared, "error")) stop(shared)
+        if (explicit && inherits(shared, "error")) stop(shared)
         if (arm$chart == "marker") magmaanlab::fit_model(target, sample,
           estimator = arm$estimator, optimizer = p$optimizer, control = ctl)
         else magmaanlab::frontier_fit_sphere(target, sample, estimator = arm$estimator,
@@ -146,7 +173,7 @@ run_ordinary_program <- function(args, here) {
   fits <- do.call(rbind, rows)
   comparisons <- ordinary_comparisons(fits, out)
   write_out(comparisons$paired, "paired"); write_out(comparisons$references, "references")
-  keys <- c("design", "n", "transform", "estimator", "chart", "start_id", "profile")
+  keys <- c(if (witness_bank) "batch", "design", "n", "transform", "estimator", "chart", "start_id", "profile")
   summary <- do.call(rbind, lapply(split(comparisons$paired, interaction(comparisons$paired[keys], drop = TRUE)), function(d)
     cbind(d[1, keys], data.frame(fits = nrow(d), returned = sum(d$returned),
       audited = sum(d$accepted), user_chart = sum(d$user_chart %in% TRUE),
@@ -161,7 +188,7 @@ run_ordinary_program <- function(args, here) {
   paired <- comparisons$paired
   changes <- paired[paired$acceptance_gain | paired$acceptance_loss | paired$recovery_gain |
     paired$recovery_loss | (paired$accepted & !paired$best_hit), ]
-  write_out(changes[c("draw_id", "design", "n", "rep", "transform", "seed", "estimator", "chart",
+  write_out(changes[c("draw_id", if (witness_bank) "batch", "design", "n", "rep", "transform", "seed", "estimator", "chart",
     "start_id", "profile", "audit_status", "newton_status", "newton_distance", "objective_gap",
     "acceptance_gain", "acceptance_loss", "recovery_gain", "recovery_loss", "reference_repeated")], "changes")
   meta$elapsed_s <- proc.time()[["elapsed"]] - t0; meta$completed_fits <- nrow(fits)
@@ -176,6 +203,7 @@ ordinary_endpoint <- function(fit, spec, sample, estimator, chart) {
     objective = NA_real_, recomputed_objective = NA_real_, objective_consistent = NA,
     newton_status = "unavailable", newton_distance = NA_real_, condition = NA_real_,
     curvature = "", accuracy_metric = "", first_order_residual = NA_real_, first_order_metric = "",
+    alternative_chart_status = "unavailable", alternative_newton_status = "unavailable", alternative_distance = NA_real_,
     newton_budget = NA_real_, implied_sigma_pd = NA, primitive_admissible = NA,
     chart_level = NA_real_, pin_residual = NA_real_, start_used = "", iterations = NA_integer_,
     f_evals = NA_integer_, g_evals = NA_integer_, detail = "", message = "", stringsAsFactors = FALSE)
@@ -222,6 +250,9 @@ ordinary_endpoint <- function(fit, spec, sample, estimator, chart) {
   rec$newton_budget <- na$budget %||% NA_real_
   if (inherits(ev, "error")) rec$message <- conditionMessage(ev)
   else {
+    rec$alternative_chart_status <- ev$verdict$status %||% "unavailable"
+    rec$alternative_newton_status <- ev$diagnostics$newton_accuracy$status %||% "unavailable"
+    rec$alternative_distance <- ev$diagnostics$newton_accuracy$distance %||% NA_real_
     rec$recomputed_objective <- ev$fmin
     rec$objective_consistent <- is.finite(rec$objective) && is.finite(ev$fmin) &&
       abs(rec$objective - ev$fmin) <= 1e-6 * (1 + abs(rec$objective))
@@ -250,7 +281,7 @@ ordinary_comparisons <- function(fits, out) {
       sigma_gap <- max(vapply(sigmas, function(s) max(abs((s - anchor) / outer(sd, sd))), 0.0))
     }
     repeated <- length(unique(near$backend)) >= 2 && is.finite(sigma_gap) && sigma_gap <= 1e-5
-    refs[[k]] <- cbind(d[1, c("draw_id", "design", "n", "rep", "transform", "seed", "estimator")],
+    refs[[k]] <- cbind(d[1, c("draw_id", if ("batch" %in% names(d)) "batch", "design", "n", "rep", "transform", "seed", "estimator")],
       best_objective = best, audited_candidates = nrow(good), best_backends = length(unique(near$backend)),
       max_standardized_sigma_gap = sigma_gap, reference_repeated = repeated)
     d$best_objective <- best; d$objective_gap <- d$objective - best

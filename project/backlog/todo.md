@@ -742,16 +742,21 @@ fitting can use the lavaan-compatible preset from 0.2.0.
 
 - [ ] **M — complete the minimal ordinary-fit reliability programme.** Start
   with complete-data unrestricted NTML, ULS and GLS. Pair marker/sphere routes
-  on identical moments; vary route-native versus shared sample-only FABIN3
+  on identical moments; vary route-native versus shared sample-only FABIN3/layered
   starts, and stock versus tighter L-BFGS/PORT stopping controls. Keep the
   library's native Newton audit fixed and record failed/unchecked endpoints,
   chart availability, backend stops, objective and implied-covariance gaps,
   and cost separately. **Check:** the bounded development pilot in
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd),
   then targeted failure replays and fresh draws before any default decision.
-  First replay the retained heterogeneous-unit NTML/GLS sphere failures while
-  marker fits pass, isolating conditioning/preconditioning and stopping;
-  separately explain the shared-FABIN3 GLS worse local minimum.
+  The matched layered replay gains one sphere ULS and one GLS fit in the pilot
+  and recovers 3/6 qualified retained ML minima versus marker's 1/6 with default
+  L-BFGS. Warm diagnostic ML fits recover all six; cold search still misses
+  qualified minima. Next isolate conditioning/preconditioning and stopping on
+  the retained heterogeneous-unit sphere failures (shared layered does not
+  repair them); explain the shared-FABIN3 GLS worse local minimum and calibrate
+  the conditioning guard on the very flat finite witness. Preserve LS-specific
+  warm references without treating a fitted ML point as an LS optimum.
   PSD/barriers, FIML, ordinal data and broad global-search guarantees are
   separate extensions, not prerequisites for this programme.
 

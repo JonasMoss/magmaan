@@ -1185,14 +1185,21 @@ The minimal ordinary-fit engineering lane (2026-10-02, within
 `engineering/active/15-sphere-reference-fits`) now separates complete-data
 unrestricted NTML/ULS/GLS starts, optimizer stopping controls and fixed native
 convergence audits. It pairs marker/sphere charts on identical N-scaled sample
-moments; compares route-native and shared sample-only FABIN3 starts under stock
+moments; compares route-native and shared sample-only FABIN3/layered starts under stock
 and tighter L-BFGS/PORT stops; and keeps local accuracy, requested-chart
-availability, best-observed basin recovery and cost distinct. The 12-dataset,
-576-fit development pilot retains a locally accurate but worse GLS minimum
-reached by shared FABIN3 across both charts/backends. A separate heterogeneous-unit
-smoke exposes sphere NTML/GLS failures while marker fits pass on that draw.
-These motivate targeted conditioning/stopping and start-loss replays, not a
-new default or a global optimum claim. PSD/barriers and their geometry remain
+availability, best-observed basin recovery and cost distinct. The expanded
+12-dataset, 864-fit pilot reproduces the initial 576 fits; shared layered vectors
+agree with ordinary ML/GLS defaults to rounding error and gain one sphere ULS
+and one GLS fit under default L-BFGS. A 648-fit cold replay of nine retained
+datasets recovers 3/6 qualified historical ML minima with layered sphere starts
+versus marker's 1/6. Exact-point audits preserve six passing refined finite
+minima and one ill-conditioned finite minimum; warm fits recover all six in
+both charts/backends. The very flat witness exposes conditioning-guard
+sensitivity near its minimum. Shared layered starts do not repair the
+heterogeneous-unit sphere NTML/GLS failures. The shared-FABIN3 worse GLS minimum
+also remains. These findings motivate targeted conditioning/stopping, guard
+calibration and basin recovery, with LS objectives judged separately. No
+new default or global optimum claim follows. PSD/barriers and their geometry remain
 separate; the existing defaults and audit budgets are unchanged.
 
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
