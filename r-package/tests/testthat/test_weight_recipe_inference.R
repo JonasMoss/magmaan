@@ -202,3 +202,178 @@ test_that("two-stage MI under missing data uses the recorded Stage-2 weight", {
   expect_error(magmaan_core$frontier_rbm(dls, dls_a = 0.5), "recorded")
   expect_true(all(is.finite(est_change_raw_approx(dls, type = "estimated.weight"))))
 })
+
+test_that("two-stage unequal groups reduce to complete-data robust tests", {
+  d <- rbind(recipe_data(240L, 20261003L), recipe_data(160L, 20261004L))
+  d$g <- rep(c("a", "b"), c(240L, 160L))
+  estimators <- c(nt = "ML", uls = "ULS", dwls = "DWLS", adf = "WLS", dls = "DLS")
+  for (syntax in c("f =~ x1+x2+x3+x4+x5", "f =~ x1+a*x2+a*x3+x4+x5")) {
+    spec <- model_spec(syntax, meanstructure = TRUE, group_labels = c("a", "b"))
+    for (w in names(estimators)) {
+      two <- fit_model(spec, d, groups = "g", estimator = "ML2S",
+                       stage2_weight = w, dls_a = 0.3)
+      one <- fit_model(spec, d, groups = "g", estimator = estimators[[w]], dls_a = 0.3)
+      expect_true(two$converged, info = w)
+      expect_true(one$converged, info = w)
+      expect_equal(two$theta, one$theta, tolerance = 1e-10, info = w)
+      for (release in c(FALSE, TRUE)) {
+        if (release && !grepl("a\\*", syntax)) next
+        worker <- if (release) score_tests_robust else modification_indices_robust
+        ordinary <- if (release) score_tests(two) else modification_indices(two)
+        for (ew in c(FALSE, TRUE)) {
+          a <- worker(two, estimated_weight = ew)
+          b <- worker(one, data = d,
+                       estimated_weight = ew && !w %in% c("nt", "uls"))
+          expect_true(nrow(a) > 0L, info = paste(w, release, ew))
+          expect_identical(attr(a, "mi_type"), "naive_stage2")
+          expect_equal(a$mi, ordinary$mi, tolerance = 1e-8)
+          expect_equal(a$mi, b$mi, tolerance = 1e-10, info = paste(w, release, ew))
+          expect_equal(a$mi.scaled, b$mi.scaled, tolerance = 1e-10,
+                       info = paste(w, release, ew))
+        }
+      }
+    }
+  }
+})
+
+test_that("two-stage MAR MI and releases retain positive Stage-1 scaling", {
+  d <- recipe_data(400L, 20261005L)
+  # x1 stays observed: missingness depends on that observed covariate, hence MAR.
+  set.seed(20261006L)
+  d$x2[runif(nrow(d)) < plogis(-1 + 0.7 * d$x1)] <- NA_real_
+  d$x4[runif(nrow(d)) < plogis(-1 - 0.6 * d$x1)] <- NA_real_
+  spec <- model_spec("f =~ x1+a*x2+a*x3+x4+x5", meanstructure = TRUE)
+  for (w in c("nt", "uls", "dwls", "adf", "dls")) {
+    fit <- fit_model(spec, d, estimator = "ML2S", stage2_weight = w, dls_a = 0.3)
+    expect_true(fit$converged, info = w)
+    for (release in c(FALSE, TRUE)) {
+      worker <- if (release) score_tests_robust else modification_indices_robust
+      ordinary <- if (release) score_tests(fit) else modification_indices(fit)
+      fixed <- worker(fit)
+      estimated <- worker(fit, estimated_weight = TRUE)
+      expect_gt(nrow(fixed), 0L)
+      expect_identical(attr(ordinary, "mi_type"), "naive_stage2")
+      for (result in list(fixed, estimated)) {
+        expect_true(all(is.finite(result$mi.scaled)), info = paste(w, release))
+        expect_true(all(is.finite(result$scaling.factor) & result$scaling.factor > 0))
+        expect_equal(result$mi, ordinary$mi, tolerance = 1e-8)
+        expect_equal(result$mi.scaled, result$mi / result$scaling.factor,
+                     tolerance = 1e-12)
+      }
+      if (w %in% c("nt", "uls")) {
+        expect_equal(estimated$mi.scaled, fixed$mi.scaled, tolerance = 1e-10)
+      }
+    }
+  }
+})
+
+test_that("continuous LS MI and releases preserve means and equality constraints", {
+  d <- recipe_data()
+  d$x1 <- d$x1 + 0.8
+  d$x3 <- d$x3 - 0.4
+  for (syntax in c("f =~ x1+x2+x3+x4+x5", "f =~ x1+a*x2+a*x3+x4+x5")) {
+    spec <- model_spec(syntax, meanstructure = TRUE)
+    fits <- c(list(uls = fit_model(spec, d, estimator = "ULS")), recipe_fits(spec, d))
+    for (release in c(FALSE, TRUE)) {
+      if (release && !grepl("a\\*", syntax)) next
+      worker <- if (release) score_tests_robust else modification_indices_robust
+      ordinary_worker <- if (release) score_tests else modification_indices
+      for (ew in c(FALSE, TRUE)) {
+        results <- lapply(fits, worker, data = d, estimated_weight = ew)
+        for (nm in names(results)) {
+          result <- results[[nm]]
+          expect_true(fits[[nm]]$converged, info = nm)
+          expect_gt(nrow(result), 0L)
+          expect_equal(result$mi, ordinary_worker(fits[[nm]])$mi, tolerance = 1e-8)
+          expect_true(all(is.finite(result$scaling.factor) & result$scaling.factor > 0))
+          expect_equal(result$mi.scaled, result$mi / result$scaling.factor,
+                       tolerance = 1e-12)
+        }
+        expect_equal(results$dls0$mi.scaled, results$nt$mi.scaled, tolerance = 1e-5)
+        expect_equal(results$dls1$mi.scaled, results$adf$mi.scaled, tolerance = 1e-10)
+        expect_equal(worker(fits$uls, data = d, estimated_weight = ew)$mi.scaled,
+                     worker(fits$uls, data = d)$mi.scaled, tolerance = 1e-10)
+      }
+    }
+  }
+})
+
+test_that("complete ML MI and equality releases share ordinary and robust coordinates", {
+  d <- recipe_data()
+  fit <- fit_model("f =~ x1+a*x2+a*x3+x4+x5\nx1 ~~ 0*x2", d,
+                   estimator = "ML", meanstructure = TRUE)
+  expect_true(fit$converged)
+  for (release in c(FALSE, TRUE)) {
+    worker <- if (release) score_tests_robust else modification_indices_robust
+    ordinary <- if (release) score_tests(fit) else modification_indices(fit)
+    robust <- worker(fit, data = d)
+    expect_gt(nrow(ordinary), 0L)
+    expect_equal(robust$mi, ordinary$mi, tolerance = 1e-8)
+    expect_equal(robust$epc, ordinary$epc, tolerance = 1e-8)
+    expect_true(all(is.finite(robust$mi.scaled) & robust$scaling.factor > 0))
+    if (release) {
+      # The R release adapter has no sample-only ML/Gamma_NT path.
+      expect_error(worker(fit, cov = "model_implied"), "require.*fitting data")
+    } else {
+      normal <- worker(fit, cov = "model_implied")
+      expect_equal(normal$mi.scaled, ordinary$mi, tolerance = 1e-8)
+    }
+    expect_error(worker(fit, data = d, estimated_weight = TRUE), "estimated_weight")
+  }
+})
+
+test_that("ordinal recipe matrix gates releases and estimated-weight refusals", {
+  cont <- recipe_data(700L)
+  d <- as.data.frame(lapply(cont[1:4], function(x)
+    ordered(cut(x, c(-Inf, -0.5, 0.5, Inf)))))
+  spec <- model_spec("f =~ x1+a*x2+a*x3+x4\nx1 ~~ 0*x3", ordered = names(d))
+  for (estimator in c("ULS", "DWLS", "WLS", "GLS", "DLS", "supplied")) {
+    fit <- if (estimator == "supplied") {
+      fit_model(spec, d, estimator = "DWLS", W = diag(seq(0.7, 1.3, length.out = 14L)))
+    } else fit_model(spec, d, estimator = estimator, dls_a = 0.3)
+    expect_true(fit$converged, info = estimator)
+    for (release in c(FALSE, TRUE)) {
+      ordinary <- if (release) score_tests(fit) else modification_indices(fit)
+      worker <- if (release) score_tests_robust else modification_indices_robust
+      fixed <- worker(fit)
+      expect_gt(nrow(ordinary), 0L)
+      expect_equal(fixed$mi, ordinary$mi, tolerance = 1e-8)
+      expect_equal(fixed$epc, ordinary$epc, tolerance = 1e-8)
+      expect_true(all(is.finite(fixed$mi.scaled) & fixed$scaling.factor > 0))
+      if (estimator %in% c("GLS", "DLS", "supplied")) {
+        expect_error(worker(fit, estimated_weight = TRUE), "UnsupportedInference")
+      } else {
+        estimated <- worker(fit, estimated_weight = TRUE)
+        expect_equal(estimated$mi, ordinary$mi, tolerance = 1e-8)
+        expect_true(all(is.finite(estimated$mi.scaled) & estimated$scaling.factor > 0))
+        if (estimator == "ULS") expect_equal(estimated, fixed, tolerance = 1e-10)
+      }
+    }
+  }
+  association <- fit_model(spec, d, estimator = "ML")
+  for (worker in list(modification_indices, score_tests, modification_indices_robust,
+                      score_tests_robust)) expect_error(worker(association), "association")
+})
+
+test_that("mixed ordinal MI matrix gates fixed weights and explicit refusals", {
+  cont <- recipe_data(700L)
+  d <- cont[1:4]
+  d[1:2] <- lapply(d[1:2], function(x) ordered(cut(x, c(-Inf, -0.5, 0.5, Inf))))
+  spec <- model_spec("f =~ x1+a*x2+a*x3+x4\nx3 ~~ 0*x4", ordered = names(d)[1:2])
+  # Core mixed ULS ordinary scores exist, but the R fitting surface refuses it.
+  expect_error(fit_model(spec, d, estimator = "ULS"), "ULS is not supported.*mixed")
+  for (estimator in c("DWLS", "WLS")) {
+    fit <- fit_model(spec, d, estimator = estimator)
+    expect_true(fit$converged, info = estimator)
+    for (release in c(FALSE, TRUE)) {
+      ordinary <- if (release) score_tests(fit) else modification_indices(fit)
+      worker <- if (release) score_tests_robust else modification_indices_robust
+      expect_gt(nrow(ordinary), 0L)
+      expect_true(all(is.finite(ordinary$mi)))
+      fixed <- worker(fit)
+      expect_equal(fixed$mi, ordinary$mi, tolerance = 1e-8)
+      expect_true(all(is.finite(fixed$mi.scaled) & fixed$scaling.factor > 0))
+      expect_error(worker(fit, estimated_weight = TRUE), "not yet implemented")
+    }
+  }
+})

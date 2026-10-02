@@ -31,6 +31,8 @@ const std::vector<std::string> kScoreFixtures = {
     "0003_uls_fixed_row_and_equality",
     "0004_ordinal_dwls_fixed_row_and_equality",
     "0005_mixed_dwls_fixed_row_and_equality",
+    "0013_gls_fixed_and_absent",
+    "0014_wls_fixed_and_absent",
 };
 
 using magmaan::test::matrix_from_json;
@@ -260,8 +262,15 @@ bool compare_modindices(const std::string& id,
                          want["rhs"].get<std::string>());
       return false;
     }
-    const double d_mi = std::abs(row->mi - want["mi"].get<double>());
-    const double d_epc = std::abs(row->epc - want["epc"].get<double>());
+    const double convention = want.value("score_convention", 1.0);
+    const double d_mi = std::abs(row->mi * convention * convention - want["mi"].get<double>());
+    const double d_epc = std::abs(row->epc * convention - want["epc"].get<double>());
+    if (want.contains("independent_mi")) {
+      CHECK(row->mi == doctest::Approx(want["independent_mi"].get<double>()).epsilon(1e-7));
+      CHECK(row->epc == doctest::Approx(want["independent_epc"].get<double>()).epsilon(1e-7));
+      CHECK(row->epc_lv * convention == doctest::Approx(want["sepc_lv"].get<double>()).epsilon(1e-6));
+      CHECK(row->epc_all * convention == doctest::Approx(want["sepc_all"].get<double>()).epsilon(1e-6));
+    }
     if (d_mi > mi_tol || d_epc > epc_tol) {
       failures.push_back(id + ": MI mismatch d_mi=" + std::to_string(d_mi) +
                          " d_epc=" + std::to_string(d_epc) + " got_mi=" +
@@ -337,9 +346,9 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
-      ok = compare_modindices(id, mi, h->names, fit["modindices"], 2e-2,
-                              5e-3, failures) && ok;
-      ok = compare_score_tests(id, st, fit["score_tests"], 2e-2, 5e-3,
+      ok = compare_modindices(id, mi, h->names, fit["modindices"], 1e-4,
+                              2e-6, failures) && ok;
+      ok = compare_score_tests(id, st, fit["score_tests"], 1e-7, 1e-8,
                                failures) && ok;
 
       // Robust reduction-to-NT: the model-implied (Γ_NT) Expected-bread robust
@@ -354,7 +363,7 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
         auto rmi = std::move(*rmi_or);
         for (auto& row : rmi.rows) row.mi = row.mi_scaled;  // compare scaled
         ok = compare_modindices(id + " [robust]", rmi, h->names,
-                                fit["modindices"], 2e-2, 5e-3, failures) && ok;
+                                fit["modindices"], 1e-4, 2e-6, failures) && ok;
       } else {
         failures.push_back(id + ": robust modification_indices failed");
         ok = false;
@@ -371,26 +380,40 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
-      ok = compare_modindices(id, mi, h->names, fit["modindices"], 2e-1,
-                              3e-2, failures) && ok;
-      ok = compare_score_tests(id, st, fit["score_tests"], 2e-1, 3e-2,
+      ok = compare_modindices(id, mi, h->names, fit["modindices"], 2e-5,
+                              5e-7, failures) && ok;
+      ok = compare_score_tests(id, st, fit["score_tests"], 1e-7, 1e-8,
                                failures) && ok;
     } else if (kind == "ls") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
+      magmaan::estimate::gmm::Weight weight;
+      if (exp.contains("weight")) {
+        for (const auto& block : exp["weight"]) {
+          auto w = magmaan::estimate::gmm::BlockWeight::dense(
+              matrix_from_json(block["matrix"]), magmaan::FitError::Kind::NumericIssue, "fixture W");
+          REQUIRE(w.has_value());
+          weight.push_back(*w);
+        }
+      }
       auto mi_or = magmaan::inference::modification_indices(
-          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{}, mi_opts);
+          h->pt, h->rep, samp, est, weight, mi_opts);
       auto st_or = magmaan::inference::score_tests(
-          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{});
+          h->pt, h->rep, samp, est, weight);
       if (!mi_or.has_value() || !st_or.has_value()) {
-        failures.push_back(id + ": ULS score path failed");
+        failures.push_back(id + ": LS score path failed");
         continue;
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
-      ok = compare_modindices(id, mi, h->names, fit["modindices"], 7e-2,
-                              1e-2, failures) && ok;
-      ok = compare_score_tests(id, st, fit["score_tests"], 5e-2, 1e-2,
+      // New GLS/WLS fixtures declare their score-divisor transport explicitly.
+      // The older ULS raw oracle retains that finite-divisor difference; the
+      // measured floor and tighter limits are recorded in mi-release-matrix.md.
+      const bool transported = exp.contains("weight");
+      ok = compare_modindices(id, mi, h->names, fit["modindices"],
+                              transported ? 1e-5 : 6.5e-2,
+                              transported ? 5e-7 : 1.2e-3, failures) && ok;
+      ok = compare_score_tests(id, st, fit["score_tests"], 3e-2, 1.2e-3,
                                failures) && ok;
     } else if (kind == "ordinal") {
       const auto blocks = data_blocks_from_fixture(exp);
@@ -412,9 +435,9 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
-      ok = compare_modindices(id, mi, h->names, fit["modindices"], 1e-1,
-                              2e-2, failures) && ok;
-      ok = compare_score_tests(id, st, fit["score_tests"], 1e-1, 2e-2,
+      ok = compare_modindices(id, mi, h->names, fit["modindices"], 2e-2,
+                              1e-3, failures) && ok;
+      ok = compare_score_tests(id, st, fit["score_tests"], 3e-3, 2e-3,
                                failures) && ok;
     } else if (kind == "mixed_ordinal") {
       const auto blocks = data_blocks_from_fixture(exp);
@@ -440,9 +463,12 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
+      // The mixed MI scale has an unresolved factor-two oracle discrepancy;
+      // retain the existing limited-validation gate visibly, without granting
+      // raw parity. The matrix records the measured difference and follow-up.
       ok = compare_modindices(id, mi, h->names, fit["modindices"], 1.1,
-                              5e-2, failures) && ok;
-      ok = compare_score_tests(id, st, fit["score_tests"], 3e-1, 5e-2,
+                              5e-4, failures) && ok;
+      ok = compare_score_tests(id, st, fit["score_tests"], 1e-2, 2e-3,
                                failures) && ok;
     } else {
       failures.push_back(id + ": unknown kind " + kind);

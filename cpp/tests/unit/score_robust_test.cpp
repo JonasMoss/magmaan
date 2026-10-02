@@ -3128,3 +3128,187 @@ TEST_CASE("frontier ML2S MI: naive statistic plus Stage-1 scaling under missing 
   CHECK_FALSE(inf::frontier::modification_indices_ml2s(h.pt, h.rep, *sm, *est,
                                                        no_raw).has_value());
 }
+
+TEST_CASE("ordinal MI recipe matrix gates ordinary releases and typed refusals") {
+  std::mt19937 rng(20261008u);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(700, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < 4; ++j) {
+      const double value = (0.8 - 0.05 * static_cast<double>(j)) * eta + 0.65 * norm(rng);
+      X(i, j) = 1.0 + (value > -0.5) + (value > 0.5);
+    }
+  }
+  auto base = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(base.has_value());
+  auto h = build(ordinal_cfa_eq_syntax);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  using Stage2 = magmaan::estimate::frontier::OrdinalStage2Weight;
+  const auto delta = magmaan::estimate::OrdinalParameterization::Delta;
+  inf::ModificationIndexOptions options;
+  options.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  for (int recipe = 0; recipe < 6; ++recipe) {
+    CAPTURE(recipe);
+    auto stats = *base;
+    W weight = recipe == 0 ? W::ULS : (recipe == 1 || recipe == 5 ? W::DWLS : W::WLS);
+    if (recipe == 3 || recipe == 4) {
+      auto swapped = magmaan::estimate::frontier::ordinal_stats_with_stage2_weight(
+          stats, recipe == 3 ? Stage2::Nt : Stage2::Dls, {0.3});
+      REQUIRE(swapped.has_value());
+      stats = std::move(*swapped);
+    }
+    if (recipe == 5) stats.W_dwls[0] *= 1.3;
+    auto est = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, stats, {}, weight);
+    REQUIRE(est.has_value());
+    auto mi = magmaan::estimate::modification_indices_ordinal(h.pt, h.rep, stats, *est, weight, options);
+    auto release = magmaan::estimate::score_tests_ordinal(h.pt, h.rep, stats, *est, weight);
+    REQUIRE(mi.has_value());
+    REQUIRE(release.has_value());
+    REQUIRE_FALSE(mi->rows.empty());
+    REQUIRE_FALSE(release->rows.empty());
+    for (bool estimated : {false, true}) {
+      auto rmi = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+          h.pt, h.rep, stats, *est, weight, options, delta, estimated);
+      auto rst = magmaan::estimate::frontier::score_tests_ordinal_robust(
+          h.pt, h.rep, stats, *est, weight, delta, estimated);
+      if (estimated && recipe >= 3) {
+        REQUIRE_FALSE(rmi.has_value());
+        REQUIRE_FALSE(rst.has_value());
+        CHECK(rmi.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+        CHECK(rst.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+      } else {
+        REQUIRE(rmi.has_value());
+        REQUIRE(rst.has_value());
+        REQUIRE(rmi->rows.size() == mi->rows.size());
+        REQUIRE(rst->rows.size() == release->rows.size());
+        for (std::size_t k = 0; k < mi->rows.size(); ++k) {
+          CHECK(rmi->rows[k].mi == doctest::Approx(mi->rows[k].mi).epsilon(1e-8));
+          CHECK(std::isfinite(rmi->rows[k].mi_scaled));
+          CHECK(rmi->rows[k].scaling_factor > 0.0);
+        }
+        for (std::size_t k = 0; k < release->rows.size(); ++k) {
+          CHECK(rst->rows[k].mi == doctest::Approx(release->rows[k].mi).epsilon(1e-8));
+          CHECK(std::isfinite(rst->rows[k].mi_scaled));
+          CHECK(rst->rows[k].scaling_factor > 0.0);
+        }
+      }
+    }
+    auto association = *est;
+    association.association = magmaan::estimate::AssociationFitInfo{};
+    auto refused = magmaan::estimate::score_tests_ordinal(h.pt, h.rep, stats, association, weight);
+    auto refused_mi = magmaan::estimate::modification_indices_ordinal(h.pt, h.rep, stats, association, weight, options);
+    REQUIRE_FALSE(refused.has_value());
+    REQUIRE_FALSE(refused_mi.has_value());
+    CHECK(refused.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+    CHECK(refused_mi.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+    for (bool estimated : {false, true}) {
+      auto robust_mi = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+          h.pt, h.rep, stats, association, weight, options, delta, estimated);
+      auto robust_release = magmaan::estimate::frontier::score_tests_ordinal_robust(
+          h.pt, h.rep, stats, association, weight, delta, estimated);
+      REQUIRE_FALSE(robust_mi.has_value());
+      REQUIRE_FALSE(robust_release.has_value());
+      CHECK(robust_mi.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+      CHECK(robust_release.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+    }
+  }
+}
+
+TEST_CASE("continuous LS recipe matrix gates means constraints and ordinary score reductions") {
+  auto h = build_mean("f =~ x1+a*x2+a*x3+x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20261009u);
+  auto raw = t_cfa_raw(rng, {450}, 7.0, 0);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto evaluator = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(evaluator.has_value());
+  const Eigen::VectorXd theta0 = Eigen::VectorXd::Ones(h.pt.n_free());
+  using Kind = magmaan::estimate::gmm::FixedWeightKind;
+  for (Kind kind : {Kind::Uls, Kind::Nt, Kind::Dwls, Kind::Wls, Kind::Dls}) {
+    CAPTURE(static_cast<int>(kind));
+    auto weight = magmaan::estimate::gmm::fixed_moment_weight(
+        *evaluator, *samp, theta0, kind, &raw, {0.3});
+    REQUIRE(weight.has_value());
+    auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, *weight);
+    REQUIRE(est.has_value());
+    inf::frontier::RobustScoreOptions options;
+    options.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+    options.spec.cov = rob::ScoreCovariance::Empirical;
+    auto mode = magmaan::estimate::continuous_ls_ij_mode_for(kind, false);
+    REQUIRE(mode.has_value());
+    options.ij_weight_mode = *mode;
+    options.dls_opts.a = 0.3;
+    auto mi = inf::modification_indices(h.pt, h.rep, *samp, *est, *weight, options.base);
+    auto releases = inf::score_tests(h.pt, h.rep, *samp, *est, *weight);
+    REQUIRE(mi.has_value());
+    REQUIRE(releases.has_value());
+    REQUIRE_FALSE(mi->rows.empty());
+    REQUIRE_FALSE(releases->rows.empty());
+    for (bool estimated : {false, true}) {
+      options.estimated_weight = estimated;
+      auto robust_mi = inf::frontier::modification_indices_robust(
+          h.pt, h.rep, *samp, raw, *est, *weight, options);
+      auto robust_release = inf::frontier::score_tests_robust(
+          h.pt, h.rep, *samp, raw, *est, *weight, options);
+      REQUIRE_MESSAGE(robust_mi.has_value(), (robust_mi.has_value() ? "" : robust_mi.error().detail));
+      REQUIRE_MESSAGE(robust_release.has_value(), (robust_release.has_value() ? "" : robust_release.error().detail));
+      for (const auto& pair : {std::pair{&*mi, &*robust_mi}, std::pair{&*releases, &*robust_release}}) {
+        REQUIRE(pair.first->rows.size() == pair.second->rows.size());
+        for (std::size_t k = 0; k < pair.first->rows.size(); ++k) {
+          CHECK(pair.first->rows[k].mi == doctest::Approx(pair.second->rows[k].mi).epsilon(1e-8));
+          CHECK(pair.first->rows[k].epc == doctest::Approx(pair.second->rows[k].epc).epsilon(1e-8));
+          CHECK(pair.second->rows[k].scaling_factor > 0.0);
+          CHECK(std::isfinite(pair.second->rows[k].mi_scaled));
+        }
+      }
+    }
+  }
+}
+
+TEST_CASE("mixed ordinal MI recipe matrix gates ordinary cells and typed robust refusals") {
+  std::mt19937 rng(20261010u);
+  auto X = mixed_ordinal_sample(rng, 700, {0.8, 0.7, 0.6, 0.75}, 0.2);
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, {{1, 1, 0, 0}});
+  REQUIRE(stats.has_value());
+  auto h = build_mean("f =~ x1+a*x2+a*x3+x4\nx1 | t1+t2\nx2 | t1\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~~ 0*x4");
+  using W = magmaan::estimate::OrdinalWeightKind;
+  const auto delta = magmaan::estimate::OrdinalParameterization::Delta;
+  inf::ModificationIndexOptions options;
+  options.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  for (W weight : {W::ULS, W::DWLS, W::WLS}) {
+    auto est = magmaan::test::fit_mixed_ordinal_bounded(h.pt, h.rep, *stats, {}, weight);
+    REQUIRE_MESSAGE(est.has_value(), (est.has_value() ? "" : est.error().detail));
+    auto mi = magmaan::estimate::modification_indices_mixed_ordinal(h.pt, h.rep, *stats, *est, weight, options);
+    auto release = magmaan::estimate::score_tests_mixed_ordinal(h.pt, h.rep, *stats, *est, weight);
+    REQUIRE(mi.has_value());
+    REQUIRE(release.has_value());
+    REQUIRE_FALSE(mi->rows.empty());
+    REQUIRE_FALSE(release->rows.empty());
+    for (bool estimated : {false, true}) {
+      auto rmi = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est, weight, options, delta, estimated);
+      auto rst = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est, weight, delta, estimated);
+      if (weight == W::ULS || estimated) {
+        REQUIRE_FALSE(rmi.has_value());
+        REQUIRE_FALSE(rst.has_value());
+        CHECK(rmi.error().kind == magmaan::PostError::Kind::NumericIssue);
+        CHECK(rst.error().kind == magmaan::PostError::Kind::NumericIssue);
+      } else {
+        REQUIRE(rmi.has_value());
+        REQUIRE(rst.has_value());
+        REQUIRE(rmi->rows.size() == mi->rows.size());
+        REQUIRE(rst->rows.size() == release->rows.size());
+        for (std::size_t k = 0; k < mi->rows.size(); ++k) {
+          CHECK(rmi->rows[k].mi == doctest::Approx(mi->rows[k].mi).epsilon(1e-8));
+          CHECK(std::isfinite(rmi->rows[k].mi_scaled));
+        }
+        for (std::size_t k = 0; k < release->rows.size(); ++k) {
+          CHECK(rst->rows[k].mi == doctest::Approx(release->rows[k].mi).epsilon(1e-8));
+          CHECK(std::isfinite(rst->rows[k].mi_scaled));
+        }
+      }
+    }
+  }
+}
