@@ -1822,10 +1822,18 @@ sam <- function(model, data,
 
 fit_fiml <- function(model, data,
                      optimizer = "nlopt-lbfgs-slsqp-fallback",
-                     control = NULL) {
+                     control = NULL, options = NULL) {
+  if (!is.null(options)) {
+    control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
+    optimizer <- NULL
+  }
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  fit_fiml_impl(partable_arg(model), fiml_data_arg(data),
+  fit <- fit_fiml_impl(partable_arg(model), fiml_data_arg(data),
                 optimizer = optimizer, control = control)
+  if (!is.null(options)) fit$options$route <- list(fitter = "fit_fiml", args = list(
+      options = control$fitting_options,
+      control = if (!is.null(control$start)) list(start = control$start) else NULL))
+  fit
 }
 
 # Frontier two-stage patternwise normal-theory ML. The saturated FIML moments
@@ -2470,9 +2478,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     inherits(data, "magmaan_mixed_ordinal_data")
   pairwise_moments <- is.list(data) && !is.data.frame(data) &&
     !is.null(data$pi_hat) && !is.null(data$n_pair)
-  if (!is.null(options) && (estimator != "ML" || ordinal_requested || psd ||
+  if (!is.null(options) && (!estimator %in% c("ML", "FIML") || ordinal_requested || psd ||
       !is.null(barrier) || !is.null(cluster) || missing == "pairwise" || pairwise_moments))
-    stop("fitting options currently require ordinary complete continuous ML")
+    stop("fitting options currently require ordinary continuous ML or FIML")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
   if (!is.null(cluster)) {
@@ -2508,7 +2516,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     } else if (psd) {
       frontier_fit_fiml_psd(spec, data, optimizer = psd_optimizer, control = control)
     } else {
-      fit_fiml(spec, data, optimizer = optimizer, control = control)
+      fit_fiml(spec, data, optimizer = optimizer, control = control, options = options)
     }
     return(done(fit))
   }

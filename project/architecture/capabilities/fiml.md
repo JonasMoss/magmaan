@@ -1,5 +1,27 @@
 ### Continuous FIML
 
+- The versioned `lavaan-0.7.2` fitting adapter (2026-10-02) composes the
+  observed-pattern objective with EM H1 starts, the ordered ML equality QR
+  coordinates, pinned PORT controls and standardized/simple retries. The H1
+  initializer uses marginal variances with zero covariances and SQUAREM
+  acceleration ([Du and Varadhan, Table 1](https://arxiv.org/abs/1810.11163));
+  native H1 keeps its pairwise initializer and plain EM. Residual-variance
+  starts and retry scales use available-case variances followed by the
+  whole-group `(N-1)/N` rescaling.
+  Search minimizes half the observed-pattern deviance relative to H1, while
+  native FIML likelihood/derivative primitives retain their full kernel scale.
+  Both R packages expose this through `options` for unrestricted continuous
+  FIML. Frozen MCAR/MAR and installed-lavaan gates cover single/grouped CFA,
+  shared labels, `group.equal` loadings/intercepts, invalid starts, retry scales
+  and identical-point gradients. The x100 rescaled fixture retains endpoint,
+  objective, retry and verdict parity, but compares gradients at identical
+  points because PORT's final gradient vector follows its floating-point path
+  (opt maximum `1.03649e-5`, oracle `2.44914e-4`, threshold `1e-3`).
+  Nonzero affine RHS, nonlinear constraints, PSD/barrier, ordinal and
+  multilevel preset routes remain explicit errors;
+  homogeneous standardized retries retain the shared constraint-surface guard.
+  Native diagnostics remain available alongside the selected preset verdict.
+
 - Direct observed-pattern ML over raw continuous data with missingness masks.
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.

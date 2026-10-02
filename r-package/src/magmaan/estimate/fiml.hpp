@@ -73,6 +73,10 @@ struct FIMLPack {
 };
 
 struct FIMLH1Options {
+  // Pinned lavaan EM starts from marginal variances with zero covariances.
+  // Native H1 retains its pairwise covariance initializer.
+  bool marginal_diagonal_start = false;
+  bool squarem_acceleration = false;
   int    max_iter = 10000;
   // Lavaan-style absolute max update in the saturated H1 parameters
   // (mu, vech(Sigma)). This is the primary EM convergence gate because the
@@ -1348,6 +1352,12 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    const RawData& raw,
                    const FIMLPack& pack,
                    const FIMLH1& h1);
+
+// Audit a supplied endpoint using the same observed-pattern objective,
+// derivatives and ambient Newton check as native FIML fitting.
+fit_expected<Estimates> evaluate_fiml_at(
+    spec::LatentStructure, const model::MatrixRep&, const RawData&,
+    const FIMLPack&, const Eigen::VectorXd&);
 
 // Full-information ML fit over raw continuous data. `backend` selects the
 // scalar optimizer (NLopt L-BFGS with SLSQP fallback by default, optional IPOPT

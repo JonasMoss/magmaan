@@ -143,9 +143,9 @@ test_that("fitting options reject unknown versions, conflicts and unsupported so
   expect_error(fit_model(m, d, options = list(wut = "newton")), "unknown fitting option")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), optimizer = "port"), "conflicts")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), control = list(start = "fabin3")), "constructor conflicts")
-  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), psd = TRUE), "ordinary complete")
-  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), estimator = "FIML"), "ordinary complete")
-  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), missing = "pairwise"), "ordinary complete")
+  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), psd = TRUE), "ordinary continuous")
+  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), estimator = "ML2S"), "ordinary continuous")
+  expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), missing = "pairwise"), "ordinary continuous")
   expect_error(fit_model("f =~ x1 + a*x2 + b*x3\na == b*b", d, options = list(preset = "lavaan-0.7.2")), "constraints")
   expect_error(fit_model("f =~ x1 + a*x2 + b*x3\na > b", d,
       options = list(optimizer = "port", convergence = "lavaan-0.7.2")), "constraints")
@@ -261,16 +261,16 @@ test_that("fitting options reject every unsupported route, including pairwise mo
   d <- lavaan::HolzingerSwineford1939
   m <- "f =~ x1+x2+x3+x4"
   lavaan_options <- list(preset = "lavaan-0.7.2")
-  expect_error(fit_model(m, d, cluster = "school", options = lavaan_options), "ordinary complete")
+  expect_error(fit_model(m, d, cluster = "school", options = lavaan_options), "ordinary continuous")
   expect_error(fit_model(m, d, ordered = c("x1", "x2", "x3", "x4"), estimator = "DWLS",
-      options = lavaan_options), "ordinary complete")
-  expect_error(fit_model(m, d, estimator = "ML2S", options = lavaan_options), "ordinary complete")
-  expect_error(fit_model(m, d, covariance = "barrier", options = lavaan_options), "ordinary complete")
+      options = lavaan_options), "ordinary continuous")
+  expect_error(fit_model(m, d, estimator = "ML2S", options = lavaan_options), "ordinary continuous")
+  expect_error(fit_model(m, d, covariance = "barrier", options = lavaan_options), "ordinary continuous")
   incomplete <- d
   incomplete$x1[1:5] <- NA
   pairwise <- fit_model(m, incomplete, missing = "pairwise")$pairwise_stats
   expect_false(is.null(pairwise))
-  expect_error(fit_model(m, pairwise, options = lavaan_options), "ordinary complete")
+  expect_error(fit_model(m, pairwise, options = lavaan_options), "ordinary continuous")
   expect_error(fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b*b", d,
       options = list(starts = "lavaan-0.7.2")), "constraints")
   expect_error(fit_model("f =~ x1+a*x2+b*x3+x4\na > b", d, groups = "school", group_equal = "loadings",
@@ -376,4 +376,47 @@ test_that("unsafe affine standardized retries error while shared-label retries r
   expect_equal(actual$converged, oracle@optim$converged)
   expect_equal(actual$fmin, as.numeric(oracle@optim$fx), tolerance = 1e-9)
   expect_equal(as.numeric(actual$theta), as.numeric(.fitting_match(actual, oracle, "est")), tolerance = 1e-5)
+})
+
+test_that("FIML preset matches live lavaan for MCAR MAR and grouped equalities", {
+  .fitting_oracle()
+  set.seed(10072)
+  d <- lavaan::HolzingerSwineford1939
+  for (mar in c(FALSE, TRUE)) for (grouped in c(FALSE, TRUE)) {
+    x <- d
+    for (j in 2:4) {
+      probability <- if (mar) plogis(-1 + .2*(x$x1-mean(x$x1))) else rep(.25,nrow(x))
+      x[runif(nrow(x))<probability,paste0("x",j)] <- NA_real_
+    }
+    model <- "f =~ x1+x2+x3+x4"
+    group <- if (grouped) "school" else NULL
+    equal <- if (grouped) c("loadings","intercepts") else NULL
+    fit <- fit_model(model,x,estimator="FIML",groups=group,group_equal=equal,
+      meanstructure=TRUE,fixed_x=FALSE,options=list(preset="lavaan-0.7.2"))
+    lv <- lavaan::sem(model,x,missing="ml",group=group,group.equal=equal,
+      meanstructure=TRUE,fixed.x=FALSE,se="none",test="none")
+    expect_equal(as.numeric(fit$fitting$attempts[[1]]$start),
+      as.numeric(.fitting_match(fit,lv,"start")),tolerance=1e-9)
+    expect_equal(as.numeric(fit$theta),as.numeric(.fitting_match(fit,lv,"est")),tolerance=1e-5)
+    expect_equal(fit$fmin,as.numeric(lv@optim$fx),tolerance=1e-9)
+    expect_equal(fit$converged,lavaan::lavInspect(lv,"converged"))
+    attempt <- fit$fitting$attempts[[fit$fitting$selected_attempt]]
+    expect_equal(attempt$gradient_max,max(abs(lv@optim$dx)),tolerance=1e-6)
+    expect_true(fit$diagnostics$newton_accuracy$checked)
+    refit <- getFromNamespace(".route_refit_fun","magmaanlab")(fit)(fit$model,x)
+    expect_equal(refit$fitting$effective,fit$fitting$effective)
+    expect_equal(refit$theta,fit$theta,tolerance=1e-10)
+  }
+})
+
+test_that("FIML preset keeps unsupported routes explicit", {
+  d <- lavaan::HolzingerSwineford1939
+  d$x2[seq(1,nrow(d),by=4)] <- NA_real_
+  options <- list(preset="lavaan-0.7.2")
+  expect_error(fit_model("f =~ x1+a*x2+b*x3+x4\na + b == 1.5",d,
+    estimator="FIML",fixed_x=FALSE,options=options),"nonzero affine")
+  expect_error(fit_model("f =~ x1+a*x2+b*x3+x4\na == b*b",d,
+    estimator="FIML",fixed_x=FALSE,options=options),"nonlinear")
+  expect_error(fit_model("f =~ x1+x2+x3+x4",d,estimator="FIML",
+    options=options,covariance="psd"),"ordinary continuous")
 })

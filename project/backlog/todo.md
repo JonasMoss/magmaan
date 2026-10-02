@@ -246,12 +246,19 @@ with each actual endpoint's declared acceptance checked separately.
   rule, and retains retry/endpoint/verdict parity for path-stable cases only.
   No thresholds, tolerances, implementation or fixtures changed.
 
-- [ ] **M — fit FIML under the lavaan preset.** lavaan builds FIML starts from
-  its EM H1 moments; feed magmaan's EM H1 to the pinned start code, evaluate the
-  FIML objective and acceptance gradient in lavaan's units, and match the
-  source of the standardized-retry scale. **Check:** MCAR/MAR fixtures and
-  live comparisons, single- and multi-group, retaining every attempt and the
-  native diagnostics.
+- [x] **M — fit FIML under the lavaan preset.** Implemented 2026-10-02:
+  pinned diagonal/SQUAREM EM H1 supplies loading/location starts;
+  available-case variances with the group ML divisor supply residual starts
+  and standardized retry scales. The observed-pattern objective uses half
+  the H1-relative deviance, ordered equality QR coordinates and pinned PORT
+  controls/retries/acceptance, retaining native diagnostics and every attempt.
+  Frozen MCAR/MAR and installed-lavaan gates cover single/multiple groups,
+  shared labels and `group.equal`, invalid starts and x100 rescaling. The x100
+  final gradient vector is path-dependent (opt max `1.03649e-5`, oracle
+  `2.44914e-4`, threshold `1e-3`): follow the approved task-47 identical-point
+  derivative and per-endpoint acceptance contract without changing tolerances;
+  estimates/objectives, retries and verdicts still match. Nonzero affine RHS,
+  nonlinear constraints and unsupported preset routes remain explicit errors.
 
 - [ ] **M — fit all-ordinal DWLS under the lavaan preset.** Pin lavaan's
   starts (sample thresholds, unit delta scales, FABIN3 on the polychoric

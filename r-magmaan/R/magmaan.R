@@ -241,9 +241,9 @@ print.magmaan_model <- function(x, ...) {
 #'     acceptance rule; explicit entries override it.
 #'
 #'   `optimizer`, `convergence`, `preset` and `start = "lavaan-0.7.2"` are
-#'   available for complete continuous ML with unrestricted covariance and no
-#'   equality constraints. Inspect `as_lab_fit(fit)$fitting` for the resolved
-#'   settings and attempts. Fitting computes magmaan's inference policy;
+#'   available for continuous ML or FIML with unrestricted covariance and
+#'   supported linear equality constraints. Inspect `as_lab_fit(fit)$fitting`
+#'   for the resolved settings and attempts. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
 #'   The policy covers complete-data ML and all-ordinal DWLS so far. DWLS
 #'   reports one global test, the fit-function statistic (equal to its score
@@ -334,10 +334,10 @@ magmaan <- function(model, data,
   start <- .start_inputs(options$start, estimator, effective, model$ordered,
                          engine = length(engine) > 0L)
   engine$starts <- start$starts
-  if (length(engine) && (!identical(estimator, "ML") || length(model$ordered) ||
+  if (length(engine) && (!estimator %in% c("ML", "FIML") || length(model$ordered) ||
                          !identical(effective, "unrestricted"))) {
     stop("magmaan(): options$optimizer, options$convergence, options$preset and ",
-         "options$start = \"lavaan-0.7.2\" are available for complete continuous ML ",
+         "options$start = \"lavaan-0.7.2\" are available for continuous ML or FIML ",
          "with unrestricted covariance so far", call. = FALSE)
   }
   if (identical(effective, "barrier")) .barrier_message()
@@ -540,7 +540,7 @@ as_lab_fit <- function(fit) {
          "whose fits have their own start", call. = FALSE)
   }
   if (!identical(covariance, "unrestricted")) return(list())
-  method <- switch(estimator, ML = , ML2S = "scaled-fabin", GLS = "fabin3", NULL)
+  method <- switch(estimator, ML = , ML2S = "scaled-fabin", GLS = , FIML = "fabin3", NULL)
   if (is.null(method)) return(list())
   if (engine) list(starts = method) else list(control = list(start = method))
 }

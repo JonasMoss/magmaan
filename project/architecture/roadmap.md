@@ -861,6 +861,13 @@ can both be reassessed. Focused tests verify fit/post-fit parity, missing checks
 policy differences, domain feasibility and reassessment without recomputation.
 The detailed contract and example are in `project/design/terminal-audit.md`.
 
+FIML joins the versioned fitting adapter on 2026-10-02: EM H1 supplies
+loading/location starts, available observations supply residual-variance
+starts and standardized retry scales, and the observed-pattern deviance uses the
+same ordered QR and PORT retry/acceptance machinery. Both R interfaces accept
+the preset for unrestricted continuous FIML; details and parity gates live in
+[the FIML capability](capabilities/fiml.md).
+
 The advanced per-call fitting setup (2026-10-01) separates start construction,
 search and acceptance in `estimate/configured_ml.hpp`. Both R packages expose
 it through `options`; `newton` names the existing common verdict, while the

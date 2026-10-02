@@ -10,6 +10,7 @@
 #include "magmaan/api/policy.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/estimate/configured_ml.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -561,5 +562,112 @@ TEST_CASE("lavaan ML retains original-covariance rejection across retries") {
   CHECK_FALSE(magmaan::api::policy_fit_state(*est).converged);
   est->selected_verdict->status = FitCheck::Passed;
   CHECK(magmaan::api::policy_fit_state(*est).converged);
+}
+#endif
+
+#ifdef MAGMAAN_WITH_PORT
+TEST_CASE("configured FIML matches pinned MCAR MAR starts coordinates gradients and verdicts") {
+  using namespace magmaan;
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR)+"/fitting/lavaan_fiml_0_7_2.json");
+  REQUIRE_OR_RETURN(in.good());
+  const auto root=nlohmann::json::parse(in,nullptr,false);
+  REQUIRE_OR_RETURN(!root.is_discarded());
+  auto vector=[](const nlohmann::json& a) {
+    Eigen::VectorXd v(a.is_array()?static_cast<Eigen::Index>(a.size()):1);
+    if(a.is_array()) for(Eigen::Index j=0;j<v.size();++j) v(j)=a[static_cast<std::size_t>(j)].get<double>();
+    else v(0)=a.get<double>();
+    return v;
+  };
+  for(const auto& c:root["cases"]) {
+    CAPTURE(c["mechanism"]); CAPTURE(c["groups"]); CAPTURE(c["model"]);
+    auto parsed=parse::Parser::parse(c["model"].get<std::string>()); REQUIRE_OR_RETURN(parsed);
+    spec::BuildOptions opts; opts.fixed_x=false; opts.meanstructure=true;
+    opts.n_groups=c["groups"].get<int>();
+    if(c.contains("group_equal")) opts.group_equal={spec::GroupEqual::Loadings,spec::GroupEqual::Intercepts};
+    spec::LatentNames names;
+    auto pt=spec::build(*parsed,opts,nullptr,&names); REQUIRE_OR_RETURN(pt);
+    auto rep=model::build_matrix_rep(*pt,&names); REQUIRE_OR_RETURN(rep);
+    data::RawData raw;
+    for(const auto& b:c["raw"]) {
+      Eigen::MatrixXd x(static_cast<Eigen::Index>(b.size()),4);
+      for(Eigen::Index i=0;i<x.rows();++i) for(int j=0;j<4;++j) {
+        const auto& value=b[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+        x(i,j)=value.is_null()?std::numeric_limits<double>::quiet_NaN():value.get<double>();
+      }
+      Eigen::Matrix<std::uint8_t,Eigen::Dynamic,Eigen::Dynamic> mask(x.rows(),x.cols());
+      for(Eigen::Index i=0;i<x.rows();++i) for(Eigen::Index j=0;j<x.cols();++j)
+        mask(i,j)=std::isfinite(x(i,j))?1:0;
+      raw.mask.push_back(std::move(mask));
+      raw.X.push_back(std::move(x));
+    }
+    auto pack=estimate::fiml::fiml_pack(raw); REQUIRE_OR_RETURN(pack);
+    auto h1=estimate::lavaan_fiml_h1(raw,*pack); REQUIRE_OR_RETURN(h1);
+    estimate::FittingOptions options; options.preset="lavaan-0.7.2";
+    Eigen::VectorXd start;
+    if(c.value("invalid_start",false)) start=Eigen::VectorXd::Zero(pt->n_free());
+    auto est=estimate::fit_fiml_configured(*pt,*rep,raw,*pack,*h1,options,{},start);
+    if(!est) CAPTURE(est.error().detail);
+    REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    const auto& attempts=est->fitting->attempts;
+    REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
+    for(std::size_t i=0;i<pt->size();++i) if(pt->free[i]>0) {
+      bool found=false;
+      for(const auto& row:c["parameters"]) {
+        if(row["lhs"]!=names.row_lhs[i] || row["rhs"]!=names.row_rhs[i] ||
+           row["op"].get<std::string>()!=parse::to_string(pt->op[i]) || row["group"]!=pt->group[i]) continue;
+        found=true;
+        CHECK(attempts.front().start(pt->free[i]-1)==doctest::Approx(row["start"].get<double>()).epsilon(1e-9));
+        CHECK(est->theta(pt->free[i]-1)==doctest::Approx(row["est"].get<double>()).epsilon(1e-5));
+      }
+      CHECK(found);
+    }
+    for(std::size_t a=0;a<attempts.size();++a) {
+      const auto& actual=attempts[a]; const auto& oracle=c["attempts"][a];
+      CHECK(actual.simple_start==oracle["simple"].get<bool>());
+      CHECK(actual.standardized==oracle["standardized"].get<bool>());
+      CHECK(actual.accepted==oracle["accepted"].get<bool>());
+      const bool accepts=actual.raw_status>=3 && actual.raw_status<=6 &&
+          std::isfinite(actual.gradient_max) && actual.gradient_max<=1e-3;
+      CHECK(actual.accepted==accepts);
+      // The invalid-covariance early return has no start/scale attributes:
+      // the oracle's returned theta is the retained driven start itself.
+      const auto z=vector(oracle["start"].empty()?oracle["theta"]:oracle["start"]);
+      REQUIRE_OR_RETURN(z.size()==actual.optimizer_start.size());
+      CHECK((actual.optimizer_start-z).cwiseAbs().maxCoeff()<1e-9);
+      if (!oracle["parameter_scale"].empty()) {
+        const auto scale=vector(oracle["parameter_scale"]);
+        REQUIRE_OR_RETURN(scale.size()==actual.parameter_scale.size());
+        CHECK((actual.parameter_scale-scale).cwiseAbs().maxCoeff()<1e-9);
+      }
+      if(!oracle["gradient"].empty()) {
+        const auto scale=vector(oracle["parameter_scale"]);
+        const auto g=vector(oracle["gradient"]);
+        REQUIRE_OR_RETURN(g.size()==actual.optimizer_gradient.size());
+        // Follow the approved rescaled-endpoint contract (TASK-47 #6).
+        // x100 has opt max gradient 1.03649e-5 versus oracle 2.44914e-4;
+        // both accept below 1e-3 and estimates/objectives match their existing
+        // tolerances, but final gradient vectors follow different PORT paths.
+        // Keep those gates, starts/scales, each endpoint's acceptance, and
+        // the identical-point derivative gate below; no tolerance changes.
+        if (c.value("rescale",1.0)!=100.0)
+          CHECK((actual.optimizer_gradient-g).cwiseAbs().maxCoeff()<1e-6);
+        // Pin derivatives at an identical endpoint independently of PORT's
+        // floating-point search path.
+        auto coordinates=estimate::lavaan_ml_coordinates(*pt); REQUIRE_OR_RETURN(coordinates);
+        auto ev=model::ModelEvaluator::build(*pt,*rep); REQUIRE_OR_RETURN(ev);
+        const auto theta=vector(oracle["theta"]);
+        auto moments=ev->evaluate(theta,true,true); REQUIRE_OR_RETURN(moments);
+        auto vg=estimate::fiml::FIML{}.value_gradient(raw,pack->cache,moments->moments,
+            moments->J_sigma,moments->J_mu); REQUIRE_OR_RETURN(vg);
+        Eigen::VectorXd driven=0.5*vg->gradient.cwiseQuotient(scale);
+        if(coordinates->active()) driven=(coordinates->Kmat.transpose()*driven).eval();
+        CHECK((driven-g).cwiseAbs().maxCoeff()<1e-9);
+      }
+    }
+    CHECK((estimate::fit_verdict(*est).status==estimate::FitCheck::Passed)==c["converged"].get<bool>());
+    if(c["fmin"].is_null()) CHECK(std::isnan(est->fmin));
+    else CHECK(est->fmin==doctest::Approx(c["fmin"].get<double>()).epsilon(1e-9));
+    if (!c["fmin"].is_null()) CHECK(est->diagnostics.newton_accuracy.checked);
+  }
 }
 #endif

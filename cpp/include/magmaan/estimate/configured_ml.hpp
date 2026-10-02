@@ -4,6 +4,9 @@
 #include "magmaan/estimate/fitting_options.hpp"
 #include "magmaan/estimate/start_pipeline.hpp"
 
+namespace magmaan::data { struct RawData; }
+namespace magmaan::estimate::fiml { struct FIMLPack; struct FIMLH1; }
+
 namespace magmaan::estimate {
 
 // Versioned QR coordinates of the ordered affine system. Native fitting keeps
@@ -37,5 +40,15 @@ fit_expected<Estimates> fit_ml_configured(
     spec::LatentStructure, const model::MatrixRep&, const SampleStats&,
     const FittingOptions&, const spec::Starts& = {},
     const Eigen::VectorXd& explicit_start = {}, Bounds = {});
+
+fit_expected<fiml::FIMLH1> lavaan_fiml_h1(
+    const data::RawData&, const fiml::FIMLPack&);
+
+// FIML uses EM H1 for loading/location starts; residual variances and
+// standardized retry scales use the available-case sample statistics.
+fit_expected<Estimates> fit_fiml_configured(
+    spec::LatentStructure, const model::MatrixRep&, const data::RawData&,
+    const fiml::FIMLPack&, const fiml::FIMLH1&, const FittingOptions&,
+    const spec::Starts& = {}, const Eigen::VectorXd& explicit_start = {});
 
 } // namespace magmaan::estimate

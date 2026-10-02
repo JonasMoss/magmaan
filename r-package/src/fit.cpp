@@ -5639,17 +5639,27 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   ctx.meanstructure = has_meanstructure(ctx.pt);
   if (!ctx.meanstructure) ctx.samp.mean.clear();
 
-  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend =
-      fiml_backend_from_optimizer_arg(optimizer);
-  auto e_or = magmaan::estimate::fit_fiml(
-      ctx.pt, ctx.rep, raw, x0, *pack_or, backend, optim_opts_from(control));
-  if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::Estimates est = std::move(*e_or);
-  Rcpp::List out = fiml_fit_result(ctx, raw, est, &starts);
-  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
-      raw, *pack_or, fiml_h1_opts_from(control));
-  if (!h1_or.has_value()) stop_fit(h1_or.error());
+  Rcpp::List ctl = control.isNotNull() ? Rcpp::List(control.get()) : Rcpp::List::create();
+  auto h1_or = ctl.containsElementNamed("fitting_options")
+      ? magmaan::estimate::lavaan_fiml_h1(raw, *pack_or)
+      : magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or, fiml_h1_opts_from(control));
+  if (!h1_or) stop_fit(h1_or.error());
+  magmaan::fit_expected<magmaan::estimate::Estimates> e_or;
+  if (ctl.containsElementNamed("fitting_options")) {
+    check_optim_control_names(ctl, {"fitting_options", "start"});
+    if (optimizer.isNotNull()) Rcpp::stop("select optimizer through fitting options");
+    auto options = fitting_options_from(Rcpp::as<Rcpp::List>(ctl["fitting_options"]));
+    Eigen::VectorXd explicit_start;
+    if (ctl.containsElementNamed("start")) explicit_start = Rcpp::as<Eigen::VectorXd>(ctl["start"]);
+    e_or = magmaan::estimate::fit_fiml_configured(ctx.pt, ctx.rep, raw,
+        *pack_or, *h1_or, options, starts, explicit_start);
+  } else {
+    const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "fabin3", nullptr, nullptr, control);
+    e_or = magmaan::estimate::fit_fiml(ctx.pt, ctx.rep, raw, x0, *pack_or,
+        fiml_backend_from_optimizer_arg(optimizer), optim_opts_from(control));
+  }
+  if (!e_or) stop_fit(e_or.error());
+  Rcpp::List out = fiml_fit_result(ctx, raw, *e_or, &starts);
   out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
   out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
   return out;

@@ -31,6 +31,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/optim/terminal_audit.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 
@@ -666,6 +667,96 @@ double h1_em_parameter_change(const Eigen::VectorXd& mu,
     out = std::max(out, (Sigma_next - Sigma).cwiseAbs().maxCoeff());
   }
   return out;
+}
+
+// Squared extrapolation of the EM fixed-point map in (mu, vech(Sigma)):
+// r=M(x)-x, v=M(M(x))-2*M(x)+x, x_sq=x+2*a*r+a*a*v,
+// a=||r||/||v||. See Du & Varadhan, arXiv:1810.11163, Table 1.
+// The pinned behavior clips a to [1, cap], stabilizes extrapolation with
+// another EM update, and allows one total log-likelihood unit of decrease.
+fit_expected<H1EMResult> h1_squarem_iterate_block(const FIMLCache& cache,
+    std::size_t block, Eigen::VectorXd& mu, Eigen::MatrixXd& sigma,
+    const FIMLH1Options& options) {
+  const Eigen::Index p = mu.size();
+  auto pack = [&](const Eigen::VectorXd& mean, const Eigen::MatrixXd& cov) {
+    Eigen::VectorXd x(p + p*(p+1)/2);
+    x.head(p) = mean;
+    Eigen::Index k=p;
+    for (Eigen::Index j=0;j<p;++j) for (Eigen::Index i=j;i<p;++i) x(k++)=cov(i,j);
+    return x;
+  };
+  auto unpack = [&](const Eigen::VectorXd& x, Eigen::VectorXd& mean, Eigen::MatrixXd& cov) {
+    mean=x.head(p); cov.resize(p,p);
+    Eigen::Index k=p;
+    for (Eigen::Index j=0;j<p;++j) for (Eigen::Index i=j;i<p;++i) cov(i,j)=cov(j,i)=x(k++);
+  };
+  H1EMResult result;
+  auto update = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    ++result.iterations;
+    Eigen::VectorXd mean, next_mean;
+    Eigen::MatrixXd cov, next_cov;
+    unpack(x,mean,cov);
+    auto step=h1_em_step_block(cache,block,mean,cov,options,next_mean,next_cov);
+    if (!step) return std::unexpected(step.error());
+    result.min_covariance_eigen=std::min(result.min_covariance_eigen,step->sigma_repair.min_eigen_after);
+    if (step->sigma_repair.applied) {
+      ++result.covariance_repairs;
+      result.max_covariance_ridge=std::max(result.max_covariance_ridge,step->sigma_repair.ridge);
+    }
+    return pack(next_mean,next_cov);
+  };
+  auto value = [&](const Eigen::VectorXd& x) {
+    Eigen::VectorXd mean; Eigen::MatrixXd cov;
+    unpack(x,mean,cov);
+    return h1_block_value_from_moments(cache,block,mean,cov);
+  };
+  Eigen::VectorXd current=pack(mu,sigma);
+  auto initial=value(current);
+  if (!initial) return std::unexpected(initial.error());
+  double previous=*initial, cap=1.0;
+  const double allowed_loss=2.0/static_cast<double>(cache.n_total);
+  while (result.iterations<options.max_iter) {
+    auto first=update(current); if (!first) return std::unexpected(first.error());
+    auto second=update(*first); if (!second) return std::unexpected(second.error());
+    const Eigen::VectorXd r=*first-current;
+    const Eigen::VectorXd v=*second-2.0*(*first)+current;
+    double a=1.0;
+    if (v.squaredNorm()>std::numeric_limits<double>::epsilon())
+      a=std::clamp(std::sqrt(r.squaredNorm()/v.squaredNorm()),1.0,cap);
+    Eigen::VectorXd next=*second;
+    std::optional<double> candidate_value;
+    if (a>1.01) {
+      const Eigen::VectorXd extrapolated=current+2.0*a*r+a*a*v;
+      auto stabilized=update(extrapolated);
+      if (stabilized && stabilized->allFinite()) {
+        auto proposed=value(*stabilized);
+        if (proposed && std::isfinite(*proposed) && *proposed<=previous+allowed_loss) {
+          next=std::move(*stabilized);
+          candidate_value=*proposed;
+        }
+      }
+      if (!candidate_value) {
+        if (a>=cap) cap=std::max(1.0,cap/4.0);
+        a=1.0;
+      }
+    }
+    auto next_value=candidate_value ? fit_expected<double>(*candidate_value) : value(next);
+    if (!next_value) return std::unexpected(next_value.error());
+    if (!std::isfinite(*next_value) || *next_value>previous+allowed_loss) break;
+    if (a>=cap) cap*=4.0;
+    result.parameter_change=(next-current).cwiseAbs().maxCoeff();
+    result.objective_change=std::abs(*next_value-previous);
+    result.objective_converged=result.objective_change<=options.objective_tol*(1.0+std::abs(*next_value));
+    current=std::move(next);
+    previous=*next_value;
+    if (result.parameter_change<options.parameter_tol) {
+      result.converged=true;
+      break;
+    }
+  }
+  unpack(current,mu,sigma);
+  result.value=previous;
+  return result;
 }
 
 // Runs the EM iteration for one block. On return (mu, Sigma) hold the
@@ -2694,10 +2785,14 @@ fiml_h1_moments(const RawData& raw, const FIMLPack& pack,
     Eigen::MatrixXd L;
     Eigen::MatrixXd Sigma;
     h1_decode(x0, p, mu, L, Sigma);
+    if (options.marginal_diagonal_start)
+      Sigma = starts.S[b].diagonal().asDiagonal();
 
     // The converged value is evaluated at the same (mu, Sigma) the iteration
     // returns, so the H1 value and moments stay mutually consistent.
-    auto em_or = h1_em_iterate_block(cache, b, mu, Sigma, options);
+    auto em_or = options.squarem_acceleration
+        ? h1_squarem_iterate_block(cache, b, mu, Sigma, options)
+        : h1_em_iterate_block(cache, b, mu, Sigma, options);
     if (!em_or.has_value()) return std::unexpected(em_or.error());
     const H1EMResult& em = *em_or;
     out.solver_blocks[b] = {
@@ -7267,6 +7362,49 @@ fit_fiml_impl(spec::LatentStructure pt,
 }
 
 }  // namespace
+
+fit_expected<Estimates> evaluate_fiml_at(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const RawData& raw, const FIMLPack& pack,
+    const Eigen::VectorXd& theta) {
+  if (theta.size() != pt.n_free())
+    return std::unexpected(make_fit_err(FitError::Kind::InvalidStartValues,
+        "FIML endpoint size differs from n_free"));
+  if (auto ok = validate_fiml_fixed_x_missing_policy(pt, raw); !ok)
+    return std::unexpected(ok.error());
+  if (auto ok = resolve_fixed_x_from_sample(pt, rep, pack.start_stats); !ok)
+    return std::unexpected(ok.error());
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return std::unexpected(make_fit_err(FitError::Kind::NumericIssue, ev.error().detail));
+  auto con = build_eq_constraints(pt);
+  if (!con) return std::unexpected(make_fit_err(FitError::Kind::NumericIssue, con.error().detail));
+  const auto nl = build_nl_constraints(pt);
+  Eigen::VectorXd gradient = Eigen::VectorXd::Constant(theta.size(),
+      std::numeric_limits<double>::quiet_NaN());
+  double value = std::numeric_limits<double>::infinity();
+  auto evaluated = ev->evaluate(theta, true, true);
+  if (evaluated) {
+    auto vg = FIML{}.value_gradient(raw, pack.cache, evaluated->moments,
+                                  evaluated->J_sigma, evaluated->J_mu);
+    if (vg) { value = 0.5 * vg->value; gradient = 0.5 * vg->gradient; }
+  }
+  Estimates est{theta, value, 0};
+  const auto endpoint = [&](const Eigen::VectorXd&, Eigen::VectorXd& g) {
+    g = gradient;
+    return value;
+  };
+  const double inf = std::numeric_limits<double>::infinity();
+  est.audit = optim::audit_terminal_iterate(endpoint, theta, value,
+      Eigen::VectorXd::Constant(theta.size(), -inf),
+      Eigen::VectorXd::Constant(theta.size(), inf));
+  est.grad_inf_norm = est.audit.grad_inf_norm;
+  est.f_evals = est.g_evals = 1;
+  est.diagnostics = finalize_fit_diagnostics(theta, pt, *ev, *con, nl, Bounds{});
+  audit_full_model_fit(est.diagnostics, theta, gradient, value, value,
+                      pt, *ev, *con, nl, Bounds{});
+  attach_fiml_newton_accuracy(est, pt, rep, pack.cache, pack.start_stats,
+                              gradient, value, StationarityDomain::Ambient);
+  return est;
+}
 
 fit_expected<Estimates>
 fit_fiml(spec::LatentStructure pt,

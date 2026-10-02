@@ -20,9 +20,9 @@ test_that("ordinary advanced fitting choices use the shared engine", {
   expect_identical(as_lab_fit(lavaan_start)$fitting$effective$starts, "lavaan-0.7.2")
   expect_identical(as_lab_fit(lavaan_start)$fitting$effective$convergence, "newton")
   expect_error(magmaan(m, d, inference = FALSE, covariance = "psd",
-      options = list(preset = "lavaan-0.7.2")), "complete continuous ML")
-  expect_error(magmaan(m, d, inference = FALSE, estimator = "FIML",
-      options = list(start = "lavaan-0.7.2")), "complete continuous ML")
+      options = list(preset = "lavaan-0.7.2")), "continuous ML or FIML")
+  expect_error(magmaan(m, d, inference = FALSE, estimator = "ML2S",
+      options = list(start = "lavaan-0.7.2")), "continuous ML or FIML")
 })
 
 test_that("the lavaan preset with a mean structure follows lavaan's search", {
@@ -37,4 +37,19 @@ test_that("the lavaan preset with a mean structure follows lavaan's search", {
   p <- coef(summary(fit))
   idx <- match(paste(theirs$lhs, theirs$op, theirs$rhs), paste(p$lhs, p$op, p$rhs))
   expect_equal(p$est[idx], theirs$est, tolerance = 1e-10)
+})
+
+
+test_that("ordinary FIML uses the pinned fitting engine", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  d$x2[seq(1,nrow(d),by=4)] <- NA_real_
+  fit <- magmaan("f =~ x1+x2+x3+x4",d,estimator="FIML",inference=FALSE,
+    options=list(preset="lavaan-0.7.2"))
+  lab <- as_lab_fit(fit)
+  lv <- lavaan::sem("f =~ x1+x2+x3+x4",d,missing="ml",fixed.x=FALSE,
+    meanstructure=TRUE,se="none",test="none")
+  expect_equal(lab$fmin,as.numeric(lv@optim$fx),tolerance=1e-9)
+  expect_identical(lab$fitting$effective$optimizer,"lavaan-0.7.2")
+  expect_equal(lab$converged,lavaan::lavInspect(lv,"converged"))
 })
