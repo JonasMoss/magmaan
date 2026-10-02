@@ -333,6 +333,11 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-02: ordinary reporting selects historical lavaan bundles through
+`lavaan_compat = NULL` (policy default), with matching cache keys, inference
+metadata and result attributes. Explicit output says lavaan compatibility;
+the unreleased `convention` argument was renamed without an alias.
+
 On 2026-09-30 the research surface was pruned: ML ridge continuation,
 automatic marker/std.lv fitting, adaptive Guttman composites, MI4/structured
 fourth-moment weights, empirical-Bayes DLS selection, fitted-weight GMM and its

@@ -430,7 +430,7 @@ as_lab_fit <- function(fit) {
   est <- toupper(estimator)
   if (est %in% names(.bundled_estimators)) {
     reporting <- if (est %in% c("MLM", "MLR", "WLSMV", "ULSMV"))
-      sprintf("Select summary(fit, convention = \"%s\") for that inference bundle.", est) else
+      sprintf("Select summary(fit, lavaan_compat = \"%s\") for that inference bundle.", est) else
       "Other corrections are available in magmaanlab."
     stop(sprintf(paste0(
       "magmaan(): estimator = \"%s\" bundles an estimator with a correction. ",

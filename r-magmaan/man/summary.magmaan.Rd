@@ -4,14 +4,14 @@
 \alias{summary.magmaan}
 \title{Summary of a magmaan fit}
 \usage{
-\method{summary}{magmaan}(object, level = 0.95, convention = "magmaan", ...)
+\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, ...)
 }
 \arguments{
 \item{object}{A \code{\link[=magmaan]{magmaan()}} fit.}
 
 \item{level}{Confidence level of the intervals.}
 
-\item{convention}{Inference bundle, as in \code{\link[=vcov.magmaan]{vcov.magmaan()}}.}
+\item{lavaan_compat}{Inference bundle, as in \code{\link[=vcov.magmaan]{vcov.magmaan()}}.}
 
 \item{...}{Unused.}
 }

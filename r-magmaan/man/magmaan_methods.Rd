@@ -13,9 +13,9 @@
 \usage{
 \method{coef}{magmaan}(object, ...)
 
-\method{vcov}{magmaan}(object, convention = "magmaan", ...)
+\method{vcov}{magmaan}(object, lavaan_compat = NULL, ...)
 
-\method{confint}{magmaan}(object, parm, level = 0.95, test = "wald", convention = "magmaan", ...)
+\method{confint}{magmaan}(object, parm, level = 0.95, test = "wald", lavaan_compat = NULL, ...)
 
 \method{nobs}{magmaan}(object, ...)
 
@@ -30,7 +30,7 @@
 
 \item{...}{Unused.}
 
-\item{convention}{Inference bundle: \code{"magmaan"} (default), \code{"ML"},
+\item{lavaan_compat}{Lavaan compatibility bundle: \code{NULL} (default policy), \code{"ML"},
 \code{"MLM"}, \code{"MLR"}, \code{"DWLS"}, \code{"WLSMV"}, \code{"ULS"}, \code{"ULSMV"} or
 \code{"WLS"}, compatible with the fitted estimator. Lavaan bundles compute
 on demand without refitting. For parity, compare lavaan fits with the same

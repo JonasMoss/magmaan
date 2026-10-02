@@ -39,7 +39,7 @@
 #'   free parameters. Indices distinguish parameters with repeated labels.
 #' @param level One confidence level strictly between zero and one.
 #' @param test Interval test, currently only `"wald"`.
-#' @param convention Inference bundle: `"magmaan"` (default), `"ML"`,
+#' @param lavaan_compat Lavaan compatibility bundle: `NULL` (default policy), `"ML"`,
 #'   `"MLM"`, `"MLR"`, `"DWLS"`, `"WLSMV"`, `"ULS"`, `"ULSMV"` or
 #'   `"WLS"`, compatible with the fitted estimator. Lavaan bundles compute
 #'   on demand without refitting. For parity, compare lavaan fits with the same
@@ -59,17 +59,17 @@ coef.magmaan <- function(object, ...) {
 
 #' @rdname magmaan_methods
 #' @export
-vcov.magmaan <- function(object, convention = "magmaan", ...) {
-  object <- .with_convention(object, convention, "vcov()")
+vcov.magmaan <- function(object, lavaan_compat = NULL, ...) {
+  object <- .with_lavaan_compat(object, lavaan_compat, "vcov()")
   .inference_result(object, "covariance", "vcov()")
 }
 
 #' @rdname magmaan_methods
 #' @export
-confint.magmaan <- function(object, parm, level = 0.95, test = "wald", convention = "magmaan", ...) {
+confint.magmaan <- function(object, parm, level = 0.95, test = "wald", lavaan_compat = NULL, ...) {
   .check_test(test, "confint()")
   .check_level(level, "confint()")
-  object <- .with_convention(object, convention, "confint()")
+  object <- .with_lavaan_compat(object, lavaan_compat, "confint()")
   V <- .inference_result(object, "covariance", "confint()")
   est <- coef(object)
   index <- seq_along(est)
@@ -90,7 +90,7 @@ confint.magmaan <- function(object, parm, level = 0.95, test = "wald", conventio
   pct <- paste0(format(100 * c((1 - level) / 2, 1 - (1 - level) / 2),
                        trim = TRUE, scientific = FALSE, digits = 3), " %")
   dimnames(out) <- list(names(est), pct)
-  if (!is.null(object$inference$convention)) attr(out, "convention") <- object$inference$convention
+  if (!is.null(object$inference$lavaan_compat)) attr(out, "lavaan_compat") <- object$inference$lavaan_compat
   out
 }
 
@@ -223,13 +223,13 @@ print.magmaan <- function(x, ...) {
 #'
 #' @param object A [magmaan()] fit.
 #' @param level Confidence level of the intervals.
-#' @param convention Inference bundle, as in [vcov.magmaan()].
+#' @param lavaan_compat Inference bundle, as in [vcov.magmaan()].
 #' @param ... Unused.
 #' @return An object of class `summary.magmaan`.
 #' @export
-summary.magmaan <- function(object, level = 0.95, convention = "magmaan", ...) {
+summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, ...) {
   .check_level(level, "summary()")
-  view <- .with_convention(object, convention, "summary()")
+  view <- .with_lavaan_compat(object, lavaan_compat, "summary()")
   structure(list(fit = object, inference = view$inference,
                  coefficients = .parameter_table(view, level = level),
                  tests = .global_tests(view), level = level),
@@ -335,13 +335,13 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' `coef(summary(fit))`.
 #'
 #' @param object,... Two [magmaan()] fits, in either order.
-#' @param convention `"magmaan"` (default) reports the policy's score and LR
+#' @param lavaan_compat `NULL` (default) reports the policy's score and LR
 #'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference
 #'   test for complete-data ML; ordinal and FIML compatibility comparisons
 #'   currently report unavailable inference.
 #' @return A data frame with one row per test, of class `magmaan_anova`.
 #' @export
-anova.magmaan <- function(object, ..., convention = "magmaan") {
+anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
   fits <- c(list(object), list(...))
   labels <- vapply(as.list(substitute(list(object, ...)))[-1L],
                    function(e) paste(deparse(e), collapse = ""), character(1))
@@ -357,21 +357,21 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
   if (!identical(a$raw_data, b$raw_data)) {
     stop("anova(): the fits must use the same observations in the same order", call. = FALSE)
   }
-  convention <- .check_convention(fits[[1L]], convention, "anova()")
-  .check_convention(fits[[2L]], convention, "anova()")
-  if (convention != "magmaan") {
+  lavaan_compat <- .check_lavaan_compat(fits[[1L]], lavaan_compat, "anova()")
+  .check_lavaan_compat(fits[[2L]], lavaan_compat, "anova()")
+  if (!is.null(lavaan_compat)) {
     null <- 2L
-    res <- magmaanlab::convention_nested(a, b, convention)
+    res <- magmaanlab::convention_nested(a, b, lavaan_compat)
     if (identical(res$test$reason, "not_nested")) {
-      res <- magmaanlab::convention_nested(b, a, convention)
+      res <- magmaanlab::convention_nested(b, a, lavaan_compat)
       null <- 1L
       if (identical(res$test$reason, "not_nested")) stop("anova(): the models are not nested", call. = FALSE)
     }
     t <- res$test
     reasons <- if (isTRUE(t$available)) character() else
       c(lr = paste0(t$reason, ": ", t$detail))
-    return(structure(.convention_test_row(t), class = c("magmaan_anova", "data.frame"),
-      convention = convention, restricted = labels[[null]], alternative = labels[[3L - null]],
+    return(structure(.lavaan_compat_test_row(t), class = c("magmaan_anova", "data.frame"),
+      lavaan_compat = lavaan_compat, restricted = labels[[null]], alternative = labels[[3L - null]],
       unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
       verdict_disagreement = isTRUE(res$verdict_disagreement)))
   }
@@ -418,13 +418,13 @@ anova.magmaan <- function(object, ..., convention = "magmaan") {
 print.magmaan_anova <- function(x, digits = 3, ...) {
   cat("Nested tests of ", attr(x, "restricted"), " (restricted) against ",
       attr(x, "alternative"), "\n", sep = "")
-  if (!is.null(attr(x, "convention"))) cat("Inference convention: lavaan ", attr(x, "convention"), "\n", sep = "")
+  if (!is.null(attr(x, "lavaan_compat"))) cat("lavaan compatibility: ", attr(x, "lavaan_compat"), "\n", sep = "")
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
   print(t, row.names = FALSE)
   .peba_note(x)
-  if (is.null(attr(x, "convention"))) .lr_note(t)
+  if (is.null(attr(x, "lavaan_compat"))) .lr_note(t)
   u <- attr(x, "unavailable")
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")

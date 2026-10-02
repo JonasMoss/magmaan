@@ -6,7 +6,7 @@ schema; `magmaan(model, data, estimator, covariance, inference, options)`
 estimates and computes inference by default. `inference = FALSE` estimates
 only; `infer(fit)` adds inference later. Keep few options and use lavaan names
 for identical concepts. Reporting methods accept named inference bundles
-through `convention` (MLM/MLR/WLSMV); fitting accepts plain estimators.
+through `lavaan_compat` (MLM/MLR/WLSMV); fitting accepts plain estimators.
 Do not expose separate information/SE/test ingredient switches.
 
 The policy lives in C++ (`api::policy_inference_ml`, exposed through

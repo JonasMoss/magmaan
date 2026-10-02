@@ -151,8 +151,8 @@ result under an unstated convention.
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 
 - [x] **M — expose named downstream inference conventions** (2026-10-02).
-  `convention` on `vcov`, `confint`, `summary` and `anova`; C++ compatibility
-  composers, on-demand reporting and optional `infer(fit, convention)` caching.
+  `lavaan_compat` on `vcov`, `confint`, `summary` and `anova`; C++ compatibility
+  composers, on-demand reporting and optional `infer(fit, lavaan_compat)` caching.
   Complete-data ML/MLM/MLR and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS
   covariance/global recipes; ML nested defaults. The
   [capability inventory](../validation/capabilities.md) records checked slices.
@@ -191,14 +191,12 @@ result under an unstated convention.
   Future FIML/ordinal nested bundles retain these test obligations; PSD hardening
   remains 0.3.0.
 
-- [ ] **S — decide the compatibility selector's name and reporting label.**
-  The current argument is `convention = "magmaan"`. Proposed on 2026-10-02:
-  `lavaan_compat = NULL` for the ordinary default and an explicit historical
-  bundle such as `"MLR"` or `"WLSMV"` for reproduction/comparison. This spelling
-  is not yet adopted; compatibility must not read as an endorsed policy choice.
-  **Check:** agree the spelling/default, then update `vcov`, `confint`, `summary`,
-  `anova`, `infer`, labels, result attributes, caches, docs and tests together;
-  preserve default policy and exact bundle identity. No ingredient switches.
+- [x] **S — decide the compatibility selector's name and reporting label** (2026-10-02).
+  Adopted `lavaan_compat = NULL` for the ordinary policy default and explicit
+  historical bundles such as `"MLR"` or `"WLSMV"` for comparison. Renamed
+  reporting arguments, inference metadata, result attributes and caches together;
+  output says lavaan compatibility. The unreleased argument has no alias.
+  Default policy, compatibility rules and computed values are unchanged.
 
 ### lavaan-compatible fitting
 

@@ -108,7 +108,7 @@ compatibility reporting**.
 
 ## Ordinary reporting conventions
 
-All routes use retained fits and do not optimize again. `convention = "magmaan"`
+All routes use retained fits and do not optimize again. `lavaan_compat = NULL`
 remains the default. Positive barrier penalties return `penalized`; failed
 selected convergence verdicts return `not_converged`. Numerical failures retain
 their reason per component. Score tests are inapplicable to lavaan reporting
@@ -129,7 +129,7 @@ bundles and are not replaced by policy score tests.
 | Continuous GLS, ULS, WLS; ML2S; mixed ordinal | Unsupported | Unsupported | Unsupported | No checked ordinary compatibility composition; see lab inventory below |
 
 The whole-bundle installed-lavaan gates are
-[`test_conventions.R`](../../r-magmaan/tests/testthat/test_conventions.R).
+[`test_lavaan_compat.R`](../../r-magmaan/tests/testthat/test_lavaan_compat.R).
 They compare full covariance matrices by parameter/group keys, global statistics,
 df, scaling, shift and p-values, and nested defaults in either model order.
 Intervals, defined parameters, deferred computation, serialization, caching,
@@ -146,8 +146,8 @@ estimate equals lavaan's unconstrained optimum.
 | Interior PSD, zero penalty | **Limited validation** for ordinary `vcov`, `confint`, `summary` and `anova` compatibility bundles. The retained-fit recipes exist, but there is no domain-specific whole-bundle lavaan gate; unrestricted parity above does not validate PSD optimization or its verdict. |
 | PSD boundary endpoint | **Limited validation** for those APIs: no boundary-specific covariance/global/nested compatibility gate or boundary reference law. Classical interior-population inference must not be described as boundary-calibrated. PSD hardening remains 0.3.0. |
 | Active parameter bound | **Limited validation** for those APIs: the checked affine slice excludes active bounds; no active-set covariance or nested reference-law gate. A finite classical result is not evidence of bound-adjusted inference. |
-| Degenerate robust scale | **Limited validation** outside the exact saturated gate. `scaled saturated tests and penalized fits keep typed unavailability` gates `summary(..., convention = "MLR")`: covariance remains finite while the global test returns `saturated`; other zero/nonfinite scale endpoints have no whole-bundle gate and are not promoted to validated. |
-| Positive barrier penalty | **Unsupported** compatibility covariance/nested reporting, gated by the same test through `vcov(..., convention = "MLM")` and `anova(..., convention = "MLR")`: typed `penalized`, no fallback. |
+| Degenerate robust scale | **Limited validation** outside the exact saturated gate. `scaled saturated tests and penalized fits keep typed unavailability` gates `summary(..., lavaan_compat = "MLR")`: covariance remains finite while the global test returns `saturated`; other zero/nonfinite scale endpoints have no whole-bundle gate and are not promoted to validated. |
+| Positive barrier penalty | **Unsupported** compatibility covariance/nested reporting, gated by the same test through `vcov(..., lavaan_compat = "MLM")` and `anova(..., lavaan_compat = "MLR")`: typed `penalized`, no fallback. |
 
 The grouped complete-ML nested gate calls `lavaan::lavTestLRT` defaults and
 checks explicit `standard` (ML) or `satorra.bentler.2001` (MLM/MLR), in both
@@ -205,7 +205,7 @@ reimplementing their algorithms.
 | Ordinary all-ordinal DWLS policy | IJ covariance, fixed-weight global/nested spectra and estimated-weight profile-LR primitives | Compose the adopted policy and settle its nested recipe/calibration; a joint nested score primitive is absent and remains typed unavailable for 0.2.0. Backlog: all-ordinal DWLS policy tasks |
 | Parameter confidence intervals | Ordinary Wald intervals and defined-parameter delta SEs; C++ and lab profile-test/CI engines for ML, FIML, ordinal and other routes | Ordinary `confint(test = "lr")` is planned but rejected. Its refit, inversion, calibration and compatibility interaction need an explicit contract and adapter. Backlog: planned LR interval interface, unscheduled |
 | Lab estimated-weight comparison | Fixed/estimated-weight primitives; explicit switches on several score, residual, profile and fit-measure routes | `frontier_rbm()` has no off switch; defaults vary between routes. Backlog: lab correction switches/defaults, unscheduled |
-| Compatibility naming | Current ordinary selector is `convention`; historical bundle names are accepted only for their compatible fits | `lavaan_compat = NULL` and explicit compatibility output are proposed, not adopted. Decide the name before changing arguments, attributes, caches and docs. Backlog: compatibility selector decision |
+| Compatibility naming | Ordinary selector is `lavaan_compat = NULL`; historical bundle names are accepted only for their compatible fits | Adopted 2026-10-02 with explicit lavaan compatibility output, matching attributes and caches; NULL retains the policy default |
 | Additional lavaan variants and secondary setups | Mixture reducers, continuous-LS, ML2S and mixed-ordinal components exist | MLMV/MLMVS, WLSM/WLSMVS, ULSM and further LS/two-stage/mixed bundles have no ordinary selector/composer gates. Inventory the exact recipes if a consumer needs them; their existence does not add a 0.2.0 requirement |
 
 The missing parts above must be separated from deliberate interface limits:

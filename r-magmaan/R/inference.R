@@ -13,37 +13,37 @@
 #' remain usable.
 #'
 #' @param fit A [magmaan()] fit.
-#' @param convention `"magmaan"` computes the default policy. A lavaan bundle
-#'   such as `"MLM"`, `"MLR"` or `"WLSMV"` stores an additional convention
+#' @param lavaan_compat `NULL` computes the default policy. A lavaan bundle
+#'   such as `"MLM"`, `"MLR"` or `"WLSMV"` stores an additional compatibility bundle
 #'   for reuse by the reporting methods; it leaves the policy intact.
 #' @return The fit with its inference results attached.
 #' @export
-infer <- function(fit, convention = "magmaan") {
+infer <- function(fit, lavaan_compat = NULL) {
   if (!inherits(fit, "magmaan")) stop("infer(): supply a magmaan() fit", call. = FALSE)
-  convention <- .check_convention(fit, convention, "infer()")
-  if (convention == "magmaan") fit$inference <- .policy_inference(fit)
-  else fit$conventions[[convention]] <- .convention_inference(fit, convention)
+  lavaan_compat <- .check_lavaan_compat(fit, lavaan_compat, "infer()")
+  if (is.null(lavaan_compat)) fit$inference <- .policy_inference(fit)
+  else fit$lavaan_compat[[lavaan_compat]] <- .lavaan_compat_inference(fit, lavaan_compat)
   fit
 }
 
-.check_convention <- function(fit, convention, caller) {
-  choices <- c("magmaan", "ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS")
-  convention <- .check_choice(convention, "convention", choices, caller = caller)
-  if (convention == "magmaan") return(convention)
+.check_lavaan_compat <- function(fit, lavaan_compat, caller) {
+  choices <- c("ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS")
+  if (is.null(lavaan_compat)) return(NULL)
+  lavaan_compat <- .check_choice(lavaan_compat, "lavaan_compat", choices, caller = caller)
   compatible <- if (isTRUE(fit$lab$ordinal)) {
     switch(fit$estimator, DWLS = c("DWLS", "WLSMV"), ULS = c("ULS", "ULSMV"), WLS = "WLS", character())
   } else switch(fit$estimator, ML = c("ML", "MLM", "MLR"), FIML = c("ML", "MLR"),
                ULS = "ULS", WLS = "WLS", character())
-  if (!convention %in% compatible) {
-    stop(sprintf("%s: convention = \"%s\" is incompatible with this %s fit; conventions change inference, so fit the required estimator first",
-                 caller, convention, fit$estimator), call. = FALSE)
+  if (!lavaan_compat %in% compatible) {
+    stop(sprintf("%s: lavaan_compat = \"%s\" is incompatible with this %s fit; compatibility bundles change inference, so fit the required estimator first",
+                 caller, lavaan_compat, fit$estimator), call. = FALSE)
   }
-  convention
+  lavaan_compat
 }
 
-.convention_inference <- function(fit, convention) {
-  res <- magmaanlab::convention_inference(fit$lab, convention)
-  out <- list(convention = convention,
+.lavaan_compat_inference <- function(fit, lavaan_compat) {
+  res <- magmaanlab::convention_inference(fit$lab, lavaan_compat)
+  out <- list(lavaan_compat = lavaan_compat,
     status = data.frame(component = c("covariance", "global_lr"),
       available = c(res$covariance_available, res$test$available),
       reason = c(res$covariance_reason, res$test$reason),
@@ -53,7 +53,7 @@ infer <- function(fit, convention = "magmaan") {
     out$covariance <- res$covariance
     nm <- names(coef(fit))
     dimnames(out$covariance) <- list(nm, nm)
-    attr(out$covariance, "convention") <- convention
+    attr(out$covariance, "lavaan_compat") <- lavaan_compat
     if (any(fit$lab$partable$op == ":="))
       out$defined <- magmaanlab::compute_defined(fit$lab$syntax, fit$lab, res$covariance)
   }
@@ -61,12 +61,12 @@ infer <- function(fit, convention = "magmaan") {
   out
 }
 
-# Selecting a convention creates a local reporting view; the fit's policy and
-# any other cached convention remain intact under R's value semantics.
-.with_convention <- function(fit, convention, caller) {
-  convention <- .check_convention(fit, convention, caller)
-  if (convention != "magmaan")
-    fit$inference <- fit$conventions[[convention]] %||% .convention_inference(fit, convention)
+# Selecting a compatibility bundle creates a local reporting view; the fit's policy and
+# any other cached compatibility bundle remain intact under R's value semantics.
+.with_lavaan_compat <- function(fit, lavaan_compat, caller) {
+  lavaan_compat <- .check_lavaan_compat(fit, lavaan_compat, caller)
+  if (!is.null(lavaan_compat))
+    fit$inference <- fit$lavaan_compat[[lavaan_compat]] %||% .lavaan_compat_inference(fit, lavaan_compat)
   fit
 }
 
@@ -138,8 +138,8 @@ infer <- function(fit, convention = "magmaan") {
 
 .inference_label <- function(fit) {
   label <- .inference_status_label(fit)
-  if (!is.null(fit$inference$convention))
-    label <- paste0("lavaan ", fit$inference$convention, "; ", label)
+  if (!is.null(fit$inference$lavaan_compat))
+    label <- paste0("lavaan compatibility: ", fit$inference$lavaan_compat, "; ", label)
   if (isTRUE(fit$inference$convergence$disagree)) paste0(label, "; see the convergence note") else label
 }
 
@@ -165,10 +165,10 @@ infer <- function(fit, convention = "magmaan") {
 .global_tests <- function(fit) {
   inf <- fit$inference
   if (is.null(inf)) return(NULL)
-  if (!is.null(inf$convention)) {
+  if (!is.null(inf$lavaan_compat)) {
     t <- inf$global_lr
     if (is.null(t)) return(NULL)
-    return(.convention_test_row(t))
+    return(.lavaan_compat_test_row(t))
   }
   rows <- lapply(c("global_score", "global_lr"), function(component) {
     t <- inf[[component]]
@@ -189,7 +189,7 @@ infer <- function(fit, convention = "magmaan") {
   out
 }
 
-.convention_test_row <- function(t) {
+.lavaan_compat_test_row <- function(t) {
   data.frame(test = t$method, statistic = t$statistic, df = t$df,
              pvalue = t$pvalue, unscaled.statistic = t$unscaled_statistic,
              scale = t$scale, shift = t$shift, stringsAsFactors = FALSE)

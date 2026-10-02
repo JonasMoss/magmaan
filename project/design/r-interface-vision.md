@@ -16,7 +16,7 @@ magmaan serves two audiences over one C++ core.
 - **Ordinary users** get a small surface whose arguments are the choices that
   define the estimate. A fit estimates the model and computes inference under a
   single policy that magmaan chooses and justifies. Reporting methods also
-  accept named lavaan inference bundles, such as `convention = "MLR"` or
+  accept named lavaan inference bundles, such as `lavaan_compat = "MLR"` or
   `"WLSMV"`, for comparison on the same estimates. Choosing the default remains
   magmaan's job. There are no separate information, SE or correction switches.
 - **Power users** (methods developers, including magmaan's authors) get the
@@ -505,7 +505,7 @@ user chooses what replaces the missing empirical moments.
 ## Reporting conventions
 
 Adopted 2026-10-02. Estimation choices stay in `magmaan()` and `options`;
-`vcov()`, `confint()`, `summary()` and `anova()` accept `convention = "magmaan"`
+`vcov()`, `confint()`, `summary()` and `anova()` accept `lavaan_compat = NULL`
 by default, or one named lavaan bundle compatible with the fitted estimator and
 data regime. Names select complete recipes, rather than independent ingredient
 switches. `"MLM"`/`"MLR"` require an ML fit; `"ML"`/`"MLR"` are coherent with
@@ -513,12 +513,13 @@ FIML, while MLM would change missing-data treatment and is rejected there.
 `"WLSMV"` requires ordinal DWLS and `"ULSMV"` requires ordinal ULS.
 
 Compatibility is computed by C++ composers on retained data, moments and
-estimates without refitting. `infer(fit, convention = "MLR")` stores an additional
+estimates without refitting. `infer(fit, lavaan_compat = "MLR")` stores an additional
 bundle for repeated reporting; the stored policy and the default reporting
 choice remain intact. A reporting call computes a local view when no matching
-bundle is cached. `coef()`, `fitted()` and `nobs()` have no convention argument.
-Covariance matrices and intervals carry a convention attribute; summaries and
-nested reports name the selected convention and actual test method.
+bundle is cached. `coef()`, `fitted()` and `nobs()` have no compatibility argument.
+Covariance matrices and intervals carry a `lavaan_compat` attribute; summaries and
+nested reports label the selected bundle as lavaan compatibility and name the
+actual test method.
 
 The [single capability inventory](../validation/capabilities.md) distinguishes
 primitives from checked compositions, component by component. Compatibility
@@ -693,7 +694,8 @@ observed geometry since 2026-10-02):
   2026-10-02; one frozen calibration run precedes release
   ([backlog](../backlog/todo.md#ml-and-fiml)).
 - **Named reporting conventions (adopted 2026-10-02).** `anova()` defaults
-  to the policy and accepts `convention` for a checked lavaan bundle. Complete
+  to the policy (`lavaan_compat = NULL`) and accepts an explicit bundle name
+  for checked lavaan compatibility. Complete
   ML uses the unscaled difference for `"ML"` and SB2001 for `"MLM"`/`"MLR"`,
   with each model's corresponding global scaling factor. This supersedes the
   earlier no-convention decision. Other nested compatibility cells remain
