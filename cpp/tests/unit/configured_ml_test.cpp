@@ -13,6 +13,11 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
+// With exceptions disabled, doctest REQUIRE records failure but cannot unwind.
+#define REQUIRE_OR_RETURN(condition) \
+  do { const bool condition_ok = static_cast<bool>(condition); \
+    REQUIRE(condition_ok); if (!condition_ok) return; } while (false)
+
 namespace {
 struct Fixture {
   magmaan::spec::LatentStructure pt;
@@ -266,9 +271,9 @@ TEST_CASE("configured ML matches frozen lavaan 0.7.2 starts and fits") {
 TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients and retries") {
   using namespace magmaan;
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) + "/fitting/lavaan_0_7_2.json");
-  REQUIRE(in.good());
+  REQUIRE_OR_RETURN(in.good());
   auto root = nlohmann::json::parse(in, nullptr, false);
-  REQUIRE_FALSE(root.is_discarded());
+  REQUIRE_OR_RETURN(!root.is_discarded());
   auto vector = [](const nlohmann::json& x) {
     Eigen::VectorXd out(x.is_array() ? static_cast<Eigen::Index>(x.size()) : 1);
     if (x.is_array()) for (Eigen::Index i=0; i<out.size(); ++i) out(i)=x[static_cast<std::size_t>(i)].get<double>();
@@ -286,14 +291,14 @@ TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients
     CAPTURE(c["model"].get<std::string>());
     CAPTURE(c.value("rescale", 1.0));
     auto parsed = parse::Parser::parse(c["model"].get<std::string>());
-    REQUIRE(parsed);
+    REQUIRE_OR_RETURN(parsed);
     spec::BuildOptions options; options.fixed_x=false; options.std_lv=c["std_lv"].get<bool>();
     options.n_groups=static_cast<int>(c["covariances"].size());
     options.meanstructure=c.contains("group_equal");
     if(options.meanstructure) options.group_equal={spec::GroupEqual::Loadings, spec::GroupEqual::Intercepts};
     spec::LatentNames names;
-    auto pt=spec::build(*parsed,options,nullptr,&names); REQUIRE(pt);
-    auto rep=model::build_matrix_rep(*pt,&names); REQUIRE(rep);
+    auto pt=spec::build(*parsed,options,nullptr,&names); REQUIRE_OR_RETURN(pt);
+    auto rep=model::build_matrix_rep(*pt,&names); REQUIRE_OR_RETURN(rep);
     data::SampleStats sample;
     const auto counts=vector(c["n_obs"]);
     for(std::size_t b=0;b<c["covariances"].size();++b) {
@@ -301,24 +306,28 @@ TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients
       sample.n_obs.push_back(static_cast<int>(counts(static_cast<Eigen::Index>(b))));
       if(options.meanstructure) sample.mean.push_back(vector(c["means"][b]));
     }
-    auto coordinates=estimate::lavaan_ml_coordinates(*pt); REQUIRE(coordinates);
+    auto coordinates=estimate::lavaan_ml_coordinates(*pt); REQUIRE_OR_RETURN(coordinates);
     const auto projected=compat::lavaan::to_lavaan_partable(*pt,names);
     const auto roundtrip=compat::lavaan::from_lavaan_partable(projected);
     CHECK(roundtrip.structure.ordered_affine_R==pt->ordered_affine_R);
     CHECK(roundtrip.structure.ordered_affine_d==pt->ordered_affine_d);
     auto roundtrip_coordinates=estimate::lavaan_ml_coordinates(roundtrip.structure);
-    REQUIRE(roundtrip_coordinates);
+    REQUIRE_OR_RETURN(roundtrip_coordinates);
     CHECK(roundtrip_coordinates->Kmat.isApprox(coordinates->Kmat,1e-14));
     CHECK((roundtrip_coordinates->theta0-coordinates->theta0).norm()<1e-14);
     CHECK(coordinates->Kmat.isApprox(matrix(c["basis"]),1e-12));
     CHECK((coordinates->theta0-vector(c["offset"])).norm()<1e-12);
     const auto jacobian=matrix(c["jacobian"]);
-    REQUIRE(pt->ordered_affine_R.size()==static_cast<std::size_t>(jacobian.size()));
+    REQUIRE_OR_RETURN(pt->ordered_affine_R.size()==static_cast<std::size_t>(jacobian.size()));
     for(Eigen::Index i=0;i<jacobian.rows();++i) for(Eigen::Index j=0;j<jacobian.cols();++j)
       CHECK(pt->ordered_affine_R[static_cast<std::size_t>(i*jacobian.cols()+j)]==doctest::Approx(jacobian(i,j)).epsilon(1e-12));
     estimate::FittingOptions fitting; fitting.preset="lavaan-0.7.2";
-    auto est=estimate::fit_ml_configured(*pt,*rep,sample,fitting); REQUIRE(est); REQUIRE(est->fitting);
-    REQUIRE(est->fitting->attempts.size()==c["attempts"].size());
+    auto est=estimate::fit_ml_configured(*pt,*rep,sample,fitting); REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    // REQUIRE cannot abort under -fno-exceptions. A count mismatch must
+    // report failure before any fixture-indexed access to the actual attempts.
+    CHECK(est->fitting->attempts.size()==c["attempts"].size());
+    if (est->fitting->attempts.size()!=c["attempts"].size()) continue;
+    REQUIRE_OR_RETURN(!est->fitting->attempts.empty());
     for(std::size_t i=0;i<pt->size();++i) if(pt->free[i]>0) {
       bool found=false;
       for(const auto& row:c["parameters"]) {
@@ -330,8 +339,8 @@ TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients
       }
       CHECK(found);
     }
-    auto evaluator=model::ModelEvaluator::build(*pt,*rep); REQUIRE(evaluator);
-    auto objective=estimate::ml_objective(*evaluator,sample); REQUIRE(objective);
+    auto evaluator=model::ModelEvaluator::build(*pt,*rep); REQUIRE_OR_RETURN(evaluator);
+    auto objective=estimate::ml_objective(*evaluator,sample); REQUIRE_OR_RETURN(objective);
     for(std::size_t i=0;i<c["attempts"].size();++i) {
       CAPTURE(i);
       const auto& actual=est->fitting->attempts[i]; const auto& oracle=c["attempts"][i];
@@ -342,17 +351,17 @@ TEST_CASE("configured equality ML matches lavaan QR starts coordinates gradients
       CHECK(actual.parameter_scale.isApprox(vector(oracle["parameter_scale"]),1e-12));
       CHECK(actual.port_scale.isApprox(vector(oracle["port_scale"]),1e-12));
       const auto gradient=vector(oracle["gradient"]);
-      REQUIRE(actual.optimizer_gradient.size()==gradient.size());
+      REQUIRE_OR_RETURN(actual.optimizer_gradient.size()==gradient.size());
       // Derivatives agree at identical parameter points. Floating-point search
       // paths may terminate at different points within the endpoint tolerance;
       // independently verify each actual endpoint and its acceptance below.
       Eigen::VectorXd full_gradient;
-      REQUIRE(std::isfinite(objective->f(vector(oracle["theta"]),full_gradient)));
+      REQUIRE_OR_RETURN(std::isfinite(objective->f(vector(oracle["theta"]),full_gradient)));
       const Eigen::VectorXd same_endpoint=coordinates->Kmat.transpose() * full_gradient.cwiseQuotient(actual.parameter_scale);
       CHECK((same_endpoint-gradient).cwiseAbs().maxCoeff()<1e-9);
       const Eigen::VectorXd actual_theta=(coordinates->Kmat * actual.optimizer_end +
           coordinates->theta0).cwiseQuotient(actual.parameter_scale);
-      REQUIRE(std::isfinite(objective->f(actual_theta,full_gradient)));
+      REQUIRE_OR_RETURN(std::isfinite(objective->f(actual_theta,full_gradient)));
       const Eigen::VectorXd actual_endpoint=coordinates->Kmat.transpose() *
           full_gradient.cwiseQuotient(actual.parameter_scale);
       CHECK((actual.optimizer_gradient-actual_endpoint).cwiseAbs().maxCoeff()<1e-10);
