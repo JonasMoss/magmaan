@@ -33,19 +33,17 @@ fit_expected<void> supported(const spec::LatentStructure& pt) {
     return std::unexpected(invalid("fitting options currently require complete continuous ML"));
   return {};
 }
-// The pinned lavaan conventions are gated without equality or inequality
-// constraints: merged free slots, active linear constraints or nonlinear ones.
-fit_expected<void> unconstrained(const spec::LatentStructure& pt) {
+fit_expected<void> linear_supported(const spec::LatentStructure& pt) {
   auto con = build_eq_constraints(pt);
+  if (!con) return std::unexpected(invalid("lavaan-0.7.2 constraints: " + con.error().detail));
+  if (!pt.nl_constraints.empty())
+    return std::unexpected(invalid("lavaan-0.7.2 conventions exclude nonlinear constraints"));
   std::vector<bool> seen(ix(pt.n_free()), false);
-  bool merged = false;
   for (int slot : pt.free) if (slot > 0) {
-    const auto k = ix(slot - 1);
-    merged = merged || seen[k];
-    seen[k] = true;
+    if (seen[ix(slot - 1)])
+      return std::unexpected(invalid("lavaan-0.7.2 requires distinct free slots (ceq.simple is unsupported)"));
+    seen[ix(slot - 1)] = true;
   }
-  if (!con || con->active() || merged || !pt.nl_constraints.empty())
-    return std::unexpected(invalid("lavaan-0.7.2 conventions currently exclude equality/inequality constraints; their coordinate and augmented-Lagrangian parity gates are pending"));
   return {};
 }
 optim::OptimOptions lavaan_controls() {
@@ -118,6 +116,64 @@ void select_verdict(Estimates& est, bool accepted) {
 }
 } // namespace
 
+fit_expected<EqConstraints> lavaan_ml_coordinates(const spec::LatentStructure& pt) {
+  if (auto ok = linear_supported(pt); !ok) return std::unexpected(ok.error());
+  auto native = build_eq_constraints(pt);
+  if (!native) return std::unexpected(invalid(native.error().detail));
+  const Eigen::Index n = pt.n_free();
+  const Eigen::Index m = static_cast<Eigen::Index>(pt.ordered_affine_d.size());
+  if (pt.ordered_affine_R.size() != ix(n * m) || (native->active() && m == 0))
+    return std::unexpected(invalid("lavaan QR coordinates require ordered affine rows from model resolution"));
+  if (m == 0) return *native;
+  Eigen::MatrixXd a(m, n);
+  Eigen::VectorXd d(m);
+  for (Eigen::Index i = 0; i < m; ++i) {
+    d(i) = pt.ordered_affine_d[ix(i)];
+    for (Eigen::Index j = 0; j < n; ++j) a(i, j) = pt.ordered_affine_R[ix(i*n+j)];
+  }
+  // Ordered Householder QR of A': Q is accumulated on the right. Columns
+  // whose remaining norm is below 1e-7 of their original norm are deferred,
+  // preserving the rank-revealing ordering used by R's default QR. Reflectors
+  // keep their sign even for an already triangular column.
+  Eigen::MatrixXd q = Eigen::MatrixXd::Identity(n, n);
+  std::vector<Eigen::Index> independent;
+  for (Eigen::Index col = 0; col < m && ix(n) > independent.size(); ++col) {
+    const Eigen::Index r = static_cast<Eigen::Index>(independent.size());
+    Eigen::VectorXd v = (q.transpose() * a.row(col).transpose()).tail(n-r);
+    const double norm = v.norm();
+    if (norm == 0.0 || norm < 1e-7 * a.row(col).norm()) continue;
+    v /= norm;
+    v(0) += std::copysign(1.0, v(0));
+    const Eigen::VectorXd qv = q.rightCols(n-r) * v;
+    q.rightCols(n-r) -= (2.0 / v.squaredNorm()) * qv * v.transpose();
+    independent.push_back(col);
+  }
+  const Eigen::Index rank = static_cast<Eigen::Index>(independent.size());
+  if (rank != native->rank)
+    return std::unexpected(invalid("lavaan QR and native affine systems disagree on rank"));
+  native->Kmat = q.rightCols(n-rank);
+  native->group.clear();
+  native->theta0 = Eigen::VectorXd::Zero(n);
+  if (rank && d.cwiseAbs().maxCoeff() != 0.0) {
+    Eigen::MatrixXd rows(rank, n);
+    Eigen::VectorXd rhs(rank);
+    for (Eigen::Index i = 0; i < rank; ++i) {
+      rows.row(i) = a.row(independent[ix(i)]);
+      rhs(i) = d(independent[ix(i)]);
+    }
+    const Eigen::MatrixXd triangular = rows * q.leftCols(rank);
+    native->theta0 = q.leftCols(rank) * triangular.triangularView<Eigen::Lower>().solve(rhs);
+  }
+  // Structural transforms may replace a constraint system. Never consume stale
+  // ordered metadata merely because the old and new systems have equal rank.
+  const double tolerance = 1e-9 * std::max(1.0, native->A_eq.norm());
+  if ((native->A_eq * native->Kmat).norm() > tolerance ||
+      (native->A_eq * native->theta0 - native->b_eq).norm() >
+          tolerance * std::max(1.0, native->b_eq.norm()))
+    return std::unexpected(invalid("lavaan ordered affine rows do not describe the current constraint system"));
+  return *native;
+}
+
 fit_expected<FittingSetup> resolve_fitting_options(const FittingOptions& request) {
   FittingSetup out;
   out.requested = request;
@@ -155,7 +211,7 @@ fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
     const SampleStats& sample, const spec::Starts& hints, bool simple) {
   if (auto ok = supported(pt); !ok) return std::unexpected(ok.error());
   // Rows sharing a free slot would otherwise take the last row's start.
-  if (auto ok = unconstrained(pt); !ok) return std::unexpected(ok.error());
+  if (auto ok = linear_supported(pt); !ok) return std::unexpected(ok.error());
   if (sample.S.size() != ix(pt.n_groups()) || rep.cell_for_row.size() != pt.size())
     return std::unexpected(invalid("lavaan starts: sample/model block mismatch"));
   auto fabin = fabin_start_values(pt, rep, sample, {}, FabinVariant::Fabin3, true);
@@ -283,6 +339,12 @@ fit_expected<double> lavaan_acceptance_gradient(spec::LatentStructure pt,
   Eigen::VectorXd g;
   const double inf = std::numeric_limits<double>::infinity();
   if (!std::isfinite(prob->f(theta, g)) || g.size() != theta.size()) return inf;
+  auto coordinates = lavaan_ml_coordinates(pt);
+  if (!coordinates) return std::unexpected(coordinates.error());
+  if (coordinates->active()) {
+    const Eigen::VectorXd reduced = coordinates->Kmat.transpose() * g.cwiseQuotient(s);
+    return reduced.size() ? reduced.cwiseAbs().maxCoeff() : 0.0;
+  }
   double out = 0.0;
   for (Eigen::Index j = 0; j < theta.size(); ++j) {
     // The oracle skips coordinates exactly at either bound. A coordinate
@@ -309,7 +371,7 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
   const bool lavaan_search = setup->optimizer == lavaan_version;
   const bool lavaan_convergence = setup->convergence == lavaan_version;
   if (lavaan_search || lavaan_convergence || setup->starts == lavaan_version)
-    if (auto ok = unconstrained(pt); !ok) return std::unexpected(ok.error());
+    if (auto ok = linear_supported(pt); !ok) return std::unexpected(ok.error());
   auto x0 = explicit_start.size() ? fit_expected<Eigen::VectorXd>(explicit_start) : initial(pt, rep, sample, *setup, hints);
   if (!x0) return std::unexpected(x0.error());
   if (x0->size() != pt.n_free() || !x0->allFinite())
@@ -364,16 +426,38 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
     if (est) { if (lavaan_convergence) select_verdict(*est, false); est->fitting = std::move(report); }
     return est;
   }
+  auto coordinates = lavaan_ml_coordinates(pt);
+  if (!coordinates) return std::unexpected(coordinates.error());
+  const auto& k = coordinates->Kmat;
+  const auto& k0 = coordinates->theta0;
+  const bool constrained = coordinates->active();
+  if (constrained) bounds = {Eigen::VectorXd::Constant(x0->size(), -inf), Eigen::VectorXd::Constant(x0->size(), inf)};
   std::optional<Estimates> selected;
   // The pinned oracle checks the original model covariance before every
   // attempt, including simple-start retries. Its early return retains the
   // driven start without undoing standardized coordinates.
   Eigen::VectorXd preflight_gradient;
   const bool original_model_valid = std::isfinite(prob->f(*x0, preflight_gradient));
+  // With reduced coordinates the oracle's invalid-start return cannot be
+  // reconstructed as a full model and its public call errors. Preserve that
+  // failure instead of reporting a fabricated expanded-parameter endpoint.
+  if (constrained && !original_model_valid)
+    return std::unexpected(invalid("lavaan-0.7.2 constrained initial model-implied covariance is not positive definite"));
   for (int a = 0; a < 4; ++a) {
     FittingAttempt attempt;
     attempt.simple_start = a >= 2;
     attempt.standardized = a % 2 == 1;
+    // z = D*theta with the original affine offset enforces A*D*theta=d,
+    // not A*theta=d. The pinned oracle can accept that different surface.
+    // Keep unstandardized affine fits, but never enter this invalid retry.
+    if (attempt.standardized && constrained &&
+        std::any_of(pt.ordered_affine_d.begin(), pt.ordered_affine_d.end(),
+                    [](double rhs) { return rhs != 0.0; })) {
+      const auto& previous = report.attempts.back();
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "lavaan-0.7.2 standardized retry is unsupported for nonzero affine constraint RHS; the unstandardized attempt was not accepted",
+          previous.iterations, previous.fmin});
+    }
     // The retry's simple start replaces every free value, including hints.
     auto start = attempt.simple_start ? lavaan_ml_start_values(pt, rep, sample, {}, true) : x0;
     if (!start) return std::unexpected(start.error());
@@ -381,28 +465,63 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
     auto scale = attempt.standardized ? standardized_scale(pt, sample)
         : fit_expected<Eigen::VectorXd>(Eigen::VectorXd::Ones(start->size()));
     if (!scale) return std::unexpected(scale.error());
+    if (constrained && attempt.standardized) {
+      *scale = (k * (k.transpose() * (*scale - k0)) + k0).eval();
+      const auto& previous = report.attempts.back();
+      if (!scale->allFinite() || (scale->array() == 0.0).any())
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "lavaan-0.7.2 standardized retry requires finite nonzero parameter scales",
+            previous.iterations, previous.fmin});
+      // Even homogeneous constraints need not survive division by the
+      // projected scale: A*z=0 implies A*theta=0 only if A*D^-1*K=0.
+      // Test each dot product relative to its row/column norms, allowing
+      // 64*eps*n for QR and matrix-product roundoff. Unrelated large columns
+      // must not hide a changed constraint in another coordinate.
+      const Eigen::MatrixXd transported = scale->cwiseInverse().asDiagonal() * k;
+      const Eigen::MatrixXd residual = coordinates->A_eq * transported;
+      if (!transported.allFinite() || !residual.allFinite())
+        return std::unexpected(FitError{FitError::Kind::NumericIssue,
+            "lavaan-0.7.2 standardized retry produces nonfinite equality coordinates",
+            previous.iterations, previous.fmin});
+      const double tolerance = 64.0 * std::numeric_limits<double>::epsilon() *
+          static_cast<double>(std::max<Eigen::Index>(1, k.rows()));
+      for (Eigen::Index i = 0; i < residual.rows(); ++i)
+        for (Eigen::Index j = 0; j < residual.cols(); ++j)
+          if (std::abs(residual(i,j)) > tolerance * coordinates->A_eq.row(i).stableNorm() *
+              transported.col(j).stableNorm())
+            return std::unexpected(FitError{FitError::Kind::NumericIssue,
+                "lavaan-0.7.2 standardized retry is unsupported because parameter scaling changes the equality constraint surface",
+                previous.iterations, previous.fmin});
+    }
     attempt.parameter_scale = *scale;
-    attempt.optimizer_start = start->cwiseProduct(*scale);
-    attempt.port_scale = Eigen::VectorXd::Ones(start->size());
-    if (!attempt.standardized) for (Eigen::Index j = 0; j < start->size(); ++j)
-      if (std::abs((*start)(j)) > 1.0) attempt.port_scale(j) = 1.0 / std::abs((*start)(j));
+    const Eigen::VectorXd z_start = start->cwiseProduct(*scale);
+    attempt.optimizer_start = constrained ? Eigen::VectorXd(k.transpose() * (z_start - k0)) : z_start;
+    attempt.port_scale = Eigen::VectorXd::Ones(attempt.optimizer_start.size());
+    if (!attempt.standardized) for (Eigen::Index j = 0; j < attempt.optimizer_start.size(); ++j)
+      if (std::abs(attempt.optimizer_start(j)) > 1.0) attempt.port_scale(j) = 1.0 / std::abs(attempt.optimizer_start(j));
     attempt.controls = lavaan_controls();
     attempt.controls.port.scale = attempt.port_scale;
     optim::ScalarProblem driven;
-    driven.n_param = start->size();
+    driven.n_param = attempt.optimizer_start.size();
     driven.expand = [](const Eigen::VectorXd& z) { return z; };
     driven.f = [&](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
-      double f = prob->f(z.cwiseQuotient(*scale), g);
-      if (g.size() == scale->size()) g.array() /= scale->array();
+      const Eigen::VectorXd expanded = constrained ? Eigen::VectorXd(k * z + k0) : z;
+      double f = prob->f(expanded.cwiseQuotient(*scale), g);
+      if (g.size() == scale->size()) {
+        g.array() /= scale->array();
+        if (constrained) g = (k.transpose() * g).eval();
+      }
       return std::isfinite(f) ? f : 1e20;
     };
     Bounds box{bounds.lower.cwiseProduct(*scale), bounds.upper.cwiseProduct(*scale)};
+    if (constrained) box = {Eigen::VectorXd::Constant(k.cols(), -inf), Eigen::VectorXd::Constant(k.cols(), inf)};
     if (!original_model_valid) {
       attempt.error = "initial model-implied covariance is not positive definite";
       attempt.fmin = std::numeric_limits<double>::quiet_NaN();
       report.selected_attempt = report.attempts.size();
       report.attempts.push_back(std::move(attempt));
-      auto est = evaluate_at(pt, rep, sample, report.attempts.back().optimizer_start, Estimator::ML, {}, bounds);
+      const Eigen::VectorXd retained = constrained ? Eigen::VectorXd(k * report.attempts.back().optimizer_start + k0) : report.attempts.back().optimizer_start;
+      auto est = evaluate_at(pt, rep, sample, retained, Estimator::ML, {}, bounds);
       if (!est) return std::unexpected(est.error());
       est->fmin = std::numeric_limits<double>::quiet_NaN();
       select_verdict(*est, false);
@@ -425,7 +544,10 @@ fit_expected<Estimates> fit_ml_configured(spec::LatentStructure pt,
       report.selected_attempt = report.attempts.size() - 1;
       continue;
     }
-    auto est = evaluate_at(pt, rep, sample, result->x.cwiseQuotient(*scale), Estimator::ML, {}, bounds);
+    attempt.optimizer_end = result->x;
+    driven.f(result->x, attempt.optimizer_gradient);
+    const Eigen::VectorXd expanded = constrained ? Eigen::VectorXd(k * result->x + k0) : result->x;
+    auto est = evaluate_at(pt, rep, sample, expanded.cwiseQuotient(*scale), Estimator::ML, {}, bounds);
     if (!est) return std::unexpected(est.error());
     est->iterations = result->iterations;
     est->f_evals = result->f_evals;

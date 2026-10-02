@@ -7,7 +7,11 @@
 
 namespace magmaan::estimate {
 
-// Single-level complete continuous ML. General affine/nonlinear constraints,
+// Versioned QR coordinates of the ordered affine system. Native fitting keeps
+// its own basis; the two bases describe the same estimands.
+fit_expected<EqConstraints> lavaan_ml_coordinates(const spec::LatentStructure&);
+
+// Single-level complete continuous ML. Nonlinear constraints,
 // composites and categorical/missing-data sources need their own parity gate.
 // User hints are in the model's target identification and original units.
 fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
@@ -16,7 +20,9 @@ fit_expected<Eigen::VectorXd> lavaan_ml_start_values(
 
 // lavaan's acceptance gradient at `theta`: the largest absolute gradient of
 // the unnormalized ML objective (½F on `sample`) in optimizer coordinates
-// z = scale·θ (unit scale when empty), skipping coordinates at a bound.
+// z = scale·θ (unit scale when empty), reduced through the ordered QR basis
+// when affine equalities are active. Bound masking applies only without those
+// equalities, because the pinned constrained search uses infinite bounds.
 // Infinite when the objective or a gradient entry is not finite.
 fit_expected<double> lavaan_acceptance_gradient(
     spec::LatentStructure, const model::MatrixRep&, const SampleStats&,
@@ -25,6 +31,9 @@ fit_expected<double> lavaan_acceptance_gradient(
 
 // Both search routes reuse the ordinary ML discrepancy and finalization.
 // `explicit_start` supplies values rather than selecting a constructor.
+// Nonzero affine RHS is supported until a standardized retry is needed; that
+// transition errors because the pinned scaling does not preserve the constraint.
+// Homogeneous retries also require finite nonzero scales preserving the kernel.
 fit_expected<Estimates> fit_ml_configured(
     spec::LatentStructure, const model::MatrixRep&, const SampleStats&,
     const FittingOptions&, const spec::Starts& = {},

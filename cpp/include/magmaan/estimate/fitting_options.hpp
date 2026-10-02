@@ -27,7 +27,9 @@ struct FittingSetup {
 
 struct FittingAttempt {
   Eigen::VectorXd start;
-  Eigen::VectorXd optimizer_start;
+  Eigen::VectorXd optimizer_start; // packed QR coordinates when constrained
+  Eigen::VectorXd optimizer_end;
+  Eigen::VectorXd optimizer_gradient; // same coordinates as optimizer_end
   Eigen::VectorXd parameter_scale;
   Eigen::VectorXd port_scale;
   optim::OptimOptions controls;

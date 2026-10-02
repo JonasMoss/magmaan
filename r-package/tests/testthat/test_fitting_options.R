@@ -146,8 +146,8 @@ test_that("fitting options reject unknown versions, conflicts and unsupported so
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), psd = TRUE), "ordinary complete")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), estimator = "FIML"), "ordinary complete")
   expect_error(fit_model(m, d, options = list(preset = "lavaan-0.7.2"), missing = "pairwise"), "ordinary complete")
-  expect_error(fit_model("f =~ x1 + a*x2 + a*x3", d, options = list(preset = "lavaan-0.7.2")), "constraints")
-  expect_error(fit_model("f =~ x1 + a*x2 + a*x3", d,
+  expect_error(fit_model("f =~ x1 + a*x2 + b*x3\na == b*b", d, options = list(preset = "lavaan-0.7.2")), "constraints")
+  expect_error(fit_model("f =~ x1 + a*x2 + b*x3\na > b", d,
       options = list(optimizer = "port", convergence = "lavaan-0.7.2")), "constraints")
 })
 
@@ -271,8 +271,109 @@ test_that("fitting options reject every unsupported route, including pairwise mo
   pairwise <- fit_model(m, incomplete, missing = "pairwise")$pairwise_stats
   expect_false(is.null(pairwise))
   expect_error(fit_model(m, pairwise, options = lavaan_options), "ordinary complete")
-  expect_error(fit_model("f =~ x1 + a*x2 + a*x3 + x4", d,
+  expect_error(fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b*b", d,
       options = list(starts = "lavaan-0.7.2")), "constraints")
-  expect_error(fit_model(m, d, groups = "school", group_equal = "loadings",
+  expect_error(fit_model("f =~ x1+a*x2+b*x3+x4\na > b", d, groups = "school", group_equal = "loadings",
       options = list(starts = "lavaan-0.7.2")), "constraints")
+})
+
+
+.fitting_equality_gradient_at <- function(fit, oracle, attempt) {
+  lp <- lavaan::parTable(oracle)
+  mp <- fit$partable
+  index <- match(.fitting_keys(lp[lp$free > 0L, ]), .fitting_keys(mp[mp$free > 0L, ]))
+  model <- lavaan:::lav_model_set_parameters(oracle@Model, as.numeric(fit$theta)[index])
+  gradient <- lavaan:::lav_model_grad(lavmodel = model, lavsamplestats = oracle@SampleStats,
+      lavdata = oracle@Data, lavcache = oracle@Cache)
+  as.numeric(crossprod(model@eq.constraints.K,
+      gradient / as.numeric(attempt$parameter_scale)[index]))
+}
+
+test_that("linear equality presets match installed lavaan coordinates and verdicts", {
+  .fitting_oracle()
+  d <- lavaan::HolzingerSwineford1939
+  cases <- list(
+    list(model = "f =~ x1+a*x2+a*x3+x4"),
+    list(model = "f =~ x1+a*x2+b*x3+x4\na == 2*b"),
+    list(model = "f =~ x1+a*x2+b*x3+x4\na+b == 1.5"),
+    list(model = "f =~ x1+a*x2+b*x3+c*x4+d*x5+e*x6\na == c\nb == e"),
+    list(model = "f =~ x1+a*x2+b*x3+c*x4+d*x5+e*x6\nb == e\na == c"),
+    list(model = "f =~ x1+x2+x3+x4", equal = "loadings"),
+    list(model = "f =~ x1+x2+x3+x4", equal = c("loadings", "intercepts")))
+  for (case in cases) {
+    ma <- list(model = case$model, data = d, meanstructure = TRUE, fixed_x = FALSE,
+               options = list(preset = "lavaan-0.7.2"))
+    la <- list(model = case$model, data = d, meanstructure = TRUE, fixed.x = FALSE)
+    if (!is.null(case$equal)) {
+      ma$groups <- la$group <- "school"
+      ma$group_equal <- la$group.equal <- case$equal
+    }
+    fit <- suppressWarnings(do.call(fit_model, ma))
+    lv <- suppressWarnings(do.call(lavaan::sem, la))
+    expect_equal(as.numeric(fit$fitting$attempts[[1]]$start),
+        as.numeric(.fitting_match(fit, lv, "start")), tolerance = 1e-9)
+    k <- lv@Model@eq.constraints.K
+    k0 <- lv@Model@eq.constraints.k0
+    expected_start <- as.numeric(crossprod(k, lavaan::parTable(lv)$start[lavaan::parTable(lv)$free > 0] - k0))
+    expect_equal(as.numeric(fit$fitting$attempts[[1]]$optimizer_start), expected_start, tolerance = 1e-9)
+    expect_equal(as.numeric(fit$theta), as.numeric(.fitting_match(fit, lv, "est")), tolerance = 1e-5)
+    expect_equal(fit$fmin, as.numeric(lavaan::fitMeasures(lv, "fmin")), tolerance = 1e-9)
+    expect_equal(fit$converged, lavaan::lavInspect(lv, "converged"))
+    attempt <- fit$fitting$attempts[[fit$fitting$selected_attempt]]
+    gradient <- .fitting_equality_gradient_at(fit, lv, attempt)
+    expect_lt(abs(attempt$gradient_max - max(abs(gradient))), 1e-9)
+    expect_equal(attempt$accepted, attempt$raw_status %in% 3:6 &&
+        all(is.finite(gradient)) && max(abs(gradient)) <= .001)
+  }
+})
+
+
+test_that("constrained invalid initial covariance is an explicit error", {
+  .fitting_oracle()
+  d <- lavaan::HolzingerSwineford1939
+  model <- "f =~ x1+a*x2+a*x3+x4"
+  n <- max(model_spec(model, meanstructure = FALSE)$partable$free)
+  expect_error(suppressWarnings(fit_model(model, d, meanstructure = FALSE,
+      control = list(start = rep(0, n)), options = list(preset = "lavaan-0.7.2"))),
+      "constrained initial model-implied covariance")
+  expect_error(suppressWarnings(lavaan::sem(model, d, meanstructure = FALSE,
+      start = rep(0, n), se = "none", test = "none")))
+})
+
+
+test_that("unsafe affine standardized retries error while shared-label retries remain valid", {
+  .fitting_oracle()
+  covariance <- tcrossprod(c(1, .8, .6, .9)) + diag(.7, 4)
+  scaled <- function(k) {
+    units <- diag(c(k, 1, 1/k, 1))
+    s <- units %*% covariance %*% units
+    dimnames(s) <- list(paste0("x", 1:4), paste0("x", 1:4))
+    structure(list(S = list(s), nobs = 200L), class = c("magmaan_data", "list"))
+  }
+  fit <- getFromNamespace("fit_ml", "magmaanlab")
+  preset <- list(preset = "lavaan-0.7.2")
+  affine <- model_spec("f =~ x1+a*x2+b*x3+x4\na-b == 0.000001")
+  expect_error(fit(affine, scaled(1000), options = preset),
+      "standardized retry is unsupported for nonzero affine constraint RHS")
+  ratio <- model_spec("f =~ x1+a*x2+b*x3+x4\na == 2*b")
+  expect_error(fit(ratio, scaled(1000), options = preset),
+      "parameter scaling changes the equality constraint surface")
+  # This fixed unit scaling triggers a rejected original attempt and a valid
+  # standardized shared-label retry in the R interface.
+  ss <- scaled(200)
+  model <- "f =~ x1+a*x2+a*x3+x4"
+  actual <- suppressWarnings(fit(model_spec(model, fixed_x = FALSE, meanstructure = FALSE), ss, options = preset))
+  oracle <- suppressWarnings(lavaan::sem(model, sample.cov = ss$S[[1]], sample.nobs = 200,
+      sample.cov.rescale = FALSE, meanstructure = FALSE, fixed.x = FALSE, se = "none", test = "none"))
+  expect_gte(length(actual$fitting$attempts), 2L)
+  expect_false(actual$fitting$attempts[[1]]$accepted)
+  expect_true(any(vapply(actual$fitting$attempts, function(a) a$standardized, logical(1))))
+  attempt <- actual$fitting$attempts[[actual$fitting$selected_attempt]]
+  gradient <- .fitting_equality_gradient_at(actual, oracle, attempt)
+  expect_lt(abs(attempt$gradient_max - max(abs(gradient))), 1e-9)
+  expect_equal(attempt$accepted, attempt$raw_status %in% 3:6 &&
+      all(is.finite(gradient)) && max(abs(gradient)) <= .001)
+  expect_equal(actual$converged, oracle@optim$converged)
+  expect_equal(actual$fmin, as.numeric(oracle@optim$fx), tolerance = 1e-9)
+  expect_equal(as.numeric(actual$theta), as.numeric(.fitting_match(actual, oracle, "est")), tolerance = 1e-5)
 })

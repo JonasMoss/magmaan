@@ -188,6 +188,8 @@ analyze_linear(const parse::Expr& e, int n_free,
 }
 
 void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
+  pt.ordered_affine_R.clear();
+  pt.ordered_affine_d.clear();
   pt.lin_constraint_R.clear();
   pt.lin_constraint_d.clear();
   pt.nonlinear_eq_rows.clear();
@@ -229,6 +231,11 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
     // reference on *both* sides) — skip; mirrors that function's `resolve()`.
     if (detail::is_bare_identifier(lhs_txt) && detail::is_bare_identifier(rhs_txt) &&
         name_to_free.count(lhs_txt) && name_to_free.count(rhs_txt)) {
+      const int left = name_to_free.at(lhs_txt) - 1;
+      const int right = name_to_free.at(rhs_txt) - 1;
+      pt.ordered_affine_d.push_back(0.0);
+      for (int k = 0; k < n_free; ++k)
+        pt.ordered_affine_R.push_back((k == left ? 1.0 : 0.0) - (k == right ? 1.0 : 0.0));
       continue;
     }
     // Re-parse "<lhs> == <rhs>" to recover the Expr ASTs (no public bare-expr
@@ -272,12 +279,35 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
       continue;
     }
     // lhs(θ) == rhs(θ)  ⟺  (gl.coef − gr.coef)·θ = gr.cst − gl.cst.
+    pt.ordered_affine_d.push_back(gr->cst - gl->cst);
+    for (int k = 0; k < n_free; ++k)
+      pt.ordered_affine_R.push_back(gl->coef[static_cast<std::size_t>(k)] -
+                                   gr->coef[static_cast<std::size_t>(k)]);
     pt.lin_constraint_d.push_back(gr->cst - gl->cst);
     pt.lin_constraint_R.reserve(pt.lin_constraint_R.size() +
                                 static_cast<std::size_t>(n_free < 0 ? 0 : n_free));
     for (int k = 0; k < n_free; ++k) {
       pt.lin_constraint_R.push_back(gl->coef[static_cast<std::size_t>(k)] -
                                     gr->coef[static_cast<std::size_t>(k)]);
+    }
+  }
+  // Match the existing lavaan projection's synthetic-row order without keeping
+  // names in LatentStructure. An unordered-map traversal would change QR axes.
+  std::unordered_map<std::string_view, std::vector<int>> by_label;
+  std::vector<std::string_view> labels;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0 || i >= names.row_label.size() || names.row_label[i].empty()) continue;
+    auto [it, inserted] = by_label.try_emplace(names.row_label[i]);
+    if (inserted) labels.push_back(names.row_label[i]);
+    it->second.push_back(pt.free[i] - 1);
+  }
+  for (auto label : labels) {
+    const auto& slots = by_label.at(label);
+    for (std::size_t j = 1; j < slots.size(); ++j) {
+      pt.ordered_affine_d.push_back(0.0);
+      for (int k = 0; k < n_free; ++k)
+        pt.ordered_affine_R.push_back((k == slots.front() ? 1.0 : 0.0) -
+                                     (k == slots[j] ? 1.0 : 0.0));
     }
   }
 }

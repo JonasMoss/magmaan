@@ -223,6 +223,14 @@ struct LatentStructure {
   std::vector<double>       lin_constraint_R;
   std::vector<double>       lin_constraint_d;
 
+  // Ordered, unreduced affine rows in the lavaan partable projection: explicit
+  // == rows first, then shared-label rows in first-label-appearance order.
+  // Unlike eq_groups/lin_constraint_R, this preserves the coordinate convention
+  // of a QR-based fitting preset. The native fit uses the ordinary fields above.
+  std::vector<double>       ordered_affine_R; // row-major, n_free() columns
+  std::vector<double>       ordered_affine_d;
+
+
   // Constraint classification, all set by `resolve_lin_constraints` (which
   // re-parses every non-pure-merge `==` row and scans the `<` / `>` rows):
   //
