@@ -2,3 +2,6 @@
 */*/raw/
 */*/progress.csv
 *.log
+
+# Smoke attempts are local construction diagnostics; only pilot summaries freeze.
+nested-geometry/smoke*/

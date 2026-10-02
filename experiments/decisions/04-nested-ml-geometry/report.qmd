@@ -1,0 +1,88 @@
+---
+title: "Nested ML geometry calibration"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Default register
+
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Nested ML score projection and LR spectrum | Observed geometry | Adopted; confirmatory calibration open | Smoke and pilot check construction and compute cost only |
+| Global ML geometry | Expected | Outside this decision | No change proposed |
+
+## Question
+
+Does observed nested ML geometry calibrate at least as well as expected geometry,
+particularly when the larger model is misspecified?
+
+## Short answer
+
+Confirmation has not run. The pilot prices the registered 16-cell study and checks
+that the observed arm reproduces the ordinary policy. Its rejection rates cannot
+justify a geometry decision.
+
+```{r}
+out <- file.path('results', 'nested-geometry', 'pilot')
+if (!file.exists(file.path(out, 'timing.csv')))
+  stop('Pilot results absent. Run Rscript run_experiment.R --pilot with the lane library.')
+timing <- read.csv(file.path(out, 'timing.csv'))
+checks <- read.csv(file.path(out, 'checks.csv'))
+metadata <- read.csv(file.path(out, 'metadata.csv'))
+hours <- sum(timing$production_cpu_hours)
+knitr::kable(data.frame(`Production CPU Hours` = round(hours, 2),
+  `Ideal Four Core Hours` = round(hours / 4, 2), `Pilot Draws` = checks$draws,
+  `Failed Arms` = checks$failed_arms, `Maximum Policy Gap` = checks$max_policy_gap),
+  check.names = FALSE)
+```
+
+## Evidence and decision rule
+
+The registered [criteria](criteria/nested_geometry.md) compare expected and
+observed score and LR quadratics, each with SB and PEBA4. A two-group CFA tests
+six loading restrictions. Equal population loadings make the null hold both
+under the correct larger model and under an omitted residual covariance shared
+by both groups. Normal and Vale–Maurelli skewed indicators are studied at 100
+and 300 observations per group; power lowers group b's standardized x3 loading
+by .15.
+
+Retain the observed geometry unless, in some misspecified-larger-model null cell, its PEBA4 or SB size error exceeds the expected geometry's by more than 1 percentage point with a paired 95% interval excluding zero. Report correct-model cells as controls; there both geometries are consistent. Size-adjusted power is reported, not gating.
+
+Per-cell Wilson intervals, paired bootstrap intervals, failures, matching-null
+p-value critical values and size-adjusted power are in the run's summary CSVs.
+Production has 2000 null and 1000 power replicates per cell (24000 draws).
+Both fits use ordinary default ML estimation and library convergence verdicts;
+the quadratics reuse one shared prepared inference dataset.
+
+## Caveats
+
+Twenty draws per cell assess mechanics and timing, not one-percentage-point
+size differences. Four-core pricing assumes ideal scaling; worker startup,
+summary computation and remote billing overhead add time. No Modal price model
+was available in this session, so the estimate is CPU-hours only. Generator
+calibration is included in the measured per-draw cost. Complete-pair inference
+conditions on available tests; all failures remain separately visible.
+
+## Reproduce
+
+Use the installed lane-c library; one math thread per worker:
+
+```bash
+export R_LIBS="$HOME/.cache/magmaan-rlib/lane-c"
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+nice -n 10 Rscript run_experiment.R --help
+nice -n 10 Rscript run_experiment.R --smoke --run-id new_smoke
+nice -n 10 Rscript run_experiment.R --pilot --run-id new_pilot
+quarto render report.qmd
+```
+
+After the task-43 compute decision, the production command is
+`nice -n 10 Rscript run_experiment.R --production --workers 4`.
+Each run uses a fresh output directory and separate mode seeds. Raw batches
+stay local; frozen pilot summaries and source/native fingerprints provide
+pricing provenance. Earlier failed smoke attempts remain local diagnostics.

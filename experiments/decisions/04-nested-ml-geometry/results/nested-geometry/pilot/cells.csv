@@ -1,0 +1,17 @@
+"n","role","distribution","larger","cell_id","production_reps"
+100,"null","normal","correct",1,2000
+300,"null","normal","correct",2,2000
+100,"power","normal","correct",3,1000
+300,"power","normal","correct",4,1000
+100,"null","skewed","correct",5,2000
+300,"null","skewed","correct",6,2000
+100,"power","skewed","correct",7,1000
+300,"power","skewed","correct",8,1000
+100,"null","normal","misspecified",9,2000
+300,"null","normal","misspecified",10,2000
+100,"power","normal","misspecified",11,1000
+300,"power","normal","misspecified",12,1000
+100,"null","skewed","misspecified",13,2000
+300,"null","skewed","misspecified",14,2000
+100,"power","skewed","misspecified",15,1000
+300,"power","skewed","misspecified",16,1000

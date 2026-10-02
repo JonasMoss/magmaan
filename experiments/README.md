@@ -13,7 +13,7 @@ same question; speculative ideas start in the trigger register.
 
 | Purpose | Studies | Activity |
 |---------|--------:|----------|
-| [Decisions](#decisions) | 3 | Maintained registers and held-out evidence for library defaults. |
+| [Decisions](#decisions) | 4 | Maintained registers and held-out evidence for library defaults. |
 | [Showcases](#showcases) | 8 | Capabilities, parity and performance demonstrations. |
 | [Replications](#replications-and-reference-studies) | 8 | Published results and reference reconstructions. |
 | [Research](#research) | 24 | 8 active, 11 banked, 5 retained evidence studies. |
@@ -30,6 +30,7 @@ Pre-registered studies whose results set library defaults; see
 | 01 | [optimizer-defaults](decisions/01-optimizer-defaults/report.qmd) | benchmark | active | Which start, optimizer and PSD route should each estimation route use by default, judged by the library verdict on held-out simulated problems? |
 | 02 | [barrier-defaults](decisions/02-barrier-defaults/report.qmd) | benchmark | active | Which start and optimizer should the complete-data ML barrier fitter use by default, judged by the library verdict on held-out simulated problems? |
 | 03 | [score-centering](decisions/03-score-centering/report.qmd) | probe | banked | Where do uncentered, globally centered or within-group likelihood-score meats give justified parameter covariance and analytic score calibration for ML and prospective FIML? |
+| 04 | [nested-ml-geometry](decisions/04-nested-ml-geometry/report.qmd) | probe | active | Does observed nested ML geometry calibrate at least as well as expected geometry, especially under larger-model misspecification? Next: task-43 compute decision, then frozen confirmation. |
 
 **Score-centering bank:** retain raw for tested regular ML and as the prospective
 FIML comparator; 72,000 confirming datasets establish no qualifying global-centering
