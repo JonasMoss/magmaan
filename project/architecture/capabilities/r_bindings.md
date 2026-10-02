@@ -324,7 +324,18 @@
   FIML recipe, so its statistic changes too), and the Satorra-2000 LR spectrum
   reduces through the observed information at the larger model. The expected
   geometry, lavaan's, remains the default of `ntml_quadratic` and the lab
-  (`inference_quadratic(geometry =)`); the calibration run is open. The shared inference-side
+  (`inference_quadratic(geometry =)`); the calibration run is open.
+  All-ordinal DWLS has its own policy since 2026-10-02
+  (`api::policy_inference_dwls`, routed by `magmaanlab::policy_inference()`):
+  the estimated-weight IJ covariance (`robust_ordinal_ij`, observed bread,
+  Stage-1 threshold and polychoric influence and the diagonal weight's
+  influence) and one global test, the fit-function statistic n F with the
+  fixed-weight UGamma spectrum and SB/PEBA4, reported in `score` with label
+  `fit_function`; `lr` carries the typed reason `inapplicable`. Only plain
+  DWLS qualifies. The lab `vcov()` names the policy covariance as
+  `regime = "sandwich_ij"`. Gates: exact-fit reduction to the fixed-weight
+  sandwich and a stratified delete-one jackknife (delta single and two
+  groups, theta) in `policy_dwls_test.cpp`; calibration remains open. The shared inference-side
   `robust::embed_nested_null` matches formula keys including group and level,
   lifts the null's affine constraints and estimate into H1, and verifies its
   implied covariance and mean moments to relative tolerance 1e-10. Omission
