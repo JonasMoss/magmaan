@@ -1237,6 +1237,33 @@ covariance, even with the longer/tighter controls. Next checks concern LS
 preconditioning/damped steps, sample-only signed-basin starts and stable sandwich
 representation/guard calibration. No optimizer default or audit threshold changes.
 
+The fixed-target ULS follow-up (2026-10-02) compares 16 pipelines across six
+sample-only starts on the five retained samples plus ten fresh regular and ten
+fresh weak-marker draws: 2,400 cold fits. Existing sphere PORT-NLS with four
+signed-moment starts recovers all 25 independent finite local references;
+shared FABIN3 alone recovers 2/5, 9/10 and 7/10 by family. The diagnostic
+portfolio gains seven and loses none. The covariance-form SNLLS split profiles
+nine linear parameters, leaving four loading parameters; combined with
+objective-preserving standardized coordinates it improves L-BFGS recovery,
+but does not outperform the sphere PORT-NLS signed portfolio. Its retained
+second minimum demonstrates objective agreement without adequate covariance
+precision, and 38 profiled PORT-NLS calls fail original-objective consistency.
+No inconsistent endpoint is used in diagnostic selection.
+
+Independent 90-digit refinement establishes all 25 strict local minima; it
+resolves two cases left unresolved at 60 digits. A separate high-precision
+repeat and repeated cold outcomes agree. Every exact reference fails the
+unchanged accuracy guard (sandwich conditions about 1e16–1e22), and none of
+the native fits passes. One weak-marker reference also exceeds the Hessian
+condition cap. Unrestricted point checks pass explicit infinite bounds:
+`evaluate_at()` otherwise applies its positive-variance preset, which can
+substitute a first-order verdict at signed-variance points. This corrects the
+experiment's domain declaration without changing that API default or any
+production threshold. The 61 such implicit-domain verdicts remain witnesses.
+Next priorities are stable sandwich representation/guard calibration, broader
+candidate confirmation and the profiled objective inconsistencies; no ordinary
+start or optimizer default is adopted.
+
 The frontier sphere chart (`cpp/include/magmaan/estimate/frontier/gauge.hpp`,
 `sphere.hpp`; design in `papers/global-gauge-sem/work/notes/`) changes only the
 chart the optimizer walks in, not the estimator. `analyze_gauge` reads the

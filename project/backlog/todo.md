@@ -767,10 +767,19 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   most cold configurations; two lower signed-variance basins remain missed.
   The sphere audit now distinguishes failed accuracy-metric factorization from
   failed Hessian curvature, without changing acceptance. Next study LS
-  preconditioning/damped steps and bounded sample-only signed-basin starts;
-  investigate stable sandwich representation and conditioning-guard calibration
+  preconditioning/damped steps and bounded sample-only signed-basin starts.
+  The 2,400-fit fixed-target follow-up recovers all five retained and 20 fresh
+  regular/weak-marker references with sphere PORT-NLS and four sample-only
+  signed-moment starts (seven gains, no losses against one shared FABIN3 start).
+  Profiling improves L-BFGS but does not outperform that portfolio. All 25
+  exact references and all native fit audits still fail certification; no
+  default follows. Point checks now specify infinite bounds, preventing the
+  evaluator's positive-variance preset from substituting first-order verdicts.
+  Next investigate stable sandwich representation and conditioning-guard calibration
   jointly with the very flat finite NTML witness. Retain the PORT curvature
-  failures and explain the shared-FABIN3 GLS worse local minimum. Preserve LS-specific
+  failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
+  and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start
+  sphere candidate on broader populations and ordinary units. Preserve LS-specific
   warm references without treating a fitted ML point as an LS optimum.
   PSD/barriers, FIML, ordinal data and broad global-search guarantees are
   separate extensions, not prerequisites for this programme.

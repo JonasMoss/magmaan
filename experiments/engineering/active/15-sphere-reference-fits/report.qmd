@@ -1,7 +1,9 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: uls
+  lane: uls_study
+  study_run: uls-reliability-final-v2
+  study_confirm: uls-reliability-reference-90
   uls_run: uls-unit-final-60
   uls_confirm: uls-unit-final-90
   run: ordinary-layered-pilot-v2
@@ -26,6 +28,61 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "uls_study")) {
+  read_study <- function(run, name) {
+    file <- file.path("results", run, paste0(name, ".csv"))
+    if (!file.exists(file)) stop("Missing ULS study evidence: ", file, "; see reproduction commands in report.qmd")
+    read.csv(file, stringsAsFactors = FALSE)
+  }
+  portfolios <- read_study(params$study_run, "portfolio_summary")
+  refs <- read_study(params$study_run, "reference_summary")
+  confirm <- read_study(params$study_confirm, "reference_summary")
+  core <- read_study(params$study_run, "reference_core_checks")
+  transport <- read_study(params$study_run, "verification")
+  failures <- read_study(params$study_run, "inconsistency_witnesses")
+  meta <- read_study(params$study_run, "metadata")
+  ref_meta <- read_study(params$study_run, "reference_metadata")
+  cat("## Question\n\nCan sample-only signed starts and existing least-squares solvers recover the known mixed-unit ULS minima, and does the improvement survive fresh regular and weak-marker samples? Does profiling or a change of coordinates help under the same objective?\n\n")
+  cat("## Short answer\n\nSphere PORT-NLS with four sample-only signed-moment starts recovers all five retained references, all ten fresh regular references and all ten fresh weak-marker references. With one shared FABIN3 start, the same solver recovers 2/5, 9/10 and 7/10 respectively. The bounded portfolio gains seven targets and loses none in these comparisons. No fitted reference is used to construct a start.\n\n")
+  cat("This improves search, but does not yet give certified ordinary fits: every exact reference fails the unrestricted point audit, and none of the 2,400 fitting calls yields a native audit pass. High-precision calculations find sandwich-metric conditions above the unchanged 1e12 guard for all 25 minima. Profiling helps L-BFGS, especially in standardized coordinates, but does not outperform the signed-start sphere PORT-NLS portfolio here. A checker-domain mismatch was also exposed: point evaluation needs explicit unrestricted bounds to keep its Newton audit from being replaced by the default positive-variance preset's first-order fallback. No default or threshold changes.\n\n")
+  cat("## Evidence\n\n### Search: starts and optimizer representation\n\n")
+  choices <- data.frame(route = c("regression_marker", "regression_sphere", "covariance_full", "covariance_profiled", "covariance_profiled", "covariance_profiled"),
+    coordinates = c(rep("mixed", 5), "standardized"), optimizer = c(rep("port-nls", 4), rep("nlopt-lbfgs", 2)),
+    Method = c("Regression marker / PORT-NLS", "Regression sphere / PORT-NLS", "Covariance full / PORT-NLS", "Covariance profiled / PORT-NLS", "Covariance profiled / L-BFGS", "Covariance profiled / L-BFGS, standardized"), stringsAsFactors = FALSE)
+  table <- choices["Method"]
+  for (family in c("retained", "regular", "weak")) {
+    role <- if (family == "retained") "retained" else "fresh"
+    design <- if (family == "weak") "weak_marker" else "ernst"
+    table[[switch(family, retained = "Retained / 5", regular = "Fresh regular / 10", weak = "Fresh weak / 10")]] <- vapply(seq_len(nrow(choices)), function(i) {
+      p <- choices[i, ]; d <- portfolios[portfolios$role == role & portfolios$design == design & portfolios$route == p$route &
+        portfolios$coordinates == p$coordinates & portfolios$optimizer == p$optimizer, ]
+      paste(d$matches[d$portfolio == "fabin3"], "→", d$matches[d$portfolio == "all"])
+    }, "")
+  }
+  cat(knitr::kable(table, row.names = FALSE), sep = "\n")
+  cat("\n\nCells show reference matches from one shared FABIN3 start → the six-start portfolio (FABIN3, layered and four signed-moment candidates). The four signed candidates alone attain the same 5/5, 10/10 and 10/10 for sphere PORT-NLS. The full unprofiled L-BFGS routes match no reference under either coordinate setting, even with all six starts. Standardizing coordinates without changing the weights back to the mixed-unit target would fit a different estimator; this study restores those weights exactly. Full PORT-NLS generally gains little from that coordinate change. Profiling has a clearer effect on L-BFGS.\n\n")
+  cat("The covariance parameterization expresses the same two-factor covariance model through three free latent covariance entries instead of a regression coefficient and disturbance variance. Its existing SNLLS implementation profiles those three entries and six indicator variances, leaving four nonlinear loading parameters. It runs the same ULS target; there is no new optimizer implementation. At the retained second minimum, profiled PORT-NLS can meet objective tolerance while missing the stricter covariance tolerance. The joint match requirement retains that loss.\n\n")
+  cat(sprintf("Across all transported starts, the largest relative objective discrepancy is %.2g and the largest covariance discrepancy standardized by sample SDs is %.2g. Fitted endpoints are restored to the original mixed-unit regression chart and re-evaluated before comparison. %d returned profiled PORT-NLS calls fail objective consistency and are excluded from diagnostic selection; their case/start/route records remain frozen. No loss or failed call is removed from the denominators.\n\n", transport$max_start_objective_gap, transport$max_start_sigma_gap, nrow(failures)))
+  cat("### References, audit domain and certification\n\n")
+  table <- data.frame(Family = c("Retained regular", "Fresh regular", "Fresh weak marker"), Datasets = c(5, 10, 10), check.names = FALSE)
+  ids <- list(1:5, 6:15, 16:25)
+  table$`Finite local references` <- vapply(ids, function(id) sum(tolower(refs$finite_local_minimum[refs$case_id %in% id]) == "true"), 0L)
+  table$`Exact-point audit passes` <- vapply(ids, function(id) sum(core$audit[core$case_id %in% id] == "passed"), 0L)
+  table$`Indefinite implied covariances` <- vapply(ids, function(id) sum(refs$sigma_min_eigenvalue[refs$case_id %in% id] < 0), 0L)
+  cat(knitr::kable(table, row.names = FALSE), sep = "\n")
+  stopifnot(all(tolower(refs$finite_local_minimum) == "true"), all(tolower(confirm$finite_local_minimum) == "true"),
+    max(abs(refs$objective - confirm$objective)) <= 1e-14, all(core$audit == "failed"))
+  cat(sprintf("\n\nAll 25 references have positive exact profile and full Hessians at 90 digits. Their sandwich-metric conditions range from %.2g to %.2g; one fresh weak-marker reference also has Hessian condition above 1e12. The 60-digit pilot left two fresh refinements unresolved; the higher-precision calculation resolves them, and a separate 90-digit refinement reproduces every reference. The full cold grid also reproduces its search outcomes across runs. These are finite strict local minima, with no global-optimality claim.\n\n", min(refs$metric_condition), max(refs$metric_condition)))
+  cat(sprintf("Point evaluation's omitted bounds argument supplies a positive-variance preset. At %d endpoints it produces a first-order pass even though the Newton evidence fails; that domain is inappropriate for this unrestricted study. Supplying explicitly infinite bounds restores the intended Newton assessment. Native fit audits remain unchanged and none pass. The correction declares the study domain; it neither fits with positive-variance constraints nor relaxes the accuracy guard. The evaluator-domain behavior is retained as a separate witness for future contract review.\n\n", transport$implicit_bound_passes))
+  cat("## What remains\n\nThe search result makes signed-start sphere PORT-NLS a candidate for a broader study, not an adopted default. The next priority is stable computation and calibration of the sandwich accuracy metric: the current search can recover these reference covariances while certification remains unavailable. Then test the candidate on new populations, ordinary measurement units and both ULS/GLS targets, recording family-specific losses and the cost of the extra starts. Investigate the profiled PORT-NLS objective inconsistencies separately.\n\n")
+  cat("## Caveats and cost\n\nThis exploratory study contains five retained regular N=100 problems plus ten fresh regular and ten fresh weak-marker draws. Both fresh families were chosen before running the full comparison; promising methods were compared together on them, so this is not a prespecified default-selection gate. All observations share the fixed multiplier (.01, 100, 2, .3, 10, .1). No means, groups, equality constraints, FIML, ordinal fitting, PSD constraints or statistical barriers are added. Signed primitive and residual variances are permitted; indefinite reference covariances remain visible.\n\n")
+  cat("All six starts are constructed from sample moments before fitting. The single-start baseline uses the shared FABIN3 vector; canonical sphere LS's auxiliary ML-start path is outside this comparison. The four moment candidates use the (+,+), (+,−), (−,+) and (−,−) latent-variance sign patterns, covariance-ratio loading formulas and a weighted cross-factor covariance estimate; their six indicator variances match the sample diagonal. This recipe is specific to this simple two-factor model. Diagnostic portfolio selection chooses the lowest consistent original objective even if it fails certification. A match requires objective agreement within 1e-6(1+|f|) and implied covariance agreement within 1e-5 after standardizing by sample SDs. Fresh references refine the best consistent candidate from the full cold grid. This checks local accuracy rather than recovery of globally or separately selected optima. Reference refinement happens after all cold fits and uses exact derivatives with the indicator variances profiled; every reference objective agrees with the independent C++ target within 1e-8(1+|f|).\n\n")
+  fit_time <- as.numeric(meta$value[meta$key == "fit_elapsed_s"])
+  cost <- portfolios[portfolios$route == "regression_sphere" & portfolios$coordinates == "mixed" & portfolios$optimizer == "port-nls" & portfolios$portfolio %in% c("fabin3", "signed"), ]
+  cat(sprintf("The 2,400 cold fits took %.1f seconds locally, including domain checks and result handling; 90-digit reference refinement took %.1f seconds. The sphere four-start portfolio uses 100 optimizer calls across 25 datasets versus 25 calls for FABIN3 alone; measured fitting time was %.2f versus %.2f seconds in this run. These short serial timings are approximate, with no balanced speed claim. All work used one math thread under nice 10 on the workstation. Compact per-family summaries, portfolio checks, reference inputs/parameters/traces, failed-call witnesses and fingerprints are frozen; raw cold fits and RDSs stay local. Earlier diagnosis remains available with `-P lane:uls`.\n\n", fit_time, ref_meta$elapsed_s, sum(cost$seconds[cost$portfolio == "signed"]), sum(cost$seconds[cost$portfolio == "fabin3"])))
+  cat("## Reproduce\n\nWith the recorded magmaanlab numerical baseline installed, and Python with mpmath 1.3.0 available, from this study directory:\n\n```sh\nRscript run_experiment.R --ordinary --uls-study --help\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --uls-study --smoke --reference-digits 90 --run-id uls-study-smoke-new\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --uls-study --reference-digits 90 --run-id uls-study-new\npython scripts/verify_uls_study.py --run-dir results/uls-study-new\nquarto render report.qmd -P study_run:uls-study-new\n```\n\n`--fresh-reps`, `--designs`, `--seed-base` and `--python` control the grid and environment. Fresh run IDs preserve attempts. The retained sample inputs are frozen in this leaf and need no local RDS files. For a separate high-precision repeat, copy the new run's `covariances.csv` and `reference_starts.csv` into a fresh result directory and run `python scripts/uls_unit_reference.py --run-dir DIRECTORY --digits 90`, then render with `-P study_confirm:NAME`. The report only reads saved results.\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "uls")) {
   read_uls <- function(run, name) {
     file <- file.path("results", run, paste0(name, ".csv"))
