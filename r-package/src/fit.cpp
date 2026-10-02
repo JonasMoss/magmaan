@@ -11033,12 +11033,16 @@ SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context) {
   return score_bindings::handle(*h,"magmaan_ntml_hypothesis");
 }
 // [[Rcpp::export]]
-Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score) {
+Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score,
+                               bool observed = false) {
   magmaan::post_expected<std::shared_ptr<magmaan::robust::frontier::NTMLQuadratic>> q;
   if (hypothesis) {
     auto& h = score_bindings::get<std::shared_ptr<magmaan::robust::frontier::NTMLHypothesis>>(object,"magmaan_ntml_hypothesis");
-    q = magmaan::robust::frontier::ntml_quadratic(*h,score);
+    q = magmaan::robust::frontier::ntml_quadratic(*h,score,
+        observed ? magmaan::robust::Information::Observed
+                 : magmaan::robust::Information::Expected);
   } else {
+    if (observed) Rcpp::stop("inference_quadratic(): geometry = \"observed\" applies to nested hypotheses");
     auto& c = score_bindings::get<score_bindings::Context>(object,"magmaan_inference_context");
     if (!c.ntml) Rcpp::stop("inference_quadratic(): shared geometry requires an interior random-X continuous ML fit with affine constraints");
     q = magmaan::robust::frontier::ntml_quadratic(*c.ntml,score);

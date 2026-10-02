@@ -177,8 +177,14 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
         : InferenceReason::NumericFailure;
     return unavailable(reason,hypothesis.error().detail);
   }
-  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true), out.score);
-  calibrate(robust::frontier::ntml_quadratic(**hypothesis, false), out.lr);
+  // Observed geometry: the nested comparison usually has a misspecified
+  // larger model, where expected information gives an inconsistent reference
+  // law for both statistics.
+  using robust::Information;
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true, Information::Observed),
+            out.score);
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, false, Information::Observed),
+            out.lr);
   // A negative difference means the alternative stopped above the null's
   // optimum, so at least one fit is not at its minimum. The score statistic
   // needs only the null fit and stays.

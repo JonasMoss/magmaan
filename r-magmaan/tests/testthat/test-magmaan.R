@@ -333,24 +333,27 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_equal(attr(a, "restricted"), "f0")
   expect_equal(unclass(anova(f1, f0)), unclass(a), ignore_attr = TRUE)
   expect_equal(a$df, c(2L, 2L))
-  # LR: the normal-theory difference, and SB is lavaan's Satorra (2000) with
-  # the exact restriction map.
-  l1 <- lav_cfa(m1, d, estimator = "MLM")
-  l0 <- lav_cfa(m0, d, estimator = "MLM")
-  nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
-  expect_equal(a$statistic[1], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
-  sb <- lavaan::lavTestLRT(l0, l1, method = "satorra.2000", A.method = "exact",
-                           scaled.shifted = FALSE)
-  expect_equal(a$statistic[1] / a$sb.scale[1], as.numeric(sb[2, "Chisq diff"]), tolerance = 1e-6)
-  expect_equal(a$p.sb[1], as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
-  # Score: the lab's hypothesis quadratic, calibrated explicitly.
+  # Both tests are the lab's hypothesis quadratics in the observed nested
+  # geometry, calibrated explicitly.
   shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))
   h <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(as_lab_fit(f0), shared),
                                       magmaanlab::prepare_inference(as_lab_fit(f1), shared))
-  cal <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "score"),
-                                         c("sb", "peba4"))
-  expect_equal(a$statistic[2], cal$statistic[1], tolerance = 1e-10)
-  expect_equal(c(a$p.sb[2], a$p.peba4[2]), cal$p_value, tolerance = 1e-10)
+  for (k in 1:2) {
+    test <- c("lr", "score")[k]
+    cal <- magmaanlab::calibrate_quadratic(
+      magmaanlab::inference_quadratic(h, test, geometry = "observed"), c("sb", "peba4"))
+    expect_equal(a$statistic[k], cal$statistic[1], tolerance = 1e-10)
+    expect_equal(c(a$p.sb[k], a$p.peba4[k]), cal$p_value, tolerance = 1e-10)
+  }
+  # The LR statistic is the normal-theory difference. In the expected
+  # geometry the lab's SB is lavaan's Satorra (2000) with the exact
+  # restriction map; the policy's observed geometry is not a lavaan method.
+  nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
+  expect_equal(a$statistic[1], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
+  sb <- lavaan::lavTestLRT(lav_cfa(m0, d, estimator = "MLM"), lav_cfa(m1, d, estimator = "MLM"),
+                           method = "satorra.2000", A.method = "exact", scaled.shifted = FALSE)
+  lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr"), "sb")
+  expect_equal(lab_sb$p_value, as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
   expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
 })
 

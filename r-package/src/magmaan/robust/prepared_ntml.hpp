@@ -35,7 +35,7 @@ struct NTMLFit {
   std::optional<NTMLGeometry> geometry;
   std::optional<UFactor> expected, observed;
   std::optional<Eigen::MatrixXd> weighted_delta, information, covariance, robust_covariance;
-  std::optional<Eigen::MatrixXd> observed_covariance;
+  std::optional<Eigen::MatrixXd> observed_information, observed_covariance;
   std::optional<Eigen::MatrixXd> score_sandwich_expected, score_sandwich_observed;
   std::optional<Eigen::MatrixXd> projected_rows;
   std::shared_ptr<NTMLQuadratic> score, lr;
@@ -47,7 +47,8 @@ struct NTMLHypothesis {
   std::shared_ptr<NTMLFit> null_fit, alternative;
   std::shared_ptr<NTMLFit> embedded_null; // H1 evaluation at H0, when slots differ
   RestrictionAlpha restriction;
-  std::shared_ptr<NTMLQuadratic> score, lr;
+  std::shared_ptr<NTMLQuadratic> score, lr;                    // expected geometry
+  std::shared_ptr<NTMLQuadratic> score_observed, lr_observed;  // observed geometry
 };
 post_expected<std::shared_ptr<NTMLData>> prepare_ntml_data(
     RawData raw, bool has_means, ContributionStorage storage = ContributionStorage::Auto);
@@ -59,11 +60,28 @@ post_expected<const UFactor*> ntml_factor(NTMLFit& fit, Information bread = Info
 post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLFit& fit, bool score);
 post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
     std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative);
-post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& hypothesis, bool score);
+// The nested score and likelihood-ratio quadratics with their reference rows.
+// `geometry` selects the information in the reference law; the statistics'
+// numerators never change. Expected (the default, lavaan's Satorra-2000 and
+// lavTestScore geometry): the score projects the restriction directions
+// against the null tangent with the expected information and uses it as the
+// metric; the LR spectrum reduces through the alternative's expected
+// information. Observed: the score projects with the observed information of
+// the alternative at the (embedded) null fit, keeping the expected metric on
+// the projected directions, so its weight changes with the projection as in
+// the FIML score test (`inference::frontier::project_scores`); the LR spectrum
+// reduces through the observed information at the alternative. Observed is
+// consistent when the larger model is misspecified.
+post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
+    NTMLHypothesis& hypothesis, bool score,
+    Information geometry = Information::Expected);
 post_expected<const Eigen::VectorXd*> ntml_unbiased_spectrum(NTMLFit& fit);
 post_expected<const Eigen::VectorXd*> ntml_spectrum(NTMLQuadratic& quadratic);
 post_expected<const Eigen::MatrixXd*> ntml_covariance(NTMLFit& fit, bool robust = false);
 post_expected<const Eigen::MatrixXd*> ntml_information(NTMLFit& fit);
+// Observed information (closed-form ML Hessian of the summed log-likelihood,
+// in the same total units as ntml_information) over the free parameters.
+post_expected<const Eigen::MatrixXd*> ntml_observed_information(NTMLFit& fit);
 // Inverse observed information (closed-form ML Hessian), reduced through the
 // equality constraints.
 post_expected<const Eigen::MatrixXd*> ntml_observed_covariance(NTMLFit& fit);

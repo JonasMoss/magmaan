@@ -18,6 +18,7 @@
 #include "magmaan/api/conventions.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -476,7 +477,7 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
   for (bool score : {true, false}) {
     const auto& test = score ? out.score : out.lr;
     REQUIRE(test.reason == api::InferenceReason::Available);
-    auto quadratic = ntml::ntml_quadratic(**h, score);
+    auto quadratic = ntml::ntml_quadratic(**h, score, magmaan::robust::Information::Observed);
     REQUIRE(quadratic.has_value());
     auto spectrum = ntml::ntml_spectrum(**quadratic);
     REQUIRE(spectrum.has_value());
@@ -671,7 +672,14 @@ TEST_CASE("policy nested embedding: frozen lavaan dropped-loading score and exac
     auto result=api::policy_nested_ml(null,{},alt,{});
     REQUIRE(result.score.reason==api::InferenceReason::Available);
     REQUIRE(result.lr.reason==api::InferenceReason::Available);
-    CHECK(std::abs(result.score.statistic-j["score"].get<double>())<1e-5);
+    // lavTestScore() uses the expected geometry, which the lab and the lavaan
+    // convention keep; the policy score uses the observed projection.
+    auto hypothesis=ntml::prepare_ntml_hypothesis(null,alt);
+    REQUIRE(hypothesis.has_value());
+    auto lavaan_score=ntml::ntml_quadratic(**hypothesis,true);
+    REQUIRE(lavaan_score.has_value());
+    CHECK(std::abs((*lavaan_score)->statistic-j["score"].get<double>())<1e-5);
+    CHECK(std::isfinite(result.score.statistic));
     CHECK(std::abs(result.lr.statistic-j["lr"].get<double>())<1e-10);
     auto c1=magmaan::estimate::build_eq_constraints(alt->pt);
     auto c0=magmaan::estimate::build_eq_constraints(null->pt);
@@ -731,6 +739,242 @@ TEST_CASE("policy nested rank checks preserve variable units") {
       CHECK(test.eigenvalues.isApprox(expected.eigenvalues, 1e-8));
       CHECK(test.p_sb == doctest::Approx(expected.p_sb).epsilon(1e-8));
       CHECK(test.p_peba4 == doctest::Approx(expected.p_peba4).epsilon(1e-8));
+    }
+  }
+}
+
+namespace {
+
+// Observed information by central second differences of the summed normal
+// log-likelihood (sample-mean centred, no mean structure), independent of the
+// closed-form Hessian.
+Eigen::MatrixXd numeric_information(const Model& model, const magmaan::data::RawData& raw,
+                                    const Eigen::VectorXd& theta) {
+  auto ev = magmaan::model::ModelEvaluator::build(model.pt, model.rep);
+  REQUIRE(ev.has_value());
+  auto loglik = [&](const Eigen::VectorXd& th) {
+    auto m = ev->sigma(th);
+    REQUIRE(m.has_value());
+    double total = 0.0;
+    for (std::size_t b = 0; b < raw.X.size(); ++b) {
+      Eigen::LLT<Eigen::MatrixXd> llt(m->sigma[b]);
+      REQUIRE(llt.info() == Eigen::Success);
+      const double logdet = 2.0 * llt.matrixL().toDenseMatrix().diagonal().array().log().sum();
+      const Eigen::VectorXd mu = raw.X[b].colwise().mean().transpose();
+      for (Eigen::Index i = 0; i < raw.X[b].rows(); ++i) {
+        const Eigen::VectorXd r = raw.X[b].row(i).transpose() - mu;
+        total += -0.5 * (logdet + r.dot(llt.solve(r)));
+      }
+    }
+    return total;
+  };
+  const Eigen::Index k = theta.size();
+  Eigen::MatrixXd H(k, k);
+  for (Eigen::Index a = 0; a < k; ++a) {
+    for (Eigen::Index b = a; b < k; ++b) {
+      const double ha = 1e-4 * std::max(1.0, std::abs(theta(a)));
+      const double hb = 1e-4 * std::max(1.0, std::abs(theta(b)));
+      auto at = [&](double sa, double sb) {
+        Eigen::VectorXd t = theta;
+        t(a) += sa * ha;
+        t(b) += sb * hb;
+        return loglik(t);
+      };
+      H(a, b) = H(b, a) = -(at(1, 1) - at(1, -1) - at(-1, 1) + at(-1, -1)) / (4.0 * ha * hb);
+    }
+  }
+  return H;
+}
+
+Eigen::VectorXd sorted(Eigen::VectorXd v) {
+  std::sort(v.data(), v.data() + v.size());
+  return v;
+}
+
+}  // namespace
+
+TEST_CASE("policy nested tests: observed geometry under a misspecified larger model") {
+  std::mt19937 rng(2026u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Zero()));
+  // The one-factor larger model is misspecified for t_rows' covariance, so the
+  // observed and expected information differ at both fits.
+  const Model alt_model = build("f =~ x1 + x2 + x3 + x4", false);
+  const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", false);
+  Prepared alt = prepare(alt_model, raw, false);
+  Prepared null = prepare(null_model, raw, false);
+  auto null_fit = ntml::prepare_ntml_fit(alt.data, null_model.pt, null_model.rep, null.est);
+  REQUIRE(null_fit.has_value());
+  auto out = api::policy_nested_ml(*null_fit, {}, alt.fit, {});
+  REQUIRE(out.score.reason == api::InferenceReason::Available);
+  REQUIRE(out.lr.reason == api::InferenceReason::Available);
+  CHECK(out.score.df == 2);
+
+  // The closed-form observed information (the projection's sensitivity)
+  // against second differences of the log-likelihood, at both fits.
+  for (const Prepared* p : {&alt, &null}) {
+    auto H = inf::information_observed_analytic(p->model.pt, p->model.rep, p->data->sample, p->est);
+    REQUIRE(H.has_value());
+    CHECK(relative(numeric_information(p->model, raw, p->est.theta), *H) < 1e-5);
+  }
+
+  // Score: first-principles reconstruction in the larger model's
+  // coordinates at the (embedded) null fit: finite-difference casewise scores
+  // s_i (uncentred), the closed-form observed information (checked above),
+  // the expected information, D = K1 A' and the null tangent K0. With
+  // sensitivity S: G = D - K0 (K0'S K0)^-1 K0'S D, statistic
+  // (G'u)'(G'I G)^-1 (G'u) with u = sum s_i, spectrum eig(G'(sum s_i s_i')G, G'I G).
+  auto hypothesis = ntml::prepare_ntml_hypothesis(*null_fit, alt.fit);
+  REQUIRE(hypothesis.has_value());
+  const auto& nf = (*hypothesis)->embedded_null ? *(*hypothesis)->embedded_null
+                                                : *(*hypothesis)->null_fit;
+  REQUIRE(nf.estimates.theta.size() == alt.est.theta.size());
+  Prepared at_null{alt_model, raw, alt.data, nf.estimates, nullptr};
+  const Eigen::MatrixXd s0 = numeric_scores(at_null);
+  const Eigen::VectorXd u = s0.colwise().sum().transpose();
+  auto I0 = inf::information_expected(alt_model.pt, alt_model.rep, alt.data->sample, nf.estimates);
+  auto H0 = inf::information_observed_analytic(alt_model.pt, alt_model.rep, alt.data->sample, nf.estimates);
+  REQUIRE(I0.has_value()); REQUIRE(H0.has_value());
+  auto c0 = magmaan::estimate::build_eq_constraints(nf.pt);
+  auto c1 = magmaan::estimate::build_eq_constraints(alt_model.pt);
+  REQUIRE(c0.has_value()); REQUIRE(c1.has_value());
+  const Eigen::MatrixXd K = c1->K(), K0 = c0->K();
+  const Eigen::MatrixXd& A = (*hypothesis)->restriction.A;
+  const Eigen::MatrixXd D = K * A.transpose();
+  auto reference_score = [&](const Eigen::MatrixXd& S) {
+    const Eigen::MatrixXd G = D - K0 * (K0.transpose() * S * K0).ldlt().solve(K0.transpose() * S * D);
+    const Eigen::MatrixXd V = G.transpose() * *I0 * G;
+    const Eigen::VectorXd g = G.transpose() * u;
+    const Eigen::MatrixXd B = G.transpose() * s0.transpose() * s0 * G;
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> es(B, V);
+    REQUIRE(es.info() == Eigen::Success);
+    return std::make_pair(g.dot(V.ldlt().solve(g)), sorted(es.eigenvalues()));
+  };
+  const auto observed = reference_score(*H0);
+  CHECK(out.score.statistic == doctest::Approx(observed.first).epsilon(1e-6));
+  CHECK((out.score.eigenvalues - observed.second).norm() < 1e-6 * observed.second.norm());
+
+  // The expected geometry stays available (lab and lavaan composition) and
+  // matches the same reconstruction with S = I; the observed weight is at
+  // least as large, so its statistic is not larger at a stationary null.
+  auto score_expected = ntml::ntml_quadratic(**hypothesis, true);
+  REQUIRE(score_expected.has_value());
+  auto spectrum_expected = ntml::ntml_spectrum(**score_expected);
+  REQUIRE(spectrum_expected.has_value());
+  const auto expected = reference_score(*I0);
+  CHECK((*score_expected)->statistic == doctest::Approx(expected.first).epsilon(1e-6));
+  CHECK((**spectrum_expected - expected.second).norm() < 1e-6 * expected.second.norm());
+  CHECK(out.score.statistic <= (*score_expected)->statistic + 1e-8);
+  CHECK(std::abs(out.score.statistic - (*score_expected)->statistic) >
+        1e-6 * (*score_expected)->statistic);
+
+  // LR: the statistic is unchanged; the Satorra-2000 spectrum reduces through
+  // the observed information of the alternative. Independent reconstruction
+  // from finite-difference casewise scores (centred) and the closed-form
+  // observed information: eig((A P^-1 A')^-1 A P^-1 K'JK P^-1 A'), P = K'HK.
+  auto lr_expected = ntml::ntml_quadratic(**hypothesis, false);
+  REQUIRE(lr_expected.has_value());
+  CHECK(out.lr.statistic == (*lr_expected)->statistic);
+  auto lr_expected_spectrum = ntml::ntml_spectrum(**lr_expected);
+  REQUIRE(lr_expected_spectrum.has_value());
+  CHECK((out.lr.eigenvalues - **lr_expected_spectrum).norm() >
+        1e-6 * (*lr_expected_spectrum)->norm());
+  auto H1 = inf::information_observed_analytic(alt_model.pt, alt_model.rep, alt.data->sample, alt.est);
+  REQUIRE(H1.has_value());
+  Eigen::MatrixXd scores = numeric_scores(alt);
+  scores.rowwise() -= scores.colwise().mean().eval();
+  const Eigen::MatrixXd J = K.transpose() * scores.transpose() * scores * K;
+  const Eigen::MatrixXd Pinv = (K.transpose() * *H1 * K).inverse();
+  const Eigen::MatrixXd M = A * Pinv * A.transpose();
+  const Eigen::MatrixXd B = A * Pinv * J * Pinv * A.transpose();
+  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> reference(B, M);
+  REQUIRE(reference.info() == Eigen::Success);
+  CHECK((out.lr.eigenvalues - sorted(reference.eigenvalues())).norm() <
+        1e-5 * reference.eigenvalues().norm());
+}
+
+TEST_CASE("policy nested tests: observed and expected geometry coincide at exact fit") {
+  // Rows whose biased sample covariance equals the null model's implied
+  // covariance, so both fits are exact and observed = expected information.
+  const Model alt_model = build("f =~ x1 + x2 + x3 + x4", false);
+  const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", false);
+  Eigen::Vector4d lambda(1.0, 0.8, 0.8, 0.8);
+  Eigen::Matrix4d Sigma = lambda * lambda.transpose();
+  Sigma.diagonal() += Eigen::Vector4d(0.5, 0.6, 0.7, 0.8);
+  std::mt19937 rng(91u);
+  std::normal_distribution<double> z(0.0, 1.0);
+  Eigen::MatrixXd X(300, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i)
+    for (int j = 0; j < 4; ++j) X(i, j) = z(rng);
+  X.rowwise() -= X.colwise().mean().eval();
+  const Eigen::MatrixXd C = X.transpose() * X / static_cast<double>(X.rows());
+  const Eigen::Matrix4d whiten = Eigen::LLT<Eigen::MatrixXd>(C).matrixL().solve(
+      Eigen::MatrixXd::Identity(4, 4)).transpose();
+  const Eigen::Matrix4d color = Eigen::LLT<Eigen::Matrix4d>(Sigma).matrixL().transpose();
+  magmaan::data::RawData raw;
+  raw.X.push_back(X * whiten * color);
+  auto data = ntml::prepare_ntml_data(raw, false, ntml::ContributionStorage::Casewise);
+  REQUIRE(data.has_value());
+  CHECK(((*data)->sample.S[0] - Sigma).norm() < 1e-10);
+  auto alt = prepare_on(*data, alt_model);
+  auto null = prepare_on(*data, null_model);
+  auto out = api::policy_nested_ml(null, {}, alt, {});
+  REQUIRE(out.score.reason == api::InferenceReason::Available);
+  REQUIRE(out.lr.reason == api::InferenceReason::Available);
+  auto hypothesis = ntml::prepare_ntml_hypothesis(null, alt);
+  REQUIRE(hypothesis.has_value());
+  for (bool score : {true, false}) {
+    auto q = ntml::ntml_quadratic(**hypothesis, score);
+    REQUIRE(q.has_value());
+    auto spectrum = ntml::ntml_spectrum(**q);
+    REQUIRE(spectrum.has_value());
+    const auto& test = score ? out.score : out.lr;
+    CHECK(std::abs(test.statistic - (*q)->statistic) < 1e-8);
+    CHECK((test.eigenvalues - **spectrum).norm() < 1e-6 * (*spectrum)->norm());
+  }
+}
+TEST_CASE("policy nested tests: the complete-data FIML nested score equals the ML policy score") {
+  // The ML nested score uses the FIML recipe (observed sensitivity, expected
+  // metric). On complete data with a mean structure the FIML score machinery
+  // therefore reproduces the policy statistic and spectrum exactly, in both
+  // geometries. (Covariance-only models differ: the FIML deviance scores fix
+  // the mean at zero rather than profiling it.)
+  std::mt19937 rng(2026u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Zero()));
+  const Model alt_model = build("f =~ x1 + x2 + x3 + x4", true);
+  const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", true);
+  Prepared alt = prepare(alt_model, raw, true);
+  Prepared null = prepare(null_model, raw, true);
+  auto null_fit = ntml::prepare_ntml_fit(alt.data, null_model.pt, null_model.rep, null.est);
+  REQUIRE(null_fit.has_value());
+  auto out = api::policy_nested_ml(*null_fit, {}, alt.fit, {});
+  REQUIRE(out.score.reason == api::InferenceReason::Available);
+  auto hypothesis = ntml::prepare_ntml_hypothesis(*null_fit, alt.fit);
+  REQUIRE(hypothesis.has_value());
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  namespace sf = magmaan::inference::frontier;
+  for (bool observed : {true, false}) {
+    auto components = sf::nested_score_components(alt_model.pt, alt_model.rep,
+        null_model.pt, null_model.rep, nullptr, raw, &*pack, null.est,
+        observed ? sf::ScoreFlipSensitivity::ObservedInformation
+                 : sf::ScoreFlipSensitivity::ExpectedInformation);
+    REQUIRE(components.has_value());
+    auto projected = sf::project_scores(*components);
+    REQUIRE(projected.has_value());
+    auto spectrum = sf::score_spectrum(*projected);
+    REQUIRE(spectrum.has_value());
+    auto q = ntml::ntml_quadratic(**hypothesis, true,
+        observed ? magmaan::robust::Information::Observed : magmaan::robust::Information::Expected);
+    REQUIRE(q.has_value());
+    auto q_spectrum = ntml::ntml_spectrum(**q);
+    REQUIRE(q_spectrum.has_value());
+    CHECK(projected->statistic == doctest::Approx((*q)->statistic).epsilon(1e-9));
+    CHECK((sorted(*spectrum) - **q_spectrum).norm() < 1e-9 * (*q_spectrum)->norm());
+    if (observed) {
+      CHECK(out.score.statistic == doctest::Approx(projected->statistic).epsilon(1e-9));
+      CHECK((out.score.eigenvalues - sorted(*spectrum)).norm() < 1e-9 * spectrum->norm());
     }
   }
 }

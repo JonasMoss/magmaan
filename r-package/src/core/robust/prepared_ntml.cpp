@@ -257,11 +257,20 @@ post_expected<const Eigen::MatrixXd*> ntml_covariance(NTMLFit& fit, bool robust)
   }
   return &*fit.robust_covariance;
 }
-post_expected<const Eigen::MatrixXd*> ntml_observed_covariance(NTMLFit& fit) {
-  if (!fit.observed_covariance) {
+post_expected<const Eigen::MatrixXd*> ntml_observed_information(NTMLFit& fit) {
+  if (!fit.observed_information) {
     auto H = inference::information_observed_analytic(fit.pt,fit.rep,fit.data->sample,fit.estimates);
     if (!H) return std::unexpected(H.error());
-    auto V = inference::vcov(*H,fit.pt,fit.estimates.theta);
+    if (!H->allFinite()) return std::unexpected(invalid("NTML observed information: non-finite Hessian"));
+    fit.observed_information = 0.5*(*H+H->transpose()).eval();
+  }
+  return &*fit.observed_information;
+}
+post_expected<const Eigen::MatrixXd*> ntml_observed_covariance(NTMLFit& fit) {
+  if (!fit.observed_covariance) {
+    auto H = ntml_observed_information(fit);
+    if (!H) return std::unexpected(H.error());
+    auto V = inference::vcov(**H,fit.pt,fit.estimates.theta);
     if (!V) return std::unexpected(V.error());
     fit.observed_covariance = std::move(*V);
   }
@@ -310,29 +319,47 @@ post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
   }
   return out;
 }
-post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& h, bool score) {
-  auto& slot = score ? h.score : h.lr;
+post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
+    NTMLHypothesis& h, bool score, Information geometry) {
+  const bool observed = geometry == Information::Observed;
+  auto& slot = observed ? (score ? h.score_observed : h.lr_observed)
+                        : (score ? h.score : h.lr);
   if (slot) return slot;
-  if (!score) for (const auto& entry : h.null_fit->nested_lr)
+  // The per-null LR cache is keyed by the alternative only, so it holds the
+  // expected geometry alone.
+  if (!score && !observed) for (const auto& entry : h.null_fit->nested_lr)
     if (entry.first == h.alternative) { slot=entry.second; return slot; }
   NTMLFit& fit = score ? *(h.embedded_null ? h.embedded_null : h.null_fit) : *h.alternative;
   auto info = ntml_information(fit); if (!info) return std::unexpected(info.error());
   auto wd = weighted_delta(fit); if (!wd) return std::unexpected(wd.error());
   auto c1 = build_eq_constraints(h.alternative->pt); if (!c1) return std::unexpected(c1.error());
   const Eigen::MatrixXd K = c1->K();
+  // Sensitivity used to project (score) or reduce (LR): the expected or the
+  // observed information of the alternative's model at `fit`.
+  const Eigen::MatrixXd* sensitivity = *info;
+  if (observed) {
+    auto H = ntml_observed_information(fit); if (!H) return std::unexpected(H.error());
+    sensitivity = *H;
+  }
   Eigen::MatrixXd directions, metric;
   if (score) {
-    auto covariance = ntml_covariance(fit); if (!covariance) return std::unexpected(covariance.error());
+    // Efficient-score directions: remove the null tangent K0 with the
+    // sensitivity S, D - K0 (K0' S K0)^-1 K0' S D, where the constrained
+    // inverse supplies K0 (K0' S K0)^-1 K0'. The metric stays expected.
+    auto covariance = observed ? ntml_observed_covariance(fit) : ntml_covariance(fit);
+    if (!covariance) return std::unexpected(covariance.error());
     Eigen::MatrixXd D = K*h.restriction.A.transpose();
-    D -= **covariance * **info * D;
+    D -= **covariance * *sensitivity * D;
     metric = D.transpose()* **info * D;
     directions = **wd * D;
   } else {
-    const Eigen::MatrixXd P = K.transpose()* **info * K;
+    const Eigen::MatrixXd P = K.transpose()* *sensitivity * K;
     const auto normalized_P = detail::equilibrate_symmetric(P);
     Eigen::LLT<Eigen::MatrixXd> factor(normalized_P.matrix);
     if (factor.info() != Eigen::Success || factor.rcond() < 1e-12)
-      return std::unexpected(invalid("NTML LR: singular alternative information"));
+      return std::unexpected(invalid(observed
+          ? "NTML LR: alternative observed information is not positive definite on its free directions"
+          : "NTML LR: singular alternative information"));
     const Eigen::MatrixXd Y = normalized_P.scale.asDiagonal() *
         factor.solve(normalized_P.scale.asDiagonal() * h.restriction.A.transpose());
     metric = h.restriction.A * Y;
@@ -354,7 +381,7 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLHypothesis& h, 
   auto q = from_rows(std::move(whitened),statistic,static_cast<int>(h.restriction.A.rows()));
   if (!q) return std::unexpected(q.error());
   slot = *q;
-  if (!score) h.null_fit->nested_lr.emplace_back(h.alternative,slot);
+  if (!score && !observed) h.null_fit->nested_lr.emplace_back(h.alternative,slot);
   return slot;
 }
 } // namespace magmaan::robust::frontier

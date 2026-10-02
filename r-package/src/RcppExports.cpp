@@ -2730,15 +2730,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // ntml_quadratic_impl
-Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score);
-RcppExport SEXP _magmaanlab_ntml_quadratic_impl(SEXP objectSEXP, SEXP hypothesisSEXP, SEXP scoreSEXP) {
+Rcpp::List ntml_quadratic_impl(SEXP object, bool hypothesis, bool score, bool observed);
+RcppExport SEXP _magmaanlab_ntml_quadratic_impl(SEXP objectSEXP, SEXP hypothesisSEXP, SEXP scoreSEXP, SEXP observedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type object(objectSEXP);
     Rcpp::traits::input_parameter< bool >::type hypothesis(hypothesisSEXP);
     Rcpp::traits::input_parameter< bool >::type score(scoreSEXP);
-    rcpp_result_gen = Rcpp::wrap(ntml_quadratic_impl(object, hypothesis, score));
+    Rcpp::traits::input_parameter< bool >::type observed(observedSEXP);
+    rcpp_result_gen = Rcpp::wrap(ntml_quadratic_impl(object, hypothesis, score, observed));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4496,7 +4497,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_score_components_matrix_impl", (DL_FUNC) &_magmaanlab_score_components_matrix_impl, 7},
     {"_magmaanlab_prepare_ntml_data_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_data_impl, 3},
     {"_magmaanlab_prepare_ntml_hypothesis_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_hypothesis_impl, 2},
-    {"_magmaanlab_ntml_quadratic_impl", (DL_FUNC) &_magmaanlab_ntml_quadratic_impl, 3},
+    {"_magmaanlab_ntml_quadratic_impl", (DL_FUNC) &_magmaanlab_ntml_quadratic_impl, 4},
     {"_magmaanlab_ntml_reference_impl", (DL_FUNC) &_magmaanlab_ntml_reference_impl, 2},
     {"_magmaanlab_ntml_rows_impl", (DL_FUNC) &_magmaanlab_ntml_rows_impl, 1},
     {"_magmaanlab_ntml_covariance_impl", (DL_FUNC) &_magmaanlab_ntml_covariance_impl, 2},

@@ -210,12 +210,19 @@ prepare_hypothesis <- function(null, alternative) {
       null=null,alternative=alternative),"magmaan_inference_hypothesis")
 }
 
-inference_quadratic <- function(object, test = c("score", "lr")) {
+# `geometry` applies to nested hypotheses: "expected" (lavaan's Satorra-2000
+# and lavTestScore geometry) or "observed" (the ordinary policy's nested
+# geometry: observed information at the null fit for the score projection and
+# at the alternative for the LR spectrum).
+inference_quadratic <- function(object, test = c("score", "lr"),
+                                geometry = c("expected", "observed")) {
   test <- match.arg(test)
+  geometry <- match.arg(geometry)
   hypothesis <- inherits(object,"magmaan_inference_hypothesis")
   if (!hypothesis && !inherits(object,"magmaan_inference"))
     stop("inference_quadratic(): supply a prepared fit or hypothesis")
-  .score_object(ntml_quadratic_impl(object$native,hypothesis,test=="score"),
+  .score_object(ntml_quadratic_impl(object$native,hypothesis,test=="score",
+                                    geometry=="observed"),
       "magmaan_ntml_quadratic",source=object,test=test)
 }
 

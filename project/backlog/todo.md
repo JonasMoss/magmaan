@@ -333,23 +333,31 @@ ordinary API exposes barrier fitting experimentally as
   [scores](../../r-package/examples/scores.R) and
   [inference reuse](../../r-package/examples/inference_reuse.R).
 
-- [ ] **M — move the ML nested policy to observed geometry.** Adopted
-  2026-10-02 in the [interface vision](../design/r-interface-vision.md):
-  expected information gives an inconsistent reference law when the larger
-  model is misspecified, the usual invariance case. In `api::policy_nested_ml`,
-  the score uses observed sensitivity at the restricted fit with the expected
-  metric (the FIML nested geometry), and the Satorra-2000 spectrum uses
-  observed information at the larger model; both statistics are unchanged.
-  The global ML test keeps expected information. Named reporting conventions
-  and explicit lab compositions retain their own lavaan parity gates.
-  **Check:** finite-difference and identity gates for the observed
-  projections, unchanged statistics, PSD-boundary and fixed/dropped-path
-  embeddings, and a component comparison with lavaan fits using
-  `information = "observed"`. Exact equality is not assumed: lavaan keeps its
-  normal-theory weight in the Satorra-2000 projector, and `lavTestScore()`
-  uses observed information for the metric too. One frozen calibration run
-  with correct and misspecified larger models (expected versus observed; size
-  and size-adjusted power) precedes release.
+- [x] **M — move the ML nested policy to observed geometry** (2026-10-02).
+  `api::policy_nested_ml` passes `Information::Observed` to the nested NTML
+  quadratics: the score projects with the larger model's observed
+  information at the restricted fit and keeps the expected metric on the
+  projected directions (the FIML recipe, so its statistic changes as well as
+  its spectrum, decided with the author), and the Satorra-2000 LR spectrum
+  reduces through the observed information at the larger model (statistic
+  unchanged). `ntml_quadratic(hypothesis, score, geometry)` defaults to
+  expected, which the lab Satorra-2000 test, the lab quadratic binding and the
+  lavaan conventions keep. Gates (`policy_test.cpp`): closed-form observed
+  information against second differences; first-principles score
+  reconstruction from finite-difference casewise scores in both geometries;
+  independent LR spectrum reconstruction; exact-fit identity (observed equals
+  expected); the complete-data FIML nested score equals the policy score to
+  1e-9 with a mean structure; the existing embedding, boundary and unit gates.
+
+- [ ] **M — calibrate the observed nested ML geometry.** One frozen run with
+  correct and misspecified larger models comparing expected and observed
+  nested geometry (size and size-adjusted power, score and LR, SB and PEBA4)
+  precedes release. Needs compute: simbox is unavailable, so Modal (cost
+  estimate first) or a small local run within the 5-minute rule. Optional
+  side check: a component comparison with lavaan fits using
+  `information = "observed"`; exact equality is not expected, since lavaan
+  keeps its normal-theory weight in the Satorra-2000 projector and
+  `lavTestScore()` uses observed information for the metric too.
 
 - [ ] **M — compose the FIML policy.** The primitives exist and are mostly
   lavaan gated: the observed-information sandwich with casewise scores (the

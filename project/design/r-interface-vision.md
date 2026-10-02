@@ -639,28 +639,32 @@ report the analogous score and likelihood-ratio (or fit-function difference)
 tests with SB and PEBA4. The comparison checks that data, estimator and nesting
 agree.
 
-Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26; the
-score and LR bullets below describe the current implementation, which uses
-expected information):
+Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26;
+observed geometry since 2026-10-02):
 
 - **Nesting.** The restricted model is the other model plus equality
   constraints on the same parameters (shared labels, or `b == 0` on a labeled
   parameter). The restriction map is exact. A restriction written as a fixed
   value (`0*`) changes the parameter slots and is not yet recognized (backlog).
 - **Likelihood ratio.** The difference of the two normal-theory fit statistics.
-  Its spectrum uses the expected information at the larger model with the
-  empirical Gamma: Satorra (2000) with the exact restriction map. SB equals
-  lavaan's `lavTestLRT(method = "satorra.2000", A.method = "exact",
-  scaled.shifted = FALSE)` on MLM fits. Evidence for SB and PEBA on this
-  statistic: FMG (2026) Study 2, reproduced in
+  Its spectrum uses the observed information at the larger model with the
+  empirical Gamma: Satorra (2000) with the exact restriction map. With expected
+  information instead, SB equals lavaan's `lavTestLRT(method = "satorra.2000",
+  A.method = "exact", scaled.shifted = FALSE)` on MLM fits; that geometry stays
+  in the lab (`ntml_quadratic(..., Information::Expected)`, the lab
+  Satorra-2000 test). Evidence for SB and PEBA on this statistic, in the
+  expected geometry: FMG (2026) Study 2, reproduced in
   `experiments/replications/07-foldnes-moss-gronneberg-2026-study2/`.
 - **Score.** Evaluated at the restricted fit: casewise likelihood scores along
   the restriction directions, projected against the restricted model's own
-  directions with its expected information (the efficient score), and the
-  expected-information metric. The projection keeps the statistic meaningful
-  where the restricted fit is not stationary, as at a PSD boundary. It mirrors
-  the global score test (_archive/complete-ml-global-test-geometry); a calibration study of its own is
-  still missing (backlog).
+  directions with the larger model's observed information at the restricted
+  fit (the efficient score), and the expected-information metric on the
+  projected directions. This is the FIML score recipe
+  (`inference::frontier::project_scores`): the projection enters the quadratic
+  form's weight as well as its spectrum, so on complete data the FIML and ML
+  nested scores coincide. The projection keeps the statistic meaningful where
+  the restricted fit is not stationary, as at a PSD boundary. A calibration
+  study of its own is still missing (backlog).
 - **Adopted change (2026-10-02): observed geometry for nested tests.** A
   nested comparison is usually made with a misspecified larger model (the
   invariance case). There the true Hessian contains residual terms that
@@ -668,12 +672,15 @@ expected information):
   reference law for both statistics. The score therefore moves to observed
   sensitivity at the restricted fit with the expected metric, as for FIML,
   and the Satorra-2000 spectrum to observed information at the larger model.
-  The statistics are unchanged; only their reference laws change. The global
-  ML test keeps expected information: there the model is correct under the
-  null, so expected is consistent, and observed sensitivity collapses as p
-  grows. Until the change and its calibration land
-  ([backlog](../backlog/todo.md#ml-and-fiml)), the implementation remains
-  expected.
+  The likelihood-ratio statistic is unchanged. The score keeps its numerator,
+  and its weight also uses the observed projection (decided 2026-10-02: the
+  same recipe as FIML rather than an unchanged statistic with an observed
+  spectrum only), so the score statistic itself changes; at df 1 the two
+  choices give the same scaled test. The global ML test keeps expected
+  information: there the model is correct under the null, so expected is
+  consistent, and observed sensitivity collapses as p grows. Implemented
+  2026-10-02; one frozen calibration run precedes release
+  ([backlog](../backlog/todo.md#ml-and-fiml)).
 - **Named reporting conventions (adopted 2026-10-02).** `anova()` defaults
   to the policy and accepts `convention` for a checked lavaan bundle. Complete
   ML uses the unscaled difference for `"ML"` and SB2001 for `"MLM"`/`"MLR"`,

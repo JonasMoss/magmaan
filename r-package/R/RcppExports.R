@@ -717,8 +717,8 @@ prepare_ntml_hypothesis_impl <- function(null_context, alternative_context) {
     .Call(`_magmaanlab_prepare_ntml_hypothesis_impl`, null_context, alternative_context)
 }
 
-ntml_quadratic_impl <- function(object, hypothesis, score) {
-    .Call(`_magmaanlab_ntml_quadratic_impl`, object, hypothesis, score)
+ntml_quadratic_impl <- function(object, hypothesis, score, observed = FALSE) {
+    .Call(`_magmaanlab_ntml_quadratic_impl`, object, hypothesis, score, observed)
 }
 
 ntml_reference_impl <- function(object, spectrum) {
