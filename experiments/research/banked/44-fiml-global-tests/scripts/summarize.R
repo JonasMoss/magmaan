@@ -41,6 +41,24 @@ overview <- do.call(rbind,lapply(split(cells,interaction(cells$estimator,cells$m
 pseudo <- read_result("global/robust-score-pseudonull-r1000/summary.csv")
 pseudo <- pseudo[pseudo$beta==5 & pseudo$n==2000,
   c("n","beta","geometry","attempted","usable","reject_peba4")]
+# Expected versus observed H0 sensitivity on the same FIML fits (expected metric).
+panel <- read_result("global/robust-score-sem-r1000/null_summary.csv")
+panel_meta <- read_result("global/robust-score-sem-r1000/metadata.csv")
+panel_labels <- c("Legacy-score FMG SB"="expected_sb",
+  "Legacy-score FMG pEBA(4)"="expected_peba4",
+  "Observed-score FMG SB"="observed_sb",
+  "Observed-score FMG pEBA(4)"="observed_peba4",
+  "LR/D FMG SB"="lr_sb", "LR/D FMG pEBA(4)"="lr_peba4")
+panel <- panel[panel$method %in% names(panel_labels),
+  c("model_id","expected_df","distribution","missingness","n","method",
+    "attempted","finite","rejection_le_05")]
+panel$method <- unname(panel_labels[panel$method])
+pseudo_grid <- do.call(rbind,lapply(c("pseudonull-information","pseudonull-information-n10000"),
+  function(run) {
+    z <- read_result(paste0("global/",run,"/summary.csv"))
+    z[z$geometry %in% c("expected-H0","observed-H0/expected-metric"),
+      c("n","beta","geometry","attempted","usable","reject_sb","reject_peba4")]
+  }))
 bases <- read_result("global/ml2s-rls-smoke/summary.csv")
 bases <- bases[bases$null_contract=="pseudo-null",]
 bases <- do.call(rbind,lapply(split(bases,bases$n),function(z)
@@ -55,7 +73,9 @@ legacy <- do.call(rbind,lapply(c("legacy-mlr","two-stage"),function(lane) {
 }))
 dir.create(out,recursive=TRUE,showWarnings=FALSE)
 artifacts <- list(sem_cells=cells,sem_overview=overview,pseudo_null=pseudo,
-                  ml2s_bases=bases,legacy_scope=legacy,sem_metadata=meta)
+                  ml2s_bases=bases,legacy_scope=legacy,sem_metadata=meta,
+                  sensitivity_panel=panel,sensitivity_panel_metadata=panel_meta,
+                  pseudo_null_grid=pseudo_grid)
 for (name in names(artifacts)) write.csv(artifacts[[name]],file.path(out,paste0(name,".csv")),row.names=FALSE)
 write.csv(data.frame(source=sub(paste0(root,"/"),"",sources,fixed=TRUE),
   md5=unname(tools::md5sum(sources))),file.path(out,"provenance.csv"),row.names=FALSE)

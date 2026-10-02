@@ -73,7 +73,7 @@ Reproduce published results or reconstruct the reference method needed to interp
 
 Investigate statistical behavior, new methods, estimands and inferential validity.
 
-### Active research (8)
+### Active research (7)
 
 Concrete remaining checks and protected ongoing paper pipelines.
 
@@ -83,12 +83,11 @@ Concrete remaining checks and protected ongoing paper pipelines.
 | 21 | [ml-parameter-profile-lrt](research/active/21-ml-parameter-profile-lrt/report.qmd) | probe | active | Do ML and fixed-weight continuous-GMM scalar profiles calibrate, including nonnormal complete-IJ coverage? | Retain ML and nonnormal fixed-weight GLS/WLS/ULS profiles with complete IJ reference; assess coverage separately from the removed fitted-weight arm. |
 | 22 | [ordinal-functional-inference](research/active/22-ordinal-functional-inference/report.qmd) | probe | active | How do delta and fitted-profile intervals behave for their distinct ordinal functional targets? | Retain 200-rep delta coverage/stress and separate profile grids. Audit sparse-summary and endpoint failures, connectedness and independent pseudo-target precision; pointwise acceptance is not CI availability. |
 | 43 | [psd-ml-repair-risk](research/active/43-psd-ml-repair-risk/report.qmd) | benchmark | active | What does PSD-ML repair when ordinary NTML leaves the primitive covariance domain, and what is its near-boundary estimation risk? | Likelihood cost and estimation risk differ across improper-solution types; extend the pilot boundary path without treating repair cost as a test. |
-| 44 | [fiml-global-tests](research/active/44-fiml-global-tests/report.qmd) | probe | active | Which score and LR/D global tests calibrate FIML and ML2S, and which sensitivity/metric geometry survives missing-data pseudo-nulls? | Representative SEM and exact pseudo-null evidence favor observed-H0 sensitivity/expected metric; freeze source adaptations, estimator-level nulls and screening. Older /04 and /05 designs are banked lanes with ten-rep local outputs. |
 | 47 | [multiinfo-penalty-improper](research/active/47-multiinfo-penalty-improper/report.qmd) | benchmark | active | Do the joint and latent-determinacy (Q) barriers remove improper solutions without costing PSD-constrained ML's accuracy, also with the truth on a face, which fit test goes with a barrier estimate, and does the barrier's local limit hold? | Paper pipeline: barrier properness trades risk near a face; complete boundary/path and fit-test checks rather than selecting a weight from pooled RMSE. |
 | 48 | [multiinfo-jeffreys-posterior](research/active/48-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? | Paper pipeline: posterior accuracy depends on functional, prior and ESS; recover substantive outputs and finish joint/Q/path comparisons (local main run: smoke; posterior rankings remain exploratory). |
 | 49 | [spectral-tail-calibration](research/active/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? | IG oracle spectra can calibrate while estimated moments fail; investigate heterogeneous spectral estimation bias and failure conditioning. |
 
-### Banked research ideas (11)
+### Banked research ideas (12)
 
 No queued run. Reopen for the named consumer or validation trigger.
 
@@ -103,6 +102,7 @@ No queued run. Reopen for the named consumer or validation trigger.
 | 32 | [standardized-flip-score](research/banked/32-standardized-flip-score/report.qmd) | probe | banked | Do nuisance-effective and flip-specifically standardized score flips calibrate continuous metric-invariance tests at small N? | Centered Mammen is promising; reopen for fresh confirmation beyond complete-data affine rank-eight ML or a concrete meat-shrinkage consumer. |
 | 35 | [residual-flip-gof-probe](research/banked/35-residual-flip-gof-probe/report.qmd) | probe | banked | Can efficient residual-score flipping calibrate single-model SEM goodness of fit without an ad hoc regularizer? | Residual-score flip algebra works, but high rank causes failure/miscalibration; reopen for a low/moderate-rank consumer or a separately justified shrinkage method. |
 | 40 | [finite-sample-gof](research/banked/40-finite-sample-gof/report.qmd) | probe | banked | Can Hotelling or projected Satterthwaite references improve finite-sample robust-score calibration? | Separate residual-rank/DGP lanes; reopen for a named GOF consumer with independently validated nuisance influence and moments. |
+| 44 | [fiml-global-tests](research/banked/44-fiml-global-tests/report.qmd) | probe | banked | Which score and LR/D global tests calibrate FIML and ML2S, and which sensitivity/metric geometry survives missing-data pseudo-nulls? | Adopted observed-H0 sensitivity/expected metric for the FIML policy (2026-10-02): consistent under MAR, where expected-H0 fails asymptotically, but conservative as df grows (0.0–0.7% pEBA4 at df 87, N=200). Reopen for a finite-sample correction of the observed reference or a consumer needing FIML score power at high df/N. Older /04 and /05 designs are banked lanes with ten-rep local outputs. |
 | 46 | [latent-metric-geometry](research/banked/46-latent-metric-geometry/report.qmd) | benchmark | banked | Which latent scaling convention should a SEM library use internally, is there a better one than the named three, and does the answer survive the move from CFA to structural models? | CFA chart conditioning does not settle structural scaling; reopen for matched starts and genuinely near-Heywood structural populations (local run: smoke). |
 | 53 | [rbm-estimation-risk](research/banked/53-rbm-estimation-risk/report.qmd) | probe | banked | When do post-hoc and integrated reduced-bias corrections improve error, and when do tails or fit failures erase that gain? | 5,000-rep N=30 evidence exposes correction tails; reopen for a concrete RBM admissibility/estimation-risk consumer or nonnormal/FIML extension. |
 
@@ -298,7 +298,7 @@ library default. Results from different targets/DGPs are never pooled.
   [speculative backlog](../project/backlog/speculative.md#pairwise-and-spectrum-performance).
   Ordinal missing-data reference/replication studies keep their distinct targets.
 - **Global FIML/ML2S tests:** former research/44, /04 and /05 form
-  [research/44](research/active/44-fiml-global-tests/report.qmd). One report and
+  [research/44](research/banked/44-fiml-global-tests/report.qmd). One report and
   runner cover representative SEM calibration, affine/pseudo-null diagnostics
   and the older banked paper designs. Their populations and outputs stay separate.
 - **Nested invariance tests:** former research/06 and /37, showcase/05 and the

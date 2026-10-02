@@ -570,11 +570,22 @@ Global tests against the saturated model:
     cells; observed sensitivity drove the score test to 0% rejection as p grew,
     an observed score metric was often not positive definite and far too
     liberal, and the LR spectrum's information choice did not matter.
-  - FIML: observed-H0 sensitivity with the expected (pattern-conditional
-    Fisher) metric in the score test, per research/44: expected sensitivity
-    fails under non-normal MAR and an observed metric is unstable. Under MAR the
-    score and LR tests are then not asymptotically equivalent, so each keeps its
-    own spectrum and both are reported.
+  - FIML (adopted 2026-10-02 from research/44): observed-H0 sensitivity with
+    the expected (pattern-conditional Fisher) metric, for the global and the
+    nested score test; the LR spectrum uses the saturated observed-H1 metric.
+    Pattern-conditional expected information equals the true Hessian only for
+    complete or MCAR data with a correct moment structure, so expected
+    sensitivity gives an inconsistent reference law under MAR. On the exact
+    nonnormal-MAR pseudo-null it rejected 0–0.9% at every N up to 10,000,
+    against 4.0–6.1% for observed. An observed metric is unstable. The cost is
+    finite-sample conservatism that grows with df: at N=200, observed-sensitivity
+    PEBA4 rejected 0.0–0.7% at df 87 and 0.2–5.7% at df 34. Nested
+    observed-sensitivity evidence is one df-1 normal family (decisions/03).
+    On complete data the FIML score therefore does not reduce exactly to the ML
+    policy; the parameter covariance and the LR statistic do. Under MAR the
+    score and LR tests are not asymptotically equivalent, so each keeps its own
+    spectrum and both are reported. Finite-sample corrections of the observed
+    reference are [banked](../backlog/speculative.md#fiml-observed-sensitivity-finite-sample-correction).
 
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)
@@ -657,9 +668,12 @@ Correctness rests on three kinds of evidence:
    paper that supports it. For example, SB and PEBA4 replace lavaan's MLR
    Yuan-Bentler-Mplus test because of the recorded calibration evidence. FIML
    evidence and its distinct pseudo-null/geometry limits are in
-   `experiments/research/active/44-fiml-global-tests/report.qmd` and
+   `experiments/research/banked/44-fiml-global-tests/report.qmd` and
    `experiments/research/active/06-fiml-invariance-tests/report.qmd`; the older
-   ten-replication FIML/MLR lane cannot independently justify a default.
+   ten-replication FIML/MLR lane cannot independently justify a default. The
+   score results of research/06 and the 55-cell panel of research/44 use
+   expected sensitivity, so they describe the comparator, not the adopted
+   geometry.
 
 ## Frontier methods in the ordinary package
 

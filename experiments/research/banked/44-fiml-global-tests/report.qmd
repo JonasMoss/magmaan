@@ -17,19 +17,27 @@ data, and which information geometry should a FIML score test use?
 
 ## Short answer
 
-The representative SEM panel favors the FIML score family over scalar-robust
-and spectrum-adjusted likelihood-ratio tests, but does not establish uniform
-calibration. Across 55 justified-null cells, FIML score pEBA4 rejected
-1.4–7.4% at a nominal 5%, compared with 4.8–36.0% for LR pEBA4 and
-4.8–89.2% for the scalar-robust comparator. Each cell attempted 500 fits.
-The paired ML2S score pEBA4 arm was less stable (3.0–16.2%).
+The FIML score test uses **observed-H0 sensitivity with the expected
+metric** (adopted for the ordinary policy on 2026-10-02). It is the consistent
+choice. The pattern-conditional expected information equals the true Hessian
+only for complete or MCAR data with a correct moment structure, so expected
+sensitivity gives the wrong reference law under MAR. On an exact nonnormal-MAR
+pseudo-null, observed-H0 rejected 4.0–6.1% at every positive selection slope and
+every N from 200 to 10,000. Expected-H0 fell to 0.3–0.9% at slope 1.5 and to 0% at
+slopes 3 and 5, without recovering with N.
 
-A separate exact pseudo-null diagnostic supports observed-H0 sensitivity with
-an expected metric: it rejected 4.0% in 1,000 attempts where expected-H0
-geometry rejected zero. This is the prospective primary construction; the
-source-based latent-model publication design still needs freezing. The older
-FIML-versus-MLR and two-stage comparisons have only ten-replication local
-outputs and remain banked designs, not additional calibration evidence.
+The price is finite-sample conservatism that grows with df. On the same FIML
+fits at N=200, observed-H0 pEBA4 rejected 0.0–0.7% at df 87 and 0.2–5.7% at
+df 34, where expected-H0 rejected 3.3–5.7%. No further run is queued; a
+finite-sample correction of the observed reference is a banked idea.
+
+The representative 55-cell SEM panel ran **expected** sensitivity, since it
+predates observed sensitivity. There, FIML score pEBA4 rejected 1.4–7.4%,
+against 4.8–36.0% for LR pEBA4 and 4.8–89.2% for the scalar-robust comparator.
+Each cell attempted 500 fits. The paired ML2S score pEBA4 arm was less stable
+(3.0–16.2%). The older FIML-versus-MLR and two-stage comparisons have only
+ten-replication local outputs and remain banked designs, not additional
+calibration evidence.
 
 ```{r}
 read_overview <- function(name) {
@@ -51,7 +59,7 @@ complete data, 30% MCAR and 30% MAR, and FIML/ML2S. It has 75,000 attempted
 fits at N=200. Its directory name contains “n200-500”; metadata specifies
 N=200 and **500 replications**, not two sample sizes. The table excludes
 nonnormal MAR, leaving 55 cells per estimator with a justified estimator-level
-null. Rates are conditional on usable results; unavailable calls are counted
+null. Its score arms use expected-H0 sensitivity. Rates are conditional on usable results; unavailable calls are counted
 separately. Score results also require the prespecified tangent rank.
 
 ```{r}
@@ -91,10 +99,74 @@ knitr::kable(data.frame(Geometry=p$geometry,
 
 Observed-H0 here changes sensitivity; “expected metric” specifies the
 projection metric. Observed-H1 and expected-H0 are retained diagnostics.
+The wider grid crosses the selection slope with N. Expected-H0 fails at every
+N once selection is present, so its error is asymptotic, not finite-sample.
+
+```{r}
+g <- read_overview("pseudo_null_grid")
+g$label <- ifelse(g$geometry == "expected-H0", "Expected-H0", "Observed-H0")
+w <- reshape(g[, c("beta", "n", "label", "reject_peba4")],
+  idvar = c("beta", "n"), timevar = "label", direction = "wide")
+w <- w[order(w$beta, w$n), ]
+knitr::kable(data.frame(`Selection slope`=w$beta, N=w$n,
+  `Expected-H0 pEBA4`=percent(w$`reject_peba4.Expected-H0`),
+  `Observed-H0 pEBA4`=percent(w$`reject_peba4.Observed-H0`),
+  check.names=FALSE))
+```
+
 This targeted result does not prove every latent-model MAR null. The
 [pseudo-null design](design/pseudo_null_information.md) and
 [score geometry appendix](design/lrt_score_information_geometry.md)
 preserve the derivation and wider historical checks.
+
+### Where sensitivity enters
+
+At the H0 fit the nuisance score is zero, so the sensitivity does not change
+the observed score vector. It changes the weight of the score quadratic and,
+decisively, the reference covariance from which the SB and pEBA4 eigenvalues
+are computed. The realized score's limit covariance is set by the true
+Hessian, whatever sensitivity is chosen, so the reference is correct only if
+the sensitivity is consistent for that Hessian in its nuisance rows. The
+normal log-likelihood Hessian is linear in centered first and second moments,
+so the expected (pattern-conditional Fisher) information matches it only when
+every missingness pattern's observed-variable moments equal the model's:
+complete or MCAR data with a correct structure. MAR selection breaks this,
+mildly for normal data (Kenward and Molenberghs, 1998) and strongly for
+nonnormal data. The observed Hessian is consistent in every case.
+
+### Observed sensitivity across latent models
+
+A later paired run fitted FIML once per replication and computed both
+sensitivities (expected metric) on the same fits: N=200, 1,000 replications
+per cell, three latent models crossed with normal/VM2/IG2 data and complete or
+30% MCAR data. It has no MAR cells, so it measures finite-sample behavior where
+both sensitivities are consistent. Ranges are over each model's six cells.
+
+```{r}
+v <- read_overview("sensitivity_panel")
+rng <- function(z, m) { r <- z$rejection_le_05[z$method == m]
+  range_percent(min(r), max(r)) }
+models <- unique(v[, c("model_id", "expected_df")])
+models <- models[order(models$expected_df), ]
+knitr::kable(do.call(rbind, lapply(seq_len(nrow(models)), function(i) {
+  z <- v[v$model_id == models$model_id[i], ]
+  data.frame(Model=models$model_id[i], df=models$expected_df[i],
+    `Expected-H0 pEBA4`=rng(z, "expected_peba4"),
+    `Observed-H0 pEBA4`=rng(z, "observed_peba4"),
+    `Observed-H0 SB`=rng(z, "observed_sb"),
+    `LR pEBA4`=rng(z, "lr_peba4"), check.names=FALSE)
+})))
+```
+
+Observed sensitivity becomes conservative as df grows, on complete normal data
+as well. A plausible mechanism, not separately verified: estimation noise in
+the observed Hessian enters the nuisance projection and inflates the reference
+covariance by a relative amount of order q/N (q free parameters). For the
+three-factor model q/N is about .24, and an inflation of 16–24% gives
+0.06–0.3% rejection at df 87. The nonnormal df-9 cells (up to 9.5%) show this
+is not the whole story. The archived complete-data ML geometry study found the
+same collapse (0% at p=40). Every finite-sample failure seen so far is
+conservative except that df-9 VM2 cell.
 
 ### Two-stage statistic versus reference law
 
@@ -133,19 +205,27 @@ outputs are single ten-replication nonnormal-MAR cells. Neither supports a
 method ranking. Reopen either only for a named paper question with a frozen
 null and new substantive run. No older grid is queued by this consolidation.
 
-The active next step is the [prospective SEM design](design/prospective_sem.md):
-freeze source adaptations, observation laws, estimator-level pseudo-nulls,
-numerical screening and power contrasts before a publication run. Completed
-multiplier comparisons and full-observed-metric failures remain diagnostics.
-Nothing here changes ordinary-user inference defaults. Parameter SEs have a
-different target and remain in research/39.
+Evidence limits of the adopted geometry: the sensitivity panel has no MAR
+cells and a single N; latent-model nonnormal-MAR validity rests on the
+four-variable pseudo-null; and observed-sensitivity nested evidence is the
+df=1 normal family of the score-centering decision study (5.0–6.5%). The panel
+ran magmaan 0.0.1 code of 2026-09-03 (`sensitivity_panel_metadata.csv`).
+The prospective SEM design (`design/prospective_sem.md`) is not queued.
+
+The study is banked. Reopen it for a finite-sample correction of the observed
+reference (for example, removing the projection-noise term) or for a consumer
+that needs FIML score power at high df/N. Implemented predeclared shrinkage
+sensitivities exist for global tests only, and have never been run with SB or
+pEBA4. Completed multiplier comparisons and full-observed-metric failures
+remain diagnostics. Parameter SEs have a different target and remain in
+research/39.
 
 ## Reproduce
 
 Render the retained overview without the large ignored raw trees:
 
 ```sh
-quarto render experiments/research/active/44-fiml-global-tests/report.qmd
+quarto render experiments/research/banked/44-fiml-global-tests/report.qmd
 ```
 
 From this study directory, inspect the parent command reference or smoke the

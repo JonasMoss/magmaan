@@ -156,12 +156,12 @@ the directions being tested.
 ## Reproduction
 
 ```sh
-Rscript experiments/research/active/44-fiml-global-tests/lanes/global/investigate_pseudonull_information.R \
+Rscript experiments/research/banked/44-fiml-global-tests/lanes/global/investigate_pseudonull_information.R \
   --reps 1000 --n 200,500,2000 --beta 0,1.5,3,5 --cores 4
 
-Rscript experiments/research/active/44-fiml-global-tests/lanes/global/investigate_pseudonull_information.R \
+Rscript experiments/research/banked/44-fiml-global-tests/lanes/global/investigate_pseudonull_information.R \
   --reps 1000 --n 10000 --beta 0,1.5,3,5 --cores 4 \
-  --results-dir experiments/research/active/44-fiml-global-tests/results/global/pseudonull-information-n10000
+  --results-dir experiments/research/banked/44-fiml-global-tests/results/global/pseudonull-information-n10000
 ```
 
 The result CSVs are local ignored artifacts. The design, summary, and decision

@@ -237,8 +237,9 @@ ordinary API exposes barrier fitting experimentally as
   Prospective FIML confirmation adds 32,000 fresh MCAR/MAR datasets, separately
   under expected and observed sensitivity: no qualifying centering benefit,
   matched-null power differences at most 0.10 points, and stationary covariance
-  agreement. Observed-sensitivity calibration remains unresolved; it belongs to
-  FIML integration below. The centering comparison is now banked in place, with
+  agreement. FIML adopted observed sensitivity on 2026-10-02 (see the FIML
+  policy item below); its finite-sample conservatism is
+  [banked](speculative.md#fiml-observed-sensitivity-finite-sample-correction). The centering comparison is now banked in place, with
   no queued extension. Check excluded constraint/boundary component contracts
   independently; penalty-specific inference follows in 0.3.0.
   Missingness patterns are not sampling groups.
@@ -282,35 +283,19 @@ ordinary API exposes barrier fitting experimentally as
   modelled on the ML policy, a FIML counterpart of the cached
   `NTMLFit`/`NTMLHypothesis` contexts for evaluation-point-specific influence
   reuse, R dispatch, and typed per-component reasons in place of today's
-  `unsupported_model` refusal. **Check:** exact reduction to the ML policy on
-  complete data for the covariance and LR statistic, the recorded score
-  geometry below, grouped and missing-pattern gates, and typed reasons;
-  missing inference never refuses a fit.
-
-- [ ] **M — write down the FIML score and LR geometry and its reductions.**
-  The [interface vision](../design/r-interface-vision.md) records observed-H0
-  sensitivity with the expected (pattern-conditional Fisher) metric for the
-  FIML score test, from the [global study](../../experiments/research/active/44-fiml-global-tests/report.qmd):
-  on an exact nonnormal-MAR pseudo-null (N=2,000) it rejected 4.0% where
-  expected-H0 geometry rejected 0%. Score and LR then keep separate spectra.
-  The written recipe must reconcile two further results without reopening the
-  choice by default: the study's 55-cell panel (score PEBA4 1.4–7.4%) used
-  expected sensitivity, and the
-  [centering confirmation](../../experiments/decisions/03-score-centering/report.qmd)
-  found observed sensitivity conservative on normal MCAR/MAR data (global
-  PEBA4 0.8–1.8% at N=80 and 2.75–2.95% at N=300, against 3.6–5.1% for
-  expected; nested MCAR 6.5% raw at N=80). Because the ML policy uses expected
-  geometry, the FIML score does not reduce exactly to it on complete data; the
-  parameter covariance and LR statistic do. The FIML LR spectrum uses the
-  saturated observed-H1 metric. FIML LR PEBA4 reached 36%, so LR reporting
-  follows the small-sample LR decision. **Check:** a written recipe citing
-  this evidence, a per-component reduction map (exact versus asymptotic), and
-  a recorded decision on whether a frozen confirmatory run (grouped, MCAR/MAR,
-  nonnormal, nested including scalar invariance) is needed. Freeze publication-model adaptations and estimator-level nulls first;
-  the [invariance study](../../experiments/research/active/06-fiml-invariance-tests/report.qmd)
-  keeps its scalar-nesting and size-matched-power gaps. Changing covariance
-  centering does not resolve the finite-sample geometry question. Legacy
-  smoke comparisons and completed flip expansion do not queue new runs.
+  `unsupported_model` refusal. The geometry was adopted on 2026-10-02 from
+  [research/44](../../experiments/research/banked/44-fiml-global-tests/report.qmd)
+  and is recorded in the [interface vision](../design/r-interface-vision.md):
+  observed-H0 sensitivity with the expected metric for global and nested
+  score tests, and the saturated observed-H1 metric for the LR spectrum.
+  Reduction map on complete data: covariance and LR statistic exact; LR
+  spectrum and score asymptotic only. No frozen FIML confirmatory run is
+  queued for 0.2.0; the capability inventory records the evidence limits (no
+  MAR cells in the latent-model sensitivity panel, nested evidence one df-1
+  normal family, conservatism as df grows). LR reporting follows the
+  small-sample LR decision. **Check:** the reductions above, the adopted
+  geometry, grouped and missing-pattern gates, and typed reasons; missing
+  inference never refuses a fit.
 
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler

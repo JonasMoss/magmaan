@@ -347,6 +347,25 @@ barrier fitting, each with its own estimand and support contract.
 and existing options are inadequate. Selection and nonstandard inference need
 their own validation; removed ridge continuation is not an alternative.
 
+### FIML observed-sensitivity finite-sample correction
+
+**Gap:** the adopted FIML score geometry (observed-H0 sensitivity, expected
+metric) is consistent under MAR but conservative as df grows: at N=200, PEBA4
+rejected 0.0–0.7% at df 87 and 0.2–5.7% at df 34 on complete and MCAR data
+([research/44](../../experiments/research/banked/44-fiml-global-tests/report.qmd)).
+A plausible cause is Hessian estimation noise in the nuisance projection,
+inflating the reference covariance by a relative O(q/N).
+**Available:** the observed-sensitivity score test as shipped, reported with
+the FIML LR (saturated observed-H1 metric), plus the implemented global-only
+diagnostic sensitivities `observed-shrink-light` / `observed-shrink-sqrt`.
+These were never calibrated with SB/PEBA4, and at finite N they inherit part
+of expected information's MAR inconsistency.
+**Build if:** a consumer needs FIML score power at high df/N, or a correction
+of the observed reference (for example, subtracting the projection-noise term)
+is derived with a consistency argument. Validate on exact nonnormal-MAR
+pseudo-nulls and complete/MCAR latent models with fresh draws before changing
+the policy; expected sensitivity is not a candidate under MAR.
+
 ### Regularized H1 references for two-stage and nested SEM
 
 **Gap:** calibrated regularization for near-singular direct-FIML H/Gamma and

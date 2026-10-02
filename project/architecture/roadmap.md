@@ -3018,7 +3018,7 @@ an unconstrained gradient test to constrained solutions.
   moments, leaving a 1-3% trace gap to robust.two.stage that grew with
   non-normality; the unstructured weight - the convention lavaan two-stage forces
   and FIML FMG already used - closed it exactly.) The historical comparison runner is
-  `experiments/research/active/44-fiml-global-tests/lanes/two-stage`; only a ten-rep
+  `experiments/research/banked/44-fiml-global-tests/lanes/two-stage`; only a ten-rep
   local smoke survives there. Substantive SEM calibration and its target limits
   are summarized in that study's parent report. A separate literature reconstruction in
   `experiments/replications/08-savalei-falk-2014-test-conventions` separates

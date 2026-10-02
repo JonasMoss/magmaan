@@ -19,7 +19,7 @@ from pathlib import Path
 import re
 import modal
 
-EXP_REMOTE = "/exp/experiments/research/active/44-fiml-global-tests/lanes/global"
+EXP_REMOTE = "/exp/experiments/research/banked/44-fiml-global-tests/lanes/global"
 
 if modal.is_local():
     HERE = Path(__file__).resolve()

@@ -139,9 +139,9 @@ to numerical tolerance.
 Reproduce with:
 
 ```sh
-Rscript experiments/research/active/44-fiml-global-tests/lanes/global/smoke_ml2s_rls.R --reps 200
+Rscript experiments/research/banked/44-fiml-global-tests/lanes/global/smoke_ml2s_rls.R --reps 200
 
 # Restricted-mean implementation smoke
-Rscript experiments/research/active/44-fiml-global-tests/lanes/global/smoke_ml2s_rls.R \
+Rscript experiments/research/banked/44-fiml-global-tests/lanes/global/smoke_ml2s_rls.R \
   --reps 20 --n 120 --model linear_growth_5 --distributions normal
 ```
