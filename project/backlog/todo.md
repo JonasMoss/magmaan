@@ -502,7 +502,7 @@ The ordinary package does not expose MI in this release; the
   inference agrees with the fitted preparation for explicit ordinal rows
   (board TASK-37).
 
-- [ ] **M — close the MI/release estimator-by-weight validation matrix.** Gate
+- [x] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,
   constraints, absent/fixed candidates and standardized EPCs. **Check:**
   independent df=1 score/Schur/sandwich reconstruction; Gamma = W^-1 reduction;
@@ -514,10 +514,16 @@ The ordinary package does not expose MI in this release; the
   groups distinct from missingness patterns and record unresolved centering
   choices rather than silently adopting them. Each R-visible cell must agree
   with the corresponding core contract or report its unsupported reason.
-  Known fixture gaps: no complete-data MLR oracle, no GLS/WLS ordinary MI
-  fixture, ordinal ULS/WLS only reduction and rank tests, and loose absolute
-  tolerances on the ordinary goldens (0.2 FIML, 0.1 DWLS, 5e-2 ULS) to tighten
-  or justify.
+  Component matrix (2026-10-02): [23 estimator/recipe rows and 92 cells](../validation/mi-release-matrix.md)
+  name C++/R gates or actual refusals, including unequal-group/MAR ML2S,
+  continuous LS means/shared labels, ordinal recipes and adapter limits.
+  GLS/WLS ordinary MI fixtures preserve raw lavaan values with explicit
+  score-divisor transport and independent analytic score/Schur/EPC checks.
+  FIML MI is gated at 2e-5; raw ULS/DWLS tolerances are tightened to measured
+  finite-divisor floors. Remaining evidence limits: no direct complete-data
+  MLR MI oracle; ordinal ULS/WLS use reduction/rank gates; mixed ordinary MI
+  retains a factor-two discrepancy tracked as TASK-33.4 (0.3.0), not raw oracle
+  parity. Component closure does not establish new calibration or defaults.
 
 ### Release readiness
 

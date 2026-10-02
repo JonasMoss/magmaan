@@ -2602,6 +2602,19 @@ an unconstrained gradient test to constrained solutions.
   equals the score test on the EM moments with the unstructured expected
   information (4e-13 complete, 3e-5 with missing data), 31% away from the
   structured row on HolzingerSwineford1939.
+- MI/release component matrix (2026-10-02):
+  [the estimator/weight inventory](../validation/mi-release-matrix.md) names
+  C++ and R gates or actual refusals for 23 recipes and 92 cells. It adds
+  unequal-group and MAR ML2S reductions, continuous LS means/shared-label
+  constraints, and complete ordinal recipe/release gates. GLS/WLS fixtures
+  retain raw lavaan MI/EPC and explicitly transport its `(N-1)/N` score
+  convention, with independent one-factor analytic Schur reconstruction;
+  primary raw golden tolerances are tightened to measured floors. R still
+  refuses model-implied robust ML releases and mixed ULS fitting. Mixed robust
+  unavailable choices report `NumericIssue`; ordinal NT/DLS/supplied estimated
+  weights and association-ML report `UnsupportedInference`. The mixed ordinary
+  MI factor-two oracle discrepancy remains TASK-33.4, with limited validation
+  recorded visibly. No implementation, sampling-law or default changed.
 - FIML (missing-data) robust MI and equality-release score tests, the MLR corner
   (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
   build the bread A1 = (N/2)·H (the analytic observed FIML information) and the
