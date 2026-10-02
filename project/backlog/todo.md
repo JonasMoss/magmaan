@@ -77,9 +77,14 @@ result under an unstated convention.
    fits complete-data ML with linear equality constraints (shared labels,
    `group.equal`, `==` rows), FIML and all-ordinal DWLS, single- and
    multi-group. Pinned fixtures match lavaan's starts, search coordinates,
-   final gradients and verdicts, and installed-lavaan R comparisons pass on a
-   named simulation-model set. Nonzero bounds, nonlinear constraints and other
-   routes error.
+   derivatives at identical parameter points, endpoint/objective tolerances
+   and verdicts; each actual endpoint is checked under the declared acceptance
+   rule. Floating-point retry paths need not have identical final gradients.
+   Installed-lavaan R comparisons pass on a named simulation-model set.
+   Nonzero bounds, nonlinear constraints and other routes error; nonzero-RHS
+   affine standardized retries and scaling that changes a homogeneous
+   constraint surface are explicitly unavailable because of the
+   [proved oracle defect](../validation/oracle-defects.md).
 3. **Primary inference.** For ML, FIML and all-ordinal DWLS, single- and
    multi-group, the ordinary policy returns parameter covariance, global tests
    and nested tests, or a typed unavailable reason per component. Each computed
@@ -199,31 +204,34 @@ Consumer: simulation studies that need lavaan-identical fitting while
 magmaan's own optimizer work waits for 0.3.0. The `lavaan-0.7.2` preset
 already pins starts, nlminb/PORT controls and scaling, the four-attempt retry
 sequence and lavaan's acceptance rule for ordinary complete continuous ML
-without equality constraints; under it the selected rule decides `converged`
-and magmaan's own check is reported beside it (2026-10-01). Inference stays on
+including linear equalities; under it the selected rule decides `converged`
+and magmaan's own check is reported beside it (2026-10-02). Inference stays on
 magmaan's policy, so lavaan-identical fitting does not imply lavaan-identical
 standard errors or tests. Retain effective controls, every attempt and
 separate native diagnostics; `options$convergence = "newton"` keeps magmaan's
 own verdict. Nonzero bounds, nonlinear constraints (lavaan's NLMINB.CONSTR
 augmented Lagrangian) and PSD, pairwise and two-level routes remain explicit
-errors under the preset. Every check compares starts, search, final
-gradients, soft failures and retries, not just easy estimates.
+errors under the preset. Gates compare starts, search coordinates, derivatives
+at identical points, endpoint/objective tolerances, soft failures and retries,
+with each actual endpoint's declared acceptance checked separately.
 
-- [ ] **M — fit linear equality constraints in lavaan's coordinates.** lavaan
-  0.7.2's default (`ceq.simple = FALSE`) turns labels and `group.equal` into
-  `==` rows and optimizes in K-reduced coordinates, K from a QR decomposition
-  of the constraint Jacobian; starts and parscale are projected through K and
-  bounds become ±Inf. magmaan's affine map θ = θ0 + Kα exists with its own
-  basis (0/1 for pure merges, per-component orthonormal otherwise), and PORT
-  is not basis invariant, so endpoint parity needs lavaan's exact QR basis,
-  including sign and column order. Pure-merge `ceq.simple = TRUE` is not
-  lavaan's default and can wait. **Check:** pinned fixtures for shared labels,
-  `group.equal` loadings/intercepts and `==` rows, matching starts,
-  coordinates, final gradients, constrained retries and verdicts, plus
-  installed-version comparisons. Retry parity so far: a ×100 rescale matches lavaan's
-  standardized retry exactly; at ×1000 and ×10⁵ starts, coordinates and
-  verdicts match, but endpoints depend on floating-point paths (fixture
-  `fitting/lavaan_0_7_2.json`).
+- [x] **M — fit linear equality constraints in lavaan's coordinates**
+  (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,
+  including row-order-sensitive equivalent systems; native fitting keeps its
+  existing basis. The preset packs starts/scales/gradients, removes bounds and
+  retains every attempt. Frozen and installed-version gates cover shared
+  labels, `group.equal` loadings/intercepts, nonzero-RHS and redundant rows,
+  partable round trips and homogeneous standardized retries. Approved retry
+  validation compares derivatives at identical points and checks each actual
+  endpoint's acceptance, while retaining endpoint/objective tolerances.
+  Nonzero-RHS standardized retries and homogeneous scaling that fails
+  `A*D^-1*K=0` return an explicit error before changing the affine surface;
+  the independent proof and replacement gates are in
+  [the oracle ledger](../validation/oracle-defects.md). Invalid constrained
+  initial covariances error as in the oracle. `ceq.simple = TRUE`, nonlinear
+  constraints, nonzero bounds and PSD/pairwise/two-level preset routes remain
+  unavailable. The older unconstrained ×1000/×10⁵ witnesses still record their
+  pre-existing endpoint sensitivity in `fitting/lavaan_0_7_2.json`.
 
 - [ ] **M — fit FIML under the lavaan preset.** lavaan builds FIML starts from
   its EM H1 moments; feed magmaan's EM H1 to the pinned start code, evaluate the

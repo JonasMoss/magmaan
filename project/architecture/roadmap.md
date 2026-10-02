@@ -864,7 +864,26 @@ search and acceptance in `estimate/configured_ml.hpp`. Both R packages expose
 it through `options`; `newton` names the existing common verdict, while the
 pinned `lavaan-0.7.2` preset selects native FABIN3/OLS starts, PORT controls and
 start scaling, bounded/unbounded R dispatch, standardized/simple-start retries,
-and raw-termination plus exactly bound-masked gradient acceptance. Component
+and raw-termination plus exactly bound-masked gradient acceptance. Linear
+equalities use an ordered Householder QR basis matching lavaan 0.7.2; the
+model retains name-free ordered affine rows alongside its native merge/reduced
+constraint system. Explicit rows followed by synthetic shared-label rows
+survive triple construction and lavaan-partable round trips. The preset packs
+starts, scales and gradients through this basis; native fitting retains its
+existing basis. Frozen and live gates cover shared labels, `group.equal`
+loadings/intercepts, nonzero affine RHS, redundant rows and equivalent systems
+with different row orders. Retry derivatives are compared at identical
+parameter points; each actual endpoint is checked under the declared acceptance
+rule, with unchanged endpoint/objective tolerances. Floating-point search paths
+need not produce identical final gradient vectors. A standardized retry with
+any nonzero affine RHS returns an explicit error before entering the invalid
+scaled surface documented in [the oracle ledger](../validation/oracle-defects.md).
+Zero-RHS standardized retries require finite nonzero scales and preservation
+of the null space (`A*D^-1*K=0`); homogeneous ratio constraints can also fail
+this property. Unstandardized affine fits and shared-label/group-equality
+standardized retries remain supported. Invalid constrained initial covariances
+return an explicit error;
+the unconstrained four-attempt soft-failure contract remains. Component
 overrides are reported as a modified preset. Thresholds remain internal.
 Frozen fixtures and live 0.7.2 comparisons cover CFA identification, observed
 and latent regressions, higher-order/single-indicator models and unequal groups.
@@ -881,14 +900,15 @@ with the anchor's group labels and order rather than grouping by appearance
 in the supplied data (2026-10-02), so group-specific candidates stay in their
 groups. Lavaan acceptance on magmaan's own PORT
 search is judged with `lavaan_acceptance_gradient()` in lavaan's units; the
-lavaan search reproduces the same measurement. Every lavaan component,
-including starts alone, rejects equality constraints. The first gate is
-ordinary complete continuous ML without equality constraints, with
-zero/infinite bounds only. Other versions and unsupported sources, including
-pairwise-moment input, error. Retry parity covers a standardized retry
-exactly; ill-conditioned retries match starts, coordinates and verdicts but
-not endpoints. Constrained, FIML and all-ordinal parity gates remain in the
-active backlog; inference conventions and default fits are unchanged. PORT
+lavaan search reproduces the same measurement. The supported preset slice is
+ordinary complete continuous ML with linear equalities and zero/infinite
+bounds. Merged free slots (`ceq.simple = TRUE`), nonlinear/inequality constraints,
+other versions and unsupported sources, including pairwise-moment input,
+error. Retry gates retain starts, coordinates and verdicts and compare
+derivatives at identical points; the older unconstrained ×1000/×10⁵ fixtures
+retain their documented endpoint sensitivity. FIML and all-ordinal preset
+gates remain in the active backlog; inference conventions and default fits
+are unchanged. PORT
 status codes follow its source: 8 false convergence (reported as a noisy
 objective), 9 evaluation limit and 10 iteration limit (both budget stops).
 A compatibility acceptance rule keeps deciding `converged` and inference, and

@@ -154,7 +154,84 @@ magmaan: multi-group two-level works end to end (the objective/H1/information
 Upstream: not filed. Found 2026-06-27 (multi-group two-level finish-up).
 ```
 
+```text
+Defect: lavaan's standardized optimizer scaling can return a converged fit
+        that violates an affine equality in the original parameter
+        units. It enforces the equality in scaled coordinates instead.
+Scope: reproduced in installed lavaan 0.7.2, complete continuous ML,
+        ceq.simple=FALSE, an equality not preserved by the projected scale and
+        optim.parscale="standardized". The preset's standardized retry uses
+        the same coordinate convention. This is an estimation-feasibility
+        defect, not a robust/scaled-statistic or sampling-law discrepancy.
+        Zero RHS alone is insufficient; homogeneous ratios are also affected.
+Proof: independent analytic reference: a+b=1.5 is satisfied by a=t,
+        b=1.5-t for every t. On S=outer((1,.8,.6,.9),(1,.8,.6,.9))+.7*I,
+        N=200, model "f =~ x1+a*x2+b*x3+x4; a+b == 1.5", with
+        sample.cov.rescale=FALSE, meanstructure=FALSE, fixed.x=FALSE and
+        se=test="none", ordinary scaling returns a+b=1.4999999999999998,
+        fmin=0.0010516528432651384. A from-scratch Gaussian covariance
+        objective and analytic gradient, optimized by BFGS under b=1.5-a,
+        return a+b=1.5, fmin=0.0010516528432646943, max|gradient|=8.06e-9.
+        That reference uses neither lavaan nor magmaan for its covariance,
+        objective or derivatives. Standardized lavaan reports converged=TRUE
+        but a+b=2.0183524702172848, original-constraint residual 0.5183524702
+        and fmin=0.026351340769849241. Its scaled-constraint residual is zero.
+        A second witness uses a==2*b on the same S: ordinary lavaan returns
+        a/b=2.0000000000000004, fmin=0.016244306065005709; independent BFGS
+        under a=2*t, b=t gives fmin=0.016244306064985281. Standardized lavaan
+        reports convergence but returns a/b=0.99999999999999989 and
+        a-2*b=-0.69088432321583448. Thus a zero RHS does not fix the defect.
+        First principles: under z=D*theta, z=K*alpha+k0, preserving the
+        original A*theta=d requires A*D^-1*K=0 and A*D^-1*k0=d. Retaining the
+        original affine basis/offset while dividing by D need not preserve
+        that surface. The ratio witness has max|A*D^-1*K|=0.8284731975.
+        Reproduction and independent reference:
+        Rscript cpp/tests/checks/lavaan_affine_scaling_defect.R.
+magmaan: the pinned preset returns an explicit unsupported error on entry
+        to a standardized retry if any ordered affine RHS is nonzero. It
+        retains the preceding attempt's iterations/objective in the error.
+        Zero-RHS standardized retries additionally require finite nonzero
+        scales and A*D^-1*K=0, checked with per-row/per-column norm-scaled
+        roundoff tolerance 64*epsilon*n. First unstandardized affine fits
+        remain supported and are checked for A*theta=d; shared-label/group
+        equality retries preserve that surface and remain supported.
+        Replacement gates (no incorrect oracle endpoint is accepted):
+        cpp/tests/unit/configured_ml_test.cpp,
+        "lavaan preset rejects nonzero affine RHS only when a standardized
+        retry is needed" and "lavaan preset rejects homogeneous ratio retries
+        that change the constraint surface";
+        r-package/tests/testthat/test_fitting_options.R,
+        "unsafe affine standardized retries error while shared-label retries
+        remain valid". The independent reproduction above protects the
+        diagnosis; affine feasibility and the typed refusal protect the
+        supported fitting contract. No inference-statistic exemption is made.
+Upstream: not filed externally. Found and independently verified 2026-10-02.
+```
+
 ## Investigated — not a defect
+
+### Constrained ML retry gradients at different endpoints (2026-10-02)
+
+For the same synthetic covariance with x1 multiplied by 100 and x3 divided
+by 100, the model `f =~ x1+a*x2+a*x3+x4` takes an unstandardized attempt and
+a standardized retry. The two implementations' full QR bases are bit-identical,
+and their starts, scales, endpoint/objective tolerances and attempt verdicts
+agree. PORT nevertheless stops after different iteration counts (1165 versus
+1185, then 249 versus 253). Reduced gradient vectors at those different
+endpoints differ by maxima 0.00268556 and 6.29886e-6.
+
+Evaluating both implementations at the **same** frozen oracle endpoints gives
+gradient differences below 1.86e-13; evaluating installed lavaan at magmaan's
+endpoints gives differences below 1.97e-12 and objective differences below
+1.34e-15. This is floating-point search-path variation, not evidence of a
+derivative or oracle defect. The approved compatibility contract gates
+derivatives at identical points, starts/scales/coordinates, endpoint and
+objective tolerances, and each actual endpoint's declared acceptance rule.
+It does not require final gradients at different endpoints to be identical.
+The ×100 witness remains in the fitting fixture and C++ gates. Installed-lavaan
+R gates use a fixed ×200 shared-label retry witness, which enters the
+standardized route in the R binary and retains the same numerical comparisons.
+No endpoint-parity exclusion or relaxed numerical tolerance is used.
 
 ### Native lavaan pEBA-4: absolute integration accuracy in a tiny tail (2026-09-20)
 
