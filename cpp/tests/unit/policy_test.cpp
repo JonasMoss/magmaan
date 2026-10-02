@@ -937,8 +937,7 @@ TEST_CASE("policy nested tests: the complete-data FIML nested score equals the M
   // The ML nested score uses the FIML recipe (observed sensitivity, expected
   // metric). On complete data with a mean structure the FIML score machinery
   // therefore reproduces the policy statistic and spectrum exactly, in both
-  // geometries. (Covariance-only models differ: the FIML deviance scores fix
-  // the mean at zero rather than profiling it.)
+  // geometries. The supplied FIML-pack path retains its mean semantics.
   std::mt19937 rng(2026u);
   magmaan::data::RawData raw;
   raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Zero()));
@@ -976,5 +975,63 @@ TEST_CASE("policy nested tests: the complete-data FIML nested score equals the M
       CHECK(out.score.statistic == doctest::Approx(projected->statistic).epsilon(1e-9));
       CHECK((out.score.eigenvalues - sorted(*spectrum)).norm() < 1e-9 * spectrum->norm());
     }
+  }
+}
+
+TEST_CASE("policy score components: covariance-only complete data profiles group means") {
+  namespace sf = magmaan::inference::frontier;
+  for (int groups : {1, 2}) {
+    std::mt19937 rng(2026u);
+    magmaan::data::RawData raw;
+    for (int b = 0; b < groups; ++b) {
+      raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Constant(2.0 + b)));
+    }
+    const Model alt_model = build("f =~ x1 + x2 + x3 + x4", false, groups);
+    const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", false, groups);
+    Prepared alt = prepare(alt_model, raw, false);
+    Prepared null = prepare(null_model, raw, false);
+    auto hypothesis = ntml::prepare_ntml_hypothesis(null.fit, alt.fit);
+    REQUIRE(hypothesis.has_value());
+    if (!hypothesis) return;
+    for (bool observed : {false, true}) {
+      auto components = sf::nested_score_components(alt_model.pt, alt_model.rep,
+          null_model.pt, null_model.rep, &alt.data->sample, raw, nullptr, null.est,
+          observed ? sf::ScoreFlipSensitivity::ObservedInformation
+                   : sf::ScoreFlipSensitivity::ExpectedInformation);
+      REQUIRE(components.has_value());
+      if (!components) return;
+      auto projected = sf::project_scores(*components);
+      REQUIRE(projected.has_value());
+      if (!projected) return;
+      auto spectrum = sf::score_spectrum(*projected);
+      auto q = ntml::ntml_quadratic(**hypothesis, true,
+          observed ? magmaan::robust::Information::Observed
+                   : magmaan::robust::Information::Expected);
+      REQUIRE(spectrum.has_value());
+      REQUIRE(q.has_value());
+      if (!spectrum || !q) return;
+      auto q_spectrum = ntml::ntml_spectrum(**q);
+      REQUIRE(q_spectrum.has_value());
+      if (!q_spectrum) return;
+      CHECK(projected->statistic == doctest::Approx((*q)->statistic).epsilon(1e-9));
+      CHECK((sorted(*spectrum) - **q_spectrum).norm() < 1e-9 * (*q_spectrum)->norm());
+    }
+    auto components = sf::global_score_components(alt_model.pt, alt_model.rep,
+        alt.data->sample, raw, alt.est, {});
+    REQUIRE(components.has_value());
+    if (!components) return;
+    auto projected = sf::project_scores(*components);
+    REQUIRE(projected.has_value());
+    if (!projected) return;
+    auto spectrum = sf::score_spectrum(*projected);
+    auto q = ntml::ntml_quadratic(*alt.fit, true);
+    REQUIRE(spectrum.has_value());
+    REQUIRE(q.has_value());
+    if (!spectrum || !q) return;
+    auto q_spectrum = ntml::ntml_spectrum(**q);
+    REQUIRE(q_spectrum.has_value());
+    if (!q_spectrum) return;
+    CHECK(projected->statistic == doctest::Approx((*q)->statistic).epsilon(1e-9));
+    CHECK((sorted(*spectrum) - **q_spectrum).norm() < 1e-9 * (*q_spectrum)->norm());
   }
 }

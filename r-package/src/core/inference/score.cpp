@@ -2442,6 +2442,24 @@ score_tests_fiml_robust(spec::LatentStructure pt,
 
 namespace {
 
+// Profile unmodelled group means only for complete-data likelihood scores.
+// FIML callers retain their supplied data and missing-pattern likelihood.
+RawData complete_score_raw(const model::MatrixRep& rep, const RawData& raw) {
+  RawData out = raw;
+  for (std::size_t b = 0; b < out.X.size(); ++b) {
+    const bool has_means = std::any_of(rep.cell_for_row.begin(), rep.cell_for_row.end(),
+        [b](const model::Cell& cell) {
+          return cell.used && static_cast<std::size_t>(cell.block) == b &&
+              (cell.mat == model::MatId::Nu || cell.mat == model::MatId::Alpha);
+        });
+    if (!has_means) {
+      const Eigen::RowVectorXd mean = out.X[b].colwise().mean();
+      out.X[b].rowwise() -= mean;
+    }
+  }
+  return out;
+}
+
 post_expected<void> validate_complete_flip_raw(const SampleStats& samp,
                                                const RawData& raw) {
   if (!raw.mask.empty()) {
@@ -3049,15 +3067,17 @@ nested_score_components(spec::LatentStructure pt_H1,
     sensitivity = 0.5 * (*observed + observed->transpose());
   }
 
+  std::optional<RawData> profiled_raw;
   std::optional<estimate::fiml::FIMLPack> owned_pack;
   if (fiml_pack == nullptr) {
-    auto pack = estimate::fiml::fiml_pack(raw);
+    profiled_raw.emplace(complete_score_raw(rep_H1, raw));
+    auto pack = estimate::fiml::fiml_pack(*profiled_raw);
     if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
     owned_pack.emplace(std::move(*pack));
     fiml_pack = &*owned_pack;
   }
   auto score_rows = estimate::fiml::fiml_casewise_deviance_scores(
-      pt_H1, rep_H1, raw, *fiml_pack, embedded_est);
+      pt_H1, rep_H1, profiled_raw ? *profiled_raw : raw, *fiml_pack, embedded_est);
   if (!score_rows.has_value()) return std::unexpected(score_rows.error());
   const Eigen::MatrixXd scores = -0.5 * *score_rows;
   if (strata.row_stratum.size() != static_cast<std::size_t>(scores.rows())) {
@@ -4377,9 +4397,10 @@ global_score_components(spec::LatentStructure pt,
                         const ScoreGeometryOptions& options) {
   if (auto ok = validate_complete_flip_raw(samp, raw); !ok.has_value())
     return std::unexpected(ok.error());
-  auto pack = estimate::fiml::fiml_pack(raw);
+  const RawData profiled_raw = complete_score_raw(rep, raw);
+  auto pack = estimate::fiml::fiml_pack(profiled_raw);
   if (!pack) return std::unexpected(fit_to_post(pack.error()));
-  return global_score_components(std::move(pt), rep, raw, *pack, est, options);
+  return global_score_components(std::move(pt), rep, profiled_raw, *pack, est, options);
 }
 
 post_expected<GlobalScoreFlipTestResult>

@@ -349,6 +349,9 @@ ordinary API exposes barrier fitting experimentally as
   independent LR spectrum reconstruction; exact-fit identity (observed equals
   expected); the complete-data FIML nested score equals the policy score to
   1e-9 with a mean structure; the existing embedding, boundary and unit gates.
+  Task-44 implements group-mean profiling for covariance-only complete-data
+  lab nested/global components and adds single-/multi-group NTML gates; opt
+  validation is pending approval to finish the cold lane build.
 
 - [ ] **M — calibrate the observed nested ML geometry.** One frozen run with
   correct and misspecified larger models comparing expected and observed
