@@ -990,7 +990,9 @@ TEST_CASE("policy score components: covariance-only complete data profiles group
     const Model null_model = build("f =~ x1 + a*x2 + a*x3 + a*x4", false, groups);
     Prepared alt = prepare(alt_model, raw, false);
     Prepared null = prepare(null_model, raw, false);
-    auto hypothesis = ntml::prepare_ntml_hypothesis(null.fit, alt.fit);
+    auto null_fit = ntml::prepare_ntml_fit(alt.data, null_model.pt, null_model.rep, null.est);
+    REQUIRE(null_fit.has_value());
+    auto hypothesis = ntml::prepare_ntml_hypothesis(*null_fit, alt.fit);
     REQUIRE(hypothesis.has_value());
     if (!hypothesis) return;
     for (bool observed : {false, true}) {
