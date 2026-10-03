@@ -133,14 +133,14 @@ bundles and are not replaced by policy score tests.
 | Complete continuous ML / ML | Validated | Validated: standard | Validated: standard difference | Single-group CFA; grouped loading/intercept invariance; random-X regression; nested fixed-zero covariance; matched means/group order |
 | Complete continuous ML / MLM | Validated: expected empirical sandwich | Validated: Satorra-Bentler | Validated: SB2001 | Same global/covariance slices; single-group and grouped loading/intercept/mean nested differences |
 | Complete continuous ML / MLR | Validated: observed exact-score sandwich | Validated: YB-Mplus H1-minus-H0 trace | Validated: SB2001 with MLR scales | Same global/covariance slices; single-group and grouped loading/intercept/mean nested differences; independent C++ saturated-distance/H0 numerical-score trace |
-| All-ordinal DWLS / DWLS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Validated: standard difference, p-value unavailable | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
-| All-ordinal DWLS / WLSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Validated: Satorra-2000 delta, scaled-shifted | Single-group delta/theta covariance/loading restrictions; two-group theta configural → loadings and Wu-Estabrook thresholds → thresholds+loadings; saturated alternative; both ordinary argument orders |
-| All-ordinal ULS / ULS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Validated: standard difference, p-value unavailable | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
-| All-ordinal ULS / ULSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Validated: Satorra-2000 delta, scaled-shifted | Same nested slices as WLSMV; per-group n minus one for the objective, original n_g/N fractions for the nested sandwich |
-| All-ordinal WLS / WLS | Validated: standard covariance | Validated: standard | Validated: standard difference | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
+| All-ordinal DWLS / DWLS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Validated: standard difference, p-value unavailable; C-OBS-LS / R-OBS-LS | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one; C-OBS-LS / R-OBS-LS |
+| All-ordinal DWLS / WLSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Validated: Satorra-2000 delta, scaled-shifted; C-OBS-LS / R-OBS-LS | Single-group delta/theta covariance/loading restrictions; two-group theta configural → loadings and Wu-Estabrook thresholds → thresholds+loadings; saturated alternative; both ordinary argument orders; C-OBS-LS / R-OBS-LS |
+| All-ordinal ULS / ULS | Validated: NACOV sandwich | Validated: unscaled statistic, p-value unavailable | Validated: standard difference, p-value unavailable; C-OBS-LS / R-OBS-LS | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one; C-OBS-LS / R-OBS-LS |
+| All-ordinal ULS / ULSMV | Validated: NACOV sandwich | Validated: scaled-shifted | Validated: Satorra-2000 delta, scaled-shifted; C-OBS-LS / R-OBS-LS | Same nested slices as WLSMV; per-group n minus one for the objective, original n_g/N fractions for the nested sandwich; C-OBS-LS / R-OBS-LS |
+| All-ordinal WLS / WLS | Validated: standard covariance | Validated: standard | Validated: standard difference; C-OBS-LS / R-OBS-LS | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one; C-OBS-LS / R-OBS-LS |
 | FIML / ML or MLR | Validated: observed Hessian / Huber–White sandwich | Validated: standard / Yuan–Bentler Mplus | Validated: standard / SB2001 with YB-Mplus scales | HS MCAR/MAR CFA; school loading/intercept invariance; missing random covariate; both argument orders and saturated alternative; retained estimates/policy and cached/deferred/serialized reporting |
 | FIML / MLM | Inapplicable | Inapplicable | Inapplicable | Rejected: MLM's missing-data handling would change estimation |
-| Continuous GLS, ULS, WLS; ML2S; mixed ordinal | Unsupported | Unsupported | Unsupported | No checked ordinary compatibility composition; see lab inventory below |
+| Continuous GLS, ULS, WLS; ML2S; mixed ordinal | Unsupported | Unsupported | Unsupported; C-OBS-LS / R-OBS-LS | No checked ordinary compatibility composition; see lab inventory below; C-OBS-LS / R-OBS-LS |
 
 The whole-bundle installed-lavaan gates are
 [`test_lavaan_compat.R`](../../r-magmaan/tests/testthat/test_lavaan_compat.R).
@@ -319,15 +319,15 @@ guards reject attempts to request one. Mixed ordinal currently reports
 | ML2S / DWLS | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
 | ML2S / ADF | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
 | ML2S / DLS(a) | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
-| Continuous ULS / identity | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | Identity has zero influence: C-LS-MATRIX / R-LS-MEAN |
-| Continuous GLS / NT(S) | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
-| Continuous WLS / ADF | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
-| Continuous DWLS / diag ADF | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
-| Continuous DLS(a) / NT-ADF mixture | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
-| Continuous LS / supplied W | C-LS / R-RECIPE | C-LS / R-SUPPLIED | C-LS / R-SUPPLIED; R-GAMMA | UnsupportedInference: unknown influence of supplied W; C-RECIPE / R-RECIPE |
-| All-ordinal ULS / identity | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | Zero influence: C-ORD-MATRIX / R-ORD-MATRIX |
-| All-ordinal DWLS / diag NACOV | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA | C-ORD-MATRIX / R-ORD-MATRIX |
-| All-ordinal WLS / inverse NACOV | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA | C-ORD-MATRIX / R-ORD-MATRIX |
+| Continuous ULS / identity | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA; C-OBS-LS / R-OBS-LS | Identity has zero influence: C-LS-MATRIX / R-LS-MEAN; C-OBS-LS / R-OBS-LS |
+| Continuous GLS / NT(S) | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA; C-OBS-LS / R-OBS-LS | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN; C-OBS-LS / R-OBS-LS |
+| Continuous WLS / ADF | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA; C-OBS-LS / R-OBS-LS | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN; C-OBS-LS / R-OBS-LS |
+| Continuous DWLS / diag ADF | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA; C-OBS-LS / R-OBS-LS | C-LS-MATRIX, C-RECIPE / R-LS-MEAN; C-OBS-LS / R-OBS-LS |
+| Continuous DLS(a) / NT-ADF mixture | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA; C-OBS-LS / R-OBS-LS | C-LS-MATRIX, C-RECIPE / R-LS-MEAN; C-OBS-LS / R-OBS-LS |
+| Continuous LS / supplied W | C-LS / R-RECIPE | C-LS / R-SUPPLIED | C-LS / R-SUPPLIED; R-GAMMA; C-OBS-LS / R-OBS-LS | UnsupportedInference: unknown influence of supplied W; C-RECIPE / R-RECIPE |
+| All-ordinal ULS / identity | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; C-OBS-LS / R-OBS-LS | Zero influence: C-ORD-MATRIX / R-ORD-MATRIX; C-OBS-LS / R-OBS-LS |
+| All-ordinal DWLS / diag NACOV | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA; C-OBS-LS / R-OBS-LS | C-ORD-MATRIX / R-ORD-MATRIX; C-OBS-LS / R-OBS-LS |
+| All-ordinal WLS / inverse NACOV | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA; C-OBS-LS / R-OBS-LS | C-ORD-MATRIX / R-ORD-MATRIX; C-OBS-LS / R-OBS-LS |
 | All-ordinal GLS / NT | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: NT weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal DLS(a) | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: DLS weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal LS / supplied W | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: unknown influence of supplied W; C-ORD-MATRIX / R-ORD-MATRIX |
@@ -346,14 +346,20 @@ empirical robust releases are gated in R-ML and caller Gamma in R-GAMMA.
 R mixed ULS is refused at fit_model(), while its C++ ordinary score
 workers exist. These adapter guards currently provide explicit R error text,
 not a PostError enum.
-Continuous LS uses the expected residual-Jacobian geometry and refuses observed
-bread; estimated weights require empirical moments. Caller-Gamma R adapters
+Continuous LS and all-ordinal ULS/DWLS/WLS support exact observed-Hessian
+nuisance sensitivity with the expected residual-Jacobian metric; estimated
+weights require empirical moments. The lab defaults select observed sensitivity
+and estimated weights. Expected sensitivity and fixed weights remain explicit
+comparators. C-OBS-LS (`score_robust_test.cpp`, tests prefixed `observed LS score:`)
+gates both Hessians, unequal-group case-weight and projected influences, exact-fit
+reduction, normal GLS, and scalar/multi-df spectrum calibration. R-OBS-LS
+(`test_lab_inference_defaults.R`, `LS score defaults use observed sensitivity
+and estimated weights`) gates lab routing and comparators. Caller-Gamma R adapters
 are gated by R-GAMMA for fixed-weight ML, continuous LS and all-ordinal LS;
 categorical workers replace NACOV while preserving fitting W. Supplied Gamma
 requires explicit estimated_weight=FALSE, validates dimension/symmetry/PSD and
 refuses FIML/ML2S scores and casewise weight influence. Mixed LS uses the same
 NACOV adapter, with its existing unsupported weight cells unchanged.
-A separately derived observed/estimated-weight score projection remains task-4.2.
 Pairwise moment sources remain MCAR; no MAR law is inferred for those routes.
 Mixed ordinal expansion and association-ML score contracts remain 0.3.0 work.
 

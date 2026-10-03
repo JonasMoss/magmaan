@@ -627,24 +627,17 @@ structural-path enumeration remains a separate model-builder contract.
 The ordinary package does not expose MI in this release; the
 [interface vision](../design/r-interface-vision.md) defers policy MI.
 
-- [ ] **M/L — complete weighted MI/release provenance and adapters.** Cover the
-  retained continuous and all-ordinal weight recipes in the matrix, with stored
-  fitting W or explicit supplied W, Gamma/NACOV source, recipe/a and fixed versus
-  estimated-weight influence. Derive consistent sensitivity and nuisance
-  projection for observed/estimated-weight GMM score variants before exposing
-  them; the existing expected-metric sweep alone does not establish that regime.
-  Association-ML MI is a 0.3.0 contract; the score workers reject it until
-  then. Fits record recipe, a and W, and every R estimated-weight consumer
-  resolves its IJ mode from that record (roadmap: estimated-weight recipe
-  guard); caller-Gamma R wiring is complete (TASK-4.1), including
-  validated per-group NACOV, fixed-weight refusals and categorical fitting-W
-  preservation. The sensitivity and nuisance projection for observed/estimated-
-  weight score variants is the genuine derivation.
-  Audit every bread/information/covariance argument and expose applicable caller-
-  Gamma paths through thin R adapters. **Check:** independent score, sensitivity,
-  meat and weight-influence assembly; recipe endpoint reductions, retained-data
-  versus supplied-data agreement, documented unavailable cells and no ignored
-  options. No numerical recipe/default changes without evidence.
+- [x] **M/L — complete weighted MI/release provenance and adapters.** Caller
+  Gamma/NACOV adapters are complete (TASK-4.1). Observed-sensitivity scores
+  with estimated-weight influence now cover continuous ULS/GLS/DWLS/WLS/DLS
+  and all-ordinal ULS/DWLS/WLS (TASK-4.2), using exact objective Hessians,
+  observed nuisance projection, and the expected quadratic metric. Unequal-group
+  case-weight finite differences gate the pooled IJ normalization. Unknown
+  supplied-weight recipes require fixed-weight inference; ordinal NT/DLS and
+  mixed estimated-weight scores remain explicit unavailable cells. Association-ML
+  MI remains a 0.3.0 contract. The maintained
+  [component matrix](../validation/capabilities.md#mi-and-equality-release-score-components)
+  records the comparator and supported-default regimes.
 
 - [x] **S — preserve user-written rows in C++ API ordinal post-fit inference.**
   `api::robust_ordinal`, `fit_measures`, `modification_indices` and

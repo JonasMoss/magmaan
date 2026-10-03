@@ -83,12 +83,19 @@ the unstructured one and differs.
 
 Identification-only releases are excluded. Ordinal and mixed-ordinal methods
 use their retained categorical moment covariance and weight conventions; the
-continuous \code{bread}, \code{moments}, and \code{cov} choices do not apply there.
+all-ordinal \code{bread} selects observed or expected nuisance sensitivity,
+while mixed methods retain their expected projection. Categorical
+\code{moments} and \code{cov} choices use the retained NACOV.
 
 Generic \code{modification_indices()} and \code{score_tests()} compose empirical
 robust inference. To request the historical unscaled comparator explicitly, use
 \code{cov = "model_implied"}, \code{estimated_weight = FALSE}, and the desired
-bread/information. Observed-sensitivity LS and ML2S score laws that are not
-implemented fail explicitly; selecting expected bread requests a comparator.}
-\value{A data frame with candidate names and groups, ordinary \code{mi}, EPCs,
+bread/information. Continuous ULS/GLS/DWLS/WLS/DLS and all-ordinal
+ULS/DWLS/WLS support observed-Hessian nuisance sensitivity with estimated-weight
+influence. Their quadratic metric stays expected and their reference law uses
+the matching projected meat. Selecting expected bread or fixed weights requests
+a comparator. At exact fit the observed and expected projections coincide and
+the weight-influence correction vanishes. Observed-sensitivity ML2S score laws
+remain unavailable.}
+\value{A data frame with candidate names and groups, unscaled quadratic \code{mi}, EPCs,
 \code{mi.scaled}, \code{scaling.factor}, and the robust \code{pvalue}.}

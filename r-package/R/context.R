@@ -212,17 +212,22 @@ score_tests <- function(fit, data = NULL, ...) {
 
 # Robust (generalized / Satorra-Bentler-scaled) modification indices and score
 # tests: the `*_robust` frontier mirror of the two functions above. Each row
-# keeps the ordinary `mi` and adds `mi_scaled = mi / scaling_factor`.
+# reports the unscaled quadratic `mi` and adds `mi_scaled = mi / scaling_factor`.
 #
 # Ordinal/mixed fits use the polychoric NACOV the fit already carries, so the
 # scaling is intrinsic to the diagonal/identity weight (DWLS/ULS scale even on
-# normal data) and `bread`/`moments`/`cov` are ignored. Continuous ML/ULS/GLS/WLS
+# normal data). All-ordinal `bread` selects observed or expected nuisance
+# sensitivity; mixed fits retain their expected projection. Categorical
+# `moments`/`cov` choices use the retained NACOV. Continuous ML/ULS/GLS/WLS
 # build the meat from `cov`: 'empirical' needs the fitting `data` (raw
 # observations); 'model_implied' uses Gamma_NT from the chosen moments.
 # WLS-computed fits (WLS/ADF, DWLS, DLS, supplied W) use the fitting weight
 # recorded in fit$W; `weight=` is needed only for fits without that record and
 # must otherwise equal it. The ordinary statistic is recovered only when the
 # weight is the inverse of the selected Gamma.
+# Continuous and all-ordinal LS use observed-Hessian nuisance sensitivity by
+# default, with the expected quadratic metric and matching projected meat.
+# Expected sensitivity and fixed weights remain explicit comparators.
 # Continuous LS does not implement 'browne_unbiased', and estimated-weight mode
 # requires 'empirical'; unavailable covariance choices error explicitly.
 # `estimated_weight = TRUE` (default) routes the scaling through the complete

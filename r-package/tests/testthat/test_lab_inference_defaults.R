@@ -95,3 +95,42 @@ test_that("scalar profile defaults to the misspecification-scaled reference", {
   expect_true(is.finite(out$p_value))
   expect_true(is.list(run(fit, index, target, reference = "ordinary")))
 })
+
+test_that("LS score defaults use observed sensitivity and estimated weights", {
+  set.seed(642)
+  eta <- rnorm(180)
+  omitted <- rnorm(180)
+  x <- outer(eta, c(1, .8, .7, .9)) + matrix(rnorm(720), 180, 4)
+  x[, 1:2] <- x[, 1:2] + .6 * omitted
+  d <- as.data.frame(x)
+  names(d) <- paste0("x", 1:4)
+  syntax <- "f =~ x1 + a*x2 + a*x3 + x4"
+  for (estimator in c("ULS", "GLS", "DWLS", "WLS", "DLS")) {
+    fit <- fit_model(syntax, d, estimator = estimator, dls_a = 0.3)
+    for (worker in list(modification_indices_robust, score_tests_robust)) {
+      implicit <- worker(fit, data = d)
+      explicit <- worker(fit, data = d, bread = "observed", estimated_weight = TRUE)
+      expect_equal(implicit, explicit)
+      expect_true(nrow(implicit) > 0L)
+      expect_true(all(is.finite(implicit$mi.scaled)))
+      expected <- worker(fit, data = d, bread = "expected", estimated_weight = FALSE)
+      fixed <- worker(fit, data = d, bread = "observed", estimated_weight = FALSE)
+      expect_true(all(is.finite(expected$mi.scaled)))
+      expect_true(all(is.finite(fixed$mi.scaled)))
+    }
+  }
+  ordinal <- as.data.frame(lapply(d, function(z) as.integer(cut(z,
+      breaks = c(-Inf, -.5, .5, Inf), labels = FALSE))))
+  for (estimator in c("ULS", "DWLS", "WLS")) {
+    spec <- model_spec(syntax, ordered = names(ordinal))
+    fit <- fit_model(spec, ordinal, estimator = estimator)
+    for (worker in list(modification_indices_robust, score_tests_robust)) {
+      implicit <- worker(fit)
+      explicit <- worker(fit, bread = "observed", estimated_weight = TRUE)
+      expect_equal(implicit, explicit)
+      expect_true(nrow(implicit) > 0L)
+      expect_true(all(is.finite(implicit$mi.scaled)))
+      expect_true(all(is.finite(worker(fit, bread = "expected", estimated_weight = FALSE)$mi.scaled)))
+    }
+  }
+})

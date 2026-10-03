@@ -293,8 +293,9 @@ score_tests_robust(spec::LatentStructure pt,
 // B1 = Σ_b (n_b/N)·Δ'WΓ̂WΔ with W the ESTIMATION weight, following the
 // non-robust `modification_indices(.., weight)` convention (empty ⇒ ULS
 // identity; `gmm::normal_theory_weight` ⇒ GLS; caller-supplied ⇒ WLS/DWLS).
-// The bread is always the expected (Δ'WΔ) one — `options.spec.bread` must be
-// Expected. Γ̂ sources mirror the ML overloads: empirical from complete-data
+// The quadratic metric is expected (Δ'WΔ). `options.spec.bread` selects
+// expected or exact observed-Hessian nuisance sensitivity. Γ̂ sources mirror
+// the ML overloads: empirical from complete-data
 // raw, model-implied Γ_NT (per `options.spec.moments`: Structured ⇒ Γ_NT(Σ̂),
 // Unstructured ⇒ Γ_NT(S)), or caller-supplied per-block Γ̂. With the GLS
 // weight and the Γ_NT(S) meat the sandwich collapses (B1 = A1, c ≡ 1) — the
@@ -443,6 +444,8 @@ score_tests_ml2s(spec::LatentStructure pt,
 // rescales by c = gᵀB1g / gᵀA1g, with g the efficient-score direction implied
 // by the info-metric nuisance projection. A1/B1 must be on the same weight
 // scale as the score/information evaluation (c is not W-scale-invariant).
+// Optional nuisance_sensitivity projects with the supplied exact Hessian while
+// keeping info_full/A1 as the expected quadratic metric and spectrum metric.
 post_expected<ScoreTestResult>
 score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::VectorXd& score_full,
@@ -450,7 +453,8 @@ score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::MatrixXd& A1,
                            const Eigen::MatrixXd& B1,
                            const Eigen::MatrixXd& K_nuisance,
-                           const Eigen::VectorXd& direction);
+                           const Eigen::VectorXd& direction,
+                           const Eigen::MatrixXd* nuisance_sensitivity = nullptr);
 
 // ── df>1 total release ───────────────────────────────────────────────────────
 // Joint release of several equality constraints at once. The NT joint statistic
@@ -489,7 +493,8 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
                           const Eigen::MatrixXd& A1,
                           const Eigen::MatrixXd& B1,
                           const Eigen::MatrixXd& K_nuisance,
-                          const Eigen::MatrixXd& directions);
+                          const Eigen::MatrixXd& directions,
+                          const Eigen::MatrixXd* nuisance_sensitivity = nullptr);
 
 // Robust joint (total) release of ALL active equality constraints, complete-data
 // ML. Γ̂ from raw data, or caller-supplied. Single- or multi-group.

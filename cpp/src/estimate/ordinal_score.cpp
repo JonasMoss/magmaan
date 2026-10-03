@@ -378,6 +378,26 @@ post_expected<void> validate_ordinal_nacov(const Stats& stats) {
   return {};
 }
 
+template <class Stats>
+post_expected<Eigen::MatrixXd> ordinal_score_sensitivity(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const Stats& stats, const Eigen::VectorXd& theta,
+    OrdinalWeightKind weights, OrdinalParameterization parameterization,
+    robust::Information bread) {
+  if (bread == robust::Information::Expected) return Eigen::MatrixXd{};
+  auto parts = [&]() {
+    if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
+      return frontier::ordinal_ls_newton_parts_prepared(pt, rep, stats, theta,
+                                                     weights, parameterization);
+    } else {
+      return frontier::mixed_ordinal_ls_newton_parts_prepared(pt, rep, stats, theta,
+                                                           weights, parameterization);
+    }
+  }();
+  if (!parts) return std::unexpected(fit_to_post(parts.error()));
+  return std::move(parts->hessian);
+}
+
 template <class Stats, class ResidualFn, class JacobianFn,
           class MomentJacobianFn, class PrepareFn>
 post_expected<inference::ScoreTestTable>
@@ -390,6 +410,7 @@ ordinal_modification_indices_robust_impl(
     const inference::ModificationIndexOptions& options,
     OrdinalParameterization parameterization,
     bool estimated_weight,
+    robust::Information bread,
     ResidualFn residual_fn,
     JacobianFn jacobian_fn,
     MomentJacobianFn moment_jacobian_fn,
@@ -509,8 +530,12 @@ ordinal_modification_indices_robust_impl(
     cand.group = work->pt.group[row];
     Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score.size(), con0->K().cols());
     if (con0->K().rows() > 0) K_aug.topRows(con0->K().rows()) = con0->K();
+    auto sensitivity = ordinal_score_sensitivity(aug, work->rep, stats, theta,
+                                                  weights, parameterization, bread);
+    if (!sensitivity) return std::unexpected(sensitivity.error());
     auto res = inference::frontier::score_for_direction_robust(
-        cand, score, info, sw->A1, sw->B1, K_aug, direction);
+        cand, score, info, sw->A1, sw->B1, K_aug, direction,
+        sensitivity->size() ? &*sensitivity : nullptr);
     if (res.has_value()) table.rows.push_back(*res);
   }
   return table;
@@ -526,6 +551,7 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
                                 OrdinalWeightKind weights,
                                 OrdinalParameterization parameterization,
                                 bool estimated_weight,
+                                robust::Information bread,
                                 ResidualFn residual_fn,
                                 JacobianFn jacobian_fn,
                                 MomentJacobianFn moment_jacobian_fn,
@@ -603,6 +629,10 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
   }();
   if (!sw.has_value()) return std::unexpected(sw.error());
 
+  auto sensitivity = ordinal_score_sensitivity(pt, rep, stats, est.theta,
+                                                weights, parameterization, bread);
+  if (!sensitivity) return std::unexpected(sensitivity.error());
+
   for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
     auto d = ordinal_release_direction(*con, row);
     if (!d.has_value()) return std::unexpected(d.error());
@@ -611,7 +641,8 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
     cand.row = static_cast<std::size_t>(row);
     cand.op = parse::Op::EqConstraint;
     auto res = inference::frontier::score_for_direction_robust(
-        cand, score, info, sw->A1, sw->B1, con->K(), *d);
+        cand, score, info, sw->A1, sw->B1, con->K(), *d,
+        sensitivity->size() ? &*sensitivity : nullptr);
     if (res.has_value()) table.rows.push_back(*res);
   }
   return table;
@@ -883,11 +914,12 @@ modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const inference::ModificationIndexOptions&
                                         options,
                                     OrdinalParameterization parameterization,
-                                    bool estimated_weight) {
+                                    bool estimated_weight,
+                                    robust::Information bread) {
   auto h = ordinal_robust_handles(parameterization);
   return ordinal_modification_indices_robust_impl(
       std::move(pt), rep, stats, est, weights, options, parameterization,
-      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
+      estimated_weight, bread, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -897,11 +929,12 @@ score_tests_ordinal_robust(spec::LatentStructure pt,
                            const Estimates& est,
                            OrdinalWeightKind weights,
                            OrdinalParameterization parameterization,
-                           bool estimated_weight) {
+                           bool estimated_weight,
+                           robust::Information bread) {
   auto h = ordinal_robust_handles(parameterization);
   return ordinal_score_tests_robust_impl(
       std::move(pt), rep, stats, est, weights, parameterization,
-      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
+      estimated_weight, bread, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -917,7 +950,8 @@ modification_indices_mixed_ordinal_robust(
   auto h = mixed_ordinal_robust_handles(parameterization);
   return ordinal_modification_indices_robust_impl(
       std::move(pt), rep, stats, est, weights, options, parameterization,
-      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
+      estimated_weight, robust::Information::Expected, h.residual, h.jacobian,
+      h.moment_jacobian, h.prepare);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -931,7 +965,8 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
   auto h = mixed_ordinal_robust_handles(parameterization);
   return ordinal_score_tests_robust_impl(
       std::move(pt), rep, stats, est, weights, parameterization,
-      estimated_weight, h.residual, h.jacobian, h.moment_jacobian, h.prepare);
+      estimated_weight, robust::Information::Expected, h.residual, h.jacobian,
+      h.moment_jacobian, h.prepare);
 }
 
 }  // namespace frontier

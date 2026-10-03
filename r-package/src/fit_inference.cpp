@@ -815,7 +815,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
-        estimated_weight);
+        estimated_weight, spec_from(bread, moments, cov).bread);
   } else if (is_mixed_ordinal_fit) {
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",
@@ -960,7 +960,7 @@ Rcpp::DataFrame inference_score_tests_robust(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
-        estimated_weight);
+        estimated_weight, spec_from(bread, moments, cov).bread);
   } else if (is_mixed_ordinal_fit) {
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",

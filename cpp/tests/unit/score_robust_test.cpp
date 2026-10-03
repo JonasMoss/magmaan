@@ -3312,3 +3312,357 @@ TEST_CASE("mixed ordinal MI recipe matrix gates ordinary cells and typed robust 
     }
   }
 }
+
+TEST_CASE("observed LS score: exact Hessians match gradient differences") {
+  std::mt19937 rng(20261013u);
+  auto h = build("f =~ x1+x2+x3+x4");
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 180, four_indicator_sample_cov(), 7.0));
+  auto sample = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(sample.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::fixed_moment_weight(*ev, *sample,
+      Eigen::VectorXd::Ones(h.pt.n_free()), magmaan::estimate::gmm::FixedWeightKind::Dwls, &raw);
+  REQUIRE(weight.has_value());
+  auto fit = magmaan::test::fit_gmm(h.pt, h.rep, *sample, *weight);
+  REQUIRE(fit.has_value());
+  auto H = magmaan::estimate::gmm::moment_quadratic_hessian(*ev, *sample, fit->theta, *weight);
+  REQUIRE(H.has_value());
+  auto problem = magmaan::estimate::gmm::residuals(*ev, *sample, fit->theta, *weight);
+  REQUIRE(problem.has_value());
+  auto gradient = [&](const Eigen::VectorXd& theta) -> Eigen::VectorXd {
+    auto r = problem->r(theta);
+    auto J = problem->J(theta);
+    REQUIRE(r.has_value()); REQUIRE(J.has_value());
+    return 180.0 * J->transpose() * *r;
+  };
+  Eigen::MatrixXd fd(H->rows(), H->cols());
+  for (Eigen::Index k = 0; k < fit->theta.size(); ++k) {
+    Eigen::VectorXd plus = fit->theta, minus = fit->theta;
+    const double step = 1e-5 * std::max(1.0, std::abs(plus(k)));
+    plus(k) += step; minus(k) -= step;
+    fd.col(k) = (gradient(plus) - gradient(minus)) / (2.0 * step);
+  }
+  CHECK((fd - *H).norm() / H->norm() < 1e-6);
+
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({ordinal_three_cat_sample(rng, 300)});
+  REQUIRE(stats.has_value());
+  auto oh = build(ordinal_cfa_syntax);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  auto ofit = magmaan::test::fit_ordinal_bounded(oh.pt, oh.rep, *stats, {}, W::DWLS);
+  REQUIRE(ofit.has_value());
+  auto objective = magmaan::estimate::frontier::ordinal_ls_objective(oh.pt, oh.rep, *stats, *ofit, W::DWLS);
+  REQUIRE(objective.has_value());
+  auto parts = magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(
+      objective->pt, oh.rep, *stats, ofit->theta, W::DWLS,
+      magmaan::estimate::OrdinalParameterization::Delta);
+  REQUIRE(parts.has_value());
+  auto og = [&](const Eigen::VectorXd& theta) -> Eigen::VectorXd {
+    auto r = objective->problem.r(theta);
+    auto J = objective->problem.J(theta);
+    REQUIRE(r.has_value()); REQUIRE(J.has_value());
+    return 300.0 * J->transpose() * *r;
+  };
+  fd.resize(parts->hessian.rows(), parts->hessian.cols());
+  for (Eigen::Index k = 0; k < ofit->theta.size(); ++k) {
+    Eigen::VectorXd plus = ofit->theta, minus = ofit->theta;
+    const double step = 1e-5 * std::max(1.0, std::abs(plus(k)));
+    plus(k) += step; minus(k) -= step;
+    fd.col(k) = (og(plus) - og(minus)) / (2.0 * step);
+  }
+  CHECK((fd - parts->hessian).norm() / parts->hessian.norm() < 1e-6);
+}
+
+TEST_CASE("observed LS score: case-weight gradient and projected influence differences") {
+  // Recompute weighted means, ML covariance and empirical Gamma from scratch.
+  // Group fractions are held fixed: N*d gradient/d case_weight is the pooled
+  // influence row. This independently gates the cancellation of n_g/N.
+  std::mt19937 rng(20261014u);
+  auto h = build_groups("f =~ x1+x2+x3+x4", 2);
+  magmaan::data::RawData raw;
+  for (int n : {60, 90}) raw.X.push_back(multivariate_t_sample(rng, n, four_indicator_sample_cov(), 7.0));
+  auto sample = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(sample.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::fixed_moment_weight(*ev, *sample,
+      Eigen::VectorXd::Ones(h.pt.n_free()), magmaan::estimate::gmm::FixedWeightKind::Dwls, &raw);
+  REQUIRE(weight.has_value());
+  auto fit = magmaan::test::fit_gmm(h.pt, h.rep, *sample, *weight);
+  REQUIRE(fit.has_value());
+  auto H = magmaan::estimate::gmm::moment_quadratic_hessian(*ev, *sample, fit->theta, *weight);
+  REQUIRE(H.has_value());
+  auto ij = magmaan::estimate::continuous_ls_casewise_influence_ij(
+      h.pt, h.rep, *sample, *fit, *weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls);
+  REQUIRE(ij.has_value());
+  const Eigen::MatrixXd influence = -ij->influence * *H;
+  auto gradient_at_weight = [&](std::size_t block, Eigen::Index row, double perturb) -> Eigen::VectorXd {
+    auto s = *sample;
+    const Eigen::MatrixXd& X = raw.X[block];
+    Eigen::VectorXd a = Eigen::VectorXd::Ones(X.rows());
+    a(row) += perturb; a /= a.sum();
+    const Eigen::VectorXd mu = X.transpose() * a;
+    const Eigen::MatrixXd centered = X.rowwise() - mu.transpose();
+    s.S[block] = centered.transpose() * a.asDiagonal() * centered;
+    s.mean[block] = mu;
+    Eigen::MatrixXd z(X.rows(), 10);
+    Eigen::Index k = 0;
+    for (Eigen::Index col = 0; col < 4; ++col)
+      for (Eigen::Index r = col; r < 4; ++r)
+        z.col(k++) = centered.col(r).array() * centered.col(col).array();
+    const Eigen::VectorXd mz = z.transpose() * a;
+    z.rowwise() -= mz.transpose();
+    const Eigen::MatrixXd gamma = z.transpose() * a.asDiagonal() * z;
+    auto w = *weight;
+    auto wb = magmaan::estimate::gmm::BlockWeight::dense(
+        gamma.diagonal().cwiseInverse().asDiagonal(), magmaan::FitError::Kind::NumericIssue, "case weight");
+    REQUIRE(wb.has_value()); w[block] = *wb;
+    auto problem = magmaan::estimate::gmm::residuals(*ev, s, fit->theta, w);
+    REQUIRE(problem.has_value());
+    auto r = problem->r(fit->theta); auto J = problem->J(fit->theta);
+    REQUIRE(r.has_value()); REQUIRE(J.has_value());
+    return J->transpose() * *r;
+  };
+  // Release the first loading coordinate while treating every other fitted
+  // coordinate as nuisance; this gates the projected influence independently.
+  const Eigen::Index q = fit->theta.size();
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(q, q).rightCols(q - 1);
+  const Eigen::VectorXd d = Eigen::VectorXd::Unit(q, 0);
+  const Eigen::MatrixXd Haa = K.transpose() * *H * K;
+  const Eigen::VectorXd g = d - K * Haa.ldlt().solve(K.transpose() * *H * d);
+  Eigen::MatrixXd fd(150, q);
+  Eigen::Index offset = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    for (Eigen::Index i = 0; i < raw.X[b].rows(); ++i) {
+      const double step = 1e-4;
+      fd.row(offset + i) = 150.0 *
+          (gradient_at_weight(b, i, step) - gradient_at_weight(b, i, -step)).transpose() / (2.0 * step);
+    }
+    offset += raw.X[b].rows();
+  }
+  CHECK((fd - influence).norm() / influence.norm() < 1e-6);
+  CHECK((fd * g - influence * g).norm() / (influence * g).norm() < 1e-6);
+  auto sw = magmaan::estimate::continuous_ls_param_space_sandwich_ij(
+      h.pt, h.rep, *sample, *fit, *weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls);
+  REQUIRE(sw.has_value());
+  CHECK((sw->B1 - fd.transpose() * fd / 150.0).norm() / sw->B1.norm() < 1e-6);
+}
+
+TEST_CASE("observed LS score: separate sensitivity metric and multi-df calibration") {
+  Eigen::Vector3d score(2.0, -1.0, 0.0);
+  Eigen::MatrixXd metric = Eigen::Matrix3d::Identity();
+  Eigen::MatrixXd sensitivity(3, 3);
+  sensitivity << 2, .1, .5, .1, 3, -.4, .5, -.4, 2;
+  Eigen::Matrix3d meat;
+  meat << 3, .2, .1, .2, 2, .3, .1, .3, 1;
+  Eigen::MatrixXd K = Eigen::Vector3d(0, 0, 1);
+  Eigen::MatrixXd D = Eigen::Matrix3d::Identity().leftCols(2);
+  Eigen::MatrixXd G = D - K * (K.transpose() * sensitivity * K).inverse() * K.transpose() * sensitivity * D;
+  const Eigen::Vector2d u = G.transpose() * score;
+  const Eigen::Matrix2d M = G.transpose() * metric * G;
+  const Eigen::Matrix2d V = G.transpose() * meat * G;
+  auto joint = inf::frontier::score_for_subspace_robust({}, score, metric, metric, meat, K, D, &sensitivity);
+  REQUIRE(joint.has_value());
+  CHECK(joint->mi == doctest::Approx(u.dot(M.inverse() * u)));
+  CHECK(joint->mi_sandwich == doctest::Approx(u.dot(V.inverse() * u)));
+  CHECK(joint->eigvals.sum() == doctest::Approx((M.inverse() * V).trace()));
+  CHECK(joint->p_mixture > 0.0);
+  auto row = inf::frontier::score_for_direction_robust({}, score, metric, metric, meat, K, D.col(0), &sensitivity);
+  REQUIRE(row.has_value());
+  CHECK(row->mi_scaled == doctest::Approx(u(0) * u(0) / V(0, 0)));
+  auto exact = inf::frontier::score_for_direction_robust({}, score, metric, metric, meat, K, D.col(0), &metric);
+  auto expected = inf::frontier::score_for_direction_robust({}, score, metric, metric, meat, K, D.col(0));
+  REQUIRE(exact.has_value()); REQUIRE(expected.has_value());
+  CHECK(exact->mi_scaled == doctest::Approx(expected->mi_scaled));
+}
+
+TEST_CASE("observed LS score: exact-fit estimated weights reduce and normal GLS is close to NT") {
+  auto h = build("f =~ x1+x2+x3+x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20261015u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 2500, four_indicator_sample_cov(), 1000000.0));
+  auto sample = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(sample.has_value());
+  auto fit = magmaan::test::fit_gmm(h.pt, h.rep, *sample);
+  REQUIRE(fit.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto evaluated = ev->evaluate(fit->theta, true, true);
+  REQUIRE(evaluated.has_value());
+  const auto* moments = &evaluated->moments;
+  // Whiten and recolor to make the empirical covariance exactly model-implied.
+  Eigen::LLT<Eigen::MatrixXd> empirical(sample->S[0]), implied(moments->sigma[0]);
+  const Eigen::MatrixXd centered = raw.X[0].rowwise() - raw.X[0].colwise().mean();
+  raw.X[0] = empirical.matrixL().solve(centered.transpose()).transpose() *
+             Eigen::MatrixXd(implied.matrixL()).transpose();
+  sample = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(sample.has_value());
+  using Kind = magmaan::estimate::gmm::FixedWeightKind;
+  for (Kind kind : {Kind::Uls, Kind::Nt, Kind::Dwls, Kind::Wls}) {
+    auto weight = magmaan::estimate::gmm::fixed_moment_weight(*ev, *sample,
+        fit->theta, kind, &raw);
+    REQUIRE(weight.has_value());
+    auto mode = magmaan::estimate::continuous_ls_ij_mode_for(kind, false);
+    REQUIRE(mode.has_value());
+    inf::frontier::RobustScoreOptions expected;
+    expected.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+    auto observed = expected;
+    observed.spec.bread = rob::Information::Observed;
+    observed.estimated_weight = true;
+    observed.ij_weight_mode = *mode;
+    auto a = inf::frontier::modification_indices_robust(h.pt, h.rep, *sample, raw, *fit, *weight, expected);
+    auto b = inf::frontier::modification_indices_robust(h.pt, h.rep, *sample, raw, *fit, *weight, observed);
+    REQUIRE(a.has_value()); REQUIRE(b.has_value());
+    REQUIRE(a->rows.size() == b->rows.size());
+    REQUIRE_FALSE(a->rows.empty());
+    for (std::size_t i = 0; i < a->rows.size(); ++i) {
+      CHECK(a->rows[i].scaling_factor == doctest::Approx(b->rows[i].scaling_factor).epsilon(1e-8));
+      CHECK(std::abs(a->rows[i].mi_scaled - b->rows[i].mi_scaled) < 1e-10);
+      if (kind == Kind::Nt) CHECK(std::abs(b->rows[i].scaling_factor - 1.0) < .15);
+    }
+  }
+}
+
+TEST_CASE("observed LS score: ordinal two-group equality releases use exact sensitivity") {
+  std::mt19937 rng(20261016u);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(
+      {ordinal_three_cat_sample(rng, 250), ordinal_three_cat_sample(rng, 350)});
+  REQUIRE(stats.has_value());
+  auto h = build_groups(ordinal_cfa_mg_eq_syntax, 2);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  for (W weight : {W::ULS, W::DWLS, W::WLS}) {
+    auto fit = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, *stats, {}, weight);
+    REQUIRE(fit.has_value());
+    auto release = magmaan::estimate::frontier::score_tests_ordinal_robust(
+        h.pt, h.rep, *stats, *fit, weight,
+        magmaan::estimate::OrdinalParameterization::Delta, true, rob::Information::Observed);
+    REQUIRE_MESSAGE(release.has_value(), (release ? "" : release.error().detail));
+    REQUIRE(release->rows.size() == 3);
+    for (const auto& row : release->rows) {
+      CHECK(std::isfinite(row.mi_scaled));
+      CHECK(row.scaling_factor > 0.0);
+      CHECK(row.mi_scaled == doctest::Approx(row.score * row.score / row.v_eff));
+    }
+  }
+}
+
+TEST_CASE("observed LS score: misspecified DWLS MI matches projected gradient meat") {
+  auto h = build("f =~ x1+x2+x3+x4\nx1 ~~ 0*x2");
+  auto aug = build("f =~ x1+x2+x3+x4\nx1 ~~ x2");
+  std::mt19937 rng(20261017u);
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 400, four_indicator_sample_cov(), 7.0));
+  auto sample = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(sample.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::fixed_moment_weight(*ev, *sample,
+      Eigen::VectorXd::Ones(h.pt.n_free()), magmaan::estimate::gmm::FixedWeightKind::Dwls, &raw);
+  REQUIRE(weight.has_value());
+  auto fit = magmaan::test::fit_gmm(h.pt, h.rep, *sample, *weight);
+  REQUIRE(fit.has_value());
+  Eigen::VectorXd theta = Eigen::VectorXd::Zero(aug.pt.n_free());
+  Eigen::MatrixXd K = Eigen::MatrixXd::Zero(aug.pt.n_free(), h.pt.n_free());
+  Eigen::VectorXd d = Eigen::VectorXd::Zero(aug.pt.n_free());
+  std::size_t candidate_row = h.pt.size();
+  for (std::size_t r = 0; r < aug.pt.size(); ++r) {
+    if (aug.pt.free[r] <= 0) continue;
+    for (std::size_t b = 0; b < h.pt.size(); ++b) {
+      if (h.pt.op[b] != aug.pt.op[r] || h.pt.lhs_var[b] != aug.pt.lhs_var[r] ||
+          h.pt.rhs_var[b] != aug.pt.rhs_var[r]) continue;
+      const Eigen::Index index = aug.pt.free[r] - 1;
+      if (h.pt.free[b] > 0) {
+        theta(index) = fit->theta(h.pt.free[b] - 1);
+        K(index, h.pt.free[b] - 1) = 1.0;
+      } else {
+        theta(index) = h.pt.fixed_value[b]; d(index) = 1.0; candidate_row = b;
+      }
+    }
+  }
+  REQUIRE(candidate_row < h.pt.size());
+  auto aev = magmaan::model::ModelEvaluator::build(aug.pt, aug.rep);
+  REQUIRE(aev.has_value());
+  auto problem = magmaan::estimate::gmm::residuals(*aev, *sample, theta, *weight);
+  REQUIRE(problem.has_value());
+  auto r = problem->r(theta); auto J = problem->J(theta);
+  REQUIRE(r.has_value()); REQUIRE(J.has_value());
+  REQUIRE(r->squaredNorm() > 1e-6);
+  auto H = magmaan::estimate::gmm::moment_quadratic_hessian(*aev, *sample, theta, *weight);
+  REQUIRE(H.has_value());
+  const Eigen::MatrixXd Haa = K.transpose() * *H * K;
+  const Eigen::VectorXd g = d - K * Haa.ldlt().solve(K.transpose() * *H * d);
+  const Eigen::VectorXd score = -400.0 * J->transpose() * *r;
+  const Eigen::MatrixXd metric = 400.0 * J->transpose() * *J;
+  magmaan::estimate::Estimates point{theta, fit->fmin, fit->iterations};
+  auto sw = magmaan::estimate::continuous_ls_param_space_sandwich_ij(
+      aug.pt, aug.rep, *sample, point, *weight, raw,
+      magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls);
+  REQUIRE(sw.has_value());
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec.bread = rob::Information::Observed;
+  opts.estimated_weight = true;
+  opts.ij_weight_mode = magmaan::estimate::ContinuousLsIJWeightMode::SampleEmpiricalDwls;
+  auto table = inf::frontier::modification_indices_robust(h.pt, h.rep, *sample, raw, *fit, *weight, opts);
+  REQUIRE(table.has_value());
+  bool found = false;
+  for (const auto& row : table->rows) {
+    if (row.candidate.row != candidate_row) continue;
+    found = true;
+    CHECK(row.score == doctest::Approx(g.dot(score)).epsilon(1e-8));
+    CHECK(row.information == doctest::Approx(g.dot(metric * g)).epsilon(1e-8));
+    CHECK(row.mi_scaled == doctest::Approx(std::pow(g.dot(score), 2) /
+        (400.0 * g.dot(sw->B1 * g))).epsilon(1e-8));
+  }
+  CHECK(found);
+}
+
+TEST_CASE("observed LS score: ordinal model-implied moments reduce to expected fixed weights") {
+  std::mt19937 rng(20261018u);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({ordinal_three_cat_sample(rng, 350)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  const auto delta = magmaan::estimate::OrdinalParameterization::Delta;
+  auto fit = magmaan::test::fit_ordinal_bounded(h.pt, h.rep, *stats, {}, W::DWLS);
+  REQUIRE(fit.has_value());
+  // With identity whitening, the residual is the difference of the fitted
+  // and supplied [thresholds; correlations] vectors. Replace the supplied
+  // vector by the model-implied one, preserving Gamma and its fitting weights.
+  auto objective = magmaan::estimate::frontier::ordinal_ls_objective(h.pt, h.rep, *stats, *fit, W::ULS);
+  REQUIRE(objective.has_value());
+  auto residual = objective->problem.r(fit->theta);
+  REQUIRE(residual.has_value());
+  const Eigen::Index nth = stats->thresholds[0].size();
+  stats->thresholds[0] += residual->head(nth);
+  Eigen::Index k = nth;
+  for (Eigen::Index col = 0; col < stats->R[0].cols(); ++col) {
+    for (Eigen::Index row = col + 1; row < stats->R[0].rows(); ++row) {
+      stats->R[0](row, col) += (*residual)(k++);
+      stats->R[0](col, row) = stats->R[0](row, col);
+    }
+  }
+  auto exact_objective = magmaan::estimate::frontier::ordinal_ls_objective(h.pt, h.rep, *stats, *fit, W::ULS);
+  REQUIRE(exact_objective.has_value());
+  auto exact_residual = exact_objective->problem.r(fit->theta);
+  REQUIRE(exact_residual.has_value());
+  REQUIRE(exact_residual->norm() < 1e-10);
+  inf::ModificationIndexOptions options;
+  options.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  for (W weight : {W::ULS, W::DWLS, W::WLS}) {
+    CAPTURE(static_cast<int>(weight));
+    auto expected = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+        h.pt, h.rep, *stats, *fit, weight, options, delta, false, rob::Information::Expected);
+    auto observed = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+        h.pt, h.rep, *stats, *fit, weight, options, delta, true, rob::Information::Observed);
+    REQUIRE(expected.has_value()); REQUIRE(observed.has_value());
+    REQUIRE_FALSE(expected->rows.empty());
+    REQUIRE(expected->rows.size() == observed->rows.size());
+    for (std::size_t i = 0; i < expected->rows.size(); ++i) {
+      CHECK(expected->rows[i].scaling_factor == doctest::Approx(observed->rows[i].scaling_factor).epsilon(1e-8));
+      CHECK(std::abs(expected->rows[i].mi_scaled - observed->rows[i].mi_scaled) < 1e-10);
+    }
+  }
+}

@@ -733,9 +733,9 @@ fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
     Estimates aug_est{append_theta(est.theta, fixed_value), est.fmin, est.iterations};
 
     Eigen::VectorXd score_full;
-    Eigen::MatrixXd info_full, A1, B1;
+    Eigen::MatrixXd info_full, A1, B1, sensitivity;
     if (auto e = eval_robust.evaluate(aug_pt, aug_est, score_full, info_full,
-                                      A1, B1);
+                                      A1, B1, sensitivity);
         !e.has_value()) {
       return std::unexpected(e.error());
     }
@@ -752,7 +752,8 @@ fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
     if (!rank.has_value()) return std::unexpected(rank.error());
     if (!identified_direction(*rank, direction)) continue;
     auto r = frontier::score_for_direction_robust(cand, score_full, info_full,
-                                                  A1, B1, K_aug, direction);
+                                                  A1, B1, K_aug, direction,
+                                                  sensitivity.size() ? &sensitivity : nullptr);
     if (r.has_value()) out.rows.push_back(*r);
   }
   return out;
@@ -789,9 +790,9 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
                     est.iterations};
 
   Eigen::VectorXd score_full;
-  Eigen::MatrixXd info_full, A1, B1;
+  Eigen::MatrixXd info_full, A1, B1, sensitivity;
   if (auto e = eval_robust.evaluate(aug_pt, aug_est, score_full, info_full,
-                                    A1, B1);
+                                    A1, B1, sensitivity);
       !e.has_value()) {
     return fixed_parameter_tests_robust_one_by_one(
         std::move(pt), rep, est, eval_robust);
@@ -819,8 +820,12 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
   for (std::size_t i = 0; i < candidates.size(); ++i) {
     const Eigen::Index coord = base_q + static_cast<Eigen::Index>(i);
     if (!identified_coordinate(*rank, coord)) continue;
-    auto r = score_for_coordinate_robust(candidates[i].candidate, score_full,
-                                         info_full, A1, B1, *nuisance, coord);
+    const Eigen::VectorXd direction = Eigen::VectorXd::Unit(q, coord);
+    auto r = sensitivity.size()
+        ? frontier::score_for_direction_robust(candidates[i].candidate,
+              score_full, info_full, A1, B1, K_aug, direction, &sensitivity)
+        : score_for_coordinate_robust(candidates[i].candidate, score_full,
+              info_full, A1, B1, *nuisance, coord);
     if (r.has_value()) out.rows.push_back(*r);
   }
   return out;
@@ -843,8 +848,8 @@ equality_release_tests_robust(spec::LatentStructure pt,
   }
 
   Eigen::VectorXd score_full;
-  Eigen::MatrixXd info_full, A1, B1;
-  if (auto e = eval_robust.evaluate(pt, est, score_full, info_full, A1, B1);
+  Eigen::MatrixXd info_full, A1, B1, sensitivity;
+  if (auto e = eval_robust.evaluate(pt, est, score_full, info_full, A1, B1, sensitivity);
       !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -861,7 +866,8 @@ equality_release_tests_robust(spec::LatentStructure pt,
     cand.row = static_cast<std::size_t>(r);
     cand.op = parse::Op::EqConstraint;
     auto res = frontier::score_for_direction_robust(cand, score_full, info_full,
-                                                    A1, B1, con->K(), *d);
+                                                    A1, B1, con->K(), *d,
+                                                    sensitivity.size() ? &sensitivity : nullptr);
     if (res.has_value()) out.rows.push_back(*res);
   }
   return out;
@@ -953,7 +959,9 @@ struct RobustMlEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info,
-           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1,
+           Eigen::MatrixXd& sensitivity) const {
+    sensitivity.resize(0, 0);
     if (auto e = evaluate_augmented_ml(pt, rep, samp, est, information,
                                        score_scale, score, info);
         !e.has_value()) {
@@ -1056,7 +1064,9 @@ struct RobustLsEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info,
-           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1,
+           Eigen::MatrixXd& sensitivity) const {
+    sensitivity.resize(0, 0);
     if (auto e = evaluate_augmented_ls(pt, rep, samp, est, weight, n_total,
                                        score, info);
         !e.has_value()) {
@@ -1064,6 +1074,13 @@ struct RobustLsEvaluator {
     }
     auto sw = sandwich_for(pt, est);
     if (!sw.has_value()) return std::unexpected(sw.error());
+    if (spec.bread == robust::Information::Observed) {
+      auto ev = build_eval(pt, rep);
+      if (!ev) return std::unexpected(ev.error());
+      auto h = estimate::gmm::moment_quadratic_hessian(*ev, samp, est.theta, weight);
+      if (!h) return std::unexpected(fit_to_post(h.error()));
+      sensitivity = std::move(*h);
+    }
     A1 = std::move(sw->A1);
     B1 = std::move(sw->B1);
     return {};
@@ -1137,7 +1154,9 @@ struct RobustFimlEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info,
-           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1,
+           Eigen::MatrixXd& sensitivity) const {
+    sensitivity.resize(0, 0);
     auto parts = estimate::fiml::fiml_score_meat_bread(pt, rep, raw, pack, est);
     if (!parts.has_value()) return std::unexpected(parts.error());
     const Eigen::MatrixXd& scores = parts->scores;  // n × q, ∂(deviance_i)/∂θ
@@ -1579,7 +1598,36 @@ score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::MatrixXd& A1,
                            const Eigen::MatrixXd& B1,
                            const Eigen::MatrixXd& K_nuisance,
-                           const Eigen::VectorXd& direction) {
+                           const Eigen::VectorXd& direction,
+                           const Eigen::MatrixXd* nuisance_sensitivity) {
+  if (nuisance_sensitivity != nullptr) {
+    // Preserve the expected-metric identification gate before changing the
+    // nuisance projection. Residual curvature cannot identify a release whose
+    // moment tangent is already spanned by the fitted nuisance coordinates
+    // (notably ordinal response scales). Testing only the projected direction
+    // would lose the original marginal-information cancellation check.
+    auto identified = score_for_direction(candidate, score_full, info_full,
+                                           K_nuisance, direction);
+    if (!identified) return std::unexpected(identified.error());
+    const Eigen::Index q = score_full.size();
+    if (nuisance_sensitivity->rows() != q || nuisance_sensitivity->cols() != q ||
+        K_nuisance.rows() != q || direction.size() != q ||
+        !nuisance_sensitivity->allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust score tests: invalid observed sensitivity"));
+    }
+    Eigen::VectorXd g = direction;
+    if (K_nuisance.cols() > 0) {
+      const Eigen::MatrixXd Haa = K_nuisance.transpose() *
+          (*nuisance_sensitivity) * K_nuisance;
+      auto inv = invert_symmetric(Haa, "robust score tests observed nuisance sensitivity");
+      if (!inv) return std::unexpected(inv.error());
+      g.noalias() -= K_nuisance * ((*inv) * (K_nuisance.transpose() *
+          (*nuisance_sensitivity) * direction));
+    }
+    return score_for_direction_robust(candidate, score_full, info_full,
+        A1, B1, Eigen::MatrixXd(q, 0), g);
+  }
   auto nt = score_for_direction(candidate, score_full, info_full, K_nuisance,
                                 direction);
   if (!nt.has_value()) return nt;
@@ -1770,10 +1818,11 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
                           const Eigen::MatrixXd& A1,
                           const Eigen::MatrixXd& B1,
                           const Eigen::MatrixXd& K_nuisance,
-                          const Eigen::MatrixXd& directions) {
+                          const Eigen::MatrixXd& directions,
+                          const Eigen::MatrixXd* nuisance_sensitivity) {
   return score_for_subspace_robust_impl(
       std::move(candidates), score_full, info_full, A1, B1, K_nuisance,
-      directions, nullptr);
+      directions, nuisance_sensitivity);
 }
 
 namespace {
@@ -1938,8 +1987,8 @@ score_tests_robust_joint_impl(spec::LatentStructure pt,
                        info_for_bread(options.spec.bread), 0.5 * *n,
                        raw, gamma_hat};
   Eigen::VectorXd score_full;
-  Eigen::MatrixXd info_full, A1, B1;
-  if (auto e = ev.evaluate(pt, est, score_full, info_full, A1, B1);
+  Eigen::MatrixXd info_full, A1, B1, sensitivity;
+  if (auto e = ev.evaluate(pt, est, score_full, info_full, A1, B1, sensitivity);
       !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -1992,11 +2041,6 @@ namespace {
 
 post_expected<void> validate_robust_score_options_ls(
     const RobustScoreOptions& options) {
-  if (options.spec.bread != robust::Information::Expected) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust score tests: the continuous-LS tier uses the expected (Δ'WΔ) "
-        "bread only"));
-  }
   if (options.spec.cov == robust::ScoreCovariance::BrowneUnbiased) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust score tests: Browne-unbiased covariance is not implemented "
@@ -2201,7 +2245,9 @@ struct RobustMl2sEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info,
-           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1,
+           Eigen::MatrixXd& sensitivity) const {
+    sensitivity.resize(0, 0);
     auto e = is_nt()
         ? evaluate_augmented_ml(pt, rep, samp, est, ScoreInformation::Expected,
                                 0.5 * n_total, score, info)

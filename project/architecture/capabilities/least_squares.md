@@ -200,3 +200,43 @@ measured maximum whole-fit savings of 0.229%, 0.100%, 0.016% and 0.006% at
 p=6,12,24,48. Whitened expected-information assembly is documented above;
 remaining R-boundary diagonal transport and factor/weight API consolidation
 are in the [backlog](../../backlog/todo.md#continuous-moment-quadratic-weight-follow-ups).
+
+### Observed-sensitivity LS scores
+
+Continuous ULS/GLS/DWLS/WLS/DLS and all-ordinal ULS/DWLS/WLS robust
+modification indices and equality releases support observed sensitivity with
+estimated-weight influence (TASK-4.2). The lab defaults select this route;
+expected sensitivity and fixed weights remain explicit comparators. The
+estimation weight is held fixed when differentiating the objective in theta;
+its recorded recipe supplies the separate data-influence channel. Unknown
+caller-supplied weight recipes still require fixed-weight inference.
+
+For group fractions $c_g=n_g/N$, residuals $e_g=s_g-\sigma_g$, and
+$F=\sum_g c_g e_g^T W_g e_g$, the gradient is
+$u=-2\sum_g c_g\Delta_g^T W_g e_g$ and sensitivity is its exact Hessian
+$J=2\sum_g c_g[\Delta_g^T W_g\Delta_g-
+\sum_k(W_ge_g)_k\nabla^2\sigma_{gk}]$. The implementation uses the
+half-quadratic objective and total-N score units consistently; common factors
+cancel in the robust statistic. Both continuous and ordinal Hessians include
+the residual curvature term, including ordinal standardization.
+
+Within-group IJ moment rows have no inverse group fraction. Consequently the
+pooled gradient influence is
+$h_i=-2\Delta_g^T[W_g\mathrm{IF}_i(s_g)+\mathrm{IF}_i(W_g)e_g]$:
+$c_g$ cancels against $N/n_g$ when differentiating normalized within-group
+case weights at fixed group fractions. Keep $c_g$ in objective, gradient and
+Hessian sums, but omit it from these pooled rows. The variance is
+$V=N^{-1}\sum_i h_i h_i^T$.
+
+In equality coordinates with nuisance basis $K$ and release directions $D$,
+$G=D-K(K^TJK)^{-1}K^TJD$ projects both the score and its influence. The
+expected metric $A$ remains positive definite on the release subspace:
+$M=G^TAG$, $V_G=G^TVG$, and $T=N(G^Tu)^TM^{-1}(G^Tu)$.
+The existing joint worker calibrates the spectrum of $M^{-1}V_G$; for one
+release the scaled statistic is $N(G^Tu)^2/V_G$. At exact fit the curvature
+and weight-influence corrections vanish and the existing expected/fixed-weight
+route is recovered, including ordinal response-scale identification refusals.
+The expected-metric candidate rank gate runs before the observed projection,
+so residual curvature does not admit identification-only releases. Finite-difference gates in `score_robust_test.cpp` check
+continuous and ordinal Hessians, unequal-group case-weight gradient rows and
+the projected influence, with scalar and multi-df calibration reductions.

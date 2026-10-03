@@ -875,7 +875,8 @@ ordinal_stats_with_stage2_weight(const data::OrdinalStats& stats,
 // data-dependent-weight IF(Ŵ) meat term — beyond lavaan, which scales MI only by
 // the global SB scalar. DWLS/WLS only (ULS has a fixed weight); requires the
 // per-case `moment_influence` and `int_data` carried by the fit's OrdinalStats.
-// Not yet implemented for mixed-ordinal (errors if requested there).
+// `bread` selects expected or exact observed nuisance sensitivity; the score
+// metric stays expected. Not implemented for mixed-ordinal estimated weights.
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,
@@ -886,7 +887,8 @@ modification_indices_ordinal_robust(spec::LatentStructure pt,
                                         options = {},
                                     OrdinalParameterization parameterization =
                                         OrdinalParameterization::Delta,
-                                    bool estimated_weight = false);
+                                    bool estimated_weight = false,
+                           robust::Information bread = robust::Information::Expected);
 
 post_expected<inference::ScoreTestTable>
 score_tests_ordinal_robust(spec::LatentStructure pt,
@@ -896,7 +898,8 @@ score_tests_ordinal_robust(spec::LatentStructure pt,
                            OrdinalWeightKind weights,
                            OrdinalParameterization parameterization =
                                OrdinalParameterization::Delta,
-                           bool estimated_weight = false);
+                           bool estimated_weight = false,
+                           robust::Information bread = robust::Information::Expected);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal_robust(

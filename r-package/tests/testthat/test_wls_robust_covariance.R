@@ -81,8 +81,9 @@ test_that("WLS covariance choices fail explicitly when unavailable", {
                  "`cov` must be")
     expect_error(worker(fit, data = d, weight = weight, cov = "browne_unbiased", estimated_weight = FALSE, bread = "expected"),
                  "Browne-unbiased.*not implemented")
-    expect_error(worker(fit, data = d, weight = weight, bread = "observed", estimated_weight = FALSE),
-                 "expected.*bread only")
+    observed <- worker(fit, data = d, weight = weight, bread = "observed", estimated_weight = FALSE)
+    expect_true(nrow(observed) > 0L)
+    expect_true(all(is.finite(observed$mi.scaled)))
     incomplete <- d
     incomplete$x2[1] <- NA_real_
     expect_error(worker(fit, data = incomplete, weight = weight, estimated_weight = FALSE, bread = "expected"), "non-finite")
