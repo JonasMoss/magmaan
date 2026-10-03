@@ -706,9 +706,10 @@ gates a release unless an exit criterion names it.
 - [x] **S/M — make lab estimated-weight comparisons consistent.**
   `frontier_rbm(estimated_weight = FALSE)` supports supplied-W continuous
   fits and fixed-weight ordinal/mixed and ML2S corrections. All lab
-  estimated-weight switches default to FALSE; explicit TRUE retains the
-  recipe-resolved corrections and supplied-W refusal. NEWS lists the routes;
-  examples opt in to preserve their numerical recipes. Ordinary policy
+  estimated-weight switches default to TRUE for misspecification-robust
+  inference; explicit FALSE retains fixed-weight comparisons. Estimated-weight
+  requests retain recipe-resolved corrections and supplied-W refusal. NEWS
+  lists the routes; examples exercise the default. Ordinary policy
   defaults are unchanged.
 
 ### EQS language extension

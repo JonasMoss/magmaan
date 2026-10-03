@@ -1204,7 +1204,7 @@ Rcpp::List frontier_rbm_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
-    bool estimated_weight = false) {
+    bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")

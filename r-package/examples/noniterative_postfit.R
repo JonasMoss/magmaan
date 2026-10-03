@@ -51,7 +51,7 @@ stopifnot(all(is.finite(sa$se)), all(abs(sa$theta) <= 1.05))
 
 ## 4. residuals + SRMR -------------------------------------------------------
 rr <- residuals(m_g)
-sr <- lav_residuals(m_g)
+sr <- lav_residuals(m_g, estimated_weight = FALSE)
 stopifnot(is.finite(sr$srmr), sr$srmr >= 0, is.list(sr$summary))
 
 ## 5. fit measures: naive + robust-scaled, NT and ULS discrepancies ----------
@@ -108,7 +108,7 @@ stopifnot(all(is.finite(unlist(fs$scores))))
 guarded <- list(
   function() modification_indices(m_g),
   function() score_tests(m_g),
-  function() modification_indices_robust(m_g),
+  function() modification_indices_robust(m_g, estimated_weight = FALSE),
   function() case_rerun(m_g, data = hs),
   function() nestedTest(m_g, m_g1)
 )

@@ -781,7 +781,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
     std::string bread = "expected", std::string moments = "structured",
     std::string cov = "empirical", std::string information = "expected",
     std::string candidates = "fixed", bool include_loadings = true,
-    bool include_covariances = true, bool estimated_weight = false) {
+    bool include_covariances = true, bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -913,7 +913,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
 Rcpp::DataFrame inference_score_tests_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
     std::string bread = "expected", std::string moments = "structured",
-    std::string cov = "empirical", bool estimated_weight = false) {
+    std::string cov = "empirical", bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")

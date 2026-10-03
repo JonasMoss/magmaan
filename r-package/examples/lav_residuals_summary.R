@@ -1,6 +1,6 @@
 ## lavResiduals()-style residual $summary table.
 ##
-## lav_residuals(fit)$summary mirrors lavaan::lavResiduals(fit)$summary: per
+## lav_residuals(fit, estimated_weight = FALSE)$summary mirrors lavaan::lavResiduals(fit)$summary: per
 ## block, the cor.bentler SRMR family (SRMR, its asymptotic SE, an exact-fit
 ## z-test against 0, and the bias-corrected USRMR with a close-fit confidence
 ## interval and a close-fit z-test against 0.05). With a mean structure the
@@ -32,7 +32,7 @@ compare_summary <- function(mag, lav, tol = 1e-4) {
 ## --- single group, no mean structure -----------------------------------------
 f1 <- cfa(HS.model, data = HolzingerSwineford1939)
 m1 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML")
-s1 <- lav_residuals(m1)$summary[[1]]
+s1 <- lav_residuals(m1, estimated_weight = FALSE)$summary[[1]]
 compare_summary(s1, lavResiduals(f1)$summary)
 stopifnot(identical(colnames(s1), "cov"))
 
@@ -43,7 +43,7 @@ print(round(s1$cov, 5))
 f2 <- cfa(HS.model, data = HolzingerSwineford1939, meanstructure = TRUE)
 m2 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML",
               meanstructure = TRUE)
-s2 <- lav_residuals(m2)$summary[[1]]
+s2 <- lav_residuals(m2, estimated_weight = FALSE)$summary[[1]]
 compare_summary(s2, lavResiduals(f2)$summary)
 stopifnot(identical(colnames(s2), c("cov", "mean", "total")))
 
@@ -52,7 +52,7 @@ f3 <- cfa(HS.model, data = HolzingerSwineford1939, group = "school",
           meanstructure = TRUE)
 m3 <- fit_model(HS.model, HolzingerSwineford1939, estimator = "ML",
               groups = "school", meanstructure = TRUE)
-s3 <- lav_residuals(m3)$summary
+s3 <- lav_residuals(m3, estimated_weight = FALSE)$summary
 ## magmaan and lavaan may order groups differently; align by label.
 lav_labels <- lavInspect(f3, "group.label")
 for (g in seq_along(s3)) {

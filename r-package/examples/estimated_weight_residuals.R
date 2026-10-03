@@ -32,7 +32,7 @@ model <- "f =~ x1 + x2 + x3 + x4"
 fit <- fit_model(model, dat, estimator = "GLS")
 stopifnot(identical(fit$estimator, "GLS"), isTRUE(fit$converged))
 
-nt <- lav_residuals(fit)                                       # NT projection
+nt <- lav_residuals(fit, estimated_weight = FALSE)                                       # NT projection
 ew <- lav_residuals(fit, estimated_weight = TRUE, data = dat)  # complete sandwich
 
 ## The point residuals are identical (same theta-hat); only the ACOV changes.

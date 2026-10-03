@@ -47,7 +47,7 @@ test_that("estimated-weight inference reads the recorded continuous recipe", {
   expect_gt(max(abs(mi$dls3$mi.scaled - mi$dls1$mi.scaled)), 1e-3)
   # The weight influence is not zero for the estimated recipes.
   for (nm in c("dwls", "dls3")) {
-    fixed <- modification_indices_robust(fits[[nm]], data = d)
+    fixed <- modification_indices_robust(fits[[nm]], data = d, estimated_weight = FALSE)
     expect_gt(max(abs(fixed$mi.scaled - mi[[nm]]$mi.scaled)), 1e-4)
   }
 
@@ -74,8 +74,7 @@ test_that("estimated-weight inference reads the recorded continuous recipe", {
                tolerance = 1e-5)
   expect_true(is.finite(profile$dls3$scaling_factor))
 
-  rbm <- lapply(fits[c("nt", "dls0")], magmaan_core$frontier_rbm, raw_data = X,
-                estimated_weight = TRUE)
+  rbm <- lapply(fits[c("nt", "dls0")], magmaan_core$frontier_rbm, raw_data = X)
   expect_equal(rbm$dls0$theta, rbm$nt$theta, tolerance = 1e-5)
 })
 
@@ -103,20 +102,20 @@ test_that("supplied weights are used as fitted but have no estimated-weight reci
   expect_equal(rbm_fixed$theta, magmaan_core$frontier_rbm(
     adf, raw_data = as.matrix(d), estimated_weight = FALSE)$theta,
     tolerance = 1e-6)
-  expect_equal(magmaan_core$frontier_rbm(
-    supplied, raw_data = as.matrix(d))$theta, rbm_fixed$theta)
+  expect_error(magmaan_core$frontier_rbm(
+    supplied, raw_data = as.matrix(d)), "UnsupportedInference")
   expect_error(magmaan_core$frontier_rbm(
     supplied, raw_data = as.matrix(d), estimated_weight = TRUE),
     "UnsupportedInference")
 
-  fixed <- modification_indices_robust(supplied, data = d)
-  expect_equal(fixed$mi.scaled, modification_indices_robust(adf, data = d)$mi.scaled,
+  fixed <- modification_indices_robust(supplied, data = d, estimated_weight = FALSE)
+  expect_equal(fixed$mi.scaled, modification_indices_robust(adf, data = d, estimated_weight = FALSE)$mi.scaled,
                tolerance = 1e-6)
   expect_equal(modification_indices(supplied)$mi, modification_indices(adf)$mi,
                tolerance = 1e-6)
-  expect_equal(modification_indices_robust(adf, data = d, weight = adf$W)$mi.scaled,
+  expect_equal(modification_indices_robust(adf, data = d, weight = adf$W, estimated_weight = FALSE)$mi.scaled,
                fixed$mi.scaled, tolerance = 1e-6)
-  expect_error(modification_indices_robust(adf, data = d, weight = diag(nrow(adf$W))),
+  expect_error(modification_indices_robust(adf, data = d, weight = diag(nrow(adf$W)), estimated_weight = FALSE),
                "fit\\$W")
 
   expect_error(modification_indices_robust(supplied, data = d, estimated_weight = TRUE),
@@ -146,7 +145,7 @@ test_that("ordinal NT, DLS and supplied weights refuse the weight influence", {
                dls = fit_model(spec, ord, estimator = "DLS", dls_a = 0.3),
                supplied = supplied)
   for (nm in names(fits)) {
-    expect_true(all(is.finite(modification_indices_robust(fits[[nm]])$mi.scaled)),
+    expect_true(all(is.finite(modification_indices_robust(fits[[nm]], estimated_weight = FALSE)$mi.scaled)),
                 info = nm)
     expect_error(modification_indices_robust(fits[[nm]], estimated_weight = TRUE),
                  "UnsupportedInference", info = nm)
@@ -154,7 +153,7 @@ test_that("ordinal NT, DLS and supplied weights refuse the weight influence", {
   # Association ML has no MI contract until 0.3.0.
   ml <- fit_model(spec, ord, estimator = "ML")
   expect_error(modification_indices(ml), "association")
-  expect_error(modification_indices_robust(ml), "association")
+  expect_error(modification_indices_robust(ml, estimated_weight = FALSE), "association")
 })
 
 test_that("two-stage MI and releases reduce to complete-data robust tests", {
@@ -192,26 +191,26 @@ test_that("two-stage MI under missing data uses the recorded Stage-2 weight", {
   nt <- fit_model(spec, d, estimator = "ML2S")
   dls <- fit_model(spec, d, estimator = "ML2S", stage2_weight = "dls", dls_a = 0.3)
 
-  nt_mi <- modification_indices_robust(nt)
+  nt_mi <- modification_indices_robust(nt, estimated_weight = FALSE)
   expect_true(all(is.finite(nt_mi$mi.scaled) & nt_mi$scaling.factor > 0))
   expect_equal(modification_indices_robust(nt, estimated_weight = TRUE)$mi.scaled,
                nt_mi$mi.scaled, tolerance = 1e-10)
-  fixed <- modification_indices_robust(dls)
+  fixed <- modification_indices_robust(dls, estimated_weight = FALSE)
   estimated <- modification_indices_robust(dls, estimated_weight = TRUE)
   expect_true(all(is.finite(estimated$mi.scaled)))
   expect_equal(estimated$mi, fixed$mi, tolerance = 1e-10)
   expect_gt(max(abs(estimated$mi.scaled - fixed$mi.scaled)), 1e-4)
   expect_equal(modification_indices(dls)$mi, fixed$mi, tolerance = 1e-8)
 
-  expect_error(modification_indices_robust(nt, information = "observed"),
+  expect_error(modification_indices_robust(nt, information = "observed", estimated_weight = FALSE),
                "UnsupportedInference")
-  expect_error(modification_indices_robust(nt, data = d), "omit `data`")
-  expect_error(modification_indices_robust(nt, bread = "observed"), "bread")
-  expect_error(modification_indices_robust(dls, weight = diag(20)), "omit `weight`")
+  expect_error(modification_indices_robust(nt, data = d, estimated_weight = FALSE), "omit `data`")
+  expect_error(modification_indices_robust(nt, bread = "observed", estimated_weight = FALSE), "bread")
+  expect_error(modification_indices_robust(dls, weight = diag(20), estimated_weight = FALSE), "omit `weight`")
 
   # Refits and case influence use the recorded Stage-2 weight.
-  expect_error(magmaan_core$frontier_rbm(dls, stage2_weight = "nt", estimated_weight = TRUE), "recorded")
-  expect_error(magmaan_core$frontier_rbm(dls, dls_a = 0.5, estimated_weight = TRUE), "recorded")
+  expect_error(magmaan_core$frontier_rbm(dls, stage2_weight = "nt"), "recorded")
+  expect_error(magmaan_core$frontier_rbm(dls, dls_a = 0.5), "recorded")
   expect_true(all(is.finite(est_change_raw_approx(dls, type = "estimated.weight"))))
 })
 
@@ -261,7 +260,7 @@ test_that("two-stage MAR MI and releases retain positive Stage-1 scaling", {
     for (release in c(FALSE, TRUE)) {
       worker <- if (release) score_tests_robust else modification_indices_robust
       ordinary <- if (release) score_tests(fit) else modification_indices(fit)
-      fixed <- worker(fit)
+      fixed <- worker(fit, estimated_weight = FALSE)
       estimated <- worker(fit, estimated_weight = TRUE)
       expect_gt(nrow(fixed), 0L)
       expect_identical(attr(ordinary, "mi_type"), "naive_stage2")
@@ -318,16 +317,16 @@ test_that("complete ML MI and equality releases share ordinary and robust coordi
   for (release in c(FALSE, TRUE)) {
     worker <- if (release) score_tests_robust else modification_indices_robust
     ordinary <- if (release) score_tests(fit) else modification_indices(fit)
-    robust <- worker(fit, data = d)
+    robust <- worker(fit, data = d, estimated_weight = FALSE)
     expect_gt(nrow(ordinary), 0L)
     expect_equal(robust$mi, ordinary$mi, tolerance = 1e-8)
     expect_equal(robust$epc, ordinary$epc, tolerance = 1e-8)
     expect_true(all(is.finite(robust$mi.scaled) & robust$scaling.factor > 0))
     if (release) {
       # The R release adapter has no sample-only ML/Gamma_NT path.
-      expect_error(worker(fit, cov = "model_implied"), "require.*fitting data")
+      expect_error(worker(fit, cov = "model_implied", estimated_weight = FALSE), "require.*fitting data")
     } else {
-      normal <- worker(fit, cov = "model_implied")
+      normal <- worker(fit, cov = "model_implied", estimated_weight = FALSE)
       expect_equal(normal$mi.scaled, ordinary$mi, tolerance = 1e-8)
     }
     expect_error(worker(fit, data = d, estimated_weight = TRUE), "estimated_weight")
@@ -347,7 +346,7 @@ test_that("ordinal recipe matrix gates releases and estimated-weight refusals", 
     for (release in c(FALSE, TRUE)) {
       ordinary <- if (release) score_tests(fit) else modification_indices(fit)
       worker <- if (release) score_tests_robust else modification_indices_robust
-      fixed <- worker(fit)
+      fixed <- worker(fit, estimated_weight = FALSE)
       expect_gt(nrow(ordinary), 0L)
       expect_equal(fixed$mi, ordinary$mi, tolerance = 1e-8)
       expect_equal(fixed$epc, ordinary$epc, tolerance = 1e-8)
@@ -382,7 +381,7 @@ test_that("mixed ordinal MI matrix gates fixed weights and explicit refusals", {
       worker <- if (release) score_tests_robust else modification_indices_robust
       expect_gt(nrow(ordinary), 0L)
       expect_true(all(is.finite(ordinary$mi)))
-      fixed <- worker(fit)
+      fixed <- worker(fit, estimated_weight = FALSE)
       expect_equal(fixed$mi, ordinary$mi, tolerance = 1e-8)
       expect_true(all(is.finite(fixed$mi.scaled) & fixed$scaling.factor > 0))
       expect_error(worker(fit, estimated_weight = TRUE), "not yet implemented")
@@ -391,7 +390,7 @@ test_that("mixed ordinal MI matrix gates fixed weights and explicit refusals", {
 })
 
 
-test_that("lab estimated-weight switches default to fixed weights", {
+test_that("lab estimated-weight switches default to misspecification-robust weights", {
   ns <- asNamespace("magmaanlab")
   checked <- character()
   for (name in ls(ns, all.names = TRUE)) {
@@ -399,7 +398,7 @@ test_that("lab estimated-weight switches default to fixed weights", {
     if (!is.function(worker)) next
     args <- formals(worker)
     if (!"estimated_weight" %in% names(args)) next
-    expect_identical(args$estimated_weight, FALSE, info = name)
+    expect_identical(args$estimated_weight, TRUE, info = name)
     checked <- c(checked, name)
   }
   expect_true("frontier_rbm" %in% checked)

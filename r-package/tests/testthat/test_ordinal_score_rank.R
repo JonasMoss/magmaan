@@ -22,7 +22,7 @@ test_that("ordinal ordinary and robust ranks agree across weight scales", {
                          groups = if (grouped) "g" else NULL)
         expect_true(fit$converged)
         baseline <- modification_indices(fit)
-        baseline_robust <- modification_indices_robust(fit)
+        baseline_robust <- modification_indices_robust(fit, estimated_weight = FALSE)
         expect_equal(nrow(baseline), if (grouped) 12L else 6L)
         expect_true(all(baseline$op == "~~" & baseline$lhs != baseline$rhs))
         for (scale in c(1e-16, 1, 1e12)) {
@@ -30,7 +30,7 @@ test_that("ordinal ordinary and robust ranks agree across weight scales", {
           slot <- if (estimator == "DWLS") "W_dwls" else "W_wls"
           scaled$ordinal_stats[[slot]] <- lapply(fit$ordinal_stats[[slot]], function(w) scale * w)
           ordinary <- modification_indices(scaled)
-          robust <- modification_indices_robust(scaled)
+          robust <- modification_indices_robust(scaled, estimated_weight = FALSE)
           expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(baseline))
           expect_identical(ordinal_score_rank_key(robust), ordinal_score_rank_key(ordinary))
           expect_equal(ordinary$mi / scale, baseline$mi, tolerance = 1e-7)
@@ -57,7 +57,7 @@ test_that("ordinal fixed rows and equality releases use the same rank and moment
         expect_true(fit$converged)
         for (release in c(FALSE, TRUE)) {
           ordinary <- if (release) score_tests(fit) else modification_indices(fit)
-          robust <- if (release) score_tests_robust(fit) else modification_indices_robust(fit)
+          robust <- if (release) score_tests_robust(fit, estimated_weight = FALSE) else modification_indices_robust(fit, estimated_weight = FALSE)
           expect_gt(nrow(ordinary), 0L)
           expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(robust))
           expect_equal(ordinary$mi, robust$mi, tolerance = 1e-8)
@@ -68,13 +68,13 @@ test_that("ordinal fixed rows and equality releases use the same rank and moment
         }
         if (estimator != "ULS") {
           base_release <- score_tests(fit)
-          base_robust <- score_tests_robust(fit)
+          base_robust <- score_tests_robust(fit, estimated_weight = FALSE)
           slot <- if (estimator == "DWLS") "W_dwls" else "W_wls"
           for (scale in c(1e-16, 1e12)) {
             scaled <- fit
             scaled$ordinal_stats[[slot]] <- lapply(fit$ordinal_stats[[slot]], function(w) scale * w)
             ordinary <- score_tests(scaled)
-            robust <- score_tests_robust(scaled)
+            robust <- score_tests_robust(scaled, estimated_weight = FALSE)
             expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(base_release))
             expect_identical(ordinal_score_rank_key(robust), ordinal_score_rank_key(ordinary))
             expect_equal(ordinary$mi / scale, base_release$mi, tolerance = 1e-7)

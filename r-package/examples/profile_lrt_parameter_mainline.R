@@ -109,19 +109,19 @@ fit_ml2s_dls <- fit_model(
 free_ml2s_dls <- loading_free_id(fit_ml2s_dls, "x2")
 target_ml2s_dls <- 0.97 * fit_ml2s_dls$theta[free_ml2s_dls]
 lrt_ml2s_dls <- core$frontier_profile_lrt_parameter_ml2s(
-  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls, estimated_weight = TRUE)
+  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls)
 lrt_ml2s_dls_robust <- core$frontier_profile_lrt_parameter_ml2s(
   fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls,
-  reference = "robust_scaled", estimated_weight = TRUE)
+  reference = "robust_scaled")
 lrt_ml2s_dls_misspec <- core$frontier_profile_lrt_parameter_ml2s(
   fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls,
-  reference = "misspec_mixture", estimated_weight = TRUE)
+  reference = "misspec_mixture")
 ci_ml2s_dls <- core$frontier_profile_lrt_ci_parameter_ml2s(
   fit_ml2s_dls, free_ml2s_dls,
   initial_step = 0.05 * abs(fit_ml2s_dls$theta[free_ml2s_dls]),
   root_tol = 1e-4,
   statistic_tol = 1e-4
-, estimated_weight = TRUE)
+)
 check_profile(lrt_ml2s_dls, target_ml2s_dls)
 check_robust(lrt_ml2s_dls_robust)
 check_misspec(lrt_ml2s_dls_misspec)

@@ -22,9 +22,9 @@ test_that("FIML robust MI and releases agree across retained and explicit data",
 
     for (release in c(FALSE, TRUE)) {
       ordinary <- if (release) score_tests(fit) else modification_indices(fit)
-      robust <- if (release) score_tests_robust(fit) else modification_indices_robust(fit)
-      explicit <- if (release) score_tests_robust(fit, data = d) else {
-        modification_indices_robust(fit, data = d)
+      robust <- if (release) score_tests_robust(fit, estimated_weight = FALSE) else modification_indices_robust(fit, estimated_weight = FALSE)
+      explicit <- if (release) score_tests_robust(fit, data = d, estimated_weight = FALSE) else {
+        modification_indices_robust(fit, data = d, estimated_weight = FALSE)
       }
       expect_gt(nrow(robust), 0L)
       expect_equal(explicit, robust, tolerance = 1e-10)
@@ -41,17 +41,17 @@ test_that("FIML robust MI and releases agree across retained and explicit data",
       uncached <- fit
       uncached$fiml_pack <- NULL
       uncached$fiml_h1 <- NULL
-      rebuilt <- if (release) score_tests_robust(uncached) else {
-        modification_indices_robust(uncached)
+      rebuilt <- if (release) score_tests_robust(uncached, estimated_weight = FALSE) else {
+        modification_indices_robust(uncached, estimated_weight = FALSE)
       }
       expect_equal(rebuilt, robust, tolerance = 1e-10)
       uncached$raw_data <- NULL
-      supplied <- if (release) score_tests_robust(uncached, data = d) else {
-        modification_indices_robust(uncached, data = d)
+      supplied <- if (release) score_tests_robust(uncached, data = d, estimated_weight = FALSE) else {
+        modification_indices_robust(uncached, data = d, estimated_weight = FALSE)
       }
       expect_equal(supplied, robust, tolerance = 1e-10)
     }
-    mi <- modification_indices_robust(fit)
+    mi <- modification_indices_robust(fit, estimated_weight = FALSE)
     marker <- mi$lhs == "f" & mi$op == "=~" & mi$rhs == "x1"
     if (grouped) {
       # Shared loading labels anchor each group's scale through the other group.
@@ -59,7 +59,7 @@ test_that("FIML robust MI and releases agree across retained and explicit data",
       unlabelled <- fit_model("f =~ x1+x2+x3+x4", d, groups = "g",
                               estimator = "FIML", meanstructure = TRUE)
       expect_true(unlabelled$converged)
-      mi_unlabelled <- modification_indices_robust(unlabelled)
+      mi_unlabelled <- modification_indices_robust(unlabelled, estimated_weight = FALSE)
       expect_equal(nrow(mi_unlabelled), 12L)
       expect_true(all(mi_unlabelled$op == "~~" &
                        mi_unlabelled$lhs != mi_unlabelled$rhs))
@@ -79,14 +79,14 @@ test_that("FIML explicit score data rebuild their missingness pack", {
   masked <- list(X = as.matrix(d), mask = !is.na(as.matrix(d)))
   masked$X[!masked$mask] <- 1e6
   for (worker in list(modification_indices_robust, score_tests_robust)) {
-    expect_equal(worker(fit, data = masked), worker(fit), tolerance = 1e-10)
-    explicit <- worker(fit, data = changed)
+    expect_equal(worker(fit, data = masked, estimated_weight = FALSE), worker(fit, estimated_weight = FALSE), tolerance = 1e-10)
+    explicit <- worker(fit, data = changed, estimated_weight = FALSE)
     rebuilt <- fit
     rebuilt$raw_data <- magmaanlab:::raw_data_arg(fit, changed)
     rebuilt$fiml_pack <- NULL
     rebuilt$fiml_h1 <- NULL
-    expect_equal(explicit, worker(rebuilt), tolerance = 1e-10)
-    expect_false(isTRUE(all.equal(explicit$mi, worker(fit)$mi)))
+    expect_equal(explicit, worker(rebuilt, estimated_weight = FALSE), tolerance = 1e-10)
+    expect_false(isTRUE(all.equal(explicit$mi, worker(fit, estimated_weight = FALSE)$mi)))
   }
 })
 
@@ -95,7 +95,7 @@ test_that("FIML robust MI retains identified fixed loadings", {
   fit <- fit_model("f =~ 1*x1+x2+x3+x4\nf ~~ 1*f", d,
                    estimator = "FIML", meanstructure = TRUE)
   expect_true(fit$converged)
-  mi <- modification_indices_robust(fit)
+  mi <- modification_indices_robust(fit, estimated_weight = FALSE)
   expect_true(any(mi$lhs == "f" & mi$op == "=~" & mi$rhs == "x1"))
   expect_equal(mi$mi, modification_indices(fit)$mi, tolerance = 1e-8)
 })
@@ -104,19 +104,19 @@ test_that("FIML robust score wrappers reject incompatible conventions", {
   fit <- fit_model("f =~ x1 + c*x2 + c*x3 + x4", fiml_robust_score_data(),
                    estimator = "FIML", meanstructure = TRUE)
   for (worker in list(modification_indices_robust, score_tests_robust)) {
-    expect_error(worker(fit, bread = "expected"), "bread='observed'")
-    expect_error(worker(fit, bread = "invalid"), "bread='observed'")
-    expect_error(worker(fit, moments = "unstructured"), "observed-pattern")
-    expect_error(worker(fit, cov = "model_implied"), "observed-pattern")
-    expect_error(worker(fit, cov = "browne_unbiased"), "observed-pattern")
+    expect_error(worker(fit, bread = "expected", estimated_weight = FALSE), "bread='observed'")
+    expect_error(worker(fit, bread = "invalid", estimated_weight = FALSE), "bread='observed'")
+    expect_error(worker(fit, moments = "unstructured", estimated_weight = FALSE), "observed-pattern")
+    expect_error(worker(fit, cov = "model_implied", estimated_weight = FALSE), "observed-pattern")
+    expect_error(worker(fit, cov = "browne_unbiased", estimated_weight = FALSE), "observed-pattern")
     expect_error(worker(fit, estimated_weight = TRUE), "no second-stage weight")
-    expect_error(worker(fit, weight = diag(10)), "no second-stage weight")
+    expect_error(worker(fit, weight = diag(10), estimated_weight = FALSE), "no second-stage weight")
     no_data <- fit
     no_data$raw_data <- NULL
-    expect_error(worker(no_data), "requires fit\\$raw_data or data=")
+    expect_error(worker(no_data, estimated_weight = FALSE), "requires fit\\$raw_data or data=")
   }
-  expect_error(modification_indices_robust(fit, information = "expected"),
+  expect_error(modification_indices_robust(fit, information = "expected", estimated_weight = FALSE),
                "information='observed'")
-  expect_error(modification_indices_robust(fit, information = "invalid"),
+  expect_error(modification_indices_robust(fit, information = "invalid", estimated_weight = FALSE),
                "information must be")
 })

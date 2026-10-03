@@ -20,8 +20,8 @@ ordinal fitting helpers.}
 fit, with \code{moment_influence} and either \code{gamma_diag_influence} or raw data
 available (e.g. from \code{data_mixed_ordinal_stats_from_df()}).}
 
-\item{estimated_weight}{\code{TRUE} (default) propagates the mixed DWLS weight
-sampling variability; \code{FALSE} is the fixed-weight comparator.}
+\item{estimated_weight}{\code{TRUE} (the misspecification-robust default)
+propagates the mixed DWLS weight sampling variability; \code{FALSE} is the fixed-weight comparator.}
 
 \item{conf_level}{Two-sided confidence level for the intervals.}
 

@@ -51,7 +51,7 @@ stopifnot(close(res$cov[[1]], ss$S[[1]] - implied$sigma[[1]]))
 stopifnot(close(std_res$cov_raw[[1]], res$cov[[1]]))
 stopifnot(is.finite(std_res$srmr))
 res_friendly <- stats::residuals(fit)
-std_res_friendly <- stats::residuals(fit, standardized = TRUE)
+std_res_friendly <- stats::residuals(fit, standardized = TRUE, estimated_weight = FALSE)
 stopifnot(close(res_friendly$cov[[1]], res$cov[[1]]))
 stopifnot(close(std_res_friendly$cov_raw[[1]], std_res$cov_raw[[1]]))
 

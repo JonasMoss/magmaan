@@ -21,8 +21,8 @@ Required and passed explicitly, like \code{robust_ordinal()} and the profile
 bindings: a fitted object does not retain the integer data the
 estimated-weight inference needs.}
 
-\item{estimated_weight}{\code{TRUE} (default) propagates the polychoric-weight
-sampling variability; \code{FALSE} is the fixed-weight comparator.}
+\item{estimated_weight}{\code{TRUE} (the misspecification-robust default)
+propagates the polychoric-weight sampling variability; \code{FALSE} is the fixed-weight comparator.}
 
 \item{conf_level}{Two-sided confidence level for the intervals.}
 

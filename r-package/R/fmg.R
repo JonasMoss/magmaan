@@ -1232,8 +1232,8 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 #'   Required and passed explicitly, like `robust_ordinal()` and the profile
 #'   bindings: a fitted object does not retain the integer data the
 #'   estimated-weight inference needs.
-#' @param estimated_weight `TRUE` propagates the polychoric-weight
-#'   sampling variability; `FALSE` (default) is the fixed-weight comparator.
+#' @param estimated_weight `TRUE` (the misspecification-robust default)
+#'   propagates the polychoric-weight sampling variability; `FALSE` is the fixed-weight comparator.
 #' @param conf_level Two-sided confidence level for the intervals.
 #' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
 #' @return A named list: `rmsea`/`crmr`/`srmr`/`cfi`/`tli` with `.ci.lower` and
@@ -1241,7 +1241,7 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 #'   baseline `chisq`/`df`, `conf.level`, `estimated.weight`, and `warnings`.
 #' @export
 fit_measures_misspec <- function(fit, ordinal_stats = NULL,
-                                 estimated_weight = FALSE, conf_level = 0.90,
+                                 estimated_weight = TRUE, conf_level = 0.90,
                                  eig_tol = 1e-10) {
   if (is.null(ordinal_stats)) {
     stop("fit_measures_misspec(): `ordinal_stats` is required (the categorical ",
@@ -1261,14 +1261,14 @@ fit_measures_misspec <- function(fit, ordinal_stats = NULL,
 #' @param mixed_stats The mixed continuous/ordinal sample statistics used for the
 #'   fit, with `moment_influence` and either `gamma_diag_influence` or raw data
 #'   available (e.g. from `data_mixed_ordinal_stats_from_df()`).
-#' @param estimated_weight `TRUE` propagates the mixed DWLS weight
-#'   sampling variability; `FALSE` (default) is the fixed-weight comparator.
+#' @param estimated_weight `TRUE` (the misspecification-robust default)
+#'   propagates the mixed DWLS weight sampling variability; `FALSE` is the fixed-weight comparator.
 #' @param conf_level Two-sided confidence level for the intervals.
 #' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
 #' @return A named list with the same fields as [fit_measures_misspec()].
 #' @export
 fit_measures_misspec_mixed_ordinal <- function(fit, mixed_stats = NULL,
-                                               estimated_weight = FALSE,
+                                               estimated_weight = TRUE,
                                                conf_level = 0.90,
                                                eig_tol = 1e-10) {
   if (is.null(mixed_stats)) {

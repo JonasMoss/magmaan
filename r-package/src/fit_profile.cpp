@@ -558,7 +558,7 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
     double constraint_tol = 1e-6,
     SEXP raw_data = R_NilValue,
     bool robust = false,
-    bool estimated_weight = false,
+    bool estimated_weight = true,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -738,7 +738,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
     double statistic_tol = 1e-6,
     SEXP raw_data = R_NilValue,
     bool robust = false,
-    bool estimated_weight = false,
+    bool estimated_weight = true,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -915,7 +915,7 @@ Rcpp::List frontier_profile_lrt_parameter_ml2s_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
-    bool estimated_weight = false) {
+    bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -1144,7 +1144,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml2s_impl(
     SEXP raw_data = R_NilValue,
     bool robust = false,
     Rcpp::Nullable<Rcpp::String> reference = R_NilValue,
-    bool estimated_weight = false) {
+    bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")

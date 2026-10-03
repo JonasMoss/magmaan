@@ -20,33 +20,39 @@ free_id <- fit$partable$free[loading_row]
 stopifnot(length(free_id) == 1L, free_id > 0L)
 
 target <- 0.95 * fit$theta[free_id]
-lrt <- core$frontier_profile_lrt_parameter_gmm(fit, free_id, target)
+lrt <- core$frontier_profile_lrt_parameter_gmm(fit, free_id, target, estimated_weight = FALSE)
 lrt_robust <- core$frontier_profile_lrt_parameter_gmm(
-  fit, free_id, target, raw_data = X, robust = TRUE
+  fit, free_id, target, raw_data = X, robust = TRUE,
+  estimated_weight = FALSE
 )
 lrt_misspec <- core$frontier_profile_lrt_parameter_gmm(
-  fit, free_id, target, raw_data = X, reference = "misspec_mixture"
+  fit, free_id, target, raw_data = X, reference = "misspec_mixture",
+  estimated_weight = FALSE
 )
 ci <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
-  root_tol = 1e-4, statistic_tol = 1e-4
+  root_tol = 1e-4, statistic_tol = 1e-4,
+  estimated_weight = FALSE
 )
 ci_robust <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-5, statistic_tol = 1e-5,
-  raw_data = X, robust = TRUE
+  raw_data = X, robust = TRUE,
+  estimated_weight = FALSE
 )
 ci_misspec <- core$frontier_profile_lrt_ci_parameter_gmm(
   fit, free_id, initial_step = 0.1 * abs(fit$theta[free_id]),
   root_tol = 1e-5, statistic_tol = 1e-5,
-  raw_data = X, reference = "misspec_mixture"
+  raw_data = X, reference = "misspec_mixture",
+  estimated_weight = FALSE
 )
 
 fit_gls <- fit_model(model, dat, estimator = "GLS")
 free_gls <- fit_gls$partable$free[loading_row]
 target_gls <- 0.95 * fit_gls$theta[free_gls]
 lrt_gls_robust <- core$frontier_profile_lrt_parameter_gmm(
-  fit_gls, free_gls, target_gls, raw_data = X, robust = TRUE
+  fit_gls, free_gls, target_gls, raw_data = X, robust = TRUE,
+  estimated_weight = FALSE
 )
 lrt_gls_estw <- core$frontier_profile_lrt_parameter_gmm(
   fit_gls, free_gls, target_gls, raw_data = X, robust = TRUE,
@@ -64,7 +70,8 @@ fit_wls <- fit_model(model, dat, estimator = "WLS")
 free_wls <- fit_wls$partable$free[loading_row]
 target_wls <- 0.95 * fit_wls$theta[free_wls]
 lrt_wls_robust <- core$frontier_profile_lrt_parameter_gmm(
-  fit_wls, free_wls, target_wls, raw_data = X, robust = TRUE
+  fit_wls, free_wls, target_wls, raw_data = X, robust = TRUE,
+  estimated_weight = FALSE
 )
 lrt_wls_estw <- core$frontier_profile_lrt_parameter_gmm(
   fit_wls, free_wls, target_wls, raw_data = X, robust = TRUE,
