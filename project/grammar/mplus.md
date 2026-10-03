@@ -162,11 +162,15 @@ increment.
   the language summary) and the special-modeling-issues chapter, summarized
   in the source inventory with documented/derived/unresolved classes as for
   EQS. Use the edition matching the installed Demo where one exists.
-- The Mplus 9.1 Demo (`mpdemo`, at most six dependent and two independent
-  observed variables). TECH1 prints Mplus's own parameter specification per
-  matrix: free-parameter numbering and fixed values. It independently checks
-  rows, fixed/free status and equalities for small probes, much as LISREL's
-  Parameter Specifications check the Little translations.
+- The Mplus 9.1 Demo, installed locally at `~/mplusdemo/mpdemo` (at most six
+  dependent and two independent observed variables). `mpdemo probe.inp` writes
+  `probe.out` beside the input in about a second and touches nothing else.
+  TECH1 prints Mplus's own parameter specification per matrix: free-parameter
+  numbering and fixed values. It independently checks rows, fixed/free status
+  and equalities for small probes, much as LISREL's Parameter Specifications
+  check the Little translations. Probes are agent work: a maintainer tool
+  under `cpp/tests/tools/` runs them and writes derived summaries, following
+  `regen_oracle_twolevel_mplus.R`.
 - The optional textbook corpus: about 100 Mplus cases (User's Guide v8 40,
   Muthén et al. 2017 20, Geiser 2013 28, Brown 2015 19) whose shipped `.out`
   gives N, free-parameter count, df, chi-square, log-likelihood and every
@@ -230,8 +234,12 @@ alpha exposure.
 ## Implementation sequence
 
 0. **Source inventory and grammar baseline** (planner). Inventory with
-   evidence classes and pages; Demo probes for unresolved defaults needed by
-   increments 1–2; the normative EBNF for increment 1.
+   evidence classes and pages, a probe list for unresolved rules (each with a
+   probe input and the TECH1 or MODEL RESULTS entry that settles it) and the
+   normative EBNF for increment 1.
+   **Demo probes** (lane). Run the probe list through the Demo, record each
+   result against its inventory ID and check in derived summaries. The
+   planner resolves the inventory and grammar from the results.
 1. **Increments 1–5** in order, each a self-contained lane: grammar, C++
    lowering, fixtures, Demo and corpus gates, lab exposure, `just vendor`.
    Increment 5 needs only increment 1 and may run in parallel with 2–4.

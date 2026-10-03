@@ -1074,11 +1074,15 @@ carry the label `mplus`.
 
 - [ ] **M — source inventory and grammar baseline.** Summarize the User's
   Guide language chapters with documented/derived/unresolved classes and
-  pages; run Demo probes for unresolved defaults needed by increments 1–2;
-  write the normative EBNF for increment 1. Planner work, not a lane.
-  **Check:** every default rule of increments 1–2 is documented or
-  Demo-confirmed, and the plan's command classification is complete for the
-  inventoried options.
+  pages; write a probe list for unresolved rules and the normative EBNF for
+  increment 1. Planner work, not a lane. **Check:** the plan's command
+  classification is complete for the inventoried options, and every
+  unresolved rule needed by increments 1–2 has a probe.
+- [ ] **S/M — Demo probes.** A lane runs the probe list through the local
+  Mplus Demo with a maintainer tool under `cpp/tests/tools/`, records results
+  against inventory IDs and checks in derived summaries; the planner then
+  resolves the inventory. **Check:** every default rule of increments 1–2 is
+  documented or Demo-confirmed.
 - [ ] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,
