@@ -832,9 +832,16 @@ check resolves both flat curvatures (conditions 1.20/1.59), with step discrepanc
 below 1.94e-11 in objective-curvature units against independent 90-digit
 derivatives. The sampling-metric guard still rejects all points. See the
 [least-squares capability contract](capabilities/least_squares.md). Remaining
-work is justified adapter construction bounds and broader sampled confirmation.
+work is terminal-audit integration and broader sampled confirmation.
 The conditional interval kernels now include projection/solve verification and
 joint ULS/NTML checks on 329 points, including 15 fresh numerical controls.
+An outward interval producer now supplies calculated construction bounds for
+covariance-only unboxed ambient ULS/ML, including analytic observed curvature
+and a verified positive-curvature lower bound. Independent 90-digit checks
+cover all 314 available bounds; all 47 numerical minima qualify, including the
+flat NTML witness, with 250 correct decisive distance classifications and 79
+unresolved points. Optional R artifacts preserve the stored verdict. Sphere
+transport, means/other weights and broader sampled controls remain open.
 No statistical regularization or acceptance default follows.
 
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for

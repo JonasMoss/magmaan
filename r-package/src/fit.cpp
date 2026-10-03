@@ -6115,6 +6115,21 @@ Rcpp::List evaluate_at_impl(
       artifacts["distance_interval_conditional"] = interval_to_r(interval(
           Rcpp::as<double>(errors["matrix"]), Rcpp::as<double>(errors["vector"])));
     }
+    if (settings.containsElementNamed("derive_interval_input_errors") &&
+        Rcpp::as<bool>(settings["derive_interval_input_errors"])) {
+      const auto errors = magmaan::estimate::frontier::newton_input_error_bounds(
+          ctx.pt, ctx.rep, ctx.samp, theta_vec, a, est_enum);
+      artifacts["derived_interval_input_errors"] = Rcpp::List::create(
+          Rcpp::_["status"] = std::string(magmaan::estimate::to_string(errors.status)),
+          Rcpp::_["matrix"] = errors.matrix, Rcpp::_["vector"] = errors.vector,
+          Rcpp::_["curvature"] = errors.curvature,
+          Rcpp::_["curvature_lower_bound"] = errors.curvature_lower_bound,
+          Rcpp::_["detail"] = errors.detail);
+      if (errors.status == magmaan::estimate::NewtonAccuracyStatus::Available) {
+        artifacts["distance_interval_derived_inputs"] = interval_to_r(
+            magmaan::estimate::frontier::newton_input_distance_interval(a, errors));
+      }
+    }
     out["newton_audit"] = artifacts;
   }
   return out;

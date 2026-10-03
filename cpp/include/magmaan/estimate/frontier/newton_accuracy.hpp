@@ -42,6 +42,8 @@
 // The conditioning and solve guards are numerical safeguards, not
 // identification tests. This function never errors: failures are statuses.
 
+namespace magmaan::estimate { enum class Estimator; }
+
 namespace magmaan::estimate::frontier {
 
 // The result types live in estimate/diagnostics.hpp, since the common fit
@@ -186,6 +188,9 @@ NewtonDistanceInterval newton_metric_distance_interval(
 NewtonDistanceInterval newton_hessian_distance_interval(
     const NewtonSystem& system, const Eigen::VectorXd& gradient,
     double hessian_error, double gradient_error, double budget = .01);
+// Lower bound for target positive curvature in the retained equilibrated
+// coordinates. Zero means unresolved/nonpositive; NaN means unavailable.
+double newton_curvature_lower_bound(const NewtonSystem& system, double error);
 
 // Convex reduced quadratic: min g's + s'Hs/2 subject to normals*s >= lower.
 // Zero must be feasible. The base Hessian must be positive definite. Retains
@@ -252,6 +257,27 @@ struct NewtonAudit {
   NewtonMetricSystem metric_factor_system;  // preferred when a factor is supplied
   NewtonAccuracyDiagnostics diagnostics;
 };
+
+struct NewtonInputErrorBounds {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unsupported;
+  double matrix = std::numeric_limits<double>::quiet_NaN();
+  double vector = std::numeric_limits<double>::quiet_NaN();
+  double curvature = std::numeric_limits<double>::quiet_NaN();
+  double curvature_lower_bound = 0;
+  std::string detail;
+};
+// Independent outward interval evaluation of covariance-only linear SEM
+// moments/derivatives and sample roots at the exact supplied binary64 point.
+// ULS or complete-data ML only; ambient, unboxed geometry, matching audit.
+// Values are in the interval primitives' retained coordinates. Unsupported
+// means/weights/faces remain explicit; no dimensional allowance is substituted.
+NewtonInputErrorBounds newton_input_error_bounds(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const SampleStats& sample, const Eigen::VectorXd& theta,
+    const NewtonAudit& audit, Estimator estimator);
+NewtonDistanceInterval newton_input_distance_interval(
+    const NewtonAudit& audit, const NewtonInputErrorBounds& bounds,
+    double budget = .01);
 
 // Preserve geometry metadata when reassessing a retained audit. Only budget,
 // max_condition and max_solve_residual are consulted; interior_eigen_tol is a

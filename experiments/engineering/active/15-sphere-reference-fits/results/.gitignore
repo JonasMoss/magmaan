@@ -371,3 +371,14 @@ audit-uncertainty-final-v3/*
 !audit-uncertainty-final-v3/verification_metadata.csv
 !audit-uncertainty-final-v3/metadata.csv
 !audit-uncertainty-final-v3/reference_metadata.csv
+
+# Compact independently checked runtime construction bounds and judgments;
+# raw points/matrices and earlier attempts remain local, no default selected.
+!audit-construction-final-v2/
+audit-construction-final-v2/*
+!audit-construction-final-v2/comparisons.csv
+!audit-construction-final-v2/intervals.csv
+!audit-construction-final-v2/verification.csv
+!audit-construction-final-v2/verification_metadata.csv
+!audit-construction-final-v2/metadata.csv
+!audit-construction-final-v2/reference_metadata.csv

@@ -2140,6 +2140,10 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # factor/residual; ML uses the equilibrated Hessian/scaled score. The conditional
 # interval reports within_budget, above_budget or unresolved; it does not alter
 # fit acceptance. Zero construction bounds do not certify SEM input construction.
+# `derive_interval_input_errors = TRUE` recomputes outward interval bounds in
+# C++ for unboxed ambient covariance-only ULS/ML. It returns explicit status,
+# construction bounds, a verified positive-curvature margin and, when available,
+# `distance_interval_derived_inputs`. Means and other estimators are unsupported.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {

@@ -42,8 +42,8 @@ reported separately from correction assembly at the recorded residual.
 
 This is development validation, not a runtime forward-error guarantee or
 a fitting-default decision. The sampling-metric guard rejects all bank points.
-Usable uncertainty bounds, the flat finite NTML witness and fresh confirmation
-remain open.
+The subsequent construction-bound lane below resolves those numerical minima;
+production integration and broader sampled confirmation remain open.
 
 ## Conditional numerical intervals
 
@@ -62,6 +62,37 @@ ML artifacts respect explicit bounds and use the supplied chart.
 
 See the [numerical interval contract](../../validation/interior-newton-audit.md).
 Experiment 15 adds 329 independent point checks, including 15 fresh numerical
-minima and all seven finite NTML witnesses. Construction-error producers
-remain open; observed coverage of a dimensional allowance is insufficient
-to promote it to a fitting default.
+minima and all seven finite NTML witnesses. Its dimensional allowance remains
+a sensitivity assumption, separate from the construction producer below.
+
+## Calculated construction bounds
+
+`newton_input_error_bounds` independently recomputes covariance-only linear SEM
+moments, analytic first/second derivatives and sample roots using outward
+long-double intervals. It supports ambient unboxed single-level ULS and
+complete-data ML, with retained equality reductions and multiple sample blocks.
+Means, other weights, native sphere normalization and PSD faces are unsupported.
+Primitive fixed/free matrix cells are exact binary64 inputs; derived matrices
+are recomputed rather than taken from rounded model-evaluation intermediates.
+
+The producer bounds the target-minus-retained factor, score and observed
+curvature in the actual audit coordinates. ULS forms its Gauss-Newton term
+after applying the QR map, preserving the separate observed correction.
+`newton_curvature_lower_bound` verifies positive curvature using triangular
+inverse and Cholesky reconstruction residuals. `newton_input_distance_interval`
+requires that proof before composing a distance interval. Uncertain rank,
+curvature or interval pivots never authorize a pass; no regularization is used.
+
+R optional `derive_interval_input_errors=TRUE` returns explicit bounds/status
+and the derived-input distance interval, preserving the stored verdict.
+Experiment 15's `audit_construction` lane checks 329 points at 90 digits:
+all 314 available construction bounds and positive-curvature lower bounds cover,
+all 47 numerical minima qualify (25 retained ULS, 15 fresh ULS and seven NTML),
+and 250 decisive interval classifications are correct. The 79 unresolved points
+include 15 independently nonpositive NTML curvatures. Owning tests cover shared
+labels, feedback and unequal-sized groups, plus interval rank/saddle controls.
+
+This implementation settles the covariance-only construction-bound mechanism.
+Terminal-verdict integration, sphere transport, broader model/sample controls
+and any default decision remain separate. The current 1e12 production guard
+still rejects all retained ULS controls and the flat NTML minimum.

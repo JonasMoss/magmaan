@@ -1,0 +1,2 @@
+verifier_sha256,comparisons_sha256,judge,construction_rule,scope
+b5a618df6832f73b552d61c299d5b26ab5eba3bfc1ff885370670040943d2966,1f0ac25de78a4da115e81d842337e9a9e6d1a08ad66a950a0d61831022d96fb3,90-digit arithmetic enclosure; model-input allowance coverage separate from distance containment and decision,outward interval recomputation at binary64 inputs; dimensional sensitivity retained separately,"covariance-only unboxed ambient ULS/ML, fixed-point numerical controls, no fitting default change"

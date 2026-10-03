@@ -89,21 +89,48 @@ def main():
         construction_covers=construction_comparable and matrix_error<=binary(r['matrix_allowance']) and vector_error<=binary(r['vector_allowance'])
         conditional_covers=not mp.isfinite(target_distance) or binary(r['conditional_lower'])<=target_distance<=binary(r['conditional_upper'])
         def wrong(decision,d,positive):
-            return decision=='within_budget' and (not positive or d>mp.mpf('.01')) or decision=='above_budget' and positive and d<=mp.mpf('.01')
+            return decision=='within_budget' and (not positive or d>binary(.01)) or decision=='above_budget' and positive and d<=binary(.01)
+        extra={}
+        if 'derived_status' in r:
+            available=r['derived_status']=='available'
+            curvature_error=matrix_error
+            derived_vector_error=vector_error
+            curvature_lower_covers=True
+            if available and r['estimator']=='ULS':
+                T=artifact(pid,'curvature_coordinate_map')
+                exact_curvature=T.T*B.T*P.T*artifacts['hessian']*P*B*T
+                curvature_error=mp.norm(exact_curvature-artifact(pid,'curvature_equilibrated_hessian'))
+            elif available:
+                exact_curvature=D*H*D
+                rounded_score=mp.matrix([binary(float(D[i,i])*float(artifact(pid,'gradient')[i])) for i in range(D.rows)])
+                derived_vector_error=mp.norm(D*G-rounded_score)
+            if available and binary(r['derived_curvature_lower_bound'])>0:
+                curvature_lower_covers=binary(r['derived_curvature_lower_bound'])<=mp.eigsy(exact_curvature,eigvals_only=True)[0]
+            extra=dict(derived_status=r['derived_status'],derived_decision=r['derived_decision'],
+                derived_curvature_error=number(curvature_error),
+                derived_vector_error=number(derived_vector_error),
+                derived_bounds_covers=bool(not available or matrix_error<=binary(r['derived_matrix']) and
+                    derived_vector_error<=binary(r['derived_vector']) and curvature_error<=binary(r['derived_curvature'])),
+                derived_curvature_lower_covers=bool(curvature_lower_covers),
+                derived_interval_covers=bool(not mp.isfinite(target_distance) or
+                    binary(r['derived_lower'])<=target_distance<=binary(r['derived_upper'])),
+                derived_wrong_decision=bool(wrong(r['derived_decision'],target_distance,target_positive)),
+                derived_curvature_lower_bound=r['derived_curvature_lower_bound'])
         comparisons.append(dict(point_id=pid,case_id=cid,source_case=r['source_case'],role=r['role'],estimator=r['estimator'],target=r['target'],
             reference_distance=number(target_distance),reference_hessian_positive=bool(target_positive),
             retained_reference_distance=number(retained_distance),retained_interval_covers=bool(retained_covers),
             matrix_forward_error=number(matrix_error),vector_forward_error=number(vector_error),construction_comparable=bool(construction_comparable),construction_allowance_covers=bool(construction_covers),
             conditional_interval_covers=bool(conditional_covers),conditional_wrong_decision=bool(wrong(r['conditional_decision'],target_distance,target_positive)),
+            actual_wrong_decision=bool(r['actual_passed']=='TRUE' and wrong('within_budget',target_distance,target_positive)),
             retained_decision=r['retained_decision'],conditional_decision=r['conditional_decision'],actual_passed=r['actual_passed'],
-            retained_upper=r['retained_upper'],conditional_upper=r['conditional_upper']))
+            retained_upper=r['retained_upper'],conditional_upper=r['conditional_upper'],**extra))
         if pid%7==0: print(f'90-digit uncertainty case {cid}; {time.monotonic()-start:.1f}s',flush=True)
     write(out/'comparisons.csv',comparisons)
     write(out/'reference_metadata.csv',[dict(digits=90,mpmath=mp.__version__,python=sys.version,interpreter=sys.executable,elapsed_s=time.monotonic()-start,
         source_sha256=';'.join(hashlib.sha256(Path(__file__).with_name(f).read_bytes()).hexdigest() for f in ('audit_uncertainty_reference.py','uls_audit_reference.py','uls_unit_reference.py','refine_open_cases.py')),
         inputs_sha256=';'.join(hashlib.sha256((out/f).read_bytes()).hexdigest() for f in ('covariances.csv','points.csv','artifacts.csv','intervals.csv')),
         convention='exact binary64 point/sample/artifacts; lower sample triangle mirrored; independent analytic derivatives; total objective scale',
-        construction_scope='dimensional allowances are assumptions; coverage of measured construction errors and interval decisions reported separately')])
+        construction_scope='dimensional allowances are assumptions; optional derived bounds, positive-curvature margins and decisions independently checked')])
 
 
 if __name__=='__main__': main()

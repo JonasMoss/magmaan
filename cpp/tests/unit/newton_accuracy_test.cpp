@@ -11,7 +11,9 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -200,6 +202,18 @@ TEST_CASE("Newton accuracy: multi-group distance matches the information metric"
   auto e = ev->evaluate(theta0, false, false);
   REQUIRE(e.has_value());
   samp.S = {e->moments.sigma[0], e->moments.sigma[1]};
+
+  // Construction bounds must cover the stacked ULS sampling factors and the
+  // summed ML score/curvature with each group's own sample size and moments.
+  using namespace magmaan::estimate::frontier;
+  for(const auto estimator : {magmaan::estimate::Estimator::ULS,magmaan::estimate::Estimator::ML}) {
+    const auto audit=estimator==magmaan::estimate::Estimator::ML ?
+        audit_newton_ml(*pt,*rep,samp,theta0) : *audit_newton_uls(*pt,*rep,samp,theta0);
+    const auto bounds=newton_input_error_bounds(*pt,*rep,samp,theta0,audit,estimator);
+    REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+    CHECK(bounds.curvature_lower_bound>0);
+    CHECK(newton_input_distance_interval(audit,bounds).decision==NewtonBudgetDecision::WithinBudget);
+  }
 
   const auto exact = newton_accuracy_ml(*pt, *rep, samp, at(theta0));
   REQUIRE(exact.status == NewtonAccuracyStatus::Available);
@@ -848,4 +862,33 @@ TEST_CASE("Newton uncertainty: likelihood quadratic and construction uncertainty
   CHECK(flat.decision == NewtonBudgetDecision::WithinBudget);
   CHECK(newton_hessian_distance_interval(prepare_newton_system(h), g, 1e-12, 0).decision == NewtonBudgetDecision::Unresolved);
   CHECK(newton_hessian_distance_interval(system, g, 0, std::numeric_limits<double>::infinity()).status == NewtonAccuracyStatus::Unavailable);
+}
+
+TEST_CASE("Newton input enclosures: independently evaluated covariance models") {
+  using namespace magmaan::estimate::frontier;
+  using magmaan::estimate::Estimator;
+  for (const auto syntax : {"f =~ x1 + x2 + x3", "f =~ x1 + a*x2 + a*x3",
+      "f1 =~ x1 + x2 + x3\nf2 =~ y1 + y2 + y3\nf1 ~ .2*f2\nf2 ~ .3*f1"}) {
+    auto m=exact_model(syntax);
+    for (const auto estimator : {Estimator::ULS,Estimator::ML}) {
+      const auto get_audit=[&](const Eigen::VectorXd& theta) {
+        if(estimator==Estimator::ML) return audit_newton_ml(m.pt,m.rep,m.samp,theta);
+        auto x=audit_newton_uls(m.pt,m.rep,m.samp,theta); REQUIRE(x.has_value()); return *x;
+      };
+      const auto a=get_audit(m.theta0);
+      const auto bounds=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,a,estimator);
+      REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+      CHECK(bounds.matrix>=0); CHECK(bounds.vector>=0); CHECK(bounds.curvature>=0);
+      CHECK(bounds.curvature_lower_bound>0);
+      const auto interval=estimator==Estimator::ULS ?
+          newton_metric_distance_interval(a.metric_factor_system,a.derivatives.metric_score_residual,bounds.matrix,bounds.vector) :
+          newton_hessian_distance_interval(a.system,a.geometry.reduced_gradient,bounds.matrix,bounds.vector);
+      CHECK(interval.decision==NewtonBudgetDecision::WithinBudget);
+      auto mismatch=m.theta0; mismatch[0]+=.1;
+      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,mismatch,a,estimator).status==NewtonAccuracyStatus::Unavailable);
+      auto means=m.samp; means.mean={Eigen::VectorXd::Zero(m.samp.S[0].rows())};
+      CHECK(newton_input_error_bounds(m.pt,m.rep,means,m.theta0,a,estimator).status==NewtonAccuracyStatus::Unsupported);
+      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,a,Estimator::GLS).status==NewtonAccuracyStatus::Unsupported);
+    }
+  }
 }

@@ -1099,5 +1099,77 @@ rank uncertainty, negative curvature and well-resolved flat likelihood inputs.
 Experiment 15's `audit_uncertainty` lane compares the primitives with independent
 90-digit calculations on retained ULS/NTML points and fresh exact-population
 numerical controls. Dimensional construction allowances in that lane are a
-sensitivity assumption. Producing justified bounds inside the owning model/
-sampling-factor adapters remains open before any production guard change.
+sensitivity assumption. The calculated producer below now supports a narrower
+covariance-only scope; production adoption remains separate.
+
+## Covariance-only input construction enclosures (2026-10-03)
+
+`newton_input_error_bounds` supplies explicit construction bounds for unboxed
+ambient single-level ULS and complete-data ML. The model, sample, point, free
+parameter order and audit must match. Feasibility and statistical identification
+remain separate checks. Retained equality/tangent bases and coordinate maps
+define the numerical coordinates being bounded; no exact-nullspace claim is
+inferred from their rounded entries. Means, other LS weights, native sphere
+normalization, PSD faces and barriers are unsupported.
+
+Primitive Lambda, Psi, Theta and Beta cells come from the owning evaluator's
+direct binary64 write contract, including fixed structural cells and later
+overwrites. The interval evaluator reconstructs their first derivatives from
+the free-cell writes and computes
+
+    A = (I-Beta)^-1, M = Lambda A, Sigma = M Psi M' + Theta,
+    dA_i = A dBeta_i A,
+    dM_i = dLambda_i A + Lambda dA_i,
+    dSigma_i = dM_i Psi M' + M dPsi_i M' + M Psi dM_i' + dTheta_i.
+
+Second derivatives differentiate these expressions analytically, including
+both ordered inverse terms and all product-rule terms. They are evaluated
+per parameter pair, avoiding storage of every second-derivative matrix.
+Multiple sample blocks receive their own exact integer sample sizes.
+
+Every scalar addition, multiplication, division and square root expands its
+computed long-double endpoints by one representable value in each direction.
+Binary64 inputs embed exactly. The arithmetic contract assumes ordinary
+IEEE rounding, correctly rounded basic operations/square roots and gradual
+underflow, without unsafe reassociation/fast-math. Interval Gauss-Jordan pivots
+must exclude zero; interval Cholesky pivots must have positive lower endpoints.
+Exact elimination identities retain zero/one cells without interval dependency.
+Unresolved pivots, nonfinite enclosures or unproved definiteness remain explicit
+failures. No inverse truncation, ridge or guessed epsilon multiplier is used.
+
+For ULS, mirror the sample's lower triangle, enclose its Cholesky root and
+triangular inverse, and construct the full symmetric-tensor sampling factor
+and whitened score residual. Compare those exact target enclosures with the
+retained column-scaled factor and residual. Assemble the observed objective
+curvature as a mapped Jacobian cross-product plus independently differentiated
+correction, in the actual retained QR coordinates. Forming the cross-product
+after applying the map avoids transporting a cancelled Hessian.
+
+For ML, enclose the implied covariance inverse W, K = W S W, score matrix
+(W-K)/2 and its analytic derivatives. Sum the total score and full observed
+Hessian across blocks, then apply the retained reduction/equilibration. The
+score bound compares with the computed scaled score; the interval kernel also
+accounts for its scaling arithmetic, conservatively counting that contribution
+twice. Neither path includes sampling uncertainty in the data themselves.
+
+Subtract each retained artifact from its independent target enclosure and
+bound the Frobenius/Euclidean norm of the difference with outward arithmetic.
+For the observed equilibrated curvature, a verified lower bound l for the
+Cholesky factor's smallest singular value gives
+
+    lambda_min(H_target) >= l^2 - ||H_retained-L L'|| - construction_bound.
+
+`newton_input_distance_interval` requires a positive verified lower bound,
+then composes the projection/quadratic interval with the produced input bounds.
+The bound concerns the exact local diagnostic at the binary64 point; it does
+not prove existence of a nearby optimum, global optimality or identification.
+
+Experiment 15's `audit_construction` lane independently checks all 314 available
+input enclosures and curvature lower bounds among 329 points at 90 digits.
+All 47 numerical minima qualify, including the flat NTML minimum; 250 decisive
+interval classifications agree and 79 remain unresolved. Fifteen perturbed
+NTML points have independently nonpositive curvature and retain that failure.
+The fresh 15 ULS controls are exact-population numerical cases, not sampled
+fitting confirmation. All production-versus-interval disagreements are retained;
+one current raw production pass exceeds the budget by about 1.5e-16 and is
+unresolved under the interval rule. Production guard thresholds are unchanged.

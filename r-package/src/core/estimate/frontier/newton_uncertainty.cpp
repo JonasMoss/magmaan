@@ -183,4 +183,15 @@ NewtonDistanceInterval newton_hessian_distance_interval(
          (static_cast<Wide>(out.distance) + solve_error) / std::sqrt(1 - alpha) + b_error / std::sqrt(margin), budget);
   return out;
 }
+double newton_curvature_lower_bound(const NewtonSystem& system, double error) {
+  if (!std::isfinite(error) || error < 0) return std::numeric_limits<double>::quiet_NaN();
+  if (system.status != NewtonAccuracyStatus::Available) return 0;
+  if (system.scale.size() == 0) return std::numeric_limits<double>::infinity();
+  const Eigen::MatrixXd L = system.factorization.matrixL();
+  const Wide minimum = singular_lower(L, true);
+  const Wide delta = (static_cast<Wide>(error) +
+      product_error(L, L.transpose(), system.equilibrated_hessian)) * (1 + 32 * wide_epsilon);
+  return std::max(0.0, std::nextafter(static_cast<double>(minimum * minimum *
+      (1 - 32 * wide_epsilon) - delta), 0.0));
+}
 }  // namespace magmaan::estimate::frontier

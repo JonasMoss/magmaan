@@ -20,6 +20,12 @@ def main():
     # A construction allowance miss remains a failed assumption even if a
     # loose/unresolved output interval happens to contain the model distance.
     assert all(yes(r['conditional_interval_covers']) for r in d if yes(r['construction_allowance_covers']))
+    derived='derived_status' in d[0]
+    if derived:
+        assert all(yes(r['derived_bounds_covers']) for r in d if r['derived_status']=='available'), 'derived construction bound missed'
+        assert all(yes(r['derived_curvature_lower_covers']) for r in d), 'derived positive-curvature lower bound exceeded reference'
+        assert all(yes(r['derived_interval_covers']) for r in d), 'derived-input interval missed'
+        assert not any(yes(r['derived_wrong_decision']) for r in d), 'derived-input decision disagrees with reference'
     rows=[]
     for role in sorted({r['role'] for r in d}):
         x=[r for r in d if r['role']==role]; minima=[r for r in x if float(r['target'])==0]
@@ -37,12 +43,29 @@ def main():
             conditional_interval_misses=sum(not yes(r['conditional_interval_covers']) for r in x),
             conditional_wrong_decisions=sum(yes(r['conditional_wrong_decision']) for r in x),
             conditional_minima_within=sum(r['conditional_decision']=='within_budget' for r in minima)))
+        if derived:
+            rows[-1].update(derived_available=sum(r['derived_status']=='available' for r in x),
+                derived_positive_curvature=sum(float(r['derived_curvature_lower_bound'])>0 for r in x),
+                derived_within=sum(r['derived_decision']=='within_budget' for r in x),
+                derived_above=sum(r['derived_decision']=='above_budget' for r in x),
+                derived_unresolved=sum(r['derived_decision']=='unresolved' for r in x),
+                derived_minima_within=sum(r['derived_decision']=='within_budget' for r in minima),
+                derived_bound_misses=sum(r['derived_status']=='available' and not yes(r['derived_bounds_covers']) for r in x),
+                derived_curvature_misses=sum(not yes(r['derived_curvature_lower_covers']) for r in x),
+                derived_interval_misses=sum(not yes(r['derived_interval_covers']) for r in x),
+                derived_wrong_decisions=sum(yes(r['derived_wrong_decision']) for r in x))
+            rows[-1].update(derived_within_actual_failed=sum(r['derived_decision']=='within_budget' and not yes(r['actual_passed']) for r in x),
+                derived_unresolved_actual_passed=sum(r['derived_decision']=='unresolved' and yes(r['actual_passed']) for r in x),
+                derived_above_actual_passed=sum(r['derived_decision']=='above_budget' and yes(r['actual_passed']) for r in x),
+                actual_wrong_decisions=sum(yes(r['actual_wrong_decision']) for r in x))
     write(out/'verification.csv',rows)
     write(out/'verification_metadata.csv',[dict(verifier_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         comparisons_sha256=hashlib.sha256((out/'comparisons.csv').read_bytes()).hexdigest(),
         judge='90-digit arithmetic enclosure; model-input allowance coverage separate from distance containment and decision',
-        construction_rule='inherited dimensional sensitivity, declared before this run; no tuning after misses',
-        scope='fixed-point numerical controls, no fitting default change; construction bounds remain open')])
+        construction_rule=('outward interval recomputation at binary64 inputs; dimensional sensitivity retained separately' if derived else
+            'inherited dimensional sensitivity, declared before this run; no tuning after misses'),
+        scope=('covariance-only unboxed ambient ULS/ML, fixed-point numerical controls, no fitting default change' if derived else
+            'fixed-point numerical controls, no fitting default change; construction bounds remain open'))])
     for row in rows: print(row)
 
 

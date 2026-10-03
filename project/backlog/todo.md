@@ -795,14 +795,21 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   normalization curvature. All 175 fixed-point curvature checks pass against
   independent 90-digit derivatives; step discrepancy is below 1.94e-11 in
   objective-curvature units. Owning tests retain saddle and rank-loss failures.
-  The sampling-metric condition guard still rejects every control. Next
-  derive justified construction-error producers in the owning adapters.
+  The sampling-metric condition guard still rejects every control.
   Conditional interval kernels now verify projection/solve arithmetic for LS
   and likelihoods, with 329 independent fixed-point checks including 15 fresh
   numerical minima and all seven finite NTML witnesses. Dimensional construction
   sensitivity covers the comparable points, but leaves the flat NTML minimum
   and many retained ULS controls unresolved; it is not a proved bound or a
-  production policy. Broader model and sampled confirmation remain open. This evidence selects no
+  production policy. The calculated construction producer now independently
+  encloses covariance-only ambient ULS/ML moments, derivatives, sample roots
+  and observed curvature. All 314 available bounds pass 90-digit checks; all
+  47 numerical minima qualify, including every retained ULS minimum and the
+  flat NTML witness. Its 250 decisive distance classifications are correct,
+  with 79 unresolved points including 15 independently nonpositive NTML
+  curvatures. Optional artifacts leave production acceptance unchanged. Next
+  integrate into terminal auditing, transport through native sphere geometry,
+  and confirm on broader model families and fresh sampled controls. This evidence selects no
   regularization or acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start

@@ -1,19 +1,21 @@
 # Fixed-point numerical validation; interval decisions never replace fit verdicts.
 run_audit_uncertainty <- function(args, here) {
+  derive <- "--derive-input-errors" %in% args
   value <- function(k, default) {
     i <- match(k,args); if (is.na(i)) return(default)
     if (i==length(args) || startsWith(args[i+1L],'--')) stop('missing ',k)
     args[i+1L]
   }
   if (any(args %in% c('--help','-h'))) {
-    cat('Usage: Rscript run_experiment.R --ordinary --audit-uncertainty --run-id NAME [--smoke] [--seed-base N] [--python PATH]\n',
+    cat('Usage: Rscript run_experiment.R --ordinary --audit-uncertainty --run-id NAME [--smoke] [--seed-base N] [--python PATH] [--derive-input-errors]\n',
       'Retained ULS bank, 15 fresh exact-population numerical controls, and seven retained finite NTML witnesses.\n',
       'Seven points per case; no optimization. Smoke selects one case of each type, including the flat NTML witness.\n',
       'Compare retained-input arithmetic intervals and the previously declared dimensional construction sensitivity.\n',
+      '--derive-input-errors: add independently constructed outward-interval bounds and their audited distance.\n',
       '90-digit independent derivatives; neither arm replaces the stored fit verdict. Fresh output IDs required.\n',sep='')
     return(invisible(NULL))
   }
-  known <- c('--ordinary','--audit-uncertainty','--run-id','--smoke','--seed-base','--python')
+  known <- c('--ordinary','--audit-uncertainty','--run-id','--smoke','--seed-base','--python','--derive-input-errors')
   if (any(startsWith(args,'--') & !args %in% known)) stop('unknown uncertainty option')
   run <- value('--run-id','audit-uncertainty'); seed <- as.integer(value('--seed-base','863261003'))
   if (!grepl('^[A-Za-z0-9_-]+$',run) || is.na(seed) || seed<1) stop('invalid run ID/seed')
@@ -22,7 +24,7 @@ run_audit_uncertainty <- function(args, here) {
   key <- function(p) paste(p$lhs,p$op,p$rhs)
   theta_of <- function(p) p$est[p$free>0][order(p$free[p$free>0])]
   evaluate <- function(p,s,n,estimator,errors=NULL) {
-    ctl <- list(retain_newton_artifacts=TRUE)
+    ctl <- list(retain_newton_artifacts=TRUE,derive_interval_input_errors=derive && is.null(errors))
     if (!is.null(errors)) ctl$interval_input_errors <- errors
     magmaanlab::magmaan_core$estimate_evaluate_at(spec$partable,
       list(S=list(s),nobs=as.integer(n),ov_names=list(ov_names)),theta_of(p),estimator=estimator,
@@ -122,9 +124,16 @@ run_audit_uncertainty <- function(args, here) {
         rank_margin=z$rank_margin,verification_matrix_error=z$factor_error_bound,
         matrix_allowance=errors$matrix,vector_allowance=errors$vector,construction_multiplier=k,
         conditional_status=conditional$status,conditional_decision=conditional$decision,conditional_lower=conditional$lower,conditional_upper=conditional$upper)
+      if(derive) {
+        e <- a$derived_interval_input_errors; z <- a$distance_interval_derived_inputs
+        if(is.null(z)) z <- list(status=e$status,decision='unresolved',lower=0,upper=Inf)
+        rows[[id]] <- cbind(rows[[id]],derived_status=e$status,derived_matrix=e$matrix,derived_vector=e$vector,
+          derived_curvature=e$curvature,derived_curvature_lower_bound=e$curvature_lower_bound,
+          derived_interval_status=z$status,derived_decision=z$decision,derived_lower=z$lower,derived_upper=z$upper)
+      }
       pp <- p[c('lhs','op','rhs','free','est')]; pp$est <- sprintf('%.17g',pp$est)
       points[[id]] <- cbind(point_id=id,case_id=cid,pp)
-      for(name in c('equilibrated_factor','factor_scale','metric_score_residual','curvature_equilibrated_hessian','curvature_scale','gradient','derivative_basis'))
+      for(name in c('equilibrated_factor','factor_scale','metric_score_residual','curvature_equilibrated_hessian','curvature_scale','gradient','derivative_basis','curvature_coordinate_map'))
         matrices[[length(matrices)+1L]] <- matrix_row(a[[name]],id,name)
     }
     cat(sprintf('Uncertainty case %d/%d (%s); %.1fs\n',cid,length(plans),plan$role,proc.time()[['elapsed']]-start))
@@ -132,15 +141,16 @@ run_audit_uncertainty <- function(args, here) {
   write_out(do.call(rbind,rows),'intervals'); write_out(do.call(rbind,points),'points')
   write_out(do.call(rbind,matrices),'artifacts'); write_out(do.call(rbind,covariances),'covariances')
   files <- file.path(here,c('run_experiment.R','R/audit_uncertainty.R','R/designs.R','R/fit.R','scripts/audit_uncertainty_reference.py','scripts/uls_audit_reference.py','scripts/refine_open_cases.py'))
-  files <- c(files,file.path(here,'../../../../cpp/src/estimate/frontier/newton_uncertainty.cpp'),file.path(here,'../../../../cpp/include/magmaan/estimate/frontier/newton_accuracy.hpp'))
+  files <- c(files,file.path(here,'../../../../cpp/src/estimate/frontier/newton_uncertainty.cpp'),file.path(here,'../../../../cpp/include/magmaan/estimate/frontier/newton_accuracy.hpp'),file.path(here,'../../../../cpp/src/estimate/frontier/newton_input_bounds.cpp'),file.path(here,'../../../../cpp/src/estimate/frontier/detail_newton_interval.hpp'))
   pkg <- list.files(find.package('magmaanlab'),recursive=TRUE,full.names=TRUE); ref <- magmaan_cache_ref()
-  write_metadata(file.path(out,'metadata.csv'),values=list(lane='audit_uncertainty',seed_base=seed,cases=length(plans),points=length(rows),threads=1,
+  write_metadata(file.path(out,'metadata.csv'),values=list(lane=if(derive) 'audit_construction' else 'audit_uncertainty',seed_base=seed,cases=length(plans),points=length(rows),threads=1,
+    evaluation_elapsed_s=proc.time()[['elapsed']]-start,
     command= paste(commandArgs(),collapse=' '),source_md5=paste(tools::md5sum(files),collapse=';'),
     input_md5=paste(tools::md5sum(file.path(here,c('results/uls-reliability-final-v2/covariances.csv','results/uls-reliability-final-v2/reference_parameters.csv','results/uls-factor-square-root-v2/comparisons.csv','results/open-case-conclusions/finite_witnesses.csv','results/open-case-conclusions/parameters.csv'))),collapse=';'),
     package_md5=paste(tools::md5sum(pkg[grepl('\\.(so|rdb|rdx)$',pkg)]),collapse=';'),git_head=ref$git_head,git_dirty=ref$git_dirty,
     construction_sensitivity='gamma(8*rows*columns), binary64 epsilon; inherited dimensional assumption, not a proved SEM construction bound',
     fresh_scope='new exact-population numerical controls; no sampled fitting/default or optimizer confirmation',
-    interpretation='conditional numerical intervals and actual production verdict separate; zero bounds concern retained inputs only'),packages='magmaanlab')
+    derived_inputs=derive,interpretation='conditional numerical intervals and actual production verdict separate; zero bounds concern retained inputs only'),packages='magmaanlab')
   status <- system2(value('--python','python3'),c(shQuote(file.path(here,'scripts/audit_uncertainty_reference.py')),'--run-dir',shQuote(normalizePath(out))))
   if(status!=0) stop('independent reference failed; inputs retained')
   cat('Uncertainty evidence saved: ',out,'\n',sep='')

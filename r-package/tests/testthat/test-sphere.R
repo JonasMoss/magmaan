@@ -265,10 +265,17 @@ test_that('conditional distance intervals preserve the stored fit verdict', {
       bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))))
     kept <- magmaan_core$estimate_evaluate_at(spec$partable,sample,theta,estimator=estimator,
       bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))),
-      audit_options=list(retain_newton_artifacts=TRUE,interval_input_errors=list(matrix=1,vector=1)))
+      audit_options=list(retain_newton_artifacts=TRUE,derive_interval_input_errors=TRUE,
+        interval_input_errors=list(matrix=1,vector=1)))
     expect_equal(kept$diagnostics$newton_accuracy,plain$diagnostics$newton_accuracy)
     expect_identical(kept$newton_audit$distance_interval_conditional$decision,'unresolved')
     expect_match(kept$newton_audit$interval_input_scope,'construction errors excluded')
+    bounds <- kept$newton_audit$derived_interval_input_errors
+    expect_identical(bounds$status,'available')
+    expect_true(all(unlist(bounds[c('matrix','vector','curvature')])>=0))
+    expect_true(bounds$curvature_lower_bound>0)
+    expect_true(kept$newton_audit$distance_interval_derived_inputs$decision %in%
+      c('within_budget','above_budget','unresolved'))
     interval <- kept$newton_audit$distance_interval_retained_inputs
     expect_true(interval$lower <= interval$distance && interval$distance <= interval$upper)
   }
