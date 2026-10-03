@@ -67,7 +67,7 @@ dwls_preflight <- function() {
   do.call(rbind,lapply(seq_len(nrow(cells)),function(i) {
     cell <- cells[i,]; seed <- 817130001L+10000L*cell$cell_id+1L
     data <- dwls_draw_data(cell,seed)
-    h1 <- dwls_fit(cell,data,'loadings')
+    h1 <- dwls_fit(cell,data,'thresholds')
     h0 <- dwls_fit(cell,data,c('loadings','thresholds'))
     test <- magmaanlab::policy_nested(h1,h0)$lr
     data.frame(cell_id=cell$cell_id,categories=cell$categories,n=cell$n,
