@@ -82,7 +82,11 @@ result under an unstated convention.
    and verdicts for path-stable cases; each actual endpoint is checked under the
    declared acceptance rule. Rescaled retry endpoints and verdicts can depend
    on floating-point search paths.
-   Installed-lavaan R comparisons pass on a named simulation-model set.
+   Installed-lavaan R comparisons must pass on the eight-case named set in
+   [test_preset_simulation_parity.R](../../r-package/tests/testthat/test_preset_simulation_parity.R):
+   HS CFA, PoliticalDemocracy SEM, school-invariant HS CFA (ML); HS MCAR/MAR
+   (FIML); HS delta/theta and school-invariant theta (all-ordinal DWLS).
+   Task-59 remains blocked by estimate disagreements; see below.
    Nonzero bounds, nonlinear constraints and other routes error; nonzero-RHS
    affine standardized retries and scaling that changes a homogeneous
    constraint surface are explicitly unavailable because of the
@@ -277,6 +281,21 @@ with each actual endpoint's declared acceptance checked separately.
   the configured entry, with live installed-lavaan WLSMV comparisons for
   delta/theta, grouping, loading/threshold invariance and invalid-start retries.
   ULS/WLS/mixed presets remain unavailable.
+
+- [ ] **Task-59 — named simulation parity set (exit 2).** The opt-in
+  `MAGMAAN_PARITY=1` test above uses fitted public lavaan datasets as normal
+  populations, fixed seeds, 20 replicates per case and N=300 per group.
+  Ordinal indicators use four categories at common population quartiles;
+  MCAR removes 15% per variable and MAR removes x2/x5/x8 depending on
+  x1/x4/x7. Installed lavaan 0.7.2 run: 160 replicates in 29.5 seconds,
+  zero rescaled retries, all convergence/verdict comparisons agree.
+  Six cases pass estimate parity; PoliticalDemocracy ML replicates
+  2, 3, 8, 9, 10, 12, 14, 16, 17 exceed 1e-5 (maximum 6.01813289e-5),
+  as does HS theta DWLS replicate 7 (2.15889363e-5). Seeds are
+  `590000 + 100 * case_index + replicate` in the named list order.
+  These are path-stable failures, printed by the test, and task-59 needs a
+  decision before further investigation or fitting changes. Tolerance and
+  fitting code remain unchanged; the exit criterion is not met.
 
 ### Primary inference workflows
 

@@ -80,3 +80,13 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   toolchain choice. `just r-install-ceres` and `just r-install-ipopt` mirror
   the relevant compile definition into the R shared object so the accepted
   optimizer strings are executable from the R dev surface in one install.
+
+The opt-in installed-lavaan 0.7.2 simulation gate is
+[`test_preset_simulation_parity.R`](../../../r-package/tests/testthat/test_preset_simulation_parity.R)
+(`MAGMAAN_PARITY=1`). Its eight named cases cover complete ML, FIML and
+all-ordinal delta/theta DWLS, including grouped equalities. The initial
+160-replicate run took 29.5 seconds: all verdicts agreed, no rescaled retries
+occurred, but nine PoliticalDemocracy ML endpoints and one HS theta DWLS
+endpoint exceeded the unchanged 1e-5 estimate tolerance. Task-59 is awaiting
+a decision; simulation endpoint parity is not yet established. The backlog
+records the cases and seeds. The default suite skips this gate.
