@@ -333,6 +333,15 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-03: the Mplus input frontend (0.3.0, [mplus.md](../grammar/mplus.md))
+imports whole input files with continuous single- and multiple-group models
+(GROUPING, group sections, cross-group defaults, one CONFIGURAL/METRIC/SCALAR
+shortcut) through `api::model_from_mplus()` and `magmaanlab::mplus_model()`;
+everything else is rejected with rule IDs. Gated against lavaan and the Mplus
+9.1 Demo; 22 of 68 eligible verified corpus cases are accepted and match Mplus.
+Data files, categorical outcomes, growth and MODEL CONSTRAINT/INDIRECT follow;
+ordinary `magmaan()` integration is TASK-57.
+
 2026-10-03: the ordinary FIML policy is composed for single-level random-x
 models with affine equalities, one or more groups. Covariance is the
 observed-bread casewise-score sandwich. Global and nested score tests use
