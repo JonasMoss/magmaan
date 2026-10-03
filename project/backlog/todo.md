@@ -537,6 +537,11 @@ required by an all-ordinal primary workflow remain current work.
   maximum policy gap 5.3e-14. Estimated production cost is 58.66 CPU-hours
   (14.66 ideal hours at four workers), plus one-time population preparation.
   Production requires a separate compute decision.
+  Task-17.2 adds runner-only global reference exploration/confirmation: 64
+  global cells, unchanged production seeds for exploration and fresh seed base
+  817160001 for confirmation, saved spectra and all 13 registered FMG arms
+  (pOLS gamma = 4, bound primitive default). Reference selection and full runs
+  remain separate work; the library policy is unchanged.
   Pilot flags are diagnostics only and never change the adopted recipes.
 
 - [ ] **M — derive the misspecification-consistent moment centering for lab

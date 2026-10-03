@@ -292,6 +292,11 @@
   parameterization-aware threshold and association Jacobians for robust ordinal
   reporting, modification indices, score tests, and standardized-solution
   reporting.
+- The DWLS calibration runner additionally supports 64-cell global-only
+  `--explore` and `--confirm` modes with saved per-replicate spectra and the
+  full registered 13-arm FMG family, using the bound primitive pOLS gamma = 4
+  and negative-spectrum truncation. Exploration reuses production draws;
+  confirmation uses seed base 817160001. No policy reference change is made.
 - DWLS calibration study `experiments/decisions/05-dwls-policy-calibration`
   has a registered 146-cell runner for global/nested size, IJ coverage and
   loading/global power, with explicit policy-equivalence gaps and CPU pricing.

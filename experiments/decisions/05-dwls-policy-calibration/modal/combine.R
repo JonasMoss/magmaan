@@ -18,7 +18,8 @@ set_single_threaded_math()
 source(file.path(study, "R", "compute.R"))
 source(file.path(study, "R", "summarize.R"))
 
-cells <- dwls_cells()
+if(!mode %in% c('smoke','pilot','production','explore','confirm')) stop('Unknown mode')
+cells <- dwls_mode_cells(mode)
 files <- sort(list.files(file.path(run_dir, "cells"), pattern = "^raw[.]rds$",
                          recursive = TRUE, full.names = TRUE))
 if (length(files) != nrow(cells))
@@ -26,14 +27,17 @@ if (length(files) != nrow(cells))
 raw <- do.call(rbind, lapply(files, readRDS))
 raw <- raw[order(raw$cell_id, raw$replicate), , drop = FALSE]
 rownames(raw) <- NULL
+if(!setequal(unique(raw$cell_id),cells$cell_id)) stop('Cell IDs do not match mode')
 
 out <- file.path(run_dir, "final")
 if (dir.exists(out)) stop("Final directory exists; use a fresh run id")
 dir.create(out, recursive = TRUE)
-seed_base <- c(smoke = 817130001L, pilot = 817140001L, production = 817150001L)[[mode]]
+seed_base <- c(smoke = 817130001L, pilot = 817140001L, production = 817150001L, explore = 817150001L, confirm = 817160001L)[[mode]]
+if(any(raw$seed != seed_base+10000L*raw$cell_id+raw$replicate)) stop('Seed mismatch')
+saveRDS(raw,file.path(out,'raw.rds'))
 write_metadata(file.path(out, "metadata.csv"), list(mode = mode, executor = "modal",
   cells = nrow(cells), seed_base = seed_base, git_head = git_head,
-  population_n_per_group = 100000L, population_seed_base = 817120001L),
+  population_n_per_group = 100000L, population_seed_base = 817120001L, pols_gamma = 4, spectrum_truncate_negative = TRUE),
   packages = c("magmaanlab", "lavaan"))
 write_csv(cells, file.path(out, "cells.csv"))
 invisible(dwls_population(cells, out))

@@ -19,6 +19,15 @@ dwls_cells <- function() {
   x
 }
 
+dwls_mode_cells <- function(mode) {
+  cells <- dwls_cells()
+  if(mode %in% c('explore','confirm')) cells <- cells[cells$family=='global',]
+  cells
+}
+
+dwls_global_arms <- function() c('policy_sb','policy_peba4','scaled_shifted',
+  'mean_variance','scaled_f','all','pall','eba2','eba4','eba6','peba2','peba6','pols')
+
 dwls_syntax <- function(cell) {
   p <- 6*cell$factors
   lines <- vapply(seq_len(cell$factors),function(f)
@@ -117,6 +126,7 @@ dwls_population_key <- function(cell) paste(cell$model,cell$categories,cell$grou
 
 dwls_population <- function(cells,out) {
   x <- cells[cells$family=='coverage',]
+  if(!nrow(x)) return(NULL)
   x <- x[!duplicated(vapply(seq_len(nrow(x)),function(i) dwls_population_key(x[i,]),'')),]
   start <- proc.time()
   result <- vector('list',nrow(x))
@@ -137,7 +147,7 @@ dwls_population <- function(cells,out) {
 dwls_replicate <- function(cell,replicate,seed_base,population) {
   seed <- seed_base+10000L*cell$cell_id+replicate
   start <- proc.time()
-  rows <- list(); gap <- NA_real_; error <- ''; h1_converged <- h0_converged <- NA
+  spectrum <- numeric(); rows <- list(); gap <- NA_real_; error <- ''; h1_converged <- h0_converged <- NA
   add <- function(arm,p=NA_real_,statistic=NA_real_,df=NA_integer_,spectrum_size=NA_integer_,
                   target='',covered=NA,estimate=NA_real_,se=NA_real_,reason='available') {
     rows[[length(rows)+1L]] <<- data.frame(arm=arm,p=p,statistic=statistic,df=df,
@@ -192,7 +202,8 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
         policy <- policy$score
         if(!isTRUE(policy$available)) stop('Policy global unavailable: ',policy$reason,': ',policy$detail)
         fixed <- core$robust_ordinal(h1,h1$ordinal_stats,bread='expected')
-        cal <- dwls_calibrate(fixed$chisq_standard,policy$df,policy$eigenvalues)
+        spectrum <- policy$eigenvalues
+        cal <- dwls_calibrate(fixed$chisq_standard,policy$df,spectrum)
         gap <- max(abs(c(policy$statistic-fixed$chisq_standard,policy$p_sb-cal$p_sb,
                           policy$p_peba4-cal$p_peba4)))
         for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
@@ -200,6 +211,16 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
         ss <- fixed$scaled_shifted; mv <- fixed$mean_var_adjusted
         add('scaled_shifted',pchisq(ss$chi2_adj,ss$df,lower.tail=FALSE),ss$chi2_adj,ss$df)
         add('mean_variance',pchisq(mv$chi2_adj,mv$df_adj,lower.tail=FALSE),mv$chi2_adj,mv$df_adj)
+        methods <- c(scaled_f='scaled_f',all='all',pall='penalized_all',
+          eba2='eba',eba4='eba',eba6='eba',peba2='peba',peba6='peba',pols='pols')
+        for(a in names(methods)) {
+          # pOLS uses the bound primitive's default gamma = 4 explicitly.
+          param <- if(grepl('eba',a)) as.numeric(sub('.*eba','',a)) else 4
+          test <- core$robust_fmg_test(fixed$chisq_standard,policy$df,spectrum,
+            methods[[a]],param,truncate_negative=TRUE)
+          if(!is.finite(test$p_value)) stop('Nonfinite FMG arm: ',a)
+          add(a,test$p_value,fixed$chisq_standard,policy$df,length(spectrum))
+        }
       }
     }
     if(!is.finite(gap) || gap>1e-7) stop('Policy gap exceeds 1e-7')
@@ -208,6 +229,7 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
   z <- do.call(rbind,rows); z$cell_id <- cell$cell_id; z$replicate <- replicate; z$seed <- seed
   z$h1_converged <- h1_converged; z$h0_converged <- h0_converged
   z$policy_gap <- gap; z$error <- error; z$elapsed_seconds <- unname((proc.time()-start)['elapsed'])
+  z$eigenvalues <- rep(list(spectrum),nrow(z))
   z$cpu_seconds <- unname(sum((proc.time()-start)[c('user.self','sys.self')]))
   z
 }

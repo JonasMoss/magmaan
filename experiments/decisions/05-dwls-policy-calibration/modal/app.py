@@ -65,11 +65,11 @@ def combine(run_id: str, mode: str, git_head: str):
 @app.local_entrypoint()
 def main(mode: str = "smoke", run_id: str = "smoke-modal"):
     import subprocess
-    if mode not in ("smoke", "pilot", "production"):
-        raise SystemExit("mode must be smoke, pilot or production")
+    if mode not in ("smoke", "pilot", "production", "explore", "confirm"):
+        raise SystemExit("mode must be smoke, pilot, production, explore or confirm")
     head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
                           capture_output=True, text=True).stdout.strip()
-    ids = list(range(1, N_CELLS + 1))
+    ids = list(range(1, 53)) + list(range(127, 139)) if mode in ("explore", "confirm") else list(range(1, N_CELLS + 1))
     done = list(run_cell.starmap([(i, run_id, mode) for i in ids]))
     print(f"cells: {len(done)}/{len(ids)}")
     print(combine.remote(run_id, mode, head))

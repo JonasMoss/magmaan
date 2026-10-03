@@ -8,8 +8,8 @@ dwls_wilson <- function(k,n) {
 dwls_summarize <- function(raw,cells,out) {
   attempts <- raw[!duplicated(raw[c('cell_id','replicate')]),]
   timing <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i) {
-    x <- attempts[attempts$cell_id==i,]
-    data.frame(cell_id=i,attempted=nrow(x),failed=sum(nzchar(x$error)),
+    x <- attempts[attempts$cell_id==cells$cell_id[i],]
+    data.frame(cell_id=cells$cell_id[i],attempted=nrow(x),failed=sum(nzchar(x$error)),
       mean_seconds=mean(x$elapsed_seconds),mean_cpu_seconds=mean(if('cpu_seconds' %in% names(x)) x$cpu_seconds else x$elapsed_seconds),production_reps=cells$production_reps[i],
       production_cpu_hours=mean(if('cpu_seconds' %in% names(x)) x$cpu_seconds else x$elapsed_seconds)*cells$production_reps[i]/3600,
       max_policy_gap=if(all(is.na(x$policy_gap))) NA_real_ else max(x$policy_gap,na.rm=TRUE))
@@ -21,10 +21,10 @@ dwls_summarize <- function(raw,cells,out) {
     cell <- cells[i,]
     arms <- if(cell$family=='coverage') c('policy_ij','expected','observed') else
       if(cell$family=='nested') c('policy_sb','policy_peba4','fixed_sb','fixed_peba4') else
-        c('policy_sb','policy_peba4','scaled_shifted','mean_variance')
+        dwls_global_arms()
     targets <- if(cell$family=='coverage') c('loading','threshold',if(cell$model=='sem') 'path' else 'correlation') else ''
     for(a in arms) for(t in targets) {
-      x <- raw[raw$cell_id==i & raw$arm==a & raw$target==t,]
+      x <- raw[raw$cell_id==cell$cell_id & raw$arm==a & raw$target==t,]
       valid <- !nzchar(x$error) & if(t=='') is.finite(x$p) else !is.na(x$covered)
       n <- sum(valid); k <- if(t=='') sum(x$p[valid]<.05) else sum(x$covered[valid])
       ci <- dwls_wilson(k,n); rate <- if(n) k/n else NA_real_
@@ -44,9 +44,9 @@ dwls_summarize <- function(raw,cells,out) {
         }
       }
       flag <- cell$role=='null' && is.finite(rate) &&
-        if(t=='') startsWith(a,'policy_') && cell$n>=500 && (rate<.03 || rate>.07) else
+        if(t=='') cell$n>=500 && (rate<.03 || rate>.07) else
           a=='policy_ij' && cell$n>=300 && rate<.93
-      summaries[[length(summaries)+1L]] <- data.frame(cell_id=i,arm=a,target=t,
+      summaries[[length(summaries)+1L]] <- data.frame(cell_id=cell$cell_id,arm=a,target=t,
         attempted=timing$attempted[i],successful=n,failed=timing$attempted[i]-n,
         successes=k,rate=rate,wilson_low=ci[1],wilson_high=ci[2],
         size_adjusted_power=adjusted,matched_null_successful=null_count,
