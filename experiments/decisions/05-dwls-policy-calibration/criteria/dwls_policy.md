@@ -65,3 +65,26 @@ Its production calibration failed in both directions (SB 0.1-2.2%, PEBA4
 4-18% and worsening with N) with 80-370 spectrum terms for 10-15 restrictions;
 it is under diagnosis (board task-17.3) and any replacement needs its own
 registered confirmation.
+
+## Amendment 2026-10-03 (after the nested diagnosis, before nested confirmation)
+
+The production-seed diagnosis (`diagnostics/nested_profile_law.md`, task-17.3)
+found the separate-point profile law's excess terms to be a plug-in
+cancellation artifact: each model's profile is built at its own fitted point,
+so residual-dependent blocks cancel only up to O_p(N^-1/2). The first-order law
+of T = N (F_H0 - F_H1) under the nested null at the larger model's pseudo-true
+point has exactly r = df_diff terms,
+lambda = eig{(A H^-1 A')^-1 A H^-1 B H^-1 A'},
+with H the observed DWLS Hessian at the larger fit, B the estimated-weight IJ
+meat (H^-1 B H^-1 / N is the IJ policy covariance) and A the exact restriction
+map. It is misspecification-robust under the scope requirement and replaces the
+separate-point profile law as the policy's nested reference.
+
+Confirmation on fresh draws, fixed now: nested cells 53-84 (null) and 139-146
+(power), seed base 817160001, 2,000 null and 1,000 power replicates. The policy
+reports SB and PEBA4 on this spectrum, as for ML and FIML. Comparators: the
+separate-point profile law (SB, PEBA4), fixed-weight Satorra-2000 at H1 (SB,
+PEBA4) and the implemented reference family on the new spectrum; spectra are
+saved. Criterion: policy SB and PEBA4 rejection within [3%, 7%] in every null
+cell with N >= 500 (the registered flag rule); N = 400 cells are reported
+alongside. Cells outside are flags; nothing is tuned on the confirmation draws.
