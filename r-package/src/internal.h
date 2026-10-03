@@ -1314,7 +1314,7 @@ profile_lrt_to_list(const magmaan::estimate::WeightedProfileLRTResult& r) {
 // and never materializes the q x q form on a gradient path. R hands us bare
 // dense matrices and expects bare dense matrices back, so the two conversions
 // live here rather than being open-coded per call site — they were previously
-// duplicated in fit.cpp and lr_test_satorra.cpp, which is why retyping
+// duplicated in the fit_*.cpp glue and lr_test_satorra.cpp, which is why retyping
 // `gmm::Weight` broke both.
 //
 // Only the *type* knowledge is shared. Argument validation and its wording stay

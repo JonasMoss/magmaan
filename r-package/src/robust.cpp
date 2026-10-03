@@ -27,7 +27,7 @@ namespace {
 
 // ---- InferenceSpec enums <-> strings ---------------------------------------
 // info_from_string / moments_from_string / cov_from_string / spec_from now live
-// in internal.h (namespace magmaanr), shared with fit.cpp's robust score glue.
+// in internal.h (namespace magmaanr), shared with the fit_*.cpp robust score glue.
 
 const char* moments_to_string(magmaan::robust::WeightMoments m) {
   switch (m) {
@@ -133,7 +133,7 @@ mean_var_to_list(const magmaan::robust::MeanVarAdjustedResult& r) {
 }
 
 // scaled_shifted_to_list / warnings_to_r / profile_lrt_to_list now live in
-// internal.h (namespace magmaanr) so fit.cpp's continuous-LS/FIML/ML2S
+// internal.h (namespace magmaanr) so the fit_*.cpp continuous-LS/FIML/ML2S
 // profile-LRT bindings can share the serializer.
 
 Rcpp::List profile_rmsea_to_list(
@@ -168,7 +168,7 @@ Rcpp::List profile_rmsea_to_list(
       Rcpp::_["warnings"] = warnings_to_r(r.warnings));
 }
 
-// profile_lrt_to_list moved to internal.h (shared with fit.cpp).
+// profile_lrt_to_list moved to internal.h (shared with the fit_*.cpp glue).
 
 Rcpp::List rmsea_inference_to_list(
     const magmaan::estimate::OrdinalRmseaInference& r) {
