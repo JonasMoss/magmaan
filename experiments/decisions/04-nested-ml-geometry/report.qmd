@@ -13,7 +13,7 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Nested ML score projection and LR spectrum | Observed geometry | Adopted; confirmatory calibration open | Amended 24-cell pilot checks construction, population misfit and geometry gaps; production pending |
+| Nested ML score projection and LR spectrum | Observed geometry | Adopted by principle (misspecification-robust default); calibration open | Amended 24-cell pilot checks construction, population misfit and geometry gaps; production pending |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
 ## Question

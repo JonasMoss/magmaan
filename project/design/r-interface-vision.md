@@ -554,6 +554,18 @@ and all-ordinal DWLS or require every lavaan variant for release.
 
 ## Inference policy
 
+**Principle: misspecification-robust by default (adopted 2026-10-03).** Real
+models are misspecified, so every default inference recipe must stay
+consistent when the fitted model is wrong. Expected information is not: it
+drops the residual terms of the true curvature. Defaults therefore use
+observed-information sensitivities and breads, empirical score or moment
+covariances, and estimated-weight influence. Expected information enters only
+where it is consistent by construction: as a freely chosen score metric, and in
+goodness-of-fit tests, whose null hypothesis is the correct model (there,
+simulations choose between expected and observed). A badly calibrated
+misspecification-robust recipe calls for a finite-sample correction, not a
+return to expected information.
+
 `inference = TRUE` is the default. With `inference = FALSE`, the call only
 estimates; `infer(fit)` later runs the same composer without refitting, reusing
 retained data and geometry. Repeated `summary()`, `vcov()` and `confint()`

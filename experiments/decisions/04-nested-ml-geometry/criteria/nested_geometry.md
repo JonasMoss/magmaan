@@ -59,3 +59,15 @@ subtraction); the largest absolute covariance residual is standardized by the
 population marginal standard deviations. Geometry gaps use complete paired
 replicates: median absolute PEBA4 p-value difference for each test, and median
 absolute score-statistic difference divided by the expected score statistic.
+
+## Amendment 2026-10-03 (user decision), before production
+
+magmaan's inference policy is misspecification-robust by default (see the
+interface vision, Inference policy). The observed nested geometry is therefore
+fixed by principle, not selected by this study: expected information is not
+consistent when the larger model is misspecified. This run is calibration
+evidence for the adopted observed geometry, with the expected geometry as a
+reported comparator. The registered rule is kept as a reporting criterion. If
+observed fails it in some cell, the consequence is finite-sample correction
+work on the observed recipe, not a return to expected information.
+
