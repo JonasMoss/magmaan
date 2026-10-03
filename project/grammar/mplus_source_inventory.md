@@ -543,14 +543,17 @@ or widened allowance. Delta scaling factors are 0.864268291773 (default) and
 0.862539755189 (Mplus mimic), and theta factors are 0.864268266371 and
 0.862539729839. Corpus convention classifications require both references.
 
-The optional `check_mplus_categorical_conventions.R --native` gate now probes
-the same explicit SCALAR rows through the existing lab routes, before frontend
-lowering. With a freshly rebuilt opt package, native DWLS converges but fixes
-all six group-2 scale/residual rows; maximum common loading/threshold/mean/scale
-estimate errors are 0.128535813260 (delta) and 0.195224660091 (theta).
-The `lavaan-0.7.2` preset refuses both models before optimization because the
-ordered affine coordinates do not describe the reconstructed model. These
-failures are not robust-reporting convention differences. The diagnostic exits
-unsuccessfully; no CT/MG09/IV03 implementation status or corpus tally is promoted.
-TASK-53 awaits a prerequisite-repair decision under the lane's stop-on-unresolved-
-numerical-failure rule.
+The optional `check_mplus_categorical_conventions.R --native` gate checks
+these explicit SCALAR rows before frontend lowering. After the provenance and
+residual-coordinate repair, both native and versioned fits preserve common
+estimates and df. Retained-estimate `convention_inference(fit, "WLSMV")` passes
+SE/test gates against default lavaan. Released DELTA scale projections now
+report their derived values with `free = 0` and no delta-method SE.
+
+`check_mplus_categorical_releases.R` passes explicit single-group DELTA/THETA
+release references. Its `--scale-equality` variant exposes lost equality-labelled
+DELTA scales: lavaan has df 11 and equal scales about 0.825, while magmaan has
+df 10 and scales about 0.771 and 0.880. The available WLSMV bundle disagrees
+(SE error 0.009725, scaled-test difference -1.235463); THETA passes. See the
+test ledger. TASK-53 awaits a prerequisite scope decision; CT/MG09/IV03
+implementation status and corpus tally remain unchanged.

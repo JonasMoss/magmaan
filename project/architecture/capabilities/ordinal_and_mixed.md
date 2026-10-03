@@ -19,8 +19,12 @@
   generated unit residual coordinate when `auto_var = FALSE`; preparation can
   therefore translate an explicit free scale into a residual dimension instead
   of silently dropping it. Existing ordinal expectations remain unchanged.
-  TASK-53's default-lavaan robust reporting and released DELTA scale projection
-  gates remain open; the categorical frontend increment is not implemented.
+  Released DELTA response-scale rows project `1/sqrt(Sigma*_ii)` with
+  `free = 0`; no delta-method SE is supplied. Single released scales and the
+  grouped P-IV2 references pass through the retained-estimate WLSMV bundle.
+  Equality-labelled DELTA scales still lose their restriction during preparation:
+  the bundle claims availability but disagrees with lavaan. TASK-53 awaits a
+  scope decision on that prerequisite; the categorical frontend is not implemented.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.

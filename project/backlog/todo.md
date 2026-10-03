@@ -1276,8 +1276,10 @@ carry the label `mplus`.
   other categorical routes return unsupported-fit. **Check:** as increment 1;
   corpus WLSMV cases match where magmaan fits them.
   TASK-53 prerequisite: explicit lab residual provenance and missing DELTA
-  residual coordinates repaired; default-lavaan robust reporting and DELTA
-  scale projection remain unresolved before categorical lowering.
+  residual coordinates repaired; default-lavaan robust reporting passes through
+  the retained-estimate WLSMV bundle, and derived DELTA scale projection passes.
+  Equality-labelled DELTA scales lose their restriction during preparation;
+  that available-bundle disagreement needs a scope decision before lowering.
 - [ ] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
   `|` statements and their defaults; NEW, equations, equalities and
   inequalities onto existing constraint machinery; indirect effects as defined

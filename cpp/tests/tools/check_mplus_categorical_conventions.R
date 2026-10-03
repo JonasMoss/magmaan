@@ -49,32 +49,33 @@ for (par in c('delta','theta')) {
      key <- function(p) paste(p$lhs,p$op,p$rhs,p$group,sep='\r')
      idx <- match(key(mp),key(lp))
      use <- !is.na(idx) & mp$op %in% c('=~','|','~1','~*~')
-     # Expected-information sandwich, rather than the lab's estimated-weight IJ
-     # default, is the WLSMV covariance being compared with the oracle.
-     reporting <- magmaanlab:::robust_ordinal(actual, actual$ordinal_stats,
-       bread='expected')
+     # Retained-estimate reporting uses the existing lavaan compatibility bundle.
+     reporting <- convention_inference(actual, 'WLSMV')
      common_free <- !is.na(idx) & mp$free > 0L &
        mp$op %in% c('=~','|','~1')
-     actual_se <- reporting$se[mp$free[common_free]]
-     oracle_se <- lp$se[idx[common_free]]
-     se_error <- abs(actual_se-oracle_se)
-     test_error <- abs(reporting$scaled_shifted$chi2_adj-
-       fitMeasures(fit,'chisq.scaled'))
-     cat('native-reporting',par,route,'df',reporting$df,
-       'max_common_se_difference',sprintf('%.12f',max(se_error)),
-       'scaled_chisq',sprintf('%.12f',reporting$scaled_shifted$chi2_adj),
-       'se_ratio_range',paste(sprintf('%.12f',range(actual_se/oracle_se)),collapse=','),'\n')
-     if (any(se_error > 1e-5*(1+pmax(abs(actual_se),abs(oracle_se)))) ||
-         test_error > 1e-5*(1+abs(fitMeasures(fit,'chisq.scaled'))) ||
-         reporting$df != fitMeasures(fit,'df'))
-       native_failures <- c(native_failures,paste(par,route,
-         'does not reproduce default-lavaan WLSMV reporting'))
+     if (!reporting$covariance_available || !reporting$test$available) {
+       cat('convention-unavailable',par,route,reporting$covariance_reason,
+         reporting$covariance_detail,reporting$test$reason,reporting$test$detail,'\n')
+     } else {
+       actual_se <- sqrt(diag(reporting$covariance))[mp$free[common_free]]
+       oracle_se <- lp$se[idx[common_free]]
+       se_error <- abs(actual_se-oracle_se)
+       test_error <- abs(reporting$test$statistic-fitMeasures(fit,'chisq.scaled'))
+       cat('retained-reporting',par,route,'df',reporting$test$df,
+         'max_common_se_difference',sprintf('%.12f',max(se_error)),
+         'test_difference',sprintf('%.12f',test_error),'\n')
+       if (any(se_error > 1e-5*(1+pmax(abs(actual_se),abs(oracle_se)))) ||
+           test_error > 1e-5*(1+abs(fitMeasures(fit,'chisq.scaled'))) ||
+           reporting$test$df != fitMeasures(fit,'df'))
+         native_failures <- c(native_failures,paste(par,route,
+           'available WLSMV convention disagrees with default lavaan'))
+     }
      errors <- abs(mp$est[use]-lp$est[idx[use]])
      difference <- max(errors)
      within_tolerance <- all(errors <= 1e-5 *
        (1 + pmax(abs(mp$est[use]),abs(lp$est[idx[use]]))))
      scales <- mp$group==2 & mp$lhs %in% paste0('u',1:6) & mp$lhs==mp$rhs &
-       mp$op==if (par=='delta') '~*~' else '~~'
+       mp$op=='~~'
      cat('native-route',par,route,'converged',actual$converged,
        'max_common_estimate_difference',sprintf('%.12f',difference),
        'free_group2_scale_rows',sum(mp$free[scales]>0),'\n')

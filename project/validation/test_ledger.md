@@ -730,16 +730,34 @@ the live-lavaan grouped THETA R provenance test uses an independent explicit
 model and the versioned fitting preset. Existing expectations are unchanged.
 The full ordinal C++ suite passes 145 cases / 7,058 assertions.
 
-The independent P-IV2 diagnostic now also checks expected-information robust
-SEs, scaled/shifted chi-square and df against default lavaan. It remains a
-failing prerequisite gate, not a completed categorical frontend golden:
-common loadings/thresholds/means agree (maximum native differences 2.43e-6
-DELTA / 8.12e-7 THETA), but DELTA scales still project as fixed unit rows.
-Native scaled chi-square is about 27.535189 versus default lavaan 27.482813;
-expected-information SE ratios are about 0.999. The fitting preset corrects
-the test statistic but not the covariance divisor difference. No inference
-default or tolerance was changed. The reporting contract needs resolution
-before declaring PART 0 or the categorical increment complete.
+The independent P-IV2 diagnostic now uses `convention_inference(fit, "WLSMV")`
+for default-lavaan robust SEs and scaled/shifted tests. Both native and versioned
+fitting routes pass (maximum common SE difference 1.04e-6, test difference
+2.07e-6, df 24). Released DELTA scales project `1/sqrt(Sigma*_ii)` rather
+than unit values; they remain fixed projection rows (`free = 0`), without a
+delta-method SE. Common estimates including scales pass existing tolerances.
+Native expected-information reporting remains an observation, not this gate:
+its test is about 27.535189, with common SE ratios about 0.999 versus default
+lavaan. No inference default or tolerance changed.
+
+`check_mplus_categorical_releases.R` adds an independent single-group reference
+with two fixed thresholds identifying an explicitly freed first response scale
+(DELTA) or residual (THETA). Both converge with df 9; maximum estimate difference
+4.44e-7, SE difference 9.25e-8, test difference 3.43e-7. Full ordinal C++ tests
+pass unchanged (145 cases / 7,058 assertions); full magmaanlab passes 5,503
+assertions, two documented skips and two existing two-level warnings.
+
+The same diagnostic with `--scale-equality` exposes a new prerequisite defect.
+Two response scales labelled `shared` are equal in the independent lavaan DELTA
+model (about 0.825), with df 11. Preparation translates the two free scale rows
+into independent residual dimensions, losing their original scale equality;
+magmaan reports about 0.771 and 0.880, df 10. Its WLSMV bundle nevertheless
+claims covariance/test availability: maximum common estimate error 0.154098,
+SE error 0.009725 and scaled-test difference -1.235463. The corresponding THETA
+residual equality passes. This is a lost model restriction, not a reporting
+convention discrepancy. TASK-53 comment 13 requires stopping on an available
+bundle disagreement. The full categorical increment remains pending a decision
+on preserving nonlinear response-scale equalities or rejecting that slice.
 
 ## Validation Areas
 
@@ -849,7 +867,10 @@ Known weak spots: R examples catch workflow regressions but are not exhaustive;
 mean-structure, group, ordinal, and post-fit reconstruction paths remain the
 places to validate deliberately after R glue edits.
 
-### Mplus categorical prerequisite probes (TASK-53; native gate blocked)
+### Mplus categorical prerequisite probes (TASK-53; initial failures)
+
+The initial native failures below are superseded by the explicit ordinal
+preparation prerequisite section above; its equality-scale blocker is current.
 
 The separate `mplus/probes_categorical.json` preserves the existing 972,086-byte
 probe fixture unchanged and adds P-IV2's 12 variants. Mplus 9.1 rejects binary

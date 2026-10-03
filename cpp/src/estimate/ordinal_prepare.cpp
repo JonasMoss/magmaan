@@ -1530,8 +1530,22 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
     values(static_cast<Eigen::Index>(i)) = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
     const bool delta_residual = parameterization == OrdinalParameterization::Delta &&
         pt.op[i] == parse::Op::Covariance;
-    const bool theta_scale = parameterization == OrdinalParameterization::Theta &&
-        pt.op[i] == parse::Op::ResponseScale;
+    bool released_delta_scale = false;
+    if (parameterization == OrdinalParameterization::Delta &&
+        pt.op[i] == parse::Op::ResponseScale) {
+      // Released DELTA scales are represented by a free residual sibling.
+      // Project their derived response scale without adding a free coordinate.
+      for (std::size_t j = 0; j < pt.size(); ++j) {
+        if (pt.op[j] == parse::Op::Covariance && pt.free[j] > 0 &&
+            pt.block_of(j) == pt.block_of(i) &&
+            pt.lhs_var[j] == pt.lhs_var[i] && pt.rhs_var[j] == pt.lhs_var[i]) {
+          released_delta_scale = true;
+          break;
+        }
+      }
+    }
+    const bool theta_scale = pt.op[i] == parse::Op::ResponseScale &&
+        (parameterization == OrdinalParameterization::Theta || released_delta_scale);
     if (pt.free[i] > 0 || (!delta_residual && !theta_scale) ||
         pt.lhs_var[i] != pt.rhs_var[i])
       continue;
