@@ -379,7 +379,10 @@ ordinary API exposes barrier fitting experimentally as
   targeted opt validation passes (13 cases, 451 assertions), including existing
   score-flip and mean-structure FIML-pack checks.
 
-- [ ] **M — calibrate the observed nested ML geometry.** Study: [decisions/04-nested-ml-geometry](../../experiments/decisions/04-nested-ml-geometry/report.qmd) (task-43.1 prep). One frozen run with
+- [ ] **M — calibrate the observed nested ML geometry.** Study: [decisions/04-nested-ml-geometry](../../experiments/decisions/04-nested-ml-geometry/report.qmd) (task-43.1 prep; task-43.2 amendment). The 24-cell pilot adds strong
+  cross-loading misspecification to correct/mild levels, with population RMSEA
+  0/0.0587/0.1274; all 480 draws pass and policy gap is zero. Production remains
+  pending the compute decision. One frozen run with
   correct and misspecified larger models comparing expected and observed
   nested geometry (size and size-adjusted power, score and LR, SB and PEBA4)
   precedes release. Needs compute: simbox is unavailable, so Modal (cost

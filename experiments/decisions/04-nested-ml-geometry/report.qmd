@@ -13,7 +13,7 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Nested ML score projection and LR spectrum | Observed geometry | Adopted; confirmatory calibration open | Smoke and pilot check construction and compute cost only |
+| Nested ML score projection and LR spectrum | Observed geometry | Adopted; confirmatory calibration open | Amended 24-cell pilot checks construction, population misfit and geometry gaps; production pending |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
 ## Question
@@ -23,14 +23,16 @@ particularly when the larger model is misspecified?
 
 ## Short answer
 
-Confirmation has not run. The pilot prices the registered 16-cell study and checks
-that the observed arm reproduces the ordinary policy. Its rejection rates cannot
-justify a geometry decision.
+Confirmation has not run. The pilot prices the amended 24-cell study and checks
+that the observed arm reproduces the ordinary policy. Strong misspecification raises population RMSEA to .1274 (mild: .0587) and
+its null-cell median LR PEBA4 gaps span .0331–.0863, compared with
+.0054–.0177 for mild. Score gaps still overlap across levels. Its rejection
+rates cannot justify a geometry decision.
 
 ```{r}
-out <- file.path('results', 'nested-geometry', 'pilot')
+out <- file.path('results', 'nested-geometry', 'pilot-strong')
 if (!file.exists(file.path(out, 'timing.csv')))
-  stop('Pilot results absent. Run Rscript run_experiment.R --pilot with the lane library.')
+  stop('Pilot results absent. Run Rscript run_experiment.R --pilot --run-id pilot-strong --workers 4 with the lane library.')
 timing <- read.csv(file.path(out, 'timing.csv'))
 checks <- read.csv(file.path(out, 'checks.csv'))
 metadata <- read.csv(file.path(out, 'metadata.csv'))
@@ -46,8 +48,9 @@ knitr::kable(data.frame(`Production CPU Hours` = round(hours, 2),
 The registered [criteria](criteria/nested_geometry.md) compare expected and
 observed score and LR quadratics, each with SB and PEBA4. A two-group CFA tests
 six loading restrictions. Equal population loadings make the null hold both
-under the correct larger model and under an omitted residual covariance shared
-by both groups. Normal and Vale–Maurelli skewed indicators are studied at 100
+under the correct larger model and under mild and strong misspecification shared by both groups. Mild omits a
+residual correlation of .3; strong additionally omits a standardized .4
+cross-loading of x5 on f1, with residual variance adjusted to keep variance 1. Normal and Vale–Maurelli skewed indicators are studied at 100
 and 300 observations per group; power lowers group b's standardized x3 loading
 by .15.
 
@@ -55,15 +58,56 @@ Retain the observed geometry unless, in some misspecified-larger-model null cell
 
 Per-cell Wilson intervals, paired bootstrap intervals, failures, matching-null
 p-value critical values and size-adjusted power are in the run's summary CSVs.
-Production has 2000 null and 1000 power replicates per cell (24000 draws).
+Production has 2000 null and 1000 power replicates per cell (36000 draws).
 Both fits use ordinary default ML estimation and library convergence verdicts;
 the quadratics reuse one shared prepared inference dataset.
+
+## Population misfit and geometry gaps
+
+The exact-covariance configural fits quantify misspecification independently of
+sampling noise. Population RMSEA uses the limiting ML discrepancy; residuals
+are standardized by population marginal standard deviations.
+
+```{r}
+population <- read.csv(file.path(out, 'population.csv'))
+knitr::kable(data.frame(Level = population$larger,
+  `Population RMSEA` = round(population$population_rmsea, 4),
+  `Largest Standardized Residual` = round(population$largest_standardized_residual, 4)),
+  check.names = FALSE)
+```
+
+Paired diagnostics are stored per cell in `geometry_gaps.csv`. The table shows
+ranges of cell medians across the four null cells per level; power cells remain
+in the CSV. Relative score differences divide the absolute observed–expected
+statistic difference by the absolute expected statistic. These gaps describe
+how much the geometries differ, rather than which calibration is better.
+
+```{r}
+gaps <- read.csv(file.path(out, 'geometry_gaps.csv'))
+null_gaps <- gaps[gaps$role == 'null', ]
+range_text <- function(x) paste(sprintf('%.4f', range(x)), collapse = '–')
+gap_table <- do.call(rbind, lapply(population$larger, function(level) {
+  x <- null_gaps[null_gaps$larger == level, ]
+  data.frame(Level = level,
+    `Score PEBA4 Gap` = range_text(x$median_absolute_peba4_gap[x$test == 'score']),
+    `LR PEBA4 Gap` = range_text(x$median_absolute_peba4_gap[x$test == 'lr']),
+    `Relative Score Difference` = range_text(x$median_relative_score_gap[x$test == 'score']),
+    check.names = FALSE)
+}))
+knitr::kable(gap_table)
+```
+
+The original 16-cell pilot remains frozen under `results/nested-geometry/pilot`.
+The amended pilot preserves those cells' seeds and adds strong cells 17–24;
+therefore its existing-cell draws overlap the original pilot. Neither pilot is
+confirmatory evidence. Frozen population and geometry summaries document the
+amendment and its compute pricing; raw replicate batches remain ignored.
 
 ## Caveats
 
 Twenty draws per cell assess mechanics and timing, not one-percentage-point
 size differences. Four-core pricing assumes ideal scaling; worker startup,
-summary computation and remote billing overhead add time. No Modal price model
+summary computation adds time. No Modal price model
 was available in this session, so the estimate is CPU-hours only. Generator
 calibration is included in the measured per-draw cost. Complete-pair inference
 conditions on available tests; all failures remain separately visible.
@@ -77,7 +121,7 @@ export R_LIBS="$HOME/.cache/magmaan-rlib/lane-c"
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 nice -n 10 Rscript run_experiment.R --help
 nice -n 10 Rscript run_experiment.R --smoke --run-id new_smoke
-nice -n 10 Rscript run_experiment.R --pilot --run-id new_pilot
+nice -n 10 Rscript run_experiment.R --pilot --run-id new_pilot --workers 4
 quarto render report.qmd
 ```
 

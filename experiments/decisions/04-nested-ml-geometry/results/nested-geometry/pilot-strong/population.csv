@@ -1,0 +1,4 @@
+"larger","groups","n_per_group","df","ml_discrepancy","population_rmsea","largest_standardized_residual"
+"correct",2,1e+07,38,0,0,8.50194326051934e-09
+"mild",2,1e+07,38,0.0653785402976332,0.0586598312743788,0.143359297487926
+"strong",2,1e+07,38,0.308515161154634,0.127426998947516,0.15794398401451

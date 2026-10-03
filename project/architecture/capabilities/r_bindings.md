@@ -345,6 +345,10 @@
   reduces through the observed information at the larger model. The expected
   geometry, lavaan's, remains the default of `ntml_quadratic` and the lab
   (`inference_quadratic(geometry =)`); the calibration run is open.
+  The decisions/04 amended 24-cell development pilot covers correct, mild
+  residual-correlation and strong cross-loading misspecification, with frozen
+  population misfit and paired geometry-gap diagnostics; 480 draws have no
+  failed arms and zero ordinary-policy gap. This is not confirming size evidence.
   All-ordinal DWLS has its own policy since 2026-10-02
   (`api::policy_inference_dwls`, routed by `magmaanlab::policy_inference()`):
   the estimated-weight IJ covariance (`robust_ordinal_ij`, observed bread,
