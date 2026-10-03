@@ -10,6 +10,8 @@
 #include "ntml_snapshot.h"
 
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/restriction.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -1250,6 +1252,41 @@ Rcpp::List infer_ordinal_profile_lrt(Rcpp::List fit_H1,
   return profile_lrt_to_list(*r_or);
 }
 
+// Internal diagnostic ingredients; no reporting policy is selected here.
+// [[Rcpp::export]]
+Rcpp::List ordinal_nested_diagnostic_impl(Rcpp::List fit_H1,
+                                        Rcpp::List fit_H0) {
+  auto c1 = ctx_from_fit(fit_H1);
+  auto c0 = ctx_from_fit(fit_H0);
+  auto e1 = est_from_fit(fit_H1);
+  auto e0 = est_from_fit(fit_H0);
+  auto stats = ordinal_stats_from_arg(fit_H1["ordinal_stats"]);
+  auto par = ordinal_parameterization_from_string(
+      Rcpp::as<std::string>(fit_H1["parameterization"]));
+  auto k1 = magmaan::estimate::build_eq_constraints(c1.pt);
+  auto k0 = magmaan::estimate::build_eq_constraints(c0.pt);
+  if (!k1) stop_post(k1.error());
+  if (!k0) stop_post(k0.error());
+  auto embed = magmaan::robust::embed_nested_null(
+      c1.pt, c1.rep, c0.pt, c0.rep, e0.theta, *k1, *k0);
+  if (!embed) stop_post(embed.error());
+  auto parts = magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(
+      c1.pt, c1.rep, stats, e1.theta,
+      magmaan::estimate::OrdinalWeightKind::DWLS, par);
+  if (!parts) stop_fit(parts.error());
+  // Keep the larger fitted point, replacing only its nuisance tangent space.
+  auto null_pt = magmaan::robust::embedded_null_structure(
+      c1.pt, embed->null_constraints);
+  auto common = magmaan::estimate::ordinal_dwls_profile_lrt(
+      c1.pt, c1.rep, stats, e1, null_pt, c1.rep, e1, par);
+  if (!common) stop_post(common.error());
+  return Rcpp::List::create(
+      Rcpp::_["hessian_total"] = Rcpp::wrap(parts->hessian),
+      Rcpp::_["K"] = Rcpp::wrap(k1->K()),
+      Rcpp::_["A"] = Rcpp::wrap(embed->restriction.A),
+      Rcpp::_["common"] = profile_lrt_to_list(*common));
+}
+
 // infer_ml_profile_lrt() — complete-data normal-theory ML nested profile LRT:
 // the misspecification-robust ("observed-Hessian profile bread") difference test
 // for two ML fits sharing the same observed data. Unlike the expected-info
@@ -1670,4 +1707,11 @@ Rcpp::List infer_robust_se_both_breads_zc(Rcpp::List fit,
       moments_from_string(moments), cov_from_string(cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return pair_to_list(*r_or);
+}
+
+// Internal access to the existing exact weighted chi-square primitive.
+// [[Rcpp::export]]
+double weighted_chisq_diagnostic_impl(Rcpp::NumericVector eigenvalues, double statistic) {
+  const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigenvalues);
+  return magmaan::robust::weighted_chisq_upper(ev, statistic);
 }

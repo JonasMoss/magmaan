@@ -297,6 +297,14 @@
   full registered 13-arm FMG family, using the bound primitive pOLS gamma = 4
   and negative-spectrum truncation. Exploration reuses production draws;
   confirmation uses seed base 817160001. No policy reference change is made.
+- DWLS nested-law diagnosis (task-17.3) replays 100 production draws in each
+  of three cells. Separate-point profile subtraction leaves 83–183 positive
+  terms for ten restrictions; common-point profile and observed-Hessian
+  parameter-space IJ spectra coincide and have ten terms. Parameter-space
+  SB/pEBA4 size is 5–6% in this exploratory replay. The internal lab diagnostic
+  accessor exposes the existing Newton Hessian, exact embedding restriction
+  map and common-point contrast; no policy change is made. Fresh-seed
+  confirmation is required before selecting the nested reference law.
 - DWLS calibration study `experiments/decisions/05-dwls-policy-calibration`
   has a registered 146-cell runner for global/nested size, IJ coverage and
   loading/global power, with explicit policy-equivalence gaps and CPU pricing.

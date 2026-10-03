@@ -1,0 +1,8 @@
+results/*
+!results/summary.csv
+!results/cells.csv
+!results/metadata.csv
+!results/failures.csv
+
+smoke/
+debug_initial/

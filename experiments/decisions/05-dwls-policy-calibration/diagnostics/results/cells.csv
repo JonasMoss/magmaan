@@ -1,0 +1,4 @@
+"factors","categories","skew","n","groups","parameterization","cross","nesting","role","model","family","cell_id","production_reps"
+2,5,"symmetric",1000,2,"theta",0,"thresholds","null","cfa","nested",75,2000
+2,5,"symmetric",1000,2,"theta",0.3,"thresholds","null","cfa","nested",83,2000
+2,2,"symmetric",400,2,"theta",0,"metric","null","cfa","nested",53,2000

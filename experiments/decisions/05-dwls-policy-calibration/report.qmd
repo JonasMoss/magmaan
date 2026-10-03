@@ -16,7 +16,8 @@ finite-sample calibration remains open. Comparators never select a replacement.
 
 How well calibrated are these all-ordinal DWLS components? The smoke and pilot
 check computation, policy equivalence, failures and cost. Twenty draws per cell
-cannot establish calibration, coverage or power. No production run is included.
+cannot establish calibration, coverage or power. The main tables below describe
+the pilot; the linked nested-law diagnostic uses a bounded production-seed replay.
 
 ```{r}
 root <- file.path('results','dwls-policy','pilot')
@@ -95,3 +96,14 @@ quarto render experiments/decisions/05-dwls-policy-calibration/report.qmd
 
 Runner `--help` documents modes. Every run needs a fresh directory. Rendering
 reads frozen results only. Production is never launched automatically.
+
+## Nested reference-law diagnostic
+
+The [production-seed replay](diagnostics/nested_profile_law.md) isolates the
+separate-fitted-point cancellation artifact: 100 draws in each of three nested
+cells yield 83–183 positive profile terms for ten restrictions. The common-point
+profile spectrum agrees with the observed-Hessian parameter-space IJ law to
+numerical precision and has exactly ten terms. Parameter-space SB/pEBA4 rejection
+is 5–6%, versus profile SB 0–2% and pEBA4 5–18%. This exploratory diagnosis
+recommends fresh-seed registered confirmation of the parameter-space law; it
+does not change the current policy or establish release calibration.

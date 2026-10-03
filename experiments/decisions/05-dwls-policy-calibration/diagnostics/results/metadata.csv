@@ -1,0 +1,2 @@
+"seed_base","reps_requested","attempts","workers","elapsed_seconds","package","git_ref","runner_md5","compute_md5","native_md5","command"
+817150001,100,300,2,227.097,"0.1.0","43541ab8fb528ee2e93d3e6ed3e2b2982d13421c","f931019cfdd4cb5bec4afc42d0010a6f","c9eb77b8c71e8df5868858058880606c","dda2e4f14095b42e6dfb0e54168a6e82","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/decisions/05-dwls-policy-calibration/diagnostics/nested_profile_law.R --args --reps 100 --workers 2"

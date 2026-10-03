@@ -3513,6 +3513,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ordinal_nested_diagnostic_impl
+Rcpp::List ordinal_nested_diagnostic_impl(Rcpp::List fit_H1, Rcpp::List fit_H0);
+RcppExport SEXP _magmaanlab_ordinal_nested_diagnostic_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_nested_diagnostic_impl(fit_H1, fit_H0));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_ml_profile_lrt
 Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double eig_tol);
 RcppExport SEXP _magmaanlab_infer_ml_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP eig_tolSEXP) {
@@ -3762,6 +3774,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_robust_se_both_breads_zc(fit, Zc, n_total, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// weighted_chisq_diagnostic_impl
+double weighted_chisq_diagnostic_impl(Rcpp::NumericVector eigenvalues, double statistic);
+RcppExport SEXP _magmaanlab_weighted_chisq_diagnostic_impl(SEXP eigenvaluesSEXP, SEXP statisticSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigenvalues(eigenvaluesSEXP);
+    Rcpp::traits::input_parameter< double >::type statistic(statisticSEXP);
+    rcpp_result_gen = Rcpp::wrap(weighted_chisq_diagnostic_impl(eigenvalues, statistic));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4608,6 +4632,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_mixed_ordinal_robust_ij", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_robust_ij, 3},
     {"_magmaanlab_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaanlab_infer_ordinal_profile_rmsea, 3},
     {"_magmaanlab_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ordinal_profile_lrt, 4},
+    {"_magmaanlab_ordinal_nested_diagnostic_impl", (DL_FUNC) &_magmaanlab_ordinal_nested_diagnostic_impl, 2},
     {"_magmaanlab_infer_ml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ml_profile_lrt, 4},
     {"_magmaanlab_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_ordinal_fit_measures_misspec, 5},
     {"_magmaanlab_infer_mixed_ordinal_rmsea_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_rmsea_misspec, 5},
@@ -4625,6 +4650,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_robust_se_both_breads", (DL_FUNC) &_magmaanlab_infer_robust_se_both_breads, 4},
     {"_magmaanlab_infer_robust_se_both_breads_raw", (DL_FUNC) &_magmaanlab_infer_robust_se_both_breads_raw, 4},
     {"_magmaanlab_infer_robust_se_both_breads_zc", (DL_FUNC) &_magmaanlab_infer_robust_se_both_breads_zc, 5},
+    {"_magmaanlab_weighted_chisq_diagnostic_impl", (DL_FUNC) &_magmaanlab_weighted_chisq_diagnostic_impl, 2},
     {"_magmaanlab_sim_ig_batch_impl", (DL_FUNC) &_magmaanlab_sim_ig_batch_impl, 22},
     {"_magmaanlab_sim_ig_calibrate_impl", (DL_FUNC) &_magmaanlab_sim_ig_calibrate_impl, 19},
     {"_magmaanlab_sim_ig_draw_impl", (DL_FUNC) &_magmaanlab_sim_ig_draw_impl, 5},

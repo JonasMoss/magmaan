@@ -172,6 +172,13 @@ result under an unstated convention.
   structural work before and weight preparation after. These are boundary
   measurements, not end-to-end speedup evidence.
 
+- [x] **M — diagnose DWLS nested profile-law excess rank** (task-17.3).
+  Three production-seed cells, 100 draws each, isolate separate-point profile
+  cancellation and positive-tail truncation. Common-point spectra equal the
+  ten-term observed-Hessian parameter-space IJ law; the latter needs registered
+  fresh-seed confirmation before replacing a reference law. Policy unchanged;
+  see the study's `diagnostics/nested_profile_law.md`.
+
 - [x] **S/M — remove the ordinary fixed-x option under the adopted API**
   (2026-10-02). Ordinary construction uses the joint random-X model and
   rejects lab specifications with `fixed_x = TRUE` and observed covariates.

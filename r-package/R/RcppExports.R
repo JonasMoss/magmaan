@@ -945,6 +945,10 @@ infer_ordinal_profile_lrt <- function(fit_H1, fit_H0, ordinal_stats, eig_tol = 1
     .Call(`_magmaanlab_infer_ordinal_profile_lrt`, fit_H1, fit_H0, ordinal_stats, eig_tol)
 }
 
+ordinal_nested_diagnostic_impl <- function(fit_H1, fit_H0) {
+    .Call(`_magmaanlab_ordinal_nested_diagnostic_impl`, fit_H1, fit_H0)
+}
+
 infer_ml_profile_lrt <- function(fit_H1, fit_H0, X_per_group, eig_tol = 1e-10) {
     .Call(`_magmaanlab_infer_ml_profile_lrt`, fit_H1, fit_H0, X_per_group, eig_tol)
 }
@@ -1011,6 +1015,10 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
+}
+
+weighted_chisq_diagnostic_impl <- function(eigenvalues, statistic) {
+    .Call(`_magmaanlab_weighted_chisq_diagnostic_impl`, eigenvalues, statistic)
 }
 
 sim_ig_batch_impl <- function(sigma, target_skewness, target_excess_kurtosis, n, reps, seed_base, root = "cholesky", generator_family = "tukey_gh", quadrature_points = 81L, max_iter = 80L, grid_points_g = 29L, grid_points_h = 25L, objective_tol = 1e-8, parameter_tol = 1e-8, finite_diff_step = 1e-4, tukey_g_bound = 3.0, tukey_h_upper = 0.249, johnson_gamma_bound = 6.0, johnson_log_delta_lower = -1.3862943611198906, johnson_log_delta_upper = 2.0794415416798357, root_eigen_tol = 1e-12, moment_solve_tol = 1e-8) {
