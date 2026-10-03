@@ -24,6 +24,12 @@ all-ordinal DWLS; PSD covariance constraints keep their current fitting and
 boundary-inference contract. magmaan's own fitting reliability, PSD hardening,
 mixed continuous/ordered completion and barrier-specific hardening/inference
 are assigned to 0.3.0.
+General inequality constraints (lavaan `<`/`>`, Mplus MODEL CONSTRAINT
+inequalities) are deliberately unsupported: they bind in exactly the samples
+where users write them, and inference at an active bound needs boundary
+(chi-bar-squared) asymptotics. Admissibility (non-negative variances, PSD
+covariance blocks) goes through `covariance = "psd"` or `"barrier"` instead;
+orderings between parameters are not supported (user decision, 2026-10-03).
 Noniterative development is indefinitely postponed and requires an explicit
 user scope decision to reopen; existing APIs and regression gates remain.
 The roadmap owns the estimator tiers and supported

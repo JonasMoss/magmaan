@@ -387,6 +387,19 @@ the consolidated [normal/robust scalar-interval showcase](../../experiments/show
 coverage/failure/cost criteria. Reconcile centering conventions and boundary
 failures before changing defaults; existing studies alone do not adopt a method.
 
+### Inequality-constrained estimation with boundary inference
+
+**Gap:** general inequality constraints (lavaan `<`/`>`, Mplus MODEL CONSTRAINT
+inequalities, e.g. orderings of variances) with chi-bar-squared tests and
+boundary-aware intervals. Deliberately unsupported ([scope](../scope.md)); the
+textbook corpus has two distinct inputs using them.
+**Available:** `covariance = "psd"` or `"barrier"` for admissibility, which
+covers the variance-positivity use; constraints that do not bind can simply be
+dropped.
+**Build if:** a user's substantive hypothesis is itself an inequality that
+needs a test or interval, not an admissibility guard. lavaan's naive inference
+(active bounds as equalities, unchanged df) is not an acceptable shortcut.
+
 ### Reduced-bias estimation and specialist covariance extensions
 
 **Gap:** new RBM performance/regular-region claims, additional estimating-

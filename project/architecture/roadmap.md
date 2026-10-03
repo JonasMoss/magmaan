@@ -1725,7 +1725,9 @@ an unconstrained gradient test to constrained solutions.
 - Inequality constraints (`<` / `>`) and active-bound inference remain
   unsupported: inequality-constrained estimation needs boundary
   (chi-bar-squared) asymptotics magmaan does not implement. They fail with an
-  explicit early error rather than silently reporting ordinary χ²/SE theory.
+  explicit early error rather than silently reporting ordinary χ²/SE theory;
+  the error points to `covariance = "psd"` or `"barrier"` for admissibility
+  (deliberate boundary, see [scope](../scope.md)).
 
 ## Design Invariants
 
