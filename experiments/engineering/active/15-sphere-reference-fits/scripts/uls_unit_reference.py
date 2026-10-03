@@ -97,10 +97,10 @@ class Profile:
                 h[i, j] = h[j, i] = mp.fsum(weight[p] * (derivatives[i][p] * derivatives[j][p] + residual[p] * second[i, j][p]) for p in self.pairs)
         return f, g, h
 
-    def refine(self, start):
+    def refine(self, start, tolerance=None):
         x = mp.matrix(start)
         trace = []
-        tol = mp.power(10, -mp.mp.dps + 15)
+        tol = mp.power(10, -mp.mp.dps + 15) if tolerance is None else mp.mpf(tolerance)
         for iteration in range(60):
             f, g, h = self.evaluate(x)
             score = max(abs(g[i]) / mp.sqrt(abs(h[i, i])) for i in range(7))

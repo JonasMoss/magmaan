@@ -1,0 +1,2 @@
+cases,fits,fit_errors,reference_points,available_bound_checks,bound_misses,interval_misses,wrong_decisions,basin_references,basin_unresolved,total_losses,default_promoted
+30,390,0,179,157,0,0,0,30,0,1,False

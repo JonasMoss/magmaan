@@ -815,10 +815,21 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   eight saddles, three above-budget failures and three unresolved assessments.
   Native mixed-unit ULS gains three passes and loses none. One unresolved
   weak-marker ML endpoint is locally accurate; two mixed-unit ULS endpoints
-  are above budget. Default acceptance is unchanged. Next prespecify adoption
-  criteria and compare against actual defaults on held-out fitting problems;
-  separately diagnose the retained weak/mixed start/search failures and the
-  conservative accurate endpoint. This evidence selects no
+  are above budget. The focused ULS search follow-up (2026-10-03) holds
+  PORT-NLS/sample-unit scaling fixed and uses actual API default starts
+  (FABIN3/native for ULS, not layered). On ten fresh draws per family, the
+  sphere default-plus-four-signed portfolio qualifies all regular, weak-marker
+  and mixed-unit cases and matches every best independently refined local
+  reference. Marker portfolios qualify 10/6/8; tighter controls raise mixed
+  units to 10 but leave weak markers at 6, with greater runtime cost. Keeping
+  the default avoids a signed-only weak-marker loss. All 398 available bounds
+  cover across 1,040 retained/fresh cold fits and 473 selected endpoint checks;
+  no decisive audit classification is wrong. This unrestricted target includes
+  negative residual variances and indefinite latent covariances. The
+  two-factor-specific recipe needs broader-model start construction and cost
+  evidence before adoption. Default acceptance is unchanged. Next prespecify
+  adoption criteria and compare against the full actual-default fitter on
+  held-out models; separately resolve the conservative accurate ML endpoint. This evidence selects no
   regularization or acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start

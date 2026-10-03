@@ -853,6 +853,18 @@ two are above budget. Default adoption, start/search reliability, means/other
 weights and constraints remain separate. No statistical regularization or
 acceptance default follows.
 
+The subsequent ULS search lane holds PORT-NLS and sample-unit scaling fixed,
+comparing actual API starts to a default-plus-four-signed portfolio. Ten fresh
+draws per family give 10/10 regular, weak-marker and mixed-unit sphere
+qualifications, all matching best independently refined local objectives;
+marker gives 10/6/8. Tight controls improve mixed-unit marker to 10 but leave
+weak markers at 6 and cost more. Keeping the default prevents a signed-only
+loss. Across 1,040 retained/fresh cold fits, 473 selected endpoint checks have
+398 available bounds, all covering with no wrong decisive audit classification.
+This is unrestricted ULS with some inadmissible winners and a two-factor-specific
+start recipe, not general SEM or PSD evidence. Broader-model start construction
+and a full actual-default decision remain open; library defaults are unchanged.
+
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
 all-ordinal and mixed-ordinal LS, CatML, two-level ML, and multi-information

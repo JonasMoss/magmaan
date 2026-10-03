@@ -135,3 +135,32 @@ are above budget (.697/.514). The interval remains conservative in all three.
 All 120 perturbation controls remain unaccepted. Fit/evaluation took 6.1 seconds
 and independent checking 214.9 seconds on one math thread. Five draws per family
 do not settle start/search reliability or justify default adoption.
+
+
+## Experimental ULS search portfolio
+
+Experiment 15's `uls_search` lane fixes PORT-NLS/sample-unit scaling and the
+opt-in audit while comparing actual API default starts, layered starts and four
+sample-only signed moment starts. ULS defaults to FABIN3/native, whereas the
+preceding terminal study held layered starts common. This is a default-start
+comparison under fixed optimizer settings, not a full no-options baseline.
+
+On ten fresh draws per family, native sphere with default plus four signed
+starts qualifies 10/10 regular, weak-marker and mixed-unit cases and matches
+every best independently refined local reference. Marker qualifies 10/6/8;
+tighter controls increase mixed units to 10 but leave weak markers at 6 and
+increase cost. Keeping the default avoids a signed-only weak-marker loss.
+Across 1,040 retained/fresh cold fits, independent 90-digit checks cover 473
+selected endpoints, including every qualified portfolio winner. All 398
+available construction bounds and all finite distance intervals cover, with
+no wrong decisive classification. Full raw fits are not all independently checked.
+
+Local basin references use independent diagonal-profile ULS refinement after
+cold fitting. Initial 75-digit residual refinement failures are retained; a
+reference-only amendment to a 40-digit residual at 90-digit working precision
+provides every reference, without changing fits or the 0.01 audit budget.
+The comparison establishes agreement with best known local minima, not global
+optimality. Some winners have negative residual variances or indefinite latent
+covariances under this unrestricted target. The two-factor-specific signed recipe
+needs broader-model construction and cost evidence; adoption requires a separate
+prespecified actual-default decision study. No implementation/default changes.
