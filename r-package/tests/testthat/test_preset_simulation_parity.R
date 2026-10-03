@@ -107,8 +107,12 @@ test_that("named simulation models retain lavaan preset parity", {
           if (!setequal(mk, lk) || anyDuplicated(mk) || anyDuplicated(lk)) {
             issue <- c(issue, "free parameter keys differ")
           } else {
-            difference <- max(abs(mp$est - lp$est[match(mk, lk)]))
-            if (!is.finite(difference) || (!retry && difference > 1e-5))
+            oracle_est <- lp$est[match(mk, lk)]
+            errors <- abs(mp$est - oracle_est)
+            difference <- max(errors)
+            # Match the pinned doctest Approx(...).epsilon(1e-5) gate.
+            within_tolerance <- all(errors <= 1e-5 * (1 + pmax(abs(mp$est), abs(oracle_est))))
+            if (!is.finite(difference) || (!retry && !within_tolerance))
               issue <- c(issue, "estimate disagreement")
           }
         }

@@ -84,9 +84,40 @@ of the optimizer stop. A returned estimate need not pass that verdict.
 The opt-in installed-lavaan 0.7.2 simulation gate is
 [`test_preset_simulation_parity.R`](../../../r-package/tests/testthat/test_preset_simulation_parity.R)
 (`MAGMAAN_PARITY=1`). Its eight named cases cover complete ML, FIML and
-all-ordinal delta/theta DWLS, including grouped equalities. The initial
-160-replicate run took 29.5 seconds: all verdicts agreed, no rescaled retries
-occurred, but nine PoliticalDemocracy ML endpoints and one HS theta DWLS
-endpoint exceeded the unchanged 1e-5 estimate tolerance. Task-59 is awaiting
-a decision; simulation endpoint parity is not yet established. The backlog
-records the cases and seeds. The default suite skips this gate.
+all-ordinal delta/theta DWLS, including grouped equalities. The comparison is
+per parameter, `abs(a-b) <= 1e-5 * (1 + max(abs(a), abs(b)))`, matching the
+pinned fixture gate. The resumed 160-replicate run took 22.8 seconds: all
+verdicts agreed, no rescaled retries occurred, and PoliticalDemocracy seeds
+590202, 590203 and 590210 failed estimates (maximum absolute difference
+5.41625767e-5). Seven named cases pass. The earlier build also failed
+590212 and 590214; after rebuilding the original implementation these pass.
+The default suite skips this gate; simulation endpoint parity remains unmet.
+
+Task-59's focused seed 590214 investigation temporarily recorded each preset
+objective callback's coordinates/value/gradient and traced installed lavaan's
+`lav_model_grad` coordinates, with `control = list(trace = 1)` for PORT output.
+The temporary instrumentation was removed before the final build. Parameter
+keys, native/optimizer starts (maximum difference 1.8e-15), unit parameter
+scales and PORT controls agree; this model has no equality reduction. Aligning
+oracle gradient evaluations with the preset's callback points (which also
+include objective-only rejected trials), the first shared coordinates differ
+by 1.8e-15, then 2.7e-15, 1.8e-14, 1.1e-13, 2.4e-12, 2.4e-11,
+8.1e-10 and 2.4e-7. Evaluating lavaan at every finite preset callback point
+gives maximum objective error 3.65e-15 and gradient error 6.28e-14. Invalid
+non-PD trial points are excluded from this same-point derivative comparison,
+not from the simulation gate. This localizes the initial divergence to
+rounding, followed by amplification along the optimization path.
+
+In the instrumented run, seed 590214 stopped after 80 versus 64 iterations;
+its endpoint objectives differed by 4.36e-11 and maximum gradients were
+1.30e-6 versus 7.41e-7. In the restored build, the five previously failing
+seeds have starts within 6.3e-15, endpoint objective differences below
+5.5e-11 and maximum gradients below 1.8e-6, comfortably within the preset's
+0.001 acceptance threshold. Expected-information directional curvature along
+the endpoint difference is 0.0134–0.0249, consistent with a weak direction.
+The evidence supports floating-point search-path amplification rather than a
+systematic objective/gradient or coordinate discrepancy. It does not exempt
+these path-stable endpoints from the gate. Task-59 needs a decision on the
+remaining failures; no fitting code or further tolerance change was made.
+Diagnostic scripts and logs are retained under `~/.cache/magmaan-logs/task-59-*`;
+the trace scripts require the temporary callback instrumentation described above.

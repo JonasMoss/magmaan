@@ -287,15 +287,22 @@ with each actual endpoint's declared acceptance checked separately.
   populations, fixed seeds, 20 replicates per case and N=300 per group.
   Ordinal indicators use four categories at common population quartiles;
   MCAR removes 15% per variable and MAR removes x2/x5/x8 depending on
-  x1/x4/x7. Installed lavaan 0.7.2 run: 160 replicates in 29.5 seconds,
-  zero rescaled retries, all convergence/verdict comparisons agree.
-  Six cases pass estimate parity; PoliticalDemocracy ML replicates
-  2, 3, 8, 9, 10, 12, 14, 16, 17 exceed 1e-5 (maximum 6.01813289e-5),
-  as does HS theta DWLS replicate 7 (2.15889363e-5). Seeds are
-  `590000 + 100 * case_index + replicate` in the named list order.
-  These are path-stable failures, printed by the test, and task-59 needs a
-  decision before further investigation or fitting changes. Tolerance and
-  fitting code remain unchanged; the exit criterion is not met.
+  x1/x4/x7. The comparison uses the pinned fixture gate per parameter:
+  `abs(a-b) <= 1e-5 * (1 + max(abs(a), abs(b)))`, as clarified in the
+  task decision; rescaled retries retain their separate endpoint contract.
+  The resumed installed-lavaan 0.7.2 run took 22.8 seconds for 160 replicates:
+  zero rescaled retries, all convergence/verdict comparisons agree, seven
+  cases pass estimates. PoliticalDemocracy seeds 590202, 590203 and 590210
+  fail (maximum absolute difference 5.41625767e-5). The earlier build also
+  failed seeds 590212 and 590214 under this criterion; the restored build
+  passes those two, demonstrating sensitivity to floating-point execution.
+  Seeds are `590000 + 100 * case_index + replicate` in named list order.
+  The [optimizer capability record](../architecture/capabilities/optimizers.md)
+  records seed 590214's trace and same-point derivative evidence. Starts
+  agree within 6.3e-15 across the five investigated seeds; both endpoints'
+  gradients are below 1.8e-6 and objective differences below 5.5e-11.
+  No fitting implementation change or endpoint exemption was made. Task-59
+  needs a decision on this floating-point endpoint variation; exit 2 is unmet.
 
 ### Primary inference workflows
 
