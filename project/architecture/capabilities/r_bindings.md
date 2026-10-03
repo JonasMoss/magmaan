@@ -254,22 +254,20 @@
   table) replaces `start` and `options$starts`; with engine options an explicit
   start overrides the preset's. Removed arguments (`psd`, `start`, `fixed.x`,
   `meanstructure`, `missing`, `cluster` and the structural arguments now on
-  `magmaan_model()`) raise errors naming their replacement. Fits still run
-  through `fit_model()` on the frozen spec: native prepared handles are not
-  yet reused, because the prepared `estimate()` path differs from
-  `fit_model()` in default starts, fitting options and routes (backlog).
-- Task-25.2 prepared ordinary routing is implemented on its lane branch but
-  awaits a coverage decision before completion. The model cache rebuilds after
-  serialization or process changes; 203 focused assertions cover fresh-fit
-  parity, reuse, save/reload and PSOCK reconstruction. Full ordinary checks
-  expose unsupported ordinal non-threshold equalities and ordinal reporting
-  moment/weight dimension mismatches (plus a changed mixed-ULS error message).
-  Only ML2S and ordinal DWLS fitting-options fallbacks are currently authorized.
+  `magmaan_model()`) raise errors naming their replacement. Fits use a lazily built native
+  prepared handle cached by reference on
+  the model. Repeated fits reuse structure; serialization and process changes
+  rebuild the handle from portable fields. ML2S and ordinal DWLS with fitting
+  options retain the `fit_model()` route pending prepared support.
+- Fresh-fit parity, structural reuse, save/reload and PSOCK reconstruction are
+  covered by the ordinary prepared-handle tests. Task-25.3 supplies ordinal
+  equality and reporting metadata parity used by this composition.
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design
   ([r-interface-vision.md](../../design/r-interface-vision.md)). `magmaan()`
   rejects estimator-plus-correction names such as MLR and WLSMV, reports rows
-  used and deleted listwise, and fits through `fit_model()`. `infer()` runs the
+  used and deleted listwise, and fits through prepared handles with the
+  documented fallbacks. `infer()` runs the
   inference policy (next entry) and records each component (covariance,
   global score, global LR) as available or with a typed reason; for an
   unavailable component `vcov()` and `confint()` raise a
