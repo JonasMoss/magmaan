@@ -218,8 +218,11 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
           param <- if(grepl('eba',a)) as.numeric(sub('.*eba','',a)) else 4
           test <- core$robust_fmg_test(fixed$chisq_standard,policy$df,spectrum,
             methods[[a]],param,truncate_negative=TRUE)
-          if(!is.finite(test$p_value)) stop('Nonfinite FMG arm: ',a)
-          add(a,test$p_value,fixed$chisq_standard,policy$df,length(spectrum))
+          # A failed comparator arm is recorded as unavailable; it must not
+          # remove the replicate from the production arms it is compared with.
+          if(is.finite(test$p_value)) add(a,test$p_value,fixed$chisq_standard,policy$df,length(spectrum))
+          else add(a,statistic=fixed$chisq_standard,df=policy$df,
+                   spectrum_size=length(spectrum),reason='numeric_failure')
         }
       }
     }
@@ -229,7 +232,8 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
   z <- do.call(rbind,rows); z$cell_id <- cell$cell_id; z$replicate <- replicate; z$seed <- seed
   z$h1_converged <- h1_converged; z$h0_converged <- h0_converged
   z$policy_gap <- gap; z$error <- error; z$elapsed_seconds <- unname((proc.time()-start)['elapsed'])
-  z$eigenvalues <- rep(list(spectrum),nrow(z))
+  # One copy of the spectrum per replicate (first row); other rows hold NULL.
+  z$eigenvalues <- c(list(spectrum),rep(list(NULL),nrow(z)-1L))
   z$cpu_seconds <- unname(sum((proc.time()-start)[c('user.self','sys.self')]))
   z
 }
