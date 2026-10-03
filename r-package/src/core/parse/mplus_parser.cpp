@@ -465,16 +465,6 @@ class Lowerer {
       if(!dependent.contains(name)) {reject(out.input.model_body,"CT07","CATEGORICAL variable '"+name+"' is not dependent; Mplus requires categorical outcomes; remove it from CATEGORICAL or model it as an outcome instead");return std::unexpected(*error);}
       if(out.input.parameterization=="DELTA" && predictors.contains(name)) {reject(out.input.model_body,"CT05","categorical outcome '"+name+"' both influences and is influenced; Mplus requires THETA; use PARAMETERIZATION = THETA instead");return std::unexpected(*error);}
     }
-    const auto validate_scales=[&](const auto& rs) {
-      for(const auto& row:rs) if(row.op==Op::ResponseScale && out.input.parameterization=="DELTA") {
-        if(row.fixed && *row.fixed!=1) reject(row.span,"CT04","fixed non-unit DELTA scale is a nonlinear residual-coordinate restriction; use PARAMETERIZATION = THETA or remove the restriction instead");
-        if(!row.fixed && !row.label.empty() && std::count_if(rs.begin(),rs.end(),[&](const auto& other){return !other.fixed && other.label==row.label;})>1)
-          reject(row.span,"CT04","equality-labelled DELTA scales are nonlinear residual-coordinate restrictions; use PARAMETERIZATION = THETA or remove the restriction instead");
-      }
-    };
-    if(grouped_rows.empty()) validate_scales(rows);
-    else {std::vector<Row> all_group_rows;for(const auto& group:grouped_rows) all_group_rows.insert(all_group_rows.end(),group.begin(),group.end());validate_scales(all_group_rows);}
-    if(error) return std::unexpected(*error);
     // Resolve names only after role/default calculations; labels remain case-folded.
     for (auto& row : rows) {
       if(row.op==Op::Threshold && !category_counts.empty()) {

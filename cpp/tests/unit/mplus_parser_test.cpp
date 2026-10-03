@@ -305,11 +305,11 @@ TEST_CASE("Mplus categorical: CT01-CT07 materialization and restrictions") {
   CHECK_FALSE(compat::mplus::prepare_ordinal_model(text(""),{{11,3,3,3}}));
   for(const auto& [model,par,rule]:std::vector<std::tuple<std::string,std::string,std::string>>{
       {"[u1];","DELTA","CT02"},{"u1;","DELTA","CT04"},
-      {"{u1};","THETA","CT04"},{"u2 ON u1;","DELTA","CT05"},
-      {"{u1@0.8};","DELTA","CT04"},
-      {"{u1-u2} (s);","DELTA","CT04"}}) {
+      {"{u1};","THETA","CT04"},{"u2 ON u1;","DELTA","CT05"}}) {
     auto actual=parse::MplusParser::parse(text(model,par));REQUIRE_FALSE(actual);
     CHECK(actual.error().detail.find("["+rule+"]")!=std::string::npos);
   }
   REQUIRE(parse::MplusParser::parse(text("u1-u2 (s);","THETA")));
+  REQUIRE(parse::MplusParser::parse(text("{u1@0.8};")));
+  REQUIRE(parse::MplusParser::parse(text("{u1-u2} (s);")));
 }

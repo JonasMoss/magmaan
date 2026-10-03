@@ -14,6 +14,10 @@
   at the larger fit and exact restriction map, with SB and PEBA4, confirmed on
   fresh draws (4.3-7.8% at nominal 5%). The separate-point profile
   law remains an explicitly named lab comparator.
+- `mplus_model()` imports binary/ordinal outcomes, threshold ranges and labels,
+  DELTA scales (including fixed and equal scales), THETA residuals, and grouped
+  CONFIGURAL/SCALAR models. All-ordinal DWLS uses explicit Mplus defaults;
+  mixed, conditional and categorical ML routes report their boundaries.
 
 - `mplus_data()` reads free/fixed individual and summary data through a typed
   C++ data plan, including missing flags and FILE/NGROUPS groups. It reports

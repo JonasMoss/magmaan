@@ -216,3 +216,83 @@ test_that("categorical Mplus boundaries identify the fit route and category rule
   d$g <- rep(1:2,length.out=nrow(d));d$u1[d$g==2]<-1
   expect_error(fit_model(grouped,d,estimator="DWLS"),"CT07.*lacks a category")
 })
+
+test_that("grouped categorical Mplus defaults and shortcuts match live explicit lavaan", {
+  skip_if_not_installed("lavaan")
+  cases <- list()
+  for(par in c("delta","theta")) for(kind in c("configural","scalar","default")) {
+    shared <- kind!="configural"
+    loading <- function(j) if(shared) paste0("c(l",j,",l",j,")") else "c(NA,NA)"
+    syntax <- c(paste0("f1 =~ c(1,1)*u1+",loading(2),"*u2+",loading(3),"*u3"),
+      paste0("f2 =~ c(1,1)*u4+",loading(5),"*u5+",loading(6),"*u6"),
+      "f1 ~~ c(NA,NA)*f1; f2 ~~ c(NA,NA)*f2; f1 ~~ c(NA,NA)*f2",
+      if(shared) "f1 ~ c(0,NA)*1; f2 ~ c(0,NA)*1" else "f1 ~ c(0,0)*1; f2 ~ c(0,0)*1")
+    for(j in 1:6) syntax <- c(syntax,
+      paste0("u",j," | ",if(shared) paste0("c(t",j,"1,t",j,"1)*t1+c(t",j,"2,t",j,"2)*t2") else "c(NA,NA)*t1+c(NA,NA)*t2"),
+      paste0("u",j," ~ c(0,0)*1"),paste0("u",j,if(par=="delta") " ~*~ " else " ~~ ",if(shared) "c(1,NA)" else "c(1,1)","*u",j))
+    input <- paste("DATA: FILE=x;", "VARIABLE: NAMES=u1-u6 g; CATEGORICAL=u1-u6;",
+      "GROUPING=g(1=a 2=b);",paste0("ANALYSIS: PARAMETERIZATION=",toupper(par),";"),
+      if(kind!="default") paste0("MODEL=",toupper(kind),";") else "",
+      "MODEL: f1 BY u1-u3; f2 BY u4-u6;",sep="\n")
+    cases[[paste(par,kind,sep="_")]] <- list(input=input,model=paste(syntax,collapse="\n"),parameterization=par)
+  }
+  set.seed(533072);n <- 600L
+  eta <- matrix(rnorm(2*n),n,2);eta[,2] <- .4*eta[,1]+sqrt(.84)*eta[,2]
+  x <- cbind(outer(eta[,1],c(.8,.7,.65)),outer(eta[,2],c(.85,.75,.6)))+matrix(rnorm(6*n,sd=.7),n,6)
+  d <- as.data.frame(apply(x,2,function(z) as.integer(cut(z,c(-Inf,-.5,.5,Inf)))))
+  names(d) <- paste0("u",1:6);d$g <- rep(1:2,each=n/2)
+  for(id in names(cases)) {
+    c <- cases[[id]]; spec <- mplus_model(c$input)
+    expect_identical(magmaanlab:::.rebuild_model_spec(spec)$partable,spec$partable)
+    actual <- fit_model(spec,d,estimator="DWLS")
+    prepared <- prepare_model(spec,prototype=d);reused <- estimate(prepared,prepare_data(prepared,d))
+    expect_equal(reused$partable$est,actual$partable$est,tolerance=1e-8)
+    oracle <- lavaan::lavaan(c$model,data=d,group="g",ordered=paste0("u",1:6),
+      parameterization=c$parameterization,estimator="WLSMV",meanstructure=TRUE,
+      auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
+    expect_true(actual$converged);expect_true(lavaan::lavInspect(oracle,"converged"))
+    p <- actual$partable;q <- lavaan::parTable(oracle)
+    key <- function(p) paste(p$lhs,p$op,p$rhs,p$group)
+    index <- match(key(p),key(q));use <- !is.na(index)&p$op %in% c("=~","|","~1","~*~","~~")
+    expect_equal(p$free[use]>0,q$free[index[use]]>0)
+    expect_equal(p$est[use],q$est[index[use]],tolerance=1e-5)
+    inference <- convention_inference(actual,"WLSMV")
+    expect_true(inference$covariance_available);expect_true(inference$test$available)
+    expect_equal(inference$test$df,unname(lavaan::fitMeasures(oracle,"df")))
+    expect_equal(inference$test$statistic,unname(lavaan::fitMeasures(oracle,"chisq.scaled")),tolerance=1e-5)
+    use <- use&p$free>0
+    expect_equal(sqrt(diag(inference$covariance))[p$free[use]],q$se[index[use]],tolerance=1e-5)
+  }
+})
+
+test_that("Mplus DELTA fixed and equality scales remain live restrictions", {
+  skip_if_not_installed("lavaan")
+  set.seed(531072);n <- 600L
+  eta <- matrix(rnorm(2*n),n,2);eta[,2] <- .4*eta[,1]+sqrt(.84)*eta[,2]
+  x <- cbind(outer(eta[,1],c(.8,.7,.65)),outer(eta[,2],c(.85,.75,.6)))+matrix(rnorm(6*n,sd=.7),n,6)
+  d <- as.data.frame(apply(x,2,function(z) as.integer(cut(z,c(-Inf,-.5,.5,Inf)))))
+  names(d) <- paste0("u",1:6)
+  reference <- function(id) {
+    syntax <- c("f1 =~ 1*u1+u2+u3; f2 =~ 1*u4+u5+u6",
+      "f1 ~~ f1; f2 ~~ f2; f1 ~~ f2; f1 ~ 0*1; f2 ~ 0*1")
+    for(j in 1:6) syntax <- c(syntax,paste0("u",j," | ",if(id=="equal_scales" && j<=2) "-0.5*t1+0.5*t2" else "t1+t2"),
+      paste0("u",j," ~ 0*1"),paste0("u",j," ~*~ ",if(id=="equal_scales" && j<=2) "shared" else if(id=="fixed_nonunit" && j==1) ".8" else "1","*u",j))
+    paste(syntax,collapse="\n")
+  }
+  for(id in c("fixed_nonunit","equal_scales")) {
+    input <- paste("DATA: FILE=x;
+VARIABLE: NAMES=u1-u6; CATEGORICAL=u1-u6;",
+      "MODEL: f1 BY u1-u3; f2 BY u4-u6;",
+      if(id=="fixed_nonunit") "{u1@0.8};" else "{u1-u2} (shared); [u1$1@-0.5 u1$2@0.5]; [u2$1@-0.5 u2$2@0.5];",sep="\n")
+    actual <- fit_model(mplus_model(input),d,estimator="DWLS")
+    oracle <- lavaan::lavaan(reference(id),data=d,ordered=names(d),parameterization="delta",estimator="WLSMV",meanstructure=TRUE,auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
+    p <- actual$partable;q <- lavaan::parTable(oracle);key <- function(p) paste(p$lhs,p$op,p$rhs,p$group)
+    index <- match(key(p),key(q));use <- !is.na(index)&p$op %in% c("=~","|","~*~")
+    expect_true(actual$converged);expect_equal(p$free[use]>0,q$free[index[use]]>0)
+    expect_equal(p$est[use],q$est[index[use]],tolerance=1e-5)
+    inference <- convention_inference(actual,"WLSMV")
+    expect_equal(inference$test$df,unname(lavaan::fitMeasures(oracle,"df")))
+    expect_equal(inference$test$statistic,unname(lavaan::fitMeasures(oracle,"chisq.scaled")),tolerance=1e-5)
+    use <- use&p$free>0;expect_equal(sqrt(diag(inference$covariance))[p$free[use]],q$se[index[use]],tolerance=1e-5)
+  }
+})

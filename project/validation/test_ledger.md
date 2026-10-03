@@ -944,3 +944,39 @@ No frontend acceptance, preparation behavior, inference defaults, tolerances,
 or corpus coverage is changed. The prerequisite numerical failure is resolved by TASK-53.1; the full
 frontend increment acceptance remains pending. Previously
 completed opt Mplus checks pass: 34 cases / 12,362 assertions.
+
+### TASK-53 categorical frontend validation and remaining meaning gate
+
+Frontend checkpoint `e28746a0` and DELTA repair `e6ec7a30` are followed by
+completed threshold/scale lowering and ten independent default-lavaan
+categorical golden cases (binary/ordinal single-group, grouped CONFIGURAL,
+SCALAR and default under both parameterizations). Opt gates pass: spec
+211 / 14,674 assertions, API 28 / 788, ordinal 148 / 11,872; the categorical
+golden accounts for 2,398 assertions. Full installed magmaanlab passes 5,721
+expectations, with two existing skips and two existing two-level warnings.
+Live frontend tests cover grouped prepared/rebuilt fits and fixed/equal scales.
+The original `probes.json` remains unchanged; P-IV2 adds 12 variants separately.
+
+Corpus: 68 eligible, 31 accepted, 25 matched and six unsupported fit routes,
+zero failures; two matched cases have independently verified robust convention
+differences. Increment 2 accepted/matched 22. The unchanged 2,440-input manifest
+(1,117 distinct inputs) has reader 291→456 and model 217→359, every rejection
+classified. Logs are under `~/.cache/magmaan-logs/task-53-frontend-*`.
+
+The stricter optional `regen_oracle_mplus_categorical.R --demo` meaning gate
+exposes a remaining SE discrepancy for seed 533072's single-group ordinal
+DELTA fit, despite matching point estimates. Mplus 9.1 prints U3 loading SE
+0.083 versus lavaan 0.7-2 `mimic="Mplus"` 0.08355350; U6 SE 0.073 versus
+0.07357317; U1 first-threshold SE 0.053 versus 0.05356258 (U6 second threshold
+has the same discrepancy). Existing allowance is 0.0005 + 1e-5 |printed|.
+Native default-lavaan fits, SEs and tests remain within their 1e-5 gates.
+
+Diagnostic `gamma.vcov.mplus=FALSE` multiplies SEs by sqrt(599/600), as the
+installed lavaan sandwich weights show, but U6 and the two threshold SEs still
+fail printed precision; it is not an accepted fix or reference convention.
+The discrepancy has no independent first-principles proof and is not an
+oracle defect exemption. TASK-53 requires a decision before accepting this
+meaning gate. Reproduce with `Rscript cpp/tests/tools/regen_oracle_mplus_categorical.R
+--demo`; ignored Demo inputs, data and output remain in
+`~/.cache/magmaan-logs/mplus-categorical-golden/delta_ordinal/`. The generator
+stops before changing frozen fixtures on a meaning failure.

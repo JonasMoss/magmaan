@@ -253,7 +253,7 @@ MG03 accepts negative integers and decimal spellings of integers, rejects
 fractional codes and duplicate numeric codes/case-insensitive labels. MG06
 accepts cumulative repeated sections and group-only parameters as generated
 fixed-zero rows elsewhere; group-specific variable-role changes are rejected
-(P-MG13). MG09 and MG12 remain categorical/mixture boundaries.
+(P-MG13). MG09 is implemented in increment 3; MG12 remains a mixture boundary.
 
 ## Measurement-invariance shortcuts
 
@@ -266,8 +266,7 @@ fixed-zero rows elsewhere; group-specific variable-role changes are rejected
 | IV05 | P | Mplus expands a shortcut into ordinary MODEL syntax (printed with `(MODEL)`, P-IV1): every model fixes factor means at zero in the overall MODEL; configural repeats the non-marker BY items and frees all indicator intercepts in every group section; metric frees only the intercepts; scalar is the default multiple-group model. Factor covariances are free per group. With variance identification, TECH1 shows variances fixed at one in both groups for configural and in the first group only for metric and scalar, although the printed commands show `f@1` in the overall MODEL: the printed text is a summary, TECH1 is authoritative. |
 
 IV01, IV02, IV04 and IV05 are implemented for one continuous first-order
-BY shortcut, including fixed-one variance identification. IV03 remains an
-increment-3 boundary. The independent goldens reproduce both identification
+BY shortcut, including fixed-one variance identification. IV03 is implemented in increment 3. The independent goldens reproduce both identification
 variants' parameter counts 38/34/30 and df 16/20/24.
 
 ## Categorical outcomes (increment 3)
@@ -551,13 +550,25 @@ The optional `check_mplus_categorical_conventions.R --native` gate checks
 these explicit SCALAR rows before frontend lowering. After the provenance and
 residual-coordinate repair, both native and versioned fits preserve common
 estimates and df. Retained-estimate `convention_inference(fit, "WLSMV")` passes
-SE/test gates against default lavaan. Released DELTA scale projections now
-report their derived values with `free = 0` and no delta-method SE.
+SE/test gates against default lavaan. Released DELTA scales now remain live `~*~` coordinates, with their estimates
+and SEs. Residual variances are derived under DELTA (TASK-53.1).
 
 `check_mplus_categorical_releases.R` passes explicit single-group DELTA/THETA
-release references. Its `--scale-equality` variant exposes lost equality-labelled
-DELTA scales: lavaan has df 11 and equal scales about 0.825, while magmaan has
-df 10 and scales about 0.771 and 0.880. The available WLSMV bundle disagrees
-(SE error 0.009725, scaled-test difference -1.235463); THETA passes. See the
-test ledger. TASK-53 awaits a prerequisite scope decision; CT/MG09/IV03
-implementation status and corpus tally remain unchanged.
+release references and its `--scale-equality` variant. TASK-53.1 repaired lost
+DELTA scale restrictions: both scales now match lavaan at about 0.8246215 with
+df 11, maximum estimate error 1.58e-7, SE error 4.38e-8 and scaled-test error
+1.65e-7. THETA remains unchanged.
+
+Increment 3 implements CT01–CT07, MG09 and IV03 in the reader/lowering and
+all-ordinal DWLS adapter. CT08 summary categorical input remains an explicit
+boundary. Data completion preserves Mplus defaults rather than applying
+lavaan threshold-invariance releases. The separate categorical golden fixture
+has ten default-lavaan references: binary/ordinal single-group, and grouped
+CONFIGURAL, SCALAR and defaults, under DELTA and THETA. Demo P-IV2 TECH1
+supplies the independent meaning gate. Fixed/equal DELTA scales additionally
+have live frontend gates against the TASK-53.1 independent models.
+
+The increment-3 implementation and native gates pass, but final acceptance
+awaits TASK-53: `regen_oracle_mplus_categorical.R --demo` exposes a
+single-group ordinal DELTA printed-SE difference under default Mplus mimic.
+No tolerance, reporting convention or oracle exemption was changed.

@@ -19,14 +19,22 @@ mplus_groups (a data.frame with label and code columns).
 Rebuilding uses mplus_source; construction options cannot be overridden.
 }
 \description{
-Imports single- and multiple-group continuous linear SEM: BY, ON, WITH, PON, PWITH,
+Imports single- and multiple-group linear SEM: BY, ON, WITH, PON, PWITH,
 means, variances, starts, fixes, labels and equality numbers, NOCOVARIANCES,
 and NOMEANSTRUCTURE with INFORMATION = EXPECTED. Names resolve without
 regard to case and retain the spelling in NAMES; factors retain their first
 BY spelling. Estimator and execution settings are reported, not imported.
 }
 \details{
-DEFINE, categorical outcomes, growth, MODEL CONSTRAINT,
+CATEGORICAL lists binary and ordinal outcomes (two through ten categories).
+Thresholds use \verb{[u$k]}, DELTA scales use \code{{u}}, and THETA residuals
+use variance statements. Categories and thresholds are completed from data;
+all groups must contain the same categories. All-ordinal models fit with
+\code{estimator = "DWLS"}; mixed, conditional and ML categorical routes report
+their unsupported route explicitly. Retained-estimate lavaan WLSMV
+reporting is available through \code{\link[=convention_inference]{convention_inference()}}.
+
+DEFINE, growth, MODEL CONSTRAINT,
 MODEL INDIRECT, mixtures, multilevel models, ESEM, unsupported name ranges
 and mixed conditioning on observed covariates are rejected with rule IDs
 and an explanation of what to write instead. Data descriptions are parsed into
@@ -35,6 +43,8 @@ read the data file or run Mplus.
 GROUPING imports explicit integer code = label pairs, ordered by numeric code.
 Group MODEL sections override the overall model; repeated sections apply
 cumulatively. CONFIGURAL, METRIC and SCALAR accept one setting at a time.
+Categorical shortcuts accept CONFIGURAL and SCALAR; METRIC is rejected
+for binary and ordinal outcomes, following Mplus 9.1.
 Group-only changes to variable roles are rejected; put the relation in the
 overall model and fix it in the other groups instead. Variance identification
 in a shortcut uses free first loadings and explicit factor variances at one.

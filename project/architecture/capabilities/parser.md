@@ -25,12 +25,15 @@
   input files, classifies commands/options, expands NAMES and selects
   USEVARIABLES, preserves source spans, and aggregates classified rejections.
   Schema settings, execution/data-description notes and explicit later-increment
-  boundaries are checked by independent unit expectations and a 110-variant
+  boundaries are checked by independent unit expectations and a 134-variant
   Demo input gate (with documented LX02, NM02 and MS11 deviations).
-  `parse::MplusParser::parse()` lowers continuous single- and multiple-group BY/ON/WITH,
+  `parse::MplusParser::parse()` lowers continuous and categorical single- and multiple-group BY/ON/WITH,
   PON/PWITH, variances, means, modifiers, line-local labels and ranges into
   an owned `MplusModel`. It materializes marker, role, mean and covariance
-  defaults explicitly; `compat::mplus::build_options()` disables lavaan
+  defaults explicitly, including thresholds, DELTA scales and THETA residuals.
+  Categorical CONFIGURAL/SCALAR shortcuts follow Mplus 9.1; METRIC is
+  rejected. Data-driven threshold completion preserves these defaults.
+  `compat::mplus::build_options()` disables lavaan
   automatic defaults and retains fixed-x sample moments. Combined starts and
   labels use duplicate formula rows, as supported by `spec::build()`; the
   gate compares unique parameter keys and checks both modifier components.
@@ -39,8 +42,11 @@
   notes and a lossless lavaan row projection. Observed names retain NAMES
   spelling and factors their first BY spelling; BY factor sets are rejected.
   Live lavaan rows/ML/expected SEs and fresh/prepared/serialized round trips
-  gate the lab surface. The local end-to-end corpus gate accepts 22 of 68
-  eligible cases, all matched (see the validation ledger). The
+  gate the lab surface. Ten independent categorical WLSMV goldens gate
+  both parameterizations and grouped defaults; the lab fits all-ordinal DWLS
+  and reports mixed, conditional and categorical ML boundaries. The local
+  corpus gate accepts 31 of 68 cases: 25 matched, six unsupported fit routes,
+  and two of the matched cases have verified SE/test convention differences (see the validation ledger). The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics

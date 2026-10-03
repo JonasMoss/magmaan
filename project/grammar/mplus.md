@@ -1,6 +1,7 @@
 # Mplus input frontend (planned)
 
-Planned 2026-10-02; nothing is implemented. Milestone 0.3.0. Development
+Milestone 0.3.0. Increments 1–2 and 5 are accepted; increment 3 implementation awaits
+its printed-SE meaning gate. Development
 starts now, alongside 0.2.0 release work, and is not a 0.2.0 exit criterion.
 This document owns the target, input boundary, increments, evidence and the
 stability bar. The [backlog](../backlog/todo.md#mplus-input-frontend) owns task
@@ -109,7 +110,12 @@ implementation.
    outcomes wait for the 0.3.0 mixed workflows; categorical outcomes regressed
    on observed covariates need
    [conditional categorical moments](../backlog/speculative.md#conditional-categorical-moments-with-observed-covariates).
-   Unsupported routes return an explicit unsupported-fit result.
+   Unsupported routes return an explicit unsupported-fit result. Binary and
+   ordinal CONFIGURAL/SCALAR shortcuts are supported; METRIC is rejected
+   according to Mplus 9.1. DELTA `{u}` rows retain free, fixed and equality
+   restrictions directly; their latent-response residuals are derived.
+   Data-driven completion preserves the frontend defaults and does not
+   invoke lavaan group-equality releases.
 4. **Growth and derived parameters.** `|` statements with time scores and
    their defaults (outcome intercepts fixed at zero, free growth means; the
    intercept-factor mean is fixed when outcomes are latent or categorical).
@@ -240,6 +246,21 @@ introduce an Mplus estimation preset. Corpus test/SE mismatches count as
 convention differences only when Mplus mimic reproduces the printed result
 and default lavaan reproduces magmaan; estimates and df remain direct gates.
 The existing printed-precision allowance is unchanged.
+
+`regen_oracle_mplus_categorical.R` freezes ten independently specified default-
+lavaan WLSMV references in `mplus/golden_categorical.json`. C++ lowers the
+original inputs and gates rows, free flags, estimates, SEs, scaled/shifted test
+and df. Live lab tests cover grouped defaults/shortcuts, prepared reconstruction
+and fixed/equal DELTA scales. P-IV2 Demo TECH1 checks meaning separately.
+The optional generator `--demo` gate currently fails printed SE parity for
+the single-group ordinal DELTA reference; increment 3 acceptance awaits the
+TASK-53 decision recorded in the test ledger.
+
+The local corpus gate accepts 31 of 68 cases: 25 match and six report
+unsupported fit routes; two of the matched cases have independently verified
+SE/test convention differences. Increment 2 accepted and matched 22.
+The 2,440-input sweep advances reader acceptance from 291 to 456 and model
+lowering from 217 to 359, with every rejection classified.
 
 **Meaning** (which model an input denotes) is gated against Mplus:
 
