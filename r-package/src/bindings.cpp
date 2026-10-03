@@ -37,6 +37,7 @@ const char* parse_error_kind(magmaan::ParseError::Kind k) {
     case K::ExpectedRhsTerm:     return "ExpectedRhsTerm";
     case K::ModifierEvalFailed:  return "ModifierEvalFailed";
     case K::GroupVecMismatch:    return "GroupVecMismatch";
+    case K::RejectedConstruct:   return "RejectedConstruct";
   }
   return "Unknown";
 }

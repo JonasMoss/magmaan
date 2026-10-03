@@ -21,14 +21,21 @@
   groups and restrictions, with lab exposure after each validated increment.
   The [backlog](../../backlog/todo.md#eqs-language-extension) records the later
   `r-magmaan` task separately. This is planning, not additional implementation.
-- Mplus input frontend: planned 2026-10-02 for 0.3.0, not implemented. The
+- Mplus input frontend (0.3.0): `parse::MplusParser::read()` reads whole
+  input files, classifies commands/options, expands NAMES and selects
+  USEVARIABLES, preserves source spans, and aggregates classified rejections.
+  Schema settings, execution/data-description notes and explicit later-increment
+  boundaries are checked by independent unit expectations and a 100-variant
+  Demo input gate (with documented LX02, NM02, MS11 and CL11 deviations).
+  MODEL bodies are delimited; MODEL parsing/lowering and API/R exposure remain
+  pending. The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
   against lavaan, and targets ordinary integration after a stability bar.
   The [source inventory](../../grammar/mplus_source_inventory.md) and the
-  increment-1 [grammar](../../grammar/mplus_grammar.ebnf) are drafted; Demo
-  probes precede implementation.
+  increment-1 [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
+  checked-in Demo probes supply independent behavioral evidence.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

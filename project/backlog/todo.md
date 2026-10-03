@@ -1160,6 +1160,15 @@ carry the label `mplus`.
   Demo-confirmed. Where 9.1 departs from the guide (setting stems, name
   length, label lists, labels on fixed parameters, observed–latent residual
   covariances, NOMEANSTRUCTURE), the inventory follows 9.1.
+- [x] **M — increment 1a: input reader/classification (TASK-51.1).**
+  `parse::MplusParser::read()` owns source bytes and spans, expands NAMES,
+  selects USEVARIABLES ranges by NAMES position, preserves selection order,
+  imports supported ANALYSIS schema
+  settings and reports every data-description/execution item. Unsupported
+  commands/options produce aggregated rule-ID diagnostics with explicit
+  later-increment boundaries. Independent rule tests and the 100-variant
+  Demo reader gate encode the deliberate LX02, NM02, MS11 and CL11 deviations;
+  MODEL statement parsing/lowering belongs to TASK-51.2.
 - [ ] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,

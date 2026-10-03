@@ -83,6 +83,8 @@ add_library(magmaan STATIC
   src/parse/lexer.cpp
   src/parse/parser.cpp
   src/parse/eqs_parser.cpp
+  src/parse/mplus_input.cpp
+  include/magmaan/parse/mplus_parser.hpp
   src/spec/build.cpp
   src/spec/composite_expand.cpp
   src/spec/lin_constraints.cpp

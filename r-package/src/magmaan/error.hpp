@@ -22,6 +22,7 @@ struct ParseError {
     ExpectedRhsTerm,
     ModifierEvalFailed,
     GroupVecMismatch,
+    RejectedConstruct,
   };
 
   Kind        kind   = Kind::UnexpectedChar;

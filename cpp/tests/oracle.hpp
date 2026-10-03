@@ -184,6 +184,7 @@ inline std::string format_lexer_fixture(std::string_view corpus_id,
         case ParseError::Kind::ExpectedRhsTerm:     return "ExpectedRhsTerm";
         case ParseError::Kind::ModifierEvalFailed:  return "ModifierEvalFailed";
         case ParseError::Kind::GroupVecMismatch:    return "GroupVecMismatch";
+        case ParseError::Kind::RejectedConstruct:   return "RejectedConstruct";
       }
       return "?";
     };
