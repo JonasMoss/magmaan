@@ -499,3 +499,10 @@
   is a forwarding shim.
 - Old `fit/*` and `partable/*` compatibility headers have been removed; use the
   target namespace headers directly.
+
+## Lab inference default audit
+
+The [phase-one inventory](../../validation/lab_inference_defaults.md) records
+current wrapper and glue defaults against the scope requirement, including
+implicit covariance dispatch and estimated-weight laws. Proposed flips are
+pending TASK-61 decisions; this inventory does not change supported recipes.

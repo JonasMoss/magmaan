@@ -734,6 +734,11 @@ gates a release unless an exit criterion names it.
   lists the routes; examples exercise the default. Ordinary policy
   defaults are unchanged.
 
+- [ ] **M — audit lab inference defaults (TASK-61).** Phase-one
+  [inventory](../validation/lab_inference_defaults.md) records generic default
+  flips, named compatibility routes and unresolved reference/dispatch choices.
+  Await the board decision before implementation; ordinary package unchanged.
+
 ### EQS language extension
 
 The initial EQS model-section frontend is complete; its implemented scope and
