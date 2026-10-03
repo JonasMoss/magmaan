@@ -4,6 +4,8 @@
 \alias{infer_build_u_factor_pairwise}
 \alias{infer_build_u_factor_fit}
 \alias{infer_continuous_ls_robust}
+\alias{infer_continuous_ls_profile_lrt}
+\alias{infer_ml_profile_lrt}
 \alias{measures_reliability_cov}
 \alias{measures_reliability_omega_multidim}
 \title{Explicit geometry and sampling laws for lab primitives}
@@ -15,14 +17,22 @@ infer_build_u_factor_parts(partable, sample_stats, theta, bread,
   moments = "structured")
 infer_build_u_factor_pairwise(fit, X, bread, mask = NULL)
 infer_build_u_factor_fit(fit, bread, moments = "structured")
-infer_continuous_ls_robust(fit, raw_data, weight = NULL,
-  bread = "observed", gamma = "empirical", fixed_weight = FALSE)
+infer_continuous_ls_robust(fit, raw_data = NULL, weight = NULL,
+  bread = "observed", gamma = NULL, fixed_weight = FALSE)
+infer_continuous_ls_profile_lrt(fit_H1, fit_H0, X_per_group = NULL,
+  weight = NULL, eig_tol = 1e-10, gamma = NULL)
+infer_ml_profile_lrt(fit_H1, fit_H0, X_per_group = NULL,
+  eig_tol = 1e-10, gamma = NULL)
 measures_reliability_cov(S, gamma = NULL, n = 0L, raw_data = NULL)
 measures_reliability_omega_multidim(S, block, target = "total",
   weights = NULL, gamma = NULL, n = 0L, raw_data = NULL)
 }
 \arguments{
 \item{fit}{Fitted model.}
+\item{fit_H1,fit_H0}{Less and more restricted fits for the profile LRT.}
+\item{X_per_group}{Raw observations in fitted group order, used when gamma
+is NULL. Omit when supplying Gamma.}
+\item{eig_tol}{Relative tolerance for profile-law eigenvalues.}
 \item{bread}{Required geometry for U factors: observed for covariance or
 nested restrictions at a pseudo-true target; expected is admissible for
 complete-data global goodness-of-fit under the correct-model null.}
@@ -33,9 +43,17 @@ The joint bread/meat derivation remains pending; this argument is unchanged.}
 Pass \code{mask} by name in the pairwise builder.}
 \item{raw_data}{Raw fitting observations; a numeric matrix for reliability.}
 \item{weight}{Fitting weight, optionally retained on the fit.}
-\item{gamma}{Empirical or normal moment covariance for LS; an explicit
-asymptotic covariance of vech(S) for reliability. Reliability NULL derives
-empirical Gamma from raw_data and errors if those observations are absent.}
+\item{gamma}{For LS robust covariance, NULL retains empirical covariance from
+raw_data; \code{"empirical"} and explicit \code{"normal"} sources remain supported.
+A supplied symmetric PSD matrix (one group) or list of per-group matrices
+replaces the meat and requires \code{fixed_weight = TRUE}. ML/LS profile LRTs
+also accept these matrices; NULL builds empirical Gamma from X_per_group.
+Blocks use means first when fitted, then lower-triangle covariances by columns
+including diagonals, in fitted observed-variable order. Supply unscaled
+per-group NACOV (N times sampling covariance); group weights are applied by
+C++. Dimensions, finiteness, symmetry and PSD are validated. For reliability,
+Gamma is an explicit asymptotic covariance of vech(S); NULL derives empirical
+Gamma from raw_data and errors if those observations are absent.}
 \item{fixed_weight}{Explicitly request the caller-fixed-weight LS law.
 For data-estimated nt/adf/dwls/dls recipes, use
 \code{infer_casewise_influence_ij_fit()} for parameter covariance.

@@ -963,6 +963,14 @@
   equals the score test on the EM moments with the unstructured expected
   information (4e-13 complete, 3e-5 with missing data), 31% away from the
   structured row on HolzingerSwineford1939.
+- Caller-Gamma lab adapters: robust MI and equality releases accept validated
+  per-group NACOV for complete ML, continuous LS and ordinal/mixed LS; the
+  adapter applies ML's n/N block weights and preserves the fitting W. Supplied
+  Gamma requires explicit fixed-weight inference, rejects casewise weight
+  influence, and is unavailable for FIML/ML2S scores. Continuous-LS covariance
+  and ML/LS profile-LRT wrappers expose their existing supplied-Gamma overloads.
+  `test_caller_gamma.R` gates raw/supplied agreement, means and unequal groups,
+  ordinal fitting-weight preservation and malformed/provenance refusals.
 - MI/release component matrix (2026-10-02):
   [the estimator/weight inventory](../../validation/capabilities.md#mi-and-equality-release-score-components) names
   C++ and R gates or actual refusals for 23 recipes and 92 cells. It adds
@@ -971,7 +979,8 @@
   retain raw lavaan MI/EPC and explicitly transport its `(N-1)/N` score
   convention, with independent one-factor analytic Schur reconstruction;
   primary raw golden tolerances are tightened to measured floors. R still
-  refuses model-implied robust ML releases and mixed ULS fitting. Mixed robust
+  refuses model-implied robust ML release shortcuts and mixed ULS fitting;
+  explicitly supplied Gamma_NT reaches the ML release core. Mixed robust
   unavailable choices report `NumericIssue`; ordinal NT/DLS/supplied estimated
   weights and association-ML report `UnsupportedInference`. The mixed ordinary
   MI factor-two oracle discrepancy remains TASK-33.4, with limited validation

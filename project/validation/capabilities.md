@@ -285,6 +285,7 @@ names); a cell lists its C++ gate first and its R gate second.
 - **R-ML**: `r-package/tests/testthat/test-score-rank.R`, `MI tables exclude identification releases across indicator units`; `test_wls_robust_covariance.R` supplies related weight and covariance guards. `test_weight_recipe_inference.R`, `complete ML MI and equality releases share ordinary and robust coordinates` gates complete-data ordinary/fixed-robust releases and the estimated-weight R refusal.
 - **C-FIML-ROB**: `cpp/tests/unit/score_robust_test.cpp`, `frontier FIML robust MI: unscaled mi matches the non-robust FIML MI`, `frontier FIML robust score test: equality release runs and is finite`, and `frontier FIML robust MI and score tests support multi-group raw blocks`; `cpp/tests/golden/score_robust_golden_test.cpp`, `robust FIML release-score matches the lavaan-internals oracle (MLR)`.
 - **R-SUPPLIED**: `r-package/tests/testthat/test_wls_robust_covariance.R`, `WLS robust MI and releases preserve empirical covariance and fitting W` and `WLS covariance choices fail explicitly when unavailable` (single/unequal groups, means, shared labels and supplied diagonal/full W).
+- **R-GAMMA**: `r-package/tests/testthat/test_caller_gamma.R`, `caller Gamma reproduces continuous ML and LS MI and releases`, `caller NACOV preserves ordinal fitting weights`, `caller Gamma validates shape, symmetry, PSD and influence provenance`, `caller Gamma reaches continuous covariance and profile LRT adapters`, `explicit Gamma_NT is available for complete ML releases`, and `caller NACOV reaches supported mixed ordinal LS score routes` (single/unequal groups, means, ML/GLS/DWLS/WLS/ULS/DLS/supplied W, all-ordinal and mixed DWLS/WLS, changed meat with unchanged fitting W).
 - **R-FIML**: `r-package/tests/testthat/test_fiml_robust_score.R`, `FIML robust MI and releases agree across retained and explicit data` and `FIML robust score wrappers reject incompatible conventions`.
 - **R-RECIPE**: `r-package/tests/testthat/test_weight_recipe_inference.R`, `estimated-weight inference reads the recorded continuous recipe`, `release score tests read the recorded recipe`, and `supplied weights are used as fitted but have no estimated-weight recipe`.
 - **R-LS-MEAN**: same file, `continuous LS MI and releases preserve means and equality constraints`.
@@ -311,27 +312,27 @@ guards reject attempts to request one. Mixed ordinal currently reports
 
 | Fitting estimator / weight | Ordinary MI | Ordinary release | Robust fixed weight | Robust estimated weight |
 | --- | --- | --- | --- | --- |
-| Complete ML / likelihood | C-ML, C-GOLD / R-ML | C-ML, C-GOLD / R-ML | C-ROB-ML / R-ML | Inapplicable: no Stage-2 recipe; R-ML rejects estimated weight |
+| Complete ML / likelihood | C-ML, C-GOLD / R-ML | C-ML, C-GOLD / R-ML | C-ROB-ML / R-ML; R-GAMMA | Inapplicable: no Stage-2 recipe; R-ML rejects estimated weight |
 | Direct FIML / likelihood | C-GOLD / R-FIML | C-GOLD / R-FIML | observed statistic/bread and pattern-score meat: C-FIML-ROB / R-FIML | Inapplicable: no second-stage weight; R-FIML rejects it |
 | ML2S / NT-ML | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S; equals fixed (no quadratic-weight influence) |
 | ML2S / ULS | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S; equals fixed (identity) |
 | ML2S / DWLS | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
 | ML2S / ADF | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
 | ML2S / DLS(a) | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S | C-2S / R-2S |
-| Continuous ULS / identity | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | Identity has zero influence: C-LS-MATRIX / R-LS-MEAN |
-| Continuous GLS / NT(S) | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
-| Continuous WLS / ADF | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
-| Continuous DWLS / diag ADF | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
-| Continuous DLS(a) / NT-ADF mixture | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
-| Continuous LS / supplied W | C-LS / R-RECIPE | C-LS / R-SUPPLIED | C-LS / R-SUPPLIED | UnsupportedInference: unknown influence of supplied W; C-RECIPE / R-RECIPE |
+| Continuous ULS / identity | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-GOLD, C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | Identity has zero influence: C-LS-MATRIX / R-LS-MEAN |
+| Continuous GLS / NT(S) | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
+| Continuous WLS / ADF | C-GOLD (transported), C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN | C-LS-MATRIX / R-RECIPE, R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-RECIPE, R-LS-MEAN |
+| Continuous DWLS / diag ADF | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
+| Continuous DLS(a) / NT-ADF mixture | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN | C-LS-MATRIX / R-LS-MEAN; R-GAMMA | C-LS-MATRIX, C-RECIPE / R-LS-MEAN |
+| Continuous LS / supplied W | C-LS / R-RECIPE | C-LS / R-SUPPLIED | C-LS / R-SUPPLIED; R-GAMMA | UnsupportedInference: unknown influence of supplied W; C-RECIPE / R-RECIPE |
 | All-ordinal ULS / identity | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | Zero influence: C-ORD-MATRIX / R-ORD-MATRIX |
-| All-ordinal DWLS / diag NACOV | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX |
-| All-ordinal WLS / inverse NACOV | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX |
+| All-ordinal DWLS / diag NACOV | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-GOLD, C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA | C-ORD-MATRIX / R-ORD-MATRIX |
+| All-ordinal WLS / inverse NACOV | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX; R-GAMMA | C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal GLS / NT | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: NT weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal DLS(a) | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: DLS weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal LS / supplied W | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: unknown influence of supplied W; C-ORD-MATRIX / R-ORD-MATRIX |
-| Mixed ordinal / DWLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
-| Mixed ordinal / WLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
+| Mixed ordinal / DWLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
+| Mixed ordinal / WLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
 | Mixed ordinal / ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | NumericIssue: mixed robust score supports DWLS/WLS only; C-MIX-MATRIX / R fitting refusal | Same core NumericIssue / R fitting refusal |
 | Prepared ordinal association ML | UnsupportedInference: LS score is not the ML-target score; C-ORD-MATRIX / R-ORD-MATRIX | Same rejection and gates | Same rejection and gates | Same rejection and gates |
 
@@ -340,13 +341,19 @@ guards reject attempts to request one. Mixed ordinal currently reports
 FIML uses analytic observed information, with expected information only for
 identification rank. Complete ML exposes expected and observed geometry.
 The complete ML R adapter refuses model-implied robust equality releases
-(the core accepts caller Gamma_NT); empirical robust releases are gated in
-R-ML. R mixed ULS is refused at fit_model(), while its C++ ordinary score
+(the core accepts explicitly supplied Gamma_NT through the new gamma adapter);
+empirical robust releases are gated in R-ML and caller Gamma in R-GAMMA.
+R mixed ULS is refused at fit_model(), while its C++ ordinary score
 workers exist. These adapter guards currently provide explicit R error text,
 not a PostError enum.
 Continuous LS uses the expected residual-Jacobian geometry and refuses observed
-bread; estimated weights require empirical moments. Caller-Gamma R adapters and
-a separately derived observed/estimated-weight score projection remain task-4.
+bread; estimated weights require empirical moments. Caller-Gamma R adapters
+are gated by R-GAMMA for fixed-weight ML, continuous LS and all-ordinal LS;
+categorical workers replace NACOV while preserving fitting W. Supplied Gamma
+requires explicit estimated_weight=FALSE, validates dimension/symmetry/PSD and
+refuses FIML/ML2S scores and casewise weight influence. Mixed LS uses the same
+NACOV adapter, with its existing unsupported weight cells unchanged.
+A separately derived observed/estimated-weight score projection remains task-4.2.
 Pairwise moment sources remain MCAR; no MAR law is inferred for those routes.
 Mixed ordinal expansion and association-ML score contracts remain 0.3.0 work.
 

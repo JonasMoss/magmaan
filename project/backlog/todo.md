@@ -619,8 +619,8 @@ projection/reference law before exposure. This adds no ordinary-user default.
 | --- | --- | --- |
 | Complete-data ML | Expected/observed information; robust core and R paths | Gate matching information/bread, structured/unstructured supported NT covariance, empirical/Browne and caller-Gamma choices; reject unsupported moment-source combinations |
 | Direct FIML | Analytic observed MI/release, robust core and R dispatch; expected geometry gates identification | Observed statistic/bread and observed-pattern casewise meat; expected-statistic, alternative covariance/moment and second-stage-weight choices explicitly rejected; broader convention/calibration work remains above |
-| Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R uses the recorded fitting W and recipe/a for empirical/model-implied covariance and the weight influence (supplied W refused there); remaining work audits sensitivity/nuisance projection and exposes caller-Gamma adapters |
-| All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; shared relative rank is implemented, provenance/adapters remain |
+| Continuous ULS/GLS/WLS | Shared moment-quadratic MI; fixed- and estimated-weight robust primitives | Identity, NT, diagonal/full empirical, DLS(a) and supplied block W: R uses the recorded fitting W and recipe/a for empirical/model-implied covariance and the weight influence (supplied W refused there); caller-Gamma adapters are exposed; remaining work audits sensitivity/nuisance projection |
+| All-ordinal ULS/DWLS/WLS | Ordinary and robust threshold/association MI; estimated-weight DWLS/WLS path | Gate identity, diagonal/full NACOV, retained Stage-2 DLS and supplied weights with delta/theta and group conventions; shared relative rank and caller-NACOV adapters are implemented; broader provenance remains |
 | Prepared all-ordinal association ML | Ordinary/PSD fitting through the shared association-target contract; LS MI is not an ML-target score contract | Typed rejection in 0.2.0; the contract is [0.3.0 work](#association-ml-inference) |
 | Two-stage/ML2S | Naive Stage-2 MI/release (`mi_type = "naive_stage2"`) and Stage-1-scaled MI/release for NT, ULS, DWLS, ADF and DLS, fixed or estimated weight, in C++ and R | Gated by exact complete-data reductions; remaining cells are grouped and MAR checks in the matrix item. lavaan's two-stage `modindices()` uses the unstructured information, so a fixture needs that option for the naive row |
 
@@ -643,9 +643,10 @@ The ordinary package does not expose MI in this release; the
   Association-ML MI is a 0.3.0 contract; the score workers reject it until
   then. Fits record recipe, a and W, and every R estimated-weight consumer
   resolves its IJ mode from that record (roadmap: estimated-weight recipe
-  guard); exposing caller Gamma in R is the remaining wiring, and the
-  sensitivity and nuisance projection for observed/estimated-weight score
-  variants is the genuine derivation.
+  guard); caller-Gamma R wiring is complete (TASK-4.1), including
+  validated per-group NACOV, fixed-weight refusals and categorical fitting-W
+  preservation. The sensitivity and nuisance projection for observed/estimated-
+  weight score variants is the genuine derivation.
   Audit every bread/information/covariance argument and expose applicable caller-
   Gamma paths through thin R adapters. **Check:** independent score, sensitivity,
   meat and weight-influence assembly; recipe endpoint reductions, retained-data

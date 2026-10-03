@@ -190,7 +190,8 @@ factor_score_precision <- function(fit, data) {
 modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices()")
   dots <- list(...)
-  if (identical(dots$cov, "model_implied") && identical(dots$estimated_weight, FALSE)) {
+  if (is.null(dots$gamma) && identical(dots$cov, "model_implied") &&
+      identical(dots$estimated_weight, FALSE)) {
     return(magmaan_core$inference_modification_indices(fit, weight = dots$weight,
       information = dots$information %||% dots$bread %||% "expected", candidates = candidates))
   }
@@ -201,7 +202,8 @@ modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
 score_tests <- function(fit, data = NULL, ...) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests()")
   dots <- list(...)
-  if (identical(dots$cov, "model_implied") && identical(dots$estimated_weight, FALSE)) {
+  if (is.null(dots$gamma) && identical(dots$cov, "model_implied") &&
+      identical(dots$estimated_weight, FALSE)) {
     return(magmaan_core$inference_score_tests(fit, weight = dots$weight))
   }
   if (is.null(dots$estimated_weight) && toupper(fit$estimator) %in% c("ML", "FIML")) dots$estimated_weight <- FALSE
@@ -241,6 +243,18 @@ score_tests <- function(fit, data = NULL, ...) {
 # and retained data; `data`, `weight`, observed information and non-default
 # bread/moments/cov are refused. `estimated_weight = TRUE` adds the DWLS, ADF
 # or DLS Stage-2 weight's data influence.
+#' Robust modification indices and equality-release score tests
+#'
+#' @rdname robust_score_tests
+#' @param gamma Optional caller NACOV: a symmetric positive semidefinite matrix
+#'   for one group or a list in fitted group order. Continuous moments use means
+#'   first (when fitted), then lower-triangle covariances by columns including
+#'   the diagonal, in the model's observed-variable order. Ordinal moments use
+#'   thresholds then lower-triangle polychorics; mixed moments use thresholds,
+#'   negative continuous means, continuous variances, then associations.
+#'   Blocks are unscaled per-group NACOV (N times the sampling covariance).
+#'   Supplying gamma replaces the meat, preserves fitting weights, and requires
+#'   estimated_weight = FALSE and cov = "empirical". FIML/ML2S refuse it.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         bread = "observed",
                                         moments = "structured",
@@ -249,7 +263,7 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         include_loadings = TRUE,
                                         include_covariances = TRUE,
                                         information = "expected",
-                                        estimated_weight = TRUE) {
+                                        estimated_weight = TRUE, gamma = NULL) {
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices_robust()")
   if (identical(fit$estimator, "FIML")) {
     if (missing(bread)) bread <- "observed"
@@ -261,19 +275,31 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
     fit, raw = raw, weight = weight, bread = bread, moments = moments,
     cov = cov, information = information, candidates = candidates,
     include_loadings = include_loadings, include_covariances = include_covariances,
-    estimated_weight = estimated_weight)
+    estimated_weight = estimated_weight, gamma = gamma)
 }
 
+#' Robust modification indices and equality-release score tests
+#'
+#' @rdname robust_score_tests
+#' @param gamma Optional caller NACOV: a symmetric positive semidefinite matrix
+#'   for one group or a list in fitted group order. Continuous moments use means
+#'   first (when fitted), then lower-triangle covariances by columns including
+#'   the diagonal, in the model's observed-variable order. Ordinal moments use
+#'   thresholds then lower-triangle polychorics; mixed moments use thresholds,
+#'   negative continuous means, continuous variances, then associations.
+#'   Blocks are unscaled per-group NACOV (N times the sampling covariance).
+#'   Supplying gamma replaces the meat, preserves fitting weights, and requires
+#'   estimated_weight = FALSE and cov = "empirical". FIML/ML2S refuse it.
 score_tests_robust <- function(fit, data = NULL, weight = NULL,
                                bread = "observed", moments = "structured",
-                               cov = "empirical", estimated_weight = TRUE) {
+                               cov = "empirical", estimated_weight = TRUE, gamma = NULL) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests_robust()")
   if (identical(fit$estimator, "FIML") && missing(bread)) bread <- "observed"
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
   magmaan_core$inference_score_tests_robust(
     fit, raw = raw, weight = weight, bread = bread, moments = moments, cov = cov,
-    estimated_weight = estimated_weight)
+    estimated_weight = estimated_weight, gamma = gamma)
 }
 
 raw_data_arg <- function(fit, data, caller = "raw_data_arg") {

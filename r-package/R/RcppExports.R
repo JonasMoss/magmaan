@@ -241,12 +241,12 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaanlab_inference_score_tests`, fit, weight, h_step)
 }
 
-inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE) {
-    .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
+inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE, gamma = NULL) {
+    .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight, gamma)
 }
 
-inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", estimated_weight = TRUE) {
-    .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
+inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", estimated_weight = TRUE, gamma = NULL) {
+    .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight, gamma)
 }
 
 inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "effective", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "observed") {
@@ -745,12 +745,12 @@ frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, ta
     .Call(`_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
-infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "observed", gamma = "empirical", fixed_weight = FALSE) {
+infer_continuous_ls_robust <- function(fit, raw_data = NULL, weight = NULL, bread = "observed", gamma = NULL, fixed_weight = FALSE) {
     .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma, fixed_weight)
 }
 
-infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
+infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group = NULL, weight = NULL, eig_tol = 1e-10, gamma = NULL) {
+    .Call(`_magmaanlab_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol, gamma)
 }
 
 infer_fiml_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
@@ -949,8 +949,8 @@ ordinal_nested_diagnostic_impl <- function(fit_H1, fit_H0) {
     .Call(`_magmaanlab_ordinal_nested_diagnostic_impl`, fit_H1, fit_H0)
 }
 
-infer_ml_profile_lrt <- function(fit_H1, fit_H0, X_per_group, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_ml_profile_lrt`, fit_H1, fit_H0, X_per_group, eig_tol)
+infer_ml_profile_lrt <- function(fit_H1, fit_H0, X_per_group = NULL, eig_tol = 1e-10, gamma = NULL) {
+    .Call(`_magmaanlab_infer_ml_profile_lrt`, fit_H1, fit_H0, X_per_group, eig_tol, gamma)
 }
 
 infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {

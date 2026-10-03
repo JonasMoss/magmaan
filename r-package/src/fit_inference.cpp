@@ -1,4 +1,5 @@
 #include "glue_internal.h"
+#include "gamma_arg.h"
 
 // [[Rcpp::depends(RcppEigen)]]
 
@@ -781,7 +782,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
     std::string bread = "observed", std::string moments = "structured",
     std::string cov = "empirical", std::string information = "expected",
     std::string candidates = "fixed", bool include_loadings = true,
-    bool include_covariances = true, bool estimated_weight = true) {
+    bool include_covariances = true, bool estimated_weight = true,
+    SEXP gamma = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -796,10 +798,13 @@ Rcpp::DataFrame inference_modification_indices_robust(
       information, candidates, include_loadings, include_covariances);
   magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
 
+  validate_score_gamma_request(gamma, estimated_weight, estimator, cov);
+
   if (is_ordinal_fit) {
     auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "ordinal_stats",
         "ordinal robust modification indices"));
+    replace_score_nacov(stats, gamma);
     out = magmaan::estimate::frontier::modification_indices_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -815,6 +820,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",
         "mixed ordinal robust modification indices"));
+    replace_score_nacov(stats, gamma);
     out = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -876,7 +882,19 @@ Rcpp::DataFrame inference_modification_indices_robust(
     } else {
       const bool model_implied = (cov == "model_implied");
       opts.spec = spec_from(bread, moments, cov);
-      if (model_implied) {
+      if (!Rf_isNull(gamma)) {
+        const auto blocks = supplied_gamma_blocks(gamma, continuous_gamma_dimensions(ctx));
+        if (is_ml) {
+          const auto full = supplied_ml_gamma(blocks, ctx);
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, full, est, opts);
+        } else {
+          const auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
+                                              "supplied-Gamma score inference");
+          out = magmaan::inference::frontier::modification_indices_robust(
+              ctx.pt, ctx.rep, ctx.samp, blocks, est, w, opts);
+        }
+      } else if (model_implied) {
         if (is_ml) {
           out = magmaan::inference::frontier::modification_indices_robust(
               ctx.pt, ctx.rep, ctx.samp, est, opts);
@@ -913,7 +931,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
 Rcpp::DataFrame inference_score_tests_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
     std::string bread = "observed", std::string moments = "structured",
-    std::string cov = "empirical", bool estimated_weight = true) {
+    std::string cov = "empirical", bool estimated_weight = true,
+    SEXP gamma = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
@@ -926,9 +945,12 @@ Rcpp::DataFrame inference_score_tests_robust(
       Rcpp::as<bool>(fit["mixed_ordinal"]);
   magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
 
+  validate_score_gamma_request(gamma, estimated_weight, estimator, cov);
+
   if (is_ordinal_fit) {
     auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "ordinal_stats", "ordinal robust score tests"));
+    replace_score_nacov(stats, gamma);
     out = magmaan::estimate::frontier::score_tests_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -943,6 +965,7 @@ Rcpp::DataFrame inference_score_tests_robust(
     auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
         fit, R_NilValue, "mixed_ordinal_stats",
         "mixed ordinal robust score tests"));
+    replace_score_nacov(stats, gamma);
     out = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -993,7 +1016,19 @@ Rcpp::DataFrame inference_score_tests_robust(
     } else {
       const bool model_implied = (cov == "model_implied");
       opts.spec = spec_from(bread, moments, cov);
-      if (model_implied) {
+      if (!Rf_isNull(gamma)) {
+        const auto blocks = supplied_gamma_blocks(gamma, continuous_gamma_dimensions(ctx));
+        if (is_ml) {
+          const auto full = supplied_ml_gamma(blocks, ctx);
+          out = magmaan::inference::frontier::score_tests_robust(
+              ctx.pt, ctx.rep, ctx.samp, full, est, opts);
+        } else {
+          const auto w = continuous_ls_weight(fit, ctx, est, estimator, weight,
+                                              "supplied-Gamma score inference");
+          out = magmaan::inference::frontier::score_tests_robust(
+              ctx.pt, ctx.rep, ctx.samp, blocks, est, w, opts);
+        }
+      } else if (model_implied) {
         if (is_ml) {
           Rcpp::stop("magmaan: ML robust score tests require the fitting data "
                      "(cov='empirical'); pass data=");

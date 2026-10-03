@@ -1,4 +1,5 @@
 #include "glue_internal.h"
+#include "gamma_arg.h"
 
 // [[Rcpp::depends(RcppEigen)]]
 
@@ -7,16 +8,20 @@ using namespace magmaanr::fitglue;
 
 // infer_continuous_ls_robust() — the R binding for the existing
 // robust_continuous_ls() C++ post-fit path. ULS uses the identity weight, GLS
-// rebuilds its fitted normal-theory weight, and WLS requires the explicit
-// fitting weight because fit lists do not retain caller-supplied W. The meat
-// can be empirical (from raw rows) or normal-theory (from the fitted sample
-// covariance); both are existing C++ overloads.
+// rebuilds its fitted normal-theory weight, and WLS uses the recorded fitting
+// weight (or an explicit weight for older fits). The meat can be empirical
+// (from raw rows), explicitly normal-theory (from the fitted sample covariance),
+// or a validated caller NACOV; all are existing C++ overloads.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_continuous_ls_robust(
-    Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue,
-    std::string bread = "observed", std::string gamma = "empirical",
+    Rcpp::List fit, SEXP raw_data = R_NilValue, SEXP weight = R_NilValue,
+    std::string bread = "observed", SEXP gamma = R_NilValue,
     bool fixed_weight = false) {
+  const bool supplied = !Rf_isNull(gamma) && TYPEOF(gamma) != STRSXP;
+  if (supplied && !fixed_weight)
+    stop_post({magmaan::PostError::Kind::UnsupportedInference,
+               "supplied gamma cannot carry casewise weight influence; set fixed_weight = TRUE explicitly"});
   const std::string recipe = fit.containsElementNamed("moment_weight")
       ? Rcpp::as<std::string>(fit["moment_weight"]) : "";
   if (!fixed_weight && (recipe == "nt" || recipe == "adf" ||
@@ -38,19 +43,26 @@ Rcpp::List infer_continuous_ls_robust(
   magmaan::estimate::gmm::Weight w =
       continuous_ls_weight(fit, ctx, est, estimator, weight,
                            "continuous-LS inference");
-  for (char& ch : gamma) {
+  std::string source = Rf_isNull(gamma) || supplied
+      ? "empirical" : Rcpp::as<std::string>(gamma);
+  for (char& ch : source) {
     if (ch == '-' || ch == '.') ch = '_';
     else ch = static_cast<char>(
         std::tolower(static_cast<unsigned char>(ch)));
   }
   magmaan::post_expected<magmaan::estimate::WeightedRobustResult> r_or;
-  if (gamma == "empirical" || gamma == "adf") {
+  if (supplied) {
+    const auto blocks = supplied_gamma_blocks(gamma, continuous_gamma_dimensions(ctx));
+    r_or = magmaan::estimate::robust_continuous_ls(
+        std::move(ctx.pt), ctx.rep, ctx.samp, est, w, blocks,
+        info_from_string(bread));
+  } else if (source == "empirical" || source == "adf") {
     magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
     r_or = magmaan::estimate::robust_continuous_ls(
         std::move(ctx.pt), ctx.rep, ctx.samp, est, w, raw,
         info_from_string(bread));
-  } else if (gamma == "normal" || gamma == "normal_theory" ||
-             gamma == "nt") {
+  } else if (source == "normal" || source == "normal_theory" ||
+             source == "nt") {
     std::vector<Eigen::MatrixXd> gamma_nt;
     gamma_nt.reserve(ctx.samp.S.size());
     for (const auto& S : ctx.samp.S) {
@@ -65,7 +77,7 @@ Rcpp::List infer_continuous_ls_robust(
         info_from_string(bread));
   } else {
     Rcpp::stop("infer_continuous_ls_robust(): `gamma` must be 'empirical' "
-               "or 'normal'");
+               "or 'normal', or a supplied matrix/list");
   }
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::WeightedRobustResult& r = *r_or;
@@ -93,14 +105,16 @@ Rcpp::List infer_continuous_ls_robust(
 // is the per-group raw data in the model's ov order (the empirical Gamma is built
 // from it). The shared weight is built at the H0 (anchor) theta, mirroring
 // inference_modification_indices: ULS=identity, GLS=normal-theory, WLS=explicit
-// `weight` (not retained on the fit, so it must be passed for WLS).
+// `weight` (normally retained on the fit). A supplied gamma replaces only
+// the empirical moment covariance; this route uses a caller-fixed weight law.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1,
                                            Rcpp::List fit_H0,
-                                           Rcpp::List X_per_group,
+                                           SEXP X_per_group = R_NilValue,
                                            SEXP weight = R_NilValue,
-                                           double eig_tol = 1e-10) {
+                                           double eig_tol = 1e-10,
+                                           SEXP gamma = R_NilValue) {
   Ctx ctx1 = ctx_from_fit(fit_H1);
   Ctx ctx0 = ctx_from_fit(fit_H0);
   const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
@@ -118,23 +132,18 @@ Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1,
   const magmaan::estimate::gmm::Weight w =
       continuous_ls_weight(fit_H0, ctx0, est0, est_H0, weight, "profile LRT");
 
-  const std::size_t G = ctx1.samp.S.size();
-  if (static_cast<std::size_t>(X_per_group.size()) != G) {
-    Rcpp::stop("infer_continuous_ls_profile_lrt: X_per_group has length %d but "
-               "the model has %d group(s)",
-               static_cast<int>(X_per_group.size()), static_cast<int>(G));
+  magmaan::post_expected<magmaan::estimate::WeightedProfileLRTResult> r_or;
+  if (!Rf_isNull(gamma)) {
+    const auto blocks = supplied_gamma_blocks(gamma, continuous_gamma_dimensions(ctx1));
+    r_or = magmaan::estimate::continuous_ls_profile_lrt(
+        std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+        std::move(ctx0.pt), ctx0.rep, est0, w, blocks, eig_tol);
+  } else {
+    const auto raw = complete_raw_from_arg(ctx1.rep, X_per_group);
+    r_or = magmaan::estimate::continuous_ls_profile_lrt(
+        std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+        std::move(ctx0.pt), ctx0.rep, est0, w, raw, eig_tol);
   }
-  magmaan::data::RawData raw;
-  raw.X.reserve(G);
-  for (std::size_t g = 0; g < G; ++g) {
-    raw.X.emplace_back(
-        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X_per_group[g])));
-  }
-
-  auto r_or = magmaan::estimate::continuous_ls_profile_lrt(
-      std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
-      std::move(ctx0.pt), ctx0.rep, est0,
-      w, raw, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return profile_lrt_to_list(*r_or);
 }

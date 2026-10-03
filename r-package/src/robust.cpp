@@ -7,6 +7,7 @@
 // eigensolve several ways. Shared plumbing lives in internal.h.
 
 #include "internal.h"
+#include "gamma_arg.h"
 #include "ntml_snapshot.h"
 
 #include "magmaan/robust/robust.hpp"
@@ -1297,30 +1298,26 @@ Rcpp::List ordinal_nested_diagnostic_impl(Rcpp::List fit_H1,
 // [[Rcpp::export]]
 Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1,
                                 Rcpp::List fit_H0,
-                                Rcpp::List X_per_group,
-                                double eig_tol = 1e-10) {
+                                SEXP X_per_group = R_NilValue,
+                                double eig_tol = 1e-10,
+                                SEXP gamma = R_NilValue) {
   Ctx ctx1 = ctx_from_fit(fit_H1);
   Ctx ctx0 = ctx_from_fit(fit_H0);
   const magmaan::estimate::Estimates est1 = est_from_fit(fit_H1);
   const magmaan::estimate::Estimates est0 = est_from_fit(fit_H0);
 
-  const std::size_t G = ctx1.samp.S.size();
-  if (static_cast<std::size_t>(X_per_group.size()) != G) {
-    Rcpp::stop("infer_ml_profile_lrt: X_per_group has length %d but the model "
-               "has %d group(s)",
-               static_cast<int>(X_per_group.size()), static_cast<int>(G));
+  magmaan::post_expected<magmaan::estimate::WeightedProfileLRTResult> r_or;
+  if (!Rf_isNull(gamma)) {
+    const auto blocks = magmaanr::fitglue::supplied_gamma_blocks(gamma, magmaanr::fitglue::continuous_gamma_dimensions(ctx1));
+    r_or = magmaan::estimate::ml_profile_lrt(
+        std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+        std::move(ctx0.pt), ctx0.rep, est0, blocks, eig_tol);
+  } else {
+    const auto raw = magmaanr::fitglue::complete_raw_from_arg(ctx1.rep, X_per_group);
+    r_or = magmaan::estimate::ml_profile_lrt(
+        std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
+        std::move(ctx0.pt), ctx0.rep, est0, raw, eig_tol);
   }
-  magmaan::data::RawData raw;
-  raw.X.reserve(G);
-  for (std::size_t g = 0; g < G; ++g) {
-    raw.X.emplace_back(
-        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X_per_group[g])));
-  }
-
-  auto r_or = magmaan::estimate::ml_profile_lrt(
-      std::move(ctx1.pt), ctx1.rep, ctx1.samp, est1,
-      std::move(ctx0.pt), ctx0.rep, est0,
-      raw, eig_tol);
   if (!r_or.has_value()) stop_post(r_or.error());
   return profile_lrt_to_list(*r_or);
 }

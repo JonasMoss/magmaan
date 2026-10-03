@@ -8,10 +8,10 @@ equality-release tests, with a direction-specific sandwich correction.}
 modification_indices_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "structured", cov = "empirical",
   candidates = "all", include_loadings = TRUE, include_covariances = TRUE,
-  information = "expected", estimated_weight = TRUE)
+  information = "expected", estimated_weight = TRUE, gamma = NULL)
 score_tests_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "structured", cov = "empirical",
-  estimated_weight = TRUE)
+  estimated_weight = TRUE, gamma = NULL)
 }
 \arguments{
 \item{fit}{A fitted magmaanlab model.}
@@ -34,12 +34,29 @@ which selects observed-pattern casewise score covariance.}
 \code{"all"} to include absent cross-loadings and covariances.}
 \item{include_loadings,include_covariances}{Whether to enumerate absent loading
 and covariance candidates.}
+\item{gamma}{Optional symmetric positive semidefinite caller NACOV: a matrix
+for one group or a list of matrices in fitted group order. Continuous moments
+are means first when fitted, then lower-triangle covariances by columns,
+including the diagonal, in the model's observed-variable order. All-ordinal
+moments are thresholds then lower-triangle polychorics by columns, excluding
+the diagonal. Mixed moments are thresholds, negative continuous means,
+continuous variances, then lower-triangle associations. Each block is the
+unscaled per-group NACOV (N times the sampling covariance); ML's group n/N
+weights are applied by the adapter. Dimensions, finite entries, symmetry and
+PSD are validated (relative tolerance 1e-10 for symmetry and PSD).
+Supplying this replaces the covariance meat and preserves the fitting weight.
+It requires \code{estimated_weight = FALSE} explicitly and
+\code{cov = "empirical"}; FIML and ML2S refuse caller Gamma. NULL preserves
+the usual covariance source. A model-implied Gamma is an explicit choice:
+use \code{cov = "model_implied"} where supported, or supply a normal-theory
+matrix constructed explicitly for the chosen moments.}
 \item{estimated_weight}{Include supported estimated-weight influence terms,
 following the weight recipe the fit records (NT, ADF, DWLS, or DLS with its
 mixing weight; ULS has none). Supplied weights have no recipe and ordinal NT
 and DLS weights have no derived influence, so both fail with an
 \code{UnsupportedInference} error. FIML has no second-stage weight and rejects
-this option.}
+this option. Supplied Gamma cannot carry casewise weight influence and
+also rejects this option.}
 }
 \details{FIML uses the analytic observed information for both its statistic and
 bread, and the observed-pattern casewise score meat. It needs no saturated-model

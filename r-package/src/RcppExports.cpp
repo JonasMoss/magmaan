@@ -877,8 +877,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // inference_modification_indices_robust
-Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances, bool estimated_weight);
-RcppExport SEXP _magmaanlab_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP estimated_weightSEXP) {
+Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances, bool estimated_weight, SEXP gamma);
+RcppExport SEXP _magmaanlab_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP estimated_weightSEXP, SEXP gammaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -893,13 +893,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type include_loadings(include_loadingsSEXP);
     Rcpp::traits::input_parameter< bool >::type include_covariances(include_covariancesSEXP);
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_modification_indices_robust(fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight));
+    Rcpp::traits::input_parameter< SEXP >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_modification_indices_robust(fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight, gamma));
     return rcpp_result_gen;
 END_RCPP
 }
 // inference_score_tests_robust
-Rcpp::DataFrame inference_score_tests_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, bool estimated_weight);
-RcppExport SEXP _magmaanlab_inference_score_tests_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP estimated_weightSEXP) {
+Rcpp::DataFrame inference_score_tests_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, bool estimated_weight, SEXP gamma);
+RcppExport SEXP _magmaanlab_inference_score_tests_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP estimated_weightSEXP, SEXP gammaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -910,7 +911,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(inference_score_tests_robust(fit, raw, weight, bread, moments, cov, estimated_weight));
+    Rcpp::traits::input_parameter< SEXP >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_tests_robust(fit, raw, weight, bread, moments, cov, estimated_weight, gamma));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2815,7 +2817,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_continuous_ls_robust
-Rcpp::List infer_continuous_ls_robust(Rcpp::List fit, SEXP raw_data, SEXP weight, std::string bread, std::string gamma, bool fixed_weight);
+Rcpp::List infer_continuous_ls_robust(Rcpp::List fit, SEXP raw_data, SEXP weight, std::string bread, SEXP gamma, bool fixed_weight);
 RcppExport SEXP _magmaanlab_infer_continuous_ls_robust(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP gammaSEXP, SEXP fixed_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -2824,24 +2826,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
     Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
-    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type gamma(gammaSEXP);
     Rcpp::traits::input_parameter< bool >::type fixed_weight(fixed_weightSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_robust(fit, raw_data, weight, bread, gamma, fixed_weight));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_continuous_ls_profile_lrt
-Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, SEXP weight, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_continuous_ls_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP weightSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_continuous_ls_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, SEXP X_per_group, SEXP weight, double eig_tol, SEXP gamma);
+RcppExport SEXP _magmaanlab_infer_continuous_ls_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP weightSEXP, SEXP eig_tolSEXP, SEXP gammaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X_per_group(X_per_groupSEXP);
     Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_profile_lrt(fit_H1, fit_H0, X_per_group, weight, eig_tol));
+    Rcpp::traits::input_parameter< SEXP >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_profile_lrt(fit_H1, fit_H0, X_per_group, weight, eig_tol, gamma));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3526,16 +3529,17 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_ml_profile_lrt
-Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_ml_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_ml_profile_lrt(Rcpp::List fit_H1, Rcpp::List fit_H0, SEXP X_per_group, double eig_tol, SEXP gamma);
+RcppExport SEXP _magmaanlab_infer_ml_profile_lrt(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP eig_tolSEXP, SEXP gammaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X_per_group(X_per_groupSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_ml_profile_lrt(fit_H1, fit_H0, X_per_group, eig_tol));
+    Rcpp::traits::input_parameter< SEXP >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ml_profile_lrt(fit_H1, fit_H0, X_per_group, eig_tol, gamma));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4456,8 +4460,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_baseline_fit", (DL_FUNC) &_magmaanlab_infer_baseline_fit, 1},
     {"_magmaanlab_inference_modification_indices", (DL_FUNC) &_magmaanlab_inference_modification_indices, 7},
     {"_magmaanlab_inference_score_tests", (DL_FUNC) &_magmaanlab_inference_score_tests, 3},
-    {"_magmaanlab_inference_modification_indices_robust", (DL_FUNC) &_magmaanlab_inference_modification_indices_robust, 11},
-    {"_magmaanlab_inference_score_tests_robust", (DL_FUNC) &_magmaanlab_inference_score_tests_robust, 7},
+    {"_magmaanlab_inference_modification_indices_robust", (DL_FUNC) &_magmaanlab_inference_modification_indices_robust, 12},
+    {"_magmaanlab_inference_score_tests_robust", (DL_FUNC) &_magmaanlab_inference_score_tests_robust, 8},
     {"_magmaanlab_inference_score_flip_test", (DL_FUNC) &_magmaanlab_inference_score_flip_test, 11},
     {"_magmaanlab_inference_score_flip_test_model", (DL_FUNC) &_magmaanlab_inference_score_flip_test_model, 11},
     {"_magmaanlab_inference_global_score_flip_test", (DL_FUNC) &_magmaanlab_inference_global_score_flip_test, 10},
@@ -4583,7 +4587,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl, 17},
     {"_magmaanlab_infer_continuous_ls_robust", (DL_FUNC) &_magmaanlab_infer_continuous_ls_robust, 6},
-    {"_magmaanlab_infer_continuous_ls_profile_lrt", (DL_FUNC) &_magmaanlab_infer_continuous_ls_profile_lrt, 5},
+    {"_magmaanlab_infer_continuous_ls_profile_lrt", (DL_FUNC) &_magmaanlab_infer_continuous_ls_profile_lrt, 6},
     {"_magmaanlab_infer_fiml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_fiml_profile_lrt, 3},
     {"_magmaanlab_infer_two_stage_nt_profile_lrt", (DL_FUNC) &_magmaanlab_infer_two_stage_nt_profile_lrt, 3},
     {"_magmaanlab_measures_standardized_residuals_estimated_weight", (DL_FUNC) &_magmaanlab_measures_standardized_residuals_estimated_weight, 4},
@@ -4633,7 +4637,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_ordinal_profile_rmsea", (DL_FUNC) &_magmaanlab_infer_ordinal_profile_rmsea, 3},
     {"_magmaanlab_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ordinal_profile_lrt, 4},
     {"_magmaanlab_ordinal_nested_diagnostic_impl", (DL_FUNC) &_magmaanlab_ordinal_nested_diagnostic_impl, 2},
-    {"_magmaanlab_infer_ml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ml_profile_lrt, 4},
+    {"_magmaanlab_infer_ml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ml_profile_lrt, 5},
     {"_magmaanlab_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_ordinal_fit_measures_misspec, 5},
     {"_magmaanlab_infer_mixed_ordinal_rmsea_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_rmsea_misspec, 5},
     {"_magmaanlab_infer_mixed_ordinal_crmr_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_crmr_misspec, 6},
