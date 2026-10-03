@@ -213,7 +213,14 @@ The frontend is stable for a subset when all of the following hold:
 - Every accepted rule has a fixture with independently written expected rows.
   Every default rule also has a Demo TECH1 check or a corpus `.out` match.
 - Every rejected construct class has a diagnostic fixture with source span and
-  reason class.
+  reason class. Each rejection message states what was found, what Mplus
+  does with it, why magmaan does not reproduce it (or which increment will
+  accept it), and what to write instead. Examples: NOMEANSTRUCTURE without
+  `INFORMATION = EXPECTED` (Mplus keeps the means and only warns: add the
+  INFORMATION setting or remove NOMEANSTRUCTURE); a mentioned x variance
+  (Mplus models that one variable with no covariances while conditioning on
+  the others: remove the mention); `a1b-a3b` in NAMES (Mplus generates A01,
+  A02, A03: list the names).
 - Robustness sweep: every User's Guide example input, including those using
   unsupported features, is accepted or rejected with a classified reason. None
   crashes, hangs or exceeds the expansion bounds, under sanitizers
