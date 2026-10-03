@@ -1,6 +1,6 @@
 geometry_cells <- function() {
   x <- expand.grid(n = c(100L, 300L), role = c('null', 'power'),
-    distribution = c('normal', 'skewed'), larger = c('correct', 'misspecified'),
+    distribution = c('normal', 'skewed'), larger = c('correct', 'mild', 'strong'),
     stringsAsFactors = FALSE)
   x$cell_id <- seq_len(nrow(x)); x$production_reps <- ifelse(x$role == 'null', 2000L, 1000L)
   x
@@ -10,11 +10,13 @@ population_syntax <- function(cell, group) {
   loading <- rep(c(.7, .8, .75, .65), 2)
   if (cell$role == 'power' && group == 'b') loading[3] <- loading[3] - .15
   residual <- 1 - loading^2
+  if (cell$larger == 'strong') residual[5] <- residual[5] - .4^2 - 2*.4*loading[5]*.4
   paste(c(paste0('f1 =~ ', paste0(loading[1:4], '*x', 1:4, collapse = ' + ')),
     paste0('f2 =~ ', paste0(loading[5:8], '*x', 5:8, collapse = ' + ')),
+    if (cell$larger == 'strong') 'f1 =~ .4*x5',
     'f1 ~~ 1*f1', 'f2 ~~ 1*f2', 'f1 ~~ .4*f2',
     paste0('x', 1:8, ' ~~ ', residual, '*x', 1:8),
-    if (cell$larger == 'misspecified') paste0('x1 ~~ ', .3 * sqrt(residual[1]*residual[5]), '*x5')),
+    if (cell$larger != 'correct') paste0('x1 ~~ ', .3 * sqrt(residual[1]*residual[5]), '*x5')),
     collapse = '\n')
 }
 
@@ -65,4 +67,33 @@ geometry_draw <- function(cell, rep, seed) {
     }
   }, error = function(e) rows$error <<- conditionMessage(e))
   finish()
+}
+
+geometry_population <- function() {
+  do.call(rbind, lapply(c('correct', 'mild', 'strong'), function(level) {
+    cell <- data.frame(role='null', larger=level)
+    loading <- rep(c(.7,.8,.75,.65),2)
+    lambda <- matrix(0,8,2); lambda[1:4,1] <- loading[1:4]
+    lambda[5:8,2] <- loading[5:8]
+    if (level=='strong') lambda[5,1] <- .4
+    phi <- matrix(c(1,.4,.4,1),2)
+    common <- lambda %*% phi %*% t(lambda)
+    residual <- diag(1-diag(common))
+    if (level!='correct') residual[1,5] <- residual[5,1] <-
+      .3*sqrt(residual[1,1]*residual[5,5])
+    sigma <- common+residual; dimnames(sigma) <- list(paste0('x',1:8),paste0('x',1:8))
+    stopifnot(min(eigen(sigma,symmetric=TRUE,only.values=TRUE)$values)>0)
+    fit <- lavaan::cfa('f1 =~ x1 + x2 + x3 + x4\nf2 =~ x5 + x6 + x7 + x8',
+      sample.cov=list(a=sigma,b=sigma), sample.nobs=c(1e7,1e7),
+      sample.mean=list(a=rep(0,8),b=rep(0,8)), meanstructure=TRUE,
+      sample.cov.rescale=FALSE)
+    if (!lavaan::lavInspect(fit,'converged')) stop('Population fit failed: ',level)
+    implied <- lavaan::lavInspect(fit,'cov.ov')
+    f <- unname(lavaan::fitMeasures(fit,'fmin'))*2
+    df <- unname(lavaan::fitMeasures(fit,'df'))
+    data.frame(larger=level, groups=2L, n_per_group=1e7, df=df,
+      ml_discrepancy=f, population_rmsea=sqrt(max(0,2*f/df)),
+      largest_standardized_residual=max(vapply(implied,function(x)
+        max(abs((sigma-x)/sqrt(outer(diag(sigma),diag(sigma))))),numeric(1))))
+  }))
 }

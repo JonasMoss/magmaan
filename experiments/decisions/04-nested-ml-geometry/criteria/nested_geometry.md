@@ -39,3 +39,23 @@ values yield unavailable summaries. Pilot decision status always remains open.
 Frozen pilot summary CSVs provide compute pricing and construction diagnostics;
 raw replicate rows are ignored. Metadata records criteria/source/native hashes,
 package versions and Git commit. Any amendment after results must be dated.
+
+## Amendment 2026-10-03, after the pilot and before production
+
+The larger-model factor gains a third level, strong. Both groups share an
+omitted cross-loading of x5 on f1 of .4 (standardized population; adjust x5's
+residual variance to keep its variance 1) in addition to the mild level's
+residual correlation. Groups stay identical, so the loading-equality null
+holds for the pseudo-true parameters. The decision rule applies to every
+misspecified (mild or strong) null cell. 24 cells; production 2000 null / 1000
+power replicates per cell. The original misspecified level is now named mild;
+its population, stable cell IDs 9–16 and seeds are unchanged. Strong cells
+receive IDs 17–24. The fresh pilot uses the registered pilot seed base.
+
+Population diagnostics fit configural H1 to exact covariance matrices in both
+groups with 10,000,000 observations per group and no covariance rescaling.
+Population RMSEA uses the limiting ML discrepancy (without the finite-N df
+subtraction); the largest absolute covariance residual is standardized by the
+population marginal standard deviations. Geometry gaps use complete paired
+replicates: median absolute PEBA4 p-value difference for each test, and median
+absolute score-statistic difference divided by the expected score statistic.

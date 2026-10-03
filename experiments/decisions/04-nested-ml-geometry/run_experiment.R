@@ -41,6 +41,7 @@ write_metadata(file.path(out,'metadata.csv'), list(mode=mode, seed_base=seed_bas
   magmaanlab_path=find.package('magmaanlab'), native_md5=paste(tools::md5sum(binary),collapse=',')),
   packages=c('magmaanlab','magmaan','lavaan'))
 write_csv(cells,file.path(out,'cells.csv'))
+write_csv(geometry_population(),file.path(out,'population.csv'))
 all <- list(); started <- proc.time()[['elapsed']]; done <- 0L
 for (i in seq_len(nrow(cells))) {
   reps <- switch(mode, smoke=2L,pilot=20L,production=cells$production_reps[i])
@@ -51,7 +52,7 @@ for (i in seq_len(nrow(cells))) {
     write_csv(x,file.path(out,'raw',sprintf('cell_%02d_batch_%04d.csv',i,ceiling(batch[1]/20))))
     done <- done+length(batch)
     write_csv(data.frame(done=done,elapsed_s=proc.time()[['elapsed']]-started),file.path(out,'progress.csv'))
-    cat(sprintf('%s cell %d/16: %d draws done, %.1f seconds\n',mode,i,done,proc.time()[['elapsed']]-started)); flush.console()
+    cat(sprintf('%s cell %d/%d: %d draws done, %.1f seconds\n',mode,i,nrow(cells),done,proc.time()[['elapsed']]-started)); flush.console()
   }
 }
 raw <- do.call(rbind,all)
