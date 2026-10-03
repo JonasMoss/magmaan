@@ -1,0 +1,3 @@
+"cell_id","categories","n","groups","parameterization","seed","converged_h1","converged_h0","available","reason","detail","df","spectrum_size"
+69,2,400,2,"theta",817820002,TRUE,TRUE,FALSE,"not_nested","nested embedding: H0 changes an H1 fixed parameter",0,0
+71,5,400,2,"theta",817840002,TRUE,TRUE,FALSE,"not_nested","nested embedding: H0 changes an H1 fixed parameter",0,0

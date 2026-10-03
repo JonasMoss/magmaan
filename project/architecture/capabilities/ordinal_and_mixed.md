@@ -281,6 +281,13 @@
   parameterization-aware threshold and association Jacobians for robust ordinal
   reporting, modification indices, score tests, and standardized-solution
   reporting.
+- DWLS calibration study `experiments/decisions/05-dwls-policy-calibration`
+  records a current lab policy availability limitation: theta two-group
+  thresholds+loadings versus loadings fits constructed via `group_equal`
+  converge, but `policy_nested()` reports `not_nested` because H0 changes an
+  H1 fixed parameter (binary and five-category preflight). Full calibration
+  and pilot pricing are blocked pending a validated nesting construction or
+  a policy embedding fix; this is no calibration finding.
 - Friendly C++ `robust_ordinal`, `fit_measures`, `modification_indices` and
   `score_tests` replay all-ordinal/mixed preparation with the fit-time
   `LatentNames::row_user` mask, preserving explicitly fixed/free ordinal

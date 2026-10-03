@@ -1,0 +1,60 @@
+---
+title: "DWLS policy calibration"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+The adopted register is estimated-weight IJ covariance, robust-ordinal global
+fit-function SB/PEBA4, and estimated-weight nested profile-law SB/PEBA4.
+The recipes are fixed by the misspecification-robust requirement; finite-sample
+calibration is pending. Comparators never select a replacement recipe.
+
+How well calibrated are these all-ordinal DWLS components? There is no
+calibration answer yet. Task-17.1 stopped at an API availability gate, before
+full smoke, pilot or production. Both tested theta threshold-invariance pairs
+converged, but `policy_nested()` returned `not_nested` with the detail
+“nested embedding: H0 changes an H1 fixed parameter”.
+
+```{r}
+path <- file.path('results','dwls-policy','preflight','availability.csv')
+if (!file.exists(path)) stop('Run Rscript run_experiment.R --preflight before rendering.')
+x <- read.csv(path)
+knitr::kable(x[c('categories','converged_h1','converged_h0','available','reason')],
+  col.names=c('Categories','Larger converged','Restricted converged','Available','Reason'))
+```
+
+The reproducer uses a two-factor, twelve-indicator Gaussian-copula population,
+400 total observations split equally between identical groups, symmetric
+thresholds, and theta parameterization. The larger fit constrains loadings;
+the restricted fit constrains loadings and thresholds through the ordinary lab
+model-construction and fitting routes. The restricted partable releases
+second-group response intercepts and, for five-category data, residual scales
+that were fixed in the larger fit. The current policy embedding rejects this
+pair. This records API behavior, not a conclusion about calibration or a proof
+that the population models are nonnested.
+
+The full prospective design is registered in `criteria/dwls_policy.md`.
+Its 154 cells comprise 52 global-size, 32 nested-size, 42 coverage and 28 power
+cells. The gate must be resolved before implementing the full batching,
+summaries and pilot pricing. No production CPU-hour estimate is available.
+
+The tiny availability, design and metadata CSVs are frozen solely to preserve
+the blocking API evidence and its package/source provenance. They are not a
+pilot and must not be used to judge rejection rates, coverage or recipes.
+
+Reproduce with the lane library and one math thread:
+
+```sh
+R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript experiments/decisions/05-dwls-policy-calibration/run_experiment.R \
+  --preflight --run-id fresh-preflight
+```
+
+The command deliberately exits unsuccessfully when the required component is
+unavailable, after saving evidence. `--smoke`, `--pilot` and `--production`
+refuse to run while this gate is unresolved.

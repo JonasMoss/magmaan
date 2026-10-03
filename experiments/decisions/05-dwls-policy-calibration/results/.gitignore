@@ -1,2 +1,9 @@
 *
 !.gitignore
+!dwls-policy/
+dwls-policy/*
+!dwls-policy/preflight/
+dwls-policy/preflight/*
+!dwls-policy/preflight/availability.csv
+!dwls-policy/preflight/cells.csv
+!dwls-policy/preflight/metadata.csv

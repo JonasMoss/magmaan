@@ -535,6 +535,11 @@ required by an all-ordinal primary workflow remain current work.
   frozen confirmatory run across ordinal regimes (categories, threshold skew,
   N, groups), including misspecified larger models for nested tests,
   reporting size, coverage and failures before the recipe becomes the policy.
+  Task-17.1 registered [decision study 05](../../experiments/decisions/05-dwls-policy-calibration/report.qmd),
+  but its availability gate is blocked: converged theta two-group
+  thresholds+loadings versus loadings pairs return `not_nested` for both
+  binary and five-category indicators. Resolve the lab policy embedding or
+  approve a validated construction before full smoke, pilot and compute pricing.
 
 - [ ] **M — derive the misspecification-consistent moment centering for lab
   robust meats.** Lab robust SE/test functions take `moments = "structured"` or
