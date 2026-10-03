@@ -182,7 +182,10 @@ fit_ordinal_bounded(const Pt& pt, const Rep& rep, const Stats& stats,
                     optim::OptimOptions opts = {},
                     estimate::OrdinalParameterization parameterization =
                         estimate::OrdinalParameterization::Delta) {
-  auto x0 = estimate::ordinal_start_values(pt, rep, stats, {});
+  // Starts must be sized for the partable prepared under the same
+  // parameterization the fit uses (DELTA and THETA prepare differently).
+  auto x0 = estimate::ordinal_start_values(pt, rep, stats, {}, nullptr,
+                                           parameterization);
   if (!x0.has_value()) return std::unexpected(x0.error());
   return estimate::fit_ordinal_bounded(pt, rep, stats, std::move(bounds),
                                        weights, *x0, backend, opts,

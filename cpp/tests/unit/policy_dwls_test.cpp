@@ -299,8 +299,10 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
                                  OrdinalParameterization parameterization) {
   const auto* stats = &stats_value;
   auto p1 = r.alt_model.pt, p0 = r.null_model.pt;
-  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(p1, *stats));
-  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(p0, *stats));
+  // Prepare under the fit's parameterization: DELTA and THETA release
+  // group-2+ response scales through different coordinates.
+  REQUIRE(magmaan::estimate::prepare_ordinal_partable(p1, *stats, parameterization));
+  REQUIRE(magmaan::estimate::prepare_ordinal_partable(p0, *stats, parameterization));
   auto c1 = magmaan::estimate::build_eq_constraints(p1);
   auto c0 = magmaan::estimate::build_eq_constraints(p0);
   REQUIRE(c1); REQUIRE(c0);
