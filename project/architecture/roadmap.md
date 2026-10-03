@@ -392,7 +392,10 @@ confirmed on fresh draws at 2.9-6.8%. The nested test uses the r-term
 parameter-space law (observed Hessian, estimated-weight IJ meat, exact
 restriction map) with SB and PEBA4, after the separate-point profile law's
 cancellation artifact was diagnosed; confirmed at 4.3-7.8%. ML/FIML likelihood-score
-contracts have their own gates (task-22).
+contracts have their own gates (task-22). FIML and DWLS policy ingredients
+(observed bread and casewise scores; IJ influence and exact Hessian) are built
+once per fit and reused across reports and nested pairs, bit-identically
+(task-23).
 
 2026-10-02: ordinary reporting selects historical lavaan bundles through
 `lavaan_compat = NULL` (policy default), with matching cache keys, inference
