@@ -536,6 +536,16 @@ required by an all-ordinal primary workflow remain current work.
   N, groups), including misspecified larger models for nested tests,
   reporting size, coverage and failures before the recipe becomes the policy.
 
+- [ ] **M — derive the misspecification-consistent moment centering for lab
+  robust meats.** Lab robust SE/test functions take `moments = "structured"` or
+  `"saturated"`. Which centering keeps the meat consistent under mean or
+  covariance misspecification depends on each estimator's estimating equation
+  (ML casewise scores are consistent at the structured point; raw moment
+  covariances may need saturated centering). Found by the task-61 audit
+  (project/validation/lab_inference_defaults.md, 'needs derivation' rows).
+  **Check:** a derivation per function family plus a misspecified-mean
+  simulation check before any default changes. Not release-gating.
+
 - [ ] **M — threshold-invariance nested tests (Wu-Estabrook).** Imposing
   threshold equality releases the second group's response scales and
   intercepts, so configural vs thresholds-equal (and thresholds+loadings vs
