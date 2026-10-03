@@ -33,15 +33,18 @@ The pilot attempted `r cost$replicates` draws across `r cost$cells` cells, with
 `r round(cost$production_cpu_hours,1)` worker-hours for production, or an ideal
 `r round(cost$ideal_four_worker_hours,1)` hours with four workers. This includes
 fitting and inference; population-target preparation is separate and performed
-once per run. Detailed timings, Wilson intervals, target-specific coverage,
+once per run. Elapsed timings include a brief scheduling pause for the shared
+compute budget, recorded in `scheduling.csv`; CPU times exclude that pause. Detailed timings, Wilson intervals, target-specific coverage,
 failure counts and policy gaps are in the frozen CSVs. These are pilot
-engineering evidence, not confirmatory findings.
+engineering evidence, not confirmatory findings. The two failures are library
+nonconvergence verdicts in the two-group theta coverage cell with binary
+indicators, total N=300 and omitted cross-loading .4; all other draws completed.
 
 ```{r}
 z <- merge(timing,cells[c('cell_id','family','role')],by='cell_id')
 table <- do.call(rbind,lapply(split(z,paste(z$family,z$role)),function(x)
   data.frame(Family=x$family[1],Role=x$role[1],Cells=nrow(x),
-    `Median seconds per draw`=round(median(x$mean_seconds),3),
+    `Median CPU seconds per draw`=round(median(x$mean_cpu_seconds),3),
     `Production worker-hours`=round(sum(x$production_cpu_hours),2),check.names=FALSE)))
 knitr::kable(table,row.names=FALSE)
 ```

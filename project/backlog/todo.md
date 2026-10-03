@@ -529,17 +529,24 @@ required by an all-ordinal primary workflow remain current work.
   Satorra-2000's (delta 1.9% to 0.19%, theta 2.3% to 0.20% from n = 4000 to
   64000). Calibration remains open (below).
 
-- [ ] **M — calibrate the DWLS policy.** No in-repo study covers DWLS SB versus
-  PEBA4 size, global or nested; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
+- [ ] **M — calibrate the DWLS policy.** Confirmatory evidence for DWLS SB
+  versus PEBA4 global/nested size remains pending; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
   covers IJ coverage for one parameter under misspecification. **Check:** one
   frozen confirmatory run across ordinal regimes (categories, threshold skew,
   N, groups), including misspecified larger models for nested tests,
-  reporting size, coverage and failures before the recipe becomes the policy.
-  Task-17.1 registered [decision study 05](../../experiments/decisions/05-dwls-policy-calibration/report.qmd),
-  but its availability gate is blocked: converged theta two-group
-  thresholds+loadings versus loadings pairs return `not_nested` for both
-  binary and five-category indicators. Resolve the lab policy embedding or
-  approve a validated construction before full smoke, pilot and compute pricing.
+  reporting size, coverage and failures for the adopted recipes.
+  Task-17.1 registered [decision study 05](../../experiments/decisions/05-dwls-policy-calibration/report.qmd)
+  with a 146-cell runner, per-cell failure/coverage/rejection summaries and
+  production pricing. The theta nesting is amended to thresholds versus
+  thresholds+loadings (Wu–Estabrook metric step); the original `not_nested`
+  verdict was a design error, not a library defect. Threshold-shift power is
+  dropped because both corrected fits impose threshold equality. Smoke passed
+  all 292 draws; the frozen four-worker pilot attempted 2,920 draws
+  with two library nonconvergence verdicts, all arms otherwise available and
+  maximum policy gap 5.3e-14. Estimated production cost is 58.66 CPU-hours
+  (14.66 ideal hours at four workers), plus one-time population preparation.
+  Production requires a separate compute decision.
+  Pilot flags are diagnostics only and never change the adopted recipes.
 
 - [ ] **M — derive the misspecification-consistent moment centering for lab
   robust meats.** Lab robust SE/test functions take `moments = "structured"` or

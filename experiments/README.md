@@ -31,7 +31,7 @@ Pre-registered studies whose results set library defaults; see
 | 02 | [barrier-defaults](decisions/02-barrier-defaults/report.qmd) | benchmark | active | Which start and optimizer should the complete-data ML barrier fitter use by default, judged by the library verdict on held-out simulated problems? |
 | 03 | [score-centering](decisions/03-score-centering/report.qmd) | probe | banked | Where do uncentered, globally centered or within-group likelihood-score meats give justified parameter covariance and analytic score calibration for ML and prospective FIML? |
 | 04 | [nested-ml-geometry](decisions/04-nested-ml-geometry/report.qmd) | probe | active | Does observed nested ML geometry calibrate at least as well as expected geometry, especially under larger-model misspecification? Next: task-43 compute decision, then frozen confirmation. |
-| 05 | [dwls-policy-calibration](decisions/05-dwls-policy-calibration/report.qmd) | probe | active | How well calibrated are the adopted all-ordinal DWLS policy components? Next: task-17.1 clarification of threshold-shift power after the approved theta nesting correction, then smoke and timed pilot; no production. |
+| 05 | [dwls-policy-calibration](decisions/05-dwls-policy-calibration/report.qmd) | probe | active | How well calibrated are the adopted all-ordinal DWLS policy components? Registered 146-cell design after approved theta-nesting and loading-power amendments; smoke/pilot frozen (292/2,920 draws; 0/2 failures), production priced at 58.66 CPU-hours. Production requires a separate compute decision. |
 
 **Score-centering bank:** retain raw for tested regular ML and as the prospective
 FIML comparator; 72,000 confirming datasets establish no qualifying global-centering

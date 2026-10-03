@@ -13,3 +13,16 @@ dwls-policy/corrected-preflight/*
 !dwls-policy/corrected-preflight/availability.csv
 !dwls-policy/corrected-preflight/cells.csv
 !dwls-policy/corrected-preflight/metadata.csv
+
+!dwls-policy/pilot/
+dwls-policy/pilot/*
+!dwls-policy/pilot/cells.csv
+!dwls-policy/pilot/metadata.csv
+!dwls-policy/pilot/population_targets.csv
+!dwls-policy/pilot/population_timing.csv
+!dwls-policy/pilot/summary.csv
+!dwls-policy/pilot/timing.csv
+!dwls-policy/pilot/cost.csv
+!dwls-policy/pilot/failures.csv
+!dwls-policy/pilot/progress.csv
+!dwls-policy/pilot/scheduling.csv

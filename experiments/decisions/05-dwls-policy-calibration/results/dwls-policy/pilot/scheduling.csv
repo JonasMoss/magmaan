@@ -1,0 +1,2 @@
+pause_start_utc,resume_utc,reason
+2026-10-03T11:27:22Z,2026-10-03T11:28:06.139169+00:00,"shared compute budget; elapsed timings include pause, CPU timings exclude it"

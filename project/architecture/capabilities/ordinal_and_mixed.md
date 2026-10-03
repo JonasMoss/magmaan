@@ -282,12 +282,18 @@
   reporting, modification indices, score tests, and standardized-solution
   reporting.
 - DWLS calibration study `experiments/decisions/05-dwls-policy-calibration`
-  records a current lab policy availability limitation: theta two-group
-  thresholds+loadings versus loadings fits constructed via `group_equal`
-  converge, but `policy_nested()` reports `not_nested` because H0 changes an
-  H1 fixed parameter (binary and five-category preflight). Full calibration
-  and pilot pricing are blocked pending a validated nesting construction or
-  a policy embedding fix; this is no calibration finding.
+  has a registered 146-cell runner for global/nested size, IJ coverage and
+  loading/global power, with explicit policy-equivalence gaps and CPU pricing.
+  Its approved theta pair constrains thresholds in H1 and adds loading
+  equalities in H0 (Wu–Estabrook metric step); availability passes for binary
+  and five-category indicators. The earlier loadings-to-thresholds-plus-loadings
+  pair correctly returned `not_nested` because it changes fixed scales/intercepts.
+  Threshold-shift power is excluded: both corrected fits impose threshold
+  equality, so that perturbation is not threshold-invariance power. Smoke
+  passed 292 draws with zero failures; the frozen 2,920-draw pilot records two
+  nonconvergence failures and maximum policy gap 5.3e-14. Per-cell CPU timing
+  extrapolates to 58.66 CPU-hours (14.66 ideal four-worker hours). Calibration
+  remains open until separately authorized production evidence; pilot flags do not change the recipes.
 - Friendly C++ `robust_ordinal`, `fit_measures`, `modification_indices` and
   `score_tests` replay all-ordinal/mixed preparation with the fit-time
   `LatentNames::row_user` mask, preserving explicitly fixed/free ordinal
