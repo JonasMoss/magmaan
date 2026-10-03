@@ -630,7 +630,8 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
-  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
+      ctx.pt, stats, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -684,7 +685,8 @@ Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
-  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
+      ctx.pt, stats, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -721,7 +723,8 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
-  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
+      ctx.pt, stats, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -767,7 +770,7 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   auto prep_or = magmaan::estimate::prepare_ordinal_partable(
-      ctx.pt, stats, parameterization, &starts);
+      ctx.pt, stats, parameterization, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -933,7 +936,7 @@ Rcpp::List fit_ordinal_stage2_impl(SEXP partable, Rcpp::List ordinal_stats,
   magmaan::data::OrdinalStats weighted = std::move(*weighted_or);
 
   auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
-      ctx.pt, weighted, &starts);
+      ctx.pt, weighted, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -1129,7 +1132,7 @@ Rcpp::List frontier_fit_mixed_ordinal_psd_impl(
   magmaan::data::MixedOrdinalStats stats =
       mixed_ordinal_stats_from_arg(mixed_stats);
   auto prep_or = magmaan::estimate::prepare_mixed_ordinal_partable(
-      ctx.pt, stats, parameterization, &starts);
+      ctx.pt, stats, parameterization, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());

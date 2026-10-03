@@ -588,3 +588,44 @@ TEST_CASE("Ordinal preparation provenance preserves released scales and rejects 
     CHECK(pt->free == prepared.free);
   }
 }
+
+TEST_CASE("Explicit response scales retain residual coordinates with auto_var disabled") {
+  auto flat = magmaan::parse::Parser::parse(
+      "f =~ x1+x2+x3\nf ~~ f\n"
+      "x1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\n"
+      "x1 ~*~ c(1,NA)*x1\nx2 ~*~ c(1,1)*x2\nx3 ~*~ c(1,1)*x3");
+  REQUIRE(flat.has_value());
+  magmaan::spec::BuildOptions options;
+  options.auto_var = false;
+  options.n_groups = 2;
+  magmaan::spec::LatentNames names;
+  magmaan::spec::Starts starts;
+  auto pt = magmaan::spec::build(*flat, options, &starts, &names);
+  REQUIRE(pt.has_value());
+  int residuals = 0;
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (pt->op[i] != magmaan::parse::Op::Covariance ||
+        names.row_lhs[i] != names.row_rhs[i] || names.row_lhs[i] == "f") continue;
+    ++residuals;
+    CHECK(names.row_user[i] == 0);
+    CHECK(pt->free[i] == 0);
+    CHECK(pt->fixed_value[i] == 1.0);
+  }
+  CHECK(residuals == 6);
+  magmaan::data::OrdinalStats stats;
+  stats.R = {Eigen::MatrixXd::Identity(3,3), Eigen::MatrixXd::Identity(3,3)};
+  stats.threshold_ov = {{0,0,1,1,2,2},{0,0,1,1,2,2}};
+  stats.threshold_level = {{1,2,1,2,1,2},{1,2,1,2,1,2}};
+  stats.thresholds = {Eigen::VectorXd::Zero(6),Eigen::VectorXd::Zero(6)};
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(
+      *pt, stats, &starts, &names.row_user).has_value());
+  int released = 0;
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (pt->op[i] == magmaan::parse::Op::Covariance &&
+        names.row_lhs[i] == "x1" && names.row_rhs[i] == "x1" && pt->group[i] == 2) {
+      CHECK(pt->free[i] > 0);
+      ++released;
+    }
+  }
+  CHECK(released == 1);
+}

@@ -715,6 +715,32 @@ two existing admissibility warnings and two documented skips. Structural
 tracked-file and dependency-layering checks pass. No oracle exemptions or
 numeric-tolerance changes were introduced.
 
+### Explicit ordinal preparation prerequisite (TASK-53, partial)
+
+The lab DWLS/ULS/WLS, PSD and stage-2 glue parsed `LatentNames::row_user`
+but omitted it from preparation, silently fixing explicit residual/intercept
+rows. Passing provenance preserves the explicit group-2 THETA residuals.
+With `auto_var = FALSE`, a response-scale row previously had no residual sibling
+for the preparation's scale-to-residual translation. Construction now emits a
+generated fixed unit sibling, which preparation releases when requested.
+
+Guards: the ordinal C++ test with explicit response scales and automatic
+variances disabled checks six generated residuals and the requested release;
+the live-lavaan grouped THETA R provenance test uses an independent explicit
+model and the versioned fitting preset. Existing expectations are unchanged.
+The full ordinal C++ suite passes 145 cases / 7,058 assertions.
+
+The independent P-IV2 diagnostic now also checks expected-information robust
+SEs, scaled/shifted chi-square and df against default lavaan. It remains a
+failing prerequisite gate, not a completed categorical frontend golden:
+common loadings/thresholds/means agree (maximum native differences 2.43e-6
+DELTA / 8.12e-7 THETA), but DELTA scales still project as fixed unit rows.
+Native scaled chi-square is about 27.535189 versus default lavaan 27.482813;
+expected-information SE ratios are about 0.999. The fitting preset corrects
+the test statistic but not the covariance divisor difference. No inference
+default or tolerance was changed. The reporting contract needs resolution
+before declaring PART 0 or the categorical increment complete.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

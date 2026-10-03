@@ -821,6 +821,22 @@ build_group_template(const parse::FlatPartable& flat,
     }
     if (!opts.fixed_x) apply_random_x(v, rows);
   }
+  // Response scales need a residual coordinate even when ordinary automatic
+  // variances are disabled. Ordinal preparation translates released scales
+  // into this coordinate; omitting it silently loses the requested dimension.
+  std::vector<std::string> response_variables;
+  for (const auto& row : rows) {
+    if (row.op == parse::Op::ResponseScale && row.lhs == row.rhs &&
+        !variance_already_present(rows, row.lhs)) {
+      response_variables.push_back(row.lhs);
+    }
+  }
+  for (const auto& name : response_variables) {
+    auto residual = make_pending(/*user=*/0, name, parse::Op::Covariance, name);
+    residual.user_fixed_value = true;
+    residual.fixed_value = 1.0;
+    rows.push_back(std::move(residual));
+  }
   if (opts.auto_fix_single) {
     apply_auto_fix_single(v, rows);
   }

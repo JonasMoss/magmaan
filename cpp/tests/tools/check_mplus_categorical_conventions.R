@@ -49,6 +49,26 @@ for (par in c('delta','theta')) {
      key <- function(p) paste(p$lhs,p$op,p$rhs,p$group,sep='\r')
      idx <- match(key(mp),key(lp))
      use <- !is.na(idx) & mp$op %in% c('=~','|','~1','~*~')
+     # Expected-information sandwich, rather than the lab's estimated-weight IJ
+     # default, is the WLSMV covariance being compared with the oracle.
+     reporting <- magmaanlab:::robust_ordinal(actual, actual$ordinal_stats,
+       bread='expected')
+     common_free <- !is.na(idx) & mp$free > 0L &
+       mp$op %in% c('=~','|','~1')
+     actual_se <- reporting$se[mp$free[common_free]]
+     oracle_se <- lp$se[idx[common_free]]
+     se_error <- abs(actual_se-oracle_se)
+     test_error <- abs(reporting$scaled_shifted$chi2_adj-
+       fitMeasures(fit,'chisq.scaled'))
+     cat('native-reporting',par,route,'df',reporting$df,
+       'max_common_se_difference',sprintf('%.12f',max(se_error)),
+       'scaled_chisq',sprintf('%.12f',reporting$scaled_shifted$chi2_adj),
+       'se_ratio_range',paste(sprintf('%.12f',range(actual_se/oracle_se)),collapse=','),'\n')
+     if (any(se_error > 1e-5*(1+pmax(abs(actual_se),abs(oracle_se)))) ||
+         test_error > 1e-5*(1+abs(fitMeasures(fit,'chisq.scaled'))) ||
+         reporting$df != fitMeasures(fit,'df'))
+       native_failures <- c(native_failures,paste(par,route,
+         'does not reproduce default-lavaan WLSMV reporting'))
      errors <- abs(mp$est[use]-lp$est[idx[use]])
      difference <- max(errors)
      within_tolerance <- all(errors <= 1e-5 *

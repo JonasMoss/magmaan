@@ -14,6 +14,13 @@
   starts, coordinates, acceptance gradients and invalid-start retries.
   Native fitting is unchanged.
   ULS/WLS and mixed versioned presets remain unavailable.
+- Explicit ordinal rows retain user provenance through lab DWLS/ULS/WLS,
+  PSD and fixed-stage-2 preparation. Response-scale self rows materialize a
+  generated unit residual coordinate when `auto_var = FALSE`; preparation can
+  therefore translate an explicit free scale into a residual dimension instead
+  of silently dropping it. Existing ordinal expectations remain unchanged.
+  TASK-53's default-lavaan robust reporting and released DELTA scale projection
+  gates remain open; the categorical frontend increment is not implemented.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.
