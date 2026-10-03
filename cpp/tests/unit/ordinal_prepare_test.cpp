@@ -629,3 +629,31 @@ TEST_CASE("Explicit response scales retain residual coordinates with auto_var di
   }
   CHECK(released == 1);
 }
+
+TEST_CASE("DELTA scale restrictions fail before losing their coordinates") {
+  using namespace magmaan;
+  data::OrdinalStats stats;
+  stats.R = {Eigen::MatrixXd::Identity(3, 3)};
+  stats.threshold_ov = {{0, 0, 1, 1, 2, 2}};
+  stats.threshold_level = {{1, 2, 1, 2, 1, 2}};
+  stats.thresholds = {Eigen::VectorXd::Zero(6)};
+  for (const char* restriction : {"x1 ~*~ shared*x1; x2 ~*~ shared*x2",
+      "x1 ~*~ shared*x1; f =~ shared*x2",
+      "x1 ~*~ a*x1; x2 ~*~ b*x2; a == 2*b",
+      "x1 ~*~ 0.8*x1"}) {
+    auto flat = parse::Parser::parse(std::string(
+        "f =~ x1+x2+x3\nx1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\n") + restriction);
+    REQUIRE(flat);
+    auto pt = spec::build(*flat);
+    REQUIRE(pt);
+    const auto original = *pt;
+    auto prepared = estimate::prepare_ordinal_delta_partable(*pt, stats);
+    REQUIRE_FALSE(prepared);
+    CHECK(prepared.error().kind == FitError::Kind::NumericIssue);
+    CHECK(prepared.error().detail.find("unsupported DELTA response scale") != std::string::npos);
+    CHECK(prepared.error().detail.find("theta") != std::string::npos);
+    CHECK(pt->free == original.free);
+    CHECK(pt->eq_groups == original.eq_groups);
+    CHECK(pt->ordinal_preparation.empty());
+  }
+}

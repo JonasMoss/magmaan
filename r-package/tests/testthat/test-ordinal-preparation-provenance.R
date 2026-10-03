@@ -65,3 +65,17 @@ test_that("explicit grouped theta residuals survive lab preparation", {
   residuals <- with(mp, group==2 & op=="~~" & lhs==rhs & lhs %in% ordered)
   expect_equal(sum(mp$free[residuals]>0L),4L)
 })
+
+test_that("DELTA scale restrictions are explicit unsupported errors", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ordered <- paste0("x", 1:4)
+  for (v in ordered) d[[v]] <- as.integer(cut(d[[v]], 3))
+  for (restriction in c("x1 ~*~ shared*x1; x2 ~*~ shared*x2",
+      "x1 ~*~ a*x1; x2 ~*~ b*x2; a == 2*b", "x1 ~*~ 0.8*x1")) {
+    spec <- model_spec(paste("f =~ x1+x2+x3+x4", restriction, sep="\n"),
+      ordered=ordered, parameterization="delta")
+    expect_error(fit_model(spec,d,estimator="DWLS"),
+      "unsupported DELTA response scale.*theta")
+  }
+})

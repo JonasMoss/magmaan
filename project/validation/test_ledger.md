@@ -755,9 +755,15 @@ magmaan reports about 0.771 and 0.880, df 10. Its WLSMV bundle nevertheless
 claims covariance/test availability: maximum common estimate error 0.154098,
 SE error 0.009725 and scaled-test difference -1.235463. The corresponding THETA
 residual equality passes. This is a lost model restriction, not a reporting
-convention discrepancy. TASK-53 comment 13 requires stopping on an available
-bundle disagreement. The full categorical increment remains pending a decision
-on preserving nonlinear response-scale equalities or rejecting that slice.
+convention discrepancy. TASK-53 decision 17 selects explicit rejection rather
+than nonlinear restriction support. Canonical DELTA preparation now rejects
+released scales sharing an equality group (including other parameter kinds),
+scales in linear constraints, and fixed non-unit scales, before changing the
+partable. It names the residual-coordinate boundary and THETA alternative.
+The diagnostic's DELTA equality branch is now an expected-error gate; its THETA
+parity branch remains unchanged. A pre-fix lab reproduction with a fixed 0.8
+scale reported 1.0; the new guard rejects it. Full ordinal C++ passes 146 cases /
+7,094 assertions with unchanged existing expectations.
 
 ## Validation Areas
 

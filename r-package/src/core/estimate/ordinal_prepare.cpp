@@ -1603,6 +1603,41 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     return {};
   }
 
+  // Releasing a scale via a residual coordinate preserves the unconstrained
+  // model, but a restriction on the original scale becomes nonlinear.
+  const auto unsupported_scale = [](const char* found) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        std::string("unsupported DELTA response scale: ") + found +
+        "; released DELTA scales use residual-variance coordinates, where "
+        "scale equalities and fixed non-unit scales are nonlinear restrictions; "
+        "use parameterization = 'theta' for supported residual-variance "
+        "equalities, or remove the restriction"));
+  };
+  const auto n_free = static_cast<std::size_t>(pt.n_free());
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::ResponseScale) continue;
+    const auto free = pt.free[i];
+    if (free <= 0) {
+      if (std::isfinite(pt.fixed_value[i]) && pt.fixed_value[i] != 1.0)
+        return unsupported_scale("fixed non-unit scale");
+      continue;
+    }
+    const auto column = static_cast<std::size_t>(free - 1);
+    for (std::size_t j = 0; j < pt.size(); ++j) {
+      if (i == j || pt.free[j] <= 0) continue;
+      const auto other = static_cast<std::size_t>(pt.free[j] - 1);
+      if (free == pt.free[j] ||
+          (pt.eq_groups.size() == n_free &&
+           pt.eq_groups[column] == pt.eq_groups[other]))
+        return unsupported_scale("released scale shares an equality group");
+    }
+    if (pt.lin_constraint_R.size() == pt.lin_constraint_d.size() * n_free) {
+      for (std::size_t r = 0; r < pt.lin_constraint_d.size(); ++r)
+        if (pt.lin_constraint_R[r * n_free + column] != 0.0)
+          return unsupported_scale("released scale appears in a linear constraint");
+    }
+  }
+
   // Wu-Estabrook (2016) multigroup categorical invariance: when `Thresholds`
   // is equated across groups, lavaan releases the group-2+ ordinal response
   // scale and indicator intercept that the single-group convention otherwise

@@ -803,3 +803,11 @@ eigenvalue), exposed as `reference = "all"` and `p_all`. SB/PEBA4 fields are
 unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
 study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
 it on fresh draws (2.9-6.8%).
+
+DELTA response-scale equalities and fixed non-unit response scales are explicitly
+unsupported (TASK-53): released scales use residual-variance coordinates, where
+these restrictions become nonlinear. Canonical preparation rejects shared
+scale equality groups and linear constraints involving released scales before
+removing their coordinates. Use THETA residual-variance equalities or remove
+the scale restriction. Fixed unit scales and independent released scales retain
+their existing behavior.

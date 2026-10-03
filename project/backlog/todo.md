@@ -1278,8 +1278,10 @@ carry the label `mplus`.
   TASK-53 prerequisite: explicit lab residual provenance and missing DELTA
   residual coordinates repaired; default-lavaan robust reporting passes through
   the retained-estimate WLSMV bundle, and derived DELTA scale projection passes.
-  Equality-labelled DELTA scales lose their restriction during preparation;
-  that available-bundle disagreement needs a scope decision before lowering.
+  Equality-labelled DELTA scales and fixed non-unit scales now return explicit
+  unsupported errors before preparation loses the restriction (decision #17).
+  DELTA response-scale equalities and fixed non-unit scales (nonlinear in
+  residual coordinates); rejected since TASK-53; build if a user model needs them.
 - [ ] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
   `|` statements and their defaults; NEW, equations, equalities and
   inequalities onto existing constraint machinery; indirect effects as defined
