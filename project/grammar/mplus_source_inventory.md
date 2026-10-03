@@ -452,7 +452,7 @@ These observations do not resolve or change the inventory rules.
 | P-MG13 | MG06 | A group-only regression absent from overall MODEL is rejected as an ignored MODEL statement. A group-only additional indicator is accepted; magmaan rejects its group-specific role because the common variable-role contract cannot preserve it. Write the relation in overall MODEL and fix it in the other groups. |
 | P-MG12 | MG03 | Accepted: negative integer -1 and integral decimal spellings -1.0 and 2.0. Canonical frontend codes must be integer strings. |
 | P-IV1 | IV01–IV05 | Planner added variant variance_both (`f1@1 f2@1`; the lane's `f1 f2@1` fixed only f2): accepted, free counts 38/34/30, df 16/20/24; TECH1 PSI fixed in G1, free in G2 for metric and scalar. Original variants: both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
-| P-IV2 | IV03, MG09 | DELTA and THETA, binary and ordinal: METRIC errors in all four variants. CONFIGURAL fixes scales (DELTA) or residual variances (THETA) in every group, factor means at zero, and releases non-marker loadings and thresholds in every group; 38 free / df 16 ordinal, 26 free / df 16 binary. SCALAR prints the overall BY model only; ordinal fits have 30 free / df 24. Probes use explicit tight convergence controls. Binary SCALAR inputs are accepted and TECH1 is present, but this sample does not converge, so these variants are meaning evidence only. Numerical convention decision pending; see TASK-53. |
+| P-IV2 | IV03, MG09 | DELTA and THETA, binary and ordinal: METRIC errors in all four variants. CONFIGURAL fixes scales (DELTA) or residual variances (THETA) in every group, factor means at zero, and releases non-marker loadings and thresholds in every group; 38 free / df 16 ordinal, 26 free / df 16 binary. SCALAR prints the overall BY model only; ordinal fits have 30 free / df 24. Probes use explicit tight convergence controls. Binary SCALAR inputs are accepted and TECH1 is present, but this sample does not converge, so these variants are meaning evidence only. The planner retains native/lavaan conventions and separates the Mplus meaning gate from the native numerical gate; see TASK-53. |
 | P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
 | P-CT1 | CT03 | Within-variable range accepted, both U1 thresholds free. Across-variable range accepted, first thresholds share number 1. Bare [U1] errors as an ignored statement. |
 | P-CT2 | CT07 | Error: CATEGORICAL is for dependent variables only; U1 is independent in this model. |
@@ -536,6 +536,21 @@ lowering. Both parameterizations converge with 30 parameters and 24 df.
 Default lavaan WLSMV reports scaled chi-square about 27.483; Mplus 9.1 prints
 27.535 in both parameterizations with explicit tight convergence controls. Lavaan `mimic="Mplus"` reports about
 27.535 in both parameterizations. This exceeds the existing Mplus printed
-precision allowance under default lavaan conventions. TASK-53 needs a choice
-of numerical reference convention before implementing its fit contract; no
-CT/MG09/IV03 implementation status or corpus tally is promoted by these probes.
+precision allowance under default lavaan conventions. The planner resolved
+this in TASK-53 comment 5: use `mimic="Mplus"` only for the Demo meaning gate,
+and default lavaan for native numerical parity; introduce no reporting preset
+or widened allowance. Delta scaling factors are 0.864268291773 (default) and
+0.862539755189 (Mplus mimic), and theta factors are 0.864268266371 and
+0.862539729839. Corpus convention classifications require both references.
+
+The optional `check_mplus_categorical_conventions.R --native` gate now probes
+the same explicit SCALAR rows through the existing lab routes, before frontend
+lowering. With a freshly rebuilt opt package, native DWLS converges but fixes
+all six group-2 scale/residual rows; maximum common loading/threshold/mean/scale
+estimate errors are 0.128535813260 (delta) and 0.195224660091 (theta).
+The `lavaan-0.7.2` preset refuses both models before optimization because the
+ordered affine coordinates do not describe the reconstructed model. These
+failures are not robust-reporting convention differences. The diagnostic exits
+unsuccessfully; no CT/MG09/IV03 implementation status or corpus tally is promoted.
+TASK-53 awaits a prerequisite-repair decision under the lane's stop-on-unresolved-
+numerical-failure rule.

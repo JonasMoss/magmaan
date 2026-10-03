@@ -823,7 +823,7 @@ Known weak spots: R examples catch workflow regressions but are not exhaustive;
 mean-structure, group, ordinal, and post-fit reconstruction paths remain the
 places to validate deliberately after R glue edits.
 
-### Mplus categorical prerequisite probes (TASK-53; pending decision)
+### Mplus categorical prerequisite probes (TASK-53; native gate blocked)
 
 The separate `mplus/probes_categorical.json` preserves the existing 972,086-byte
 probe fixture unchanged and adds P-IV2's 12 variants. Mplus 9.1 rejects binary
@@ -841,8 +841,23 @@ and raw lavaan discrepancy agree between lavaan conventions; the robust scaling
 factor changes. The default-convention difference exceeds the corpus's
 printed precision allowance (approximately 0.000775 at this value).
 
-This is a reference-convention decision, not an oracle defect exemption.
+The planner resolved the reference-convention decision in TASK-53 comment 5:
+Mplus-mimic checks meaning and printed values; default lavaan checks native
+numbers. This is not an oracle defect exemption or a reporting preset.
+
+`check_mplus_categorical_conventions.R --native` additionally checks the same
+independently written SCALAR model through `model_spec()` / native DWLS and
+the `lavaan-0.7.2` preset. The diagnostic uses the existing simulation parity
+allowance `1e-5 * (1 + max(abs(actual), abs(reference)))`. A fresh opt install
+reproduces native common-estimate errors 0.128535813260 (delta) and
+0.195224660091 (theta). All six group-2 scale/residual rows become fixed,
+although the explicit model frees them. The preset instead returns
+"lavaan QR coordinates require ordered affine rows from model resolution"
+before optimization in both parameterizations. The native delta fit also
+reports a covariance-admissibility warning. The diagnostic fails deliberately;
+these results cannot be classified as a robust convention mismatch.
+
 No frontend acceptance, preparation behavior, inference defaults, tolerances,
-or corpus coverage is changed. TASK-53 is blocked pending the intended
-numerical reference and Mplus-only reporting contract. Prerequisite opt
-Mplus tests pass: 34 cases / 12,362 assertions. Structural checks pass.
+or corpus coverage is changed. TASK-53 is blocked for a prerequisite-repair
+scope decision; its full increment acceptance remains pending. Previously
+completed opt Mplus checks pass: 34 cases / 12,362 assertions.

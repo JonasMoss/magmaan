@@ -229,6 +229,18 @@ corpus gate remains `check_mplus_corpus.R`.
 
 ## Oracles and evidence
 
+Categorical numerical gates retain native/lavaan conventions. An independently
+written explicit model with lavaan `mimic="Mplus"` must reproduce the Demo's
+printed estimates, SEs, scaled test, df and parameter count; the same model
+under default lavaan conventions is the native numerical reference. For P-IV2
+ordinal SCALAR, the default scaled test is about 27.483 and Mplus mimic/Demo
+about 27.535: the robust scaling factors differ (delta 0.864268291773 versus
+0.862539755189; theta 0.864268266371 versus 0.862539729839). This does not
+introduce an Mplus estimation preset. Corpus test/SE mismatches count as
+convention differences only when Mplus mimic reproduces the printed result
+and default lavaan reproduces magmaan; estimates and df remain direct gates.
+The existing printed-precision allowance is unchanged.
+
 **Meaning** (which model an input denotes) is gated against Mplus:
 
 - The User's Guide v8 language chapters (VARIABLE/DATA/DEFINE, ANALYSIS,
