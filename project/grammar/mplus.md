@@ -252,9 +252,9 @@ lavaan WLSMV references in `mplus/golden_categorical.json`. C++ lowers the
 original inputs and gates rows, free flags, estimates, SEs, scaled/shifted test
 and df. Live lab tests cover grouped defaults/shortcuts, prepared reconstruction
 and fixed/equal DELTA scales. P-IV2 Demo TECH1 checks meaning separately.
-The optional generator `--demo` gate currently fails printed SE parity for
-the single-group ordinal DELTA reference; increment 3 acceptance awaits the
-TASK-53 decision recorded in the test ledger.
+The optional generator `--demo` gates parameter count, df, estimates and scaled
+tests at printed precision. Printed SEs are retained as convention observations;
+the categorical Demo/mimic differences are recorded in the test ledger.
 
 The local corpus gate accepts 31 of 68 cases: 25 match and six report
 unsupported fit routes; two of the matched cases have independently verified

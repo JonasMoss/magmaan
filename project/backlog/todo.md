@@ -1271,14 +1271,15 @@ carry the label `mplus`.
   grouped goldens; numeric 1e-5 gates, API/lab rebuild/serialization and row-order
   checks; corpus 22/68 accepted and matched, sweep reader 253→291 and MODEL
   189→217 on the same 2,440-input manifest. TASK-52.
-- [ ] **M — increment 3: categorical outcomes.** Thresholds, delta/theta
+- [x] **M — increment 3: categorical outcomes.** Thresholds, delta/theta
   parameterizations and their multigroup defaults; all-ordinal DWLS fits,
   other categorical routes return unsupported-fit. **Check:** as increment 1;
   ten independent categorical goldens, live grouped/scale/prepared gates,
   P-IV2 TECH1 probes; corpus 31/68 accepted, 25 matched and six unsupported
   fit routes, with two verified convention differences among matches. Sweep
-  reader 291→456 and model 217→359 on 2,440 inputs. TASK-53 awaits a
-  decision on the Demo/mimic printed-SE discrepancy; native gates pass.
+  reader 291→456 and model 217→359 on 2,440 inputs. TASK-53: ten Demo
+  meaning gates pass; SE convention observations are recorded separately,
+  while default-lavaan inference gates pass.
   TASK-53.1 prerequisite: DELTA response scales retain live lavaan coordinates,
   including equality labels, fixed non-unit values and linear constraints.
   Seven frozen WLSMV/DWLS/ULS cases and live ordinal tests gate estimates,

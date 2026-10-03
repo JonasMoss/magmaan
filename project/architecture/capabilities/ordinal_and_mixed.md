@@ -811,3 +811,10 @@ it on fresh draws (2.9-6.8%).
 DELTA response-scale equalities, fixed non-unit scales and linear scale
 constraints use live lavaan coordinates (TASK-53.1); see the ordinal LS contract
 and the frozen `ordinal/delta_scales.json` gates above.
+
+Mplus categorical lowering (TASK-53) supports thresholds, DELTA/THETA scales,
+multigroup defaults and all-ordinal DWLS. Ten independent default-lavaan
+goldens and live grouped/scale tests gate fitting and inference; Demo meaning
+gates cover parameter count, df, estimates and scaled tests. Demo SEs remain
+convention observations, as recorded in the test ledger. Mixed, conditional
+and categorical ML fitting remain explicit unsupported routes.

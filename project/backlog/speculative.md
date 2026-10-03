@@ -709,7 +709,8 @@ of an Mplus input file. These entries record what it deliberately leaves out.
 **Gap:** reproducing Mplus's printed numbers for an imported input: MLR as
 sandwich SEs with Mplus's scaled test, FIML by default with Mplus's
 analysis-sample rules, Mplus's WLSMV expected information, its SRMR and its
-divisor conventions.
+divisor conventions. Categorical SEs also require explaining the remaining
+Demo/lavaan Mplus-mimic component recorded in the TASK-53 test ledger.
 **Available:** the imported model fitted under explicit lab estimator and
 inference choices or the ordinary policy; existing pieces include the
 Yuan-Bentler-Mplus test and lavaan's `information.expected.mplus` convention.

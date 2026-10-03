@@ -942,10 +942,10 @@ these results cannot be classified as a robust convention mismatch.
 
 No frontend acceptance, preparation behavior, inference defaults, tolerances,
 or corpus coverage is changed. The prerequisite numerical failure is resolved by TASK-53.1; the full
-frontend increment acceptance remains pending. Previously
+frontend increment is accepted by the completed gates below. Previously
 completed opt Mplus checks pass: 34 cases / 12,362 assertions.
 
-### TASK-53 categorical frontend validation and remaining meaning gate
+### TASK-53 categorical frontend validation and model-meaning gate
 
 Frontend checkpoint `e28746a0` and DELTA repair `e6ec7a30` are followed by
 completed threshold/scale lowering and ten independent default-lavaan
@@ -963,20 +963,26 @@ differences. Increment 2 accepted/matched 22. The unchanged 2,440-input manifest
 (1,117 distinct inputs) has reader 291→456 and model 217→359, every rejection
 classified. Logs are under `~/.cache/magmaan-logs/task-53-frontend-*`.
 
-The stricter optional `regen_oracle_mplus_categorical.R --demo` meaning gate
-exposes a remaining SE discrepancy for seed 533072's single-group ordinal
-DELTA fit, despite matching point estimates. Mplus 9.1 prints U3 loading SE
-0.083 versus lavaan 0.7-2 `mimic="Mplus"` 0.08355350; U6 SE 0.073 versus
-0.07357317; U1 first-threshold SE 0.053 versus 0.05356258 (U6 second threshold
-has the same discrepancy). Existing allowance is 0.0005 + 1e-5 |printed|.
-Native default-lavaan fits, SEs and tests remain within their 1e-5 gates.
+The optional `regen_oracle_mplus_categorical.R --demo` meaning gate asserts
+free-parameter count, df, estimates and scaled tests at unchanged printed
+precision against explicit lavaan `mimic="Mplus"` references. Group equalities
+are specified by the independent syntax, with `group.equal="none"` preventing
+mimic from adding its default grouped restrictions. Demo SEs remain frozen
+observations, not model-meaning assertions (TASK-53 decision #24); magmaan SEs
+remain gated against default lavaan through retained-estimate WLSMV bundles.
 
-Diagnostic `gamma.vcov.mplus=FALSE` multiplies SEs by sqrt(599/600), as the
-installed lavaan sandwich weights show, but U6 and the two threshold SEs still
-fail printed precision; it is not an accepted fix or reference convention.
-The discrepancy has no independent first-principles proof and is not an
-oracle defect exemption. TASK-53 requires a decision before accepting this
-meaning gate. Reproduce with `Rscript cpp/tests/tools/regen_oracle_mplus_categorical.R
---demo`; ignored Demo inputs, data and output remain in
-`~/.cache/magmaan-logs/mplus-categorical-golden/delta_ordinal/`. The generator
-stops before changing frozen fixtures on a meaning failure.
+For seed 533072's single-group ordinal DELTA fit, Mplus 9.1 prints U3 loading
+SE 0.083 versus lavaan 0.7-2 mimic 0.08355350 (ratio 0.9933755); U6 0.073
+versus 0.07357317 (0.9922095); U1 first-threshold and U6 second-threshold
+0.053 versus 0.05356258 (0.9894970). `gamma.vcov.mplus=FALSE` multiplies mimic
+SEs by sqrt(599/600) = 0.9991663, but U6 and both thresholds still exceed
+printed precision. The remaining component is unexplained. This is an observed
+Mplus/lavaan convention difference, not an oracle exemption; native default-
+lavaan SEs and tests pass their existing 1e-5 gates. Reproduce with
+`Rscript cpp/tests/tools/regen_oracle_mplus_categorical.R --demo`; ignored
+inputs/data/output remain under `~/.cache/magmaan-logs/mplus-categorical-golden/`.
+
+Final decision-24 regeneration passes all ten Demo model-meaning cases. All
+ten default-lavaan reference payloads remain exactly unchanged; only Demo
+observations were added. Rechecked categorical C++ goldens: 2,398 assertions;
+reader/lowering: 68 assertions; tracked-file, layering and diff checks pass.
