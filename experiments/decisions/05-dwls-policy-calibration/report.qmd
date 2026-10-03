@@ -10,11 +10,17 @@ execute:
 ---
 
 The adopted register is estimated-weight IJ covariance, robust-ordinal global
-fit-function SB/PEBA4, and r-term parameter-space estimated-weight nested IJ SB/PEBA4.
+fit-function exact spectrum (All) reference, and r-term parameter-space estimated-weight nested IJ SB/PEBA4.
 The nested reference uses the larger fit’s observed Hessian and exact restriction
 map; validation is limited and fresh-seed confirmation is pending.
 These recipes are settled by the misspecification-robust requirement;
 finite-sample calibration remains open. Comparators never select a replacement.
+
+Local task-17.5 verification used five fresh-seed draws each in global cells 3
+and 49: policy_all and all agreed exactly on all ten fits. Replaying cell 3's
+first five exploration draws gave a maximum p-value difference of 4.97e-10
+against the retained exploration rows (gate 1e-7). These are equivalence checks,
+not confirmation of finite-sample calibration.
 
 How well calibrated are these all-ordinal DWLS components? The smoke and pilot
 check computation, policy equivalence, failures and cost. Twenty draws per cell
@@ -56,8 +62,10 @@ The population is a thresholded Gaussian copula. Sample size is total across
 groups. Population DWLS targets use one 100,000-row draw per group for each
 coverage configuration, with seeds and target estimates recorded separately.
 Intervals use the IJ policy covariance or the expected/observed fixed-weight
-sandwich comparators, with a delta-method factor correlation. Global comparators
-are scaled-shifted and mean-variance adjustments of the same robust-ordinal
+sandwich comparators, with a delta-method factor correlation. The global policy_all arm is gated against the explicit all arm at 1e-7.
+Historical policy_sb/policy_peba4 arm names now denote explicit spectrum
+comparators, not policy outputs. Global comparators
+are SB/PEBA4, scaled-shifted and mean-variance adjustments of the same robust-ordinal
 spectrum. Nested comparators retain the separate-point profile SB/PEBA4 and fixed-weight
 Satorra-2000 restriction map at H1; the implemented reference family uses the
 new policy spectrum. Restriction degrees of freedom and reference-spectrum size are recorded

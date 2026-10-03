@@ -76,6 +76,9 @@ struct PolicyTest {
   int df = 0;
   // Mean eigenvalue of the UGamma spectrum: the SB scaling divisor.
   double sb_scale = std::numeric_limits<double>::quiet_NaN();
+  // Report only the calibration selected by this component.
+  std::string reference = "sb_peba4";
+  double p_all = std::numeric_limits<double>::quiet_NaN();
   double p_sb = std::numeric_limits<double>::quiet_NaN();
   double p_peba4 = std::numeric_limits<double>::quiet_NaN();
   int peba_blocks = 0; // actual nonempty PEBA4 blocks; zero when unavailable
@@ -163,7 +166,9 @@ PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
 //
 // Global test against the saturated model: the fit-function statistic n F
 // with the fixed-weight UGamma spectrum (estimate::robust_ordinal), calibrated
-// with SB and PEBA4. The objective is quadratic in the saturated moments and
+// with the exact weighted chi-square All tail on every positive sample
+// eigenvalue (decision study 05; limited validation, confirmation pending).
+// The objective is quadratic in the saturated moments and
 // the weight influence vanishes under the global null, so the global score
 // statistic equals n F; it is reported once, in `score`, labelled
 // "fit_function". DWLS has no likelihood, so `lr` is Inapplicable. Only plain

@@ -252,7 +252,8 @@ inference_reuse <- function(context) {
 # ordinary-user package: the observed-information sandwich covariance and the
 # global score and likelihood-ratio tests, each with SB and PEBA4. All-ordinal
 # DWLS uses the estimated-weight (IJ) sandwich and one global test, the
-# fit-function statistic (labelled "fit_function"); its LR is "inapplicable". Components
+# fit-function statistic (labelled "fit_function") with the exact spectrum All
+# reference (reference="all", p_all); its LR is "inapplicable". Components
 # outside the policy's scope come back unavailable with a reason, never
 # computed under another convention.
 policy_inference <- function(fit, data = NULL) {

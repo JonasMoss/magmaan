@@ -589,7 +589,7 @@ Parameter uncertainty:
 
 Global tests against the saturated model:
 
-- The score test and the likelihood-ratio test, each calibrated with SB and
+- For ML/FIML, the score test and the likelihood-ratio test, each calibrated with SB and
   PEBA4. The likelihood-ratio statistic and its df are reported because
   classical readers look for them; the normal-theory p-value is not shown.
 - **The score test is primary (decided 2026-10-02).** It comes first in
@@ -604,7 +604,10 @@ Global tests against the saturated model:
 - For fixed-weight estimators (GLS, ULS, WLS, DWLS) the objective is exactly
   quadratic in the saturated moments, so the global score statistic equals the
   fit-function statistic n F. It is reported once, labelled as the fit-function
-  statistic, since it is not a likelihood ratio.
+  statistic, since it is not a likelihood ratio. All-ordinal DWLS reports the
+  exact weighted chi-square All tail on every positive robust-ordinal sample
+  eigenvalue (decision study 05); SB/PEBA4 are comparators only for that global
+  test. Validation is limited, confirmation pending.
 - Profiling: when the score uses the estimator's own weight, the nuisance part
   of the score is zero at the estimate (the first-order condition), so the
   effective (profile) score vector equals the raw score. The statistic is that

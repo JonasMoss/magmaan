@@ -1,6 +1,7 @@
 # Inference under magmaan's policy (project/design/r-interface-vision.md):
 # the observed-information sandwich for parameter uncertainty, and global
-# score and likelihood-ratio tests, each calibrated with SB and PEBA4. The
+# ML/FIML score and likelihood-ratio tests calibrated with SB and PEBA4,
+# and the DWLS global fit-function test with the exact spectrum All tail. The
 # policy is composed in C++ (magmaanlab::policy_inference()); a component it
 # cannot compute carries a reason instead of a substitute result.
 
@@ -175,6 +176,10 @@ infer <- function(fit, lavaan_compat = NULL) {
     if (is.null(t)) return(NULL)
     label <- if (component == "global_lr") "likelihood ratio" else
       if (identical(t$label, "fit_function")) "fit function" else "score"
+    if (identical(t$reference, "all"))
+      return(data.frame(test = label, statistic = t$statistic, df = t$df,
+                        pvalue = t$p_all, reference = "exact spectrum (All)",
+                        stringsAsFactors = FALSE))
     data.frame(test = label,
                statistic = t$statistic, df = t$df, p.sb = t$p_sb,
                p.peba4 = t$p_peba4, sb.scale = t$sb_scale,

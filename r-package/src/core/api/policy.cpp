@@ -225,7 +225,12 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
   out.score.eigenvalues.tail(fixed->eigvals.size()) = fixed->eigvals;
   std::sort(out.score.eigenvalues.data(), out.score.eigenvalues.data() + out.score.df);
   out.score.label = "fit_function";
-  calibrate_spectrum(out.score);
+  out.score.reference = "all";
+  out.score.p_all = robust::frontier::fmg_test(out.score.statistic, out.score.df,
+      out.score.eigenvalues, {robust::frontier::FmgMethod::All, 0.0, true}).p_value;
+  if (!std::isfinite(out.score.p_all))
+    set_unavailable(out.score, InferenceReason::NumericFailure,
+                    "DWLS global test: All reference tail evaluation failed");
   return out;
 }
 

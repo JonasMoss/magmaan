@@ -17,6 +17,7 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/robust/restriction.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 
 namespace {
 
@@ -117,10 +118,15 @@ TEST_CASE("DWLS policy: IJ covariance and one fit-function global test") {
   eig.tail(fixed->eigvals.size()) = fixed->eigvals;
   std::sort(eig.data(), eig.data() + eig.size());
   CHECK((out.score.eigenvalues - eig).norm() == 0.0);
-  CHECK(out.score.sb_scale == doctest::Approx(eig.mean()));
-  CHECK(out.score.p_sb == doctest::Approx(
-      magmaan::inference::chi2_pvalue(out.score.statistic / out.score.sb_scale, out.score.df)));
-  CHECK(std::isfinite(out.score.p_peba4));
+  CHECK(out.score.reference == "all");
+  CHECK(out.score.p_all == doctest::Approx(magmaan::robust::frontier::fmg_test(
+      out.score.statistic, out.score.df, eig,
+      {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-7));
+  CHECK(std::isnan(out.score.p_sb));
+  CHECK(std::isnan(out.score.p_peba4));
+  CHECK(std::isnan(out.score.sb_scale));
+  CHECK(out.score.peba_blocks == 0);
+  CHECK(out.lr.reference == "sb_peba4");
   CHECK(out.lr.reason == api::InferenceReason::Inapplicable);
   CHECK(api::reason_name(out.lr.reason) == "inapplicable");
 
@@ -130,6 +136,33 @@ TEST_CASE("DWLS policy: IJ covariance and one fit-function global test") {
                                                   OrdinalParameterization::Delta, failed);
   CHECK(refused.covariance_reason == api::InferenceReason::NotConverged);
   CHECK(refused.score.reason == api::InferenceReason::NotConverged);
+}
+
+TEST_CASE("DWLS global All reference: delta and theta, one and two groups") {
+  for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+    for (int groups : {1, 2}) {
+      CAPTURE(groups);
+      CAPTURE(static_cast<int>(parameterization));
+      std::vector<Eigen::MatrixXd> blocks;
+      for (int g = 0; g < groups; ++g)
+        blocks.push_back(misspecified_block(20261003u + static_cast<std::uint32_t>(g), 400, -0.4, 0.6));
+      auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+      REQUIRE(stats.has_value());
+      const auto m = ordinal_model(kOneFactor, groups);
+      const auto est = fit_dwls(m, *stats, parameterization);
+      const auto out = api::policy_inference_dwls(m.pt, m.rep, *stats, est, parameterization, {});
+      REQUIRE(out.score.reason == api::InferenceReason::Available);
+      CHECK(out.score.reference == "all");
+      CHECK(out.lr.reference == "sb_peba4");
+      const auto explicit_all = magmaan::robust::frontier::fmg_test(out.score.statistic,
+          out.score.df, out.score.eigenvalues,
+          {magmaan::robust::frontier::FmgMethod::All, 0.0, true});
+      CHECK(std::abs(out.score.p_all - explicit_all.p_value) <= 1e-7);
+      CHECK(std::isnan(out.score.p_sb));
+      CHECK(std::isnan(out.score.p_peba4));
+      CHECK(out.score.peba_blocks == 0);
+    }
+  }
 }
 
 TEST_CASE("DWLS policy: at exact fit the IJ covariance is the fixed-weight sandwich") {
@@ -313,6 +346,7 @@ TEST_CASE("DWLS nested policy: fit-function difference with the parameter-space 
   CHECK(t.statistic == doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
   const auto eig = check_common_law(r, *stats, OrdinalParameterization::Delta);
   CHECK(t.sb_scale == doctest::Approx(eig.sum() / 2.0));
+  CHECK(t.reference == "sb_peba4");
   CHECK(t.p_sb == doctest::Approx(magmaan::inference::chi2_pvalue(t.statistic / t.sb_scale, 2)));
   CHECK(std::isfinite(t.p_peba4));
   const int m = static_cast<int>(t.eigenvalues.size());

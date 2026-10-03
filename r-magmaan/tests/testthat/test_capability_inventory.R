@@ -45,6 +45,14 @@ test_that("the inventory's ordinary policy rows match each estimator's component
     fit <- magmaan(model, r[[2]], estimator = r[[1]])
     expect_true(isTRUE(as_lab_fit(fit)$converged), label = label)
     expect_identical(inventory_states(fit)[names(r[[4]])], r[[4]], label = label)
+    if (r[[1]] == "DWLS" && all(r[[4]][1:2] == "computed")) {
+      expect_identical(fit$inference$global_score$reference, "all")
+      expect_true(is.finite(fit$inference$global_score$p_all))
+    }
+    if (all(r[[4]] == "computed")) {
+      expect_identical(fit$inference$global_score$reference, "sb_peba4")
+      expect_identical(fit$inference$global_lr$reference, "sb_peba4")
+    }
     if (all(r[[4]] == "unsupported_model")) {
       expect_error(vcov(fit), class = "magmaan_inference_unavailable")
       expect_error(confint(fit), class = "magmaan_inference_unavailable")

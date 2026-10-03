@@ -210,6 +210,10 @@ print.magmaan <- function(x, ...) {
   cat("  observations:    ", .rows_label(x), "\n", sep = "")
   cat("  free parameters: ", length(coef(x)), "\n", sep = "")
   cat("  inference:       ", .inference_label(x), "\n", sep = "")
+  t <- x$inference$global_score
+  if (identical(t$reference, "all"))
+    cat("  global p-value:  ", format(t$p_all),
+        " (exact spectrum (All); decisions/05-dwls-policy-calibration)\n", sep = "")
   invisible(x)
 }
 
@@ -265,6 +269,8 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
     num <- vapply(t, is.numeric, logical(1))
     t[num] <- lapply(t[num], function(v) round(v, digits))
     print(t, row.names = FALSE)
+    if (identical(fit$inference$global_score$reference, "all"))
+      cat("Reference: exact spectrum (All); decisions/05-dwls-policy-calibration.\n")
     .peba_note(x$tests)
     .lr_note(t)
   }

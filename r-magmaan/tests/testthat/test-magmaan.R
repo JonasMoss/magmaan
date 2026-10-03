@@ -133,9 +133,19 @@ test_that("all-ordinal DWLS gets the estimated-weight covariance and one global 
   expect_false(anyNA(tests$se[tests$free]))
   g <- summary(fit)$tests
   expect_equal(g$test, "fit function")
+  expect_identical(g$reference, "exact spectrum (All)")
+  expect_false(any(c("p.sb", "p.peba4", "sb.scale") %in% names(g)))
+  policy <- fit$inference$global_score
+  expect_identical(policy$reference, "all")
+  expect_true(is.nan(policy$p_sb) && is.nan(policy$p_peba4))
+  explicit <- magmaanlab::magmaan_core$robust_fmg_test(policy$statistic, policy$df,
+    policy$eigenvalues, "all", 0, truncate_negative = TRUE)
+  expect_equal(g$pvalue, explicit$p_value, tolerance = 1e-7)
   expect_true(is.finite(g$statistic) && g$df > 0)
   out <- capture.output(print(summary(fit)))
   expect_false(any(grepl("Unavailable inference", out)))
+  expect_true(any(grepl("exact spectrum (All)", out, fixed = TRUE)))
+  expect_true(any(grepl("decisions/05-dwls-policy-calibration", out, fixed = TRUE)))
   expect_true(any(grepl("Note: DWLS has no likelihood", out)))
   expect_true(any(grepl("inference: +computed$", capture.output(print(fit)))))
 })

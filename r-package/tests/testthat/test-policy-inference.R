@@ -120,3 +120,31 @@ test_that("DWLS nested policy equals the parameter-IJ diagnostic and common-poin
   failed <- f1; failed$converged <- FALSE
   expect_identical(policy_nested(failed,f0)$lr$reason,"not_converged")
 })
+
+test_that("DWLS global policy exposes the exact spectrum All reference", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ord <- paste0("x", 1:6)
+  for (v in ord) d[[v]] <- ordered(cut(d[[v]],
+    quantile(d[[v]], c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE))
+  for (parameterization in c("delta", "theta")) {
+    for (group in list(NULL, "school")) {
+      spec <- model_spec(cfa, ordered = ord, parameterization = parameterization,
+        group = group, group_labels = if (is.null(group)) NULL else levels(d$school))
+      fit <- fit_model(spec, d, estimator = "DWLS")
+      expect_true(fit$converged)
+      policy <- policy_inference(fit)
+      t <- policy$score
+      expect_true(t$available, info = t$detail)
+      expect_identical(t$reference, "all")
+      expect_identical(policy$lr$reference, "sb_peba4")
+      fixed <- robust_ordinal(fit, fit$ordinal_stats, bread = "expected")
+      expect_equal(t$statistic, fixed$chisq_standard)
+      explicit <- robust_fmg_test(t$statistic, t$df, t$eigenvalues, "all", 0,
+        truncate_negative = TRUE)
+      expect_equal(t$p_all, explicit$p_value, tolerance = 1e-7)
+      expect_true(is.nan(t$p_sb) && is.nan(t$p_peba4) && is.nan(t$sb_scale))
+      expect_equal(t$peba_blocks, 0L)
+    }
+  }
+})

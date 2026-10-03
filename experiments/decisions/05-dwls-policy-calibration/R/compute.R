@@ -28,7 +28,7 @@ dwls_mode_cells <- function(mode, family='all') {
   cells
 }
 
-dwls_global_arms <- function() c('policy_sb','policy_peba4','scaled_shifted',
+dwls_global_arms <- function() c('policy_all','policy_sb','policy_peba4','scaled_shifted',
   'mean_variance','scaled_f','all','pall','eba2','eba4','eba6','peba2','peba6','pols')
 
 dwls_syntax <- function(cell) {
@@ -229,10 +229,14 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
         fixed <- core$robust_ordinal(h1,h1$ordinal_stats,bread='expected')
         spectrum <- policy$eigenvalues
         cal <- dwls_calibrate(fixed$chisq_standard,policy$df,spectrum)
-        gap <- max(abs(c(policy$statistic-fixed$chisq_standard,policy$p_sb-cal$p_sb,
-                          policy$p_peba4-cal$p_peba4)))
-        for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
-          policy$statistic/policy$sb_scale,policy$df,length(policy$eigenvalues))
+        all <- core$robust_fmg_test(fixed$chisq_standard,policy$df,spectrum,'all',0,
+          truncate_negative=TRUE)
+        gap <- max(abs(c(policy$statistic-fixed$chisq_standard,policy$p_all-all$p_value)))
+        if(!identical(policy$reference,'all')) stop('Unexpected global policy reference')
+        add('policy_all',policy$p_all,policy$statistic,policy$df,length(spectrum))
+        # Retain historical arm names; SB/PEBA4 are now explicit comparators.
+        for(a in c('sb','peba4')) add(paste0('policy_',a),cal[[paste0('p_',a)]],
+          policy$statistic/mean(pmax(spectrum,0)),policy$df,length(spectrum))
         ss <- fixed$scaled_shifted; mv <- fixed$mean_var_adjusted
         add('scaled_shifted',pchisq(ss$chi2_adj,ss$df,lower.tail=FALSE),ss$chi2_adj,ss$df)
         add('mean_variance',pchisq(mv$chi2_adj,mv$df_adj,lower.tail=FALSE),mv$chi2_adj,mv$df_adj)

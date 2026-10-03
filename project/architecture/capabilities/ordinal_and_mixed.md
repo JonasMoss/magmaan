@@ -771,3 +771,12 @@ identical fitted parameters, maximum covariance difference 4.87e-15, and maximum
 SE difference 2.27e-14. The existing `ordinal_dwls_wls.R` workflow passes. The
 repository-wide layering check still reports unrelated existing paper-to-tests
 references in `covariance-honest-sem` and `target-specific-distinguishability`.
+
+### Ordinary DWLS global reference
+
+`api::policy_inference_dwls` reports n F with its unchanged `robust_ordinal`
+spectrum and the exact weighted chi-square All tail (every positive sample
+eigenvalue), exposed as `reference = "all"` and `p_all`. SB/PEBA4 fields are
+unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
+study 05 compares `policy_all` with its explicit `all` arm at 1e-7. Limited
+validation, confirmation pending.

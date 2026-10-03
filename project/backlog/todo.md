@@ -496,8 +496,9 @@ required by an all-ordinal primary workflow remain current work.
 - [x] **S/M — compose the DWLS policy covariance and global test** (2026-10-02).
   `api::policy_inference_dwls`: the IJ covariance (`robust_ordinal_ij`, which
   now takes the fit-time `row_user`) and one global test, the fit-function
-  statistic n F with the fixed-weight `robust_ordinal` UGamma spectrum, SB and
-  PEBA4, reported in `score` with label `fit_function`; `lr` is the new typed
+  statistic n F with the fixed-weight `robust_ordinal` UGamma spectrum, exact
+  weighted chi-square All reference (task-17.5), reported in `score` with label
+  `fit_function`; `lr` is the typed
   `inapplicable` reason. Only plain DWLS qualifies (Stage-2 NT/DLS, supplied
   weights, ULS and WLS stay `unsupported_model`). R: `policy_inference()`
   routes all-ordinal DWLS fits; the lab `vcov()` gains the explicit
@@ -527,8 +528,8 @@ required by an all-ordinal primary workflow remain current work.
   and fixed-weight comparators, and confirms registered nested cells 53–84 and
   139–146 with seed base 817160001. Modal selects global, nested or both.
 
-- [ ] **M — calibrate the DWLS policy.** Confirmatory evidence for DWLS SB
-  versus PEBA4 global/nested size remains pending; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
+- [ ] **M — calibrate the DWLS policy.** Confirmatory evidence for DWLS All global
+  and SB/PEBA4 nested size remains pending; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
   covers IJ coverage for one parameter under misspecification. **Check:** one
   frozen confirmatory run across ordinal regimes (categories, threshold skew,
   N, groups), including misspecified larger models for nested tests,
@@ -547,8 +548,11 @@ required by an all-ordinal primary workflow remain current work.
   Task-17.2 adds runner-only global reference exploration/confirmation: 64
   global cells, unchanged production seeds for exploration and fresh seed base
   817160001 for confirmation, saved spectra and all 13 registered FMG arms
-  (pOLS gamma = 4, bound primitive default). Reference selection and full runs
-  remain separate work; the library policy is unchanged.
+  (pOLS gamma = 4, bound primitive default). Full fresh-seed confirmation
+  remains separate work. Task-17.5 implements the user-selected All global
+  reference with unchanged n F and spectrum; policy_all is gated against the
+  explicit all arm, and SB/PEBA4 remain runner comparators. Validation is
+  limited, confirmation pending.
   Pilot flags are diagnostics only and never change the adopted recipes.
 
 - [ ] **M — derive the misspecification-consistent moment centering for lab
