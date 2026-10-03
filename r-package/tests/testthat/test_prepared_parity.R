@@ -118,3 +118,68 @@ test_that("fit-local starts preserve labeled prepared models across datasets", {
   expect_equal(staged$theta, fresh$theta, tolerance = 1e-8)
   expect_equal(prepared_structure_count_impl(), count)
 })
+
+# Reporting rebuilds ordinal inference from these retained fit fields, without
+# access to the process-local preparation handles.
+.prepared_ordinal_reporting <- function(pair, estimator) {
+  fields <- c("ordinal", "parameterization", "thresholds", "polychoric",
+              "estimator", "moment_weight", "ordinal_computational_weight", "df", "npar_active")
+  expect_equal(pair$staged[fields], pair$fresh[fields])
+  layout <- c("R", "thresholds", "threshold_ov", "threshold_level", "moments",
+              "NACOV", "W_dwls", "W_wls", "nobs", "n_levels")
+  expect_equal(pair$staged$ordinal_stats[layout], pair$fresh$ordinal_stats[layout])
+  bundles <- switch(estimator, DWLS = c("DWLS", "WLSMV"),
+                    ULS = c("ULS", "ULSMV"), WLS = "WLS")
+  for (bundle in bundles) {
+    fresh <- convention_inference(pair$fresh, bundle)
+    staged <- convention_inference(pair$staged, bundle)
+    expect_true(fresh$covariance_available)
+    expect_equal(staged, fresh, tolerance = 1e-8)
+  }
+  expect_equal(policy_inference(pair$staged), policy_inference(pair$fresh), tolerance = 1e-8)
+}
+
+test_that("prepared ordinal equalities and reporting match fresh fits", {
+  skip_if_not_installed("lavaan")
+  d <- .prepared_parity_data("ordinal")
+  syntax <- "visual =~ x1+x2+x3\ntextual =~ x4+x5+x6"
+  for (parameterization in c("delta", "theta")) {
+    # Unconstrained ULS also needs the Gamma retained for reporting bundles.
+    spec <- model_spec(syntax, ordered = paste0("x", 1:6), parameterization = parameterization,
+                       meanstructure = TRUE, fixed_x = FALSE)
+    for (estimator in c("DWLS", "ULS", "WLS"))
+      .prepared_ordinal_reporting(.prepared_parity_pair(spec, d, estimator), estimator)
+    equalities <- if (parameterization == "theta")
+      list("loadings", c("loadings", "thresholds")) else list("loadings")
+    for (eq in equalities) {
+      spec <- model_spec(syntax, ordered = paste0("x", 1:6), parameterization = parameterization,
+                         meanstructure = TRUE, fixed_x = FALSE, group = "school",
+                         group_labels = levels(d$school), group_equal = eq)
+      for (estimator in c("DWLS", "ULS", "WLS"))
+        .prepared_ordinal_reporting(.prepared_parity_pair(spec, d, estimator), estimator)
+    }
+    restricted <- model_spec("visual =~ x1+a*x2+a*x3\ntextual =~ x4+x5+x6",
+                             ordered = paste0("x", 1:6), parameterization = parameterization,
+                             meanstructure = TRUE, fixed_x = FALSE)
+    for (estimator in c("DWLS", "ULS", "WLS"))
+      .prepared_ordinal_reporting(.prepared_parity_pair(restricted, d, estimator), estimator)
+    h1 <- .prepared_parity_pair(model_spec(syntax, ordered = paste0("x", 1:6),
+        parameterization = parameterization, meanstructure = TRUE, fixed_x = FALSE), d, "DWLS")
+    h0 <- .prepared_parity_pair(restricted, d, "DWLS")
+    fresh <- policy_nested(h1$fresh, h0$fresh)
+    expect_true(fresh$lr$available)
+    expect_equal(policy_nested(h1$staged, h0$staged), fresh, tolerance = 1e-8)
+  }
+})
+
+test_that("prepared mixed ULS preserves the fresh fitter's diagnostic", {
+  skip_if_not_installed("lavaan")
+  d <- .prepared_parity_data("mixed")
+  spec <- model_spec("visual =~ x1+x2+x3\ntextual =~ x4+x5+x6",
+                     ordered = paste0("x", 1:3), meanstructure = TRUE, fixed_x = FALSE)
+  m <- prepare_model(spec, prototype = d)
+  data <- prepare_data(m, d)
+  message <- "ULS is not supported for mixed continuous/categorical data; use DWLS or WLS"
+  expect_error(fit_model(spec, d, estimator = "ULS"), message, fixed = TRUE)
+  expect_error(estimate(m, data, estimator = "ULS"), message, fixed = TRUE)
+})

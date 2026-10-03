@@ -353,15 +353,19 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
           : estimate::frontier::fit_ordinal_psd(ctx.pt, ctx.rep, s, {}, weights, x0, backend, opts, parameterization);
     } else e = method == "ML"
         ? estimate::frontier::fit_ml(ctx.pt, ctx.rep, s, x0, backend, opts)
-        : method == "WLS" || method == "GLS" || method == "DLS"
-        // Replay the dense fixed-weight factorization used by fit_model().
+        // Default fits replay fit_model()'s equality-aware composition.
+        // Explicit lean weights retain the cache-aware estimation-only path;
+        // the full-stats overload requires dense Gamma even for DWLS/ULS.
+        : std::all_of(s.NACOV.begin(), s.NACOV.end(),
+            [](const auto& gamma) { return gamma.size() > 0; })
         ? estimate::fit_ordinal_bounded(ctx.pt, ctx.rep, s, bnd, weights, x0, backend, opts, parameterization)
         : estimate::fit_ordinal_bounded(ctx.pt, ctx.rep,
             data::ordinal_moments_from_stats(s), &cache, bnd, plan, x0, backend, opts);
     if (!e) stop_fit(e.error());
     const auto label = method == "GLS" || method == "DLS" ? "WLS" : method.c_str();
     auto out = ordinal_fit_result(ctx, s, *e, &starts, label, m.parameterization.c_str());
-    if (method == "GLS" || method == "DLS") out["ordinal_computational_weight"] = "WLS";
+    if (method != "ML") out["ordinal_computational_weight"] =
+        method == "GLS" || method == "DLS" ? "WLS" : method;
     if (e->association) {
       Rcpp::List composition = out["composition"];
       composition["algorithm"] = std::string(estimate::backend_name(backend));

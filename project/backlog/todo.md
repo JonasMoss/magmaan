@@ -142,7 +142,10 @@ result under an unstated convention.
   skip structural preparation (ordinal DWLS 9.1 → 3.5 ms in the 2026-10-01
   timing). Prepared `estimate()` parity is complete (task-25.1): ordinary
   starts, fitting options/presets, fit-time start tables, mixed PSD fitting and
-  replayable refit routes use the reference compositions. The permitted ML2S
+  replayable refit routes use the reference compositions. Task-25.3 closes
+  ordinal loading-equality and theta loading/threshold-invariance parity,
+  nested DWLS policy pairs, retained reporting moment/weight layouts (including
+  ULS Gamma) and the mixed-ULS diagnostic. The permitted ML2S
   gap is explicit: `magmaan_unsupported_estimator` directs callers to
   `fit_model()`; no Stage-1 ML2S implementation was added. The ordinary caller
   still needs routing through these handles (task-25.2). Native handles stay

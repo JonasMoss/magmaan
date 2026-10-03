@@ -176,8 +176,13 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   if (identical(estimator, "ADF")) estimator <- "WLS"
   allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "GLS", "DWLS", "WLS", "DLS"),
                     mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS", "DLS"))
+  if (data$kind == "mixed" && identical(estimator, "ULS"))
+    stop("estimate(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
   if (length(estimator) != 1L || !estimator %in% allowed) stop("estimate(): unsupported estimator for this data kind")
+  # Default fits retain categorical Gamma for later reporting, including ULS.
+  # Explicit full = FALSE weights remain available for estimation-only callers.
   if (is.null(weight) && (estimator %in% c("DWLS", "WLS", "DLS") ||
+      (data$kind == "ordinal" && estimator == "ULS") ||
       (data$kind == "ordinal" && estimator == "GLS"))) weight <- prepare_weight(data, estimator, dls_a = dls_a)
   if (!is.null(bounds) && (!is.list(bounds) || is.character(bounds)))
     stop("estimate(): supply explicit bounds (e.g. bounds_standard())")

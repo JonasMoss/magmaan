@@ -25,6 +25,12 @@
   mixed PSD fitting use the existing reference estimator compositions. Mixed
   barriers remain unsupported in both paths; prepared ML2S raises the typed
   `magmaan_unsupported_estimator` error and must use `fit_model()`.
+  Ordinal loading equalities (single and grouped), theta loading/threshold
+  invariance and nested DWLS policy pairs match fresh fits. Default ordinal LS
+  fits retain the moment/Gamma/weight layout required by policy and named
+  lavaan reporting bundles, including ULS; mixed ULS preserves the explicit
+  unsupported-data diagnostic. Explicit `full = FALSE` weights remain
+  estimation-only inputs.
   An internal structural-preparation counter gates repeated handle reuse.
   Existing fit lists and numerical audits are preserved. Legacy
   entry points remain supported for compatibility and specialized families;
