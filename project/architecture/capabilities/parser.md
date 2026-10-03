@@ -34,7 +34,13 @@
   automatic defaults and retains fixed-x sample moments. Combined starts and
   labels use duplicate formula rows, as supported by `spec::build()`; the
   gate compares unique parameter keys and checks both modifier components.
-  API/R exposure remains TASK-51.3. The
+  `api::model_from_mplus()` retains the whole source and diagnostics;
+  `magmaanlab::mplus_model()` exposes source-based rebuilding, portable specs,
+  notes and a lossless lavaan row projection. Observed names retain NAMES
+  spelling and factors their first BY spelling; BY factor sets are rejected.
+  Live lavaan rows/ML/expected SEs and fresh/prepared/serialized round trips
+  gate the lab surface. The local end-to-end corpus gate accepts 15 of 68
+  eligible cases, all matched (see the validation ledger). The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics

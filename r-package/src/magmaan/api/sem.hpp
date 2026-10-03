@@ -36,6 +36,7 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/mplus_parser.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/satorra2000.hpp"
@@ -77,6 +78,8 @@ struct ModelOptions {
   spec::BuildOptions build;
 };
 
+struct MplusModel;
+
 class Model {
 public:
   static Result<Model> from_lavaan(std::string_view syntax,
@@ -94,6 +97,7 @@ public:
   const ModelOptions &options() const noexcept { return options_; }
 
 private:
+  friend Result<MplusModel> model_from_mplus(std::string_view source);
   Model(std::string source, parse::FlatPartable flat,
         spec::LatentStructure structure, spec::LatentNames names,
         spec::Starts starts, model::MatrixRep rep, ModelOptions options);
@@ -106,6 +110,12 @@ private:
   model::MatrixRep rep_;
   ModelOptions options_;
 };
+
+struct MplusModel {
+  Model model;
+  std::vector<parse::MplusDiagnostic> notes;
+};
+Result<MplusModel> model_from_mplus(std::string_view source);
 
 Result<Model> model_from_lavaan(std::string_view syntax,
                                 ModelOptions options = {});

@@ -163,6 +163,15 @@ as_magmaan_model_spec <- function(model) {
 
 .rebuild_model_spec <- function(spec, group = NULL, group_labels = NULL,
                                 overrides = list(), caller = "fit_model") {
+  if (!is.null(spec$mplus_source)) {
+    if (length(overrides)) {
+      stop(caller, "(): Mplus construction options cannot be overridden; edit mplus_source instead.", call. = FALSE)
+    }
+    if ((!is.null(group) && nzchar(group)) || length(group_labels) > 1L) {
+      stop(caller, "(): Mplus specs support only one group; multiple groups require increment 2.", call. = FALSE)
+    }
+    return(mplus_model(input = spec$mplus_source))
+  }
   if (is.null(spec$syntax)) {
     stop(caller, "(): cannot rebuild a lavaan partable without source syntax.",
          call. = FALSE)

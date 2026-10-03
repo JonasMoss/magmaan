@@ -589,6 +589,43 @@ models provide the numeric gate; later language families and API/R exposure
 remain separate increments. Focused opt validation: 84 test cases and
 7,994 assertions passed (Mplus, EQS, parser, lavaanify and spec goldens).
 
+### Mplus API/lab end-to-end gate (TASK-51.3)
+
+`api::model_from_mplus()` retains source and classified notes. Lab tests compare
+four independently written lavaan models on rows, fixed/free status, fixed
+values, starts, ML estimates, expected-information SEs, chi-square and df
+(1e-5), and exercise fresh/prepared fits, source rebuilds and specs/fits reloaded
+in a fresh R process. Generated equality plabels depend on row order; tests
+compare constraint counts and the resulting constrained estimates. Fixed-x
+sample moments have no fitted estimate in the lab partable.
+
+Local `cpp/tests/tools/check_mplus_corpus.R` on 2026-10-03 fitted original
+inputs against `book.json` and available original output: **68 eligible,
+15 accepted and matched, 53 rejected**, with first-rule counts CL10 14,
+CL11 13, CL13 3, CL15 1, CL16 1, CL27 7, GR01 7 and NM03 7.
+The report is `~/.cache/magmaan-logs/mplus-corpus-gate.csv`; it includes
+per-comparison deviations, recorded decimal counts and tolerances. All 15
+cases match N, df and chi-square; available npar (11), H0 log-likelihood (10)
+and printed parameter estimates (220 comparisons) also match. MLR chi-square
+is excluded because its printed statistic is scaled.
+
+Of the stated 79 cases, 11 lack `data/raw.csv` (none lack original input or
+book expectations): Muthen `ch2_ex2_17`; Brown `tab4_1_neuroticism_extraversion`,
+`tab6_3_mtmm_correlated_uniqueness`, `tab7_17_mimic_phobia`,
+`tab7_2_tau_equivalent`, `tab7_5_parallel`, `tab7_8_longitudinal_invariance`,
+`tab7_9_effects_coding`, `tab8_12_sem_formative_stress`,
+`tab8_2_higher_order_coping` and `tab8_8_reliability_ptsd`.
+
+The planner authorized printed-precision allowances in board comment #8:
+for chi-square, log-likelihood and estimates use the maximum of the original
+quantity-specific tolerance and `0.5*10^(-d) + 1e-5*abs(expected)`, with `d`
+counted from the recorded JSON/output token. Brown tab8_6 prints 167.63;
+167.634078594 matches within its resulting 0.0066763 tolerance. Exact count
+checks retain zero tolerance. No frontend rule or numeric gate was relaxed.
+Focused opt gates: 24 Mplus cases/4,636 assertions and one API case/nine
+assertions pass. Full lab testthat passes (5,018 assertions) with two existing two-level
+admissibility warnings and two documented skips.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

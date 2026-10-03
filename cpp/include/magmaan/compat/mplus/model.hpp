@@ -7,6 +7,8 @@ namespace magmaan::compat::mplus {
 
 // MODEL lowering materializes Mplus defaults. Only fixed-x sample moments
 // may be added by spec::build; starts remain explicit caller hints.
+std::string to_lavaan_syntax(const parse::FlatPartable& flat);
+
 spec::BuildOptions build_options(const parse::MplusInput& input);
 
 }  // namespace magmaan::compat::mplus

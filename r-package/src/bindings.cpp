@@ -17,6 +17,7 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/parse/eqs_parser.hpp"
 #include "magmaan/compat/eqs/model.hpp"
+#include "magmaan/compat/mplus/model.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/compat/lavaan/composite_fold.hpp"
@@ -356,4 +357,33 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   stamp_group_equal(df);
   Rf_setAttrib(df, Rf_install("magmaan.expanded_partable"), expanded);
   return df;
+}
+
+// [[Rcpp::export]]
+Rcpp::List mplus_model_impl(std::string source) {
+  auto parsed = magmaan::parse::MplusParser::parse(source);
+  if (!parsed) stop_parse(parsed.error());
+  const auto options = magmaan::compat::mplus::build_options(parsed->input);
+  magmaan::spec::LatentNames names;
+  magmaan::spec::Starts starts;
+  auto model = magmaan::spec::build(parsed->flat, options, &starts, &names);
+  if (!model) Rcpp::stop("magmaan Mplus model error: %s", model.error().detail);
+  auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
+  const auto n = parsed->notes.size();
+  Rcpp::CharacterVector klass(n), rule(n), message(n);
+  Rcpp::IntegerVector line(n), col(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    const auto& note = parsed->notes[i];
+    klass[i] = note.klass == magmaan::parse::MplusClass::Reported ? "reported" :
+        note.klass == magmaan::parse::MplusClass::DataDescription ? "data_description" : "schema";
+    rule[i] = note.rule; message[i] = note.message;
+    line[i] = note.span.line; col[i] = note.span.col;
+  }
+  return Rcpp::List::create(
+      Rcpp::_["partable"] = lavaan_partable_df(pt),
+      Rcpp::_["syntax"] = magmaan::compat::mplus::to_lavaan_syntax(parsed->flat),
+      Rcpp::_["meanstructure"] = options.meanstructure,
+      Rcpp::_["notes"] = Rcpp::DataFrame::create(Rcpp::_["class"] = klass,
+          Rcpp::_["rule"] = rule, Rcpp::_["line"] = line, Rcpp::_["col"] = col,
+          Rcpp::_["message"] = message));
 }

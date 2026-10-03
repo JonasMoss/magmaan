@@ -17,6 +17,10 @@ lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto
     .Call(`_magmaanlab_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels, group_equal, group_partial)
 }
 
+mplus_model_impl <- function(source) {
+    .Call(`_magmaanlab_mplus_model_impl`, source)
+}
+
 model_matrix_rep <- function(partable) {
     .Call(`_magmaanlab_model_matrix_rep`, partable)
 }

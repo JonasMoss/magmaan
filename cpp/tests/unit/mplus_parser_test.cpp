@@ -167,3 +167,12 @@ TEST_CASE("Mplus MODEL: LB05 preserves groups per left-hand variable") {
   CHECK(r.at("y2~x1")=="q"); CHECK(r.at("y2~x2")=="q");
   reject("y1 y2 ON x1 x2 (p1-p3 q);","LB05");
 }
+
+TEST_CASE("Mplus MODEL: canonical observed and first BY spelling and BY lists") {
+  auto m = parse::MplusParser::parse(source("Factor BY y1 Y2 y3; factor ON x;", "", "Y1 y2 Y3 X"));
+  REQUIRE(m);
+  CHECK(m->flat.rows[0].lhs == "Factor");
+  CHECK(m->flat.rows[0].rhs == "Y1");
+  reject("f1-f3 BY y1-y3;", "MS09");
+  reject("f1 f2 BY y1-y3;", "MS09");
+}

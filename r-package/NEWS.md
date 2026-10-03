@@ -22,7 +22,7 @@
 - FMG/semTests replication routes retain their comparator conventions.
   infer_continuous_ls_robust() documents its caller-fixed-weight law and
   rejects recorded data-estimated weights unless fixed_weight = TRUE is explicit.
-
+- `mplus_model()` constructs rebuildable single-group continuous SEM specs from whole Mplus inputs, retaining reported input items in `$mplus_notes`.
 
 - All lab `estimated_weight` switches now default to `TRUE`, the
   misspecification-robust choice: robust modification indices and score tests,

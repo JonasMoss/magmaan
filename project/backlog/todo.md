@@ -1245,13 +1245,15 @@ carry the label `mplus`.
   pinned-lavaan numeric gate, Demo TECH1 status/equality checks and the
   optional extracted local corpus sweep. Combined start/label modifiers
   accumulate through duplicate flat rows; no spec or matrix changes.
-- [ ] **M/L — increment 1: input file and single-group continuous models.**
+- [x] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,
   `api::` constructor and `magmaanlab::mplus_model()`. **Check:** independent
   expected-row fixtures, rejection fixtures, Demo TECH1 probes, local corpus
   match on free-parameter count and df, lab round trips and pinned-lavaan
-  numerics of the projection.
+  numerics of the projection. TASK-51.3 adds source-preserving API/lab
+  construction, canonical spelling, BY-set rejection and serialization gates;
+  the local end-to-end gate matches all 15 accepted cases among 68 eligible.
 - [ ] **M — increment 2: multiple groups.** GROUPING, group-specific sections,
   invariance defaults and overrides. **Check:** as increment 1, including
   asymmetric group models and group-order agreement with supplied data.

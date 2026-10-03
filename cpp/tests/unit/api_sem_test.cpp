@@ -1580,3 +1580,18 @@ TEST_CASE("api continuous and FIML fits retain the shared explicit start policy"
     CHECK(explicit_fit->starts()->theta.isApprox(fit->estimates().theta));
   }
 }
+
+TEST_CASE("api Mplus constructor retains input and diagnostics") {
+  const std::string source = "TITLE: test\nDATA: FILE=x;\nVARIABLE: NAMES=Y1 Y2 Y3 X;\nMODEL: Factor BY y1-y3; Factor ON x;\nOUTPUT: TECH1;\n";
+  auto result = magmaan::api::model_from_mplus(source);
+  REQUIRE_MESSAGE(result, (result ? "" : result.error().detail));
+  CHECK(result->model.source() == source);
+  CHECK(result->model.options().build.fixed_x);
+  CHECK(result->model.options().build.meanstructure);
+  CHECK(std::any_of(result->notes.begin(), result->notes.end(), [](const auto& n) { return n.rule == "CL01"; }));
+  CHECK(std::any_of(result->notes.begin(), result->notes.end(), [](const auto& n) { return n.rule == "CL30"; }));
+  auto bad = magmaan::api::model_from_mplus(source + "DEFINE: Y1=2;\n");
+  REQUIRE_FALSE(bad);
+  CHECK(bad.error().stage == magmaan::api::ErrorStage::Parse);
+  CHECK(bad.error().detail.find("CL16") != std::string::npos);
+}

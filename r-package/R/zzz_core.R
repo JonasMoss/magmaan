@@ -357,6 +357,7 @@ magmaan_core <- local({
     compat_eqs = c(
       "eqs_model"
     ),
+    compat_mplus = c("mplus_model"),
     model = c(
       "model_matrix_rep",
       "model_implied"

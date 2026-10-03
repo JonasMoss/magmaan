@@ -24,6 +24,7 @@ class Lowerer {
   std::vector<Token> tokens;
   std::vector<std::string> observed, latent;
   std::set<std::string> observed_set, latent_set;
+  std::map<std::string, std::string> spelling;
   std::vector<std::vector<std::string>> label_groups;
   std::vector<Row> rows;
   std::map<std::tuple<std::string,Op,std::string>,std::size_t> row_indices;
@@ -31,7 +32,7 @@ class Lowerer {
   std::set<std::string> dependent, predictors, indicators, defined, factor_has_loading;
   explicit Lowerer(MplusInput input) {
     out.input = std::move(input); out.notes = out.input.notes;
-    for (const auto& name : out.input.analysis) { observed.push_back(lower(name)); observed_set.insert(lower(name)); }
+    for (const auto& name : out.input.analysis) { observed.push_back(lower(name)); observed_set.insert(lower(name)); spelling[lower(name)] = name; }
   }
   void reject(SourceSpan span, std::string rule, std::string detail) {
     if (!error) error = ParseError{ParseError::Kind::RejectedConstruct, span,
@@ -271,10 +272,11 @@ class Lowerer {
       bool deferred = false;
       for (auto i = begin; i < end; ++i) if (tokens[i].text == "|" || tokens[i].text == "{" || tokens[i].text == "$" || tokens[i].text == "#" || tokens[i].text == "%" || tokens[i].text == "~") deferred = true;
       for (auto i = begin; !deferred && i < end; ++i) if (tokens[i].text == "by") {
+        if (i != begin + 1) { reject(tokens[begin].span,"MS09","left-hand BY lists or ranges define ESEM factor sets; ESEM is outside scope; write one factor per BY statement instead"); break; }
         for (auto j = begin; j < i; ++j) if (tokens[j].text != "-") {
           if (tokens[j].text.empty() || !(tokens[j].text.front() >= 'a' && tokens[j].text.front() <= 'z') || !std::all_of(tokens[j].text.begin(),tokens[j].text.end(),[](char c) {return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';})) { reject(tokens[j].span,"NM01","invalid BY factor name '"+tokens[j].text+"'; Mplus requires a letter followed by letters, digits or underscores; write a valid factor name instead"); break; }
           if (observed_set.contains(tokens[j].text)) { reject(tokens[j].span,"MS03","BY factor '"+tokens[j].text+"' is an observed analysis name; Mplus requires a distinct factor name; rename the factor"); break; }
-          if (!is_latent(tokens[j].text)) { latent.push_back(tokens[j].text); latent_set.insert(tokens[j].text); }
+          if (!is_latent(tokens[j].text)) { latent.push_back(tokens[j].text); latent_set.insert(tokens[j].text); spelling[tokens[j].text] = out.input.source.substr(tokens[j].span.begin, tokens[j].span.end-tokens[j].span.begin); }
         }
         break;
       }
@@ -305,6 +307,11 @@ class Lowerer {
       if ((exo(l) && exo(r)) || (final(l) && final(r))) put({l,r,"",Op::Covariance,{},{},out.input.model_body},false);
     }
     if (error) return std::unexpected(*error);
+    // Resolve names only after role/default calculations; labels remain case-folded.
+    for (auto& row : rows) {
+      row.lhs = spelling.at(row.lhs);
+      if (!row.rhs.empty()) row.rhs = spelling.at(row.rhs);
+    }
     auto& flat = out.flat;
     flat.source_text.assign(out.input.source.begin(),out.input.source.end());
     std::map<std::string,std::size_t> offsets;
