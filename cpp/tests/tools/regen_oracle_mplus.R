@@ -116,9 +116,13 @@ make_data <- function(case, seed) {
   z <- matrix(rnorm(n*12), n, 12)
   x1 <- z[,1]; x2 <- .2*x1 + z[,2]
   f <- z[,3]; f2 <- .3*f + z[,4]
+  # Marker/std/nomean CFA: independent indicator errors; equalities also
+  # shares the non-marker population loadings and all residual variances.
   y <- outer(f, c(1,.8,.7,.9,.85,.75)) + .7*z[,5:10]
   if (case$id == 'equalities') y <- outer(f, c(1,.8,.8,.8,.8,.8)) + .7*z[,5:10]
   if (case$id %in% c('mimic','mixed_final')) {
+    # Correlated final factor disturbances (DF09); mixed_final instead uses
+    # a final observed disturbance correlated with f (DF10).
     f <- f + .35*x1 + .2*x2
     f2 <- f2 + .25*x1 - .2*x2
     y[,1:3] <- outer(f,c(1,.8,.7)) + .7*z[,5:7]
@@ -128,13 +132,18 @@ make_data <- function(case, seed) {
   if (case$id == 'second_order') {
     g <- z[,3]
     factors <- outer(g,c(1,.8,.7)) + .7*z[,4:6]
-    for (j in 1:3) y[,(2*j-1):(2*j)] <- outer(factors[,j],c(1,.8)) + .6*z[,(6+j):(7+j)]
+    # Separate indicator innovations from each other and the factor disturbances.
+    for (j in 1:3)
+      y[,(2*j-1):(2*j)] <- outer(factors[,j],c(1,.8)) + .6*z[,(5+2*j):(6+2*j)]
   }
   if (case$id == 'nocov') {
+    # Independent factors; only the explicitly freed y1-y4 errors covary.
     y[,4:6] <- outer(z[,4],c(1,.85,.75)) + .7*z[,8:10]
     y[,4] <- y[,4] + .1*z[,5]
   }
   if (case$id %in% c('path_final','labels','pon_pwith')) {
+    # path_final omits x2: its independent innovation joins y2's residual.
+    # Only final residuals correlate; labels has equal .4 slopes on x1.
     y[,1] <- .4*x1 + z[,5]
     y[,2] <- .4*x1 + .2*x2 + z[,6]
     y[,3] <- .5*y[,1] + z[,7] + .15*z[,6]
@@ -146,6 +155,7 @@ make_data <- function(case, seed) {
     }
   }
   if (case$id == 'unmentioned') y[,4] <- z[,8]
+  # NAMES-order x1 is a fourth indicator, with its own independent error.
   if (case$id == 'range_order') x1 <- .85*f + .7*z[,11]
   colnames(y) <- paste0('y',1:6)
   data <- cbind(y,x1=x1,x2=x2)[,case$names,drop=FALSE]
@@ -205,14 +215,20 @@ for (i in seq_along(cases)) {
     options,list(control=list(iter.max=2000))))
   if (!lavInspect(fit,'converged')) stop(case$id,': lavaan did not converge')
   pt <- parTable(fit)
+  fail <- function(message) stop(case$id,': ',message,'; rules ',paste(case$rules,collapse=', '))
+  fm <- fitMeasures(fit,c('npar','df','chisq','pvalue'))
+  # Meaning fixtures require a proper fit to their intended population.
+  variance_rows <- which(pt$op=='~~' & pt$lhs==pt$rhs)
+  if (any(!is.finite(pt$est[variance_rows]) | pt$est[variance_rows] < 0))
+    fail('data-quality gate: non-finite or negative lavaan variance estimate')
+  if (fm['df'] > 0 && (!is.finite(fm['pvalue']) || fm['pvalue'] < .001))
+    fail(sprintf('data-quality gate: lavaan chi-square p-value %.8g below .001',fm['pvalue']))
   old <- getwd(); setwd(dir)
   status <- system2(mpdemo,c('golden.inp','golden.out'),
     stdout='console.log',stderr='console.err',timeout=120)
   setwd(old)
   if (status != 0 || !file.exists(file.path(dir,'golden.out'))) stop(case$id,': Demo execution failed')
   mp <- parse_output(readLines(file.path(dir,'golden.out'),warn=FALSE))
-  fm <- fitMeasures(fit,c('npar','df','chisq'))
-  fail <- function(message) stop(case$id,': ',message,'; rules ',paste(case$rules,collapse=', '))
   if (mp$npar != fm['npar'] || mp$df != fm['df'])
     fail(sprintf('counts disagree: Mplus npar/df %s/%s, lavaan %s/%s',mp$npar,mp$df,fm['npar'],fm['df']))
   chi_error <- abs(mp$chisq-fm['chisq'])
@@ -241,7 +257,8 @@ for (i in seq_along(cases)) {
     sample_mean=unname(colMeans(data)),lavaan=list(rows=rows,
       implied_variables=colnames(implied$cov),implied_cov=unname(implied$cov),
       implied_mean=if(case$meanstructure) unname(implied$mean) else NULL,
-      npar=unname(fm['npar']),df=unname(fm['df']),chisq=unname(fm['chisq'])),
+      npar=unname(fm['npar']),df=unname(fm['df']),chisq=unname(fm['chisq']),
+      pvalue=unname(fm['pvalue'])),
     mplus=c(mp,list(chisq_absolute_error=unname(chi_error),
       minimum_estimate_margin=min(margins))))
   cat(sprintf('%s: npar=%d df=%d chi error=%.6g min estimate margin=%.6g\n',

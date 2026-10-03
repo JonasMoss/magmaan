@@ -36,6 +36,14 @@
   The [source inventory](../../grammar/mplus_source_inventory.md) and the
   increment-1 [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
   checked-in Demo probes supply independent behavioral evidence.
+  Independent increment-1 meaning/numeric evidence is frozen in
+  `cpp/tests/fixtures/mplus/golden.json` by `regen_oracle_mplus.R`: 13
+  hand-written paired models fitted to identical complete observations by
+  pinned lavaan and the Mplus 9.1 Demo. Exact parameter-count/df checks and
+  fixed chi-square/printed-estimate tolerances gate serialization; negative
+  lavaan variances and population-fit p-values below 0.001 stop generation.
+  The fixture includes explicit rows, starts, expected-information SEs and
+  sample/implied moments; C++ consumer gates await the lowering increment.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

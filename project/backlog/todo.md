@@ -1169,6 +1169,15 @@ carry the label `mplus`.
   later-increment boundaries. Independent rule tests and the 100-variant
   Demo reader gate encode the deliberate LX02, NM02, MS11 and CL11 deviations;
   MODEL statement parsing/lowering belongs to TASK-51.2.
+- [x] **S/M — increment-1 independent golden fixtures** (2026-10-03).
+  `cpp/tests/tools/regen_oracle_mplus.R` writes 13 hand-written paired
+  Mplus/lavaan models to `cpp/tests/fixtures/mplus/golden.json`: explicit
+  partables, starts, N-divisor moments, estimates, expected SEs and implied
+  moments. Mplus 9.1 Demo agrees on parameter counts, df, chi-square and
+  every printed estimate within the fixed tolerances. Population-quality
+  gates reject negative variances and chi-square p-values below 0.001;
+  regeneration is byte-for-byte deterministic. C++ consumption belongs to
+  the increment-1 lowering card (TASK-51.2).
 - [ ] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,
