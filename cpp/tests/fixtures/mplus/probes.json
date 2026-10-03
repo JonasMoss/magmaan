@@ -34255,5 +34255,784 @@
         ]
       }
     }
+  },
+  "P-DA3": {
+    "settles": "DA02",
+    "variants": {
+      "no_means": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3; ",
+        "data": "TYPE = COVARIANCE  ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58048,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 500
+          }
+        ],
+        "free_parameters": [
+          6
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2",
+              "Y3"
+            ]
+          },
+          {
+            "role": "Continuous latent variables",
+            "variables": [
+              "F"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 1
+              },
+              "Y3": {
+                "F": 2
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3"],
+            "rows": {
+              "Y1": {
+                "Y1": 3
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 4
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 5
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 6
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 0.865
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 0.93
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.642
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 0.896
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 1.144
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.937
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "intercept": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3; [y1];",
+        "data": "TYPE = COVARIANCE  ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58048,
+        "note": null,
+        "status": "error",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [
+          "*** ERROR in DATA command"
+        ],
+        "warnings": [],
+        "diagnostics": [
+          {
+            "header": "*** ERROR in DATA command",
+            "message": "Means are required as part of summary data due to [] statements in the MODEL command."
+          }
+        ],
+        "observations": [],
+        "free_parameters": [],
+        "chi_square": [],
+        "variable_order": [],
+        "tech1": [],
+        "model_results": [],
+        "estimation_messages": [],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "factor_mean": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3; [f];",
+        "data": "TYPE = COVARIANCE  ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58048,
+        "note": null,
+        "status": "error",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [
+          "*** ERROR in DATA command"
+        ],
+        "warnings": [],
+        "diagnostics": [
+          {
+            "header": "*** ERROR in DATA command",
+            "message": "Means are required as part of summary data due to [] statements in the MODEL command."
+          }
+        ],
+        "observations": [],
+        "free_parameters": [],
+        "chi_square": [],
+        "variable_order": [],
+        "tech1": [],
+        "model_results": [],
+        "estimation_messages": [],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "with_means": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3; ",
+        "data": "TYPE = COVARIANCE MEANS ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58048,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 500
+          }
+        ],
+        "free_parameters": [
+          9
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2",
+              "Y3"
+            ]
+          },
+          {
+            "role": "Continuous latent variables",
+            "variables": [
+              "F"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "NU",
+            "columns": ["Y1", "Y2", "Y3"],
+            "rows": {
+              "vector": {
+                "Y1": 1,
+                "Y2": 2,
+                "Y3": 3
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 4
+              },
+              "Y3": {
+                "F": 5
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3"],
+            "rows": {
+              "Y1": {
+                "Y1": 6
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 7
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 8
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "ALPHA",
+            "columns": "F",
+            "rows": {
+              "vector": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 9
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 0.866
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 0.93
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Intercepts",
+            "parameter": "Y1",
+            "estimate": -0.087
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Intercepts",
+            "parameter": "Y2",
+            "estimate": -0.076
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Intercepts",
+            "parameter": "Y3",
+            "estimate": -0.03
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.642
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 0.896
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 1.144
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.937
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      }
+    }
+  },
+  "P-DA4": {
+    "settles": "DA02",
+    "variants": {
+      "unit": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3;",
+        "data": "TYPE = CORRELATION  ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58049,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 500
+          }
+        ],
+        "free_parameters": [
+          6
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2",
+              "Y3"
+            ]
+          },
+          {
+            "role": "Continuous latent variables",
+            "variables": [
+              "F"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 1
+              },
+              "Y3": {
+                "F": 2
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3"],
+            "rows": {
+              "Y1": {
+                "Y1": 3
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 4
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 5
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 6
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 1.035
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 0.91
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.323
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 0.675
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 0.652
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.73
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "sd": {
+        "variable": "NAMES = y1 y2 y3;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3;",
+        "data": "TYPE = CORRELATION STDEVIATIONS ; NOBSERVATIONS = 500;",
+        "title": null,
+        "seed": 58049,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 500
+          }
+        ],
+        "free_parameters": [
+          6
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2",
+              "Y3"
+            ]
+          },
+          {
+            "role": "Continuous latent variables",
+            "variables": [
+              "F"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 1
+              },
+              "Y3": {
+                "F": 2
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3"],
+            "rows": {
+              "Y1": {
+                "Y1": 3
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 4
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 5
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 6
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 1.079
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 0.855
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.483
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 1.007
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 1.057
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.961
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      }
+    }
   }
 }

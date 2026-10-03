@@ -181,8 +181,35 @@ and zero entries in `LatentNames::row_user` before the partable projection.
 Repeated group sections apply cumulatively in source order. Changes to the
 variable-role sets in a group section are rejected: the shared role contract
 cannot preserve group-specific indicator/predictor/dependent classifications.
-The data adapter rejects unlisted codes with their row counts; filter in R
-before fitting, because Mplus would drop them.
+`mplus_data()` drops unlisted codes and reports their row counts. Direct
+raw-data fitting still rejects unlisted codes; filter explicitly or use the reader.
+
+Increment 5 stores a typed `MplusDataPlan` in `MplusInput` and `api::MplusModel`;
+lab specs expose it as `$mplus_data_plan` and retain the input directory for
+working-directory-first relative FILE resolution. Separate `FILE (label) =`
+entries define groups in statement order; summary `NGROUPS` defines g1, g2, ... .
+These groups have empty codes, label-valued triple group labels, and reserved
+`.mplus_group` metadata. For individual file groups the reader creates that
+column with the source labels. Group lowering otherwise follows the same
+invariance, provenance and reference-group rules as GROUPING, with the first
+declared file or summary group as reference. FILE groups and NGROUPS cannot
+be combined with GROUPING; summary inputs require NOBSERVATIONS per group.
+
+Summary TYPE without MEANS lowers no intercept/mean rows; explicit bracket
+mentions require MEANS (Demo P-DA3). CORRELATION without STDEVIATIONS returns
+unit-variance covariance with a note (P-DA4). Summary moments use divisor N,
+without lavaan's default covariance rescaling. FREE and bounded fixed FORMAT
+operations (Fw.d or Fw, w.d, X, Tn, /, repeats and nested groups) are parsed by
+C++; the R reader executes them and compares MISSING flags after decimal
+scaling. Global symbols are `MISSING = .`, `*`, or `BLANK`; numeric flags use
+NAMES lists/ALL and ranges. Fixed blanks without BLANK missing read as zero.
+NOBSERVATIONS limits individual observations and is reported. LISTWISE and
+analysis-sample deletion are reported but left to fitting conventions.
+
+| Data rules | Evidence |
+| --- | --- |
+| CL02–CL03, CL09, MG01–MG03, DA01–DA06 | Typed-plan/parser/API units; independently written R frames/matrices; 25 Demo data cases / 28 group moment comparisons; P-DA1–P-DA4; single/multigroup corpus data-to-fit round trips |
+
 
 ### Continuous group coverage
 

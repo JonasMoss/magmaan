@@ -1,0 +1,203 @@
+{
+  "version": "Mplus 9.1 Demo",
+  "covariance_divisor": "N",
+  "printed_tolerance": 0.00050001,
+  "comparisons": [
+    {
+      "case": "free",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "free_extra",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "free_wrapped",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "free_nobservations",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "fixed_repeat",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "fixed_tab",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "fixed_records",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "fixed_explicit",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_star",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_dot",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_blank",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_numeric",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_scaled",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "missing_range",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "cov_FALSE_FALSE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "cov_FALSE_TRUE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "corr_FALSE_FALSE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 0.000197180256555018
+    },
+    {
+      "case": "corr_FALSE_TRUE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 1.4210854715202e-14
+    },
+    {
+      "case": "cov_TRUE_FALSE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "cov_TRUE_TRUE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "corr_TRUE_FALSE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 0.000197180256555018
+    },
+    {
+      "case": "corr_TRUE_TRUE",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": null,
+      "max_covariance_error": 1.4210854715202e-14
+    },
+    {
+      "case": "summary_groups",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "summary_groups",
+      "group": 2,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 0
+    },
+    {
+      "case": "file_groups",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "file_groups",
+      "group": 2,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "group_codes",
+      "group": 1,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    },
+    {
+      "case": "group_codes",
+      "group": 2,
+      "n": 5,
+      "max_mean_error": 0,
+      "max_covariance_error": 8.88178419700125e-16
+    }
+  ]
+}

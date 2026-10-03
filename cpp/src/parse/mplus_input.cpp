@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -223,7 +224,7 @@ class Reader {
       const auto parsed=std::from_chars(numeric.data(),numeric.data()+numeric.size(),code);
       if (numeric.empty() || parsed.ec!=std::errc{} || parsed.ptr!=numeric.data()+numeric.size() || !std::isfinite(code) || std::trunc(code)!=code || std::abs(code)>2147483647) { fail("non-integral or invalid grouping code; Mplus requires integer grouping values and suggests DEFINE, which magmaan does not import"); return; }
       while (i<body.size() && blank(body[i])) ++i;
-      if (i==body.size() || body[i]!='=') { fail("count, value list or range without labels; Mplus determines count-form g1, g2 labels from ascending data values (data increment 5)"); return; }
+      if (i==body.size() || body[i]!='=') { fail("count, value list or range without labels; Mplus determines count-form g1, g2 labels from ascending data values"); return; }
       ++i; while (i<body.size() && blank(body[i])) ++i;
       const auto label_begin=i;
       while (i<body.size() && (letter(body[i]) || digit(body[i]) || body[i]=='_')) ++i;
@@ -353,6 +354,173 @@ class Reader {
     return result;
   }
 
+  // production: format_value ::= 'FREE' | format_group | format_item+
+  void data_format(std::string_view value, SourceSpan at) {
+    if (upper(value) == "FREE") return;
+    std::size_t i = 0;
+    const auto fail = [&] { reject(at,"DA01","malformed FORMAT '" + std::string(value) + "'; Mplus reads Fw.d/w.d, X, Tn, / and repeated groups; write FREE or a valid bounded fixed format instead"); };
+    const auto skip = [&] { while (i<value.size() && (blank(value[i]) || value[i]==',')) ++i; };
+    const auto integer = [&]() -> int {
+      const auto start=i;
+      while (i<value.size() && digit(value[i])) ++i;
+      int result=0;
+      if (start==i) return -1;
+      const auto p=std::from_chars(value.data()+start,value.data()+i,result);
+      return p.ec==std::errc{} && result<=10000 ? result : -1;
+    };
+    // production: format_group ::= '(' format_item (','? format_item)* ')'
+    const auto group = [&](auto&& self, bool nested, int depth) -> bool {
+      if (depth>32) return false;
+      while (true) {
+        skip();
+        if (i==value.size()) return !nested;
+        if (value[i]==')') { if (!nested) return false; ++i; return true; }
+        int repeat=1, width=-1;
+        const bool prefix=digit(value[i]);
+        if (prefix) { repeat=integer(); if (repeat<1) return false; }
+        if (i==value.size()) return false;
+        const auto begin=out.data_plan.format.size();
+        auto c=value[i]; if(c>='a' && c<='z') c=static_cast<char>(c-'a'+'A');
+        if (c=='(') { ++i; if (!self(self,true,depth+1) || out.data_plan.format.size()==begin) return false; }
+        else if (c=='X') { ++i; out.data_plan.format.push_back({MplusFormatKind::Skip,repeat,0}); repeat=1; }
+        else if (c=='T') { if(prefix) return false; ++i; width=integer(); if(width<1) return false; out.data_plan.format.push_back({MplusFormatKind::Tab,width,0}); }
+        else if (c=='/') { ++i; out.data_plan.format.push_back({MplusFormatKind::Record,0,0}); }
+        else {
+          if(c=='F') { ++i; width=integer(); }
+          else if(c=='.' && prefix) {width=repeat;repeat=1;}
+          else return false;
+          if(width<1) return false;
+          int decimals=0;
+          if(i<value.size() && value[i]=='.') {++i;decimals=integer();}
+          else if(c!='F') return false;
+          if(decimals<0 || decimals>width) return false;
+          out.data_plan.format.push_back({MplusFormatKind::Field,width,decimals});
+        }
+        const auto length=out.data_plan.format.size()-begin;
+        if (length*static_cast<std::size_t>(repeat)>100000-out.data_plan.format.size()) return false;
+        for(int r=1;r<repeat;++r) for(std::size_t j=0;j<length;++j) out.data_plan.format.push_back(out.data_plan.format[begin+j]);
+      }
+    };
+    if(!group(group,false,0) || out.data_plan.format.empty() ||
+        std::none_of(out.data_plan.format.begin(),out.data_plan.format.end(),[](const auto& f){return f.kind==MplusFormatKind::Field;})) fail();
+  }
+
+  // production: missing_value ::= '.' | '*' | 'BLANK' | (('ALL' | variable_range+) '(' missing_numbers ')')+
+  void data_missing(std::string_view value, SourceSpan at) {
+    const auto fail = [&] { reject(at,"DA03","malformed MISSING '" + std::string(value) + "'; Mplus accepts one global symbol or numeric flags per NAMES list/ALL; write * or ALL (-9) with optional numeric ranges instead"); };
+    auto text=upper(value);
+    if(text=="." || text=="*" || text=="BLANK") {out.data_plan.missing_symbol=text;return;}
+    std::size_t i=0;
+    while(i<value.size()) {
+      while(i<value.size() && (blank(value[i]) || value[i]==',')) ++i;
+      if(i==value.size()) break;
+      const auto open=value.find('(',i), close=value.find(')',open);
+      if(open==std::string_view::npos || close==std::string_view::npos) {fail();return;}
+      auto vars=items(value.substr(i,open-i),at,"DA03");
+      MplusMissingRule rule;
+      // Keep variable ranges until the whole NAMES schema is available.
+      for(const auto& v:vars) rule.variables.push_back(v.first+(v.last.empty()?"":"-"+v.last));
+      auto numbers=value.substr(open+1,close-open-1);
+      std::size_t j=0;
+      const auto number = [&]() -> std::optional<double> {
+        while(j<numbers.size() && blank(numbers[j])) ++j;
+        const auto begin=j;
+        if(j<numbers.size() && (numbers[j]=='-' || numbers[j]=='+')) ++j;
+        while(j<numbers.size() && (digit(numbers[j]) || numbers[j]=='.')) ++j;
+        double n=0; auto token=numbers.substr(begin,j-begin);
+        if(token.starts_with('+')) token.remove_prefix(1);
+        auto p=std::from_chars(token.data(),token.data()+token.size(),n);
+        if(token.empty() || p.ec!=std::errc{} || p.ptr!=token.data()+token.size() || !std::isfinite(n)) return {};
+        return n;
+      };
+      while(j<numbers.size()) {
+        while(j<numbers.size() && (blank(numbers[j]) || numbers[j]==',')) ++j;
+        if(j==numbers.size()) break;
+        auto a=number(); if(!a) {fail();return;}
+        const auto after_number=j;
+        while(j<numbers.size() && blank(numbers[j])) ++j;
+        const bool separated=j>after_number;
+        if(j<numbers.size() && numbers[j]=='-') {
+          ++j; auto b=number(); if(!b || *b<*a || *b-*a>100000 || std::trunc(*b-*a)!=*b-*a) {fail();return;}
+          for(double n=*a;n<=*b;n+=1) rule.values.push_back(n);
+        } else rule.values.push_back(*a);
+        if(j<numbers.size() && !separated && !blank(numbers[j]) && numbers[j]!=',') {fail();return;}
+      }
+      if(rule.variables.empty() || rule.values.empty()) {fail();return;}
+      out.data_plan.missing.push_back(std::move(rule));i=close+1;
+    }
+    if(out.data_plan.missing.empty()) fail();
+  }
+
+  // production: data_file ::= ('(' group_label ')' assign)? file_path
+  void data_file(std::string_view value, SourceSpan at) {
+    MplusDataFile file;
+    if(value.starts_with('(')) {
+      const auto close=value.find(')'); if(close==std::string_view::npos) {reject(at,"CL02","missing FILE label terminator; Mplus expects FILE (label) = path; write that form instead");return;}
+      file.label=std::string(value.substr(1,close-1));
+      if(!valid_name(file.label)) reject(at,"MG01","invalid FILE group label; Mplus requires a name; write FILE (g1) = path instead");
+      value.remove_prefix(close+1);
+      while(!value.empty() && blank(value.front())) value.remove_prefix(1);
+      if(value.starts_with('=')) value.remove_prefix(1);
+      else if(upper(value).starts_with("IS ")) value.remove_prefix(3);
+      else {reject(at,"CL02","FILE label lacks assignment; Mplus expects FILE (label) = path; add = instead");return;}
+    }
+    while(!value.empty() && blank(value.front())) value.remove_prefix(1);
+    while(!value.empty() && blank(value.back())) value.remove_suffix(1);
+    if(value.empty()) {reject(at,"CL02","empty FILE path; Mplus reads a separate data file; supply a path instead");return;}
+    if(value.front()=='\'' || value.front()=='"') {
+      if(value.size()<2 || value.back()!=value.front()) {reject(at,"CL02","unclosed FILE quote; Mplus quotes paths with blanks; close the quote instead");return;}
+      value=value.substr(1,value.size()-2);
+    } else if(value.find_first_of(" \t\r\n")!=std::string_view::npos) reject(at,"CL02","unquoted FILE path with blanks; Mplus requires quotes; quote the path instead");
+    file.path=value;out.data_plan.files.push_back(std::move(file));
+  }
+
+  // production: data_type ::= ('INDIVIDUAL' | 'COVARIANCE' | 'CORRELATION' | 'FULLCOV' | 'FULLCORR' | 'MEANS' | 'STDEVIATIONS')+
+  void validate_data() {
+    auto& plan=out.data_plan;const auto at=span(0,0);
+    const auto fail=[&](std::string rule,std::string message){reject(at,std::move(rule),std::move(message)+"; Mplus requires a consistent data description; write one matching FILE/TYPE/NOBSERVATIONS plan instead");};
+    if(!plan.files.empty()) {
+      plan.file_groups=!plan.files.front().label.empty();
+      std::set<std::string> labels;
+      for(const auto& f:plan.files) if(f.label.empty()==plan.file_groups || (plan.file_groups && !labels.insert(upper(f.label)).second)) fail("MG01","mixed or duplicate FILE group labels");
+      if(!plan.file_groups && plan.files.size()!=1) fail("CL02","repeated unlabelled FILE");
+      if(plan.file_groups) {
+        if(grouping) fail("MG01","FILE groups combined with GROUPING");
+        if(data_groups && plan.n_groups!=static_cast<int>(plan.files.size())) fail("MG02","NGROUPS disagrees with FILE count");
+        plan.n_groups=static_cast<int>(plan.files.size());
+        for(const auto& f:plan.files) out.groups.push_back({f.label,""});
+      }
+    }
+    if(data_groups && !plan.file_groups) {
+      if(plan.matrix_type.empty() || grouping) fail("MG02","NGROUPS without summary data or combined with GROUPING");
+      else for(int i=1;i<=plan.n_groups;++i) out.groups.push_back({"g"+std::to_string(i),""});
+    }
+    if(plan.file_groups || (data_groups && !out.groups.empty())) {
+      out.grouping_variable=".mplus_group";
+      if(std::any_of(out.names.begin(),out.names.end(),[](const auto& n){return upper(n)==".MPLUS_GROUP";})) fail("MG01","reserved .mplus_group column in NAMES");
+    }
+    if(!plan.matrix_type.empty()) {
+      if(!plan.format.empty()) fail("DA02","fixed FORMAT with summary data");
+      if(plan.n_observations.size()!=static_cast<std::size_t>(plan.n_groups)) fail("DA02","summary NOBSERVATIONS count differs from group count");
+      out.nomeanstructure=!plan.means;
+    } else if(plan.means || plan.standard_deviations) fail("CL03","MEANS/STDEVIATIONS without a covariance or correlation type");
+    if(plan.standard_deviations && plan.matrix_type!="CORRELATION" && plan.matrix_type!="FULLCORR") fail("CL03","STDEVIATIONS without correlation");
+    if(!plan.n_observations.empty() && plan.n_observations.size()!=static_cast<std::size_t>(plan.n_groups)) fail("CL03","NOBSERVATIONS count differs from data group count");
+    if(plan.missing_symbol=="BLANK" && plan.format.empty()) fail("DA03","BLANK missing flag with free format");
+    for(auto& rule:plan.missing) {
+      std::vector<std::string> variables;
+      for(const auto& v:rule.variables) {
+        if(upper(v)=="ALL") {variables.insert(variables.end(),out.names.begin(),out.names.end());continue;}
+        const auto dash=v.find('-'); auto first=v.substr(0,dash),last=dash==std::string::npos?first:v.substr(dash+1);
+        auto a=std::find_if(out.names.begin(),out.names.end(),[&](const auto& n){return upper(n)==upper(first);});
+        auto b=std::find_if(out.names.begin(),out.names.end(),[&](const auto& n){return upper(n)==upper(last);});
+        if(a==out.names.end() || b==out.names.end() || b<a) {fail("DA03","unknown or reversed MISSING variable range");continue;}
+        variables.insert(variables.end(),a,b+1);
+      }
+      rule.variables=std::move(variables);
+    }
+  }
+
   // production: option ::= option_name (assign? option_value)? ';'
   void option(const Section& section, std::size_t begin, std::size_t end, std::set<std::string>& seen) {
     while (begin < end && blank(clean[begin])) ++begin;
@@ -371,7 +539,8 @@ class Reader {
       reject(at, "LX03", "unknown or ambiguous option '" + raw + "'; Mplus resolves complete names or unique prefixes of at least four letters; accepted options: " + accepted + "; write a complete accepted name instead"); return;
     }
     const auto spec = *std::find_if(table.begin(), table.end(), [&](const OptionSpec& s) { return s.name == name; });
-    if (!seen.insert(name).second) reject(at, "LX01", "repeated option: " + name);
+    if (spec.klass==MplusClass::DataDescription) diagnostic(spec.klass,at,spec.rule,name+" is parsed into the data plan; mplus_data() reads it");
+    if (!seen.insert(name).second && !(section.command == "DATA" && name == "FILE")) reject(at, "LX01", "repeated option: " + name);
     auto value_begin = name_end;
     while (value_begin < end && blank(clean[value_begin])) ++value_begin;
     if (value_begin < end && clean[value_begin] == '=') ++value_begin;
@@ -391,9 +560,9 @@ class Reader {
     }
     auto after_name = name_end;
     while (after_name < end && blank(clean[after_name])) ++after_name;
-    if (section.command == "DATA" && name == "FILE" && after_name < end && clean[after_name] == '(') {
-      data_groups = true;
-      reject(at, "CL02", "group FILE option not yet supported; planned for increment 5; supply a single data set in R instead"); return;
+    if (section.command == "DATA" && name == "FILE") {
+      data_file(std::string_view(clean).substr(after_name,end-after_name).starts_with('(') ?
+          std::string_view(clean).substr(after_name,end-after_name) : value,at); return;
     }
     if (name == "PARAMETERIZATION" && section.command == "ANALYSIS") {
       const auto values = settings(value, "DELTA THETA LOGIT LOGLINEAR/LOGLIN PROBABILITY/PROB RESCOVARIANCES/RESCOV", at, "CL22");
@@ -413,14 +582,38 @@ class Reader {
       if (name == "NAMES") names(value, at);
       else if (name == "USEVARIABLES") { has_use = true; use_span = at; use = items(value, at, "NM03"); }
     }
-    if (section.command == "DATA" && name == "NGROUPS") {
-      reject(at, "CL03", "summary/multigroup data not yet supported; planned for increment 5; supply summary moments in R instead"); return;
-    }
-    if (section.command == "DATA" && (name == "TYPE" || name == "LISTWISE")) {
-      const auto values = settings(value, name == "TYPE" ? "INDIVIDUAL/IND COVARIANCE/COVA CORRELATION/CORR FULLCOV FULLCORR MEANS STDEVIATIONS/STD MONTECARLO/MONTE IMPUTATION/IMP" : "ON OFF", at, spec.rule);
-      if (name == "LISTWISE" && values.size() != 1) reject(at, spec.rule, "expected one " + name + " setting");
-      for (const auto& v : values) if (name == "TYPE" && v != "INDIVIDUAL")
-        reject(at, v == "MONTECARLO" || v == "IMPUTATION" ? "CL04" : "CL03", v + (v == "MONTECARLO" || v == "IMPUTATION" ? " is outside scope" : " not yet supported; planned for increment 5; supply the summary moments in R instead"));
+    if(section.command == "VARIABLE" && name == "MISSING") {data_missing(value,at);return;}
+    if(section.command == "DATA") {
+      if(name == "FORMAT") {data_format(value,at);return;}
+      if(name == "NGROUPS" || name == "NOBSERVATIONS") {
+        std::vector<std::int32_t> counts;
+        for(const auto& word:words(value)) {
+          int n=0;auto p=std::from_chars(word.data(),word.data()+word.size(),n);
+          if(p.ec!=std::errc{} || p.ptr!=word.data()+word.size() || n<1 || (name=="NGROUPS" && n>1000)) reject(at,"CL03","invalid "+name+"; Mplus requires positive integer counts; write one count per group instead");
+          else counts.push_back(n);
+        }
+        if(counts.empty()) reject(at,"CL03","empty "+name+"; Mplus requires counts; supply positive integers instead");
+        if(name=="NGROUPS") {if(counts.size()!=1) reject(at,"MG02","NGROUPS requires one count; write one positive integer instead");else out.data_plan.n_groups=counts[0];}
+        else out.data_plan.n_observations=std::move(counts);
+        return;
+      }
+      if(name=="TYPE" || name=="LISTWISE") {
+        const auto values=settings(value,name=="TYPE"?"INDIVIDUAL/IND COVARIANCE/COVA CORRELATION/CORR FULLCOV FULLCORR MEANS STDEVIATIONS/STD MONTECARLO/MONTE IMPUTATION/IMP":"ON OFF",at,spec.rule);
+        if(name=="LISTWISE") {if(values.size()!=1) reject(at,"CL03","LISTWISE requires one setting; write ON or OFF instead");else out.data_plan.listwise=values[0]=="ON";}
+        else {
+          bool individual=false;
+          for(const auto& v:values) {
+            if(v=="MONTECARLO" || v=="IMPUTATION") reject(at,"CL04",v+" reads multiple datasets in Mplus; magmaan does not import them; supply one INDIVIDUAL dataset instead");
+            else if(v=="MEANS") out.data_plan.means=true;
+            else if(v=="STDEVIATIONS") out.data_plan.standard_deviations=true;
+            else if(v=="INDIVIDUAL") individual=true;
+            else if(!out.data_plan.matrix_type.empty()) reject(at,"CL03","multiple summary matrix types; Mplus requires one; write COVARIANCE or CORRELATION instead");
+            else out.data_plan.matrix_type=v;
+          }
+          if(individual && values.size()!=1) reject(at,"CL03","INDIVIDUAL combined with summary TYPE; Mplus requires one data family; write INDIVIDUAL alone instead");
+        }
+        return;
+      }
     }
     if (section.command == "ANALYSIS") {
       if (name == "TYPE") {
@@ -459,7 +652,7 @@ class Reader {
         }
       }
     }
-    if (spec.klass == MplusClass::DataDescription || spec.klass == MplusClass::Reported)
+    if (spec.klass == MplusClass::Reported)
       diagnostic(spec.klass, at, spec.rule, name + " is recognized but not imported" +
           (name == "ADDFREQUENCY" ? "; changes polychoric inputs" : ""));
   }
@@ -491,6 +684,7 @@ class Reader {
     for (const auto& section : sections) if (section.qualifier.empty() &&
         (section.command == "DATA" || section.command == "VARIABLE" || section.command == "ANALYSIS" ||
          section.command == "OUTPUT" || section.command == "SAVEDATA" || section.command == "PLOT")) options(section);
+    validate_data();
     for (const auto& section : sections) {
       const auto at = span(section.begin, section.end);
       const auto& c = section.command;
@@ -517,7 +711,7 @@ class Reader {
         }
       }
     }
-    if (!out.grouping_variable.empty()) {
+    if (!out.grouping_variable.empty() && out.grouping_variable!=".mplus_group") {
       const auto name=std::find_if(out.names.begin(),out.names.end(),[&](const auto& n) {return upper(n)==upper(out.grouping_variable);});
       if (name==out.names.end()) reject(span(0,0),"MG03","grouping variable is absent from NAMES; Mplus uses the data schema; add it to NAMES instead");
       else out.grouping_variable=*name;
@@ -534,7 +728,7 @@ class Reader {
         reject(span(begin + 90, end), "LX02", "content extends beyond column 90; Mplus truncates physical lines, which magmaan rejects; wrap the statement before column 91");
     }
     select();
-    if (out.nomeanstructure && out.information != "EXPECTED")
+    if (out.nomeanstructure && out.data_plan.matrix_type.empty() && out.information != "EXPECTED")
       reject(nomean_span, "MS11", "Mplus ignores NOMEANSTRUCTURE under its default observed information and keeps the means; magmaan does not reproduce this ignored setting; add INFORMATION = EXPECTED; or remove NOMEANSTRUCTURE");
   }
 

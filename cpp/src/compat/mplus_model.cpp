@@ -71,7 +71,7 @@ spec::BuildOptions build_options(const parse::MplusInput& input) {
   if (!input.groups.empty()) {
     options.n_groups=static_cast<std::int32_t>(input.groups.size());
     options.group_var=input.grouping_variable;
-    for(const auto& group:input.groups) options.group_labels.push_back(group.code);
+    for(const auto& group:input.groups) options.group_labels.push_back(group.code.empty() ? group.label : group.code);
   }
   options.auto_var = false;
   options.auto_cov_lv_x = false;

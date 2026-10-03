@@ -57,6 +57,15 @@
   1e-5. Lab specs retain grouping on rebuild/serialization and reject unlisted
   data codes with row counts. Same-manifest input acceptance rises 253→291
   for the reader and 189→217 for MODEL lowering.
+  Increment 5 parses a typed data plan and exposes `mplus_data()` for free/fixed
+  individual files and summary covariance/correlation/means/SD. FILE groups use
+  labels in declaration order and reserved `.mplus_group`; NGROUPS summaries
+  use g1, g2, ... . Summary data without MEANS omit mean rows and reject explicit
+  means; correlations without SD have unit variances. Missing flags compare
+  scaled values, NOBSERVATIONS limits raw records, and unlisted GROUPING codes
+  are dropped with counts. LISTWISE/sample-selection rules are reported only.
+  Independent frames/matrices, Demo printed moments and two corpus fit round
+  trips gate the reader; summary covariances retain divisor N.
   Independent increment-1 meaning/numeric evidence is frozen in
   `cpp/tests/fixtures/mplus/golden.json` by `regen_oracle_mplus.R`: 13
   hand-written paired models fitted to identical complete observations by

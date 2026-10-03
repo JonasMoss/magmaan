@@ -170,7 +170,17 @@ make_data <- function(p, seed) {
   x
 }
 write_data <- function(p, x, path) {
-  if (p$kind == 'fixed_special') {
+  if (p$kind == 'summary') {
+    S <- crossprod(scale(x,scale=FALSE))/nrow(x)
+    lines <- character()
+    if(p$variant=='with_means') lines <- c(lines,paste(colMeans(x),collapse=' '))
+    if(p$id=='P-DA4') {
+      if(p$variant=='sd') lines <- c(lines,paste(sqrt(diag(S)),collapse=' '))
+      S <- cov2cor(S)
+    }
+    lines <- c(lines,vapply(seq_len(ncol(S)),function(j) paste(S[j,seq_len(j)],collapse=' '),''))
+    writeLines(lines,path)
+  } else if (p$kind == 'fixed_special') {
     # F2.1 supplies an implied decimal: field 99 is 9.9; field -9 is -0.9.
     fields <- matrix(sprintf('%02d', sample(10:89, length(x), replace = TRUE)), nrow(x))
     fields[1:50,1] <- if (startsWith(p$variant,'-')) '-9' else '99'
@@ -299,6 +309,12 @@ inventory <- readLines(file.path(root,'project/grammar/mplus_source_inventory.md
 probe_lines <- grep('^\\| P-',inventory,value=TRUE)
 mg('P-MG13', 'group_only_regression', 'f BY y1-y3;\nMODEL g2: y4 ON x1;', 'y1 y2 y3 y4 x1')
 mg('P-MG13', 'group_only_indicator', 'f BY y1-y3;\nMODEL g2: f BY y4;', 'y1 y2 y3 y4')
+for (v in c('no_means','intercept','factor_mean','with_means')) add('P-DA3', v,
+  paste('f BY y1-y3;', switch(v,intercept='[y1];',factor_mean='[f];','')),
+  data=paste('TYPE = COVARIANCE',if(v=='with_means') 'MEANS' else '', '; NOBSERVATIONS = 500;'),kind='summary')
+for (v in c('unit','sd')) add('P-DA4',v,
+  data=paste('TYPE = CORRELATION',if(v=='sd') 'STDEVIATIONS' else '', '; NOBSERVATIONS = 500;'),kind='summary')
+
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))

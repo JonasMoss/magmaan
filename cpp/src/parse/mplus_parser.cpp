@@ -152,6 +152,10 @@ class Lowerer {
   // production: model_statement ::= relation | variance_statement | mean_statement | scale_statement | bar_statement | section_marker
   void statement(const std::vector<Token>& ts) {
     if (ts.empty()) return;
+    if (!out.input.data_plan.matrix_type.empty() && !out.input.data_plan.means &&
+        std::any_of(ts.begin(),ts.end(),[](const auto& t){return t.text=="[" || t.text=="$";})) {
+      reject(ts.front().span,"DA02","an explicit intercept, mean or threshold with summary data without MEANS; Mplus requires MEANS for these parameters (P-DA3); add MEANS and supply a mean vector instead");return;
+    }
     for (const auto& t : ts) {
       if (t.text == "{" || t.text == "$") { reject(t.span,t.text == "{" ? "CT04" : "CT02","found '"+t.text+"'; Mplus specifies categorical scale factors or thresholds; not yet supported, planned for increment 3; use a continuous model instead"); return; }
       if (t.text == "|") { reject(t.span,"GR01","found '|'; Mplus defines growth or random effects; not yet supported, planned for increment 4; write explicit BY and ON statements instead"); return; }

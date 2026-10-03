@@ -1,5 +1,9 @@
 # magmaanlab 0.2.0 (in development)
 
+- `mplus_data()` reads free/fixed individual and summary data through a typed
+  C++ data plan, including missing flags and FILE/NGROUPS groups. It reports
+  NOBSERVATIONS and dropped GROUPING codes; LISTWISE remains a fitting choice.
+
 - FIML fits now receive the ordinary inference policy: observed-bread
   casewise-score sandwich covariance, global and nested score and LR tests,
   each calibrated with SB and PEBA4. Score sensitivity is observed with an

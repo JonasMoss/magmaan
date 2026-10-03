@@ -676,6 +676,43 @@ errors; the
 full suite retains its optional-test skips and existing two-level admissibility
 warnings. No tolerance was widened and no oracle exemption was added.
 
+### Mplus data files (TASK-55)
+
+`MplusDataPlan` carries ordered FILE references, expanded FORMAT operations,
+TYPE, NOBSERVATIONS/NGROUPS/LISTWISE and MISSING flags through the parser and
+API. Separate-file and summary groups use source labels and `.mplus_group`;
+GROUPING continues to use integer codes. The reader drops unlisted codes with
+counts but leaves LISTWISE and estimation-sample rules unapplied.
+
+`regen_mplus_probes.R` adds P-DA3/P-DA4 (six variants; 49 probes/116 variants
+in total), preserving every previous fixture entry. Mplus 9.1 omits NU/ALPHA
+for summary inputs without MEANS, rejects explicit intercept/factor mean
+mentions without MEANS, and accepts correlation without SD as unit covariance.
+
+`check_mplus_data.R` generates synthetic data locally and gates 25 Demo data
+cases / 28 group comparisons: wrapping/extra fields/NOBSERVATIONS; fixed repeats,
+skips/tabs/record breaks/explicit and implied decimals; global symbols, numeric
+and range missing flags; triangular/full covariance/correlation, means/SD;
+NGROUPS, FILE groups and dropped GROUPING codes. Derived evidence is frozen in
+`mplus/data_summary.json`, consumed by C++ tests. N is exact; means/covariances
+agree within half the Demo's three-decimal printed unit (0.00050001). Synthetic
+all-missing rows are explicitly excluded by the comparison harness to reproduce
+DA05; the reader retains them. Both raw and summary covariances use divisor N.
+A live lavaan sample.cov gate disables its default covariance rescaling.
+
+Independent R frames/matrices gate reader behavior and shape/file errors.
+The free-format raw.csv round trips for User's Guide ex5.1 (single group) and
+ex5.14 (multiple groups) reproduce direct-data fit estimates at 1e-8. The existing
+end-to-end corpus gate remains 22 accepted/matched of 68 cases, zero failures.
+The original-input sweep classifies all 2,440 files: 389 reader and 310 MODEL
+acceptances; the previously unreadable ex11.8imp.zip remains reported.
+
+Focused opt C++ checks pass 33 Mplus cases / 12,200 assertions and four API
+cases / 27 assertions. Full magmaanlab testthat passes 5,493 assertions with
+two existing admissibility warnings and two documented skips. Structural
+tracked-file and dependency-layering checks pass. No oracle exemptions or
+numeric-tolerance changes were introduced.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

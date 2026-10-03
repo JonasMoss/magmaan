@@ -1267,8 +1267,9 @@ carry the label `mplus`.
   inequalities onto existing constraint machinery; indirect effects as defined
   parameters. **Check:** as increment 1, plus a fit-path check that no
   accepted restriction is silently dropped.
-- [ ] **M — increment 5: data files.** Data plan in C++ (including FORMAT) and
-  `magmaanlab::mplus_data()`. Needs only increment 1. **Check:** free and
+- [x] **M — increment 5: data files.** Data plan in C++ (including FORMAT) and
+  `magmaanlab::mplus_data()`, FILE/summary groups and summary mean-structure
+  lowering. **Check:** free and
   fixed format, summary data and missing codes against independently written
   data frames.
 - [ ] **S/M — stability closeout.** Robustness sweep over every User's Guide

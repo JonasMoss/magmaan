@@ -112,6 +112,7 @@ private:
 
 struct MplusModel {
   Model model;
+  parse::MplusDataPlan data_plan;
   std::string grouping_variable;
   std::vector<parse::MplusGroup> groups;
   std::vector<parse::MplusDiagnostic> notes;

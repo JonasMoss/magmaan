@@ -9,15 +9,19 @@
 #' DEFINE, categorical outcomes, growth, MODEL CONSTRAINT,
 #' MODEL INDIRECT, mixtures, multilevel models, ESEM, unsupported name ranges
 #' and mixed conditioning on observed covariates are rejected with rule IDs
-#' and an explanation of what to write instead. Data descriptions are retained
-#' as notes; this function does not read the data file or run Mplus.
+#' and an explanation of what to write instead. Data descriptions are parsed into
+#' `$mplus_data_plan`; [mplus_data()] reads them. This constructor does not
+#' read the data file or run Mplus.
 #' GROUPING imports explicit integer code = label pairs, ordered by numeric code.
 #' Group MODEL sections override the overall model; repeated sections apply
 #' cumulatively. CONFIGURAL, METRIC and SCALAR accept one setting at a time.
 #' Group-only changes to variable roles are rejected; put the relation in the
 #' overall model and fix it in the other groups instead. Variance identification
 #' in a shortcut uses free first loadings and explicit factor variances at one.
-#' Unlisted data codes must be filtered in R before fitting.
+#' [mplus_data()] drops unlisted GROUPING codes with counts. Separate FILE
+#' groups retain source labels, use `.mplus_group`, and follow FILE order.
+#' Summary NGROUPS labels are g1, g2, ... . Summary data without MEANS
+#' have no mean structure and reject explicit means/intercepts.
 #' @param input One string containing the whole input text.
 #' @param file Path to an input file. Supply exactly one of input or file.
 #' @return A magmaan_model_spec with original mplus_source, a data.frame of
@@ -41,6 +45,8 @@ mplus_model <- function(input = NULL, file = NULL) {
   out <- as_magmaan_model_spec(parsed$partable)
   out$syntax <- parsed$syntax
   out$mplus_source <- input
+  out$mplus_data_plan <- parsed$data_plan
+  out$mplus_input_dir <- if (is.null(file)) NULL else dirname(normalizePath(file))
   out$mplus_notes <- parsed$notes
   out$group_var <- parsed$group_var
   out$group_labels <- parsed$group_labels
@@ -72,7 +78,7 @@ print.magmaan_mplus_model_spec <- function(x, ...) {
     counts <- table(codes[bad])
     stop("[MG03] unlisted GROUPING codes: ",
       paste(paste0(names(counts), " (", as.integer(counts), " rows)"), collapse = ", "),
-      "; Mplus drops those rows; magmaan requires you to filter them in R before fitting (data increment 5).",
+      "; Mplus drops those rows; magmaan requires you to filter them in R before fitting, or to use mplus_data().",
       call. = FALSE)
   }
   invisible(NULL)

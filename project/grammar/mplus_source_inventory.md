@@ -71,7 +71,7 @@ bold stem must be written in full.
 | ID | Command / option | Class | Evidence and notes |
 | --- | --- | --- | --- |
 | CL01 | TITLE | E | 563. Text is reported. |
-| CL02 | DATA: FILE | DD | 567. Quoted when the path has blanks; bare names are looked up locally, then beside the input. `FILE (label) =` per group also defines groups (MG01): later (increment 5). |
+| CL02 | DATA: FILE | DD | 567. Quoted when the path has blanks; bare names are looked up locally, then beside the input. `FILE (label) =` per group also defines groups (MG01): imported in FILE order by increment 5. |
 | CL03 | DATA: FORMAT, TYPE (INDIVIDUAL, COVARIANCE, CORRELATION, FULLCOV, FULLCORR, MEANS, STDEVIATIONS), NOBSERVATIONS, NGROUPS, LISTWISE | DD | 567–574. Stems: IND, COVA, CORR, STD; FULLCOV, FULLCORR, MEANS in full. NOBSERVATIONS with individual data keeps only the first N records and LISTWISE deletes cases: both change the sample and are reported. |
 | CL04 | DATA: TYPE = MONTECARLO, IMPUTATION; SWMATRIX | R | 571–574. Multiple data sets; two-level WLS. |
 | CL05 | DATA: VARIANCES | E | 575. Zero-variance check only. |
@@ -310,12 +310,16 @@ variants' parameter counts 38/34/30 and df 16/20/24.
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
-| DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT needs its own grammar production. |
+| DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT has its own bounded grammar production and typed plan; Fw without a decimal suffix means zero decimal places. |
 | DA02 | D, 570–571, 539–540 | Summary data are free-format: lower-triangular or full covariance or correlation matrices, means and standard deviations, each type starting on a new record; groups follow one another with NOBSERVATIONS per group and NGROUPS. Map to magmaan's sample-statistics input. |
-| DA03 | D, 601–603; P | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Flags compare with the value after FORMAT scaling: with F2.1 the field `99` reads as 9.9 and only the flag `9.9` matches; `-9` and `-9.0` are the same flag (P-DA2). |
+| DA03 | D, 601–603; P | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only; global symbol syntax has no parentheses) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Flags compare with the value after FORMAT scaling: with F2.1 the field `99` reads as 9.9 and only the flag `9.9` matches; `-9` and `-9.0` are the same flag (P-DA2). |
 | DA04 | D, 613 | Rows with an unlisted GROUPING value are excluded; the reader reports how many. |
 | DA05 | D, UG 443, 548 | In the analysis, cases missing on an x variable are deleted and the remaining missingness is handled by FIML. These are estimation-sample rules for the preset, not reader behavior. |
 | DA06 | P | Free format: an empty field between commas is an error; extra fields and observations wrapped over several records are accepted (P-DA1). |
+
+Increment 5 imports DA01–DA04/DA06 into `MplusDataPlan` and the lab reader;
+DA05 remains reported estimation policy. Fixed blanks not declared missing
+are zero (UG 601). FILE/NGROUPS groups are lowered with source labels.
 
 ## Probe list
 
@@ -384,6 +388,8 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-CN2 | CN05 | `y3 IND y2 y1 x1` versus `y3 IND y1 y2 x1`; `y IND f x` through a factor; continuous `y IND m x` | Effects printed |
 | P-DA1 | DA06 | Free-format records with `1,,3`, extra fields and wrapped observations | N and sample means |
 | P-DA2 | DA03 | `FORMAT = 3F2.1; MISSING = ALL (99);` versus `(9.9)`; `-9` versus `-9.0` | N and sample means |
+| P-DA3 | DA02 | COVARIANCE without MEANS, explicit intercept/factor mean, and with MEANS | TECH1 NU/ALPHA presence and DATA errors |
+| P-DA4 | DA02 | CORRELATION with and without STDEVIATIONS | Unit-variance covariance interpretation |
 
 
 ## Probe results (Mplus 9.1 Demo)
@@ -456,6 +462,8 @@ These observations do not resolve or change the inventory rules.
 | P-CN2 | CN05 | Both mediator orders accepted; printed specific paths retain the requested order (forward estimate 0.001, reverse 0.000). Factor path prints indirect 0.012; continuous mediation prints indirect 0.010. |
 | P-DA1 | DA06 | Empty comma field errors (non-missing blank; zero observations). Extra field and wrapped records accepted, N=500 and identical means (-0.023,0.058,-0.045). |
 | P-DA2 | DA03 | All accepted, N=500. Y1 mean: 99 → 5.465; 9.9 → 4.972; -9 and -9.0 → 4.385. F2.1 fields are 99 or -9 in the first 50 rows; only flag 9.9 marks those 99 fields missing. |
+| P-DA3 | DA02 | Without MEANS: no NU/ALPHA and six free parameters in three-indicator CFA. Explicit intercept/factor mean is a DATA error requiring MEANS; with MEANS retains NU/ALPHA. |
+| P-DA4 | DA02 | CORRELATION without STDEVIATIONS is accepted as unit-variance covariance; with STDEVIATIONS supplies the original covariance scale. |
 
 ## Corpus tally: input reader only (2026-10-03)
 
@@ -498,3 +506,14 @@ CL15/CL16/IV04/MG03 one each. Four corpus CSVs store human group labels;
 the harness restores their explicit integer coding without changing rows.
 The adapter itself accepts only the declared codes. Probe evidence now totals
 47 probes / 110 variants (P-MG13 adds the variable-role boundaries).
+
+
+### Increment-5 corpus comparison (TASK-55)
+
+The original-input sweep uses the same 2,440-file manifest (1,117 distinct
+inputs): reader acceptance is 389 and MODEL acceptance 310; every rejection
+is classified. The existing unreadable ex11.8imp.zip is reported separately.
+The end-to-end gate remains 22 accepted/matched of 68 eligible cases, with no
+failures. `check_mplus_data.R` independently checks 25 Demo data cases / 28
+per-group moments at printed precision and single/multigroup raw.csv fit
+round trips. Derived evidence is `cpp/tests/fixtures/mplus/data_summary.json`.

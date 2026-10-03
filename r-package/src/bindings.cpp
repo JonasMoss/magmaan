@@ -384,7 +384,25 @@ Rcpp::List mplus_model_impl(std::string source) {
   for (std::size_t i=0;i<parsed->input.groups.size();++i) {
     group_label[i]=parsed->input.groups[i].label;group_code[i]=parsed->input.groups[i].code;
   }
+  const auto& plan=parsed->input.data_plan;
+  Rcpp::List files(plan.files.size()), format(plan.format.size()), missing(plan.missing.size());
+  for(std::size_t i=0;i<plan.files.size();++i) files[i]=Rcpp::List::create(
+      Rcpp::_["path"]=plan.files[i].path,Rcpp::_["label"]=plan.files[i].label);
+  for(std::size_t i=0;i<plan.format.size();++i) format[i]=Rcpp::List::create(
+      Rcpp::_["kind"]=static_cast<int>(plan.format[i].kind),
+      Rcpp::_["width"]=plan.format[i].width,Rcpp::_["decimals"]=plan.format[i].decimals);
+  for(std::size_t i=0;i<plan.missing.size();++i) missing[i]=Rcpp::List::create(
+      Rcpp::_["variables"]=plan.missing[i].variables,Rcpp::_["values"]=plan.missing[i].values);
+  auto data_plan=Rcpp::List::create(Rcpp::_["files"]=files,Rcpp::_["format"]=format,
+      Rcpp::_["matrix_type"]=plan.matrix_type,Rcpp::_["means"]=plan.means,
+      Rcpp::_["standard_deviations"]=plan.standard_deviations,Rcpp::_["listwise"]=plan.listwise,
+      Rcpp::_["file_groups"]=plan.file_groups,Rcpp::_["n_groups"]=plan.n_groups,
+      Rcpp::_["n_observations"]=plan.n_observations,Rcpp::_["missing_symbol"]=plan.missing_symbol,
+      Rcpp::_["missing"]=missing,Rcpp::_["names"]=parsed->input.names,Rcpp::_["analysis"]=parsed->input.analysis);
+  for(std::size_t i=0;i<parsed->input.groups.size();++i)
+    if(parsed->input.groups[i].code.empty()) group_code[i]=parsed->input.groups[i].label;
   return Rcpp::List::create(
+      Rcpp::_["data_plan"] = data_plan,
       Rcpp::_["partable"] = lavaan_partable_df(pt),
       Rcpp::_["syntax"] = magmaan::compat::mplus::to_lavaan_syntax(parsed->flat),
       Rcpp::_["group_var"] = options.group_var,

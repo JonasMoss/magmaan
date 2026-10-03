@@ -154,3 +154,5 @@ export(convention_nested)
 importFrom(nloptr, nloptr)
 importFrom(stats, pchisq, setNames, uniroot)
 importFrom(utils, modifyList)
+
+export(mplus_data)

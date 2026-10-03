@@ -1615,3 +1615,14 @@ TEST_CASE("api Mplus generated group-only zeros preserve provenance") {
   }
   CHECK(found==2);
 }
+
+TEST_CASE("api Mplus constructor carries summary data plan and label groups") {
+  auto result=magmaan::api::model_from_mplus("DATA: FILE(b)=b.dat;\nFILE(a)=a.dat;\nTYPE=COVA; NOBSERVATIONS=50 60;\nVARIABLE: NAMES=y1 y2 y3;\nMODEL: f BY y1-y3;\n");
+  REQUIRE_MESSAGE(result,(result?"":result.error().detail));
+  CHECK(result->data_plan.matrix_type=="COVARIANCE");
+  CHECK(result->data_plan.n_observations==std::vector<std::int32_t>{50,60});
+  CHECK(result->data_plan.files[0].path=="b.dat");
+  CHECK(result->groups[0].code.empty());
+  CHECK(result->model.names().group_labels==std::vector<std::string>{"b","a"});
+  CHECK_FALSE(result->model.options().build.meanstructure);
+}

@@ -194,7 +194,7 @@ grouping_pair       ::= signed_number '=' group_label
 (* MG01–MG08: codes must be integral, including negative integers and decimal
    spellings of integers (P-MG11/P-MG12). Compare numerically, reject duplicate
    codes/labels, and order groups by ascending code. Count and unlabelled forms
-   await increment 5. Repeated MODEL label sections apply cumulatively in source
+   remain rejected; write explicit code = label pairs. Repeated MODEL label sections apply cumulatively in source
    order; multi-label heads are rejected (P-MG9/P-MG10).
    Overall MODEL is materialized in each group. Observed BY loadings and
    indicator intercepts share reserved .mgN. identifiers; these are generated,
@@ -207,3 +207,30 @@ grouping_pair       ::= signed_number '=' group_label
    shares loadings, scalar shares both; latent means are zero except in later
    scalar groups. Variance identification fixes variances in all configural
    groups and only the first metric/scalar group. *)
+
+(* === Data description (increment 5; CL02–CL03, CL09, DA01–DA06) =========== *)
+data_file           ::= ('(' group_label ')' assign)? file_path
+file_path           ::= quoted_path | bare_path
+format_value        ::= 'FREE' | format_group | format_item+
+format_group        ::= '(' format_item (','? format_item)* ')'
+format_item         ::= integer? (format_group | numeric_field | skip | tab | '/')
+numeric_field       ::= 'F' integer ('.' integer)? | integer '.' integer
+skip                ::= 'X'
+tab                 ::= 'T' integer
+integer             ::= digit+
+data_type           ::= ('INDIVIDUAL' | 'COVARIANCE' | 'CORRELATION'
+                        | 'FULLCOV' | 'FULLCORR' | 'MEANS' | 'STDEVIATIONS')+
+missing_value       ::= '.' | '*' | 'BLANK'
+                      | (('ALL' | variable_range+) '(' missing_numbers ')')+
+missing_numbers     ::= signed_number ('-' signed_number)?
+                        (list_sep signed_number ('-' signed_number)?)*
+(* FORMAT is flattened to bounded field/skip/tab/record operations. Summary
+   inputs are free format, require positive NOBSERVATIONS per group, and
+   allow exactly one matrix type, optionally MEANS and STDEVIATIONS (the
+   latter with correlation only). Separate FILE labels define group order;
+   NGROUPS defines g1, g2, ... for summary inputs. Neither combines with
+   GROUPING. Data groups use reserved column .mplus_group and label-valued
+   triple group labels, with no numeric codes. Summary inputs without MEANS
+   have no mean structure and reject explicit bracket mentions (P-DA3).
+   Correlation without SD has unit variances (P-DA4). Numeric missing flags
+   are compared after fixed-format implied-decimal scaling (P-DA2). *)

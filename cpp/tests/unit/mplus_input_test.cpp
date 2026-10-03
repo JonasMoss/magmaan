@@ -192,12 +192,13 @@ TEST_CASE("Mplus input: CL02 CL03 CL04 CL05 DATA option classification") {
   CHECK(r->notes[5].klass == MplusClass::Reported);
   CHECK(r->notes[5].rule == "CL05");
   for (auto s : split("COVARIANCE COVA CORRELATION CORR FULLCOV FULLCORR MEANS STDEVIATIONS STD"))
-    rejection(input("NAMES=y1;", "", "TYPE=" + s + ";"), "CL03", "increment 5");
+    if(s=="MEANS" || s=="STDEVIATIONS" || s=="STD") rejection(input("NAMES=y1;", "", "TYPE=" + s + ";"), "CL03");
+    else CHECK(MplusParser::read(input("NAMES=y1;", "", "TYPE=" + s + "; NOBSERVATIONS=20;")));
   for (auto s : split("MONTECARLO MONTE IMPUTATION IMP")) rejection(input("NAMES=y1;", "", "TYPE=" + s + ";"), "CL04");
   rejection(input("NAMES=y1;", "", "SWMATRIX=x;"), "CL04");
-  rejection(input("NAMES=y1;", "", "FILE (g1)=x;"), "CL02", "increment 5");
+  CHECK(MplusParser::read(input("NAMES=y1;", "", "FILE (g1)=x;")));
   CHECK(MplusParser::read(input("NAMES=y1;", "", "FILE='file(with parens).dat';")).has_value());
-  rejection(input("NAMES=y1;", "", "NGROUPS=2;"), "CL03", "increment 5");
+  rejection(input("NAMES=y1;", "", "NGROUPS=2;"), "MG02");
 }
 
 TEST_CASE("Mplus input: CL07 CL09 CL10 CL11 CL12 CL13 CL14 CL15 VARIABLE classification") {
@@ -295,7 +296,7 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
       CHECK(result.error().detail.find("[" + deviation + "]") != std::string::npos);
     } else CHECK(result.has_value() == (v.at("status") == "accepted"));
   }
-  CHECK(count == 110);
+  CHECK(count == 116);
   CHECK(gated > 15);
 }
 
@@ -307,7 +308,7 @@ TEST_CASE("Mplus input: reader refinements preserve actionable boundaries") {
   rejection(input("NAMES=y1;", "TYPE=EFAUNKNOWN;"), "LX03", "accepted words/stems");
   auto summary=MplusParser::read(input("NAMES=y1;", "", "FILE=x; TYPE=CORRELATION MEANS STDEVIATIONS;")); REQUIRE_FALSE(summary);
   CHECK(summary.error().detail.find("expected one TYPE")==std::string::npos);
-  rejection(input("NAMES=y1;", "", "FILE(g1)=x;")+"MODEL g1: y1;\n", "CL26", "increment 5");
+  CHECK(MplusParser::read(input("NAMES=y1;", "", "FILE(g1)=x;")+"MODEL g1: y1;\n"));
   rejection(input("NAMES=y1; CLASSES=c(2);")+"MODEL c1: y1;\n", "MS10", "mixture class");
   std::string many="NAMES=";
   for(int n=0;n<10;++n) many+="v"+std::string(1,static_cast<char>('a'+n))+"0-v"+std::string(1,static_cast<char>('a'+n))+"10000\n";
@@ -324,4 +325,56 @@ TEST_CASE("Mplus input: MG03 explicit integer codes and cumulative sections") {
   rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")+"MODEL a b: y1;\n","MG06","one");
   rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")+"MODEL c: y1;\n","MG06","declared");
   rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);","MODEL=CONFIGURAL METRIC;"),"IV04","exactly one");
+}
+
+TEST_CASE("Mplus data plans: fixed formats and missing flags") {
+  auto parsed=MplusParser::read(input("NAMES = y1 y2 y3;\nMISSING = ALL (-9, -7--5);", "", "FILE = 'some path.dat'; FORMAT = (2(F2.1,1X),T10,3.0,/);") );
+  REQUIRE(parsed.has_value());
+  CHECK(parsed->data_plan.files[0].path=="some path.dat");
+  CHECK(parsed->data_plan.format.size()==7);
+  CHECK(parsed->data_plan.missing[0].values==std::vector<double>{-9,-7,-6,-5});
+  CHECK(parsed->data_plan.missing[0].variables==std::vector<std::string>{"y1","y2","y3"});
+  for(const auto& format:{"F0.1","2(F2.1","T0,F2.1","F2.","0F2.1","(X)","F2.4"})
+    rejection(input("NAMES=y1 y2 y3;","",std::string("FORMAT=")+format+";"),"DA01");
+  rejection(input("NAMES=y1 y2 y3;\nMISSING=BLANK;"),"DA03");
+  rejection(input("NAMES=y1 y2 y3;\nMISSING=ALL (oops);"),"DA03");
+  rejection(input("NAMES=y1 y2 y3;\nMISSING=z (99);"),"DA03");
+  auto symbol=MplusParser::read(input("NAMES=y1 y2 y3;\nMISSING=*;"));
+  REQUIRE(symbol); CHECK(symbol->data_plan.missing_symbol=="*");
+}
+
+TEST_CASE("Mplus data plans: summary and separate-file groups") {
+  auto parsed=MplusParser::read(input("NAMES=y1 y2 y3;", "", "FILE(a)=a.dat; FILE(b)=b.dat; NOBSERVATIONS=20 30;"));
+  REQUIRE(parsed); CHECK(parsed->groups.size()==2); CHECK(parsed->groups[0].label=="a");
+  CHECK(parsed->groups[0].code.empty()); CHECK(parsed->grouping_variable==".mplus_group");
+  auto summary=MplusParser::parse(input("NAMES=y1 y2 y3;", "", "TYPE=COVA; NGROUPS=2; NOBSERVATIONS=20 30;"));
+  REQUIRE(summary); CHECK(summary->input.groups[1].label=="g2"); CHECK(summary->input.nomeanstructure);
+  for(const auto& row:summary->flat.rows) CHECK(row.op!=magmaan::parse::Op::Intercept);
+  for(const auto& type:{"COVA","CORR","FULLCOV","FULLCORR"}) {
+    auto result=MplusParser::read(input("NAMES=y1 y2 y3;","",std::string("TYPE=")+type+" MEANS; NOBSERVATIONS=20;"));
+    REQUIRE(result); CHECK(result->data_plan.means);
+  }
+  rejection(input("NAMES=y1 y2 y3;","","TYPE=COVA;"),"DA02");
+  rejection(input("NAMES=y1 y2 y3;","","TYPE=COVA STD; NOBSERVATIONS=20;"),"CL03");
+  rejection(input("NAMES=y1 y2 y3;","","TYPE=IND MEANS;"),"CL03");
+  rejection(input("NAMES=y1 y2 y3;","","NGROUPS=2;"),"MG02");
+  rejection(input("NAMES=y1 y2 y3;","","TYPE=CORR; NGROUPS=2; NOBSERVATIONS=20;"),"DA02");
+  // An unqualified explicit bracket is independently rejected by the MODEL parser.
+  auto source=input("NAMES=y1 y2 y3;","","TYPE=COVA; NOBSERVATIONS=20;");
+  source.insert(source.find("f BY"),"[y1]; ");
+  auto invalid=MplusParser::parse(source); REQUIRE_FALSE(invalid); CHECK(invalid.error().detail.find("DA02")!=std::string::npos);
+}
+
+TEST_CASE("Mplus data Demo derived agreement evidence") {
+  std::ifstream file(std::string(MAGMAAN_FIXTURES_DIR)+"/mplus/data_summary.json");
+  REQUIRE(file.good());
+  const auto evidence=nlohmann::json::parse(file,nullptr,false);
+  REQUIRE_FALSE(evidence.is_discarded());
+  CHECK(evidence.at("covariance_divisor")=="N");
+  CHECK(evidence.at("comparisons").size()==28);
+  for(const auto& row:evidence.at("comparisons")) {
+    CHECK(row.at("n").get<int>()==5);
+    CHECK(row.at("max_covariance_error").get<double>()<=0.00050001);
+    if(!row.at("max_mean_error").is_null()) CHECK(row.at("max_mean_error").get<double>()<=0.00050001);
+  }
 }

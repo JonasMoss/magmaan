@@ -326,7 +326,7 @@ Result<MplusModel> model_from_mplus(std::string_view source) {
   if (!rep) return std::unexpected(make_error(ErrorStage::Model, rep.error()));
   return MplusModel{Model(std::string(source), std::move(parsed->flat),
       std::move(*structure), std::move(names), std::move(starts),
-      std::move(*rep), options), std::move(parsed->input.grouping_variable), std::move(parsed->input.groups), std::move(parsed->notes)};
+      std::move(*rep), options), std::move(parsed->input.data_plan), std::move(parsed->input.grouping_variable), std::move(parsed->input.groups), std::move(parsed->notes)};
 }
 
 Result<Model> Model::from_eqs(
