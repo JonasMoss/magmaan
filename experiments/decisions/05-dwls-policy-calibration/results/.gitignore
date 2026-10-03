@@ -37,3 +37,12 @@ dwls-policy/production-2026-10-03/*
 !dwls-policy/production-2026-10-03/population_timing.csv
 !dwls-policy/production-2026-10-03/summary.csv
 !dwls-policy/production-2026-10-03/timing.csv
+
+!dwls-policy/explore-2026-10-03/
+dwls-policy/explore-2026-10-03/*
+!dwls-policy/explore-2026-10-03/cells.csv
+!dwls-policy/explore-2026-10-03/cost.csv
+!dwls-policy/explore-2026-10-03/failures.csv
+!dwls-policy/explore-2026-10-03/metadata.csv
+!dwls-policy/explore-2026-10-03/summary.csv
+!dwls-policy/explore-2026-10-03/timing.csv
