@@ -196,9 +196,10 @@ declared file or summary group as reference. FILE groups and NGROUPS cannot
 be combined with GROUPING; summary inputs require NOBSERVATIONS per group.
 
 Summary TYPE without MEANS lowers no intercept/mean rows; explicit bracket
-mentions require MEANS (Demo P-DA3). CORRELATION without STDEVIATIONS returns
-unit-variance covariance with a note (P-DA4). Summary moments use divisor N,
-without lavaan's default covariance rescaling. FREE and bounded fixed FORMAT
+mentions require MEANS (Demo P-DA3). CORRELATION without STDEVIATIONS uses
+unit variances on input, recorded in a note (P-DA4). Summary matrices have
+divisor N-1 on input and are rescaled by (N-1)/N for ML, matching Mplus and
+lavaan's default sample.cov.rescale (P-DA5). FREE and bounded fixed FORMAT
 operations (Fw.d or Fw, w.d, X, Tn, /, repeats and nested groups) are parsed by
 C++; the R reader executes them and compares MISSING flags after decimal
 scaling. Global symbols are `MISSING = .`, `*`, or `BLANK`; numeric flags use
@@ -208,7 +209,7 @@ analysis-sample deletion are reported but left to fitting conventions.
 
 | Data rules | Evidence |
 | --- | --- |
-| CL02–CL03, CL09, MG01–MG03, DA01–DA06 | Typed-plan/parser/API units; independently written R frames/matrices; 25 Demo data cases / 28 group moment comparisons; P-DA1–P-DA4; single/multigroup corpus data-to-fit round trips |
+| CL02–CL03, CL09, MG01–MG03, DA01–DA06 | Typed-plan/parser/API units; independently written R frames/matrices; 25 Demo data cases / 28 group moment comparisons; P-DA1–P-DA5; single/multigroup corpus data-to-fit round trips |
 
 
 ### Continuous group coverage

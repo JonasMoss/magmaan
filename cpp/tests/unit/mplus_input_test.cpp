@@ -296,7 +296,7 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
       CHECK(result.error().detail.find("[" + deviation + "]") != std::string::npos);
     } else CHECK(result.has_value() == (v.at("status") == "accepted"));
   }
-  CHECK(count == 116);
+  CHECK(count == 122);
   CHECK(gated > 15);
 }
 
@@ -370,11 +370,19 @@ TEST_CASE("Mplus data Demo derived agreement evidence") {
   REQUIRE(file.good());
   const auto evidence=nlohmann::json::parse(file,nullptr,false);
   REQUIRE_FALSE(evidence.is_discarded());
-  CHECK(evidence.at("covariance_divisor")=="N");
+  CHECK(evidence.at("covariance_divisor")=="N-1 input, rescaled to N for ML");
   CHECK(evidence.at("comparisons").size()==28);
+  int summary_groups = 0;
   for(const auto& row:evidence.at("comparisons")) {
     CHECK(row.at("n").get<int>()==5);
     CHECK(row.at("max_covariance_error").get<double>()<=0.00050001);
+    if(!row.at("max_ml_error").is_null()) {
+      ++summary_groups;
+      CHECK(row.at("max_ml_error").get<double>()<=0.00050001);
+      REQUIRE_FALSE(row.at("max_lavaan_error").is_null());
+    }
+    if(!row.at("max_lavaan_error").is_null()) CHECK(row.at("max_lavaan_error").get<double>()<1e-6);
     if(!row.at("max_mean_error").is_null()) CHECK(row.at("max_mean_error").get<double>()<=0.00050001);
   }
+  CHECK(summary_groups == 10);
 }

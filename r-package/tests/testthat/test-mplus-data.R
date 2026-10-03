@@ -40,21 +40,24 @@ test_that("summary formats retain covariance and means and convert correlation",
   for(type in c("COVA","FULLCOV")) {
     lines <- if(type=="COVA") c("4","1 9","2 3 16") else c("4 1 2","1 9 3","2 3 16")
     with_dat(c("1 2 3",lines),data_spec(paste0("TYPE=",type," MEANS;NOBSERVATIONS=50;")),function(x) {
-      expect_equal(x$S[[1]],S);expect_equal(unname(x$mean[[1]]),c(1,2,3));expect_equal(x$nobs,50L)
+      expect_equal(attr(x,"mplus_data_report")$input_covariance,list(S))
+      expect_equal(attr(x,"mplus_data_report")$covariance_scale,49/50)
+      expect_match(attr(x,"mplus_data_report")$covariance_divisor,"N-1 input")
+      expect_equal(x$S[[1]],S*49/50);expect_equal(unname(x$mean[[1]]),c(1,2,3));expect_equal(x$nobs,50L)
     })
   }
   for(type in c("CORR","FULLCORR")) {
     lines <- if(type=="CORR") c("1","0.5 1","0.25 0.5 1") else c("1 .5 .25",".5 1 .5",".25 .5 1")
     with_dat(c("2 3 4",lines),data_spec(paste0("TYPE=",type," STD;NOBSERVATIONS=50;")),function(x) {
-      expect_equal(unname(x$S[[1]]),matrix(c(4,3,2,3,9,6,2,6,16),3,3));expect_false(any(x$mean[[1]]!=0))
+      expect_equal(unname(x$S[[1]]),matrix(c(4,3,2,3,9,6,2,6,16),3,3)*49/50);expect_false(any(x$mean[[1]]!=0))
     })
     with_dat(lines,data_spec(paste0("TYPE=",type,";NOBSERVATIONS=50;")),function(x) {
-      expect_equal(diag(x$S[[1]]),setNames(rep(1,3),paste0("y",1:3)))
+      expect_equal(diag(x$S[[1]]),setNames(rep(49/50,3),paste0("y",1:3)))
       expect_match(tail(attr(x,"mplus_data_report")$notes,1),"unit variances")
     })
   }
   with_dat(c("4","1 9","2 3 16","4","1 9","2 3 16"),data_spec("TYPE=COVA;NGROUPS=2;NOBSERVATIONS=50 60;"),function(x) {
-    expect_equal(x$S,list(S,S));expect_equal(x$nobs,c(50L,60L))
+    expect_equal(x$S,list(S*49/50,S*59/60));expect_equal(x$nobs,c(50L,60L))
   })
 })
 test_that("FILE groups and GROUPING codes preserve order and report exclusions", {
@@ -85,12 +88,12 @@ test_that("summary moments fit on Mplus N scaling against explicit lavaan covari
   with_dat(c("4","1 9","2 3 16"),spec,function(data) {
     fit <- fit_model(spec,data,estimator="ML")
     ref <- lavaan::lavaan("f =~ 1*y1+y2+y3; f ~~ f; y1 ~~ y1; y2 ~~ y2; y3 ~~ y3",
-      sample.cov=S,sample.nobs=200,sample.cov.rescale=FALSE,meanstructure=FALSE,
+      sample.cov=S,sample.nobs=200,meanstructure=FALSE,
       auto.var=FALSE,auto.cov.lv.x=FALSE,auto.fix.first=FALSE)
     expected <- lavaan::parTable(ref)
     key <- function(pt) paste(pt$lhs,pt$op,pt$rhs)
     expect_equal(fit$partable$est,expected$est[match(key(fit$partable),key(expected))],tolerance=1e-5)
-    expect_equal(lavaan::lavInspect(ref,"sampstat")$cov,S,ignore_attr=TRUE)
+    expect_equal(lavaan::lavInspect(ref,"sampstat")$cov,S*199/200,ignore_attr=TRUE)
   })
 })
 

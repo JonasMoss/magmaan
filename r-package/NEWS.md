@@ -3,6 +3,7 @@
 - `mplus_data()` reads free/fixed individual and summary data through a typed
   C++ data plan, including missing flags and FILE/NGROUPS groups. It reports
   NOBSERVATIONS and dropped GROUPING codes; LISTWISE remains a fitting choice.
+  Summary input covariances use N-1 and are rescaled to N for ML, matching Mplus.
 
 - FIML fits now receive the ordinary inference policy: observed-bread
   casewise-score sandwich covariance, global and nested score and LR tests,

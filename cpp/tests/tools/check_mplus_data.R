@@ -51,7 +51,7 @@ for(id in names(cases)) {
   else writeLines(c$lines,file.path(dir,'data.dat'))
   input <- c(paste0('DATA: ',if(is.null(c$groups))'FILE=data.dat;' else '',gsub(';',';\n',c$data,fixed=TRUE)),
     paste0('VARIABLE: NAMES=y1 y2 y3',if(id=='group_codes')' g' else '', ';'),c$variable,
-    'MODEL: y1 y2 y3;', 'OUTPUT: SAMPSTAT;')
+    'MODEL: y1 y2 y3; y1 WITH y2 y3; y2 WITH y3;', 'OUTPUT: SAMPSTAT;')
   # For BASIC summaries Mplus omits means if not supplied. Reader constructs
   # the same mean-free model; BASIC itself needs no MODEL statement.
   demo_input <- if(grepl('TYPE=(COVA|CORR|FULL)',c$data)) input else c(input[!grepl('^MODEL:',input)],'ANALYSIS: TYPE=BASIC;')
@@ -73,7 +73,7 @@ for(id in names(cases)) {
       # cases; reader intentionally retains those rows and reports the policy.
       list(S=crossprod(scale(d,scale=FALSE))/nrow(d),mean=colMeans(d),n=nrow(d))
     })
-  } else moments <- lapply(seq_along(data$S),function(g) list(S=data$S[[g]],mean=if(spec$requested_meanstructure)data$mean[[g]] else NULL,n=data$nobs[g]))
+  } else moments <- lapply(seq_along(data$S),function(g) list(S=attr(data,"mplus_data_report")$input_covariance[[g]],mean=if(spec$requested_meanstructure)data$mean[[g]] else NULL,n=data$nobs[g]))
   nlines <- grep('Number of observations',output)
   if(length(moments)==1) ns <- tail(nums(output[nlines[1]]),1) else {
     ns <- vapply(seq_along(moments),function(g) tail(nums(output[nlines[1]+g]),1),0.0)
@@ -95,11 +95,45 @@ for(id in names(cases)) {
       if(length(values)!=3 || any(abs(values-m$mean)>.00050001)) stop('Demo mean mismatch: ',id)
       mean_error <- max(abs(values-m$mean))
     }
-    results[[length(results)+1L]] <- data.frame(case=id,group=g,n=m$n,max_mean_error=mean_error,max_covariance_error=max(abs(demo-target)))
+    ml_error <- lavaan_error <- NA_real_
+    if (!is.data.frame(data)) {
+      fit <- fit_model(spec, data, estimator='ML')
+      pt <- fit$partable
+      gp <- if ('group' %in% names(pt)) pt$group == g else rep(TRUE,nrow(pt))
+      cov_rows <- pt[gp & pt$op == '~~',]
+      expected_cov <- m$S * (m$n-1)/m$n
+      expected_est <- expected_cov[cbind(match(cov_rows$lhs,colnames(expected_cov)),match(cov_rows$rhs,colnames(expected_cov)))]
+      stopifnot(max(abs(cov_rows$est-expected_est)) < 1e-6)
+      # Parse the independent printed saturated MODEL RESULTS by group and
+      # section; compare each variance/covariance and supplied mean.
+      section <- ''; lhs <- ''; group <- 1L; demo_est <- numeric(); target_est <- numeric()
+      start <- grep('^MODEL RESULTS$',output)[1]
+      for (line in output[(start+1):length(output)]) {
+        if (grepl('^QUALITY OF',line)) break
+        if (grepl('^Group ',trimws(line))) { group <- match(tolower(sub('^Group +','',trimws(line))),tolower(spec$group_labels)); next }
+        text <- trimws(line)
+        if (text %in% c('Means','Intercepts','Variances','Residual Variances')) { section <- text; next }
+        if (grepl('^Y[123] +WITH$',text)) {section <- 'WITH';lhs <- strsplit(text,' +')[[1]][1];next}
+        if (group != g || !grepl('^Y[123] +[-0-9]',text)) next
+        rhs <- tolower(strsplit(text,' +')[[1]][1]); value <- nums(sub('^Y[123]','',text))[1]
+        estimate_target <- if(section %in% c('Means','Intercepts')) m$mean[match(rhs,colnames(expected_cov))] else if(section=='WITH') expected_cov[tolower(lhs),rhs] else expected_cov[rhs,rhs]
+        demo_est <- c(demo_est,value);target_est <- c(target_est,estimate_target)
+      }
+      stopifnot(length(demo_est)==6L+if(is.null(m$mean))0L else 3L)
+      ml_error <- max(abs(demo_est-target_est))
+      stopifnot(ml_error <= .00050001)
+      ref <- lavaan::sem('y1 ~~ y1+y2+y3; y2 ~~ y2+y3; y3 ~~ y3',
+        sample.cov=m$S,sample.mean=m$mean,sample.nobs=m$n,meanstructure=!is.null(m$mean),fixed.x=FALSE)
+      rpt <- lavaan::parTable(ref); key <- function(p) paste(p$lhs,p$op,p$rhs)
+      selected <- pt[gp,]
+      lavaan_error <- max(abs(selected$est-rpt$est[match(key(selected),key(rpt))]))
+      stopifnot(is.finite(lavaan_error),lavaan_error < 1e-6)
+    }
+    results[[length(results)+1L]] <- data.frame(case=id,group=g,n=m$n,max_mean_error=mean_error,max_covariance_error=max(abs(demo-target)),max_ml_error=ml_error,max_lavaan_error=lavaan_error)
   }
 }
 result <- do.call(rbind,results)
-writeLines(toJSON(list(version='Mplus 9.1 Demo',covariance_divisor='N',printed_tolerance=.00050001,comparisons=result),auto_unbox=TRUE,pretty=TRUE,digits=NA,na='null'),file.path(root,'cpp/tests/fixtures/mplus/data_summary.json'))
+writeLines(toJSON(list(version='Mplus 9.1 Demo',covariance_divisor='N-1 input, rescaled to N for ML',printed_tolerance=.00050001,comparisons=result),auto_unbox=TRUE,pretty=TRUE,digits=NA,na='null'),file.path(root,'cpp/tests/fixtures/mplus/data_summary.json'))
 cat(length(cases),'Demo data cases;',nrow(result),'group comparisons; covariance/mean printed tolerance 0.00050001\n')
 
 # Fit round trips use the same independent corpus inputs as the end-to-end gate.

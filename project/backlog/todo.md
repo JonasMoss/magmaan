@@ -1271,7 +1271,8 @@ carry the label `mplus`.
   `magmaanlab::mplus_data()`, FILE/summary groups and summary mean-structure
   lowering. **Check:** free and
   fixed format, summary data and missing codes against independently written
-  data frames.
+  data frames; saturated summary ML agrees with Demo and lavaan after
+  group-specific N-1 to N divisor conversion.
 - [ ] **S/M — stability closeout.** Robustness sweep over every User's Guide
   example input under sanitizers, coverage matrix keyed to inventory IDs, lab
   help listing the accepted subset, test-ledger entries.

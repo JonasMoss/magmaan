@@ -16,9 +16,10 @@
 #' remove incomplete rows or `missing = "fiml"` for FIML; explicitly filter
 #' missing covariates to reproduce Mplus's conditional analysis sample.
 #'
-#' Summary covariances use divisor N, as Mplus does; no lavaan-style
-#' (N-1)/N rescaling is applied. Correlations are multiplied by supplied SDs;
-#' without SDs they are returned as unit-variance covariance matrices.
+#' Summary matrices use divisor N-1 on input. As in Mplus ML and lavaan's
+#' default sample.cov.rescale, they are multiplied by (N-1)/N for fit_model().
+#' Correlations are multiplied by supplied SDs; without SDs the input has
+#' unit variances. The report retains input covariances and conversion factors.
 #' @param model A `magmaan_mplus_model_spec` from [mplus_model()].
 #' @param file Optional path override, one path per separate-file group.
 #' @return Individual data as a data.frame, or summary moments as a list with
@@ -49,6 +50,10 @@ mplus_data <- function(model, file = NULL) {
     if (plan$matrix_type %in% c("CORRELATION", "FULLCORR") && !plan$standard_deviations)
       report$notes <- c(report$notes, "CORRELATION without STDEVIATIONS is interpreted as covariance with unit variances")
     report$nobs <- out$nobs
+    report$input_covariance <- out$S
+    report$covariance_divisor <- "N-1 input, rescaled to N for ML"
+    report$covariance_scale <- (out$nobs - 1) / out$nobs
+    out$S <- Map(function(S, factor) S * factor, out$S, report$covariance_scale)
   } else {
     blocks <- lapply(seq_along(paths), function(g) {
       lines <- readLines(paths[g], warn = FALSE)

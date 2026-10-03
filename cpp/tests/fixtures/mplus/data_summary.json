@@ -1,6 +1,6 @@
 {
   "version": "Mplus 9.1 Demo",
-  "covariance_divisor": "N",
+  "covariance_divisor": "N-1 input, rescaled to N for ML",
   "printed_tolerance": 0.00050001,
   "comparisons": [
     {
@@ -8,196 +8,252 @@
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "free_extra",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "free_wrapped",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "free_nobservations",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "fixed_repeat",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "fixed_tab",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "fixed_records",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "fixed_explicit",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_star",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_dot",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_blank",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_numeric",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_scaled",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "missing_range",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "cov_FALSE_FALSE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407529694144e-07
     },
     {
       "case": "cov_FALSE_TRUE",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407529694144e-07
     },
     {
       "case": "corr_FALSE_FALSE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 0.000197180256555018
+      "max_covariance_error": 0.000197180256555018,
+      "max_ml_error": 0.000442255794755986,
+      "max_lavaan_error": 3.48592354981747e-09
     },
     {
       "case": "corr_FALSE_TRUE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 1.4210854715202e-14
+      "max_covariance_error": 1.4210854715202e-14,
+      "max_ml_error": 1.13242748511766e-14,
+      "max_lavaan_error": 1.25407521256449e-07
     },
     {
       "case": "cov_TRUE_FALSE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407529694144e-07
     },
     {
       "case": "cov_TRUE_TRUE",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407529694144e-07
     },
     {
       "case": "corr_TRUE_FALSE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 0.000197180256555018
+      "max_covariance_error": 0.000197180256555018,
+      "max_ml_error": 0.000442255794755986,
+      "max_lavaan_error": 3.48592354981747e-09
     },
     {
       "case": "corr_TRUE_TRUE",
       "group": 1,
       "n": 5,
       "max_mean_error": null,
-      "max_covariance_error": 1.4210854715202e-14
+      "max_covariance_error": 1.4210854715202e-14,
+      "max_ml_error": 1.13242748511766e-14,
+      "max_lavaan_error": 1.25407521256449e-07
     },
     {
       "case": "summary_groups",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407519036003e-07
     },
     {
       "case": "summary_groups",
       "group": 2,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 0
+      "max_covariance_error": 0,
+      "max_ml_error": 4.44089209850063e-16,
+      "max_lavaan_error": 1.25407519036003e-07
     },
     {
       "case": "file_groups",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "file_groups",
       "group": 2,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "group_codes",
       "group": 1,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     },
     {
       "case": "group_codes",
       "group": 2,
       "n": 5,
       "max_mean_error": 0,
-      "max_covariance_error": 8.88178419700125e-16
+      "max_covariance_error": 8.88178419700125e-16,
+      "max_ml_error": null,
+      "max_lavaan_error": null
     }
   ]
 }

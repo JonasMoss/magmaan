@@ -684,7 +684,7 @@ API. Separate-file and summary groups use source labels and `.mplus_group`;
 GROUPING continues to use integer codes. The reader drops unlisted codes with
 counts but leaves LISTWISE and estimation-sample rules unapplied.
 
-`regen_mplus_probes.R` adds P-DA3/P-DA4 (six variants; 49 probes/116 variants
+`regen_mplus_probes.R` adds P-DA3/P-DA4/P-DA5 (12 variants; 50 probes/122 variants
 in total), preserving every previous fixture entry. Mplus 9.1 omits NU/ALPHA
 for summary inputs without MEANS, rejects explicit intercept/factor mean
 mentions without MEANS, and accepts correlation without SD as unit covariance.
@@ -697,8 +697,10 @@ NGROUPS, FILE groups and dropped GROUPING codes. Derived evidence is frozen in
 `mplus/data_summary.json`, consumed by C++ tests. N is exact; means/covariances
 agree within half the Demo's three-decimal printed unit (0.00050001). Synthetic
 all-missing rows are explicitly excluded by the comparison harness to reproduce
-DA05; the reader retains them. Both raw and summary covariances use divisor N.
-A live lavaan sample.cov gate disables its default covariance rescaling.
+DA05; the reader retains them. Raw covariances use divisor N. Summary input matrices use divisor N-1;
+the reader converts each group by (N-1)/N to the lab divisor-N convention.
+Ten saturated summary group comparisons gate Demo ML estimates and live lavaan using its
+default sample.cov.rescale = TRUE, including means and NGROUPS.
 
 Independent R frames/matrices gate reader behavior and shape/file errors.
 The free-format raw.csv round trips for User's Guide ex5.1 (single group) and
@@ -707,8 +709,8 @@ end-to-end corpus gate remains 22 accepted/matched of 68 cases, zero failures.
 The original-input sweep classifies all 2,440 files: 389 reader and 310 MODEL
 acceptances; the previously unreadable ex11.8imp.zip remains reported.
 
-Focused opt C++ checks pass 33 Mplus cases / 12,200 assertions and four API
-cases / 27 assertions. Full magmaanlab testthat passes 5,493 assertions with
+Focused opt C++ checks pass 33 Mplus cases / 12,297 assertions and four API
+cases / 27 assertions. Full magmaanlab testthat passes 5,499 assertions with
 two existing admissibility warnings and two documented skips. Structural
 tracked-file and dependency-layering checks pass. No oracle exemptions or
 numeric-tolerance changes were introduced.

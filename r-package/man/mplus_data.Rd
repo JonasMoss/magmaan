@@ -34,7 +34,8 @@ rules are only reported: use \code{fit_model(..., missing = "listwise")} to
 remove incomplete rows or \code{missing = "fiml"} for FIML; explicitly filter
 missing covariates to reproduce Mplus's conditional analysis sample.
 
-Summary covariances use divisor N, as Mplus does; no lavaan-style
-(N-1)/N rescaling is applied. Correlations are multiplied by supplied SDs;
-without SDs they are returned as unit-variance covariance matrices.
+Summary matrices use divisor N-1 on input. As in Mplus ML and lavaan's
+default sample.cov.rescale, they are multiplied by (N-1)/N for fit_model().
+Correlations are multiplied by supplied SDs; without SDs the input has
+unit variances. The report retains input covariances and conversion factors.
 }

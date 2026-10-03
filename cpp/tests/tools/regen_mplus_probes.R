@@ -170,7 +170,18 @@ make_data <- function(p, seed) {
   x
 }
 write_data <- function(p, x, path) {
-  if (p$kind == 'summary') {
+  if (p$kind == 'divisor_summary') {
+    S <- matrix(c(2,.5,.5,1),2)
+    if(grepl('CORR',p$data)) {
+      sd <- sqrt(diag(S)); S <- cov2cor(S)
+    }
+    lines <- if(grepl('MEANS',p$data)) '3 4' else character()
+    if(grepl('STDEVIATIONS',p$data)) lines <- c(lines,paste(sd,collapse=' '))
+    lines <- c(lines,if(grepl('FULL',p$data)) apply(S,1,paste,collapse=' ') else c('1',paste(S[2,],collapse=' ')))
+    if(!grepl('CORR|FULL',p$data)) lines <- c(if(grepl('MEANS',p$data)) '3 4', '2','.5 1')
+    if(grepl('NGROUPS',p$data)) lines <- rep(lines,2)
+    writeLines(lines,path)
+  } else if (p$kind == 'summary') {
     S <- crossprod(scale(x,scale=FALSE))/nrow(x)
     lines <- character()
     if(p$variant=='with_means') lines <- c(lines,paste(colMeans(x),collapse=' '))
@@ -314,6 +325,10 @@ for (v in c('no_means','intercept','factor_mean','with_means')) add('P-DA3', v,
   data=paste('TYPE = COVARIANCE',if(v=='with_means') 'MEANS' else '', '; NOBSERVATIONS = 500;'),kind='summary')
 for (v in c('unit','sd')) add('P-DA4',v,
   data=paste('TYPE = CORRELATION',if(v=='sd') 'STDEVIATIONS' else '', '; NOBSERVATIONS = 500;'),kind='summary')
+
+for (v in c('COVARIANCE','FULLCOV','CORRELATION','STDEVIATIONS CORRELATION','COVARIANCE MEANS','COVARIANCE MEANS; NGROUPS=2')) add('P-DA5',gsub('[ ;=]+','_',v),
+  model='y1 y2; y1 WITH y2;',names='y1 y2',
+  data=paste0('TYPE=',v,'; NOBSERVATIONS=',if(grepl('NGROUPS',v)) '5 7' else '5',';'),kind='divisor_summary')
 
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))

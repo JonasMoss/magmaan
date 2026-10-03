@@ -311,7 +311,7 @@ variants' parameter counts 38/34/30 and df 16/20/24.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT has its own bounded grammar production and typed plan; Fw without a decimal suffix means zero decimal places. |
-| DA02 | D, 570–571, 539–540 | Summary data are free-format: lower-triangular or full covariance or correlation matrices, means and standard deviations, each type starting on a new record; groups follow one another with NOBSERVATIONS per group and NGROUPS. Map to magmaan's sample-statistics input. |
+| DA02 | D, 570–571, 539–540 | Summary data are free-format: lower-triangular or full covariance or correlation matrices, means and standard deviations, each type starting on a new record; groups follow one another with NOBSERVATIONS per group and NGROUPS. Input matrices use divisor N-1; convert by (N-1)/N to magmaan's divisor-N sample statistics for ML (P-DA5); means unchanged. |
 | DA03 | D, 601–603; P | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only; global symbol syntax has no parentheses) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Flags compare with the value after FORMAT scaling: with F2.1 the field `99` reads as 9.9 and only the flag `9.9` matches; `-9` and `-9.0` are the same flag (P-DA2). |
 | DA04 | D, 613 | Rows with an unlisted GROUPING value are excluded; the reader reports how many. |
 | DA05 | D, UG 443, 548 | In the analysis, cases missing on an x variable are deleted and the remaining missingness is handled by FIML. These are estimation-sample rules for the preset, not reader behavior. |
@@ -389,6 +389,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-DA1 | DA06 | Free-format records with `1,,3`, extra fields and wrapped observations | N and sample means |
 | P-DA2 | DA03 | `FORMAT = 3F2.1; MISSING = ALL (99);` versus `(9.9)`; `-9` versus `-9.0` | N and sample means |
 | P-DA3 | DA02 | COVARIANCE without MEANS, explicit intercept/factor mean, and with MEANS | TECH1 NU/ALPHA presence and DATA errors |
+| P-DA5 | DA02 | Saturated ML: covariance/full covariance, correlation, SD, means and NGROUPS | Summary input divisor N-1 and group-specific (N-1)/N analysis rescaling |
 | P-DA4 | DA02 | CORRELATION with and without STDEVIATIONS | Unit-variance covariance interpretation |
 
 
@@ -463,6 +464,7 @@ These observations do not resolve or change the inventory rules.
 | P-DA1 | DA06 | Empty comma field errors (non-missing blank; zero observations). Extra field and wrapped records accepted, N=500 and identical means (-0.023,0.058,-0.045). |
 | P-DA2 | DA03 | All accepted, N=500. Y1 mean: 99 → 5.465; 9.9 → 4.972; -9 and -9.0 → 4.385. F2.1 fields are 99 or -9 in the first 50 rows; only flag 9.9 marks those 99 fields missing. |
 | P-DA3 | DA02 | Without MEANS: no NU/ALPHA and six free parameters in three-indicator CFA. Explicit intercept/factor mean is a DATA error requiring MEANS; with MEANS retains NU/ALPHA. |
+| P-DA5 | DA02 | All summary matrices are rescaled by (N-1)/N for ML; means unchanged, including NGROUPS with different N. |
 | P-DA4 | DA02 | CORRELATION without STDEVIATIONS is accepted as unit-variance covariance; with STDEVIATIONS supplies the original covariance scale. |
 
 ## Corpus tally: input reader only (2026-10-03)

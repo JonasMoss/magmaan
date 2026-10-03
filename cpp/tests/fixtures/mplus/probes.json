@@ -35034,5 +35034,644 @@
         "sample_statistics": []
       }
     }
+  },
+  "P-DA5": {
+    "settles": "DA02",
+    "variants": {
+      "COVARIANCE": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=COVARIANCE; NOBSERVATIONS=5;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 5
+          }
+        ],
+        "free_parameters": [
+          3
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 1
+              },
+              "Y2": {
+                "Y1": 2,
+                "Y2": 3
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.4
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.6
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "FULLCOV": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=FULLCOV; NOBSERVATIONS=5;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 5
+          }
+        ],
+        "free_parameters": [
+          3
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 1
+              },
+              "Y2": {
+                "Y1": 2,
+                "Y2": 3
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.4
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.6
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "CORRELATION": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=CORRELATION; NOBSERVATIONS=5;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 5
+          }
+        ],
+        "free_parameters": [
+          3
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 1
+              },
+              "Y2": {
+                "Y1": 2,
+                "Y2": 3
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.283
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 0.8
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "STDEVIATIONS_CORRELATION": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=STDEVIATIONS CORRELATION; NOBSERVATIONS=5;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 5
+          }
+        ],
+        "free_parameters": [
+          3
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 1
+              },
+              "Y2": {
+                "Y1": 2,
+                "Y2": 3
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.4
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.6
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "COVARIANCE_MEANS": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=COVARIANCE MEANS; NOBSERVATIONS=5;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "single",
+            "n": 5
+          }
+        ],
+        "free_parameters": [
+          5
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "single",
+            "name": "NU",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "vector": {
+                "Y1": 1,
+                "Y2": 2
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 3
+              },
+              "Y2": {
+                "Y1": 4,
+                "Y2": 5
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.4
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Means",
+            "parameter": "Y1",
+            "estimate": 3
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Means",
+            "parameter": "Y2",
+            "estimate": 4
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.6
+          },
+          {
+            "model": "single",
+            "group": "single",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "COVARIANCE_MEANS_NGROUPS_2": {
+        "variable": "NAMES = y1 y2;\n",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "y1 y2; y1 WITH y2;",
+        "data": "TYPE=COVARIANCE MEANS; NGROUPS=2; NOBSERVATIONS=5 7;",
+        "title": null,
+        "seed": 58050,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [],
+        "diagnostics": [],
+        "observations": [
+          {
+            "group": "G1",
+            "n": 5
+          },
+          {
+            "group": "G2",
+            "n": 7
+          }
+        ],
+        "free_parameters": [
+          10
+        ],
+        "chi_square": [
+          {
+            "value": 0,
+            "df": 0
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "NU",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "vector": {
+                "Y1": 1,
+                "Y2": 2
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 3
+              },
+              "Y2": {
+                "Y1": 4,
+                "Y2": 5
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "NU",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "vector": {
+                "Y1": 6,
+                "Y2": 7
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "THETA",
+            "columns": ["Y1", "Y2"],
+            "rows": {
+              "Y1": {
+                "Y1": 8
+              },
+              "Y2": {
+                "Y1": 9,
+                "Y2": 10
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.4
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Means",
+            "parameter": "Y1",
+            "estimate": 3
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Means",
+            "parameter": "Y2",
+            "estimate": 4
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.6
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.8
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Y1       WITH",
+            "parameter": "Y2",
+            "estimate": 0.429
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Means",
+            "parameter": "Y1",
+            "estimate": 3
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Means",
+            "parameter": "Y2",
+            "estimate": 4
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Variances",
+            "parameter": "Y1",
+            "estimate": 1.714
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Variances",
+            "parameter": "Y2",
+            "estimate": 0.857
+          }
+        ],
+        "estimation_messages": [
+          "INPUT READING TERMINATED NORMALLY",
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      }
+    }
   }
 }

@@ -232,5 +232,7 @@ missing_numbers     ::= signed_number ('-' signed_number)?
    GROUPING. Data groups use reserved column .mplus_group and label-valued
    triple group labels, with no numeric codes. Summary inputs without MEANS
    have no mean structure and reject explicit bracket mentions (P-DA3).
-   Correlation without SD has unit variances (P-DA4). Numeric missing flags
+   Correlation without SD has unit variances (P-DA4). Summary matrices use
+   divisor N-1 on input and are rescaled by (N-1)/N for ML (P-DA5).
+   Numeric missing flags
    are compared after fixed-format implied-decimal scaling (P-DA2). *)
