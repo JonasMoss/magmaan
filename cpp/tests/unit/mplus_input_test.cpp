@@ -295,7 +295,7 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
       CHECK(result.error().detail.find("[" + deviation + "]") != std::string::npos);
     } else CHECK(result.has_value() == (v.at("status") == "accepted"));
   }
-  CHECK(count == 100);
+  CHECK(count == 108);
   CHECK(gated > 15);
 }
 

@@ -126,12 +126,24 @@ add('P-CN2', 'continuous', 'm ON x; y ON m x;\nMODEL INDIRECT: y IND m x;', 'y m
 for (v in c('empty','extra','wrapped')) add('P-DA1', v, 'y1 y2 y3;', kind = 'free_special')
 for (v in c('99','9.9','-9','-9.0')) add('P-DA2', v, 'y1 y2 y3;', variable = paste0('MISSING = ALL (',v,');'), data = 'FORMAT = 3F2.1;', kind = 'fixed_special')
 
+mg('P-MG8', 'group_only_covariance', paste0(cfa, '\nMODEL g2: y1 WITH y2;'))
+mg('P-MG9', 'cumulative', paste0(cfa, '\nMODEL g2: f BY y2;\nMODEL g2: [y3];'))
+mg('P-MG9', 'override', paste0(cfa, '\nMODEL g2: f BY y2@0.7;\nMODEL g2: f BY y2@0.8;'))
+mg('P-MG9', 'release', paste0(cfa, '\nMODEL g2: f BY y2@0.7;\nMODEL g2: f BY y2;'))
+mg('P-MG10', 'multi_label', paste0(cfa, '\nMODEL g1 g2: [y3];'))
+add('P-MG11', 'fractional', cfa, 'y1 y2 y3 g',
+    'GROUPING = g (-1 = g1 2.5 = g2);', kind = 'fractional_codes')
+add('P-MG12', 'negative_integer', cfa, 'y1 y2 y3 g',
+    'GROUPING = g (-1 = g1 2 = g2);', kind = 'negative_codes')
+add('P-MG12', 'decimal_integer', cfa, 'y1 y2 y3 g',
+    'GROUPING = g (-1.0 = g1 2.0 = g2);', kind = 'negative_codes')
+
 make_data <- function(p, seed) {
   set.seed(seed)
   names <- strsplit(p$names, ' +')[[1]]
   if (p$kind == 'nm_range') names <- c(paste0('y', sprintf('%02d',8:11)), paste0('a',1:3,'b'), 'z')
   grouped <- 'g' %in% names
-  codes <- if (p$kind == 'three_groups') 1:3 else if (p$kind == 'codes_5_7') c(5,7) else 1:2
+  codes <- if (p$kind == 'three_groups') 1:3 else if (p$kind == 'codes_5_7') c(5,7) else if (p$kind == 'fractional_codes') c(-1,2.5) else if (p$kind == 'negative_codes') c(-1,2) else 1:2
   n <- if (grouped) 500L * length(codes) else 500L
   latent <- rnorm(n)
   latent2 <- .3 * latent + sqrt(1-.3^2) * rnorm(n)

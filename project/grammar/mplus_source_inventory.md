@@ -348,6 +348,11 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-MG7 | MG11 | Two groups: `f1 BY y1-y3; f2 BY y4-y5; y4 ON f1; y6 ON f1;` | Are the y4 and y6 slopes and y6's intercept equal across groups? |
 | P-DF7 | DF08 | `y1 y2 ON x1; y3 ON y1;` | Which residual covariances among y1, y2, y3 are free |
 | P-MG6 | MG06 | Two groups: overall `f BY y1-y3;`, group-specific `MODEL g2: f BY y1;` and `MODEL g2: f BY y2;` | Is y1 freed in g2? Is y2's equality released only in g2? |
+| P-MG8 | MG06 | Overall CFA; `MODEL g2: y1 WITH y2;` | Can a group section add a parameter absent from the overall model? |
+| P-MG9 | MG06, LB07 | Repeated `MODEL g2:` sections: disjoint mentions, conflicting loading fixes, then a bare loading mention | Cumulative application, last fix wins, and later bare mention releases a fix |
+| P-MG10 | MG06 | `MODEL g1 g2: [y3];` | Are multi-label group section heads allowed? |
+| P-MG11 | MG03 | `GROUPING = g (-1 = g1 2.5 = g2);` | Are fractional grouping codes accepted? |
+| P-MG12 | MG03 | Negative integers, with integer and decimal spellings | Are negative codes and integral decimal spellings accepted? |
 | P-IV1 | IV01–IV05 | `MODEL = CONFIGURAL METRIC SCALAR (MODEL);` on a two-factor, six-indicator, two-group continuous CFA (once with markers, once with `f@1`) | Generated MODEL commands; reference group; factor covariances |
 
 **Later increments:**
@@ -419,6 +424,11 @@ These observations do not resolve or change the inventory rules.
 | P-MG7 | MG11 | Accepted; Y4 ON F1 numbers 14/28 and Y6 ON F1 numbers 15/29. Y4 intercept number 12 shared; Y6 intercepts 13/27. Iteration limit reached; no fit chi-square printed. |
 | P-DF7 | DF08 | Accepted; PSI[Y3,Y2]=9 free; Y1/Y2 and Y1/Y3 residual covariance cells zero. |
 | P-MG6 | MG06 | Both accepted; G2 Y1 mention frees its loading while G1 Y1 stays fixed. G2 Y2 mention assigns a distinct loading number; Y3 remains shared. |
+| P-MG8 | MG06 | Accepted: group-2-only residual covariance adds one free parameter (15 versus the default 14). |
+| P-MG9 | MG06, LB07 | Repeated sections accepted cumulatively (16 free parameters for disjoint mentions). Later loading fix wins (0.8); a later bare loading mention releases the earlier fix. |
+| P-MG10 | MG06 | Rejected: Unknown group name G1 G2 specified in group-specific MODEL command. Write one label per section. |
+| P-MG11 | MG03 | Rejected: grouping value has to be an integer (2.5); Mplus suggests DEFINE. Frontend policy: recode to integers in R because DEFINE remains rejected. |
+| P-MG12 | MG03 | Accepted: negative integer -1 and integral decimal spellings -1.0 and 2.0. Canonical frontend codes must be integer strings. |
 | P-IV1 | IV01–IV05 | Planner added variant variance_both (`f1@1 f2@1`; the lane's `f1 f2@1` fixed only f2): accepted, free counts 38/34/30, df 16/20/24; TECH1 PSI fixed in G1, free in G2 for metric and scalar. Original variants: both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
 | P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
 | P-CT1 | CT03 | Within-variable range accepted, both U1 thresholds free. Across-variable range accepted, first thresholds share number 1. Bare [U1] errors as an ignored statement. |
