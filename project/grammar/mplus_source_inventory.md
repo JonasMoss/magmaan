@@ -316,3 +316,69 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-CN2 | CN05 | `y3 IND y2 y1 x1` versus `y3 IND y1 y2 x1`; `y IND f x` through a factor; continuous `y IND m x` | Effects printed |
 | P-DA1 | DA06 | Free-format records with `1,,3`, extra fields and wrapped observations | N and sample means |
 | P-DA2 | DA03 | `FORMAT = 3F2.1; MISSING = ALL (99);` versus `(9.9)`; `-9` versus `-9.0` | N and sample means |
+
+
+## Probe results (Mplus 9.1 Demo)
+
+Observed output from the standalone maintainer tool
+[`regen_mplus_probes.R`](../../cpp/tests/tools/regen_mplus_probes.R) is summarized
+below; [`probes.json`](../../cpp/tests/fixtures/mplus/probes.json) contains all
+41 probes and 98 variants, their input sections, seeds, inventory IDs and parsed
+output. Scratch inputs, data and original output stay under
+`~/.cache/magmaan-logs/mplus-probes/` and are not checked in.
+
+“Accepted” means no `*** ERROR` header, not successful estimation. Identification,
+nonconvergence and other estimation messages are retained separately. Empty
+fit-statistic arrays mean that the Demo did not print those statistics. TECH1
+entries retain the printed row/column names, parameter numbers and lower
+triangles; vectors use a `vector` row. Repeated truncated TECH1 names gain
+`#1` suffixes to preserve distinct printed cells; summary/results names retain
+the full printed spelling. Additional parameters have their own specification. Zero is a fixed-cell parameter number,
+not its fixed value. Group and invariance-model identifiers are kept separately.
+Synthetic estimation failures are reported without altering the probe syntax.
+P-NM1 uses analyzed subsets to respect Demo caps; its NAMES statement is intact.
+These observations do not resolve or change the inventory rules.
+
+| Probe | Settles | Observed facts |
+| --- | --- | --- |
+| P-LX1 | LX05 | Inline: Y1 ON X1 and Y2 ON X1 printed (7 free parameters). Multiline: only Y1 ON X1 printed (5 free). |
+| P-LX2 | LX03 | GEN, USEVAR and ESTI accepted. GENE: unrecognized TYPE setting; USE: unknown option; NOCOVAR: unrecognized MODEL setting. |
+| P-LX3 | LX06 | Both title strings accepted; the printed titles retain `anal: x` and `model: x`; the later CFA has 9 free parameters. |
+| P-LX4 | LX02, LX02a | 91 columns: accepted with warning that input exceeds 90 characters; all three indicators appear, 9 free parameters. 200 columns: error, no semicolon before new command; output echoes only F BY Y1 Y2 in the diagnostic. |
+| P-NM1 | NM02 | Original NAMES accepted with USEV selecting Y08 Y09 Y10 Y11 Z; those names print in that order. Selecting explicit A1B A2B A3B Z errors on unknown A2B. Analyzed subset reduced to five/four variables for Demo caps; NAMES unchanged. |
+| P-NM2 | NM01, NM01a | Both variants accepted; LONGNAME_1/LONGNAME_2 and ABCDEFGH1/ABCDEFGH2 print distinctly in the summary and MODEL RESULTS; TECH1 prints both names as the same eight-character prefix. |
+| P-NM3 | NM03, NM04 | (a) X1 is an indicator between Y1 and Y2; order Y1 X1 Y2 Y3, marker Y1. (b) error expanding Y1-Y3. (c) F-Y3 unknown. |
+| P-MS1 | MS02, LB07 | Two BY statements: Y1 fixed at 1, Y3 free (parameter 6). Repeated Y1: all three loadings free (4,5,6); SEs unavailable. Start/fix: Y1 free (5), Y2 fixed at 1. |
+| P-MS2 | MS08, DF01 | Baseline N=450; X1 variance/mean mentions each give N=500, free X1 mean and variance, X2 fixed. X1 WITH X2 gives N=500 and both means, variances and covariance free (9 total). |
+| P-LB1 | LB01 | Factor @: F variance fixed, printed 0.050. Residual @: Y1 residual fixed, printed 0.719; SEs unavailable. TECH1 numbers are zero for those fixed cells. |
+| P-LB2 | LB05 | Accepted; BETA orders Y1/X1,Y1/X2,Y2/X1,Y2/X2,Y3/X1,Y3/X2 as 4–9. Printed D=-0.021 equals the rounded Y1/X2 minus Y2/X1 estimates. |
+| P-LB3 | LB06 | Slopes share one parameter number and printed estimate. Bare Y1 Y2 (v) variances likewise share one number; 3 free parameters total. |
+| P-LB4 | LB04, LB06 | (1-4) accepted with Y1 fixed at 1. (a2-a4): label-count mismatch. (a1-a4) plus constraint referencing all labels: unknown label A1. |
+| P-LB5 | LB03 | Error: extra characters after the right parenthesis; no fitted Y5 row. |
+| P-LB6 | LB06, NM01 | Fixed-label form errors on characters after parenthesis. Mixed-case reference and nine-character label accepted. |
+| P-DF1 | DF10 | Accepted; PSI[Y4,F]=13 (free). |
+| P-DF2 | DF07 | Accepted; Y4 and X1 have free means and variances; warnings say they are uncorrelated with all other variables. |
+| P-DF3 | DF09 | Second order: PSI[F2,F1]=0. First order: PSI[F2,F1] is free. |
+| P-DF4 | DF13 | Accepted; factor residual covariance zero; explicit Y1 WITH Y4 free in THETA. |
+| P-DF5 | MS11, CL19 | Both accepted. Single df=0, group df=4; NU intercepts remain free; group-2 F mean remains free despite NOMEANSTRUCTURE. |
+| P-DF6 | CL17 | All three settings accepted; each has 9 free parameters and df=0 with free intercepts. |
+| P-MG1 | MG05 | Accepted; second-order F2 BY F3 coefficient is BETA[F2,F3]=11 in G1, 22 in G2; first-order loadings share numbers. SEs unavailable; identification messages printed. |
+| P-MG3 | MG02, MG03 | Order A then B, N=500 each (1000 total); unlisted group 3 absent. F mean fixed at zero in A, free in B. |
+| P-MG4 | MG03 | (2) accepted, labels G1/G2 with N=500 each. (3) errors: G3 (2147483647) has 0 observations. |
+| P-MG5 | MG07, MG13 | Named: Y1 variance number 3 in both groups. Named pair: all four variances number 3. Released numeric label: Y1 numbers 3/7. Reused a: G1 Y1 and G2 Y1/Y2 all number 3. |
+| P-MG7 | MG11 | Accepted; Y4 ON F1 numbers 14/28 and Y6 ON F1 numbers 15/29. Y4 intercept number 12 shared; Y6 intercepts 13/27. Iteration limit reached; no fit chi-square printed. |
+| P-DF7 | DF08 | Accepted; PSI[Y3,Y2]=9 free; Y1/Y2 and Y1/Y3 residual covariance cells zero. |
+| P-MG6 | MG06 | Both accepted; G2 Y1 mention frees its loading while G1 Y1 stays fixed. G2 Y2 mention assigns a distinct loading number; Y3 remains shared. |
+| P-IV1 | IV01–IV05 | Both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
+| P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
+| P-CT1 | CT03 | Within-variable range accepted, both U1 thresholds free. Across-variable range accepted, first thresholds share number 1. Bare [U1] errors as an ignored statement. |
+| P-CT2 | CT07 | Error: CATEGORICAL is for dependent variables only; U1 is independent in this model. |
+| P-CT3 | CT07, CT01 | Error: group 2 does not contain all values of categorical U1. |
+| P-CT4 | CL18 | Both accepted. Categorical CFA reports numerical integration (one dimension); observed regression reports zero integration dimensions. |
+| P-GR1 | GR04, GR05 | All accepted. Threshold indices shared over time; I mean fixed zero, S mean free. Delta: U1 scale fixed, U2–U4 free. Theta: U1 residual fixed, U2–U4 free. ML prints fixed response residual cells and no chi-square. |
+| P-GR2 | GR06 | Delta/Theta accepted; G2 time-one scale/residual free; I and S means free in G2. Continuous accepted: all observed intercepts fixed zero, both growth means free in both groups. Multiple-group ML errors: integration unavailable. |
+| P-GR3 | GR02, GR03 | Cubic accepted, 19 free, df 1; cubic fixed loadings printed 0,1,8,27,64. Free-time form errors: insufficient fixed time scores. Shared-I piecewise accepted. Before/after intercept mentions both yield shared free NU number 1 and free I mean; SEs unavailable. |
+| P-CN1 | CN02 | Explicit/implicit each 11 free, df 1 and same chi-square. NEW(c) form 12 free, df 0. Derived ratio form 9 free, df 3; R printed as an additional parameter. |
+| P-CN2 | CN05 | Both mediator orders accepted; printed specific paths retain the requested order (forward estimate 0.001, reverse 0.000). Factor path prints indirect 0.012; continuous mediation prints indirect 0.010. |
+| P-DA1 | DA06 | Empty comma field errors (non-missing blank; zero observations). Extra field and wrapped records accepted, N=500 and identical means (-0.023,0.058,-0.045). |
+| P-DA2 | DA03 | All accepted, N=500. Y1 mean: 99 → 5.465; 9.9 → 4.972; -9 and -9.0 → 4.385. F2.1 fields are 99 or -9 in the first 50 rows; only flag 9.9 marks those 99 fields missing. |
