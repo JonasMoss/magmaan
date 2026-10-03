@@ -1,5 +1,16 @@
 ### Ordinal and mixed categorical LS
 
+- C++ `fit_ordinal_configured()` supports the `lavaan-0.7.2` preset for
+  all-ordinal DWLS, with delta/theta and ordered affine equality coordinates.
+  Sample thresholds, polychoric FABIN3 loadings, unit response scales and
+  theta residual starts feed the pinned PORT controls and four-attempt retry
+  sequence. Search weights use `(n_g-1)/n_g` relative to native weights,
+  reproducing lavaan's group-weighted half quadratic and acceptance gradient.
+  Every attempt and the selected first-order verdict are retained beside
+  native objective/stationarity diagnostics. Frozen single/grouped,
+  loading/threshold invariance and invalid-start fixtures cover this contract.
+  Native fitting is unchanged; R routing awaits task-40 integration.
+  ULS/WLS and mixed versioned presets remain unavailable.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.

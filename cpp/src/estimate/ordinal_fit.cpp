@@ -1,4 +1,6 @@
 #include "ordinal_internal.hpp"
+#include "magmaan/estimate/configured_ml.hpp"
+#include "magmaan/estimate/backend_strings.hpp"
 
 namespace magmaan::estimate {
 
@@ -2339,6 +2341,203 @@ profile_lrt_ci_parameter_mixed_ordinal(
 }
 
 }  // namespace frontier
+
+fit_expected<Estimates>
+fit_ordinal_configured(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const FittingOptions& options, spec::Starts starts,
+    const Eigen::VectorXd& explicit_start, Bounds bounds,
+    OrdinalWeightKind weights, OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user) {
+  auto setup = resolve_fitting_options(options);
+  if (!setup) return std::unexpected(setup.error());
+  constexpr std::string_view version = "lavaan-0.7.2";
+  const bool search = setup->optimizer == version;
+  const bool acceptance = setup->convergence == version;
+  auto fail = [](std::string message) -> fit_expected<Estimates> {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue, std::move(message)));
+  };
+  if (weights != OrdinalWeightKind::DWLS)
+    return fail("ordinal fitting options currently support only all-ordinal DWLS");
+  if (pt.n_levels() != 1 || pt.composite_mode != spec::CompositeMode::None ||
+      !pt.nl_constraints.empty() || pt.has_inequality_constraints)
+    return fail("ordinal fitting options require a single-level model with affine equalities only");
+  if (auto valid = validate_stats(stats, rep, weights); !valid)
+    return std::unexpected(valid.error());
+  if (auto prepared = prepare_ordinal_delta_partable(pt, stats, &starts, row_user); !prepared)
+    return std::unexpected(prepared.error());
+  std::vector<bool> seen(static_cast<std::size_t>(pt.n_free()), false);
+  for (int slot : pt.free) if (slot > 0) {
+    if (seen[static_cast<std::size_t>(slot - 1)])
+      return fail("lavaan ordinal fitting requires distinct free slots");
+    seen[static_cast<std::size_t>(slot - 1)] = true;
+  }
+  auto make_start = [&](bool simple) {
+    if (simple || setup->starts == version)
+      return lavaan_ordinal_start_values(pt, rep, stats, starts, simple, row_user);
+    if (setup->starts == "simple" || setup->starts == "layered")
+      return ordinal_start_values(pt, rep, stats, starts, row_user);
+    return fit_expected<Eigen::VectorXd>(std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "ordinal fitting options start constructor lacks a parity gate")));
+  };
+  auto x0 = explicit_start.size() ? fit_expected<Eigen::VectorXd>(explicit_start) : make_start(false);
+  if (!x0) return std::unexpected(x0.error());
+  if (x0->size() != pt.n_free() || !x0->allFinite())
+    return fail("configured ordinal start has wrong dimension or nonfinite values");
+  FittingReport report; report.setup = *setup; report.explicit_start = explicit_start.size() != 0;
+  if (!search) {
+    if (acceptance) return fail("ordinal lavaan acceptance currently requires the lavaan optimizer");
+    auto backend = backend_from_string(setup->optimizer);
+    if (!backend) return std::unexpected(backend.error());
+    auto est = fit_ordinal_bounded(pt, rep, stats, bounds, weights, *x0, *backend, {}, parameterization, row_user);
+    if (est) est->fitting = std::move(report);
+    return est;
+  }
+#ifndef MAGMAAN_WITH_PORT
+  return fail("lavaan ordinal fitting requires a PORT-enabled build");
+#else
+  // Native residuals carry sqrt(n_g/N). Multiplying only the search weight
+  // by (n_g-1)/n_g yields lavaan's half quadratic in its original units.
+  data::OrdinalStats driven_stats = stats;
+  for (std::size_t b = 0; b < stats.n_obs.size(); ++b)
+    driven_stats.W_dwls[b] *= static_cast<double>(stats.n_obs[b] - 1) / static_cast<double>(stats.n_obs[b]);
+  // Build at a valid ordinary start even when explicit input is invalid. DWLS
+  // has no ML covariance preflight; PORT sees nonfinite objectives as 1e20.
+  auto valid_start = lavaan_ordinal_start_values(pt, rep, stats, {}, true, row_user);
+  if (!valid_start) return std::unexpected(valid_start.error());
+  Estimates seed; seed.theta = *valid_start;
+  auto objective = frontier::ordinal_ls_objective(pt, rep, driven_stats, seed, weights, parameterization, row_user);
+  if (!objective) return std::unexpected(objective.error());
+  const auto scalar = optim::scalarize(objective->problem);
+  auto coords = lavaan_ml_coordinates(pt);
+  if (!coords) return std::unexpected(coords.error());
+  const bool constrained = coords->active();
+  const auto& k = coords->Kmat;
+  const auto& k0 = coords->theta0;
+  const double inf = std::numeric_limits<double>::infinity();
+  if (bounds.empty()) bounds = {Eigen::VectorXd::Constant(pt.n_free(), -inf), Eigen::VectorXd::Constant(pt.n_free(), inf)};
+  if (bounds.lower.size() != pt.n_free() || bounds.upper.size() != pt.n_free())
+    return fail("configured ordinal bounds have wrong dimension");
+  if (((bounds.lower.array().isFinite()) && (bounds.lower.array() != 0.0)).any() ||
+      ((bounds.upper.array().isFinite()) && (bounds.upper.array() != 0.0)).any())
+    return fail("lavaan ordinal search supports only zero/infinite bounds");
+  auto evaluator = model::ModelEvaluator::build(pt, rep);
+  if (!evaluator) return fail(evaluator.error().detail);
+  auto native_constraints = build_eq_constraints(pt);
+  if (!native_constraints) return std::unexpected(post_to_fit(native_constraints.error()));
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout) return fail(layout.error().detail);
+  auto factors = weight_factors(stats, weights);
+  if (!factors) return std::unexpected(factors.error());
+  auto endpoint = [&](const Eigen::VectorXd& theta, double f) {
+    Estimates est; est.theta = theta; est.fmin = f;
+    // Preserve the native audit and Newton geometry alongside the selected
+    // versioned first-order verdict, using the original sampling weights.
+    auto native = frontier::ordinal_ls_objective(pt, rep, stats, seed, weights, parameterization, row_user);
+    if (native) {
+      Eigen::VectorXd gradient;
+      est.fmin = optim::scalarize(native->problem).f(theta, gradient);
+      attach_ordinal_geometric_diagnostics(est, pt, *evaluator,
+          *native_constraints, bounds, native->problem,
+          OrdinalNewtonContext{&rep, &stats, nullptr, &*layout, &*factors, parameterization});
+      est.fmin = f;
+    }
+    return est;
+  };
+  if (pt.n_free() == 0) {
+    Eigen::VectorXd g;
+    auto est = endpoint(*x0, scalar.f(*x0, g));
+    est.fitting = std::move(report);
+    FitVerdict verdict; verdict.status = verdict.stationarity = FitCheck::Failed;
+    verdict.criterion = StationarityCriterion::FirstOrder;
+    est.selected_verdict = verdict;
+    return est;
+  }
+  std::optional<Estimates> selected;
+  for (int a = 0; a < 4; ++a) {
+    FittingAttempt attempt;
+    attempt.simple_start = a >= 2; attempt.standardized = a % 2 == 1;
+    auto start = attempt.simple_start ? make_start(true) : x0;
+    if (!start) return std::unexpected(start.error());
+    attempt.start = *start;
+    // Every all-ordinal sample response variance is one, including theta.
+    // The retry scale comes from sample responses, never implied variances.
+    Eigen::VectorXd scale = Eigen::VectorXd::Ones(pt.n_free());
+    if (constrained && attempt.standardized) {
+      if (std::any_of(pt.ordered_affine_d.begin(), pt.ordered_affine_d.end(), [](double d) { return d != 0.0; }))
+        return fail("lavaan ordinal standardized retry excludes nonzero affine RHS");
+      scale = (k * (k.transpose() * (scale - k0)) + k0).eval();
+      if (!scale.allFinite() || (scale.array() == 0.0).any())
+        return fail("lavaan ordinal standardized retry requires finite nonzero scales");
+      const Eigen::MatrixXd transported = scale.cwiseInverse().asDiagonal() * k;
+      const Eigen::MatrixXd residual = coords->A_eq * transported;
+      const double tolerance = 64 * std::numeric_limits<double>::epsilon() * static_cast<double>(std::max<Eigen::Index>(1,k.rows()));
+      for (Eigen::Index i=0;i<residual.rows();++i) for(Eigen::Index j=0;j<residual.cols();++j)
+        if (std::abs(residual(i,j)) > tolerance * coords->A_eq.row(i).stableNorm() * transported.col(j).stableNorm())
+          return fail("lavaan ordinal standardized retry changes the equality constraint surface");
+    }
+    attempt.parameter_scale = scale;
+    const Eigen::VectorXd z_start = start->cwiseProduct(scale);
+    attempt.optimizer_start = constrained ? Eigen::VectorXd(k.transpose() * (z_start-k0)) : z_start;
+    attempt.port_scale = Eigen::VectorXd::Ones(attempt.optimizer_start.size());
+    if (!attempt.standardized) for (Eigen::Index j=0;j<attempt.port_scale.size();++j)
+      if (std::abs(attempt.optimizer_start(j)) > 1) attempt.port_scale(j) = 1 / std::abs(attempt.optimizer_start(j));
+    auto& controls = attempt.controls;
+    controls.normalize_sample = false; controls.coordinate_scaling = optim::CoordinateScaling::None;
+    controls.center_locations = false;
+    controls.port.max_eval = 20000; controls.port.max_iter = 10000;
+    controls.port.abs_f_tol = 10 * std::numeric_limits<double>::epsilon();
+    controls.port.rel_f_tol = 1e-10; controls.port.x_tol = 1.5e-8; controls.port.false_conv_tol = 2.2e-14;
+    controls.port.step_min = controls.port.step_max = 1;
+    controls.port.unbounded_routine = true; controls.port.scale = attempt.port_scale;
+    optim::ScalarProblem driven;
+    driven.n_param = attempt.optimizer_start.size();
+    driven.expand = [](const Eigen::VectorXd& z) { return z; };
+    driven.f = [&](const Eigen::VectorXd& z, Eigen::VectorXd& g) {
+      const Eigen::VectorXd expanded = constrained ? Eigen::VectorXd(k*z+k0) : z;
+      const double f = scalar.f(expanded.cwiseQuotient(scale), g);
+      if (!std::isfinite(f)) g = Eigen::VectorXd::Constant(scale.size(), std::numeric_limits<double>::quiet_NaN());
+      g.array() /= scale.array();
+      if (constrained) g = (k.transpose()*g).eval();
+      return std::isfinite(f) ? f : 1e20;
+    };
+    Bounds box{bounds.lower.cwiseProduct(scale), bounds.upper.cwiseProduct(scale)};
+    if (constrained) box = {Eigen::VectorXd::Constant(k.cols(),-inf),Eigen::VectorXd::Constant(k.cols(),inf)};
+    auto result = optim::port(driven, attempt.optimizer_start, box, controls);
+    if (!result) {
+      attempt.error = result.error().detail;
+      attempt.fmin = std::numeric_limits<double>::quiet_NaN();
+      selected = endpoint(*x0, attempt.fmin);
+    } else {
+      attempt.optimizer_end = result->x;
+      attempt.fmin = driven.f(result->x, attempt.optimizer_gradient);
+      attempt.raw_status = result->audit.raw_backend_status;
+      attempt.gradient_max = result->audit.backend_gradient_max;
+      attempt.iterations = result->iterations;
+      const Eigen::VectorXd expanded = constrained ? Eigen::VectorXd(k*result->x+k0) : result->x;
+      selected = endpoint(expanded.cwiseQuotient(scale), attempt.fmin);
+      selected->iterations = result->iterations; selected->f_evals = result->f_evals;
+      selected->g_evals = result->g_evals; selected->optimizer_status = result->status;
+      selected->audit.raw_backend_status = attempt.raw_status;
+      selected->audit.backend_gradient_max = attempt.gradient_max;
+    }
+    if (acceptance) {
+      FitVerdict verdict;
+      const bool accepted = attempt.raw_status >= 3 && attempt.raw_status <= 6 &&
+          std::isfinite(attempt.gradient_max) && attempt.gradient_max <= 1e-3;
+      verdict.status = verdict.stationarity = accepted ? FitCheck::Passed : FitCheck::Failed;
+      verdict.objective = std::isfinite(selected->fmin) ? FitCheck::Passed : FitCheck::Failed;
+      verdict.criterion = StationarityCriterion::FirstOrder;
+      selected->selected_verdict = verdict;
+    }
+    attempt.accepted = fit_verdict(*selected).status == FitCheck::Passed;
+    report.selected_attempt = report.attempts.size(); report.attempts.push_back(std::move(attempt));
+    if (report.attempts.back().accepted) break;
+  }
+  selected->fitting = std::move(report);
+  return std::move(*selected);
+#endif
+}
 
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,

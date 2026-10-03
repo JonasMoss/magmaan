@@ -2268,6 +2268,41 @@ prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
   return prepare_mixed_ordinal_delta_partable(pt, stats, starts, row_user);
 }
 
+// FABIN3 loadings use the polychoric matrix in target identification.
+// Threshold hints win over sample thresholds; the simple retry replaces all
+// free values (including hints) and starts thresholds/locations at zero.
+fit_expected<Eigen::VectorXd>
+lavaan_ordinal_start_values(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    spec::Starts starts, bool simple,
+    const std::vector<std::int8_t>* row_user) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts, row_user); !p)
+    return std::unexpected(p.error());
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout) return std::unexpected(make_err(FitError::Kind::NumericIssue, layout.error().detail));
+  auto fabin = fabin_start_values(pt, rep, sample_stats_for_starts(stats), {},
+                                FabinVariant::Fabin3, true);
+  if (!fabin) return std::unexpected(fabin.error());
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(pt.n_free());
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0) continue;
+    const auto k = pt.free[i] - 1;
+    if (pt.op[i] == parse::Op::Measurement)
+      out(k) = simple ? 0.7 : (*fabin)(k);
+    else if (pt.op[i] == parse::Op::ResponseScale) out(k) = 1.0;
+    else if (pt.op[i] == parse::Op::Covariance && pt.lhs_var[i] == pt.rhs_var[i])
+      out(k) = simple || pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])] >= 0 ? 1.0 : 0.05;
+  }
+  if (!simple) {
+    seed_threshold_starts(out, *layout, stats);
+    for (Eigen::Index k = 0; k < out.size() && static_cast<std::size_t>(k) < starts.hint.size(); ++k)
+      if (std::isfinite(starts.hint[static_cast<std::size_t>(k)])) out(k) = starts.hint[static_cast<std::size_t>(k)];
+  }
+  if (!out.allFinite()) return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+      "lavaan ordinal starts are nonfinite"));
+  return out;
+}
+
 // Start-value producer for the ordinal delta path. Prepares the partable
 // (delta parameterization fixes the ordinal indicator variances/intercepts —
 // this is what changes n_free), seeds the structural parameters via the simple
