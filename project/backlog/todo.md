@@ -708,6 +708,14 @@ The ordinary package does not expose MI in this release; the
   (both Status OK, no NOTEs); primary CI uses it, and weekly/manual hardening
   adds dev sanitizers, fixture parity and LLVM domain coverage artifacts.
 
+- [x] **S/M — release check dry run (task-31.1).** `just check` passes
+  (1,486 Debug C++ tests, R examples and ordinary-package tests), and the opt
+  parity label passes (20 tests). Both portable packages finish `R CMD check
+  --no-manual` with Status OK and no NOTEs. Fixed stale help defaults, a duplicate
+  Rd details section, an unqualified `stats::setNames`, and a socket-unavailable
+  PSOCK test skip that preserves local serialization coverage. The worker test
+  also passes with sockets available. Versions and publishing remain pending.
+
 - [ ] **S — align versions and publish.** Set the CMake project version
   (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;
   push `main` and the tags. As of 2026-10-02 `main` is 74 commits ahead of

@@ -10,7 +10,7 @@ score_flip_test(
   data = NULL,
   n_flips = 999L,
   seed = 1,
-  calibration = c("all", "effective-standardized", "effective", "asymptotic"),
+  calibration = c("effective", "all", "effective-standardized", "asymptotic"),
   multiplier = c("rademacher", "mammen", "two-point", "gaussian", "centered-exponential"),
   two_point_skewness = 1,
   center_multiplier_scores = FALSE,

@@ -73,18 +73,32 @@ test_that("repeated fits reuse structure and serialized models rebuild it", {
     expect_equal(count(), n + 1)
     expect_equal(rebuilt$lab$theta, fit$lab$theta, tolerance = 1e-8)
     expect_equal(rebuilt$inference$status, fit$inference$status)
-    worker <- parallel::makePSOCKcluster(1)
-    tryCatch({
-      result <- parallel::clusterCall(worker, function(model, data, estimator, libs) {
-        .libPaths(libs)
-        Sys.setenv(OPENBLAS_NUM_THREADS = 1, OMP_NUM_THREADS = 1, MKL_NUM_THREADS = 1)
-        magmaan::magmaan(model, data, estimator)
-      }, model, data, estimator, .libPaths())[[1]]
-      expect_equal(result$lab$theta, fit$lab$theta, tolerance = 1e-8)
-      expect_equal(result$inference$status, fit$inference$status)
-      expect_equal(coef(result), coef(fit), tolerance = 1e-8)
-      expect_equal(vcov(result), vcov(fit), tolerance = 1e-8)
-    }, finally = parallel::stopCluster(worker))
+  }
+})
+
+test_that("serialized models rebuild prepared handles on PSOCK workers", {
+  # Socket access can be disabled by a check sandbox; local rebuilding is
+  # covered separately so that it still runs in those environments.
+  socket <- tryCatch(suppressWarnings(serverSocket(0)), error = identity)
+  if (inherits(socket, "error"))
+    skip(paste("PSOCK sockets unavailable:", conditionMessage(socket)))
+  close(socket)
+  worker <- parallel::makePSOCKcluster(1)
+  on.exit(parallel::stopCluster(worker), add = TRUE)
+  for (data in list(hs(), ordinal_hs())) {
+    ordered <- if (is.ordered(data$x1)) paste0("x", 1:6) else NULL
+    estimator <- if (length(ordered)) "DWLS" else "ML"
+    model <- magmaan_model(cfa, prototype = data, ordered = ordered)
+    fit <- magmaan(model, data, estimator)
+    result <- parallel::clusterCall(worker, function(model, data, estimator, libs) {
+      .libPaths(libs)
+      Sys.setenv(OPENBLAS_NUM_THREADS = 1, OMP_NUM_THREADS = 1, MKL_NUM_THREADS = 1)
+      magmaan::magmaan(model, data, estimator)
+    }, model, data, estimator, .libPaths())[[1]]
+    expect_equal(result$lab$theta, fit$lab$theta, tolerance = 1e-8)
+    expect_equal(result$inference$status, fit$inference$status)
+    expect_equal(coef(result), coef(fit), tolerance = 1e-8)
+    expect_equal(vcov(result), vcov(fit), tolerance = 1e-8)
   }
 })
 

@@ -30,3 +30,8 @@ independently (`ctest -L parity`). CI never invokes R; fixture regeneration is
 a manual developer step. Property and boundary tests are expected to catch
 structural mistakes early, before they surface as hard-to-debug parity
 failures.
+
+The ordinary R package tests local prepared-handle reuse and serialization
+independently of its PSOCK worker check. The worker check probes socket access
+and skips with the socket error when a check sandbox disallows listeners;
+local serialization assertions still run in that environment.

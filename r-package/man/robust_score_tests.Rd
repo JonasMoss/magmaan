@@ -66,8 +66,12 @@ the unstructured one and differs.
 
 Identification-only releases are excluded. Ordinal and mixed-ordinal methods
 use their retained categorical moment covariance and weight conventions; the
-continuous \code{bread}, \code{moments}, and \code{cov} choices do not apply there.}
+continuous \code{bread}, \code{moments}, and \code{cov} choices do not apply there.
+
+Generic \code{modification_indices()} and \code{score_tests()} compose empirical
+robust inference. To request the historical unscaled comparator explicitly, use
+\code{cov = "model_implied"}, \code{estimated_weight = FALSE}, and the desired
+bread/information. Observed-sensitivity LS and ML2S score laws that are not
+implemented fail explicitly; selecting expected bread requests a comparator.}
 \value{A data frame with candidate names and groups, ordinary \code{mi}, EPCs,
 \code{mi.scaled}, \code{scaling.factor}, and the robust \code{pvalue}.}
-
-\details{Generic modification_indices() and score_tests() compose empirical robust inference. To request the historical unscaled comparator explicitly, use cov = "model_implied", estimated_weight = FALSE, and the desired bread/information. Observed-sensitivity LS and ML2S score laws that are not implemented fail explicitly; selecting expected bread requests a comparator.}

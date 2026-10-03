@@ -3,7 +3,7 @@
 \title{Standardized residual diagnostics}
 \description{Returns standardized residual matrices, residual SE and z statistics, SRMR and block summaries. Estimated-weight inference for continuous least squares requires raw observations.}
 \usage{
-lav_residuals(fit, estimated_weight = FALSE, data = NULL)
+lav_residuals(fit, estimated_weight = TRUE, data = NULL)
 }
 \arguments{
 \item{fit}{A fitted magmaan model.}
