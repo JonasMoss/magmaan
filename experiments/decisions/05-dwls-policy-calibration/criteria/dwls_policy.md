@@ -54,6 +54,11 @@ family: SB, scaled-shifted, mean-variance, scaled F, All, penalized All,
 EBA and pEBA with 2, 4 and 6 blocks, and pOLS. The user chooses the global
 reference from that table. This selection is post hoc.
 
+The user chose **All** (2026-10-03): the exact weighted chi-square tail with
+every positive sample eigenvalue of the robust-ordinal spectrum, as computed by
+the exploration's `all` arm (truncate_negative = TRUE). Exploration rejection
+was 2.9-7.0% (median 4.8%), with no null cell outside [3%, 7%] at N >= 500.
+
 The chosen reference is then confirmed on fresh draws: the same 64 cells with
 seed base 817160001 and the registered replicate counts (2,000 null, 1,000
 power). Confirmation criterion, fixed now: policy rejection within [3%, 7%] in
