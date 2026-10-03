@@ -1494,6 +1494,9 @@ frontier_fit_ml_multiinfo <- function(
 # fit is restarted from the translated sphere solution, so the reported
 # estimate meets the ordinary convergence criteria in the model's own chart;
 # `fit$gauge$polish` records how far it moved.
+# `control$verified_newton = TRUE` selects construction-aware native terminal
+# assessment for covariance-only, unboxed ULS/ML. Missing bounds give NA.
+# The gauge retains the compatibility assessment and original objective checks.
 frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 ..., cluster = NULL, ordered = NULL,
                                 parameterization = "delta", psd = FALSE,
@@ -2144,6 +2147,11 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # C++ for unboxed ambient covariance-only ULS/ML. It returns explicit status,
 # construction bounds, a verified positive-curvature margin and, when available,
 # `distance_interval_derived_inputs`. Means and other estimators are unsupported.
+# `reported_objective` optionally supplies the backend objective for consistency
+# checking at a fitted endpoint; otherwise the supplied point is recomputed.
+# `verified_newton = TRUE` selects the construction-aware terminal assessment,
+# returning TRUE/FALSE/NA for within/above/unresolved; original acceptance is
+# retained in `converged_compatibility` and diagnostics. No optimizer runs here.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {

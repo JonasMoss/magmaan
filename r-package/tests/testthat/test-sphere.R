@@ -41,6 +41,35 @@ test_that("sphere ML reproduces the ordinary ML fit", {
   expect_equal(sph$gauge$native_audit$fmin, sph$gauge$fmin_sphere, tolerance = 1e-10)
 })
 
+test_that('construction-aware terminal assessment is explicit and keeps original evidence', {
+  spec <- model_spec('x ~~ x',fixed_x=FALSE,meanstructure=FALSE)
+  sample <- list(S=list(matrix(1,1,1,dimnames=list('x','x'))),nobs=100L)
+  for(estimator in c('ULS','ML')) {
+    x <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.0001,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE))
+    expect_true(x$converged)
+    expect_identical(x$converged_compatibility,x$diagnostics$newton_accuracy$passed)
+    expect_identical(x$verified_convergence$newton$status,'passed')
+    far <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.1,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE))
+    expect_false(far$converged)
+    expect_identical(far$verified_convergence$newton$status,'failed')
+    inconsistent <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.0001,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE,reported_objective=1))
+    expect_false(inconsistent$converged)
+    expect_identical(inconsistent$verified_convergence$objective_consistency$status,'failed')
+  }
+  fit <- suppressWarnings(frontier_fit_sphere(ernst,ernst_sim(),estimator='ULS',
+    optimizer='port-nls',polish=FALSE,control=list(verified_newton=TRUE)))
+  a <- fit$gauge$native_audit
+  expect_identical(fit$converged,a$converged)
+  expect_true(is.list(a$input_map))
+  expect_identical(a$distance_interval_derived_inputs$decision,'within_budget')
+  expect_equal(a$input_map$rounded_point,fit$gauge$sphere_partable$est[
+    fit$gauge$sphere_partable$free>0][order(fit$gauge$sphere_partable$free[fit$gauge$sphere_partable$free>0])],
+    tolerance=1e-10,ignore_attr=TRUE)
+})
+
 test_that("std.lv and multi-group metric invariance round-trip", {
   dat <- ernst_sim()
   ord <- fit_model(ernst, dat, std_lv = TRUE)

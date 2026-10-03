@@ -1,0 +1,2 @@
+cases,fit_calls,points,endpoints,perturbed_controls,fit_errors,available,within,above,unresolved,bound_misses,curvature_margin_misses,interval_misses,wrong_decisions,endpoint_passes,endpoint_unresolved,endpoint_failures,losses,control_passes,default_promoted
+30,120,240,120,120,0,216,106,107,27,0,0,0,0,106,3,11,0,0,False

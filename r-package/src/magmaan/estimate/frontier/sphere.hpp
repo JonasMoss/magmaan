@@ -83,6 +83,9 @@ struct SphereOptions {
   // translated sphere solution is finalized as is.
   bool         polish = true;
   SphereStart  start = SphereStart::Canonical;
+  // Opt-in terminal assessment with calculated construction bounds. Search
+  // and the translated common verdict are unchanged; unresolved stays unchecked.
+  bool verified_newton = false;
 };
 
 // Evidence at the driven endpoint, before user-chart translation or polish.
@@ -93,6 +96,7 @@ struct SphereOptions {
 // Unsupported constraint geometry stays unchecked under the Newton policy.
 struct SphereAudit {
   NewtonAudit computations;
+  std::optional<NewtonSphereMap> input_map;
   FitDiagnostics evidence;
   std::string detail;
 };

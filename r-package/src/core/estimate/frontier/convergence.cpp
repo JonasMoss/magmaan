@@ -10,6 +10,7 @@
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 
 namespace magmaan::estimate::frontier {
 namespace {
@@ -143,10 +144,37 @@ fit_expected<ConvergenceReport> audit_convergence(
   r.differences.max_shrink = audit.derivatives.difference_max_shrink;
   return collect(pt, rep, std::move(audit), std::move(r), reported);
 }
+fit_expected<ConvergenceReport> audit_convergence_covariance(
+    spec::LatentStructure pt,const model::MatrixRep& rep,const SampleStats& sample,
+    const Eigen::VectorXd& theta,Estimator estimator,ConvergenceRequest request,
+    std::optional<double> reported) {
+  request.newton=true;
+  if(auto ok=validate(pt,theta,request); !ok) return std::unexpected(ok.error());
+  if(auto ok=resolve_fixed_x_from_sample(pt,rep,sample); !ok) return std::unexpected(ok.error());
+  NewtonAudit audit;
+  if(estimator==Estimator::ML) {
+    audit=audit_newton_derivatives(pt,rep,evaluate_newton_ml(pt,rep,sample,theta),
+        request.domain,request.curvature,request.bounds,request.diagnostics.active_bound_tol);
+  } else if(estimator==Estimator::ULS) {
+    NewtonAdapterOptions options;
+    options.domain=request.domain; options.accuracy=request.curvature;
+    options.bounds=request.bounds; options.active_bound_tol=request.diagnostics.active_bound_tol;
+    auto a=audit_newton_uls(pt,rep,sample,theta,options);
+    if(!a) return std::unexpected(a.error());
+    audit=std::move(*a);
+  } else return std::unexpected(error("construction-aware covariance report supports ULS/ML"));
+  audit.input_errors=newton_input_error_bounds(pt,rep,sample,theta,audit,estimator);
+  return collect(pt,rep,std::move(audit),std::move(request),reported);
+}
+
 ConvergenceAssessment assess_convergence(const ConvergenceReport& r, ConvergencePolicy p) {
   auto evidence = r.evidence;
   if (r.request.newton && p.kind != ConvergencePolicyKind::Compatibility)
     evidence.newton_accuracy = assess_newton_accuracy(r.computations, p.newton);
+  if(p.require_verified_inputs && r.computations.input_errors) {
+    const auto interval=newton_input_distance_interval(r.computations,*r.computations.input_errors,p.newton.budget);
+    return assess_convergence(evidence,p,&interval);
+  }
   return assess_convergence(evidence, p);
 }
 } // namespace magmaan::estimate::frontier

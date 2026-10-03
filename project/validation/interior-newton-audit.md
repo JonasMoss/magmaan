@@ -1109,8 +1109,8 @@ ambient single-level ULS and complete-data ML. The model, sample, point, free
 parameter order and audit must match. Feasibility and statistical identification
 remain separate checks. Retained equality/tangent bases and coordinate maps
 define the numerical coordinates being bounded; no exact-nullspace claim is
-inferred from their rounded entries. Means, other LS weights, native sphere
-normalization, PSD faces and barriers are unsupported.
+inferred from their rounded entries. Means, other LS weights, PSD faces and barriers are unsupported. Native sphere
+normalization is covered by the subsequent extension below.
 
 Primitive Lambda, Psi, Theta and Beta cells come from the owning evaluator's
 direct binary64 write contract, including fixed structural cells and later
@@ -1173,3 +1173,64 @@ The fresh 15 ULS controls are exact-population numerical cases, not sampled
 fitting confirmation. All production-versus-interval disagreements are retained;
 one current raw production pass exceeds the budget by about 1.5e-16 and is
 unresolved under the interval rule. Production guard thresholds are unchanged.
+
+## Opt-in terminal composition and sphere construction (2026-10-03)
+
+`audit_convergence_covariance` composes original-objective and feasibility
+collection with retained ULS/ML Newton computations and calculated input bounds.
+`ConvergencePolicy::require_verified_inputs` changes only the explicit Newton
+check: the complete verified interval must be within the declared budget.
+An interval wholly above it fails; nonpositive curvature fails; unsupported,
+missing or unresolved bounds stay unchecked. There is no fallback to a raw
+condition cutoff, raw distance or weaker first-order criterion. Compatibility
+policy ignores this flag. The other required objective/consistency/feasibility
+checks retain their original semantics.
+
+`SphereOptions::verified_newton` attaches the producer to the native endpoint
+before marker translation or polish. `NewtonSphereMap` records binary64 offset,
+rest basis, unit basis Q, measurement units D, free-cell indices and the driven
+point. For a unit block b, r = ||b||, V = D Q, independently enclose
+
+    loading = V b/r,
+    J = V (I/r - b b'/r^3).
+
+For physical objective gradient g, collect the loading-cell score v using the
+last writer of each free parameter; shared aliases do not duplicate the score.
+Set c = V'v and a = b'c. The second-derivative contraction is
+
+    chain = -(c b' + b c' + a I)/r^3 + 3 a b b'/r^5.
+
+Combine J' H J with this chain, then reduce through the retained tangent and
+QR/equilibration maps. The target uses actual radii and retained Q entries,
+rather than assuming exact unit norm or exact orthogonality. Thus rounding in
+expansion and normalization is part of the construction bound. The sphere
+radial pin objective never enters the audit. Fixed cells keep their owning
+binary64 write contract; later fixed writes replace earlier free enclosures.
+This extends the covariance-only unboxed ambient scope to native sphere ULS/ML;
+means, other weights, active bounds and PSD faces remain unsupported.
+
+The R explicit `evaluate_at` assessment selects TRUE/FALSE/NA and retains
+`converged_compatibility`; `reported_objective` can supply the backend objective
+for an endpoint consistency check. With no supplied reported value it is a
+recomputed point assessment. Native sphere fitting retains both the old full
+native assessment and the new interval assessment; the opt-in selected verdict
+refers to the native point, with translated/polished diagnostics separate.
+
+
+Fresh sampled numerical confirmation in experiment 15's `audit_terminal` lane
+uses 30 problems in six families, with five draws per family and a fresh seed
+base 863261201. The common sample-only layered/native physical start is held
+fixed across marker and sphere fits. PORT-NLS ULS and PORT ML use sample-unit
+scaling and no sphere polish. The 120 endpoints and 120 marker variance
+perturbations yield 216 available construction comparisons and 213 decisive
+interval classifications, all correct against independent 90-digit SEM/map
+calculations. Original objective values agree as well. The remaining 27
+distances include 24 retained nonpositive-curvature failures and three
+unresolved intervals. At endpoints, 106 pass, eight have independently
+nonpositive curvature, three are above budget and three remain unchecked.
+Native mixed-unit ULS gains three passes with no losses. One unresolved
+weak-marker sphere ML endpoint is accurate at .000429; two mixed-unit sphere
+ULS endpoints are inaccurate at .697/.514. No perturbation passes. This is
+numerical confirmation on sampled controls, not a default adoption or
+population-reliability study. It preserves the remaining start/search and
+audit-conservatism questions separately.

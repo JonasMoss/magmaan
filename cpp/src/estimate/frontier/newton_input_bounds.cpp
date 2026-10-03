@@ -24,9 +24,11 @@ struct MomentIntervals {
 };
 std::optional<MomentIntervals> moments(
     const spec::LatentStructure& pt,const model::MatrixRep& rep,
-    const model::BlockMatrices& block,std::size_t b,Eigen::Index q) {
+    const model::BlockMatrices& block,std::size_t b,Eigen::Index q,
+    const IntervalMatrix& point) {
   MomentIntervals out;
   out.lambda=IntervalMatrix(block.Lambda); out.psi=IntervalMatrix(block.Psi);
+  IntervalMatrix theta(block.Theta), beta(block.Beta);
   const Eigen::Index p=block.Theta.rows(), m=block.Beta.rows();
   for(Eigen::Index k=0;k<q;++k) {
     out.d_lambda.emplace_back(p,m); out.d_psi.emplace_back(m,m);
@@ -45,6 +47,24 @@ std::optional<MomentIntervals> moments(
     if(cell.mat==MatId::Psi) derivatives=&out.d_psi;
     else if(cell.mat==MatId::Theta) derivatives=&out.d_theta;
     else if(cell.mat==MatId::Beta) derivatives=&out.d_beta;
+    auto* primitive=&out.lambda;
+    if(cell.mat==MatId::Psi) primitive=&out.psi;
+    else if(cell.mat==MatId::Theta) primitive=&theta;
+    else if(cell.mat==MatId::Beta) primitive=&beta;
+    if(pt.free[row]>0) {
+      (*primitive)(cell.row,cell.col)=point(pt.free[row]-1,0);
+      if((cell.mat==MatId::Psi || cell.mat==MatId::Theta) && cell.row!=cell.col)
+        (*primitive)(cell.col,cell.row)=point(pt.free[row]-1,0);
+    } else {
+      // A later fixed write must replace an earlier mapped/free enclosure.
+      const Eigen::MatrixXd* fixed=&block.Lambda;
+      if(cell.mat==MatId::Psi) fixed=&block.Psi;
+      else if(cell.mat==MatId::Theta) fixed=&block.Theta;
+      else if(cell.mat==MatId::Beta) fixed=&block.Beta;
+      (*primitive)(cell.row,cell.col)=Interval(static_cast<Wide>((*fixed)(cell.row,cell.col)));
+      if((cell.mat==MatId::Psi || cell.mat==MatId::Theta) && cell.row!=cell.col)
+        (*primitive)(cell.col,cell.row)=(*primitive)(cell.row,cell.col);
+    }
     for(Eigen::Index k=0;k<q;++k) {
       const Interval value(k+1==pt.free[row] ? Wide(1) : Wide(0));
       (*derivatives)[static_cast<std::size_t>(k)](cell.row,cell.col)=value;
@@ -52,10 +72,10 @@ std::optional<MomentIntervals> moments(
         (*derivatives)[static_cast<std::size_t>(k)](cell.col,cell.row)=value;
     }
   }
-  auto inverse=detail::inverse(detail::identity(m)-IntervalMatrix(block.Beta));
+  auto inverse=detail::inverse(detail::identity(m)-beta);
   if(!inverse) return std::nullopt;
   out.A=std::move(*inverse); out.M=out.lambda*out.A;
-  out.covariance=out.M*out.psi*out.M.transpose()+IntervalMatrix(block.Theta);
+  out.covariance=out.M*out.psi*out.M.transpose()+theta;
   for(Eigen::Index k=0;k<q;++k) {
     const auto idx=static_cast<std::size_t>(k);
     out.d_A.push_back(out.A*out.d_beta[idx]*out.A);
@@ -85,12 +105,76 @@ IntervalMatrix diagonal(const Eigen::VectorXd& d) {
   for(Eigen::Index i=0;i<d.size();++i) out(i,i)=Interval(static_cast<Wide>(d[i]));
   return out;
 }
+struct MappedInputs {
+  IntervalMatrix point, jacobian;
+  std::vector<IntervalMatrix> beta;
+  std::vector<Interval> radius;
+  std::vector<std::pair<std::size_t,Eigen::Index>> writer;
+};
+std::optional<MappedInputs> mapped_inputs(const Eigen::VectorXd& u,const NewtonSphereMap& map) {
+  const Eigen::Index q=map.offset.size(), rest=map.rest_basis.cols();
+  if(map.rest_basis.rows()!=q || rest>u.size() || !map.offset.allFinite() ||
+      !map.rest_basis.allFinite() || map.rounded_point.size()!=q) return std::nullopt;
+  MappedInputs out;
+  out.point=IntervalMatrix(map.offset)+IntervalMatrix(map.rest_basis)*IntervalMatrix(Eigen::VectorXd(u.head(rest)));
+  out.jacobian=IntervalMatrix(q,u.size());
+  out.writer.resize(static_cast<std::size_t>(q),{map.spheres.size(),0});
+  for(Eigen::Index i=0;i<q;++i) for(Eigen::Index j=0;j<rest;++j)
+    out.jacobian(i,j)=Interval(static_cast<Wide>(map.rest_basis(i,j)));
+  for(std::size_t k=0;k<map.spheres.size();++k) {
+    const auto& unit=map.spheres[k]; const auto dim=unit.basis.cols();
+    if(unit.units.size()!=unit.basis.rows() || unit.offset<rest || unit.offset+dim>u.size() ||
+        !unit.units.allFinite() || !unit.basis.allFinite()) return std::nullopt;
+    IntervalMatrix b(Eigen::VectorXd(u.segment(unit.offset,dim)));
+    Interval square;
+    for(Eigen::Index i=0;i<dim;++i) square=square+b(i,0)*b(i,0);
+    square.lower=std::max(Wide(0),square.lower);
+    const Interval radius=detail::square_root(square);
+    if(!(radius.lower>0) || !radius.finite()) return std::nullopt;
+    const auto Q=diagonal(unit.units)*IntervalMatrix(unit.basis);
+    const auto loading=(Interval(1)/radius)*(Q*b);
+    const auto jac=Q*((Interval(1)/radius)*detail::identity(dim)-
+        (Interval(1)/(radius*radius*radius))*(b*b.transpose()));
+    for(const auto& member:unit.parameters) {
+      if(member.size()!=static_cast<std::size_t>(Q.rows)) return std::nullopt;
+      for(Eigen::Index j=0;j<Q.rows;++j) if(member[static_cast<std::size_t>(j)]>=0) {
+        const auto row=member[static_cast<std::size_t>(j)]; if(row>=q) return std::nullopt;
+        out.point(row,0)=loading(j,0);
+        for(Eigen::Index col=0;col<u.size();++col) out.jacobian(row,col)=Interval();
+        for(Eigen::Index col=0;col<dim;++col) out.jacobian(row,unit.offset+col)=jac(j,col);
+        out.writer[static_cast<std::size_t>(row)]={k,j};
+      }
+    }
+    out.beta.push_back(std::move(b)); out.radius.push_back(radius);
+  }
+  return out.point.finite() && out.jacobian.finite() ? std::optional<MappedInputs>(std::move(out)) : std::nullopt;
+}
+IntervalMatrix map_curvature(const MappedInputs& inputs,const NewtonSphereMap& map,
+    const IntervalMatrix& gradient) {
+  IntervalMatrix out(inputs.jacobian.cols,inputs.jacobian.cols);
+  for(std::size_t k=0;k<map.spheres.size();++k) {
+    const auto& unit=map.spheres[k]; const auto dim=unit.basis.cols();
+    IntervalMatrix loading_gradient(unit.units.size(),1);
+    for(Eigen::Index row=0;row<gradient.rows;++row) {
+      const auto [owner,component]=inputs.writer[static_cast<std::size_t>(row)];
+      if(owner==k) loading_gradient(component,0)=loading_gradient(component,0)+gradient(row,0);
+    }
+    const auto q=IntervalMatrix(unit.basis).transpose()*diagonal(unit.units)*loading_gradient;
+    const auto& b=inputs.beta[k]; const auto r=inputs.radius[k];
+    const auto radial=(b.transpose()*q)(0,0);
+    const auto chain=(Interval(-1)/(r*r*r))*(q*b.transpose()+b*q.transpose()+radial*detail::identity(dim))+
+        ((Interval(3)*radial)/(r*r*r*r*r))*(b*b.transpose());
+    for(Eigen::Index i=0;i<dim;++i) for(Eigen::Index j=0;j<dim;++j)
+      out(unit.offset+i,unit.offset+j)=out(unit.offset+i,unit.offset+j)+chain(i,j);
+  }
+  return out;
+}
 }  // namespace
 
 NewtonInputErrorBounds newton_input_error_bounds(
     const spec::LatentStructure& pt,const model::MatrixRep& rep,
     const SampleStats& sample,const Eigen::VectorXd& theta,
-    const NewtonAudit& audit,Estimator estimator) {
+    const NewtonAudit& audit,Estimator estimator,const NewtonSphereMap* sphere_map) {
   NewtonInputErrorBounds out;
   const bool uls=estimator==Estimator::ULS;
   if((!uls && estimator!=Estimator::ML) ||
@@ -100,7 +184,9 @@ NewtonInputErrorBounds newton_input_error_bounds(
       !sample.mean.empty() || pt.n_levels()!=1) {
     out.detail="interval input bounds support unboxed ambient covariance-only ULS/ML"; return out;
   }
-  if(theta.size()!=pt.n_free() || audit.derivatives.theta.size()!=theta.size() ||
+  if((!sphere_map && theta.size()!=pt.n_free()) ||
+      (sphere_map && (sphere_map->offset.size()!=pt.n_free() || sphere_map->rounded_point.size()!=pt.n_free())) ||
+      !theta.allFinite() || audit.derivatives.theta.size()!=theta.size() ||
       !(theta.array()==audit.derivatives.theta.array()).all() ||
       sample.S.size()!=rep.dims.size() || sample.n_obs.size()!=sample.S.size() ||
       audit.geometry.equality_basis.rows()!=theta.size()) {
@@ -114,11 +200,18 @@ NewtonInputErrorBounds newton_input_error_bounds(
   }
   auto ev=model::ModelEvaluator::build(pt,rep);
   if(!ev) {out.status=NewtonAccuracyStatus::Unavailable; out.detail=ev.error().detail; return out;}
-  auto assembled=ev->assembled(theta);
+  auto assembled=ev->assembled(sphere_map ? sphere_map->rounded_point : theta);
   if(!assembled) {out.status=NewtonAccuracyStatus::Unavailable; out.detail=assembled.error().detail; return out;}
-  const Eigen::Index q=theta.size();
+  const Eigen::Index q=pt.n_free();
+  std::optional<MappedInputs> inputs;
+  IntervalMatrix target_point(theta), jacobian=detail::identity(q);
+  if(sphere_map) {
+    inputs=mapped_inputs(theta,*sphere_map);
+    if(!inputs) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="sphere expansion enclosure unresolved"; return out;}
+    target_point=inputs->point; jacobian=inputs->jacobian;
+  }
   const Eigen::MatrixXd B=audit.geometry.equality_basis*audit.geometry.tangent_basis;
-  const IntervalMatrix basis(B);
+  const IntervalMatrix audit_basis(B), basis=jacobian*audit_basis;
   IntervalMatrix total_h(q,q),total_g(q,1),total_correction(q,q);
   const IntervalMatrix full_map=uls ? basis*IntervalMatrix(audit.system.coordinate_map) : basis;
   IntervalMatrix transformed_gn(full_map.cols,full_map.cols);
@@ -131,7 +224,7 @@ NewtonInputErrorBounds newton_input_error_bounds(
     if(S.rows()!=rep.dims[b].n_observed || S.cols()!=S.rows() || !S.allFinite() || sample.n_obs[b]<=0) {
       out.status=NewtonAccuracyStatus::Unavailable; out.detail="invalid sample block"; return out;
     }
-    auto x=moments(pt,rep,assembled->blocks[b],b,q);
+    auto x=moments(pt,rep,assembled->blocks[b],b,q,target_point);
     if(!x) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="model inverse or moment enclosure unresolved"; return out;}
     const Interval N(detail::below(static_cast<Wide>(sample.n_obs[b])),detail::above(static_cast<Wide>(sample.n_obs[b])));
     const Eigen::Index p=S.rows(); const auto s=uls ? sample_matrix(S) : IntervalMatrix(S);
@@ -142,6 +235,7 @@ NewtonInputErrorBounds newton_input_error_bounds(
     }
     IntervalMatrix score_matrix, W, K;
     if(uls) {
+      total_g=total_g+N*(J.transpose()*residual);
       auto L=detail::cholesky(s);
       if(!L) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="sample positive definiteness unresolved"; return out;}
       auto inverse=detail::lower_inverse(*L);
@@ -193,11 +287,16 @@ NewtonInputErrorBounds newton_input_error_bounds(
     const auto scaled=target_factor*basis*diagonal(audit.metric_factor_system.scale);
     out.matrix=detail::error_upper(scaled,audit.metric_factor_system.equilibrated_factor);
     out.vector=detail::error_upper(target_residual,audit.derivatives.metric_score_residual);
-    out.curvature=detail::error_upper(transformed_gn+full_map.transpose()*total_correction*full_map,
+    const auto mapped_basis=audit_basis*IntervalMatrix(audit.system.coordinate_map);
+    const auto chain=inputs ? mapped_basis.transpose()*map_curvature(*inputs,*sphere_map,total_g)*mapped_basis :
+        IntervalMatrix(full_map.cols,full_map.cols);
+    out.curvature=detail::error_upper(transformed_gn+full_map.transpose()*total_correction*full_map+chain,
                                      audit.system.equilibrated_hessian);
   } else {
     const auto D=diagonal(audit.system.scale);
-    out.matrix=detail::error_upper(D*basis.transpose()*total_h*basis*D,audit.system.equilibrated_hessian);
+    const auto chain=inputs ? audit_basis.transpose()*map_curvature(*inputs,*sphere_map,total_g)*audit_basis :
+        IntervalMatrix(basis.cols,basis.cols);
+    out.matrix=detail::error_upper(D*(basis.transpose()*total_h*basis+chain)*D,audit.system.equilibrated_hessian);
     const Eigen::MatrixXd stored_score=audit.system.scale.asDiagonal()*audit.geometry.reduced_gradient;
     // The interval comparison includes the binary64 score-scaling operation;
     // the likelihood primitive also bounds it, conservatively counting twice.

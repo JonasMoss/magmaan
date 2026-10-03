@@ -884,6 +884,25 @@ SphereAudit collect_sphere_audit(
   return out;
 }
 
+void collect_sphere_inputs(SphereAudit& audit,const SphereSetup& setup,
+    const model::MatrixRep& rep,const SampleStats& sample,Estimator estimator) {
+  if(audit.computations.derivatives.theta.size()!=setup.n_u) {
+    NewtonInputErrorBounds unavailable;
+    unavailable.status=NewtonAccuracyStatus::Unavailable;
+    unavailable.detail="sphere endpoint unavailable for input construction";
+    audit.computations.input_errors=std::move(unavailable);
+    return;
+  }
+  NewtonSphereMap map;
+  map.offset=setup.con_int.theta0; map.rest_basis=setup.K_rest;
+  map.rounded_point=expand_u(setup,audit.computations.derivatives.theta);
+  for(const auto& unit:setup.units)
+    map.spheres.push_back({unit.Q,unit.D,unit.params,unit.offset});
+  audit.computations.input_errors=newton_input_error_bounds(setup.pt_int,rep,sample,
+      audit.computations.derivatives.theta,audit.computations,estimator,&map);
+  audit.input_map=std::move(map);
+}
+
 double unpinned_reported_value(const SphereSetup& s, const optim::OptimResult& r) {
   double pin = 0;
   for (const auto& um : s.units) {
@@ -904,6 +923,7 @@ finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
   auto& rep_out = out.report;
   rep_out.native_audit = std::move(native_audit);
   auto policy = newton_convergence_policy();
+  policy.require_verified_inputs=sopts.verified_newton;
   policy.require_objective_consistency = true;
   rep_out.native_verdict = assess_convergence(rep_out.native_audit, policy);
   rep_out.plan = s->plan;
@@ -982,6 +1002,10 @@ finish(const std::shared_ptr<SphereSetup>& s, const Eigen::VectorXd& x0_user,
 ConvergenceAssessment assess_convergence(const SphereAudit& audit, ConvergencePolicy policy) {
   auto evidence = audit.evidence;
   evidence.newton_accuracy = assess_newton_accuracy(audit.computations, policy.newton);
+  if(policy.require_verified_inputs && audit.computations.input_errors) {
+    const auto interval=newton_input_distance_interval(audit.computations,*audit.computations.input_errors,policy.newton.budget);
+    return assess_convergence(evidence,policy,&interval);
+  }
   auto assessment = assess_convergence(evidence, policy);
   if (assessment.newton.status == FitCheck::Unchecked && !audit.detail.empty())
     assessment.newton.reason = audit.detail;
@@ -1008,10 +1032,12 @@ fit_expected<SphereAudit> audit_ml_sphere(
   auto scratch = driven;
   auto ub = driven_bounds(**s, bounds, scratch, who);
   if (!ub) return std::unexpected(ub.error());
-  return collect_sphere_audit(**s, *objective, driven, *ub, reported,
+  auto audit=collect_sphere_audit(**s, *objective, driven, *ub, reported,
       [&](const Eigen::VectorXd& theta) {
         return evaluate_newton_ml((*s)->pt_int, rep, sample, theta);
       });
+  if(sphere.verified_newton) collect_sphere_inputs(audit,**s,rep,sample,Estimator::ML);
+  return audit;
 }
 
 fit_expected<SphereFit>
@@ -1053,6 +1079,7 @@ fit_ml_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
       [&](const Eigen::VectorXd& theta) {
         return evaluate_newton_ml((*s)->pt_int, rep, samp, theta);
       });
+  if(sphere.verified_newton) collect_sphere_inputs(audit,**s,rep,samp,Estimator::ML);
   auto out = finish(*s, x0, *r, *obj, finalize, polish, sphere, who, std::move(audit));
   if (out) out->report.driven_scaled = scale.size() > 0;
   return out;
@@ -1163,6 +1190,7 @@ fit_ls_sphere(spec::LatentStructure pt, const model::MatrixRep& rep,
       unpinned_reported_value(**s, *r), [&](const Eigen::VectorXd& theta) {
         return evaluate_newton_moment_quadratic(*ev, samp, theta, weight);
       });
+  if(sphere.verified_newton) collect_sphere_inputs(audit,**s,rep,samp,est);
   auto out = finish(*s, x0, *r, internal_obj, finalize, polish, sphere, who, std::move(audit));
   if (out) out->report.driven_scaled = scale.size() > 0;
   return out;

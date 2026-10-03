@@ -40,6 +40,14 @@ fit_expected<ConvergenceReport> audit_convergence_ml(
     const Eigen::VectorXd& theta, ConvergenceRequest request = {},
     std::optional<double> reported_value = std::nullopt);
 
+// Opt-in covariance-only ULS/ML terminal report, including calculated input
+// error bounds. The common legacy verdict remains in evidence; assess with
+// require_verified_inputs=true to use the entire local-distance interval.
+fit_expected<ConvergenceReport> audit_convergence_covariance(
+    spec::LatentStructure pt,const model::MatrixRep& rep,const SampleStats& sample,
+    const Eigen::VectorXd& theta,Estimator estimator,ConvergenceRequest request = {},
+    std::optional<double> reported_value = std::nullopt);
+
 // Compose any retained estimator adapter with common feasibility/first-order
 // evidence, without reevaluating its objective or Hessian. Supply the exact
 // prepared model/parameter order used by the adapter (including fixed.x and

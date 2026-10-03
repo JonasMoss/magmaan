@@ -382,3 +382,16 @@ audit-construction-final-v2/*
 !audit-construction-final-v2/verification_metadata.csv
 !audit-construction-final-v2/metadata.csv
 !audit-construction-final-v2/reference_metadata.csv
+
+# Compact fresh sampled terminal/sphere construction confirmation, every loss
+# and provenance. Raw per-fit rows, samples and matrices remain ignored.
+!audit-terminal-final-v1/
+audit-terminal-final-v1/*
+!audit-terminal-final-v1/comparisons.csv
+!audit-terminal-final-v1/intervals.csv
+!audit-terminal-final-v1/family_summary.csv
+!audit-terminal-final-v1/losses.csv
+!audit-terminal-final-v1/verification.csv
+!audit-terminal-final-v1/verification_metadata.csv
+!audit-terminal-final-v1/metadata.csv
+!audit-terminal-final-v1/reference_metadata.csv

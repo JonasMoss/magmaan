@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -241,7 +242,16 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
 
 // Convenience composition retaining every stage. Fit wrappers below return
 // only its small diagnostics record; callers wanting reuse own this result.
+struct NewtonInputErrorBounds {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unsupported;
+  double matrix = std::numeric_limits<double>::quiet_NaN();
+  double vector = std::numeric_limits<double>::quiet_NaN();
+  double curvature = std::numeric_limits<double>::quiet_NaN();
+  double curvature_lower_bound = 0;
+  std::string detail;
+};
 struct NewtonAudit {
+  std::optional<NewtonInputErrorBounds> input_errors;
   // Derivatives and full-space geometry maps still use the caller's parameter
   // coordinates; the reduced solve may use normalized internal coordinates.
   bool unit_normalized = false;
@@ -258,23 +268,34 @@ struct NewtonAudit {
   NewtonAccuracyDiagnostics diagnostics;
 };
 
-struct NewtonInputErrorBounds {
-  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unsupported;
-  double matrix = std::numeric_limits<double>::quiet_NaN();
-  double vector = std::numeric_limits<double>::quiet_NaN();
-  double curvature = std::numeric_limits<double>::quiet_NaN();
-  double curvature_lower_bound = 0;
-  std::string detail;
+// The retained binary64 sphere map defines theta = offset + K*u_rest, with
+// each mapped loading row replaced by D*Q*beta/||beta||. The producer bounds
+// expansion, its Jacobian and its full second-derivative chain independently.
+struct NewtonSphereUnit {
+  Eigen::MatrixXd basis;
+  Eigen::VectorXd units;
+  std::vector<std::vector<Eigen::Index>> parameters;
+  Eigen::Index offset = 0;
 };
+struct NewtonSphereMap {
+  Eigen::VectorXd offset;
+  Eigen::MatrixXd rest_basis;
+  Eigen::VectorXd rounded_point;
+  std::vector<NewtonSphereUnit> spheres;
+};
+
 // Independent outward interval evaluation of covariance-only linear SEM
 // moments/derivatives and sample roots at the exact supplied binary64 point.
 // ULS or complete-data ML only; ambient, unboxed geometry, matching audit.
+// With a sphere map, theta is the retained driven point; normalization, its
+// Jacobian and full second-derivative chain are independently enclosed.
 // Values are in the interval primitives' retained coordinates. Unsupported
 // means/weights/faces remain explicit; no dimensional allowance is substituted.
 NewtonInputErrorBounds newton_input_error_bounds(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& sample, const Eigen::VectorXd& theta,
-    const NewtonAudit& audit, Estimator estimator);
+    const NewtonAudit& audit, Estimator estimator,
+    const NewtonSphereMap* sphere_map = nullptr);
 NewtonDistanceInterval newton_input_distance_interval(
     const NewtonAudit& audit, const NewtonInputErrorBounds& bounds,
     double budget = .01);

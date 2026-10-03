@@ -71,7 +71,8 @@ a sensitivity assumption, separate from the construction producer below.
 moments, analytic first/second derivatives and sample roots using outward
 long-double intervals. It supports ambient unboxed single-level ULS and
 complete-data ML, with retained equality reductions and multiple sample blocks.
-Means, other weights, native sphere normalization and PSD faces are unsupported.
+The native sphere extension below encloses loading normalization as well.
+Means, other weights, active boxes and PSD faces are unsupported.
 Primitive fixed/free matrix cells are exact binary64 inputs; derived matrices
 are recomputed rather than taken from rounded model-evaluation intermediates.
 
@@ -92,7 +93,45 @@ and 250 decisive interval classifications are correct. The 79 unresolved points
 include 15 independently nonpositive NTML curvatures. Owning tests cover shared
 labels, feedback and unequal-sized groups, plus interval rank/saddle controls.
 
-This implementation settles the covariance-only construction-bound mechanism.
-Terminal-verdict integration, sphere transport, broader model/sample controls
-and any default decision remain separate. The current 1e12 production guard
-still rejects all retained ULS controls and the flat NTML minimum.
+The original default retains its 1e12 production guard; the opt-in policy below
+uses the calculated interval instead.
+
+## Opt-in terminal assessment
+
+`audit_convergence_covariance` collects original-objective, consistency and
+feasibility evidence alongside the retained ULS/ML audit and its construction
+bounds. Set `ConvergencePolicy::require_verified_inputs` on an explicit Newton
+policy to require the entire verified interval within budget. Above-budget and
+nonpositive-curvature evidence fail; unavailable bounds and unresolved arithmetic
+stay unchecked, with no fallback to condition thresholds or first-order checks.
+Compatibility behavior and ordinary automatic fit acceptance remain unchanged.
+
+`SphereOptions::verified_newton` adds construction bounds at the native endpoint.
+The retained `NewtonSphereMap` allows independent reconstruction of the loading
+normalization, its Jacobian and full second-derivative score contraction before
+tangent/QR transport. Radial pin curvature is excluded. R exposes this as
+`frontier_fit_sphere(..., control=list(verified_newton=TRUE))`; its selected
+verdict concerns the native endpoint before translation/polish. The old full
+native assessment remains in `gauge$native_audit$compatibility_assessment`.
+
+The ordinary explicit R point assessment is
+`evaluate_at(..., audit_options=list(verified_newton=TRUE))`; optional
+`reported_objective` checks backend consistency at an endpoint. Both adapters
+retain the previous verdict; selected unchecked evidence is NA. A call without
+this option preserves the existing assessment. Default adoption, means/other
+weights/constraints, and start/search choices remain separate work.
+
+
+Experiment 15's fresh `audit_terminal` confirmation retains 120 fits across
+30 sampled regular/weak/mixed/tied-loading/feedback/two-group problems, plus
+120 variance perturbations. All 216 available construction bounds, curvature
+margins and all finite distance intervals cover their 90-digit references;
+213 decisive classifications are correct. Endpoints yield 106 passes, eight
+independently nonpositive curvatures, three above-budget failures and three
+unresolved assessments. Mixed-unit native ULS gains three passes with no losses
+at identical endpoints. Of the unresolved endpoints, weak-marker sphere ML is
+locally accurate (distance .000429), while two mixed-unit sphere ULS endpoints
+are above budget (.697/.514). The interval remains conservative in all three.
+All 120 perturbation controls remain unaccepted. Fit/evaluation took 6.1 seconds
+and independent checking 214.9 seconds on one math thread. Five draws per family
+do not settle start/search reliability or justify default adoption.

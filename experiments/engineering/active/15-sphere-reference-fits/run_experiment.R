@@ -6,7 +6,10 @@ if ("--ordinary" %in% args) {
   source(file.path(here, "../../../_support/R/helpers.R"))
   set_single_threaded_math()
   for (file in c("designs.R", "fit.R", "ordinary_program.R")) source(file.path(here, "R", file))
-  if ("--audit-uncertainty" %in% args) {
+  if ("--audit-terminal" %in% args) {
+    source(file.path(here,"R/audit_terminal.R"))
+    run_audit_terminal(args,here)
+  } else if ("--audit-uncertainty" %in% args) {
     source(file.path(here, "R/audit_uncertainty.R"))
     run_audit_uncertainty(args, here)
   } else if (any(c("--uls-audit-guard","--uls-audit-curvature") %in% args)) {

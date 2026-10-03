@@ -29,6 +29,7 @@
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
+#include "magmaan/estimate/frontier/convergence.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -1185,6 +1186,28 @@ Rcpp::List newton_accuracy_to_r(
       Rcpp::_["null_directions"] = a.null_directions,
       Rcpp::_["constrained_directions"] = a.constrained_directions,
       Rcpp::_["min_multiplier"] = num(a.min_multiplier));
+}
+
+Rcpp::List input_errors_to_r(const magmaan::estimate::frontier::NewtonInputErrorBounds& e) {
+  return Rcpp::List::create(Rcpp::_["status"]=std::string(magmaan::estimate::to_string(e.status)),
+      Rcpp::_["matrix"]=e.matrix,Rcpp::_["vector"]=e.vector,Rcpp::_["curvature"]=e.curvature,
+      Rcpp::_["curvature_lower_bound"]=e.curvature_lower_bound,Rcpp::_["detail"]=e.detail);
+}
+Rcpp::List distance_interval_to_r(const magmaan::estimate::frontier::NewtonDistanceInterval& x) {
+  return Rcpp::List::create(Rcpp::_["status"]=std::string(magmaan::estimate::to_string(x.status)),
+      Rcpp::_["decision"]=std::string(magmaan::estimate::frontier::to_string(x.decision)),
+      Rcpp::_["distance"]=x.distance,Rcpp::_["lower"]=x.lower,Rcpp::_["upper"]=x.upper,
+      Rcpp::_["rank_margin"]=x.rank_margin,Rcpp::_["factor_error_bound"]=x.factor_error_bound);
+}
+Rcpp::List verified_assessment_to_r(const magmaan::estimate::frontier::ConvergenceAssessment& a) {
+  auto check=[](const magmaan::estimate::frontier::ConvergenceCheck& x) {
+    return Rcpp::List::create(Rcpp::_["status"]=fit_check_to_r(x.status),Rcpp::_["reason"]=x.reason);
+  };
+  Rcpp::LogicalVector passed(1);
+  passed[0]=a.status==magmaan::estimate::FitCheck::Unchecked ? NA_LOGICAL : a.status==magmaan::estimate::FitCheck::Passed;
+  return Rcpp::List::create(Rcpp::_["status"]=fit_check_to_r(a.status),Rcpp::_["converged"]=passed,
+      Rcpp::_["objective"]=check(a.objective),Rcpp::_["objective_consistency"]=check(a.objective_consistency),
+      Rcpp::_["feasibility"]=check(a.feasibility),Rcpp::_["newton"]=check(a.newton));
 }
 
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
@@ -2722,6 +2745,7 @@ magmaan::estimate::frontier::SphereOptions sphere_options_from(
   if (control.isNotNull()) {
     Rcpp::List ctl(control.get());
     if (ctl.containsElementNamed("start") && !Rf_isNull(ctl["start"])) start = "user";
+    if(ctl.containsElementNamed("verified_newton")) out.verified_newton=Rcpp::as<bool>(ctl["verified_newton"]);
   }
   out.start = start == "canonical"
                   ? magmaan::estimate::frontier::SphereStart::Canonical
@@ -2830,6 +2854,10 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
       Rcpp::_["reduced_gradient"] = Rcpp::wrap(computations.geometry.reduced_gradient),
       Rcpp::_["reduced_hessian"] = Rcpp::wrap(computations.geometry.reduced_hessian),
       Rcpp::_["detail"] = a.detail);
+  auto legacy_policy=magmaan::estimate::frontier::newton_convergence_policy();
+  legacy_policy.require_objective_consistency=true;
+  native_audit["compatibility_assessment"]=verified_assessment_to_r(
+      magmaan::estimate::frontier::assess_convergence(a,legacy_policy));
   native_audit["n_obs"] = computations.derivatives.n_obs;
   auto system = [](const magmaan::estimate::frontier::NewtonSystem& s) {
     return Rcpp::List::create(
@@ -2854,6 +2882,30 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
   native_audit["reduced_metric_factor"] = Rcpp::wrap(computations.geometry.reduced_metric_factor);
   native_audit["metric_score_residual"] = Rcpp::wrap(computations.derivatives.metric_score_residual);
   native_audit["reduced_metric"] = Rcpp::wrap(computations.geometry.reduced_metric);
+  native_audit["equilibrated_factor"]=Rcpp::wrap(computations.metric_factor_system.equilibrated_factor);
+  native_audit["factor_scale"]=Rcpp::wrap(computations.metric_factor_system.scale);
+  native_audit["curvature_scale"]=Rcpp::wrap(computations.system.scale);
+  if(computations.input_errors) {
+    native_audit["derived_interval_input_errors"]=input_errors_to_r(*computations.input_errors);
+    native_audit["distance_interval_derived_inputs"]=distance_interval_to_r(
+        magmaan::estimate::frontier::newton_input_distance_interval(computations,*computations.input_errors));
+  }
+  if(a.input_map) {
+    const auto& map=*a.input_map;
+    Rcpp::List mapped_units(map.spheres.size());
+    for(std::size_t k=0;k<map.spheres.size();++k) {
+      const auto& unit=map.spheres[k];
+      Rcpp::IntegerMatrix parameters(unit.units.size(),unit.parameters.size());
+      for(std::size_t member=0;member<unit.parameters.size();++member)
+        for(Eigen::Index j=0;j<unit.units.size();++j) parameters(j,member)=unit.parameters[member][j];
+      mapped_units[k]=Rcpp::List::create(Rcpp::_["basis"]=Rcpp::wrap(unit.basis),
+          Rcpp::_["units"]=Rcpp::wrap(unit.units),Rcpp::_["parameters"]=parameters,Rcpp::_["offset"]=unit.offset);
+    }
+    native_audit["input_map"]=Rcpp::List::create(Rcpp::_["offset"]=Rcpp::wrap(map.offset),
+        Rcpp::_["rest_basis"]=Rcpp::wrap(map.rest_basis),Rcpp::_["rounded_point"]=Rcpp::wrap(map.rounded_point),
+        Rcpp::_["spheres"]=mapped_units);
+  }
+
 
   return Rcpp::List::create(
       Rcpp::_["chart"] = "sphere",
@@ -2971,6 +3023,13 @@ Rcpp::List frontier_fit_sphere_impl(
   }
   Rcpp::List out = fit_result(ctx, r->estimates, &starts, estimator.c_str());
   out["gauge"] = gauge_report_to_r(ctx, *r, metric);
+  if(sopts.verified_newton) {
+    auto assessment=verified_assessment_to_r(r->report.native_verdict);
+    out["verified_convergence"]=assessment;
+    out["converged_compatibility"]=out["converged"];
+    out["converged"]=assessment["converged"];
+  }
+
   if (estimator == "ML") {
     out["ml_start_policy"] = start_policy;
     out["ml_start_fallback_reason"] = start_fallback_reason;
@@ -3021,6 +3080,13 @@ Rcpp::List frontier_fit_fiml_sphere_impl(
   }
   Rcpp::List out = fiml_fit_result(ctx, raw, r->estimates, &starts);
   out["gauge"] = gauge_report_to_r(ctx, *r, metric);
+  if(control.isNotNull() && Rcpp::List(control).containsElementNamed("verified_newton") &&
+      Rcpp::as<bool>(Rcpp::List(control)["verified_newton"])) {
+    auto assessment=verified_assessment_to_r(r->report.native_verdict);
+    out["verified_convergence"]=assessment;
+    out["converged_compatibility"]=out["converged"];
+    out["converged"]=assessment["converged"];
+  }
   auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(
       raw, *pack_or, fiml_h1_opts_from(control));
   if (!h1_or.has_value()) stop_fit(h1_or.error());
@@ -6024,9 +6090,12 @@ Rcpp::List evaluate_at_impl(
   Rcpp::List out = fit_result(ctx, *e_or, &starts, estimator.c_str());
   // Optional methods-development artifacts; the core owns every calculation.
   // Recomputing explicitly requested artifacts leaves the stored verdict intact.
-  if (audit_options.isNotNull() &&
-      Rcpp::List(audit_options.get()).containsElementNamed("retain_newton_artifacts") &&
-      Rcpp::as<bool>(Rcpp::List(audit_options.get())["retain_newton_artifacts"])) {
+  const auto audit_flag=[&](const char* name) {
+    if(audit_options.isNull()) return false;
+    Rcpp::List settings(audit_options.get());
+    return settings.containsElementNamed(name) && Rcpp::as<bool>(settings[name]);
+  };
+  if (audit_flag("retain_newton_artifacts") || audit_flag("verified_newton")) {
     auto weight = wls;
     if (est_enum == magmaan::estimate::Estimator::GLS) {
       auto ev = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
@@ -6051,7 +6120,7 @@ Rcpp::List evaluate_at_impl(
         : magmaan::estimate::frontier::audit_newton_gmm(
             ctx.pt, ctx.rep, ctx.samp, theta_vec, weight, opts);
     if (!audit) stop_fit(audit.error());
-    const auto& a = *audit;
+    auto& a = *audit;
     out["newton_audit"] = Rcpp::List::create(
         Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
         Rcpp::_["gradient"] = Rcpp::wrap(a.geometry.reduced_gradient),
@@ -6115,10 +6184,12 @@ Rcpp::List evaluate_at_impl(
       artifacts["distance_interval_conditional"] = interval_to_r(interval(
           Rcpp::as<double>(errors["matrix"]), Rcpp::as<double>(errors["vector"])));
     }
-    if (settings.containsElementNamed("derive_interval_input_errors") &&
-        Rcpp::as<bool>(settings["derive_interval_input_errors"])) {
+    const bool verified=settings.containsElementNamed("verified_newton") && Rcpp::as<bool>(settings["verified_newton"]);
+    if (verified || (settings.containsElementNamed("derive_interval_input_errors") &&
+        Rcpp::as<bool>(settings["derive_interval_input_errors"]))) {
       const auto errors = magmaan::estimate::frontier::newton_input_error_bounds(
           ctx.pt, ctx.rep, ctx.samp, theta_vec, a, est_enum);
+      a.input_errors=errors;
       artifacts["derived_interval_input_errors"] = Rcpp::List::create(
           Rcpp::_["status"] = std::string(magmaan::estimate::to_string(errors.status)),
           Rcpp::_["matrix"] = errors.matrix, Rcpp::_["vector"] = errors.vector,
@@ -6129,6 +6200,18 @@ Rcpp::List evaluate_at_impl(
         artifacts["distance_interval_derived_inputs"] = interval_to_r(
             magmaan::estimate::frontier::newton_input_distance_interval(a, errors));
       }
+    }
+    if(verified) {
+      const double reported=settings.containsElementNamed("reported_objective")
+          ? Rcpp::as<double>(settings["reported_objective"]) : e_or->fmin;
+      auto report=magmaan::estimate::frontier::audit_convergence(ctx.pt,ctx.rep,a,{}, {},reported);
+      if(!report) stop_fit(report.error());
+      auto policy=magmaan::estimate::frontier::newton_convergence_policy();
+      policy.require_verified_inputs=true; policy.require_objective_consistency=true;
+      auto assessment=verified_assessment_to_r(magmaan::estimate::frontier::assess_convergence(*report,policy));
+      out["verified_convergence"]=assessment;
+      out["converged_compatibility"]=out["converged"];
+      out["converged"]=assessment["converged"];
     }
     out["newton_audit"] = artifacts;
   }

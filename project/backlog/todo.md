@@ -807,9 +807,18 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   47 numerical minima qualify, including every retained ULS minimum and the
   flat NTML witness. Its 250 decisive distance classifications are correct,
   with 79 unresolved points including 15 independently nonpositive NTML
-  curvatures. Optional artifacts leave production acceptance unchanged. Next
-  integrate into terminal auditing, transport through native sphere geometry,
-  and confirm on broader model families and fresh sampled controls. This evidence selects no
+  curvatures. Opt-in terminal integration and native sphere
+  transport now include the normalization's full derivative chain. Fresh sampled
+  confirmation covers six families with 30 problems, 120 fits and 120 variance
+  perturbations: all 216 available bounds cover and all 213 decisive interval
+  classifications agree with 90-digit references. Endpoints yield 106 passes,
+  eight saddles, three above-budget failures and three unresolved assessments.
+  Native mixed-unit ULS gains three passes and loses none. One unresolved
+  weak-marker ML endpoint is locally accurate; two mixed-unit ULS endpoints
+  are above budget. Default acceptance is unchanged. Next prespecify adoption
+  criteria and compare against actual defaults on held-out fitting problems;
+  separately diagnose the retained weak/mixed start/search failures and the
+  conservative accurate endpoint. This evidence selects no
   regularization or acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start

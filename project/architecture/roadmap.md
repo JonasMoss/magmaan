@@ -831,8 +831,7 @@ Newton solve through full-rank QR coordinates. The 175-point implementation
 check resolves both flat curvatures (conditions 1.20/1.59), with step discrepancy
 below 1.94e-11 in objective-curvature units against independent 90-digit
 derivatives. The sampling-metric guard still rejects all points. See the
-[least-squares capability contract](capabilities/least_squares.md). Remaining
-work is terminal-audit integration and broader sampled confirmation.
+[least-squares capability contract](capabilities/least_squares.md). The later opt-in integration and sampled confirmation are described below.
 The conditional interval kernels now include projection/solve verification and
 joint ULS/NTML checks on 329 points, including 15 fresh numerical controls.
 An outward interval producer now supplies calculated construction bounds for
@@ -840,9 +839,19 @@ covariance-only unboxed ambient ULS/ML, including analytic observed curvature
 and a verified positive-curvature lower bound. Independent 90-digit checks
 cover all 314 available bounds; all 47 numerical minima qualify, including the
 flat NTML witness, with 250 correct decisive distance classifications and 79
-unresolved points. Optional R artifacts preserve the stored verdict. Sphere
-transport, means/other weights and broader sampled controls remain open.
-No statistical regularization or acceptance default follows.
+unresolved points. Optional artifact-only R calls preserve the stored verdict. Opt-in
+`audit_convergence_covariance` / `require_verified_inputs` now composes these
+bounds with terminal objective and feasibility checks; native sphere ULS/ML
+also encloses the full normalization chain. Explicit R point and sphere options
+select TRUE/FALSE/NA while retaining the original assessment. On 30 new sampled
+problems (120 fits plus 120 perturbations), all 216 available bounds cover and
+all 213 decisive interval classifications match 90-digit references. Endpoints
+supply 106 passes, 11 failures (eight saddles, three above budget) and three
+unresolved assessments. Native mixed-unit ULS gains three passes with no losses;
+all perturbations remain unaccepted. One unresolved endpoint is locally accurate,
+two are above budget. Default adoption, start/search reliability, means/other
+weights and constraints remain separate. No statistical regularization or
+acceptance default follows.
 
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
@@ -1412,6 +1421,12 @@ A rank-one-sample ULS regression tests full objective curvature with a singular
 sandwich metric.
 `audit_ml_sphere` recomputes this evidence without fitting or translating;
 `assess_convergence(SphereAudit, policy)` reuses the retained computation.
+For covariance-only unboxed ULS/ML, `SphereOptions::verified_newton` additionally
+retains exact binary64 expansion primitives and independently encloses their
+normalization, Jacobian and full score-contracted second derivatives. The opt-in
+native verdict requires the whole verified local-distance interval within budget;
+missing or unresolved inputs do not fall back to the old condition guard. The
+original full native assessment and translated/polished diagnostics stay separate.
 First-order telemetry uses the product Euclidean metric of normalized driven
 coordinates, not the common full-model Frobenius metric.
 

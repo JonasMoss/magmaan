@@ -17,6 +17,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/gauge.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
@@ -1099,5 +1100,24 @@ TEST_CASE("sphere ML: without gauge units the driven run is scaled like fit_ml")
     CHECK(sph->report.driven_audit.stationary);
     CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-9));
     CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < 1e-5 * c * c);
+  }
+}
+
+TEST_CASE("Sphere construction bounds: nonlinear map is retained with the terminal audit") {
+  auto f=setup("f =~ x1 + x2 + x3 + x4",{one_factor_sigma()});
+  fr::SphereOptions options; options.verified_newton=true; options.polish=false;
+  for(const auto estimator:{magmaan::estimate::Estimator::ULS,magmaan::estimate::Estimator::ML}) {
+    auto fit=estimator==magmaan::estimate::Estimator::ML ?
+        fr::fit_ml_sphere(f.pt,f.rep,f.samp,f.x0,{},Backend::Port,{},options) :
+        fr::fit_gmm_sphere(f.pt,f.rep,f.samp,f.x0,{}, {},Backend::PortNls,{},options);
+    REQUIRE_OK(fit);
+    const auto& audit=fit->report.native_audit;
+    REQUIRE(audit.input_map.has_value()); REQUIRE(audit.computations.input_errors.has_value());
+    const auto& errors=*audit.computations.input_errors;
+    REQUIRE_MESSAGE(errors.status==fr::NewtonAccuracyStatus::Available,errors.detail);
+    CHECK(errors.curvature_lower_bound>0);
+    auto policy=fr::newton_convergence_policy(); policy.require_verified_inputs=true;
+    CHECK(fr::assess_convergence(audit,policy).newton.status==magmaan::estimate::FitCheck::Passed);
+    CHECK(audit.input_map->rounded_point.isApprox(fit->report.internal_theta,1e-12));
   }
 }
