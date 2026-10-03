@@ -13,7 +13,8 @@ prepare_weight(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
                W = NULL, full = TRUE, dls_a = 0.5)
 estimate(model, data, estimator = NULL, weight = NULL,
          optimizer = NULL, control = NULL, bounds = NULL,
-         covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5)
+         covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5,
+         options = NULL)
 }
 \arguments{
 \item{model}{Model syntax or a model specification for \code{prepare_model};
@@ -44,11 +45,15 @@ name: \code{"uls"}, \code{"nt"}, \code{"dwls"}, \code{"adf"}, or \code{"dls"}.
 Required weights are prepared internally if omitted.}
 \item{dls_a}{Fixed DLS mixing scalar in [0, 1]. Zero selects NT and one ADF.
 When a prepared weight is supplied its stored scalar governs.}
-\item{optimizer, control}{Existing native optimizer name and control list.}
+\item{optimizer, control}{Existing native optimizer name and control list.
+A keyed data-frame \code{control$start} supplies fit-local start hints.}
+\item{options}{Versioned fitting choices (preset, starts, optimizer and
+convergence) for unrestricted continuous ML or FIML, as in \code{fit_model}.}
 \item{bounds}{Explicit lower/upper bound list in free-parameter order. Not
 supported by the prepared FIML path.}
-\item{covariance}{Non-mixed model covariance policy: \code{"unrestricted"},
-\code{"psd"} or \code{"barrier"}. NULL follows \code{psd}.}
+\item{covariance}{Model covariance policy: \code{"unrestricted"},
+\code{"psd"} or \code{"barrier"}. NULL follows \code{psd}.
+Mixed models support unrestricted and PSD fitting; barriers are deferred.}
 \item{psd}{Compatible spelling for \code{covariance = "psd"}. Explicit
 contradictory requests are rejected.}
 \item{barrier}{Options for barrier fitting: a list with \code{target}
@@ -74,12 +79,14 @@ Ordinal ML fits associations with Stage-1 thresholds held fixed; it does not
 provide Gaussian likelihood or generic post-fit sampling inference.
 
 FIML retains its missingness pack but does not compute saturated H1 during
-estimation. Categorical inference needs full Gamma; obtain it separately with
+estimation unless versioned fitting options require it. Categorical inference
+needs full Gamma; obtain it separately with
 \code{prepare_weight(data, "DWLS", full = TRUE)$stats} and pass it to an
 existing explicit inference function, without refitting.
 
-The initial interface covers the estimators listed above. Specialized ML2S,
-two-level, FC-SEM, SAM and frontier methods continue using their existing
+The interface covers the estimators listed above.
+ML2S raises a typed \code{magmaan_unsupported_estimator} error.
+Two-level, FC-SEM, SAM and frontier methods continue using their existing
 entry points, which remain supported without deprecation warnings. Categorical
 weight preparation currently recomputes stage-one moments in the existing core
 builder; fitting itself reuses the prepared objects.}

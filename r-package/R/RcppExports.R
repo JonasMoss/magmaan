@@ -569,8 +569,8 @@ prepared_weight_impl <- function(data, method, W, full, model, dls_a = 0.5) {
     .Call(`_magmaanlab_prepared_weight_impl`, data, method, W, full, model, dls_a)
 }
 
-prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL, covariance = "unrestricted", barrier_target = "joint", barrier_weight = 0.25) {
-    .Call(`_magmaanlab_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight)
+prepared_estimate_impl <- function(model, data, weight, estimator, optimizer = NULL, control = NULL, bounds = NULL, covariance = "unrestricted", barrier_target = "joint", barrier_weight = 0.25, start_hints = NULL) {
+    .Call(`_magmaanlab_prepared_estimate_impl`, model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight, start_hints)
 }
 
 prepare_inference_impl <- function(fit, raw, shared_data = NULL) {
@@ -671,6 +671,10 @@ policy_nested_impl <- function(null_context, alternative_context, null_state, al
 
 inference_reuse_impl <- function(context) {
     .Call(`_magmaanlab_inference_reuse_impl`, context)
+}
+
+prepared_structure_count_impl <- function() {
+    .Call(`_magmaanlab_prepared_structure_count_impl`)
 }
 
 frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {

@@ -105,9 +105,10 @@ Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight,
                                  Rcpp::Nullable<Rcpp::List> control = R_NilValue,
                                  Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
                                  std::string covariance = "unrestricted",
-                                 std::string barrier_target = "joint", double barrier_weight = 0.25) {
+                                 std::string barrier_target = "joint", double barrier_weight = 0.25,
+                                 SEXP start_hints = R_NilValue) {
   return prepared::fit(model, data, weight, estimator, optimizer, control, bounds,
-                       covariance, barrier_target, barrier_weight);
+                       covariance, barrier_target, barrier_weight, start_hints);
 }
 
 // [[Rcpp::export]]
@@ -525,4 +526,10 @@ Rcpp::List inference_reuse_impl(SEXP context) {
     Rcpp::_["contribution_builds"]=static_cast<double>(f.data->contribution_builds),
     Rcpp::_["projection_passes"]=static_cast<double>(f.data->projection_passes),
     Rcpp::_["storage"]=f.data->storage == magmaan::robust::frontier::ContributionStorage::Tiled ? "tiled" : "casewise");
+}
+
+// Internal test hook; not exported from the package namespace.
+// [[Rcpp::export]]
+double prepared_structure_count_impl() {
+  return static_cast<double>(prepared::structural_preparations);
 }

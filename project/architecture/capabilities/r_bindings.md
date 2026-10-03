@@ -18,7 +18,15 @@
   Ordinal schema augmentation and native matrix representation are prepared
   once; each dataset refreshes moments/patterns/starts. Weights are dataset-bound,
   and full categorical Gamma is optional. New FIML estimation does not compute
-  H1 eagerly. Existing fit lists and numerical audits are preserved. Legacy
+  H1 eagerly unless versioned fitting options require it. Prepared fitting
+  matches `fit_model()`'s ordinary starts and optimizer options, including
+  versioned ML/FIML presets, fit-local keyed start tables and replayable
+  `fit_model()` routes. Continuous and all-ordinal covariance policies and
+  mixed PSD fitting use the existing reference estimator compositions. Mixed
+  barriers remain unsupported in both paths; prepared ML2S raises the typed
+  `magmaan_unsupported_estimator` error and must use `fit_model()`.
+  An internal structural-preparation counter gates repeated handle reuse.
+  Existing fit lists and numerical audits are preserved. Legacy
   entry points remain supported for compatibility and specialized families;
   see [the rollout status](../../design/r-model-preparation.md) and
   [R usage](../../../r-package/README.md#reusable-model-data-and-weights).

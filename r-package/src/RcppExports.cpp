@@ -2081,8 +2081,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // prepared_estimate_impl
-Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string covariance, std::string barrier_target, double barrier_weight);
-RcppExport SEXP _magmaanlab_prepared_estimate_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP weightSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP covarianceSEXP, SEXP barrier_targetSEXP, SEXP barrier_weightSEXP) {
+Rcpp::List prepared_estimate_impl(SEXP model, SEXP data, SEXP weight, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string covariance, std::string barrier_target, double barrier_weight, SEXP start_hints);
+RcppExport SEXP _magmaanlab_prepared_estimate_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP weightSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP covarianceSEXP, SEXP barrier_targetSEXP, SEXP barrier_weightSEXP, SEXP start_hintsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2096,7 +2096,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type covariance(covarianceSEXP);
     Rcpp::traits::input_parameter< std::string >::type barrier_target(barrier_targetSEXP);
     Rcpp::traits::input_parameter< double >::type barrier_weight(barrier_weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(prepared_estimate_impl(model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight));
+    Rcpp::traits::input_parameter< SEXP >::type start_hints(start_hintsSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_estimate_impl(model, data, weight, estimator, optimizer, control, bounds, covariance, barrier_target, barrier_weight, start_hints));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2419,6 +2420,16 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
     rcpp_result_gen = Rcpp::wrap(inference_reuse_impl(context));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_structure_count_impl
+double prepared_structure_count_impl();
+RcppExport SEXP _magmaanlab_prepared_structure_count_impl() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(prepared_structure_count_impl());
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4487,7 +4498,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},
     {"_magmaanlab_prepared_data_impl", (DL_FUNC) &_magmaanlab_prepared_data_impl, 4},
     {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 6},
-    {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 10},
+    {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 11},
     {"_magmaanlab_prepare_inference_impl", (DL_FUNC) &_magmaanlab_prepare_inference_impl, 3},
     {"_magmaanlab_score_rows_impl", (DL_FUNC) &_magmaanlab_score_rows_impl, 2},
     {"_magmaanlab_score_components_impl", (DL_FUNC) &_magmaanlab_score_components_impl, 4},
@@ -4513,6 +4524,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_policy_nested_dwls_impl", (DL_FUNC) &_magmaanlab_policy_nested_dwls_impl, 4},
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
+    {"_magmaanlab_prepared_structure_count_impl", (DL_FUNC) &_magmaanlab_prepared_structure_count_impl, 0},
     {"_magmaanlab_frontier_profile_lrt_parameter_ml_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ml_impl, 10},
     {"_magmaanlab_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_gmm_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl, 11},

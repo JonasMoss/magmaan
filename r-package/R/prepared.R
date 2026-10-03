@@ -17,6 +17,7 @@ prepare_model <- function(model, ..., prototype = NULL) {
     if (length(list(...))) stop("prepare_model(): options belong in model_spec()")
     as_magmaan_model_spec(model)
   }
+  input_spec <- spec
   ov <- model_matrix_rep(spec$partable)$ov_names
   if (!is.list(ov)) ov <- list(ov)
   if (length(ov) != max(1L, length(spec$group_labels)))
@@ -66,7 +67,7 @@ prepare_model <- function(model, ..., prototype = NULL) {
     }
   }
   native <- prepared_model_impl(spec$partable, kind, schema)
-  .prepared_object(native = native, spec = spec, ov_names = ov, kind = kind,
+  .prepared_object(native = native, spec = spec, input_spec = input_spec, ov_names = ov, kind = kind,
                    categories = categories, masks = masks, class = "magmaan_prepared_model")
 }
 
@@ -146,7 +147,10 @@ prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
 #' @rdname prepared
 estimate <- function(model, data, estimator = NULL, weight = NULL,
                      optimizer = NULL, control = NULL, bounds = NULL,
-                     covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5) {
+                     covariance = NULL, psd = FALSE, barrier = NULL, dls_a = 0.5, options = NULL) {
+  supplied <- names(as.list(match.call()))[-1L]
+  route_args <- .route_args(environment(), sys.function(), supplied = supplied)
+  route_args <- route_args[setdiff(names(route_args), "weight")]
   stopifnot(inherits(model, "magmaan_prepared_model"),
             inherits(data, "magmaan_prepared_data"))
   if (!identical(model$categories, data$model$categories) ||
@@ -166,6 +170,9 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   }
   if (is.null(estimator)) estimator <- switch(data$kind, raw = "FIML", ordinal = "DWLS", mixed = "DWLS", "ML")
   estimator <- toupper(estimator)
+  if (identical(estimator, "ML2S")) stop(structure(
+    list(message = "estimate(): ML2S is not supported by prepared handles; use fit_model()", call = NULL),
+    class = c("magmaan_unsupported_estimator", "error", "condition")))
   if (identical(estimator, "ADF")) estimator <- "WLS"
   allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "GLS", "DWLS", "WLS", "DLS"),
                     mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS", "DLS"))
@@ -177,9 +184,30 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   covariance_options <- .covariance_options(covariance, psd, !missing(psd), barrier)
   covariance <- covariance_options$covariance
   barrier <- covariance_options$barrier
+  spec <- model$input_spec
+  start_hints <- NULL
+  if (is.data.frame(control$start)) {
+    spec <- .start_from_table(spec, control$start)
+    # Only original model rows receive fit-time hints, as in fit_model().
+    # Generated categorical rows get current sample thresholds in native code.
+    hints <- spec$partable
+    hints$start <- hints$ustart
+    pt <- .start_from_table(model$spec, hints)$partable
+    start_hints <- pt$ustart
+    start_hints[pt$free == 0L] <- NA_real_
+    control$start <- NULL
+    if (!length(control)) control <- NULL
+    if ("control" %in% names(route_args)) route_args["control"] <- list(control)
+  }
+  if (!is.null(options)) {
+    if (!estimator %in% c("ML", "FIML") || model$kind != "moments" || covariance != "unrestricted")
+      stop("fitting options currently require ordinary continuous ML or FIML")
+    control <- .fitting_control(options, control, optimizer)
+    optimizer <- NULL
+  }
   fit <- prepared_estimate_impl(model$native, data$native, if (is.null(weight)) NULL else weight$native,
                                 estimator, optimizer, control, bounds, covariance,
-                                barrier$target %||% "joint", barrier$weight %||% 0.25)
+                                barrier$target %||% "joint", barrier$weight %||% 0.25, start_hints)
   if (data$kind == "moments" && !is.null(weight)) fit$W <- weight$W
   if (data$kind == "moments" && !is.null(data$X)) {
     fit$raw_data <- structure(list(X = data$X, ov_names = model$ov_names,
@@ -188,7 +216,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
                                   nobs = vapply(data$X, nrow, integer(1))),
                              class = c("magmaan_complete_data", "list"))
   }
-  fit <- finalize_magmaan_fit(fit, model$spec, estimator,
+  fit <- finalize_magmaan_fit(fit, spec, estimator,
                       if (data$kind == "raw") "fiml" else data$missing, "none", "none")
   if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
     if (!is.null(weight) && isTRUE(weight$supplied)) "custom" else switch(estimator,
@@ -199,11 +227,13 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
       optimizer %||% if (covariance == "psd") "nlopt-slsqp" else if (covariance == "barrier") "port" else "nlopt-lbfgs")
   fit$options$covariance <- covariance
   fit$options$barrier <- barrier
-  if (covariance != "unrestricted" || estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$options$route <- list(fitter = "fit_model", args = list(
-    estimator = estimator, covariance = covariance, barrier = barrier,
-    optimizer = optimizer, control = control, missing = if (data$kind == "raw") "listwise" else data$missing,
-    W = if (!is.null(weight) && isTRUE(weight$supplied)) {
-      if (data$kind == "moments") weight$W else if (estimator == "DWLS") weight$stats$W_dwls else weight$stats$W_wls
-    } else NULL, dls_a = weight$dls_a %||% dls_a))
+  fit$options$psd <- covariance == "psd"
+  if (!is.null(weight) && isTRUE(weight$supplied)) route_args$W <-
+    if (data$kind == "moments") weight$W else if (estimator == "DWLS") weight$stats$W_dwls else weight$stats$W_wls
+  # A native weight handle cannot be replayed by fit_model(); record its method
+  # and any supplied matrix in the ordinary fitter's argument vocabulary.
+  if (!"estimator" %in% names(route_args) || !is.null(weight)) route_args$estimator <- estimator
+  if (estimator == "DLS") route_args$dls_a <- weight$dls_a
+  fit$options$route <- list(fitter = "fit_model", args = route_args)
   fit
 }

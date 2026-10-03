@@ -130,10 +130,13 @@ result under an unstated convention.
 - [ ] **M — fit constructed ordinary models through native prepared
   handles.** `magmaan_model()` should own a prepared model so repeated fits
   skip structural preparation (ordinal DWLS 9.1 → 3.5 ms in the 2026-10-01
-  timing). First close the parity gaps of the prepared `estimate()` path
-  against `fit_model()`: the layered start for continuous ML and GLS (it uses
-  FABIN3), fitting options and presets, fit-time start tables, ML2S, and the
-  recorded refit route. Native handles stay process-local and are rebuilt from
+  timing). Prepared `estimate()` parity is complete (task-25.1): ordinary
+  starts, fitting options/presets, fit-time start tables, mixed PSD fitting and
+  replayable refit routes use the reference compositions. The permitted ML2S
+  gap is explicit: `magmaan_unsupported_estimator` directs callers to
+  `fit_model()`; no Stage-1 ML2S implementation was added. The ordinary caller
+  still needs routing through these handles (task-25.2). Native handles stay
+  process-local and are rebuilt from
   the portable model on workers. **Check:** fresh/prepared parity in partable,
   estimates, objective, diagnostics and routes for every ordinary estimator
   and covariance policy; zero repeated structural-preparation calls;
