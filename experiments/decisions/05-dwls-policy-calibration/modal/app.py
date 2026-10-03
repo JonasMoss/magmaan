@@ -53,23 +53,32 @@ def run_cell(cell_id: int, run_id: str, mode: str):
 
 
 @app.function(image=image, volumes={"/vol": vol}, timeout=60 * 60, cpu=2.0, memory=8192)
-def combine(run_id: str, mode: str, git_head: str):
+def combine(run_id: str, mode: str, git_head: str, family: str):
     import subprocess
     vol.reload()
     subprocess.run(["Rscript", f"/repo/{STUDY}/modal/combine.R", "--run-dir", f"/vol/{run_id}",
-                    "--mode", mode, "--git-head", git_head], check=True)
+                    "--mode", mode, "--git-head", git_head, "--family", family], check=True)
     vol.commit()
     return f"/vol/{run_id}/final"
 
 
 @app.local_entrypoint()
-def main(mode: str = "smoke", run_id: str = "smoke-modal"):
+def main(mode: str = "smoke", run_id: str = "smoke-modal", family: str = "all"):
     import subprocess
     if mode not in ("smoke", "pilot", "production", "explore", "confirm"):
         raise SystemExit("mode must be smoke, pilot, production, explore or confirm")
     head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
                           capture_output=True, text=True).stdout.strip()
-    ids = list(range(1, 53)) + list(range(127, 139)) if mode in ("explore", "confirm") else list(range(1, N_CELLS + 1))
+    if family not in ("global", "nested", "all"):
+        raise SystemExit("family must be global, nested or all")
+    global_ids = list(range(1, 53)) + list(range(127, 139))
+    nested_ids = list(range(53, 85)) + list(range(139, 147))
+    ids = global_ids if mode == "explore" else (global_ids + nested_ids if mode == "confirm" else list(range(1, N_CELLS + 1)))
+    if family != "all":
+        selected = global_ids if family == "global" else nested_ids
+        ids = [i for i in ids if i in selected]
+    if not ids:
+        raise SystemExit("no cells for this mode/family")
     done = list(run_cell.starmap([(i, run_id, mode) for i in ids]))
     print(f"cells: {len(done)}/{len(ids)}")
-    print(combine.remote(run_id, mode, head))
+    print(combine.remote(run_id, mode, head, family))

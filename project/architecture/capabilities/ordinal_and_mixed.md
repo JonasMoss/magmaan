@@ -292,19 +292,21 @@
   parameterization-aware threshold and association Jacobians for robust ordinal
   reporting, modification indices, score tests, and standardized-solution
   reporting.
-- The DWLS calibration runner additionally supports 64-cell global-only
-  `--explore` and `--confirm` modes with saved per-replicate spectra and the
-  full registered 13-arm FMG family, using the bound primitive pOLS gamma = 4
-  and negative-spectrum truncation. Exploration reuses production draws;
-  confirmation uses seed base 817160001. No policy reference change is made.
-- DWLS nested-law diagnosis (task-17.3) replays 100 production draws in each
-  of three cells. Separate-point profile subtraction leaves 83–183 positive
-  terms for ten restrictions; common-point profile and observed-Hessian
-  parameter-space IJ spectra coincide and have ten terms. Parameter-space
-  SB/pEBA4 size is 5–6% in this exploratory replay. The internal lab diagnostic
-  accessor exposes the existing Newton Hessian, exact embedding restriction
-  map and common-point contrast; no policy change is made. Fresh-seed
-  confirmation is required before selecting the nested reference law.
+- DWLS nested policy (task-17.4) uses the observed-Hessian parameter-space
+  estimated-weight IJ law at H1 with the exact embedding restriction map.
+  Its spectrum has exactly df_diff terms and matches the common-point profile
+  and task-17.3 diagnostic construction. T = N(F_H0 − F_H1), SB/PEBA4, typed
+  nesting reasons and unsupported nested score are preserved. The separate-point
+  profile law remains an explicitly named lab comparator. Limited validation,
+  confirmation pending; the global test, ML and FIML recipes are unchanged.
+- Study 05 retains global-only production-seed `--explore` and extends
+  fresh-seed `--confirm` to 64 global and 40 nested cells (53–84, 139–146),
+  seed base 817160001. Nested arms retain profile and fixed-weight comparators,
+  evaluate the registered reference family on the policy's r-term spectrum,
+  and save spectra. Runner and Modal `--family global|nested|all` select subsets;
+  combine checks the selected cell count. The task-17.3 three-cell exploratory
+  replay found common-point and parameter-IJ spectra agreeing with ten terms,
+  with SB/PEBA4 size 5–6%; this is not fresh-seed confirmation.
 - DWLS calibration study `experiments/decisions/05-dwls-policy-calibration`
   has a registered 146-cell runner for global/nested size, IJ coverage and
   loading/global power, with explicit policy-equivalence gaps and CPU pricing.

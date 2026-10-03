@@ -19,9 +19,12 @@ dwls_cells <- function() {
   x
 }
 
-dwls_mode_cells <- function(mode) {
+dwls_mode_cells <- function(mode, family='all') {
+  stopifnot(family %in% c('global','nested','all'))
   cells <- dwls_cells()
-  if(mode %in% c('explore','confirm')) cells <- cells[cells$family=='global',]
+  if(mode=='explore') cells <- cells[cells$family=='global',]
+  if(mode=='confirm') cells <- cells[cells$family %in% c('global','nested'),]
+  if(family!='all') cells <- cells[cells$family==family,]
   cells
 }
 
@@ -165,15 +168,37 @@ dwls_replicate <- function(cell,replicate,seed_base,population) {
       if(!isTRUE(h0$converged)) stop('H0 did not converge')
       policy <- magmaanlab::policy_nested(h1,h0)$lr
       if(!isTRUE(policy$available)) stop('Policy unavailable: ',policy$reason,': ',policy$detail)
+      parts <- magmaanlab:::ordinal_nested_diagnostic_impl(h1,h0)
+      K <- parts$K; A <- parts$A
+      H <- crossprod(K,parts$hessian_total%*%K)/h1$ntotal
+      L <- solve(crossprod(K),t(K))
+      V <- h1$ntotal*L%*%core$robust_ordinal_ij(h1,h1$ordinal_stats)$vcov%*%t(L)
+      C <- A%*%solve(H,t(A)); S <- A%*%V%*%t(A)
+      Ri <- solve(chol(C))
+      spectrum <- sort(eigen(t(Ri)%*%S%*%Ri,symmetric=TRUE,only.values=TRUE)$values)
       explicit <- core$ordinal_profile_lrt(h1,h0,h1$ordinal_stats)
+      cal <- dwls_calibrate(max(0,explicit$T_diff),nrow(A),spectrum)
+      gap <- max(abs(c(policy$statistic-explicit$T_diff,policy$p_sb-cal$p_sb,
+        policy$p_peba4-cal$p_peba4)),
+        sqrt(sum((policy$eigenvalues-spectrum)^2)/sum(spectrum^2)))
+      for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
+        policy$statistic/policy$sb_scale,policy$df,length(policy$eigenvalues))
+      methods <- c(scaled_shifted='ss',mean_variance='mv',scaled_f='scaled_f',
+        all='all',pall='penalized_all',eba2='eba',eba4='eba',eba6='eba',
+        peba2='peba',peba6='peba',pols='pols')
+      for(a in names(methods)) {
+        param <- if(grepl('eba',a)) as.numeric(sub('.*eba','',a)) else 4
+        test <- core$robust_fmg_test(policy$statistic,policy$df,spectrum,
+          methods[[a]],param,truncate_negative=TRUE)
+        add(a,test$p_value,policy$statistic,policy$df,length(spectrum),
+          reason=if(is.finite(test$p_value)) 'available' else 'numeric_failure')
+      }
       e <- explicit$eigvals; e <- e[e>1e-8*max(e)]
       e <- sort(c(rep(0,max(0,explicit$df_diff-length(e))),e))
       cal <- dwls_calibrate(max(0,explicit$T_diff),explicit$df_diff,e)
       cal$p_peba4 <- core$robust_fmg_test(max(0,explicit$T_diff),length(e),e,'peba',4)$p_value
-      gap <- max(abs(c(policy$statistic-explicit$T_diff,policy$p_sb-cal$p_sb,
-                        policy$p_peba4-cal$p_peba4)))
-      for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
-        policy$statistic/policy$sb_scale,policy$df,length(policy$eigenvalues))
+      for(a in c('sb','peba4')) add(paste0('profile_',a),cal[[paste0('p_',a)]],
+        explicit$T_diff/(sum(e)/explicit$df_diff),explicit$df_diff,length(e))
       fixed <- magmaanlab::robust_nested_lrt(h1,h0,data=h1$ordinal_stats,
         gamma='empirical',method='restriction_map',A.method='exact',weight='DWLS')
       cal <- dwls_calibrate(fixed$T_diff,fixed$df_diff,fixed$eigenvalues)

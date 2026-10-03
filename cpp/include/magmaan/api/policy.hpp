@@ -182,18 +182,14 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
 //
 // The `lr` slot holds the fit-function difference T = n (F_null - F_alt),
 // labelled "fit_function_difference" (DWLS has no likelihood), with the
-// estimated-weight profile reference law (estimate::ordinal_dwls_profile_lrt):
-// each model's profile at its own estimate over the extended first-stage
-// moments (thresholds, polychorics and the diagonal of the DWLS weight), so the
-// reference stays valid when the larger model is misspecified (evidence 13).
-// At exact fit the weight channel is dormant and the spectrum is the
-// fixed-weight Satorra-2000 one. `eigenvalues` is the positive profile
-// spectrum (values below 1e-8 of the largest count as zero), padded with
-// zeros to at least the restriction df; SB scales by its
-// trace over the restriction df (mean matching over every term, which a top-df
-// truncation would lose) and PEBA4 uses the whole spectrum. No nested DWLS
-// score test is derived, so `score` is UnsupportedModel. Nesting is verified
-// with the shared restriction embedding.
+// parameter-space estimated-weight IJ law at the larger fit: observed Hessian
+// H, IJ meat B, and exact restriction map A, with df_diff eigenvalues of
+// (A H^-1 A')^-1 A H^-1 B H^-1 A'. SB and PEBA4 calibrate this r-term spectrum.
+// Validation is limited; fresh-seed confirmation is pending. The separately
+// fitted ordinal_dwls_profile_lrt remains an explicitly named lab comparator.
+// At exact fit the weight channel is dormant, giving fixed-weight Satorra-2000.
+// No nested DWLS score test is derived, so `score` is UnsupportedModel.
+// Nesting is verified with the shared restriction embedding.
 PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const model::MatrixRep& null_rep,
                                 const estimate::Estimates& null_estimates,

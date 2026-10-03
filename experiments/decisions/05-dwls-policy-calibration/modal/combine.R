@@ -19,7 +19,8 @@ source(file.path(study, "R", "compute.R"))
 source(file.path(study, "R", "summarize.R"))
 
 if(!mode %in% c('smoke','pilot','production','explore','confirm')) stop('Unknown mode')
-cells <- dwls_mode_cells(mode)
+family <- if('--family' %in% args) opt('--family') else 'all'
+cells <- dwls_mode_cells(mode,family)
 files <- sort(list.files(file.path(run_dir, "cells"), pattern = "^raw[.]rds$",
                          recursive = TRUE, full.names = TRUE))
 if (length(files) != nrow(cells))
@@ -36,7 +37,7 @@ seed_base <- c(smoke = 817130001L, pilot = 817140001L, production = 817150001L, 
 if(any(raw$seed != seed_base+10000L*raw$cell_id+raw$replicate)) stop('Seed mismatch')
 saveRDS(raw,file.path(out,'raw.rds'))
 write_metadata(file.path(out, "metadata.csv"), list(mode = mode, executor = "modal",
-  cells = nrow(cells), seed_base = seed_base, git_head = git_head,
+  cells = nrow(cells), family = family, seed_base = seed_base, git_head = git_head,
   population_n_per_group = 100000L, population_seed_base = 817120001L, pols_gamma = 4, spectrum_truncate_negative = TRUE),
   packages = c("magmaanlab", "lavaan"))
 write_csv(cells, file.path(out, "cells.csv"))

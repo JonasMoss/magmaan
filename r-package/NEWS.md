@@ -1,5 +1,11 @@
 # magmaanlab 0.2.0 (in development)
 
+- Nested all-ordinal DWLS now calibrates the unchanged fit-function difference
+  with the df-length parameter-space estimated-weight IJ law: observed Hessian
+  at the larger fit and exact restriction map, with SB and PEBA4. Validation is
+  limited; fresh-seed confirmation remains pending. The separate-point profile
+  law remains an explicitly named lab comparator.
+
 - `mplus_data()` reads free/fixed individual and summary data through a typed
   C++ data plan, including missing flags and FILE/NGROUPS groups. It reports
   NOBSERVATIONS and dropped GROUPING codes; LISTWISE remains a fitting choice.
@@ -79,7 +85,7 @@
   (IJ) covariance and one global test, the fit-function statistic labelled
   `"fit_function"`, with the likelihood-ratio component `"inapplicable"`.
 - `policy_nested()` compares two all-ordinal DWLS fits with the fit-function
-  difference and its estimated-weight profile reference (label
+  difference and its parameter-space estimated-weight IJ reference (label
   `"fit_function_difference"`); the nested score is unavailable.
 - `vcov()` gains `regime = "sandwich_ij"` for all-ordinal fits, the
   estimated-weight sandwich; the default stays the fixed-weight sandwich.

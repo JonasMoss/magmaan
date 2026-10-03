@@ -20,7 +20,7 @@ dwls_summarize <- function(raw,cells,out) {
   for(i in seq_len(nrow(cells))) {
     cell <- cells[i,]
     arms <- if(cell$family=='coverage') c('policy_ij','expected','observed') else
-      if(cell$family=='nested') c('policy_sb','policy_peba4','fixed_sb','fixed_peba4') else
+      if(cell$family=='nested') c(dwls_global_arms(),'profile_sb','profile_peba4','fixed_sb','fixed_peba4') else
         dwls_global_arms()
     targets <- if(cell$family=='coverage') c('loading','threshold',if(cell$model=='sem') 'path' else 'correlation') else ''
     for(a in arms) for(t in targets) {
@@ -33,8 +33,9 @@ dwls_summarize <- function(raw,cells,out) {
         match_cols <- c('family','factors','categories','skew','n','groups','parameterization','nesting','model')
         matched <- cells$role=='null' & cells$cross==0
         for(col in match_cols) matched <- matched & cells[[col]]==cell[[col]]
-        ids <- cells$cell_id[matched]; if(length(ids)!=1) stop('Ambiguous matched null for cell ',i)
-        nx <- raw[raw$cell_id==ids & raw$arm==a & !nzchar(raw$error) & is.finite(raw$p),]
+        ids <- cells$cell_id[matched]; if(length(ids)>1) stop('Ambiguous matched null for cell ',i)
+        # A selected power-only subset has no null draws for size adjustment.
+        nx <- raw[raw$cell_id %in% ids & raw$arm==a & !nzchar(raw$error) & is.finite(raw$p),]
         null_count <- nrow(nx)
         # Chi-square-equivalent statistics are monotone in each arm's p-value.
         if(n && null_count) {

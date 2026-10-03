@@ -10,7 +10,9 @@ execute:
 ---
 
 The adopted register is estimated-weight IJ covariance, robust-ordinal global
-fit-function SB/PEBA4, and estimated-weight nested profile-law SB/PEBA4.
+fit-function SB/PEBA4, and r-term parameter-space estimated-weight nested IJ SB/PEBA4.
+The nested reference uses the larger fit’s observed Hessian and exact restriction
+map; validation is limited and fresh-seed confirmation is pending.
 These recipes are settled by the misspecification-robust requirement;
 finite-sample calibration remains open. Comparators never select a replacement.
 
@@ -56,9 +58,11 @@ coverage configuration, with seeds and target estimates recorded separately.
 Intervals use the IJ policy covariance or the expected/observed fixed-weight
 sandwich comparators, with a delta-method factor correlation. Global comparators
 are scaled-shifted and mean-variance adjustments of the same robust-ordinal
-spectrum. Nested comparators use the fixed-weight Satorra-2000 restriction map
-at H1. Restriction degrees of freedom and reference-spectrum size are recorded
-separately; the profile-law spectrum may contain more terms than restrictions.
+spectrum. Nested comparators retain the separate-point profile SB/PEBA4 and fixed-weight
+Satorra-2000 restriction map at H1; the implemented reference family uses the
+new policy spectrum. Restriction degrees of freedom and reference-spectrum size are recorded
+separately; the policy spectrum has df_diff terms, while the profile comparator
+may contain more. The retained pilot predates this nested-reference replacement.
 Power uses matched null draws for arm-specific empirical size adjustment.
 
 The original availability preflight is retained. The approved correction uses

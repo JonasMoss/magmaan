@@ -16,6 +16,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include "magmaan/robust/restriction.hpp"
 
 namespace {
 
@@ -48,11 +49,13 @@ struct OrdinalModel {
   magmaan::model::MatrixRep rep;
 };
 
-OrdinalModel ordinal_model(const std::string& syntax, int groups) {
+OrdinalModel ordinal_model(const std::string& syntax, int groups,
+                           std::vector<magmaan::spec::GroupEqual> equal = {}) {
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
   magmaan::spec::BuildOptions options;
   options.n_groups = groups;
+  options.group_equal = std::move(equal);
   auto pt = magmaan::spec::build(*fp, options);
   REQUIRE(pt.has_value());
   auto rep = magmaan::model::build_matrix_rep(*pt);
@@ -259,9 +262,34 @@ NestedDwls nested_dwls(const magmaan::data::OrdinalStats& stats, int groups,
   return r;
 }
 
+Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::OrdinalStats& stats_value,
+                                 OrdinalParameterization parameterization) {
+  const auto* stats = &stats_value;
+  auto p1 = r.alt_model.pt, p0 = r.null_model.pt;
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(p1, *stats));
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(p0, *stats));
+  auto c1 = magmaan::estimate::build_eq_constraints(p1);
+  auto c0 = magmaan::estimate::build_eq_constraints(p0);
+  REQUIRE(c1); REQUIRE(c0);
+  auto embed = magmaan::robust::embed_nested_null(p1, r.alt_model.rep, p0,
+      r.null_model.rep, r.null_est.theta, *c1, *c0);
+  REQUIRE(embed);
+  auto common_null = magmaan::robust::embedded_null_structure(p1, embed->null_constraints);
+  auto common = magmaan::estimate::ordinal_dwls_profile_lrt(p1, r.alt_model.rep,
+      *stats, r.alt_est, common_null, r.alt_model.rep, r.alt_est, parameterization);
+  REQUIRE(common);
+  const auto& t = r.out.lr;
+  Eigen::VectorXd eig = common->eigvals.tail(t.df);
+  REQUIRE(t.eigenvalues.size() == t.df);
+  CHECK((t.eigenvalues - eig).norm() <= 1e-10 * eig.norm());
+  CHECK(t.eigenvalues.allFinite());
+  CHECK(t.eigenvalues.minCoeff() >= 0.0);
+  return eig;
+}
+
 }  // namespace
 
-TEST_CASE("DWLS nested policy: fit-function difference with the estimated-weight profile law") {
+TEST_CASE("DWLS nested policy: fit-function difference with the parameter-space estimated-weight IJ law") {
   const Eigen::MatrixXd X = misspecified_block(5150u, 600, -0.4, 0.6);
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
   REQUIRE(stats.has_value());
@@ -283,14 +311,7 @@ TEST_CASE("DWLS nested policy: fit-function difference with the estimated-weight
                                               r.alt_est, OrdinalWeightKind::DWLS);
   REQUIRE(g0.has_value()); REQUIRE(g1.has_value());
   CHECK(t.statistic == doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
-  // The whole positive spectrum enters; SB matches its mean over the restriction df.
-  std::vector<double> kept;
-  for (Eigen::Index i = 0; i < profile->eigvals.size(); ++i)
-    if (profile->eigvals(i) > 1e-8 * profile->eigvals.maxCoeff()) kept.push_back(profile->eigvals(i));
-  Eigen::VectorXd eig = Eigen::VectorXd::Zero(std::max<Eigen::Index>(2, static_cast<Eigen::Index>(kept.size())));
-  for (std::size_t i = 0; i < kept.size(); ++i) eig(eig.size() - static_cast<Eigen::Index>(kept.size()) + static_cast<Eigen::Index>(i)) = kept[i];
-  std::sort(eig.data(), eig.data() + eig.size());
-  CHECK((t.eigenvalues - eig).norm() == 0.0);
+  const auto eig = check_common_law(r, *stats, OrdinalParameterization::Delta);
   CHECK(t.sb_scale == doctest::Approx(eig.sum() / 2.0));
   CHECK(t.p_sb == doctest::Approx(magmaan::inference::chi2_pvalue(t.statistic / t.sb_scale, 2)));
   CHECK(std::isfinite(t.p_peba4));
@@ -305,7 +326,7 @@ TEST_CASE("DWLS nested policy: fit-function difference with the estimated-weight
   CHECK(swapped.lr.reason != api::InferenceReason::Available);
 }
 
-TEST_CASE("DWLS nested policy: delta and theta give the same test; two groups compose") {
+TEST_CASE("DWLS nested policy: delta and theta match their common-point laws; two groups compose") {
   const Eigen::MatrixXd X = misspecified_block(5151u, 600, -0.4, 0.6);
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
   REQUIRE(stats.has_value());
@@ -315,9 +336,12 @@ TEST_CASE("DWLS nested policy: delta and theta give the same test; two groups co
   REQUIRE(theta.out.lr.reason == api::InferenceReason::Available);
   CHECK(theta.out.lr.statistic == doctest::Approx(delta.out.lr.statistic).epsilon(1e-6));
   REQUIRE(theta.out.lr.eigenvalues.size() == delta.out.lr.eigenvalues.size());
-  CHECK((theta.out.lr.eigenvalues - delta.out.lr.eigenvalues).norm() <
-        1e-5 * delta.out.lr.eigenvalues.norm());
-  CHECK(theta.out.lr.p_peba4 == doctest::Approx(delta.out.lr.p_peba4).epsilon(1e-5));
+  check_common_law(delta, *stats, OrdinalParameterization::Delta);
+  check_common_law(theta, *stats, OrdinalParameterization::Theta);
+  // Away from the nested null, the affine restrictions at H1 describe
+  // different tangents under nonlinear delta/theta response scaling. The
+  // r-term law must match the common-point profile in each coordinate system;
+  // equal statistics do not imply equal reference spectra there.
 
   auto grouped = magmaan::data::ordinal_stats_from_integer_data(
       {misspecified_block(5152u, 500, -0.4, 0.6), misspecified_block(5153u, 450, -0.2, 0.6)}, true);
@@ -334,7 +358,50 @@ TEST_CASE("DWLS nested policy: delta and theta give the same test; two groups co
         doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
 }
 
-TEST_CASE("DWLS nested policy: under a true null the profile law approaches Satorra-2000") {
+namespace {
+Eigen::MatrixXd cross_loading_block(std::uint32_t seed, Eigen::Index n) {
+  std::mt19937 rng(seed);
+  std::normal_distribution<double> z(0.0, 1.0);
+  Eigen::MatrixXd X(n, 6);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double f1 = z(rng), f2 = 0.3 * f1 + std::sqrt(0.91) * z(rng);
+    for (int j = 0; j < 6; ++j) {
+      const double cross = j == 1 ? 0.3 : 0.0;
+      const double residual = std::sqrt(1.0 - 0.7 * 0.7 - cross * cross - 2.0 * 0.7 * cross * 0.3);
+      const double y = 0.7 * (j < 3 ? f1 : f2) + cross * f2 + residual * z(rng);
+      X(i, j) = 1.0 + (y > -0.4) + (y > 0.6);
+    }
+  }
+  return X;
+}
+}  // namespace
+
+TEST_CASE("DWLS nested policy: two-group theta invariance laws match common-point profiles") {
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(
+      {cross_loading_block(5162u, 500), cross_loading_block(5163u, 450)}, true);
+  REQUIRE(stats);
+  // The fitted CFA omits x2's population cross-loading on f2.
+  const std::string syntax = "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\n"
+      "x4 | t1 + t2\nx5 | t1 + t2\nx6 | t1 + t2\n";
+  using magmaan::spec::GroupEqual;
+  for (const bool thresholds : {false, true}) {
+    const std::vector<GroupEqual> eq1 = thresholds ? std::vector<GroupEqual>{GroupEqual::Thresholds}
+                                                   : std::vector<GroupEqual>{};
+    auto eq0 = eq1; eq0.push_back(GroupEqual::Loadings);
+    NestedDwls r;
+    r.alt_model = ordinal_model(syntax, 2, eq1);
+    r.null_model = ordinal_model(syntax, 2, eq0);
+    r.alt_est = fit_dwls(r.alt_model, *stats, OrdinalParameterization::Theta);
+    r.null_est = fit_dwls(r.null_model, *stats, OrdinalParameterization::Theta);
+    r.out = api::policy_nested_dwls(r.null_model.pt, r.null_model.rep, r.null_est, {},
+        r.alt_model.pt, r.alt_model.rep, r.alt_est, {}, *stats, OrdinalParameterization::Theta);
+    REQUIRE_MESSAGE(r.out.lr.reason == api::InferenceReason::Available, r.out.lr.detail);
+    check_common_law(r, *stats, OrdinalParameterization::Theta);
+  }
+}
+
+TEST_CASE("DWLS nested policy: under a true null the IJ law approaches Satorra-2000") {
   // The weight channel is driven by the residuals, which vanish under correct
   // specification, so the estimated-weight spectrum converges to the
   // fixed-weight Satorra-2000 spectrum (exact restriction map) as n grows.

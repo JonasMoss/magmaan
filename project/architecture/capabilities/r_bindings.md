@@ -373,12 +373,13 @@
   groups, theta) in `policy_dwls_test.cpp`; calibration remains open.
   Nested DWLS comparisons (`api::policy_nested_dwls`, routed by
   `policy_nested()` and `magmaan::anova()`) report the fit-function
-  difference with the estimated-weight profile law
-  (`ordinal_dwls_profile_lrt`): positive spectrum with numerical zeros
-  removed, SB as full trace over the restriction df, PEBA4 on the whole
-  spectrum, nesting verified by `embed_nested_null`, nested score typed
-  unavailable. Gates: global-statistic difference, delta/theta invariance,
-  two groups and convergence to Satorra-2000 under a true null. The shared inference-side
+  difference with the df-length parameter-space estimated-weight IJ law:
+  observed Hessian at H1, exact restriction map, and SB/PEBA4. The separate-point
+  `ordinal_dwls_profile_lrt` is an explicit lab comparator. Nested score remains
+  typed unavailable. Gates cover the global-statistic difference, common-point
+  profile equality (delta and two-group theta invariance), diagnostic IJ
+  construction, and true-null Satorra-2000 reduction. Limited validation,
+  confirmation pending. The shared inference-side
   `robust::embed_nested_null` matches formula keys including group and level,
   lifts the null's affine constraints and estimate into H1, and verifies its
   implied covariance and mean moments to relative tolerance 1e-10. Omission

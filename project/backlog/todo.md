@@ -505,27 +505,21 @@ required by an all-ordinal primary workflow remain current work.
   n = 2400). Remaining: the calibration item below and lavaan WLSMV agreement
   of the shared spectrum, which the conventions already gate.
 
-- [x] **S/M — compose the DWLS nested likelihood-ratio-type test** (2026-10-02).
-  `api::policy_nested_dwls`: the fit-function difference T = n(F_null −
-  F_alt) in the `lr` slot (label `fit_function_difference`) with the
-  estimated-weight profile law (`ordinal_dwls_profile_lrt`, each model's
-  profile at its own estimate over thresholds, polychorics and the DWLS
-  weight diagonal; evidence 13). Decisions: the reference is the positive
-  profile spectrum with values below 1e-8 of the largest treated as zero
-  (otherwise theta's extra scale directions change PEBA4), padded to the
-  restriction df; SB divides its full trace by the restriction df (mean
-  matching over every term; `fmg_test`'s top-df truncation would drop the
-  weight channel); PEBA4 uses the whole spectrum; negative profile
-  eigenvalues are dropped as in the validated mixture (conservative). Nesting
-  is verified with `robust::embed_nested_null` on the prepared partables. The
-  nested score is typed `unsupported_model` (no derivation). R:
-  `policy_nested()` routes two DWLS fits with identical ordinal statistics;
-  `anova()` prints "fit-function difference". Gates (`policy_dwls_test.cpp`):
-  statistic equals the difference of the global fit-function statistics; role
-  swap is refused; delta and theta give identical statistics, spectra and
-  PEBA4; two groups compose; under a true null the profile trace approaches
-  Satorra-2000's (delta 1.9% to 0.19%, theta 2.3% to 0.20% from n = 4000 to
-  64000). Calibration remains open (below).
+- [x] **S/M — compose the DWLS nested likelihood-ratio-type test** (task-17.4).
+  `api::policy_nested_dwls` reports unchanged T = n(F_null − F_alt) in `lr`
+  (`fit_function_difference`), calibrated with SB and PEBA4 on exactly
+  df_diff parameter-space estimated-weight IJ terms. Observed Hessian at H1,
+  IJ covariance in the constraint coordinates (using K's left inverse), and
+  `embed_nested_null`'s exact restriction map compose the reference. The
+  separate-point `ordinal_dwls_profile_lrt` remains an explicitly named lab
+  comparator. Nested score stays typed `unsupported_model`. C++ and lab gates
+  compare against common-point profiles and the task-17.3 diagnostic; statistic,
+  nesting refusals and true-null fixed-weight reduction are preserved.
+  Delta/theta statistics agree, but their H1 affine restriction tangents need
+  not coincide away from the nested null. Validation is limited, confirmation
+  pending. Study 05 saves spectra and the reference family, retains profile
+  and fixed-weight comparators, and confirms registered nested cells 53–84 and
+  139–146 with seed base 817160001. Modal selects global, nested or both.
 
 - [ ] **M — calibrate the DWLS policy.** Confirmatory evidence for DWLS SB
   versus PEBA4 global/nested size remains pending; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)

@@ -88,3 +88,35 @@ test_that("FIML policy uses retained missing-pattern scores for global and neste
     expect_identical(policy_inference(failed)$score$reason, "not_converged")
   }
 })
+
+
+test_that("DWLS nested policy equals the parameter-IJ diagnostic and common-point law", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ord <- paste0("x",1:6)
+  for(v in ord) d[[v]] <- ordered(cut(d[[v]],
+    quantile(d[[v]],c(0,1/3,2/3,1)),include.lowest=TRUE,labels=FALSE),levels=1:3)
+  f1 <- fit_model(model_spec(cfa,ordered=ord,parameterization="theta",
+    group="school",group_labels=levels(d$school),group_equal="thresholds"),d,estimator="DWLS")
+  f0 <- fit_model(model_spec(cfa,ordered=ord,parameterization="theta",
+    group="school",group_labels=levels(d$school),group_equal=c("thresholds","loadings")),d,estimator="DWLS")
+  expect_true(f1$converged); expect_true(f0$converged)
+  policy <- policy_nested(f1,f0)$lr
+  expect_true(policy$available,info=policy$detail)
+  parts <- magmaanlab:::ordinal_nested_diagnostic_impl(f1,f0)
+  K <- parts$K; A <- parts$A
+  H <- crossprod(K,parts$hessian_total%*%K)/f1$ntotal
+  L <- solve(crossprod(K),t(K))
+  V <- f1$ntotal*L%*%magmaan_core$robust_ordinal_ij(f1,f1$ordinal_stats)$vcov%*%t(L)
+  Ri <- solve(chol(A%*%solve(H,t(A))))
+  e <- sort(eigen(t(Ri)%*%A%*%V%*%t(A)%*%Ri,symmetric=TRUE,only.values=TRUE)$values)
+  expect_length(policy$eigenvalues,policy$df)
+  expect_equal(policy$eigenvalues,e,tolerance=1e-10)
+  expect_equal(policy$eigenvalues,tail(sort(parts$common$eigvals),policy$df),tolerance=1e-10)
+  profile <- magmaan_core$ordinal_profile_lrt(f1,f0,f1$ordinal_stats)
+  expect_equal(policy$statistic,profile$T_diff,tolerance=1e-10)
+  expect_equal(robust_nested_lrt(f1,f0)$eigenvalues,policy$eigenvalues,tolerance=1e-10)
+  expect_true(all(is.finite(e) & e>=0))
+  failed <- f1; failed$converged <- FALSE
+  expect_identical(policy_nested(failed,f0)$lr$reason,"not_converged")
+})

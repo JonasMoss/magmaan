@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <utility>
 
 #include <Eigen/Cholesky>
@@ -256,6 +257,7 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
   if (null_estimates.association || alternative_estimates.association)
     return unavailable(InferenceReason::UnsupportedModel, "ordinal association ML is not a DWLS fit");
 
+  Eigen::MatrixXd K, restriction;
   // Nesting: lift the null into the alternative's parameter space on the
   // prepared (threshold- and scale-augmented) structures.
   {
@@ -281,68 +283,65 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
     }
     if (embedding->restriction.A.rows() == 0)
       return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+    K = c1->K();
+    restriction = embedding->restriction.A;
     alternative_pt = std::move(p1);
     null_pt = std::move(p0);
   }
 
   set_unavailable(out.score, InferenceReason::UnsupportedModel,
       "no nested DWLS score test is derived; the fit-function difference test is reported");
-  auto profile = estimate::ordinal_dwls_profile_lrt(std::move(alternative_pt), alternative_rep,
-      stats, alternative_estimates, std::move(null_pt), null_rep, null_estimates,
+  auto ij = estimate::robust_ordinal_ij(alternative_pt, alternative_rep, stats,
+      alternative_estimates, estimate::OrdinalWeightKind::DWLS, parameterization,
+      alternative_row_user);
+  if (!ij) {
+    set_unavailable(out.lr, reason_from(ij.error()), ij.error().detail);
+    return out;
+  }
+  auto parts = estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
+      alternative_rep, stats, alternative_estimates.theta, estimate::OrdinalWeightKind::DWLS,
       parameterization);
-  if (!profile) {
-    set_unavailable(out.lr, reason_from(profile.error()), profile.error().detail);
+  if (!parts) {
+    set_unavailable(out.lr, InferenceReason::NumericFailure, parts.error().detail);
     return out;
   }
-  const auto& p = *profile;
-  if (p.df_diff <= 0) {
-    set_unavailable(out.lr, InferenceReason::NotNested,
-                    "the null does not restrict the alternative");
-    return out;
-  }
-  if (!std::isfinite(p.T_diff) || !p.eigvals.allFinite()) {
+  const double N = std::accumulate(stats.n_obs.begin(), stats.n_obs.end(), 0.0);
+  const Eigen::MatrixXd H = K.transpose() * parts->hessian * K / N;
+  // Pure-merge constraint coordinates are not orthonormal. Recover their
+  // covariance with K's left inverse, then undo the IJ bread to obtain B.
+  Eigen::LDLT<Eigen::MatrixXd> gram(K.transpose() * K);
+  if (gram.info() != Eigen::Success || !gram.isPositive()) {
     set_unavailable(out.lr, InferenceReason::NumericFailure,
-                    "DWLS nested test: non-finite statistic or spectrum");
+                    "DWLS nested test: singular constraint coordinates");
     return out;
   }
-  // Eigenvalues that are zero to working precision (they appear, for
-  // instance, from the extra scale directions of the theta parameterization)
-  // are zeros of the reference law, not terms of it; keeping them would make
-  // PEBA4 depend on the parameterization.
-  const double largest = p.eigvals.size() ? p.eigvals.maxCoeff() : 0.0;
-  std::vector<double> kept;
-  for (Eigen::Index i = 0; i < p.eigvals.size(); ++i)
-    if (p.eigvals(i) > 1e-8 * largest) kept.push_back(p.eigvals(i));
-  const Eigen::Index k = std::max<Eigen::Index>(p.df_diff, static_cast<Eigen::Index>(kept.size()));
-  Eigen::VectorXd eigenvalues = Eigen::VectorXd::Zero(k);
-  for (std::size_t i = 0; i < kept.size(); ++i)
-    eigenvalues(k - static_cast<Eigen::Index>(kept.size()) + static_cast<Eigen::Index>(i)) = kept[i];
-  std::sort(eigenvalues.data(), eigenvalues.data() + k);
-  const double trace = eigenvalues.sum();
-  if (!(trace > 0.0)) {
+  const Eigen::MatrixXd L = gram.solve(K.transpose());
+  const Eigen::MatrixXd V = N * L * ij->vcov * L.transpose();
+  const Eigen::MatrixXd B = H * V * H.transpose();
+  auto spectrum = robust::compute_satorra2000_from_sandwich(H, B, restriction);
+  if (!spectrum) {
+    set_unavailable(out.lr, reason_from(spectrum.error()), spectrum.error().detail);
+    return out;
+  }
+  // est.fmin is half the discrepancy, including the existing group weights.
+  const double statistic = 2.0 * N * (null_estimates.fmin - alternative_estimates.fmin);
+  const double trace = spectrum->eigenvalues.sum();
+  if (!std::isfinite(statistic) || !spectrum->eigenvalues.allFinite() || !(trace > 0.0)) {
     set_unavailable(out.lr, InferenceReason::NumericFailure,
-                    "DWLS nested test: the reference spectrum has no positive mass");
+                    "DWLS nested test: invalid statistic or reference spectrum");
     return out;
   }
-  // A clearly negative difference means the alternative stopped above the
-  // null's optimum.
-  if (p.T_diff < -1e-8 * std::max(1.0, trace)) {
+  if (statistic < -1e-8 * std::max(1.0, trace)) {
     set_unavailable(out.lr, InferenceReason::NotConverged,
                     "the alternative fits worse than the null (fit-function difference " +
-                    std::to_string(p.T_diff) + ")");
+                    std::to_string(statistic) + ")");
     return out;
   }
-  PolicyTest& t = out.lr;
-  t.statistic = std::max(0.0, p.T_diff);
-  t.df = p.df_diff;
-  t.eigenvalues = std::move(eigenvalues);
-  t.sb_scale = trace / static_cast<double>(t.df);
-  t.p_sb = inference::chi2_pvalue(t.statistic / t.sb_scale, t.df);
-  const auto peba = robust::frontier::fmg_test(t.statistic, static_cast<int>(k), t.eigenvalues,
-      {robust::frontier::FmgMethod::Peba, 4.0, true});
-  t.p_peba4 = peba.p_value;
-  t.peba_blocks = peba.blocks_effective;
-  t.label = "fit_function_difference";
+  out.lr.statistic = std::max(0.0, statistic);
+  out.lr.df = static_cast<int>(restriction.rows());
+  out.lr.eigenvalues = spectrum->eigenvalues;
+  out.lr.label = "fit_function_difference";
+  calibrate_spectrum(out.lr);
   return out;
 }
 

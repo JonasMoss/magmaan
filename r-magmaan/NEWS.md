@@ -1,5 +1,11 @@
 # magmaan 0.2.0 (in development)
 
+- Nested all-ordinal DWLS now calibrates the unchanged fit-function difference
+  with the df-length parameter-space estimated-weight IJ law: observed Hessian
+  at the larger fit and exact restriction map, with SB and PEBA4. Validation is
+  limited; fresh-seed confirmation remains pending. The separate-point profile
+  law remains an explicitly named lab comparator.
+
 - FIML fits now receive the ordinary inference policy: observed-bread
   casewise-score sandwich covariance, global and nested score and LR tests,
   each calibrated with SB and PEBA4. Score sensitivity is observed with an

@@ -6,7 +6,8 @@ usage <- 'Usage: Rscript run_experiment.R MODE [--run-id ID] [--workers W]
   --pilot      20 replicates per cell; timing and failure diagnostics
   --production 2000 null/coverage, 1000 power replicates; separate compute approval required
   --explore    64 global cells, production draws and counts; save full FMG family
-  --confirm    same global cells/counts, fresh seed base 817160001
+  --confirm    global and nested cells/counts, fresh seed base 817160001
+  --family global|nested|all (default all)
   --reps R     override replicates per cell for local verification
   --workers W  1..4, one math thread each (default 1)
   --run-id ID  fresh immutable output directory (default mode name)
@@ -20,7 +21,7 @@ opt <- function(key,default) {
   if(at==length(args) || startsWith(args[at+1],'--')) stop('Missing value for ',key)
   args[at+1]
 }
-if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--explore','--confirm','--reps','--run-id','--workers','--cell','--out-dir'))) stop('Unknown option')
+if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--explore','--confirm','--reps','--run-id','--workers','--cell','--out-dir','--family'))) stop('Unknown option')
 modes <- intersect(args,c('--preflight','--smoke','--pilot','--production','--explore','--confirm'))
 if(length(modes)!=1) stop(usage)
 mode <- substring(modes,3)
@@ -44,12 +45,12 @@ seed_base <- c(preflight=817130001L,smoke=817130001L,pilot=817140001L,production
 binary <- list.files(file.path(find.package('magmaanlab'),'libs'),'\\.so$',full.names=TRUE)
 files <- c(script,list.files(file.path(here,'R'),full.names=TRUE),file.path(here,'criteria','dwls_policy.md'),binary)
 write_metadata(file.path(out,'metadata.csv'),list(mode=mode,workers=workers,
-  seed_base=seed_base,git_head=git_scalar(c('rev-parse','HEAD')),git_dirty=git_dirty(),
+  seed_base=seed_base,family=opt('--family','all'),git_head=git_scalar(c('rev-parse','HEAD')),git_dirty=git_dirty(),
   source_hashes=paste(tools::md5sum(files),collapse=','),hash_files=paste(files,collapse=','),
   magmaanlab_path=find.package('magmaanlab'),native_md5=paste(tools::md5sum(binary),collapse=','),
   population_n_per_group=100000L,population_seed_base=817120001L,batch_size=20L,reps_override=reps,pols_gamma=4,spectrum_truncate_negative=TRUE),
   packages=c('magmaanlab','lavaan'))
-cells <- dwls_mode_cells(mode)
+cells <- dwls_mode_cells(mode,opt('--family','all'))
 if(length(only_cells) && any(!only_cells %in% cells$cell_id)) stop('Unknown cell ID for mode')
 write_csv(cells,file.path(out,'cells.csv'))
 if(mode=='preflight') {
