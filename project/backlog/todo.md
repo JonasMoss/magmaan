@@ -536,6 +536,16 @@ required by an all-ordinal primary workflow remain current work.
   N, groups), including misspecified larger models for nested tests,
   reporting size, coverage and failures before the recipe becomes the policy.
 
+- [ ] **M — threshold-invariance nested tests (Wu-Estabrook).** Imposing
+  threshold equality releases the second group's response scales and
+  intercepts, so configural vs thresholds-equal (and thresholds+loadings vs
+  loadings-only) are nested in moment space but not by parameter restriction;
+  `policy_nested()` correctly reports `not_nested`. With 3 categories the step is
+  a zero-df equivalence; with more it is testable through a restriction map (the
+  lab's ordinal Satorra-2000 delta map is the candidate). Found by task-17.1.
+  **Check:** a 5-category two-group design against the restriction-map law;
+  typed unavailability where untestable. Not release-gating.
+
 - [ ] **L — derive a nested DWLS score test, or defer it.** No joint
   least-squares nested score statistic exists; `score_tests_robust_joint` is
   ML-only. Specify sensitivity, metric, nuisance projection, weight influence
