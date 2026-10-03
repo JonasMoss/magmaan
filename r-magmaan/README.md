@@ -59,8 +59,8 @@ with lavaan need matching model/fitting settings, including ordinary models'
 mean structure and `fixed.x = FALSE`. See the
 [capability inventory](../project/validation/capabilities.md) for checked slices.
 
-Status: single-level complete-data ML and FIML compute the full inference
-policy: observed-information casewise-score sandwich covariance (standard
+Status: single-level ML (complete data) and FIML (complete or incomplete
+continuous data) compute the full inference policy: observed-information casewise-score sandwich covariance (standard
 errors, Wald tests, intervals, defined parameters), global score and LR tests,
 and nested score and LR tests, each calibrated with SB and PEBA4. FIML score
 uses observed sensitivity and an expected metric; nested LR uses empirical
