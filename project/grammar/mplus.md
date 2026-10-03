@@ -80,12 +80,18 @@ implementation.
    classification; BY, ON, WITH, PWITH, PON; means and intercepts `[ ]`;
    variances; `@` fixing and `*` freeing/starts; labels per statement and label
    lists; ranges in NAMES order; latent ranges; `!` comments; IS/ARE/=
-   forms and documented abbreviations. Defaults: first BY loading fixed at one;
-   x variables conditioned on; free observed intercepts; free residual
-   covariances among final dependent variables, observed and latent
-   (Demo-confirmed for observed); free covariances among exogenous factors
-   unless NOCOVARIANCES; an unmentioned USEVARIABLES variable gets a free mean
-   and variance and no covariances (Demo-confirmed).
+   forms and documented abbreviations. Defaults: first loading of a factor's
+   first BY statement fixed at one; x variables conditioned on; free observed
+   intercepts; free residual covariances among all final dependent variables
+   that are not factor indicators, observed or latent; free covariances
+   among exogenous factors unless NOCOVARIANCES; an unmentioned USEVARIABLES
+   variable gets a free mean and variance and no covariances. Two Mplus
+   behaviors are rejected rather than reproduced: mentioning an x
+   variable's variance or mean, which brings that one variable into the
+   model with no covariances (mixed conditioning), and NOMEANSTRUCTURE
+   without an explicit `INFORMATION = EXPECTED`, which Mplus ignores. The
+   Demo probes settled these rules; where Mplus 9.1 departs from the guide,
+   the frontend follows 9.1.
 2. **Multiple groups.** GROUPING labels and codes; group-specific MODEL
    sections; the invariance defaults (equal loadings and indicator intercepts,
    factor means fixed at zero in the first group and free in the others);

@@ -1104,11 +1104,13 @@ carry the label `mplus`.
   without GROUPING can mean longitudinal time points (rejected); the guide
   contradicts itself on the marker with repeated BY statements and on label
   lists, which probes settle before increment 1.
-- [ ] **S/M — Demo probes.** A lane runs the probe list through the local
-  Mplus Demo with a maintainer tool under `cpp/tests/tools/`, records results
-  against inventory IDs and checks in derived summaries; the planner then
-  resolves the inventory. **Check:** every default rule of increments 1–2 is
-  documented or Demo-confirmed.
+- [x] **S/M — Demo probes** (2026-10-03). `cpp/tests/tools/regen_mplus_probes.R`
+  runs 41 probes (100 variants) through the local Mplus 9.1 Demo and writes
+  derived summaries to `cpp/tests/fixtures/mplus/probes.json`
+  reproducibly. Every rule needed by increments 1–2 is now documented or
+  Demo-confirmed. Where 9.1 departs from the guide (setting stems, name
+  length, label lists, labels on fixed parameters, observed–latent residual
+  covariances, NOMEANSTRUCTURE), the inventory follows 9.1.
 - [ ] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,

@@ -29,17 +29,19 @@ line_content        ::= (token | BLANK | block_comment)+ line_comment?
                       | line_comment
 line_comment        ::= '!' (char - '*') char*  |  '!'
 block_comment       ::= '!*' (char | NEWLINE)* '*!'
-(* A block comment ends at the first '*!'. Its placement rules are U and
-   settled by probe P-LX1 [LX05]. A line longer than 90 columns is rejected
-   with its span until probe P-LX4 settles later versions [LX02]. *)
+(* A block comment ends at the first '*!'. It must open at a line start or
+   close on its opening line; a block opened after code that closes on a
+   later line is rejected, because Mplus 9.1 then also drops the preceding
+   code [LX05]. A line longer than 90 columns is rejected with its span,
+   because 9.1 truncates it [LX02]. *)
 
 
 (* === Tokens =============================================================== *)
 
 token               ::= name | number | punct
 name                ::= letter (letter | digit | '_')*
-(* Variable names and labels are at most 8 characters [NM01]; longer names
-   are rejected until probe P-NM2 settles later versions. *)
+(* The guide limits names to 8 characters, but 9.1 accepts longer names and
+   keeps them distinct; full names are compared [NM01]. *)
 number              ::= digit+ ('.' digit*)? | '.' digit+
 punct               ::= ':' | ';' | ',' | '-' | '*' | '@' | '(' | ')' | '['
                       | ']' | '{' | '}' | '|' | '$' | '#' | '%' | '=' | '~'
@@ -86,7 +88,8 @@ opaque_body         ::= free_text
 (* === Options (DATA, VARIABLE, ANALYSIS, OUTPUT, SAVEDATA, PLOT) ===========
    An option ends at ';'; several may share a line [LX01]. IS, ARE and '='
    are interchangeable [LX07]. Option names may be shortened to four or more
-   letters; settings to their documented stems [LX03, CL rules]. *)
+   letters; a setting must be its complete word or its exact documented stem,
+   never an intermediate prefix [LX03, CL rules]. *)
 
 option_body         ::= option*
 option              ::= option_name (assign? option_value)? ';'
@@ -101,16 +104,18 @@ option_value        ::= (token - ';')+
 names_value         ::= name_generator (list_sep name_generator)*
 name_generator      ::= name | name '-' name
 list_sep            ::= ','? BLANK* | BLANK+ ','? BLANK*
-(* A NAMES range generates names from equal stems with numeric or letter
-   suffixes (y1-y5, itema-itemd). Other stem shapes are rejected until probe
-   P-NM1 settles them. Duplicate names are rejected. *)
+(* A NAMES range generates names from a shared stem with a numeric suffix,
+   keeping the endpoint digit width (y08-y11), or a single-letter suffix
+   (itema-itemd). Other shapes are rejected [NM02]. Duplicate names are
+   rejected. *)
 
 (* VARIABLE: USEVARIABLES [CL08, NM03] *)
 usevariables_value  ::= ('ALL' list_sep)? variable_range (list_sep variable_range)*
 variable_range      ::= name | name '-' name
 (* Here a range selects NAMES variables by position, from the first name
-   to the second [NM03, probe P-NM3]. ALL first means every NAMES variable.
-   The USEVARIABLES order becomes the analysis order. *)
+   to the second; a range whose first endpoint comes later is an error
+   [NM03]. ALL first means every NAMES variable. The USEVARIABLES order
+   becomes the analysis order, which MODEL ranges follow. *)
 
 (* ANALYSIS: TYPE, MODEL; settings are names resolved by stem [CL17,
    CL19-CL21] *)
@@ -138,17 +143,20 @@ modifier            ::= '*' signed_number? | '@' signed_number?
 signed_number       ::= '-'? number
 (* '*' frees (with an optional start), '@' fixes [LB01]. After a range the
    modifier applies to every element [LB01]. A bare '*' frees at the
-   default start (no Starts entry); a bare '@' is rejected until probe P-LB1
-   settles its value. A later mention of the same parameter overrides an
-   earlier one [LB07]. *)
+   default start (no Starts entry); a bare '@' is rejected, because Mplus
+   fixes at its data-dependent default start [LB01]. A later mention of the
+   same parameter, in the same or a later statement, overrides an earlier
+   one, including the default marker fix [LB07, MS02]. *)
 
 line_label          ::= '(' label_group+ ')'
 label_group         ::= label_atom | label_atom '-' label_atom
 label_atom          ::= number | name
-(* Numbers are equality sets, names parameter labels [LB04, LB06]. One
-   label group per line item set, or one group per left-hand element when
-   lhs_list has several elements [LB05]. Mixing numbers and names in one
-   label, '(*label)' ESEM sets and other forms are rejected [MS09]. *)
+(* Numbers are equality sets, names parameter labels; both are global
+   across groups, and parameters sharing one are equal [LB04, LB06, MG07].
+   A list has one entry per item; with a left-hand list, one group per
+   left-hand element or a single list assigned row by row [LB05]. A label on
+   a fixed parameter is not a usable label [LB06]. Mixing numbers and names
+   in one label, '(*label)' ESEM sets and other forms are rejected [MS09]. *)
 
 variance_statement  ::= rhs_lines ';'
 mean_statement      ::= '[' rhs_item+ ']' line_label? ';'
@@ -172,6 +180,10 @@ section_marker      ::= '%' (token - '%')+ '%'
    2. Expand ranges and left-hand lists into statements [NM05, MS05, MS06].
    3. Attach labels and equalities by line [LB02-LB06].
    4. Apply the default rules DF01-DF13 and the marker rule MS02, and
-      materialize every default parameter explicitly.
-   5. Reject mentions of observed independent variables' moments [MS08]
+      materialize every default parameter explicitly. All final dependent
+      variables that are not factor indicators, observed or latent, get
+      free residual covariances [DF08-DF10].
+   5. Honor NOMEANSTRUCTURE only with an explicit INFORMATION = EXPECTED;
+      otherwise reject it, since Mplus would ignore it [MS11].
+   6. Reject mentions of observed independent variables' moments [MS08]
       and every construct outside the increment, with its span. *)
