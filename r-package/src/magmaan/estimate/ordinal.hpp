@@ -223,6 +223,9 @@ struct OrdinalMisspecFitMeasures {
 // default. Null (the default) preserves the unconditional-forcing behavior,
 // which is correct for partables synthesized in C++ (nested-test H0/H1 pairs,
 // PSD probes) rather than parsed from a user's model syntax.
+// Successful preparation stamps the ordered set and binary vetoes on the
+// structure. Repeated calls validate that stamp and preserve all rows,
+// constraints and starts, regardless of the supplied row_user mask.
 // Categorical preparation rejects fixed observed covariates (exo rows):
 // conditional moments are not implemented. Joint random-x models are retained.
 fit_expected<void>
@@ -336,7 +339,8 @@ ordinal_rbm_parts(spec::LatentStructure pt,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization =
                       OrdinalParameterization::Delta,
-                  bool estimated_weight = true);
+                  bool estimated_weight = true,
+                  const std::vector<std::int8_t>* row_user = nullptr);
 
 // Per-case one-step misspecification-robust ("complete-sandwich") parameter
 // influences for an all-ordinal DWLS/WLS/ULS(MV) fit: the categorical analogue
@@ -356,7 +360,8 @@ ordinal_casewise_influence_ij(spec::LatentStructure pt,
                               const Estimates& est,
                               OrdinalWeightKind weights,
                               OrdinalParameterization parameterization =
-                                  OrdinalParameterization::Delta);
+                                  OrdinalParameterization::Delta,
+                              const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
@@ -390,7 +395,8 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const Estimates& est,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization =
-                            OrdinalParameterization::Delta);
+                            OrdinalParameterization::Delta,
+                        const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<WeightedMomentRBMParts>
 mixed_ordinal_rbm_parts(spec::LatentStructure pt,
@@ -400,7 +406,8 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization =
                             OrdinalParameterization::Delta,
-                  bool estimated_weight = true);
+                  bool estimated_weight = true,
+                        const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal(spec::LatentStructure pt,
@@ -425,7 +432,9 @@ lr_test_satorra2000_ordinal(
     int df_H0,
     int df_H1,
     robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact,
-    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    const std::vector<std::int8_t>* row_user_H1 = nullptr,
+    const std::vector<std::int8_t>* row_user_H0 = nullptr);
 
 post_expected<robust::LRSatorra2000Result>
 lr_test_satorra2000_mixed_ordinal(
@@ -442,7 +451,9 @@ lr_test_satorra2000_mixed_ordinal(
     int df_H0,
     int df_H1,
     robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact,
-    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    const std::vector<std::int8_t>* row_user_H1 = nullptr,
+    const std::vector<std::int8_t>* row_user_H0 = nullptr);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,

@@ -185,7 +185,9 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const estimate::Estimates& alternative_estimates,
                                 const PolicyFitState& alternative_state,
                                 const data::OrdinalStats& stats,
-                                estimate::OrdinalParameterization parameterization);
+                                estimate::OrdinalParameterization parameterization,
+                                const std::vector<std::int8_t>* null_row_user = nullptr,
+                                const std::vector<std::int8_t>* alternative_row_user = nullptr);
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,

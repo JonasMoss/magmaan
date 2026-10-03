@@ -1493,6 +1493,25 @@ weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
   return out;
 }
 
+// The signature records only preparation decisions, not estimates or weights.
+// Category counts above two all use the same nonbinary scale-release rule.
+template <typename Stats>
+std::vector<std::vector<std::int8_t>> ordinal_preparation_signature(
+    const std::vector<std::vector<char>>& ordered, const Stats& stats) {
+  std::vector<std::vector<std::int8_t>> preparation(ordered.size());
+  for (std::size_t b = 0; b < ordered.size(); ++b) {
+    preparation[b].resize(ordered[b].size(), 0);
+    for (std::size_t j = 0; j < ordered[b].size(); ++j) {
+      if (!ordered[b][j]) continue;
+      const auto count = std::count(stats.threshold_ov[b].begin(),
+                                    stats.threshold_ov[b].end(),
+                                    static_cast<std::int32_t>(j));
+      preparation[b][j] = count <= 1 ? 1 : 2;
+    }
+  }
+  return preparation;
+}
+
 }  // namespace detail_ordinal
 
 post_expected<Eigen::VectorXd>
@@ -1562,6 +1581,13 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
   auto ordered_or = ordered_indicator_layout(pt, stats);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
+  auto preparation = ordinal_preparation_signature(ordered, stats);
+  if (!pt.ordinal_preparation.empty()) {
+    if (pt.ordinal_preparation != preparation)
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal preparation ordered indicators or binary vetoes do not match"));
+    return {};
+  }
 
   // Wu-Estabrook (2016) multigroup categorical invariance: when `Thresholds`
   // is equated across groups, lavaan releases the group-2+ ordinal response
@@ -1771,7 +1797,9 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     pt.free[i] = 0;
     pt.fixed_value[i] = pt.op[i] == parse::Op::Covariance ? 1.0 : 0.0;
   }
-  return compact_free_set(pt, remove_free, starts);
+  auto result = compact_free_set(pt, remove_free, starts);
+  if (result) pt.ordinal_preparation = std::move(preparation);
+  return result;
 }
 
 fit_expected<void>
@@ -1981,6 +2009,14 @@ prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
   auto ordered_or = ordered_indicator_layout(pt, stats);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
+  auto preparation = ordinal_preparation_signature(ordered, stats);
+  if (!pt.ordinal_preparation.empty()) {
+    if (pt.ordinal_preparation != preparation)
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal preparation ordered indicators or binary vetoes do not match"));
+    return {};
+  }
+
 
   const bool release_invariant =
       std::find(pt.group_equal.begin(), pt.group_equal.end(),
@@ -2153,7 +2189,9 @@ prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
     pt.free[i] = 0;
     pt.fixed_value[i] = pt.op[i] == parse::Op::Covariance ? 1.0 : 0.0;
   }
-  return compact_free_set(pt, remove_free, starts);
+  auto result = compact_free_set(pt, remove_free, starts);
+  if (result) pt.ordinal_preparation = std::move(preparation);
+  return result;
 }
 
 fit_expected<void>
@@ -2166,6 +2204,14 @@ prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
   auto ordered_or = ordered_indicator_layout(pt, moments);
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
+  auto preparation = ordinal_preparation_signature(ordered, moments);
+  if (!pt.ordinal_preparation.empty()) {
+    if (pt.ordinal_preparation != preparation)
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal preparation ordered indicators or binary vetoes do not match"));
+    return {};
+  }
+
 
   const bool release_invariant =
       std::find(pt.group_equal.begin(), pt.group_equal.end(),
@@ -2255,7 +2301,9 @@ prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
     pt.free[i] = 0;
     pt.fixed_value[i] = pt.op[i] == parse::Op::Covariance ? 1.0 : 0.0;
   }
-  return compact_free_set(pt, remove_free, starts);
+  auto result = compact_free_set(pt, remove_free, starts);
+  if (result) pt.ordinal_preparation = std::move(preparation);
+  return result;
 }
 
 fit_expected<void>

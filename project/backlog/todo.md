@@ -564,15 +564,13 @@ The ordinary package does not expose MI in this release; the
   absent-row MI, and equivalent explicit/implicit default spellings. R glue is
   unchanged.
 
-- [ ] **S — complete lower-level ordinal preparation provenance.** The IJ,
-  RBM/casewise and Satorra-2000 entry points still prepare without `row_user`.
-  A freed `~*~` is not idempotent: preparation transfers its free dimension to
-  `~~` and pins `~*~` to 1; a second preparation loses that release and pins
-  the auto `~~` too. Preserve the release in the model/preparation contract,
-  rather than guessing from an explicitly fixed `~*~` row. **Check:** repeat
-  preparation preserves the free set/constraints/starts, and low-level
-  inference agrees with the fitted preparation for explicit ordinal rows
-  (board TASK-37).
+- [x] **S — complete lower-level ordinal preparation provenance.** Preparation
+  stamps the ordered-indicator set and binary vetoes on `LatentStructure`;
+  repeated calls preserve the free set, constraints and starts or reject a
+  changed preparation layout. The lavaan projection and R fit partable retain
+  this header metadata, distinguishing a prepared released `~*~` from an
+  explicitly fixed scale. IJ, RBM/casewise, Satorra-2000 and DWLS policy nesting
+  accept fit-time row masks for unprepared inputs (board TASK-37).
 
 - [x] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,

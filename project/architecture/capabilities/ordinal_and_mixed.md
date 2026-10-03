@@ -286,10 +286,17 @@
   `LatentNames::row_user` mask, preserving explicitly fixed/free ordinal
   residual and intercept rows. Automatic ordinal/mixed starts receive the
   same mask, keeping their free-vector length consistent with the fitted
-  model. Lower-level callers may supply the optional mask; R retains its
-  consistent mask-free fit/post-fit preparation. The
-  lower-level IJ/Satorra paths and repeat preparation of a freed `~*~` still
-  need provenance completion (active backlog; board TASK-37).
+  model. Lower-level IJ, RBM/casewise and Satorra-2000 callers, plus DWLS
+  policy nesting, may supply fit-time row masks for unprepared structures.
+  Successful preparation records the per-group ordered set and binary vetoes
+  in `LatentStructure::ordinal_preparation`. Repeated preparation validates
+  that signature and preserves the free set, fixed values, constraints and
+  starts, including a response-scale release transferred from `~*~` to `~~`.
+  `LavaanParTable` carries the signature as header metadata; R projections
+  preserve it in the `magmaan.ordinal_preparation` partable attribute, read by
+  shared fit reconstruction. `LatentNames` still owns row provenance and
+  `Starts` owns start hints. Explicitly fixed scales retain their original
+  preparation rules; an incompatible ordered set or binary veto is an error.
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
   the threshold-plus-polychoric moment vector. The implementation now uses a

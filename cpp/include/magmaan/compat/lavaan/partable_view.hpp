@@ -27,6 +27,13 @@ namespace magmaan::compat::lavaan {
 // metadata, mirroring `spec::LatentNames`. `extra_*` carry the methods-developer
 // escape-hatch columns straight through from `spec::LatentStructure`.
 struct LavaanParTable {
+  // Ordinal preparation provenance, in group/canonical observed order.
+  // Empty means unprepared; each entry is 0 (continuous), 1 (binary ordered),
+  // or 2 (nonbinary ordered). A prepared model must not be prepared again
+  // with a different ordered set or binary veto. This header metadata preserves
+  // released response scales; names and start hints remain in their companions.
+  std::vector<std::vector<std::int8_t>> ordinal_preparation;
+
   std::vector<std::int32_t> id;       // 1-based, = row position
   std::vector<std::int8_t>  user;     // 0=auto, 1=user, 2=auto-equality
   std::vector<std::string>  lhs;

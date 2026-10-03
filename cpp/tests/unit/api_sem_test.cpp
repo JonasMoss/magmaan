@@ -745,6 +745,40 @@ TEST_CASE("api ordinal theta post-fit preserves explicit residual rows") {
   REQUIRE_OK(fit);
   REQUIRE(estimate::fit_verdict(fit->estimates()).status == estimate::FitCheck::Passed);
 
+  auto prepared = model->structure();
+  REQUIRE_OK(estimate::prepare_ordinal_delta_partable(
+      prepared, *stats, nullptr, &model->names().row_user));
+  const auto ij = estimate::robust_ordinal_ij(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(ij);
+  const auto prepared_ij = estimate::robust_ordinal_ij(
+      prepared, model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization);
+  REQUIRE_OK(prepared_ij);
+  CHECK((ij->vcov - prepared_ij->vcov).norm() < 1e-12);
+  const auto rbm = estimate::ordinal_rbm_parts(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization, true,
+      &model->names().row_user);
+  REQUIRE_OK(rbm);
+  const auto prepared_rbm = estimate::ordinal_rbm_parts(
+      prepared, model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization);
+  REQUIRE_OK(prepared_rbm);
+  CHECK((rbm->information - prepared_rbm->information).norm() < 1e-12);
+  CHECK((rbm->meat - prepared_rbm->meat).norm() < 1e-12);
+  const auto casewise = estimate::ordinal_casewise_influence_ij(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(casewise);
+  const auto prepared_casewise = estimate::ordinal_casewise_influence_ij(
+      prepared, model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization);
+  REQUIRE_OK(prepared_casewise);
+  CHECK((casewise->influence - prepared_casewise->influence).norm() < 1e-12);
   const auto robust_result = api::robust_ordinal(*fit);
   REQUIRE_OK(robust_result);
   const double chisq = 2.0 * static_cast<double>(stats->n_obs[0]) *
@@ -902,6 +936,30 @@ TEST_CASE("api mixed ordinal post-fit preserves explicit residual rows") {
   const auto fit = api::fit(*model, *observed, estimator);
   REQUIRE_OK(fit);
   REQUIRE(estimate::fit_verdict(fit->estimates()).status == estimate::FitCheck::Passed);
+  auto prepared = model->structure();
+  REQUIRE_OK(estimate::prepare_mixed_ordinal_delta_partable(
+      prepared, *stats, nullptr, &model->names().row_user));
+  const auto ij = estimate::robust_mixed_ordinal_ij(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
+      &model->names().row_user);
+  REQUIRE_OK(ij);
+  const auto prepared_ij = estimate::robust_mixed_ordinal_ij(
+      prepared, model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization);
+  REQUIRE_OK(prepared_ij);
+  CHECK((ij->vcov - prepared_ij->vcov).norm() < 1e-12);
+  const auto rbm = estimate::mixed_ordinal_rbm_parts(
+      model->structure(), model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization, true,
+      &model->names().row_user);
+  REQUIRE_OK(rbm);
+  const auto prepared_rbm = estimate::mixed_ordinal_rbm_parts(
+      prepared, model->matrix_rep(), *stats, fit->estimates(),
+      estimator.ordinal_weight, estimator.ordinal_parameterization);
+  REQUIRE_OK(prepared_rbm);
+  CHECK((rbm->information - prepared_rbm->information).norm() < 1e-12);
+  CHECK((rbm->meat - prepared_rbm->meat).norm() < 1e-12);
   const auto robust_result = api::robust_ordinal(*fit);
   REQUIRE_OK(robust_result);
   CHECK(robust_result->chisq_standard == doctest::Approx(

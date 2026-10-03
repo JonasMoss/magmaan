@@ -155,6 +155,13 @@ struct LatentNames {
 // labels are) is a `LatentNames` concern. The single-group case is just
 // `n_groups() == 1`.
 struct LatentStructure {
+  // Ordinal preparation provenance, in group/canonical observed order.
+  // Empty means unprepared; each entry is 0 (continuous), 1 (binary ordered),
+  // or 2 (nonbinary ordered). A prepared model must not be prepared again
+  // with a different ordered set or binary veto. This header metadata preserves
+  // released response scales; names and start hints remain in their companions.
+  std::vector<std::vector<std::int8_t>> ordinal_preparation;
+
   // Statement kind, per row.
   std::vector<parse::Op>    op;
 

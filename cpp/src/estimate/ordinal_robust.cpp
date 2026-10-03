@@ -590,7 +590,8 @@ ordinal_rbm_parts(spec::LatentStructure pt,
                   const Estimates& est,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization,
-                  bool estimated_weight) {
+                  bool estimated_weight,
+                  const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -604,7 +605,7 @@ ordinal_rbm_parts(spec::LatentStructure pt,
       stats, estimated_weight ? weights : OrdinalWeightKind::ULS);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -671,7 +672,8 @@ ordinal_casewise_influence_ij(spec::LatentStructure pt,
                               const data::OrdinalStats& stats,
                               const Estimates& est,
                               OrdinalWeightKind weights,
-                              OrdinalParameterization parameterization) {
+                              OrdinalParameterization parameterization,
+                              const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -685,7 +687,7 @@ ordinal_casewise_influence_ij(spec::LatentStructure pt,
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -914,7 +916,8 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const data::MixedOrdinalStats& stats,
                         const Estimates& est,
                         OrdinalWeightKind weights,
-                        OrdinalParameterization parameterization) {
+                        OrdinalParameterization parameterization,
+                        const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -940,7 +943,7 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         "robust_mixed_ordinal_ij: WLS estimated-weight influence unavailable; "
         "recompute mixed ordinal stats with gamma_full_influence or raw_data"));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -1114,7 +1117,8 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                         const Estimates& est,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization,
-                  bool estimated_weight) {
+                  bool estimated_weight,
+                        const std::vector<std::int8_t>* row_user) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -1142,7 +1146,7 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
         "mixed_ordinal_rbm_parts: WLS estimated-weight influence unavailable; "
         "recompute mixed ordinal stats with gamma_full_influence or raw_data"));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }

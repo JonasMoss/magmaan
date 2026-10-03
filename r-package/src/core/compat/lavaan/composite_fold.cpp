@@ -36,6 +36,7 @@ fold_composites(const LavaanParTable&                   pt,
   const std::int32_t n_groups = pt.n_groups();
 
   LavaanParTable out;
+  out.ordinal_preparation = pt.ordinal_preparation;
   out.group_var    = pt.group_var;
   out.group_labels = pt.group_labels;
   // `extra_*` columns are intentionally not carried through — a folded table

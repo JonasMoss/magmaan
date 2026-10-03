@@ -1,4 +1,5 @@
 #include "ordinal_test_helpers.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
 
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
   Eigen::MatrixXd X(320, 3);
@@ -517,4 +518,73 @@ TEST_CASE("Cache-aware ordinal theta fits and SNLLS use fit-only workspaces") {
     CHECK((fallback->theta - generic->theta).norm() == 0);
   }
 
+}
+
+TEST_CASE("Ordinal preparation provenance preserves released scales and rejects changed layouts") {
+  using namespace magmaan;
+  data::OrdinalStats stats;
+  stats.R = {Eigen::MatrixXd::Identity(4, 4)};
+  stats.threshold_ov = {{0, 0, 1, 1, 2, 2, 3, 3}};
+  stats.threshold_level = {{1, 2, 1, 2, 1, 2, 1, 2}};
+  stats.thresholds = {Eigen::VectorXd::Zero(8)};
+  for (const char* scale : {"NA", "1"}) {
+    const std::string syntax = std::string("f =~ y1+a*y2+b*y3+y4\na == 2*b\n") +
+        "y1 | t1+t2\ny2 | t1+t2\ny3 | t1+t2\ny4 | t1+t2\n" +
+        "y1 ~*~ " + scale + "*y1\n";
+    auto parsed = parse::Parser::parse(syntax);
+    REQUIRE(parsed);
+    spec::Starts starts;
+    spec::LatentNames names;
+    auto pt = spec::build(*parsed, {}, &starts, &names);
+    REQUIRE(pt);
+    for (std::size_t k = 0; k < starts.hint.size(); ++k)
+      starts.hint[k] = static_cast<double>(k + 1);
+    REQUIRE(estimate::prepare_ordinal_delta_partable(*pt, stats, &starts, &names.row_user));
+    CHECK(pt->n_free() == (std::string(scale) == "NA" ? 13 : 12));
+    REQUIRE_FALSE(pt->lin_constraint_R.empty());
+    const auto prepared = *pt;
+    const auto hints = starts.hint;
+    REQUIRE(estimate::prepare_ordinal_delta_partable(*pt, stats, &starts));
+    CHECK(pt->free == prepared.free);
+    CHECK(pt->eq_groups == prepared.eq_groups);
+    CHECK(pt->lin_constraint_R == prepared.lin_constraint_R);
+    CHECK(pt->lin_constraint_d == prepared.lin_constraint_d);
+    REQUIRE(starts.hint.size() == hints.size());
+    for (std::size_t k = 0; k < hints.size(); ++k) {
+      if (std::isnan(hints[k])) CHECK(std::isnan(starts.hint[k]));
+      else CHECK(starts.hint[k] == hints[k]);
+    }
+    for (std::size_t i = 0; i < pt->size(); ++i) {
+      if (std::isnan(prepared.fixed_value[i])) CHECK(std::isnan(pt->fixed_value[i]));
+      else CHECK(pt->fixed_value[i] == prepared.fixed_value[i]);
+    }
+    auto projection = compat::lavaan::to_lavaan_partable(*pt, names, starts);
+    auto restored = compat::lavaan::from_lavaan_partable(projection);
+    CHECK(restored.structure.ordinal_preparation == pt->ordinal_preparation);
+    REQUIRE(estimate::prepare_ordinal_delta_partable(restored.structure, stats, &restored.starts));
+    CHECK(restored.structure.free == pt->free);
+    data::OrdinalMoments moments;
+    moments.R = stats.R;
+    moments.threshold_ov = stats.threshold_ov;
+    REQUIRE(estimate::prepare_ordinal_delta_partable(*pt, moments, &starts));
+    data::MixedOrdinalStats mixed;
+    mixed.R = stats.R;
+    mixed.ordered = {{1, 1, 1, 1}};
+    mixed.threshold_ov = stats.threshold_ov;
+    REQUIRE(estimate::prepare_mixed_ordinal_delta_partable(*pt, mixed, &starts));
+    mixed.ordered[0][0] = 0;
+    CHECK_FALSE(estimate::prepare_mixed_ordinal_delta_partable(*pt, mixed, &starts));
+    CHECK(pt->free == prepared.free);
+    REQUIRE(starts.hint.size() == hints.size());
+    for (std::size_t k = 0; k < hints.size(); ++k) {
+      if (std::isnan(hints[k])) CHECK(std::isnan(starts.hint[k]));
+      else CHECK(starts.hint[k] == hints[k]);
+    }
+    auto changed = stats;
+    changed.threshold_ov[0][1] = 1; // y1 now binary: its scale release is vetoed.
+    CHECK_FALSE(estimate::prepare_ordinal_delta_partable(*pt, changed));
+    changed.threshold_ov[0] = {1, 1, 2, 2, 3, 3}; // y1 is no longer ordered.
+    CHECK_FALSE(estimate::prepare_ordinal_delta_partable(*pt, changed));
+    CHECK(pt->free == prepared.free);
+  }
 }

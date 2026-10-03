@@ -233,7 +233,9 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const estimate::Estimates& alternative_estimates,
                                 const PolicyFitState& alternative_state,
                                 const data::OrdinalStats& stats,
-                                estimate::OrdinalParameterization parameterization) {
+                                estimate::OrdinalParameterization parameterization,
+                                const std::vector<std::int8_t>* null_row_user,
+                                const std::vector<std::int8_t>* alternative_row_user) {
   PolicyNested out;
   out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
   out.verdict_disagreement =
@@ -254,8 +256,8 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
   // prepared (threshold- and scale-augmented) structures.
   {
     spec::LatentStructure p1 = alternative_pt, p0 = null_pt;
-    auto prepared1 = estimate::prepare_ordinal_delta_partable(p1, stats);
-    auto prepared0 = estimate::prepare_ordinal_delta_partable(p0, stats);
+    auto prepared1 = estimate::prepare_ordinal_delta_partable(p1, stats, nullptr, alternative_row_user);
+    auto prepared0 = estimate::prepare_ordinal_delta_partable(p0, stats, nullptr, null_row_user);
     if (!prepared1 || !prepared0)
       return unavailable(InferenceReason::NumericFailure,
                          !prepared1 ? prepared1.error().detail : prepared0.error().detail);
@@ -275,6 +277,8 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
     }
     if (embedding->restriction.A.rows() == 0)
       return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+    alternative_pt = std::move(p1);
+    null_pt = std::move(p0);
   }
 
   set_unavailable(out.score, InferenceReason::UnsupportedModel,

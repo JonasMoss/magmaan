@@ -19,7 +19,9 @@ lr_test_satorra2000_ordinal(
     int df_H0,
     int df_H1,
     robust::SatorraAMethod a_method,
-    OrdinalParameterization parameterization) {
+    OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user_H1,
+    const std::vector<std::int8_t>* row_user_H0) {
   (void)df_H0;
   (void)df_H1;
   if (auto v = validate_stats(stats, rep_H1, weights); !v.has_value()) {
@@ -28,11 +30,11 @@ lr_test_satorra2000_ordinal(
   if (auto v = validate_stats(stats, rep_H0, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt_H1, stats, nullptr);
+  if (auto p = prepare_ordinal_delta_partable(pt_H1, stats, nullptr, row_user_H1);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt_H0, stats, nullptr);
+  if (auto p = prepare_ordinal_delta_partable(pt_H0, stats, nullptr, row_user_H0);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -145,7 +147,9 @@ lr_test_satorra2000_mixed_ordinal(
     int df_H0,
     int df_H1,
     robust::SatorraAMethod a_method,
-    OrdinalParameterization parameterization) {
+    OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user_H1,
+    const std::vector<std::int8_t>* row_user_H0) {
   (void)df_H0;
   (void)df_H1;
   if (weights == OrdinalWeightKind::ULS) {
@@ -159,11 +163,11 @@ lr_test_satorra2000_mixed_ordinal(
   if (auto v = validate_stats(stats, rep_H0, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt_H1, stats, nullptr);
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt_H1, stats, nullptr, row_user_H1);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt_H0, stats, nullptr);
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt_H0, stats, nullptr, row_user_H0);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }

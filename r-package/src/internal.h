@@ -324,6 +324,14 @@ inline magmaan::compat::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::Dat
     lvpt.plabel[i] = plab[i];
   }
   read_group_attrs(df, lvpt.group_var, lvpt.group_labels);
+  SEXP preparation = Rf_getAttrib(df, Rf_install("magmaan.ordinal_preparation"));
+  if (preparation != R_NilValue) {
+    Rcpp::List blocks(preparation);
+    for (R_xlen_t b = 0; b < blocks.size(); ++b) {
+      auto values = Rcpp::as<std::vector<int>>(blocks[b]);
+      lvpt.ordinal_preparation.emplace_back(values.begin(), values.end());
+    }
+  }
   auto parsed = magmaan::compat::lavaan::from_lavaan_partable(lvpt);
   if (!composites.empty()) parsed.names.composites = std::move(composites);
   return parsed;
@@ -377,6 +385,13 @@ inline Rcpp::DataFrame partable_df_from_lavaan(
   cols.attr("class") = "data.frame";
   Rcpp::DataFrame out(cols);
   attach_group_attrs(out, pt.group_var, pt.group_labels);
+  if (!pt.ordinal_preparation.empty()) {
+    Rcpp::List blocks(pt.ordinal_preparation.size());
+    for (std::size_t b = 0; b < pt.ordinal_preparation.size(); ++b)
+      blocks[b] = Rcpp::IntegerVector(pt.ordinal_preparation[b].begin(),
+                                     pt.ordinal_preparation[b].end());
+    out.attr("magmaan.ordinal_preparation") = blocks;
+  }
   return out;
 }
 

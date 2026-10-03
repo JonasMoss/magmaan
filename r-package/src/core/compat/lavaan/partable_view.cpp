@@ -47,6 +47,7 @@ LavaanParTable to_lavaan_partable(const LatentStructure& s,
                                   const Starts& starts) {
   const std::size_t n = s.size();
   LavaanParTable out;
+  out.ordinal_preparation = s.ordinal_preparation;
   out.id.resize(n);     out.user.resize(n);   out.lhs.resize(n);
   out.op.resize(n);     out.rhs.resize(n);    out.block.resize(n);
   out.group.resize(n);  out.free.resize(n);   out.exo.resize(n);
@@ -129,6 +130,7 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
   const std::size_t n_in = pt.size();
   ParsedLavaanParTable out;
   LatentStructure& s     = out.structure;
+  s.ordinal_preparation = pt.ordinal_preparation;
   LatentNames&     names = out.names;
   Starts&          starts = out.starts;
 
