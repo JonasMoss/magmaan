@@ -47,7 +47,7 @@ evidence for the adopted recipe (exit criterion 3).
 | | Nested fit-function difference (estimated-weight profile law) | Limited validation | `DWLS nested policy: fit-function difference ...`, `delta and theta give the same test; two groups compose`, `... approaches Satorra-2000` | None for the adopted recipe | Task-17 |
 | | Nested score | Unsupported (intentional for 0.2.0) | Typed `unsupported_model` | | Joint nested score primitive absent (task-18, decision D4) |
 | | Wald intervals, defined parameters | Limited validation (with the covariance) | As covariance | | Task-17 |
-| FIML (complete or incomplete continuous data) | Every component | Unsupported | Typed `unsupported_model`; C++ likelihood-score, observed-information, covariance and spectrum primitives exist (`fiml_golden_test.cpp`); geometry adopted from [research/44](../../experiments/research/banked/44-fiml-global-tests/report.qmd) | research/44 (global), research/06 (nested, expected sensitivity) | Compose the FIML policy (task-13, held); exit criterion 3 |
+| FIML (complete or incomplete continuous data) | Covariance; global and nested score/LR with SB and PEBA4 | Limited validation | `policy_fiml_test.cpp`: complete-data reductions, MCAR/MAR lavaan-gated sandwich, grouped components, direct-score finite differences under larger-model misspecification, typed reasons | research/44 global; decisions/03 nested observed score (one df-1 normal family) | No MAR latent sensitivity panel or frozen confirmatory run; growing score conservatism with df; FIML compatibility remains task-14 |
 | ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed DWLS/WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
 | Continuous WLS (ADF), mixed ULS | Estimation | Unsupported in `magmaan()` | The call errors and names `magmaanlab::estimate()` / DWLS or WLS | | Consumer-gated |
 | Two-level, SAM, composites, closed-form estimators | Every component | Not offered in `magmaan()` | Lab interfaces keep their own gates (area files) | | No 0.2.0 requirement |
@@ -92,7 +92,7 @@ own check.
   group's n minus one.
 - **Missing data.** ML, GLS, ULS and the ordinal estimators delete incomplete
   rows listwise (reported in `fit$rows`); FIML and ML2S use them. The ordinary
-  policy has no missing-data route until the FIML policy lands.
+  policy uses observed-data FIML inference for incomplete continuous data.
 - **Constraints.** Affine equalities are validated; defined parameters use the
   delta method with the active covariance. Fixed, omitted and equality-written
   nested nulls share one null geometry (`policy nested embedding: ...`).
@@ -201,7 +201,7 @@ reimplementing their algorithms.
 | Existing complete-ML compatibility tests | Single-group and grouped loading/intercept/mean nested defaults; grouped covariance/global tests | Existing complete-data bundle gates closed by task-7.1; additional regimes require separate evidence |
 | Existing ordinal compatibility tests | Single/grouped delta/theta for DWLS/ULS/WLS and MV reporting, loading equality | Theta threshold equality is gated and delta threshold equality is limited above; nested routes and further mean restrictions still need their own whole-bundle gates. Backlog: extend checked reporting conventions |
 | Covariance domains and failures | Classical affine/no-active-bound slice; convergence and positive-penalty refusals; PSD metadata | Domain-specific limits are inventoried above, policy domains in the primary inventory; unequal-group normalization is gated for existing ordinal bundles. PSD hardening is 0.3.0 |
-| Ordinary FIML policy | C++ likelihood-score, covariance and LR-spectrum primitives | `policy_inference_fiml`, `policy_nested_fiml`, reusable contexts and R dispatch are missing. This is separate from lavaan compatibility. Backlog: compose the FIML policy |
+| Ordinary FIML policy | C++ likelihood-score, covariance and LR-spectrum primitives | Composed through `policy_inference_fiml`, `policy_nested_fiml` and the retained raw/pattern R context. Numerical gates exist; calibration remains limited (research/44 global, decisions/03 nested). This is separate from pending lavaan compatibility |
 | Ordinary all-ordinal DWLS policy | IJ covariance, fixed-weight global/nested spectra and estimated-weight profile-LR primitives | Compose the adopted policy and settle its nested recipe/calibration; a joint nested score primitive is absent and remains typed unavailable for 0.2.0. Backlog: all-ordinal DWLS policy tasks |
 | Parameter confidence intervals | Ordinary Wald intervals and defined-parameter delta SEs; C++ and lab profile-test/CI engines for ML, FIML, ordinal and other routes | Ordinary `confint(test = "lr")` is planned but rejected. Its refit, inversion, calibration and compatibility interaction need an explicit contract and adapter. Backlog: planned LR interval interface, unscheduled |
 | Lab estimated-weight comparison | Fixed/estimated-weight primitives; explicit switches on several score, residual, profile and fit-measure routes | `frontier_rbm()` has no off switch; defaults vary between routes. Backlog: lab correction switches/defaults, unscheduled |

@@ -397,9 +397,11 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
                                            std::string(magmaan::api::penalized_detail));
   } else if (auto& c = score_bindings::get<score_bindings::Context>(
                  context, "magmaan_inference_context");
-             c.estimator != "ML") {
+             c.estimator != "ML" && c.estimator != "FIML") {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
-        "the inference policy covers complete-data ML so far");
+        "the inference policy covers single-level ML and FIML");
+  } else if (c.estimator == "FIML") {
+    out = magmaan::api::policy_inference_fiml(c.ctx.pt, c.ctx.rep, c.raw, c.pack, c.estimates, fit_state);
   } else if (!c.ntml) {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the inference policy requires random x, affine equality constraints and no active bounds");
@@ -519,7 +521,10 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
   } else {
     auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
     auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
-    if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
+    if (a.estimator == "FIML" && b.estimator == "FIML") {
+      out = magmaan::api::policy_nested_fiml(a.ctx.pt, a.ctx.rep, a.estimates, null_fit,
+          b.ctx.pt, b.ctx.rep, b.estimates, alternative_fit, a.raw, a.pack);
+    } else if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
       unavailable(InferenceReason::UnsupportedModel,
                   "nested policy tests cover complete-data ML with random x, affine equality "
                   "constraints and no active bounds");

@@ -59,12 +59,17 @@ with lavaan need matching model/fitting settings, including ordinary models'
 mean structure and `fixed.x = FALSE`. See the
 [capability inventory](../project/validation/capabilities.md) for checked slices.
 
-Status: for single-level complete-data ML, `magmaan()` computes the full
-inference policy: the observed-information sandwich covariance (standard
-errors, Wald tests, intervals, defined parameters) and the global score and
-likelihood-ratio tests, each calibrated with SB and PEBA4. The other estimators
-fit, but their inference components report `unsupported_model`, and `vcov()`
-and `confint()` raise a `magmaan_inference_unavailable` condition. The design is
+Status: single-level complete-data ML and FIML compute the full inference
+policy: observed-information casewise-score sandwich covariance (standard
+errors, Wald tests, intervals, defined parameters), global score and LR tests,
+and nested score and LR tests, each calibrated with SB and PEBA4. FIML score
+uses observed sensitivity and an expected metric; nested LR uses empirical
+scores at the larger fit. FIML calibration remains limited; see the capability
+inventory. All-ordinal DWLS computes covariance and global fit-function tests,
+and a nested fit-function difference; nested score is unavailable. ML2S, GLS,
+ULS and WLS fit with typed unavailable policy components. `vcov()` and
+`confint()` raise `magmaan_inference_unavailable` when covariance is unavailable.
+The design is
 [`project/design/r-interface-vision.md`](../project/design/r-interface-vision.md).
 Barrier fits report every inference component unavailable with reason
 `penalized`.

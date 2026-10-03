@@ -4,6 +4,10 @@
 #include <cmath>
 #include <utility>
 
+#include <Eigen/Cholesky>
+#include "magmaan/inference/score.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
+
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/robust/frontier/fmg.hpp"
@@ -390,6 +394,189 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                     "the alternative fits worse than the null (likelihood-ratio "
                     "statistic " + std::to_string(out.lr.statistic) + ")");
   }
+  return out;
+}
+
+namespace {
+InferenceReason nested_reason(const PostError& error) {
+  switch (error.kind) {
+    case PostError::Kind::NotNested: return InferenceReason::NotNested;
+    case PostError::Kind::UnsupportedNesting: return InferenceReason::UnsupportedNesting;
+    case PostError::Kind::BoundaryNesting: return InferenceReason::BoundaryNesting;
+    default: return reason_from(error);
+  }
+}
+
+void fiml_score(const post_expected<inference::frontier::ScoreComponents>& components,
+                PolicyTest& out) {
+  if (!components) {
+    set_unavailable(out, nested_reason(components.error()), components.error().detail);
+    return;
+  }
+  // Joint observational-unit sampling: retain raw score cross-products.
+  // Missingness patterns are not fixed sampling strata.
+  auto projected = inference::frontier::project_scores(*components);
+  if (!projected) {
+    set_unavailable(out, reason_from(projected.error()), projected.error().detail);
+    return;
+  }
+  auto spectrum = inference::frontier::score_spectrum(*projected);
+  if (!spectrum) {
+    set_unavailable(out, reason_from(spectrum.error()), spectrum.error().detail);
+    return;
+  }
+  out.statistic = projected->statistic;
+  out.df = static_cast<int>(spectrum->size());
+  out.eigenvalues = *spectrum;
+  calibrate_spectrum(out);
+}
+}
+
+PolicyInference policy_inference_fiml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
+    const PolicyFitState& state) {
+  using namespace estimate::fiml;
+  if (state.penalized || !state.converged) {
+    auto out = policy_unavailable(state.penalized ? InferenceReason::Penalized
+        : InferenceReason::NotConverged, state.penalized ? std::string(penalized_detail)
+        : "the fit did not pass its convergence verdict");
+    out.verdict_disagreement = verdict_disagreement(state);
+    return out;
+  }
+  PolicyInference out;
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  if (auto resolved = estimate::resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !resolved) return policy_unavailable(InferenceReason::UnsupportedModel, resolved.error().detail);
+  if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }) ||
+      pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty()) {
+    return policy_unavailable(InferenceReason::UnsupportedModel,
+        "FIML policy requires random x and affine equality constraints");
+  }
+  auto con = estimate::build_eq_constraints(pt);
+  if (!con) return policy_unavailable(reason_from(con.error()), con.error().detail);
+  const auto& K = con->K();
+  if (K.cols() == 0) out.covariance = Eigen::MatrixXd::Zero(pt.n_free(), pt.n_free());
+  else {
+    auto mb = fiml_score_meat_bread(pt, rep, raw, pack, estimates);
+    if (!mb) {
+      out.covariance_reason = reason_from(mb.error());
+      out.covariance_detail = mb.error().detail;
+    } else {
+      Eigen::MatrixXd A = K.transpose() * mb->hessian * K;
+      Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (A + A.transpose()));
+      if (llt.info() != Eigen::Success) {
+        out.covariance_reason = InferenceReason::NumericFailure;
+        out.covariance_detail = "FIML observed bread is not positive definite";
+      } else {
+        const Eigen::MatrixXd inverse = llt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+        const Eigen::MatrixXd rows = mb->scores * K;
+        // H is averaged deviance, scores are casewise deviance gradients.
+        const double N = static_cast<double>(pack.cache.n_total);
+        out.covariance = K * inverse * (rows.transpose() * rows) * inverse * K.transpose() / (N * N);
+      }
+    }
+  }
+  auto df = inference::df_stat(pt, pack.start_stats, estimates.theta);
+  if (!df) {
+    set_unavailable(out.score, reason_from(df.error()), df.error().detail);
+    out.lr = out.score;
+    return out;
+  }
+  if (*df <= 0) {
+    set_unavailable(out.score, InferenceReason::Saturated,
+        "the model has zero degrees of freedom, so there is no global test");
+    out.lr = out.score;
+    return out;
+  }
+  using namespace inference::frontier;
+  fiml_score(global_score_components(pt, rep, raw, pack, estimates,
+      {ScoreSensitivity::ObservedInformation, ScoreMetric::ExpectedInformation}), out.score);
+  auto h1 = fiml_h1_moments(raw, pack);
+  if (!h1) {
+    set_unavailable(out.lr, InferenceReason::NumericFailure, h1.error().detail);
+    return out;
+  }
+  auto extras = fiml_extras(pt, rep, raw, estimates, pack, *h1);
+  if (!extras) {
+    set_unavailable(out.lr, reason_from(extras.error()), extras.error().detail);
+    return out;
+  }
+  auto spectrum = fiml_ugamma_spectrum(pt, rep, raw, estimates, *df, extras->chi2, pack, *h1);
+  if (!spectrum) set_unavailable(out.lr, reason_from(spectrum.error()), spectrum.error().detail);
+  else {
+    out.lr.statistic = extras->chi2;
+    out.lr.df = *df;
+    out.lr.eigenvalues = spectrum->eigvals;
+    calibrate_spectrum(out.lr);
+  }
+  return out;
+}
+
+PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack) {
+  PolicyNested out;
+  out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(null_state) || verdict_disagreement(alternative_state);
+  auto unavailable = [&](InferenceReason reason, const std::string& detail) {
+    set_unavailable(out.score, reason, detail);
+    out.lr = out.score;
+    return out;
+  };
+  if (null_state.penalized || alternative_state.penalized)
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!null_state.converged || !alternative_state.converged)
+    return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
+  for (auto* pt : {&null_pt, &alternative_pt}) {
+    if (std::any_of(pt->exo.begin(), pt->exo.end(), [](auto x) { return x != 0; }) ||
+        pt->has_inequality_constraints || !pt->nonlinear_eq_rows.empty())
+      return unavailable(InferenceReason::UnsupportedModel,
+          "FIML policy requires random x and affine equality constraints");
+  }
+  auto resolved0 = estimate::resolve_fixed_x_from_sample(null_pt, null_rep, pack.start_stats);
+  auto resolved1 = estimate::resolve_fixed_x_from_sample(alternative_pt, alternative_rep, pack.start_stats);
+  if (!resolved0 || !resolved1) return unavailable(InferenceReason::UnsupportedModel,
+      !resolved0 ? resolved0.error().detail : resolved1.error().detail);
+  auto con0 = estimate::build_eq_constraints(null_pt);
+  auto con1 = estimate::build_eq_constraints(alternative_pt);
+  if (!con0 || !con1) return unavailable(InferenceReason::NumericFailure,
+      !con0 ? con0.error().detail : con1.error().detail);
+  auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep, null_pt,
+      null_rep, null_estimates.theta, *con1, *con0, true, &alternative_estimates.theta);
+  if (!embedding) return unavailable(nested_reason(embedding.error()), embedding.error().detail);
+  if (embedding->restriction.A.rows() == 0)
+    return unavailable(InferenceReason::NotNested, "model pair has no released restrictions");
+  using namespace inference::frontier;
+  fiml_score(nested_score_components(alternative_pt, alternative_rep, null_pt, null_rep,
+      nullptr, raw, &pack, null_estimates, ScoreSensitivity::ObservedInformation), out.score);
+  auto mb = estimate::fiml::fiml_score_meat_bread(alternative_pt, alternative_rep,
+      raw, pack, alternative_estimates);
+  if (!mb) {
+    set_unavailable(out.lr, reason_from(mb.error()), mb.error().detail);
+    return out;
+  }
+  const auto& K = con1->K();
+  const double N = static_cast<double>(pack.cache.n_total);
+  const Eigen::MatrixXd A = (N / 2.0) * K.transpose() * mb->hessian * K;
+  const Eigen::MatrixXd rows = -0.5 * mb->scores * K;
+  const Eigen::MatrixXd B = rows.transpose() * rows;
+  auto spectrum = robust::compute_satorra2000_from_sandwich(A, B, embedding->restriction.A);
+  if (!spectrum) {
+    set_unavailable(out.lr, reason_from(spectrum.error()), spectrum.error().detail);
+    return out;
+  }
+  out.lr.statistic = 2.0 * N * (null_estimates.fmin - alternative_estimates.fmin);
+  out.lr.df = static_cast<int>(embedding->restriction.A.rows());
+  out.lr.eigenvalues = spectrum->eigenvalues;
+  if (out.lr.statistic < -1e-8 * std::max(1.0, std::abs(2.0 * N * null_estimates.fmin)))
+    set_unavailable(out.lr, InferenceReason::NotConverged, "the alternative fits worse than the null");
+  else calibrate_spectrum(out.lr);
   return out;
 }
 

@@ -1,5 +1,11 @@
 # magmaanlab 0.2.0 (in development)
 
+- FIML fits now receive the ordinary inference policy: observed-bread
+  casewise-score sandwich covariance, global and nested score and LR tests,
+  each calibrated with SB and PEBA4. Score sensitivity is observed with an
+  expected metric; nested LR uses empirical scores at the larger fit.
+  Components fail separately with typed reasons. FIML lavaan compatibility
+  bundles remain pending convention validation.
 - Scalar profile tests and intervals now default to the misspecification-scaled
   reference. Empirical laws require raw data; callers can explicitly select
   ordinary or robust-scaled comparators.

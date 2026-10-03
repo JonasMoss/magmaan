@@ -51,7 +51,11 @@ test_that("Q-route decisions use explicit meats, breads and supported policy law
   missing$x2[seq(1L, nrow(d), 7L)] <- NA_real_
   f1 <- fit_model(syntax, missing, estimator = "FIML")
   f0 <- fit_model(paste(syntax, "a == b", sep = "\n"), missing, estimator = "FIML")
-  expect_error(robust_nested_lrt(f1, f0), class = "magmaan_unsupported_inference")
+  fiml_policy <- policy_nested(f1, f0)
+  fiml_nested <- robust_nested_lrt(f1, f0)
+  expect_equal(fiml_nested$eigenvalues, fiml_policy$lr$eigenvalues)
+  expect_equal(fiml_nested$p_scaled, fiml_policy$lr$p_sb)
+  expect_identical(fiml_nested$method, "policy")
   expect_identical(global_score_flip_test(f1, n_flips = 3L)$sensitivity, "observed")
   expect_identical(global_score_flip_test(h1, d, n_flips = 3L)$sensitivity, "expected")
   fit <- fit_model(syntax, d, estimator = "GLS")

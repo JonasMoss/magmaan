@@ -454,27 +454,15 @@ ordinary API exposes barrier fitting experimentally as
   calibration). **Check:** decisions/04 cells plus a larger-df family; size and
   size-adjusted power; no expected-sensitivity fallback. Not release-gating.
 
-- [ ] **M — compose the FIML policy.** The primitives exist and are mostly
-  lavaan gated: the observed-information sandwich with casewise scores (the
-  MLR bread and meat), global and nested score through
-  `global_score_components` / `nested_score_components`, and the FIML LR with
-  its UGamma spectrum. Add `policy_inference_fiml` / `policy_nested_fiml`
-  modelled on the ML policy, a FIML counterpart of the cached
-  `NTMLFit`/`NTMLHypothesis` contexts for evaluation-point-specific influence
-  reuse, R dispatch, and typed per-component reasons in place of today's
-  `unsupported_model` refusal. The geometry was adopted on 2026-10-02 from
-  [research/44](../../experiments/research/banked/44-fiml-global-tests/report.qmd)
-  and is recorded in the [interface vision](../design/r-interface-vision.md):
-  observed-H0 sensitivity with the expected metric for global and nested
-  score tests, and the saturated observed-H1 metric for the LR spectrum.
-  Reduction map on complete data: covariance and LR statistic exact; LR
-  spectrum and score asymptotic only. No frozen FIML confirmatory run is
-  queued for 0.2.0; the capability inventory records the evidence limits (no
-  MAR cells in the latent-model sensitivity panel, nested evidence one df-1
-  normal family, conservatism as df grows). LR reporting follows the
-  small-sample LR decision. **Check:** the reductions above, the adopted
-  geometry, grouped and missing-pattern gates, and typed reasons; missing
-  inference never refuses a fit.
+- [x] **M — compose the FIML policy.** Implemented C++ global/nested
+  composers and R dispatch: observed-bread casewise-score covariance,
+  observed-H0 score sensitivity with expected metric, saturated observed-H1
+  global LR, and direct larger-fit empirical-score nested LR via the exact
+  restriction map. SB/PEBA4 and typed per-component reasons are retained.
+  The existing transported-influence lab LR route remains unchanged.
+  See [FIML capability detail](../architecture/capabilities/fiml.md) for gates
+  and the limited research/44 and decisions/03 calibration evidence; no new
+  confirmatory calibration is claimed.
 
 - [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
   bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler

@@ -1,5 +1,43 @@
 ### Continuous FIML
 
+## Ordinary policy
+
+`api::policy_inference_fiml` and `api::policy_nested_fiml` compose single-level
+random-x continuous FIML with affine equality constraints, one or more groups.
+The existing R inference context retains the raw observations and `FIMLPack`;
+policy calls use those ingredients without adding a second fitting route.
+Covariance uses observed deviance Hessian bread and empirical casewise score
+meat (`fiml_score_meat_bread`), the lavaan-gated MLR sandwich. Global score
+uses `global_score_components` with observed-H0 sensitivity and the
+pattern-conditional expected metric, direct saturated-moment casewise scores
+at model-implied moments, and uncentered empirical score cross-products.
+Nested score uses `nested_score_components` with observed sensitivity and
+expected metric; its casewise parameter scores are evaluated at the embedded
+null fit. Missingness patterns are random, not fixed sampling strata.
+Global LR uses `fiml_ugamma_spectrum` with saturated observed-H1 information.
+Nested LR uses the larger-fit observed bread and direct casewise likelihood
+score meat, reduced by the exact restriction map through
+`compute_satorra2000_from_sandwich`. The lab/compatibility FIML Satorra driver
+remains unchanged: its empirical Magmaan route transports saturated influence
+into the larger fit, which can differ under larger-model misspecification.
+Both tests report SB and PEBA4, with independent typed unavailability reasons.
+Penalty and convergence gates precede computation; saturation suppresses only
+global tests. PSD boundary fits retain the policy's interior-population caveat.
+
+Validation is limited: `policy_fiml_test.cpp` gates complete-data covariance
+and LR-statistic reductions, exact nested observed LR-spectrum reduction with
+free means, frozen MCAR/MAR sandwich agreement with the lavaan-gated primitive
+and a direct frozen lavaan MLR SE comparison,
+grouped components, and first-principles finite-difference casewise scores at a
+misspecified larger fit. Correct-specification large-N comparison with the
+transported spectrum is asymptotic (5% at N=20000), not a finite-sample identity.
+Global score and LR-spectrum reductions to ML are asymptotic.
+Calibration evidence is research/44 for global geometry and decisions/03 for
+nested observed score, with no MAR cells in the latent sensitivity panel,
+one df-1 normal nested family, and growing conservatism with df. No new
+confirmatory calibration is claimed. FIML lavaan compatibility is task-14.
+
+
 - The versioned `lavaan-0.7.2` fitting adapter (2026-10-02) composes the
   observed-pattern objective with EM H1 starts, the ordered ML equality QR
   coordinates, pinned PORT controls and standardized/simple retries. The H1

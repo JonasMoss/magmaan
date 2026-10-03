@@ -1,5 +1,11 @@
 # magmaan 0.2.0 (in development)
 
+- FIML fits now receive the ordinary inference policy: observed-bread
+  casewise-score sandwich covariance, global and nested score and LR tests,
+  each calibrated with SB and PEBA4. Score sensitivity is observed with an
+  expected metric; nested LR uses empirical scores at the larger fit.
+  Components fail separately with typed reasons. FIML lavaan compatibility
+  bundles remain pending convention validation.
 - The score test is the primary test. `anova()` now lists it first and the
   likelihood-ratio (or fit-function difference) row second; select rows by
   `test`, not position. When a likelihood-ratio test is shown, `summary()` and

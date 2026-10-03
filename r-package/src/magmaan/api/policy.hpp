@@ -15,6 +15,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/robust/prepared_ntml.hpp"
@@ -134,6 +135,24 @@ PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 // saturated mean/covariance direction; a saturated model has no global test.
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state);
+
+// Observed-data FIML. Score sensitivity is observed at H0, its metric is
+// pattern-conditional expected information, and its meat consists of direct
+// casewise likelihood scores at H0. Global LR uses saturated observed H1.
+PolicyInference policy_inference_fiml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
+    const PolicyFitState& state);
+
+// Nested LR uses observed bread and empirical casewise score meat at the
+// larger fit, with the exact restriction map; no transported H1 influence.
+PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack);
 
 // All-ordinal DWLS, delta or theta parameterization, one or more groups.
 //

@@ -30,7 +30,7 @@ test_that("the inventory's ordinary policy rows match each estimator's component
     list("ML", d, NULL, c(covariance = "computed", global_score = "computed", global_lr = "computed")),
     list("ML", incomplete, NULL, c(covariance = "computed", global_score = "computed", global_lr = "computed")),
     list("DWLS", ord, paste0("x", 1:6), c(covariance = "computed", global_score = "computed", global_lr = "inapplicable")),
-    list("FIML", incomplete, NULL, all3("unsupported_model")),
+    list("FIML", incomplete, NULL, all3("computed")),
     list("ML2S", incomplete, NULL, all3("unsupported_model")),
     list("GLS", d, NULL, all3("unsupported_model")),
     list("ULS", d, NULL, all3("unsupported_model")),
@@ -59,6 +59,7 @@ test_that("the inventory's nested rows match ML, DWLS and the unsupported setups
   d <- hs()
   ord <- ordinal_hs()
   for (case in list(list("ML", d, NULL, c(lr = "computed", score = "computed")),
+                    list("FIML", d, NULL, c(lr = "computed", score = "computed")),
                     list("DWLS", ord, paste0("x", 1:6), c(lr = "computed", score = "unavailable")),
                     list("GLS", d, NULL, c(lr = "unavailable", score = "unavailable")))) {
     mk <- function(syntax) if (is.null(case[[3]])) magmaan_model(syntax, prototype = case[[2]]) else

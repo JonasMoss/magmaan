@@ -75,7 +75,7 @@ test_that("defined estimates survive deferred and unsupported inference", {
     expect_true(all(is.na(defs$se)))
     later <- coef(summary(infer(f)))
     expect_equal(later$est[later$op == ":="], defs$est)
-    if (est == "ML") expect_true(all(is.finite(later$se[later$op == ":="])))
+    if (est %in% c("ML", "FIML")) expect_true(all(is.finite(later$se[later$op == ":="])))
     else expect_true(all(is.na(later$se[later$op == ":="])))
   }
   fixed <- "visual =~ 1*x1 + a*0.8*x2 + b*0.6*x3\nvisual ~~ 1*visual\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\nab := a*b"

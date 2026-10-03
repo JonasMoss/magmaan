@@ -25,11 +25,6 @@ test_that("policy_inference() equals the explicit composition of primitives", {
 test_that("policy_inference() reports estimators outside its scope", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
-  res <- policy_inference(fit_model(cfa, d, estimator = "FIML"))
-  expect_false(res$covariance_available)
-  expect_null(res$covariance)
-  expect_equal(c(res$covariance_reason, res$score$reason, res$lr$reason),
-               rep("unsupported_model", 3))
   uls <- policy_inference(fit_model(cfa, d, estimator = "ULS"))
   expect_equal(uls$lr$reason, "unsupported_model")
 })
@@ -68,5 +63,28 @@ test_that("inference_rows() rebuilds the score statistic and its spectrum", {
     expect_equal(sum(colSums(rows)^2), q$statistic, tolerance = 1e-10)
     expect_equal(sort(eigen(crossprod(rows), symmetric = TRUE, only.values = TRUE)$values),
                  sort(score_spectrum(q)$eigenvalues), tolerance = 1e-8)
+  }
+})
+
+
+test_that("FIML policy uses retained missing-pattern scores for global and nested tests", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  set.seed(13)
+  d$x2[runif(nrow(d)) < plogis(-1.5 + scale(d$x1)[, 1])] <- NA
+  restricted <- "visual =~ x1 + a*x2 + a*x3\ntextual =~ x4 + x5 + x6"
+  for (group in list(NULL, "school")) {
+    f1 <- fit_model(cfa, d, estimator = "FIML", group = group, meanstructure = TRUE)
+    f0 <- fit_model(restricted, d, estimator = "FIML", group = group, meanstructure = TRUE)
+    p <- policy_inference(f1)
+    expect_true(p$covariance_available)
+    expect_equal(p$covariance, vcov(f1, regime = "robust"), tolerance = 1e-7, ignore_attr = TRUE)
+    for (t in list(p$score, p$lr, policy_nested(f1, f0)$score, policy_nested(f1, f0)$lr)) {
+      expect_true(t$available, info = t$detail)
+      expect_true(all(is.finite(c(t$statistic, t$p_sb, t$p_peba4))))
+      expect_true(all(t$eigenvalues >= 0))
+    }
+    failed <- f1; failed$converged <- FALSE
+    expect_identical(policy_inference(failed)$score$reason, "not_converged")
   }
 })

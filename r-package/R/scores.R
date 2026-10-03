@@ -266,9 +266,9 @@ policy_inference <- function(fit, data = NULL) {
       return(.policy_unavailable("unsupported_model", conditionMessage(out), state))
     return(out)
   }
-  if (!identical(estimator, "ML") || !is.null(fit$nclusters)) {
+  if (!estimator %in% c("ML", "FIML") || !is.null(fit$nclusters)) {
     return(.policy_unavailable("unsupported_model",
-      "the inference policy covers single-level complete-data ML and all-ordinal DWLS so far", state))
+      "the inference policy covers single-level ML, FIML and all-ordinal DWLS", state))
   }
   context <- tryCatch(prepare_inference(fit, data), error = function(e) e)
   if (inherits(context, "error")) {
@@ -330,13 +330,16 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
     return(out)
   }
   for (fit in list(fit_H1, fit_H0)) {
-    if (!identical(toupper(fit$estimator %||% ""), "ML") || !is.null(fit$nclusters))
-      return(unsupported("the inference policy covers single-level complete-data ML and all-ordinal DWLS so far"))
+    if (!toupper(fit$estimator %||% "") %in% c("ML", "FIML") || !is.null(fit$nclusters))
+      return(unsupported("the inference policy covers single-level ML, FIML and all-ordinal DWLS"))
   }
-  if (is.null(data) && !identical(fit_H1$raw_data, fit_H0$raw_data))
+  fiml <- identical(toupper(fit_H1$estimator), "FIML")
+  if ((is.null(data) || fiml) && !identical(fit_H1$raw_data, fit_H0$raw_data))
     stop("policy_nested(): the two fits must use the same observations in the same order")
   contexts <- tryCatch({
-    shared <- prepare_inference_data(fit_H1, data)
+    if (!identical(toupper(fit_H0$estimator), toupper(fit_H1$estimator)))
+      stop("nested policy requires the same estimator")
+    shared <- if (fiml) data else prepare_inference_data(fit_H1, data)
     list(H0 = prepare_inference(fit_H0, shared), H1 = prepare_inference(fit_H1, shared))
   }, error = function(e) e)
   if (inherits(contexts, "error")) return(unsupported(conditionMessage(contexts)))
