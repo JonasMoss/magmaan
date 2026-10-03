@@ -26,3 +26,14 @@ dwls-policy/pilot/*
 !dwls-policy/pilot/failures.csv
 !dwls-policy/pilot/progress.csv
 !dwls-policy/pilot/scheduling.csv
+
+!dwls-policy/production-2026-10-03/
+dwls-policy/production-2026-10-03/*
+!dwls-policy/production-2026-10-03/cells.csv
+!dwls-policy/production-2026-10-03/cost.csv
+!dwls-policy/production-2026-10-03/failures.csv
+!dwls-policy/production-2026-10-03/metadata.csv
+!dwls-policy/production-2026-10-03/population_targets.csv
+!dwls-policy/production-2026-10-03/population_timing.csv
+!dwls-policy/production-2026-10-03/summary.csv
+!dwls-policy/production-2026-10-03/timing.csv
