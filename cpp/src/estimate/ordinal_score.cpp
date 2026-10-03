@@ -653,14 +653,14 @@ modification_indices_ordinal(spec::LatentStructure pt,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
                                         const Eigen::MatrixXd& J_sigma,
-                                        const Eigen::MatrixXd&,
+                                        const Eigen::MatrixXd& J_mu,
                                         const WhitenFactors& factors,
                                         const Eigen::VectorXd& theta) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
-                            theta, parameterization);
+                            theta, parameterization, J_mu);
   };
-  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::OrdinalStats& s) {
-    return prepare_ordinal_delta_partable(p, s, nullptr, row_user);
+  auto prepare_fn = [row_user, parameterization](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_partable(p, s, parameterization, nullptr, row_user);
   };
   return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
                                            weights, options, residual_fn,
@@ -687,14 +687,14 @@ score_tests_ordinal(spec::LatentStructure pt,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
                                         const Eigen::MatrixXd& J_sigma,
-                                        const Eigen::MatrixXd&,
+                                        const Eigen::MatrixXd& J_mu,
                                         const WhitenFactors& factors,
                                         const Eigen::VectorXd& theta) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
-                            theta, parameterization);
+                            theta, parameterization, J_mu);
   };
-  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::OrdinalStats& s) {
-    return prepare_ordinal_delta_partable(p, s, nullptr, row_user);
+  auto prepare_fn = [row_user, parameterization](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_partable(p, s, parameterization, nullptr, row_user);
   };
   return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
                                   residual_fn, jacobian_fn, prepare_fn);
@@ -803,23 +803,23 @@ auto ordinal_robust_handles(OrdinalParameterization parameterization) {
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
                                      const Eigen::MatrixXd& J_sigma,
-                                     const Eigen::MatrixXd&,
+                                     const Eigen::MatrixXd& J_mu,
                                      const WhitenFactors& factors,
                                      const Eigen::VectorXd& theta) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors, theta,
-                            parameterization);
+                            parameterization, J_mu);
   };
   auto moment_jacobian_fn = [parameterization](const data::OrdinalStats& s,
                                             const ThresholdLayout& layout,
                                             const model::ImpliedMoments& moments,
                                             const Eigen::MatrixXd& J_sigma,
-                                            const Eigen::MatrixXd&,
+                                            const Eigen::MatrixXd& J_mu,
                                             const Eigen::VectorXd& theta) {
     return ordinal_moment_jacobian(s, layout, moments, J_sigma, theta,
-                                   parameterization);
+                                   parameterization, J_mu);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
-    return prepare_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [parameterization](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_partable(p, s, parameterization, nullptr);
   };
   struct Handles {
     decltype(residual_fn) residual;

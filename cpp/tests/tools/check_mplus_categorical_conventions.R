@@ -52,7 +52,7 @@ for (par in c('delta','theta')) {
      # Retained-estimate reporting uses the existing lavaan compatibility bundle.
      reporting <- convention_inference(actual, 'WLSMV')
      common_free <- !is.na(idx) & mp$free > 0L &
-       mp$op %in% c('=~','|','~1')
+       mp$op %in% c('=~','|','~1','~*~')
      if (!reporting$covariance_available || !reporting$test$available) {
        cat('convention-unavailable',par,route,reporting$covariance_reason,
          reporting$covariance_detail,reporting$test$reason,reporting$test$detail,'\n')
@@ -75,7 +75,7 @@ for (par in c('delta','theta')) {
      within_tolerance <- all(errors <= 1e-5 *
        (1 + pmax(abs(mp$est[use]),abs(lp$est[idx[use]]))))
      scales <- mp$group==2 & mp$lhs %in% paste0('u',1:6) & mp$lhs==mp$rhs &
-       mp$op=='~~'
+       mp$op==if(par=='delta') '~*~' else '~~'
      cat('native-route',par,route,'converged',actual$converged,
        'max_common_estimate_difference',sprintf('%.12f',difference),
        'free_group2_scale_rows',sum(mp$free[scales]>0),'\n')

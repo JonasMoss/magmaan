@@ -31,11 +31,11 @@ lr_test_satorra2000_ordinal(
   if (auto v = validate_stats(stats, rep_H0, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt_H1, stats, nullptr, row_user_H1);
+  if (auto p = prepare_ordinal_partable(pt_H1, stats, parameterization, nullptr, row_user_H1);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt_H0, stats, nullptr, row_user_H0);
+  if (auto p = prepare_ordinal_partable(pt_H0, stats, parameterization, nullptr, row_user_H0);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }

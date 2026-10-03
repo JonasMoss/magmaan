@@ -126,6 +126,7 @@ PatternKey pattern_key(const Eigen::Ref<const Eigen::RowVectorXd>& row) {
 
 struct ThresholdBlock {
   std::vector<char> ordinal;
+  std::vector<double> delta;
   std::vector<std::vector<double>> tau;
   std::vector<std::int32_t> n_levels;
 };
@@ -179,6 +180,7 @@ make_threshold_blocks(const spec::LatentStructure& pt,
     }
     ThresholdBlock block;
     block.ordinal.assign(static_cast<std::size_t>(p), 1);
+    block.delta.assign(static_cast<std::size_t>(p), 1.0);
     if (ordered) {
       if (b >= ordered->size() ||
           (*ordered)[b].size() != static_cast<std::size_t>(p)) {
@@ -256,6 +258,13 @@ make_threshold_blocks(const spec::LatentStructure& pt,
         }
       }
     }
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::ResponseScale || pt.group[i] <= 0 || pt.lhs_var[i] < 0) continue;
+    const auto b = static_cast<std::size_t>(pt.group[i] - 1);
+    const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+    if (b < nb && ov >= 0)
+      out[b].delta[static_cast<std::size_t>(ov)] = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
   }
   return out;
 }
@@ -345,7 +354,8 @@ make_score_block(const Eigen::MatrixXd& X,
         parameterization == estimate::OrdinalParameterization::Delta) {
       const Eigen::RowVectorXd lambda = B.Lambda.row(j);
       const double latent_var = (lambda * B.Mid * lambda.transpose())(0, 0);
-      rv = 1.0 - latent_var;
+      const double delta = out.thresholds.delta[static_cast<std::size_t>(j)];
+      rv = 1.0 / (delta * delta) - latent_var;
     }
     if (!(rv > 0.0) || !std::isfinite(rv)) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,

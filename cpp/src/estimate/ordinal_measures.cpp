@@ -187,7 +187,7 @@ fit_measures_ordinal(spec::LatentStructure pt,
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -238,7 +238,7 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
       !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -251,8 +251,8 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
   if (parameterization == OrdinalParameterization::Delta) {
-    for (const auto& block : layout_or->scale_free) {
-      if (std::any_of(block.begin(), block.end(), [](char c) { return c != 0; })) {
+    for (const auto& block : layout_or->delta_free) {
+      if (std::any_of(block.begin(), block.end(), [](auto c) { return c != 0; })) {
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "catml_dwls_rmsea_ordinal: delta fits with released response "
             "scales are not yet supported"));
@@ -455,7 +455,7 @@ ordinal_dwls_profile_rmsea_core(spec::LatentStructure pt,
     }
   }
 
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -468,9 +468,9 @@ ordinal_dwls_profile_rmsea_core(spec::LatentStructure pt,
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
   if (parameterization == OrdinalParameterization::Delta) {
-    for (const auto& block : layout_or->scale_free) {
+    for (const auto& block : layout_or->delta_free) {
       if (std::any_of(block.begin(), block.end(),
-                      [](char c) { return c != 0; })) {
+                      [](auto c) { return c != 0; })) {
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "ordinal_dwls_profile_rmsea: delta fits with released response "
             "scales are not yet supported"));
@@ -812,7 +812,7 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
     }
   }
 
-  if (auto pr = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto pr = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !pr.has_value()) {
     return std::unexpected(fit_to_post(pr.error()));
   }
@@ -825,9 +825,9 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
   if (parameterization == OrdinalParameterization::Delta) {
-    for (const auto& blk : layout_or->scale_free) {
+    for (const auto& blk : layout_or->delta_free) {
       if (std::any_of(blk.begin(), blk.end(),
-                      [](char c) { return c != 0; })) {
+                      [](auto c) { return c != 0; })) {
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "ordinal_crmr_misspec_inference: delta fits with released response "
             "scales are not yet supported"));
@@ -1303,7 +1303,7 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
   // −d_b²/γ_b²); then grad_var = g_Fᵀ Γ_x g_F and Var(N·F) = N·grad_var pool the
   // independent groups (Section "Multi-group" of the note).
   spec::LatentStructure pt2 = std::move(pt);
-  if (auto pr = prepare_ordinal_delta_partable(pt2, stats, nullptr);
+  if (auto pr = prepare_ordinal_partable(pt2, stats, parameterization, nullptr);
       !pr.has_value()) {
     return std::unexpected(fit_to_post(pr.error()));
   }
@@ -1557,7 +1557,7 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
   }
 
   // User residuals d_{u,b} = σ_b(θ̂) − u_b (recompute as the RMSEA path does).
-  if (auto pr = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto pr = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !pr.has_value()) {
     return std::unexpected(fit_to_post(pr.error()));
   }
@@ -2302,56 +2302,28 @@ ordinal_observed_omega_value(
   Eigen::MatrixXd R;
 
   const bool theta_param = parameterization == OrdinalParameterization::Theta;
-  const bool block_released =
-      b < layout.scale_free.size() &&
-      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
-                  [](char c) { return c != 0; });
-  if (theta_param || block_released) {
-    const bool have_mu =
-        b < eval->moments.mu.size() && eval->moments.mu[b].size() == p;
-    std::vector<std::int32_t> scale_free(static_cast<std::size_t>(p), 1);
-    if (!theta_param) {
-      scale_free.assign(static_cast<std::size_t>(p), 0);
-      for (Eigen::Index i = 0; i < p; ++i) {
-        if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
-          scale_free[static_cast<std::size_t>(i)] =
-              layout.scale_free[b][static_cast<std::size_t>(i)];
-        }
-      }
-    }
+  if (!theta_param) {
+    const bool have_mu = b < eval->moments.mu.size() && eval->moments.mu[b].size() == p;
     for (Eigen::Index k = 0; k < thresholds.size(); ++k) {
-      const Eigen::Index ov =
-          stats.threshold_ov[b][static_cast<std::size_t>(k)];
-      const double mu = have_mu ? eval->moments.mu[b](ov) : 0.0;
-      const bool standardize =
-          theta_param || scale_free[static_cast<std::size_t>(ov)] != 0;
-      if (standardize && (!(Sig(ov, ov) > 0.0) || !std::isfinite(Sig(ov, ov)))) {
+      const auto ov = stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      thresholds(k) = (thresholds(k) - (have_mu ? eval->moments.mu[b](ov) : 0.0)) * ordinal_delta(layout, theta, b, ov);
+    }
+    R = Eigen::MatrixXd::Identity(p,p);
+    for (Eigen::Index j = 0; j < p; ++j) for (Eigen::Index i = j + 1; i < p; ++i)
+      R(i,j) = R(j,i) = ordinal_delta(layout, theta, b, i) * ordinal_delta(layout, theta, b, j) * Sig(i,j);
+  } else {
+    const bool have_mu = b < eval->moments.mu.size() && eval->moments.mu[b].size() == p;
+    for (Eigen::Index k = 0; k < thresholds.size(); ++k) {
+      const auto ov = stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      if (!(Sig(ov, ov) > 0.0) || !std::isfinite(Sig(ov, ov)))
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "ordinal_observed_omega: non-positive latent-response variance"));
-      }
-      const double delta = standardize ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
-      thresholds(k) = (thresholds(k) - mu) * delta;
+      thresholds(k) = (thresholds(k) - (have_mu ? eval->moments.mu[b](ov) : 0.0)) / std::sqrt(Sig(ov, ov));
     }
-    if (theta_param) {
-      auto R_or = ordinal_catml_correlation_matrix(
-          Sig, parameterization, "ordinal_observed_omega implied covariance");
-      if (!R_or.has_value()) return std::unexpected(R_or.error());
-      R = std::move(*R_or);
-    } else {
-      R = Eigen::MatrixXd::Identity(p, p);
-      for (Eigen::Index j = 0; j < p; ++j) {
-        for (Eigen::Index i = j + 1; i < p; ++i) {
-          R(i, j) = mixed_assoc_moment(
-              Sig, scale_free, i, j, OrdinalParameterization::Theta);
-          R(j, i) = R(i, j);
-        }
-      }
-    }
-  } else {
-    auto R_or = ordinal_catml_correlation_matrix(
-        Sig, parameterization, "ordinal_observed_omega implied covariance");
-    if (!R_or.has_value()) return std::unexpected(R_or.error());
-    R = std::move(*R_or);
+    auto correlation = ordinal_catml_correlation_matrix(Sig, parameterization,
+        "ordinal_observed_omega implied covariance");
+    if (!correlation) return std::unexpected(correlation.error());
+    R = std::move(*correlation);
   }
 
   return rel::omega_ordinal_observed(
@@ -2383,7 +2355,7 @@ ordinal_observed_omega(
   }
 
   spec::LatentStructure pt_eval = pt;
-  if (auto p = prepare_ordinal_delta_partable(pt_eval, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt_eval, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }

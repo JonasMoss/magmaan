@@ -425,7 +425,7 @@ robust_ordinal(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "OrdinalStats NACOV block count does not match MatrixRep"));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
@@ -524,7 +524,7 @@ robust_ordinal_ij(spec::LatentStructure pt,
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -606,7 +606,7 @@ ordinal_rbm_parts(spec::LatentStructure pt,
       stats, estimated_weight ? weights : OrdinalWeightKind::ULS);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {
@@ -688,7 +688,7 @@ ordinal_casewise_influence_ij(spec::LatentStructure pt,
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(missing_or.error());
   const std::vector<bool> block_has_missing = std::move(*missing_or);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user); !p.has_value()) {
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
   if (est.theta.size() != pt.n_free()) {

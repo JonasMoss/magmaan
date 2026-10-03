@@ -589,7 +589,7 @@ TEST_CASE("Ordinal preparation provenance preserves released scales and rejects 
   }
 }
 
-TEST_CASE("Explicit response scales retain residual coordinates with auto_var disabled") {
+TEST_CASE("Explicit response scales retain DELTA coordinates with auto_var disabled") {
   auto flat = magmaan::parse::Parser::parse(
       "f =~ x1+x2+x3\nf ~~ f\n"
       "x1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\n"
@@ -621,7 +621,7 @@ TEST_CASE("Explicit response scales retain residual coordinates with auto_var di
       *pt, stats, &starts, &names.row_user).has_value());
   int released = 0;
   for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->op[i] == magmaan::parse::Op::Covariance &&
+    if (pt->op[i] == magmaan::parse::Op::ResponseScale &&
         names.row_lhs[i] == "x1" && names.row_rhs[i] == "x1" && pt->group[i] == 2) {
       CHECK(pt->free[i] > 0);
       ++released;
@@ -630,7 +630,7 @@ TEST_CASE("Explicit response scales retain residual coordinates with auto_var di
   CHECK(released == 1);
 }
 
-TEST_CASE("DELTA scale restrictions fail before losing their coordinates") {
+TEST_CASE("DELTA scale restrictions retain their original coordinates") {
   using namespace magmaan;
   data::OrdinalStats stats;
   stats.R = {Eigen::MatrixXd::Identity(3, 3)};
@@ -648,12 +648,12 @@ TEST_CASE("DELTA scale restrictions fail before losing their coordinates") {
     REQUIRE(pt);
     const auto original = *pt;
     auto prepared = estimate::prepare_ordinal_delta_partable(*pt, stats);
-    REQUIRE_FALSE(prepared);
-    CHECK(prepared.error().kind == FitError::Kind::NumericIssue);
-    CHECK(prepared.error().detail.find("unsupported DELTA response scale") != std::string::npos);
-    CHECK(prepared.error().detail.find("theta") != std::string::npos);
-    CHECK(pt->free == original.free);
-    CHECK(pt->eq_groups == original.eq_groups);
-    CHECK(pt->ordinal_preparation.empty());
+    REQUIRE(prepared);
+    CHECK_FALSE(pt->ordinal_preparation.empty());
+    for (std::size_t i = 0; i < pt->size(); ++i) {
+      if (pt->op[i] != parse::Op::ResponseScale) continue;
+      CHECK((pt->free[i] > 0) == (original.free[i] > 0));
+      if (pt->free[i] == 0) CHECK(pt->fixed_value[i] == original.fixed_value[i]);
+    }
   }
 }

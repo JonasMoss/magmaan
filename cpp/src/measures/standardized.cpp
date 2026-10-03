@@ -286,8 +286,14 @@ standardize_all(const spec::LatentStructure& pt,
         if (ordinal_delta_unit &&
             ordinal_ov[static_cast<std::size_t>(L.block)]
                       [static_cast<std::size_t>(L.row)]) {
-          // Unit latent-response variance: standardize by latent SD only.
-          return bmat.Lambda(L.row, L.col) * std::sqrt(*v_or);
+          // DELTA scales specify the response SD directly (1/delta).
+          double delta = 1.0;
+          for (std::size_t i = 0; i < pt.size(); ++i) {
+            if (pt.op[i] != parse::Op::ResponseScale || pt.group[i] != L.block + 1 || pt.lhs_var[i] < 0) continue;
+            if (pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])] == L.row)
+              delta = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
+          }
+          return delta * bmat.Lambda(L.row, L.col) * std::sqrt(*v_or);
         }
         const double sigma_rr = sigma(L.row, L.row);
         if (sigma_rr <= 0.0) {

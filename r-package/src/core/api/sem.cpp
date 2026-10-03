@@ -53,7 +53,7 @@ Result<Eigen::VectorXd> ordinal_start_values(const Model &model,
         "StartPolicy is not yet supported for ordinal starts"));
   auto x0 = estimate::ordinal_start_values(
       model.structure(), model.matrix_rep(), stats, model.starts(),
-      &model.names().row_user);
+      &model.names().row_user, spec.ordinal_parameterization);
   if (!x0) {
     return std::unexpected(make_error(ErrorStage::Fit, x0.error()));
   }

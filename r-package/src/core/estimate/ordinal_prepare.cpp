@@ -889,28 +889,19 @@ make_threshold_layout(const spec::LatentStructure& pt,
     }
   }
 
-  // Response-scale-release mask: an ordinal indicator whose `~~` self-variance
-  // survived `prepare_*` as a free parameter (Wu-Estabrook invariance release,
-  // or theta parameterization) is compared in standardized form.
-  out.scale_free.resize(nb);
+  out.delta_free.resize(nb);
+  out.delta_fixed.resize(nb);
   for (std::size_t b = 0; b < nb; ++b) {
-    out.scale_free[b].assign(
-        static_cast<std::size_t>(rep.dims[b].n_observed), 0);
+    out.delta_free[b].assign(static_cast<std::size_t>(rep.dims[b].n_observed), 0);
+    out.delta_fixed[b].assign(static_cast<std::size_t>(rep.dims[b].n_observed), 1.0);
   }
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (pt.op[i] != parse::Op::Covariance || pt.group[i] <= 0 ||
-        pt.free[i] <= 0) {
-      continue;
-    }
-    if (pt.lhs_var[i] < 0 || pt.lhs_var[i] != pt.rhs_var[i]) continue;
-    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
-    if (b >= nb) continue;
-    const std::int32_t ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
-    if (ov < 0 ||
-        static_cast<std::size_t>(ov) >= out.scale_free[b].size()) {
-      continue;
-    }
-    out.scale_free[b][static_cast<std::size_t>(ov)] = 1;
+    if (pt.op[i] != parse::Op::ResponseScale || pt.group[i] <= 0 || pt.lhs_var[i] < 0) continue;
+    const auto b = static_cast<std::size_t>(pt.group[i] - 1);
+    const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+    if (b >= nb || ov < 0) continue;
+    out.delta_free[b][static_cast<std::size_t>(ov)] = pt.free[i];
+    out.delta_fixed[b][static_cast<std::size_t>(ov)] = std::isfinite(pt.fixed_value[i]) ? pt.fixed_value[i] : 1.0;
   }
   return out;
 }
@@ -1166,8 +1157,8 @@ Bounds profile_bounds(const ThresholdDesign& profile, const Bounds& bounds) {
 fit_expected<void> validate_ordinal_snlls_chart(
     const ThresholdLayout& layout, OrdinalParameterization parameterization) {
   if (parameterization == OrdinalParameterization::Delta) {
-    for (const auto& block : layout.scale_free) {
-      if (std::any_of(block.begin(), block.end(), [](char v) { return v != 0; }))
+    for (const auto& block : layout.delta_free) {
+      if (std::any_of(block.begin(), block.end(), [](auto v) { return v != 0; }))
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             "SNLLS compatibility: released-scale delta requires a nonlinear "
             "moment map; use a full-moment ordinal fit"));
@@ -1531,22 +1522,8 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
     values(static_cast<Eigen::Index>(i)) = pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
     const bool delta_residual = parameterization == OrdinalParameterization::Delta &&
         pt.op[i] == parse::Op::Covariance;
-    bool released_delta_scale = false;
-    if (parameterization == OrdinalParameterization::Delta &&
-        pt.op[i] == parse::Op::ResponseScale) {
-      // Released DELTA scales are represented by a free residual sibling.
-      // Project their derived response scale without adding a free coordinate.
-      for (std::size_t j = 0; j < pt.size(); ++j) {
-        if (pt.op[j] == parse::Op::Covariance && pt.free[j] > 0 &&
-            pt.block_of(j) == pt.block_of(i) &&
-            pt.lhs_var[j] == pt.lhs_var[i] && pt.rhs_var[j] == pt.lhs_var[i]) {
-          released_delta_scale = true;
-          break;
-        }
-      }
-    }
     const bool theta_scale = pt.op[i] == parse::Op::ResponseScale &&
-        (parameterization == OrdinalParameterization::Theta || released_delta_scale);
+        parameterization == OrdinalParameterization::Theta;
     if (pt.free[i] > 0 || (!delta_residual && !theta_scale) ||
         pt.lhs_var[i] != pt.rhs_var[i])
       continue;
@@ -1577,7 +1554,11 @@ ordinal_parameter_values(const spec::LatentStructure& pt,
     // latents. The implied variance is still indexed by the observed variable.
     if (cell.used && (cell.mat == model::MatId::Theta || cell.mat == model::MatId::Psi)) {
       const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
-      values(static_cast<Eigen::Index>(i)) += 1.0 -
+      double delta = 1.0;
+      for (std::size_t j = 0; j < pt.size(); ++j)
+        if (pt.op[j] == parse::Op::ResponseScale && pt.block_of(j) == pt.block_of(i) && pt.lhs_var[j] == pt.lhs_var[i])
+          delta = pt.free[j] > 0 ? theta(pt.free[j] - 1) : pt.fixed_value[j];
+      values(static_cast<Eigen::Index>(i)) += 1.0 / (delta * delta) -
           moments->sigma[static_cast<std::size_t>(cell.block)](ov, ov);
     }
   }
@@ -1603,57 +1584,9 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     return {};
   }
 
-  // Releasing a scale via a residual coordinate preserves the unconstrained
-  // model, but a restriction on the original scale becomes nonlinear.
-  const auto unsupported_scale = [](const char* found) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        std::string("unsupported DELTA response scale: ") + found +
-        "; released DELTA scales use residual-variance coordinates, where "
-        "scale equalities and fixed non-unit scales are nonlinear restrictions; "
-        "use parameterization = 'theta' for supported residual-variance "
-        "equalities, or remove the restriction"));
-  };
-  const auto n_free = static_cast<std::size_t>(pt.n_free());
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (pt.op[i] != parse::Op::ResponseScale) continue;
-    const auto free = pt.free[i];
-    if (free <= 0) {
-      if (std::isfinite(pt.fixed_value[i]) && pt.fixed_value[i] != 1.0)
-        return unsupported_scale("fixed non-unit scale");
-      continue;
-    }
-    const auto column = static_cast<std::size_t>(free - 1);
-    for (std::size_t j = 0; j < pt.size(); ++j) {
-      if (i == j || pt.free[j] <= 0) continue;
-      const auto other = static_cast<std::size_t>(pt.free[j] - 1);
-      if (free == pt.free[j] ||
-          (pt.eq_groups.size() == n_free &&
-           pt.eq_groups[column] == pt.eq_groups[other]))
-        return unsupported_scale("released scale shares an equality group");
-    }
-    if (pt.lin_constraint_R.size() == pt.lin_constraint_d.size() * n_free) {
-      for (std::size_t r = 0; r < pt.lin_constraint_d.size(); ++r)
-        if (pt.lin_constraint_R[r * n_free + column] != 0.0)
-          return unsupported_scale("released scale appears in a linear constraint");
-    }
-  }
-
-  // Wu-Estabrook (2016) multigroup categorical invariance: when `Thresholds`
-  // is equated across groups, lavaan releases the group-2+ ordinal response
-  // scale and indicator intercept that the single-group convention otherwise
-  // pins (residual variance 1, intercept 0). The standard parameterization for
-  // ordinal invariance is THETA: the released scale is the free residual
-  // variance `~~`, exactly how lavaan-theta reports it. The `~*~` preparation
-  // value stays fixed at 1; reporting derives its scale from the fitted
-  // response variance. The moment path standardizes the released block by its
-  // implied √Σ*ᵢᵢ. (Under delta the
-  // released `~*~` scale is unidentified — it stays pinned at 1 with a singular
-  // vcov — so delta invariance is not gated; the dormant delta released-block
-  // branch in `ordinal_residuals`/`ordinal_jacobian` is kept but untested.)
-  // Binary items keep a fixed scale (one threshold leaves no room to identify
-  // a separate scale; lavaan does the same), so the release is vetoed there.
-  // At the scalar ordinal rung (`intercepts` also equated), lavaan fixes those
-  // group-2+ indicator intercepts back to 0 and frees the group-2+ latent means.
+  // Threshold invariance releases nonbinary group-2+ response scales and
+  // intercepts. DELTA keeps those scales in lavaan's original coordinates;
+  // binary indicators retain the unit-scale identification rule.
   const bool release_invariant =
       std::find(pt.group_equal.begin(), pt.group_equal.end(),
                 spec::GroupEqual::Thresholds) != pt.group_equal.end();
@@ -1709,17 +1642,174 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
       pt.lin_constraint_R = std::move(R_new);
     }
   }
-  // A `~*~` (response scale, Op::ResponseScale) self-row the user explicitly
-  // freed signals "let this indicator's total variance float" (Mplus's usual
-  // per-occasion growth-model release), but magmaan never reads a response-
-  // scale value: delta is always derived analytically as 1/sqrt(Sigma*_ii),
-  // see the block_released branch of ordinal_residuals/ordinal_jacobian.
-  // Translate the request into leaving the *sibling* `~~` residual-variance
-  // row free instead -- the mathematically equivalent reparameterization
-  // (same fmin/chi^2/df, different raw coordinates) that machinery already
-  // implements for the Wu-Estabrook multigroup release, generalized here to
-  // single-group and to any group. Binary indicators keep the veto below:
-  // one threshold leaves no room to identify a separate scale.
+  const auto before_scale_release = old_n;
+  if (release_invariant) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != parse::Op::ResponseScale || pt.group[i] < 2 || pt.free[i] > 0 || pt.lhs_var[i] < 0) continue;
+      if (row_user && i < row_user->size() && (*row_user)[i] != 0) continue;
+      const auto b = static_cast<std::size_t>(pt.group[i] - 1);
+      const auto ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      if (ov < 0 || is_binary(b, ov)) continue;
+      pt.free[i] = ++old_n;
+      pt.fixed_value[i] = std::numeric_limits<double>::quiet_NaN();
+      if (pt.eq_groups.size() == static_cast<std::size_t>(old_n - 1))
+        pt.eq_groups.push_back(old_n - 1);
+      if (starts) starts->hint.resize(static_cast<std::size_t>(old_n), std::numeric_limits<double>::quiet_NaN());
+    }
+  }
+  if (old_n > before_scale_release && !pt.lin_constraint_d.empty()) {
+    const auto nr = pt.lin_constraint_d.size();
+    std::vector<double> expanded(nr * static_cast<std::size_t>(old_n), 0.0);
+    for (std::size_t r = 0; r < nr; ++r)
+      for (std::int32_t c = 0; c < before_scale_release; ++c)
+        expanded[r * static_cast<std::size_t>(old_n) + static_cast<std::size_t>(c)] =
+            pt.lin_constraint_R[r * static_cast<std::size_t>(before_scale_release) + static_cast<std::size_t>(c)];
+    pt.lin_constraint_R = std::move(expanded);
+  }
+  std::vector<char> remove_free(static_cast<std::size_t>(old_n) + 1, 0);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if ((pt.op[i] != parse::Op::Covariance &&
+         pt.op[i] != parse::Op::Intercept &&
+         pt.op[i] != parse::Op::ResponseScale) ||
+        pt.group[i] <= 0) {
+      continue;
+    }
+    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
+    if (b >= ordered.size()) continue;
+    if (pt.lhs_var[i] < 0) continue;
+    if ((pt.op[i] == parse::Op::Covariance ||
+         pt.op[i] == parse::Op::ResponseScale) &&
+        (pt.rhs_var[i] < 0 || pt.lhs_var[i] != pt.rhs_var[i])) {
+      continue;
+    }
+    const std::int32_t ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+    if (ov < 0 || static_cast<std::size_t>(ov) >= ordered[b].size() ||
+        ordered[b][static_cast<std::size_t>(ov)] == 0) {
+      continue;
+    }
+    // DELTA response scales are live coordinates, including fixed values and
+    // affine restrictions. Residual variances are derived instead.
+    if (pt.op[i] == parse::Op::ResponseScale) continue;
+    if (pt.op[i] == parse::Op::Covariance) {
+      if (pt.free[i] > 0) remove_free[static_cast<std::size_t>(pt.free[i])] = 1;
+      pt.free[i] = 0;
+      pt.fixed_value[i] = 1.0;
+      continue;
+    }
+    // Release: keep this group-2+ ordinal scale/intercept free instead of
+    // pinning it. The scale is vetoed (re-fixed) for binary indicators; the
+    // intercept release is suppressed when scalar intercept equality is active.
+    if (release_invariant && pt.group[i] >= 2 && pt.free[i] > 0) {
+      const bool is_scale = pt.op[i] == parse::Op::Covariance;
+      if (is_scale) {
+        if (!is_binary(b, ov)) continue;  // honor the free scale row
+      } else if (!intercepts_equal) {
+        continue;  // honor the free indicator intercept row
+      }
+    }
+    // A row the user's own model syntax resolved (free, or fixed at a value
+    // other than the ordinal default) stays as spec::build left it; only rows
+    // lavaanify auto-added get the single-group default.
+    if (row_user != nullptr && i < row_user->size() && (*row_user)[i] != 0) {
+      continue;
+    }
+    if (pt.free[i] > 0) remove_free[static_cast<std::size_t>(pt.free[i])] = 1;
+    pt.free[i] = 0;
+    pt.fixed_value[i] = pt.op[i] == parse::Op::Covariance ? 1.0 : 0.0;
+  }
+  auto result = compact_free_set(pt, remove_free, starts);
+  if (result) pt.ordinal_preparation = std::move(preparation);
+  return result;
+}
+
+fit_expected<void>
+prepare_ordinal_delta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalMoments& moments,
+                                spec::Starts* starts,
+                                const std::vector<std::int8_t>* row_user) {
+  data::OrdinalStats stats = stats_adapter(moments);
+  return prepare_ordinal_delta_partable(pt, stats, starts, row_user);
+}
+
+fit_expected<void>
+prepare_ordinal_theta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalStats& stats,
+                                spec::Starts* starts,
+                                const std::vector<std::int8_t>* row_user) {
+  if (auto v = validate_categorical_covariates(pt); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  auto ordered_or = ordered_indicator_layout(pt, stats);
+  if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
+  const auto& ordered = *ordered_or;
+  auto preparation = ordinal_preparation_signature(ordered, stats);
+  if (!pt.ordinal_preparation.empty()) {
+    if (pt.ordinal_preparation != preparation)
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal preparation ordered indicators or binary vetoes do not match"));
+    return {};
+  }
+
+  // THETA invariance releases nonbinary group-2+ residual variances and
+  // intercepts, retaining the established THETA identification rules.
+  const bool release_invariant =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Thresholds) != pt.group_equal.end();
+  const bool intercepts_equal =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Intercepts) != pt.group_equal.end();
+  const bool means_equal =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Means) != pt.group_equal.end();
+  auto is_binary = [&](std::size_t b, std::int32_t ov) {
+    if (b >= stats.threshold_ov.size()) return false;
+    int n = 0;
+    for (std::int32_t t : stats.threshold_ov[b])
+      if (t == ov) ++n;
+    return n <= 1;
+  };
+
+  const std::int32_t initial_n = pt.n_free();
+  std::int32_t old_n = initial_n;
+  if (release_invariant && intercepts_equal && !means_equal) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != parse::Op::Intercept || pt.group[i] < 2 ||
+          pt.free[i] > 0 || pt.lhs_var[i] < 0) {
+        continue;
+      }
+      const std::int32_t ov =
+          pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      if (ov >= 0) continue;  // observed intercept; scalar fixes these
+      pt.free[i] = ++old_n;
+      pt.fixed_value[i] = std::numeric_limits<double>::quiet_NaN();
+      if (static_cast<std::int32_t>(pt.eq_groups.size()) == pt.free[i] - 1) {
+        pt.eq_groups.push_back(pt.free[i] - 1);
+      }
+    }
+    if (starts != nullptr &&
+        starts->hint.size() < static_cast<std::size_t>(old_n)) {
+      starts->hint.resize(static_cast<std::size_t>(old_n),
+                          std::numeric_limits<double>::quiet_NaN());
+    }
+    const std::size_t n_lin = pt.lin_constraint_d.size();
+    if (n_lin > 0 && old_n > initial_n &&
+        pt.lin_constraint_R.size() ==
+            n_lin * static_cast<std::size_t>(initial_n)) {
+      std::vector<double> R_new(n_lin * static_cast<std::size_t>(old_n), 0.0);
+      for (std::size_t r = 0; r < n_lin; ++r) {
+        for (std::int32_t c = 0; c < initial_n; ++c) {
+          R_new[r * static_cast<std::size_t>(old_n) +
+                static_cast<std::size_t>(c)] =
+              pt.lin_constraint_R[r * static_cast<std::size_t>(initial_n) +
+                                  static_cast<std::size_t>(c)];
+        }
+      }
+      pt.lin_constraint_R = std::move(R_new);
+    }
+  }
+  // Preserve the pre-existing THETA preparation convention for callers that
+  // supply an explicit response-scale release: its free dimension is a
+  // residual variance and the scale row is derived after fitting.
   std::vector<std::vector<char>> delta_released(ordered.size());
   for (std::size_t b = 0; b < ordered.size(); ++b) {
     delta_released[b].assign(ordered[b].size(), 0);
@@ -1851,14 +1941,6 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
   return result;
 }
 
-fit_expected<void>
-prepare_ordinal_delta_partable(spec::LatentStructure& pt,
-                                const data::OrdinalMoments& moments,
-                                spec::Starts* starts,
-                                const std::vector<std::int8_t>* row_user) {
-  data::OrdinalStats stats = stats_adapter(moments);
-  return prepare_ordinal_delta_partable(pt, stats, starts, row_user);
-}
 
 fit_expected<void>
 prepare_ordinal_partable(spec::LatentStructure& pt,
@@ -1866,11 +1948,8 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
                          OrdinalParameterization parameterization,
                          spec::Starts* starts,
                          const std::vector<std::int8_t>* row_user) {
-  // The prepared partable is identical for Delta and Theta: magmaan fixes the
-  // ordinal-indicator residual variances and intercepts the same way for both.
-  // The Delta/Theta distinction is realized in the fit objective (whether the
-  // implied moments are standardized), not in the partable layout.
-  (void)parameterization;
+  if (parameterization == OrdinalParameterization::Theta)
+    return prepare_ordinal_theta_partable(pt, stats, starts, row_user);
   return prepare_ordinal_delta_partable(pt, stats, starts, row_user);
 }
 
@@ -1880,8 +1959,7 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
                          OrdinalParameterization parameterization,
                          spec::Starts* starts,
                          const std::vector<std::int8_t>* row_user) {
-  (void)parameterization;
-  return prepare_ordinal_delta_partable(pt, moments, starts, row_user);
+  return prepare_ordinal_partable(pt, stats_adapter(moments), parameterization, starts, row_user);
 }
 
 fit_expected<void>
@@ -2411,8 +2489,9 @@ ordinal_start_values(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::OrdinalStats& stats,
                      spec::Starts starts,
-                     const std::vector<std::int8_t>* row_user) {
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts, row_user);
+                     const std::vector<std::int8_t>* row_user,
+                     OrdinalParameterization parameterization) {
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, &starts, row_user);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -2423,6 +2502,9 @@ ordinal_start_values(spec::LatentStructure pt,
   auto x0_or = simple_start_values(pt, rep, samp, starts);
   if (!x0_or.has_value()) return std::unexpected(x0_or.error());
   Eigen::VectorXd x0 = std::move(*x0_or);
+  for (std::size_t i = 0; i < pt.size(); ++i)
+    if (pt.op[i] == parse::Op::ResponseScale && pt.free[i] > 0)
+      x0(pt.free[i] - 1) = 1.0;
   seed_threshold_starts(x0, *layout_or, stats);
   return x0;
 }

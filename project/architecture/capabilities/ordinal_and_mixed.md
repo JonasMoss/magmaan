@@ -15,16 +15,20 @@
   Native fitting is unchanged.
   ULS/WLS and mixed versioned presets remain unavailable.
 - Explicit ordinal rows retain user provenance through lab DWLS/ULS/WLS,
-  PSD and fixed-stage-2 preparation. Response-scale self rows materialize a
-  generated unit residual coordinate when `auto_var = FALSE`; preparation can
-  therefore translate an explicit free scale into a residual dimension instead
-  of silently dropping it. Existing ordinal expectations remain unchanged.
-  Released DELTA response-scale rows project `1/sqrt(Sigma*_ii)` with
-  `free = 0`; no delta-method SE is supplied. Single released scales and the
-  grouped P-IV2 references pass through the retained-estimate WLSMV bundle.
-  Equality-labelled DELTA scales still lose their restriction during preparation:
-  the bundle claims availability but disagrees with lavaan. TASK-53 awaits a
-  scope decision on that prerequisite; the categorical frontend is not implemented.
+  PSD, fixed-stage-2 and native prepared handles. DELTA response-scale `~*~`
+  rows are live coordinates: free, labelled/equal, linearly constrained or
+  fixed at a non-unit value. Their estimates and SEs retain lavaan's scale
+  coordinates. Residual variances are derived as
+  `theta_ii = delta_i^(-2) - (Lambda Mid Lambda')_ii`, with `free = 0`.
+  Thresholds use `delta_i * (tau_i - mu_i)` and associations use
+  `delta_i * delta_j * Sigma*_ij`; Jacobian and observed curvature include
+  their product-rule derivatives. THETA keeps its residual coordinates.
+  Seven frozen lavaan WLSMV/DWLS cases cover fixed/released/equal/constrained
+  scales, threshold/loading invariance, P-IV2 SCALAR and longitudinal equality;
+  live R gates include scale SEs and retained-estimate WLSMV reporting.
+  Threshold augmentation preserves an existing source scale row, and automatic
+  group release respects explicit fixed scales. Factor scores, std.all and
+  fitted-correlation reliability use the corresponding response variance.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.
@@ -192,8 +196,9 @@
   linear equalities and joint multi-group equations with `n_b/N` weights.
   All-ordinal delta SNLLS uses this affine map; eligible theta SNLLS profiles
   standardized thresholds, with generic full-threshold fitting retained for
-  fixed/shared/constrained cases. Released-scale delta is rejected by the
-  all-ordinal SNLLS paths. Unit tests compare profiled/cache-aware fits with
+  fixed/shared/constrained cases. Non-unit or free DELTA scales use the full
+  moment map in compact bounded and generic SNLLS fitting; frozen ULS oracle
+  estimates gate these routes. Unit tests compare profiled/cache-aware fits with
   full-threshold and legacy bounded fits; lavaan fixtures 0013/0014 cover
   cross-group shared thresholds and threshold-only linear constraints.
   The maintained [workspace contract](../../design/ordinal-snlls-gamma-architecture.md)
@@ -217,10 +222,9 @@
   the freed intercept μ from standardized thresholds `(τ−μ)/√Σ*ᵢᵢ` and threads
   `J_mu`; released delta differentiates `(τ−μ)δ_i` plus the implied association
   rows, so freed latent means and released response scales carry nonzero
-  moment-Jacobian columns. Under **delta** lavaan's own released `~*~` scale is
-  structurally unidentified (it stays pinned at 1 with a singular vcov), so
-  lavaan-delta `group.equal` invariance remains ungated; the delta released
-  branch is gated only by the explicit Mplus-style scalar probe below.
+  moment-Jacobian columns. DELTA now retains lavaan's `~*~` coordinates rather
+  than translating them into residual dimensions; threshold/loading invariance
+  is gated by `delta_scales.json`, including scale SEs and scaled/shifted tests.
   lavaan-gated by the bounded golden `ordinal invariance (group.equal) theta
   fits match lavaan` over fixtures
   0017 (3-cat thresholds+loadings), 0018 (binary scale-veto), 0019
@@ -804,10 +808,6 @@ unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
 study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
 it on fresh draws (2.9-6.8%).
 
-DELTA response-scale equalities and fixed non-unit response scales are explicitly
-unsupported (TASK-53): released scales use residual-variance coordinates, where
-these restrictions become nonlinear. Canonical preparation rejects shared
-scale equality groups and linear constraints involving released scales before
-removing their coordinates. Use THETA residual-variance equalities or remove
-the scale restriction. Fixed unit scales and independent released scales retain
-their existing behavior.
+DELTA response-scale equalities, fixed non-unit scales and linear scale
+constraints use live lavaan coordinates (TASK-53.1); see the ordinal LS contract
+and the frozen `ordinal/delta_scales.json` gates above.

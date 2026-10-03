@@ -201,15 +201,21 @@ lavaan.
 
 The threshold-profiled ordinal SNLLS path covers:
 
-- all-ordinal, delta parameterization with fixed response scales
+- all-ordinal, delta parameterization with fixed unit response scales
 - the full affine threshold design: free thresholds, fixed rows, equality
   merges within and across groups, and threshold-only linear constraints
 - ULS, DWLS, and WLS (profiled Schur-complement weight)
 - multi-group fits with joint `n_b/N`-weighted threshold normal equations
 
-Released-scale delta is rejected by both all-ordinal SNLLS entry points:
-response standardization invalidates the affine delta profile. Nonlinear
-equality constraints are rejected by the shared GP classifier.
+Non-unit fixed or free DELTA scales retain their original `~*~` coordinates.
+They use the full-threshold GP moment map instead of the unit-scale Schur
+profile: thresholds are `delta_i * (tau_i - mu_i)` and correlations are
+`delta_i * delta_j * Sigma*_ij`. Scale coordinates stay nonlinear, while
+threshold and mean coordinates are conditionally linear. Affine equalities
+on scales remain in the generic constraint map. The compact-moment bounded
+route likewise switches to full moments for these scales. Frozen ULS oracle
+fixtures cover fixed, released, equal, constrained and grouped scales.
+Nonlinear equality constraints are rejected by the shared GP classifier.
 
 Theta now has a separate fast path for independently free, unbounded
 thresholds with no active equality constraints. It eliminates standardized

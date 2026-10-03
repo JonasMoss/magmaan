@@ -748,7 +748,7 @@ constexpr const char* k2GroupOrdinalCfa =
 // groups deliberately have different sample sizes so a missing n_b/N weight
 // in the joint normal equations would break parity with the legacy
 // unprofiled fit.
-TEST_CASE("Ordinal SNLLS rejects released-scale delta before profiling") {
+TEST_CASE("Ordinal SNLLS retains released DELTA scale coordinates") {
   const Eigen::MatrixXd X =
       ordinal_test_block(20260610, 400, {0.85, 0.78, 0.71, 0.66}, -0.45, 0.55);
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X, X});
@@ -773,10 +773,14 @@ TEST_CASE("Ordinal SNLLS rejects released-scale delta before profiling") {
       *pt, *rep, moments, nullptr, plan, *start);
   auto full = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
       *pt, *rep, moments, nullptr, plan, *start);
-  REQUIRE_FALSE(profiled.has_value());
-  REQUIRE_FALSE(full.has_value());
-  CHECK(profiled.error().detail.find("released-scale delta") != std::string::npos);
-  CHECK(full.error().detail.find("released-scale delta") != std::string::npos);
+  REQUIRE(profiled.has_value());
+  REQUIRE(full.has_value());
+  auto bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::ULS, *start);
+  REQUIRE(bounded.has_value());
+  CHECK(std::abs(profiled->fmin - bounded->fmin) < 1e-8);
+  CHECK(std::abs(full->fmin - bounded->fmin) < 1e-8);
+
 }
 
 TEST_CASE("Joint threshold profiling handles two-group ordinal fits") {

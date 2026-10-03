@@ -74,7 +74,8 @@ SEXP model(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema) {
     if (!valid) m.association_error = valid.error();
     auto s = ordinal_stats_from_arg(Rcpp::List(schema.get()));
     m.levels = s.n_levels;
-    auto ok = estimate::prepare_ordinal_delta_partable(m.ctx.pt, s, &m.starts);
+    auto ok = estimate::prepare_ordinal_partable(m.ctx.pt, s,
+        ordinal_parameterization_from_string(m.parameterization), &m.starts, &m.ctx.names.row_user);
     if (!ok) stop_fit(ok.error());
   } else if (kind == "mixed") {
     auto s = mixed_ordinal_stats_from_arg(Rcpp::List(schema.get()));

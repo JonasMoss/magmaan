@@ -755,15 +755,45 @@ magmaan reports about 0.771 and 0.880, df 10. Its WLSMV bundle nevertheless
 claims covariance/test availability: maximum common estimate error 0.154098,
 SE error 0.009725 and scaled-test difference -1.235463. The corresponding THETA
 residual equality passes. This is a lost model restriction, not a reporting
-convention discrepancy. TASK-53 decision 17 selects explicit rejection rather
-than nonlinear restriction support. Canonical DELTA preparation now rejects
-released scales sharing an equality group (including other parameter kinds),
-scales in linear constraints, and fixed non-unit scales, before changing the
-partable. It names the residual-coordinate boundary and THETA alternative.
-The diagnostic's DELTA equality branch is now an expected-error gate; its THETA
-parity branch remains unchanged. A pre-fix lab reproduction with a fixed 0.8
-scale reported 1.0; the new guard rejects it. Full ordinal C++ passes 146 cases /
-7,094 assertions with unchanged existing expectations.
+convention discrepancy. The user superseded the temporary rejection from
+`ae94fd9b` with TASK-53.1: DELTA now retains live response-scale coordinates.
+The same equality diagnostic reports both scales 0.8246215, df 11, maximum
+estimate error 1.58e-7, scale/common SE error 4.38e-8 and scaled-test error
+1.65e-7. THETA's residual-equality counterpart remains unchanged and passes.
+
+`regen_ordinal_delta_scales.R` pins lavaan 0.7-2 and seed 531072, writing only
+synthetic derived summaries to `ordinal/delta_scales.json`. Seven models cover
+fixed 0.8, two shared scales, a single release, DELTA threshold/loading
+invariance, the P-IV2 label-equality SCALAR model, equality over time and a fixed
+non-unit scale plus a linear scale constraint. The C++ golden gates free flags,
+labels, all estimates (including derived residuals), DWLS and WLSMV SEs
+(including live scales), unscaled/scaled statistics, scaling, shift and df at
+existing 1e-5 magnitude-scaled tolerances. Compact bounded and generic SNLLS
+routes additionally match frozen ULS estimates, and the observed Hessian is
+checked against a finite-difference gradient away from the optimum. The live R
+ordinal provenance file independently regenerates the synthetic data and fits
+all seven models against installed lavaan. It also gates standardized loading
+values/SEs at 1e-5 and fixed/equal/released-scale EBM predictions at the existing
+5e-4 factor-score tolerance.
+
+Changed expectations are coordinate corrections: the explicit-release unit
+guard now checks a free `~*~` rather than a free `~~`; the temporary rejection
+guard now checks retained restrictions; the provenance regression restricts a
+response scale rather than its derived residual; the old SNLLS rejection test
+now checks full-moment fitting, with frozen ULS estimates providing independent
+numerical evidence. The THETA API regression explicitly selects THETA during
+preparation, retaining all its existing numerical assertions. Lavaan confirms the explicit
+group-2 fixed scale remains fixed under threshold invariance. Augmentation no
+longer duplicates a source scale row; prepared handles use the selected
+parameterization and row provenance. Existing THETA numeric expectations and
+native inference defaults are unchanged. The grouped diagnostic counts DELTA
+scale rows and includes their SEs, rather than counting translated residuals.
+
+Final opt C++ verification: ordinal 147 cases / 9,474 assertions; spec 211 /
+14,676; API 28 / 788; inference 376 / 482,841. Estimate passes 564 / 16,320 and robcat 1 / 1. All previously fixed-unit DELTA and THETA numerical gates
+retain their existing tolerances. The full installed magmaanlab suite passes
+5,643 expectations (two existing skips and two existing two-level warnings);
+the ordinary R suite passes 1,736 expectations without failures or skips.
 
 ## Validation Areas
 
@@ -876,7 +906,7 @@ places to validate deliberately after R glue edits.
 ### Mplus categorical prerequisite probes (TASK-53; initial failures)
 
 The initial native failures below are superseded by the explicit ordinal
-preparation prerequisite section above; its equality-scale blocker is current.
+preparation prerequisite section above; its equality-scale blocker is superseded by TASK-53.1.
 
 The separate `mplus/probes_categorical.json` preserves the existing 972,086-byte
 probe fixture unchanged and adds P-IV2's 12 variants. Mplus 9.1 rejects binary
@@ -911,6 +941,6 @@ reports a covariance-admissibility warning. The diagnostic fails deliberately;
 these results cannot be classified as a robust convention mismatch.
 
 No frontend acceptance, preparation behavior, inference defaults, tolerances,
-or corpus coverage is changed. TASK-53 is blocked for a prerequisite-repair
-scope decision; its full increment acceptance remains pending. Previously
+or corpus coverage is changed. The prerequisite numerical failure is resolved by TASK-53.1; the full
+frontend increment acceptance remains pending. Previously
 completed opt Mplus checks pass: 34 cases / 12,362 assertions.

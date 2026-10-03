@@ -141,14 +141,29 @@ struct ThresholdLayout {
   std::vector<std::vector<std::int32_t>> free;
   std::vector<std::vector<double>> fixed;
   std::vector<std::vector<char>> present;
-  // Per block, per observed index: 1 if that ordinal indicator's `~~`
-  // self-variance is a free parameter — i.e. its response scale is released
-  // (Wu-Estabrook multigroup invariance, or the theta parameterization). The
-  // moment code then standardizes that indicator's implied covariances and
-  // thresholds by √Σᵢᵢ instead of comparing the raw delta moment. Empty / all-0
-  // for the single-group delta convention (raw comparison).
-  std::vector<std::vector<char>> scale_free;
+  // Live DELTA coordinates; absent scale rows imply the unit default.
+  std::vector<std::vector<std::int32_t>> delta_free;
+  std::vector<std::vector<double>> delta_fixed;
 };
+inline bool delta_needs_full_moments(const ThresholdLayout& layout) {
+  for (std::size_t b = 0; b < layout.delta_free.size(); ++b)
+    for (std::size_t i = 0; i < layout.delta_free[b].size(); ++i)
+      if (layout.delta_free[b][i] > 0 || layout.delta_fixed[b][i] != 1.0) return true;
+  return false;
+}
+
+inline double ordinal_delta(const ThresholdLayout& layout, const Eigen::VectorXd& theta,
+                            std::size_t b, Eigen::Index ov) {
+  if (b >= layout.delta_free.size()) return 1.0;
+  const auto fr = layout.delta_free[b][static_cast<std::size_t>(ov)];
+  return fr > 0 ? theta(fr - 1) : layout.delta_fixed[b][static_cast<std::size_t>(ov)];
+}
+inline double ordinal_delta_deriv(const ThresholdLayout& layout, std::size_t b,
+                                  Eigen::Index ov, Eigen::Index parameter) {
+  if (b >= layout.delta_free.size()) return 0.0;
+  return layout.delta_free[b][static_cast<std::size_t>(ov)] == parameter + 1 ? 1.0 : 0.0;
+}
+
 
 
 // Affine threshold model tau_b = c[b] + H[b] * gamma over all blocks, plus

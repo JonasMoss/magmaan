@@ -1275,13 +1275,10 @@ carry the label `mplus`.
   parameterizations and their multigroup defaults; all-ordinal DWLS fits,
   other categorical routes return unsupported-fit. **Check:** as increment 1;
   corpus WLSMV cases match where magmaan fits them.
-  TASK-53 prerequisite: explicit lab residual provenance and missing DELTA
-  residual coordinates repaired; default-lavaan robust reporting passes through
-  the retained-estimate WLSMV bundle, and derived DELTA scale projection passes.
-  Equality-labelled DELTA scales and fixed non-unit scales now return explicit
-  unsupported errors before preparation loses the restriction (decision #17).
-  DELTA response-scale equalities and fixed non-unit scales (nonlinear in
-  residual coordinates); rejected since TASK-53; build if a user model needs them.
+  TASK-53.1 prerequisite: DELTA response scales retain live lavaan coordinates,
+  including equality labels, fixed non-unit values and linear constraints.
+  Seven frozen WLSMV/DWLS/ULS cases and live ordinal tests gate estimates,
+  scale SEs and tests; THETA retains its residual coordinates.
 - [ ] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
   `|` statements and their defaults; NEW, equations, equalities and
   inequalities onto existing constraint machinery; indirect effects as defined

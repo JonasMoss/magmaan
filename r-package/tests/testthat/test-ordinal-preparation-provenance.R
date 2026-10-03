@@ -15,7 +15,7 @@ test_that("released response scales retain preparation through post-fit reconstr
   stamp <- attr(fit$partable, "magmaan.ordinal_preparation")
   expect_identical(stamp, rep(list(rep(2L, 4)), 2))
   n <- max(fit$partable$free)
-  released <- with(fit$partable, op == "~~" & lhs == "x1" & rhs == "x1" & group == 2)
+  released <- with(fit$partable, op == "~*~" & lhs == "x1" & rhs == "x1" & group == 2)
   expect_true(fit$partable$free[released] > 0L)
   robust <- robust_ordinal(fit, fit$ordinal_stats)
   ij <- vcov(fit, regime = "sandwich_ij")
@@ -25,7 +25,7 @@ test_that("released response scales retain preparation through post-fit reconstr
   policy <- policy_inference(fit)
   expect_true(policy$covariance_available)
   expect_equal(nrow(policy$covariance), n)
-  null <- fit_one("x2 ~~ c(1, 1)*x2")
+  null <- fit_one("x2 ~*~ c(1, 1)*x2")
   expect_true(null$converged)
   nested <- robust_nested_lrt(fit, null, data = fit$ordinal_stats, A.method = "delta", method = "restriction_map")
   expect_equal(nested$df_diff, 1)
@@ -66,16 +66,64 @@ test_that("explicit grouped theta residuals survive lab preparation", {
   expect_equal(sum(mp$free[residuals]>0L),4L)
 })
 
-test_that("DELTA scale restrictions are explicit unsupported errors", {
+
+test_that("live DELTA scale restrictions and invariance match lavaan", {
   skip_if_not_installed("lavaan")
-  d <- lavaan::HolzingerSwineford1939
-  ordered <- paste0("x", 1:4)
-  for (v in ordered) d[[v]] <- as.integer(cut(d[[v]], 3))
-  for (restriction in c("x1 ~*~ shared*x1; x2 ~*~ shared*x2",
-      "x1 ~*~ a*x1; x2 ~*~ b*x2; a == 2*b", "x1 ~*~ 0.8*x1")) {
-    spec <- model_spec(paste("f =~ x1+x2+x3+x4", restriction, sep="\n"),
-      ordered=ordered, parameterization="delta")
-    expect_error(fit_model(spec,d,estimator="DWLS"),
-      "unsupported DELTA response scale.*theta")
+  skip_if_not_installed("jsonlite")
+  fixture <- file.path("..", "..", "..", "cpp", "tests", "fixtures", "ordinal", "delta_scales.json")
+  reference <- jsonlite::fromJSON(fixture, simplifyVector=FALSE)$cases
+  set.seed(531072)
+  n <- 600L
+  eta <- matrix(rnorm(2*n),n,2)
+  eta[,2] <- .4*eta[,1]+sqrt(.84)*eta[,2]
+  x <- cbind(outer(eta[,1],c(.8,.7,.65)),outer(eta[,2],c(.85,.75,.6))) + matrix(rnorm(6*n,sd=.7),n,6)
+  d <- as.data.frame(apply(x,2,function(z) as.integer(cut(z,c(-Inf,-.5,.5,Inf)))))
+  ordered <- paste0("u",1:6)
+  names(d) <- ordered
+  d$g <- rep(1:2,each=n/2)
+  for (id in names(reference)) {
+    case <- reference[[id]]
+    grouped <- id %in% c("threshold_loading_invariance", "scalar_groups")
+    automatic <- id == "threshold_loading_invariance"
+    args <- list(syntax=case$model, ordered=ordered, parameterization="delta",
+      meanstructure=TRUE)
+    if (grouped) { args$group <- "g"; args$group_labels <- c("1","2") }
+    if (length(case$group_equal)) args$group_equal <- unlist(case$group_equal)
+    if (!automatic) args <- c(args,list(auto_var=FALSE,auto_fix_first=FALSE,
+      auto_cov_lv_x=FALSE,auto_cov_y=FALSE))
+    spec <- do.call(model_spec,args)
+    fit <- fit_model(spec,d,estimator="DWLS")
+    lavaan_args <- args
+    names(lavaan_args) <- gsub("_",".",names(lavaan_args),fixed=TRUE)
+    names(lavaan_args)[names(lavaan_args)=="syntax"] <- "model"
+    names(lavaan_args)[names(lavaan_args)=="group.labels"] <- "group.label"
+    oracle <- do.call(if (automatic) lavaan::cfa else lavaan::lavaan,
+      c(lavaan_args,list(data=d,estimator="WLSMV")))
+    expect_true(fit$converged, info=id)
+    expect_true(lavaan::lavInspect(oracle,"converged"), info=id)
+    mp <- fit$partable; lp <- lavaan::parTable(oracle)
+    key <- function(p) paste(p$lhs,p$op,p$rhs,p$group)
+    index <- match(key(mp),key(lp))
+    use <- !is.na(index) & mp$group>0
+    expect_equal(mp$free[use]>0L,lp$free[index[use]]>0L,info=id)
+    expect_equal(mp$est[use],lp$est[index[use]],tolerance=1e-5,info=id)
+    free <- use & mp$free>0L
+    bundle <- convention_inference(fit,"WLSMV")
+    expect_true(bundle$covariance_available,info=id)
+    expect_true(bundle$test$available,info=id)
+    expect_equal(sqrt(diag(bundle$covariance))[mp$free[free]],lp$se[index[free]],tolerance=1e-5,info=id)
+    expect_equal(bundle$test$statistic,unname(lavaan::fitMeasures(oracle,"chisq.scaled")),tolerance=1e-5,info=id)
+    expect_equal(bundle$test$df,unname(lavaan::fitMeasures(oracle,"df")),info=id)
+    std <- standardized(fit,bundle$covariance,type="all")
+    ls <- lavaan::standardizedSolution(oracle,type="std.all")
+    si <- match(key(mp),key(ls))
+    loadings <- mp$op=="=~" & mp$free>0L & !is.na(si)
+    expect_equal(as.numeric(std$theta)[mp$free[loadings]],ls$est.std[si[loadings]],tolerance=1e-5,info=id)
+    expect_equal(as.numeric(std$se)[mp$free[loadings]],ls$se[si[loadings]],tolerance=1e-5,info=id)
+    if (id %in% c("fixed_nonunit","equal_scales","released_scale")) {
+      scores <- factor_scores(fit,d,method="EBM")$scores[[1]]
+      reference_scores <- lavaan::lavPredict(oracle,method="EBM")
+      expect_equal(unname(scores),unname(reference_scores),tolerance=5e-4,info=id)
+    }
   }
 })

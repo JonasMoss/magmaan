@@ -234,8 +234,8 @@ Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
   // See measures_standardize_lv(): standardization is well-defined for
   // ordinal/mixed-ordinal fits, so no ordinal guard here. For ordinal/mixed
   // fits under the delta parameterization, the categorical indicators' latent
-  // responses are unit-variance, so std.all standardizes their loadings by the
-  // latent SD only (no √σ_rr division) — pass that through to the core.
+  // response SDs are 1/delta; the core includes their live/fixed scales in
+  // std.all instead of using the residual matrix placeholder.
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);

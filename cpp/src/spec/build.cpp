@@ -821,9 +821,9 @@ build_group_template(const parse::FlatPartable& flat,
     }
     if (!opts.fixed_x) apply_random_x(v, rows);
   }
-  // Response scales need a residual coordinate even when ordinary automatic
-  // variances are disabled. Ordinal preparation translates released scales
-  // into this coordinate; omitting it silently loses the requested dimension.
+  // Response scales need a residual matrix cell even when automatic variances
+  // are disabled. DELTA reports that residual as a derived value; THETA keeps
+  // the residual coordinate used by its standardized moment map.
   std::vector<std::string> response_variables;
   for (const auto& row : rows) {
     if (row.op == parse::Op::ResponseScale && row.lhs == row.rhs &&

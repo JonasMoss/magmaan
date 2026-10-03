@@ -39,7 +39,7 @@ ordinal_ls_objective(spec::LatentStructure pt,
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -228,7 +228,7 @@ ordinal_ls_newton_parts(spec::LatentStructure pt,
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr); !p.has_value()) {
     return std::unexpected(p.error());
   }
   return ordinal_ls_newton_parts_prepared(pt, rep, stats, theta, weights, parameterization);
@@ -1402,6 +1402,7 @@ fit_expected<Eigen::MatrixXd>
 ordinal_polychoric_model_correlation(
     const ThresholdLayout& layout,
     const model::Evaluation& eval,
+    const Eigen::VectorXd& theta,
     OrdinalParameterization parameterization,
     const char* who) {
   if (eval.moments.sigma.empty()) {
@@ -1413,26 +1414,10 @@ ordinal_polychoric_model_correlation(
   const Eigen::Index p = Sig.rows();
 
   const bool theta_param = parameterization == OrdinalParameterization::Theta;
-  const bool block_released =
-      b < layout.scale_free.size() &&
-      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
-                  [](char c) { return c != 0; });
-  if (!theta_param && block_released) {
-    std::vector<std::int32_t> scale_free(static_cast<std::size_t>(p), 0);
-    for (Eigen::Index i = 0; i < p; ++i) {
-      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
-        scale_free[static_cast<std::size_t>(i)] =
-            layout.scale_free[b][static_cast<std::size_t>(i)];
-      }
-    }
-    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
-    for (Eigen::Index j = 0; j < p; ++j) {
-      for (Eigen::Index i = j + 1; i < p; ++i) {
-        R(i, j) = mixed_assoc_moment(
-            Sig, scale_free, i, j, OrdinalParameterization::Theta);
-        R(j, i) = R(i, j);
-      }
-    }
+  if (!theta_param) {
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p,p);
+    for (Eigen::Index j = 0; j < p; ++j) for (Eigen::Index i = j + 1; i < p; ++i)
+      R(i,j) = R(j,i) = ordinal_delta(layout, theta, b, i) * ordinal_delta(layout, theta, b, j) * Sig(i,j);
     return R;
   }
 
@@ -1460,7 +1445,7 @@ ordinal_polychoric_omega_value(
             eval.error().detail));
   }
   auto R_or = ordinal_polychoric_model_correlation(
-      layout, *eval, parameterization, who);
+      layout, *eval, theta, parameterization, who);
   if (!R_or.has_value()) return std::unexpected(R_or.error());
   auto omega_or = rel::omega_multidim(omega_target, *R_or, omega_spec);
   if (!omega_or.has_value()) return std::unexpected(post_to_fit(omega_or.error()));
@@ -1496,7 +1481,7 @@ make_ordinal_polychoric_omega_functional(
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         std::string(who) + ": only single-group ordinal fits are supported"));
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -1554,7 +1539,7 @@ ordinal_scalar_profile_scaling_factor(
   }
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(post_to_fit(missing_or.error()));
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -1635,7 +1620,7 @@ ordinal_scalar_profile_misspec_scaling_factor(
   }
   auto missing_or = ordinal_ij_block_missing(stats, weights);
   if (!missing_or.has_value()) return std::unexpected(post_to_fit(missing_or.error()));
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -2365,7 +2350,7 @@ fit_ordinal_configured(spec::LatentStructure pt,
     return fail("ordinal fitting options require a single-level model with affine equalities only");
   if (auto valid = validate_stats(stats, rep, weights); !valid)
     return std::unexpected(valid.error());
-  if (auto prepared = prepare_ordinal_delta_partable(pt, stats, &starts, row_user); !prepared)
+  if (auto prepared = prepare_ordinal_partable(pt, stats, parameterization, &starts, row_user); !prepared)
     return std::unexpected(prepared.error());
   std::vector<bool> seen(static_cast<std::size_t>(pt.n_free()), false);
   for (int slot : pt.free) if (slot > 0) {
@@ -2554,7 +2539,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr, row_user);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr, row_user);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -2674,7 +2659,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return std::unexpected(v.error());
   }
   data::OrdinalStats stats = stats_adapter(moments);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
@@ -2695,7 +2680,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
             ") != prepared partable n_free (" +
             std::to_string(pt.n_free()) + ")"));
   }
-  if (parameterization == OrdinalParameterization::Theta) {
+  if (parameterization == OrdinalParameterization::Theta || delta_needs_full_moments(layout)) {
     if (bounds.empty()) {
       auto b_or = bounds_from_partable(pt);
       if (!b_or.has_value()) {
@@ -2902,7 +2887,7 @@ fit_expected<std::optional<Estimates>> fit_theta_free_thresholds(
   if (auto valid = validate_moments(moments, rep); !valid.has_value())
     return std::unexpected(valid.error());
   auto stats = stats_adapter(moments);
-  if (auto prep = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto prep = prepare_ordinal_partable(pt, stats, OrdinalParameterization::Theta, nullptr);
       !prep.has_value()) return std::unexpected(prep.error());
   if (x0.size() != pt.n_free())
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
@@ -3058,13 +3043,15 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   }
 
   data::OrdinalStats stats = stats_adapter(moments);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(layout_or.error());
   const ThresholdLayout& layout = *layout_or;
+  if (delta_needs_full_moments(layout))
+    return fit_ordinal_snlls_full_thresholds(std::move(pt), rep, moments, gamma_cache, plan, x0, backend, opts);
   if (auto valid = validate_ordinal_snlls_chart(layout, parameterization);
       !valid.has_value()) return std::unexpected(valid.error());
 
@@ -3225,15 +3212,13 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
   }
 
   data::OrdinalStats stats = stats_adapter(moments);
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+  if (auto p = prepare_ordinal_partable(pt, stats, parameterization, nullptr);
       !p.has_value()) {
     return std::unexpected(p.error());
   }
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(layout_or.error());
   const ThresholdLayout& layout = *layout_or;
-  if (auto valid = validate_ordinal_snlls_chart(layout, parameterization);
-      !valid.has_value()) return std::unexpected(valid.error());
 
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) {

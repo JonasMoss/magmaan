@@ -309,8 +309,8 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   // prepared (threshold- and scale-augmented) structures.
   {
     spec::LatentStructure p1 = alternative_pt, p0 = null_pt;
-    auto prepared1 = estimate::prepare_ordinal_delta_partable(p1, stats, nullptr, alternative_row_user);
-    auto prepared0 = estimate::prepare_ordinal_delta_partable(p0, stats, nullptr, null_row_user);
+    auto prepared1 = estimate::prepare_ordinal_partable(p1, stats, parameterization, nullptr, alternative_row_user);
+    auto prepared0 = estimate::prepare_ordinal_partable(p0, stats, parameterization, nullptr, null_row_user);
     if (!prepared1 || !prepared0)
       return unavailable(InferenceReason::NumericFailure,
                          !prepared1 ? prepared1.error().detail : prepared0.error().detail);

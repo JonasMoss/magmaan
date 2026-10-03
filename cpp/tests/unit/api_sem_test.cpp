@@ -746,8 +746,8 @@ TEST_CASE("api ordinal theta post-fit preserves explicit residual rows") {
   REQUIRE(estimate::fit_verdict(fit->estimates()).status == estimate::FitCheck::Passed);
 
   auto prepared = model->structure();
-  REQUIRE_OK(estimate::prepare_ordinal_delta_partable(
-      prepared, *stats, nullptr, &model->names().row_user));
+  REQUIRE_OK(estimate::prepare_ordinal_partable(
+      prepared, *stats, estimator.ordinal_parameterization, nullptr, &model->names().row_user));
   const auto ij = estimate::robust_ordinal_ij(
       model->structure(), model->matrix_rep(), *stats, fit->estimates(),
       estimator.ordinal_weight, estimator.ordinal_parameterization,

@@ -316,10 +316,10 @@ ConventionTest lavaan_nested_ordinal(spec::LatentStructure null_pt,
   };
   // Establish actual nesting before computing the delta restriction map:
   // a Jacobian rank difference alone does not establish nested models.
-  if (auto p = estimate::prepare_ordinal_delta_partable(alternative_pt, stats,
+  if (auto p = estimate::prepare_ordinal_partable(alternative_pt, stats, parameterization,
           nullptr, alternative_row_user); !p)
     return unavailable(InferenceReason::NumericFailure, p.error().detail);
-  if (auto p = estimate::prepare_ordinal_delta_partable(null_pt, stats,
+  if (auto p = estimate::prepare_ordinal_partable(null_pt, stats, parameterization,
           nullptr, null_row_user); !p)
     return unavailable(InferenceReason::NumericFailure, p.error().detail);
   auto c1 = estimate::build_eq_constraints(alternative_pt);

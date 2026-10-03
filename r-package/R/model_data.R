@@ -820,6 +820,8 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
         rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
         th_pos <- th_pos + 1L
       }
+      # Preserve an existing source scale row when supplying the category schema.
+      if (any(pt$op == "~*~" & pt$lhs == ov[[j]] & pt$rhs == ov[[j]] & pt$group == b)) next
       rr <- rr + 1L
       rows[rr, ] <- pt[1L, required, drop = FALSE]
       rows$id[rr] <- n0 + rr
@@ -836,7 +838,7 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
       rows$plabel[rr] <- ""
     }
   }
-  out <- reorder_delta_free(rbind(pt, rows))
+  out <- reorder_delta_free(rbind(pt, rows[seq_len(rr), , drop = FALSE]))
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered

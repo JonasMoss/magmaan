@@ -66,6 +66,9 @@ std::vector<char> threshold_parameter_mask(const ThresholdLayout& layout,
       }
     }
   }
+  for (const auto& block : layout.delta_free)
+    for (const auto fr : block)
+      if (fr > 0 && fr <= q) out[static_cast<std::size_t>(fr - 1)] = 1;
   return out;
 }
 
@@ -164,23 +167,17 @@ MomentCurvatureWeights ordinal_curvature_weights(
   MomentCurvatureWeights out{Eigen::MatrixXd::Zero(p, p),
                              Eigen::VectorXd::Zero(p)};
 
-  const bool block_released =
-      b < layout.scale_free.size() &&
-      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
-                  [](char c) { return c != 0; });
-  std::vector<std::int32_t> sf(static_cast<std::size_t>(p),
-                               theta_param ? 1 : 0);
-  if (block_released && !theta_param) {
-    std::fill(sf.begin(), sf.end(), 0);
-    for (Eigen::Index i = 0; i < p; ++i) {
-      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
-        sf[static_cast<std::size_t>(i)] =
-            layout.scale_free[b][static_cast<std::size_t>(i)];
-      }
+  if (!theta_param) {
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const auto ov = stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      out.u(ov) -= h(k) * ordinal_delta(layout, theta, b, ov);
     }
-  } else if (!theta_param) {
-    std::fill(sf.begin(), sf.end(), 0);
+    Eigen::Index r = nth;
+    for (Eigen::Index j = 0; j < p; ++j) for (Eigen::Index i = j + 1; i < p; ++i)
+      add_sigma_trace_weight(out.G, i, j, h(r++) * ordinal_delta(layout, theta, b, i) * ordinal_delta(layout, theta, b, j));
+    return out;
   }
+  const std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 1);
 
   // mu (nu + Lambda*alpha) enters the threshold residual whenever the model
   // has a mean structure, whether or not this indicator is standardized:
@@ -238,28 +235,29 @@ double ordinal_curvature_extra(const data::OrdinalStats& stats,
   const Eigen::Index p = stats.R[blk].rows();
   const Eigen::Index nth = stats.thresholds[blk].size();
   const Eigen::MatrixXd& Sig = moments.sigma[blk];
-  const bool block_released =
-      blk < layout.scale_free.size() &&
-      std::any_of(layout.scale_free[blk].begin(), layout.scale_free[blk].end(),
-                  [](char x) { return x != 0; });
-  std::vector<std::int32_t> sf(static_cast<std::size_t>(p),
-                               theta_param ? 1 : 0);
-  if (block_released && !theta_param) {
-    std::fill(sf.begin(), sf.end(), 0);
-    for (Eigen::Index i = 0; i < p; ++i) {
-      if (static_cast<std::size_t>(i) < layout.scale_free[blk].size()) {
-        sf[static_cast<std::size_t>(i)] =
-            layout.scale_free[blk][static_cast<std::size_t>(i)];
-      }
+  if (!theta_param) {
+    double out = 0.0;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const auto ov = stats.threshold_ov[blk][static_cast<std::size_t>(k)];
+      const double da = ordinal_delta_deriv(layout, blk, ov, a), dc = ordinal_delta_deriv(layout, blk, ov, c);
+      out += h(k) * (da * (threshold_deriv(layout, blk, k, c) - mu_deriv(J_mu, mu_off, ov, c)) +
+                     dc * (threshold_deriv(layout, blk, k, a) - mu_deriv(J_mu, mu_off, ov, a)));
     }
-  } else if (!theta_param) {
-    std::fill(sf.begin(), sf.end(), 0);
+    Eigen::Index r = nth;
+    for (Eigen::Index j = 0; j < p; ++j) for (Eigen::Index i = j + 1; i < p; ++i) {
+      const double di = ordinal_delta(layout, theta, blk, i), dj = ordinal_delta(layout, theta, blk, j);
+      const double ia = ordinal_delta_deriv(layout, blk, i, a), ic = ordinal_delta_deriv(layout, blk, i, c);
+      const double ja = ordinal_delta_deriv(layout, blk, j, a), jc = ordinal_delta_deriv(layout, blk, j, c);
+      out += h(r++) * ((ia * jc + ic * ja) * Sig(i,j) +
+          (ia * dj + di * ja) * sigma_deriv(J_sigma, sigma_off, p, i,j,c) +
+          (ic * dj + di * jc) * sigma_deriv(J_sigma, sigma_off, p, i,j,a));
+    }
+    return out;
   }
+  const std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 1);
 
   double out = 0.0;
-  const bool subtract_mu =
-      theta_param || (block_released && !theta_param);
-  const bool have_mu = subtract_mu && blk < moments.mu.size() &&
+  const bool have_mu = blk < moments.mu.size() &&
                        moments.mu[blk].size() == p;
   const Eigen::VectorXd it = implied_thresholds(layout, theta, blk);
   for (Eigen::Index k = 0; k < nth; ++k) {
