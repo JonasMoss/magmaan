@@ -271,8 +271,13 @@ TEST_CASE("Mplus input: aggregate rejection order and arbitrary input stability"
 TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
   std::ifstream file(std::string(MAGMAAN_FIXTURES_DIR) + "/mplus/probes.json");
   REQUIRE(file.good());
-  const auto probes = nlohmann::json::parse(file, nullptr, false);
+  auto probes = nlohmann::json::parse(file, nullptr, false);
   REQUIRE_FALSE(probes.is_discarded());
+  std::ifstream categorical_file(std::string(MAGMAAN_FIXTURES_DIR) + "/mplus/probes_categorical.json");
+  REQUIRE(categorical_file.good());
+  const auto categorical = nlohmann::json::parse(categorical_file, nullptr, false);
+  REQUIRE_FALSE(categorical.is_discarded());
+  probes.update(categorical);
   std::size_t count = 0, gated = 0;
   for (const auto& [id, probe] : probes.items()) for (const auto& [variant, v] : probe.at("variants").items()) {
     const auto title = v.at("title").is_null() ? "TITLE: " + id + " " + variant + ";" : v.at("title").get<std::string>();
@@ -296,7 +301,7 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
       CHECK(result.error().detail.find("[" + deviation + "]") != std::string::npos);
     } else CHECK(result.has_value() == (v.at("status") == "accepted"));
   }
-  CHECK(count == 122);
+  CHECK(count == 134);
   CHECK(gated > 15);
 }
 

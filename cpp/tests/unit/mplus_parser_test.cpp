@@ -101,6 +101,9 @@ TEST_CASE("Mplus MODEL: local corpus sweep") {
 TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partitions") {
   auto raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes.json"); REQUIRE(raw);
   auto probes=nlohmann::json::parse(*raw,nullptr,false); REQUIRE_FALSE(probes.is_discarded());
+  auto categorical_raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_categorical.json"); REQUIRE(categorical_raw);
+  auto categorical=nlohmann::json::parse(*categorical_raw,nullptr,false); REQUIRE_FALSE(categorical.is_discarded());
+  probes.update(categorical);
   int checked=0;
   for(auto probe=probes.begin();probe!=probes.end();++probe) for(auto variant=probe.value()["variants"].begin();variant!=probe.value()["variants"].end();++variant) {
     INFO(probe.key(),"/",variant.key()); const auto& v=variant.value();
@@ -227,5 +230,36 @@ TEST_CASE("Mplus MODEL: MS08 mixed conditioning is rejected in group sections") 
   for(const auto& section:{"[x1];","x1;","y1 WITH x1;"}) {
     auto m=parse::MplusParser::parse(std::string("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 x1 g;\nGROUPING=g(1=a 2=b);\nMODEL: f BY y1-y3; f ON x1;\nMODEL b: ")+section+"\n");
     REQUIRE_FALSE(m);if(m) continue;CHECK(m.error().detail.find("[MS08]")!=std::string::npos);CHECK(m.error().detail.find("remove")!=std::string::npos);
+  }
+}
+
+TEST_CASE("Mplus categorical probes: 9.1 shortcut evidence") {
+  auto raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_categorical.json"); REQUIRE(raw);
+  const auto probes=nlohmann::json::parse(*raw,nullptr,false); REQUIRE_FALSE(probes.is_discarded());
+  const auto& variants=probes.at("P-IV2").at("variants");
+  REQUIRE(variants.size()==12);
+  for (const auto& [name, v]:variants.items()) {
+    INFO(name);
+    if (name.ends_with("_metric")) {
+      CHECK(v.at("status")=="error");
+      CHECK_FALSE(v.at("diagnostics").empty());
+      continue;
+    }
+    CHECK(v.at("status")=="accepted");
+    REQUIRE_FALSE(v.at("tech1").empty());
+    if (name.ends_with("_configural")) {
+      REQUIRE(v.at("free_parameters").size()==1);
+      CHECK(v.at("free_parameters")[0]==(name.find("_binary_")!=std::string::npos ? 26 : 38));
+      CHECK(v.at("chi_square")[0].at("df")==16);
+    } else if (name.find("_ordinal_")!=std::string::npos) {
+      REQUIRE(v.at("free_parameters").size()==1);
+      CHECK(v.at("free_parameters")[0]==30);
+      CHECK(v.at("chi_square")[0].at("df")==24);
+    } else {
+      // Binary scalar input meaning is available from TECH1 even though this
+      // fixed sample does not converge. It is not numerical golden evidence.
+      CHECK(v.at("free_parameters").empty());
+      CHECK_FALSE(v.at("estimation_messages").empty());
+    }
   }
 }

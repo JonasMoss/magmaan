@@ -822,3 +822,27 @@ Protected by:
 Known weak spots: R examples catch workflow regressions but are not exhaustive;
 mean-structure, group, ordinal, and post-fit reconstruction paths remain the
 places to validate deliberately after R glue edits.
+
+### Mplus categorical prerequisite probes (TASK-53; pending decision)
+
+The separate `mplus/probes_categorical.json` preserves the existing 972,086-byte
+probe fixture unchanged and adds P-IV2's 12 variants. Mplus 9.1 rejects binary
+and ordinal METRIC under DELTA and THETA. CONFIGURAL and SCALAR meaning is
+recorded through generated commands and TECH1. Ordinal SCALAR fits converge
+properly with tight Demo convergence controls; binary SCALAR does not converge
+on this fixed sample, so those two variants supply no numerical golden.
+
+The independent `check_mplus_categorical_conventions.R` specifies ordinal
+SCALAR rows directly in pinned lavaan 0.7.2. Default lavaan WLSMV gives scaled
+chi-square 27.482813436125 (delta) / 27.482814143160 (theta), whereas
+`mimic="Mplus"` gives 27.535187965637 / 27.535188674204. The Demo prints
+27.535 for both with tight convergence controls. Parameters (30), df (24),
+and raw lavaan discrepancy agree between lavaan conventions; the robust scaling
+factor changes. The default-convention difference exceeds the corpus's
+printed precision allowance (approximately 0.000775 at this value).
+
+This is a reference-convention decision, not an oracle defect exemption.
+No frontend acceptance, preparation behavior, inference defaults, tolerances,
+or corpus coverage is changed. TASK-53 is blocked pending the intended
+numerical reference and Mplus-only reporting contract. Prerequisite opt
+Mplus tests pass: 34 cases / 12,362 assertions. Structural checks pass.

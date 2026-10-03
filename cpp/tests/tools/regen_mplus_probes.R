@@ -15,6 +15,8 @@ scratch <- path.expand('~/.cache/magmaan-logs/mplus-probes')
 mpdemo <- '/home/jonas/mplusdemo/mpdemo'
 Sys.setenv(OPENBLAS_NUM_THREADS = '1', OMP_NUM_THREADS = '1', MKL_NUM_THREADS = '1')
 if (!file.exists(mpdemo)) stop('Mplus Demo binary unavailable')
+categorical_only <- '--categorical' %in% commandArgs(trailingOnly = TRUE)
+if (categorical_only) scratch <- paste0(scratch, '-categorical')
 probes <- list()
 add <- function(id, variant, model = 'f BY y1-y3;', names = 'y1 y2 y3',
                 variable = '', analysis = 'ESTIMATOR = ML;', data = '',
@@ -155,6 +157,7 @@ make_data <- function(p, seed) {
     nm <- names[j]
     x[,j] <- if (nm == 'g') rep(codes, each = 500) else if (startsWith(nm,'x')) rnorm(n) else .7 * latent + rnorm(n)
     if (grepl('f2 BY',p$model,fixed=TRUE) && nm %in% c('y4','y5','y6')) x[,j] <- .7*latent2+rnorm(n)
+    if (p$id == 'P-IV2' && nm %in% c('u4', 'u5', 'u6')) x[,j] <- .7*latent2+rnorm(n)
     if (p$id == 'P-MG7' && nm == 'y4') x[,j] <- x[,j]+.25*latent
     if (p$id == 'P-MG7' && nm == 'y6') x[,j] <- .4*latent+rnorm(n)
     if (p$id == 'P-LB1' && p$variant == 'factor_at') x[,j] <- sqrt(.05)*latent+rnorm(n)
@@ -164,6 +167,9 @@ make_data <- function(p, seed) {
       if(p$variant == 'cubic') x[,j] <- x[,j]+time^2*quadratic+time^3*cubic
     }
     if (startsWith(nm,'u')) x[,j] <- as.integer(cut(x[,j], c(-Inf,-.5,.5,Inf)))
+  }
+  if (p$id == 'P-IV2' && grepl('_binary_', p$variant)) {
+    for (nm in names[startsWith(names, 'u')]) x[, nm] <- as.integer(x[, nm] > 1)
   }
   if (p$id == 'P-CT3') x[x[,'g'] == 2 & x[,'u1'] == 3, 'u1'] <- 2
   if (p$kind == 'missing_x') x[sample.int(n, n/10), 'x1'] <- -99
@@ -330,10 +336,26 @@ for (v in c('COVARIANCE','FULLCOV','CORRELATION','STDEVIATIONS CORRELATION','COV
   model='y1 y2; y1 WITH y2;',names='y1 y2',
   data=paste0('TYPE=',v,'; NOBSERVATIONS=',if(grepl('NGROUPS',v)) '5 7' else '5',';'),kind='divisor_summary')
 
+# P-IV2 is isolated so existing fixtures and their data seeds remain unchanged.
+for (parameterization in c('DELTA', 'THETA')) {
+  for (categories in c('ordinal', 'binary')) {
+    for (shortcut in c('CONFIGURAL', 'SCALAR', 'METRIC')) {
+      catadd('P-IV2', paste(tolower(parameterization), categories,
+                           tolower(shortcut), sep = '_'),
+        'f1 BY u1-u3; f2 BY u4-u6;', 'u1 u2 u3 u4 u5 u6',
+        analysis = paste0('ESTIMATOR = WLSMV; PARAMETERIZATION = ',
+          parameterization, ';\nMODEL = ', shortcut, ' (MODEL);\n',
+          'CONVERGENCE = 0.00000001; ITERATIONS = 10000;'),
+        groups = TRUE, note = paste(categories, 'categorical shortcut TECH1 probe'))
+    }
+  }
+}
+
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))
 if (!setequal(ids,names(settles))) stop('Probe inventory mismatch')
+if (categorical_only) probes <- Filter(function(p) p$id == 'P-IV2', probes)
 unlink(scratch,recursive=TRUE)
 dir.create(scratch,recursive=TRUE)
 all_results <- list()
@@ -360,7 +382,12 @@ for (p in probes) {
     model=p$model,data=p$data,title=p$title,seed=58000L+match(p$id,ids),note=p$note),parsed)
   cat(p$id,p$variant,parsed$status,'\n')
 }
-fixture <- file.path(root,'cpp/tests/fixtures/mplus/probes.json')
-dir.create(dirname(fixture),recursive=TRUE,showWarnings=FALSE)
-writeLines(toJSON(all_results,auto_unbox=TRUE,pretty=TRUE,digits=NA,null='null'),fixture)
-cat(length(ids),'probes;',length(probes),'variants\n')
+write_fixture <- function(results, name) {
+  fixture <- file.path(root, 'cpp/tests/fixtures/mplus', name)
+  dir.create(dirname(fixture), recursive = TRUE, showWarnings = FALSE)
+  writeLines(toJSON(results, auto_unbox = TRUE, pretty = TRUE, digits = NA,
+                   null = 'null'), fixture)
+}
+if (!categorical_only) write_fixture(all_results[names(all_results) != 'P-IV2'], 'probes.json')
+write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
+cat(length(unique(vapply(probes, `[[`, character(1), 'id'))), 'probes;', length(probes), 'variants\n')

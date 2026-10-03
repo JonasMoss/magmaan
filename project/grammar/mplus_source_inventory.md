@@ -371,6 +371,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-MG13 | MG06 | A group-only `y4 ON x1` or `f BY y4` | Does Mplus accept group-specific variable roles absent from overall MODEL? |
 | P-MG12 | MG03 | Negative integers, with integer and decimal spellings | Are negative codes and integral decimal spellings accepted? |
 | P-IV1 | IV01–IV05 | `MODEL = CONFIGURAL METRIC SCALAR (MODEL);` on a two-factor, six-indicator, two-group continuous CFA (once with markers, once with `f@1`) | Generated MODEL commands; reference group; factor covariances |
+| P-IV2 | IV03, MG09 | Two-factor categorical two-group CFA; DELTA/THETA, binary/ordinal, CONFIGURAL/SCALAR/METRIC with `(MODEL)` and TECH1 | Categorical shortcut expansion, identification and binary METRIC acceptance |
 
 **Later increments:**
 
@@ -451,6 +452,7 @@ These observations do not resolve or change the inventory rules.
 | P-MG13 | MG06 | A group-only regression absent from overall MODEL is rejected as an ignored MODEL statement. A group-only additional indicator is accepted; magmaan rejects its group-specific role because the common variable-role contract cannot preserve it. Write the relation in overall MODEL and fix it in the other groups. |
 | P-MG12 | MG03 | Accepted: negative integer -1 and integral decimal spellings -1.0 and 2.0. Canonical frontend codes must be integer strings. |
 | P-IV1 | IV01–IV05 | Planner added variant variance_both (`f1@1 f2@1`; the lane's `f1 f2@1` fixed only f2): accepted, free counts 38/34/30, df 16/20/24; TECH1 PSI fixed in G1, free in G2 for metric and scalar. Original variants: both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
+| P-IV2 | IV03, MG09 | DELTA and THETA, binary and ordinal: METRIC errors in all four variants. CONFIGURAL fixes scales (DELTA) or residual variances (THETA) in every group, factor means at zero, and releases non-marker loadings and thresholds in every group; 38 free / df 16 ordinal, 26 free / df 16 binary. SCALAR prints the overall BY model only; ordinal fits have 30 free / df 24. Probes use explicit tight convergence controls. Binary SCALAR inputs are accepted and TECH1 is present, but this sample does not converge, so these variants are meaning evidence only. Numerical convention decision pending; see TASK-53. |
 | P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
 | P-CT1 | CT03 | Within-variable range accepted, both U1 thresholds free. Across-variable range accepted, first thresholds share number 1. Bare [U1] errors as an ignored statement. |
 | P-CT2 | CT07 | Error: CATEGORICAL is for dependent variables only; U1 is independent in this model. |
@@ -519,3 +521,21 @@ The end-to-end gate remains 22 accepted/matched of 68 eligible cases, with no
 failures. `check_mplus_data.R` independently checks 25 Demo data cases / 28
 per-group moments at printed precision and single/multigroup raw.csv fit
 round trips. Derived evidence is `cpp/tests/fixtures/mplus/data_summary.json`.
+
+### Increment 3 prerequisite evidence (TASK-53; implementation pending)
+
+`regen_mplus_probes.R --categorical` runs P-IV2 alone and writes
+`cpp/tests/fixtures/mplus/probes_categorical.json`; the original
+`probes.json` remains byte-identical. Full generation also writes the two files
+separately and preserves the original probes' seeds. Together the files contain
+51 probes / 134 variants (50 / 122 original, 1 / 12 categorical).
+
+`check_mplus_categorical_conventions.R` independently specifies the ordinal
+SCALAR model in lavaan from the same synthetic input data, without frontend
+lowering. Both parameterizations converge with 30 parameters and 24 df.
+Default lavaan WLSMV reports scaled chi-square about 27.483; Mplus 9.1 prints
+27.535 in both parameterizations with explicit tight convergence controls. Lavaan `mimic="Mplus"` reports about
+27.535 in both parameterizations. This exceeds the existing Mplus printed
+precision allowance under default lavaan conventions. TASK-53 needs a choice
+of numerical reference convention before implementing its fit contract; no
+CT/MG09/IV03 implementation status or corpus tally is promoted by these probes.
