@@ -333,13 +333,46 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-03: the ordinary FIML policy is composed for single-level random-x
+models with affine equalities, one or more groups. Covariance is the
+observed-bread casewise-score sandwich. Global and nested score tests use
+observed sensitivity with the expected metric. The global LR uses the saturated
+observed-H1 spectrum, and the nested LR uses the larger fit's observed bread
+and direct casewise-score meat through the exact restriction map, reported with
+SB and PEBA4. Calibration is limited (research/44, decisions/03). The lab's
+transported-influence FIML Satorra driver is unchanged and is no longer a default.
+
+2026-10-03: misspecification-robust inference is a
+[scope requirement](../scope.md#misspecification-robust-inference-requirement).
+Lab `estimated_weight` switches default to TRUE, and generic lab covariance and
+nested scores default to robust geometry. Named compatibility and diagnostic
+routes stay explicit, and unsupported observed or estimated-weight laws fail.
+
+2026-10-03: the ML nested geometry is calibrated (decisions/04). The score test
+is primary (observed-H0 sensitivity, expected metric); the LR uses the observed
+larger-model Satorra-2000 spectrum. Both report SB and PEBA4.
+
+2026-10-03: the `lavaan-0.7.2` preset fits all-ordinal DWLS in both R packages.
+The named eight-case simulated parity set passes all 160 replicates under the
+approved endpoint contract (exit criterion 2). `LatentStructure` records its
+ordinal preparation, projected through the partable and an R attribute;
+re-preparation is a no-op or an error.
+
+2026-10-03: `magmaan_model()` lazily caches native prepared structure;
+`magmaan()` fits through it and rebuilds after serialization, falling back for
+ML2S and ordinal fitting options. Prepared ordinal fits match fresh
+equality-constrained fits and retain the reporting moment/weight layout.
+
+2026-10-03: the DWLS policy calibration study (decisions/05) has a frozen
+runner and pilot; production runs on Modal, one container per cell.
+
 2026-10-02: ordinary reporting selects historical lavaan bundles through
 `lavaan_compat = NULL` (policy default), with matching cache keys, inference
 metadata and result attributes. Explicit output says lavaan compatibility;
 the unreleased `convention` argument was renamed without an alias.
 
-2026-10-02: lab estimated-weight switches consistently default to FALSE;
-RBM exposes fixed/estimated-weight selection. Ordinary policy is unchanged.
+2026-10-02: RBM exposes fixed/estimated-weight selection. (That day's FALSE
+lab default was reversed on 2026-10-03.)
 
 2026-10-02: CI is configured for both portable R source-package checks, with
 weekly dev-preset sanitizers and domain-level LLVM coverage artifacts (no
