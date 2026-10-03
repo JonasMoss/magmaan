@@ -96,6 +96,20 @@ own check.
 - **Constraints.** Affine equalities are validated; defined parameters use the
   delta method with the active covariance. Fixed, omitted and equality-written
   nested nulls share one null geometry (`policy nested embedding: ...`).
+- **Likelihood-score contracts.** `policy_score_contracts_test.cpp` gates
+  `policy score contracts: stationarity raw meat and projection` for complete,
+  MCAR and MAR rows in one/two groups, including a single-observed-variable
+  pattern. It checks finite-difference casewise scores and observed bread,
+  free-direction stationarity (half the terminal 1e-3 deviance-gradient
+  tolerance), raw sandwich covariance, nuisance orthogonality and projected
+  raw cross-products. `policy score contracts: equivalent constraints at a
+  common null point` compares shared labels, `==` rows and two-group
+  `group.equal` in common larger-model coordinates (relative 1e-8), including
+  global/nested statistics and spectra. `policy score contracts: two-group
+  complete-data ML reduction` gates nested observed scores and covariance.
+  `policy score contracts: actual Heywood PSD boundary has typed inference`
+  uses a fitted PSD boundary, checking its flag and finite available values
+  or typed unavailability. These are component identities, not calibration.
 - **Retained data and refits.** Inference reuses the fit's retained data and
   geometry; `infer()` after `inference = FALSE` equals the default call;
   `anova()` requires the same observations in the same order and both fits'

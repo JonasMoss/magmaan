@@ -59,6 +59,12 @@ and a direct frozen lavaan MLR SE comparison,
 grouped components, and first-principles finite-difference casewise scores at a
 misspecified larger fit. Correct-specification large-N comparison with the
 transported spectrum is asymptotic (5% at N=20000), not a finite-sample identity.
+`policy_score_contracts_test.cpp` additionally gates free-direction stationarity,
+raw score-meat covariance, observed bread by score differentiation, direct
+embedded-null projected scores, nuisance orthogonality, sparse MAR patterns,
+constraint-spelling equivalence at a common point and actual PSD-boundary
+flagging. The two-group complete-data nested observed score statistic and
+spectrum reduce to ML at relative 1e-8; covariance reduces at absolute 1e-9.
 Global score and LR-spectrum reductions to ML are asymptotic.
 Calibration evidence is research/44 for global geometry and decisions/03 for
 nested observed score, with no MAR cells in the latent sensitivity panel,

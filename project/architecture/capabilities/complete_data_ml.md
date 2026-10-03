@@ -1,5 +1,10 @@
 ### Complete-data ML and inference
 
+- `policy_score_contracts_test.cpp` gates two-group complete-data covariance
+  and nested observed-score reduction from FIML, equivalent label/`==`/
+  `group.equal` restrictions at a shared evaluation point (relative 1e-8),
+  and finite or typed policy inference on an actual Heywood PSD-boundary fit.
+  These gates preserve raw score second moments and existing policy defaults.
 - Normal-theory ML fitting defaults to NLopt L-BFGS. Heuristic start values
   sign each free loading by its indicator's covariance with the factor's
   marker, and terminal audit records projected-gradient stationarity at the

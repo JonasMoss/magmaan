@@ -356,7 +356,7 @@ ordinary API exposes barrier fitting experimentally as
 
 #### ML and FIML
 
-- [ ] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**
+- [x] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**
   Retain uncentered score second moments as the baseline for ML/FIML
   parameter sandwiches and global/nested score-test calibration under joint
   population sampling. The
@@ -390,8 +390,14 @@ ordinary API exposes barrier fitting experimentally as
   agreement. FIML adopted observed sensitivity on 2026-10-02 (see the FIML
   policy item below); its finite-sample conservatism is
   [banked](speculative.md#fiml-observed-sensitivity-finite-sample-correction). The centering comparison is now banked in place, with
-  no queued extension. Check excluded constraint/boundary component contracts
-  independently; penalty-specific inference follows in 0.3.0.
+  no queued extension. `policy_score_contracts_test.cpp` independently gates
+  complete/MCAR/MAR free-direction stationarity, observed bread, raw sandwich
+  meat, null-score projection, one/two-group equivalent constraints, two-group
+  complete-data nested score reduction, a single-observed-variable MAR pattern
+  and an actual Heywood PSD boundary. Constraint comparisons use one common
+  evaluation point and relative 1e-8 tolerance; stationarity uses half the
+  terminal 1e-3 deviance-gradient tolerance. These are component checks, not
+  additional calibration. Penalty-specific inference follows in 0.3.0.
   Missingness patterns are not sampling groups.
 
 - [x] **M — investigate ML/FIML sandwich and Wald coverage gaps** (2026-10-02,
