@@ -7,6 +7,8 @@ usage <- 'Usage: Rscript run_experiment.R MODE [--run-id ID] [--workers W]
   --production 2000 null/coverage, 1000 power replicates; separate compute approval required
   --workers W  1..4, one math thread each (default 1)
   --run-id ID  fresh immutable output directory (default mode name)
+  --cell ID    run one cell only and save its raw rows (Modal fan-out; see modal/)
+  --out-dir D  write to D instead of results/dwls-policy/<run-id>
   --help       show help
 No automatic production launch. Frozen summaries exclude raw per-fit rows.'
 if ('--help' %in% args) { cat(usage,'\n'); quit(save='no') }
@@ -15,7 +17,7 @@ opt <- function(key,default) {
   if(at==length(args) || startsWith(args[at+1],'--')) stop('Missing value for ',key)
   args[at+1]
 }
-if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--run-id','--workers'))) stop('Unknown option')
+if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--run-id','--workers','--cell','--out-dir'))) stop('Unknown option')
 modes <- intersect(args,c('--preflight','--smoke','--pilot','--production'))
 if(length(modes)!=1) stop(usage)
 mode <- substring(modes,3)
@@ -29,7 +31,8 @@ source(file.path(here,'R','compute.R'))
 source(file.path(here,'R','summarize.R'))
 run_id <- opt('--run-id',mode)
 if(!grepl('^[a-zA-Z0-9_-]+$',run_id)) stop('Invalid run ID')
-out <- file.path(here,'results','dwls-policy',run_id)
+out <- opt('--out-dir',file.path(here,'results','dwls-policy',run_id))
+only_cell <- as.integer(opt('--cell',NA))
 if(dir.exists(out)) stop('Run exists; choose a fresh --run-id')
 dir.create(out,recursive=TRUE)
 seed_base <- c(preflight=817130001L,smoke=817130001L,pilot=817140001L,production=817150001L)[[mode]]
@@ -49,6 +52,9 @@ if(mode=='preflight') {
   population <- dwls_population(cells,out)
   jobs <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i)
     data.frame(cell_id=i,replicate=seq_len(if(mode=='production') cells$production_reps[i] else if(mode=='smoke') 2L else 20L))))
+  # A single-cell run reproduces that cell's slice of the full run: seeds depend
+  # only on the cell and replicate, and population targets are recomputed in full.
+  if(!is.na(only_cell)) jobs <- jobs[jobs$cell_id==only_cell,,drop=FALSE]
   start <- proc.time()[['elapsed']]; rows <- list()
   for(first in seq(1L,nrow(jobs),by=20L)) {
     indices <- first:min(first+19L,nrow(jobs))
@@ -64,6 +70,9 @@ if(mode=='preflight') {
     write_csv(data.frame(completed=max(indices),total=nrow(jobs),elapsed_seconds=elapsed,
       eta_seconds=elapsed*(nrow(jobs)-max(indices))/max(indices)),file.path(out,'progress.csv'))
     cat('Completed ',max(indices),'/',nrow(jobs),'; elapsed ',round(elapsed,1),'s\n',sep=''); flush.console()
+  }
+  if(!is.na(only_cell)) {
+    cat('Cell ',only_cell,' raw rows saved: ',out,'\n',sep=''); quit(save='no')
   }
   dwls_summarize(raw,cells,out)
   if(any(is.finite(raw$policy_gap) & raw$policy_gap>1e-7)) stop('Policy equivalence gate failed')
