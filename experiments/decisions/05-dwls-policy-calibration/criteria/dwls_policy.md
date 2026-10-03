@@ -35,3 +35,29 @@ power. Keep the non-invariant-loading family for the loading step (metric
 versus configural); eight nested power cells remain, for 146 cells overall.
 A genuine threshold-invariance test requires a separately validated restriction
 map and is outside this study. All other design choices remain unchanged.
+
+## Amendment 2026-10-03 (after production, before confirmation)
+
+Production (`results/dwls-policy/production-2026-10-03`) found the policy
+global SB and PEBA4 references over-rejecting at df >= 53 (SB median 11%,
+up to 20.5%; still 8-12% at N = 1000), while the scaled-shifted adjustment of
+the same robust-ordinal spectrum stayed within 3.5-7.8%. Size-adjusted power
+was identical across arms. On the user's decision (2026-10-03) the DWLS global
+policy reference becomes scaled-shifted on that spectrum. The statistic
+(n F), its spectrum and the IJ covariance are unchanged, so the switch keeps
+the misspecification-robust ingredients and changes only the reference-law
+approximation.
+
+Because the reference was chosen after seeing production data, it is confirmed
+on fresh draws before adoption is reported as validated: the 64 global cells
+(52 null, 12 power) rerun with seed base 817160001 and the registered replicate
+counts (2,000 null, 1,000 power). Confirmation criterion, fixed now: policy
+scaled-shifted rejection within [3%, 7%] in every null cell with N >= 500, the
+registered flag rule. Cells outside it are reported as flags; the reference is
+not tuned on the confirmation draws.
+
+The nested estimated-weight profile law is not changed by this amendment.
+Its production calibration failed in both directions (SB 0.1-2.2%, PEBA4
+4-18% and worsening with N) with 80-370 spectrum terms for 10-15 restrictions;
+it is under diagnosis (board task-17.3) and any replacement needs its own
+registered confirmation.
