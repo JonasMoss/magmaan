@@ -25,3 +25,13 @@ Per-replicate policy gaps compare explicit library primitive covariance/statisti
 ## Amendment 2026-10-03 (after availability preflight, before pilot)
 
 Board task-17.1 comment 6 corrects the second theta nesting: H1 uses group_equal = "thresholds"; H0 uses c("thresholds", "loadings"). This is the Wu–Estabrook metric step, with loading restrictions. Thresholds-plus-loadings versus loadings-only releases group-2 response scales/intercepts and is not nested by parameter restriction; the recorded not_nested verdict was correct. All other registered design choices remain as written. The threshold-shift power family is retained as requested, but its interpretation must respect this corrected pair.
+
+## Amendment 2026-10-03 (after corrected preflight, before smoke or pilot)
+
+Board task-17.1 comment 10 drops the threshold-shift nested power family.
+Both models in the corrected Wu–Estabrook metric step impose equal thresholds,
+so a threshold perturbation misspecifies both and is not threshold-invariance
+power. Keep the non-invariant-loading family for the loading step (metric
+versus configural); eight nested power cells remain, for 146 cells overall.
+A genuine threshold-invariance test requires a separately validated restriction
+map and is outside this study. All other design choices remain unchanged.

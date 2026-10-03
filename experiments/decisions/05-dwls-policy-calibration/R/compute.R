@@ -13,7 +13,7 @@ dwls_cells <- function() {
   subset <- rbind(base('coverage',2,c(2,5),'symmetric',c(300,1000),2,'theta',.2),
                   base('coverage',2,c(2,5),'symmetric',300,2,'theta',.4))
   power_g <- base('global',2:3,c(2,5),'symmetric',c(200,500,1000),cross=.3,role='power')
-  power_n <- base('nested',2:3,c(2,5),'symmetric',c(400,1000),2,'theta',nesting=c('metric','thresholds'),role='power')
+  power_n <- base('nested',2:3,c(2,5),'symmetric',c(400,1000),2,'theta',nesting='metric',role='power')
   x <- rbind(g,mg,nested,coverage,subset,power_g,power_n)
   x$cell_id <- seq_len(nrow(x)); x$production_reps <- ifelse(x$role=='power',1000L,2000L)
   x
@@ -44,7 +44,6 @@ dwls_draw_data <- function(cell, seed, n=cell$n) {
     z <- matrix(rnorm(as.integer(n/cell$groups)*p),ncol=p)%*%chol(sigma)
     d <- as.data.frame(lapply(seq_len(p),function(j) {
       threshold <- cuts
-      if (cell$role=='power' && cell$family=='nested' && cell$nesting=='thresholds' && g==2 && j==2) threshold[1] <- threshold[1]+.3
       as.integer(cut(z[,j],c(-Inf,threshold,Inf)))
     }))
     names(d) <- paste0('x',seq_len(p)); if(cell$groups==2) d$group <- c('a','b')[g]
