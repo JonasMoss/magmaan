@@ -554,7 +554,7 @@ and all-ordinal DWLS or require every lavaan variant for release.
 
 ## Inference policy
 
-**Principle: misspecification-robust by default (adopted 2026-10-03).** Real
+**Principle: misspecification-robust by default (adopted 2026-10-03; the requirement and its component-by-component consequences are owned by [scope](../scope.md#misspecification-robust-inference-requirement)).** Real
 models are misspecified, so every default inference recipe must stay
 consistent when the fitted model is wrong. Expected information is not: it
 drops the residual terms of the true curvature. Defaults therefore use

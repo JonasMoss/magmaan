@@ -67,6 +67,38 @@ dependent designs and design-based survey or randomization inference are not
 implied by a robust covariance label. Ergodicity alone does not specify a
 central limit theorem or an estimable variance.
 
+### Misspecification-robust inference (requirement)
+
+Adopted 2026-10-03. Every default inference component of the ordinary policy
+must be misspecification-robust: its covariance or reference law must be
+consistent whenever the component's own null hypothesis holds, including when
+the fitted model is misspecified, unless that null itself asserts correct
+specification. This is a requirement, not a preference among calibrated
+options. What it demands depends on what each component's null asserts.
+
+| Component | What its null asserts | Consequence |
+| --- | --- | --- |
+| Parameter covariance, Wald tests and intervals | Nothing about model correctness: the target is the pseudo-true $\theta(P)$ | Sandwich with observed-information bread and empirical score or moment meat; estimated-weight influence for data-dependent weights (DWLS, GLS, WLS) |
+| Nested tests (score, likelihood ratio, fit-function difference) | The restriction holds at the larger model's pseudo-true value; the larger model may be wrong | Observed-information sensitivity and spectra; estimated-weight laws for least-squares estimators (the DWLS profile law). Fixed-weight or expected-information versions are comparators only |
+| Global goodness-of-fit tests | The model is correct | Consistency is needed only under that null. With complete data, the expected normal-theory information is the limit of the observed Hessian there, even for nonnormal data, so it is admissible and simulations choose. Under MAR missingness the pattern-conditional expected information is not the Hessian even for a correct model, so FIML uses observed information |
+| Score-test metric | A free choice: any fixed positive definite metric with its matching spectrum gives a consistent test | Expected information is allowed, and is used for stability |
+
+Consequences:
+
+- A recipe that is inconsistent under misspecification does not become a
+  default because it calibrates better in correctly specified finite samples.
+  Robust tests can be less accurate at small N than model-based ones; that
+  cost is accepted.
+- Calibration studies document the adopted robust recipes; they do not select
+  inconsistent alternatives. A poorly calibrated robust recipe calls for
+  finite-sample work that preserves consistency (corrected references,
+  multiplier or bootstrap calibration), which stays research-tier until
+  validated.
+- Explicit lavaan compatibility output (`lavaan_compat`) reproduces lavaan's
+  recipes, robust or not, and is labelled as compatibility rather than policy.
+- The robustness concerns the structural model. Identifiability, regularity
+  and the sampling law above remain required.
+
 ### Group allocation and likelihood-score covariance
 
 Settled 2026-10-01: the sampling law determines whether between-group score
