@@ -826,11 +826,14 @@ them but leaves 83 budget decisions unresolved, including one minimum. No
 acceptance policy follows. Reference-only QR of the total objective Jacobian,
 retaining the observed curvature correction, lowers the two flat Hessian
 conditions from 6.8e13/2.2e13 to 1.2/1.6; all 25 minima have condition below
-13.6 in these coordinates. The next implementation must retain that correction
-separately from J'J and transport the Newton solve through the QR coordinates,
-then calibrate construction/projection uncertainty jointly with NTML and fresh
-controls. Transforming an already rounded cross-product is insufficient;
-statistical regularization is not indicated by this coordinate evidence.
+13.6 in these coordinates. Core now retains the analytic correction independently and transports the
+Newton solve through full-rank QR coordinates. The 175-point implementation
+check resolves both flat curvatures (conditions 1.20/1.59), with step discrepancy
+below 1.94e-11 in objective-curvature units against independent 90-digit
+derivatives. The sampling-metric guard still rejects all points. See the
+[least-squares capability contract](capabilities/least_squares.md). Remaining
+work is usable construction/projection uncertainty, joint NTML calibration and
+fresh confirmation; no statistical regularization or acceptance default follows.
 
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,

@@ -633,12 +633,12 @@ Eigen::MatrixXd vech_gradient_to_trace_weight(const Eigen::VectorXd& h,
 
 }  // namespace
 
-fit_expected<Eigen::MatrixXd>
-moment_quadratic_hessian(const model::ModelEvaluator& ev,
+fit_expected<MomentCurvature>
+moment_quadratic_curvature(const model::ModelEvaluator& ev,
                          const SampleStats& samp,
                          const Eigen::VectorXd& theta,
                          const Weight& weight) {
-  const char* who = "gmm::moment_quadratic_hessian";
+  const char* who = "gmm::moment_quadratic_curvature";
   auto pt = quadratic_point(ev, samp, theta, weight, who);
   if (!pt.has_value()) return std::unexpected(pt.error());
   auto assembled = ev.assembled(theta);
@@ -660,13 +660,13 @@ moment_quadratic_hessian(const model::ModelEvaluator& ev,
     }
   }
   const auto& layout = pt->layout;
-  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  MomentCurvature out{Eigen::MatrixXd::Zero(q, q), Eigen::MatrixXd::Zero(q, q)};
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const double n_b = static_cast<double>(samp.n_obs[b]);
     const Eigen::MatrixXd Jb = block_moment_jacobian(samp, pt->eval, layout, b);
     const Eigen::MatrixXd& Wb = pt->W[b];
     const Eigen::VectorXd h = Wb * block_moment_delta(samp, pt->eval.moments, layout, b);
-    H.noalias() += n_b * (Jb.transpose() * Wb * Jb);
+    out.gauss_newton.noalias() += n_b * (Jb.transpose() * Wb * Jb);
 
     const Eigen::Index p = pt->eval.moments.sigma[b].rows();
     const Eigen::Index cov_off = layout.has_means ? p : 0;
@@ -690,16 +690,29 @@ moment_quadratic_hessian(const model::ModelEvaluator& ev,
         if (layout.has_means) {
           h2 += h.head(p).dot(detail::second_mu(la, lc, bm, sow.A_alpha));
         }
-        H(a, c) += n_b * h2;
-        if (a != c) H(c, a) += n_b * h2;
+        out.correction(a, c) += n_b * h2;
+        if (a != c) out.correction(c, a) += n_b * h2;
       }
     }
   }
-  H = (0.5 * (H + H.transpose())).eval();
-  if (!H.allFinite()) {
+  out.gauss_newton = (0.5 * (out.gauss_newton + out.gauss_newton.transpose())).eval();
+  if (!out.gauss_newton.allFinite() || !out.correction.allFinite()) {
     return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
         std::string(who) + ": non-finite Hessian"));
   }
+  return out;
+}
+
+fit_expected<Eigen::MatrixXd>
+moment_quadratic_hessian(const model::ModelEvaluator& ev,
+                         const SampleStats& samp,
+                         const Eigen::VectorXd& theta,
+                         const Weight& weight) {
+  auto parts = moment_quadratic_curvature(ev, samp, theta, weight);
+  if (!parts) return std::unexpected(parts.error());
+  Eigen::MatrixXd H = parts->gauss_newton + parts->correction;
+  if (!H.allFinite()) return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+      "gmm::moment_quadratic_hessian: non-finite Hessian"));
   return H;
 }
 

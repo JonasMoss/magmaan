@@ -14,6 +14,11 @@ NewtonBoxSolution solve_newton_box(
   r.applied = true; r.normals = normals; r.lower = lower;
   auto& out = r.solution;
   out.status = system.status; out.condition = system.condition;
+  if (system.coordinate_map.size()) {
+    out.status = NewtonAccuracyStatus::Unsupported;
+    r.detail = "box correction requires the diagonal-coordinate system";
+    return r;
+  }
   if (out.status != NewtonAccuracyStatus::Available) return r;
   out.status = NewtonAccuracyStatus::Unavailable;
   const Eigen::Index n = gradient.size(), m = lower.size();

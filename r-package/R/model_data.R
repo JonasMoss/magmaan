@@ -2129,6 +2129,9 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # `newton_audit`: reduced curvature, sampling-metric factor, whitened score
 # residual and factor rank/condition. This recomputes owning C++ artifacts
 # without altering the stored verdict or its acceptance thresholds.
+# Unrestricted complete-data LS also retains the independent observed
+# correction, the QR coordinate map and equilibrated curvature, the Jacobian
+# condition/reconstruction residual and the Newton step in reduced coordinates.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {

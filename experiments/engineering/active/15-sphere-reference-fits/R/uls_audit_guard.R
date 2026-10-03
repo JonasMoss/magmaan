@@ -1,6 +1,7 @@
 # Numerical calibration at fixed points, including controls near the budget.
 # This lane records conditional intervals; it never replaces a fit verdict.
 run_uls_audit_guard <- function(args, here) {
+  curvature <- '--uls-audit-curvature' %in% args
   value <- function(k, default) {
     i <- match(k,args); if (is.na(i)) return(default)
     if (i==length(args) || startsWith(args[i+1L],'--')) stop('missing ',k)
@@ -13,9 +14,10 @@ run_uls_audit_guard <- function(args, here) {
       '90-digit forward-error comparisons and conditional projection intervals; no optimization or default change.',
       'Inspect diagonal curvature and a reference-only Jacobian QR change of coordinates.',
       'Requires mpmath and the square-root artifact API; matrices remain local.',sep='\n'),'\n')
+    cat('Use --uls-audit-curvature instead of --uls-audit-guard to validate the implemented QR curvature and Newton steps.\n')
     return(invisible(NULL))
   }
-  known <- c('--ordinary','--uls-audit-guard','--smoke','--run-id','--source-run','--factor-run','--python')
+  known <- c('--ordinary','--uls-audit-guard','--uls-audit-curvature','--smoke','--run-id','--source-run','--factor-run','--python')
   if (any(startsWith(args,'--') & !args %in% known)) stop('unknown guard option')
   run <- value('--run-id','uls-audit-guard'); source_run <- value('--source-run','uls-reliability-final-v2')
   factor_run <- value('--factor-run','uls-factor-square-root-v2')
@@ -54,7 +56,11 @@ run_uls_audit_guard <- function(args, here) {
         bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))),
         audit_options=list(retain_newton_artifacts=TRUE))
       a <- fit$newton_audit; audit <- fit$diagnostics$newton_accuracy
-      if (is.null(a) || a$factor_status!='available') stop('factor artifacts unavailable')
+      if (is.null(a) || a$factor_status!='available') {
+        write_out(cbind(case_id=case_id,target_distance=target,p),'failed_point')
+        saveRDS(fit,file.path(out,'failed_fit.rds'))
+        stop('factor artifacts unavailable; failed point retained')
+      }
       id <- length(rows)+1L
       rows[[id]] <- data.frame(point_id=id,case_id=case_id,target_distance=target,epsilon=epsilon,
         passed=isTRUE(audit$passed),distance=audit$distance,audit_status=audit$status,
@@ -62,7 +68,10 @@ run_uls_audit_guard <- function(args, here) {
         factor_residual=a$factor_residual,solve_residual=audit$solve_residual)
       pp <- p[c('lhs','op','rhs','free','est')]; pp$est <- sprintf('%.17g',pp$est)
       points[[id]] <- cbind(point_id=id,case_id=case_id,pp)
-      for (name in c('metric_factor','metric_score_residual','hessian')) {
+      names <- c('metric_factor','metric_score_residual','hessian')
+      if (curvature) names <- c(names,'curvature_coordinate_map','curvature_equilibrated_hessian',
+        'newton_step','ls_curvature_correction','whitened_jacobian','whitened_residual')
+      for (name in names) {
         x <- as.matrix(a[[name]]); grid <- expand.grid(row=seq_len(nrow(x)),col=seq_len(ncol(x)))
         matrices[[length(matrices)+1L]] <- cbind(point_id=id,name=name,grid,value=sprintf('%.17g',as.vector(x)))
       }
@@ -75,14 +84,14 @@ run_uls_audit_guard <- function(args, here) {
     'scripts/uls_audit_reference.py','scripts/uls_unit_reference.py'))
   package_files <- list.files(find.package('magmaanlab'),recursive=TRUE,full.names=TRUE)
   ref <- magmaan_cache_ref()
-  write_metadata(file.path(out,'metadata.csv'),values=list(lane='uls_audit_guard',source_run=source_run,
+  write_metadata(file.path(out,'metadata.csv'),values=list(lane=if(curvature) 'uls_audit_curvature' else 'uls_audit_guard',source_run=source_run,
     factor_run=factor_run,cases=length(cases),points_per_case=length(targets),threads=1,
     targets=paste(targets,collapse=';'),target='original mixed-unit unrestricted ULS; explicit infinite bounds',
     git_head=ref$git_head,git_dirty=ref$git_dirty,
     source_md5=paste(tools::md5sum(files),collapse=';'),
     input_md5=paste(tools::md5sum(c(file.path(input,c('covariances.csv','reference_parameters.csv')),calibration_file)),collapse=';'),
     package_md5=paste(tools::md5sum(package_files[grepl('\\.(so|rdb|rdx)$',package_files)]),collapse=';'),
-    interpretation='development numerical calibration; conditional perturbation allowances; production guard unchanged',
+    interpretation='development numerical calibration; QR curvature when requested; conditional perturbation allowances; acceptance thresholds unchanged',
     audit_elapsed_s=proc.time()[['elapsed']]-t0),packages='magmaanlab')
   status <- system2(value('--python','python3'),c(shQuote(file.path(here,'scripts/uls_guard_reference.py')),
     '--run-dir',shQuote(normalizePath(out))))

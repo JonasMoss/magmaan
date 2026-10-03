@@ -82,6 +82,9 @@ struct NewtonDerivatives {
   // LS-native whitening, including group weights; gradient = N J' r.
   Eigen::VectorXd whitened_residual;
   Eigen::MatrixXd whitened_jacobian;
+  // H = N J'J + this analytic observed correction (TOTAL scale).
+  // Empty unless independently supplied by the owning LS adapter.
+  Eigen::MatrixXd ls_curvature_correction;
   // Coordinates absent from the objective, explicitly held fixed by its
   // adapter (CatML's Stage-1 thresholds). Never inferred from Hessian rank.
   std::vector<Eigen::Index> fixed_coordinates;
@@ -115,14 +118,19 @@ struct NewtonGeometry {
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
 };
 
-// Reusable factorization of C = diag(scale) H diag(scale). No inverse is
-// formed. The retained factorization also supports additional right-hand sides.
+// Reusable factorization of C = T' H T. Ordinary preparation uses diagonal
+// T = diag(scale); LS QR preparation retains a full coordinate_map T.
+// No Hessian inverse is formed. Additional right-hand sides reuse the solve.
 struct NewtonSystem {
   NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
   Eigen::VectorXd scale;
   Eigen::MatrixXd equilibrated_hessian;
   Eigen::LLT<Eigen::MatrixXd> factorization;
   double condition = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd coordinate_map;
+  Eigen::MatrixXd objective_projection;  // diag(scale) Q', LS QR only
+  double jacobian_condition = std::numeric_limits<double>::quiet_NaN();
+  double jacobian_factor_residual = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct NewtonSolution {
@@ -183,8 +191,16 @@ NewtonGeometry prepare_newton_geometry(
     double interior_eigen_tol = 1e-8);
 
 NewtonSystem prepare_newton_system(const Eigen::MatrixXd& hessian);
+// J is the TOTAL objective Jacobian, H = J'J + correction. Full-rank,
+// column-equilibrated pivoted QR prepares I + R^-T C R^-1. The observed
+// correction is retained; rank loss fails without truncation or a ridge.
+// This internal coordinate change is currently used for unrestricted LS
+// audits; box and PSD-face solves retain their existing coordinate contract.
+NewtonSystem prepare_newton_ls_system(const Eigen::MatrixXd& total_jacobian,
+                                     const Eigen::MatrixXd& correction);
 NewtonSolution solve_newton_system(const NewtonSystem& system,
-                                   const Eigen::VectorXd& gradient);
+                                   const Eigen::VectorXd& gradient,
+                                   const Eigen::VectorXd& total_ls_residual = {});
 // Reassess numerical guards and acceptance budget without derivatives,
 // geometry reconstruction or factorization. Unavailable evidence stays so.
 NewtonAccuracyDiagnostics assess_newton_accuracy(

@@ -1,0 +1,2 @@
+points,minima,positive_curvature,curvature_error_certificates,actual_passes,max_reference_qr_condition,max_curvature_relative_error,max_step_curvature_error,max_jacobian_relative_error,max_correction_assembly_error,max_residual_construction_error,max_correction_scaled_error
+175,25,175,175,0,13.5428283447266,0.00013923983047493325,1.9372251413639127e-11,8.828604942591717e-17,2.23228344662374e-16,1.93722514033559e-12,4.2606067458379126e-07

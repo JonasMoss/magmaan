@@ -116,6 +116,18 @@ moment_quadratic_hessian(const model::ModelEvaluator& ev,
                          const Eigen::VectorXd& theta,
                          const Weight& weight = {});
 
+// Owning total-scale pieces, assembled independently. Retaining the observed
+// correction avoids recovering it by subtracting a rounded cross-product.
+struct MomentCurvature {
+  Eigen::MatrixXd gauss_newton;
+  Eigen::MatrixXd correction;
+};
+fit_expected<MomentCurvature>
+moment_quadratic_curvature(const model::ModelEvaluator& ev,
+                           const data::SampleStats& samp,
+                           const Eigen::VectorXd& theta,
+                           const Weight& weight = {});
+
 // Normal-theory variance of the total gradient of the same objective,
 // Σ_b n_b J_bᵀ W_b Γ_b W_b J_b with Γ_b the normal-theory asymptotic
 // covariance of the block's [mean ; vech(cov)] moments built from S_b. For the

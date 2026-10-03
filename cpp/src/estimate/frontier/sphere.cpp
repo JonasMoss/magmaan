@@ -800,12 +800,17 @@ SphereAudit collect_sphere_audit(
     audit.derivatives.metric.resize(0, 0);
     audit.derivatives.metric_factor.resize(0, 0);
     audit.derivatives.whitened_jacobian.resize(0, 0);
+    audit.derivatives.ls_curvature_correction.resize(0, 0);
     if (full.gradient.size() == theta.size())
       audit.derivatives.gradient = jacobian.transpose() * full.gradient;
     if (full.whitened_jacobian.cols() == theta.size())
       audit.derivatives.whitened_jacobian = full.whitened_jacobian * jacobian;
     if (full.status == NewtonAccuracyStatus::Available) {
       audit.derivatives.hessian = jacobian.transpose() * full.hessian * jacobian;
+      const bool ls_parts = full.ls_curvature_correction.rows() == theta.size() &&
+          full.ls_curvature_correction.cols() == theta.size() && theta.size() > 0;
+      if (ls_parts) audit.derivatives.ls_curvature_correction =
+          jacobian.transpose() * full.ls_curvature_correction * jacobian;
       // Full chain rule for theta(beta) = D Q beta / ||beta||. Omitting
       // this term would give Gauss-Newton-like curvature away from stationarity.
       for (const auto& um : s.units) {
@@ -816,10 +821,13 @@ SphereAudit collect_sphere_audit(
         const Eigen::VectorXd q = um.Q.transpose() * um.D.cwiseProduct(loading_gradient);
         const Eigen::VectorXd beta = u.segment(um.offset, um.dim);
         const double radial = beta.dot(q);
-        audit.derivatives.hessian.block(um.offset, um.offset, um.dim, um.dim) +=
+        const Eigen::MatrixXd chain =
             -q * beta.transpose() - beta * q.transpose() -
             radial * Eigen::MatrixXd::Identity(um.dim, um.dim) +
             3.0 * radial * beta * beta.transpose();
+        audit.derivatives.hessian.block(um.offset, um.offset, um.dim, um.dim) += chain;
+        if (ls_parts) audit.derivatives.ls_curvature_correction.block(
+            um.offset, um.offset, um.dim, um.dim) += chain;
       }
       if (full.metric_kind == NewtonMetricKind::Sandwich)
         audit.derivatives.metric = jacobian.transpose() * full.metric * jacobian;
@@ -829,8 +837,15 @@ SphereAudit collect_sphere_audit(
       g.status = NewtonAccuracyStatus::Available;
       g.reduced_gradient = tangent.transpose() * audit.derivatives.gradient;
       g.reduced_hessian = tangent.transpose() * audit.derivatives.hessian * tangent;
-      audit.system = prepare_newton_system(g.reduced_hessian);
-      audit.solution = solve_newton_system(audit.system, g.reduced_gradient);
+      audit.system = ls_parts && domain == StationarityDomain::Ambient
+          ? prepare_newton_ls_system(std::sqrt(full.n_obs) *
+              audit.derivatives.whitened_jacobian * tangent,
+              tangent.transpose() * audit.derivatives.ls_curvature_correction * tangent)
+          : prepare_newton_system(g.reduced_hessian);
+      audit.solution = solve_newton_system(audit.system, g.reduced_gradient,
+          audit.system.objective_projection.size()
+              ? Eigen::VectorXd(std::sqrt(full.n_obs) * full.whitened_residual)
+              : Eigen::VectorXd{});
       if (full.metric_kind == NewtonMetricKind::Sandwich &&
           audit.solution.status == NewtonAccuracyStatus::Available) {
         g.reduced_metric = tangent.transpose() * audit.derivatives.metric * tangent;

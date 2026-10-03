@@ -747,3 +747,46 @@ TEST_CASE("Newton metric factor: ordinary triangular solve matches a well-condit
   CHECK(projected.condition == doctest::Approx(old.condition).epsilon(1e-12));
   CHECK(nf::solve_newton_metric_system(system, Eigen::VectorXd::Ones(3)).status == NewtonAccuracyStatus::Unavailable);
 }
+
+TEST_CASE("Newton LS QR: recover a correction lost by rounded normal equations") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 3, 2> J;
+  J << 1, 1, 0, 1e-10, 0, 0;
+  const Eigen::Vector3d r(.5, .25e-10, .1);
+  const Eigen::Vector2d g = J.transpose() * r;
+  const Eigen::Matrix2d H = J.transpose() * J;
+  CHECK(nf::prepare_newton_system(H).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  const auto system = nf::prepare_newton_ls_system(J, Eigen::Matrix2d::Zero());
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  CHECK(system.condition == doctest::Approx(1));
+  CHECK(system.jacobian_condition > 1e9);
+  CHECK(system.jacobian_factor_residual < 1e-14);
+  const auto solution = nf::solve_newton_system(system, g, r);
+  REQUIRE(solution.status == NewtonAccuracyStatus::Available);
+  CHECK(solution.step.isApprox(Eigen::Vector2d(-.25, -.25), 1e-6));
+  CHECK(solution.distance == doctest::Approx(.5).epsilon(1e-10));
+  CHECK(solution.solve_residual < 1e-14);
+}
+
+TEST_CASE("Newton LS QR: retain observed curvature and transport pivoted scaled steps") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 4, 2> J;
+  J << .02, 3, -.03, 1, .01, 2, .04, -1;
+  Eigen::Matrix2d correction; correction << .0001, .002, .002, -.5;
+  const Eigen::Matrix2d H = J.transpose()*J + correction;
+  const Eigen::Vector2d g(.01, -.3);
+  const auto system = nf::prepare_newton_ls_system(J, correction);
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  const auto solution = nf::solve_newton_system(system, g);
+  const auto expected = nf::solve_newton_system(nf::prepare_newton_system(H), g);
+  REQUIRE(solution.status == NewtonAccuracyStatus::Available);
+  CHECK(solution.step.isApprox(expected.step, 1e-11));
+  CHECK(solution.distance == doctest::Approx(expected.distance).epsilon(1e-11));
+  CHECK(system.equilibrated_hessian.isApprox(
+      system.coordinate_map.transpose()*H*system.coordinate_map, 1e-11));
+  const Eigen::Matrix2d saddle = -2*(J.transpose()*J);
+  CHECK(nf::prepare_newton_ls_system(J, saddle).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  J.col(1) = 100*J.col(0);
+  CHECK(nf::prepare_newton_ls_system(J, Eigen::Matrix2d::Zero()).status == NewtonAccuracyStatus::IllConditioned);
+  CHECK(nf::prepare_newton_ls_system(J, Eigen::MatrixXd::Zero(3,3)).status == NewtonAccuracyStatus::Unavailable);
+}

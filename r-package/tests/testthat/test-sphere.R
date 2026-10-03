@@ -233,4 +233,23 @@ test_that("LS point auditing retains square-root artifacts only when requested",
     as.numeric(a$gradient),tolerance=1e-10)
   expect_identical(a$factor_status,'available')
   expect_identical(a$factor_rank,length(theta))
+  expect_equal(a$hessian,a$n_obs*crossprod(a$whitened_jacobian)+a$ls_curvature_correction,
+    tolerance=1e-10)
+  T <- a$curvature_coordinate_map
+  expect_equal(a$curvature_equilibrated_hessian,crossprod(T,a$hessian%*%T),tolerance=1e-10)
+  expect_equal(as.numeric(a$hessian%*%a$newton_step),-as.numeric(a$gradient),tolerance=1e-8)
+})
+
+test_that("sphere LS transports the observed correction into QR coordinates", {
+  fit <- suppressWarnings(frontier_fit_sphere(ernst,ernst_sim(),estimator='ULS',
+    optimizer='port',polish=FALSE))
+  a <- fit$gauge$native_audit
+  expect_identical(a$curvature_system$status,'available')
+  expect_equal(a$hessian,a$n_obs*crossprod(a$whitened_jacobian)+a$ls_curvature_correction,
+    tolerance=1e-9)
+  T <- a$curvature_system$coordinate_map
+  expect_equal(a$curvature_system$equilibrated_hessian,
+    crossprod(T,a$reduced_hessian%*%T),tolerance=1e-9)
+  expect_equal(as.numeric(a$reduced_hessian%*%a$newton_step),
+    -as.numeric(a$reduced_gradient),tolerance=1e-7)
 })

@@ -423,6 +423,9 @@ void check_moment_quadratic_hessian(const Model& m, const data::SampleStats& s,
   CHECK((exact.hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
   // The Gauss-Newton part alone differs here: the residual term is not zero.
   const Eigen::MatrixXd gn = n * exact.whitened_jacobian.transpose() * exact.whitened_jacobian;
+  CHECK((exact.hessian - gn - exact.ls_curvature_correction).norm() <=
+      1e-12 * (1 + exact.hessian.norm()));
+  CHECK(exact.ls_curvature_correction.isApprox(exact.ls_curvature_correction.transpose(), 1e-12));
   CHECK((exact.hessian - gn).norm() > 1e-4 * gn.norm());
 }
 } // namespace

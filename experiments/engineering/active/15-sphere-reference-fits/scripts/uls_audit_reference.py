@@ -13,7 +13,7 @@ import mpmath as mp
 from uls_unit_reference import components, equilibrated, number, read, write
 
 
-def evaluate(sample, rows, retain=False):
+def evaluate(sample, rows, retain=False, residual_override=None):
     values = {(r['lhs'],r['op'],r['rhs']):mp.mpf(r['est']) for r in rows}
     get = lambda a,op,b:values[a,op,b]
     vx = get('X','~~','X'); beta = get('Y','~','X'); psi = get('Y','~~','Y')
@@ -26,19 +26,32 @@ def evaluate(sample, rows, retain=False):
         e = mp.matrix(6); e[i,i] = 1; derivatives.append(e)
     pairs = [(i,j) for j in range(6) for i in range(j,6)]
     residual = mp.matrix([sigma[i,j]-sample[i,j] for i,j in pairs])
+    if residual_override is not None:
+        residual = residual_override
     J = mp.matrix([[d[i,j] for d in derivatives] for i,j in pairs])
-    g = J.T*residual; correction = mp.matrix(13)
+    g = J.T*residual; correction = mp.matrix(13); absolute_terms = mp.matrix(13)
     for j in range(7):
         for i in range(j+1):
             v = mp.fsum(residual[k]*second[i,j][p] for k,p in enumerate(pairs))
             correction[i,j] += v
             if i!=j: correction[j,i] += v
+            if retain:
+                a = mp.fsum(abs(residual[k]*second[i,j][p]) for k,p in enumerate(pairs))
+                absolute_terms[i,j]=absolute_terms[j,i]=a
     T = mp.eye(13)
     T[5,4]=beta; T[5,5]=vx; T[5,6]=0
     T[6,4]=beta**2; T[6,5]=2*beta*vx; T[6,6]=1
     correction = 100*T.T*correction*T
     correction[4,5] += 100*(g[5]+2*beta*g[6]); correction[5,4]=correction[4,5]
     correction[5,5] += 200*vx*g[6]
+    if retain:
+        abs_T = mp.matrix([[abs(t) for t in row] for row in T.tolist()])
+        absolute_terms = 100*abs_T.T*absolute_terms*abs_T
+        g5_abs = mp.fsum(abs(J[k,5]*residual[k]) for k in range(21))
+        g6_abs = mp.fsum(abs(J[k,6]*residual[k]) for k in range(21))
+        absolute_terms[4,5] += 100*(g5_abs+2*abs(beta)*g6_abs)
+        absolute_terms[5,4] = absolute_terms[4,5]
+        absolute_terms[5,5] += 200*abs(vx)*g6_abs
     objective_jacobian = 10*J*T
     h = objective_jacobian.T*objective_jacobian + correction
     G = 100*T.T*g
@@ -62,7 +75,8 @@ def evaluate(sample, rows, retain=False):
         b = mp.matrix([10*whitened[row,col]/mp.sqrt(2) for col in range(6) for row in range(6)])
         result['artifacts'] = dict(factor=10*F*J*T, score_residual=b, hessian=h,
             objective_jacobian=objective_jacobian, correction=correction,
-            gradient=G, metric=omega)
+            gradient=G, metric=omega, moment_residual=residual,
+            correction_absolute_terms=absolute_terms)
     return result
 
 

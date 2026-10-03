@@ -2834,9 +2834,16 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
   auto system = [](const magmaan::estimate::frontier::NewtonSystem& s) {
     return Rcpp::List::create(
         Rcpp::_["status"] = std::string(magmaan::estimate::to_string(s.status)),
-        Rcpp::_["condition"] = s.condition);
+        Rcpp::_["condition"] = s.condition,
+        Rcpp::_["coordinate_map"] = Rcpp::wrap(s.coordinate_map),
+        Rcpp::_["equilibrated_hessian"] = Rcpp::wrap(s.equilibrated_hessian),
+        Rcpp::_["jacobian_condition"] = s.jacobian_condition,
+        Rcpp::_["jacobian_factor_residual"] = s.jacobian_factor_residual);
   };
   native_audit["curvature_system"] = system(computations.system);
+  native_audit["ls_curvature_correction"] = Rcpp::wrap(computations.derivatives.ls_curvature_correction);
+  native_audit["whitened_jacobian"] = Rcpp::wrap(computations.derivatives.whitened_jacobian);
+  native_audit["newton_step"] = Rcpp::wrap(computations.solution.step);
   native_audit["accuracy_metric_system"] = system(computations.metric_system);
   const auto& factor_system = computations.metric_factor_system;
   native_audit["accuracy_metric_factor_system"] = Rcpp::List::create(
@@ -6050,6 +6057,15 @@ Rcpp::List evaluate_at_impl(
         Rcpp::_["metric_score_residual"] = Rcpp::wrap(a.derivatives.metric_score_residual),
         Rcpp::_["curvature_status"] = std::string(magmaan::estimate::to_string(a.system.status)),
         Rcpp::_["curvature_condition"] = a.system.condition,
+        Rcpp::_["curvature_coordinate_map"] = Rcpp::wrap(a.system.coordinate_map),
+        Rcpp::_["curvature_equilibrated_hessian"] = Rcpp::wrap(a.system.equilibrated_hessian),
+        Rcpp::_["curvature_jacobian_condition"] = a.system.jacobian_condition,
+        Rcpp::_["curvature_factor_residual"] = a.system.jacobian_factor_residual,
+        Rcpp::_["ls_curvature_correction"] = Rcpp::wrap(a.derivatives.ls_curvature_correction),
+        Rcpp::_["whitened_jacobian"] = Rcpp::wrap(a.derivatives.whitened_jacobian),
+        Rcpp::_["whitened_residual"] = Rcpp::wrap(a.derivatives.whitened_residual),
+        Rcpp::_["n_obs"] = a.derivatives.n_obs,
+        Rcpp::_["newton_step"] = Rcpp::wrap(a.solution.step),
         Rcpp::_["factor_status"] = std::string(magmaan::estimate::to_string(a.metric_factor_system.status)),
         Rcpp::_["factor_condition"] = a.metric_factor_system.condition,
         Rcpp::_["factor_residual"] = a.metric_factor_system.factor_residual,

@@ -790,11 +790,14 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   remain assumptions; a 64-epsilon sensitivity covers observed input errors
   but leaves 83 controls unresolved. At 90 digits, objective-Jacobian QR
   coordinates reduce the two flat Hessian conditions to 1.2/1.6 and preserve
-  all observed curvature. Next retain the analytic curvature correction
-  separately from J'J in core, implement a full-rank QR-coordinate Newton solve,
-  and calibrate forward-error guards jointly with the very flat finite NTML
-  witness and fresh controls. Do not transform a rounded cross-product and
-  assume its lost digits have been repaired. This evidence selects no
+  all observed curvature. Core now assembles the analytic correction separately
+  and implements the transported full-rank QR Newton solve, including sphere
+  normalization curvature. All 175 fixed-point curvature checks pass against
+  independent 90-digit derivatives; step discrepancy is below 1.94e-11 in
+  objective-curvature units. Owning tests retain saddle and rank-loss failures.
+  The sampling-metric condition guard still rejects every control. Next
+  implement usable construction/projection uncertainty and calibrate jointly
+  with the very flat finite NTML witness and fresh controls. This evidence selects no
   regularization or acceptance default. Retain the PORT curvature
   failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
   and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start

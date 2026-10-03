@@ -350,3 +350,13 @@ uls-guard-calibration-v3/*
 !uls-guard-calibration-v3/reference_metadata.csv
 !uls-guard-calibration-v3/verification.csv
 !uls-guard-calibration-v3/verification_metadata.csv
+
+# Compact implemented QR-curvature reference evidence; raw matrices stay local.
+!uls-curvature-qr-v2/
+uls-curvature-qr-v2/*
+!uls-curvature-qr-v2/comparisons.csv
+!uls-curvature-qr-v2/curvature_checks.csv
+!uls-curvature-qr-v2/curvature_verification.csv
+!uls-curvature-qr-v2/curvature_verification_metadata.csv
+!uls-curvature-qr-v2/metadata.csv
+!uls-curvature-qr-v2/reference_metadata.csv

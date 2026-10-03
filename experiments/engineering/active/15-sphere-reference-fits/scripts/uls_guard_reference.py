@@ -12,6 +12,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import time
+import sys
 import mpmath as mp
 from uls_audit_reference import evaluate
 from uls_unit_reference import read, write, number
@@ -84,6 +85,7 @@ def main():
         truth['objective_jacobian']=truth['objective_jacobian']*P
         truth['hessian']=P.T*truth['hessian']*P
         truth['correction']=P.T*truth['correction']*P
+        truth['gradient']=P.T*truth['gradient']
         A=artifact(pid,'metric_factor'); b=artifact(pid,'metric_score_residual'); H=artifact(pid,'hessian')
         if cid not in cache:
             D=mp.diag([1/mp.norm(A[:,j]) for j in range(A.cols)])
@@ -110,6 +112,32 @@ def main():
         # cancellation already introduced by forming J'J.
         preconditioned=mp.eye(H.cols)+Rinv.T*truth['correction']*Rinv
         pre_eig=mp.eigsy(preconditioned,eigvals_only=True)
+        extra={}
+        if (pid,'curvature_coordinate_map') in matrices:
+            T=artifact(pid,'curvature_coordinate_map'); actual=artifact(pid,'curvature_equilibrated_hessian')
+            transformed=T.T*truth['hessian']*T
+            et=mp.eigsy(transformed,eigvals_only=True)
+            exact_step=-mp.lu_solve(truth['hessian'],truth['gradient'])
+            step=artifact(pid,'newton_step'); error=step-exact_step
+            cpp_residual=artifact(pid,'whitened_residual')
+            # Judge derivative assembly at the actual recorded residual as
+            # well as forward error at the mathematical model point. Scale
+            # assembly error by absolute summands, allowing cancellation.
+            supplied=evaluate(samples[cid],pp,retain=True,residual_override=cpp_residual)['artifacts']
+            assembly=P.T*supplied['correction']*P
+            terms=P.T*supplied['correction_absolute_terms']*P
+            extra=dict(curvature_condition=audit['curvature_condition'],
+                curvature_reference_condition=number(et[et.rows-1]/et[0]),
+                curvature_relative_error=number(mp.norm(actual-transformed)/mp.norm(transformed)),
+                curvature_error_bound=number(mp.norm(actual-transformed)),
+                curvature_error_certified=bool(mp.norm(actual-transformed)<et[0]),
+                curvature_min_eigenvalue=number(mp.eigsy(actual,eigvals_only=True)[0]),
+                curvature_reference_min_eigenvalue=number(et[0]),
+                newton_step_curvature_error=number(mp.sqrt((error.T*truth['hessian']*error)[0])),
+                jacobian_relative_error=number(mp.norm(10*artifact(pid,'whitened_jacobian')-truth['objective_jacobian'])/mp.norm(truth['objective_jacobian'])),
+                residual_construction_error=number(mp.norm(cpp_residual-truth['moment_residual'])),
+                correction_assembly_error=number(mp.norm(artifact(pid,'ls_curvature_correction')-assembly)/max(mp.norm(terms),1)),
+                correction_relative_error=number(mp.norm(artifact(pid,'ls_curvature_correction')-truth['correction'])/max(mp.norm(truth['correction']),1)))
         comparisons.append(dict(point_id=pid,case_id=cid,target_distance=audit['target_distance'],
             passed=audit['passed'],distance=number(reported),**exact,
             absolute_distance_error=number(abs(reported-reference_distance)),
@@ -119,7 +147,7 @@ def main():
             measured_decision=classify(reported,measured_error),factor_min_singular=number(smin),residual_norm=number(mp.norm(b)),
             hessian_min_eigenvalue=number(eig[0]),hessian_forward_error_bound=number(h_error),
             measured_curvature_certified=bool(eig[0]>h_error),
-            qr_curvature_min_eigenvalue=number(pre_eig[0]),qr_curvature_condition=number(pre_eig[pre_eig.rows-1,0]/pre_eig[0])))
+            qr_curvature_min_eigenvalue=number(pre_eig[0]),qr_curvature_condition=number(pre_eig[pre_eig.rows-1,0]/pre_eig[0]),**extra))
         # A sensitivity sweep, not a fitted choice of a new production cap.
         # Include QR reconstruction error as well as assumed construction error.
         for multiplier in (8,64,8*A.rows*A.cols):
@@ -144,13 +172,13 @@ def main():
         dict(control='zero minimum singular value',result=classify(0,interval(0,1,mp.mpf(0),unit,unit))),
         dict(control='observed saddle with positive Gauss-Newton term',
             result='nonpositive_curvature' if mp.eigsy(observed,eigvals_only=True)[0]<0 else 'incorrect_pass')])
-    write(out/'reference_metadata.csv',[dict(digits=90,mpmath=mp.__version__,elapsed_s=time.monotonic()-start,
+    write(out/'reference_metadata.csv',[dict(digits=90,mpmath=mp.__version__,python=sys.version,interpreter=sys.executable,elapsed_s=time.monotonic()-start,
         source_sha256=';'.join(hashlib.sha256(p.read_bytes()).hexdigest() for p in (
             Path(__file__),Path(__file__).with_name('uls_audit_reference.py'),Path(__file__).with_name('uls_unit_reference.py'))),
         inputs_sha256=';'.join(hashlib.sha256((out/n).read_bytes()).hexdigest() for n in ('points.csv','covariances.csv','artifacts.csv','audits.csv')),
         input_convention='17-digit CSV reconstructed to exact binary64; sample lower triangle mirrored as in objective and factor LLT; 90-digit derivatives',
         bounds='conditional subspace perturbation; Frobenius input-error bound; measured or assumed allowances',
-        curvature='observed correction retained in reference-only objective-Jacobian QR coordinates; no ridge',
+        curvature='observed correction and step in computed QR coordinates; assembly checked at recorded binary residual and forward error at exact model point; no ridge',
         scope='development calibration, no optimizer, no production acceptance change')])
 
 
