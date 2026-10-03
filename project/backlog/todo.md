@@ -127,6 +127,12 @@ result under an unstated convention.
   `fit_model()` on the constructed specification. See the
   [implementation record](../design/r-interface-vision.md#implementation-and-remaining-decisions).
 
+- [ ] **S — prepared-path fitting options for all-ordinal DWLS.** The lavaan
+  preset for ordinal DWLS (task-11) runs through `fit_model()` only; the prepared
+  `estimate()` path still rejects ordinal fitting options, so `magmaan()` falls
+  back to `fit_model()` for those calls (as for ML2S). **Check:** prepared/fresh
+  parity for preset ordinal fits, then drop the fallback. Not release-gating.
+
 - [ ] **M — fit constructed ordinary models through native prepared
   handles.** `magmaan_model()` should own a prepared model so repeated fits
   skip structural preparation (ordinal DWLS 9.1 → 3.5 ms in the 2026-10-01
