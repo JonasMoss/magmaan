@@ -385,8 +385,14 @@ re-preparation is a no-op or an error.
 ML2S and ordinal fitting options. Prepared ordinal fits match fresh
 equality-constrained fits and retain the reporting moment/weight layout.
 
-2026-10-03: the DWLS policy calibration study (decisions/05) has a frozen
-runner and pilot; production runs on Modal, one container per cell.
+2026-10-03: the DWLS policy calibration study (decisions/05) ran production on
+Modal. The IJ covariance is calibrated. The global SB/PEBA4 references
+over-reject at df >= 53, and an exploration of the implemented reference
+family on the same draws favours the unpenalized laws; the global reference
+choice and its fresh-seed confirmation are pending. The nested policy now uses
+the r-term parameter-space law (observed Hessian, estimated-weight IJ meat,
+exact restriction map) after a diagnosis showed the separate-point profile
+law's extra terms to be a cancellation artifact; its confirmation is registered.
 
 2026-10-02: ordinary reporting selects historical lavaan bundles through
 `lavaan_compat = NULL` (policy default), with matching cache keys, inference
