@@ -299,7 +299,7 @@ variants' parameter counts 38/34/30 and df 16/20/24.
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
-| CN01 | D, 766–768 | MODEL CONSTRAINT holds explicit (`p1 = f(…)`) and implicit (`0 = f(…)`) constraints and inequalities (`>`, `<`) over MODEL labels and NEW parameters, with DEFINE's arithmetic and functions except absolute value. Lower onto existing defined-parameter, equality and constraint machinery; inequalities without an enforcing backend give unsupported-fit. |
+| CN01 | D, 766–768 | MODEL CONSTRAINT holds explicit (`p1 = f(…)`) and implicit (`0 = f(…)`) constraints and inequalities (`>`, `<`) over MODEL labels and NEW parameters, with DEFINE's arithmetic and functions except absolute value. Lower onto existing defined-parameter, equality and constraint machinery; inequalities are [deliberately refused](../scope.md#inequality-constraints-deliberately-refused) (rejected with the PSD/barrier remedy). |
 | CN02 | D, 766–769; P | `NEW (c*.6)` declares a parameter with a start (default 0.5); lists allowed. A NEW name on a right-hand side adds a free parameter (P-CN1: one more free parameter, one less df); on a left-hand side it is a derived quantity (no change in df). Explicit and implicit forms of one constraint give the same model. |
 | CN03 | D, 769–770 | DO loops (`DO (1,3) r# = p#/q#;`, nested with `$` and `%`) expand before lowering. LOOP and PLOT are plotting requests: E. |
 | CN04 | D, 766 | With MODEL CONSTRAINT the default INFORMATION becomes OBSERVED: an estimation convention for the [preset](../backlog/speculative.md#mplus-estimation-convention-preset), not imported. |

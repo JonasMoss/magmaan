@@ -113,9 +113,10 @@ implementation.
 4. **Growth and derived parameters.** `|` statements with time scores and
    their defaults (outcome intercepts fixed at zero, free growth means; the
    intercept-factor mean is fixed when outcomes are latent or categorical).
-   MODEL CONSTRAINT: NEW, defining equations, equalities and inequalities, onto
-   the existing defined-parameter, equality and constraint machinery; general
-   inequalities without an enforcing backend return unsupported-fit. MODEL
+   MODEL CONSTRAINT: NEW, defining equations and equalities, onto the existing
+   defined-parameter, equality and constraint machinery. Inequalities are
+   [deliberately refused](../scope.md#inequality-constraints-deliberately-refused): the rejection explains why and
+   points to `covariance = "psd"` or `"barrier"` for admissibility. MODEL
    INDIRECT (IND, VIA) becomes defined parameters.
 5. **Data files.** The C++ frontend parses the data description into a data
    plan: file reference, free or fixed FORMAT (its own grammar production),

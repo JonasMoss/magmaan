@@ -45,8 +45,8 @@ subset of operators.
 | `~ n` | fixed intercept/mean at numeric value `n` | `y ~ 0` |
 | `:=` | defined parameter | `indirect := a * b` |
 | `==` | equality constraint | `a == 0.5` |
-| `<` | inequality (upper bound) | `a < 0.5` |
-| `>` | inequality (lower bound) | `a > 0` |
+| `<` | inequality (upper bound); parsed, fitting [deliberately refused](../scope.md#inequality-constraints-deliberately-refused) | `a < 0.5` |
+| `>` | inequality (lower bound); parsed, fitting [deliberately refused](../scope.md#inequality-constraints-deliberately-refused) | `a > 0` |
 
 | Modifier form | Meaning | Example |
 |---|---|---|
@@ -160,7 +160,7 @@ level: 2
 # Defined indirect effect
 indirect := a * b
 
-# Equality and inequality
+# Equality and inequality (inequalities parse; fitting refuses them, see scope.md)
 a == b
 a > 0
 ```

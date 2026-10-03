@@ -1727,7 +1727,7 @@ an unconstrained gradient test to constrained solutions.
   (chi-bar-squared) asymptotics magmaan does not implement. They fail with an
   explicit early error rather than silently reporting ordinary χ²/SE theory;
   the error points to `covariance = "psd"` or `"barrier"` for admissibility
-  (deliberate boundary, see [scope](../scope.md)).
+  ([deliberate boundary: why and remedies](../scope.md#inequality-constraints-deliberately-refused)).
 
 ## Design Invariants
 

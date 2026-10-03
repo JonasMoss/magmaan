@@ -391,7 +391,7 @@ failures before changing defaults; existing studies alone do not adopt a method.
 
 **Gap:** general inequality constraints (lavaan `<`/`>`, Mplus MODEL CONSTRAINT
 inequalities, e.g. orderings of variances) with chi-bar-squared tests and
-boundary-aware intervals. Deliberately unsupported ([scope](../scope.md)); the
+boundary-aware intervals. Deliberately unsupported ([why and remedies](../scope.md#inequality-constraints-deliberately-refused)); the
 textbook corpus has two distinct inputs using them.
 **Available:** `covariance = "psd"` or `"barrier"` for admissibility, which
 covers the variance-positivity use; constraints that do not bind can simply be

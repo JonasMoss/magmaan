@@ -111,9 +111,10 @@ constraints (`b1 > exp(...)`), multiple modifiers on one term.
     a nonlinear equality constraint fits (IPOPT runs in the linear-reduced
     α-space). Lavaan-parity unit tests in `constraints_test`.
 - **Gap:**
-  - **Inequality constraints `<` / `>` ✗** — out of scope: estimation would be
+  - **Inequality constraints `<` / `>` ✗** — [deliberately refused](../scope.md#inequality-constraints-deliberately-refused): estimation would be
     fine but active-bound (chi-bar-squared) inference needs machinery magmaan
-    does not have. They fail with an explicit, specific early error.
+    does not have. They fail with an explicit early error that points to
+    `covariance = "psd"` or `"barrier"`.
 
 ### §8 — Meanstructures
 

@@ -24,12 +24,8 @@ all-ordinal DWLS; PSD covariance constraints keep their current fitting and
 boundary-inference contract. magmaan's own fitting reliability, PSD hardening,
 mixed continuous/ordered completion and barrier-specific hardening/inference
 are assigned to 0.3.0.
-General inequality constraints (lavaan `<`/`>`, Mplus MODEL CONSTRAINT
-inequalities) are deliberately unsupported: they bind in exactly the samples
-where users write them, and inference at an active bound needs boundary
-(chi-bar-squared) asymptotics. Admissibility (non-negative variances, PSD
-covariance blocks) goes through `covariance = "psd"` or `"barrier"` instead;
-orderings between parameters are not supported (user decision, 2026-10-03).
+Inequality constraints are
+[deliberately refused](#inequality-constraints-deliberately-refused).
 Noniterative development is indefinitely postponed and requires an explicit
 user scope decision to reopen; existing APIs and regression gates remain.
 The roadmap owns the estimator tiers and supported
@@ -245,6 +241,47 @@ how to rebuild them; it never silently converts a supplied fixed-x model or
 refits a joint model in its place. The ordinary API implements this decision
 from 0.2.0 (2026-10-02); 0.1.0 kept `fixed.x = TRUE` as its default, with
 explicitly unsupported inference for fixed observed covariates.
+
+### Inequality constraints: deliberately refused
+
+Decided 2026-10-03. magmaan parses inequality constraints (lavaan `a > 0`,
+`a < b`; Mplus MODEL CONSTRAINT `v > 0`, `ve2 > ve5`) but does not fit them.
+Every route fails early with an error that names the remedies below. This is
+a statistical decision, not a missing feature.
+
+**Why.** Users write an inequality because the unconstrained estimate violates
+it, typically a negative variance. The constraint therefore binds in exactly
+the samples where it is written. At a binding constraint the estimator is an
+asymptotically normal vector projected onto a cone. It is not normal, Wald
+standard errors and intervals lose their meaning, and likelihood-ratio and
+model tests follow chi-bar-squared mixtures whose weights depend on the
+information matrix and the active set (Shapiro 1985; Silvapulle and Sen 2005).
+Close to the boundary these approximations are not uniform in finite samples
+either. The shortcut other programs take, treating active bounds as equalities
+and leaving the degrees of freedom unchanged (lavaan), reports numbers with the
+wrong sampling law. When the constraint does not bind, it changes nothing: the
+fit equals the unconstrained fit. Supporting inequalities would therefore
+either print inference magmaan cannot defend or require boundary-inference
+machinery that is research-scale work.
+
+**Typical remedies.**
+
+- Admissibility, the usual reason (negative variances, Heywood cases, non-PSD
+  covariance blocks): drop the inequality and fit with `covariance = "psd"`,
+  which constrains covariance blocks to be PSD under magmaan's existing
+  boundary-inference contract, or `covariance = "barrier"`, the
+  multi-information barrier that keeps the solution strictly admissible.
+- A constraint that does not bind: drop it; estimates and inference are
+  unchanged.
+- An ordering between parameters, such as one residual variance exceeding
+  another: not supported as a restriction. If the ordering is a hypothesis,
+  test it on the unconstrained fit, for example with a one-sided test or an
+  interval for a defined difference `d := ve2 - ve5`.
+
+The decision covers constraint statements. The existing opt-in optimizer
+bounds (`bounds` presets, `variance_bounds`) are unchanged. The
+[trigger entry](backlog/speculative.md#inequality-constrained-estimation-with-boundary-inference)
+states when boundary inference would be built.
 
 ## Reopening banked work
 
