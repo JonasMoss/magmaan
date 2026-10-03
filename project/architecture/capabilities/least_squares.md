@@ -44,3 +44,24 @@ This is development validation, not a runtime forward-error guarantee or
 a fitting-default decision. The sampling-metric guard rejects all bank points.
 Usable uncertainty bounds, the flat finite NTML witness and fresh confirmation
 remain open.
+
+## Conditional numerical intervals
+
+`newton_metric_distance_interval` now verifies QR reconstruction, Q
+orthogonality, triangular invertibility and projection arithmetic. It accepts
+explicit scaled-factor/residual construction bounds and reports within budget,
+above budget or unresolved. `newton_hessian_distance_interval` provides the
+corresponding likelihood quadratic calculation using Cholesky perturbation
+bounds. Active boxes and PSD faces are unsupported.
+
+R `evaluate_at(..., audit_options=list(retain_newton_artifacts=TRUE))` exposes
+a retained-input arithmetic interval for complete-data ML/LS. Optional
+`interval_input_errors=list(matrix=...,vector=...)` adds a conditional
+construction interval. These artifacts never replace the stored verdict.
+ML artifacts respect explicit bounds and use the supplied chart.
+
+See the [numerical interval contract](../../validation/interior-newton-audit.md).
+Experiment 15 adds 329 independent point checks, including 15 fresh numerical
+minima and all seven finite NTML witnesses. Construction-error producers
+remain open; observed coverage of a dimensional allowance is insufficient
+to promote it to a fitting default.

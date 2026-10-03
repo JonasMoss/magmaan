@@ -253,3 +253,23 @@ test_that("sphere LS transports the observed correction into QR coordinates", {
   expect_equal(as.numeric(a$reduced_hessian%*%a$newton_step),
     -as.numeric(a$reduced_gradient),tolerance=1e-7)
 })
+
+test_that('conditional distance intervals preserve the stored fit verdict', {
+  S <- matrix(c(1.2,.4,.3,.4,1.1,.2,.3,.2,1.3),3)
+  dimnames(S) <- list(paste0('x',1:3),paste0('x',1:3))
+  sample <- list(S=list(S),nobs=400L)
+  spec <- model_spec('f =~ x1 + x2 + x3')
+  theta <- magmaan_core$estimate_start_values(spec$partable,sample)
+  for (estimator in c('ULS','ML')) {
+    plain <- magmaan_core$estimate_evaluate_at(spec$partable,sample,theta,estimator=estimator,
+      bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))))
+    kept <- magmaan_core$estimate_evaluate_at(spec$partable,sample,theta,estimator=estimator,
+      bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))),
+      audit_options=list(retain_newton_artifacts=TRUE,interval_input_errors=list(matrix=1,vector=1)))
+    expect_equal(kept$diagnostics$newton_accuracy,plain$diagnostics$newton_accuracy)
+    expect_identical(kept$newton_audit$distance_interval_conditional$decision,'unresolved')
+    expect_match(kept$newton_audit$interval_input_scope,'construction errors excluded')
+    interval <- kept$newton_audit$distance_interval_retained_inputs
+    expect_true(interval$lower <= interval$distance && interval$distance <= interval$upper)
+  }
+})

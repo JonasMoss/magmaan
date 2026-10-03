@@ -159,6 +159,35 @@ NewtonSolution solve_newton_metric_system(
     const NewtonMetricSystem& system, const Eigen::VectorXd& gradient,
     const Eigen::VectorXd& score_residual = {});
 
+// Conditional numerical interval, separate from the ordinary fit verdict.
+// Bounds concern exact target inputs versus retained binary64 inputs in the
+// stated coordinates. Zero bounds certify only the retained inputs, not SEM
+// derivative/factor construction. They never arise from a solve residual.
+enum class NewtonBudgetDecision { Unresolved, WithinBudget, AboveBudget };
+std::string_view to_string(NewtonBudgetDecision decision) noexcept;
+struct NewtonDistanceInterval {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  NewtonBudgetDecision decision = NewtonBudgetDecision::Unresolved;
+  double distance = std::numeric_limits<double>::quiet_NaN();
+  double lower = 0;
+  double upper = std::numeric_limits<double>::infinity();
+  double error_bound = std::numeric_limits<double>::infinity();
+  double rank_margin = 0;
+  double factor_error_bound = std::numeric_limits<double>::quiet_NaN();
+  double orthogonality_error_bound = std::numeric_limits<double>::quiet_NaN();
+};
+// factor_error is a Frobenius bound AFTER the system's column scaling;
+// residual_error is an absolute Euclidean bound on the supplied residual.
+NewtonDistanceInterval newton_metric_distance_interval(
+    const NewtonMetricSystem& system, const Eigen::VectorXd& residual,
+    double factor_error, double residual_error, double budget = .01);
+// Hessian/score errors are Frobenius/Euclidean bounds in diagonal-equilibrated
+// coordinates. Full QR coordinate maps are unsupported by this likelihood
+// primitive. Cholesky reconstruction and triangular solve error are included.
+NewtonDistanceInterval newton_hessian_distance_interval(
+    const NewtonSystem& system, const Eigen::VectorXd& gradient,
+    double hessian_error, double gradient_error, double budget = .01);
+
 // Convex reduced quadratic: min g's + s'Hs/2 subject to normals*s >= lower.
 // Zero must be feasible. The base Hessian must be positive definite. Retains
 // normalized KKT residuals and multipliers for the original supplied rows.

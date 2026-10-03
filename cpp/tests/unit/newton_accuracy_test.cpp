@@ -790,3 +790,62 @@ TEST_CASE("Newton LS QR: retain observed curvature and transport pivoted scaled 
   CHECK(nf::prepare_newton_ls_system(J, Eigen::Matrix2d::Zero()).status == NewtonAccuracyStatus::IllConditioned);
   CHECK(nf::prepare_newton_ls_system(J, Eigen::MatrixXd::Zero(3,3)).status == NewtonAccuracyStatus::Unavailable);
 }
+
+TEST_CASE("Newton uncertainty: projector perturbations and budget ambiguity") {
+  using namespace magmaan::estimate::frontier;
+  Eigen::MatrixXd a(3, 2); a << 1, 1, 0, 1e-10, 0, 0;
+  Eigen::VectorXd b(3); b << .003, .004, .02;
+  const auto system = prepare_newton_metric_system(a);
+  const auto exact_inputs = newton_metric_distance_interval(system, b, 0, 0);
+  REQUIRE(exact_inputs.status == NewtonAccuracyStatus::Available);
+  CHECK(exact_inputs.lower <= .005);
+  CHECK(exact_inputs.upper >= .005);
+  CHECK(exact_inputs.decision == NewtonBudgetDecision::WithinBudget);
+  // Perturb the subspace, not just the projected score. The exact two-column
+  // projector has a closed form, independently of this kernel's QR.
+  const double delta = 1e-13;
+  const double bound = delta * system.scale[1];
+  const auto interval = newton_metric_distance_interval(system, b, bound, 1e-6);
+  for (double sign : {-1.0, 1.0}) {
+    const double slope = sign * delta / 1e-10;
+    const double d = std::hypot(b[0], (b[1] + slope * (b[2] + sign * 1e-6)) /
+        std::sqrt(1 + slope * slope));
+    CHECK(interval.lower <= d); CHECK(interval.upper >= d);
+  }
+  b << .006, .008, .02;
+  CHECK(newton_metric_distance_interval(system, b, 0, 0).decision == NewtonBudgetDecision::Unresolved);
+  b << .012, .016, .02;
+  CHECK(newton_metric_distance_interval(system, b, 0, 0).decision == NewtonBudgetDecision::AboveBudget);
+  CHECK(newton_metric_distance_interval(system, b, 1, 0).decision == NewtonBudgetDecision::Unresolved);
+  CHECK(newton_metric_distance_interval(system, b, -1, 0).status == NewtonAccuracyStatus::Unavailable);
+  CHECK(newton_metric_distance_interval(system, b, std::numeric_limits<double>::quiet_NaN(), 0).status == NewtonAccuracyStatus::Unavailable);
+  a.col(1) = a.col(0);
+  CHECK(newton_metric_distance_interval(prepare_newton_metric_system(a), b, 0, 0).decision == NewtonBudgetDecision::Unresolved);
+}
+
+TEST_CASE("Newton uncertainty: likelihood quadratic and construction uncertainty") {
+  using namespace magmaan::estimate::frontier;
+  Eigen::MatrixXd h(2, 2); h << 1, .25, .25, 2;
+  Eigen::VectorXd g(2); g << .003, .004;
+  const auto system = prepare_newton_system(h);
+  const auto interval = newton_hessian_distance_interval(system, g, 1e-5, 1e-5);
+  REQUIRE(interval.status == NewtonAccuracyStatus::Available);
+  for (double sign : {-1.0, 1.0}) {
+    // Exact inverse of a 2x2 symmetric matrix, in the declared scaled inputs.
+    Eigen::MatrixXd c = system.equilibrated_hessian;
+    c(0, 0) += sign * 1e-5;
+    Eigen::VectorXd b = system.scale.cwiseProduct(g); b[1] += sign * 1e-5;
+    const double q = (c(1, 1)*b[0]*b[0] - 2*c(0, 1)*b[0]*b[1] + c(0, 0)*b[1]*b[1]) /
+        (c(0, 0)*c(1, 1) - c(0, 1)*c(0, 1));
+    CHECK(interval.lower <= std::sqrt(q)); CHECK(interval.upper >= std::sqrt(q));
+  }
+  CHECK(newton_hessian_distance_interval(system, g, 1, 0).decision == NewtonBudgetDecision::Unresolved);
+  h(1, 1) = -.1;
+  CHECK(newton_hessian_distance_interval(prepare_newton_system(h), g, 0, 0).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  h << 1, 1-1e-13, 1-1e-13, 1;
+  g.setZero();
+  const auto flat = newton_hessian_distance_interval(prepare_newton_system(h), g, 0, 0);
+  CHECK(flat.decision == NewtonBudgetDecision::WithinBudget);
+  CHECK(newton_hessian_distance_interval(prepare_newton_system(h), g, 1e-12, 0).decision == NewtonBudgetDecision::Unresolved);
+  CHECK(newton_hessian_distance_interval(system, g, 0, std::numeric_limits<double>::infinity()).status == NewtonAccuracyStatus::Unavailable);
+}

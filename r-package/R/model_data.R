@@ -2125,13 +2125,21 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # names accepted by `fit_*`. `audit_options` accepts the same fields as the
 # C++ `TerminalAuditOptions` struct (e.g.
 # `list(stationarity_mode = "absolute", absolute_tol = 1e-3)`).
-# For complete-data LS, `retain_newton_artifacts = TRUE` additionally returns
+# For complete-data ML/LS, `retain_newton_artifacts = TRUE` additionally returns
 # `newton_audit`: reduced curvature, sampling-metric factor, whitened score
 # residual and factor rank/condition. This recomputes owning C++ artifacts
 # without altering the stored verdict or its acceptance thresholds.
 # Unrestricted complete-data LS also retains the independent observed
 # correction, the QR coordinate map and equilibrated curvature, the Jacobian
 # condition/reconstruction residual and the Newton step in reduced coordinates.
+# ML artifacts are recomputed in the supplied chart with explicit bounds;
+# they may differ numerically from the stored unit-normalized ML audit.
+# `distance_interval_retained_inputs` bounds arithmetic on retained inputs only.
+# Optional `interval_input_errors = list(matrix = ..., vector = ...)` supplies
+# Frobenius/Euclidean construction-error bounds: LS uses the column-scaled
+# factor/residual; ML uses the equilibrated Hessian/scaled score. The conditional
+# interval reports within_budget, above_budget or unresolved; it does not alter
+# fit acceptance. Zero construction bounds do not certify SEM input construction.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {

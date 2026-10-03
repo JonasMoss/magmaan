@@ -1,7 +1,8 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: uls_curvature
+  lane: audit_uncertainty
+  uncertainty_run: audit-uncertainty-final-v3
   curvature_run: uls-curvature-qr-v2
   guard_run: uls-guard-calibration-v3
   factor_run: uls-factor-square-root-v2
@@ -33,7 +34,34 @@ execute:
 
 ```{r}
 #| results: asis
-if (identical(params$lane, "uls_curvature")) {
+if (identical(params$lane, "audit_uncertainty")) {
+  read_uncertainty <- function(name) {
+    path <- file.path("results",params$uncertainty_run,paste0(name,".csv"))
+    if (!file.exists(path)) stop("Missing uncertainty evidence: ",path,"; run --ordinary --audit-uncertainty and scripts/verify_audit_uncertainty.py")
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  v <- read_uncertainty("verification"); points <- read_uncertainty("comparisons")
+  timing <- read_uncertainty("reference_metadata")
+  old <- v[v$role=="retained_ULS",]; nt <- v[v$role=="retained_NTML",]
+  fresh <- v[startsWith(v$role,"fresh_"),]
+  cat("## Question\n\nCan an implemented numerical uncertainty interval separate trustworthy local accuracy statements from unresolved ones, without choosing a conditioning cutoff to raise pass rates?\n\n")
+  cat(sprintf("## Short answer\n\nThe conditional interval is implemented for LS projection distances and likelihood quadratic distances. Every arithmetic interval contains its independent 90-digit reference across %d fixed points. With the previously declared dimensional construction allowance, all %d fresh numerical minima fall within budget, while only %d/25 retained ULS minima do. The flat NTML minimum remains unresolved. These results establish a working interval calculation; production acceptance still needs justified construction-error bounds and remains unchanged.\n\n",sum(v$points),sum(fresh$conditional_minima_within),old$conditional_minima_within))
+  cat("## Evidence\n\nThe run uses seven points on each of 25 retained ULS datasets, 15 fresh exact-population numerical controls, and seven retained finite NTML witnesses. Fresh controls comprise five regular, five weak-marker and five mixed-unit populations. Their sample matrices are constructed moments, not fresh sampled fitting problems. No optimizer is called.\n\n")
+  labels <- c(fresh_mixed_units="Fresh mixed units",fresh_regular="Fresh regular",fresh_weak="Fresh weak markers",retained_NTML="Retained NTML",retained_ULS="Retained ULS")
+  table <- data.frame(Controls=unname(labels[v$role]),`Within budget`=v$conditional_within,
+    `Above budget`=v$conditional_above,Unresolved=v$conditional_unresolved,
+    `Minima within / cases`=paste(v$conditional_minima_within,v$cases,sep=" / "),check.names=FALSE)
+  cat(knitr::kable(table,row.names=FALSE),sep="\n")
+  cat(sprintf("\n\nUnder this declared construction sensitivity, no interval misses a finite model-point reference and no decisive classification is wrong. The measured construction errors lie within the allowances in all %d comparable points. One NTML point has nonpositive curvature before an equilibrated matrix is available, so it supplies no construction comparison and stays unresolved. Containment alone cannot justify the assumed allowances.\n\n",sum(v$construction_comparisons)))
+  flat <- points[points$role=="retained_NTML" & points$source_case==4 & points$target==0,]
+  cat(sprintf("The independently positive flat NTML minimum has local distance %.2g. Its interval on retained rounded inputs falls within budget, but the construction-sensitive interval cannot resolve positive curvature. The actual library audit still fails its condition guard. This is a numerical qualification issue at a finite minimum.\n\n",flat$reference_distance))
+  cat("### What is bounded\n\nFor LS, the input is the column-scaled sampling factor and retained score residual. The kernel measures QR reconstruction and orthogonality defects using explicit wider-precision accumulation with roundoff allowances. A triangular inverse is verified by its identity residual; this gives a conservative singular-value lower bound without relying on an estimated condition number. The subspace perturbation bound then includes the separately supplied factor and residual construction bounds, plus projection arithmetic. Rank uncertainty and intervals crossing 0.01 remain unresolved.\n\n")
+  cat("For likelihood distances, the kernel verifies the Cholesky reconstruction and triangular inverse, bounds the solve residual, and applies a positive-curvature perturbation bound in equilibrated coordinates. Matrix uncertainty that can cross zero curvature remains unresolved. Both paths retain failure statuses and use no ridge or truncated inverse. Owning tests cover explicit bounded input perturbations, budget ambiguity, saddles and rank loss. All 567 C++ estimate cases (14,230 assertions) and the sphere R binding tests pass.\n\n")
+  cat("The arithmetic interval with zero construction bounds concerns the retained rounded inputs. The second arm assumes a Frobenius matrix allowance of $\\gamma_k\\|A\\|_F$ (or $\\gamma_k\\|H\\|_F$), and a vector allowance of $\\gamma_k\\max(\\|b\\|,1)$, where $k=8mq$ and $\\gamma_k=k\\epsilon/(1-k\\epsilon)$. This dimensional rule was carried forward from the earlier sensitivity sweep; it was not selected after this run. It is an assumption about SEM construction, not a proved bound for all model evaluations. The [LAPACK error-analysis discussion](https://www.netlib.org/lapack/lug/node78.html) explains why backward error and conditioning must be considered separately.\n\n")
+  cat(sprintf("## Caveats\n\nThis is fixed-point numerical validation on 47 cases. The independent calculations reconstruct exact binary64 point, sample and artifact inputs; interval endpoints are transported with 17 significant digits. The reference calculation took %.1f seconds on one math thread. R exposes the conditional interval as optional methods-development artifacts, leaving the stored fit verdict intact. Active boxes and PSD-face intervals remain unsupported. The ML artifacts are recomputed in the supplied chart, separate from the stored unit-normalized ML audit.\n\n",timing$elapsed_s))
+  cat("The remaining implementation work is a construction-error producer for the owning SEM adapters, followed by calibration on broader models and sampled controls. The current dimensional sensitivity is too conservative to resolve many retained mixed-unit cases and cannot settle the flat NTML curvature. These controls establish neither an optimizer policy nor global optimality. The earlier curvature, uncertainty sensitivity and search lanes remain available as `uls_curvature`, `uls_guard` and `uls_study`.\n\n## Reproduce\n\nUse the matching interval-enabled magmaanlab installation, Python with mpmath 1.3.0, and fresh run IDs. Raw matrices stay local; compact reference comparisons and fingerprints are frozen.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --audit-uncertainty --smoke --run-id uncertainty-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --audit-uncertainty --run-id uncertainty-new --python /path/to/python\npython3 scripts/verify_audit_uncertainty.py --run-dir results/uncertainty-new\nquarto render report.qmd -P lane:audit_uncertainty -P uncertainty_run:uncertainty-new\n```\n\n")
+  knitr::knit_exit()
+} else if (identical(params$lane, "uls_curvature")) {
   read_curvature <- function(name) {
     path <- file.path("results",params$curvature_run,paste0(name,".csv"))
     if (!file.exists(path)) stop("Missing curvature evidence: ",path,"; run --ordinary --uls-audit-curvature and scripts/verify_uls_curvature.py")

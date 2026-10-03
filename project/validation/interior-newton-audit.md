@@ -1039,3 +1039,65 @@ existing optimizer-control checks, and existing common-verdict checks pass
 against a locally built package. The global layering check still reports
 pre-existing paper-to-test references; no finding concerns the changed files.
 The canonical C++ sources were re-vendored into the portable R package.
+
+
+## Conditional numerical distance intervals (2026-10-03)
+
+The production condition cap and .01 budget remain unchanged. Frontier now
+provides separate conditional interval primitives for retained LS sampling
+factors and likelihood Hessians. Their decisions are `within_budget`,
+`above_budget`, and `unresolved`; an available interval is not a fit verdict.
+Construction errors must be supplied explicitly. Zero bounds concern the
+retained rounded artifacts only, not the exact SEM objective at the point.
+
+The primitives use explicit long-double product/residual accumulations with
+standard gamma allowances, under round-to-nearest arithmetic, ordinary square
+root rounding and gradual underflow. They include conservative scalar margins
+and outward binary64 endpoint conversion. Nonfinite verification arithmetic
+stays unresolved. This is conditional floating-point error analysis, not
+validation of unknown construction errors or a global optimization statement.
+
+For LS, let the retained scaled factor have computed QR factors Q and R.
+Bound the Frobenius reconstruction error by eta and the orthogonality defect
+`||Q'Q-I||` by e < 1. For a computed triangular inverse X, a verified defect
+rho = `||I-XR||` < 1 gives
+
+    sigma_min(R) >= (1-rho)/||X||_F.
+
+Thus `s = sqrt(1-e)*(1-rho)/||X||_F` is a lower bound for the smallest
+singular value of QR. If the supplied scaled-factor construction bound is a,
+use delta = eta+a. When delta < s, the equal-rank projector perturbation is
+at most delta/(s-delta). To see this, apply the complementary projector to
+the perturbed full-rank factor, use its right inverse, and bound its smallest
+singular value by s-delta; equal-rank orthogonal projectors have equal largest
+principal-angle sine. The distance interval around `||Q'b||` includes
+
+    ||b|| * [delta/(s-delta) + e/(1+sqrt(1-e))]
+    + supplied residual construction error + projection arithmetic error.
+
+The second term in brackets accounts for Q being only approximately
+orthogonal. Matrix/vector norms and verification residuals receive their own
+arithmetic allowances. Rank uncertainty gives no finite interval.
+
+For likelihoods, let C be the retained equilibrated Hessian and L its computed
+Cholesky factor. Verify a lower bound l for `sigma_min(L)` by the same
+triangular inverse argument. Let delta bound `||C-L L'||` plus the supplied
+Hessian construction error. If delta < l^2, set alpha = delta/l^2. A verified
+triangular solve gives a distance estimate t and error u for the quadratic
+with matrix L L'. With equilibrated score construction bound v (including
+scaling arithmetic), the target distance lies in
+
+    [max(0, (t-u)/sqrt(1+alpha) - v/sqrt(l^2-delta)),
+            (t+u)/sqrt(1-alpha) + v/sqrt(l^2-delta)].
+
+These inequalities follow from the relative Loewner bounds on C versus L L'
+and the triangle inequality in the inverse-matrix norm. Unresolved positive
+curvature gives no finite interval; a saddle never becomes a pass.
+
+Owning tests exercise bounded input perturbations, near-budget ambiguity,
+rank uncertainty, negative curvature and well-resolved flat likelihood inputs.
+Experiment 15's `audit_uncertainty` lane compares the primitives with independent
+90-digit calculations on retained ULS/NTML points and fresh exact-population
+numerical controls. Dimensional construction allowances in that lane are a
+sensitivity assumption. Producing justified bounds inside the owning model/
+sampling-factor adapters remains open before any production guard change.

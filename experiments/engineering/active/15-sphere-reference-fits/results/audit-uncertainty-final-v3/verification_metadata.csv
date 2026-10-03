@@ -1,0 +1,2 @@
+verifier_sha256,comparisons_sha256,judge,construction_rule,scope
+77c9655a856bcf4f2d73b83b7ffb889b6820bb2f9657fb4313dcb6d0db0699cc,6dc2950a454f6e458adb4b515a07afac493e61bc51d1452cf6f5fe3f6c624e0f,90-digit arithmetic enclosure; model-input allowance coverage separate from distance containment and decision,"inherited dimensional sensitivity, declared before this run; no tuning after misses","fixed-point numerical controls, no fitting default change; construction bounds remain open"

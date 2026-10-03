@@ -832,8 +832,10 @@ check resolves both flat curvatures (conditions 1.20/1.59), with step discrepanc
 below 1.94e-11 in objective-curvature units against independent 90-digit
 derivatives. The sampling-metric guard still rejects all points. See the
 [least-squares capability contract](capabilities/least_squares.md). Remaining
-work is usable construction/projection uncertainty, joint NTML calibration and
-fresh confirmation; no statistical regularization or acceptance default follows.
+work is justified adapter construction bounds and broader sampled confirmation.
+The conditional interval kernels now include projection/solve verification and
+joint ULS/NTML checks on 329 points, including 15 fresh numerical controls.
+No statistical regularization or acceptance default follows.
 
 `estimate/frontier/newton_adapters.hpp` adds explicit post-fit adapters for
 ULS, GLS, fixed-weight WLS/DWLS/GMM, expanded ordinary LS-SNLLS, FIML,
