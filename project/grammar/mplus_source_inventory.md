@@ -161,7 +161,7 @@ OFF.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | LX01 | D, 13–14 | Ten commands. Each begins on a new line and is followed by a colon; commands may come in any order; DATA and VARIABLE are required. Options end with semicolons and several may share a line. The lexer tracks line starts; a command head is recognized only at a line start. |
-| LX02 | D, 14; P | Input records are at most 90 columns; upper and lower case and tabs are allowed. 9.1 truncates a longer line with a warning (P-LX4), which can silently change a statement or break it. The frontend rejects lines over 90 columns with their span. |
+| LX02 | D, 14; P; corpus | Input records are at most 90 columns. 9.1 truncates a longer line with a warning (P-LX4), which can change or break a statement. In the corpus, every line beyond 90 columns is TITLE text or comment text, where truncation is harmless. The frontend therefore rejects a line only when content outside comments and TITLE text extends beyond column 90. |
 | LX02a | P | No addendum changes the limit, and 9.1 still truncates at 90 columns (P-LX4). Settled; no separate rule. |
 | LX03 | D, 14, 563, 567; P | Commands and options can be shortened to four or more letters (`USEVAR`, `ESTI` accepted; three-letter `USE` rejected). Settings accept only the complete word or the exact documented stem: `GEN` and `GENERAL` work, `GENE` and `NOCOVAR` are errors (P-LX2). An ambiguous or intermediate prefix is rejected. |
 | LX04 | D, 14, 598 | Keywords and names are case-insensitive. Canonical matching folds case; source spelling is retained for diagnostics and names. |
@@ -432,3 +432,25 @@ These observations do not resolve or change the inventory rules.
 | P-CN2 | CN05 | Both mediator orders accepted; printed specific paths retain the requested order (forward estimate 0.001, reverse 0.000). Factor path prints indirect 0.012; continuous mediation prints indirect 0.010. |
 | P-DA1 | DA06 | Empty comma field errors (non-missing blank; zero observations). Extra field and wrapped records accepted, N=500 and identical means (-0.023,0.058,-0.045). |
 | P-DA2 | DA03 | All accepted, N=500. Y1 mean: 99 → 5.465; 9.9 → 4.972; -9 and -9.0 → 4.385. F2.1 fields are 99 or -9 in the first 50 rows; only flag 9.9 marks those 99 fields missing. |
+
+## Corpus tally: input reader only (2026-10-03)
+
+A throwaway driver ran `MplusParser::read()` (TASK-51.1, before MODEL
+parsing) over every Mplus input in the textbook corpus: 2,438 files from case
+sources, raw folders and zip archives, 1,178 with distinct content. No input
+crashed or hung. 174 inputs passed the input-file level. Files rejected per
+rule (a file counts once per rule): CL17 analysis types 340 (mixture 196,
+two-level 112, random 84), CL27 MODEL CONSTRAINT/INDIRECT 277, CL16 DEFINE 239,
+CL29 Monte Carlo 237, CL10 CATEGORICAL 231, CL15 designs, weights and mixture
+options 219, NM03 196, LX02 98, CL18 Bayes 93, CL11 GROUPING 78, CL31 75, CL03
+summary data 72, CL26 group sections 70, CL14 outcome types 68, CL22 56, CL13
+case selection 51.
+
+Findings fed back into TASK-51.2: all LX02 lines were TITLE or comment text
+(rule refined above); NM03 hits were variables created by DEFINE or DATA
+transformations, so the message must say so; CL31 also caught group sections
+whose labels come from `FILE (label)` or NGROUPS; combined summary-data TYPE
+settings (`CORRELATION MEANS STDEVIATIONS`) were misreported. The tally
+suggests the order of value after increment 1: categorical outcomes, MODEL
+CONSTRAINT/INDIRECT and multiple groups each block several hundred inputs;
+DEFINE blocks 239.
