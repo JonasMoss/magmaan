@@ -8,10 +8,10 @@ equality-release tests, with a direction-specific sandwich correction.}
 modification_indices_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "structured", cov = "empirical",
   candidates = "all", include_loadings = TRUE, include_covariances = TRUE,
-  information = "expected", estimated_weight = FALSE)
+  information = "expected", estimated_weight = TRUE)
 score_tests_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "structured", cov = "empirical",
-  estimated_weight = FALSE)
+  estimated_weight = TRUE)
 }
 \arguments{
 \item{fit}{A fitted magmaanlab model.}
@@ -25,7 +25,8 @@ record; otherwise it must equal the recorded weight or a positive multiple of
 it. Unsupported for FIML and ML2S.}
 \item{bread,information}{Sandwich sensitivity and score-information choices.
 For FIML, omitted arguments select \code{"observed"}; explicitly requesting
-\code{"expected"} is unsupported. Other estimator defaults remain expected.}
+\code{"expected"} is unsupported. Bread defaults to observed for all
+estimators; the complete-data score metric may remain expected.}
 \item{moments,cov}{Continuous moment and covariance conventions. FIML accepts
 only the default \code{moments="structured"}, \code{cov="empirical"} combination,
 which selects observed-pattern casewise score covariance.}

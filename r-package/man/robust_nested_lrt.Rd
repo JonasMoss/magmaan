@@ -75,8 +75,8 @@ choices with the retained saturated EM covariance: \code{"streaming"} applies
 additional full Gamma; \code{"materialized"} forms Gamma explicitly and
 \code{"dense"} is a diagnostic oracle.}
 
-\item{convention}{\code{"magmaan"} (default) keeps magmaan's estimator-specific
-Satorra-2000 moment convention. \code{"lavaan"} uses lavaan's public
+\item{convention}{\code{"magmaan"} with method omitted calls the ML/DWLS policy composer.
+With an explicit method it retains the estimator-specific Satorra comparator. \code{"lavaan"} uses lavaan's public
 \code{lavTestLRT(method = "satorra.2000")} convention for FIML/ML2S missing-data
 pairs. For FIML with empirical Gamma, it combines the saturated EM
 sandwich covariance, expected \code{WLS.V} at the fitted larger model, and
@@ -115,3 +115,5 @@ reduction of the asymptotic weighted-chi-square distribution. The
 \code{"lavaan_sb2001"} and \code{"lavaan_sb2010"} options mirror lavaan's
 compatibility difference-test approximations.
 }
+
+\details{With convention = "magmaan" and method omitted, robust_nested_lrt() calls policy_nested() for complete-data ML and all-ordinal DWLS. Unsupported components raise a condition of class \code{magmaan_unsupported_inference}, with reason and detail fields. Explicit method choices and nestedTest() are Satorra/lavaan compatibility routes and retain their documented formulas.}

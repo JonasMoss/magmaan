@@ -11,7 +11,7 @@ suppressPackageStartupMessages(library(magmaanlab))
 # Diagnostic composition for single-group complete-data covariance models only.
 # One U-factor and one reduced empirical meat; retain the uncentered score correction.
 shared_primary <- function(f, d) {
- u <- magmaan_core$robust_build_u_factor_fit(f)
+ u <- magmaan_core$robust_build_u_factor_fit(f, bread = "expected")
  Z <- magmaan_core$robust_casewise_contributions(f$partable,as.matrix(d))
  Y <- Z %*% u$B
  M <- crossprod(Y)/nrow(d)

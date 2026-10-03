@@ -191,7 +191,7 @@ test_that("complete continuous and all-ordinal data share the fixed-weight menu"
         if (policy == "unrestricted") expect_equal(selected$fmin, fit$fmin, tolerance = 1e-6)
         if (!categorical && policy == "unrestricted") {
           reference <- magmaan_core$infer_continuous_ls_robust(staged, staged$raw_data$X,
-            weight = staged$W, bread = "expected", gamma = "empirical")$vcov
+            weight = staged$W, bread = "expected", gamma = "empirical", fixed_weight = TRUE)$vcov
           expect_equal(vcov(staged, regime = "sandwich_expected"), reference, tolerance = 0)
           expect_true(all(is.finite(vcov(staged))))
         }

@@ -46,7 +46,7 @@ test_that("exact ML path embedding agrees across spellings and with lavaan", {
     }
   }
   lr <- lapply(nulls, function(h0) robust_nested_lrt(h1,
-    nested_at_same_point(h0, nulls[[3L]]), data = d, A.method = "exact"))
+    nested_at_same_point(h0, nulls[[3L]]), data = d, A.method = "exact", method = "restriction_map"))
   for (x in lr[-1L]) expect_equal(nested_numeric(x), nested_numeric(lr[[1L]]), tolerance = 1e-10)
   scores <- lapply(nulls, function(h0) nested_score_test(h1,
     nested_at_same_point(h0, nulls[[3L]]), data = d))
@@ -57,7 +57,7 @@ test_that("exact ML path embedding agrees across spellings and with lavaan", {
   lav0 <- lavaan::cfa(nested_spellings[[2L]], d, estimator = "MLR", information = "expected")
   oracle <- lavaan::lavTestLRT(lav1, lav0, method = "satorra.2000", A.method = "exact")
   compat <- robust_nested_lrt(h1, nulls[[2L]], data = d,
-                              A.method = "exact", convention = "lavaan")
+                              A.method = "exact", convention = "lavaan", method = "restriction_map")
   expect_equal(compat$T_scaled, oracle[["Chisq diff"]][2L], tolerance = 1e-4)
   # lavTestScore() is the expected nested geometry; the policy uses the
   # observed one. The lab reproduces both.
@@ -90,7 +90,7 @@ test_that("FIML, ordinal and weighted exact paths share key embedding", {
     lr <- lapply(nulls, function(h0) robust_nested_lrt(h1,
       nested_at_same_point(h0, nulls[[3L]]),
       data = if (estimator %in% c("FIML", "ML2S")) NULL else input,
-      A.method = "exact"))
+      A.method = "exact", method = "restriction_map"))
     for (x in lr[-1L]) expect_equal(nested_numeric(x), nested_numeric(lr[[1L]]), tolerance = 1e-9)
     if (estimator == "FIML") {
       scores <- lapply(nulls, function(h0) nested_score_test(h1,
@@ -122,10 +122,10 @@ test_that("multigroup drop/fix embedding retains group-specific constraints", {
   lav0 <- lavaan::cfa(paste(nested_three, "visual =~ c(b,a)*x9\nb == 0", sep = "\n"), d,
                       group = "school", estimator = "MLR", information = "expected")
   oracle <- lavaan::lavTestLRT(lav1, lav0, method = "satorra.2000", A.method = "exact")
-  expect_equal(robust_nested_lrt(h1, equal, data = raw)$T_scaled,
+  expect_equal(robust_nested_lrt(h1, equal, data = raw, method = "restriction_map")$T_scaled,
                oracle[["Chisq diff"]][2L], tolerance = 1e-4)
-  expect_equal(nested_numeric(robust_nested_lrt(h1, fixed, data = raw)),
-               nested_numeric(robust_nested_lrt(h1, equal, data = raw)), tolerance = 1e-10)
+  expect_equal(nested_numeric(robust_nested_lrt(h1, fixed, data = raw, method = "restriction_map")),
+               nested_numeric(robust_nested_lrt(h1, equal, data = raw, method = "restriction_map")), tolerance = 1e-10)
 })
 
 test_that("covariance-only nested scores profile the mean (structural-path constants)", {

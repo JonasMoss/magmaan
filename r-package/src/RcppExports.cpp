@@ -1160,21 +1160,22 @@ BEGIN_RCPP
 END_RCPP
 }
 // measures_reliability_cov
-Rcpp::List measures_reliability_cov(Rcpp::NumericMatrix S, Rcpp::Nullable<Rcpp::NumericMatrix> gamma, int n);
-RcppExport SEXP _magmaanlab_measures_reliability_cov(SEXP SSEXP, SEXP gammaSEXP, SEXP nSEXP) {
+Rcpp::List measures_reliability_cov(Rcpp::NumericMatrix S, Rcpp::Nullable<Rcpp::NumericMatrix> gamma, int n, Rcpp::Nullable<Rcpp::NumericMatrix> raw_data);
+RcppExport SEXP _magmaanlab_measures_reliability_cov(SEXP SSEXP, SEXP gammaSEXP, SEXP nSEXP, SEXP raw_dataSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type S(SSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type gamma(gammaSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    rcpp_result_gen = Rcpp::wrap(measures_reliability_cov(S, gamma, n));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_reliability_cov(S, gamma, n, raw_data));
     return rcpp_result_gen;
 END_RCPP
 }
 // measures_reliability_omega_multidim
-Rcpp::List measures_reliability_omega_multidim(Rcpp::NumericMatrix S, Rcpp::IntegerVector block, std::string target, Rcpp::Nullable<Rcpp::NumericVector> weights, Rcpp::Nullable<Rcpp::NumericMatrix> gamma, int n);
-RcppExport SEXP _magmaanlab_measures_reliability_omega_multidim(SEXP SSEXP, SEXP blockSEXP, SEXP targetSEXP, SEXP weightsSEXP, SEXP gammaSEXP, SEXP nSEXP) {
+Rcpp::List measures_reliability_omega_multidim(Rcpp::NumericMatrix S, Rcpp::IntegerVector block, std::string target, Rcpp::Nullable<Rcpp::NumericVector> weights, Rcpp::Nullable<Rcpp::NumericMatrix> gamma, int n, Rcpp::Nullable<Rcpp::NumericMatrix> raw_data);
+RcppExport SEXP _magmaanlab_measures_reliability_omega_multidim(SEXP SSEXP, SEXP blockSEXP, SEXP targetSEXP, SEXP weightsSEXP, SEXP gammaSEXP, SEXP nSEXP, SEXP raw_dataSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1184,7 +1185,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type weights(weightsSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type gamma(gammaSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    rcpp_result_gen = Rcpp::wrap(measures_reliability_omega_multidim(S, block, target, weights, gamma, n));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericMatrix> >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_reliability_omega_multidim(S, block, target, weights, gamma, n, raw_data));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2800,8 +2802,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_continuous_ls_robust
-Rcpp::List infer_continuous_ls_robust(Rcpp::List fit, SEXP raw_data, SEXP weight, std::string bread, std::string gamma);
-RcppExport SEXP _magmaanlab_infer_continuous_ls_robust(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP gammaSEXP) {
+Rcpp::List infer_continuous_ls_robust(Rcpp::List fit, SEXP raw_data, SEXP weight, std::string bread, std::string gamma, bool fixed_weight);
+RcppExport SEXP _magmaanlab_infer_continuous_ls_robust(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP gammaSEXP, SEXP fixed_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2810,7 +2812,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_robust(fit, raw_data, weight, bread, gamma));
+    Rcpp::traits::input_parameter< bool >::type fixed_weight(fixed_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_continuous_ls_robust(fit, raw_data, weight, bread, gamma, fixed_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3126,16 +3129,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_build_u_factor_pairwise
-Rcpp::List infer_build_u_factor_pairwise(Rcpp::List fit, SEXP X, SEXP mask, std::string bread);
-RcppExport SEXP _magmaanlab_infer_build_u_factor_pairwise(SEXP fitSEXP, SEXP XSEXP, SEXP maskSEXP, SEXP breadSEXP) {
+Rcpp::List infer_build_u_factor_pairwise(Rcpp::List fit, SEXP X, std::string bread, SEXP mask);
+RcppExport SEXP _magmaanlab_infer_build_u_factor_pairwise(SEXP fitSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP maskSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_build_u_factor_pairwise(fit, X, mask, bread));
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_build_u_factor_pairwise(fit, X, bread, mask));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4436,8 +4439,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_measures_composite_weights", (DL_FUNC) &_magmaanlab_measures_composite_weights, 2},
     {"_magmaanlab_measures_residuals", (DL_FUNC) &_magmaanlab_measures_residuals, 1},
     {"_magmaanlab_measures_standardized_residuals", (DL_FUNC) &_magmaanlab_measures_standardized_residuals, 1},
-    {"_magmaanlab_measures_reliability_cov", (DL_FUNC) &_magmaanlab_measures_reliability_cov, 3},
-    {"_magmaanlab_measures_reliability_omega_multidim", (DL_FUNC) &_magmaanlab_measures_reliability_omega_multidim, 6},
+    {"_magmaanlab_measures_reliability_cov", (DL_FUNC) &_magmaanlab_measures_reliability_cov, 4},
+    {"_magmaanlab_measures_reliability_omega_multidim", (DL_FUNC) &_magmaanlab_measures_reliability_omega_multidim, 7},
     {"_magmaanlab_measures_reliability_omega_from_fit", (DL_FUNC) &_magmaanlab_measures_reliability_omega_from_fit, 5},
     {"_magmaanlab_measures_reliability_ordinal_observed_omega", (DL_FUNC) &_magmaanlab_measures_reliability_ordinal_observed_omega, 5},
     {"_magmaanlab_measures_factor_scores", (DL_FUNC) &_magmaanlab_measures_factor_scores, 3},
@@ -4541,7 +4544,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl, 16},
     {"_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl, 17},
-    {"_magmaanlab_infer_continuous_ls_robust", (DL_FUNC) &_magmaanlab_infer_continuous_ls_robust, 5},
+    {"_magmaanlab_infer_continuous_ls_robust", (DL_FUNC) &_magmaanlab_infer_continuous_ls_robust, 6},
     {"_magmaanlab_infer_continuous_ls_profile_lrt", (DL_FUNC) &_magmaanlab_infer_continuous_ls_profile_lrt, 5},
     {"_magmaanlab_infer_fiml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_fiml_profile_lrt, 3},
     {"_magmaanlab_infer_two_stage_nt_profile_lrt", (DL_FUNC) &_magmaanlab_infer_two_stage_nt_profile_lrt, 3},

@@ -11,3 +11,5 @@ est_change(rerun_out, parameters = NULL, se = c("standard", "robust.sem", "robus
 \item{se}{Standard-error convention. fit_model is estimate-only and accepts only "none"; SAM and est_change expose the choices shown in their signatures.}
 }
 \value{A parameter-change results table.}
+
+\note{The SE/type defaults standardize SAM or case-change diagnostics. They do not assert a generic misspecification-robust inference law; explicit robust or estimated-weight choices remain available within their supported scope.}

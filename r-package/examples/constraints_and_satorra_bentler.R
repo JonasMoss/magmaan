@@ -95,7 +95,7 @@ fit_hs <- magmaan_core$fit_fit(pt_hs, magmaan_core$data_sample_stats_from_raw(Xf
 T_hs   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_hs), fit_hs$fmin);  df_hs <- magmaan_core$infer_df_stat(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs))
 
 # the robust chain, composed from the thin wrappers:
-uf  <- magmaan_core$infer_build_u_factor_parts(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs), fit_hs$theta)  # U-factor at θ̂
+uf  <- magmaan_core$infer_build_u_factor_parts(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs), fit_hs$theta, bread = "expected")  # U-factor at θ̂
 Zc  <- magmaan_core$infer_casewise_contributions(pt_hs, Xfull)           # casewise vech contributions (raw data)
 M   <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit_hs$nobs)      # BᵀΓ̂B  (df × df); per-block divisor = nobs
 ev  <- magmaan_core$infer_ugamma_eigenvalues(M)                          # eigenvalues of UΓ̂  ← the deliverable

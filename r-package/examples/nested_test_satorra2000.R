@@ -1,11 +1,11 @@
 ## magmaan R bindings — robust nested-model likelihood-ratio test, via
-## `robust_nested_lrt()`, on Holzinger-Swineford × school (configural vs metric
+## `robust_nested_lrt(..., method = "restriction_map")`, on Holzinger-Swineford × school (configural vs metric
 ## invariance).
 ##
 ## Run from the repo root (after `R CMD INSTALL r-package`):
 ##     Rscript r-package/examples/nested_test_satorra2000.R
 ##
-## `robust_nested_lrt()` reports five p-values for H1 ⊃ H0: the naïve χ²(m), the
+## `robust_nested_lrt(..., method = "restriction_map")` reports five p-values for H1 ⊃ H0: the naïve χ²(m), the
 ## Satorra-Bentler scaled correction, the mean-and-variance adjustment, the
 ## scaled-and-shifted correction, and the exact Imhof mixture tail.
 ##
@@ -48,8 +48,8 @@ fit_met <- magmaan_core$fit_fit(pt_met, ssg)     # H0  (additional cross-group `
 ## fit_cfg$S — which is the order `magmaan_core$data_sample_stats_from_raw()` consumed
 ## above).
 res <- magmaanlab::robust_nested_lrt(fit_H1 = fit_cfg, fit_H0 = fit_met,
-                                  data = Xg, A.method = "exact")
-cat("\n=== magmaanlab::robust_nested_lrt(fit_cfg, fit_met, A.method = 'exact') ===\n")
+                                  data = Xg, A.method = "exact", method = "restriction_map")
+cat("\n=== magmaanlab::robust_nested_lrt(fit_cfg, fit_met, A.method = 'exact', method = 'restriction_map') ===\n")
 print(res)
 
 ## ---- lavaan, for reference -------------------------------------------------
@@ -115,8 +115,8 @@ fit_cfg_m <- magmaan_core$fit_fit(pt_cfg_m, ssg)     # H1
 fit_met_m <- magmaan_core$fit_fit(pt_met_m, ssg)     # H0
 
 res_m <- magmaanlab::robust_nested_lrt(fit_H1 = fit_cfg_m, fit_H0 = fit_met_m,
-                                    data = Xg, A.method = "exact")
-cat("\n=== meanstructure=TRUE: robust_nested_lrt(cfg, met, A.method='exact') ===\n")
+                                    data = Xg, A.method = "exact", method = "restriction_map")
+cat("\n=== meanstructure=TRUE: robust_nested_lrt(cfg, met, A.method='exact', method = 'restriction_map') ===\n")
 print(res_m)
 
 lav_cfg_m <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
@@ -170,8 +170,8 @@ fit_if <- magmaan_core$fit_fit(pt_if, ssg)   # H1
 fit_it <- magmaan_core$fit_fit(pt_it, ssg)   # H0
 
 res_i <- magmaanlab::robust_nested_lrt(fit_H1 = fit_if, fit_H0 = fit_it,
-                                    data = Xg, A.method = "exact")
-cat("\n=== intercept invariance: robust_nested_lrt(free, tied, A.method='exact') ===\n")
+                                    data = Xg, A.method = "exact", method = "restriction_map")
+cat("\n=== intercept invariance: robust_nested_lrt(free, tied, A.method='exact', method = 'restriction_map') ===\n")
 print(res_i)
 
 lm_obs <- "visual =~ x1 + x2 + x3\n  textual =~ x4 + x5 + x6\n  speed =~ x7 + x8 + x9"

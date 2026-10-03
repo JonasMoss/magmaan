@@ -29,7 +29,7 @@ score_components_from_matrices(score, rows, sensitivity, metric = sensitivity,
   nuisance = matrix(0, length(score), 0L), directions = diag(length(score)),
   influence_rows = FALSE)
 project_scores(components, retain_rows = FALSE, center = FALSE)
-score_quadratic(score, metric, meat = NULL)
+score_quadratic(score, metric, meat)
 score_spectrum(projected)
 score_sandwich(projected)
 resample_scores(projected, n_flips = 999L, seed = 1,
@@ -62,7 +62,7 @@ rather than likelihood scores. Likelihood rows must sum to the observed score.}
 \item{center}{Globally center covariance rows. Does not change the observed
 score. This is not within-pattern centering.}
 \item{score}{An observed score or contrast vector in total-likelihood units.}
-\item{meat}{Optional symmetric score covariance in corresponding total units.}
+\item{meat}{Symmetric score covariance in total units. Required for score_quadratic. For parameter_covariance, NULL derives empirical meat from retained fitting data; explicit "model" requests inverse information.}
 \item{statistic,df,eigenvalues}{A precomputed quadratic statistic, nominal
 positive integer degrees of freedom, and optional spectrum including zero weights.}
 \item{methods}{One or more of std, sb, peba2, peba4, all. Only all requests

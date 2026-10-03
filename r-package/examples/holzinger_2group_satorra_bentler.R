@@ -67,7 +67,7 @@ cat(sprintf("  match: df %s | T_ML %s\n\n",
 ## ===========================================================================
 ## 2. pooled (multi-group) Satorra-Bentler scaled χ²
 ## ===========================================================================
-uf <- magmaan_core$infer_build_u_factor_parts(fit$partable, magmaan_core$fit_sample_stats(fit), fit$theta)  # blocks = 2; B is (p*_1 + p*_2) x df
+uf <- magmaan_core$infer_build_u_factor_parts(fit$partable, magmaan_core$fit_sample_stats(fit), fit$theta, bread = "expected")  # blocks = 2; B is (p*_1 + p*_2) x df
 Zc <- magmaan_core$infer_casewise_contributions(pt, Xg)               # N × (p*_1 + p*_2), block-diagonal layout
 M  <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit$nobs)       # Σ_g B_gᵀΓ̂_gB_g, each Γ̂_g divided by n_g
 ev <- magmaan_core$infer_ugamma_eigenvalues(M)
@@ -93,7 +93,7 @@ m_met <- "visual  =~ x1 + L1*x2 + L2*x3
 pt_met <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
 fit_met <- magmaan_core$fit_fit(pt_met, ssg)
 T_met   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_met), fit_met$fmin);  df_met <- magmaan_core$infer_df_stat(fit_met$partable, magmaan_core$fit_sample_stats(fit_met))
-uf_met <- magmaan_core$infer_build_u_factor_parts(fit_met$partable, magmaan_core$fit_sample_stats(fit_met), fit_met$theta)  # constraints shrink df
+uf_met <- magmaan_core$infer_build_u_factor_parts(fit_met$partable, magmaan_core$fit_sample_stats(fit_met), fit_met$theta, bread = "expected")  # constraints shrink df
 ev_met  <- magmaan_core$infer_ugamma_eigenvalues(
              magmaan_core$infer_reduced_gamma_sample(uf_met, magmaan_core$infer_casewise_contributions(pt_met, Xg), fit_met$nobs))
 sb_met  <- magmaan_core$infer_satorra_bentler(T_met, df_met, ev_met)

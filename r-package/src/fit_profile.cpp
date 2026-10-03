@@ -172,7 +172,7 @@ scalar_reference_from_nullable(Rcpp::Nullable<Rcpp::String> reference,
   using magmaan::estimate::frontier::ScalarProfileReference;
   if (reference.isNull()) {
     return robust ? ScalarProfileReference::RobustScaled
-                  : ScalarProfileReference::Ordinary;
+                  : ScalarProfileReference::MisspecScaled;
   }
   std::string key = Rcpp::as<std::string>(reference.get());
   for (char& ch : key) {
@@ -524,7 +524,7 @@ Rcpp::List frontier_profile_lrt_parameter_ml_impl(
   if (scalar_reference_needs_sandwich(reference_mode)) {
     if (Rf_isNull(raw_data)) {
       Rcpp::stop("frontier_profile_lrt_parameter_ml() robust/misspec "
-                 "reference requires raw_data");
+                 "reference requires raw_data; supply raw data or choose reference = 'ordinary' explicitly");
     }
     raw_holder = std::make_unique<magmaan::data::RawData>(
         complete_raw_from_arg(ctx.rep, raw_data));
@@ -595,7 +595,7 @@ Rcpp::List frontier_profile_lrt_parameter_gmm_impl(
   if (scalar_reference_needs_sandwich(reference_mode)) {
     if (Rf_isNull(raw_data)) {
       Rcpp::stop("frontier_profile_lrt_parameter_gmm() robust/misspec "
-                 "reference requires raw_data");
+                 "reference requires raw_data; supply raw data or choose reference = 'ordinary' explicitly");
     }
     raw_holder = std::make_unique<magmaan::data::RawData>(
         complete_raw_from_arg(ctx.rep, raw_data));
@@ -707,7 +707,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_ml_impl(
   if (scalar_reference_needs_sandwich(ci_opts.reference)) {
     if (Rf_isNull(raw_data)) {
       Rcpp::stop("frontier_profile_lrt_ci_parameter_ml() robust/misspec "
-                 "reference requires raw_data");
+                 "reference requires raw_data; supply raw data or choose reference = 'ordinary' explicitly");
     }
     raw_holder = std::make_unique<magmaan::data::RawData>(
         complete_raw_from_arg(ctx.rep, raw_data));
@@ -777,7 +777,7 @@ Rcpp::List frontier_profile_lrt_ci_parameter_gmm_impl(
   if (scalar_reference_needs_sandwich(ci_opts.reference)) {
     if (Rf_isNull(raw_data)) {
       Rcpp::stop("frontier_profile_lrt_ci_parameter_gmm() robust/misspec "
-                 "reference requires raw_data");
+                 "reference requires raw_data; supply raw data or choose reference = 'ordinary' explicitly");
     }
     raw_holder = std::make_unique<magmaan::data::RawData>(
         complete_raw_from_arg(ctx.rep, raw_data));

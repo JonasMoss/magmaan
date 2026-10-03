@@ -1,5 +1,29 @@
 # magmaanlab 0.2.0 (in development)
 
+- Scalar profile tests and intervals now default to the misspecification-scaled
+  reference. Empirical laws require raw data; callers can explicitly select
+  ordinary or robust-scaled comparators.
+- U-factor builders require an explicit bread. Observed is needed for
+  pseudo-true covariance/nested restrictions; complete-data global GOF may
+  use expected geometry.
+- Global score flips select observed sensitivity for MAR FIML and expected
+  sensitivity for complete-data correct-model GOF.
+- Reliability with NULL Gamma derives empirical Gamma from supplied raw data
+  and errors if no raw data are available.
+- Structured/saturated moments remain unchanged pending a joint derivation
+  recorded in the backlog.
+- SAM and case-influence SE/type defaults are retained as diagnostic conventions.
+- parameter_covariance() derives empirical meat from its retained observations;
+  meat = "model" explicitly requests inverse information.
+- score_quadratic() requires an explicit meat matrix; its metric is a free choice.
+- Generic robust_nested_lrt() composes the ML/DWLS nested policy and raises
+  typed unsupported reasons elsewhere. Explicit methods and Satorra aliases
+  remain compatibility routes.
+- FMG/semTests replication routes retain their comparator conventions.
+  infer_continuous_ls_robust() documents its caller-fixed-weight law and
+  rejects recorded data-estimated weights unless fixed_weight = TRUE is explicit.
+
+
 - All lab `estimated_weight` switches now default to `TRUE`, the
   misspecification-robust choice: robust modification indices and score tests,
   residuals, GMM and ML2S profile tests/intervals, ordinal/mixed

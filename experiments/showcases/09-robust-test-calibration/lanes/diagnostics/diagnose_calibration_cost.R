@@ -44,7 +44,7 @@ for(j in seq_len(nrow(cases))){
  ev<-magmaanlab:::infer_fmg_ugamma_spectra(snapshot,X,FALSE)$biased
  df<-fm$df[1];T<-fm$base_statistic[1];eig<-sort(pmax(ev,0),decreasing=TRUE)
  ug<-lavaan:::lav_test_fmg_ugamma(lavobject=lf)
- u<-core$robust_build_u_factor_fit(snapshot)
+ u<-core$robust_build_u_factor_fit(snapshot, bread = "expected")
  # Materialize Gamma only outside timing to isolate the reduced eigensolve.
  Z<-core$robust_casewise_contributions(f$partable,X)
  if(c$meanstructure)Z<-cbind(scale(X,center=TRUE,scale=FALSE),Z)

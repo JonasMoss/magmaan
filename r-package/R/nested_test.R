@@ -212,6 +212,7 @@ global_score_flip_test <- function(
     metric = c("expected", "observed", "observed-h1")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
+  if (missing(sensitivity) && identical(toupper(fit$estimator), "FIML")) sensitivity <- "observed"
   sensitivity <- match.arg(sensitivity)
   metric <- match.arg(metric)
   estimator <- toupper(fit$estimator %||% "ML")
@@ -409,7 +410,8 @@ print.magmaan_nested_score_test <- function(x, ...) {
 #'   `WLS.V` to restriction columns and contracts that covariance without an
 #'   additional full Gamma; `"materialized"` forms Gamma explicitly and
 #'   `"dense"` is a diagnostic oracle.
-#' @param convention `"magmaan"` (default) keeps magmaan's estimator-specific
+#' @param convention `"magmaan"` with method omitted calls policy_nested();
+#'   unsupported policy components raise a typed condition. Explicit methods keep the compatibility
 #'   Satorra-2000 moment convention. `"lavaan"` uses lavaan's public
 #'   `lavTestLRT(method = "satorra.2000")` convention for FIML/ML2S missing-data
 #'   pairs. For FIML with empirical Gamma, it combines the saturated EM
@@ -450,8 +452,30 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               ud_method = c("2000", "2001"),
                               h1_reference_regularization = NULL,
                               weight = NULL) {
+  policy_route <- missing(method) && match.arg(convention) == "magmaan"
   pair <- .inference_pair(fit_H1, fit_H0, data)
   fit_H1 <- pair$H1; fit_H0 <- pair$H0; data <- pair$data
+  if (policy_route) {
+    if (is.list(data) && !is.data.frame(data) &&
+        length(data) && all(vapply(data, is.data.frame, logical(1))))
+      data <- lapply(data, as.matrix)
+    if ((!missing(gamma) && !identical(gamma, "empirical")) ||
+        !is.null(weight) || !is.null(h1_reference_regularization))
+      stop("robust_nested_lrt(): policy owns the inference ingredients; choose an explicit compatibility method for gamma/weight/reference overrides",
+           call. = FALSE)
+    result <- policy_nested(fit_H1, fit_H0, data)
+    lr <- result$lr
+    if (!isTRUE(lr$available))
+      stop(structure(list(message = paste0("robust_nested_lrt(): ", lr$reason, ": ", lr$detail),
+        call = NULL, reason = lr$reason, detail = lr$detail),
+        class = c("magmaan_unsupported_inference", "error", "condition")))
+    return(structure(list(T_diff = lr$statistic, df_diff = lr$df,
+      scale_c = lr$sb_scale, T_scaled = lr$statistic / lr$sb_scale,
+      p_scaled = lr$p_sb, p_value = lr$p_sb, p_adjusted = lr$p_peba4,
+      p_mixture = calibrate_quadratic(quadratic_reference(lr$statistic, lr$df, lr$eigenvalues), "all")$p_value,
+      eigenvalues = lr$eigenvalues, convention = "magmaan", gamma = "empirical",
+      method = "policy", policy = result), class = c("magmaan_nested_test", "list")))
+  }
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   convention <- match.arg(convention)

@@ -60,7 +60,8 @@ project_scores <- function(components, retain_rows = FALSE, center = FALSE) {
 }
 
 # Supplied-matrix route, also usable for a Wald contrast and its covariance.
-score_quadratic <- function(score, metric, meat = NULL) {
+score_quadratic <- function(score, metric, meat) {
+  if (missing(meat) || is.null(meat)) stop("score_quadratic(): supply an explicit meat matrix")
   .score_object(score_quadratic_impl(as.numeric(score), as.matrix(metric), meat),
                 "magmaan_projected_score")
 }

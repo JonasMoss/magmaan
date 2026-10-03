@@ -184,8 +184,29 @@ Rcpp::NumericMatrix parameter_covariance_impl(SEXP context, Rcpp::NumericMatrix 
   const auto& c = score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   auto out = magmaan::inference::vcov(Rcpp::as<Eigen::MatrixXd>(information),c.ctx.pt,c.estimates.theta);
   if (!out) stop_post(out.error());
-  if (!Rf_isNull(meat)) {
-    const Eigen::MatrixXd B = Rcpp::as<Eigen::MatrixXd>(meat);
+  const bool model = TYPEOF(meat) == STRSXP &&
+      Rcpp::as<std::string>(meat) == "model";
+  if (!model) {
+    Eigen::MatrixXd B;
+    if (Rf_isNull(meat)) {
+      if (c.raw.X.empty())
+        Rcpp::stop("parameter_covariance(): empirical meat requires retained raw data");
+      if (c.estimator == "ML") {
+        // Covariance-only ML profiles its mean; use the core moment scores.
+        auto rows = magmaan::inference::casewise_scores(
+            c.ctx.pt, c.ctx.rep, c.ctx.samp, c.raw, c.estimates);
+        if (!rows) stop_post(rows.error());
+        B = rows->transpose() * *rows;
+      } else {
+        const Rcpp::List scores = score_bindings::rows(context, "parameter");
+        const Eigen::MatrixXd rows = Rcpp::as<Eigen::MatrixXd>(scores["rows"]);
+        B = rows.transpose() * rows;
+      }
+    } else {
+      if (TYPEOF(meat) == STRSXP)
+        Rcpp::stop("parameter_covariance(): named meat must be 'model'");
+      B = Rcpp::as<Eigen::MatrixXd>(meat);
+    }
     if (B.rows() != out->rows() || B.cols() != out->cols() || !B.allFinite() || !B.isApprox(B.transpose()))
       Rcpp::stop("parameter_covariance(): meat must be finite, symmetric and match information");
     *out = (*out * B * *out).eval();

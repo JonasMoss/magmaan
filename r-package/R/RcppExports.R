@@ -253,7 +253,7 @@ inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 
     .Call(`_magmaanlab_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "observed", metric = "expected") {
+inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "auto", metric = "expected") {
     .Call(`_magmaanlab_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric)
 }
 
@@ -321,12 +321,12 @@ measures_standardized_residuals <- function(fit) {
     .Call(`_magmaanlab_measures_standardized_residuals`, fit)
 }
 
-measures_reliability_cov <- function(S, gamma = NULL, n = 0L) {
-    .Call(`_magmaanlab_measures_reliability_cov`, S, gamma, n)
+measures_reliability_cov <- function(S, gamma = NULL, n = 0L, raw_data = NULL) {
+    .Call(`_magmaanlab_measures_reliability_cov`, S, gamma, n, raw_data)
 }
 
-measures_reliability_omega_multidim <- function(S, block, target = "total", weights = NULL, gamma = NULL, n = 0L) {
-    .Call(`_magmaanlab_measures_reliability_omega_multidim`, S, block, target, weights, gamma, n)
+measures_reliability_omega_multidim <- function(S, block, target = "total", weights = NULL, gamma = NULL, n = 0L, raw_data = NULL) {
+    .Call(`_magmaanlab_measures_reliability_omega_multidim`, S, block, target, weights, gamma, n, raw_data)
 }
 
 measures_reliability_omega_from_fit <- function(fit, target, weight, gamma, n) {
@@ -741,8 +741,8 @@ frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, ta
     .Call(`_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
-infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "observed", gamma = "empirical") {
-    .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma)
+infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "observed", gamma = "empirical", fixed_weight = FALSE) {
+    .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma, fixed_weight)
 }
 
 infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
@@ -813,11 +813,11 @@ infer_lr_test_satorra_bentler2010 <- function(fit_H1, fit_H0, X_per_group, T_H1,
     .Call(`_magmaanlab_infer_lr_test_satorra_bentler2010`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
 
-infer_build_u_factor <- function(fit, bread = "expected", moments = "structured") {
+infer_build_u_factor <- function(fit, bread, moments = "structured") {
     .Call(`_magmaanlab_infer_build_u_factor`, fit, bread, moments)
 }
 
-infer_build_u_factor_parts <- function(partable, sample_stats, theta, bread = "expected", moments = "structured") {
+infer_build_u_factor_parts <- function(partable, sample_stats, theta, bread, moments = "structured") {
     .Call(`_magmaanlab_infer_build_u_factor_parts`, partable, sample_stats, theta, bread, moments)
 }
 
@@ -825,8 +825,8 @@ infer_reduced_gamma_nt <- function(uf) {
     .Call(`_magmaanlab_infer_reduced_gamma_nt`, uf)
 }
 
-infer_build_u_factor_pairwise <- function(fit, X, mask = NULL, bread = "expected") {
-    .Call(`_magmaanlab_infer_build_u_factor_pairwise`, fit, X, mask, bread)
+infer_build_u_factor_pairwise <- function(fit, X, bread, mask = NULL) {
+    .Call(`_magmaanlab_infer_build_u_factor_pairwise`, fit, X, bread, mask)
 }
 
 infer_reduced_gamma_nt_pairwise <- function(uf, X, mask = NULL) {

@@ -45,3 +45,5 @@ relative to the one-step error, but they have no first-principles basis (see
 the influence-function derivation; tracked as an upstream-PR item). The raw
 \code{\link[=est_change_raw_approx]{est_change_raw_approx()}} is unaffected (semfindr is correct there).
 }
+
+\note{The SE/type defaults standardize SAM or case-change diagnostics. They do not assert a generic misspecification-robust inference law; explicit robust or estimated-weight choices remain available within their supported scope.}

@@ -1,3 +1,5 @@
+# SE/type defaults standardize case-change diagnostics; inference requires
+# an explicit supported robust/estimated-weight law.
 # Case-level influence diagnostics (semfindr parity, exact leave-one-out engine).
 #
 # Reproduces the outputs and output format of the R package semfindr

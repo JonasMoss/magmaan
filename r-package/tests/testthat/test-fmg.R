@@ -49,7 +49,7 @@ test_that("continuous least-squares fits use the C++ robust spectrum", {
   local_mocked_bindings(
     infer_continuous_ls_robust = function(fit, raw_data, weight = NULL,
                                           bread = "expected",
-                                          gamma = "empirical") {
+                                          gamma = "empirical", fixed_weight = FALSE) {
       calls$weight <- weight
       calls$gamma <- gamma
       list(df = 2L, eigvals = c(0.75, 1.25), chisq_standard = 6)

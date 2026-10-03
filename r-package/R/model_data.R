@@ -2903,7 +2903,7 @@ infer_nt_moment_quadratic_fit <- function(fit, implied) {
   infer_nt_moment_quadratic(fit, implied)
 }
 
-infer_build_u_factor_fit <- function(fit, bread = "expected", moments = "structured") {
+infer_build_u_factor_fit <- function(fit, bread, moments = "structured") {
   infer_build_u_factor(fit, bread = bread, moments = moments)
 }
 

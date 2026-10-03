@@ -502,7 +502,15 @@
 
 ## Lab inference default audit
 
-The [phase-one inventory](../../validation/lab_inference_defaults.md) records
-current wrapper and glue defaults against the scope requirement, including
-implicit covariance dispatch and estimated-weight laws. Proposed flips are
-pending TASK-61 decisions; this inventory does not change supported recipes.
+The [implemented inventory](../../validation/lab_inference_defaults.md) classifies
+wrapper/glue defaults and each component's null. Generic covariance uses
+observed empirical sandwiches (estimated-weight IJ where needed); nested
+sensitivity is observed. Generic robust_nested_lrt() calls the ML/DWLS policy
+composer and raises a typed unsupported condition outside its coverage.
+Scalar profiles default to MisspecScaled; raw-data-free ordinary references
+must be requested explicitly. U-factor breads and supplied-score meats are
+required choices. Reliability with NULL Gamma requires raw observations.
+Fixed-weight LS, Satorra, lavaan bundles and FMG/semTests APIs remain explicit
+comparators. Noniterative NT defaults are postponed; SAM/case-change scaling
+remains diagnostic. Structured/saturated moments await a recorded derivation.
+The ordinary package implementation is unchanged.

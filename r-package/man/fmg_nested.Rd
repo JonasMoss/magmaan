@@ -50,3 +50,5 @@ Browne/Du-Bentler finite-sample correction to the nested Gamma spectrum.
 Unsuffixed tests and \verb{_ml} retain the likelihood-ratio difference. FIML and
 two-stage ML (\code{ML2S}) support only the biased Gamma and ML base.
 }
+
+\note{This is an FMG/semTests replication-compatibility route. Its NT/fixed-weight conventions reproduce the documented comparator and are distinct from the generic nested policy in robust_nested_lrt().}

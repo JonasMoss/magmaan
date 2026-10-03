@@ -107,7 +107,7 @@ for (std_lv in c(FALSE, TRUE)) for (estimator in c("ML", "FIML")) test_that(past
     as.matrix(d[d$school == g, paste0("x", 1:6)])
   }) else NULL
   nt <- robust_nested_lrt(metric$ours, scalar$ours, data = raw,
-                           A.method = "delta", convention = "lavaan")
+                           A.method = "delta", convention = "lavaan", method = "restriction_map")
   # Complete-data restriction-map geometry uses expected information (MLM).
   # FIML uses MLR; requesting MLM would silently select listwise deletion.
   oracle_estimator <- if (estimator == "ML") "MLM" else "MLR"

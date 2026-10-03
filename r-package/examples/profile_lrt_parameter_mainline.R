@@ -64,7 +64,7 @@ fit_fiml <- fit_model(model, dat, estimator = "FIML", control = control)
 free_fiml <- loading_free_id(fit_fiml, "x2")
 target_fiml <- 0.97 * fit_fiml$theta[free_fiml]
 lrt_fiml <- core$frontier_profile_lrt_parameter_fiml(
-  fit_fiml, free_fiml, target_fiml)
+  fit_fiml, free_fiml, target_fiml, reference = "ordinary")
 lrt_fiml_robust <- core$frontier_profile_lrt_parameter_fiml(
   fit_fiml, free_fiml, target_fiml, reference = "robust_scaled")
 lrt_fiml_misspec <- core$frontier_profile_lrt_parameter_fiml(
@@ -73,8 +73,8 @@ ci_fiml <- core$frontier_profile_lrt_ci_parameter_fiml(
   fit_fiml, free_fiml,
   initial_step = 0.05 * abs(fit_fiml$theta[free_fiml]),
   root_tol = 1e-4,
-  statistic_tol = 1e-4
-)
+  statistic_tol = 1e-4,
+  reference = "ordinary")
 check_profile(lrt_fiml, target_fiml)
 check_robust(lrt_fiml_robust)
 check_misspec(lrt_fiml_misspec)
@@ -85,7 +85,7 @@ fit_ml2s <- fit_model(model, dat, estimator = "ML2S", control = control)
 free_ml2s <- loading_free_id(fit_ml2s, "x2")
 target_ml2s <- 0.97 * fit_ml2s$theta[free_ml2s]
 lrt_ml2s <- core$frontier_profile_lrt_parameter_ml2s_nt(
-  fit_ml2s, free_ml2s, target_ml2s)
+  fit_ml2s, free_ml2s, target_ml2s, reference = "ordinary")
 lrt_ml2s_robust <- core$frontier_profile_lrt_parameter_ml2s_nt(
   fit_ml2s, free_ml2s, target_ml2s, reference = "robust_scaled")
 lrt_ml2s_misspec <- core$frontier_profile_lrt_parameter_ml2s_nt(
@@ -94,8 +94,8 @@ ci_ml2s <- core$frontier_profile_lrt_ci_parameter_ml2s_nt(
   fit_ml2s, free_ml2s,
   initial_step = 0.05 * abs(fit_ml2s$theta[free_ml2s]),
   root_tol = 1e-4,
-  statistic_tol = 1e-4
-)
+  statistic_tol = 1e-4,
+  reference = "ordinary")
 check_profile(lrt_ml2s, target_ml2s)
 check_robust(lrt_ml2s_robust)
 check_misspec(lrt_ml2s_misspec)
@@ -109,7 +109,7 @@ fit_ml2s_dls <- fit_model(
 free_ml2s_dls <- loading_free_id(fit_ml2s_dls, "x2")
 target_ml2s_dls <- 0.97 * fit_ml2s_dls$theta[free_ml2s_dls]
 lrt_ml2s_dls <- core$frontier_profile_lrt_parameter_ml2s(
-  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls)
+  fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls, reference = "ordinary")
 lrt_ml2s_dls_robust <- core$frontier_profile_lrt_parameter_ml2s(
   fit_ml2s_dls, free_ml2s_dls, target_ml2s_dls,
   reference = "robust_scaled")
@@ -120,8 +120,8 @@ ci_ml2s_dls <- core$frontier_profile_lrt_ci_parameter_ml2s(
   fit_ml2s_dls, free_ml2s_dls,
   initial_step = 0.05 * abs(fit_ml2s_dls$theta[free_ml2s_dls]),
   root_tol = 1e-4,
-  statistic_tol = 1e-4
-)
+  statistic_tol = 1e-4,
+  reference = "ordinary")
 check_profile(lrt_ml2s_dls, target_ml2s_dls)
 check_robust(lrt_ml2s_dls_robust)
 check_misspec(lrt_ml2s_dls_misspec)
@@ -140,7 +140,7 @@ fit_mixed <- fit_model(
 free_mixed <- loading_free_id(fit_mixed, "x2")
 target_mixed <- 0.97 * fit_mixed$theta[free_mixed]
 lrt_mixed <- core$frontier_profile_lrt_parameter_mixed_ordinal(
-  fit_mixed, free_mixed, target_mixed)
+  fit_mixed, free_mixed, target_mixed, reference = "ordinary")
 lrt_mixed_robust <- core$frontier_profile_lrt_parameter_mixed_ordinal(
   fit_mixed, free_mixed, target_mixed, reference = "robust_scaled")
 lrt_mixed_misspec <- core$frontier_profile_lrt_parameter_mixed_ordinal(
@@ -149,8 +149,8 @@ ci_mixed <- core$frontier_profile_lrt_ci_parameter_mixed_ordinal(
   fit_mixed, free_mixed,
   initial_step = 0.05 * abs(fit_mixed$theta[free_mixed]),
   root_tol = 1e-4,
-  statistic_tol = 1e-4
-)
+  statistic_tol = 1e-4,
+  reference = "ordinary")
 check_profile(lrt_mixed, target_mixed)
 check_robust(lrt_mixed_robust)
 check_misspec(lrt_mixed_misspec)

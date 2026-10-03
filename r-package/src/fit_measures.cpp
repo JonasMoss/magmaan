@@ -305,7 +305,17 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
 Rcpp::List measures_reliability_cov(
     Rcpp::NumericMatrix S,
     Rcpp::Nullable<Rcpp::NumericMatrix> gamma = R_NilValue,
-    int n = 0) {
+    int n = 0,
+    Rcpp::Nullable<Rcpp::NumericMatrix> raw_data = R_NilValue) {
+  if (gamma.isNull()) {
+    if (raw_data.isNull())
+      Rcpp::stop("reliability: gamma = NULL requires raw_data; supply raw data or an explicit Gamma");
+    const Eigen::MatrixXd X = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(raw_data.get()));
+    auto g = magmaan::data::empirical_gamma(X);
+    if (!g) stop_post(g.error());
+    gamma = Rcpp::wrap(*g);
+    if (n == 0) n = static_cast<int>(X.rows());
+  }
   const Eigen::MatrixXd S_m = Rcpp::as<Eigen::MatrixXd>(S);
   return reliability_results_to_r(S_m, gamma, n);
 }
@@ -324,8 +334,18 @@ Rcpp::List measures_reliability_omega_multidim(
     std::string target = "total",
     Rcpp::Nullable<Rcpp::NumericVector> weights = R_NilValue,
     Rcpp::Nullable<Rcpp::NumericMatrix> gamma = R_NilValue,
-    int n = 0) {
+    int n = 0,
+    Rcpp::Nullable<Rcpp::NumericMatrix> raw_data = R_NilValue) {
   namespace rel = magmaan::measures::frontier::reliability;
+  if (gamma.isNull()) {
+    if (raw_data.isNull())
+      Rcpp::stop("reliability: gamma = NULL requires raw_data; supply raw data or an explicit Gamma");
+    const Eigen::MatrixXd X = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(raw_data.get()));
+    auto g = magmaan::data::empirical_gamma(X);
+    if (!g) stop_post(g.error());
+    gamma = Rcpp::wrap(*g);
+    if (n == 0) n = static_cast<int>(X.rows());
+  }
   const Eigen::MatrixXd S_m = Rcpp::as<Eigen::MatrixXd>(S);
   const R_xlen_t p = S_m.rows();
   if (static_cast<R_xlen_t>(block.size()) != p) {

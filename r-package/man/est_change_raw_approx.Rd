@@ -47,3 +47,5 @@ no semfindr counterpart; this is a frontier extension.
 Both regimes support single- and multiple-group fits; multiple-group rows are
 block-stacked (\verb{g\{b\}_\{row\}} ids, group-suffixed columns).
 }
+
+\note{The SE/type defaults standardize SAM or case-change diagnostics. They do not assert a generic misspecification-robust inference law; explicit robust or estimated-weight choices remain available within their supported scope.}

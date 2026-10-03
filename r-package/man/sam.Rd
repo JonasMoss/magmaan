@@ -27,3 +27,5 @@ sam(model, data, method = c("local", "global"), mapping = c("ml", "gls", "uls"),
 \item{...}{Additional options forwarded to model construction or the underlying named operation.}
 }
 \value{A fitted SAM result with measurement and structural components.}
+
+\note{The SE/type defaults standardize SAM or case-change diagnostics. They do not assert a generic misspecification-robust inference law; explicit robust or estimated-weight choices remain available within their supported scope.}

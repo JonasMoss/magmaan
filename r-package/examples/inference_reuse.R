@@ -26,7 +26,7 @@ for (g in list(g0,g1)) {
   close(fmg_tests(g,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value,
         fmg_tests(fresh,x,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value)
   close(inference_information(g,"expected"),magmaanlab:::infer_information_expected(fresh))
-  close(inference_covariance(g,FALSE),parameter_covariance(g,inference_information(g,"expected")))
+  close(inference_covariance(g,FALSE),parameter_covariance(g,inference_information(g,"expected"),meat="model"))
   close(inference_covariance(g,TRUE),magmaanlab:::infer_robust_se_raw(fresh,as.matrix(x))$vcov)
   V <- inference_covariance(g,TRUE)
   R <- diag(length(g$theta))[1,,drop=FALSE]
@@ -36,10 +36,10 @@ qs <- inference_quadratic(h,'score'); ql <- inference_quadratic(h,'lr',geometry=
 oldscore <- project_scores(score_components(g0,H1=f1))
 close(qs$statistic,oldscore$statistic)
 close(score_spectrum(qs)$eigenvalues,score_spectrum(oldscore)$eigenvalues)
-oldlr <- robust_nested_lrt(f1,f0,x)
+oldlr <- robust_nested_lrt(f1,f0,x, method = "restriction_map")
 close(ql$statistic,oldlr$T_diff)
 close(score_spectrum(ql)$eigenvalues,oldlr$eigenvalues)
-close(robust_nested_lrt(g1,g0)$eigenvalues,oldlr$eigenvalues)
+close(robust_nested_lrt(g1,g0, method = "restriction_map")$eigenvalues,oldlr$eigenvalues)
 # Both nested geometries cache their reductions independently.
 calibrate_quadratic(inference_quadratic(h,"lr"),"sb")
 # All repeated consumers use their retained geometry and reductions.
@@ -48,7 +48,7 @@ for (i in 1:3) {
   calibrate_quadratic(inference_quadratic(h,'score'),c('sb','peba4'))
   calibrate_quadratic(inference_quadratic(h,'lr'),c('sb','peba4'))
   fmg_tests(g1,tests=c('sb_ml','peba4_ug_ml'))
-  robust_nested_lrt(g1,g0)
+  robust_nested_lrt(g1,g0, method = "restriction_map")
   inference_covariance(g0,TRUE)
 }
 stopifnot(identical(before,list(inference_reuse(g0),inference_reuse(g1))),

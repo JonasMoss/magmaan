@@ -78,3 +78,5 @@ saturated moment dimension minus the tangent rank. This is the general
 goodness-of-fit counterpart to
 \code{\link[=score_flip_test]{score_flip_test()}}, which instead releases specified affine restrictions.
 }
+
+\details{The default sensitivity is observed for FIML under MAR and expected for complete-data global goodness-of-fit under the correct-model null. Explicit sensitivity and metric choices remain available.}

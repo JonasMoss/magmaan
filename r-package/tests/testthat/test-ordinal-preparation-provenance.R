@@ -27,7 +27,7 @@ test_that("released response scales retain preparation through post-fit reconstr
   expect_equal(nrow(policy$covariance), n)
   null <- fit_one("x2 ~~ c(1, 1)*x2")
   expect_true(null$converged)
-  nested <- robust_nested_lrt(fit, null, data = fit$ordinal_stats, A.method = "delta")
+  nested <- robust_nested_lrt(fit, null, data = fit$ordinal_stats, A.method = "delta", method = "restriction_map")
   expect_equal(nested$df_diff, 1)
   expect_true(is.finite(nested$T_scaled))
   expect_identical(attr(fit$partable, "magmaan.ordinal_preparation"), stamp)

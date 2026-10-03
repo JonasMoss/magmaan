@@ -43,7 +43,7 @@ pending their own sampling/inference contracts.
 
 Legacy \code{model} selects the historical default. Legacy \code{robust}
 selects \code{sandwich_observed}, except for categorical and GLS/WLS fits (\code{sandwich_ij}), non-iterative CFA
-(\code{delta_empirical}) and SAM (\code{stored}). These aliases intentionally
-retain their old estimator-dependent meanings; prefer the explicit names.
+(\code{delta_empirical}) and SAM (\code{stored}). The model alias retains its historical comparator; robust selects the
+empirical/IJ route described above. Prefer the explicit names.
 }
 \value{A covariance matrix in the fit's free-parameter order.}

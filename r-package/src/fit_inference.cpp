@@ -1153,7 +1153,7 @@ Rcpp::List inference_global_score_flip_test(
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
     std::string multiplier_studentization = "none",
-    std::string sensitivity = "observed",
+    std::string sensitivity = "auto",
     std::string metric = "expected") {
   if (n_flips < 1) {
     Rcpp::stop("magmaan: global_score_flip_test n_flips must be positive");
@@ -1168,6 +1168,7 @@ Rcpp::List inference_global_score_flip_test(
     Rcpp::stop("magmaan: global_score_flip_test requires an ML, FIML, or "
                "normal-theory ML2S fit");
   }
+  if (sensitivity == "auto") sensitivity = estimator == "FIML" ? "observed" : "expected";
   magmaan::data::RawData rd = estimator == "FIML" || estimator == "ML2S"
       ? fiml_raw_from_arg(ctx.rep, raw)
       : complete_raw_from_arg(ctx.rep, raw);

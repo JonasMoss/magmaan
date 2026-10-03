@@ -54,7 +54,7 @@ test_that("ML2S stage2 weight can be inferred from estimator labels", {
   h1 <- list(estimator = "ML2S_ULS", raw_data = raw)
   h0 <- list(estimator = "ML2S_ULS", raw_data = raw)
 
-  res <- robust_nested_lrt(h1, h0)
+  res <- robust_nested_lrt(h1, h0, method = "restriction_map")
 
   expect_equal(calls$stage2_weight, "uls")
   expect_equal(res$stage2_weight, "uls")
@@ -66,7 +66,7 @@ test_that("ML2S nested tests reject mismatched stage2 weights", {
   h0 <- list(estimator = "ML2S", raw_data = raw, stage2_weight = "nt")
 
   expect_error(
-    robust_nested_lrt(h1, h0),
+    robust_nested_lrt(h1, h0, method = "restriction_map"),
     "same stage2_weight"
   )
 })
@@ -88,7 +88,7 @@ test_that("paired Gamma is rejected outside complete-data streaming ML", {
   h0 <- list(estimator = "ML2S", raw_data = raw)
 
   expect_error(
-    robust_nested_lrt(h1, h0, gamma = "both"),
+    robust_nested_lrt(h1, h0, gamma = "both", method = "restriction_map"),
     "available only for complete-data normal-theory ML"
   )
 })

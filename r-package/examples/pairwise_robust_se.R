@@ -65,7 +65,7 @@ cat(sprintf("fit converged: estimator = %s; fmin = %.6f\n",
 
 # Pairwise bread + ModelImplied meat: should collapse to the naive SE
 # (eigenvalues all = 1).
-uf_pw <- magmaan_core$robust_build_u_factor_pairwise(fit, Xm, mask)
+uf_pw <- magmaan_core$robust_build_u_factor_pairwise(fit, Xm, mask = mask, bread = "expected")
 M_collapse <- magmaan_core$robust_reduced_gamma_nt_pairwise(uf_pw, Xm, mask)
 ev_collapse <- magmaan_core$robust_ugamma_eigenvalues(M_collapse)
 collapse_max_dev <- max(abs(ev_collapse - 1))

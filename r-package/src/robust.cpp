@@ -417,7 +417,7 @@ magmaan::data::RawData raw_from_arg(const lvm::MatrixRep& rep, SEXP X) {
 // ignores it; the meat is chosen by which infer_reduced_gamma_*() you call.
 //
 // [[Rcpp::export]]
-Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread = "expected",
+Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread,
                                 std::string moments = "structured") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -432,7 +432,7 @@ Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread = "expected",
 // [[Rcpp::export]]
 Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats,
                                       Rcpp::NumericVector theta,
-                                      std::string bread = "expected",
+                                      std::string bread,
                                       std::string moments = "structured") {
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
                                            "infer_build_u_factor_parts");
@@ -462,8 +462,8 @@ Rcpp::NumericMatrix infer_reduced_gamma_nt(Rcpp::List uf) {
 //
 // [[Rcpp::export]]
 Rcpp::List infer_build_u_factor_pairwise(Rcpp::List fit, SEXP X,
-                                         SEXP mask = R_NilValue,
-                                         std::string bread = "expected") {
+                                         std::string bread,
+                                         SEXP mask = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_data_args(X, mask);

@@ -83,7 +83,7 @@ stopifnot(mok(se, sqrt(diag(lavaan::vcov(lav)))) == "ok")
 ## ===========================================================================
 chi2 <- core$inference_chi2_stat(core$fit_sample_stats(fit), fit$fmin)
 dfm  <- core$inference_df_stat(fit$partable, core$fit_sample_stats(fit))
-uf   <- core$robust_build_u_factor_fit(fit)                  # U-factor at theta-hat
+uf   <- core$robust_build_u_factor_fit(fit, bread = "expected")                  # U-factor at theta-hat
 Zc   <- core$robust_casewise_contributions(fit$partable, X)  # casewise vech rows
 ev   <- core$robust_ugamma_eigenvalues(
           core$robust_reduced_gamma_sample(uf, Zc, fit$nobs))

@@ -29,15 +29,15 @@ free_id <- fit$partable$free[loading_row]
 stopifnot(length(free_id) == 1L, free_id > 0L)
 
 target <- 0.95 * fit$theta[free_id]
-lrt <- core$frontier_profile_lrt_parameter_ordinal(fit, free_id, target)
+lrt <- core$frontier_profile_lrt_parameter_ordinal(fit, free_id, target, reference = "ordinary")
 lrt_robust <- core$frontier_profile_lrt_parameter_ordinal(
   fit, free_id, target, robust = TRUE)
 ci <- core$frontier_profile_lrt_ci_parameter_ordinal(
   fit, free_id,
   initial_step = 0.08 * abs(fit$theta[free_id]),
   root_tol = 1e-5,
-  statistic_tol = 1e-5
-)
+  statistic_tol = 1e-5,
+  reference = "ordinary")
 ci_robust <- core$frontier_profile_lrt_ci_parameter_ordinal(
   fit, free_id,
   initial_step = 0.08 * abs(fit$theta[free_id]),
@@ -51,12 +51,12 @@ omega_ci <- core$frontier_profile_lrt_ci_ordinal_polychoric_omega(
   fit, block = block,
   initial_step = 0.02,
   root_tol = 1e-5,
-  statistic_tol = 1e-5
-)
+  statistic_tol = 1e-5,
+  reference = "ordinary")
 omega_target <- 0.98 * omega_ci$estimate
 omega_lrt <- core$frontier_profile_lrt_ordinal_polychoric_omega(
-  fit, block = block, omega0 = omega_target
-)
+  fit, block = block, omega0 = omega_target,
+  reference = "ordinary")
 omega_lrt_robust <- core$frontier_profile_lrt_ordinal_polychoric_omega(
   fit, block = block, omega0 = omega_target, robust = TRUE
 )

@@ -545,8 +545,7 @@
 .fmg_result_rows_continuous_ls <- function(fit, X, specs, weight = NULL,
                                            gamma = "empirical") {
   spectrum <- infer_continuous_ls_robust(
-    fit, X, weight = weight, gamma = gamma
-  )
+    fit, X, weight = weight, bread = "expected", gamma = gamma, fixed_weight = TRUE)
   .fmg_result_rows_ordinal(spectrum, specs)
 }
 
@@ -761,6 +760,7 @@ fmg_nested_mixed_ordinal <- function(
 #' @return A `magmaan_fmg_tests` data frame. Numerical diagnostics from the
 #'   nested-test backend are available in `attr(x, "warnings")`.
 #' @export
+# FMG/semTests replication compatibility: retain its named NT/fixed-weight law.
 fmg_nested <- function(fit_H1, fit_H0, data = NULL, tests = NULL,
                        A.method = c("exact", "delta"), weight = NULL,
                        gamma = NULL) {

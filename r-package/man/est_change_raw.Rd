@@ -25,3 +25,5 @@ with \code{standardized = TRUE} they are changes in the standardized (std.all)
 solution. The change is NOT divided by a standard error (see \code{\link[=est_change]{est_change()}}).
 Mirror of \code{semfindr::est_change_raw()}.
 }
+
+\note{The SE/type defaults standardize SAM or case-change diagnostics. They do not assert a generic misspecification-robust inference law; explicit robust or estimated-weight choices remain available within their supported scope.}

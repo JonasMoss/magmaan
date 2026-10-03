@@ -734,10 +734,14 @@ gates a release unless an exit criterion names it.
   lists the routes; examples exercise the default. Ordinary policy
   defaults are unchanged.
 
-- [ ] **M — audit lab inference defaults (TASK-61).** Phase-one
-  [inventory](../validation/lab_inference_defaults.md) records generic default
-  flips, named compatibility routes and unresolved reference/dispatch choices.
-  Await the board decision before implementation; ordinary package unchanged.
+- [x] **M — audit lab inference defaults (TASK-61).** The
+  [inventory](../validation/lab_inference_defaults.md) records robust generic
+  defaults, explicit compatibility/diagnostic routes and typed unsupported
+  cases; ordinary implementation is unchanged.
+- [ ] **M — derive structured versus saturated moment evaluation for lab robust
+  covariance and nested components.** TASK-61 decisions retain existing
+  moments arguments pending a joint bread/meat derivation. Resolve every
+  inventory Q row before claiming either moment evaluation universally valid.
 
 ### EQS language extension
 

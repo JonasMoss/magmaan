@@ -112,7 +112,7 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
       return(crossprod(infer_casewise_influence_ij_fit(fit, raw, weight = fit$W)$influence))
     }
     return(magmaan_core$infer_continuous_ls_robust(fit, raw, weight = fit$W,
-      bread = bread, gamma = "empirical")$vcov)
+      bread = bread, gamma = "empirical", fixed_weight = TRUE)$vcov)
   }
   magmaan_core$robust_se_raw_fit(fit, raw, bread = bread)$vcov
 }

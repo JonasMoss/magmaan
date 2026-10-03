@@ -80,7 +80,7 @@ e <- score_spectrum(q)
 stopifnot(identical(as.numeric(e$eigenvalues), c(0,1)), e$df == 2L,
           is.finite(calibrate_quadratic(e,'sb')$p_value))
 reject(score_sandwich(q), 'singular')
-reject(score_quadratic(c(1,2), diag(c(1,-1))), 'positive definite')
+reject(score_quadratic(c(1,2), diag(c(1,-1)), diag(2)), 'positive definite')
 
 # A precomputed LR/GOF spectrum uses the same calibration operation.
 lr <- quadratic_reference(8, 6, rep(1,6))
@@ -92,8 +92,8 @@ cat('Reusable score, inference and Wald checks passed.\n')
 # returned reference laws can be calibrated repeatedly without refitting.
 gof <- fmg_tests(context, tests = 'peba4_ml')
 stopifnot(abs(gof$p_value - fmg_tests(fit, data=x, tests='peba4_ml')$p_value) < 1e-8)
-nested <- robust_nested_lrt(context, nc)
-old_nested <- robust_nested_lrt(fit, h0, x)
+nested <- robust_nested_lrt(context, nc, method = "restriction_map")
+old_nested <- robust_nested_lrt(fit, h0, x, method = "restriction_map")
 stopifnot(abs(nested$T_diff - old_nested$T_diff) < 1e-8,
           max(abs(nested$eigenvalues - old_nested$eigenvalues)) < 1e-8)
 nref <- quadratic_reference(nested$T_diff, nested$df_diff, nested$eigenvalues)

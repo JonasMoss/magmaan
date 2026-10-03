@@ -15,7 +15,16 @@ using namespace magmaanr::fitglue;
 // [[Rcpp::export]]
 Rcpp::List infer_continuous_ls_robust(
     Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue,
-    std::string bread = "observed", std::string gamma = "empirical") {
+    std::string bread = "observed", std::string gamma = "empirical",
+    bool fixed_weight = false) {
+  const std::string recipe = fit.containsElementNamed("moment_weight")
+      ? Rcpp::as<std::string>(fit["moment_weight"]) : "";
+  if (!fixed_weight && (recipe == "nt" || recipe == "adf" ||
+                        recipe == "dwls" || recipe == "dls")) {
+    Rcpp::stop("infer_continuous_ls_robust(): data-estimated moment_weight "
+               "requires infer_casewise_influence_ij_fit(); request "
+               "fixed_weight = TRUE explicitly for the fixed-weight law");
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")
