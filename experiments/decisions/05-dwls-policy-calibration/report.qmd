@@ -11,51 +11,84 @@ execute:
 
 The adopted register is estimated-weight IJ covariance, robust-ordinal global
 fit-function SB/PEBA4, and estimated-weight nested profile-law SB/PEBA4.
-The recipes are fixed by the misspecification-robust requirement; finite-sample
-calibration is pending. Comparators never select a replacement recipe.
+These recipes are settled by the misspecification-robust requirement;
+finite-sample calibration remains open. Comparators never select a replacement.
 
-How well calibrated are these all-ordinal DWLS components? There is no
-calibration answer yet. The corrected thresholds-to-metric theta pair is
-available for binary and five-category data, with both fits converged. Full
-smoke and pilot remain pending a clarification of the retained threshold-shift
-power family; no production run has been launched.
+How well calibrated are these all-ordinal DWLS components? The smoke and pilot
+check computation, policy equivalence, failures and cost. Twenty draws per cell
+cannot establish calibration, coverage or power. No production run is included.
 
 ```{r}
-path <- file.path('results','dwls-policy','corrected-preflight','availability.csv')
-if (!file.exists(path)) stop('Run Rscript run_experiment.R --preflight before rendering.')
-x <- read.csv(path)
-knitr::kable(x[c('categories','converged_h1','converged_h0','available','df','spectrum_size')],
-  col.names=c('Categories','Larger converged','Restricted converged','Available','Restriction df','Spectrum size'))
+root <- file.path('results','dwls-policy','pilot')
+if (!file.exists(file.path(root,'cost.csv')))
+  stop('Run Rscript run_experiment.R --pilot --workers 4 --run-id pilot before rendering.')
+cost <- read.csv(file.path(root,'cost.csv'))
+timing <- read.csv(file.path(root,'timing.csv'))
+summary <- read.csv(file.path(root,'summary.csv'))
+cells <- read.csv(file.path(root,'cells.csv'))
 ```
 
-The gate uses a two-factor, twelve-indicator Gaussian-copula population,
-400 total observations split equally between identical groups, symmetric
-thresholds, and theta parameterization. The amended larger fit constrains
-thresholds; the restricted fit adds loading equalities. This tests the
-Wu–Estabrook metric step. The previous loadings-to-thresholds-plus-loadings
-pair was correctly rejected because it releases response scales/intercepts.
-The original preflight is retained unchanged.
+The pilot attempted `r cost$replicates` draws across `r cost$cells` cells, with
+`r cost$failures` failed draws. Per-cell extrapolation gives
+`r round(cost$production_cpu_hours,1)` worker-hours for production, or an ideal
+`r round(cost$ideal_four_worker_hours,1)` hours with four workers. This includes
+fitting and inference; population-target preparation is separate and performed
+once per run. Detailed timings, Wilson intervals, target-specific coverage,
+failure counts and policy gaps are in the frozen CSVs. These are pilot
+engineering evidence, not confirmatory findings.
 
-The amendment resolves availability but leaves a question for the registered
-power design: the threshold-shift family now imposes threshold equality in
-both fits. Its rejection rate measures sensitivity of the loading-equality
-step under that perturbation, rather than power of a threshold-equality test.
-The next decision is whether to retain that family with this interpretation,
-or register a separately validated threshold-invariance pair. No pilot data
-have been seen and no production CPU-hour estimate is available.
+```{r}
+z <- merge(timing,cells[c('cell_id','family','role')],by='cell_id')
+table <- do.call(rbind,lapply(split(z,paste(z$family,z$role)),function(x)
+  data.frame(Family=x$family[1],Role=x$role[1],Cells=nrow(x),
+    `Median seconds per draw`=round(median(x$mean_seconds),3),
+    `Production worker-hours`=round(sum(x$production_cpu_hours),2),check.names=FALSE)))
+knitr::kable(table,row.names=FALSE)
+```
 
-The full prospective 154-cell design is registered in `criteria/dwls_policy.md`.
-Tiny original and amended availability, design and metadata CSVs are frozen
-to preserve the design correction and package/source provenance. They are not
-calibration or timing evidence.
+The population is a thresholded Gaussian copula. Sample size is total across
+groups. Population DWLS targets use one 100,000-row draw per group for each
+coverage configuration, with seeds and target estimates recorded separately.
+Intervals use the IJ policy covariance or the expected/observed fixed-weight
+sandwich comparators, with a delta-method factor correlation. Global comparators
+are scaled-shifted and mean-variance adjustments of the same robust-ordinal
+spectrum. Nested comparators use the fixed-weight Satorra-2000 restriction map
+at H1. Restriction degrees of freedom and reference-spectrum size are recorded
+separately; the profile-law spectrum may contain more terms than restrictions.
+Power uses matched null draws for arm-specific empirical size adjustment.
 
-Reproduce with the lane library and one math thread:
+The original availability preflight is retained. The approved correction uses
+H1 threshold equality and H0 threshold-plus-loading equality under theta,
+the Wu–Estabrook metric step. The earlier loadings-to-thresholds-plus-loadings
+pair changes fixed scales/intercepts and correctly returned `not_nested`.
+The second amendment drops threshold-shift power: both corrected models impose
+equal thresholds, so that perturbation would misspecify both models rather than
+test threshold invariance. Loading power remains for metric versus configural.
+A genuine threshold-invariance restriction map needs separate validation.
+
+The 146-cell grid and both amendments are in `criteria/dwls_policy.md`.
+Finite-sample flags use the registered thresholds, but pilot flags are only
+nominations for follow-up. All convergence verdicts come from the library.
+Failures remain in attempted counts and are excluded only from explicitly
+reported successful-arm denominators. Monte Carlo error in population targets
+and the small pilot limit interpretation. Production is pending a separate
+compute decision; production evidence must use its distinct registered seeds.
+
+Tiny pilot summaries, metadata, cells and population targets are frozen to
+preserve timing and provenance; raw per-fit rows remain ignored. The native
+library hash and source hashes identify the installed package and runner.
+
+Reproduce with the lane library and one math thread per worker:
 
 ```sh
 R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   nice -n 10 Rscript experiments/decisions/05-dwls-policy-calibration/run_experiment.R \
-  --preflight --run-id fresh-corrected-preflight
+  --smoke --workers 1 --run-id fresh-smoke
+R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript experiments/decisions/05-dwls-policy-calibration/run_experiment.R \
+  --pilot --workers 4 --run-id fresh-pilot
+quarto render experiments/decisions/05-dwls-policy-calibration/report.qmd
 ```
 
-The command checks component availability and saves evidence. `--smoke`, `--pilot` and `--production`
-refuse to run while this gate is unresolved.
+Runner `--help` documents modes. Every run needs a fresh directory. Rendering
+reads frozen results only. Production is never launched automatically.

@@ -76,3 +76,138 @@ dwls_preflight <- function() {
       df=test$df,spectrum_size=length(test$eigenvalues))
   }))
 }
+
+# All distribution and covariance calculations use lab primitives.
+dwls_calibrate <- function(statistic, df, eigenvalues) {
+  core <- magmaanlab::magmaan_core
+  sb <- core$robust_satorra_bentler(statistic,df,eigenvalues)
+  peba <- core$robust_fmg_test(statistic,df,eigenvalues,'peba',4)
+  list(p_sb=pchisq(sb$chi2_scaled,df,lower.tail=FALSE),p_peba4=peba$p_value)
+}
+
+dwls_targets <- function(fit, covariance=NULL) {
+  pt <- fit$partable
+  row <- function(lhs,op,rhs) {
+    i <- which(pt$lhs==lhs & pt$op==op & pt$rhs==rhs & pt$group==1)
+    if(length(i)!=1) stop('Target row missing or ambiguous: ',lhs,op,rhs)
+    pt$free[i]
+  }
+  value <- function(i) { if(i<1) stop('Target is fixed'); fit$theta[i] }
+  l <- row('f1','=~','x2'); t <- row('x2','|','t1')
+  targets <- list(loading=list(value=value(l),gradient=replace(numeric(fit$npar),l,1)),
+                  threshold=list(value=value(t),gradient=replace(numeric(fit$npar),t,1)))
+  if(grepl('f2 ~ f1',fit$syntax,fixed=TRUE)) {
+    i <- row('f2','~','f1')
+    targets$path <- list(value=value(i),gradient=replace(numeric(fit$npar),i,1))
+  } else {
+    i <- row('f1','~~','f2'); a <- row('f1','~~','f1'); b <- row('f2','~~','f2')
+    v <- value(i)/sqrt(value(a)*value(b)); g <- numeric(fit$npar)
+    g[i] <- 1/sqrt(value(a)*value(b)); g[a] <- -v/(2*value(a)); g[b] <- -v/(2*value(b))
+    targets$correlation <- list(value=v,gradient=g)
+  }
+  do.call(rbind,lapply(names(targets),function(n) {
+    z <- targets[[n]]
+    data.frame(target=n,estimate=z$value,se=if(is.null(covariance)) NA_real_ else
+      sqrt(as.numeric(crossprod(z$gradient,covariance%*%z$gradient))))
+  }))
+}
+
+dwls_population_key <- function(cell) paste(cell$model,cell$categories,cell$groups,
+  cell$parameterization,cell$cross,sep='_')
+
+dwls_population <- function(cells,out) {
+  x <- cells[cells$family=='coverage',]
+  x <- x[!duplicated(vapply(seq_len(nrow(x)),function(i) dwls_population_key(x[i,]),'')),]
+  start <- proc.time()
+  result <- vector('list',nrow(x))
+  for(i in seq_len(nrow(x))) {
+    c <- x[i,]; seed <- 817120001L+i*10000L
+    cat('Population target ',i,'/',nrow(x),'\n',sep=''); flush.console()
+    f <- dwls_fit(c,dwls_draw_data(c,seed,n=100000L*c$groups))
+    if(!isTRUE(f$converged)) stop('Population fit did not converge: ',dwls_population_key(c))
+    z <- dwls_targets(f); z$key <- dwls_population_key(c); z$seed <- seed
+    z$n_per_group <- 100000L; result[[i]] <- z
+    write_csv(do.call(rbind,result[seq_len(i)]),file.path(out,'population_targets.csv'))
+  }
+  elapsed <- proc.time()-start
+  write_csv(data.frame(elapsed_seconds=unname(elapsed['elapsed']),cpu_seconds=unname(sum(elapsed[c('user.self','sys.self')]))),file.path(out,'population_timing.csv'))
+  do.call(rbind,result)
+}
+
+dwls_replicate <- function(cell,replicate,seed_base,population) {
+  seed <- seed_base+10000L*cell$cell_id+replicate
+  start <- proc.time()
+  rows <- list(); gap <- NA_real_; error <- ''; h1_converged <- h0_converged <- NA
+  add <- function(arm,p=NA_real_,statistic=NA_real_,df=NA_integer_,spectrum_size=NA_integer_,
+                  target='',covered=NA,estimate=NA_real_,se=NA_real_,reason='available') {
+    rows[[length(rows)+1L]] <<- data.frame(arm=arm,p=p,statistic=statistic,df=df,
+      spectrum_size=spectrum_size,target=target,covered=covered,estimate=estimate,se=se,reason=reason)
+  }
+  tryCatch({
+    d <- dwls_draw_data(cell,seed)
+    equal1 <- if(cell$family=='nested' && cell$nesting=='thresholds') 'thresholds' else NULL
+    h1 <- dwls_fit(cell,d,equal1); h1_converged <- h1$converged
+    if(!isTRUE(h1$converged)) stop('H1 did not converge')
+    core <- magmaanlab::magmaan_core
+    if(cell$family=='nested') {
+      equal0 <- if(cell$nesting=='metric') 'loadings' else c('thresholds','loadings')
+      h0 <- dwls_fit(cell,d,equal0); h0_converged <- h0$converged
+      if(!isTRUE(h0$converged)) stop('H0 did not converge')
+      policy <- magmaanlab::policy_nested(h1,h0)$lr
+      if(!isTRUE(policy$available)) stop('Policy unavailable: ',policy$reason,': ',policy$detail)
+      explicit <- core$ordinal_profile_lrt(h1,h0,h1$ordinal_stats)
+      e <- explicit$eigvals; e <- e[e>1e-8*max(e)]
+      e <- sort(c(rep(0,max(0,explicit$df_diff-length(e))),e))
+      cal <- dwls_calibrate(max(0,explicit$T_diff),explicit$df_diff,e)
+      cal$p_peba4 <- core$robust_fmg_test(max(0,explicit$T_diff),length(e),e,'peba',4)$p_value
+      gap <- max(abs(c(policy$statistic-explicit$T_diff,policy$p_sb-cal$p_sb,
+                        policy$p_peba4-cal$p_peba4)))
+      for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
+        policy$statistic/policy$sb_scale,policy$df,length(policy$eigenvalues))
+      fixed <- magmaanlab::robust_nested_lrt(h1,h0,data=h1$ordinal_stats,
+        gamma='empirical',method='restriction_map',A.method='exact',weight='DWLS')
+      cal <- dwls_calibrate(fixed$T_diff,fixed$df_diff,fixed$eigenvalues)
+      for(a in c('sb','peba4')) add(paste0('fixed_',a),cal[[paste0('p_',a)]],
+        fixed$T_diff/mean(fixed$eigenvalues),fixed$df_diff,length(fixed$eigenvalues))
+    } else {
+      policy <- magmaanlab::policy_inference(h1)
+      if(cell$family=='coverage') {
+        if(!isTRUE(policy$covariance_available)) stop('Policy covariance unavailable: ',policy$covariance_reason)
+        ij <- core$robust_ordinal_ij(h1,h1$ordinal_stats)$vcov
+        gap <- max(abs(policy$covariance-ij))
+        covariances <- list(policy_ij=policy$covariance,
+          expected=core$robust_ordinal(h1,h1$ordinal_stats,bread='expected')$vcov,
+          observed=core$robust_ordinal(h1,h1$ordinal_stats,bread='observed')$vcov)
+        truth <- population[population$key==dwls_population_key(cell),]
+        for(a in names(covariances)) {
+          z <- dwls_targets(h1,covariances[[a]])
+          for(i in seq_len(nrow(z))) {
+            v <- truth$estimate[match(z$target[i],truth$target)]
+            if(!is.finite(v)) stop('Population target missing')
+            add(a,target=z$target[i],covered=abs(z$estimate[i]-v)<=qnorm(.975)*z$se[i],
+              estimate=z$estimate[i],se=z$se[i])
+          }
+        }
+      } else {
+        policy <- policy$score
+        if(!isTRUE(policy$available)) stop('Policy global unavailable: ',policy$reason,': ',policy$detail)
+        fixed <- core$robust_ordinal(h1,h1$ordinal_stats,bread='expected')
+        cal <- dwls_calibrate(fixed$chisq_standard,policy$df,policy$eigenvalues)
+        gap <- max(abs(c(policy$statistic-fixed$chisq_standard,policy$p_sb-cal$p_sb,
+                          policy$p_peba4-cal$p_peba4)))
+        for(a in c('sb','peba4')) add(paste0('policy_',a),policy[[paste0('p_',a)]],
+          policy$statistic/policy$sb_scale,policy$df,length(policy$eigenvalues))
+        ss <- fixed$scaled_shifted; mv <- fixed$mean_var_adjusted
+        add('scaled_shifted',pchisq(ss$chi2_adj,ss$df,lower.tail=FALSE),ss$chi2_adj,ss$df)
+        add('mean_variance',pchisq(mv$chi2_adj,mv$df_adj,lower.tail=FALSE),mv$chi2_adj,mv$df_adj)
+      }
+    }
+    if(!is.finite(gap) || gap>1e-7) stop('Policy gap exceeds 1e-7')
+  },error=function(e) { error <<- conditionMessage(e) })
+  if(!length(rows)) add('failure',reason=error)
+  z <- do.call(rbind,rows); z$cell_id <- cell$cell_id; z$replicate <- replicate; z$seed <- seed
+  z$h1_converged <- h1_converged; z$h0_converged <- h0_converged
+  z$policy_gap <- gap; z$error <- error; z$elapsed_seconds <- unname((proc.time()-start)['elapsed'])
+  z$cpu_seconds <- unname(sum((proc.time()-start)[c('user.self','sys.self')]))
+  z
+}

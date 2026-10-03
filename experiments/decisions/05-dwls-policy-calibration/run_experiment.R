@@ -1,14 +1,14 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(TRUE)
-usage <- 'Usage: Rscript run_experiment.R --preflight [--run-id ID] [--workers W]
-  --preflight  check the amended theta thresholds-to-metric availability gate
-  --workers W  1..4; preflight runs serially with one math thread
-  --run-id ID  fresh immutable result directory (default preflight)
-  --smoke      unavailable until task-17.1 power-design decision is resolved
-  --pilot      unavailable until task-17.1 power-design decision is resolved
-  --production unavailable; requires separate compute approval after pilot
+usage <- 'Usage: Rscript run_experiment.R MODE [--run-id ID] [--workers W]
+  --preflight  amended theta thresholds-to-metric availability gate
+  --smoke      2 replicates per cell; development checks only
+  --pilot      20 replicates per cell; timing and failure diagnostics
+  --production 2000 null/coverage, 1000 power replicates; separate compute approval required
+  --workers W  1..4, one math thread each (default 1)
+  --run-id ID  fresh immutable output directory (default mode name)
   --help       show help
-No calibration, timing pilot or production evidence has been generated.'
+No automatic production launch. Frozen summaries exclude raw per-fit rows.'
 if ('--help' %in% args) { cat(usage,'\n'); quit(save='no') }
 opt <- function(key,default) {
   at <- match(key,args); if(is.na(at)) return(default)
@@ -16,8 +16,9 @@ opt <- function(key,default) {
   args[at+1]
 }
 if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--run-id','--workers'))) stop('Unknown option')
-if(length(intersect(args,c('--preflight','--smoke','--pilot','--production')))!=1) stop(usage)
-if(!'--preflight' %in% args) stop('task-17.1 is blocked: threshold-shift power interpretation needs a decision; see report.qmd')
+modes <- intersect(args,c('--preflight','--smoke','--pilot','--production'))
+if(length(modes)!=1) stop(usage)
+mode <- substring(modes,3)
 workers <- as.integer(opt('--workers','1'))
 if(is.na(workers) || workers<1 || workers>4) stop('workers must be 1..4')
 script <- normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))
@@ -25,21 +26,50 @@ here <- dirname(script)
 source(file.path(here,'..','..','_support','R','helpers.R'))
 set_single_threaded_math()
 source(file.path(here,'R','compute.R'))
-run_id <- opt('--run-id','preflight')
+source(file.path(here,'R','summarize.R'))
+run_id <- opt('--run-id',mode)
 if(!grepl('^[a-zA-Z0-9_-]+$',run_id)) stop('Invalid run ID')
 out <- file.path(here,'results','dwls-policy',run_id)
 if(dir.exists(out)) stop('Run exists; choose a fresh --run-id')
 dir.create(out,recursive=TRUE)
+seed_base <- c(preflight=817130001L,smoke=817130001L,pilot=817140001L,production=817150001L)[[mode]]
 binary <- list.files(file.path(find.package('magmaanlab'),'libs'),'\\.so$',full.names=TRUE)
-files <- c(script,file.path(here,'R','compute.R'),file.path(here,'criteria','dwls_policy.md'),binary)
-write_metadata(file.path(out,'metadata.csv'),list(mode='preflight',workers=1L,
-  requested_workers=workers,seed_base=817130001L,git_head=git_scalar(c('rev-parse','HEAD')),
-  git_dirty=git_dirty(),source_hashes=paste(tools::md5sum(files),collapse=','),
-  hash_files=paste(files,collapse=','),magmaanlab_path=find.package('magmaanlab'),
-  native_md5=paste(tools::md5sum(binary),collapse=',')),packages=c('magmaanlab','lavaan'))
-write_csv(dwls_cells(),file.path(out,'cells.csv'))
-x <- dwls_preflight()
-write_csv(x,file.path(out,'availability.csv'))
-print(x)
+files <- c(script,list.files(file.path(here,'R'),full.names=TRUE),file.path(here,'criteria','dwls_policy.md'),binary)
+write_metadata(file.path(out,'metadata.csv'),list(mode=mode,workers=workers,
+  seed_base=seed_base,git_head=git_scalar(c('rev-parse','HEAD')),git_dirty=git_dirty(),
+  source_hashes=paste(tools::md5sum(files),collapse=','),hash_files=paste(files,collapse=','),
+  magmaanlab_path=find.package('magmaanlab'),native_md5=paste(tools::md5sum(binary),collapse=','),
+  population_n_per_group=100000L,population_seed_base=817120001L,batch_size=20L),
+  packages=c('magmaanlab','lavaan'))
+cells <- dwls_cells(); write_csv(cells,file.path(out,'cells.csv'))
+if(mode=='preflight') {
+  x <- dwls_preflight(); write_csv(x,file.path(out,'availability.csv')); print(x)
+  if(any(!x$available)) stop('Required policy component unavailable')
+} else {
+  population <- dwls_population(cells,out)
+  jobs <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i)
+    data.frame(cell_id=i,replicate=seq_len(if(mode=='production') cells$production_reps[i] else if(mode=='smoke') 2L else 20L))))
+  start <- proc.time()[['elapsed']]; rows <- list()
+  for(first in seq(1L,nrow(jobs),by=20L)) {
+    indices <- first:min(first+19L,nrow(jobs))
+    batch <- parallel::mclapply(indices,function(j) {
+      set_single_threaded_math()
+      dwls_replicate(cells[jobs$cell_id[j],],jobs$replicate[j],seed_base,population)
+    },mc.cores=workers,mc.preschedule=TRUE)
+    if(any(vapply(batch,inherits,logical(1),'try-error'))) stop('Worker process failed; retained earlier batches')
+    rows <- c(rows,batch)
+    raw <- do.call(rbind,rows)
+    saveRDS(raw,file.path(out,'raw.rds'))
+    elapsed <- proc.time()[['elapsed']]-start
+    write_csv(data.frame(completed=max(indices),total=nrow(jobs),elapsed_seconds=elapsed,
+      eta_seconds=elapsed*(nrow(jobs)-max(indices))/max(indices)),file.path(out,'progress.csv'))
+    cat('Completed ',max(indices),'/',nrow(jobs),'; elapsed ',round(elapsed,1),'s\n',sep=''); flush.console()
+  }
+  dwls_summarize(raw,cells,out)
+  if(any(is.finite(raw$policy_gap) & raw$policy_gap>1e-7)) stop('Policy equivalence gate failed')
+  # Nonconvergence is evidence, not a new study-specific acceptance tolerance.
+  bad <- grepl('Policy unavailable|Policy covariance unavailable',raw$error) &
+    !grepl('not_converged|numeric_failure|boundary',raw$error)
+  if(any(bad)) stop('Required policy component structurally unavailable; see failures.csv')
+}
 cat('Results: ',out,'\n',sep='')
-if(any(!x$available)) stop('Required policy component unavailable; task-17.1 needs a decision. No pilot or production run.')
