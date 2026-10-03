@@ -86,12 +86,20 @@ The opt-in installed-lavaan 0.7.2 simulation gate is
 (`MAGMAAN_PARITY=1`). Its eight named cases cover complete ML, FIML and
 all-ordinal delta/theta DWLS, including grouped equalities. The comparison is
 per parameter, `abs(a-b) <= 1e-5 * (1 + max(abs(a), abs(b)))`, matching the
-pinned fixture gate. The resumed 160-replicate run took 22.8 seconds: all
-verdicts agreed, no rescaled retries occurred, and PoliticalDemocracy seeds
-590202, 590203 and 590210 failed estimates (maximum absolute difference
-5.41625767e-5). Seven named cases pass. The earlier build also failed
-590212 and 590214; after rebuilding the original implementation these pass.
-The default suite skips this gate; simulation endpoint parity remains unmet.
+pinned fixture gate. The approved alternative for non-retry endpoints requires
+identical convergence/verdicts, both maximum gradients <=1e-3 in lavaan units,
+objective agreement within 1e-9 relative and maximum estimate difference divided
+by the same-fit lavaan standard SE <=1e-3. The test evaluates the preset endpoint
+with lavaan's objective/gradient in oracle coordinates and records every metric;
+contract-route counts print per model. Rescaled retries keep the task-47 contract.
+The installed-lavaan 0.7.2 gate passes all 160 replicates in 52.9 seconds:
+155 pass estimates and five PoliticalDemocracy seeds (590202, 590203,
+590210, 590212, 590214) pass the endpoint alternative; all other models
+use zero endpoint alternatives. All verdicts agree and no rescaled retry
+occurs. Maximum absolute estimate difference is 6.01813289e-5;
+alternative-route maximum relative objective difference is 9.331223e-10,
+maximum gradient 1.412701e-6 and maximum SE-scaled difference 1.783093e-4.
+The default suite skips this opt-in gate.
 
 Task-59's focused seed 590214 investigation temporarily recorded each preset
 objective callback's coordinates/value/gradient and traced installed lavaan's
@@ -116,8 +124,8 @@ seeds have starts within 6.3e-15, endpoint objective differences below
 0.001 acceptance threshold. Expected-information directional curvature along
 the endpoint difference is 0.0134–0.0249, consistent with a weak direction.
 The evidence supports floating-point search-path amplification rather than a
-systematic objective/gradient or coordinate discrepancy. It does not exempt
-these path-stable endpoints from the gate. Task-59 needs a decision on the
-remaining failures; no fitting code or further tolerance change was made.
+systematic objective/gradient or coordinate discrepancy. This evidence supports
+the approved endpoint alternative above; the estimate tolerance remains unchanged
+and no fitting code was changed.
 Diagnostic scripts and logs are retained under `~/.cache/magmaan-logs/task-59-*`;
 the trace scripts require the temporary callback instrumentation described above.

@@ -86,7 +86,7 @@ result under an unstated convention.
    [test_preset_simulation_parity.R](../../r-package/tests/testthat/test_preset_simulation_parity.R):
    HS CFA, PoliticalDemocracy SEM, school-invariant HS CFA (ML); HS MCAR/MAR
    (FIML); HS delta/theta and school-invariant theta (all-ordinal DWLS).
-   Task-59 remains blocked by estimate disagreements; see below.
+   Task-59 passes under the approved estimate-or-endpoint contract; see below.
    Nonzero bounds, nonlinear constraints and other routes error; nonzero-RHS
    affine standardized retries and scaling that changes a homogeneous
    constraint surface are explicitly unavailable because of the
@@ -282,27 +282,30 @@ with each actual endpoint's declared acceptance checked separately.
   delta/theta, grouping, loading/threshold invariance and invalid-start retries.
   ULS/WLS/mixed presets remain unavailable.
 
-- [ ] **Task-59 — named simulation parity set (exit 2).** The opt-in
+- [x] **Task-59 — named simulation parity set (exit 2).** The opt-in
   `MAGMAAN_PARITY=1` test above uses fitted public lavaan datasets as normal
   populations, fixed seeds, 20 replicates per case and N=300 per group.
   Ordinal indicators use four categories at common population quartiles;
   MCAR removes 15% per variable and MAR removes x2/x5/x8 depending on
-  x1/x4/x7. The comparison uses the pinned fixture gate per parameter:
-  `abs(a-b) <= 1e-5 * (1 + max(abs(a), abs(b)))`, as clarified in the
-  task decision; rescaled retries retain their separate endpoint contract.
-  The resumed installed-lavaan 0.7.2 run took 22.8 seconds for 160 replicates:
-  zero rescaled retries, all convergence/verdict comparisons agree, seven
-  cases pass estimates. PoliticalDemocracy seeds 590202, 590203 and 590210
-  fail (maximum absolute difference 5.41625767e-5). The earlier build also
-  failed seeds 590212 and 590214 under this criterion; the restored build
-  passes those two, demonstrating sensitivity to floating-point execution.
-  Seeds are `590000 + 100 * case_index + replicate` in named list order.
+  x1/x4/x7. Seeds are `590000 + 100 * case_index + replicate` in named list order.
+  The per-parameter fixture gate remains
+  `abs(a-b) <= 1e-5 * (1 + max(abs(a), abs(b)))`.
+  The approved alternative for non-retry endpoints requires identical
+  convergence/verdicts, both maximum gradients <=1e-3 in lavaan units,
+  objective agreement within 1e-9 relative and every estimate difference
+  <=1e-3 times its same-fit lavaan standard SE. Rescaled retries retain
+  their separate task-47 contract. Contract-route counts and metrics print
+  explicitly; no replicate is dropped and every disagreement fails the test.
   The [optimizer capability record](../architecture/capabilities/optimizers.md)
-  records seed 590214's trace and same-point derivative evidence. Starts
-  agree within 6.3e-15 across the five investigated seeds; both endpoints'
-  gradients are below 1.8e-6 and objective differences below 5.5e-11.
-  No fitting implementation change or endpoint exemption was made. Task-59
-  needs a decision on this floating-point endpoint variation; exit 2 is unmet.
+  retains seed 590214's trace and same-point derivative evidence supporting
+  this decision. No fitting implementation change was needed.
+  The installed-lavaan 0.7.2 gate passes all 160 replicates in 52.9 seconds:
+  155 pass estimates and five PoliticalDemocracy seeds (590202, 590203,
+  590210, 590212, 590214) pass the endpoint alternative; all other models
+  use zero endpoint alternatives. All verdicts agree and no rescaled retry
+  occurs. Maximum absolute estimate difference is 6.01813289e-5;
+  alternative-route maximum relative objective difference is 9.331223e-10,
+  maximum gradient 1.412701e-6 and maximum SE-scaled difference 1.783093e-4.
 
 ### Primary inference workflows
 

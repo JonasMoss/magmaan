@@ -72,7 +72,7 @@ test_that("named simulation models retain lavaan preset parity", {
                    options = list(preset = "lavaan-0.7.2"))
       oracle_args <- list(model = model, data = data, meanstructure = TRUE,
           fixed.x = FALSE, estimator = if (case$estimator == "DWLS") "WLSMV" else "ML",
-          se = "none", test = "none")
+          se = "standard", test = "none")
       if (grouped) {
         args$groups <- oracle_args$group <- "school"
         args$group_equal <- oracle_args$group.equal <- case$equal
@@ -87,11 +87,13 @@ test_that("named simulation models retain lavaan preset parity", {
       issue <- character()
       retry <- FALSE
       difference <- NA_real_
+      endpoint_contract <- FALSE
+      objective_relative_difference <- max_gradient <- max_se_difference <- NA_real_
       if (inherits(actual, "error") || inherits(oracle, "error")) {
         issue <- paste("fit error:", if (inherits(actual, "error")) conditionMessage(actual),
                        if (inherits(oracle, "error")) conditionMessage(oracle))
       } else {
-        # Only an executed rescaled retry permits endpoint path dependence.
+        # Executed rescaled retries retain the task-47 endpoint contract.
         retry <- any(vapply(actual$fitting$attempts, function(a)
           isTRUE(a$standardized), logical(1)))
         converged <- lavaan::lavInspect(oracle, "converged")
@@ -112,13 +114,41 @@ test_that("named simulation models retain lavaan preset parity", {
             difference <- max(errors)
             # Match the pinned doctest Approx(...).epsilon(1e-5) gate.
             within_tolerance <- all(errors <= 1e-5 * (1 + pmax(abs(mp$est), abs(oracle_est))))
-            if (!is.finite(difference) || (!retry && !within_tolerance))
+            if (!retry && !within_tolerance && is.finite(difference)) {
+              # Approved task-59 endpoint contract. Seed 590214's PORT trace
+              # and same-point derivatives locate divergence at rounding level;
+              # see project/architecture/capabilities/optimizers.md.
+              # Evaluate both endpoints in the oracle's search coordinates and
+              # units, rather than comparing differently scaled fit summaries.
+              theta <- oracle@optim$x
+              theta[lp$free[match(mk, lk)]] <- mp$est
+              endpoint <- lavaan:::lav_model_set_parameters(oracle@Model, theta)
+              objective <- as.numeric(lavaan:::lav_model_objective(
+                  endpoint, endpoint@GLIST, oracle@SampleStats, oracle@Data))
+              gradient <- lavaan:::lav_model_grad(
+                  endpoint, endpoint@GLIST, oracle@SampleStats, oracle@Data)
+              oracle_objective <- as.numeric(oracle@optim$fx)
+              objective_relative_difference <- abs(objective - oracle_objective) /
+                max(abs(objective), abs(oracle_objective), .Machine$double.eps)
+              max_gradient <- max(abs(c(gradient, oracle@optim$dx)))
+              oracle_se <- lp$se[match(mk, lk)]
+              max_se_difference <- max(errors / oracle_se)
+              endpoint_contract <- !length(issue) &&
+                all(is.finite(c(objective_relative_difference, max_gradient,
+                                max_se_difference))) && all(oracle_se > 0) &&
+                max_gradient <= 1e-3 && objective_relative_difference <= 1e-9 &&
+                max_se_difference <= 1e-3
+            }
+            if (!is.finite(difference) || (!retry && !within_tolerance && !endpoint_contract))
               issue <- c(issue, "estimate disagreement")
           }
         }
       }
       results[[length(results) + 1L]] <- data.frame(model = name, replicate = replicate,
-          seed = seed, rescaled_retry = retry, max_abs_difference = difference)
+          seed = seed, rescaled_retry = retry, endpoint_contract = endpoint_contract,
+          max_abs_difference = difference,
+          objective_relative_difference = objective_relative_difference,
+          max_gradient = max_gradient, max_se_difference = max_se_difference)
       if (length(issue)) disagreements[[length(disagreements) + 1L]] <- data.frame(
           model = name, replicate = replicate, seed = seed, rescaled_retry = retry,
           max_abs_difference = difference, issue = paste(issue, collapse = "; "))
@@ -127,12 +157,13 @@ test_that("named simulation models retain lavaan preset parity", {
   results <- do.call(rbind, results)
   for (name in names(.preset_simulation_models)) {
     rows <- results[results$model == name, ]
-    cat(sprintf("\n%s: %d replicates, %d rescaled retries, max abs difference %.9g\n",
-        name, nrow(rows), sum(rows$rescaled_retry),
+    cat(sprintf("\n%s: %d replicates, %d rescaled retries, %d endpoint contracts, max abs difference %.9g\n",
+        name, nrow(rows), sum(rows$rescaled_retry), sum(rows$endpoint_contract),
         if (all(is.na(rows$max_abs_difference))) NA_real_ else
           max(rows$max_abs_difference, na.rm = TRUE)))
   }
   cat(sprintf("Elapsed: %.1f seconds\n", proc.time()[["elapsed"]] - started))
+  print(results[results$endpoint_contract, ], row.names = FALSE)
   if (length(disagreements)) print(do.call(rbind, disagreements), row.names = FALSE)
   expect_length(disagreements, 0L)
 })
