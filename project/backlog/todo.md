@@ -155,6 +155,22 @@ result under an unstated convention.
   and covariance policy; zero repeated structural-preparation calls;
   changed-data starts/thresholds; save/reload and worker reconstruction; and
   separately timed construction, data preparation, fit and inference.
+  Task-25.2 implementation is retained on `lane/task-25.2` pending additional
+  prepared-path coverage: ordinal non-threshold equalities fail in the native
+  profiled fitter; ordinal reporting bundles can report moment/weight dimension
+  mismatches. The authorized fallbacks are ML2S and ordinal DWLS with fitting
+  options; broader fallbacks require a decision. Full ordinary tests: 991 pass,
+  six failures; full lab tests: 4,568 pass (one existing skip, two warnings).
+  Preliminary HolzingerSwineford1939 phase timings (single thread, median of
+  20 runs after one warmup; milliseconds, before → after): ML construction
+  0 → 0, data preparation 0 → 0, fit 1 → 1, inference 1 → 1; all-ordinal DWLS
+  construction 0 → 0, data preparation 1 → 1, fit 4 → 1, inference 2 → 2.
+  These use the elapsed process clock (millisecond resolution); zero means
+  below its resolution. Before fits consume separately constructed lab sample
+  statistics; after fits consume prepared data with a warm model handle.
+  Construction times exclude lazy native preparation; fit times include
+  structural work before and weight preparation after. These are boundary
+  measurements, not end-to-end speedup evidence, and the item remains open.
 
 - [x] **S/M — remove the ordinary fixed-x option under the adopted API**
   (2026-10-02). Ordinary construction uses the joint random-X model and

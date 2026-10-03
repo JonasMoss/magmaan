@@ -184,8 +184,26 @@ magmaan_model <- function(model, prototype = NULL,
     list(spec = spec, observed = observed, ordered = ordered, categories = categories,
          group = group, groups = labels, group.equal = group.equal,
          group.partial = group.partial, identification = identification,
-         parameterization = parameterization),
+         parameterization = parameterization,
+         prepared_cache = new.env(parent = emptyenv())),
     class = "magmaan_model")
+}
+
+# Only the portable specification/schema survives serialization meaningfully.
+# A reloaded pointer is NULL even when the reader has the same process id.
+.prepared_model <- function(model) {
+  cache <- model$prepared_cache
+  if (is.null(cache)) cache <- new.env(parent = emptyenv())
+  handle <- cache$handle
+  if (is.null(handle) || !identical(cache$pid, Sys.getpid()) ||
+      identical(format(handle$native), "<pointer: (nil)>")) {
+    prototype <- as.data.frame(setNames(lapply(model$ordered, function(v)
+      factor(character(), levels = model$categories[[v]], ordered = TRUE)), model$ordered))
+    handle <- magmaanlab::prepare_model(model$spec, prototype = prototype)
+    cache$handle <- handle
+    cache$pid <- Sys.getpid()
+  }
+  handle
 }
 
 #' @export
@@ -352,7 +370,19 @@ magmaan <- function(model, data,
   }
   if (!is.null(start$control)) args$control <- start$control
   if (length(engine)) args$options <- engine
-  lab <- do.call(magmaanlab::fit_model, args)
+  # Prepared ML2S and ordinal fitting options remain explicit lab gaps.
+  fallback <- estimator == "ML2S" || (length(model$ordered) && length(engine))
+  if (fallback) {
+    lab <- do.call(magmaanlab::fit_model, args)
+  } else {
+    handle <- .prepared_model(model)
+    prepared_data <- magmaanlab::prepare_data(handle, data,
+      kind = if (estimator == "FIML") "raw" else handle$kind,
+      missing = "listwise")
+    args$model <- handle
+    args$data <- prepared_data
+    lab <- do.call(magmaanlab::estimate, args)
+  }
 
   fit <- structure(
     list(lab = lab, call = match.call(), model = model, estimator = estimator,
