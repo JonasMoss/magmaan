@@ -342,6 +342,12 @@ and direct casewise-score meat through the exact restriction map, reported with
 SB and PEBA4. Calibration is limited (research/44, decisions/03). The lab's
 transported-influence FIML Satorra driver is unchanged and is no longer a default.
 
+2026-10-03: FIML `lavaan_compat = "ML"`/`"MLR"` reports lavaan 0.7.2's
+`missing = "ml"` bundles: observed-Hessian or Huber-White covariance, the
+standard or Yuan-Bentler Mplus global test, and the standard or SB2001 nested
+difference, gated against installed lavaan on MCAR/MAR and grouped invariance.
+The FIML policy is unchanged.
+
 2026-10-03: ordinal `anova(lavaan_compat = )` composes lavaan's default
 nested test: WLSMV/ULSMV use the delta Satorra-2000 scaled-shifted difference;
 plain DWLS/ULS keep the statistic and df without a p-value, and WLS uses the
