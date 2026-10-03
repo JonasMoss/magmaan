@@ -706,8 +706,14 @@ observed geometry since 2026-10-02):
   choices give the same scaled test. The global ML test keeps expected
   information: there the model is correct under the null, so expected is
   consistent, and observed sensitivity collapses as p grows. Implemented
-  2026-10-02; one frozen calibration run precedes release
-  ([backlog](../backlog/todo.md#ml-and-fiml)).
+  2026-10-02 and calibrated 2026-10-03
+  ([decisions/04](../../experiments/decisions/04-nested-ml-geometry/report.qmd),
+  36,000 draws): under a strongly misspecified larger model the
+  expected-geometry LR rejects 10–16% of true nulls and its excess barely
+  shrinks with N, while the observed geometry approaches 5% (6.4% at N = 300
+  per group, normal data). The observed score is conservative at N = 100 per
+  group (2–3%); a finite-sample correction that keeps consistency is in the
+  backlog.
 - **Named reporting conventions (adopted 2026-10-02).** `anova()` defaults
   to the policy (`lavaan_compat = NULL`) and accepts an explicit bundle name
   for checked lavaan compatibility. Complete

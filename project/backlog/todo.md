@@ -437,18 +437,22 @@ ordinary API exposes barrier fitting experimentally as
   targeted opt validation passes (13 cases, 451 assertions), including existing
   score-flip and mean-structure FIML-pack checks.
 
-- [ ] **M — calibrate the observed nested ML geometry.** Study: [decisions/04-nested-ml-geometry](../../experiments/decisions/04-nested-ml-geometry/report.qmd) (task-43.1 prep; task-43.2 amendment). The 24-cell pilot adds strong
-  cross-loading misspecification to correct/mild levels, with population RMSEA
-  0/0.0587/0.1274; all 480 draws pass and policy gap is zero. Production remains
-  pending the compute decision. One frozen run with
-  correct and misspecified larger models comparing expected and observed
-  nested geometry (size and size-adjusted power, score and LR, SB and PEBA4)
-  precedes release. Needs compute: simbox is unavailable, so Modal (cost
-  estimate first) or a small local run within the 5-minute rule. Optional
-  side check: a component comparison with lavaan fits using
-  `information = "observed"`; exact equality is not expected, since lavaan
-  keeps its normal-theory weight in the Satorra-2000 projector and
-  `lavTestScore()` uses observed information for the metric too.
+- [x] **M — calibrate the observed nested ML geometry** (2026-10-03).
+  [decisions/04](../../experiments/decisions/04-nested-ml-geometry/report.qmd),
+  36,000 draws, 24 cells (correct, mild and strong misspecification of the
+  larger model). Under strong misspecification the expected-geometry LR rejects
+  10–16% of true nulls and barely improves with N; the observed geometry reaches
+  6.4% at N = 300 per group (normal). The observed score is conservative at
+  N = 100 (2–3%), which tripped the registered reporting rule; under the
+  misspecification-robust requirement that calls for finite-sample work, below.
+
+- [ ] **M — finite-sample calibration of the observed nested score.** The
+  observed-sensitivity nested ML score rejects 2–3% at nominal 5% with 100
+  observations per group (decisions/04), where the inconsistent expected
+  sensitivity holds about 5%. Find a correction that keeps consistency under
+  misspecification (a corrected reference law, or multiplier/bootstrap
+  calibration). **Check:** decisions/04 cells plus a larger-df family; size and
+  size-adjusted power; no expected-sensitivity fallback. Not release-gating.
 
 - [ ] **M — compose the FIML policy.** The primitives exist and are mostly
   lavaan gated: the observed-information sandwich with casewise scores (the
@@ -945,6 +949,16 @@ Assigned 2026-10-02. Until these land, simulations that need dependable
 fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Optimization and convergence
+
+- [ ] **S/M — seed the larger nested model from the restricted fit.** Under
+  strong misspecification the larger model sometimes converges to a worse local
+  optimum than the restricted model (7 of 12,000 strong-cell draws in
+  [decisions/04](../../experiments/decisions/04-nested-ml-geometry/report.qmd);
+  lavaan reaches the same endpoints), so the LR difference is negative and the
+  nested test reports a typed failure. Starting the larger model at the
+  restricted estimate (embedded) guarantees a fit at least as good. **Check:**
+  the failing seeds, no change for well-behaved pairs, and the native verdict
+  on the reseeded endpoint.
 
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.

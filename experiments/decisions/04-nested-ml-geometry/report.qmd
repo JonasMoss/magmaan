@@ -13,34 +13,63 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Nested ML score projection and LR spectrum | Observed geometry | Adopted by principle (misspecification-robust default); calibration open | Amended 24-cell pilot checks construction, population misfit and geometry gaps; production pending |
+| Nested ML LR spectrum | Observed information at the larger model | Adopted by principle; confirmed | Production 2026-10-03: expected drifts under strong misspecification (11–16% at nominal 5%), observed approaches 5% as N grows |
+| Nested ML score projection | Observed sensitivity, expected metric | Adopted by principle; conservative at N = 100 per group | Production 2026-10-03: 2–3% at N = 100, 3.6–5.7% at N = 300; finite-sample follow-up open |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
 ## Question
 
-Does observed nested ML geometry calibrate at least as well as expected geometry,
-particularly when the larger model is misspecified?
+How well does the adopted observed nested ML geometry calibrate, in particular
+when the larger model is misspecified, and how does the expected geometry
+compare? Since 2026-10-03 the observed geometry is fixed by the
+misspecification-robust requirement ([scope](../../../project/scope.md));
+this study is calibration evidence, not a selection.
 
 ## Short answer
 
-Confirmation has not run. The pilot prices the amended 24-cell study and checks
-that the observed arm reproduces the ordinary policy. Strong misspecification raises population RMSEA to .1274 (mild: .0587) and
-its null-cell median LR PEBA4 gaps span .0331–.0863, compared with
-.0054–.0177 for mild. Score gaps still overlap across levels. Its rejection
-rates cannot justify a geometry decision.
+**Under strong misspecification of the larger model, the expected geometry's
+LR test is inconsistent and the observed geometry fixes it.** With an omitted
+.4 cross-loading (population RMSEA .127), expected-geometry LR-PEBA4 rejects
+13.5% and 11.6% of true nulls at N = 100 and 300 per group (normal data),
+against 7.8% and 6.4% for the observed geometry; skewed data show the same
+pattern (14.9%/10.4% against 10.2%/6.9%). The expected excess barely shrinks
+with N; the observed one does.
+
+**The observed score test is conservative in small samples.** At N = 100 per
+group it rejects 2.0–3.3% where the expected-sensitivity score rejects
+4.2–6.3%; at N = 300 the gap is at most one point. This is what tripped the
+registered rule (`reconsider_observed`, mild and correct cells, score arms).
+Under the 2026-10-03 amendment it calls for finite-sample work on the observed
+score, not a return to expected sensitivity. Under strong misspecification both
+score geometries stay near 5%.
+
+The LR tests over-reject with skewed data at N = 100 in every geometry
+(10–16%), consistent with the score-first reporting decision. Seven of 36,000
+draws (strong cells) produced no LR test: the larger model converged to a worse
+local optimum than the restricted model (lavaan reaches the same endpoints), so
+the difference statistic is negative and the policy reports a typed failure.
 
 ```{r}
-out <- file.path('results', 'nested-geometry', 'pilot-strong')
-if (!file.exists(file.path(out, 'timing.csv')))
-  stop('Pilot results absent. Run Rscript run_experiment.R --pilot --run-id pilot-strong --workers 4 with the lane library.')
-timing <- read.csv(file.path(out, 'timing.csv'))
-checks <- read.csv(file.path(out, 'checks.csv'))
-metadata <- read.csv(file.path(out, 'metadata.csv'))
-hours <- sum(timing$production_cpu_hours)
-knitr::kable(data.frame(`Production CPU Hours` = round(hours, 2),
-  `Ideal Four Core Hours` = round(hours / 4, 2), `Pilot Draws` = checks$draws,
-  `Failed Arms` = checks$failed_arms, `Maximum Policy Gap` = checks$max_policy_gap),
-  check.names = FALSE)
+prod <- file.path('results', 'nested-geometry', 'production-2026-10-03')
+if (!file.exists(file.path(prod, 'rates.csv')))
+  stop('Production results absent. Run Rscript run_experiment.R --production --workers 4 --run-id production-2026-10-03.')
+rates <- read.csv(file.path(prod, 'rates.csv'))
+null <- rates[rates$role == 'null', ]
+w <- reshape(null[, c('n', 'distribution', 'larger', 'test', 'method', 'geometry', 'rejection')],
+  idvar = c('n', 'distribution', 'larger', 'test', 'method'), timevar = 'geometry',
+  direction = 'wide')
+w <- w[order(match(w$larger, c('correct', 'mild', 'strong')), w$test, w$method,
+             w$distribution, w$n), ]
+knitr::kable(data.frame(`Larger model` = w$larger, Test = w$test, Method = w$method,
+  Data = w$distribution, `N per group` = w$n,
+  `Expected (%)` = round(100 * w$rejection.expected, 2),
+  `Observed (%)` = round(100 * w$rejection.observed, 2), check.names = FALSE),
+  caption = 'Null rejection at nominal 5%, 2,000 replicates per cell. Wilson intervals and paired differences are in rates.csv and paired.csv.')
+checks <- read.csv(file.path(prod, 'checks.csv'))
+knitr::kable(data.frame(Draws = checks$draws, `Failed draws` = checks$failed_draws,
+  `Failed arms` = checks$failed_arms, `Maximum policy gap` = checks$max_policy_gap,
+  `Registered rule` = read.csv(file.path(prod, 'decisions.csv'))$status,
+  check.names = FALSE))
 ```
 
 ## Evidence and decision rule
@@ -62,7 +91,11 @@ Production has 2000 null and 1000 power replicates per cell (36000 draws).
 Both fits use ordinary default ML estimation and library convergence verdicts;
 the quadratics reuse one shared prepared inference dataset.
 
-## Population misfit and geometry gaps
+## Population misfit and geometry gaps (pilot)
+
+```{r}
+out <- file.path('results', 'nested-geometry', 'pilot-strong')
+```
 
 The exact-covariance configural fits quantify misspecification independently of
 sampling noise. Population RMSEA uses the limiting ML discrepancy; residuals
@@ -105,8 +138,11 @@ amendment and its compute pricing; raw replicate batches remain ignored.
 
 ## Caveats
 
-Twenty draws per cell assess mechanics and timing, not one-percentage-point
-size differences. Four-core pricing assumes ideal scaling; worker startup,
+The pilots' twenty draws per cell assess mechanics and timing only; the
+production run (2,000 null and 1,000 power replicates per cell) is the
+evidence. One model family (two-group, two-factor CFA, six loading
+restrictions) is covered; scalar invariance, larger df and incomplete data
+are not. Four-core pricing assumes ideal scaling; worker startup,
 summary computation adds time. No Modal price model
 was available in this session, so the estimate is CPU-hours only. Generator
 calibration is included in the measured per-draw cost. Complete-pair inference
@@ -125,8 +161,9 @@ nice -n 10 Rscript run_experiment.R --pilot --run-id new_pilot --workers 4
 quarto render report.qmd
 ```
 
-After the task-43 compute decision, the production command is
-`nice -n 10 Rscript run_experiment.R --production --workers 4`.
+The production run of 2026-10-03 used
+`nice -n 10 Rscript run_experiment.R --production --workers 4 --run-id production-2026-10-03`
+(about 18 minutes on four local cores).
 Each run uses a fresh output directory and separate mode seeds. Raw batches
 stay local; frozen pilot summaries and source/native fingerprints provide
 pricing provenance. Earlier failed smoke attempts remain local diagnostics.
