@@ -185,10 +185,21 @@ increment.
   check the Little translations. Probes are agent work: a maintainer tool
   under `cpp/tests/tools/` runs them and writes derived summaries, following
   `regen_oracle_twolevel_mplus.R`.
-- The optional textbook corpus: about 100 Mplus cases (User's Guide v8 40,
-  Muthén et al. 2017 20, Geiser 2013 28, Brown 2015 19) whose shipped `.out`
-  gives N, free-parameter count, df, chi-square, log-likelihood and every
-  printed estimate.
+- The optional textbook corpus, used in two tiers:
+  - **End-to-end gate.** 79 verified cases keep the original `.inp`, the
+    shipped `.out`, the analysed data and Mplus-verified expected values
+    (User's Guide v8 40, Muthén et al. 2017 20, Brown 2015 19); Geiser 2013
+    adds 28 with inputs in the raw companion files. Every case the frontend
+    accepts is fitted from its original input and compared with Mplus on N,
+    free-parameter count, df, chi-square, log-likelihood and every printed
+    estimate, where the fit conventions match.
+  - **Sweep.** Every Mplus input in the corpus, about 2,300 including the
+    archives (also the Mplus versions of Little's and Newsom's models), is
+    read and lowered: accepted or rejected with a classified reason, never a
+    crash. The tally of rejection reasons is the coverage evidence and
+    guides which later increments matter most.
+  A maintainer script extracts the inputs to an ignored cache; the gates
+  run locally when the corpus is present.
 
 **Numerics** stay with lavaan, the component oracle: the lowered triple's
 lavaan projection, fitted by pinned lavaan, must match magmaan's fit as for
@@ -221,10 +232,10 @@ The frontend is stable for a subset when all of the following hold:
   (Mplus models that one variable with no covariances while conditioning on
   the others: remove the mention); `a1b-a3b` in NAMES (Mplus generates A01,
   A02, A03: list the names).
-- Robustness sweep: every User's Guide example input, including those using
-  unsupported features, is accepted or rejected with a classified reason. None
-  crashes, hangs or exceeds the expansion bounds, under sanitizers
-  (`just test-dev`). Accepted corpus inputs match their `.out` on free-parameter
+- Robustness sweep: every Mplus input in the corpus (about 2,300, including
+  those using unsupported features) is accepted or rejected with a
+  classified reason. None crashes, hangs or exceeds the expansion bounds,
+  under sanitizers (`just test-dev`). Accepted corpus inputs match their `.out` on free-parameter
   count and df, and on chi-square, log-likelihood and estimates where fit
   conventions agree.
 - Lab round trips agree: partable, fresh versus prepared fit, rebuild/refit and
