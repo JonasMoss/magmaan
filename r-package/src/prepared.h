@@ -1,4 +1,4 @@
-// Binding-owned immutable handles. Included by fit.cpp to share its result
+// Binding-owned immutable handles. Included by fit_prepared.cpp to share the result
 // converters; SEM computations remain in the core estimators.
 #pragma once
 

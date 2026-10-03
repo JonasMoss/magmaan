@@ -795,6 +795,11 @@ ordinary-user default.
   unit tests compile by topic with shared test helpers; public headers and
   numerical bodies are unchanged, and vendors are refreshed.
 
+- [x] **M — split R fitting glue (TASK-40).** Topical estimation, ordinal,
+  missing-data, inference, robust, measures, frontier, profile, noniterative
+  and prepared-interface files share private helper declarations and a utility
+  translation unit. Exported signatures and numerical behavior are unchanged.
+
 - [x] **M — split ordinal estimation implementation (TASK-41).** Preparation,
   moments, curvature, fitting, robust/IJ covariance, score tests, fit measures
   and nested tests now compile separately, sharing a private internal header.

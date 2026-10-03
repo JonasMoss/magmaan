@@ -45,6 +45,70 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaanlab_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
+fixed_moment_weight_impl <- function(partable, sample_stats, method, raw_data = NULL, dls_a = 0.5) {
+    .Call(`_magmaanlab_fixed_moment_weight_impl`, partable, sample_stats, method, raw_data, dls_a)
+}
+
+fit_moments_barrier_impl <- function(partable, sample_stats, estimator = "ML", W = NULL, target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
+    .Call(`_magmaanlab_fit_moments_barrier_impl`, partable, sample_stats, estimator, W, target, weight, optimizer, control)
+}
+
+fit_twolevel_impl <- function(partable, data, cluster_id, group_id = NULL, optimizer = NULL, control = NULL, bounds = NULL, bounds_preset = NULL) {
+    .Call(`_magmaanlab_fit_twolevel_impl`, partable, data, cluster_id, group_id, optimizer, control, bounds, bounds_preset)
+}
+
+fit_ml_fisher_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_ml_fisher_impl`, partable, sample_stats, control, bounds)
+}
+
+fit_ml_fisher_snlls_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_ml_fisher_snlls_impl`, partable, sample_stats, control, bounds)
+}
+
+fit_ml_irls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_ml_irls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_ml_irls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_ml_irls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_gls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_wls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_wls_impl`, partable, sample_stats, W, optimizer, control, bounds)
+}
+
+evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL, bounds = NULL, audit_options = NULL) {
+    .Call(`_magmaanlab_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
+}
+
+fit_uls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_uls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_gls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_gls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_wls_snlls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaanlab_fit_wls_snlls_impl`, partable, sample_stats, W, optimizer, control, bounds)
+}
+
+fit_start_values <- function(partable, sample_stats, start = NULL, transport = NULL) {
+    .Call(`_magmaanlab_fit_start_values`, partable, sample_stats, start, transport)
+}
+
+fit_coordinate_map <- function(partable, sample_stats, start, scaling = "sample_units", center_locations = TRUE) {
+    .Call(`_magmaanlab_fit_coordinate_map`, partable, sample_stats, start, scaling, center_locations)
+}
+
 frontier_fit_ml_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = TRUE) {
     .Call(`_magmaanlab_frontier_fit_ml_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning)
 }
@@ -69,18 +133,6 @@ frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, w
     .Call(`_magmaanlab_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds, target)
 }
 
-fixed_moment_weight_impl <- function(partable, sample_stats, method, raw_data = NULL, dls_a = 0.5) {
-    .Call(`_magmaanlab_fixed_moment_weight_impl`, partable, sample_stats, method, raw_data, dls_a)
-}
-
-ordinal_fixed_weight_stats_impl <- function(ordinal_stats, method, W = NULL, dls_a = 0.5) {
-    .Call(`_magmaanlab_ordinal_fixed_weight_stats_impl`, ordinal_stats, method, W, dls_a)
-}
-
-fit_moments_barrier_impl <- function(partable, sample_stats, estimator = "ML", W = NULL, target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
-    .Call(`_magmaanlab_fit_moments_barrier_impl`, partable, sample_stats, estimator, W, target, weight, optimizer, control)
-}
-
 frontier_fit_uls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaanlab_frontier_fit_uls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol)
 }
@@ -91,90 +143,6 @@ frontier_fit_gls_psd_impl <- function(partable, sample_stats, optimizer = NULL, 
 
 frontier_fit_wls_psd_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
     .Call(`_magmaanlab_frontier_fit_wls_psd_impl`, partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol)
-}
-
-frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
-}
-
-frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust, estimated_weight, reference)
-}
-
-frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl`, fit, parameter, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
-}
-
-frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
-}
-
-frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, estimated_weight, reference)
-}
-
-frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
-}
-
-frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data, robust, reference)
-}
-
-frontier_profile_lrt_parameter_ml2s_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL, estimated_weight = FALSE) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml2s_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data, robust, reference, estimated_weight)
-}
-
-frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol, robust, reference)
-}
-
-frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
-}
-
-frontier_profile_lrt_ci_parameter_fiml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_fiml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
-}
-
-frontier_profile_lrt_ci_parameter_ml2s_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL, estimated_weight = FALSE) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml2s_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference, estimated_weight)
-}
-
-frontier_profile_lrt_ci_parameter_ml2s_nt_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml2s_nt_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, robust, reference)
-}
-
-frontier_profile_lrt_ci_parameter_mixed_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
-}
-
-frontier_profile_lrt_ordinal_polychoric_omega_impl <- function(fit, block, omega0, target = "total", weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl`, fit, block, omega0, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
-}
-
-frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, target = "total", weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
-    .Call(`_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
-}
-
-fit_twolevel_impl <- function(partable, data, cluster_id, group_id = NULL, optimizer = NULL, control = NULL, bounds = NULL, bounds_preset = NULL) {
-    .Call(`_magmaanlab_fit_twolevel_impl`, partable, data, cluster_id, group_id, optimizer, control, bounds, bounds_preset)
-}
-
-fit_ml_fisher_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_ml_fisher_impl`, partable, sample_stats, control, bounds)
-}
-
-fit_ml_fisher_snlls_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_ml_fisher_snlls_impl`, partable, sample_stats, control, bounds)
-}
-
-fit_ml_irls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_ml_irls_impl`, partable, sample_stats, optimizer, control, bounds)
-}
-
-fit_ml_irls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_ml_irls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
 frontier_sam_impl <- function(partable, sample_stats, raw_data = NULL, method = "local", mapping = "ml", se = "twostep", lambda_correction = TRUE, alpha_correction = 0L, meanstructure = FALSE, mm_optimizer = NULL, struc_optimizer = NULL, mm_control = NULL, struc_control = NULL) {
@@ -205,6 +173,178 @@ fcsem_standardized_rows_impl <- function(fit, vcov) {
     .Call(`_magmaanlab_fcsem_standardized_rows_impl`, fit, vcov)
 }
 
+frontier_dls_weight_impl <- function(fit, raw_data, dls_a = 0.5) {
+    .Call(`_magmaanlab_frontier_dls_weight_impl`, fit, raw_data, dls_a)
+}
+
+infer_information_expected <- function(fit) {
+    .Call(`_magmaanlab_infer_information_expected`, fit)
+}
+
+infer_information_observed_fd <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaanlab_infer_information_observed_fd`, fit, h_step)
+}
+
+infer_information_observed_analytic <- function(fit) {
+    .Call(`_magmaanlab_infer_information_observed_analytic`, fit)
+}
+
+frontier_newton_accuracy_impl <- function(fit, budget, psd) {
+    .Call(`_magmaanlab_frontier_newton_accuracy_impl`, fit, budget, psd)
+}
+
+infer_information_cross_products <- function(fit, raw_data) {
+    .Call(`_magmaanlab_infer_information_cross_products`, fit, raw_data)
+}
+
+infer_vcov <- function(info, fit) {
+    .Call(`_magmaanlab_infer_vcov`, info, fit)
+}
+
+infer_vcov_partable <- function(info, partable) {
+    .Call(`_magmaanlab_infer_vcov_partable`, info, partable)
+}
+
+infer_se <- function(vcov) {
+    .Call(`_magmaanlab_infer_se`, vcov)
+}
+
+compute_defined_impl <- function(syntax, fit, vcov) {
+    .Call(`_magmaanlab_compute_defined_impl`, syntax, fit, vcov)
+}
+
+infer_chi2_stat <- function(sample_stats, fmin) {
+    .Call(`_magmaanlab_infer_chi2_stat`, sample_stats, fmin)
+}
+
+infer_df_stat <- function(partable, sample_stats) {
+    .Call(`_magmaanlab_infer_df_stat`, partable, sample_stats)
+}
+
+infer_baseline <- function(sample_stats) {
+    .Call(`_magmaanlab_infer_baseline`, sample_stats)
+}
+
+infer_baseline_fit <- function(fit) {
+    .Call(`_magmaanlab_infer_baseline_fit`, fit)
+}
+
+inference_modification_indices <- function(fit, weight = NULL, information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, h_step = 1e-4) {
+    .Call(`_magmaanlab_inference_modification_indices`, fit, weight, information, candidates, include_loadings, include_covariances, h_step)
+}
+
+inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
+    .Call(`_magmaanlab_inference_score_tests`, fit, weight, h_step)
+}
+
+inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = FALSE) {
+    .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
+}
+
+inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", estimated_weight = FALSE) {
+    .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
+}
+
+inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+    .Call(`_magmaanlab_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
+}
+
+inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+    .Call(`_magmaanlab_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
+}
+
+inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected", metric = "expected") {
+    .Call(`_magmaanlab_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric)
+}
+
+infer_z_test <- function(fit, se) {
+    .Call(`_magmaanlab_infer_z_test`, fit, se)
+}
+
+infer_z_test_theta <- function(theta, se) {
+    .Call(`_magmaanlab_infer_z_test_theta`, theta, se)
+}
+
+infer_chi2_pvalue <- function(chi2, df) {
+    .Call(`_magmaanlab_infer_chi2_pvalue`, chi2, df)
+}
+
+infer_wald_test <- function(fit, R, vcov, q = NULL) {
+    .Call(`_magmaanlab_infer_wald_test`, fit, R, vcov, q)
+}
+
+infer_wald_test_theta <- function(theta, R, vcov, q = NULL) {
+    .Call(`_magmaanlab_infer_wald_test_theta`, theta, R, vcov, q)
+}
+
+infer_browne_residual_nt <- function(fit) {
+    .Call(`_magmaanlab_infer_browne_residual_nt`, fit)
+}
+
+infer_rls_chi2 <- function(fit, implied) {
+    .Call(`_magmaanlab_infer_rls_chi2`, fit, implied)
+}
+
+infer_nt_moment_quadratic <- function(fit, implied) {
+    .Call(`_magmaanlab_infer_nt_moment_quadratic`, fit, implied)
+}
+
+infer_nt_moment_quadratic_sample <- function(sample_stats, implied) {
+    .Call(`_magmaanlab_infer_nt_moment_quadratic_sample`, sample_stats, implied)
+}
+
+model_implied <- function(fit) {
+    .Call(`_magmaanlab_model_implied`, fit)
+}
+
+measures_fit <- function(fit, chi2, df, baseline) {
+    .Call(`_magmaanlab_measures_fit`, fit, chi2, df, baseline)
+}
+
+measures_standardize_lv <- function(fit, vcov) {
+    .Call(`_magmaanlab_measures_standardize_lv`, fit, vcov)
+}
+
+measures_standardize_all <- function(fit, vcov) {
+    .Call(`_magmaanlab_measures_standardize_all`, fit, vcov)
+}
+
+measures_composite_weights <- function(fit, vcov) {
+    .Call(`_magmaanlab_measures_composite_weights`, fit, vcov)
+}
+
+measures_residuals <- function(fit) {
+    .Call(`_magmaanlab_measures_residuals`, fit)
+}
+
+measures_standardized_residuals <- function(fit) {
+    .Call(`_magmaanlab_measures_standardized_residuals`, fit)
+}
+
+measures_reliability_cov <- function(S, gamma = NULL, n = 0L) {
+    .Call(`_magmaanlab_measures_reliability_cov`, S, gamma, n)
+}
+
+measures_reliability_omega_multidim <- function(S, block, target = "total", weights = NULL, gamma = NULL, n = 0L) {
+    .Call(`_magmaanlab_measures_reliability_omega_multidim`, S, block, target, weights, gamma, n)
+}
+
+measures_reliability_omega_from_fit <- function(fit, target, weight, gamma, n) {
+    .Call(`_magmaanlab_measures_reliability_omega_from_fit`, fit, target, weight, gamma, n)
+}
+
+measures_reliability_ordinal_observed_omega <- function(fit, block, target = "total", weight = "fit", ordinal_stats = NULL) {
+    .Call(`_magmaanlab_measures_reliability_ordinal_observed_omega`, fit, block, target, weight, ordinal_stats)
+}
+
+measures_factor_scores <- function(fit, raw_data, method = "regression") {
+    .Call(`_magmaanlab_measures_factor_scores`, fit, raw_data, method)
+}
+
+measures_factor_score_precision <- function(fit, raw_data) {
+    .Call(`_magmaanlab_measures_factor_score_precision`, fit, raw_data)
+}
+
 fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) {
     .Call(`_magmaanlab_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
@@ -225,24 +365,100 @@ regularize_saturated_stage1_impl <- function(stage1, regularization = NULL) {
     .Call(`_magmaanlab_regularize_saturated_stage1_impl`, stage1, regularization)
 }
 
-fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
+infer_fiml_observed_vcov <- function(fit) {
+    .Call(`_magmaanlab_infer_fiml_observed_vcov`, fit)
 }
 
-fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_gls_impl`, partable, sample_stats, optimizer, control, bounds)
+infer_fiml_information_vcov <- function(fit) {
+    .Call(`_magmaanlab_infer_fiml_information_vcov`, fit)
 }
 
-fit_wls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_wls_impl`, partable, sample_stats, W, optimizer, control, bounds)
+estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaanlab_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
-frontier_dls_weight_impl <- function(fit, raw_data, dls_a = 0.5) {
-    .Call(`_magmaanlab_frontier_dls_weight_impl`, fit, raw_data, dls_a)
+fiml_fit_measures_impl <- function(fit, robust = FALSE) {
+    .Call(`_magmaanlab_fiml_fit_measures_impl`, fit, robust)
 }
 
-evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL, bounds = NULL, audit_options = NULL) {
-    .Call(`_magmaanlab_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
+infer_ml2s_casewise_influence_ij_fit <- function(fit, raw_data, stage2_weight = NULL, dls_a = NULL) {
+    .Call(`_magmaanlab_infer_ml2s_casewise_influence_ij_fit`, fit, raw_data, stage2_weight, dls_a)
+}
+
+estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4, stage2_weight = "nt", dls_a = 0.5) {
+    .Call(`_magmaanlab_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step, stage2_weight, dls_a)
+}
+
+frontier_ml2s_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
+    .Call(`_magmaanlab_frontier_ml2s_information_choices_impl`, fit, raw_data, eigen_tol)
+}
+
+frontier_fiml_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
+    .Call(`_magmaanlab_frontier_fiml_information_choices_impl`, fit, raw_data, eigen_tol)
+}
+
+two_stage_stage2_weight_blocks_impl <- function(stage1, stage2_weight = "nt", dls_a = 0.5) {
+    .Call(`_magmaanlab_two_stage_stage2_weight_blocks_impl`, stage1, stage2_weight, dls_a)
+}
+
+infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaanlab_infer_fiml_fmg_spectrum`, fit, h_step)
+}
+
+frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
+    .Call(`_magmaanlab_frontier_guttman_h_impl`, S, blocks, method)
+}
+
+noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
+    .Call(`_magmaanlab_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
+}
+
+noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
+    .Call(`_magmaanlab_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
+}
+
+noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
+    .Call(`_magmaanlab_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
+}
+
+noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_modindices_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL, candidates = "all", include_loadings = TRUE, include_covariances = TRUE) {
+    .Call(`_magmaanlab_noniterative_cfa_modindices_impl`, fit, estimator, discrepancy, gamma, data, candidates, include_loadings, include_covariances)
+}
+
+noniterative_cfa_se_impl <- function(fit, estimator = "auto", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_se_impl`, fit, estimator, gamma, data)
+}
+
+noniterative_cfa_wald_impl <- function(fit, R, q, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_wald_impl`, fit, R, q, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "auto", discrepancy = "uls", gamma = "nt", data0 = NULL, data1 = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_difference_impl`, fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1)
+}
+
+noniterative_cfa_grouped_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_grouped_inference_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_pseudo_lrt_impl <- function(fit_H1, fit_H0, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_pseudo_lrt_impl`, fit_H1, fit_H0, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_constrained_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_constrained_impl`, fit, estimator, discrepancy, gamma, data)
+}
+
+noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
+    .Call(`_magmaanlab_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
+}
+
+ordinal_fixed_weight_stats_impl <- function(ordinal_stats, method, W = NULL, dls_a = 0.5) {
+    .Call(`_magmaanlab_ordinal_fixed_weight_stats_impl`, ordinal_stats, method, W, dls_a)
 }
 
 data_ordinal_stats_from_raw_impl <- function(X, full_wls_weight = TRUE) {
@@ -337,312 +553,8 @@ frontier_fit_mixed_ordinal_psd_impl <- function(partable, mixed_stats, estimator
     .Call(`_magmaanlab_frontier_fit_mixed_ordinal_psd_impl`, partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
 }
 
-fit_uls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_uls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
-}
-
-fit_gls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_gls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
-}
-
-fit_wls_snlls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
-    .Call(`_magmaanlab_fit_wls_snlls_impl`, partable, sample_stats, W, optimizer, control, bounds)
-}
-
-fit_start_values <- function(partable, sample_stats, start = NULL, transport = NULL) {
-    .Call(`_magmaanlab_fit_start_values`, partable, sample_stats, start, transport)
-}
-
-fit_coordinate_map <- function(partable, sample_stats, start, scaling = "sample_units", center_locations = TRUE) {
-    .Call(`_magmaanlab_fit_coordinate_map`, partable, sample_stats, start, scaling, center_locations)
-}
-
-model_implied <- function(fit) {
-    .Call(`_magmaanlab_model_implied`, fit)
-}
-
-infer_information_expected <- function(fit) {
-    .Call(`_magmaanlab_infer_information_expected`, fit)
-}
-
-infer_information_observed_fd <- function(fit, h_step = 1e-4) {
-    .Call(`_magmaanlab_infer_information_observed_fd`, fit, h_step)
-}
-
-infer_information_observed_analytic <- function(fit) {
-    .Call(`_magmaanlab_infer_information_observed_analytic`, fit)
-}
-
-frontier_newton_accuracy_impl <- function(fit, budget, psd) {
-    .Call(`_magmaanlab_frontier_newton_accuracy_impl`, fit, budget, psd)
-}
-
-infer_information_cross_products <- function(fit, raw_data) {
-    .Call(`_magmaanlab_infer_information_cross_products`, fit, raw_data)
-}
-
-infer_vcov <- function(info, fit) {
-    .Call(`_magmaanlab_infer_vcov`, info, fit)
-}
-
-infer_vcov_partable <- function(info, partable) {
-    .Call(`_magmaanlab_infer_vcov_partable`, info, partable)
-}
-
-infer_se <- function(vcov) {
-    .Call(`_magmaanlab_infer_se`, vcov)
-}
-
-compute_defined_impl <- function(syntax, fit, vcov) {
-    .Call(`_magmaanlab_compute_defined_impl`, syntax, fit, vcov)
-}
-
-infer_chi2_stat <- function(sample_stats, fmin) {
-    .Call(`_magmaanlab_infer_chi2_stat`, sample_stats, fmin)
-}
-
-infer_df_stat <- function(partable, sample_stats) {
-    .Call(`_magmaanlab_infer_df_stat`, partable, sample_stats)
-}
-
-infer_baseline <- function(sample_stats) {
-    .Call(`_magmaanlab_infer_baseline`, sample_stats)
-}
-
-infer_baseline_fit <- function(fit) {
-    .Call(`_magmaanlab_infer_baseline_fit`, fit)
-}
-
-measures_fit <- function(fit, chi2, df, baseline) {
-    .Call(`_magmaanlab_measures_fit`, fit, chi2, df, baseline)
-}
-
 ordinal_catml_dwls_rmsea_impl <- function(fit, ordinal_stats = NULL) {
     .Call(`_magmaanlab_ordinal_catml_dwls_rmsea_impl`, fit, ordinal_stats)
-}
-
-infer_fiml_observed_vcov <- function(fit) {
-    .Call(`_magmaanlab_infer_fiml_observed_vcov`, fit)
-}
-
-infer_fiml_information_vcov <- function(fit) {
-    .Call(`_magmaanlab_infer_fiml_information_vcov`, fit)
-}
-
-estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
-    .Call(`_magmaanlab_estimate_fiml_robust_mlr`, fit, h_step)
-}
-
-fiml_fit_measures_impl <- function(fit, robust = FALSE) {
-    .Call(`_magmaanlab_fiml_fit_measures_impl`, fit, robust)
-}
-
-infer_ml2s_casewise_influence_ij_fit <- function(fit, raw_data, stage2_weight = NULL, dls_a = NULL) {
-    .Call(`_magmaanlab_infer_ml2s_casewise_influence_ij_fit`, fit, raw_data, stage2_weight, dls_a)
-}
-
-estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4, stage2_weight = "nt", dls_a = 0.5) {
-    .Call(`_magmaanlab_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step, stage2_weight, dls_a)
-}
-
-frontier_ml2s_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
-    .Call(`_magmaanlab_frontier_ml2s_information_choices_impl`, fit, raw_data, eigen_tol)
-}
-
-frontier_fiml_information_choices_impl <- function(fit, raw_data = NULL, eigen_tol = 1e-9) {
-    .Call(`_magmaanlab_frontier_fiml_information_choices_impl`, fit, raw_data, eigen_tol)
-}
-
-two_stage_stage2_weight_blocks_impl <- function(stage1, stage2_weight = "nt", dls_a = 0.5) {
-    .Call(`_magmaanlab_two_stage_stage2_weight_blocks_impl`, stage1, stage2_weight, dls_a)
-}
-
-infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
-    .Call(`_magmaanlab_infer_fiml_fmg_spectrum`, fit, h_step)
-}
-
-measures_standardize_lv <- function(fit, vcov) {
-    .Call(`_magmaanlab_measures_standardize_lv`, fit, vcov)
-}
-
-measures_standardize_all <- function(fit, vcov) {
-    .Call(`_magmaanlab_measures_standardize_all`, fit, vcov)
-}
-
-measures_composite_weights <- function(fit, vcov) {
-    .Call(`_magmaanlab_measures_composite_weights`, fit, vcov)
-}
-
-measures_residuals <- function(fit) {
-    .Call(`_magmaanlab_measures_residuals`, fit)
-}
-
-measures_standardized_residuals <- function(fit) {
-    .Call(`_magmaanlab_measures_standardized_residuals`, fit)
-}
-
-measures_reliability_cov <- function(S, gamma = NULL, n = 0L) {
-    .Call(`_magmaanlab_measures_reliability_cov`, S, gamma, n)
-}
-
-measures_reliability_omega_multidim <- function(S, block, target = "total", weights = NULL, gamma = NULL, n = 0L) {
-    .Call(`_magmaanlab_measures_reliability_omega_multidim`, S, block, target, weights, gamma, n)
-}
-
-measures_reliability_omega_from_fit <- function(fit, target, weight, gamma, n) {
-    .Call(`_magmaanlab_measures_reliability_omega_from_fit`, fit, target, weight, gamma, n)
-}
-
-measures_reliability_ordinal_observed_omega <- function(fit, block, target = "total", weight = "fit", ordinal_stats = NULL) {
-    .Call(`_magmaanlab_measures_reliability_ordinal_observed_omega`, fit, block, target, weight, ordinal_stats)
-}
-
-measures_factor_scores <- function(fit, raw_data, method = "regression") {
-    .Call(`_magmaanlab_measures_factor_scores`, fit, raw_data, method)
-}
-
-measures_factor_score_precision <- function(fit, raw_data) {
-    .Call(`_magmaanlab_measures_factor_score_precision`, fit, raw_data)
-}
-
-inference_modification_indices <- function(fit, weight = NULL, information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, h_step = 1e-4) {
-    .Call(`_magmaanlab_inference_modification_indices`, fit, weight, information, candidates, include_loadings, include_covariances, h_step)
-}
-
-inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
-    .Call(`_magmaanlab_inference_score_tests`, fit, weight, h_step)
-}
-
-infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "expected", gamma = "empirical") {
-    .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma)
-}
-
-infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
-}
-
-infer_fiml_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_fiml_profile_lrt`, fit_H1, fit_H0, eig_tol)
-}
-
-infer_two_stage_nt_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_two_stage_nt_profile_lrt`, fit_H1, fit_H0, eig_tol)
-}
-
-measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weight = NULL, conf_level = 0.90) {
-    .Call(`_magmaanlab_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
-}
-
-infer_casewise_influence_ij_fit <- function(fit, raw_data, weight = NULL) {
-    .Call(`_magmaanlab_infer_casewise_influence_ij_fit`, fit, raw_data, weight)
-}
-
-inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = FALSE) {
-    .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
-}
-
-inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", estimated_weight = FALSE) {
-    .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
-}
-
-inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
-    .Call(`_magmaanlab_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
-}
-
-inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
-    .Call(`_magmaanlab_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
-}
-
-inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected", metric = "expected") {
-    .Call(`_magmaanlab_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric)
-}
-
-infer_z_test <- function(fit, se) {
-    .Call(`_magmaanlab_infer_z_test`, fit, se)
-}
-
-infer_z_test_theta <- function(theta, se) {
-    .Call(`_magmaanlab_infer_z_test_theta`, theta, se)
-}
-
-infer_chi2_pvalue <- function(chi2, df) {
-    .Call(`_magmaanlab_infer_chi2_pvalue`, chi2, df)
-}
-
-infer_wald_test <- function(fit, R, vcov, q = NULL) {
-    .Call(`_magmaanlab_infer_wald_test`, fit, R, vcov, q)
-}
-
-infer_wald_test_theta <- function(theta, R, vcov, q = NULL) {
-    .Call(`_magmaanlab_infer_wald_test_theta`, theta, R, vcov, q)
-}
-
-infer_browne_residual_nt <- function(fit) {
-    .Call(`_magmaanlab_infer_browne_residual_nt`, fit)
-}
-
-infer_rls_chi2 <- function(fit, implied) {
-    .Call(`_magmaanlab_infer_rls_chi2`, fit, implied)
-}
-
-infer_nt_moment_quadratic <- function(fit, implied) {
-    .Call(`_magmaanlab_infer_nt_moment_quadratic`, fit, implied)
-}
-
-infer_nt_moment_quadratic_sample <- function(sample_stats, implied) {
-    .Call(`_magmaanlab_infer_nt_moment_quadratic_sample`, sample_stats, implied)
-}
-
-frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
-    .Call(`_magmaanlab_frontier_guttman_h_impl`, S, blocks, method)
-}
-
-noniterative_cfa_fit_impl <- function(partable, sample_stats, estimator = "guttman_lavaan", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
-    .Call(`_magmaanlab_noniterative_cfa_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
-}
-
-noniterative_cfa_metric_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
-    .Call(`_magmaanlab_noniterative_cfa_metric_fit_impl`, partable, sample_stats, estimator, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
-}
-
-noniterative_cfa_restricted_fit_impl <- function(partable, sample_stats, estimator = "guttman_aligned", communality = "triad_wls", composite = "auto", admissibility = "raw", margin = 1e-4, beta0 = 1.0, rate = 0.5, score_conditioning = "raw", score_floor0 = 1.0, score_rate = 0.5, h_conditioning = "raw", h_floor0 = 1.0, h_rate = 0.5) {
-    .Call(`_magmaanlab_noniterative_cfa_restricted_fit_impl`, partable, sample_stats, estimator, communality, composite, admissibility, margin, beta0, rate, score_conditioning, score_floor0, score_rate, h_conditioning, h_floor0, h_rate)
-}
-
-noniterative_cfa_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_inference_impl`, fit, estimator, discrepancy, gamma, data)
-}
-
-noniterative_cfa_modindices_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL, candidates = "all", include_loadings = TRUE, include_covariances = TRUE) {
-    .Call(`_magmaanlab_noniterative_cfa_modindices_impl`, fit, estimator, discrepancy, gamma, data, candidates, include_loadings, include_covariances)
-}
-
-noniterative_cfa_se_impl <- function(fit, estimator = "auto", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_se_impl`, fit, estimator, gamma, data)
-}
-
-noniterative_cfa_wald_impl <- function(fit, R, q, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_wald_impl`, fit, R, q, estimator, discrepancy, gamma, data)
-}
-
-noniterative_cfa_difference_impl <- function(fit0, fit1, df_d, estimator = "auto", discrepancy = "uls", gamma = "nt", data0 = NULL, data1 = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_difference_impl`, fit0, fit1, df_d, estimator, discrepancy, gamma, data0, data1)
-}
-
-noniterative_cfa_grouped_inference_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_grouped_inference_impl`, fit, estimator, discrepancy, gamma, data)
-}
-
-noniterative_cfa_pseudo_lrt_impl <- function(fit_H1, fit_H0, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_pseudo_lrt_impl`, fit_H1, fit_H0, estimator, discrepancy, gamma, data)
-}
-
-noniterative_cfa_constrained_impl <- function(fit, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_constrained_impl`, fit, estimator, discrepancy, gamma, data)
-}
-
-noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "auto", discrepancy = "uls", gamma = "nt", data = NULL) {
-    .Call(`_magmaanlab_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
 }
 
 prepared_model_impl <- function(partable, kind, schema = NULL) {
@@ -759,6 +671,94 @@ policy_nested_impl <- function(null_context, alternative_context, null_state, al
 
 inference_reuse_impl <- function(context) {
     .Call(`_magmaanlab_inference_reuse_impl`, context)
+}
+
+frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
+}
+
+frontier_profile_lrt_parameter_gmm_impl <- function(fit, parameter, target, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_gmm_impl`, fit, parameter, target, weight, optimizer, control, bounds, constraint_tol, raw_data, robust, estimated_weight, reference)
+}
+
+frontier_profile_lrt_parameter_ordinal_impl <- function(fit, parameter, target, weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl`, fit, parameter, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
+}
+
+frontier_profile_lrt_ci_parameter_ml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
+}
+
+frontier_profile_lrt_ci_parameter_gmm_impl <- function(fit, parameter, weight = NULL, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, estimated_weight = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_gmm_impl`, fit, parameter, weight, level, lower, upper, initial_step, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, raw_data, robust, estimated_weight, reference)
+}
+
+frontier_profile_lrt_ci_parameter_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
+}
+
+frontier_profile_lrt_parameter_fiml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_fiml_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data, robust, reference)
+}
+
+frontier_profile_lrt_parameter_ml2s_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL, estimated_weight = FALSE) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml2s_impl`, fit, parameter, target, optimizer, control, constraint_tol, raw_data, robust, reference, estimated_weight)
+}
+
+frontier_profile_lrt_parameter_ml2s_nt_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml2s_nt_impl`, fit, parameter, target, optimizer, control, constraint_tol, robust, reference)
+}
+
+frontier_profile_lrt_parameter_mixed_ordinal_impl <- function(fit, parameter, target, weight = "fit", mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_parameter_mixed_ordinal_impl`, fit, parameter, target, weight, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
+}
+
+frontier_profile_lrt_ci_parameter_fiml_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_fiml_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference)
+}
+
+frontier_profile_lrt_ci_parameter_ml2s_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL, estimated_weight = FALSE) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml2s_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, raw_data, robust, reference, estimated_weight)
+}
+
+frontier_profile_lrt_ci_parameter_ml2s_nt_impl <- function(fit, parameter, level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, optimizer = NULL, control = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_ml2s_nt_impl`, fit, parameter, level, lower, upper, initial_step, optimizer, control, constraint_tol, root_tol, statistic_tol, robust, reference)
+}
+
+frontier_profile_lrt_ci_parameter_mixed_ordinal_impl <- function(fit, parameter, weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, mixed_ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_parameter_mixed_ordinal_impl`, fit, parameter, weight, level, lower, upper, initial_step, mixed_ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
+}
+
+frontier_profile_lrt_ordinal_polychoric_omega_impl <- function(fit, block, omega0, target = "total", weight = "fit", ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ordinal_polychoric_omega_impl`, fit, block, omega0, target, weight, ordinal_stats, optimizer, control, bounds, constraint_tol, robust, reference)
+}
+
+frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, target = "total", weight = "fit", level = 0.95, lower = NA_real_, upper = NA_real_, initial_step = NA_real_, ordinal_stats = NULL, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, root_tol = 1e-5, statistic_tol = 1e-6, robust = FALSE, reference = NULL) {
+    .Call(`_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
+}
+
+infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "expected", gamma = "empirical") {
+    .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma)
+}
+
+infer_continuous_ls_profile_lrt <- function(fit_H1, fit_H0, X_per_group, weight = NULL, eig_tol = 1e-10) {
+    .Call(`_magmaanlab_infer_continuous_ls_profile_lrt`, fit_H1, fit_H0, X_per_group, weight, eig_tol)
+}
+
+infer_fiml_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
+    .Call(`_magmaanlab_infer_fiml_profile_lrt`, fit_H1, fit_H0, eig_tol)
+}
+
+infer_two_stage_nt_profile_lrt <- function(fit_H1, fit_H0, eig_tol = 1e-10) {
+    .Call(`_magmaanlab_infer_two_stage_nt_profile_lrt`, fit_H1, fit_H0, eig_tol)
+}
+
+measures_standardized_residuals_estimated_weight <- function(fit, raw_data, weight = NULL, conf_level = 0.90) {
+    .Call(`_magmaanlab_measures_standardized_residuals_estimated_weight`, fit, raw_data, weight, conf_level)
+}
+
+infer_casewise_influence_ij_fit <- function(fit, raw_data, weight = NULL) {
+    .Call(`_magmaanlab_infer_casewise_influence_ij_fit`, fit, raw_data, weight)
 }
 
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {

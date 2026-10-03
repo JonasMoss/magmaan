@@ -1,5 +1,5 @@
 // Shared internal plumbing for the magmaan R bindings. Header-only helpers in
-// namespace `magmaanr` — no // [[Rcpp::export]] here. Included by fit.cpp and
+// namespace `magmaanr` — no // [[Rcpp::export]] here. Included by the topical fit_*.cpp files and
 // robust.cpp; bindings.cpp (parse/lavaanify only) does not need it.
 
 #pragma once
@@ -85,7 +85,7 @@ inline void stamp_group_equal_attr(
   Rf_setAttrib(target, Rf_install("magmaan.group_equal"), v);
 }
 
-// ---- robust InferenceSpec enums <-> strings (shared by fit.cpp / robust.cpp) -
+// ---- robust InferenceSpec enums <-> strings (shared by fit_*.cpp / robust.cpp) -
 
 inline magmaan::robust::Information info_from_string(const std::string& s) {
   if (s == "expected") return magmaan::robust::Information::Expected;
@@ -1135,7 +1135,7 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
 // false when the fit carries no usable stage1 (e.g. a plain FIML fit), so the
 // caller can fall back to computing it. Reusing this is bit-identical to a
 // recompute (the EM is deterministic) while skipping the EM + observed-
-// information rebuild. Shared by fit.cpp and lr_test_satorra.cpp so two-stage
+// information rebuild. Shared by the fitting glue and lr_test_satorra.cpp so two-stage
 // SB, the FMG spectrum, and the nested LRT all consume one saturated build.
 // Reconstruct only the saturated target moments. Pattern-NTML deliberately
 // needs no empirical Stage-1 information or ACOV.
@@ -1254,9 +1254,9 @@ two_stage_weight_from_arg(const std::string& s) {
              "' (expected nt, uls, dwls, adf, dls)");
 }
 
-// ---- profile-LRT result serializers (shared by robust.cpp + fit.cpp) -------
+// ---- profile-LRT result serializers (shared by robust.cpp + fit_robust.cpp) -------
 // The misspecification-robust profile-LRT bindings live in two glue files
-// (robust.cpp: ML/ordinal/mixed; fit.cpp: continuous-LS/FIML/ML2S, co-located
+// (robust.cpp: ML/ordinal/mixed; fit_robust.cpp: continuous-LS/FIML/ML2S, co-located
 // with their fit-local weight/pack helpers), so the WeightedProfileLRTResult
 // serializer must be shared rather than file-local.
 [[maybe_unused]] inline Rcpp::List

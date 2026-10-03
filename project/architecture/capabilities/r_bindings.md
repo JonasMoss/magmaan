@@ -1,5 +1,17 @@
 ### R bindings and public namespace transition
 
+- Fitting and post-fit Rcpp glue compiles in topical `fit_*.cpp` files
+  (estimation, ordinal, missing data, inference, robust, measures, frontier,
+  profile tests, noniterative and prepared interfaces). Shared helper
+  declarations/types live in private `glue_internal.h`, with definitions in
+  `glue_util.cpp`; helpers used by one topic remain local. The split preserves
+  the exported R interface and function bodies.
+  Uncached Clang 21 `-O1 -g0 -march=native` glue compilation on the
+  workstation took 33.76 s for the original `fit.cpp`, versus 6.25–11.37 s
+  per topical file (shared utility: 7.44 s; serial total: 95.83 s). The split
+  reduces recompilation after a topic-only edit, while increasing cold-build
+  work because each translation unit parses the shared headers.
+
 - **Prepared R interface:** `prepare_model`, `prepare_data`, `prepare_weight`
   and `estimate` retain separate, immutable process-local native handles for
   continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS.
