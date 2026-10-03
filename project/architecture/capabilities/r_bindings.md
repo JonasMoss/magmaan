@@ -378,8 +378,8 @@
   `ordinal_dwls_profile_lrt` is an explicit lab comparator. Nested score remains
   typed unavailable. Gates cover the global-statistic difference, common-point
   profile equality (delta and two-group theta invariance), diagnostic IJ
-  construction, and true-null Satorra-2000 reduction. Limited validation,
-  confirmation pending. The shared inference-side
+  construction, and true-null Satorra-2000 reduction. Confirmed on fresh
+  draws (decision study 05). The shared inference-side
   `robust::embed_nested_null` matches formula keys including group and level,
   lifts the null's affine constraints and estimate into H1, and verifies its
   implied covariance and mean moments to relative tolerance 1e-10. Omission

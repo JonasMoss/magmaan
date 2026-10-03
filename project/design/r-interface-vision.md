@@ -607,7 +607,7 @@ Global tests against the saturated model:
   statistic, since it is not a likelihood ratio. All-ordinal DWLS reports the
   exact weighted chi-square All tail on every positive robust-ordinal sample
   eigenvalue (decision study 05); SB/PEBA4 are comparators only for that global
-  test. Validation is limited, confirmation pending.
+  test. Confirmed on fresh draws (2.9-6.8% at nominal 5%).
 - Profiling: when the score uses the estimator's own weight, the nuisance part
   of the score is zero at the estimate (the first-order condition), so the
   effective (profile) score vector equals the raw score. The statistic is that

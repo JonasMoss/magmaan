@@ -65,8 +65,9 @@ errors, Wald tests, intervals, defined parameters), global score and LR tests,
 and nested score and LR tests, each calibrated with SB and PEBA4. FIML score
 uses observed sensitivity and an expected metric; nested LR uses empirical
 scores at the larger fit. FIML calibration remains limited; see the capability
-inventory. All-ordinal DWLS computes covariance and global fit-function tests,
-and a nested fit-function difference; nested score is unavailable. ML2S, GLS,
+inventory. All-ordinal DWLS computes the estimated-weight IJ covariance, a
+global fit-function test with the exact spectrum (All) tail, and a nested
+fit-function difference with SB and PEBA4; nested score is unavailable. ML2S, GLS,
 ULS and WLS fit with typed unavailable policy components. `vcov()` and
 `confint()` raise `magmaan_inference_unavailable` when covariance is unavailable.
 The design is

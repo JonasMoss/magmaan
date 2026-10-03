@@ -9,113 +9,218 @@ execute:
   message: false
 ---
 
-The adopted register is estimated-weight IJ covariance, robust-ordinal global
-fit-function exact spectrum (All) reference, and r-term parameter-space estimated-weight nested IJ SB/PEBA4.
-The nested reference uses the larger fit’s observed Hessian and exact restriction
-map; validation is limited and fresh-seed confirmation is pending.
-These recipes are settled by the misspecification-robust requirement;
-finite-sample calibration remains open. Comparators never select a replacement.
+## Default register
 
-Local task-17.5 verification used five fresh-seed draws each in global cells 3
-and 49: policy_all and all agreed exactly on all ten fits. Replaying cell 3's
-first five exploration draws gave a maximum p-value difference of 4.97e-10
-against the retained exploration rows (gate 1e-7). These are equivalence checks,
-not confirmation of finite-sample calibration.
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Covariance | Estimated-weight IJ sandwich | Adopted by principle; calibrated | Production 2026-10-03: median coverage about 95% for every target |
+| Global test | $nF$ on the `robust_ordinal` spectrum, exact weighted chi-square tail with every positive eigenvalue (All) | Chosen after exploration (user, 2026-10-03); confirmed on fresh draws | SB and PEBA4 over-reject at df ≥ 53; All 2.9–6.8% at confirmation |
+| Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), SB and PEBA4 | Replaced the separate-point profile law after diagnosis; confirmed on fresh draws | Profile law 0.1–2% (SB) and 3–17% (PEBA4); parameter-space law 4.3–7.8% |
+| Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
 
-How well calibrated are these all-ordinal DWLS components? The smoke and pilot
-check computation, policy equivalence, failures and cost. Twenty draws per cell
-cannot establish calibration, coverage or power. The main tables below describe
-the pilot; the linked nested-law diagnostic uses a bounded production-seed replay.
+## Question
+
+How well calibrated are the all-ordinal DWLS policy components? The recipes'
+ingredients are fixed by the misspecification-robust requirement
+([scope](../../../project/scope.md)): IJ covariance with the estimated weight's
+influence, the robust-ordinal spectrum for the global test, and an
+estimated-weight law for the nested test. Which reference-law approximation to
+use, and whether a law is correctly assembled, are empirical questions this
+study answers. The registered design, its amendments and the confirmation
+criteria are in `criteria/dwls_policy.md`.
+
+## Short answer
+
+**The IJ covariance is calibrated.** Across 42 coverage cells (misspecification
+0, .2 and .4; N 150 to 1000; binary and five categories; one and two groups)
+its median coverage is about 95% for loadings, thresholds, correlations and
+paths, with a minimum of 92.3%. The fixed-weight expected and observed
+sandwiches fall to 89% for correlations and paths under misspecification.
+
+**The global test needs the exact spectrum tail.** SB and PEBA4 on the robust
+spectrum over-reject once df ≥ 53, at 8–12% even at N = 1000 and up to 20% at
+N = 200. SB, EBA2 and every penalized law (pEBA, penalized All, pOLS) fail the
+same way: they flatten the spectrum's spread. The laws that keep it (All,
+scaled F, mean-variance, scaled-shifted, EBA6) stay near 5%. All, the
+exact weighted chi-square tail of the estimated spectrum, was chosen and then
+confirmed on fresh draws: 2.9–6.8% (median 5.1%), with no null cell outside
+[3%, 7%] at N ≥ 500.
+
+**The nested profile law had an assembly artifact; the parameter-space law
+works.** The separate-point profile law produced 78–373 spectrum terms for
+10–15 restrictions, because each model's profile is built at its own fitted
+point and residual-dependent blocks cancel only up to $O_p(N^{-1/2})$. Its SB
+tail rejected 0.1–2% and its PEBA4 tail 3–17%, worsening with N. The
+first-order law
+
+$$
+\lambda = \operatorname{eig}\big\{(A H^{-1} A^\top)^{-1} A H^{-1} B H^{-1} A^\top\big\}
+$$
+
+has exactly $r$ terms ($H$ the observed Hessian at the larger fit, $B$ the
+estimated-weight IJ meat, $A$ the exact restriction map). On fresh draws its
+SB and PEBA4 tails reject 4.3–7.8%, with no cell outside [3%, 7%] at
+N = 1000; the cells above 7% are all at N = 400. The fixed-weight
+Satorra-2000 comparator rejects 4.8–11.4%. Size-adjusted power is the same
+for every arm, so the choices cost no power.
 
 ```{r}
-root <- file.path('results','dwls-policy','pilot')
-if (!file.exists(file.path(root,'cost.csv')))
-  stop('Run Rscript run_experiment.R --pilot --workers 4 --run-id pilot before rendering.')
-cost <- read.csv(file.path(root,'cost.csv'))
-timing <- read.csv(file.path(root,'timing.csv'))
-summary <- read.csv(file.path(root,'summary.csv'))
-cells <- read.csv(file.path(root,'cells.csv'))
+read_run <- function(run) {
+  root <- file.path('results', 'dwls-policy', run)
+  if (!file.exists(file.path(root, 'summary.csv')))
+    stop('Frozen results for ', run, ' are absent; see criteria/dwls_policy.md for the run commands.')
+  s <- read.csv(file.path(root, 'summary.csv'))
+  merge(s, read.csv(file.path(root, 'cells.csv')), by = 'cell_id')
+}
+prod <- read_run('production-2026-10-03')
+expl <- read_run('explore-2026-10-03')
+cg <- read_run('confirm-global-2026-10-03')
+cn <- read_run('confirm-nested-2026-10-03')
+pct <- function(x) sprintf('%.1f', 100 * x)
+arm_table <- function(z, arms, labels, judged = function(x) x$n >= 500) {
+  do.call(rbind, lapply(seq_along(arms), function(i) {
+    x <- z[z$role == 'null' & z$arm == arms[i], ]
+    out <- x$rate < .03 | x$rate > .07
+    data.frame(Reference = labels[i], Min = pct(min(x$rate)), Median = pct(median(x$rate)),
+      Max = pct(max(x$rate)), `Outside [3, 7]` = sprintf('%d/%d', sum(out), nrow(x)),
+      `Judged cells outside` = sprintf('%d/%d', sum(out & judged(x)), sum(judged(x))),
+      check.names = FALSE)
+  }))
+}
 ```
 
-The pilot attempted `r cost$replicates` draws across `r cost$cells` cells, with
-`r cost$failures` failed draws. Per-cell extrapolation gives
-`r round(cost$production_cpu_hours,1)` worker-hours for production, or an ideal
-`r round(cost$ideal_four_worker_hours,1)` hours with four workers. This includes
-fitting and inference; population-target preparation is separate and performed
-once per run. Elapsed timings include a brief scheduling pause for the shared
-compute budget, recorded in `scheduling.csv`; CPU times exclude that pause. Detailed timings, Wilson intervals, target-specific coverage,
-failure counts and policy gaps are in the frozen CSVs. These are pilot
-engineering evidence, not confirmatory findings. The two failures are library
-nonconvergence verdicts in the two-group theta coverage cell with binary
-indicators, total N=300 and omitted cross-loading .4; all other draws completed.
+## Covariance
+
+Coverage of nominal 95% Wald intervals by target and covariance, over the
+coverage cells. Pseudo-true values come from a population DWLS fit to one
+100,000-row draw per group. The registered flag is IJ coverage below 93% at
+N ≥ 300.
 
 ```{r}
-z <- merge(timing,cells[c('cell_id','family','role')],by='cell_id')
-table <- do.call(rbind,lapply(split(z,paste(z$family,z$role)),function(x)
-  data.frame(Family=x$family[1],Role=x$role[1],Cells=nrow(x),
-    `Median CPU seconds per draw`=round(median(x$mean_cpu_seconds),3),
-    `Production worker-hours`=round(sum(x$production_cpu_hours),2),check.names=FALSE)))
-knitr::kable(table,row.names=FALSE)
+cv <- prod[prod$family == 'coverage', ]
+tab <- do.call(rbind, lapply(c('loading', 'threshold', 'correlation', 'path'), function(t)
+  do.call(rbind, lapply(c('policy_ij', 'expected', 'observed'), function(a) {
+    x <- cv[cv$target == t & cv$arm == a, ]
+    data.frame(Target = t, Covariance = c(policy_ij = 'IJ (policy)', expected = 'Expected sandwich',
+      observed = 'Observed sandwich')[[a]], Cells = nrow(x), Min = pct(min(x$rate)),
+      Median = pct(median(x$rate)), Max = pct(max(x$rate)),
+      `Below 93% at N >= 300` = sum(x$rate < .93 & x$n >= 300), check.names = FALSE)
+  }))))
+knitr::kable(tab, row.names = FALSE)
 ```
 
-The population is a thresholded Gaussian copula. Sample size is total across
-groups. Population DWLS targets use one 100,000-row draw per group for each
-coverage configuration, with seeds and target estimates recorded separately.
-Intervals use the IJ policy covariance or the expected/observed fixed-weight
-sandwich comparators, with a delta-method factor correlation. The global policy_all arm is gated against the explicit all arm at 1e-7.
-Historical policy_sb/policy_peba4 arm names now denote explicit spectrum
-comparators, not policy outputs. Global comparators
-are SB/PEBA4, scaled-shifted and mean-variance adjustments of the same robust-ordinal
-spectrum. Nested comparators retain the separate-point profile SB/PEBA4 and fixed-weight
-Satorra-2000 restriction map at H1; the implemented reference family uses the
-new policy spectrum. Restriction degrees of freedom and reference-spectrum size are recorded
-separately; the policy spectrum has df_diff terms, while the profile comparator
-may contain more. The retained pilot predates this nested-reference replacement.
-Power uses matched null draws for arm-specific empirical size adjustment.
+The three flagged IJ cells are factor correlations in two-group theta models at
+N = 300 (92.8–93.0%); the fixed-weight sandwiches flag eight correlation cells each.
 
-The original availability preflight is retained. The approved correction uses
-H1 threshold equality and H0 threshold-plus-loading equality under theta,
-the Wu–Estabrook metric step. The earlier loadings-to-thresholds-plus-loadings
-pair changes fixed scales/intercepts and correctly returned `not_nested`.
-The second amendment drops threshold-shift power: both corrected models impose
-equal thresholds, so that perturbation would misspecify both models rather than
-test threshold invariance. Loading power remains for metric versus configural.
-A genuine threshold-invariance restriction map needs separate validation.
+## Global test
 
-The 146-cell grid and both amendments are in `criteria/dwls_policy.md`.
-Finite-sample flags use the registered thresholds, but pilot flags are only
-nominations for follow-up. All convergence verdicts come from the library.
-Failures remain in attempted counts and are excluded only from explicitly
-reported successful-arm denominators. Monte Carlo error in population targets
-and the small pilot limit interpretation. Production is pending a separate
-compute decision; production evidence must use its distinct registered seeds.
+The statistic is $nF$, equal to the score statistic of the least-squares fit,
+with the `robust_ordinal` spectrum. Production evaluated four references.
+An exploratory rerun with the production seeds, saving every spectrum,
+evaluated the implemented family; it reproduced production's four arms exactly
+(all 256 cell-by-arm counts). Rejection rates at nominal 5% over the 52 null
+cells; judged cells are those with N ≥ 500.
 
-Tiny pilot summaries, metadata, cells and population targets are frozen to
-preserve timing and provenance; raw per-fit rows remain ignored. The native
-library hash and source hashes identify the installed package and runner.
+```{r}
+arms <- c('policy_sb', 'policy_peba4', 'scaled_shifted', 'mean_variance', 'scaled_f', 'all',
+          'pall', 'eba2', 'eba4', 'eba6', 'peba2', 'peba6', 'pols')
+labels <- c('SB (production policy)', 'PEBA4 (production policy)', 'Scaled-shifted',
+            'Mean-variance', 'Scaled F', 'All (exact tail)', 'Penalized All', 'EBA2', 'EBA4',
+            'EBA6', 'pEBA2', 'pEBA6', 'pOLS')
+knitr::kable(arm_table(expl, arms, labels), row.names = FALSE)
+```
 
-Reproduce with the lane library and one math thread per worker:
+The failures grow with df: at df = 9 every reference is near 5%. SB matches
+only the spectrum's mean, and the penalized laws pull the eigenvalues toward
+their mean, so all of them understate the spread of DWLS spectra at large df.
+
+Confirmation of All on fresh draws (seed base 817160001), with the same
+comparators recomputed:
+
+```{r}
+knitr::kable(arm_table(cg, c('policy_all', 'mean_variance', 'scaled_shifted', 'eba6', 'policy_sb', 'policy_peba4'),
+  c('All (policy)', 'Mean-variance', 'Scaled-shifted', 'EBA6', 'SB', 'PEBA4')), row.names = FALSE)
+```
+
+The only null cell outside [3%, 7%] is binary, skewed, df = 132, N = 200
+(2.95%), below the judged sample sizes.
+
+## Nested test
+
+Two groups with identical populations; metric versus configural and the
+Wu–Estabrook step (thresholds versus thresholds plus loadings, theta); the
+larger model correct or with an omitted .3 cross-loading in both groups, so
+invariance holds at the pseudo-true values. Judged cells are those with
+N = 1000.
+
+```{r}
+judged <- function(x) x$n >= 500
+prod_nested <- arm_table(prod[prod$family == 'nested', ], c('policy_sb', 'policy_peba4', 'fixed_sb', 'fixed_peba4'),
+  c('Profile law SB (production policy)', 'Profile law PEBA4 (production policy)',
+    'Fixed-weight Satorra-2000 SB', 'Fixed-weight Satorra-2000 PEBA4'), judged)
+conf_nested <- arm_table(cn[cn$family == 'nested', ], c('policy_sb', 'policy_peba4', 'all', 'profile_sb', 'profile_peba4', 'fixed_sb'),
+  c('Parameter-space law SB (policy)', 'Parameter-space law PEBA4 (policy)', 'Parameter-space law All',
+    'Profile law SB', 'Profile law PEBA4', 'Fixed-weight Satorra-2000 SB'), judged)
+knitr::kable(prod_nested, row.names = FALSE, caption = 'Production (seed base 817150001)')
+knitr::kable(conf_nested, row.names = FALSE, caption = 'Confirmation (seed base 817160001)')
+```
+
+The [diagnosis](diagnostics/nested_profile_law.md) replayed 100 production
+draws in three cells. The profile law's positive trace exceeded the Monte Carlo
+mean of $T$ while the parameter-space law matched it (for example 10.80 against
+11.24 in the five-category N = 1000 cell); evaluated at one common point, the
+profile law and the parameter-space law agree to $4 \times 10^{-14}$.
+
+## Power
+
+Size-adjusted power uses each arm's empirical 95th percentile in the matched
+null cell. Within a run every arm has the same size-adjusted power, because the
+arms are monotone in one statistic per draw.
+
+```{r}
+pw <- rbind(
+  data.frame(Run = 'Global confirmation', x = cg[cg$role == 'power' & cg$arm == 'policy_all', ]),
+  data.frame(Run = 'Nested confirmation', x = cn[cn$role == 'power' & cn$arm == 'policy_sb', ]))
+tab <- do.call(rbind, lapply(split(pw, pw$Run), function(x)
+  data.frame(Run = x$Run[1], Cells = nrow(x), Min = pct(min(x$x.size_adjusted_power)),
+    Max = pct(max(x$x.size_adjusted_power)))))
+knitr::kable(tab, row.names = FALSE)
+```
+
+## Design and limits
+
+The population is a thresholded Gaussian copula: one to three factors with six
+indicators each, two or five categories, symmetric or skewed thresholds, one or
+two groups, and delta or theta parameterization. N is total across groups.
+Production used 2,000 replicates per null and coverage cell and 1,000 per power
+cell; the confirmations used the same counts on the fresh seed base. A smoke
+run and a 20-draw pilot (frozen under `results/dwls-policy/`) checked the
+runner and priced production at about 59 CPU-hours; production took 73. Library
+convergence verdicts decide acceptance; failed draws stay in attempted counts
+and leave the successful-arm denominators (312 failures in production, 3 in the
+global and 42 in the nested confirmation, all nonconvergence verdicts).
+
+The global reference was selected after seeing production and exploration data,
+then confirmed on fresh draws under a criterion fixed beforehand. The nested
+law was derived from first-order theory after a diagnosis, also confirmed on
+fresh draws. A Gaussian copula does not stress the polychoric step itself;
+heavier-tailed latent responses are outside this study. Threshold-invariance
+tests that are not parameter-nested (thresholds versus loadings) are outside
+it as well.
+
+## Reproduce
+
+Runs execute on Modal, one container per cell (`modal/app.py`); `combine.R`
+reproduces the single-process summaries. From the study's `modal/` directory:
 
 ```sh
-R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  nice -n 10 Rscript experiments/decisions/05-dwls-policy-calibration/run_experiment.R \
-  --smoke --workers 1 --run-id fresh-smoke
-R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  nice -n 10 Rscript experiments/decisions/05-dwls-policy-calibration/run_experiment.R \
-  --pilot --workers 4 --run-id fresh-pilot
-quarto render experiments/decisions/05-dwls-policy-calibration/report.qmd
+modal run app.py --mode production --run-id production-YYYY-MM-DD
+modal run app.py --mode explore --run-id explore-YYYY-MM-DD
+modal run app.py --mode confirm --family global --run-id confirm-global-YYYY-MM-DD
+modal run app.py --mode confirm --family nested --run-id confirm-nested-YYYY-MM-DD
+modal volume get magmaan-dwls-policy <run-id>/final <local-dir>
 ```
 
-Runner `--help` documents modes. Every run needs a fresh directory. Rendering
-reads frozen results only. Production is never launched automatically.
-
-## Nested reference-law diagnostic
-
-The [production-seed replay](diagnostics/nested_profile_law.md) isolates the
-separate-fitted-point cancellation artifact: 100 draws in each of three nested
-cells yield 83–183 positive profile terms for ten restrictions. The common-point
-profile spectrum agrees with the observed-Hessian parameter-space IJ law to
-numerical precision and has exactly ten terms. Parameter-space SB/pEBA4 rejection
-is 5–6%, versus profile SB 0–2% and pEBA4 5–18%. This exploratory diagnosis
-recommends fresh-seed registered confirmation of the parameter-space law; it
-does not change the current policy or establish release calibration.
+Single-process runs use `Rscript run_experiment.R --<mode> --workers 4`
+(`--help` lists modes and options). Rendering reads only the frozen summaries
+under `results/dwls-policy/`; raw rows and spectra stay untracked.

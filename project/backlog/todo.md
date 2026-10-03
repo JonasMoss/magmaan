@@ -523,37 +523,23 @@ required by an all-ordinal primary workflow remain current work.
   compare against common-point profiles and the task-17.3 diagnostic; statistic,
   nesting refusals and true-null fixed-weight reduction are preserved.
   Delta/theta statistics agree, but their H1 affine restriction tangents need
-  not coincide away from the nested null. Validation is limited, confirmation
-  pending. Study 05 saves spectra and the reference family, retains profile
+  not coincide away from the nested null. Confirmed on fresh draws (decision
+  study 05, 4.3-7.8%). Study 05 saves spectra and the reference family, retains profile
   and fixed-weight comparators, and confirms registered nested cells 53–84 and
   139–146 with seed base 817160001. Modal selects global, nested or both.
 
-- [ ] **M — calibrate the DWLS policy.** Confirmatory evidence for DWLS All global
-  and SB/PEBA4 nested size remains pending; [evidence 12](../../experiments/research/evidence/12-misspec-robust-se/)
-  covers IJ coverage for one parameter under misspecification. **Check:** one
-  frozen confirmatory run across ordinal regimes (categories, threshold skew,
-  N, groups), including misspecified larger models for nested tests,
-  reporting size, coverage and failures for the adopted recipes.
-  Task-17.1 registered [decision study 05](../../experiments/decisions/05-dwls-policy-calibration/report.qmd)
-  with a 146-cell runner, per-cell failure/coverage/rejection summaries and
-  production pricing. The theta nesting is amended to thresholds versus
-  thresholds+loadings (Wu–Estabrook metric step); the original `not_nested`
-  verdict was a design error, not a library defect. Threshold-shift power is
-  dropped because both corrected fits impose threshold equality. Smoke passed
-  all 292 draws; the frozen four-worker pilot attempted 2,920 draws
-  with two library nonconvergence verdicts, all arms otherwise available and
-  maximum policy gap 5.3e-14. Estimated production cost is 58.66 CPU-hours
-  (14.66 ideal hours at four workers), plus one-time population preparation.
-  Production requires a separate compute decision.
-  Task-17.2 adds runner-only global reference exploration/confirmation: 64
-  global cells, unchanged production seeds for exploration and fresh seed base
-  817160001 for confirmation, saved spectra and all 13 registered FMG arms
-  (pOLS gamma = 4, bound primitive default). Full fresh-seed confirmation
-  remains separate work. Task-17.5 implements the user-selected All global
-  reference with unchanged n F and spectrum; policy_all is gated against the
-  explicit all arm, and SB/PEBA4 remain runner comparators. Validation is
-  limited, confirmation pending.
-  Pilot flags are diagnostics only and never change the adopted recipes.
+- [x] **M — calibrate the DWLS policy** (2026-10-03, task-17).
+  [Decision study 05](../../experiments/decisions/05-dwls-policy-calibration/report.qmd)
+  ran production (146 cells, Modal), a 13-reference exploration on the
+  production seeds and two registered fresh-seed confirmations. The IJ
+  covariance is calibrated (median coverage about 95% for every target). The
+  global SB/PEBA4 references over-reject at df >= 53; the user chose the exact
+  spectrum tail (All), confirmed at 2.9-6.8%. The separate-point nested
+  profile law had an O_p(N^-1/2) cancellation artifact (78-373 terms for 10-15
+  restrictions); the r-term parameter-space law (observed Hessian,
+  estimated-weight IJ meat, exact restriction map) replaced it and was
+  confirmed at 4.3-7.8% with SB/PEBA4. Out of scope and reopen triggers:
+  heavier-tailed latent responses; threshold-invariance restriction maps.
 
 - [ ] **M — derive the misspecification-consistent moment centering for lab
   robust meats.** Lab robust SE/test functions take `moments = "structured"` or

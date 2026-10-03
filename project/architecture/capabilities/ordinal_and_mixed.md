@@ -297,8 +297,8 @@
   Its spectrum has exactly df_diff terms and matches the common-point profile
   and task-17.3 diagnostic construction. T = N(F_H0 − F_H1), SB/PEBA4, typed
   nesting reasons and unsupported nested score are preserved. The separate-point
-  profile law remains an explicitly named lab comparator. Limited validation,
-  confirmation pending; the global test, ML and FIML recipes are unchanged.
+  profile law remains an explicitly named lab comparator. Confirmed on fresh
+  draws in decision study 05 (4.3-7.8%); the global test, ML and FIML recipes are unchanged.
 - Study 05 retains global-only production-seed `--explore` and extends
   fresh-seed `--confirm` to 64 global and 40 nested cells (53–84, 139–146),
   seed base 817160001. Nested arms retain profile and fixed-weight comparators,
@@ -778,5 +778,5 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
 spectrum and the exact weighted chi-square All tail (every positive sample
 eigenvalue), exposed as `reference = "all"` and `p_all`. SB/PEBA4 fields are
 unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
-study 05 compares `policy_all` with its explicit `all` arm at 1e-7. Limited
-validation, confirmation pending.
+study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
+it on fresh draws (2.9-6.8%).

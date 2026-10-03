@@ -2,7 +2,7 @@
 
 - DWLS global policy now reports the exact spectrum (All) weighted chi-square
   p-value on unchanged n F and robust-ordinal eigenvalues (decision study 05).
-  Limited validation, confirmation pending; nested DWLS and ML/FIML unchanged.
+  Confirmed on fresh draws (2.9-6.8% at nominal 5%).
 - Robust MI and equality-release tests accept validated caller `gamma` matrices
   or per-group NACOV blocks for complete ML, continuous LS and categorical LS.
   Fitting weights are preserved; supplied Gamma requires explicit fixed-weight
@@ -11,8 +11,8 @@
 
 - Nested all-ordinal DWLS now calibrates the unchanged fit-function difference
   with the df-length parameter-space estimated-weight IJ law: observed Hessian
-  at the larger fit and exact restriction map, with SB and PEBA4. Validation is
-  limited; fresh-seed confirmation remains pending. The separate-point profile
+  at the larger fit and exact restriction map, with SB and PEBA4, confirmed on
+  fresh draws (4.3-7.8% at nominal 5%). The separate-point profile
   law remains an explicitly named lab comparator.
 
 - `mplus_data()` reads free/fixed individual and summary data through a typed
