@@ -17,7 +17,8 @@ tests. \code{"ML"}, \code{"MLM"} and \code{"MLR"} report lavaan's default differ
 test for complete-data ML. \code{"WLSMV"} and \code{"ULSMV"} report the ordinal
 Satorra-2000 scaled-shifted difference; plain \code{"DWLS"}/\code{"ULS"} retain
 the statistic without a p-value, and \code{"WLS"} reports the standard difference.
-FIML compatibility comparisons currently report unavailable inference.}
+FIML supports \code{"ML"} (standard) and \code{"MLR"} (SB2001 using Yuan-Bentler
+Mplus scales); \code{"MLM"} is inapplicable.}
 
 \item{x}{A nested-test result.}
 

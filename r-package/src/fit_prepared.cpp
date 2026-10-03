@@ -344,7 +344,9 @@ Rcpp::List convention_inference_impl(Rcpp::List fit, SEXP context,
         ordinal_parameterization_from_string(parameterization), c, fit_state);
   } else if (!Rf_isNull(context)) {
     auto& ctx = score_bindings::get<score_bindings::Context>(context, "magmaan_inference_context");
-    if (ctx.estimator == "ML" && ctx.ntml) out = lavaan_inference_ml(*ctx.ntml, c, fit_state);
+    if (ctx.estimator == "FIML") out = lavaan_inference_fiml(ctx.ctx.pt, ctx.ctx.rep,
+        ctx.raw, ctx.pack, ctx.estimates, c, fit_state);
+    else if (ctx.estimator == "ML" && ctx.ntml) out = lavaan_inference_ml(*ctx.ntml, c, fit_state);
     else out = convention_unavailable(c, InferenceReason::UnsupportedModel,
         "this lavaan convention is not checked for the fitted model", fit_state);
   } else {
@@ -395,13 +397,16 @@ Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
           ordinal_parameterization_from_string(p1), c, &a.names.row_user, &b.names.row_user);
     }
   } else if (Rf_isNull(null_context) || Rf_isNull(alternative_context)) {
-    out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions cover complete-data ML so far";
+    out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions require matching continuous ML or FIML fits";
   } else {
     auto& a = score_bindings::get<score_bindings::Context>(null_context, "magmaan_inference_context");
     auto& b = score_bindings::get<score_bindings::Context>(alternative_context, "magmaan_inference_context");
-    if (a.estimator == "ML" && b.estimator == "ML" && a.ntml && b.ntml)
+    if (a.estimator == "FIML" && b.estimator == "FIML")
+      out = lavaan_nested_fiml(a.ctx.pt, a.ctx.rep, a.estimates, s0,
+          b.ctx.pt, b.ctx.rep, b.estimates, s1, a.raw, a.pack, c);
+    else if (a.estimator == "ML" && b.estimator == "ML" && a.ntml && b.ntml)
       out = lavaan_nested_ml(a.ntml, s0, b.ntml, s1, c);
-    else { out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions cover complete-data ML so far"; }
+    else { out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions require matching continuous ML or FIML fits"; }
   }
   return Rcpp::List::create(Rcpp::_["test"] = convention_test_list(out),
       Rcpp::_["psd_boundary"] = s0.psd_boundary || s1.psd_boundary,

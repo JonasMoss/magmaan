@@ -4,8 +4,7 @@
   casewise-score sandwich covariance, global and nested score and LR tests,
   each calibrated with SB and PEBA4. Score sensitivity is observed with an
   expected metric; nested LR uses empirical scores at the larger fit.
-  Components fail separately with typed reasons. FIML lavaan compatibility
-  bundles remain pending convention validation.
+  Components fail separately with typed reasons.
 - The score test is the primary test. `anova()` now lists it first and the
   likelihood-ratio (or fit-function difference) row second; select rows by
   `test`, not position. When a likelihood-ratio test is shown, `summary()` and
@@ -28,8 +27,11 @@
   lavaan bundles through `lavaan_compat`, defaulting to `NULL`. ML/MLM/MLR
   and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS covariance/global recipes run
   on retained fits; complete-data ML also has lavaan's default difference
-  tests. `infer(fit, lavaan_compat)` caches an additional bundle. FIML and ordinal
-  nested compatibility remain unavailable, and incompatible choices error.
+  tests. `infer(fit, lavaan_compat)` caches an additional bundle. FIML fits
+  support `"ML"` and `"MLR"` (observed Hessian or Huber-White covariance,
+  Yuan-Bentler Mplus global test, standard or SB2001 nested difference), and
+  all-ordinal `anova()` reports lavaan's default nested test (scaled-shifted
+  Satorra-2000 for WLSMV/ULSMV). Incompatible choices error.
 
 The ordinary API adopted on 2026-10-01. Calls written for 0.1.0 need changes;
 each removed argument raises an error that names its replacement.

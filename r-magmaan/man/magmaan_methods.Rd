@@ -35,7 +35,8 @@
 \code{"WLS"}, compatible with the fitted estimator. Lavaan bundles compute
 on demand without refitting. For parity, compare lavaan fits with the same
 model and estimation settings, including \code{meanstructure = TRUE} and
-\code{fixed.x = FALSE}. Unchecked components remain unavailable.}
+\code{fixed.x = FALSE}. FIML supports \code{"ML"} and \code{"MLR"} with lavaan's
+\code{missing = "ml"} recipes. Unchecked components remain unavailable.}
 
 \item{parm}{Parameter names or positive integer indices; omitted for all
 free parameters. Indices distinguish parameters with repeated labels.}

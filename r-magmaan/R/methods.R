@@ -44,7 +44,8 @@
 #'   `"WLS"`, compatible with the fitted estimator. Lavaan bundles compute
 #'   on demand without refitting. For parity, compare lavaan fits with the same
 #'   model and estimation settings, including `meanstructure = TRUE` and
-#'   `fixed.x = FALSE`. Unchecked components remain unavailable.
+#'   `fixed.x = FALSE`. FIML supports `"ML"` and `"MLR"` with lavaan's
+#'   `missing = "ml"` recipes. Unchecked components remain unavailable.
 #' @param ... Unused.
 #' @return `coef()` returns a named numeric vector for fits and a data frame
 #'   for summaries. `vcov()` returns the parameter covariance matrix;
@@ -340,7 +341,8 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #'   test for complete-data ML. `"WLSMV"` and `"ULSMV"` report the ordinal
 #'   Satorra-2000 scaled-shifted difference; plain `"DWLS"`/`"ULS"` retain
 #'   the statistic without a p-value, and `"WLS"` reports the standard difference.
-#'   FIML compatibility comparisons currently report unavailable inference.
+#'   FIML supports `"ML"` (standard) and `"MLR"` (SB2001 using Yuan-Bentler
+#'   Mplus scales); `"MLM"` is inapplicable.
 #' @return A data frame with one row per test, of class `magmaan_anova`.
 #' @export
 anova.magmaan <- function(object, ..., lavaan_compat = NULL) {

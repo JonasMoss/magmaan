@@ -1,6 +1,8 @@
 #include "magmaan/api/conventions.hpp"
 
 #include <cmath>
+#include <algorithm>
+#include "magmaan/robust/restriction.hpp"
 
 #include "magmaan/inference/inference.hpp"
 
@@ -118,6 +120,115 @@ ConventionInference lavaan_inference_ml(robust::frontier::NTMLFit& fit,
   }
   finish(t);
   return out;
+}
+
+// lavaan 0.7.2 missing="ml", fixed.x=FALSE: ML uses standard SEs,
+// observed information / Hessian (h1.information="structured"). MLR uses
+// robust.huber.white SEs and yuan.bentler.mplus. That test overrides H1 to
+// unstructured EM moments: c = [tr(A1^-1 B1) - tr(A0^-1 B0)] / df.
+ConventionInference lavaan_inference_fiml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
+    LavaanConvention c, const PolicyFitState& state) {
+  if (c != LavaanConvention::ML && c != LavaanConvention::MLR)
+    return convention_unavailable(c, InferenceReason::Inapplicable,
+        "FIML compatibility covers ML and MLR", state);
+  if (state.penalized)
+    return convention_unavailable(c, InferenceReason::Penalized, std::string(penalized_detail), state);
+  if (!state.converged)
+    return convention_unavailable(c, InferenceReason::NotConverged,
+        "the fit did not pass its convergence verdict", state);
+  if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }) ||
+      pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty())
+    return convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "FIML compatibility requires random x and affine equality constraints", state);
+  ConventionInference out;
+  out.convention = convention_name(c);
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  auto fail = [&](const std::string& detail) {
+    return convention_unavailable(c, InferenceReason::NumericFailure, detail, state);
+  };
+  auto df = inference::df_stat(pt, pack.start_stats, estimates.theta);
+  if (!df) return fail(df.error().detail);
+  auto h1 = estimate::fiml::fiml_h1_moments(raw, pack);
+  if (!h1) return fail(h1.error().detail);
+  auto extras = estimate::fiml::fiml_extras(pt, rep, raw, estimates, pack, *h1);
+  if (!extras) return fail(extras.error().detail);
+  auto& t = out.test;
+  t.df = *df;
+  t.method = c == LavaanConvention::ML ? "standard" : "yuan.bentler.mplus";
+  t.unscaled_statistic = t.statistic = extras->chi2;
+  if (c == LavaanConvention::ML) {
+    auto info = estimate::fiml::fiml_observed_information(pt, rep, raw, estimates, pack);
+    if (!info) return fail(info.error().detail);
+    auto covariance = inference::vcov(*info, pt, estimates.theta);
+    if (!covariance) return fail(covariance.error().detail);
+    out.covariance = *covariance;
+  } else {
+    auto robust = estimate::fiml::fiml_robust_mlr(pt, rep, raw, estimates,
+        *df, extras->chi2, pack, *h1);
+    if (!robust) return fail(robust.error().detail);
+    out.covariance = robust->vcov;
+    if (*df <= 0) {
+      t.reason = InferenceReason::Saturated;
+      t.detail = "the model has no positive degrees of freedom for a scaled test";
+      t.statistic = std::numeric_limits<double>::quiet_NaN();
+      return out;
+    }
+    t.scale = robust->scaling_factor;
+    t.statistic = robust->chisq_scaled;
+  }
+  finish(t);
+  return out;
+}
+
+ConventionTest lavaan_nested_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, LavaanConvention c) {
+  if (null_state.penalized || alternative_state.penalized)
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!null_state.converged || !alternative_state.converged)
+    return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
+  auto con0 = estimate::build_eq_constraints(null_pt);
+  auto con1 = estimate::build_eq_constraints(alternative_pt);
+  if (!con0 || !con1) return unavailable(InferenceReason::UnsupportedModel,
+      !con0 ? con0.error().detail : con1.error().detail);
+  auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep, null_pt,
+      null_rep, null_estimates.theta, *con1, *con0, true, &alternative_estimates.theta);
+  if (!embedding) return unavailable(
+      embedding.error().kind == PostError::Kind::NotNested ? InferenceReason::NotNested :
+      embedding.error().kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting :
+      embedding.error().kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting :
+      InferenceReason::NumericFailure, embedding.error().detail);
+  auto a = lavaan_inference_fiml(null_pt, null_rep, raw, pack, null_estimates, c, null_state);
+  auto b = lavaan_inference_fiml(alternative_pt, alternative_rep, raw, pack, alternative_estimates, c, alternative_state);
+  if (a.test.reason != InferenceReason::Available) return a.test;
+  if (b.test.reason != InferenceReason::Available &&
+      !(b.test.reason == InferenceReason::Saturated && b.test.df == 0)) return b.test;
+  ConventionTest t;
+  t.df = a.test.df - b.test.df;
+  if (t.df <= 0 || embedding->restriction.A.rows() != t.df)
+    return unavailable(InferenceReason::NotNested, "the comparison needs a positive difference in degrees of freedom");
+  t.statistic = t.unscaled_statistic = a.test.unscaled_statistic - b.test.unscaled_statistic;
+  t.method = "standard";
+  if (t.statistic < -1e-8 * std::max(1.0, a.test.unscaled_statistic))
+    return unavailable(InferenceReason::NotConverged, "the alternative fits worse than the null");
+  if (c == LavaanConvention::MLR) {
+    // lavTestLRT defaults to SB2001, using the YB-Mplus single-model scales.
+    // Its saturated alternative contributes zero to df1*c1.
+    auto result = robust::lr_test_satorra_bentler2001(a.test.unscaled_statistic,
+        b.test.unscaled_statistic, a.test.df, b.test.df, a.test.scale, b.test.scale);
+    if (!result) return unavailable(InferenceReason::NumericFailure, result.error().detail);
+    t.method = "satorra.bentler.2001";
+    t.statistic = result->T_scaled;
+    t.scale = result->scale_c;
+  }
+  finish(t);
+  return t;
 }
 
 ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,

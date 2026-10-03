@@ -15,7 +15,7 @@ convention_inference <- function(fit, convention) {
   convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS"))
   state <- .policy_state(fit)
   context <- NULL
-  if (identical(fit$estimator, "ML") && !isTRUE(fit$ordinal) &&
+  if (fit$estimator %in% c("ML", "FIML") && !isTRUE(fit$ordinal) &&
       !isTRUE(fit$mixed_ordinal) && is.null(fit$nclusters) && state[[1]] && !state[[4]]) {
     context <- tryCatch(prepare_inference(fit), error = function(e) NULL)
   }
@@ -34,11 +34,11 @@ convention_nested <- function(fit_H1, fit_H0, convention) {
   states <- list(H0 = .policy_state(fit_H0), H1 = .policy_state(fit_H1))
   contexts <- list()
   if (all(vapply(list(fit_H0, fit_H1), function(f)
-      identical(f$estimator, "ML") && !isTRUE(f$ordinal) && !isTRUE(f$mixed_ordinal) &&
+      f$estimator %in% c("ML", "FIML") && !isTRUE(f$ordinal) && !isTRUE(f$mixed_ordinal) &&
         is.null(f$nclusters), logical(1))) && states$H0[[1]] && states$H1[[1]] &&
       !states$H0[[4]] && !states$H1[[4]]) {
     contexts <- tryCatch({
-      data <- prepare_inference_data(fit_H1)
+      data <- if (identical(fit_H1$estimator, "FIML")) NULL else prepare_inference_data(fit_H1)
       list(H0 = prepare_inference(fit_H0, data), H1 = prepare_inference(fit_H1, data))
     }, error = function(e) list())
   }

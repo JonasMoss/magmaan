@@ -40,7 +40,15 @@ Rcpp::List prepare(Rcpp::List fit, SEXP raw, SEXP shared_data = R_NilValue) {
     c.pack=shared->pack;
   } else {
     std::unique_ptr<FimlPack> owned;
-    c.pack = fiml_pack_for_fit(fit, c.raw, owned);
+    // Serialized fits retain raw data but their external cache pointers are
+    // cleared by R. Rebuild the snapshot cache through the existing fallback.
+    Rcpp::List cache_fit(Rf_shallow_duplicate(fit));
+    if (cache_fit.containsElementNamed("fiml_pack")) {
+      SEXP pointer = cache_fit["fiml_pack"];
+      if (TYPEOF(pointer) == EXTPTRSXP && R_ExternalPtrAddr(pointer) == nullptr)
+        cache_fit["fiml_pack"] = R_NilValue;
+    }
+    c.pack = fiml_pack_for_fit(cache_fit, c.raw, owned);
   }
   if (c.estimator == "ML") {
     const auto& sample = c.pack.start_stats;

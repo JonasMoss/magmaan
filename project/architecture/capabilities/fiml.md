@@ -1,5 +1,33 @@
 ### Continuous FIML
 
+## Lavaan compatibility reporting
+
+`api::lavaan_inference_fiml` and `lavaan_nested_fiml` compose ML/MLR
+compatibility bundles at retained estimates, exposed by `convention_inference`
+and `convention_nested` and ordinary `vcov`, `confint`, `summary`, `anova`.
+They do not change the ordinary policy below. MLM is inapplicable.
+
+Pinned installed lavaan 0.7.2 settings are `missing="ml"`, `fixed.x=FALSE`,
+`meanstructure=TRUE`, observed information, Hessian observed-information form,
+and structured H1 information. ML uses standard covariance and the standard
+likelihood-ratio test. MLR uses the observed-Hessian Huber–White sandwich and
+`yuan.bentler.mplus`; that test internally overrides H1 to unstructured EM
+moments. Its scale is `[tr(A1^-1 B1) - tr(A0^-1 B0)] / df`, composed with
+`fiml_robust_mlr`. Yuan–Bentler global tests retain their own label.
+Default `lavTestLRT` uses standard differences for ML and
+`satorra.bentler.2001` for MLR, with the YB-Mplus single-model scales;
+the saturated alternative's weighted scale contributes zero. This uses the
+scalar reducer with explicit scales, rather than the residual-projector
+single-model scaling of the data-level SB engines.
+
+Installed-lavaan gates in `test_lavaan_compat.R` cover HS MCAR/MAR CFA,
+school loading/intercept invariance, both argument orders, saturated
+alternatives and a random covariate with missing values. Fits use the pinned
+`lavaan-0.7.2` optimization preset. Cached, deferred and serialized reporting
+preserve estimates and policy; nonnested, penalized, nonconverged and
+mismatched-observation pairs refuse explicitly. These are compatibility gates,
+not calibration evidence.
+
 ## Ordinary policy
 
 `api::policy_inference_fiml` and `api::policy_nested_fiml` compose single-level
@@ -35,7 +63,7 @@ Global score and LR-spectrum reductions to ML are asymptotic.
 Calibration evidence is research/44 for global geometry and decisions/03 for
 nested observed score, with no MAR cells in the latent sensitivity panel,
 one df-1 normal nested family, and growing conservatism with df. No new
-confirmatory calibration is claimed. FIML lavaan compatibility is task-14.
+confirmatory calibration is claimed. FIML lavaan compatibility is composed separately above.
 
 
 - The versioned `lavaan-0.7.2` fitting adapter (2026-10-02) composes the

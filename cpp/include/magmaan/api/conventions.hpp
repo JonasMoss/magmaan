@@ -34,6 +34,16 @@ ConventionInference convention_unavailable(LavaanConvention convention,
     InferenceReason reason, std::string detail, const PolicyFitState& state = {});
 ConventionInference lavaan_inference_ml(robust::frontier::NTMLFit& fit,
     LavaanConvention convention, const PolicyFitState& state);
+ConventionInference lavaan_inference_fiml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
+    LavaanConvention convention, const PolicyFitState& state);
+ConventionTest lavaan_nested_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, LavaanConvention convention);
 ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& stats,
     const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,

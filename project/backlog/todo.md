@@ -191,22 +191,20 @@ result under an unstated convention.
   **Check:** installed-lavaan whole-bundle comparisons, typed unavailable
   reasons, incompatible-regime rejection and preserved estimates/default policy.
 
-- [ ] **M — extend checked reporting conventions to FIML and ordinal nested
-  tests.** FIML still needs ordinary reporting composition; ordinal nested
-  reporting is complete below. These reuse existing C++ algorithms and
-  available lavaan features. Reuse FIML standard/robust
-  covariance, global MLR and nested engines, and the ordinal Satorra-2000
-  exact/delta engine, scaled-shifted reducer and existing lab adapters.
-  FIML ML/MLR need covariance/global/default nested bundle gates; pin the
-  observed-information, H1 and scale recipes rather than assuming the scalar
-  SB2001 engine's spectrum-derived scales equal lavaan MLR's trace recipe.
+- [x] **M — extend checked reporting conventions to FIML and ordinal nested
+  tests** (2026-10-03, task-7.2 and task-14). Both reuse existing C++
+  algorithms and lavaan features: FIML standard/robust covariance, global MLR
+  and nested engines, and the ordinal Satorra-2000 exact/delta engine,
+  scaled-shifted reducer and lab adapters.
+  FIML ML/MLR covariance/global/default nested bundles are complete (task-14),
+  with observed-Hessian covariance and trace-based YB-Mplus scales pinned
+  against installed lavaan; they do not use spectrum-derived SB scales.
   Ordinal nested reporting is composed and live-gated (task-7.2): WLSMV/ULSMV
   use delta plus scaled-shifted Satorra-2000, n_g−1 objective counts and original
   n_g/N sandwich fractions. Plain DWLS/ULS retain statistic/df without p; WLS
   uses the standard difference. Single-group delta/theta, two-group theta
   loading and Wu-Estabrook threshold→threshold+loading invariance, saturated
   alternatives and typed refusals are covered at doctest-relative 1e-5.
-  The unchecked item now tracks only the FIML composition (task-14).
   **Check:** live lavaan defaults, full covariance and intervals, statistic/df/
   p-value/scale/shift, grouped incomplete FIML and ordinal delta/theta invariance,
   both model orders, actual nesting, saturated alternatives, convergence and
@@ -469,13 +467,13 @@ ordinary API exposes barrier fitting experimentally as
   and the limited research/44 and decisions/03 calibration evidence; no new
   confirmatory calibration is claimed.
 
-- [ ] **M — pin FIML robust conventions before claiming parity.** Resolve `sb_ml`
-  bread/meat/H1 choices and convention dispatch; distinguish Yuan-Bentler
-  variants from SB labels and retain FMG missing-data oracle limitations.
-  **Check:** convention-matched values and target-regime/grouped calibration.
-  Evidence: [definitions and matrix fingerprints](../../experiments/replications/08-savalei-falk-2014-test-conventions/report.qmd)
-  and [calibration policy](../validation/calibration-parity.md). These
-  labels concern lavaan parity; they do not block the FIML policy.
+- [x] **M — pin FIML robust conventions before claiming parity.** Task-14
+  composes observed-Hessian ML and Huber–White/Yuan–Bentler Mplus MLR
+  reporting, with default SB2001 differences using the trace-based scales.
+  Installed-lavaan MCAR/MAR, grouped invariance, missing random-X and saturated
+  gates cover covariance/intervals/global/nested bundles and refusal reasons.
+  The [inventory](../validation/capabilities.md) pins the recipes; this is
+  compatibility evidence, not target-regime calibration or a policy change.
 
 #### All-ordinal DWLS
 
