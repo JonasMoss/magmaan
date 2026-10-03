@@ -54,7 +54,10 @@ means a consequence derived from documented rules. **U** means the sources do
 not settle the exact behavior; each U rule needed by increments 1–2 has a
 probe in the [probe list](#probe-list). **C** marks a rule that the
 textbook-corpus translator reproduces against shipped Mplus output or an
-earlier Demo run; C is supporting evidence, not a source.
+earlier Demo run; C is supporting evidence, not a source. **P** marks a rule
+settled by a Mplus 9.1 Demo probe ([results](#probe-results-mplus-91-demo));
+where a probe contradicts the guide, the frontend follows 9.1 and the row
+says so.
 
 ## Command and option classification
 
@@ -83,7 +86,7 @@ bold stem must be written in full.
 | CL14 | VARIABLE: CENSORED, NOMINAL, COUNT, DSURVIVAL, SURVIVAL, TIMECENSORED, LAGGED, TINTERVAL, TSCORES | R | 603–615, 635–639. Out-of-scope outcome types, survival, time series, random time scores. |
 | CL15 | VARIABLE: AUXILIARY with modifiers, CONSTRAINT, PATTERN, FREQWEIGHT, WEIGHT and the other weight options, STRATIFICATION, CLUSTER, FINITE, REPWEIGHTS, CLASSES, KNOWNCLASS, TRAINING, WITHIN, BETWEEN | R | 614–635. Auxiliary-variable methods, data-dependent constraints, designs, weights, mixtures, multilevel. |
 | CL16 | DEFINE | R | 639–650. See [trigger entry](../backlog/speculative.md#mplus-define-and-case-selection). |
-| CL17 | ANALYSIS: TYPE | S | 651, 657–665. GENERAL (explicit or implied) accepted. BASIC requests descriptives only and is rejected for lowering. RANDOM, COMPLEX, MIXTURE, TWOLEVEL, THREELEVEL, CROSSCLASSIFIED and EFA are R. Pre-v5 settings such as `TYPE = MISSING` are U (probe P-DF6). |
+| CL17 | ANALYSIS: TYPE | S | 651, 657–665; P. GENERAL (explicit or implied) accepted. The legacy settings MISSING, MEANSTRUCTURE and `GENERAL MISSING H1` are accepted by 9.1 as no-ops (P-DF6) and reported. BASIC requests descriptives only and is rejected for lowering. RANDOM, COMPLEX, MIXTURE, TWOLEVEL, THREELEVEL, CROSSCLASSIFIED and EFA are R. |
 | CL18 | ANALYSIS: ESTIMATOR | E + screen | 652, 665–669. Reported. Screens: with CATEGORICAL, ML/MLR/MLF denote a full-information link model by numerical integration (666–667) and BAYES a Bayesian model; both R. MUML implies two-level: R. |
 | CL19 | ANALYSIS: MODEL = NOMEANSTRUCTURE, NOCOVARIANCES | S | 652, 671. Stems NOMEAN, NOCOV. NOMEANSTRUCTURE only with TYPE = GENERAL. |
 | CL20 | ANALYSIS: MODEL = CONFIGURAL, METRIC, SCALAR | S, later (increment 2) | 652, 670–671; see IV rules. Stem CONFIG; METRIC and SCALAR in full. |
@@ -111,23 +114,23 @@ multilevel, SEFA rotation) or output only.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | LX01 | D, 13–14 | Ten commands. Each begins on a new line and is followed by a colon; commands may come in any order; DATA and VARIABLE are required. Options end with semicolons and several may share a line. The lexer tracks line starts; a command head is recognized only at a line start. |
-| LX02 | D, 14 | Input records are at most 90 columns in v8; upper and lower case and tabs are allowed. See LX02a for later versions. A longer line is rejected with its span rather than truncated. |
-| LX02a | A; U | No addendum through 9.1 mentions a change to the record limit (searched for line, column and length). Whether the 9.1 Demo still enforces 90 columns is U (probe P-LX4). |
-| LX03 | D, 14, 563, 567 | Commands and options can be shortened to four or more letters. Option settings accept the complete word or the documented short form (bold in the option tables). Resolution must be unambiguous; an ambiguous prefix is rejected. |
+| LX02 | D, 14; P | Input records are at most 90 columns; upper and lower case and tabs are allowed. 9.1 truncates a longer line with a warning (P-LX4), which can silently change a statement or break it. The frontend rejects lines over 90 columns with their span. |
+| LX02a | P | No addendum changes the limit, and 9.1 still truncates at 90 columns (P-LX4). Settled; no separate rule. |
+| LX03 | D, 14, 563, 567; P | Commands and options can be shortened to four or more letters (`USEVAR`, `ESTI` accepted; three-letter `USE` rejected). Settings accept only the complete word or the exact documented stem: `GEN` and `GENERAL` work, `GENE` and `NOCOVAR` are errors (P-LX2). An ambiguous or intermediate prefix is rejected. |
 | LX04 | D, 14, 598 | Keywords and names are case-insensitive. Canonical matching folds case; source spelling is retained for diagnostics and names. |
-| LX05 | D, 14 | `!` starts a comment to the end of the line. A block of lines is commented out by starting its first line with `!*` and ending its last line with `*!`. Whether `!*` and `*!` must sit at line start/end is U (probe P-LX1). |
-| LX06 | D, 563 | TITLE text can contain anything except a command word followed by a colon; colons after other words are allowed. |
+| LX05 | D, 14; P | `!` starts a comment to the end of the line. `!* … *!` on one line removes only the delimited text. When `*!` closes on a later line, 9.1 also drops code that preceded `!*` on the opening line, and keeps text after `*!` (P-LX1). The frontend accepts a block that opens at a line start or closes on its opening line, and rejects a block opened after code that closes on a later line. |
+| LX06 | D, 563; P | TITLE text runs to the next command head at a line start; `model: x` inside a title line is text (P-LX3). |
 | LX07 | D, 14 | IS, ARE and `=` are interchangeable in all commands except DEFINE, MODEL CONSTRAINT and MODEL TEST. List items are separated by blanks or commas. A hyphen denotes a list of variables or numbers; ALL denotes all variables where an option documents it. |
 
 ## Names and lists
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
-| NM01 | D, 598, 744 | Variable names and parameter labels are at most 8 characters in v8, begin with a letter and contain only letters, digits and underscore. See NM01a for later versions. Over-long names are rejected. |
-| NM01a | A; U | No addendum through 9.1 mentions longer names. Whether 9.1 accepts, truncates or rejects longer names is U (probe P-NM2). |
-| NM02 | D, 598 | In NAMES, a hyphenated range generates names: `y1-y5` from numeric suffixes, `itema-itemd` from letter suffixes. Generation rules for mixed or mismatched stems are U (probe P-NM1). |
-| NM03 | D, 730–731 | In MODEL, a hyphenated range of observed variables follows the NAMES order when all NAMES variables are analyzed, otherwise the USEVARIABLES order. It never expands by numeric suffix. (lavaan's `mplus2lavaan()` gets this wrong.) |
-| NM04 | D, 731 | Latent variables are ordered by their BY statements in MODEL order, followed by `|`-defined random effects in order. Ranges of latent variables follow this order. Whether a range may mix observed and latent variables is U (probe P-NM3). |
+| NM01 | D, 598, 744; P | Names and labels begin with a letter and contain only letters, digits and underscore. The guide limits them to 8 characters, but 9.1 accepts longer variable names and labels and keeps them distinct (TECH1 alone prints an 8-character prefix; P-NM2, P-LB6). The frontend accepts longer names and compares full names. |
+| NM01a | P | Settled by P-NM2 and P-LB6; see NM01. |
+| NM02 | D, 598; P | NAMES ranges generate names from a shared stem with a numeric suffix, keeping the endpoint digit width (`y08-y11` gives Y08 to Y11), or a single-letter suffix (`itema-itemd`). A mixed form such as `a1b-a3b` does not generate the intermediate names (P-NM1). The frontend accepts only the two documented shapes. |
+| NM03 | D, 730–731; P | A hyphenated range in USEVARIABLES or MODEL selects variables by position: in USEVARIABLES by NAMES position, in MODEL by the analysis (USEVARIABLES) order. `y1-y3` therefore includes any variable placed between them (P-NM3a: x1 became an indicator), and a range whose first endpoint comes later is an error (P-NM3b). It never expands by numeric suffix. (lavaan's `mplus2lavaan()` gets this wrong.) |
+| NM04 | D, 731; P | Latent variables are ordered by their BY statements, then `|`-defined random effects. A range mixing a latent and an observed endpoint is an error (P-NM3c). |
 | NM05 | D, 731–732 | A list on the left of ON or WITH implies one statement per element; a list on the right is a list of variables. BY accepts lists on its right. |
 
 ## MODEL statements
@@ -135,28 +138,28 @@ multilevel, SEFA rotation) or output only.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | MS01 | D, 713–715 | Statement forms: BY, ON, PON, WITH, PWITH, a bare list (variances or residual variances), `[list]` (means, intercepts, thresholds), `{list}` (scale factors), `|` (growth, random effects, interactions). Modifiers: `*` frees with an optional start, `@` fixes at an optional value, `(…)` equalities or labels. MODEL is optional only for EFA, LCA, a baseline model and TYPE = BASIC. |
-| MS02 | D, 718, 532–533 | In `f BY y1 y2 …` the loading of the first variable after BY is fixed at one by default; the others are free with start one. `y1*` frees the first loading; `f@1` fixes the factor variance. When one factor has several BY statements, p. 718 ("the first variable after BY") and pp. 532–533 ("the first factor loading in each BY statement") can disagree: U (probe P-MS1). |
+| MS02 | D, 718; P | The marker is the first indicator of the factor's first BY statement; later BY statements add free loadings (P-MS1a). A later mention of the marker, even as the first item of another BY statement, frees it (P-MS1b: the model became unidentified). A `*` on a range that includes the first indicator frees it (P-MS1c). The pp. 532–533 wording ("each BY statement") does not hold. |
 | MS03 | D, 719 | A factor may appear on the right of BY only after its own BY definition (second-order factors). Out-of-order use is an input error. |
 | MS04 | D, 722–723 | `y ON x` frees a regression coefficient with start zero. Observed or latent variables may appear on either side. |
 | MS05 | D, 725–726 | `a b PON c d` pairs elements; both sides need equal length. `a b WITH c d` crosses all left and right elements; PWITH pairs them. |
 | MS06 | D, 726, 745; A | WITH frees covariances among continuous variables (residual covariances for dependent variables); for categorical or censored variables only with weighted least squares. `y1-y3 WITH y1-y3` yields the distinct unordered pairs and no variances (shown by the label example on p. 745). Self-pairs and duplicate orientations collapse to one parameter. |
 | MS07 | D, 728 | A bare variable list refers to variances of independent and residual variances of dependent variables; mentioning frees them. Categorical observed variables have no variance parameter (Theta exceptions belong to increment 3). |
-| MS08 | D, 723 | Means, variances and covariances of observed independent variables should not be mentioned, because the model conditions on them. What happens when they are mentioned is U (probe P-MS2). Until settled, increment 1 rejects such mentions. |
+| MS08 | D, 723; P | Mentioning the variance or mean of an observed independent variable brings that variable into the model: it gains a free mean and variance, its cases with missing values are kept (N 450 to 500), and it has no covariance with the independent variables that stay conditioned on. `x1 WITH x2` brings both in with their covariance (P-MS2). This mixed conditioning has no single-convention counterpart in magmaan, so increment 1 rejects such mentions. Bringing every independent variable in with all their covariances equals the joint random-x model; supporting that case later needs its own design. |
 | MS09 | D, 719–722 | `(*label)` after BY defines ESEM factor sets; `~` gives target-rotation values. Both belong to ESEM and are rejected. |
 | MS10 | D, 714–715, 723–725, 742–743 | `#` labels (latent classes, nominal categories, inflation parts, hazards), `%OVERALL%`, `%class%`, `%WITHIN%`, `%BETWEEN%` and the MODEL variants for mixtures, multilevel models and Monte Carlo belong to out-of-scope families and are rejected. |
-| MS11 | D, 729–730 | Means, intercepts and thresholds are in the model by default; ANALYSIS `MODEL = NOMEANSTRUCTURE` removes them for TYPE = GENERAL. `[x]` refers to means of independent variables and of variables that are neither dependent nor independent, intercepts of continuous dependent variables, thresholds via `u$k`. |
+| MS11 | D, 729–730; P | Means, intercepts and thresholds are in the model by default. ANALYSIS `MODEL = NOMEANSTRUCTURE` removes them for TYPE = GENERAL, but 9.1 ignores it with a warning under observed information, the default with raw-data ML (P-DF5). Increment 1 honors NOMEANSTRUCTURE only with an explicit `INFORMATION = EXPECTED` and otherwise rejects it, saying that Mplus would ignore it. `[x]` refers to means, intercepts or thresholds (`u$k`) by the variable's role. |
 
 ## Starts, fixes, equalities and labels
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
-| LB01 | D, 732–733, 736 | `*` and `@` apply to the preceding item; after a range they apply to every element (`y7-y9*0.9`, `f1-f3@1`). `@` or `*` without a number fixes at or frees with the default value. Bare `@` is U (probe P-LB1); increment 1 rejects it until settled. Starts go to `Starts`; Mplus's automatic starts (UG 519–520) are not emulated. |
+| LB01 | D, 732–733, 736; P | `*` and `@` apply to the preceding item; after a range they apply to every element. A bare `*` frees at the default start. A bare `@` fixes at Mplus's default starting value, which depends on the data (0.05 for a factor variance, half the sample variance for a residual variance; P-LB1); the frontend rejects bare `@`. Starts go to `Starts`; Mplus's automatic starts are not emulated. |
 | LB02 | D, 734–735, 744 | Only one parenthesized label or equality may appear per line, and it applies only to the items on its own line. Statements spanning lines can carry one label per line. The parser therefore keeps line segments inside statements. |
-| LB03 | D, 742 | Anything after an equality label on the same line is ignored by Mplus. The frontend rejects such tokens instead of dropping them; this is a deliberate, documented deviation. |
-| LB04 | D, 734–735, 737 | The same number in parentheses makes parameters equal: `(1)` on several statements, or one `(1)` over a list. A list of numbers pairs with a list of right-hand items, `f BY y1-y5 (1-5)`; the count must equal the number of items, and the fixed marker takes no equality. A number list cannot follow individually listed items. For label lists p. 744 instead gives `f BY y1-y10 (z2-z10)`, nine labels for ten items: U (probe P-LB4). |
-| LB05 | D/U, 738, 740, 745 | With a left-hand list, one number or label per left-hand element (`y1-y3 ON x (1 2 3)`); with lists on both sides, one group per left-hand element (`(1-2 3-4 5-6)`). For labels p. 740 says a single list cannot be used, whereas p. 745 expands `y1-y3 ON x1-x2 (p1-p6)` row by row. U (probe P-LB2). |
-| LB06 | D, 744–745 | A name in parentheses is a parameter label, following the variable-name rules (NM01). Labels are used by MODEL CONSTRAINT, MODEL TEST and MODEL PRIORS. Label lists `(p1-p5)` expand by numeric suffix; WITH label lists over a square list fill the upper triangle row by row. Whether a repeated label also imposes equality is U (probe P-LB3). |
-| LB07 | D, 741–742 | A parameter mentioned more than once takes its last specification (start, fix or free) within a statement; for equalities the overriding item must sit on its own line. Whether later separate statements also override is A from "mentioned in the MODEL command more than once" and should be confirmed (probe P-MS1 covers BY). |
+| LB03 | D, 742; P | The guide says text after an equality label on the same line is ignored; 9.1 instead reports an error for characters after the right parenthesis (P-LB5, P-LB6). The frontend rejects such tokens, matching 9.1. |
+| LB04 | D, 734–735, 737; P | The same number in parentheses makes parameters equal. A number list pairs with right-hand items, `f BY y1-y4 (1-4)`, with the marker left fixed and unconstrained. A label list must also have one label per item: `(a2-a4)` for four items is an error, so the p. 744 example is wrong for 9.1, and the label paired with the fixed marker is not a usable label (P-LB4). A list cannot follow individually listed items. |
+| LB05 | D, 738, 745; P | With a left-hand list, one number or label per left-hand element. With lists on both sides, either one group per left-hand element or a single list assigned row by row (`y1-y3 ON x1-x2 (p1-p6)` labels y1/x1, y1/x2, y2/x1, …; P-LB2). The p. 740 statement that a single list cannot be used does not hold in 9.1. |
+| LB06 | D, 744–745; P | A name in parentheses is a parameter label; references are case-insensitive. Parameters sharing a label are equal (P-LB3). Labels exist only for free parameters: a label on a fixed parameter is an unknown label in MODEL CONSTRAINT (P-LB6 fixed_label_own_line). Label lists `(p1-p5)` expand by numeric suffix; a WITH label list over a square list fills the upper triangle row by row. |
+| LB07 | D, 741–742; P | A parameter mentioned more than once takes its last specification, within a statement and across statements (P-MS1b); for equalities the overriding item must sit on its own line. |
 | LB08 | D, 519 | Mentioning a parameter that is not free by default frees it at the default start unless `*value` or `@value` is given. |
 
 ## Default parameters (single group)
@@ -172,31 +175,31 @@ independent (x) variables carry no parameters.
 | DF04 | D, 517 | Variances and residual variances of continuous observed dependent variables and continuous latent variables are free. |
 | DF05 | D, 518 | Covariances among continuous latent independent variables are free (random effects from ON/XWITH with `|` excepted). |
 | DF06 | D, 518 | Covariances between continuous latent independent variables and observed independent variables are fixed at zero. |
-| DF07 | D, 518 | Covariances among observed variables that are neither dependent nor independent are fixed at zero. Such a variable (in USEVARIABLES but not in any relation) has a free mean and variance (UG 729; C, Demo-confirmed). |
-| DF08 | D, 518; C | Residual covariances among observed dependent variables are fixed at zero except free when neither influences any other variable and neither is a factor indicator, for continuous variables (and categorical or censored ones under weighted least squares). C: Demo-confirmed for `y1 ON x; y2 ON x`. |
-| DF09 | D, 518, 723 | Residual covariances among continuous latent dependent variables are free when neither influences any variable other than its own indicators and neither indicates a second-order factor; otherwise zero. |
-| DF10 | A, 518; U | No default frees a residual covariance between an observed and a latent dependent variable: DF08 and DF09 list separate families. The corpus translator's wording ("final latent and final observed") is ambiguous. U (probe P-DF1). |
+| DF07 | D, 518; P | Covariances among observed variables that are neither dependent nor independent are fixed at zero. Such a variable (in USEVARIABLES but not in any relation) has a free mean and variance, with a warning (P-DF2). |
+| DF08 | D, 518; P | Residual covariances among observed dependent variables are fixed at zero except free when neither influences any other variable and neither is a factor indicator, for continuous variables (and categorical or censored ones under weighted least squares). P-DF7: with `y1 y2 ON x1; y3 ON y1`, only y2–y3 is free. |
+| DF09 | D, 518, 723; P | Residual covariances among continuous latent dependent variables are free when neither influences any variable other than its own indicators and neither indicates a second-order factor; otherwise zero (P-DF3). |
+| DF10 | P | A final observed dependent variable that is not a factor indicator and a final latent dependent variable also get a free residual covariance (P-DF1: `f ON x1; y4 ON x1` frees f–y4). DF08 and DF09 therefore describe one family: all final dependent variables that are not factor indicators covary. |
 | DF11 | D, 518 | Regression coefficients are zero unless mentioned. |
 | DF12 | D, 719 | Residual variances of continuous factor indicators are free; residual covariances among factor indicators are zero. |
-| DF13 | D, 726 | ANALYSIS `MODEL = NOCOVARIANCES` fixes every covariance and residual covariance among latent and observed variables at zero; WITH frees selected ones. |
+| DF13 | D, 726; P | ANALYSIS `MODEL = NOCOVARIANCES` fixes every covariance and residual covariance at zero; WITH frees selected ones (P-DF4). |
 
 ## Multiple groups
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | MG01 | D, 530 | One data set: GROUPING requests groups. Separate files: one `FILE (label) =` per group. Summary data: NGROUPS, labels g1, g2, …. Increment 2 supports GROUPING; separate files and summary groups belong to the data increment. |
-| MG02 | D, 530 | With one data set, the **first group is the group with the lowest value** of the grouping variable, not the first label declared. With separate files, the first FILE statement; with summary data, g1. The first group is the reference for latent means and scale factors, so this mapping must be exact. |
-| MG03 | D, 538–539 | `GROUPING IS g (1 = male 2 = female)` maps codes to labels used by `MODEL label:`. Observations whose code is not listed are excluded from the analysis (a data-side effect that the frontend must report). Only one grouping variable. |
+| MG02 | D, 530; P | With one data set, the **first group is the group with the lowest value** of the grouping variable, whatever the label order (P-MG3: `(2 = b 1 = a)` puts a first). With separate files, the first FILE statement; with summary data, g1. The first group is the reference for latent means and scale factors. |
+| MG03 | D, 538–539, 613; P | `GROUPING IS g (1 = male 2 = female)` maps codes to labels used by `MODEL label:`; unlisted codes leave the analysis (P-MG3). `g (101-200 225)` uses the values as labels; `g (2)` alone means two groups labelled g1, g2 by ascending value, and a count that does not match the data is an error (P-MG4). Only one grouping variable. |
 | MG04 | D, 516–518, 531 | Defaults across groups: loadings of observed factor indicators equal; intercepts and thresholds of observed factor indicators equal; residual variances free and unequal; all structural parameters (factor variances, covariances, regressions, latent intercepts) free and unequal; latent means fixed at zero in the first group and free in the others. Intercepts of observed dependent variables that are not factor indicators are free and unequal. |
-| MG05 | D/U, 518 | Loading equality applies to regressions of an observed dependent variable that is a factor indicator on a continuous latent variable. Whether second-order loadings (latent indicators) are equal by default is not stated and reads as no (A); U (probe P-MG1). |
+| MG05 | D, 518; P | Loading equality covers observed factor indicators only; second-order loadings are free and unequal across groups (P-MG1). |
 | MG06 | D, 532–534 | `MODEL label:` states differences from the overall model. Mentioning a parameter there relaxes its cross-group equality (frees it for that group); including the first indicator in a group-specific BY frees its marker loading. The marker rule MS02 therefore applies only in the overall MODEL. |
-| MG07 | D, 534–535 | Equality labels in the overall MODEL hold across all groups (each labeled parameter equal in every group and to the others with the same number). Labels in a group-specific MODEL apply within that group only. Mentioning a parameter in a group-specific MODEL without a label removes it from the overall equality for that group. |
+| MG07 | D, 534–535; P | Equality numbers and labels are global identifiers. An overall-MODEL statement with a number or label holds in every group, so the parameter is equal across groups (and to others sharing the identifier). The same identifier inside a group section ties to it as well. Mentioning a parameter in a group section without an identifier releases it for that group (P-MG5). |
 | MG08 | D, 536 | Group-specific `[f]` frees a latent mean (also in the first group); `[f@0]` fixes it. |
-| MG09 | D/U, 517, 531, 537 | Delta: scale factors of categorical dependent variables are fixed at one in the first group and free in the others; Theta: residual variances of their latent responses likewise. p. 531 restricts this to categorical factor indicators; pp. 517 and 537 do not. U (probe P-MG2, increment 3). |
+| MG09 | D, 517, 531, 537; P | Delta: scale factors of categorical factor indicators are fixed at one in the first group and free in the others; Theta: their latent-response residual variances likewise. A categorical dependent variable that is not a factor indicator stays fixed in every group (P-MG2), so p. 531 holds and p. 517 overstates. |
 | MG10 | D, 541–546 | Configural, metric and scalar invariance models are defined per outcome type and parameterization; ANALYSIS `MODEL = CONFIGURAL METRIC SCALAR` requests them (see IV rules). |
-| MG11 | D/U, 518–519 | Free regressions are unequal across groups except regressions of an observed factor indicator on a continuous latent variable. Whether `y ON f` written with ON, for y indicating another factor, counts as such a loading, and what holds for y indicating no factor, is U (probe P-MG7). |
+| MG11 | D, 518–519; P | Only BY loadings of observed indicators are equal across groups. Regressions on a factor written with ON are unequal even for an indicator of another factor; that indicator's intercept stays equal, and a non-indicator's intercept is unequal (P-MG7). |
 | MG12 | D, 516–519, 628–629 | KNOWNCLASS multiple groups follow mixture defaults (equal variances and slopes, reference in the last class), not GROUPING defaults. KNOWNCLASS is rejected (CL15). |
-| MG13 | U | Whether a named label in the overall MODEL ties a parameter across groups as an equality number does, and what reusing that label inside `MODEL label:` does (probe P-MG5). |
+| MG13 | P | Settled by P-MG5; see MG07. |
 
 ## Measurement-invariance shortcuts
 
@@ -206,7 +209,7 @@ independent (x) variables carry no parameters.
 | IV02 | D, 541–542 | Continuous outcomes. Configural: loadings, intercepts and residual variances free across groups; factor means zero in all groups. Metric: loadings equal, the rest free, factor means zero in all groups. Scalar: loadings and intercepts equal, factor means zero in one group and free elsewhere. With variance identification the variance is one in all groups (configural) or one in one group (metric, scalar). Residual variances are never equal (no strict setting). |
 | IV03 | D, 542–546; v8.9–8.11 addendum PDF p. 6 | Categorical outcomes under weighted least squares: configural and scalar only. The guide's ordinal metric model with threshold pins (pp. 544–545) is superseded by the addendum, which treats ordinal metric as not identified. Increment 3. |
 | IV04 | D, 670 | Several settings run several models and difference tests. A list is a model family plus a test plan: increment 2 accepts one setting and rejects a list until its result shape is decided. |
-| IV05 | U | Factor covariances, the reference group for means and the generated rows. Probe P-IV1 (version 9.1 can print the generated MODEL commands). |
+| IV05 | P | Mplus expands a shortcut into ordinary MODEL syntax (printed with `(MODEL)`, P-IV1): every model fixes factor means at zero in the overall MODEL; configural repeats the non-marker BY items and frees all indicator intercepts in every group section; metric frees only the intercepts; scalar is the default multiple-group model. Factor covariances are free per group. With variance identification, TECH1 shows variances fixed at one in both groups for configural and in the first group only for metric and scalar, although the printed commands show `f@1` in the overall MODEL: the printed text is a summary, TECH1 is authoritative. |
 
 ## Categorical outcomes (increment 3)
 
@@ -214,11 +217,11 @@ independent (x) variables carry no parameters.
 | --- | --- | --- |
 | CT01 | D, 604–608 | CATEGORICAL lists binary and ordinal dependent variables. Categories come from the data; at most 10; thresholds = categories − 1; each variable is recoded so its lowest observed category is 0. The threshold count therefore depends on data, as in magmaan's ordinal preparation. |
 | CT02 | D, 729–730, 742 | Thresholds are `[u$k]`, lowest first; categorical outcomes have thresholds instead of intercepts; a threshold has the opposite sign of an intercept. |
-| CT03 | D, 735; A, 748–751; U | Threshold equalities use one threshold index per statement, `[u1$1 u2$1 u3$1] (2)`. `[u1$1-u4$1]` means the first threshold of u1 to u4 (A, from growth tables). Within-variable ranges and bare `[u]` are U (probe P-CT1). |
+| CT03 | D, 735; A, 748–751; P | Threshold equalities use one threshold index per statement, `[u1$1 u2$1 u3$1] (2)`. Ranges `[u1$1-u4$1]` (across variables) and `[u1$1-u1$2]` (within one variable) are accepted; bare `[u]` for a categorical variable is an error (P-CT1). |
 | CT04 | D, 517, 519, 675 | Delta (default): scale factors fixed at one; latent-response residual variances cannot be freed. Theta: residual variances fixed at one; scale factors cannot be freed. |
 | CT05 | D, 675 | Theta is required when a categorical dependent variable both influences and is influenced by another dependent variable or a factor. Under Delta such an input is rejected. |
 | CT06 | D, 726 | WITH among categorical variables is allowed only with weighted least squares. |
-| CT07 | U | A CATEGORICAL variable used as a predictor, and category coverage that differs across groups (probes P-CT2, P-CT3). |
+| CT07 | P | A CATEGORICAL variable must be dependent: using it only as a predictor is an error (P-CT2). Every group must contain every category of each categorical variable (P-CT3). |
 | CT08 | D, 570 | Summary data with categorical outcomes can only be a correlation matrix (data increment). |
 
 ## Growth (increment 4)
@@ -226,11 +229,11 @@ independent (x) variables carry no parameters.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | GR01 | D, 746–747 | `i s q | y1@0 y2@1 y3@2 y4@3` names growth factors on the left and outcomes with time scores on the right. It equals BY statements with unit intercept loadings, time-score slope loadings and squared scores for q, with outcome intercepts fixed at zero and free growth-factor means. Lower to those rows. |
-| GR02 | D, 747; U | An outcome without `@` has a free time score. The quadratic loading for a free time score, four-factor (cubic) forms and piecewise forms sharing `i` are U (probe P-GR3). |
-| GR03 | D, 746–747; U | Defaults are overridden by mentioning parameters after the `|` statement; mentions before it are U (probe P-GR3). |
+| GR02 | D, 747; P | An outcome without `@` has a free time score. A quadratic with free time scores is an error (too few fixed scores); four growth factors give a cubic with loadings t³ (P-GR3). |
+| GR03 | D, 746–747; P | Defaults are overridden by mentioning parameters, before or after the `|` statement alike (P-GR3). |
 | GR04 | D, 752–753 | Growth-factor variances and covariances are free. Means: free for continuous outcomes; for categorical outcomes and multiple-indicator growth the intercept-factor mean is zero (first group in multiple groups) and slope means free. |
 | GR05 | D, 747–753 | Continuous outcomes: intercepts zero, residual variances free, residual covariances zero (A from DF12). Categorical: thresholds equal over time per index; Delta scale factor fixed at time one and free later; Theta residual variance likewise. |
-| GR06 | D/U, 749–751 | Multiple-group categorical growth tables disagree about time-one scale factors in later groups (probe P-GR2). |
+| GR06 | P | Multiple-group categorical growth: the time-one scale factor (Delta) or residual variance (Theta) is free in later groups, and the I and S means are free there. Continuous multiple-group growth: outcome intercepts fixed at zero and growth means free in every group (P-GR2). |
 | GR07 | D, 714, 753–757 | `|` with ON, PON, BY, XWITH, AT or a single bare variable is a random slope, random loading, interaction, individually varying time or random variance: R. `@` on the right identifies growth; a bare `i | y1` is ambiguous and is rejected. |
 
 ## Constraints, indirect effects and tests (increment 4)
@@ -238,10 +241,10 @@ independent (x) variables carry no parameters.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | CN01 | D, 766–768 | MODEL CONSTRAINT holds explicit (`p1 = f(…)`) and implicit (`0 = f(…)`) constraints and inequalities (`>`, `<`) over MODEL labels and NEW parameters, with DEFINE's arithmetic and functions except absolute value. Lower onto existing defined-parameter, equality and constraint machinery; inequalities without an enforcing backend give unsupported-fit. |
-| CN02 | D, 766–769; U | `NEW (c*.6)` declares a parameter with a start (default 0.5); lists allowed. A NEW name on a right-hand side is an extra free parameter; on a left-hand side a derived quantity. The deciding rule and explicit versus implicit classification are U (probe P-CN1). |
+| CN02 | D, 766–769; P | `NEW (c*.6)` declares a parameter with a start (default 0.5); lists allowed. A NEW name on a right-hand side adds a free parameter (P-CN1: one more free parameter, one less df); on a left-hand side it is a derived quantity (no change in df). Explicit and implicit forms of one constraint give the same model. |
 | CN03 | D, 769–770 | DO loops (`DO (1,3) r# = p#/q#;`, nested with `$` and `%`) expand before lowering. LOOP and PLOT are plotting requests: E. |
 | CN04 | D, 766 | With MODEL CONSTRAINT the default INFORMATION becomes OBSERVED: an estimation convention for the [preset](../backlog/speculative.md#mplus-estimation-convention-preset), not imported. |
-| CN05 | D, 759–762; U | MODEL INDIRECT `y IND [m …] x` (all or one specific indirect path) and `y VIA m x` become defined parameters (products of coefficients). Order of several mediators, paths through BY links and the choice between conventional and causal effects are U (probe P-CN2). Causal effects with `(values)` and MOD are R. |
+| CN05 | D, 759–762; P | MODEL INDIRECT `y IND [m …] x` and `y VIA m x` become defined parameters (products of coefficients); a specific path keeps the written mediator order, and paths through a factor are allowed (P-CN2). Causal effects with `(values)` and MOD are R. |
 | CN06 | D, 772 | MODEL TEST is a joint Wald test of `0 = …` restrictions: E (reported). |
 
 ## Data files (increment 5)
@@ -250,10 +253,10 @@ independent (x) variables carry no parameters.
 | --- | --- | --- |
 | DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT needs its own grammar production. |
 | DA02 | D, 570–571, 539–540 | Summary data are free-format: lower-triangular or full covariance or correlation matrices, means and standard deviations, each type starting on a new record; groups follow one another with NOBSERVATIONS per group and NGROUPS. Map to magmaan's sample-statistics input. |
-| DA03 | D, 601–603 | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Implied-decimal interaction is U (probe P-DA2). |
+| DA03 | D, 601–603; P | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Flags compare with the value after FORMAT scaling: with F2.1 the field `99` reads as 9.9 and only the flag `9.9` matches; `-9` and `-9.0` are the same flag (P-DA2). |
 | DA04 | D, 613 | Rows with an unlisted GROUPING value are excluded; the reader reports how many. |
 | DA05 | D, UG 443, 548 | In the analysis, cases missing on an x variable are deleted and the remaining missingness is handled by FIML. These are estimation-sample rules for the preset, not reader behavior. |
-| DA06 | U | Empty fields, extra fields and wrapped records in free format (probe P-DA1). |
+| DA06 | P | Free format: an empty field between commas is an error; extra fields and observations wrapped over several records are accepted (P-DA1). |
 
 ## Probe list
 
@@ -323,7 +326,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 Observed output from the standalone maintainer tool
 [`regen_mplus_probes.R`](../../cpp/tests/tools/regen_mplus_probes.R) is summarized
 below; [`probes.json`](../../cpp/tests/fixtures/mplus/probes.json) contains all
-41 probes and 98 variants, their input sections, seeds, inventory IDs and parsed
+41 probes and 100 variants, their input sections, seeds, inventory IDs and parsed
 output. Scratch inputs, data and original output stay under
 `~/.cache/magmaan-logs/mplus-probes/` and are not checked in.
 
@@ -355,7 +358,7 @@ These observations do not resolve or change the inventory rules.
 | P-LB3 | LB06 | Slopes share one parameter number and printed estimate. Bare Y1 Y2 (v) variances likewise share one number; 3 free parameters total. |
 | P-LB4 | LB04, LB06 | (1-4) accepted with Y1 fixed at 1. (a2-a4): label-count mismatch. (a1-a4) plus constraint referencing all labels: unknown label A1. |
 | P-LB5 | LB03 | Error: extra characters after the right parenthesis; no fitted Y5 row. |
-| P-LB6 | LB06, NM01 | Fixed-label form errors on characters after parenthesis. Mixed-case reference and nine-character label accepted. |
+| P-LB6 | LB06, NM01 | Fixed-label form errors on characters after parenthesis. Mixed-case reference and nine-character label accepted. Added variant with the label on its own line (planner): error, unknown parameter label L1 in MODEL CONSTRAINT. |
 | P-DF1 | DF10 | Accepted; PSI[Y4,F]=13 (free). |
 | P-DF2 | DF07 | Accepted; Y4 and X1 have free means and variances; warnings say they are uncorrelated with all other variables. |
 | P-DF3 | DF09 | Second order: PSI[F2,F1]=0. First order: PSI[F2,F1] is free. |
@@ -369,7 +372,7 @@ These observations do not resolve or change the inventory rules.
 | P-MG7 | MG11 | Accepted; Y4 ON F1 numbers 14/28 and Y6 ON F1 numbers 15/29. Y4 intercept number 12 shared; Y6 intercepts 13/27. Iteration limit reached; no fit chi-square printed. |
 | P-DF7 | DF08 | Accepted; PSI[Y3,Y2]=9 free; Y1/Y2 and Y1/Y3 residual covariance cells zero. |
 | P-MG6 | MG06 | Both accepted; G2 Y1 mention frees its loading while G1 Y1 stays fixed. G2 Y2 mention assigns a distinct loading number; Y3 remains shared. |
-| P-IV1 | IV01–IV05 | Both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
+| P-IV1 | IV01–IV05 | Planner added variant variance_both (`f1@1 f2@1`; the lane's `f1 f2@1` fixed only f2): accepted, free counts 38/34/30, df 16/20/24; TECH1 PSI fixed in G1, free in G2 for metric and scalar. Original variants: both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
 | P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
 | P-CT1 | CT03 | Within-variable range accepted, both U1 thresholds free. Across-variable range accepted, first thresholds share number 1. Bare [U1] errors as an ignored statement. |
 | P-CT2 | CT07 | Error: CATEGORICAL is for dependent variables only; U1 is independent in this model. |

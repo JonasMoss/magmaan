@@ -75,6 +75,7 @@ for (r in c('1-4','a2-a4','a1-a4')) {
 }
 add('P-LB5', 'trailing_indicator', 'f BY y1-y4 (1) y5;', 'y1 y2 y3 y4 y5')
 add('P-LB6', 'fixed_label', 'f BY y1@1 (l1) y2-y3;\nMODEL CONSTRAINT: NEW(r); r = l1;')
+add('P-LB6', 'fixed_label_own_line', 'f BY y1@1 (l1)\n  y2-y3;\nMODEL CONSTRAINT: NEW(r); r = 2*l1;', note = 'Label on an explicitly fixed loading, on its own line so LB03 does not interfere.')
 add('P-LB6', 'case_label', 'y1 ON x1 (MiXeD);\nMODEL CONSTRAINT: NEW(r); r = mixed;', 'y1 x1')
 add('P-LB6', 'long_label', 'y1 ON x1 (abcdefghi);\nMODEL CONSTRAINT: NEW(r); r = abcdefghi;', 'y1 x1')
 add('P-DF1', 'latent_observed', 'f BY y1-y3; f ON x1; y4 ON x1;', 'y1 y2 y3 y4 x1')
@@ -98,7 +99,8 @@ mg('P-MG7', 'on_latent', 'f1 BY y1-y3; f2 BY y4-y5; y4 ON f1; y6 ON f1;', 'y1 y2
 add('P-DF7', 'final_dependents', 'y1 y2 ON x1; y3 ON y1;', 'y1 y2 y3 x1')
 for (y in c('y1','y2')) mg('P-MG6', y, paste0(cfa, '\nMODEL g2: f BY ',y,';'))
 mg('P-IV1', 'markers', 'f1 BY y1-y3; f2 BY y4-y6;', 'y1 y2 y3 y4 y5 y6', analysis = 'MODEL = CONFIGURAL METRIC SCALAR (MODEL); ESTIMATOR = ML;')
-mg('P-IV1', 'variance', 'f1 BY y1* y2-y3; f2 BY y4* y5-y6; f1 f2@1;', 'y1 y2 y3 y4 y5 y6', analysis = 'MODEL = CONFIGURAL METRIC SCALAR (MODEL); ESTIMATOR = ML;', note = 'Variance identification applied to both factors (f@1 in the brief).')
+mg('P-IV1', 'variance', 'f1 BY y1* y2-y3; f2 BY y4* y5-y6; f1 f2@1;', 'y1 y2 y3 y4 y5 y6', analysis = 'MODEL = CONFIGURAL METRIC SCALAR (MODEL); ESTIMATOR = ML;', note = 'As run by the lane: f1 f2@1 frees f1 and fixes only f2, so f1 is unidentified.')
+mg('P-IV1', 'variance_both', 'f1 BY y1* y2-y3; f2 BY y4* y5-y6; f1@1 f2@1;', 'y1 y2 y3 y4 y5 y6', analysis = 'MODEL = CONFIGURAL METRIC SCALAR (MODEL); ESTIMATOR = ML;', note = 'Variance identification for both factors (planner correction).')
 for (p in c('DELTA','THETA')) catadd('P-MG2', tolower(p), 'f BY u1-u3; u4 ON x1;', 'u1 u2 u3 u4 x1', analysis = paste0('ESTIMATOR = WLSMV; PARAMETERIZATION = ',p,';'), groups = TRUE)
 for (m in c('[u1$1-u1$2];','[u1$1-u4$1] (1);','[u1];')) catadd('P-CT1', c('within_range','across_range','bare')[match(m,c('[u1$1-u1$2];','[u1$1-u4$1] (1);','[u1];'))], paste('f BY u1-u4;',m), 'u1 u2 u3 u4')
 catadd('P-CT2', 'predictor', 'y1 ON u1;', 'y1 u1')
