@@ -27,8 +27,14 @@
   Schema settings, execution/data-description notes and explicit later-increment
   boundaries are checked by independent unit expectations and a 100-variant
   Demo input gate (with documented LX02, NM02, MS11 and CL11 deviations).
-  MODEL bodies are delimited; MODEL parsing/lowering and API/R exposure remain
-  pending. The
+  `parse::MplusParser::parse()` lowers continuous single-group BY/ON/WITH,
+  PON/PWITH, variances, means, modifiers, line-local labels and ranges into
+  an owned `MplusModel`. It materializes marker, role, mean and covariance
+  defaults explicitly; `compat::mplus::build_options()` disables lavaan
+  automatic defaults and retains fixed-x sample moments. Combined starts and
+  labels use duplicate formula rows, as supported by `spec::build()`; the
+  gate compares unique parameter keys and checks both modifier components.
+  API/R exposure remains TASK-51.3. The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
@@ -43,7 +49,14 @@
   fixed chi-square/printed-estimate tolerances gate serialization; negative
   lavaan variances and population-fit p-values below 0.001 stop generation.
   The fixture includes explicit rows, starts, expected-information SEs and
-  sample/implied moments; C++ consumer gates await the lowering increment.
+  sample/implied moments. The C++ consumer compares complete row sets,
+  equality partitions, explicit starts, ML estimates and implied moments,
+  expected-information SEs (1e-5), parameter counts, df and chi-square.
+  Demo TECH1 gates compare parameter counts, cell status and equality
+  partitions; the optional local corpus sweep reports rule-ID tallies.
+  Reader refinements exclude TITLE/comment text from the column-90 check,
+  classify group/class MODEL sections using all declarations, reject
+  duplicate analysis names and bound generated NAMES at 100000.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained

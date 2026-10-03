@@ -82,7 +82,9 @@ TEST_CASE("Mplus input: LX02 LX05 physical lines and comments") {
   const auto base = input();
   auto exact = MplusParser::read(base + "!" + std::string(89, 'x') + "\n");
   CHECK(exact.has_value());
-  rejection(base + "!" + std::string(90, 'x') + "\n", "LX02", "90 columns");
+  CHECK(MplusParser::read(base + "!" + std::string(200, 'x') + "\n"));
+  CHECK(MplusParser::read("TITLE: " + std::string(200, 'x') + "\n" + base));
+  rejection(base + "MODEL: " + std::string(90, ' ') + "y1;\n", "LX02", "column 90");
   CHECK(MplusParser::read("!* block\ncomment *!\n" + base).has_value());
   CHECK(MplusParser::read(input("NAMES=y1 !* inline *! y2 y3; ! ignored" )).has_value());
   rejection(input("NAMES=y1; !* unsafe\ncomment *!"), "LX05", "opening line");
@@ -140,9 +142,7 @@ TEST_CASE("Mplus input: CL08 NM03 USEVARIABLES selects NAMES positions") {
   r = MplusParser::read(input("USEV=y3 Y1 y2 x1; NAMES=Y1 x1 y2 y3;"));
   REQUIRE(r);
   CHECK(r->analysis == std::vector<std::string>{"y3", "Y1", "y2", "x1"});
-  r = MplusParser::read(input("NAMES=y1 y2 y3; USEV=ALL y1;"));
-  REQUIRE(r);
-  CHECK(r->analysis == r->names);
+  rejection(input("NAMES=y1 y2 y3; USEV=ALL y1;"), "NM03", "duplicate");
   rejection(input("NAMES=y1 y2 y3; USEV=y3-y1;"), "NM03", "backward");
   rejection(input("NAMES=y1 y2 y3; USEV=unknown;"), "NM03", "unknown");
   rejection(input("NAMES=y1 y2 y3; USEV=y1 ALL;"), "NM03");
@@ -179,7 +179,7 @@ TEST_CASE("Mplus input: CL17 CL19 CL20 CL21 CL18 CL22 CL23 MS11 settings") {
     CHECK(info->information == (std::string(setting).starts_with("OBS") ? "OBSERVED" : "COMBINATION"));
   }
   for (auto s : {"", "INFORMATION=OBS;", "INFORMATION=COMB;"})
-    rejection(input("NAMES=y1;", std::string("MODEL=NOMEAN;") + s), "MS11", "Mplus would ignore it");
+    rejection(input("NAMES=y1;", std::string("MODEL=NOMEAN;") + s), "MS11", "Mplus ignores NOMEANSTRUCTURE");
   rejection(input("NAMES=y1;", "ESTIMATOR=M;"), "LX03");
   rejection(input("NAMES=y1;", "INFORMATION=EXPE;"), "LX03");
 }
@@ -297,4 +297,19 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
   }
   CHECK(count == 100);
   CHECK(gated > 15);
+}
+
+TEST_CASE("Mplus input: reader refinements preserve actionable boundaries") {
+  rejection(input("NAMES=y1 y2 y3; USEV=y1 y1;"), "NM03", "duplicate USEVARIABLES name 'y1'");
+  rejection(input("NAMES=y1;", "TYPE=EFA 1 3;"), "CL17", "EFA");
+  auto efa=MplusParser::read(input("NAMES=y1;", "TYPE=EFA 1 3;")); REQUIRE_FALSE(efa);
+  CHECK(efa.error().detail.find("unknown setting")==std::string::npos);
+  rejection(input("NAMES=y1;", "TYPE=EFAUNKNOWN;"), "LX03", "accepted words/stems");
+  auto summary=MplusParser::read(input("NAMES=y1;", "", "FILE=x; TYPE=CORRELATION MEANS STDEVIATIONS;")); REQUIRE_FALSE(summary);
+  CHECK(summary.error().detail.find("expected one TYPE")==std::string::npos);
+  rejection(input("NAMES=y1;", "", "FILE(g1)=x;")+"MODEL g1: y1;\n", "CL26", "increment 5");
+  rejection(input("NAMES=y1; CLASSES=c(2);")+"MODEL c1: y1;\n", "MS10", "mixture class");
+  std::string many="NAMES=";
+  for(int n=0;n<10;++n) many+="v"+std::string(1,static_cast<char>('a'+n))+"0-v"+std::string(1,static_cast<char>('a'+n))+"10000\n";
+  many+=';'; rejection(input(many),"NM02","100000");
 }

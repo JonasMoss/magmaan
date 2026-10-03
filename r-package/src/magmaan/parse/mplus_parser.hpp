@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/parse/flat_partable.hpp"
 
 namespace magmaan::parse {
 
@@ -32,10 +33,18 @@ struct MplusInput {
   std::vector<MplusDiagnostic> notes;
 };
 
+struct MplusModel {
+  MplusInput input;
+  FlatPartable flat;
+  std::vector<MplusDiagnostic> notes;
+};
+
 class MplusParser {
  public:
   // production: input_file ::= line*
   static parse_expected<MplusInput> read(std::string_view source);
+  // production: model_body ::= model_statement*
+  static parse_expected<MplusModel> parse(std::string_view source);
 };
 
 }  // namespace magmaan::parse

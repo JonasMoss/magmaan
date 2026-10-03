@@ -84,6 +84,7 @@ add_library(magmaan STATIC
   src/parse/parser.cpp
   src/parse/eqs_parser.cpp
   src/parse/mplus_input.cpp
+  src/parse/mplus_parser.cpp
   include/magmaan/parse/mplus_parser.hpp
   src/spec/build.cpp
   src/spec/composite_expand.cpp
@@ -91,6 +92,7 @@ add_library(magmaan STATIC
   src/compat/lavaan/partable_view.cpp
   src/compat/lavaan/composite_fold.cpp
   src/compat/eqs_model.cpp
+  src/compat/mplus_model.cpp
   src/detail_linalg.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp

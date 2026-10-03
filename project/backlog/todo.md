@@ -1225,6 +1225,14 @@ carry the label `mplus`.
   gates reject negative variances and chi-square p-values below 0.001;
   regeneration is byte-for-byte deterministic. C++ consumption belongs to
   the increment-1 lowering card (TASK-51.2).
+- [x] **M — increment 1b: MODEL statements and lowering (TASK-51.2).**
+  Continuous single-group relations, pairing, means/variances, line-local
+  labels/equality numbers, starts/fixing, ordered ranges and explicit Mplus
+  role/default rules lower into owned flat rows. Reader refinements and
+  rule-ID rejections accompany independent expected rows, the 13-model
+  pinned-lavaan numeric gate, Demo TECH1 status/equality checks and the
+  optional extracted local corpus sweep. Combined start/label modifiers
+  accumulate through duplicate flat rows; no spec or matrix changes.
 - [ ] **M/L — increment 1: input file and single-group continuous models.**
   Command classification, BY/ON/WITH/PWITH/PON, means, `@`/`*`, labels and
   label lists, NAMES-order ranges and the single-group defaults; C++ lowering,

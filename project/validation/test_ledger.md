@@ -545,6 +545,50 @@ harnesses under `cpp/tests/checks/ordinal_{dwls_profile,rmsea_inference,
 crmr_inference,cfi_inference}/` assess prototype finite-sample behavior;
 passing deterministic reductions alone does not establish calibration.
 
+### Mplus continuous MODEL lowering (TASK-51.2)
+
+Guard: `cpp/tests/unit/mplus_parser_test.cpp` independently checks marker and
+last-mention rules, physical-line labels, label lists/equality partitions,
+explicit starts, ordered ranges, paired/crossed relations and DF01–DF13 roles.
+`cpp/tests/golden/mplus_model_golden_test.cpp` consumes all 13 frozen
+`mplus/golden.json` cases: exact parameter-key sets, fixed/free status,
+fixed values, explicit start hints, equality partitions, ML estimates,
+implied means/covariances, expected-information SEs, npar, df and chi-square.
+Numeric differences must be below 1e-5. Eligible Demo `probes.json` variants
+also gate TECH1 distinct free counts, cell status and equality partitions.
+The reserved `.eq1.` equality-label spelling is accepted by pinned lavaan
+0.7.2; named labels cannot collide with it.
+
+Local corpus sweep on 2026-10-03: `extract_mplus_corpus.sh` read case
+`original.inp` files, raw inputs and `.inp` zip entries from the ignored
+textbook corpus. The manifest and files live under
+`~/.cache/magmaan-mplus-corpus/`; each extraction replaces `files/` while
+preserving the previous cache directory. A non-zip mirror,
+`raw/mplususerguid/ex11.8imp.zip`, was reported and skipped. With
+`MAGMAAN_MPLUS_CORPUS` set to the extracted `files/`, the opt spec tests
+parsed 2,438 inputs: **189 accepted, 2,249 rejected; no crash or hang**.
+Each rejected file counts once per rule, so the following counts overlap:
+
+| Rule | Files | Rule | Files | Rule | Files |
+| --- | ---: | --- | ---: | --- | ---: |
+| CL03 | 170 | CL04 | 88 | CL06 | 66 |
+| CL10 | 452 | CL11 | 146 | CL13 | 139 |
+| CL14 | 168 | CL15 | 531 | CL16 | 436 |
+| CL17 | 879 | CL18 | 253 | CL20 | 3 |
+| CL21 | 2 | CL22 | 86 | CL23 | 55 |
+| CL24 | 44 | CL26 | 135 | CL27 | 599 |
+| CL29 | 628 | CL31 | 108 | CL32 | 20 |
+| GR01 | 47 | LX01 | 647 | LX02 | 1 |
+| LX03 | 28 | MS01 | 2 | MS08 | 4 |
+| MS09 | 11 | MS10 | 57 | MS11 | 16 |
+| NM03 | 345 | | | | |
+
+Scope: this corpus gate checks parser stability and classified boundaries,
+not estimation or parity of every accepted corpus model. Frozen golden
+models provide the numeric gate; later language families and API/R exposure
+remain separate increments. Focused opt validation: 84 test cases and
+7,994 assertions passed (Mplus, EQS, parser, lavaanify and spec goldens).
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
@@ -627,6 +671,9 @@ Protected by:
 
 - `project/grammar/grammar.ebnf`
 - `cpp/tests/unit/parser_test.cpp`
+- `cpp/tests/unit/mplus_input_test.cpp`
+- `cpp/tests/unit/mplus_parser_test.cpp`
+- `cpp/tests/golden/mplus_model_golden_test.cpp`
 - `cpp/tests/unit/lavaanify_test.cpp`
 - `cpp/tests/golden/parser_golden_test.cpp`
 - `cpp/tests/golden/lavaanify_golden_test.cpp`

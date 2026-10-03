@@ -17,7 +17,6 @@ bool letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 bool digit(char c) { return c >= '0' && c <= '9'; }
 // production: BLANK ::= ' ' | '\t'
 bool blank(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
-// production: name ::= letter (letter | digit | '_')*
 std::string upper(std::string_view s) {
   std::string out(s);
   for (char& c : out) if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
@@ -29,7 +28,6 @@ bool valid_name(std::string_view s) {
     return letter(c) || digit(c) || c == '_';
   });
 }
-// production: option_name ::= name
 std::vector<std::string> words(std::string_view s) {
   std::vector<std::string> out;
   for (std::size_t i = 0; i < s.size();) {
@@ -40,7 +38,6 @@ std::vector<std::string> words(std::string_view s) {
   }
   return out;
 }
-// production: command_word ::= 'TITLE' | 'DATA' data_qualifier? | 'VARIABLE' | 'DEFINE' | 'ANALYSIS' | 'MODEL' model_qualifier? | 'OUTPUT' | 'SAVEDATA' | 'PLOT' | 'MONTECARLO'
 std::string resolve(std::string_view raw, const std::vector<std::string>& choices) {
   const auto key = upper(raw);
   std::string found;
@@ -53,7 +50,6 @@ std::string resolve(std::string_view raw, const std::vector<std::string>& choice
   }
   return found;
 }
-// production: setting ::= name
 std::string setting(std::string_view raw, std::string_view table) {
   const auto key = upper(raw);
   for (const auto& entry : words(table)) {
@@ -78,36 +74,32 @@ class Reader {
   std::vector<Section> sections;
   std::vector<Item> use;
   SourceSpan use_span, nomean_span;
-  bool has_use = false, grouping = false;
+  bool has_use = false, grouping = false, data_groups = false, mixture = false;
 
-  // production: input_file ::= line*
   explicit Reader(std::string_view s) { out.source = s; clean = s; }
 
-  // production: line ::= BLANK* line_content? NEWLINE
   SourceSpan span(std::size_t begin, std::size_t end) const {
     const auto it = std::upper_bound(lines.begin(), lines.end(), begin);
     const auto row = static_cast<std::size_t>(it - lines.begin() - 1);
     return {static_cast<std::uint32_t>(begin), static_cast<std::uint32_t>(end),
             static_cast<std::uint32_t>(row + 1), static_cast<std::uint32_t>(begin - lines[row] + 1)};
   }
-  // production: command_body ::= title_body | option_body | model_body | opaque_body
   void diagnostic(MplusClass klass, SourceSpan at, std::string rule, std::string message) {
     (klass == MplusClass::Rejected ? rejects : out.notes).push_back(
         {klass, at, std::move(rule), std::move(message)});
   }
-  // production: command_body ::= title_body | option_body | model_body | opaque_body
   void reject(SourceSpan at, std::string rule, std::string message) {
-    diagnostic(MplusClass::Rejected, at, std::move(rule), std::move(message));
+    // Preserve the specific rule explanation and make every reader rejection
+    // actionable, including malformed list/command boundaries.
+    const auto found = out.source.substr(at.begin, std::min<std::size_t>(at.end - at.begin, 120));
+    if (message.find("Mplus") == std::string::npos)
+      message += "; Mplus requires valid names, complete command heads and terminated options, and supports additional analysis/data families; magmaan cannot reproduce this input in increment 1; write a valid supported single-group continuous specification instead";
+    diagnostic(MplusClass::Rejected, at, std::move(rule), "found '" + found + "': " + message);
   }
 
   // production: line_content ::= (token | BLANK | block_comment)+ line_comment? | line_comment
   void comments() {
     for (std::size_t i = 0; i < clean.size(); ++i) if (clean[i] == '\n') lines.push_back(i + 1);
-    for (std::size_t row = 0; row < lines.size(); ++row) {
-      auto end = row + 1 < lines.size() ? lines[row + 1] - 1 : clean.size();
-      if (end > lines[row] && clean[end - 1] == '\r') --end;
-      if (end - lines[row] > 90) reject(span(lines[row], end), "LX02", "line exceeds 90 columns");
-    }
     char quote = 0;
     for (std::size_t i = 0; i < clean.size();) {
       if (clean[i] == '\n') quote = 0;
@@ -179,7 +171,6 @@ class Reader {
         reject(span(0, 0), "LX01", std::string("required command: ") + required);
   }
 
-  // production: option_name ::= name
   static std::vector<OptionSpec> specs(const std::string& command) {
     std::vector<OptionSpec> result;
     const auto add = [&](std::string_view names, MplusClass klass, const char* rule, int later = 0) {
@@ -241,6 +232,7 @@ class Reader {
   void names(std::string_view value, SourceSpan at) {
     std::set<std::string> seen;
     const auto append = [&](std::string name) {
+      if (out.names.size() >= 100000) { reject(at, "NM02", "NAMES generates more than 100000 variables; Mplus expands these ranges, but magmaan bounds expansion; list a smaller analysis schema instead"); return false; }
       if (!seen.insert(upper(name)).second) {
         reject(at, "NM02", "duplicate NAMES variable: " + name); return false;
       }
@@ -280,7 +272,7 @@ class Reader {
           const char suffix = item.first.back() >= 'a' && item.first.back() <= 'z' ? static_cast<char>(c - 'A' + 'a') : c;
           if (!append(item.first.substr(0, item.first.size() - 1) + suffix)) return;
         }
-      } else reject(at, "NM02", "unsupported NAMES range shape");
+      } else reject(at, "NM02", "unsupported NAMES range shape '" + item.first + "-" + item.last + "': Mplus does not generate a1b, a2b, a3b from a1b-a3b; it produces names such as A01, A02, A03; magmaan avoids silently renaming columns; list the names instead");
     }
   }
 
@@ -289,16 +281,14 @@ class Reader {
     if (!has_use) { out.analysis = out.names; return; }
     std::map<std::string, std::size_t> positions;
     for (std::size_t i = 0; i < out.names.size(); ++i) positions.emplace(upper(out.names[i]), i);
-    // Erase selected positions so overlapping ranges visit each name only once.
-    std::set<std::size_t> remaining;
-    for (std::size_t i = 0; i < out.names.size(); ++i) remaining.insert(i);
+    std::set<std::size_t> selected;
     const auto append_range = [&](std::size_t first, std::size_t last) {
-      auto it = remaining.lower_bound(first);
-      while (it != remaining.end() && *it <= last) {
-        out.analysis.push_back(out.names[*it]);
-        it = remaining.erase(it);
+      for (auto i = first; i <= last; ++i) {
+        if (!selected.insert(i).second) reject(use_span, "NM03", "duplicate USEVARIABLES name '" + out.names[i] + "'; Mplus requires a unique analysis list; remove the duplicate");
+        else out.analysis.push_back(out.names[i]);
       }
     };
+    const bool transformations = std::any_of(sections.begin(),sections.end(),[](const Section& section) { return section.command == "DEFINE" || (section.command == "DATA" && !section.qualifier.empty()); });
     for (std::size_t n = 0; n < use.size(); ++n) {
       const auto& item = use[n];
       if (n == 0 && upper(item.first) == "ALL" && item.last.empty()) {
@@ -307,7 +297,7 @@ class Reader {
       }
       auto a = positions.find(upper(item.first));
       auto b = item.last.empty() ? a : positions.find(upper(item.last));
-      if (a == positions.end() || b == positions.end()) { reject(use_span, "NM03", "unknown USEVARIABLES name"); continue; }
+      if (a == positions.end() || b == positions.end()) { reject(use_span, "NM03", "unknown USEVARIABLES name '" + (a == positions.end() ? item.first : item.last) + "'; Mplus resolves analysis names after transformations" + std::string(transformations ? "; DEFINE or a DATA transformation is present, so the name is probably created there" : "; the name is not in NAMES") + "; magmaan reads the supplied schema only; compute transformations in R and list the resulting names"); continue; }
       if (a->second > b->second) { reject(use_span, "NM03", "backward USEVARIABLES range"); continue; }
       append_range(a->second, b->second);
     }
@@ -318,7 +308,7 @@ class Reader {
     std::vector<std::string> result;
     for (const auto& raw : words(value)) {
       auto full = setting(raw, table);
-      if (full.empty()) reject(at, "LX03", "unknown setting for " + rule + ": " + raw);
+      if (full.empty()) reject(at, "LX03", "unknown setting '" + raw + "' for " + rule + "; Mplus accepts exact words or documented stems; accepted words/stems: " + std::string(table) + "; write one of these instead");
       else result.push_back(std::move(full));
     }
     if (result.empty() && words(value).empty()) reject(at, rule, "missing setting");
@@ -337,7 +327,11 @@ class Reader {
     std::vector<std::string> choices;
     for (const auto& spec : table) choices.push_back(spec.name);
     auto name = resolve(raw, choices);
-    if (name.empty()) { reject(at, "LX03", "unknown or ambiguous option: " + raw); return; }
+    if (name.empty()) {
+      std::string accepted;
+      for (const auto& choice : choices) { if (!accepted.empty()) accepted += ", "; accepted += choice; }
+      reject(at, "LX03", "unknown or ambiguous option '" + raw + "'; Mplus resolves complete names or unique prefixes of at least four letters; accepted options: " + accepted + "; write a complete accepted name instead"); return;
+    }
     const auto spec = *std::find_if(table.begin(), table.end(), [&](const OptionSpec& s) { return s.name == name; });
     if (!seen.insert(name).second) reject(at, "LX01", "repeated option: " + name);
     auto value_begin = name_end;
@@ -352,26 +346,29 @@ class Reader {
     while (value_begin < end && blank(clean[value_begin])) ++value_begin;
     const auto value = std::string_view(clean).substr(value_begin, end - value_begin);
     if (name == "GROUPING") grouping = true;
+    if (name == "CLASSES" || name == "KNOWNCLASS") mixture = true;
+    if (name == "NGROUPS") data_groups = true;
     if (name == "AUXILIARY" && value.find('(') != std::string_view::npos) {
       reject(at, "CL15", "AUXILIARY modifiers change the analysis"); return;
     }
     auto after_name = name_end;
     while (after_name < end && blank(clean[after_name])) ++after_name;
     if (section.command == "DATA" && name == "FILE" && after_name < end && clean[after_name] == '(') {
-      reject(at, "CL02", "group FILE option: later increment 5"); return;
+      data_groups = true;
+      reject(at, "CL02", "group FILE option not yet supported; planned for increment 5; supply a single data set in R instead"); return;
     }
     if (name == "PARAMETERIZATION" && section.command == "ANALYSIS") {
       const auto values = settings(value, "DELTA THETA LOGIT LOGLINEAR/LOGLIN PROBABILITY/PROB RESCOVARIANCES/RESCOV", at, "CL22");
       if (values.size() != 1) reject(at, "CL22", "expected one PARAMETERIZATION setting");
       for (const auto& v : values) reject(at, "CL22", v +
-          (v == "DELTA" || v == "THETA" ? ": later increment 3" : " is outside scope"));
+          (v == "DELTA" || v == "THETA" ? " not yet supported; planned for increment 3; supply continuous outcomes instead" : " is outside scope"));
       return;
     }
     if (name == "CATEGORICAL" && value.find('(') != std::string_view::npos) {
       reject(at, "CL10", "CATEGORICAL category-set forms are outside scope"); return;
     }
     if (spec.klass == MplusClass::Rejected) {
-      reject(at, spec.rule, name + (spec.later ? ": later increment " + std::to_string(spec.later) : " is outside the supported model families"));
+      reject(at, spec.rule, name + (spec.rule == "CL13" ? " selects cases in Mplus; magmaan cannot ignore sample selection; select cases in R before fitting" : spec.later ? " not yet supported; planned for increment " + std::to_string(spec.later) + "; supply an increment-1 continuous single-group model instead" : " is outside the supported model families"));
       return;
     }
     if (section.command == "VARIABLE") {
@@ -379,17 +376,20 @@ class Reader {
       else if (name == "USEVARIABLES") { has_use = true; use_span = at; use = items(value, at, "NM03"); }
     }
     if (section.command == "DATA" && name == "NGROUPS") {
-      reject(at, "CL03", "summary/multigroup data: later increment 5"); return;
+      reject(at, "CL03", "summary/multigroup data not yet supported; planned for increment 5; supply summary moments in R instead"); return;
     }
     if (section.command == "DATA" && (name == "TYPE" || name == "LISTWISE")) {
       const auto values = settings(value, name == "TYPE" ? "INDIVIDUAL/IND COVARIANCE/COVA CORRELATION/CORR FULLCOV FULLCORR MEANS STDEVIATIONS/STD MONTECARLO/MONTE IMPUTATION/IMP" : "ON OFF", at, spec.rule);
-      if (values.size() != 1) reject(at, spec.rule, "expected one " + name + " setting");
+      if (name == "LISTWISE" && values.size() != 1) reject(at, spec.rule, "expected one " + name + " setting");
       for (const auto& v : values) if (name == "TYPE" && v != "INDIVIDUAL")
-        reject(at, v == "MONTECARLO" || v == "IMPUTATION" ? "CL04" : "CL03", v + (v == "MONTECARLO" || v == "IMPUTATION" ? " is outside scope" : ": later increment 5"));
+        reject(at, v == "MONTECARLO" || v == "IMPUTATION" ? "CL04" : "CL03", v + (v == "MONTECARLO" || v == "IMPUTATION" ? " is outside scope" : " not yet supported; planned for increment 5; supply the summary moments in R instead"));
     }
     if (section.command == "ANALYSIS") {
       if (name == "TYPE") {
-        for (auto& v : settings(value, "GENERAL/GEN BASIC/BAS RANDOM/RAND COMPLEX/COM MIXTURE/MIX TWOLEVEL/TWO THREELEVEL/THREE CROSSCLASSIFIED/CROSS EFA MISSING MEANSTRUCTURE H1", at, "CL17")) {
+        auto type_value = value;
+        const auto type_words = words(value);
+        if (!type_words.empty() && upper(type_words.front()) == "EFA") type_value = value.substr(0, 3);
+        for (auto& v : settings(type_value, "GENERAL/GEN BASIC/BAS RANDOM/RAND COMPLEX/COM MIXTURE/MIX TWOLEVEL/TWO THREELEVEL/THREE CROSSCLASSIFIED/CROSS EFA MISSING MEANSTRUCTURE H1", at, "CL17")) {
           if (v == "GENERAL" || v == "MISSING" || v == "MEANSTRUCTURE" || v == "H1") {
             out.type_settings.push_back(v);
             if (v != "GENERAL") diagnostic(MplusClass::Reported, at, "CL17", v + " is a legacy no-op");
@@ -399,7 +399,7 @@ class Reader {
         for (const auto& v : settings(value, "NOMEANSTRUCTURE/NOMEAN NOCOVARIANCES/NOCOV CONFIGURAL/CONFIG METRIC SCALAR ALLFREE/ALL", at, "CL19")) {
           if (v == "NOMEANSTRUCTURE") { out.nomeanstructure = true; nomean_span = at; }
           else if (v == "NOCOVARIANCES") out.nocovariances = true;
-          else reject(at, v == "ALLFREE" ? "CL21" : "CL20", v + (v == "ALLFREE" ? " is outside scope" : ": later increment 2"));
+          else reject(at, v == "ALLFREE" ? "CL21" : "CL20", v + (v == "ALLFREE" ? " is outside scope" : " not yet supported; planned for increment 2; fit groups separately in R instead"));
         }
       } else if (name == "ESTIMATOR" || name == "INFORMATION" || name == "DISTRIBUTION" || name == "MATRIX") {
         const std::string_view settings_table = name == "ESTIMATOR" ? "ML MLM MLMV MLR MLF MUML WLS WLSM WLSMV ULS ULSMV GLS BAYES" :
@@ -453,7 +453,7 @@ class Reader {
       const auto at = span(section.begin, section.end);
       const auto& c = section.command;
       if (c == "TITLE") diagnostic(MplusClass::Reported, at, "CL01", "TITLE is not imported");
-      else if (c == "DEFINE") reject(at, "CL16", "DEFINE transformations must be performed by the caller");
+      else if (c == "DEFINE") reject(at, "CL16", "DEFINE transforms or creates variables in Mplus; magmaan does not reproduce data transformations; compute them in R before fitting and remove DEFINE");
       else if (c == "MONTECARLO") reject(at, "CL29", "MONTECARLO is outside scope");
       else if (c == "DATA" && !section.qualifier.empty()) reject(at, "CL06", "DATA transformations are outside scope");
       else if (c == "MODEL") {
@@ -463,21 +463,30 @@ class Reader {
           const auto q = resolve(std::string_view(section.qualifier).substr(0, dash),
               {"CONSTRAINT", "INDIRECT", "TEST", "PRIORS", "POPULATION", "COVERAGE", "MISSING"});
           if (q == "TEST") diagnostic(MplusClass::Reported, at, "CL28", "MODEL TEST is not imported");
-          else if (q == "CONSTRAINT" || q == "INDIRECT") reject(at, "CL27", "MODEL " + q + ": later increment 4");
+          else if (q == "CONSTRAINT" || q == "INDIRECT") reject(at, "CL27", "MODEL '" + q + "' not yet supported; planned for increment 4; write explicit BY/ON parameters instead");
           else if (q == "PRIORS") reject(at, "CL32", "MODEL PRIORS penalties are outside scope");
           else if (q == "POPULATION" || q == "COVERAGE" || q == "MISSING" ||
                    section.qualifier.starts_with("POPULATION-") || section.qualifier.starts_with("COVERAGE-") || section.qualifier.starts_with("MISSING-"))
             reject(at, "CL29", "simulation MODEL command is outside scope");
-          else reject(at, grouping ? "CL26" : "CL31", grouping ? "group MODEL section: later increment 2" : "MODEL label without GROUPING may denote longitudinal invariance; outside scope");
+          else reject(at, mixture ? "MS10" : grouping || data_groups ? "CL26" : "CL31", mixture ? "MODEL '" + section.qualifier + "' is a mixture class section in Mplus; mixtures are outside scope; supply a single-group continuous model instead" : grouping || data_groups ? "MODEL '" + section.qualifier + "' is a group section in Mplus; not yet supported; planned for increment " + std::string(data_groups ? "5" : "2") + "; fit groups separately in R instead" : "MODEL '" + section.qualifier + "' may denote longitudinal invariance in Mplus; outside scope; write an unqualified MODEL section instead");
         }
       }
     }
+    for (std::size_t row = 0; row < lines.size(); ++row) {
+      const auto begin = lines[row];
+      const auto end = row + 1 < lines.size() ? lines[row + 1] - 1 : clean.size();
+      auto content_begin = begin;
+      while (content_begin < end && blank(clean[content_begin])) ++content_begin;
+      bool title = false;
+      for (const auto& section : sections) if (section.command == "TITLE" && content_begin >= section.begin && content_begin < section.end) title = true;
+      if (!title && end > begin + 90 && std::any_of(clean.begin() + static_cast<std::ptrdiff_t>(begin + 90), clean.begin() + static_cast<std::ptrdiff_t>(end), [](char c) { return !blank(c); }))
+        reject(span(begin + 90, end), "LX02", "content extends beyond column 90; Mplus truncates physical lines, which magmaan rejects; wrap the statement before column 91");
+    }
     select();
     if (out.nomeanstructure && out.information != "EXPECTED")
-      reject(nomean_span, "MS11", "NOMEANSTRUCTURE requires explicit INFORMATION = EXPECTED; Mplus would ignore it");
+      reject(nomean_span, "MS11", "Mplus ignores NOMEANSTRUCTURE under its default observed information and keeps the means; magmaan does not reproduce this ignored setting; add INFORMATION = EXPECTED; or remove NOMEANSTRUCTURE");
   }
 
-  // production: input_file ::= line*
   parse_expected<MplusInput> finish() {
     const auto order = [](const MplusDiagnostic& a, const MplusDiagnostic& b) { return a.span.begin < b.span.begin; };
     std::stable_sort(out.notes.begin(), out.notes.end(), order);

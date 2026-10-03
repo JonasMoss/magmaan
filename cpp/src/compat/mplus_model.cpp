@@ -1,0 +1,17 @@
+#include "magmaan/compat/mplus/model.hpp"
+
+namespace magmaan::compat::mplus {
+
+spec::BuildOptions build_options(const parse::MplusInput& input) {
+  spec::BuildOptions options;
+  options.auto_var = false;
+  options.auto_cov_lv_x = false;
+  options.auto_cov_y = false;
+  options.auto_fix_first = false;
+  options.auto_fix_single = false;
+  options.fixed_x = true;
+  options.meanstructure = !input.nomeanstructure;
+  return options;
+}
+
+}  // namespace magmaan::compat::mplus

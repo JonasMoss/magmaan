@@ -63,6 +63,8 @@ magmaan_add_test_target(magmaan_test_spec spec
   unit/parser_test.cpp
   unit/eqs_parser_test.cpp
   unit/mplus_input_test.cpp
+  unit/mplus_parser_test.cpp
+  golden/mplus_model_golden_test.cpp
   golden/eqs_golden_test.cpp
   unit/lavaanify_test.cpp
   unit/composite_expand_test.cpp
