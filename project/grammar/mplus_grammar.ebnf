@@ -1,0 +1,177 @@
+(* ===========================================================================
+   Mplus input-file grammar, increment 1
+   ---------------------------------------------------------------------------
+   Normative for parse::Mplus* once implemented (planned; nothing implemented
+   yet). mplus.md owns the target and increments; mplus_source_inventory.md
+   owns the evidence, cited here by rule ID in brackets ([LX03]). Source:
+   Mplus User's Guide v8 (2017) and the language addenda 8.1 to 9.1.
+
+   Increment 1 reads the whole input file, classifies every command and
+   option [CL01-CL32], and parses single-group MODEL statements for
+   continuous outcomes. Every other construct is delimited and rejected or
+   reported with its source span; nothing is skipped silently. Later
+   increments extend this file before their code.
+
+   Notation as in grammar.ebnf (W3C-style EBNF). Matching of command, option
+   and setting names, keywords and variable names is case-insensitive
+   [LX04]. Abbreviations are resolved after tokenizing, by name resolution
+   rules stated in comments, not by the productions.
+   ===========================================================================*)
+
+
+(* === Physical lines and comments ==========================================
+   Lines matter twice: a command starts a line [LX01], and a MODEL label
+   applies to the items of its own line [LB02]. Tabs are blanks. *)
+
+input_file          ::= line*
+line                ::= BLANK* line_content? NEWLINE
+line_content        ::= (token | BLANK | block_comment)+ line_comment?
+                      | line_comment
+line_comment        ::= '!' (char - '*') char*  |  '!'
+block_comment       ::= '!*' (char | NEWLINE)* '*!'
+(* A block comment ends at the first '*!'. Its placement rules are U and
+   settled by probe P-LX1 [LX05]. A line longer than 90 columns is rejected
+   with its span until probe P-LX4 settles later versions [LX02]. *)
+
+
+(* === Tokens =============================================================== *)
+
+token               ::= name | number | punct
+name                ::= letter (letter | digit | '_')*
+(* Variable names and labels are at most 8 characters [NM01]; longer names
+   are rejected until probe P-NM2 settles later versions. *)
+number              ::= digit+ ('.' digit*)? | '.' digit+
+punct               ::= ':' | ';' | ',' | '-' | '*' | '@' | '(' | ')' | '['
+                      | ']' | '{' | '}' | '|' | '$' | '#' | '%' | '=' | '~'
+                      | '&' | '/' | '+' | '<' | '>' | other_symbol
+letter              ::= [A-Za-z]
+digit               ::= [0-9]
+BLANK               ::= ' ' | '\t'
+
+
+(* === Commands ============================================================= *)
+
+command             ::= command_head command_body
+command_head        ::= LINE_START BLANK* command_word ':'
+command_word        ::= 'TITLE' | 'DATA' data_qualifier? | 'VARIABLE'
+                      | 'DEFINE' | 'ANALYSIS' | 'MODEL' model_qualifier?
+                      | 'OUTPUT' | 'SAVEDATA' | 'PLOT' | 'MONTECARLO'
+(* Command words may be shortened to four or more letters [LX03]. Commands
+   appear in any order; DATA and VARIABLE are required [LX01]. A repeated
+   command other than MODEL label sections is rejected. *)
+data_qualifier      ::= 'IMPUTATION' | 'WIDETOLONG' | 'LONGTOWIDE'
+                      | 'TWOPART' | 'MISSING' | 'SURVIVAL' | 'COHORT'
+model_qualifier     ::= 'CONSTRAINT' | 'INDIRECT' | 'TEST' | 'PRIORS'
+                      | ('POPULATION' | 'COVERAGE' | 'MISSING')
+                        ('-' group_label)?
+                      | group_label
+group_label         ::= name
+(* A `MODEL label:` section is a group section only when GROUPING declares
+   that label; otherwise it is rejected, because since 8.9 such sections can
+   denote time points of a longitudinal invariance model [CL31]. *)
+command_body        ::= title_body | option_body | model_body | opaque_body
+
+title_body          ::= free_text
+(* TITLE text runs to the next command head. A command word followed by a
+   colon ends it; other colons are text [LX06, probe P-LX3]. *)
+
+opaque_body         ::= free_text
+(* Data transformation commands, DEFINE, MODEL CONSTRAINT/INDIRECT/TEST/
+   PRIORS/POPULATION/COVERAGE/MISSING, MONTECARLO and `MODEL label:`
+   sections: increment 1 delimits the body and rejects or reports the whole
+   command by class, citing the increment that will accept it [CL06,
+   CL16, CL26-CL29]. *)
+
+
+(* === Options (DATA, VARIABLE, ANALYSIS, OUTPUT, SAVEDATA, PLOT) ===========
+   An option ends at ';'; several may share a line [LX01]. IS, ARE and '='
+   are interchangeable [LX07]. Option names may be shortened to four or more
+   letters; settings to their documented stems [LX03, CL rules]. *)
+
+option_body         ::= option*
+option              ::= option_name (assign? option_value)? ';'
+option_name         ::= name
+assign              ::= 'IS' | 'ARE' | '='
+option_value        ::= (token - ';')+
+(* The option name is classified before its value is read [CL01-CL32].
+   Values of imported options are parsed by the productions below; values
+   of other options are delimited only. *)
+
+(* VARIABLE: NAMES [CL07, NM02] *)
+names_value         ::= name_generator (list_sep name_generator)*
+name_generator      ::= name | name '-' name
+list_sep            ::= ','? BLANK* | BLANK+ ','? BLANK*
+(* A NAMES range generates names from equal stems with numeric or letter
+   suffixes (y1-y5, itema-itemd). Other stem shapes are rejected until probe
+   P-NM1 settles them. Duplicate names are rejected. *)
+
+(* VARIABLE: USEVARIABLES [CL08, NM03] *)
+usevariables_value  ::= ('ALL' list_sep)? variable_range (list_sep variable_range)*
+variable_range      ::= name | name '-' name
+(* Here a range selects NAMES variables by position, from the first name
+   to the second [NM03, probe P-NM3]. ALL first means every NAMES variable.
+   The USEVARIABLES order becomes the analysis order. *)
+
+(* ANALYSIS: TYPE, MODEL; settings are names resolved by stem [CL17,
+   CL19-CL21] *)
+settings_value      ::= setting+
+setting             ::= name
+
+
+(* === MODEL statements (increment 1: single group, continuous) ============
+   A statement ends at ';' and may span lines. A parenthesized label applies
+   to the items of its own line only; at most one label per line [LB02].
+   Tokens after a label on the same line, other than the closing ';', are
+   rejected [LB03]. *)
+
+model_body          ::= model_statement*
+model_statement     ::= relation | variance_statement | mean_statement
+                      | scale_statement | bar_statement | section_marker
+relation            ::= lhs_list relation_op rhs_lines ';'
+relation_op         ::= 'BY' | 'ON' | 'WITH' | 'PON' | 'PWITH'
+lhs_list            ::= variable_range+
+rhs_lines           ::= rhs_line+
+rhs_line            ::= rhs_item+ line_label?
+(* rhs_line is a maximal run of items on one physical line. *)
+rhs_item            ::= variable_range modifier?
+modifier            ::= '*' signed_number? | '@' signed_number?
+signed_number       ::= '-'? number
+(* '*' frees (with an optional start), '@' fixes [LB01]. After a range the
+   modifier applies to every element [LB01]. A bare '*' frees at the
+   default start (no Starts entry); a bare '@' is rejected until probe P-LB1
+   settles its value. A later mention of the same parameter overrides an
+   earlier one [LB07]. *)
+
+line_label          ::= '(' label_group+ ')'
+label_group         ::= label_atom | label_atom '-' label_atom
+label_atom          ::= number | name
+(* Numbers are equality sets, names parameter labels [LB04, LB06]. One
+   label group per line item set, or one group per left-hand element when
+   lhs_list has several elements [LB05]. Mixing numbers and names in one
+   label, '(*label)' ESEM sets and other forms are rejected [MS09]. *)
+
+variance_statement  ::= rhs_lines ';'
+mean_statement      ::= '[' rhs_item+ ']' line_label? ';'
+(* One bracket group per statement. Threshold items (name '$' number) are
+   increment 3 [CT02]. *)
+
+scale_statement     ::= '{' rhs_item+ '}' line_label? ';'
+(* Increment 3 [CT04]; rejected in increment 1. *)
+
+bar_statement       ::= lhs_list '|' (token - ';')+ ';'
+(* Growth statements are increment 4 [GR01]; every '|' form is rejected in
+   increment 1 [GR07]. *)
+
+section_marker      ::= '%' (token - '%')+ '%'
+(* Mixture and multilevel sections are rejected [MS10]. *)
+
+(* Semantic rules applied after parsing, in order:
+   1. Resolve names: observed names against the analysis order [NM03];
+      latent names are those on the left of BY [NM04]. A latent variable on
+      the right of BY must be defined earlier [MS03].
+   2. Expand ranges and left-hand lists into statements [NM05, MS05, MS06].
+   3. Attach labels and equalities by line [LB02-LB06].
+   4. Apply the default rules DF01-DF13 and the marker rule MS02, and
+      materialize every default parameter explicitly.
+   5. Reject mentions of observed independent variables' moments [MS08]
+      and every construct outside the increment, with its span. *)

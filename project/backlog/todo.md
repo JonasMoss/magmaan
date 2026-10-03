@@ -1081,12 +1081,16 @@ exit criterion. Each increment merges only when complete, so every merged state
 is stable for its documented subset and rejects everything else. Board cards
 carry the label `mplus`.
 
-- [ ] **M — source inventory and grammar baseline.** Summarize the User's
-  Guide language chapters with documented/derived/unresolved classes and
-  pages; write a probe list for unresolved rules and the normative EBNF for
-  increment 1. Planner work, not a lane. **Check:** the plan's command
-  classification is complete for the inventoried options, and every
-  unresolved rule needed by increments 1–2 has a probe.
+- [x] **M — source inventory and grammar baseline** (2026-10-03). The
+  [source inventory](../grammar/mplus_source_inventory.md) covers the User's
+  Guide v8 and the 8.1–9.1 addenda: 123 rules with printed pages and evidence
+  classes, a classification of every command and option, and 41 Demo probes,
+  29 of them for increments 1–2. The increment-1
+  [grammar](../grammar/mplus_grammar.ebnf) is drafted. Findings that change
+  the plan: the reference group is the lowest grouping value; `MODEL label:`
+  without GROUPING can mean longitudinal time points (rejected); the guide
+  contradicts itself on the marker with repeated BY statements and on label
+  lists, which probes settle before increment 1.
 - [ ] **S/M — Demo probes.** A lane runs the probe list through the local
   Mplus Demo with a maintainer tool under `cpp/tests/tools/`, records results
   against inventory IDs and checks in derived summaries; the planner then

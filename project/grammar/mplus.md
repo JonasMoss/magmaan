@@ -4,8 +4,10 @@ Planned 2026-10-02; nothing is implemented. Milestone 0.3.0. Development
 starts now, alongside 0.2.0 release work, and is not a 0.2.0 exit criterion.
 This document owns the target, input boundary, increments, evidence and the
 stability bar. The [backlog](../backlog/todo.md#mplus-input-frontend) owns task
-state. The source inventory, the first task, will own manual evidence and page
-references, as the [EQS inventory](eqs_source_inventory.md) does for EQS.
+state. The [source inventory](mplus_source_inventory.md) owns manual evidence,
+page references and the Demo probe list, as the
+[EQS inventory](eqs_source_inventory.md) does for EQS. The normative grammar
+is [mplus_grammar.ebnf](mplus_grammar.ebnf).
 
 ## Target
 
@@ -44,7 +46,8 @@ MODEL cannot be read alone, because its meaning depends on other commands:
 - ANALYSIS TYPE decides whether the input is in scope at all.
 
 Every command and option belongs to exactly one class. Nothing is silently
-skipped; an option outside the inventory is rejected.
+skipped; an option outside the inventory is rejected. The inventory's
+classification table (CL rules) is the complete per-option list.
 
 | Class | Members | Treatment |
 | --- | --- | --- |
@@ -86,8 +89,12 @@ implementation.
 2. **Multiple groups.** GROUPING labels and codes; group-specific MODEL
    sections; the invariance defaults (equal loadings and indicator intercepts,
    factor means fixed at zero in the first group and free in the others);
-   frees and overrides by mention in a group-specific section. Group order
-   follows the GROUPING declaration, which must agree with the supplied data.
+   frees and overrides by mention in a group-specific section. With one data
+   set the first (reference) group is the one with the lowest grouping value,
+   not the first label declared; codes that GROUPING does not list leave the
+   analysis. A single `ANALYSIS: MODEL = CONFIGURAL`, `METRIC` or `SCALAR`
+   setting is accepted; a list of them is rejected until its result shape is
+   decided.
 3. **Categorical outcomes.** CATEGORICAL thresholds `[u$k]` and threshold
    ranges; delta (scale factors) and theta parameterizations; threshold
    invariance and free scale factors or residual variances in later groups.
@@ -158,10 +165,11 @@ increment.
 
 **Meaning** (which model an input denotes) is gated against Mplus:
 
-- The User's Guide language chapters (VARIABLE/DATA/DEFINE, ANALYSIS, MODEL,
-  the language summary) and the special-modeling-issues chapter, summarized
-  in the source inventory with documented/derived/unresolved classes as for
-  EQS. Use the edition matching the installed Demo where one exists.
+- The User's Guide v8 language chapters (VARIABLE/DATA/DEFINE, ANALYSIS,
+  MODEL, the language summary), the special-modeling-issues chapter and the
+  language addenda through 9.1, summarized in the source inventory with
+  documented/derived/unresolved classes as for EQS. No full guide newer than
+  v8 exists; the addenda cover 8.1 to 9.1.
 - The Mplus 9.1 Demo, installed locally at `~/mplusdemo/mpdemo` (at most six
   dependent and two independent observed variables). `mpdemo probe.inp` writes
   `probe.out` beside the input in about a second and touches nothing else.

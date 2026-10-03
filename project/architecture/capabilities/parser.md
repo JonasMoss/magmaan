@@ -26,6 +26,9 @@
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
   against lavaan, and targets ordinary integration after a stability bar.
+  The [source inventory](../../grammar/mplus_source_inventory.md) and the
+  increment-1 [grammar](../../grammar/mplus_grammar.ebnf) are drafted; Demo
+  probes precede implementation.
 - Lavaan-style syntax parser with normative grammar in `project/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
   modifier labels (`(label)*x`), signed numeric modifiers/starts, chained
