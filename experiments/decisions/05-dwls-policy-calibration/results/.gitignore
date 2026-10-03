@@ -55,3 +55,12 @@ dwls-policy/confirm-global-2026-10-03/*
 !dwls-policy/confirm-global-2026-10-03/metadata.csv
 !dwls-policy/confirm-global-2026-10-03/summary.csv
 !dwls-policy/confirm-global-2026-10-03/timing.csv
+
+!dwls-policy/confirm-nested-2026-10-03/
+dwls-policy/confirm-nested-2026-10-03/*
+!dwls-policy/confirm-nested-2026-10-03/cells.csv
+!dwls-policy/confirm-nested-2026-10-03/cost.csv
+!dwls-policy/confirm-nested-2026-10-03/failures.csv
+!dwls-policy/confirm-nested-2026-10-03/metadata.csv
+!dwls-policy/confirm-nested-2026-10-03/summary.csv
+!dwls-policy/confirm-nested-2026-10-03/timing.csv
