@@ -1595,3 +1595,23 @@ TEST_CASE("api Mplus constructor retains input and diagnostics") {
   CHECK(bad.error().stage == magmaan::api::ErrorStage::Parse);
   CHECK(bad.error().detail.find("CL16") != std::string::npos);
 }
+
+TEST_CASE("api Mplus constructor carries ordered group metadata") {
+  auto result=magmaan::api::model_from_mplus("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 g;\nGROUPING=g(2=b 1=a);\nMODEL: f BY y1-y3;\n");
+  REQUIRE_MESSAGE(result,(result?"":result.error().detail));
+  CHECK(result->grouping_variable=="g");REQUIRE(result->groups.size()==2);
+  CHECK(result->groups[0].label=="a");CHECK(result->groups[0].code=="1");CHECK(result->groups[1].code=="2");
+  CHECK(result->model.options().build.n_groups==2);
+}
+
+TEST_CASE("api Mplus generated group-only zeros preserve provenance") {
+  auto result=magmaan::api::model_from_mplus("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 g;\nGROUPING=g(1=a 2=b);\nMODEL: f BY y1-y3;\nMODEL b: y1 WITH y2;\n");
+  REQUIRE(result);if(!result) return;
+  const auto& names=result->model.names();const auto& st=result->model.structure();
+  int found=0;
+  for(std::size_t i=0;i<names.row_lhs.size();++i) if(st.op[i]==magmaan::parse::Op::Covariance &&
+    ((names.row_lhs[i]=="y1" && names.row_rhs[i]=="y2") || (names.row_lhs[i]=="y2" && names.row_rhs[i]=="y1"))) {
+    ++found;CHECK(names.row_user[i]==(st.group[i]==1?0:1));
+  }
+  CHECK(found==2);
+}

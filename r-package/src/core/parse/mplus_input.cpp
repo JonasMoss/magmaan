@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <set>
@@ -183,7 +184,7 @@ class Reader {
       add("VARIANCES", Reported, "CL05"); add("SWMATRIX", Rejected, "CL04");
     } else if (command == "VARIABLE") {
       add("NAMES", Schema, "CL07"); add("USEVARIABLES", Schema, "CL08");
-      add("MISSING", DataDescription, "CL09"); add("GROUPING", Rejected, "CL11", 2);
+      add("MISSING", DataDescription, "CL09"); add("GROUPING", Schema, "CL11");
       add("CATEGORICAL", Rejected, "CL10", 3); add("IDVARIABLE AUXILIARY", Reported, "CL12");
       add("USEOBSERVATIONS SUBPOPULATION", Rejected, "CL13");
       add("CENSORED NOMINAL COUNT DSURVIVAL TSCORES SURVIVAL TIMECENSORED LAGGED TINTERVAL", Rejected, "CL14");
@@ -197,6 +198,44 @@ class Reader {
       add("CHOLESKY ALGORITHM INTEGRATION MCSEED ADAPTIVE BOOTSTRAP LRTBOOTSTRAP STARTS STITERATIONS STCONVERGENCE STSCALE STSEED OPTSEED K-1STARTS LRTSTARTS H1STARTS DIFFTEST COVERAGE ADDFREQUENCY ITERATIONS SDITERATIONS H1ITERATIONS MITERATIONS MCITERATIONS MUITERATIONS CONVERGENCE H1CONVERGENCE LOGCRITERION RLOGCRITERION MCONVERGENCE MCCONVERGENCE MUCONVERGENCE MIXC MIXU LOGHIGH LOGLOW UCELLSIZE VARIANCE POINT CHAINS BSEED STVALUES PREDICTOR BCONVERGENCE BITERATIONS FBITERATIONS THIN MDITERATIONS KOLMOGOROV PRIOR INTERACTIVE PROCESSORS NESTED", Reported, "CL25");
     }
     return result;
+  }
+
+  // production: grouping_value ::= name '(' grouping_pair (list_sep grouping_pair)* ')'
+  void read_grouping(std::string_view value, SourceSpan at) {
+    const auto fail = [&](std::string detail) {
+      reject(at, "MG03", detail + "; Mplus supports data-dependent group forms, but magmaan imports explicit integer codes only; recode the grouping variable to integers in R and write g (1 = g1 2 = g2) instead");
+    };
+    const auto open = value.find('('), close = value.find(')');
+    if (open == std::string_view::npos || close == std::string_view::npos || close < open) { fail("missing code = label pairs"); return; }
+    const auto vars = words(value.substr(0, open));
+    if (vars.size() != 1 || !valid_name(vars[0]) || !words(value.substr(close+1)).empty()) { fail("several grouping variables or trailing tokens"); return; }
+    out.grouping_variable = vars[0];
+    std::vector<std::pair<double, MplusGroup>> groups;
+    std::set<std::string> labels;
+    auto body = value.substr(open+1, close-open-1);
+    for (std::size_t i=0; i<body.size();) {
+      while (i<body.size() && (blank(body[i]) || body[i]==',')) ++i;
+      if (i==body.size()) break;
+      const auto begin=i;
+      if (body[i]=='-' || body[i]=='+') ++i;
+      while (i<body.size() && (digit(body[i]) || body[i]=='.')) ++i;
+      double code=0;
+      auto numeric=body.substr(begin,i-begin);
+      const auto parsed=std::from_chars(numeric.data(),numeric.data()+numeric.size(),code);
+      if (numeric.empty() || parsed.ec!=std::errc{} || parsed.ptr!=numeric.data()+numeric.size() || !std::isfinite(code) || std::trunc(code)!=code || std::abs(code)>2147483647) { fail("non-integral or invalid grouping code; Mplus requires integer grouping values and suggests DEFINE, which magmaan does not import"); return; }
+      while (i<body.size() && blank(body[i])) ++i;
+      if (i==body.size() || body[i]!='=') { fail("count, value list or range without labels; Mplus determines count-form g1, g2 labels from ascending data values (data increment 5)"); return; }
+      ++i; while (i<body.size() && blank(body[i])) ++i;
+      const auto label_begin=i;
+      while (i<body.size() && (letter(body[i]) || digit(body[i]) || body[i]=='_')) ++i;
+      const std::string label(body.substr(label_begin,i-label_begin));
+      if (!valid_name(label)) { fail("invalid group label"); return; }
+      if (!labels.insert(upper(label)).second || std::any_of(groups.begin(),groups.end(),[&](const auto& g) {return g.first==code;})) { fail("duplicate grouping code or label"); return; }
+      groups.push_back({code,{label,std::to_string(static_cast<long long>(code))}});
+    }
+    if (groups.empty()) { fail("empty GROUPING declaration"); return; }
+    std::sort(groups.begin(),groups.end(),[](const auto& a,const auto& b) {return a.first<b.first;});
+    for (auto& group:groups) out.groups.push_back(std::move(group.second));
   }
 
   // production: name_generator ::= name | name '-' name
@@ -345,7 +384,7 @@ class Reader {
     }
     while (value_begin < end && blank(clean[value_begin])) ++value_begin;
     const auto value = std::string_view(clean).substr(value_begin, end - value_begin);
-    if (name == "GROUPING") grouping = true;
+    if (name == "GROUPING") { grouping = true; read_grouping(value, at); }
     if (name == "CLASSES" || name == "KNOWNCLASS") mixture = true;
     if (name == "NGROUPS") data_groups = true;
     if (name == "AUXILIARY" && value.find('(') != std::string_view::npos) {
@@ -399,6 +438,10 @@ class Reader {
         for (const auto& v : settings(value, "NOMEANSTRUCTURE/NOMEAN NOCOVARIANCES/NOCOV CONFIGURAL/CONFIG METRIC SCALAR ALLFREE/ALL", at, "CL19")) {
           if (v == "NOMEANSTRUCTURE") { out.nomeanstructure = true; nomean_span = at; }
           else if (v == "NOCOVARIANCES") out.nocovariances = true;
+          else if (v != "ALLFREE") {
+            if (!out.invariance.empty()) reject(at, "IV04", "Mplus runs multiple invariance models for a setting list; magmaan returns one model; write exactly one of CONFIGURAL, METRIC or SCALAR instead");
+            out.invariance = v;
+          }
           else reject(at, v == "ALLFREE" ? "CL21" : "CL20", v + (v == "ALLFREE" ? " is outside scope" : " not yet supported; planned for increment 2; fit groups separately in R instead"));
         }
       } else if (name == "ESTIMATOR" || name == "INFORMATION" || name == "DISTRIBUTION" || name == "MATRIX") {
@@ -468,10 +511,19 @@ class Reader {
           else if (q == "POPULATION" || q == "COVERAGE" || q == "MISSING" ||
                    section.qualifier.starts_with("POPULATION-") || section.qualifier.starts_with("COVERAGE-") || section.qualifier.starts_with("MISSING-"))
             reject(at, "CL29", "simulation MODEL command is outside scope");
+          else if (!out.groups.empty() && std::any_of(out.groups.begin(),out.groups.end(),[&](const auto& g) {return upper(g.label)==section.qualifier;}))
+            out.group_sections.push_back({section.qualifier,span(section.body,section.end)});
+          else if (!out.groups.empty()) reject(at,"MG06","unknown or multi-label MODEL group '" + section.qualifier + "'; Mplus requires one declared group label per section; write one GROUPING label after MODEL instead");
           else reject(at, mixture ? "MS10" : grouping || data_groups ? "CL26" : "CL31", mixture ? "MODEL '" + section.qualifier + "' is a mixture class section in Mplus; mixtures are outside scope; supply a single-group continuous model instead" : grouping || data_groups ? "MODEL '" + section.qualifier + "' is a group section in Mplus; not yet supported; planned for increment " + std::string(data_groups ? "5" : "2") + "; fit groups separately in R instead" : "MODEL '" + section.qualifier + "' may denote longitudinal invariance in Mplus; outside scope; write an unqualified MODEL section instead");
         }
       }
     }
+    if (!out.grouping_variable.empty()) {
+      const auto name=std::find_if(out.names.begin(),out.names.end(),[&](const auto& n) {return upper(n)==upper(out.grouping_variable);});
+      if (name==out.names.end()) reject(span(0,0),"MG03","grouping variable is absent from NAMES; Mplus uses the data schema; add it to NAMES instead");
+      else out.grouping_variable=*name;
+    }
+    if (!out.invariance.empty() && out.groups.empty()) reject(span(0,0),"IV01","Mplus invariance shortcuts require GROUPING; magmaan cannot expand a single-group shortcut; add explicit GROUPING or write ordinary BY statements instead");
     for (std::size_t row = 0; row < lines.size(); ++row) {
       const auto begin = lines[row];
       const auto end = row + 1 < lines.size() ? lines[row + 1] - 1 : clean.size();
@@ -499,6 +551,7 @@ class Reader {
       }
       return std::unexpected(ParseError{ParseError::Kind::RejectedConstruct, rejects.front().span, std::move(detail)});
     }
+    if (!out.grouping_variable.empty()) std::erase_if(out.analysis,[&](const auto& n) {return upper(n)==upper(out.grouping_variable);});
     return std::move(out);
   }
 };

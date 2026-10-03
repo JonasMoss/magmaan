@@ -20,6 +20,8 @@ struct Row { std::string lhs, rhs, label; Op op; std::optional<double> fixed, st
 class Lowerer {
  public:
   MplusModel out;
+  bool group_mode = false;
+  std::vector<std::vector<Row>> grouped_rows;
   std::vector<Token> tokens;
   std::vector<std::string> observed, latent;
   std::set<std::string> observed_set, latent_set;
@@ -215,7 +217,7 @@ class Lowerer {
           if (kind == Op::Measurement) {
             const bool previous = factor_has_loading.contains(l.name);
             const bool mentioned = row_indices.contains(std::tuple{l.name,kind,r.name});
-            if (!previous && b == 0 && !fixed && !r.explicit_free) fixed = 1;
+            if (!group_mode && !previous && b == 0 && !fixed && !r.explicit_free) fixed = 1;
             if (mentioned && !r.fixed) fixed.reset();
             factor_has_loading.insert(l.name); indicators.insert(r.name); dependent.insert(r.name);
           } else if (kind == Op::Regression) { dependent.insert(l.name); predictors.insert(r.name); }
@@ -258,6 +260,78 @@ class Lowerer {
     }
     if (op == "by") for (const auto& l : lhs) defined.insert(l.name);
   }
+  // production: model_qualifier ::= group_label
+  void expand_groups() {
+    if (!rows.empty() && out.input.groups.size()>100000/rows.size()) {
+      reject(out.input.model_body,"MG01","group replication exceeds 100000 parameter rows; Mplus fits larger group models, but magmaan bounds expansion; reduce the number of groups or relations instead");return;
+    }
+    const auto common = rows;
+    const auto key = [](const Row& r) {return std::tuple{r.lhs,r.op,r.rhs};};
+    const auto original_dependent=dependent, original_predictors=predictors, original_indicators=indicators;
+    const bool shortcut=!out.input.invariance.empty();
+    if (shortcut) {
+      if (!out.input.group_sections.empty()) { reject(out.input.model_body,"IV01","Mplus shortcuts do not permit partial invariance; magmaan expands an overall first-order BY model only; remove group sections or write ordinary MODEL statements instead"); return; }
+      for (const auto& row:common) if (row.span.begin!=out.input.model_body.begin && (row.op!=Op::Measurement || is_latent(row.rhs)) && !(row.op==Op::Covariance && row.lhs==row.rhs && is_latent(row.lhs) && row.fixed==1)) {
+        reject(row.span,"IV01","Mplus invariance shortcuts require only first-order BY statements; magmaan does not expand structural or second-order shortcuts; write ordinary grouped MODEL statements instead"); return;
+      }
+    }
+    std::size_t equality=0;
+    std::map<std::tuple<std::string,Op,std::string>,std::string> defaults;
+    for (const auto& row:common) if (row.label.empty() && !row.fixed &&
+        ((row.op==Op::Measurement && !is_latent(row.rhs)) || (row.op==Op::Intercept && indicators.contains(row.lhs))))
+      defaults[key(row)]=".mg"+std::to_string(++equality)+".";
+    for (std::size_t g=0; g<out.input.groups.size(); ++g) {
+      rows=common; row_indices.clear();
+      for (std::size_t i=0;i<rows.size();++i) {
+        auto& row=rows[i]; row_indices[key(row)]=i;
+        if (defaults.contains(key(row))) row.label=defaults.at(key(row));
+        const bool generated=row.span.begin==out.input.model_body.begin;
+        if (row.op==Op::Intercept && is_latent(row.lhs) && generated && g>0) row.fixed.reset();
+        if (shortcut) {
+          const auto& setting=out.input.invariance;
+          if ((setting=="CONFIGURAL" && row.op==Op::Measurement) || (setting!="SCALAR" && row.op==Op::Intercept && indicators.contains(row.lhs))) {if (row.label.starts_with(".mg")) row.label.clear();}
+          if (row.op==Op::Intercept && is_latent(row.lhs)) row.fixed=(setting=="SCALAR" && g>0) ? std::nullopt : std::optional<double>{0};
+          // A fixed factor variance in the overall MODEL identifies the variance
+          // version; metric/scalar release it in later groups (TECH1, IV05).
+          if (row.op==Op::Covariance && row.lhs==row.rhs && is_latent(row.lhs) && row.fixed==1 && setting!="CONFIGURAL" && g>0) row.fixed.reset();
+        }
+      }
+      group_mode=true;
+      for (const auto& section:out.input.group_sections) if (lower(section.label)==lower(out.input.groups[g].label)) {
+        const auto body=out.input.model_body; out.input.model_body=section.body;
+        tokens.clear(); lex(); std::vector<Token> current;
+        for (const auto& token:tokens) {if (token.text==";") {statement(current);current.clear();} else current.push_back(token); if(error) break;}
+        if (!current.empty()) reject(current.front().span,"MS01","group MODEL statement lacks a terminator; Mplus requires ';'; add ';' instead");
+        out.input.model_body=body;
+        if (error) return;
+      }
+      if (dependent!=original_dependent || predictors!=original_predictors || indicators!=original_indicators) {
+        reject(out.input.model_body,"MG06","a group section changes a variable's indicator, predictor or dependent role; Mplus accepts extra indicators but rejects overall-absent group regressions as ignored statements (P-MG13); magmaan's common variable-role contract cannot preserve such differences; put the relation in the overall MODEL and fix its coefficient in the other groups instead"); return;
+      }
+      for (const auto& row:rows) if ((row.op==Op::Covariance || row.op==Op::Intercept) &&
+          ((observed_set.contains(row.lhs) && predictors.contains(row.lhs) && !dependent.contains(row.lhs)) ||
+           (observed_set.contains(row.rhs) && predictors.contains(row.rhs) && !dependent.contains(row.rhs)))) {
+        reject(row.span,"MS08","a group section explicitly mentions an observed independent variable's moment; Mplus models that variable while conditioning on others, but magmaan does not reproduce mixed conditioning; remove its variance, mean or WITH mention instead");return;
+      }
+      grouped_rows.push_back(rows);
+    }
+    group_mode=false;
+    // Union topology: generated zero entries add neither parameters nor df.
+    rows=common; row_indices.clear();
+    for (std::size_t i=0;i<rows.size();++i) row_indices[key(rows[i])]=i;
+    for (const auto& group:grouped_rows) for (const auto& row:group) if (!row_indices.contains(key(row))) {row_indices[key(row)]=rows.size();rows.push_back(row);}
+    for (auto& group:grouped_rows) {
+      std::map<std::tuple<std::string,Op,std::string>,Row> by_key;
+      for (const auto& row:group) by_key.emplace(key(row),row);
+      group.clear();
+      for (const auto& row:rows) {
+        auto found=by_key.find(key(row));
+        if (found!=by_key.end()) group.push_back(found->second);
+        else {auto zero=row;zero.fixed=0;zero.start.reset();zero.label.clear();zero.span={};group.push_back(std::move(zero));}
+      }
+    }
+  }
+
   // production: model_body ::= model_statement*
   parse_expected<MplusModel> run() {
     if (out.input.model_body.begin == out.input.model_body.end) {
@@ -306,16 +380,42 @@ class Lowerer {
       if ((exo(l) && exo(r)) || (final(l) && final(r))) put({l,r,"",Op::Covariance,{},{},out.input.model_body},false);
     }
     if (error) return std::unexpected(*error);
+    if (!out.input.groups.empty()) {expand_groups();if(error) return std::unexpected(*error);}
     // Resolve names only after role/default calculations; labels remain case-folded.
     for (auto& row : rows) {
       row.lhs = spelling.at(row.lhs);
       if (!row.rhs.empty()) row.rhs = spelling.at(row.rhs);
     }
+    for (auto& group:grouped_rows) for (auto& row:group) {
+      row.lhs=spelling.at(row.lhs);if(!row.rhs.empty()) row.rhs=spelling.at(row.rhs);
+    }
+    for (std::size_t g=0;g<grouped_rows.size();++g) for (const auto& row:grouped_rows[g])
+      if (row.span.end==0 || row.span.begin==out.input.model_body.begin)
+        out.generated_rows.push_back({row.lhs,row.rhs,row.op,static_cast<std::int32_t>(g+1)});
+    if (grouped_rows.empty()) for (const auto& row:rows) if(row.span.begin==out.input.model_body.begin)
+      out.generated_rows.push_back({row.lhs,row.rhs,row.op,1});
     auto& flat = out.flat;
     flat.source_text.assign(out.input.source.begin(),out.input.source.end());
     std::map<std::string,std::size_t> offsets;
     for (const auto& row : rows) for (const auto* value : {&row.lhs,&row.rhs,&row.label}) if (!offsets.contains(*value)) { offsets[*value] = flat.symbol_text.size(); flat.symbol_text.insert(flat.symbol_text.end(),value->begin(),value->end()); flat.symbol_text.push_back('\0'); }
+    for (const auto& group:grouped_rows) for (const auto& row:group) if (!offsets.contains(row.label)) {offsets[row.label]=flat.symbol_text.size();flat.symbol_text.insert(flat.symbol_text.end(),row.label.begin(),row.label.end());flat.symbol_text.push_back('\0');}
     const auto view = [&](const auto& s) { return std::string_view(flat.symbol_text.data()+offsets.at(s),s.size()); };
+    if (!grouped_rows.empty()) {
+      for (std::size_t i=0;i<rows.size();++i) {
+        GroupVec values, starts;bool any_start=false;
+        for (const auto& group:grouped_rows) {
+          const auto& row=group[i];
+          if(row.fixed) values.per_group.push_back(FixedValue{*row.fixed});
+          else if(!row.label.empty()) values.per_group.push_back(Label{view(row.label)});
+          else values.per_group.push_back(Free{});
+          if(row.start && !row.fixed) {starts.per_group.push_back(StartValue{*row.start});any_start=true;} else starts.per_group.push_back(Free{});
+        }
+        const auto& row=rows[i];
+        if(any_start) flat.rows.push_back({view(row.lhs),row.op,view(row.rhs),1,flat.add_modifier(std::move(starts)),row.span});
+        flat.rows.push_back({view(row.lhs),row.op,view(row.rhs),1,flat.add_modifier(std::move(values)),row.span});
+      }
+      return std::move(out);
+    }
     for (const auto& row : rows) {
       std::uint32_t mod = 0;
       if (row.fixed) mod = flat.add_modifier(FixedValue{*row.fixed});

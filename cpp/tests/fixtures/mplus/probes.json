@@ -33718,5 +33718,542 @@
         ]
       }
     }
+  },
+  "P-MG13": {
+    "settles": "MG06",
+    "variants": {
+      "group_only_regression": {
+        "variable": "NAMES = y1 y2 y3 y4 x1 g;\nGROUPING = g (1 = g1 2 = g2); ",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3;\nMODEL g2: y4 ON x1;",
+        "data": "",
+        "title": null,
+        "seed": 58047,
+        "note": null,
+        "status": "error",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [
+          "*** ERROR"
+        ],
+        "warnings": [
+          "*** WARNING in MODEL command",
+          "*** WARNING in MODEL command",
+          "*** WARNING in MODEL command"
+        ],
+        "diagnostics": [
+          {
+            "header": "*** WARNING in MODEL command",
+            "message": "Variable is uncorrelated with all other variables:  Y4"
+          },
+          {
+            "header": "*** WARNING in MODEL command",
+            "message": "Variable is uncorrelated with all other variables:  X1"
+          },
+          {
+            "header": "*** WARNING in MODEL command",
+            "message": "At least one variable is uncorrelated with all other variables in the model. Check that this is what is intended."
+          },
+          {
+            "header": "*** ERROR",
+            "message": "The following MODEL statements are ignored: * Statements in Group G2: Y4 ON X1"
+          }
+        ],
+        "observations": [],
+        "free_parameters": [],
+        "chi_square": [],
+        "variable_order": [],
+        "tech1": [],
+        "model_results": [],
+        "estimation_messages": [],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": []
+      },
+      "group_only_indicator": {
+        "variable": "NAMES = y1 y2 y3 y4 g;\nGROUPING = g (1 = g1 2 = g2); ",
+        "analysis": "ESTIMATOR = ML;",
+        "model": "f BY y1-y3;\nMODEL g2: f BY y4;",
+        "data": "",
+        "title": null,
+        "seed": 58047,
+        "note": null,
+        "status": "accepted",
+        "version": "Mplus VERSION 9.1 DEMO (Linux)",
+        "errors": [],
+        "warnings": [
+          "*** WARNING in MODEL command",
+          "*** WARNING in MODEL command"
+        ],
+        "diagnostics": [
+          {
+            "header": "*** WARNING in MODEL command",
+            "message": "Variable is uncorrelated with all other variables:  Y4"
+          },
+          {
+            "header": "*** WARNING in MODEL command",
+            "message": "At least one variable is uncorrelated with all other variables in the model. Check that this is what is intended. 2 WARNING(S) FOUND IN THE INPUT INSTRUCTIONS"
+          }
+        ],
+        "observations": [
+          {
+            "group": "G1",
+            "n": 500
+          },
+          {
+            "group": "G2",
+            "n": 500
+          }
+        ],
+        "free_parameters": [
+          18
+        ],
+        "chi_square": [
+          {
+            "value": 73.153,
+            "df": 10
+          }
+        ],
+        "variable_order": [
+          {
+            "role": "Observed dependent variables",
+            "variables": [
+              "Y1",
+              "Y2",
+              "Y3",
+              "Y4"
+            ]
+          },
+          {
+            "role": "Continuous latent variables",
+            "variables": [
+              "F"
+            ]
+          }
+        ],
+        "tech1": [
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "NU",
+            "columns": ["Y1", "Y2", "Y3", "Y4"],
+            "rows": {
+              "vector": {
+                "Y1": 1,
+                "Y2": 2,
+                "Y3": 3,
+                "Y4": 4
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 5
+              },
+              "Y3": {
+                "F": 6
+              },
+              "Y4": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3", "Y4"],
+            "rows": {
+              "Y1": {
+                "Y1": 7
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 8
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 9
+              },
+              "Y4": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 0,
+                "Y4": 10
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "ALPHA",
+            "columns": "F",
+            "rows": {
+              "vector": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 11
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "NU",
+            "columns": ["Y1", "Y2", "Y3", "Y4"],
+            "rows": {
+              "vector": {
+                "Y1": 1,
+                "Y2": 2,
+                "Y3": 3,
+                "Y4": 4
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "LAMBDA",
+            "columns": "F",
+            "rows": {
+              "Y1": {
+                "F": 0
+              },
+              "Y2": {
+                "F": 5
+              },
+              "Y3": {
+                "F": 6
+              },
+              "Y4": {
+                "F": 12
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "THETA",
+            "columns": ["Y1", "Y2", "Y3", "Y4"],
+            "rows": {
+              "Y1": {
+                "Y1": 13
+              },
+              "Y2": {
+                "Y1": 0,
+                "Y2": 14
+              },
+              "Y3": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 15
+              },
+              "Y4": {
+                "Y1": 0,
+                "Y2": 0,
+                "Y3": 0,
+                "Y4": 16
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "ALPHA",
+            "columns": "F",
+            "rows": {
+              "vector": {
+                "F": 17
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "BETA",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 0
+              }
+            }
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "name": "PSI",
+            "columns": "F",
+            "rows": {
+              "F": {
+                "F": 18
+              }
+            }
+          }
+        ],
+        "model_results": [
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 1.026
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 1.099
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Means",
+            "parameter": "Y4",
+            "estimate": -0.02
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Means",
+            "parameter": "F",
+            "estimate": 0
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Intercepts",
+            "parameter": "Y1",
+            "estimate": -0.051
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Intercepts",
+            "parameter": "Y2",
+            "estimate": -0.023
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Intercepts",
+            "parameter": "Y3",
+            "estimate": 0.027
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Variances",
+            "parameter": "Y4",
+            "estimate": 1.339
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.451
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 0.882
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 1.078
+          },
+          {
+            "model": "single",
+            "group": "G1",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.972
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "F        BY",
+            "parameter": "Y1",
+            "estimate": 1
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "F        BY",
+            "parameter": "Y2",
+            "estimate": 1.026
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "F        BY",
+            "parameter": "Y3",
+            "estimate": 1.099
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "F        BY",
+            "parameter": "Y4",
+            "estimate": 0.995
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Means",
+            "parameter": "Y4",
+            "estimate": -0.02
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Means",
+            "parameter": "F",
+            "estimate": 0.033
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Intercepts",
+            "parameter": "Y1",
+            "estimate": -0.051
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Intercepts",
+            "parameter": "Y2",
+            "estimate": -0.023
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Intercepts",
+            "parameter": "Y3",
+            "estimate": 0.027
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Variances",
+            "parameter": "Y4",
+            "estimate": 1.007
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Variances",
+            "parameter": "F",
+            "estimate": 0.463
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Residual Variances",
+            "parameter": "Y1",
+            "estimate": 0.966
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Residual Variances",
+            "parameter": "Y2",
+            "estimate": 0.957
+          },
+          {
+            "model": "single",
+            "group": "G2",
+            "block": "Residual Variances",
+            "parameter": "Y3",
+            "estimate": 0.968
+          }
+        ],
+        "estimation_messages": [
+          "THE MODEL ESTIMATION TERMINATED NORMALLY"
+        ],
+        "integration": [],
+        "indirect_effects": [],
+        "generated_model": [],
+        "sample_statistics": [
+          [
+            "UNIVARIATE SAMPLE STATISTICS",
+            "",
+            "",
+            "     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR G1",
+            "",
+            "         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles",
+            "        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median",
+            "",
+            "     Y1                   -0.031       0.113      -3.001    0.20%      -1.018     -0.349     -0.050",
+            "             500.000       1.365      -0.181       3.263    0.20%       0.228      0.912",
+            "     Y2                    0.035       0.103      -3.339    0.20%      -1.130     -0.287      0.055",
+            "             500.000       1.525      -0.254       4.144    0.20%       0.357      1.107",
+            "     Y3                    0.005      -0.233      -4.031    0.20%      -1.023     -0.203      0.060",
+            "             500.000       1.502       0.054       3.321    0.20%       0.359      1.056",
+            "     Y4                   -0.049       0.135      -3.020    0.20%      -1.096     -0.360     -0.030",
+            "             500.000       1.338       0.117       4.818    0.20%       0.298      0.918",
+            "",
+            "",
+            "     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS FOR G2",
+            "",
+            "         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles",
+            "        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median",
+            "",
+            "     Y1                   -0.031      -0.115      -3.949    0.20%      -1.021     -0.332      0.012",
+            "             500.000       1.394      -0.246       2.870    0.20%       0.320      0.962",
+            "     Y2                   -0.032       0.136      -3.652    0.20%      -1.073     -0.334     -0.087",
+            "             500.000       1.466       0.157       4.686    0.20%       0.227      0.977",
+            "     Y3                    0.095       0.016      -3.565    0.20%      -0.942     -0.216      0.044",
+            "             500.000       1.538      -0.070       3.912    0.20%       0.362      1.117",
+            "     Y4                    0.033       0.214      -3.088    0.20%      -1.093     -0.353     -0.030",
+            "             500.000       1.463      -0.471       3.428    0.20%       0.289      1.161",
+            "",
+            ""
+          ]
+        ]
+      }
+    }
   }
 }

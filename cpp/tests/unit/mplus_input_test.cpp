@@ -160,7 +160,7 @@ TEST_CASE("Mplus input: CL17 CL19 CL20 CL21 CL18 CL22 CL23 MS11 settings") {
   CHECK(std::count_if(r->notes.begin(), r->notes.end(), [](const auto& n) { return n.rule == "CL17"; }) == 3);
   for (auto s : split("BASIC BAS RANDOM RAND COMPLEX COM MIXTURE MIX TWOLEVEL TWO THREELEVEL THREE CROSSCLASSIFIED CROSS EFA"))
     rejection(input("NAMES=y1;", "TYPE=" + s + ";"), "CL17");
-  for (auto s : split("CONFIGURAL CONFIG METRIC SCALAR")) rejection(input("NAMES=y1;", "MODEL=" + s + ";"), "CL20", "increment 2");
+  for (auto s : split("CONFIGURAL CONFIG METRIC SCALAR")) rejection(input("NAMES=y1;", "MODEL=" + s + ";"), "IV01", "GROUPING");
   rejection(input("NAMES=y1;", "MODEL=ALL;"), "CL21");
   for (auto s : {"BAYES", "MUML"}) rejection(input("NAMES=y1;", std::string("ESTIMATOR=") + s + ";"), "CL18");
   for (auto s : split("ML MLM MLMV MLR MLF WLS WLSM WLSMV ULS ULSMV GLS")) {
@@ -209,7 +209,7 @@ TEST_CASE("Mplus input: CL07 CL09 CL10 CL11 CL12 CL13 CL14 CL15 VARIABLE classif
   CHECK(r->notes[2].rule == "CL12");
   CHECK(r->notes[3].rule == "CL12");
   rejection(input("NAMES=y1; CATEGORICAL=y1;"), "CL10", "increment 3");
-  rejection(input("NAMES=y1; GROUPING=y1(1=a 2=b);"), "CL11", "increment 2");
+  CHECK(MplusParser::read(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")));
   rejection(input("NAMES=y1; AUXILIARY=y1(m);"), "CL15");
   for (const auto& name : split("USEOBSERVATIONS SUBPOPULATION")) rejection(input("NAMES=y1; " + name + "=x;"), "CL13");
   for (const auto& name : split("CENSORED NOMINAL COUNT DSURVIVAL TSCORES SURVIVAL TIMECENSORED LAGGED TINTERVAL")) rejection(input("NAMES=y1; " + name + "=x;"), "CL14");
@@ -239,7 +239,7 @@ TEST_CASE("Mplus input: CL06 CL16 CL26 CL27 CL28 CL29 CL31 CL32 opaque commands"
   rejection(input() + "MODEL PRIORS: anything;\n", "CL32");
   rejection(input() + "MODEL TEST: 0=a;\nMODEL TEST: 0=b;\n", "LX01", "repeated command");
   rejection(input() + "MODEL g1: y1;\n", "CL31");
-  rejection(input("NAMES=y1; GROUPING=y1(1=g1 2=g2);") + "MODEL g1: y1;\n", "CL26", "increment 2");
+  CHECK(MplusParser::read(input("NAMES=y1 g; GROUPING=g(1=g1 2=g2);") + "MODEL g1: y1;\n"));
   auto r = MplusParser::read(input() + "MODEL TEST: 0=a-b;\n");
   REQUIRE(r);
   CHECK(r->notes.back().rule == "CL28");
@@ -289,13 +289,13 @@ TEST_CASE("Mplus input: Mplus 9.1 Demo input-reader agreement gate") {
     if (id == "P-LX4" && variant == "columns_91") deviation = "LX02";
     if (id == "P-NM1" && variant == "mixed_range") deviation = "NM02";
     if (id == "P-DF5" && variant == "single") deviation = "MS11";
-    if (id == "P-DF5" && variant == "groups") deviation = "CL11";
+    if (id == "P-DF5" && variant == "groups") deviation = "MS11";
     if (!deviation.empty()) {
       REQUIRE_FALSE(result);
       CHECK(result.error().detail.find("[" + deviation + "]") != std::string::npos);
     } else CHECK(result.has_value() == (v.at("status") == "accepted"));
   }
-  CHECK(count == 108);
+  CHECK(count == 110);
   CHECK(gated > 15);
 }
 
@@ -312,4 +312,16 @@ TEST_CASE("Mplus input: reader refinements preserve actionable boundaries") {
   std::string many="NAMES=";
   for(int n=0;n<10;++n) many+="v"+std::string(1,static_cast<char>('a'+n))+"0-v"+std::string(1,static_cast<char>('a'+n))+"10000\n";
   many+=';'; rejection(input(many),"NM02","100000");
+}
+
+TEST_CASE("Mplus input: MG03 explicit integer codes and cumulative sections") {
+  auto m=MplusParser::read(input("NAMES=Y1 G; GROUPING IS g (2.0 = B, -1 = A);")+"MODEL a: [y1];\nMODEL A: y1@1;\n");
+  REQUIRE(m); CHECK(m->grouping_variable=="G"); REQUIRE(m->groups.size()==2);
+  CHECK(m->groups[0].code=="-1");CHECK(m->groups[1].code=="2");
+  CHECK(m->groups[0].label=="A");CHECK(m->group_sections.size()==2);
+  for (const auto& value:{"g (2)","g (1 2)","g (1-2)","g (1=a 1.0=b)","g (1=a 2=A)","g h (1=a 2=b)","g (1=a 2.5=b)"})
+    rejection(input(std::string("NAMES=y1 g h; GROUPING=")+value+";"),"MG03","instead");
+  rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")+"MODEL a b: y1;\n","MG06","one");
+  rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")+"MODEL c: y1;\n","MG06","declared");
+  rejection(input("NAMES=y1 g; GROUPING=g(1=a 2=b);","MODEL=CONFIGURAL METRIC;"),"IV04","exactly one");
 }

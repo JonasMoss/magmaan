@@ -96,7 +96,7 @@ test_that("Mplus inputs retain notes, spelling, starts and serialize across proc
 test_that("Mplus rejects unsupported inputs and construction overrides explicitly", {
   base <- mplus_input(mplus_cases[[1]])
   for (item in list(c(paste0(base,"DEFINE: x1=2;\n"),"CL16"),
-                    c(sub("NAMES=", "GROUPING=g(1=a 2=b); NAMES=",base),"CL11"),
+                    c(sub("NAMES=", "GROUPING=g(1=a 2=b); NAMES=",base),"MG03"),
                     c(sub("F BY X1 X2 X3;", "x2 ON x1; x1;",base),"MS08"),
                     c(paste0(base,"ANALYSIS: MODEL=NOMEANSTRUCTURE;\n"),"MS11"),
                     c(sub("x1 x2 x3", "a1b-a3b",base),"NM02"))) {
@@ -107,5 +107,60 @@ test_that("Mplus rejects unsupported inputs and construction overrides explicitl
   expect_error(mplus_model(base,file="x"), "exactly one")
   m <- mplus_model(base)
   expect_error(magmaanlab:::.rebuild_model_spec(m, overrides=list(fixed_x=FALSE)), "cannot be overridden")
-  expect_error(magmaanlab:::.rebuild_model_spec(m, group="g"), "only one group")
+  expect_error(magmaanlab:::.rebuild_model_spec(m, group="g"), "edit mplus_source")
+})
+
+test_that("Mplus multiple groups preserve numeric order, topology and live lavaan fits", {
+  skip_if_not_installed("lavaan")
+  set.seed(5202)
+  n <- 600L; f <- rnorm(2*n)
+  d <- data.frame(y1=f+.8*rnorm(2*n),y2=.8*f+.8*rnorm(2*n),
+    y3=.7*f+.8*rnorm(2*n),y4=.9*f+.8*rnorm(2*n),G=rep(c(2,1),each=n))
+  input <- paste("DATA: FILE=x;", "VARIABLE: NAMES=y1 y2 y3 y4 G;",
+    "GROUPING=g(2=b 1=a);", "MODEL: f BY y1-y4;",
+    "MODEL b: f BY y2*0.8;", "[y3]; y1 WITH y2;",sep="\n")
+  s <- mplus_model(input)
+  expect_identical(s$group_var,"G")
+  expect_identical(s$group_labels,c("1","2"))
+  expect_equal(s$mplus_groups,data.frame(label=c("a","b"),code=c("1","2")))
+  expect_output(print(s),"a = 1, b = 2")
+  zero <- s$partable$group==1 & s$partable$lhs=="y1" & s$partable$op=="~~" & s$partable$rhs=="y2"
+  if (!any(zero)) zero <- s$partable$group==1 & s$partable$lhs=="y2" & s$partable$op=="~~" & s$partable$rhs=="y1"
+  expect_equal(s$partable$user[zero],0L)
+  expect_equal(s$partable$ustart[zero],0)
+  expect_equal(fit_model(s,d,groups="G")$partable$group,s$partable$group)
+  projection <- lavaan::lavaanify(s$syntax, ngroups=2, meanstructure=TRUE,
+    auto.var=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE,auto.fix.first=FALSE)
+  expect_equal(projection$ustart[projection$lhs=="f" & projection$op=="=~" & projection$rhs=="y2" & projection$group==2],.8)
+  expect_true(projection$free[projection$lhs=="f" & projection$op=="=~" & projection$rhs=="y2" & projection$group==2]>0)
+  syntax <- paste("f =~ c(1,1)*y1 + c(l2,NA)*y2 + c(l3,l3)*y3 + c(l4,l4)*y4",
+    "f ~~ c(NA,NA)*f; f ~ c(0,NA)*1",
+    "y1 ~~ c(NA,NA)*y1 + c(0,NA)*y2; y2 ~~ c(NA,NA)*y2",
+    "y3 ~~ c(NA,NA)*y3; y4 ~~ c(NA,NA)*y4",
+    "y1 ~ c(i1,i1)*1; y2 ~ c(i2,i2)*1; y3 ~ c(i3,NA)*1; y4 ~ c(i4,i4)*1",sep="\n")
+  ref <- lavaan::lavaan(syntax,data=d,group="G",group.label=c("1","2"),
+    meanstructure=TRUE,fixed.x=TRUE,auto.var=FALSE,auto.cov.lv.x=FALSE,
+    auto.cov.y=FALSE,auto.fix.first=FALSE,auto.fix.single=FALSE,information="expected")
+  pt <- lavaan::parTable(ref); a <- fit_model(s,d)
+  keep <- a$partable$op!="=="
+  key <- function(x) paste(x$group,mplus_key(x))
+  idx <- match(key(a$partable[keep,]),key(pt))
+  expect_false(anyNA(idx))
+  expect_equal(a$partable$free[keep]>0,pt$free[idx]>0)
+  expect_equal(a$partable$est[keep],pt$est[idx],tolerance=1e-5)
+  got <- magmaan_core$inference_se(magmaan_core$inference_vcov(magmaan_core$inference_information_expected(a), a))
+  free <- a$partable$free[keep]>0
+  expect_equal(got[a$partable$free[keep][free]],pt$se[idx][free],tolerance=1e-5,ignore_attr=TRUE)
+  expect_equal(fit_measures(a)$chisq,unname(lavaan::fitMeasures(ref,"chisq")),tolerance=1e-5)
+  b <- fit_model(s,d[nrow(d):1,])
+  expect_equal(a$partable$est[keep],b$partable$est[keep],tolerance=1e-5)
+  rebuilt <- magmaanlab:::.rebuild_model_spec(s,group="G",group_labels=c("1","2"))
+  expect_equal(rebuilt$partable,s$partable)
+  path <- tempfile(fileext=".rds");on.exit(unlink(path),add=TRUE);saveRDS(s,path)
+  c <- fit_model(readRDS(path),d)
+  expect_equal(c$partable$est[keep],a$partable$est[keep],tolerance=1e-5)
+  expect_error(magmaanlab:::.rebuild_model_spec(s,group="other"),"MG03.*edit mplus_source")
+  expect_error(magmaanlab:::.rebuild_model_spec(s,group_labels=c("2","1")),"MG03.*edit mplus_source")
+  d$G[1:3] <- 3
+  expect_error(fit_model(s,d),"MG03.*3 \\(3 rows\\).*Mplus drops.*filter")
 })

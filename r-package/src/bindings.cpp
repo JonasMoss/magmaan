@@ -368,6 +368,7 @@ Rcpp::List mplus_model_impl(std::string source) {
   magmaan::spec::Starts starts;
   auto model = magmaan::spec::build(parsed->flat, options, &starts, &names);
   if (!model) Rcpp::stop("magmaan Mplus model error: %s", model.error().detail);
+  magmaan::compat::mplus::apply_provenance(*parsed,*model,names);
   auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
   const auto n = parsed->notes.size();
   Rcpp::CharacterVector klass(n), rule(n), message(n);
@@ -379,9 +380,16 @@ Rcpp::List mplus_model_impl(std::string source) {
     rule[i] = note.rule; message[i] = note.message;
     line[i] = note.span.line; col[i] = note.span.col;
   }
+  Rcpp::CharacterVector group_label(parsed->input.groups.size()), group_code(parsed->input.groups.size());
+  for (std::size_t i=0;i<parsed->input.groups.size();++i) {
+    group_label[i]=parsed->input.groups[i].label;group_code[i]=parsed->input.groups[i].code;
+  }
   return Rcpp::List::create(
       Rcpp::_["partable"] = lavaan_partable_df(pt),
       Rcpp::_["syntax"] = magmaan::compat::mplus::to_lavaan_syntax(parsed->flat),
+      Rcpp::_["group_var"] = options.group_var,
+      Rcpp::_["group_labels"] = group_code,
+      Rcpp::_["groups"] = Rcpp::DataFrame::create(Rcpp::_["label"] = group_label, Rcpp::_["code"] = group_code),
       Rcpp::_["meanstructure"] = options.meanstructure,
       Rcpp::_["notes"] = Rcpp::DataFrame::create(Rcpp::_["class"] = klass,
           Rcpp::_["rule"] = rule, Rcpp::_["line"] = line, Rcpp::_["col"] = col,

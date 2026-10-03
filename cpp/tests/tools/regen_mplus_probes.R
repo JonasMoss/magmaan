@@ -297,6 +297,8 @@ extract_section <- function(out, start, ends) {
 # Bind each result to the inventory's Settles cell without duplicating rule text.
 inventory <- readLines(file.path(root,'project/grammar/mplus_source_inventory.md'))
 probe_lines <- grep('^\\| P-',inventory,value=TRUE)
+mg('P-MG13', 'group_only_regression', 'f BY y1-y3;\nMODEL g2: y4 ON x1;', 'y1 y2 y3 y4 x1')
+mg('P-MG13', 'group_only_indicator', 'f BY y1-y3;\nMODEL g2: f BY y4;', 'y1 y2 y3 y4')
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))

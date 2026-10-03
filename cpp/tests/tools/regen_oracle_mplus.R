@@ -274,3 +274,8 @@ write_json(list(meta=list(lavaan_version=version,mplus_version='9.1 Demo',
   output,auto_unbox=TRUE,pretty=TRUE,digits=16,na='null',null='null')
 if (file.info(output)$size >= 300000) stop('Fixture exceeds 300 KB')
 cat('Wrote',output,'\n')
+
+# Increment 2 extends the same frozen fixture with independently specified groups.
+status <- system2(file.path(R.home('bin'),'Rscript'),
+  shQuote(file.path(root,'cpp/tests/tools/regen_oracle_mplus_groups.R')))
+if (status != 0L) stop('Multigroup oracle generation failed')

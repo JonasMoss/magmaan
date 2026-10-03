@@ -626,6 +626,56 @@ Focused opt gates: 24 Mplus cases/4,636 assertions and one API case/nine
 assertions pass. Full lab testthat passes (5,018 assertions) with two existing two-level
 admissibility warnings and two documented skips.
 
+### Mplus multiple groups (TASK-52)
+
+The continuous GROUPING frontend uses ascending integer code order and source
+label metadata. P-MG8–P-MG12 settled asymmetric rows, repeated sections,
+last-mention overrides, multi-label rejection and integer coding (including
+negative/integral-decimal codes). P-MG13 adds group-specific role probes:
+Mplus rejects an overall-absent group regression as ignored and accepts an
+extra indicator. Both are rejected with a rewrite instruction where the common
+variable-role contract cannot preserve the group-specific roles.
+
+`regen_oracle_mplus.R` now extends `mplus/golden.json` with 14 independently
+specified grouped cases (the separate helper is `regen_oracle_mplus_groups.R`).
+Default/three-group CFA, named/numeric ties, first-group mean release, asymmetric
+residual covariance, reversed declaration/raw-row order, structural regressions,
+second-order CFA and all six shortcut/identification combinations have proper
+lavaan fits (nonnegative variances, chi-square p >= .001). The second-order
+fixture explicitly pins first-order latent intercepts, avoiding redundant
+higher-/first-order latent mean identification. Demo TECH1 checks every
+fixed/free cell and equality partition; counts/df are exact. Every printed
+Demo estimate and chi-square matches the existing printed-precision allowance.
+C++ gates compare independently written rows, ML estimates, expected SEs,
+implied means/covariances and chi-square against pinned lavaan at 1e-5.
+Both shortcut identifications give 38/34/30 parameters and 16/20/24 df.
+
+The end-to-end corpus gate increases from 15 to **22 accepted/matched among
+68 eligible**, with zero failures; 46 remain rejected (CL10 15, CL27 10, GR01
+7, NM03 7, CL13 3, CL15/CL16/IV04/MG03 one each). Four raw CSVs store source
+labels rather than integer codes; the harness restores their declared coding
+without dropping rows. The adapter still rejects undeclared codes with row
+counts and an explicit filtering instruction.
+
+`check_mplus_input_corpus.R` sweeps 2,440 original files including archive
+members; same-manifest pre-increment/current acceptance is **253/291 reader**
+and **189/217 MODEL**. All rejections are classified, with no crashes or hangs.
+One existing archive (`ex11.8imp.zip`) is unreadable and reported separately.
+The inventory records the first-rule tallies; raw results stay in the log cache.
+The older reader-only tally used a different extraction/uniqueness convention.
+
+The lab gates compare live independent lavaan rows, fits and expected SEs,
+check group order regardless of row appearance, source rebuilds and serialized
+specs, and reject conflicting grouping and undeclared data codes. Projection
+checks cover per-group starts and labelled intercepts. Generated default/zero
+row provenance is applied in the C++ compatibility layer before projection.
+Focused opt gates pass 30 Mplus cases / 11,976 assertions and three API
+cases / 20 assertions. The full magmaanlab suite passes 166 tests / 5,083
+expectations (5,079 passes, two skips and two warnings), with no failures or
+errors; the
+full suite retains its optional-test skips and existing two-level admissibility
+warnings. No tolerance was widened and no oracle exemption was added.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

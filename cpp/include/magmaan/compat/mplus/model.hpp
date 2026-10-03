@@ -9,6 +9,8 @@ namespace magmaan::compat::mplus {
 // may be added by spec::build; starts remain explicit caller hints.
 std::string to_lavaan_syntax(const parse::FlatPartable& flat);
 
+void apply_provenance(const parse::MplusModel& parsed, const spec::LatentStructure& structure, spec::LatentNames& names);
+
 spec::BuildOptions build_options(const parse::MplusInput& input);
 
 }  // namespace magmaan::compat::mplus

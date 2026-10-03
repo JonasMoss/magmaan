@@ -137,6 +137,7 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
       else continue;
       std::optional<int> number;
       for(const auto& matrix:v["tech1"]) {
+        if (!m->input.groups.empty() && matrix["group"].get<std::string>()!=upper(m->input.groups[static_cast<std::size_t>(pt.group[i]-1)].label)) continue;
         if(std::find(matrices.begin(),matrices.end(),matrix["name"].get<std::string>())==matrices.end()) continue;
         const auto& cells=matrix["rows"];
         if(cells.contains(row) && cells[row].contains(col)) { const int n=cells[row][col].get<int>(); if(!number || n>0) number=n; }
@@ -175,4 +176,56 @@ TEST_CASE("Mplus MODEL: canonical observed and first BY spelling and BY lists") 
   CHECK(m->flat.rows[0].rhs == "Y1");
   reject("f1-f3 BY y1-y3;", "MS09");
   reject("f1 f2 BY y1-y3;", "MS09");
+}
+
+TEST_CASE("Mplus MODEL: MG04 MG06 MG07 MG08 ordered groups and overrides") {
+  const std::string text="DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 y4 g;\nGROUPING=g(2=b 1=a);\nMODEL: f BY y1-y4;\nMODEL b: f BY y2*0.8;\n[y3]; y1 WITH y2;\nMODEL a: [f];\nMODEL b: f BY y2@0.9;\nMODEL b: f BY y2;\n";
+  auto m=parse::MplusParser::parse(text);REQUIRE_MESSAGE(m,(m ? "" : m.error().detail));
+  spec::LatentNames names;spec::Starts starts;
+  auto st=spec::build(m->flat,compat::mplus::build_options(m->input),&starts,&names);REQUIRE(st);
+  auto pt=compat::lavaan::to_lavaan_partable(*st,names,starts);
+  CHECK(pt.group_labels==std::vector<std::string>{"1","2"});
+  std::map<std::string,std::string> got;
+  for(std::size_t i=0;i<pt.size();++i) if(pt.op[i]!=parse::Op::EqConstraint && !pt.exo[i])
+    got[std::to_string(pt.group[i])+":"+key(pt.lhs[i],pt.op[i],pt.rhs[i])]=pt.free[i] ? (pt.label[i].empty()?"free":pt.label[i]) : std::to_string(pt.ustart[i]);
+  const std::map<std::string,std::string> expected={
+    {"1:f=~y1","1.000000"},{"2:f=~y1","1.000000"},
+    {"1:f=~y2",".mg1."},{"2:f=~y2","free"},
+    {"1:f=~y3",".mg2."},{"2:f=~y3",".mg2."},
+    {"1:f=~y4",".mg3."},{"2:f=~y4",".mg3."},
+    {"1:y1~1",".mg4."},{"2:y1~1",".mg4."},
+    {"1:y2~1",".mg5."},{"2:y2~1",".mg5."},
+    {"1:y3~1",".mg6."},{"2:y3~1","free"},
+    {"1:y4~1",".mg7."},{"2:y4~1",".mg7."},
+    {"1:y1~~y1","free"},{"2:y1~~y1","free"},
+    {"1:y2~~y2","free"},{"2:y2~~y2","free"},
+    {"1:y3~~y3","free"},{"2:y3~~y3","free"},
+    {"1:y4~~y4","free"},{"2:y4~~y4","free"},
+    {"1:f~~f","free"},{"2:f~~f","free"},
+    {"1:f~1","free"},{"2:f~1","free"},
+    {"1:y1~~y2","0.000000"},{"2:y1~~y2","free"}};
+  CHECK(got==expected);CHECK(model::build_matrix_rep(*st,&names));
+}
+TEST_CASE("Mplus MODEL: IV05 marker and variance identification counts") {
+  for(const auto& method:{"CONFIGURAL","METRIC","SCALAR"}) for(bool variance:{false,true}) {
+    auto text=std::string("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 y4 y5 y6 g;\nGROUPING=g(1=a 2=b);\nANALYSIS: MODEL=")+method+";\nMODEL: "+(variance?"f1 BY y1* y2-y3; f2 BY y4* y5-y6; f1@1 f2@1;":"f1 BY y1-y3; f2 BY y4-y6;")+"\n";
+    auto m=parse::MplusParser::parse(text);REQUIRE_MESSAGE(m,(m?"":m.error().detail));
+    spec::LatentNames names;spec::Starts starts;auto st=spec::build(m->flat,compat::mplus::build_options(m->input),&starts,&names);REQUIRE(st);
+    std::set<int> eq;for(auto group:st->eq_groups) eq.insert(group);
+    CHECK(eq.size()==(std::string(method)=="CONFIGURAL"?38:std::string(method)=="METRIC"?34:30));
+  }
+}
+
+TEST_CASE("Mplus MODEL: MG06 group-specific variable roles are explicit boundaries") {
+  for(const auto& section:{"y4 ON x1;","f BY y4;"}) {
+    auto m=parse::MplusParser::parse(std::string("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 y4 x1 g;\nGROUPING=g(1=a 2=b);\nMODEL: f BY y1-y3;\nMODEL b: ")+section+"\n");
+    REQUIRE_FALSE(m);if(m) continue;CHECK(m.error().detail.find("[MG06]")!=std::string::npos);CHECK(m.error().detail.find("instead")!=std::string::npos);
+  }
+}
+
+TEST_CASE("Mplus MODEL: MS08 mixed conditioning is rejected in group sections") {
+  for(const auto& section:{"[x1];","x1;","y1 WITH x1;"}) {
+    auto m=parse::MplusParser::parse(std::string("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3 x1 g;\nGROUPING=g(1=a 2=b);\nMODEL: f BY y1-y3; f ON x1;\nMODEL b: ")+section+"\n");
+    REQUIRE_FALSE(m);if(m) continue;CHECK(m.error().detail.find("[MS08]")!=std::string::npos);CHECK(m.error().detail.find("remove")!=std::string::npos);
+  }
 }

@@ -5,6 +5,10 @@
   each calibrated with SB and PEBA4. Score sensitivity is observed with an
   expected metric; nested LR uses empirical scores at the larger fit.
   Components fail separately with typed reasons.
+- mplus_model() imports continuous GROUPING models, cumulative group sections,
+  cross-group defaults and one CONFIGURAL/METRIC/SCALAR shortcut. Specs preserve
+  numeric group order and source labels; unlisted data codes require filtering
+  in R. Group-specific variable-role changes remain explicit rejections.
 - Scalar profile tests and intervals now default to the misspecification-scaled
   reference. Empirical laws require raw data; callers can explicitly select
   ordinary or robust-scaled comparators.

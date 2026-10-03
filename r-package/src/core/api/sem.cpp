@@ -321,11 +321,12 @@ Result<MplusModel> model_from_mplus(std::string_view source) {
   spec::LatentNames names;
   auto structure = spec::build(parsed->flat, options.build, &starts, &names);
   if (!structure) return std::unexpected(make_error(ErrorStage::Model, structure.error()));
+  compat::mplus::apply_provenance(*parsed,*structure,names);
   auto rep = model::build_matrix_rep(*structure, &names);
   if (!rep) return std::unexpected(make_error(ErrorStage::Model, rep.error()));
   return MplusModel{Model(std::string(source), std::move(parsed->flat),
       std::move(*structure), std::move(names), std::move(starts),
-      std::move(*rep), options), std::move(parsed->notes)};
+      std::move(*rep), options), std::move(parsed->input.grouping_variable), std::move(parsed->input.groups), std::move(parsed->notes)};
 }
 
 Result<Model> Model::from_eqs(

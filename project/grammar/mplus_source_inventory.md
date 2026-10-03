@@ -80,7 +80,7 @@ bold stem must be written in full.
 | CL08 | VARIABLE: USEVARIABLES | S | 599–600. Default: all NAMES variables. Original variables precede DEFINE variables; the order governs later ranges (NM03). `ALL` as first entry means all NAMES variables. |
 | CL09 | VARIABLE: MISSING | DD | 601–603. |
 | CL10 | VARIABLE: CATEGORICAL (plain list) | S, later (increment 3) | 604–608. The category-set forms `(*)`, explicit sets and `(gpcm)`, `(3pl)`, `(4pl)` are ML-only and R. |
-| CL11 | VARIABLE: GROUPING | S, later (increment 2) | 612–613. |
+| CL11 | VARIABLE: GROUPING | S | 612–613. Implemented explicit integer code = label pairs; count/unlabelled forms await increment 5. |
 | CL12 | VARIABLE: IDVARIABLE; AUXILIARY plain list | E | 613–615. Only saved or plotted. |
 | CL13 | VARIABLE: USEOBSERVATIONS, SUBPOPULATION | R | 599, 626. Case selection (see [trigger entry](../backlog/speculative.md#mplus-define-and-case-selection)). |
 | CL14 | VARIABLE: CENSORED, NOMINAL, COUNT, DSURVIVAL, SURVIVAL, TIMECENSORED, LAGGED, TINTERVAL, TSCORES | R | 603–615, 635–639. Out-of-scope outcome types, survival, time series, random time scores. |
@@ -248,6 +248,13 @@ independent (x) variables carry no parameters.
 | MG12 | D, 516–519, 628–629 | KNOWNCLASS multiple groups follow mixture defaults (equal variances and slopes, reference in the last class), not GROUPING defaults. KNOWNCLASS is rejected (CL15). |
 | MG13 | P | Settled by P-MG5; see MG07. |
 
+Increment 2 implements MG01–MG08, MG11 and MG13 for continuous outcomes.
+MG03 accepts negative integers and decimal spellings of integers, rejects
+fractional codes and duplicate numeric codes/case-insensitive labels. MG06
+accepts cumulative repeated sections and group-only parameters as generated
+fixed-zero rows elsewhere; group-specific variable-role changes are rejected
+(P-MG13). MG09 and MG12 remain categorical/mixture boundaries.
+
 ## Measurement-invariance shortcuts
 
 | ID | Evidence | Rule and implementation consequence |
@@ -257,6 +264,11 @@ independent (x) variables carry no parameters.
 | IV03 | D, 542–546; v8.9–8.11 addendum PDF p. 6 | Categorical outcomes under weighted least squares: configural and scalar only. The guide's ordinal metric model with threshold pins (pp. 544–545) is superseded by the addendum, which treats ordinal metric as not identified. Increment 3. |
 | IV04 | D, 670 | Several settings run several models and difference tests. A list is a model family plus a test plan: increment 2 accepts one setting and rejects a list until its result shape is decided. |
 | IV05 | P | Mplus expands a shortcut into ordinary MODEL syntax (printed with `(MODEL)`, P-IV1): every model fixes factor means at zero in the overall MODEL; configural repeats the non-marker BY items and frees all indicator intercepts in every group section; metric frees only the intercepts; scalar is the default multiple-group model. Factor covariances are free per group. With variance identification, TECH1 shows variances fixed at one in both groups for configural and in the first group only for metric and scalar, although the printed commands show `f@1` in the overall MODEL: the printed text is a summary, TECH1 is authoritative. |
+
+IV01, IV02, IV04 and IV05 are implemented for one continuous first-order
+BY shortcut, including fixed-one variance identification. IV03 remains an
+increment-3 boundary. The independent goldens reproduce both identification
+variants' parameter counts 38/34/30 and df 16/20/24.
 
 ## Categorical outcomes (increment 3)
 
@@ -352,6 +364,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-MG9 | MG06, LB07 | Repeated `MODEL g2:` sections: disjoint mentions, conflicting loading fixes, then a bare loading mention | Cumulative application, last fix wins, and later bare mention releases a fix |
 | P-MG10 | MG06 | `MODEL g1 g2: [y3];` | Are multi-label group section heads allowed? |
 | P-MG11 | MG03 | `GROUPING = g (-1 = g1 2.5 = g2);` | Are fractional grouping codes accepted? |
+| P-MG13 | MG06 | A group-only `y4 ON x1` or `f BY y4` | Does Mplus accept group-specific variable roles absent from overall MODEL? |
 | P-MG12 | MG03 | Negative integers, with integer and decimal spellings | Are negative codes and integral decimal spellings accepted? |
 | P-IV1 | IV01–IV05 | `MODEL = CONFIGURAL METRIC SCALAR (MODEL);` on a two-factor, six-indicator, two-group continuous CFA (once with markers, once with `f@1`) | Generated MODEL commands; reference group; factor covariances |
 
@@ -428,6 +441,7 @@ These observations do not resolve or change the inventory rules.
 | P-MG9 | MG06, LB07 | Repeated sections accepted cumulatively (16 free parameters for disjoint mentions). Later loading fix wins (0.8); a later bare loading mention releases the earlier fix. |
 | P-MG10 | MG06 | Rejected: Unknown group name G1 G2 specified in group-specific MODEL command. Write one label per section. |
 | P-MG11 | MG03 | Rejected: grouping value has to be an integer (2.5); Mplus suggests DEFINE. Frontend policy: recode to integers in R because DEFINE remains rejected. |
+| P-MG13 | MG06 | A group-only regression absent from overall MODEL is rejected as an ignored MODEL statement. A group-only additional indicator is accepted; magmaan rejects its group-specific role because the common variable-role contract cannot preserve it. Write the relation in overall MODEL and fix it in the other groups. |
 | P-MG12 | MG03 | Accepted: negative integer -1 and integral decimal spellings -1.0 and 2.0. Canonical frontend codes must be integer strings. |
 | P-IV1 | IV01–IV05 | Planner added variant variance_both (`f1@1 f2@1`; the lane's `f1 f2@1` fixed only f2): accepted, free counts 38/34/30, df 16/20/24; TECH1 PSI fixed in G1, free in G2 for metric and scalar. Original variants: both accepted; generated commands and separate CONFIGURAL/METRIC/SCALAR TECH1 matrices printed. Marker variant: free counts 38/34/30, df 16/20/24. Variance variant prints identification messages; only metric fit statistics printed (35 free, df 19). |
 | P-MG2 | MG09 | Both accepted. G2 U4 scale factor (Delta) or residual variance (Theta) has number 0; the corresponding U1–U3 cells are free. |
@@ -464,3 +478,23 @@ settings (`CORRELATION MEANS STDEVIATIONS`) were misreported. The tally
 suggests the order of value after increment 1: categorical outcomes, MODEL
 CONSTRAINT/INDIRECT and multiple groups each block several hundred inputs;
 DEFINE blocks 239.
+
+### Increment-2 corpus comparison (TASK-52)
+
+On the same extracted manifest, the pre-increment branch accepted 253 inputs
+at the reader and 189 at MODEL lowering; increment 2 accepts **291 and 217**.
+The sweep reads 2,440 files (1,117 distinct after newline normalization),
+including ZIP members, with no crashes or unclassified rejections. The earlier
+reader tally above used a different extraction/count convention. One existing
+ZIP (`ex11.8imp.zip`) is unreadable and reported separately. Current first-rule
+reader blockers: LX01 627, CL15 344, CL10 267, NM03 240, CL03 170, CL27 143,
+CL16 93, CL04 88, CL14 72, CL13 34, CL18 19, CL17 14, CL06 12, MG03 11,
+CL24 6, CL29 4, IV04 3 and LX03 2. MODEL lowering additionally rejects GR01 47,
+MS09 21, MS08 4 and MS01 2.
+
+The end-to-end gate increases from **15 to 22 accepted/matched of 68 eligible**;
+46 remain rejected, first rule CL10 15, CL27 10, GR01 7, NM03 7, CL13 3,
+CL15/CL16/IV04/MG03 one each. Four corpus CSVs store human group labels;
+the harness restores their explicit integer coding without changing rows.
+The adapter itself accepts only the declared codes. Probe evidence now totals
+47 probes / 110 variants (P-MG13 adds the variable-role boundaries).

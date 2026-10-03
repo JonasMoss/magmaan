@@ -1245,9 +1245,14 @@ carry the label `mplus`.
   numerics of the projection. TASK-51.3 adds source-preserving API/lab
   construction, canonical spelling, BY-set rejection and serialization gates;
   the local end-to-end gate matches all 15 accepted cases among 68 eligible.
-- [ ] **M — increment 2: multiple groups.** GROUPING, group-specific sections,
-  invariance defaults and overrides. **Check:** as increment 1, including
-  asymmetric group models and group-order agreement with supplied data.
+- [x] **M — increment 2: multiple groups.** Explicit integer GROUPING, ordered
+  source labels/codes, cumulative group sections, invariance defaults and
+  overrides, asymmetric fixed-zero topology and generated provenance; one
+  CONFIGURAL/METRIC/SCALAR with marker or variance identification. Group-specific
+  variable-role changes are rejected. **Check:** 14 independent Demo/lavaan
+  grouped goldens; numeric 1e-5 gates, API/lab rebuild/serialization and row-order
+  checks; corpus 22/68 accepted and matched, sweep reader 253→291 and MODEL
+  189→217 on the same 2,440-input manifest. TASK-52.
 - [ ] **M — increment 3: categorical outcomes.** Thresholds, delta/theta
   parameterizations and their multigroup defaults; all-ordinal DWLS fits,
   other categorical routes return unsupported-fit. **Check:** as increment 1;

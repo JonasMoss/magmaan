@@ -167,8 +167,9 @@ as_magmaan_model_spec <- function(model) {
     if (length(overrides)) {
       stop(caller, "(): Mplus construction options cannot be overridden; edit mplus_source instead.", call. = FALSE)
     }
-    if ((!is.null(group) && nzchar(group)) || length(group_labels) > 1L) {
-      stop(caller, "(): Mplus specs support only one group; multiple groups require increment 2.", call. = FALSE)
+    if ((!is.null(group) && !identical(as.character(group), spec$group_var)) ||
+        (!is.null(group_labels) && !identical(as.character(group_labels), spec$group_labels))) {
+      stop(caller, "(): [MG03] Mplus grouping is defined by GROUPING; edit mplus_source to change the group variable or labels.", call. = FALSE)
     }
     return(mplus_model(input = spec$mplus_source))
   }
@@ -982,6 +983,7 @@ df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
     stop("df_to_data(): `x` must be a data.frame")
   }
   model <- as_magmaan_model_spec(model)
+  .validate_mplus_groups(model, x)
   group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
   if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
 
@@ -1001,13 +1003,13 @@ df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
            paste(setdiff(unique(as.character(g)), labels), collapse = ", "))
     }
     if (!is.null(model$syntax)) {
-      model <- do.call(
-        model_spec,
-        c(list(syntax = model$syntax,
-               group = group_var,
-               group_labels = labels),
-          model$options)
-      )
+      if (!is.null(model$mplus_source)) {
+        model <- .rebuild_model_spec(model, group = group_var, group_labels = labels,
+                                     caller = "df_to_data")
+      } else {
+        model <- do.call(model_spec, c(list(syntax = model$syntax,
+          group = group_var, group_labels = labels), model$options))
+      }
     }
   } else {
     labels <- character()
@@ -1085,6 +1087,7 @@ df_to_fiml_data <- function(x, model, group = NULL) {
     stop("df_to_fiml_data(): `x` must be a data.frame")
   }
   model <- as_magmaan_model_spec(model)
+  .validate_mplus_groups(model, x)
   group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
   if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
 
@@ -1104,13 +1107,13 @@ df_to_fiml_data <- function(x, model, group = NULL) {
            paste(setdiff(unique(as.character(g)), labels), collapse = ", "))
     }
     if (!is.null(model$syntax)) {
-      model <- do.call(
-        model_spec,
-        c(list(syntax = model$syntax,
-               group = group_var,
-               group_labels = labels),
-          model$options)
-      )
+      if (!is.null(model$mplus_source)) {
+        model <- .rebuild_model_spec(model, group = group_var, group_labels = labels,
+                                     caller = "df_to_fiml_data")
+      } else {
+        model <- do.call(model_spec, c(list(syntax = model$syntax,
+          group = group_var, group_labels = labels), model$options))
+      }
     }
   } else {
     labels <- character()
@@ -2393,6 +2396,12 @@ frontier_fit_mixed_ordinal_psd <- function(
     spec <- as_magmaan_model_spec(model)
   }
 
+  if (!is.null(spec$mplus_source)) {
+    .validate_mplus_groups(spec, data)
+    if (!is.null(group_var) && !identical(group_var, spec$group_var))
+      stop(caller_prefix, "[MG03] Mplus grouping is defined by GROUPING; edit mplus_source instead.", call. = FALSE)
+    group_labels <- spec$group_labels
+  }
   spec_group_labels <- spec$group_labels %||% character()
   needs_group_rebuild <- !is.null(group_var) && !identical(group_var, "") &&
     !is.null(spec$syntax) &&

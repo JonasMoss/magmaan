@@ -92,7 +92,7 @@ implementation.
    without an explicit `INFORMATION = EXPECTED`, which Mplus ignores. The
    Demo probes settled these rules; where Mplus 9.1 departs from the guide,
    the frontend follows 9.1.
-2. **Multiple groups.** GROUPING labels and codes; group-specific MODEL
+2. **Multiple groups.** GROUPING labels and integer codes; group-specific MODEL
    sections; the invariance defaults (equal loadings and indicator intercepts,
    factor means fixed at zero in the first group and free in the others);
    frees and overrides by mention in a group-specific section. With one data
@@ -166,6 +166,37 @@ increment.
   triple, never through a row-only lavaan string; the EQS frontend showed that
   such a string cannot carry the full contract. A lavaan-syntax projection is
   an optional interoperability output.
+
+Grouped models use canonical integer code strings (`"1"`, `"-1"`) in
+`LatentNames::group_labels`, ordered by numeric value. The grouping variable
+retains its NAMES spelling. `MplusInput` and `api::MplusModel` retain source
+labels separately as ordered `MplusGroup { label, code }` metadata. Negative
+integers and integral decimal spellings are accepted; fractional values are
+rejected following Mplus 9.1 (recode them in R; DEFINE is not imported).
+Default cross-group equalities use reserved `.mgN.` labels, distinct from
+user equality numbers `.eqN.`. Group modifiers carry free/fixed/value/label
+and start vectors. A group-only parameter has a generated fixed-zero entry
+in other groups; `compat::mplus::apply_provenance()` marks generated defaults
+and zero entries in `LatentNames::row_user` before the partable projection.
+Repeated group sections apply cumulatively in source order. Changes to the
+variable-role sets in a group section are rejected: the shared role contract
+cannot preserve group-specific indicator/predictor/dependent classifications.
+The data adapter rejects unlisted codes with their row counts; filter in R
+before fitting, because Mplus would drop them.
+
+### Continuous group coverage
+
+| Rules | Accepted subset and gate |
+| --- | --- |
+| MG01–MG03, CL11, CL26 | One explicit integer-code GROUPING; numeric order, case-insensitive labels, repeated sections; reader units, Demo P-MG3/P-MG8–P-MG13, ordered-data golden and R fit |
+| MG04–MG08, MG11, MG13 | Default equalities, second-order and structural freedom, identifier ties, group means, starts/fixes and releases; independent grouped rows, TECH1 partitions and numerical goldens |
+| IV01, IV02, IV04, IV05 | One CONFIGURAL/METRIC/SCALAR, continuous first-order BY, marker or explicitly fixed-one factor variance identification; 38/34/30 parameters and 16/20/24 df in both identification variants |
+| MG09, MG12, IV03 | Categorical scale rules await increment 3; KNOWNCLASS remains rejected |
+
+Grouped meaning/numeric fixtures are generated independently by
+`cpp/tests/tools/regen_oracle_mplus_groups.R` into the `multigroup_cases` section of `golden.json`.
+The local sweep is reproducible with `check_mplus_input_corpus.R`; the end-to-end
+corpus gate remains `check_mplus_corpus.R`.
 
 ## Oracles and evidence
 

@@ -19,6 +19,9 @@ struct MplusDiagnostic {
   std::string message;
 };
 
+struct MplusGroup { std::string label; std::string code; };
+struct MplusGroupSection { std::string label; SourceSpan body; };
+
 struct MplusInput {
   std::string source;  // All spans index this owned, unmodified copy.
   std::vector<std::string> names;
@@ -26,15 +29,22 @@ struct MplusInput {
   std::vector<std::string> type_settings;
   bool nomeanstructure = false;
   bool nocovariances = false;
+  std::string grouping_variable;
+  std::vector<MplusGroup> groups;
+  std::vector<MplusGroupSection> group_sections;
+  std::string invariance;
   std::string estimator;
   std::string information;
   SourceSpan model_body;
   std::vector<MplusDiagnostic> notes;
 };
 
+struct MplusGeneratedRow { std::string lhs, rhs; Op op; std::int32_t group; };
+
 struct MplusModel {
   MplusInput input;
   FlatPartable flat;
+  std::vector<MplusGeneratedRow> generated_rows;
   std::vector<MplusDiagnostic> notes;
 };
 

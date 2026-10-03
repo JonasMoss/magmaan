@@ -25,9 +25,9 @@
   input files, classifies commands/options, expands NAMES and selects
   USEVARIABLES, preserves source spans, and aggregates classified rejections.
   Schema settings, execution/data-description notes and explicit later-increment
-  boundaries are checked by independent unit expectations and a 100-variant
-  Demo input gate (with documented LX02, NM02, MS11 and CL11 deviations).
-  `parse::MplusParser::parse()` lowers continuous single-group BY/ON/WITH,
+  boundaries are checked by independent unit expectations and a 110-variant
+  Demo input gate (with documented LX02, NM02 and MS11 deviations).
+  `parse::MplusParser::parse()` lowers continuous single- and multiple-group BY/ON/WITH,
   PON/PWITH, variances, means, modifiers, line-local labels and ranges into
   an owned `MplusModel`. It materializes marker, role, mean and covariance
   defaults explicitly; `compat::mplus::build_options()` disables lavaan
@@ -39,15 +39,24 @@
   notes and a lossless lavaan row projection. Observed names retain NAMES
   spelling and factors their first BY spelling; BY factor sets are rejected.
   Live lavaan rows/ML/expected SEs and fresh/prepared/serialized round trips
-  gate the lab surface. The local end-to-end corpus gate accepts 15 of 68
+  gate the lab surface. The local end-to-end corpus gate accepts 22 of 68
   eligible cases, all matched (see the validation ledger). The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
   against lavaan, and targets ordinary integration after a stability bar.
   The [source inventory](../../grammar/mplus_source_inventory.md) and the
-  increment-1 [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
+  continuous [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
   checked-in Demo probes supply independent behavioral evidence.
+  GROUPING imports ordered integer codes and retains source labels separately.
+  Per-group modifier vectors implement defaults, releases, identifier ties,
+  cumulative sections and asymmetric rows (fixed zero elsewhere, with generated
+  provenance). Group-specific variable-role changes are an explicit boundary.
+  CONFIGURAL/METRIC/SCALAR support marker and variance identification; 14
+  independent grouped goldens gate TECH1, rows, ML/SEs and implied moments at
+  1e-5. Lab specs retain grouping on rebuild/serialization and reject unlisted
+  data codes with row counts. Same-manifest input acceptance rises 253→291
+  for the reader and 189→217 for MODEL lowering.
   Independent increment-1 meaning/numeric evidence is frozen in
   `cpp/tests/fixtures/mplus/golden.json` by `regen_oracle_mplus.R`: 13
   hand-written paired models fitted to identical complete observations by

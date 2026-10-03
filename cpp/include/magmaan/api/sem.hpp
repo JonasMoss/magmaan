@@ -112,6 +112,8 @@ private:
 
 struct MplusModel {
   Model model;
+  std::string grouping_variable;
+  std::vector<parse::MplusGroup> groups;
   std::vector<parse::MplusDiagnostic> notes;
 };
 Result<MplusModel> model_from_mplus(std::string_view source);

@@ -1,8 +1,8 @@
 (* ===========================================================================
-   Mplus input-file grammar, increment 1
+   Mplus input-file grammar, increments 1–2
    ---------------------------------------------------------------------------
-   Normative for parse::Mplus* once implemented (planned; nothing implemented
-   yet). mplus.md owns the target and increments; mplus_source_inventory.md
+   Normative for the implemented continuous parse::Mplus* frontend. mplus.md
+   owns the target and increments; mplus_source_inventory.md
    owns the evidence, cited here by rule ID in brackets ([LX03]). Source:
    Mplus User's Guide v8 (2017) and the language addenda 8.1 to 9.1.
 
@@ -79,8 +79,8 @@ title_body          ::= free_text
 
 opaque_body         ::= free_text
 (* Data transformation commands, DEFINE, MODEL CONSTRAINT/INDIRECT/TEST/
-   PRIORS/POPULATION/COVERAGE/MISSING, MONTECARLO and `MODEL label:`
-   sections: increment 1 delimits the body and rejects or reports the whole
+   PRIORS/POPULATION/COVERAGE/MISSING, MONTECARLO and undeclared `MODEL label:`
+   sections: the frontend delimits the body and rejects or reports the whole
    command by class, citing the increment that will accept it [CL06,
    CL16, CL26-CL29]. *)
 
@@ -187,3 +187,23 @@ section_marker      ::= '%' (token - '%')+ '%'
       otherwise reject it, since Mplus would ignore it [MS11].
    6. Reject mentions of observed independent variables' moments [MS08]
       and every construct outside the increment, with its span. *)
+
+(* === Multiple groups (increment 2) ======================================== *)
+grouping_value      ::= name '(' grouping_pair (list_sep grouping_pair)* ')'
+grouping_pair       ::= signed_number '=' group_label
+(* MG01–MG08: codes must be integral, including negative integers and decimal
+   spellings of integers (P-MG11/P-MG12). Compare numerically, reject duplicate
+   codes/labels, and order groups by ascending code. Count and unlabelled forms
+   await increment 5. Repeated MODEL label sections apply cumulatively in source
+   order; multi-label heads are rejected (P-MG9/P-MG10).
+   Overall MODEL is materialized in each group. Observed BY loadings and
+   indicator intercepts share reserved .mgN. identifiers; these are generated,
+   distinct from user equality-number .eqN. identifiers. Other defaults are
+   free per group; latent means are zero in group 1 and free thereafter.
+   Group mentions release the corresponding default equality/marker unless
+   explicitly fixed or labelled. Group-only rows are fixed zero elsewhere.
+   IV01–IV05: one CONFIGURAL/METRIC/SCALAR requires GROUPING and an overall
+   first-order-BY-only model. Configural frees loadings/intercepts, metric
+   shares loadings, scalar shares both; latent means are zero except in later
+   scalar groups. Variance identification fixes variances in all configural
+   groups and only the first metric/scalar group. *)

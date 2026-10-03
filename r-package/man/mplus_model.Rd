@@ -14,19 +14,28 @@ mplus_model(input = NULL, file = NULL)
 \value{
 A magmaan_model_spec with original mplus_source, a data.frame of
 mplus_notes (class, rule, line, col, message), and a lavaan syntax projection.
+Grouped specs also carry group_var, ordered integer-code group_labels and
+mplus_groups (a data.frame with label and code columns).
 Rebuilding uses mplus_source; construction options cannot be overridden.
 }
 \description{
-Imports single-group continuous linear SEM: BY, ON, WITH, PON, PWITH,
+Imports single- and multiple-group continuous linear SEM: BY, ON, WITH, PON, PWITH,
 means, variances, starts, fixes, labels and equality numbers, NOCOVARIANCES,
 and NOMEANSTRUCTURE with INFORMATION = EXPECTED. Names resolve without
 regard to case and retain the spelling in NAMES; factors retain their first
 BY spelling. Estimator and execution settings are reported, not imported.
 }
 \details{
-DEFINE, multiple groups, categorical outcomes, growth, MODEL CONSTRAINT,
+DEFINE, categorical outcomes, growth, MODEL CONSTRAINT,
 MODEL INDIRECT, mixtures, multilevel models, ESEM, unsupported name ranges
 and mixed conditioning on observed covariates are rejected with rule IDs
 and an explanation of what to write instead. Data descriptions are retained
 as notes; this function does not read the data file or run Mplus.
+GROUPING imports explicit integer code = label pairs, ordered by numeric code.
+Group MODEL sections override the overall model; repeated sections apply
+cumulatively. CONFIGURAL, METRIC and SCALAR accept one setting at a time.
+Group-only changes to variable roles are rejected; put the relation in the
+overall model and fix it in the other groups instead. Variance identification
+in a shortcut uses free first loadings and explicit factor variances at one.
+Unlisted data codes must be filtered in R before fitting.
 }

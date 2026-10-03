@@ -14,14 +14,17 @@ key <- function(lhs, op, rhs) {
   tmp <- lhs[swap]; lhs[swap] <- rhs[swap]; rhs[swap] <- tmp
   paste(lhs,op,rhs)
 }
-printed_parameters <- function(lines) {
+printed_parameters <- function(lines, groups) {
   start <- grep("^MODEL RESULTS\\s*$", lines)
   if (!length(start)) return(data.frame())
   lines <- lines[(start[1]+1):length(lines)]
-  lhs <- op <- ""; out <- list()
+  lhs <- op <- ""; out <- list(); group <- 1L
   for (line in lines) {
     if (grepl("^QUALITY OF|^STANDARDIZED|^R-SQUARE|^CONFIDENCE",line)) break
     text <- trimws(line)
+    if (grepl("^Group ", text) && nrow(groups)) {
+      group <- match(tolower(sub("^Group ", "", text)), tolower(groups$label)); next
+    }
     relation <- regexec("^([A-Za-z][A-Za-z0-9_]*)\\s+(BY|ON|WITH)$",text)
     m <- regmatches(text,relation)[[1]]
     if (length(m)) { lhs <- m[2]; op <- switch(m[3],BY="=~",ON="~",WITH="~~"); next }
@@ -32,7 +35,7 @@ printed_parameters <- function(lines) {
     if (length(m) && nzchar(op)) {
       l <- if (nzchar(lhs)) lhs else m[2]
       r <- if (op == "~1") "" else if (nzchar(lhs)) m[2] else l
-      out[[length(out)+1]] <- data.frame(key=key(l,op,r),est=as.numeric(m[3]),printed=m[3])
+      out[[length(out)+1]] <- data.frame(key=paste(group,key(l,op,r)),est=as.numeric(m[3]),printed=m[3])
     }
   }
   if (length(out)) do.call(rbind,out) else data.frame()
@@ -62,6 +65,16 @@ for (folder in folders) {
   }
   result <- tryCatch({
     data <- read.csv(raw,check.names=FALSE)
+    # The corpus stores human group labels in raw.csv for these examples.
+    # Restore the original integer coding from the explicit GROUPING schema;
+    # never change the sample or allow the adapter to accept undeclared codes.
+    if (nzchar(spec$group_var) && spec$group_var %in% names(data)) {
+      g <- as.character(data[[spec$group_var]])
+      if (!all(g %in% spec$group_labels) && all(tolower(g) %in% tolower(spec$mplus_groups$label))) {
+        data[[spec$group_var]] <- as.integer(spec$mplus_groups$code[match(tolower(g),tolower(spec$mplus_groups$label))])
+        cat(case, ": restored corpus group labels to declared integer codes\n", sep="")
+      }
+    }
     meta <- fromJSON(file.path(folder,"meta.json"))
     book <- fromJSON(bookfile)
     book_text <- paste(readLines(bookfile,warn=FALSE),collapse="\n")
@@ -91,9 +104,9 @@ for (folder in folders) {
         add("H0 loglik",fm$logl,expected,.002+1e-6*abs(expected),
             sub(".*H0 Value\\s+(-?[0-9.]+).*","\\1",h0[1]))
       }
-      params <- printed_parameters(lines)
+      params <- printed_parameters(lines,spec$mplus_groups)
       if(nrow(params)) {
-        idx <- match(params$key,key(fit$partable$lhs,fit$partable$op,fit$partable$rhs))
+        idx <- match(params$key,paste(fit$partable$group,key(fit$partable$lhs,fit$partable$op,fit$partable$rhs)))
         for(i in seq_len(nrow(params))) add(paste("estimate",params$key[i]),
           if(is.na(idx[i])) NA_real_ else fit$partable$est[idx[i]],params$est[i],.001+2e-4*abs(params$est[i]),params$printed[i])
       }

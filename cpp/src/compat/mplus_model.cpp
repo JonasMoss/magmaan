@@ -1,7 +1,10 @@
 #include "magmaan/compat/mplus/model.hpp"
 #include <charconv>
+#include <algorithm>
 #include <limits>
 #include <variant>
+#include <set>
+#include <tuple>
 
 namespace magmaan::compat::mplus {
 namespace {
@@ -19,11 +22,24 @@ std::string to_lavaan_syntax(const parse::FlatPartable& flat) {
   for (const auto& row : flat.rows) {
     result.append(row.lhs);
     result += " ";
-    result.append(parse::to_string(row.op));
+    result.append(row.op==parse::Op::Intercept ? "~" : parse::to_string(row.op));
     result += " ";
     if (row.mod_idx != 0) {
       const auto& modifier = flat.mods[row.mod_idx];
-      if (const auto* fixed = std::get_if<parse::FixedValue>(&modifier))
+      if (const auto* groups = std::get_if<parse::GroupVec>(&modifier)) {
+        const bool starts = std::any_of(groups->per_group.begin(),groups->per_group.end(),[](const auto& atom) {return std::holds_alternative<parse::StartValue>(atom);});
+        result += starts ? "start(c(" : "c(";
+        for (std::size_t g=0;g<groups->per_group.size();++g) {
+          if(g) result+=",";
+          const auto& atom=groups->per_group[g];
+          if(const auto* fixed=std::get_if<parse::FixedValue>(&atom)) result+=number(fixed->value);
+          else if(const auto* start=std::get_if<parse::StartValue>(&atom)) result+=number(start->value);
+          else if(const auto* label=std::get_if<parse::Label>(&atom)) result+=std::string(label->text);
+          else result+="NA";
+        }
+        result+=starts ? "))*" : ")*";
+      }
+      else if (const auto* fixed = std::get_if<parse::FixedValue>(&modifier))
         result += number(fixed->value) + "*";
       else if (const auto* start = std::get_if<parse::StartValue>(&modifier))
         result += "start(" + number(start->value) + ")*";
@@ -39,8 +55,24 @@ std::string to_lavaan_syntax(const parse::FlatPartable& flat) {
 }
 
 
+void apply_provenance(const parse::MplusModel& parsed, const spec::LatentStructure& structure, spec::LatentNames& names) {
+  const auto key=[](std::int32_t group,parse::Op op,std::string lhs,std::string rhs) {
+    if(op==parse::Op::Covariance && rhs<lhs) std::swap(lhs,rhs);
+    return std::tuple{group,op,std::move(lhs),std::move(rhs)};
+  };
+  std::set<std::tuple<std::int32_t,parse::Op,std::string,std::string>> generated;
+  for(const auto& row:parsed.generated_rows) generated.insert(key(row.group,row.op,row.lhs,row.rhs));
+  for(std::size_t i=0;i<names.row_lhs.size();++i)
+    if(generated.contains(key(structure.group[i],structure.op[i],names.row_lhs[i],names.row_rhs[i]))) names.row_user[i]=0;
+}
+
 spec::BuildOptions build_options(const parse::MplusInput& input) {
   spec::BuildOptions options;
+  if (!input.groups.empty()) {
+    options.n_groups=static_cast<std::int32_t>(input.groups.size());
+    options.group_var=input.grouping_variable;
+    for(const auto& group:input.groups) options.group_labels.push_back(group.code);
+  }
   options.auto_var = false;
   options.auto_cov_lv_x = false;
   options.auto_cov_y = false;
