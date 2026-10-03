@@ -299,6 +299,18 @@
   nesting reasons and unsupported nested score are preserved. The separate-point
   profile law remains an explicitly named lab comparator. Confirmed on fresh
   draws in decision study 05 (4.3-7.8%); the global test, ML and FIML recipes are unchanged.
+- Reusable DWLS policy evaluation points (TASK-23): `api::DwlsPolicyFit` owns
+  the fitted structure, parameters, ordinal statistics, parameterization and
+  row provenance. It lazily retains IJ covariance and exact Newton Hessian
+  results, including failures, and shares the IJ result between global
+  covariance and larger-fit nested LR. Global policy output is retained too;
+  original signatures remain fresh wrappers. R fits own process-local caches
+  keyed by portable inputs (including data and weight recipe), rebuilt after
+  serialization or PID changes. `inference_reuse(fit)` reports build counts.
+  `policy_cache_test.cpp` gates exact fresh/cached covariance, statistics,
+  spectra and probabilities for delta/theta, one/two groups and nested pairs;
+  R gates restoration, repeated reporting/anova, fork rebuilding and input
+  invalidation. Timing is recorded in [FIML](fiml.md#ordinary-policy).
 - Study 05 retains global-only production-seed `--explore` and extends
   fresh-seed `--confirm` to 64 global and 40 nested cells (53–84, 139–146),
   seed base 817160001. Nested arms retain profile and fixed-weight comparators,

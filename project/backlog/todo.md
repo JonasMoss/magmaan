@@ -573,11 +573,18 @@ required by an all-ordinal primary workflow remain current work.
   meets the 0.2.0 exit criterion; move this item to 0.3.0 if it is not needed
   sooner.
 
-- [ ] **M — finish primary reusable inference ownership.** Extend observed-bread
-  covariance/score, delta-nesting and categorical influence adapters where
-  independently validated. **Check:** centering, finite-sample/group scaling and
-  retained geometry; equal statistics do not establish equal spectra. See
-  inference reuse and [workspace contract](../design/ordinal-snlls-gamma-architecture.md).
+- [x] **M — finish primary reusable inference ownership** (TASK-23).
+  Owning `api::FimlPolicyFit` / `DwlsPolicyFit` snapshots lazily retain the
+  evaluation-point bread/scores and IJ/Hessian results, respectively, including
+  failures. Fit-owned R contexts reuse them for ordinary covariance, summary,
+  global and repeated nested policy calls; serialization and PID changes rebuild
+  transparently. Exact-output gates cover MAR, theta, groups and nested pairs.
+  Delta/theta nested LR already uses the shared restriction embedding.
+  Concrete residue outside this policy slice: shared ML2S/global score geometry;
+  categorical `score_components`/resampling adapters need a separately derived
+  joint score contract (nested DWLS score is already deferred above). Embedded-null
+  score geometry remains pair-specific. See the
+  [workspace contract](../design/ordinal-snlls-gamma-architecture.md).
 
 With `missing` removed from the ordinary call, pairwise DWLS stays a lab route;
 the capability inventory lists its policy inference as unsupported.

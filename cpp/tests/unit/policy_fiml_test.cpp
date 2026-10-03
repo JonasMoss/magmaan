@@ -146,6 +146,42 @@ TEST_CASE("FIML policy: MCAR MAR grouped sandwich and evaluation-point score mea
     // Transitive lavaan gate: fiml_robust_mlr is checked on frozen MLR fixtures.
     CHECK((p.covariance-mlr->vcov).norm() < 1e-9);
     auto nested = api::policy_nested_fiml(m0.pt,m0.rep,e0,{},m1.pt,m1.rep,e1,{},raw,*pack);
+    api::FimlPolicyFit c0(m0.pt,m0.rep,raw,*pack,e0), c1(m1.pt,m1.rep,raw,*pack,e1);
+    const auto cached = api::policy_inference_fiml(c1,{});
+    const api::PolicyFitState boundary{true,true,false,false};
+    const auto flagged = api::policy_inference_fiml(c1,boundary);
+    const auto fresh_flagged = api::policy_inference_fiml(m1.pt,m1.rep,raw,*pack,e1,boundary);
+    CHECK(flagged.psd_boundary == fresh_flagged.psd_boundary);
+    CHECK(flagged.verdict_disagreement == fresh_flagged.verdict_disagreement);
+    auto unsupported_pt = m1.pt; unsupported_pt.has_inequality_constraints = true;
+    api::FimlPolicyFit unsupported(unsupported_pt,m1.rep,raw,*pack,e1);
+    const auto refused = api::policy_inference_fiml(unsupported,boundary);
+    const auto fresh_refused = api::policy_inference_fiml(unsupported_pt,m1.rep,raw,*pack,e1,boundary);
+    CHECK(refused.covariance_reason == fresh_refused.covariance_reason);
+    CHECK(refused.psd_boundary == fresh_refused.psd_boundary);
+    CHECK(refused.verdict_disagreement == fresh_refused.verdict_disagreement);
+    CHECK(api::policy_ingredient_builds(unsupported) == 0);
+    CHECK((cached.covariance.array() == p.covariance.array()).all());
+    for (const auto& tests : {std::pair{cached.score,p.score}, std::pair{cached.lr,p.lr}}) {
+      CHECK(tests.first.statistic == tests.second.statistic);
+      CHECK(tests.first.p_sb == tests.second.p_sb);
+      CHECK(tests.first.p_peba4 == tests.second.p_peba4);
+      CHECK((tests.first.eigenvalues.array() == tests.second.eigenvalues.array()).all());
+    }
+    for (int i = 0; i < 2; ++i) {
+      const auto got = api::policy_nested_fiml(c0,{},c1,{});
+      for (const auto& tests : {std::pair{got.score,nested.score}, std::pair{got.lr,nested.lr}}) {
+        CHECK(tests.first.statistic == tests.second.statistic);
+        CHECK(tests.first.p_sb == tests.second.p_sb);
+        CHECK(tests.first.p_peba4 == tests.second.p_peba4);
+        CHECK((tests.first.eigenvalues.array() == tests.second.eigenvalues.array()).all());
+      }
+      CHECK(api::policy_ingredient_builds(c1) == 1);
+    }
+    auto elsewhere = raw; elsewhere.X[0](0,0) += 1;
+    api::FimlPolicyFit wrong(m0.pt,m0.rep,elsewhere,*pack,e0);
+    CHECK(api::policy_nested_fiml(wrong,{},c1,{}).lr.reason == api::InferenceReason::NotNested);
+
     // The repeated label also ties loadings across groups: four slots
     // collapse to one in the two-group null.
     const int restrictions = 2*groups-1;

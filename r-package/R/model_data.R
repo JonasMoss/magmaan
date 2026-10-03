@@ -2789,6 +2789,7 @@ finalize_fcsem_fit <- function(fit, spec, missing) {
 }
 
 finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
+  attr(fit, "policy_cache") <- new.env(parent = emptyenv())
   fit$model <- spec
   fit$syntax <- spec$syntax
   fit$options <- list(

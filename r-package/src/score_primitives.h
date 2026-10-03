@@ -1,5 +1,6 @@
 #pragma once
 #include "magmaan/robust/prepared_ntml.hpp"
+#include "magmaan/api/policy.hpp"
 
 namespace score_bindings {
 using namespace magmaan;
@@ -11,6 +12,7 @@ struct Context {
   estimate::fiml::FIMLPack pack;
   std::string estimator;
   std::shared_ptr<robust::frontier::NTMLFit> ntml;
+  std::shared_ptr<api::FimlPolicyFit> fiml_policy;
 };
 
 template<class T> T& get(SEXP ptr, const char* tag) {

@@ -32,8 +32,15 @@ not calibration evidence.
 
 `api::policy_inference_fiml` and `api::policy_nested_fiml` compose single-level
 random-x continuous FIML with affine equality constraints, one or more groups.
-The existing R inference context retains the raw observations and `FIMLPack`;
-policy calls use those ingredients without adding a second fitting route.
+The R inference context retains the raw observations and `FIMLPack`.
+`api::FimlPolicyFit` owns an immutable evaluation-point snapshot and lazily
+retains `fiml_score_meat_bread` (including failures) across covariance and
+larger-fit nested LR calls. Global policy results are retained too. Existing
+signatures remain fresh-computation wrappers; pair-specific embedded-null score
+geometry keeps its original calculation. A fit-owned R cache invalidates on
+changed portable inputs, cleared pointers or PID changes. `inference_reuse`
+reports the ingredient build count. Ordinary `vcov`, `summary` and `anova`
+consume these same policy results without adding another fitting route.
 Covariance uses observed deviance Hessian bread and empirical casewise score
 meat (`fiml_score_meat_bread`), the lavaan-gated MLR sandwich. Global score
 uses `global_score_components` with observed-H0 sensitivity and the
@@ -51,6 +58,19 @@ into the larger fit, which can differ under larger-model misspecification.
 Both tests report SB and PEBA4, with independent typed unavailability reasons.
 Penalty and convergence gates precede computation; saturation suppresses only
 global tests. PSD boundary fits retain the policy's interior-population caveat.
+
+Reuse gates in `policy_fiml_test.cpp` compare cached and fresh covariance,
+statistics, spectra and calibration probabilities with exact equality for
+MCAR/MAR, one/two groups and nested pairs. Both R suites gate repeated calls,
+serialized restoration and fork/PID rebuilding, with construction counters.
+
+Single-thread timing on HS-sized data (301 rows, six indicators, three nested
+models, two successive `anova` calls; median of three batches of 30 sequences,
+fit time excluded): FIML fresh contexts 3.167 ms versus retained 2.633 ms
+(16.8% saving, 1.20x); theta DWLS 5.233 ms versus 2.133 ms (59.2%, 2.45x).
+Fresh calls remove only the fit's cache, reproducing the preceding per-call
+ingredient construction; retained calls start warm. These timings measure
+reuse, not statistical calibration, and preserve bit-identical results.
 
 Validation is limited: `policy_fiml_test.cpp` gates complete-data covariance
 and LR-statistic reductions, exact nested observed LR-spectrum reduction with

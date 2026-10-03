@@ -661,12 +661,20 @@ policy_inference_impl <- function(context, state) {
     .Call(`_magmaanlab_policy_inference_impl`, context, state)
 }
 
-policy_inference_dwls_impl <- function(fit, state) {
-    .Call(`_magmaanlab_policy_inference_dwls_impl`, fit, state)
+prepare_policy_dwls_impl <- function(fit) {
+    .Call(`_magmaanlab_prepare_policy_dwls_impl`, fit)
 }
 
-policy_nested_dwls_impl <- function(fit_H1, fit_H0, null_state, alternative_state) {
-    .Call(`_magmaanlab_policy_nested_dwls_impl`, fit_H1, fit_H0, null_state, alternative_state)
+dwls_policy_reuse_impl <- function(context) {
+    .Call(`_magmaanlab_dwls_policy_reuse_impl`, context)
+}
+
+policy_inference_dwls_impl <- function(fit, state, context = NULL) {
+    .Call(`_magmaanlab_policy_inference_dwls_impl`, fit, state, context)
+}
+
+policy_nested_dwls_impl <- function(fit_H1, fit_H0, null_state, alternative_state, null_context = NULL, alternative_context = NULL) {
+    .Call(`_magmaanlab_policy_nested_dwls_impl`, fit_H1, fit_H0, null_state, alternative_state, null_context, alternative_context)
 }
 
 policy_nested_impl <- function(null_context, alternative_context, null_state, alternative_state) {

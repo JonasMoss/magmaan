@@ -2389,21 +2389,44 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prepare_policy_dwls_impl
+SEXP prepare_policy_dwls_impl(Rcpp::List fit);
+RcppExport SEXP _magmaanlab_prepare_policy_dwls_impl(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_policy_dwls_impl(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dwls_policy_reuse_impl
+double dwls_policy_reuse_impl(SEXP context);
+RcppExport SEXP _magmaanlab_dwls_policy_reuse_impl(SEXP contextSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(dwls_policy_reuse_impl(context));
+    return rcpp_result_gen;
+END_RCPP
+}
 // policy_inference_dwls_impl
-Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state);
-RcppExport SEXP _magmaanlab_policy_inference_dwls_impl(SEXP fitSEXP, SEXP stateSEXP) {
+Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state, SEXP context);
+RcppExport SEXP _magmaanlab_policy_inference_dwls_impl(SEXP fitSEXP, SEXP stateSEXP, SEXP contextSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
-    rcpp_result_gen = Rcpp::wrap(policy_inference_dwls_impl(fit, state));
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_inference_dwls_impl(fit, state, context));
     return rcpp_result_gen;
 END_RCPP
 }
 // policy_nested_dwls_impl
-Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state);
-RcppExport SEXP _magmaanlab_policy_nested_dwls_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP) {
+Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state, SEXP null_context, SEXP alternative_context);
+RcppExport SEXP _magmaanlab_policy_nested_dwls_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP, SEXP null_contextSEXP, SEXP alternative_contextSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2411,7 +2434,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
     Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type null_state(null_stateSEXP);
     Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type alternative_state(alternative_stateSEXP);
-    rcpp_result_gen = Rcpp::wrap(policy_nested_dwls_impl(fit_H1, fit_H0, null_state, alternative_state));
+    Rcpp::traits::input_parameter< SEXP >::type null_context(null_contextSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type alternative_context(alternative_contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_nested_dwls_impl(fit_H1, fit_H0, null_state, alternative_state, null_context, alternative_context));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4565,8 +4590,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_convention_inference_impl", (DL_FUNC) &_magmaanlab_convention_inference_impl, 4},
     {"_magmaanlab_convention_nested_impl", (DL_FUNC) &_magmaanlab_convention_nested_impl, 7},
     {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 2},
-    {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 2},
-    {"_magmaanlab_policy_nested_dwls_impl", (DL_FUNC) &_magmaanlab_policy_nested_dwls_impl, 4},
+    {"_magmaanlab_prepare_policy_dwls_impl", (DL_FUNC) &_magmaanlab_prepare_policy_dwls_impl, 1},
+    {"_magmaanlab_dwls_policy_reuse_impl", (DL_FUNC) &_magmaanlab_dwls_policy_reuse_impl, 1},
+    {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 3},
+    {"_magmaanlab_policy_nested_dwls_impl", (DL_FUNC) &_magmaanlab_policy_nested_dwls_impl, 6},
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_prepared_structure_count_impl", (DL_FUNC) &_magmaanlab_prepared_structure_count_impl, 0},

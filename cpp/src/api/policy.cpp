@@ -17,6 +17,43 @@
 
 namespace magmaan::api {
 
+struct FimlPolicyFit::Impl {
+  const spec::LatentStructure pt;
+  const model::MatrixRep rep;
+  const data::RawData raw;
+  const estimate::fiml::FIMLPack pack;
+  const estimate::Estimates estimates;
+  std::optional<post_expected<estimate::fiml::FIMLScoreMeatBread>> bread;
+  std::optional<PolicyInference> inference;
+  std::size_t builds = 0;
+};
+struct DwlsPolicyFit::Impl {
+  const spec::LatentStructure pt;
+  const model::MatrixRep rep;
+  const data::OrdinalStats stats;
+  const estimate::Estimates estimates;
+  const estimate::OrdinalParameterization parameterization;
+  const std::vector<std::int8_t> row_user;
+  std::optional<post_expected<estimate::OrdinalRobustResult>> ij;
+  std::optional<fit_expected<estimate::frontier::OrdinalNewtonParts>> parts;
+  std::optional<PolicyInference> inference;
+  std::size_t builds = 0;
+};
+FimlPolicyFit::FimlPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
+    data::RawData raw, estimate::fiml::FIMLPack pack, estimate::Estimates estimates)
+    : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
+        std::move(raw), std::move(pack), std::move(estimates), {}, {}, 0})) {}
+DwlsPolicyFit::DwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
+    data::OrdinalStats stats, estimate::Estimates estimates,
+    estimate::OrdinalParameterization parameterization, std::vector<std::int8_t> row_user)
+    : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
+        std::move(stats), std::move(estimates), parameterization,
+        std::move(row_user), {}, {}, {}, 0})) {}
+std::size_t policy_ingredient_builds(const FimlPolicyFit& fit) { return fit.impl->builds; }
+std::size_t policy_ingredient_builds(const DwlsPolicyFit& fit) { return fit.impl->builds; }
+
+
+
 std::string_view reason_name(InferenceReason reason) noexcept {
   switch (reason) {
     case InferenceReason::Available:        return "available";
@@ -166,13 +203,13 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
   return out;
 }
 
-PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
                                       const data::OrdinalStats& stats,
                                       const estimate::Estimates& estimates,
                                       estimate::OrdinalParameterization parameterization,
                                       const PolicyFitState& state,
-                                      const std::vector<std::int8_t>* row_user) {
+                                      const std::vector<std::int8_t>* row_user, DwlsPolicyFit::Impl* cache) {
   PolicyInference out;
   if (state.penalized) {
     out = policy_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
@@ -190,8 +227,13 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
   out.psd_boundary = state.psd_boundary;
   out.verdict_disagreement = verdict_disagreement(state);
   using estimate::OrdinalWeightKind;
-  auto ij = estimate::robust_ordinal_ij(pt, rep, stats, estimates, OrdinalWeightKind::DWLS,
-                                        parameterization, row_user);
+  if (cache && !cache->ij) {
+    cache->ij = estimate::robust_ordinal_ij(pt, rep, stats, estimates,
+        OrdinalWeightKind::DWLS, parameterization, row_user);
+    ++cache->builds;
+  }
+  auto ij = cache ? *cache->ij : estimate::robust_ordinal_ij(pt, rep, stats,
+      estimates, OrdinalWeightKind::DWLS, parameterization, row_user);
   if (ij) {
     out.covariance = ij->vcov;
   } else {
@@ -233,7 +275,7 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
   return out;
 }
 
-PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
                                 const model::MatrixRep& null_rep,
                                 const estimate::Estimates& null_estimates,
                                 const PolicyFitState& null_state,
@@ -244,7 +286,7 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const data::OrdinalStats& stats,
                                 estimate::OrdinalParameterization parameterization,
                                 const std::vector<std::int8_t>* null_row_user,
-                                const std::vector<std::int8_t>* alternative_row_user) {
+                                const std::vector<std::int8_t>* alternative_row_user, DwlsPolicyFit::Impl* cache) {
   PolicyNested out;
   out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
   out.verdict_disagreement =
@@ -295,16 +337,29 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
 
   set_unavailable(out.score, InferenceReason::UnsupportedModel,
       "no nested DWLS score test is derived; the fit-function difference test is reported");
-  auto ij = estimate::robust_ordinal_ij(alternative_pt, alternative_rep, stats,
-      alternative_estimates, estimate::OrdinalWeightKind::DWLS, parameterization,
-      alternative_row_user);
+  if (cache && !cache->ij) {
+    cache->ij = estimate::robust_ordinal_ij(alternative_pt, alternative_rep, stats,
+        alternative_estimates, estimate::OrdinalWeightKind::DWLS, parameterization,
+        alternative_row_user);
+    ++cache->builds;
+  }
+  auto ij = cache ? *cache->ij : estimate::robust_ordinal_ij(alternative_pt,
+      alternative_rep, stats, alternative_estimates, estimate::OrdinalWeightKind::DWLS,
+      parameterization, alternative_row_user);
   if (!ij) {
     set_unavailable(out.lr, reason_from(ij.error()), ij.error().detail);
     return out;
   }
-  auto parts = estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
-      alternative_rep, stats, alternative_estimates.theta, estimate::OrdinalWeightKind::DWLS,
-      parameterization);
+  if (cache && !cache->parts) {
+    cache->parts = estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
+        alternative_rep, stats, alternative_estimates.theta,
+        estimate::OrdinalWeightKind::DWLS, parameterization);
+    ++cache->builds;
+  }
+  auto parts = cache ? *cache->parts :
+      estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
+          alternative_rep, stats, alternative_estimates.theta,
+          estimate::OrdinalWeightKind::DWLS, parameterization);
   if (!parts) {
     set_unavailable(out.lr, InferenceReason::NumericFailure, parts.error().detail);
     return out;
@@ -436,10 +491,10 @@ void fiml_score(const post_expected<inference::frontier::ScoreComponents>& compo
 }
 }
 
-PolicyInference policy_inference_fiml(spec::LatentStructure pt,
+static PolicyInference policy_inference_fiml_cached(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
     const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
-    const PolicyFitState& state) {
+    const PolicyFitState& state, FimlPolicyFit::Impl* cache) {
   using namespace estimate::fiml;
   if (state.penalized || !state.converged) {
     auto out = policy_unavailable(state.penalized ? InferenceReason::Penalized
@@ -463,7 +518,11 @@ PolicyInference policy_inference_fiml(spec::LatentStructure pt,
   const auto& K = con->K();
   if (K.cols() == 0) out.covariance = Eigen::MatrixXd::Zero(pt.n_free(), pt.n_free());
   else {
-    auto mb = fiml_score_meat_bread(pt, rep, raw, pack, estimates);
+    if (cache && !cache->bread) {
+      cache->bread = fiml_score_meat_bread(pt, rep, raw, pack, estimates);
+      ++cache->builds;
+    }
+    auto mb = cache ? *cache->bread : fiml_score_meat_bread(pt, rep, raw, pack, estimates);
     if (!mb) {
       out.covariance_reason = reason_from(mb.error());
       out.covariance_detail = mb.error().detail;
@@ -518,13 +577,13 @@ PolicyInference policy_inference_fiml(spec::LatentStructure pt,
   return out;
 }
 
-PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
+static PolicyNested policy_nested_fiml_cached(spec::LatentStructure null_pt,
     const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
     const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
     const model::MatrixRep& alternative_rep,
     const estimate::Estimates& alternative_estimates,
     const PolicyFitState& alternative_state, const data::RawData& raw,
-    const estimate::fiml::FIMLPack& pack) {
+    const estimate::fiml::FIMLPack& pack, FimlPolicyFit::Impl* cache) {
   PolicyNested out;
   out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
   out.verdict_disagreement = verdict_disagreement(null_state) || verdict_disagreement(alternative_state);
@@ -559,8 +618,13 @@ PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
   using namespace inference::frontier;
   fiml_score(nested_score_components(alternative_pt, alternative_rep, null_pt, null_rep,
       nullptr, raw, &pack, null_estimates, ScoreSensitivity::ObservedInformation), out.score);
-  auto mb = estimate::fiml::fiml_score_meat_bread(alternative_pt, alternative_rep,
-      raw, pack, alternative_estimates);
+  if (cache && !cache->bread) {
+    cache->bread = estimate::fiml::fiml_score_meat_bread(alternative_pt,
+        alternative_rep, raw, pack, alternative_estimates);
+    ++cache->builds;
+  }
+  auto mb = cache ? *cache->bread : estimate::fiml::fiml_score_meat_bread(
+      alternative_pt, alternative_rep, raw, pack, alternative_estimates);
   if (!mb) {
     set_unavailable(out.lr, reason_from(mb.error()), mb.error().detail);
     return out;
@@ -582,6 +646,118 @@ PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
     set_unavailable(out.lr, InferenceReason::NotConverged, "the alternative fits worse than the null");
   else calibrate_spectrum(out.lr);
   return out;
+}
+
+
+PolicyInference policy_inference_fiml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& estimates,
+    const PolicyFitState& state) {
+  return policy_inference_fiml_cached(std::move(pt), rep, raw, pack, estimates, state, nullptr);
+}
+PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack) {
+  return policy_nested_fiml_cached(std::move(null_pt), null_rep, null_estimates,
+      null_state, std::move(alternative_pt), alternative_rep, alternative_estimates,
+      alternative_state, raw, pack, nullptr);
+}
+PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& estimates, estimate::OrdinalParameterization parameterization,
+    const PolicyFitState& state, const std::vector<std::int8_t>* row_user) {
+  return policy_inference_dwls_cached(std::move(pt), rep, stats, estimates,
+      parameterization, state, row_user, nullptr);
+}
+PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::OrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return policy_nested_dwls_cached(std::move(null_pt), null_rep, null_estimates,
+      null_state, std::move(alternative_pt), alternative_rep, alternative_estimates,
+      alternative_state, stats, parameterization, null_row_user, alternative_row_user, nullptr);
+}
+namespace {
+template<class Matrix> bool same_blocks(const std::vector<Matrix>& a,
+                                        const std::vector<Matrix>& b) {
+  if (a.size() != b.size()) return false;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    if (a[i].rows() != b[i].rows() || a[i].cols() != b[i].cols()) return false;
+    const auto x = a[i].template cast<double>().array();
+    const auto y = b[i].template cast<double>().array();
+    if (!((x == y) || (x.isNaN() && y.isNaN())).all()) return false;
+  }
+  return true;
+}
+PolicyNested different_policy_data(const PolicyFitState& a, const PolicyFitState& b) {
+  PolicyNested out;
+  out.psd_boundary = a.psd_boundary || b.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(a) || verdict_disagreement(b);
+  set_unavailable(out.score, InferenceReason::NotNested,
+      "policy snapshots must use the same observations, statistics and weight recipe");
+  out.lr = out.score;
+  return out;
+}
+}
+PolicyInference policy_inference_fiml(FimlPolicyFit& fit, const PolicyFitState& state) {
+  auto& f = *fit.impl;
+  if (state.penalized || !state.converged)
+    return policy_inference_fiml_cached(f.pt, f.rep, f.raw, f.pack, f.estimates, state, &f);
+  // Retain which state flags the original path propagates, including its
+  // early unsupported-model returns. State never changes the ingredients.
+  if (!f.inference) f.inference = policy_inference_fiml_cached(
+      f.pt, f.rep, f.raw, f.pack, f.estimates, {true, true, false, false}, &f);
+  auto out = *f.inference;
+  out.psd_boundary = out.psd_boundary && state.psd_boundary;
+  out.verdict_disagreement = out.verdict_disagreement && verdict_disagreement(state);
+  return out;
+}
+PolicyNested policy_nested_fiml(FimlPolicyFit& null, const PolicyFitState& null_state,
+    FimlPolicyFit& alternative, const PolicyFitState& alternative_state) {
+  auto& a = *null.impl; auto& b = *alternative.impl;
+  if (!null_state.penalized && !alternative_state.penalized &&
+      null_state.converged && alternative_state.converged &&
+      (!same_blocks(a.raw.X, b.raw.X) || !same_blocks(a.raw.mask, b.raw.mask)))
+    return different_policy_data(null_state, alternative_state);
+  return policy_nested_fiml_cached(a.pt, a.rep, a.estimates, null_state,
+      b.pt, b.rep, b.estimates, alternative_state, b.raw, b.pack, &b);
+}
+PolicyInference policy_inference_dwls(DwlsPolicyFit& fit, const PolicyFitState& state) {
+  auto& f = *fit.impl;
+  const auto* row_user = f.row_user.empty() ? nullptr : &f.row_user;
+  if (state.penalized || !state.converged)
+    return policy_inference_dwls_cached(f.pt, f.rep, f.stats, f.estimates,
+        f.parameterization, state, row_user, &f);
+  if (!f.inference) f.inference = policy_inference_dwls_cached(f.pt, f.rep,
+      f.stats, f.estimates, f.parameterization, {true, true, false, false}, row_user, &f);
+  auto out = *f.inference;
+  out.psd_boundary = out.psd_boundary && state.psd_boundary;
+  out.verdict_disagreement = out.verdict_disagreement && verdict_disagreement(state);
+  return out;
+}
+PolicyNested policy_nested_dwls(DwlsPolicyFit& null, const PolicyFitState& null_state,
+    DwlsPolicyFit& alternative, const PolicyFitState& alternative_state) {
+  auto& a = *null.impl; auto& b = *alternative.impl;
+  if (!null_state.penalized && !alternative_state.penalized &&
+      null_state.converged && alternative_state.converged &&
+      (a.parameterization != b.parameterization || a.stats.n_obs != b.stats.n_obs ||
+      !same_blocks(a.stats.R, b.stats.R) || !same_blocks(a.stats.thresholds, b.stats.thresholds) ||
+      !same_blocks(a.stats.int_data, b.stats.int_data) ||
+      !same_blocks(a.stats.NACOV, b.stats.NACOV) || !same_blocks(a.stats.W_dwls, b.stats.W_dwls) ||
+      !same_blocks(a.stats.moment_influence, b.stats.moment_influence) ||
+      !same_blocks(a.stats.moment_bread, b.stats.moment_bread)))
+    return different_policy_data(null_state, alternative_state);
+  return policy_nested_dwls_cached(a.pt, a.rep, a.estimates, null_state,
+      b.pt, b.rep, b.estimates, alternative_state, b.stats, b.parameterization,
+      a.row_user.empty() ? nullptr : &a.row_user,
+      b.row_user.empty() ? nullptr : &b.row_user, &b);
 }
 
 }  // namespace magmaan::api

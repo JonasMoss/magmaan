@@ -1,3 +1,22 @@
+# Fit-owned cache: keys retain all portable inputs under R value semantics.
+# A changed model, estimate, data, parameterization or weight gets a new handle.
+.policy_context <- function(fit, kind, build, data = NULL) {
+  cache <- attr(fit, "policy_cache")
+  if (!is.environment(cache)) return(build())
+  keys <- fit
+  attr(keys, "policy_cache") <- NULL
+  keys <- list(fit = keys, data = data)
+  saved <- cache[[kind]]
+  native <- if (is.null(saved)) NULL else if (kind == "dwls") saved$value else saved$value$native
+  if (is.null(saved) || !identical(saved$pid, Sys.getpid()) ||
+      is.null(native) || identical(format(native), "<pointer: (nil)>") ||
+      !identical(saved$keys, keys)) {
+    saved <- list(pid = Sys.getpid(), keys = keys, value = build())
+    cache[[kind]] <- saved
+  }
+  saved$value
+}
+
 # Explicit, immutable inference snapshots; no p-values during preparation.
 .score_object <- function(x, class, ...) {
   do.call(.prepared_object, c(x, list(...), list(class = class)))
@@ -6,6 +25,9 @@
 prepare_inference <- function(fit, data = NULL) {
   if (inherits(fit, "magmaan_inference")) {
     if (!is.null(data)) stop("prepare_inference(): a snapshot already owns its data")
+    if (identical(format(fit$native), "<pointer: (nil)>") ||
+        !identical(fit$pid, Sys.getpid())) return(prepare_inference(fit$original_fit,
+          if (identical(fit$estimator, "ML")) fit$raw else NULL))
     return(fit)
   }
   if (!inherits(fit, "magmaan_fit")) stop("prepare_inference(): supply a fitted magmaan model")
@@ -31,7 +53,9 @@ prepare_inference <- function(fit, data = NULL) {
     if (is.null(data)) stop("prepare_inference(): supply the fitting data")
     raw <- raw_data_arg(fit, data)
   }
-  .score_object(prepare_inference_impl(fit, raw, shared_data), "magmaan_inference")
+  build <- function() .score_object(prepare_inference_impl(fit, raw, shared_data),
+                                   "magmaan_inference", pid = Sys.getpid())
+  if (estimator == "FIML") .policy_context(fit, "fiml", build) else build()
 }
 
 scores <- function(object, data = NULL, space = c("parameter", "saturated")) {
@@ -244,7 +268,11 @@ inference_covariance <- function(context, robust = TRUE) {
 }
 
 inference_reuse <- function(context) {
+  if (inherits(context, "magmaan_fit") && isTRUE(context$ordinal))
+    return(list(ingredient_builds = dwls_policy_reuse_impl(.policy_context(context,
+      "dwls", function() prepare_policy_dwls_impl(context)))))
   stopifnot(inherits(context,"magmaan_inference"))
+  context <- prepare_inference(context)
   inference_reuse_impl(context$native)
 }
 
@@ -262,7 +290,8 @@ policy_inference <- function(fit, data = NULL) {
   if (state[[4]]) return(policy_inference_impl(NULL, state))
   estimator <- toupper(fit$estimator %||% "")
   if (isTRUE(fit$ordinal) && identical(estimator, "DWLS")) {
-    out <- tryCatch(policy_inference_dwls_impl(fit, state), error = function(e) e)
+    out <- tryCatch(policy_inference_dwls_impl(fit, state,
+      .policy_context(fit, "dwls", function() prepare_policy_dwls_impl(fit))), error = function(e) e)
     if (inherits(out, "error"))
       return(.policy_unavailable("unsupported_model", conditionMessage(out), state))
     return(out)
@@ -322,10 +351,11 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   dwls <- vapply(list(fit_H1, fit_H0), function(fit)
     isTRUE(fit$ordinal) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))
   if (all(dwls)) {
-    same <- function(x) identical(fit_H1$ordinal_stats[[x]], fit_H0$ordinal_stats[[x]])
-    if (!all(vapply(c("R", "thresholds", "nobs"), same, logical(1))))
+    if (!identical(fit_H1$ordinal_stats, fit_H0$ordinal_stats))
       stop("policy_nested(): the two fits must use the same observations in the same order")
-    out <- tryCatch(policy_nested_dwls_impl(fit_H1, fit_H0, states$H0, states$H1),
+    out <- tryCatch(policy_nested_dwls_impl(fit_H1, fit_H0, states$H0, states$H1,
+      .policy_context(fit_H0, "dwls", function() prepare_policy_dwls_impl(fit_H0)),
+      .policy_context(fit_H1, "dwls", function() prepare_policy_dwls_impl(fit_H1))),
                     error = function(e) e)
     if (inherits(out, "error")) return(unsupported(conditionMessage(out)))
     return(out)

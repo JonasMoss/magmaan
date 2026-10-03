@@ -428,7 +428,9 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the inference policy covers single-level ML and FIML");
   } else if (c.estimator == "FIML") {
-    out = magmaan::api::policy_inference_fiml(c.ctx.pt, c.ctx.rep, c.raw, c.pack, c.estimates, fit_state);
+    if (!c.fiml_policy) c.fiml_policy = std::make_shared<magmaan::api::FimlPolicyFit>(
+        c.ctx.pt, c.ctx.rep, c.raw, c.pack, c.estimates);
+    out = magmaan::api::policy_inference_fiml(*c.fiml_policy, fit_state);
   } else if (!c.ntml) {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the inference policy requires random x, affine equality constraints and no active bounds");
@@ -439,13 +441,33 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
   return policy_inference_list(out);
 }
 
+// [[Rcpp::export]]
+SEXP prepare_policy_dwls_impl(Rcpp::List fit) {
+  auto ctx = ctx_from_fit(fit);
+  auto est = est_from_fit(fit);
+  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+      fit, R_NilValue, "ordinal_stats", "policy_inference"));
+  const std::string parameterization = fit.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit["parameterization"])
+      : ordinal_parameterization_attr(fit["partable"]);
+  return score_bindings::handle(magmaan::api::DwlsPolicyFit(std::move(ctx.pt),
+      std::move(ctx.rep), std::move(stats), std::move(est),
+      ordinal_parameterization_from_string(parameterization)), "magmaan_dwls_policy");
+}
+
+// [[Rcpp::export]]
+double dwls_policy_reuse_impl(SEXP context) {
+  return static_cast<double>(magmaan::api::policy_ingredient_builds(
+      score_bindings::get<magmaan::api::DwlsPolicyFit>(context, "magmaan_dwls_policy")));
+}
+
 // policy_inference_dwls_impl() — mirrors api::policy_inference_dwls() for an
 // all-ordinal DWLS fit, from the fit's partable, estimates and retained
 // ordinal statistics. Only plain DWLS (weight diag(NACOV)^-1) qualifies;
 // Stage-2 NT/DLS, supplied-weight, ULS and WLS fits are unavailable.
 //
 // [[Rcpp::export]]
-Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state) {
+Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state, SEXP context = R_NilValue) {
   using magmaan::api::InferenceReason;
   const auto fit_state = policy_state_from(state);
   auto text = [&](const char* name) {
@@ -472,7 +494,9 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state)
     const std::string parameterization = fit.containsElementNamed("parameterization")
         ? Rcpp::as<std::string>(fit["parameterization"])
         : ordinal_parameterization_attr(fit["partable"]);
-    out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
+    if (!Rf_isNull(context)) out = magmaan::api::policy_inference_dwls(
+        score_bindings::get<magmaan::api::DwlsPolicyFit>(context, "magmaan_dwls_policy"), fit_state);
+    else out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
         ordinal_parameterization_from_string(parameterization), fit_state);
   }
   out.verdict_disagreement = magmaan::api::verdict_disagreement(fit_state);
@@ -486,7 +510,9 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state)
 // [[Rcpp::export]]
 Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                    Rcpp::LogicalVector null_state,
-                                   Rcpp::LogicalVector alternative_state) {
+                                   Rcpp::LogicalVector alternative_state,
+                                   SEXP null_context = R_NilValue,
+                                   SEXP alternative_context = R_NilValue) {
   const auto null_fit = policy_state_from(null_state);
   const auto alternative_fit = policy_state_from(alternative_state);
   auto text = [](Rcpp::List fit, const char* name) {
@@ -517,9 +543,13 @@ Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
   const magmaan::estimate::Estimates e0 = est_from_fit(fit_H0);
   auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
       fit_H1, R_NilValue, "ordinal_stats", "policy_nested"));
-  auto out = magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
-      std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
-      ordinal_parameterization_from_string(parameterization));
+  auto out = !Rf_isNull(null_context) && !Rf_isNull(alternative_context)
+      ? magmaan::api::policy_nested_dwls(
+          score_bindings::get<magmaan::api::DwlsPolicyFit>(null_context, "magmaan_dwls_policy"), null_fit,
+          score_bindings::get<magmaan::api::DwlsPolicyFit>(alternative_context, "magmaan_dwls_policy"), alternative_fit)
+      : magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
+          std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
+          ordinal_parameterization_from_string(parameterization));
   return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
                             Rcpp::_["lr"] = policy_test_list(out.lr),
                             Rcpp::_["psd_boundary"] = out.psd_boundary,
@@ -549,8 +579,12 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
     auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
     auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
     if (a.estimator == "FIML" && b.estimator == "FIML") {
-      out = magmaan::api::policy_nested_fiml(a.ctx.pt, a.ctx.rep, a.estimates, null_fit,
-          b.ctx.pt, b.ctx.rep, b.estimates, alternative_fit, a.raw, a.pack);
+      if (!a.fiml_policy) a.fiml_policy = std::make_shared<magmaan::api::FimlPolicyFit>(
+          a.ctx.pt, a.ctx.rep, a.raw, a.pack, a.estimates);
+      if (!b.fiml_policy) b.fiml_policy = std::make_shared<magmaan::api::FimlPolicyFit>(
+          b.ctx.pt, b.ctx.rep, b.raw, b.pack, b.estimates);
+      out = magmaan::api::policy_nested_fiml(*a.fiml_policy, null_fit,
+          *b.fiml_policy, alternative_fit);
     } else if (a.estimator != "ML" || b.estimator != "ML" || !a.ntml || !b.ntml) {
       unavailable(InferenceReason::UnsupportedModel,
                   "nested policy tests cover complete-data ML with random x, affine equality "
@@ -570,7 +604,10 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
 // [[Rcpp::export]]
 Rcpp::List inference_reuse_impl(SEXP context) {
   auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
-  if (!c.ntml) Rcpp::stop("reuse counters currently require continuous ML");
+  if (c.estimator == "FIML") return Rcpp::List::create(
+      Rcpp::_["ingredient_builds"] = static_cast<double>(c.fiml_policy ?
+          magmaan::api::policy_ingredient_builds(*c.fiml_policy) : 0));
+  if (!c.ntml) Rcpp::stop("reuse counters require ML or FIML");
   const auto& f=*c.ntml;
   return Rcpp::List::create(Rcpp::_["geometry_builds"]=static_cast<double>(f.geometry_builds),
     Rcpp::_["u_builds"]=static_cast<double>(f.u_builds),

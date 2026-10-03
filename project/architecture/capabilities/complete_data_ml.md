@@ -530,8 +530,11 @@
   covariance/Wald, restricted means, repeated calls and ownership/invalidation.
   `inference_reuse` exposes construction counters and
   `benchmarks/inference_reuse.R` provides a bounded timing comparison.
-  Shared geometry for FIML/ML2S and additional bread/nesting conventions remains
-  on the backlog; the first-class score interfaces below remain available.
+  FIML/DWLS ordinary-policy evaluation-point ingredients now have owning
+  snapshots (TASK-23; see [FIML](fiml.md#ordinary-policy) and
+  [ordinal](ordinal_and_mixed.md)). Generic FIML/ML2S score geometry and
+  additional bread/nesting conventions remain separate; the first-class score
+  interfaces below remain available.
 
 - **Reusable score primitives (2026-09-16):**
   `inference::frontier::{global_score_components,global_score_components_ml2s,

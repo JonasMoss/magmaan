@@ -122,6 +122,35 @@ struct PolicyNested {
 // All components unavailable for one reason.
 PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 
+// Owning evaluation-point snapshots. Inputs cannot be edited or combined with
+// another fit after construction; lazily retained ingredients include failures.
+// As with NTMLFit, a snapshot is used from one thread at a time.
+class FimlPolicyFit {
+ public:
+  FimlPolicyFit(spec::LatentStructure pt, model::MatrixRep rep, data::RawData raw,
+      estimate::fiml::FIMLPack pack, estimate::Estimates estimates);
+  struct Impl;
+  const std::shared_ptr<Impl> impl;
+};
+class DwlsPolicyFit {
+ public:
+  DwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
+      data::OrdinalStats stats, estimate::Estimates estimates,
+      estimate::OrdinalParameterization parameterization,
+      std::vector<std::int8_t> row_user = {});
+  struct Impl;
+  const std::shared_ptr<Impl> impl;
+};
+PolicyInference policy_inference_fiml(FimlPolicyFit& fit, const PolicyFitState& state);
+PolicyNested policy_nested_fiml(FimlPolicyFit& null, const PolicyFitState& null_state,
+    FimlPolicyFit& alternative, const PolicyFitState& alternative_state);
+PolicyInference policy_inference_dwls(DwlsPolicyFit& fit, const PolicyFitState& state);
+PolicyNested policy_nested_dwls(DwlsPolicyFit& null, const PolicyFitState& null_state,
+    DwlsPolicyFit& alternative, const PolicyFitState& alternative_state);
+// Number of expensive evaluation-point builds, for reuse diagnostics.
+std::size_t policy_ingredient_builds(const FimlPolicyFit& fit);
+std::size_t policy_ingredient_builds(const DwlsPolicyFit& fit);
+
 // Complete-data normal-theory ML.
 //
 // Parameter covariance: the sandwich V (sum_i s_i s_i') V with V the inverse
