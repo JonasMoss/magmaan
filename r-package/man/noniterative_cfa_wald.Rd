@@ -37,3 +37,5 @@ Sigma) or \code{"empirical"} (distribution-free; requires \code{data}).}
 Exact chi-square on \code{nrow(R)} degrees of freedom, using the delta-method
 covariance. The primary nested test for these estimators.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

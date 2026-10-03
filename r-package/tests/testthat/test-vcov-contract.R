@@ -13,7 +13,7 @@ test_that("ML covariance regimes identify information and sandwich formulas", {
     expect_equal(unname(vcov(fit, paste0("information_", bread))),
                  unname(unclass(lavaan::lavInspect(oracle, "vcov"))), tolerance = 1e-5)
   }
-  expect_equal(vcov(fit), vcov(fit, "sandwich_expected"))
+  expect_equal(vcov(fit), vcov(fit, "sandwich_observed"))
   expect_equal(vcov(fit, "model"), vcov(fit, "sandwich_expected"))
   expect_equal(vcov(fit, "robust"), vcov(fit, "sandwich_observed"))
   expect_gt(max(abs(vcov(fit, "information_expected") - vcov(fit, "sandwich_expected"))), 1e-5)
@@ -48,7 +48,7 @@ test_that("FIML explicit regimes reuse matching information conventions", {
     expect_equal(vcov(fit, paste0("information_", bread)), ref$vcov_model, tolerance = 1e-10)
     expect_equal(vcov(fit, paste0("sandwich_", bread)), ref$vcov_sandwich, tolerance = 1e-10)
   }
-  expect_equal(vcov(fit), vcov(fit, "information_observed"))
+  expect_equal(vcov(fit), vcov(fit, "sandwich_observed"))
   expect_equal(vcov(fit, "model"), vcov(fit, "information_observed"))
   expect_equal(vcov(fit, "robust"), vcov(fit, "sandwich_observed"))
   expect_error(vcov(fit, "delta_nt"), "not supported")
@@ -69,8 +69,8 @@ test_that("categorical and closed-form fits do not silently substitute regimes",
   expect_error(vcov(fit, "information_expected"), "not supported")
   for (v in paste0("x", 1:6)) d[[v]] <- as.integer(cut(d[[v]], 3))
   ordinal <- fit_model(vcov_syntax, d, estimator = "DWLS", ordered = paste0("x", 1:6))
-  expect_equal(vcov(ordinal), vcov(ordinal, "sandwich_expected"))
-  expect_equal(vcov(ordinal, "robust"), vcov(ordinal, "sandwich_observed"))
+  expect_equal(vcov(ordinal), vcov(ordinal, "sandwich_ij"))
+  expect_equal(vcov(ordinal, "robust"), vcov(ordinal, "sandwich_ij"))
   expect_error(vcov(ordinal, "information_observed"), "not supported")
   sam <- structure(list(vcov = diag(2)), class = c("magmaan_sam_fit", "magmaan_fit"))
   expect_equal(vcov(sam, "stored"), diag(2))

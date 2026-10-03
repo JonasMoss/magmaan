@@ -295,7 +295,8 @@ Rcpp::NumericMatrix ntml_rows_impl(SEXP object) {
 Rcpp::NumericMatrix ntml_covariance_impl(SEXP context, bool robust) {
   auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   if (!c.ntml) Rcpp::stop("inference_covariance(): shared geometry requires continuous ML");
-  auto v=magmaan::robust::frontier::ntml_covariance(*c.ntml,robust);
+  auto v = robust ? magmaan::robust::frontier::ntml_score_sandwich(*c.ntml, magmaan::robust::Information::Observed)
+                  : magmaan::robust::frontier::ntml_covariance(*c.ntml, false);
   if (!v) stop_post(v.error()); return Rcpp::wrap(**v);
 }
 

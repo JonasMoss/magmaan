@@ -76,8 +76,8 @@ chisq_wls <- 2 * fit_wls$ntotal * fit_wls$fmin
 stopifnot(abs(chisq_dwls - lavaan::fitMeasures(lavaan_dwls, "chisq")) < 0.08)
 stopifnot(abs(chisq_wls - lavaan::fitMeasures(lavaan_wls, "chisq")) < 0.08)
 
-rob_dwls <- core$robust_ordinal(fit_dwls, d)
-rob_wls <- core$robust_ordinal(fit_wls, d, weight = "WLS")
+rob_dwls <- core$robust_ordinal(fit_dwls, d, bread = "expected")
+rob_wls <- core$robust_ordinal(fit_wls, d, weight = "WLS", bread = "expected")
 stopifnot(nrow(rob_dwls$vcov) == length(fit_dwls$theta))
 stopifnot(length(rob_dwls$se) == length(fit_dwls$theta))
 stopifnot(all(is.finite(rob_dwls$se)))
@@ -116,15 +116,15 @@ stopifnot(abs(omega_poly$se - omega_poly_fit$se) < 1e-12)
 stopifnot(abs(omega_poly$value - omega_poly_direct$value) < 1e-12)
 stopifnot(abs(omega_poly$se - omega_poly_direct$se) < 1e-12)
 
-mi_dwls <- magmaanlab::modification_indices(fit_dwls)
-mi_dwls_explicit <- magmaanlab::modification_indices(fit_dwls, d)
+mi_dwls <- magmaanlab::modification_indices(fit_dwls, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+mi_dwls_explicit <- magmaanlab::modification_indices(fit_dwls, d, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
 model_score <- "f =~ x1 + L*x2 + L*x3 + x4"
 m_score <- magmaanlab::model_spec(model_score, ordered = ordered,
                                parameterization = "delta")
 fit_score <- core$fit_dwls_ordinal(
   m_score, d, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-st_dwls <- magmaanlab::score_tests(fit_score)
-st_dwls_explicit <- magmaanlab::score_tests(fit_score, d)
+st_dwls <- magmaanlab::score_tests(fit_score, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+st_dwls_explicit <- magmaanlab::score_tests(fit_score, d, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
 stopifnot(nrow(mi_dwls) > 0L, nrow(st_dwls) > 0L)
 stopifnot(identical(mi_dwls$lhs, mi_dwls_explicit$lhs),
           identical(mi_dwls$rhs, mi_dwls_explicit$rhs),
@@ -192,7 +192,7 @@ m_def <- magmaanlab::model_spec(model_def, ordered = ordered,
 d_def <- core$data_ordinal_stats_from_df(df, m_def)
 fit_def <- core$fit_dwls_ordinal(
   m_def, d_def, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-rob_def <- core$robust_ordinal(fit_def, d_def)
+rob_def <- core$robust_ordinal(fit_def, d_def, bread = "expected")
 mg_def <- magmaanlab::compute_defined(model_def, fit_def, rob_def$vcov)
 lav_def <- lavaan::cfa(model_def, data = df, ordered = ordered,
                        estimator = "DWLS", parameterization = "delta")
@@ -222,8 +222,8 @@ m_mx <- magmaanlab::model_spec(model, ordered = c("x1", "x2"),
 d_mx <- core$data_mixed_ordinal_stats_from_df(df_mx, m_mx)
 fit_mx <- core$fit_dwls_mixed_ordinal(
   m_mx, d_mx, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-rob_mx <- core$robust_mixed_ordinal(fit_mx, d_mx)
-mi_mx <- magmaanlab::modification_indices(fit_mx)
+rob_mx <- core$robust_mixed_ordinal(fit_mx, d_mx, bread = "expected")
+mi_mx <- magmaanlab::modification_indices(fit_mx, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
 model_mx_score <- "f =~ x1 + L*x2 + L*x3 + x4"
 m_mx_score <- magmaanlab::model_spec(model_mx_score, ordered = c("x1", "x2"),
                                   parameterization = "delta",
@@ -231,7 +231,7 @@ m_mx_score <- magmaanlab::model_spec(model_mx_score, ordered = c("x1", "x2"),
 fit_mx_score <- core$fit_dwls_mixed_ordinal(
   m_mx_score, d_mx,
   control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-st_mx <- magmaanlab::score_tests(fit_mx_score, d_mx)
+st_mx <- magmaanlab::score_tests(fit_mx_score, d_mx, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
 stopifnot(isTRUE(fit_mx$mixed_ordinal))
 stopifnot(inherits(fit_mx$mixed_ordinal_stats, "magmaan_mixed_ordinal_data"))
 stopifnot(nrow(mi_mx) > 0L, nrow(st_mx) > 0L)

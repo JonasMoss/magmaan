@@ -16,7 +16,7 @@ g1 <- prepare_inference(f1,d); g0 <- prepare_inference(f0,d)
 h <- prepare_hypothesis(g0,g1)
 for (g in list(g0,g1)) {
   q <- inference_quadratic(g,'score')
-  old <- project_scores(score_components(g))
+  old <- project_scores(score_components(g, sensitivity = "expected"))
   close(q$statistic,old$statistic)
   close(score_spectrum(q)$eigenvalues,score_spectrum(old)$eigenvalues)
   lr <- inference_quadratic(g,'lr')
@@ -25,14 +25,14 @@ for (g in list(g0,g1)) {
   close(calibrate_quadratic(lr,c('sb','peba4'))$p_value,gof$p_value)
   close(fmg_tests(g,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value,
         fmg_tests(fresh,x,tests=c('sb_ml','peba4_ml','peba4_ug_ml'))$p_value)
-  close(inference_information(g),magmaanlab:::infer_information_expected(fresh))
-  close(inference_covariance(g),parameter_covariance(g,inference_information(g)))
+  close(inference_information(g,"expected"),magmaanlab:::infer_information_expected(fresh))
+  close(inference_covariance(g,FALSE),parameter_covariance(g,inference_information(g,"expected")))
   close(inference_covariance(g,TRUE),magmaanlab:::infer_robust_se_raw(fresh,as.matrix(x))$vcov)
   V <- inference_covariance(g,TRUE)
   R <- diag(length(g$theta))[1,,drop=FALSE]
   close(wald_test(g,R,V)$chi2,drop(crossprod(R%*%g$theta,solve(R%*%V%*%t(R),R%*%g$theta))))
 }
-qs <- inference_quadratic(h,'score'); ql <- inference_quadratic(h,'lr')
+qs <- inference_quadratic(h,'score'); ql <- inference_quadratic(h,'lr',geometry='expected')
 oldscore <- project_scores(score_components(g0,H1=f1))
 close(qs$statistic,oldscore$statistic)
 close(score_spectrum(qs)$eigenvalues,score_spectrum(oldscore)$eigenvalues)
@@ -40,6 +40,8 @@ oldlr <- robust_nested_lrt(f1,f0,x)
 close(ql$statistic,oldlr$T_diff)
 close(score_spectrum(ql)$eigenvalues,oldlr$eigenvalues)
 close(robust_nested_lrt(g1,g0)$eigenvalues,oldlr$eigenvalues)
+# Both nested geometries cache their reductions independently.
+calibrate_quadratic(inference_quadratic(h,"lr"),"sb")
 # All repeated consumers use their retained geometry and reductions.
 before <- list(inference_reuse(g0),inference_reuse(g1))
 for (i in 1:3) {
@@ -73,7 +75,7 @@ reject(magmaanlab:::infer_fmg_ugamma_spectra(g1$fit,as.matrix(y)),'observations 
 # A restricted mean needs the fitted-mean correction, not centered GOF rows.
 fm <- fit_model(paste(syntax,'x1 ~ 0*1',sep='\n'),transform(x,x1=x1+1),meanstructure=TRUE,control=control)
 gm <- prepare_inference(fm,transform(x,x1=x1+1))
-qm <- inference_quadratic(gm,'score'); om <- project_scores(score_components(gm))
+qm <- inference_quadratic(gm,'score'); om <- project_scores(score_components(gm, sensitivity = "expected"))
 close(qm$statistic,om$statistic)
 close(score_spectrum(qm)$eigenvalues,score_spectrum(om)$eigenvalues)
 gmt <- prepare_inference(fm,prepare_inference_data(fm,transform(x,x1=x1+1),storage='tiled'))

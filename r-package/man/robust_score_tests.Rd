@@ -6,11 +6,11 @@
 equality-release tests, with a direction-specific sandwich correction.}
 \usage{
 modification_indices_robust(fit, data = NULL, weight = NULL,
-  bread = "expected", moments = "structured", cov = "empirical",
+  bread = "observed", moments = "structured", cov = "empirical",
   candidates = "all", include_loadings = TRUE, include_covariances = TRUE,
   information = "expected", estimated_weight = FALSE)
 score_tests_robust(fit, data = NULL, weight = NULL,
-  bread = "expected", moments = "structured", cov = "empirical",
+  bread = "observed", moments = "structured", cov = "empirical",
   estimated_weight = FALSE)
 }
 \arguments{
@@ -68,3 +68,5 @@ use their retained categorical moment covariance and weight conventions; the
 continuous \code{bread}, \code{moments}, and \code{cov} choices do not apply there.}
 \value{A data frame with candidate names and groups, ordinary \code{mi}, EPCs,
 \code{mi.scaled}, \code{scaling.factor}, and the robust \code{pvalue}.}
+
+\details{Generic modification_indices() and score_tests() compose empirical robust inference. To request the historical unscaled comparator explicitly, use cov = "model_implied", estimated_weight = FALSE, and the desired bread/information. Observed-sensitivity LS and ML2S score laws that are not implemented fail explicitly; selecting expected bread requests a comparator.}

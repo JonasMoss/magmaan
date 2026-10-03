@@ -36,3 +36,5 @@ and \code{block_of_param} (0-based group index per free parameter). Reduces to
 Required for mean-structure models (the single-group path omits the intercept
 block).
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

@@ -8,7 +8,7 @@ nested_score_test(
   fit_H1,
   fit_H0,
   data = NULL,
-  sensitivity = c("expected", "observed")
+  sensitivity = c("observed", "expected")
 )
 }
 \arguments{

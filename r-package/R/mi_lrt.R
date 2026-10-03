@@ -52,8 +52,10 @@ modification_indices_lrt <- function(fit, data,
 
   # Reuse the one-step sweep for both the candidate enumeration and the
   # comparison column (lavaan-style mi / epc). WLS needs the weight here too.
-  one_step <- if (is.null(weight)) modification_indices(fit) else
-    modification_indices(fit, weight = weight)
+  one_step <- if (is.null(weight)) modification_indices(fit, data = data, bread = "expected",
+      cov = "model_implied", estimated_weight = FALSE) else
+    modification_indices(fit, data = data, weight = weight, bread = "expected",
+      cov = "model_implied", estimated_weight = FALSE)
   cand <- one_step[one_step$op %in% ops, , drop = FALSE]
   if (!nrow(cand)) {
     stop("modification_indices_lrt(): modification_indices() found no absent ",

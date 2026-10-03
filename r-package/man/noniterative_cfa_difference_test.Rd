@@ -38,3 +38,5 @@ Sigma) or \code{"empirical"} (distribution-free; requires \code{data}).}
 Secondary to the Wald test: \code{T_d} can be negative for a non-minimizing
 estimator (flagged in \code{warnings}).
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

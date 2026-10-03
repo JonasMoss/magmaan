@@ -2907,12 +2907,12 @@ infer_build_u_factor_fit <- function(fit, bread = "expected", moments = "structu
   infer_build_u_factor(fit, bread = bread, moments = moments)
 }
 
-infer_robust_se_fit <- function(fit, gamma_hat, bread = "expected",
+infer_robust_se_fit <- function(fit, gamma_hat, bread = "observed",
                                 moments = "structured", cov = "empirical") {
   infer_robust_se(fit, gamma_hat, bread = bread, moments = moments, cov = cov)
 }
 
-infer_robust_se_raw_fit <- function(fit, X, bread = "expected",
+infer_robust_se_raw_fit <- function(fit, X, bread = "observed",
                                     moments = "structured", cov = "empirical") {
   infer_robust_se_raw(fit, X, bread = bread, moments = moments, cov = cov)
 }

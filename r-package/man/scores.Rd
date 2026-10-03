@@ -22,7 +22,7 @@ unregularized fixed-normal-theory ML2S global score construction.}
 prepare_inference(fit, data = NULL)
 scores(object, data = NULL, space = c("parameter", "saturated"))
 score_components(object, data = NULL, H1 = NULL,
-  sensitivity = c("expected", "observed", "observed-h1",
+  sensitivity = c("observed", "expected", "observed-h1",
                   "observed-shrink-light", "observed-shrink-sqrt"),
   metric = c("expected", "observed", "observed-h1"))
 score_components_from_matrices(score, rows, sensitivity, metric = sensitivity,
@@ -37,7 +37,7 @@ resample_scores(projected, n_flips = 999L, seed = 1,
                  "centered-exponential"), two_point_skewness = 1)
 quadratic_reference(statistic, df, eigenvalues = NULL)
 calibrate_quadratic(object, methods = "peba4")
-inference_information(context, type = c("expected", "observed"))
+inference_information(context, type = c("observed", "expected"))
 parameter_covariance(context, information, meat = NULL)
 wald_test(object, R, vcov, q = NULL)
 }

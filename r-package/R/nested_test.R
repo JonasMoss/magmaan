@@ -49,15 +49,15 @@
 #' @export
 score_flip_test <- function(fit_H1, fit_H0, data = NULL,
                             n_flips = 999L, seed = 1,
-                            calibration = c("all", "effective-standardized",
-                                            "effective", "asymptotic"),
+                            calibration = c("effective", "all", "effective-standardized",
+                                            "asymptotic"),
                             multiplier = c("rademacher", "mammen", "two-point",
                                            "gaussian", "centered-exponential"),
                             two_point_skewness = 1,
                             center_multiplier_scores = FALSE,
                             multiplier_studentization = c("none",
                                                           "weighted-meat"),
-                            sensitivity = c("expected", "observed")) {
+                            sensitivity = c("observed", "expected")) {
   calibration <- match.arg(calibration)
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
@@ -305,7 +305,7 @@ global_score_flip_test <- function(
 #'   p-values, conditioning diagnostics, and setup/asymptotic timings.
 #' @export
 nested_score_test <- function(fit_H1, fit_H0, data = NULL,
-                              sensitivity = c("expected", "observed")) {
+                              sensitivity = c("observed", "expected")) {
   sensitivity <- match.arg(sensitivity)
   out <- score_flip_test(
     fit_H1, fit_H0, data = data, n_flips = 0L, seed = 0,

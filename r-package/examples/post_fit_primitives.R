@@ -65,7 +65,7 @@ stopifnot(close(fs_friendly$scores[[1]], fs_reg$scores[[1]]))
 
 std_friendly <- magmaanlab::standardized(fit, vc_parts, type = "all")
 stopifnot(length(std_friendly$theta) == length(fit$theta))
-mi_friendly <- magmaanlab::modification_indices(fit)
+mi_friendly <- magmaanlab::modification_indices(fit, data = df)
 stopifnot(is.data.frame(mi_friendly))
 
 uf_fit <- core$robust_build_u_factor_fit(fit)

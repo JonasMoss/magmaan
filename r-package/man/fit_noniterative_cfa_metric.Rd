@@ -72,3 +72,5 @@ constraint inside the Sigma/H reconstruction itself: a common standardized
 loading shape is estimated across groups and then converted back to the
 marker chart represented by \code{partable}.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

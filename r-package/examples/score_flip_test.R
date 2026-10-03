@@ -12,8 +12,8 @@ h1 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4", dat,
 h0 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat,
               estimator = "ML", se = "none", test = "none")
 
-a <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17)
-b <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17)
+a <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17, calibration = "all", sensitivity = "expected")
+b <- score_flip_test(h1, h0, dat, n_flips = 63, seed = 17, calibration = "all", sensitivity = "expected")
 # With one complete-data information stratum, the effective direction G is
 # Fisher-orthogonal to the nuisance directions K: G' J K = 0. Thus every flip
 # has the identity variance in exact arithmetic. The two dense-product paths
@@ -59,10 +59,10 @@ stopifnot(
 )
 
 effective <- score_flip_test(
-  h1, h0, dat, n_flips = 63, seed = 17, calibration = "effective")
-score <- nested_score_test(h1, h0, dat)
+  h1, h0, dat, n_flips = 63, seed = 17, calibration = "effective", sensitivity = "expected")
+score <- nested_score_test(h1, h0, dat, sensitivity = "expected")
 h1_model <- model_spec("f =~ x1 + a*x2 + b*x3 + x4")
-score_model <- nested_score_test(h1_model, h0, dat)
+score_model <- nested_score_test(h1_model, h0, dat, sensitivity = "expected")
 stopifnot(
   identical(effective$p_effective, a$p_effective),
   is.na(effective$p_basic),
@@ -89,12 +89,12 @@ f1 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4", dat_mis,
               estimator = "FIML", se = "none", test = "none")
 f0 <- fit_model("f =~ x1 + a*x2 + b*x3 + x4\na == b", dat_mis,
               estimator = "FIML", se = "none", test = "none")
-fa <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
-fb <- score_flip_test(f1, f0, n_flips = 63, seed = 19)
-fs <- nested_score_test(f1, f0)
+fa <- score_flip_test(f1, f0, n_flips = 63, seed = 19, calibration = "all", sensitivity = "expected")
+fb <- score_flip_test(f1, f0, n_flips = 63, seed = 19, calibration = "all", sensitivity = "expected")
+fs <- nested_score_test(f1, f0, sensitivity = "expected")
 f1_model <- model_spec(
   "f =~ x1 + a*x2 + b*x3 + x4", meanstructure = TRUE)
-fs_model <- nested_score_test(f1_model, f0)
+fs_model <- nested_score_test(f1_model, f0, sensitivity = "expected")
 fg <- global_score_flip_test(f1, n_flips = 63, seed = 29)
 fg_observed <- global_score_flip_test(
   f1, n_flips = 63, seed = 29,

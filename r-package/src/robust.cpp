@@ -991,10 +991,21 @@ Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X) {
 // Empty `weight` means reuse fit$ordinal_computational_weight when present,
 // otherwise fit$estimator ("ULS", "DWLS", or "WLS").
 //
+Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight);
+
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
                                 std::string weight = "",
-                                std::string bread = "expected") {
+                                std::string bread = "ij") {
+  if (bread == "ij") {
+    // The global correct-model spectrum keeps expected geometry; covariance
+    // includes estimated-weight influence at a potentially misspecified fit.
+    Rcpp::List covariance = infer_ordinal_robust_ij(fit, ordinal_stats, weight);
+    Rcpp::List result = infer_ordinal_robust(fit, ordinal_stats, weight, "expected");
+    result["vcov"] = covariance["vcov"];
+    result["se"] = covariance["se"];
+    return result;
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
@@ -1109,10 +1120,21 @@ Rcpp::List infer_ordinal_casewise_influence_ij_fit(
       Rcpp::Named("n_total") = static_cast<double>(r_or->n_total));
 }
 
+Rcpp::List infer_mixed_ordinal_robust_ij(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight);
+
 // [[Rcpp::export]]
 Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
                                       std::string weight = "",
-                                      std::string bread = "expected") {
+                                      std::string bread = "ij") {
+  if (bread == "ij") {
+    // The global correct-model spectrum keeps expected geometry; covariance
+    // includes estimated-weight influence at a potentially misspecified fit.
+    Rcpp::List covariance = infer_mixed_ordinal_robust_ij(fit, mixed_stats, weight);
+    Rcpp::List result = infer_mixed_ordinal_robust(fit, mixed_stats, weight, "expected");
+    result["vcov"] = covariance["vcov"];
+    result["se"] = covariance["se"];
+    return result;
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
@@ -1465,7 +1487,7 @@ Rcpp::List infer_mixed_ordinal_profile_lrt(Rcpp::List fit_H1,
 //
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
-                           std::string bread = "expected", std::string moments = "structured",
+                           std::string bread = "observed", std::string moments = "structured",
                            std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1483,7 +1505,7 @@ Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
 Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
                                  Rcpp::NumericVector theta,
                                  Rcpp::NumericMatrix gamma_hat,
-                                 std::string bread = "expected",
+                                 std::string bread = "observed",
                                  std::string moments = "structured",
                                  std::string cov = "empirical") {
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
@@ -1505,7 +1527,7 @@ Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
 //
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
-                               std::string bread = "expected", std::string moments = "structured",
+                               std::string bread = "observed", std::string moments = "structured",
                                std::string cov = "empirical") {
   if (auto cached=magmaanr::ntml_snapshot(fit);
       cached && bread=="expected" && moments=="structured" &&
@@ -1546,7 +1568,7 @@ Rcpp::NumericMatrix infer_casewise_scores_fit(Rcpp::List fit, SEXP X) {
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
                                      Rcpp::NumericVector theta, SEXP X,
-                                     std::string bread = "expected",
+                                     std::string bread = "observed",
                                      std::string moments = "structured",
                                      std::string cov = "empirical") {
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
@@ -1570,7 +1592,7 @@ Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc,
                               double n_total,
-                              std::string bread = "expected",
+                              std::string bread = "observed",
                               std::string moments = "structured",
                               std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);

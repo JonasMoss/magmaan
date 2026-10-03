@@ -72,3 +72,5 @@ inference helpers below and by partable inspection.
 \description{
 Fit a non-iterative CFA estimator.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

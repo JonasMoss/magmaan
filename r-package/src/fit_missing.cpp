@@ -561,7 +561,7 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
 // user and baseline reductions used by lavaan-style robust CFI/RMSEA.
 //
 // [[Rcpp::export]]
-Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust = false) {
+Rcpp::List fiml_fit_measures_impl(Rcpp::List fit, bool robust = true) {
   if (!fit.containsElementNamed("raw_data")) {
     Rcpp::stop("magmaan: fiml_fit_measures_impl() requires a FIML fit with $raw_data");
   }

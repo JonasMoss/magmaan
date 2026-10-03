@@ -37,3 +37,5 @@ statistic is \code{T_diff = T(H0) - T(H1)} with an H1-anchored weighted-chi-squa
 reference. This is an LRT-shaped discrepancy comparison; unlike ML, it can be
 negative for a non-minimizing estimator.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

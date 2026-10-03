@@ -60,3 +60,9 @@ Version 0.1.0 provides a versioned simulation snapshot, not a finished release.
 
 High-level fit reconstruction retains defined parameter estimates using the
 shared C++ evaluator, independently of covariance inference.
+
+- Generic lab covariance and nested score sensitivity now default to observed
+  information with empirical meat; categorical and GLS/WLS covariance uses
+  estimated-weight IJ. Explicit expected/fixed-weight choices remain comparators.
+- FIML fit measures request robust inference by default. Noniterative NT
+  defaults remain documented comparators in the postponed development area.

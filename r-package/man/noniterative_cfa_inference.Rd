@@ -35,3 +35,5 @@ family (\code{p_scaled} Satorra-Bentler, \code{p_meanvar}, \code{p_scaled_shifte
 For \code{discrepancy = "ntml"}, \code{rls_check} is the reweighted-least-squares
 cross-check of \code{T}.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

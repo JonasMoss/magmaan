@@ -15,7 +15,7 @@ using namespace magmaanr::fitglue;
 // [[Rcpp::export]]
 Rcpp::List infer_continuous_ls_robust(
     Rcpp::List fit, SEXP raw_data, SEXP weight = R_NilValue,
-    std::string bread = "expected", std::string gamma = "empirical") {
+    std::string bread = "observed", std::string gamma = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const std::string estimator = fit.containsElementNamed("estimator")

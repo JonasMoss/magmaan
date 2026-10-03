@@ -40,7 +40,7 @@ scores <- function(object, data = NULL, space = c("parameter", "saturated")) {
 }
 
 score_components <- function(object, data = NULL, H1 = NULL,
-    sensitivity = c("expected", "observed", "observed-h1", "observed-shrink-light", "observed-shrink-sqrt"),
+    sensitivity = c("observed", "expected", "observed-h1", "observed-shrink-light", "observed-shrink-sqrt"),
     metric = c("expected", "observed", "observed-h1")) {
   context <- prepare_inference(object, data)
   sensitivity <- match.arg(sensitivity); metric <- match.arg(metric)
@@ -125,7 +125,7 @@ resample_scores <- function(projected, n_flips = 999L, seed = 1,
   resample_scores_impl(projected$native, as.integer(n_flips), seed, match.arg(multiplier), two_point_skewness)
 }
 
-inference_information <- function(context, type = c("expected", "observed")) {
+inference_information <- function(context, type = c("observed", "expected")) {
   stopifnot(inherits(context, "magmaan_inference"))
   out <- inference_information_impl(context$native, match.arg(type))
   attr(out, "inference_context") <- context
@@ -215,10 +215,11 @@ prepare_hypothesis <- function(null, alternative) {
 # geometry: observed information at the null fit for the score projection and
 # at the alternative for the LR spectrum).
 inference_quadratic <- function(object, test = c("score", "lr"),
-                                geometry = c("expected", "observed")) {
+                                geometry = NULL) {
   test <- match.arg(test)
-  geometry <- match.arg(geometry)
   hypothesis <- inherits(object,"magmaan_inference_hypothesis")
+  if (is.null(geometry)) geometry <- if (hypothesis) "observed" else "expected"
+  geometry <- match.arg(geometry, c("observed", "expected"))
   if (!hypothesis && !inherits(object,"magmaan_inference"))
     stop("inference_quadratic(): supply a prepared fit or hypothesis")
   .score_object(ntml_quadratic_impl(object$native,hypothesis,test=="score",
@@ -234,7 +235,7 @@ inference_rows <- function(quadratic) {
   ntml_rows_impl(quadratic$native)
 }
 
-inference_covariance <- function(context, robust = FALSE) {
+inference_covariance <- function(context, robust = TRUE) {
   stopifnot(inherits(context,"magmaan_inference"),is.logical(robust),length(robust)==1L,!is.na(robust))
   out <- ntml_covariance_impl(context$native,robust)
   attr(out,"inference_context") <- context

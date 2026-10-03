@@ -44,3 +44,5 @@ Returns the latent means \code{alpha} (a list, one per non-reference group) with
 delta-method \code{alpha_se} / \code{alpha_cov}, the common intercept \code{nu}, the stacked
 residual \code{d}, and the test (\code{W}, \code{df}, \code{rank}, \code{p_value}).
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

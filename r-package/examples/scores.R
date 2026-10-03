@@ -12,11 +12,12 @@ reject <- function(expr, pattern) {
 }
 check_score <- function(fit, data = NULL) {
   context <- prepare_inference(fit, data)
-  components <- score_components(context)
+  components <- score_components(context, sensitivity = if (fit$estimator == "FIML") "observed" else "expected")
   projected <- project_scores(components, retain_rows = TRUE)
   reference <- score_spectrum(projected)
   p <- calibrate_quadratic(reference, c('sb', 'peba2', 'peba4'))
-  old <- global_score_flip_test(fit, data, n_flips = 31L, seed = 19)
+  old <- global_score_flip_test(fit, data, n_flips = 31L, seed = 19,
+    sensitivity = if (fit$estimator == "FIML") "observed" else "expected")
   stopifnot(abs(projected$statistic - old$statistic_effective) < 1e-6,
             max(abs(reference$eigenvalues - old$eigenvalues)) < 1e-6,
             abs(p$p_value[1] - old$p_mean_scaled) < 1e-7,

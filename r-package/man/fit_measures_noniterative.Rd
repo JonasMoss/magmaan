@@ -37,3 +37,5 @@ the baseline scaling (independence model) to correct the mixture reference.
 likelihood information criteria and are not defined for the closed-form
 non-ML estimator.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

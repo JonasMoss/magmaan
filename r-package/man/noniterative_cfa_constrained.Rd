@@ -38,3 +38,5 @@ minimum-distance duality). Returns the projected estimate (\code{theta_tilde}), 
 rank-deficient covariance (\code{vcov_constrained}, \code{se_constrained}), and the
 constraint test (\code{W}, \code{k}, \code{p_wald}).
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

@@ -14,12 +14,12 @@ prepare_inference_data(fit, data = NULL,
   storage = c("auto", "casewise", "tiled"))
 prepare_hypothesis(null, alternative)
 inference_quadratic(object, test = c("score", "lr"),
-                    geometry = c("expected", "observed"))
-inference_covariance(context, robust = FALSE)
+                    geometry = NULL)
+inference_covariance(context, robust = TRUE)
 inference_reuse(context)
 }
 \arguments{
-\item{geometry}{Nested-test geometry: expected information (the default) or observed information.}
+\item{geometry}{Observed information for nested hypotheses by default; expected information for global goodness-of-fit under the correct-model null. Either may be chosen explicitly.}
 
 \item{fit}{A continuous ML fit defining the observed-variable/group layout.}
 \item{data}{Fitting observations or a prepared dataset. Defaults to retained fitting data.}
@@ -32,7 +32,7 @@ models. The null adds affine restrictions.}
 \item{object}{An inference snapshot (global test), or prepared hypothesis (nested test).}
 \item{test}{Expected-information score or ML likelihood-ratio quadratic.}
 \item{context}{A prepared inference snapshot.}
-\item{robust}{Use the empirical sandwich covariance rather than inverse expected information.}
+\item{robust}{Use the observed-information empirical sandwich covariance (the default), or explicitly request inverse expected information with \code{robust = FALSE}.}
 }
 \details{
 The core reuses the existing NTML U-factor construction and casewise covariance

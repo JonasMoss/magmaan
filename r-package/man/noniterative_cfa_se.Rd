@@ -26,3 +26,5 @@ Sigma) or \code{"empirical"} (distribution-free; requires \code{data}).}
 \description{
 Returns only \code{se} and \code{vcov}, skipping residual goodness-of-fit spectra.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

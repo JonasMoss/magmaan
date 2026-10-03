@@ -33,14 +33,16 @@ It is the ordinary DWLS policy covariance.}
 covariances using normal-theory or empirical moment covariance.}
 \item{\code{stored}}{The covariance already computed by a SAM fit.}
 }
-Unsupported combinations raise an error. Defaults are \code{sandwich_expected}
-for continuous/categorical iterative fits, \code{information_observed} for
-FIML, \code{delta_nt} for non-iterative CFA, and \code{stored} for SAM.
+Unsupported combinations raise an error. Defaults are \code{sandwich_observed}
+for ML and FIML and \code{sandwich_ij} for categorical and estimated-weight
+continuous GLS/WLS fits. IJ errors when the estimator's influence law is unsupported.
+Non-iterative CFA retains \code{delta_nt}: this postponed development area
+uses a documented normal-theory comparator. SAM retains \code{stored} as a diagnostic.
 Shared barrier compositions and pairwise MCAR fits reject this interface
 pending their own sampling/inference contracts.
 
 Legacy \code{model} selects the historical default. Legacy \code{robust}
-selects \code{sandwich_observed}, except for non-iterative CFA
+selects \code{sandwich_observed}, except for categorical and GLS/WLS fits (\code{sandwich_ij}), non-iterative CFA
 (\code{delta_empirical}) and SAM (\code{stored}). These aliases intentionally
 retain their old estimator-dependent meanings; prefer the explicit names.
 }

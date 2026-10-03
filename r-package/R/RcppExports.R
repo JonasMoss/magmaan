@@ -237,23 +237,23 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaanlab_inference_score_tests`, fit, weight, h_step)
 }
 
-inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE) {
+inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE) {
     .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight)
 }
 
-inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "expected", moments = "structured", cov = "empirical", estimated_weight = TRUE) {
+inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", estimated_weight = TRUE) {
     .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight)
 }
 
-inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+inference_score_flip_test <- function(fit_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "effective", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "observed") {
     .Call(`_magmaanlab_inference_score_flip_test`, fit_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "all", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected") {
+inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 999L, seed = 1.0, calibration = "effective", multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "observed") {
     .Call(`_magmaanlab_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected", metric = "expected") {
+inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "observed", metric = "expected") {
     .Call(`_magmaanlab_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric)
 }
 
@@ -377,7 +377,7 @@ estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaanlab_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
-fiml_fit_measures_impl <- function(fit, robust = FALSE) {
+fiml_fit_measures_impl <- function(fit, robust = TRUE) {
     .Call(`_magmaanlab_fiml_fit_measures_impl`, fit, robust)
 }
 
@@ -741,7 +741,7 @@ frontier_profile_lrt_ci_ordinal_polychoric_omega_impl <- function(fit, block, ta
     .Call(`_magmaanlab_frontier_profile_lrt_ci_ordinal_polychoric_omega_impl`, fit, block, target, weight, level, lower, upper, initial_step, ordinal_stats, optimizer, control, bounds, constraint_tol, root_tol, statistic_tol, robust, reference)
 }
 
-infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "expected", gamma = "empirical") {
+infer_continuous_ls_robust <- function(fit, raw_data, weight = NULL, bread = "observed", gamma = "empirical") {
     .Call(`_magmaanlab_infer_continuous_ls_robust`, fit, raw_data, weight, bread, gamma)
 }
 
@@ -913,7 +913,7 @@ infer_empirical_gamma_with_means <- function(X) {
     .Call(`_magmaanlab_infer_empirical_gamma_with_means`, X)
 }
 
-infer_ordinal_robust <- function(fit, ordinal_stats, weight = "", bread = "expected") {
+infer_ordinal_robust <- function(fit, ordinal_stats, weight = "", bread = "ij") {
     .Call(`_magmaanlab_infer_ordinal_robust`, fit, ordinal_stats, weight, bread)
 }
 
@@ -925,7 +925,7 @@ infer_ordinal_casewise_influence_ij_fit <- function(fit, ordinal_stats, weight =
     .Call(`_magmaanlab_infer_ordinal_casewise_influence_ij_fit`, fit, ordinal_stats, weight)
 }
 
-infer_mixed_ordinal_robust <- function(fit, mixed_stats, weight = "", bread = "expected") {
+infer_mixed_ordinal_robust <- function(fit, mixed_stats, weight = "", bread = "ij") {
     .Call(`_magmaanlab_infer_mixed_ordinal_robust`, fit, mixed_stats, weight, bread)
 }
 
@@ -973,15 +973,15 @@ infer_mixed_ordinal_profile_lrt <- function(fit_H1, fit_H0, mixed_stats, eig_tol
     .Call(`_magmaanlab_infer_mixed_ordinal_profile_lrt`, fit_H1, fit_H0, mixed_stats, eig_tol)
 }
 
-infer_robust_se <- function(fit, gamma_hat, bread = "expected", moments = "structured", cov = "empirical") {
+infer_robust_se <- function(fit, gamma_hat, bread = "observed", moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se`, fit, gamma_hat, bread, moments, cov)
 }
 
-infer_robust_se_parts <- function(partable, sample_stats, theta, gamma_hat, bread = "expected", moments = "structured", cov = "empirical") {
+infer_robust_se_parts <- function(partable, sample_stats, theta, gamma_hat, bread = "observed", moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_parts`, partable, sample_stats, theta, gamma_hat, bread, moments, cov)
 }
 
-infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structured", cov = "empirical") {
+infer_robust_se_raw <- function(fit, X, bread = "observed", moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_raw`, fit, X, bread, moments, cov)
 }
 
@@ -989,11 +989,11 @@ infer_casewise_scores_fit <- function(fit, X) {
     .Call(`_magmaanlab_infer_casewise_scores_fit`, fit, X)
 }
 
-infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
+infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "observed", moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
 
-infer_robust_se_zc <- function(fit, Zc, n_total, bread = "expected", moments = "structured", cov = "empirical") {
+infer_robust_se_zc <- function(fit, Zc, n_total, bread = "observed", moments = "structured", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_zc`, fit, Zc, n_total, bread, moments, cov)
 }
 

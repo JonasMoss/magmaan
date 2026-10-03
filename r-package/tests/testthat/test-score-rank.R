@@ -20,14 +20,14 @@ test_that("MI tables exclude identification releases across indicator units", {
       oracle <- lavaan::cfa(syntax, d, meanstructure = TRUE,
                             missing = if (missing) "ml" else "listwise")
       expect_true(lavaan::lavInspect(oracle, "converged"))
-      mi <- modification_indices(fit)
+      mi <- modification_indices(fit, data = d, bread = if (missing) "observed" else "expected")
       reference <- lavaan::modindices(oracle,
                                       information = if (missing) "observed" else "expected")
       expect_equal(nrow(mi), 6L)
       expect_true(all(mi$op == "~~" & mi$lhs != mi$rhs))
       expect_setequal(key(mi), key(reference))
       expect_equal(mi$mi, reference$mi[match(key(mi), key(reference))], tolerance = 1e-4)
-      robust <- modification_indices_robust(fit, data = d, estimated_weight = FALSE)
+      robust <- modification_indices_robust(fit, data = d, bread = if (missing) "observed" else "expected", estimated_weight = FALSE)
       expect_setequal(key(robust), key(mi))
       expect_equal(robust$mi, mi$mi, tolerance = 1e-8)
     }

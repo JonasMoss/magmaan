@@ -47,3 +47,5 @@ This helper reports residual-space analogues for fixed-zero and absent
 one-parameter candidates: raw residual scores, tangent-residualized residual
 scores, and local one-step discrepancy-drop/EPC diagnostics.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

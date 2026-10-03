@@ -1113,7 +1113,8 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL, weight = NULL,
 }
 
 .fit_measures_fiml_robust_auto <- function(robust) {
-  if (is.null(robust) || identical(robust, FALSE) || is.list(robust)) {
+  if (is.null(robust)) return(TRUE)
+  if (identical(robust, FALSE) || is.list(robust)) {
     return(FALSE)
   }
   if (isTRUE(robust)) return(TRUE)

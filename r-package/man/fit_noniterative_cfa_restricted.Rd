@@ -78,3 +78,5 @@ equalities are then projected with a Sigma-only composite metric. Rows that
 mix residual and loading parameters, or rows involving factor variances,
 intercepts, or latent means, are rejected.
 }
+
+\note{Noniterative development is postponed. The NT default is a normal-theory comparator and does not provide structural-misspecification robustness.}

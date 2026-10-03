@@ -414,7 +414,7 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_equal(a$statistic[2], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
   sb <- lavaan::lavTestLRT(lav_cfa(m0, d, estimator = "MLM"), lav_cfa(m1, d, estimator = "MLM"),
                            method = "satorra.2000", A.method = "exact", scaled.shifted = FALSE)
-  lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr"), "sb")
+  lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr", geometry = "expected"), "sb")
   expect_equal(lab_sb$p_value, as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
   expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
   expect_output(print(a), "The score test is primary")

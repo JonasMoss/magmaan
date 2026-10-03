@@ -15,7 +15,7 @@ score_flip_test(
   two_point_skewness = 1,
   center_multiplier_scores = FALSE,
   multiplier_studentization = c("none", "weighted-meat"),
-  sensitivity = c("expected", "observed")
+  sensitivity = c("observed", "expected")
 )
 }
 \arguments{

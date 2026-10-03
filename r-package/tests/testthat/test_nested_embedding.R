@@ -66,7 +66,7 @@ test_that("exact ML path embedding agrees across spellings and with lavaan", {
   expect_equal(inference_quadratic(hyp, "score", geometry = "observed")$statistic,
                expected$score$statistic, tolerance = 1e-10)
   score_null <- lavaan::cfa(nested_spellings[[3L]], d)
-  expect_equal(inference_quadratic(hyp, "score")$statistic,
+  expect_equal(inference_quadratic(hyp, "score", geometry = "expected")$statistic,
                lavaan::lavTestScore(score_null, release = 1)$test$X2, tolerance = 1e-4)
 })
 
@@ -140,10 +140,11 @@ test_that("covariance-only nested scores profile the mean (structural-path const
   h0_syntax <- paste(h1_syntax, "r1 == 0", "r2 == 0", sep = "\n")
   h1 <- fit_model(h1_syntax, d)
   h0 <- fit_model(h0_syntax, d)
-  projected <- project_scores(score_components(prepare_inference(h0, d), H1 = model_spec(h1_syntax)))
+  projected <- project_scores(score_components(prepare_inference(h0, d), H1 = model_spec(h1_syntax), sensitivity = "expected"))
   shared <- prepare_inference_data(h1, d)
   hyp <- prepare_hypothesis(prepare_inference(h0, shared), prepare_inference(h1, shared))
+  expect_true(is.finite(inference_quadratic(hyp, "score")$statistic))
   reference <- lavaan::lavTestScore(lavaan::sem(h0_syntax, d))$test$X2
   expect_equal(projected$statistic, reference, tolerance = 1e-5)
-  expect_equal(inference_quadratic(hyp, "score")$statistic, reference, tolerance = 1e-5)
+  expect_equal(inference_quadratic(hyp, "score", geometry = "expected")$statistic, reference, tolerance = 1e-5)
 })

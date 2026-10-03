@@ -21,16 +21,16 @@ test_that("ordinal ordinary and robust ranks agree across weight scales", {
                          ordered = paste0("x", 1:4), parameterization = parameterization,
                          groups = if (grouped) "g" else NULL)
         expect_true(fit$converged)
-        baseline <- modification_indices(fit)
-        baseline_robust <- modification_indices_robust(fit, estimated_weight = FALSE)
+        baseline <- modification_indices(fit, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+        baseline_robust <- modification_indices_robust(fit, estimated_weight = FALSE, bread = "expected")
         expect_equal(nrow(baseline), if (grouped) 12L else 6L)
         expect_true(all(baseline$op == "~~" & baseline$lhs != baseline$rhs))
         for (scale in c(1e-16, 1, 1e12)) {
           scaled <- fit
           slot <- if (estimator == "DWLS") "W_dwls" else "W_wls"
           scaled$ordinal_stats[[slot]] <- lapply(fit$ordinal_stats[[slot]], function(w) scale * w)
-          ordinary <- modification_indices(scaled)
-          robust <- modification_indices_robust(scaled, estimated_weight = FALSE)
+          ordinary <- modification_indices(scaled, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+          robust <- modification_indices_robust(scaled, estimated_weight = FALSE, bread = "expected")
           expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(baseline))
           expect_identical(ordinal_score_rank_key(robust), ordinal_score_rank_key(ordinary))
           expect_equal(ordinary$mi / scale, baseline$mi, tolerance = 1e-7)
@@ -56,8 +56,8 @@ test_that("ordinal fixed rows and equality releases use the same rank and moment
                          groups = if (grouped) "g" else NULL)
         expect_true(fit$converged)
         for (release in c(FALSE, TRUE)) {
-          ordinary <- if (release) score_tests(fit) else modification_indices(fit)
-          robust <- if (release) score_tests_robust(fit, estimated_weight = FALSE) else modification_indices_robust(fit, estimated_weight = FALSE)
+          ordinary <- if (release) score_tests(fit, bread = "expected", estimated_weight = FALSE, cov = "model_implied") else modification_indices(fit, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+          robust <- if (release) score_tests_robust(fit, estimated_weight = FALSE, bread = "expected") else modification_indices_robust(fit, estimated_weight = FALSE, bread = "expected")
           expect_gt(nrow(ordinary), 0L)
           expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(robust))
           expect_equal(ordinary$mi, robust$mi, tolerance = 1e-8)
@@ -67,21 +67,21 @@ test_that("ordinal fixed rows and equality releases use the same rank and moment
           }
         }
         if (estimator != "ULS") {
-          base_release <- score_tests(fit)
-          base_robust <- score_tests_robust(fit, estimated_weight = FALSE)
+          base_release <- score_tests(fit, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+          base_robust <- score_tests_robust(fit, estimated_weight = FALSE, bread = "expected")
           slot <- if (estimator == "DWLS") "W_dwls" else "W_wls"
           for (scale in c(1e-16, 1e12)) {
             scaled <- fit
             scaled$ordinal_stats[[slot]] <- lapply(fit$ordinal_stats[[slot]], function(w) scale * w)
-            ordinary <- score_tests(scaled)
-            robust <- score_tests_robust(scaled, estimated_weight = FALSE)
+            ordinary <- score_tests(scaled, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
+            robust <- score_tests_robust(scaled, estimated_weight = FALSE, bread = "expected")
             expect_identical(ordinal_score_rank_key(ordinary), ordinal_score_rank_key(base_release))
             expect_identical(ordinal_score_rank_key(robust), ordinal_score_rank_key(ordinary))
             expect_equal(ordinary$mi / scale, base_release$mi, tolerance = 1e-7)
             expect_equal(robust$mi.scaled, base_robust$mi.scaled, tolerance = 1e-7)
           }
         }
-        mi <- modification_indices(fit)
+        mi <- modification_indices(fit, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
         expect_true(any(mi$op == "=~" & mi$rhs == "x1"))
         expect_true(any(mi$op == "=~" & mi$rhs == "x2"))
         expect_true(any(mi$op == "|" & mi$lhs == "x1"))
@@ -89,7 +89,7 @@ test_that("ordinal fixed rows and equality releases use the same rank and moment
         absent <- fit
         pt <- absent$partable
         absent$partable <- pt[!(pt$op == "~~" & pt$lhs == "x1" & pt$rhs == "x3"), ]
-        mi_absent <- modification_indices(absent)
+        mi_absent <- modification_indices(absent, bread = "expected", estimated_weight = FALSE, cov = "model_implied")
         key <- ordinal_score_rank_key(mi)
         index <- match(key, ordinal_score_rank_key(mi_absent))
         expect_false(anyNA(index))

@@ -128,7 +128,7 @@ test_that("observed score sensitivity enforces its supported calibration", {
   h1 <- list(estimator = "FIML")
 
   expect_error(
-    score_flip_test(h1, h0, sensitivity = "observed"),
+    score_flip_test(h1, h0, calibration = "all", sensitivity = "observed"),
     "supports only effective or asymptotic"
   )
   expect_error(

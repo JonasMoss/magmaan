@@ -17,7 +17,7 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
 }
 
 # Explicit names identify the formula, independently of the estimator.
-# NULL preserves historical numerical defaults; model/robust are legacy aliases.
+# NULL selects observed empirical covariance; model/robust are legacy aliases.
 vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   fit <- object
   if (identical(fit$penalty_inference, "not_validated") ||
@@ -29,16 +29,14 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   estimator <- toupper(fit$estimator %||% "")
   fiml <- isTRUE(fit$fiml) || identical(estimator, "FIML")
   categorical <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
-  default <- if (sam) "stored" else if (noniterative) "delta_nt" else if (fiml) {
-    "information_observed"
-  } else "sandwich_expected"
+  default <- if (sam) "stored" else if (noniterative) "delta_nt" else if (categorical || estimator %in% c("GLS", "WLS")) "sandwich_ij" else "sandwich_observed"
   if (is.null(regime)) regime <- default
   regime <- match.arg(regime, c("information_expected", "information_observed",
     "sandwich_expected", "sandwich_observed", "sandwich_ij", "delta_nt",
     "delta_empirical", "stored", "model", "robust"))
-  if (identical(regime, "model")) regime <- default
+  if (identical(regime, "model")) regime <- if (sam) "stored" else if (noniterative) "delta_nt" else if (fiml) "information_observed" else "sandwich_expected"
   if (identical(regime, "robust")) {
-    regime <- if (sam) "stored" else if (noniterative) "delta_empirical" else "sandwich_observed"
+    regime <- if (sam) "stored" else if (noniterative) "delta_empirical" else if (categorical || estimator %in% c("GLS", "WLS")) "sandwich_ij" else "sandwich_observed"
   }
   unsupported <- function() {
     stop("vcov(): regime = '", regime, "' is not supported for this fit", call. = FALSE)
@@ -68,6 +66,7 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
     # the ordinary DWLS policy uses; the other sandwiches keep the weight fixed
     # (sandwich_expected is lavaan's robust.sem).
     if (identical(regime, "sandwich_ij")) {
+      if (isTRUE(fit$mixed_ordinal)) return(infer_mixed_ordinal_robust_ij(fit, fit$mixed_ordinal_stats)$vcov)
       if (!isTRUE(fit$ordinal)) unsupported()
       if (is.null(fit$ordinal_stats)) stop("vcov(): ordinal fit does not carry $ordinal_stats")
       return(infer_ordinal_robust_ij(fit, fit$ordinal_stats)$vcov)
@@ -100,7 +99,7 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
     } else magmaan_core$inference_information_expected(fit)
     return(magmaan_core$inference_vcov(info, fit))
   }
-  if (!sandwich) unsupported()
+  if (!sandwich && !identical(regime, "sandwich_ij")) unsupported()
   data <- data %||% fit$raw_data
   if (is.null(data)) {
     stop("vcov(): empirical-meat sandwiches need raw observations; supply `data` or refit with raw data",
@@ -109,6 +108,9 @@ vcov.magmaan_fit <- function(object, regime = NULL, data = NULL, ...) {
   raw <- raw_data_arg(fit, data, caller = "vcov")
   if (is.list(raw) && !is.null(raw$X)) raw <- raw$X
   if (estimator %in% c("ULS", "GLS", "WLS")) {
+    if (identical(regime, "sandwich_ij")) {
+      return(crossprod(infer_casewise_influence_ij_fit(fit, raw, weight = fit$W)$influence))
+    }
     return(magmaan_core$infer_continuous_ls_robust(fit, raw, weight = fit$W,
       bread = bread, gamma = "empirical")$vcov)
   }
@@ -188,26 +190,22 @@ factor_score_precision <- function(fit, data) {
 modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices()")
   dots <- list(...)
-  if (!is.null(data)) {
-    if ("weight" %in% names(dots)) {
-      stop("modification_indices(): pass only one of `data` or `weight`")
-    }
-    dots$weight <- data
+  if (identical(dots$cov, "model_implied") && identical(dots$estimated_weight, FALSE)) {
+    return(magmaan_core$inference_modification_indices(fit, weight = dots$weight,
+      information = dots$information %||% dots$bread %||% "expected", candidates = candidates))
   }
-  dots$candidates <- candidates
-  do.call(magmaan_core$inference_modification_indices, c(list(fit = fit), dots))
+  if (is.null(dots$estimated_weight) && toupper(fit$estimator) %in% c("ML", "FIML")) dots$estimated_weight <- FALSE
+  do.call(modification_indices_robust, c(list(fit = fit, data = data, candidates = candidates), dots))
 }
 
 score_tests <- function(fit, data = NULL, ...) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests()")
   dots <- list(...)
-  if (!is.null(data)) {
-    if ("weight" %in% names(dots)) {
-      stop("score_tests(): pass only one of `data` or `weight`")
-    }
-    dots$weight <- data
+  if (identical(dots$cov, "model_implied") && identical(dots$estimated_weight, FALSE)) {
+    return(magmaan_core$inference_score_tests(fit, weight = dots$weight))
   }
-  do.call(magmaan_core$inference_score_tests, c(list(fit = fit), dots))
+  if (is.null(dots$estimated_weight) && toupper(fit$estimator) %in% c("ML", "FIML")) dots$estimated_weight <- FALSE
+  do.call(score_tests_robust, c(list(fit = fit, data = data), dots))
 }
 
 # Robust (generalized / Satorra-Bentler-scaled) modification indices and score
@@ -244,7 +242,7 @@ score_tests <- function(fit, data = NULL, ...) {
 # bread/moments/cov are refused. `estimated_weight = TRUE` adds the DWLS, ADF
 # or DLS Stage-2 weight's data influence.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
-                                        bread = "expected",
+                                        bread = "observed",
                                         moments = "structured",
                                         cov = "empirical",
                                         candidates = "all",
@@ -267,7 +265,7 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
 }
 
 score_tests_robust <- function(fit, data = NULL, weight = NULL,
-                               bread = "expected", moments = "structured",
+                               bread = "observed", moments = "structured",
                                cov = "empirical", estimated_weight = TRUE) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests_robust()")
   if (identical(fit$estimator, "FIML") && missing(bread)) bread <- "observed"

@@ -778,7 +778,7 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_modification_indices_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
-    std::string bread = "expected", std::string moments = "structured",
+    std::string bread = "observed", std::string moments = "structured",
     std::string cov = "empirical", std::string information = "expected",
     std::string candidates = "fixed", bool include_loadings = true,
     bool include_covariances = true, bool estimated_weight = true) {
@@ -912,7 +912,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_score_tests_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
-    std::string bread = "expected", std::string moments = "structured",
+    std::string bread = "observed", std::string moments = "structured",
     std::string cov = "empirical", bool estimated_weight = true) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1028,13 +1028,13 @@ Rcpp::DataFrame inference_score_tests_robust(
 Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
                                      SEXP raw, int n_flips = 999,
                                      double seed = 1.0,
-                                     std::string calibration = "all",
+                                     std::string calibration = "effective",
                                      std::string multiplier = "rademacher",
                                      double two_point_skewness = 1.0,
                                      bool center_multiplier_scores = false,
                                      std::string multiplier_studentization =
                                          "none",
-                                     std::string sensitivity = "expected") {
+                                     std::string sensitivity = "observed") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
@@ -1088,12 +1088,12 @@ Rcpp::List inference_score_flip_test(Rcpp::List fit_H1, Rcpp::List fit_H0,
 // [[Rcpp::export]]
 Rcpp::List inference_score_flip_test_model(
     SEXP partable_H1, Rcpp::List fit_H0, SEXP raw, int n_flips = 999,
-    double seed = 1.0, std::string calibration = "all",
+    double seed = 1.0, std::string calibration = "effective",
     std::string multiplier = "rademacher",
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
     std::string multiplier_studentization = "none",
-    std::string sensitivity = "expected") {
+    std::string sensitivity = "observed") {
   const auto calibration_kind =
       score_flip_calibration_from_string(calibration, n_flips);
   const auto multiplier_kind =
@@ -1153,7 +1153,7 @@ Rcpp::List inference_global_score_flip_test(
     double two_point_skewness = 1.0,
     bool center_multiplier_scores = false,
     std::string multiplier_studentization = "none",
-    std::string sensitivity = "expected",
+    std::string sensitivity = "observed",
     std::string metric = "expected") {
   if (n_flips < 1) {
     Rcpp::stop("magmaan: global_score_flip_test n_flips must be positive");
