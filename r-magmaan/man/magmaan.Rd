@@ -56,7 +56,7 @@ acceptance rule; explicit entries override it.
 }
 
 \code{optimizer}, \code{convergence}, \code{preset} and \code{start = "lavaan-0.7.2"} are
-available for continuous ML or FIML with unrestricted covariance and
+available for continuous ML or FIML, or all-ordinal DWLS, with unrestricted covariance and
 supported linear equality constraints. Inspect \code{as_lab_fit(fit)$fitting}
 for the resolved settings and attempts. Fitting computes magmaan's inference policy;
 reporting methods can select an explicit lavaan inference convention.

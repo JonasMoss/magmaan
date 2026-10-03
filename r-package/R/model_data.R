@@ -2160,8 +2160,44 @@ fcsem_standardized_rows <- function(fit, vcov = NULL) {
 }
 
 fit_dwls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
-                             control = NULL, bounds = NULL) {
+                             control = NULL, bounds = NULL, options = NULL) {
+  if (!is.null(options)) {
+    control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
+    optimizer <- NULL
+  }
   pt <- augment_ordinal_partable(model, data)
+  if (!is.null(options)) {
+    # Fix automatic ordinal intercepts before parsing equality coordinates:
+    # fit-time removal would invalidate the resolved affine row matrix.
+    ge <- attr(pt, "magmaan.group_equal", exact = TRUE)
+    release <- !is.null(ge) && 1L %in% as.integer(ge)
+    fixed <- pt$op == "~1" & pt$lhs %in% unlist(data$ov_names) & pt$user == 0L &
+        (!release | pt$group == 1L)
+    pt$free[fixed] <- 0L
+    pt$ustart[fixed] <- 0
+    ids <- sort(unique(pt$free[pt$free > 0L]))
+    free <- pt$free > 0L
+    pt$free[free] <- match(pt$free[free], ids)
+    # Augmented threshold labels need explicit ordered equality rows for the
+    # versioned QR basis, just as model resolution emits for group loadings.
+    thresholds <- which(pt$op == "|" & nzchar(pt$label))
+    for (label in unique(pt$label[thresholds])) {
+      tied <- thresholds[pt$label[thresholds] == label]
+      if (length(tied) < 2L) next
+      for (row in tied[-1L]) {
+        eq <- pt[tied[1L], , drop = FALSE]
+        eq$id <- nrow(pt) + 1L
+        eq$lhs <- pt$plabel[tied[1L]]
+        eq$op <- "=="
+        eq$rhs <- pt$plabel[row]
+        eq$free <- eq$group <- eq$block <- eq$exo <- 0L
+        eq$user <- 2L
+        eq$ustart <- NA_real_
+        eq$label <- eq$plabel <- ""
+        pt <- rbind(pt, eq)
+      }
+    }
+  }
   b <- bounds_arg(bounds, pt, caller = "fit_dwls_ordinal")
   fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
                         control = control, bounds = b)
@@ -2478,9 +2514,10 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     inherits(data, "magmaan_mixed_ordinal_data")
   pairwise_moments <- is.list(data) && !is.data.frame(data) &&
     !is.null(data$pi_hat) && !is.null(data$n_pair)
-  if (!is.null(options) && (!estimator %in% c("ML", "FIML") || ordinal_requested || psd ||
+  if (!is.null(options) && (!(estimator %in% c("ML", "FIML") && !ordinal_requested ||
+      estimator == "DWLS" && ordinal_requested) || psd ||
       !is.null(barrier) || !is.null(cluster) || missing == "pairwise" || pairwise_moments))
-    stop("fitting options currently require ordinary continuous ML or FIML")
+    stop("fitting options currently require ordinary continuous ML or FIML, or all-ordinal DWLS")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
   if (!is.null(cluster)) {
@@ -2592,7 +2629,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       } else if (psd) frontier_fit_ordinal_psd(spec, data, estimator = computational,
           optimizer = psd_optimizer, control = control)
       else switch(computational,
-        DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds),
+        DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds, options = options),
         WLS = fit_wls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds),
         ULS = fit_uls_ordinal(spec, data, optimizer = optimizer, control = control, bounds = bounds))
       fit$ordinal_computational_weight <- computational
@@ -2600,6 +2637,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (!is.null(options)) stop("fitting options require all-ordinal DWLS; mixed presets are unavailable")
       if (estimator %in% c("GLS", "DLS") || !is.null(W)) stop("fit_model(): mixed fixed-weight expansion is deferred")
       if (!is.null(barrier)) stop("fit_model(): mixed/polyserial barrier fitting is deferred")
       if (identical(estimator, "ML")) {

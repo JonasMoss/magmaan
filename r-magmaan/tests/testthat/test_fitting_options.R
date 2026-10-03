@@ -53,3 +53,37 @@ test_that("ordinary FIML uses the pinned fitting engine", {
   expect_identical(lab$fitting$effective$optimizer,"lavaan-0.7.2")
   expect_equal(lab$converged,lavaan::lavInspect(lv,"converged"))
 })
+
+test_that("ordinary all-ordinal DWLS exposes the lavaan fitting preset", {
+  skip_if_not_installed("lavaan")
+  skip_if(as.character(utils::packageVersion("lavaan")) != "0.7.2")
+  d <- lavaan::HolzingerSwineford1939
+  for (name in paste0("x", 1:4)) d[[name]] <- as.integer(cut(d[[name]], 3))
+  for (parameterization in c("delta", "theta")) for (grouped in c(FALSE, TRUE)) {
+    group <- if (grouped) "school" else NULL
+    equal <- if (!grouped) character() else if (parameterization == "theta")
+        c("loadings", "thresholds") else "loadings"
+    m <- magmaan_model("f =~ x1+x2+x3+x4", d, ordered = paste0("x", 1:4),
+        group = group, group.equal = equal, parameterization = parameterization)
+    fit <- magmaan(m, d, estimator = "DWLS", inference = FALSE,
+        options = list(preset = "lavaan-0.7.2"))
+    lv <- lavaan::cfa("f =~ x1+x2+x3+x4", d, ordered = paste0("x", 1:4),
+        group = group, group.label = if (grouped) m$groups else NULL,
+        group.equal = equal, parameterization = parameterization,
+        estimator = "WLSMV", se = "none", test = "none")
+    lab <- as_lab_fit(fit)
+    pt <- lavaan::parTable(lv)
+    key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
+    mp <- lab$partable[lab$partable$free > 0L, ]
+    mp <- mp[order(mp$free), ]
+    expect_equal(as.numeric(lab$theta), pt$est[match(key(mp), key(pt))], tolerance = 1e-5)
+    expect_equal(lab$converged, lavaan::lavInspect(lv, "converged"))
+    expect_identical(lab$fitting$effective$optimizer, "lavaan-0.7.2")
+    for (estimator in c("ULS", "WLS"))
+      expect_error(magmaan(m, d, estimator = estimator, inference = FALSE,
+          options = list(preset = "lavaan-0.7.2")), "continuous ML or FIML")
+  }
+  mixed <- magmaan_model("f =~ x1+x2+x3+x4", d, ordered = c("x1", "x2"))
+  expect_error(magmaan(mixed, d, estimator = "DWLS", inference = FALSE,
+      options = list(preset = "lavaan-0.7.2")), "mixed presets")
+})

@@ -262,7 +262,7 @@ test_that("fitting options reject every unsupported route, including pairwise mo
   m <- "f =~ x1+x2+x3+x4"
   lavaan_options <- list(preset = "lavaan-0.7.2")
   expect_error(fit_model(m, d, cluster = "school", options = lavaan_options), "ordinary continuous")
-  expect_error(fit_model(m, d, ordered = c("x1", "x2", "x3", "x4"), estimator = "DWLS",
+  expect_error(fit_model(m, d, ordered = c("x1", "x2", "x3", "x4"), estimator = "ULS",
       options = lavaan_options), "ordinary continuous")
   expect_error(fit_model(m, d, estimator = "ML2S", options = lavaan_options), "ordinary continuous")
   expect_error(fit_model(m, d, covariance = "barrier", options = lavaan_options), "ordinary continuous")
@@ -419,4 +419,90 @@ test_that("FIML preset keeps unsupported routes explicit", {
     estimator="FIML",fixed_x=FALSE,options=options),"nonlinear")
   expect_error(fit_model("f =~ x1+x2+x3+x4",d,estimator="FIML",
     options=options,covariance="psd"),"ordinary continuous")
+})
+
+.ordinal_fitting_match <- function(fit, oracle, column) {
+  mp <- fit$partable[fit$partable$free > 0L, ]
+  mp <- mp[order(mp$free), ]
+  lp <- lavaan::parTable(oracle)
+  lp[[column]][match(.fitting_keys(mp), .fitting_keys(lp))]
+}
+
+test_that("all-ordinal DWLS preset matches live lavaan delta theta and invariance", {
+  .fitting_oracle()
+  set.seed(11072)
+  x <- outer(rnorm(400), c(1, .8, .6, .9)) + matrix(rnorm(1600, sd = .8), 400, 4)
+  d <- as.data.frame(apply(x, 2, function(z) as.integer(cut(z, c(-Inf, -.5, .6, Inf)))))
+  names(d) <- paste0("x", 1:4)
+  d$g <- rep(c("a", "b"), c(230, 170))
+  model <- "f =~ x1+x2+x3+x4"
+  for (parameterization in c("delta", "theta")) {
+    for (equal in list(NULL, character(), "loadings",
+                      if (parameterization == "theta") c("loadings", "thresholds") else "loadings")) {
+      group <- if (is.null(equal)) NULL else "g"
+      fit <- fit_model(model, d, ordered = paste0("x", 1:4), estimator = "DWLS",
+          groups = group, group_equal = equal %||% character(),
+          parameterization = parameterization, options = list(preset = "lavaan-0.7.2"))
+      lv <- lavaan::cfa(model, d, ordered = paste0("x", 1:4), estimator = "WLSMV",
+          group = group, group.equal = equal %||% character(),
+          parameterization = parameterization, se = "none", test = "none")
+      expect_equal(as.numeric(fit$theta), as.numeric(.ordinal_fitting_match(fit, lv, "est")), tolerance = 1e-5)
+      expect_equal(fit$converged, lavaan::lavInspect(lv, "converged"))
+      expect_equal(abs(fit$fmin - as.numeric(lv@optim$fx)), 0, tolerance = 1e-9)
+      expect_identical(fit$fitting$effective$optimizer, "lavaan-0.7.2")
+      # Pin search components on identical stage-1 inputs. Independent
+      # polychoric solvers differ slightly; raw-data endpoint parity is above.
+      spec <- model_spec(model, ordered = paste0("x", 1:4), group = group,
+          group_labels = if (is.null(group)) NULL else unique(d$g),
+          group_equal = equal %||% character(), parameterization = parameterization)
+      stats <- data_ordinal_stats_from_df(d, spec)
+      stats$R <- lv@SampleStats@cov
+      stats$thresholds <- lv@SampleStats@th
+      stats$W_dwls <- lapply(lv@SampleStats@WLS.VD, diag)
+      fit <- fit_dwls_ordinal(spec, stats, options = list(preset = "lavaan-0.7.2"))
+      k <- lv@Model@eq.constraints.K
+      expected <- lv@ParTable$start[lv@ParTable$free > 0L]
+      if (nrow(k)) expected <- as.numeric(crossprod(k, expected - lv@Model@eq.constraints.k0))
+      expect_equal(as.numeric(fit$fitting$attempts[[1]]$optimizer_start), expected, tolerance = 1e-9)
+      expect_equal(as.numeric(fit$fitting$attempts[[1]]$start),
+          as.numeric(.ordinal_fitting_match(fit, lv, "start")), tolerance = 1e-9)
+      attempt <- fit$fitting$attempts[[fit$fitting$selected_attempt]]
+      lp <- lavaan::parTable(lv)
+      mp <- fit$partable[fit$partable$free > 0L, ]
+      mp <- mp[order(mp$free), ]
+      index <- match(.fitting_keys(lp[lp$free > 0L, ]), .fitting_keys(mp))
+      at <- lavaan:::lav_model_set_parameters(lv@Model, as.numeric(fit$theta)[index])
+      gradient <- lavaan:::lav_model_grad(lavmodel = at, lavsamplestats = lv@SampleStats,
+          lavdata = lv@Data, lavcache = lv@Cache)
+      if (nrow(k)) gradient <- as.numeric(crossprod(k, gradient))
+      expect_equal(attempt$gradient_max, max(abs(gradient)), tolerance = 1e-9)
+      for (estimator in c("ULS", "WLS"))
+        expect_error(fit_model(model, d, ordered = paste0("x", 1:4), estimator = estimator,
+            options = list(preset = "lavaan-0.7.2")), "ordinary continuous")
+    }
+  }
+  expect_error(fit_model(model, d, ordered = c("x1", "x2"), estimator = "DWLS",
+      options = list(preset = "lavaan-0.7.2")), "mixed presets")
+})
+
+test_that("ordinal preset retries an invalid theta start like live lavaan", {
+  .fitting_oracle()
+  set.seed(11072)
+  x <- outer(rnorm(400), c(1, .8, .6, .9)) + matrix(rnorm(1600, sd = .8), 400, 4)
+  d <- as.data.frame(apply(x, 2, function(z) as.integer(cut(z, c(-Inf, -.5, .6, Inf)))))
+  names(d) <- paste0("x", 1:4)
+  args <- list(model = "f =~ x1+x2+x3+x4", data = d, ordered = names(d),
+      estimator = "WLSMV", parameterization = "theta", se = "none", test = "none")
+  initial <- do.call(lavaan::cfa, c(args, list(do.fit = FALSE)))
+  pt <- lavaan::parTable(initial)
+  start <- rep(0, max(pt$free))
+  start[pt$free[pt$lhs == "f" & pt$op == "~~"]] <- -10
+  lv <- suppressWarnings(do.call(lavaan::cfa, c(args, list(start = start))))
+  fit <- suppressWarnings(fit_model(args$model, d, ordered = names(d), estimator = "DWLS",
+      parameterization = "theta", control = list(start = start),
+      options = list(preset = "lavaan-0.7.2")))
+  expect_length(fit$fitting$attempts, 3L)
+  expect_equal(as.numeric(fit$fitting$attempts[[1]]$start), start)
+  expect_equal(fit$converged, lavaan::lavInspect(lv, "converged"))
+  expect_equal(as.numeric(fit$theta), as.numeric(.ordinal_fitting_match(fit, lv, "est")), tolerance = 1e-5)
 })

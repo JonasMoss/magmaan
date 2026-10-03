@@ -261,15 +261,16 @@ with each actual endpoint's declared acceptance checked separately.
   estimates/objectives, retries and verdicts still match. Nonzero affine RHS,
   nonlinear constraints and unsupported preset routes remain explicit errors.
 
-- [ ] **M — fit all-ordinal DWLS under the lavaan preset.** Pin lavaan's
+- [x] **M — fit all-ordinal DWLS under the lavaan preset.**
   C++ `fit_ordinal_configured()` supplies sample-threshold/FABIN3 starts,
   unit response scales, theta residual starts, the DWLS objective and group
   weighting in lavaan's units, ordered equality coordinates and four-attempt
   PORT retries. Frozen delta/theta, grouped, invariance and invalid-start
   fixtures gate starts, coordinates, gradients, estimates and verdicts.
-  Native DWLS remains on its existing path. Remaining: route both R packages
-  through the configured entry and add live WLSMV comparisons after task-40's
-  glue split is integrated; ULS/WLS/mixed presets remain unavailable.
+  Native DWLS remains on its existing path. Both R packages now route through
+  the configured entry, with live installed-lavaan WLSMV comparisons for
+  delta/theta, grouping, loading/threshold invariance and invalid-start retries.
+  ULS/WLS/mixed presets remain unavailable.
 
 ### Primary inference workflows
 

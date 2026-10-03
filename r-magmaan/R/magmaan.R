@@ -241,7 +241,7 @@ print.magmaan_model <- function(x, ...) {
 #'     acceptance rule; explicit entries override it.
 #'
 #'   `optimizer`, `convergence`, `preset` and `start = "lavaan-0.7.2"` are
-#'   available for continuous ML or FIML with unrestricted covariance and
+#'   available for continuous ML or FIML, or all-ordinal DWLS, with unrestricted covariance and
 #'   supported linear equality constraints. Inspect `as_lab_fit(fit)$fitting`
 #'   for the resolved settings and attempts. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
@@ -336,10 +336,11 @@ magmaan <- function(model, data,
   start <- .start_inputs(options$start, estimator, effective, model$ordered,
                          engine = length(engine) > 0L)
   engine$starts <- start$starts
-  if (length(engine) && (!estimator %in% c("ML", "FIML") || length(model$ordered) ||
+  if (length(engine) && (!(estimator %in% c("ML", "FIML") && !length(model$ordered) ||
+                         estimator == "DWLS" && length(model$ordered)) ||
                          !identical(effective, "unrestricted"))) {
     stop("magmaan(): options$optimizer, options$convergence, options$preset and ",
-         "options$start = \"lavaan-0.7.2\" are available for continuous ML or FIML ",
+         "options$start = \"lavaan-0.7.2\" are available for continuous ML or FIML, or all-ordinal DWLS ",
          "with unrestricted covariance so far", call. = FALSE)
   }
   if (identical(effective, "barrier")) .barrier_message()

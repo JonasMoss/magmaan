@@ -9,7 +9,10 @@
   Every attempt and the selected first-order verdict are retained beside
   native objective/stationarity diagnostics. Frozen single/grouped,
   loading/threshold invariance and invalid-start fixtures cover this contract.
-  Native fitting is unchanged; R routing awaits task-40 integration.
+  Both R packages route all-ordinal DWLS fitting options through this engine;
+  live lavaan tests cover delta/theta, grouped loading/threshold invariance,
+  starts, coordinates, acceptance gradients and invalid-start retries.
+  Native fitting is unchanged.
   ULS/WLS and mixed versioned presets remain unavailable.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
