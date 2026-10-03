@@ -42,19 +42,23 @@ Production (`results/dwls-policy/production-2026-10-03`) found the policy
 global SB and PEBA4 references over-rejecting at df >= 53 (SB median 11%,
 up to 20.5%; still 8-12% at N = 1000), while the scaled-shifted adjustment of
 the same robust-ordinal spectrum stayed within 3.5-7.8%. Size-adjusted power
-was identical across arms. On the user's decision (2026-10-03) the DWLS global
-policy reference becomes scaled-shifted on that spectrum. The statistic
-(n F), its spectrum and the IJ covariance are unchanged, so the switch keeps
-the misspecification-robust ingredients and changes only the reference-law
-approximation.
+was identical across arms. The statistic (n F), its spectrum and the IJ
+covariance stay; only the reference-law approximation is reconsidered, which
+keeps the misspecification-robust ingredients.
 
-Because the reference was chosen after seeing production data, it is confirmed
-on fresh draws before adoption is reported as validated: the 64 global cells
-(52 null, 12 power) rerun with seed base 817160001 and the registered replicate
-counts (2,000 null, 1,000 power). Confirmation criterion, fixed now: policy
-scaled-shifted rejection within [3%, 7%] in every null cell with N >= 500, the
-registered flag rule. Cells outside it are reported as flags; the reference is
-not tuned on the confirmation draws.
+Production evaluated four of the implemented reference laws and did not save
+spectra. Before choosing, an exploratory rerun of the 64 global cells
+(52 null, 12 power) uses the production seed base 817150001, so its draws equal
+production, saves every replicate's spectrum and evaluates the implemented
+family: SB, scaled-shifted, mean-variance, scaled F, All, penalized All,
+EBA and pEBA with 2, 4 and 6 blocks, and pOLS. The user chooses the global
+reference from that table. This selection is post hoc.
+
+The chosen reference is then confirmed on fresh draws: the same 64 cells with
+seed base 817160001 and the registered replicate counts (2,000 null, 1,000
+power). Confirmation criterion, fixed now: policy rejection within [3%, 7%] in
+every null cell with N >= 500, the registered flag rule. Cells outside it are
+reported as flags; the reference is not tuned on the confirmation draws.
 
 The nested estimated-weight profile law is not changed by this amendment.
 Its production calibration failed in both directions (SB 0.1-2.2%, PEBA4
