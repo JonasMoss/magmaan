@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(TRUE)
 usage <- 'Usage: Rscript run_experiment.R --preflight [--run-id ID] [--workers W]
-  --preflight  reproduce the required theta threshold-nesting availability gate
+  --preflight  check the amended theta thresholds-to-metric availability gate
   --workers W  1..4; preflight runs serially with one math thread
   --run-id ID  fresh immutable result directory (default preflight)
-  --smoke      unavailable until task-17.1 API decision is resolved
-  --pilot      unavailable until task-17.1 API decision is resolved
+  --smoke      unavailable until task-17.1 power-design decision is resolved
+  --pilot      unavailable until task-17.1 power-design decision is resolved
   --production unavailable; requires separate compute approval after pilot
   --help       show help
 No calibration, timing pilot or production evidence has been generated.'
@@ -17,7 +17,7 @@ opt <- function(key,default) {
 }
 if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--run-id','--workers'))) stop('Unknown option')
 if(length(intersect(args,c('--preflight','--smoke','--pilot','--production')))!=1) stop(usage)
-if(!'--preflight' %in% args) stop('task-17.1 is blocked: required policy threshold nesting is unavailable; see report.qmd')
+if(!'--preflight' %in% args) stop('task-17.1 is blocked: threshold-shift power interpretation needs a decision; see report.qmd')
 workers <- as.integer(opt('--workers','1'))
 if(is.na(workers) || workers<1 || workers>4) stop('workers must be 1..4')
 script <- normalizePath(sub('^--file=','',grep('^--file=',commandArgs(FALSE),value=TRUE)[1]))

@@ -7,3 +7,9 @@ dwls-policy/preflight/*
 !dwls-policy/preflight/availability.csv
 !dwls-policy/preflight/cells.csv
 !dwls-policy/preflight/metadata.csv
+
+!dwls-policy/corrected-preflight/
+dwls-policy/corrected-preflight/*
+!dwls-policy/corrected-preflight/availability.csv
+!dwls-policy/corrected-preflight/cells.csv
+!dwls-policy/corrected-preflight/metadata.csv
