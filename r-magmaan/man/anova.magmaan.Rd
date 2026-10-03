@@ -14,8 +14,10 @@
 
 \item{lavaan_compat}{\code{NULL} (default) reports the policy's score and LR
 tests. \code{"ML"}, \code{"MLM"} and \code{"MLR"} report lavaan's default difference
-test for complete-data ML; ordinal and FIML compatibility comparisons
-currently report unavailable inference.}
+test for complete-data ML. \code{"WLSMV"} and \code{"ULSMV"} report the ordinal
+Satorra-2000 scaled-shifted difference; plain \code{"DWLS"}/\code{"ULS"} retain
+the statistic without a p-value, and \code{"WLS"} reports the standard difference.
+FIML compatibility comparisons currently report unavailable inference.}
 
 \item{x}{A nested-test result.}
 

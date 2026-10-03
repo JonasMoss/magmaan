@@ -43,5 +43,5 @@ convention_nested <- function(fit_H1, fit_H0, convention) {
     }, error = function(e) list())
   }
   convention_nested_impl(contexts$H0$native, contexts$H1$native, convention,
-                         states$H0, states$H1)
+                         states$H0, states$H1, fit_H0, fit_H1)
 }

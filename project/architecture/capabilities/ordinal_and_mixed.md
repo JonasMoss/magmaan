@@ -269,6 +269,17 @@
   for mixed continuous/ordinal data. Method-specific Rcpp names remain
   callable compatibility aliases rather than entries in the displayed
   `magmaan_core` data group.
+- Retained-fit `lavaan_nested_ordinal` composes lavaan 0.7.2's default
+  WLSMV/ULSMV nested reporting: Satorra-2000 with delta restrictions,
+  scaled-shifted reduction and larger-model information/Jacobian. Actual
+  nesting uses the existing embedding gate. Objective counts are n_g−1;
+  the nested sandwich retains original n_g/N fractions. Live R gates cover
+  single-group delta/theta loading/covariance restrictions, two-group theta
+  loading invariance and Wu-Estabrook thresholds→thresholds+loadings,
+  saturated alternatives and explicit refusals. Plain DWLS/ULS retain the
+  standard difference without a p-value; WLS reports the standard chi-square.
+  Both ordinary `anova()` argument orders are gated. This changes only
+  named compatibility reporting.
 - Current ordinal fixtures validate thresholds, polychoric `R`, `NACOV`,
   `WLS.V`, `WLS.VD`, free sets, point estimates, degrees of freedom, and
   chi-square statistics across representative single-group, multi-group,

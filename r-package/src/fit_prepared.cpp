@@ -364,7 +364,8 @@ Rcpp::List convention_inference_impl(Rcpp::List fit, SEXP context,
 
 // [[Rcpp::export]]
 Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
-    std::string convention, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state) {
+    std::string convention, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state,
+    Rcpp::List null_fit, Rcpp::List alternative_fit) {
   using namespace magmaan::api;
   const auto c = lavaan_convention_from(convention);
   const auto s0 = policy_state_from(null_state), s1 = policy_state_from(alternative_state);
@@ -373,6 +374,26 @@ Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
     out.reason = InferenceReason::Penalized; out.detail = penalized_detail;
   } else if (!s0.converged || !s1.converged) {
     out.reason = InferenceReason::NotConverged; out.detail = "a fit did not pass its convergence verdict";
+  } else if (null_fit.containsElementNamed("ordinal") &&
+      Rcpp::as<bool>(null_fit["ordinal"]) && alternative_fit.containsElementNamed("ordinal") &&
+      Rcpp::as<bool>(alternative_fit["ordinal"])) {
+    const auto p0 = Rcpp::as<std::string>(null_fit["parameterization"]);
+    const auto p1 = Rcpp::as<std::string>(alternative_fit["parameterization"]);
+    const auto w0 = Rcpp::as<std::string>(null_fit["estimator"]);
+    const auto w1 = Rcpp::as<std::string>(alternative_fit["estimator"]);
+    if (p0 != p1 || w0 != w1) {
+      out.reason = InferenceReason::UnsupportedModel;
+      out.detail = "the two fits use different ordinal parameterizations or estimators";
+    } else {
+      auto a = ctx_from_fit(null_fit), b = ctx_from_fit(alternative_fit);
+      const auto e0 = est_from_fit(null_fit), e1 = est_from_fit(alternative_fit);
+      const auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(alternative_fit,
+          R_NilValue, "ordinal_stats", "convention_nested"));
+      out = lavaan_nested_ordinal(std::move(a.pt), a.rep, e0, s0,
+          std::move(b.pt), b.rep, e1, s1, stats,
+          ordinal_weight_from_estimator(w1, "convention_nested"),
+          ordinal_parameterization_from_string(p1), c, &a.names.row_user, &b.names.row_user);
+    }
   } else if (Rf_isNull(null_context) || Rf_isNull(alternative_context)) {
     out.reason = InferenceReason::UnsupportedModel; out.detail = "nested lavaan conventions cover complete-data ML so far";
   } else {

@@ -256,8 +256,7 @@ test_that("invalid and unavailable lavaan_bundles cannot change the fit or fall 
   o <- ordinal_hs()
   model <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
   ord <- magmaan(model, o, estimator = "DWLS")
-  a <- anova(ord, ord, lavaan_compat = "WLSMV")
-  expect_match(attr(a, "unavailable")[[1]], "unsupported_model")
+  expect_error(anova(ord, ord, lavaan_compat = "WLSMV"), "not nested")
 })
 
 test_that("scaled saturated tests and penalized fits keep typed unavailability", {
@@ -273,4 +272,31 @@ test_that("scaled saturated tests and penalized fits keep typed unavailability",
   expect_identical(err$reason, "penalized")
   a <- anova(penalized, penalized, lavaan_compat = "MLR")
   expect_match(attr(a, "unavailable")[[1]], "penalized")
+})
+
+test_that("ordinal anova conventions match lavaan in both argument orders", {
+  d <- ordinal_hs()
+  restricted <- paste(cfa, "visual ~~ 0*textual", sep = "\n")
+  ord <- paste0("x", 1:6)
+  for (bundle in c("WLSMV", "ULSMV", "DWLS", "ULS", "WLS")) {
+    estimator <- switch(bundle, WLSMV = "DWLS", ULSMV = "ULS", bundle)
+    model <- magmaan_model(cfa, prototype = d, ordered = ord, parameterization = "theta")
+    null <- magmaan_model(restricted, prototype = d, ordered = ord, parameterization = "theta")
+    a <- magmaan(model, d, estimator = estimator, inference = FALSE)
+    b <- magmaan(null, d, estimator = estimator, inference = FALSE)
+    ref_a <- lavaan::cfa(cfa, d, ordered = ord, parameterization = "theta", estimator = bundle)
+    ref_b <- lavaan::cfa(restricted, d, ordered = ord, parameterization = "theta", estimator = bundle)
+    ref <- lavaan::lavTestLRT(ref_a, ref_b)
+    for (order in list(list(a, b), list(b, a))) {
+      out <- anova(order[[1]], order[[2]], lavaan_compat = bundle)
+      expect_length(attr(out, "unavailable"), 0)
+      expect_lte(abs(out$statistic - ref[2, "Chisq diff"]),
+        1e-5 * max(abs(out$statistic), abs(ref[2, "Chisq diff"])))
+      expect_equal(out$df, ref[2, "Df diff"])
+      if (bundle %in% c("DWLS", "ULS")) expect_true(is.na(out$pvalue))
+      else expect_lte(abs(out$pvalue-ref[2, "Pr(>Chisq)"]),
+        1e-5 * max(abs(out$pvalue), abs(ref[2, "Pr(>Chisq)"])))
+      expect_output(print(out), "lavaan compatibility")
+    }
+  }
 })

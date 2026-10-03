@@ -166,7 +166,9 @@ ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
   t.unscaled_statistic = t.statistic = result->chisq_standard;
   t.method = "standard";
   if ((c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) && t.df <= 0) {
-    t = unavailable(InferenceReason::Saturated, "the model has no positive degrees of freedom for a scaled test");
+    t.reason = InferenceReason::Saturated;
+    t.detail = "the model has no positive degrees of freedom for a scaled test";
+    t.statistic = std::numeric_limits<double>::quiet_NaN();
     return out;
   }
   if ((c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) && t.df > 0) {
@@ -181,6 +183,78 @@ ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
   if (c == LavaanConvention::DWLS || c == LavaanConvention::ULS)
     t.p_value = std::numeric_limits<double>::quiet_NaN();
   return out;
+}
+
+ConventionTest lavaan_nested_ordinal(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::OrdinalStats& stats,
+    estimate::OrdinalWeightKind weight, estimate::OrdinalParameterization parameterization,
+    LavaanConvention c, const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  if (null_state.penalized || alternative_state.penalized)
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!null_state.converged || !alternative_state.converged)
+    return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
+  auto reason_from = [](const PostError& error) {
+    return error.kind == PostError::Kind::NotNested ? InferenceReason::NotNested :
+        error.kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting :
+        error.kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting :
+        InferenceReason::NumericFailure;
+  };
+  // Establish actual nesting before computing the delta restriction map:
+  // a Jacobian rank difference alone does not establish nested models.
+  if (auto p = estimate::prepare_ordinal_delta_partable(alternative_pt, stats,
+          nullptr, alternative_row_user); !p)
+    return unavailable(InferenceReason::NumericFailure, p.error().detail);
+  if (auto p = estimate::prepare_ordinal_delta_partable(null_pt, stats,
+          nullptr, null_row_user); !p)
+    return unavailable(InferenceReason::NumericFailure, p.error().detail);
+  auto c1 = estimate::build_eq_constraints(alternative_pt);
+  auto c0 = estimate::build_eq_constraints(null_pt);
+  if (!c1 || !c0) return unavailable(InferenceReason::NumericFailure,
+      !c1 ? c1.error().detail : c0.error().detail);
+  auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep,
+      null_pt, null_rep, null_estimates.theta, *c1, *c0, false,
+      &alternative_estimates.theta);
+  if (!embedding) return unavailable(reason_from(embedding.error()), embedding.error().detail);
+  if (embedding->restriction.A.rows() == 0)
+    return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+  auto a = lavaan_inference_ordinal(null_pt, null_rep, stats, null_estimates,
+      weight, parameterization, c, null_state);
+  auto b = lavaan_inference_ordinal(alternative_pt, alternative_rep, stats,
+      alternative_estimates, weight, parameterization, c, alternative_state);
+  if (a.test.reason != InferenceReason::Available) return a.test;
+  if (b.test.reason != InferenceReason::Available &&
+      !(b.test.reason == InferenceReason::Saturated && b.test.df == 0)) return b.test;
+  ConventionTest t;
+  t.df = a.test.df - b.test.df;
+  t.statistic = t.unscaled_statistic = a.test.unscaled_statistic - b.test.unscaled_statistic;
+  t.method = "standard";
+  if (t.df <= 0) return unavailable(InferenceReason::NotNested,
+      "the comparison needs a positive difference in degrees of freedom");
+  if (t.statistic < -1e-8 * std::max(1.0, a.test.unscaled_statistic))
+    return unavailable(InferenceReason::NotConverged, "the alternative fits worse than the null");
+  if (c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) {
+    // lavaan 0.7.2 lavTestLRT defaults: satorra.2000, A.method=delta,
+    // scaled.shifted=TRUE, H1 information/Jacobian. The standard objective
+    // above uses n_g-1; the sandwich uses original n_g/N group fractions.
+    auto result = estimate::lr_test_satorra2000_ordinal(alternative_pt,
+        alternative_rep, stats, alternative_estimates, null_pt, null_rep,
+        null_estimates, weight, a.test.unscaled_statistic, b.test.unscaled_statistic,
+        a.test.df, b.test.df, robust::SatorraAMethod::Delta, parameterization,
+        alternative_row_user, null_row_user);
+    if (!result) return unavailable(reason_from(result.error()), result.error().detail);
+    t.method = "satorra.2000";
+    t.statistic = result->scaled_shifted.chi2_adj;
+    t.scale = 1.0 / result->scaled_shifted.scale_a;
+    t.shift = result->scaled_shifted.shift_b;
+  }
+  finish(t);
+  if (c == LavaanConvention::DWLS || c == LavaanConvention::ULS)
+    t.p_value = std::numeric_limits<double>::quiet_NaN();
+  return t;
 }
 
 ConventionTest lavaan_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,

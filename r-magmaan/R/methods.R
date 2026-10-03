@@ -337,8 +337,10 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' @param object,... Two [magmaan()] fits, in either order.
 #' @param lavaan_compat `NULL` (default) reports the policy's score and LR
 #'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference
-#'   test for complete-data ML; ordinal and FIML compatibility comparisons
-#'   currently report unavailable inference.
+#'   test for complete-data ML. `"WLSMV"` and `"ULSMV"` report the ordinal
+#'   Satorra-2000 scaled-shifted difference; plain `"DWLS"`/`"ULS"` retain
+#'   the statistic without a p-value, and `"WLS"` reports the standard difference.
+#'   FIML compatibility comparisons currently report unavailable inference.
 #' @return A data frame with one row per test, of class `magmaan_anova`.
 #' @export
 anova.magmaan <- function(object, ..., lavaan_compat = NULL) {

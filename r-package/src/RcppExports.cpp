@@ -2359,8 +2359,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // convention_nested_impl
-Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context, std::string convention, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state);
-RcppExport SEXP _magmaanlab_convention_nested_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP, SEXP conventionSEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP) {
+Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context, std::string convention, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state, Rcpp::List null_fit, Rcpp::List alternative_fit);
+RcppExport SEXP _magmaanlab_convention_nested_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP, SEXP conventionSEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP, SEXP null_fitSEXP, SEXP alternative_fitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2369,7 +2369,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type convention(conventionSEXP);
     Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type null_state(null_stateSEXP);
     Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type alternative_state(alternative_stateSEXP);
-    rcpp_result_gen = Rcpp::wrap(convention_nested_impl(null_context, alternative_context, convention, null_state, alternative_state));
+    Rcpp::traits::input_parameter< Rcpp::List >::type null_fit(null_fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type alternative_fit(alternative_fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(convention_nested_impl(null_context, alternative_context, convention, null_state, alternative_state, null_fit, alternative_fit));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4533,7 +4535,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_ntml_rows_impl", (DL_FUNC) &_magmaanlab_ntml_rows_impl, 1},
     {"_magmaanlab_ntml_covariance_impl", (DL_FUNC) &_magmaanlab_ntml_covariance_impl, 2},
     {"_magmaanlab_convention_inference_impl", (DL_FUNC) &_magmaanlab_convention_inference_impl, 4},
-    {"_magmaanlab_convention_nested_impl", (DL_FUNC) &_magmaanlab_convention_nested_impl, 5},
+    {"_magmaanlab_convention_nested_impl", (DL_FUNC) &_magmaanlab_convention_nested_impl, 7},
     {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 2},
     {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 2},
     {"_magmaanlab_policy_nested_dwls_impl", (DL_FUNC) &_magmaanlab_policy_nested_dwls_impl, 4},

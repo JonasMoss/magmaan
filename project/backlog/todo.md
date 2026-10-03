@@ -192,16 +192,21 @@ result under an unstated convention.
   reasons, incompatible-regime rejection and preserved estimates/default policy.
 
 - [ ] **M — extend checked reporting conventions to FIML and ordinal nested
-  tests.** These are missing ordinary reporting compositions, not missing C++
-  algorithms or unavailable lavaan features. Reuse FIML standard/robust
+  tests.** FIML still needs ordinary reporting composition; ordinal nested
+  reporting is complete below. These reuse existing C++ algorithms and
+  available lavaan features. Reuse FIML standard/robust
   covariance, global MLR and nested engines, and the ordinal Satorra-2000
   exact/delta engine, scaled-shifted reducer and existing lab adapters.
   FIML ML/MLR need covariance/global/default nested bundle gates; pin the
   observed-information, H1 and scale recipes rather than assuming the scalar
   SB2001 engine's spectrum-derived scales equal lavaan MLR's trace recipe.
-  WLSMV/ULSMV nested reporting needs delta plus scaled-shifted composition and
-  per-group reporting normalization; existing ordinal golden tests gate the
-  mean-scaled result. Probe plain ordinal DWLS/ULS/WLS nested reports separately.
+  Ordinal nested reporting is composed and live-gated (task-7.2): WLSMV/ULSMV
+  use delta plus scaled-shifted Satorra-2000, n_g−1 objective counts and original
+  n_g/N sandwich fractions. Plain DWLS/ULS retain statistic/df without p; WLS
+  uses the standard difference. Single-group delta/theta, two-group theta
+  loading and Wu-Estabrook threshold→threshold+loading invariance, saturated
+  alternatives and typed refusals are covered at doctest-relative 1e-5.
+  The unchecked item now tracks only the FIML composition (task-14).
   **Check:** live lavaan defaults, full covariance and intervals, statistic/df/
   p-value/scale/shift, grouped incomplete FIML and ordinal delta/theta invariance,
   both model orders, actual nesting, saturated alternatives, convergence and
