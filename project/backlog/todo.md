@@ -556,7 +556,10 @@ required by an all-ordinal primary workflow remain current work.
   covariances may need saturated centering). Found by the task-61 audit
   (project/validation/lab_inference_defaults.md, 'needs derivation' rows).
   **Check:** a derivation per function family plus a misspecified-mean
-  simulation check before any default changes. Not release-gating.
+  simulation check before any default changes. Include the complete-data ML policy's nested LR spectrum, which uses the
+  empirical Gamma: with saturated means it equals the casewise-score meat, but
+  under a misspecified mean structure the two may differ (raised by task-13's
+  FIML finding). Not release-gating.
 
 - [ ] **M — threshold-invariance nested tests (Wu-Estabrook).** Imposing
   threshold equality releases the second group's response scales and
