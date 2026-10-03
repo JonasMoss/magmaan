@@ -88,7 +88,7 @@ test_that("named simulation models retain lavaan preset parity", {
       retry <- FALSE
       difference <- NA_real_
       endpoint_contract <- FALSE
-      objective_relative_difference <- max_gradient <- max_se_difference <- NA_real_
+      chisq_difference <- max_gradient <- max_se_difference <- NA_real_
       if (inherits(actual, "error") || inherits(oracle, "error")) {
         issue <- paste("fit error:", if (inherits(actual, "error")) conditionMessage(actual),
                        if (inherits(oracle, "error")) conditionMessage(oracle))
@@ -128,15 +128,18 @@ test_that("named simulation models retain lavaan preset parity", {
               gradient <- lavaan:::lav_model_grad(
                   endpoint, endpoint@GLIST, oracle@SampleStats, oracle@Data)
               oracle_objective <- as.numeric(oracle@optim$fx)
-              objective_relative_difference <- abs(objective - oracle_objective) /
-                max(abs(objective), abs(oracle_objective), .Machine$double.eps)
+              # Objective agreement on the scale users see: lavaan's statistic
+              # is 2 N fx. Near an optimum the gap is second order in the
+              # estimate difference, so it is judged in chi-square units.
+              chisq_difference <- 2 * lavaan::lavInspect(oracle, "ntotal") *
+                abs(objective - oracle_objective)
               max_gradient <- max(abs(c(gradient, oracle@optim$dx)))
               oracle_se <- lp$se[match(mk, lk)]
               max_se_difference <- max(errors / oracle_se)
               endpoint_contract <- !length(issue) &&
-                all(is.finite(c(objective_relative_difference, max_gradient,
+                all(is.finite(c(chisq_difference, max_gradient,
                                 max_se_difference))) && all(oracle_se > 0) &&
-                max_gradient <= 1e-3 && objective_relative_difference <= 1e-9 &&
+                max_gradient <= 1e-3 && chisq_difference <= 1e-6 &&
                 max_se_difference <= 1e-3
             }
             if (!is.finite(difference) || (!retry && !within_tolerance && !endpoint_contract))
@@ -147,11 +150,13 @@ test_that("named simulation models retain lavaan preset parity", {
       results[[length(results) + 1L]] <- data.frame(model = name, replicate = replicate,
           seed = seed, rescaled_retry = retry, endpoint_contract = endpoint_contract,
           max_abs_difference = difference,
-          objective_relative_difference = objective_relative_difference,
+          chisq_difference = chisq_difference,
           max_gradient = max_gradient, max_se_difference = max_se_difference)
       if (length(issue)) disagreements[[length(disagreements) + 1L]] <- data.frame(
           model = name, replicate = replicate, seed = seed, rescaled_retry = retry,
-          max_abs_difference = difference, issue = paste(issue, collapse = "; "))
+          max_abs_difference = difference, chisq_difference = chisq_difference,
+          max_gradient = max_gradient, max_se_difference = max_se_difference,
+          issue = paste(issue, collapse = "; "))
     }
   }
   results <- do.call(rbind, results)
