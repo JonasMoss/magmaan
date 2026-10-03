@@ -22,6 +22,7 @@ class Lowerer {
  public:
   MplusModel out;
   bool group_mode = false;
+  std::vector<std::int32_t> category_counts;
   std::vector<std::vector<Row>> grouped_rows;
   std::vector<Token> tokens;
   std::vector<std::string> observed, latent;
@@ -39,6 +40,9 @@ class Lowerer {
   void reject(SourceSpan span, std::string rule, std::string detail) {
     if (!error) error = ParseError{ParseError::Kind::RejectedConstruct, span,
       std::to_string(span.line) + ":" + std::to_string(span.col) + " [" + rule + "] found '" + out.input.source.substr(span.begin,std::min<std::size_t>(span.end-span.begin,120)) + "': " + detail};
+  }
+  bool is_categorical(const std::string& name) const {
+    return std::any_of(out.input.categorical.begin(),out.input.categorical.end(),[&](const auto& n) {return lower(n)==name;});
   }
   bool is_latent(const std::string& name) const { return latent_set.contains(name); }
   // production: token ::= name | number | punct
@@ -108,6 +112,42 @@ class Lowerer {
     }
     return result;
   }
+  // production: threshold_item ::= threshold_range modifier?
+  std::vector<Item> threshold_items(const std::vector<Token>& ts, std::size_t begin, std::size_t end) {
+    std::vector<Item> result;
+    for (auto i=begin;i<end && !error;) {
+      const auto first=ts[i++];
+      if (i==end || ts[i].text!="$") {
+        auto last=i;
+        while(last<end && ts[last].text!="$" && ts[last].text!="(") ++last;
+        // Ordinary means share the existing item/range parser.
+        if(last<end && ts[last].text=="$") last=last>i ? last-1 : i;
+        if(last==i) last=i;
+        auto ordinary=items(ts,i-1,last);
+        result.insert(result.end(),ordinary.begin(),ordinary.end()); i=last; continue;
+      }
+      auto index=[&](std::size_t& at)->int {
+        if(at==end || ts[at++].text!="$" || at==end) {reject(first.span,"CT02","missing threshold index; write $1 or a higher positive integer instead");return 0;}
+        int n=0; const auto& value=ts[at++].text;
+        auto parsed=std::from_chars(value.data(),value.data()+value.size(),n);
+        if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size() || n<1 || n>9) {reject(first.span,"CT01","threshold index must be 1 through 9; Mplus permits at most ten categories; supply a valid index instead");return 0;}
+        return n;
+      };
+      const int a=index(i); int b=a; Token last=first;
+      if(i<end && ts[i].text=="-") {++i;if(i==end) {reject(first.span,"CT03","unfinished threshold range; supply both endpoints instead");break;} last=ts[i++];b=index(i);}
+      if(!is_categorical(first.text) || !is_categorical(last.text)) {reject(first.span,"CT02","threshold on a non-categorical variable; declare CATEGORICAL instead");break;}
+      std::vector<std::string> names;
+      if(first.text==last.text) names={first.text};
+      else if(a==b) names=expand(first,&last);
+      else {reject(first.span,"CT03","threshold range changes both variable and index; use one variable or one index per range instead");break;}
+      if(b<a) {reject(first.span,"CT03","backward threshold range; list thresholds from lowest to highest instead");break;}
+      std::optional<double> fixed,start;bool explicit_free=false;
+      if(i<end && (ts[i].text=="@" || ts[i].text=="*")) {const bool fix=ts[i++].text=="@";auto value=number(ts,i);if(fix && !value) reject(first.span,"LB01","bare threshold @ requires a data-dependent start; write @value instead");if(fix) fixed=value;else {start=value;explicit_free=true;}}
+      auto span=first.span;span.end=ts[i-1].span.end;
+      for(const auto& name:names) for(int n=a;n<=b;++n) result.push_back({name+"$"+std::to_string(n),fixed,start,span,explicit_free});
+    }
+    return result;
+  }
   // production: line_label ::= '(' label_group+ ')'
   std::vector<std::string> labels(const std::vector<Token>& ts, std::size_t begin, std::size_t end) {
     std::vector<std::string> result;
@@ -158,17 +198,18 @@ class Lowerer {
       reject(ts.front().span,"DA02","an explicit intercept, mean or threshold with summary data without MEANS; Mplus requires MEANS for these parameters (P-DA3); add MEANS and supply a mean vector instead");return;
     }
     for (const auto& t : ts) {
-      if (t.text == "{" || t.text == "$") { reject(t.span,t.text == "{" ? "CT04" : "CT02","found '"+t.text+"'; Mplus specifies categorical scale factors or thresholds; not yet supported, planned for increment 3; use a continuous model instead"); return; }
+      if ((t.text == "{" || t.text == "$") && out.input.categorical.empty()) { reject(t.span,t.text == "{" ? "CT04" : "CT02","categorical scale or threshold without CATEGORICAL; declare categorical outcomes instead"); return; }
       if (t.text == "|") { reject(t.span,"GR01","found '|'; Mplus defines growth or random effects; not yet supported, planned for increment 4; write explicit BY and ON statements instead"); return; }
       if (t.text == "#" || t.text == "%") { reject(t.span,"MS10","found '"+t.text+"'; Mplus selects mixture or multilevel sections; these families are outside scope; supply a single-group model instead"); return; }
       if (t.text == "~" || (t.text == "*" && &t != &ts.front() && (&t-1)->text == "(")) { reject(t.span,"MS09","found ESEM modifier; Mplus defines rotation targets or factor sets; ESEM is outside scope; specify ordinary BY loadings instead"); return; }
     }
     std::size_t relation = ts.size(); std::string op;
     for (std::size_t i = 0; i < ts.size(); ++i) if (ts[i].text == "by" || ts[i].text == "on" || ts[i].text == "pon" || ts[i].text == "with" || ts[i].text == "pwith") { relation = i; op = ts[i].text; break; }
-    const bool mean = ts.front().text == "[";
+    const bool scale = ts.front().text == "{";
+    const bool mean = ts.front().text == "[" || scale;
     auto begin = mean ? std::size_t{1} : relation < ts.size() ? relation+1 : 0;
     auto end = ts.size();
-    if (mean) { auto close = std::find_if(ts.begin(),ts.end(),[](const auto& t) { return t.text == "]"; }); if (close == ts.end()) { reject(ts.front().span,"MS01","unclosed mean list; Mplus requires ']'; close the bracket before ';'"); return; } end = static_cast<std::size_t>(close-ts.begin()); }
+    if (mean) { auto close = std::find_if(ts.begin(),ts.end(),[](const auto& t) { return t.text == "]" || t.text == "}"; }); if (close == ts.end()) { reject(ts.front().span,"MS01","unclosed mean list; Mplus requires ']'; close the bracket before ';'"); return; } end = static_cast<std::size_t>(close-ts.begin()); }
     if (mean && end+1 < ts.size() && ts[end+1].text != "(") { reject(ts[end+1].span,"MS01","token '"+ts[end+1].text+"' after mean bracket; Mplus accepts a label or semicolon here; finish this statement and write a separate statement instead"); return; }
     auto lhs = relation < ts.size() ? items(ts,0,relation) : std::vector<Item>{};
     if (error) return;
@@ -193,7 +234,7 @@ class Lowerer {
       if (mean && cursor == end) { ++cursor; continue; }
       auto line_end = cursor;
       while (line_end < end && ts[line_end].span.line == ts[cursor].span.line && ts[line_end].text != "(") ++line_end;
-      auto rhs = items(ts,cursor,line_end);
+      auto rhs = mean && !scale ? threshold_items(ts,cursor,line_end) : items(ts,cursor,line_end);
       std::size_t label_begin = line_end, label_end = line_end;
       if (mean && line_end == end && end+1 < ts.size() && ts[end+1].text == "(") label_begin = end+1;
       std::vector<std::string> lab;
@@ -207,7 +248,22 @@ class Lowerer {
       }
       std::vector<Row> segment;
       if (relation == ts.size()) {
-        for (const auto& r : rhs) segment.push_back({r.name,mean ? "" : r.name,"",mean ? Op::Intercept : Op::Covariance,r.fixed,r.start,r.span});
+        for (const auto& r : rhs) {
+          const auto dollar=r.name.find('$');
+          const auto name=r.name.substr(0,dollar);
+          if (scale && (!is_categorical(name) || out.input.parameterization=="THETA")) {
+            reject(r.span,"CT04","scale-factor statement requires a categorical DELTA outcome; use PARAMETERIZATION = DELTA or a THETA residual variance instead"); return;
+          }
+          if (mean && !scale && dollar==std::string::npos && is_categorical(name)) {
+            reject(r.span,"CT02","bare categorical intercept; Mplus requires a threshold index; write ["+name+"$1] instead"); return;
+          }
+          if (!mean && is_categorical(name) && out.input.parameterization=="DELTA" && !r.fixed) {
+            reject(r.span,"CT04","free categorical residual variance under DELTA; Mplus requires THETA; use PARAMETERIZATION = THETA instead"); return;
+          }
+          segment.push_back({name,dollar!=std::string::npos ? "t"+r.name.substr(dollar+1) : mean && !scale ? "" : name,"",
+              dollar!=std::string::npos ? Op::Threshold : scale ? Op::ResponseScale : mean ? Op::Intercept : Op::Covariance,
+              r.fixed,r.start,r.span});
+        }
       } else {
         const bool pair = paired;
         if (lhs.size() && rhs.size() > 100000 / lhs.size()) { reject(ts[relation].span,"MS01","relation list expands beyond 100000 parameters; Mplus crosses lists, but magmaan bounds expansion; reduce the lists instead"); return; }
@@ -283,7 +339,7 @@ class Lowerer {
     std::size_t equality=0;
     std::map<std::tuple<std::string,Op,std::string>,std::string> defaults;
     for (const auto& row:common) if (row.label.empty() && !row.fixed &&
-        ((row.op==Op::Measurement && !is_latent(row.rhs)) || (row.op==Op::Intercept && indicators.contains(row.lhs))))
+        ((row.op==Op::Measurement && !is_latent(row.rhs)) || ((row.op==Op::Intercept || row.op==Op::Threshold) && indicators.contains(row.lhs))))
       defaults[key(row)]=".mg"+std::to_string(++equality)+".";
     for (std::size_t g=0; g<out.input.groups.size(); ++g) {
       rows=common; row_indices.clear();
@@ -292,9 +348,13 @@ class Lowerer {
         if (defaults.contains(key(row))) row.label=defaults.at(key(row));
         const bool generated=row.span.begin==out.input.model_body.begin;
         if (row.op==Op::Intercept && is_latent(row.lhs) && generated && g>0) row.fixed.reset();
+        if (generated && g>0 && indicators.contains(row.lhs) && is_categorical(row.lhs) &&
+            ((row.op==Op::ResponseScale && out.input.parameterization=="DELTA") ||
+             (row.op==Op::Covariance && row.lhs==row.rhs && out.input.parameterization=="THETA")) &&
+            out.input.invariance!="CONFIGURAL") row.fixed.reset();
         if (shortcut) {
           const auto& setting=out.input.invariance;
-          if ((setting=="CONFIGURAL" && row.op==Op::Measurement) || (setting!="SCALAR" && row.op==Op::Intercept && indicators.contains(row.lhs))) {if (row.label.starts_with(".mg")) row.label.clear();}
+          if ((setting=="CONFIGURAL" && row.op==Op::Measurement) || (setting!="SCALAR" && (row.op==Op::Intercept || row.op==Op::Threshold) && indicators.contains(row.lhs))) {if (row.label.starts_with(".mg")) row.label.clear();}
           if (row.op==Op::Intercept && is_latent(row.lhs)) row.fixed=(setting=="SCALAR" && g>0) ? std::nullopt : std::optional<double>{0};
           // A fixed factor variance in the overall MODEL identifies the variance
           // version; metric/scalar release it in later groups (TECH1, IV05).
@@ -364,13 +424,28 @@ class Lowerer {
     for (const auto& token : tokens) { if (token.text == ";") { statement(current); current.clear(); } else current.push_back(token); if (error) return std::unexpected(*error); }
     if (!current.empty() && std::any_of(current.begin(),current.end(),[](const Token& token) {return token.text == "%";})) { statement(current); if (error) return std::unexpected(*error); }
     if (!current.empty()) { reject(current.front().span,"MS01","MODEL statement has no ';'; Mplus requires a terminator; add ';'"); return std::unexpected(*error); }
+    if (!category_counts.empty()) {
+      if (category_counts.size()!=out.input.categorical.size()) {
+        reject(out.input.model_body,"CT01","category schema does not match CATEGORICAL; supply counts in CATEGORICAL order instead");return std::unexpected(*error);
+      }
+      for(std::size_t j=0;j<category_counts.size();++j) {
+        const auto name=lower(out.input.categorical[j]);const int n=category_counts[j];
+        if(n<2 || n>10) {reject(out.input.model_body,"CT01","categorical outcome needs two through ten categories, as in Mplus; recode the data instead");return std::unexpected(*error);}
+        for(const auto& row:rows) if(row.op==Op::Threshold && row.lhs==name) {
+          int index=0;std::from_chars(row.rhs.data()+1,row.rhs.data()+row.rhs.size(),index);
+          if(index>=n) {reject(row.span,"CT02","threshold index exceeds the data's categories; remove the threshold or supply the missing categories instead");return std::unexpected(*error);}
+        }
+        for(int k=1;k<n;++k) put({name,"t"+std::to_string(k),"",Op::Threshold,{},{},out.input.model_body},false);
+      }
+    }
     std::set<std::string> x;
     for (const auto& name : observed) if (predictors.contains(name) && !dependent.contains(name)) x.insert(name);
     for (const auto& row : rows) if ((row.op == Op::Covariance || row.op == Op::Intercept) && (x.contains(row.lhs) || x.contains(row.rhs))) { reject(row.span,"MS08","observed independent variable '"+(x.contains(row.lhs) ? row.lhs : row.rhs)+"' has an explicit moment; Mplus models that variable while conditioning on the others; magmaan does not reproduce mixed conditioning; remove its variance, mean or WITH mention"); return std::unexpected(*error); }
     auto all = observed; all.insert(all.end(),latent.begin(),latent.end());
     for (const auto& name : all) if (!x.contains(name)) {
-      put({name,name,"",Op::Covariance,{},{},out.input.model_body},false);
-      if (!out.input.nomeanstructure) put({name,"","",Op::Intercept,is_latent(name) ? std::optional<double>{0} : std::nullopt,{},out.input.model_body},false);
+      put({name,name,"",Op::Covariance,is_categorical(name) ? std::optional<double>{1} : std::nullopt,{},out.input.model_body},false);
+      if (is_categorical(name)) put({name,name,"",Op::ResponseScale,1,{},out.input.model_body},false);
+      if (!out.input.nomeanstructure) put({name,"","",Op::Intercept,(is_latent(name) || is_categorical(name)) ? std::optional<double>{0} : std::nullopt,{},out.input.model_body},false);
       if (!is_latent(name) && !dependent.contains(name) && !predictors.contains(name)) out.notes.push_back({MplusClass::Reported,out.input.model_body,"DF07","analysis variable '"+name+"' is uncorrelated with all other variables, as in Mplus"});
     }
     std::vector<std::string> exogenous, finals;
@@ -386,13 +461,34 @@ class Lowerer {
     }
     if (error) return std::unexpected(*error);
     if (!out.input.groups.empty()) {expand_groups();if(error) return std::unexpected(*error);}
+    for (const auto& name:observed) if(is_categorical(name)) {
+      if(!dependent.contains(name)) {reject(out.input.model_body,"CT07","CATEGORICAL variable '"+name+"' is not dependent; Mplus requires categorical outcomes; remove it from CATEGORICAL or model it as an outcome instead");return std::unexpected(*error);}
+      if(out.input.parameterization=="DELTA" && predictors.contains(name)) {reject(out.input.model_body,"CT05","categorical outcome '"+name+"' both influences and is influenced; Mplus requires THETA; use PARAMETERIZATION = THETA instead");return std::unexpected(*error);}
+    }
+    const auto validate_scales=[&](const auto& rs) {
+      for(const auto& row:rs) if(row.op==Op::ResponseScale && out.input.parameterization=="DELTA") {
+        if(row.fixed && *row.fixed!=1) reject(row.span,"CT04","fixed non-unit DELTA scale is a nonlinear residual-coordinate restriction; use PARAMETERIZATION = THETA or remove the restriction instead");
+        if(!row.fixed && !row.label.empty() && std::count_if(rs.begin(),rs.end(),[&](const auto& other){return !other.fixed && other.label==row.label;})>1)
+          reject(row.span,"CT04","equality-labelled DELTA scales are nonlinear residual-coordinate restrictions; use PARAMETERIZATION = THETA or remove the restriction instead");
+      }
+    };
+    if(grouped_rows.empty()) validate_scales(rows);
+    else {std::vector<Row> all_group_rows;for(const auto& group:grouped_rows) all_group_rows.insert(all_group_rows.end(),group.begin(),group.end());validate_scales(all_group_rows);}
+    if(error) return std::unexpected(*error);
     // Resolve names only after role/default calculations; labels remain case-folded.
     for (auto& row : rows) {
+      if(row.op==Op::Threshold && !category_counts.empty()) {
+        const auto name=std::find_if(out.input.categorical.begin(),out.input.categorical.end(),[&](const auto& n){return lower(n)==row.lhs;});
+        int index=0;std::from_chars(row.rhs.data()+1,row.rhs.data()+row.rhs.size(),index);
+        if(name!=out.input.categorical.end() && index>=category_counts[static_cast<std::size_t>(name-out.input.categorical.begin())]) {
+          reject(row.span,"CT02","threshold index exceeds the data's categories; remove the threshold instead");return std::unexpected(*error);
+        }
+      }
       row.lhs = spelling.at(row.lhs);
-      if (!row.rhs.empty()) row.rhs = spelling.at(row.rhs);
+      if (!row.rhs.empty() && row.op!=Op::Threshold) row.rhs = spelling.at(row.rhs);
     }
     for (auto& group:grouped_rows) for (auto& row:group) {
-      row.lhs=spelling.at(row.lhs);if(!row.rhs.empty()) row.rhs=spelling.at(row.rhs);
+      row.lhs=spelling.at(row.lhs);if(!row.rhs.empty() && row.op!=Op::Threshold) row.rhs=spelling.at(row.rhs);
     }
     for (std::size_t g=0;g<grouped_rows.size();++g) for (const auto& row:grouped_rows[g])
       if (row.span.end==0 || row.span.begin==out.input.model_body.begin)
@@ -441,5 +537,15 @@ class Lowerer {
 parse_expected<MplusModel> MplusParser::parse(std::string_view source) {
   auto input = read(source); if (!input) return std::unexpected(input.error());
   return Lowerer(std::move(*input)).run();
+}
+}
+
+namespace magmaan::parse {
+// production: model_body ::= model_statement*
+parse_expected<MplusModel> MplusParser::parse_ordinal(std::string_view source,
+    const std::vector<std::int32_t>& category_counts) {
+  auto input=read(source);if(!input) return std::unexpected(input.error());
+  Lowerer lowerer(std::move(*input));lowerer.category_counts=category_counts;
+  return lowerer.run();
 }
 }

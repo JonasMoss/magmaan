@@ -73,7 +73,8 @@ class Reader {
   std::vector<std::size_t> lines{0};
   std::vector<MplusDiagnostic> rejects;
   std::vector<Section> sections;
-  std::vector<Item> use;
+  std::vector<Item> use, categorical;
+  SourceSpan categorical_span;
   SourceSpan use_span, nomean_span;
   bool has_use = false, grouping = false, data_groups = false, mixture = false;
 
@@ -185,13 +186,13 @@ class Reader {
     } else if (command == "VARIABLE") {
       add("NAMES", Schema, "CL07"); add("USEVARIABLES", Schema, "CL08");
       add("MISSING", DataDescription, "CL09"); add("GROUPING", Schema, "CL11");
-      add("CATEGORICAL", Rejected, "CL10", 3); add("IDVARIABLE AUXILIARY", Reported, "CL12");
+      add("CATEGORICAL", Schema, "CL10"); add("IDVARIABLE AUXILIARY", Reported, "CL12");
       add("USEOBSERVATIONS SUBPOPULATION", Rejected, "CL13");
       add("CENSORED NOMINAL COUNT DSURVIVAL TSCORES SURVIVAL TIMECENSORED LAGGED TINTERVAL", Rejected, "CL14");
       add("FREQWEIGHT CONSTRAINT PATTERN STRATIFICATION CLUSTER WEIGHT WTSCALE BWEIGHT B2WEIGHT B3WEIGHT BWTSCALE REPWEIGHTS FINITE CLASSES KNOWNCLASS TRAINING WITHIN BETWEEN", Rejected, "CL15");
     } else if (command == "ANALYSIS") {
       add("TYPE", Schema, "CL17"); add("MODEL", Schema, "CL19"); add("ESTIMATOR", Reported, "CL18");
-      add("PARAMETERIZATION", Rejected, "CL22", 3); add("INFORMATION", Reported, "CL25");
+      add("PARAMETERIZATION", Schema, "CL22"); add("INFORMATION", Reported, "CL25");
       add("DISTRIBUTION MATRIX", Reported, "CL23"); add("LINK", Rejected, "CL23");
       add("ALIGNMENT", Rejected, "CL21");
       add("ROTATION ROWSTANDARDIZATION PARALLEL REPSE MULTIPLIER BASEHAZARD RSTARTS RITERATIONS RCONVERGENCE ASTARTS AITERATIONS ACONVERGENCE SIMPLICITY TOLERANCE METRIC", Rejected, "CL24");
@@ -567,8 +568,10 @@ class Reader {
     if (name == "PARAMETERIZATION" && section.command == "ANALYSIS") {
       const auto values = settings(value, "DELTA THETA LOGIT LOGLINEAR/LOGLIN PROBABILITY/PROB RESCOVARIANCES/RESCOV", at, "CL22");
       if (values.size() != 1) reject(at, "CL22", "expected one PARAMETERIZATION setting");
-      for (const auto& v : values) reject(at, "CL22", v +
-          (v == "DELTA" || v == "THETA" ? " not yet supported; planned for increment 3; supply continuous outcomes instead" : " is outside scope"));
+      for (const auto& v : values) {
+        if (v == "DELTA" || v == "THETA") out.parameterization = v;
+        else reject(at, "CL22", v + " is outside scope; use DELTA or THETA instead");
+      }
       return;
     }
     if (name == "CATEGORICAL" && value.find('(') != std::string_view::npos) {
@@ -580,6 +583,7 @@ class Reader {
     }
     if (section.command == "VARIABLE") {
       if (name == "NAMES") names(value, at);
+      else if (name == "CATEGORICAL") { categorical_span = at; categorical = items(value, at, "CL10"); }
       else if (name == "USEVARIABLES") { has_use = true; use_span = at; use = items(value, at, "NM03"); }
     }
     if(section.command == "VARIABLE" && name == "MISSING") {data_missing(value,at);return;}
@@ -728,6 +732,28 @@ class Reader {
         reject(span(begin + 90, end), "LX02", "content extends beyond column 90; Mplus truncates physical lines, which magmaan rejects; wrap the statement before column 91");
     }
     select();
+    // production: categorical_value ::= variable_range+
+    for (const auto& item : categorical) {
+      const auto locate = [&](const auto& name) {
+        return std::find_if(out.names.begin(),out.names.end(),[&](const auto& n) {return upper(n)==upper(name);});
+      };
+      const auto first=locate(item.first), last=item.last.empty() ? first : locate(item.last);
+      if (first==out.names.end() || last==out.names.end() || last<first) {
+        reject(categorical_span,"CL10","invalid CATEGORICAL range; Mplus resolves it in NAMES order; list valid names instead"); continue;
+      }
+      for (auto name=first;name<=last;++name) {
+        if (std::find(out.analysis.begin(),out.analysis.end(),*name)==out.analysis.end()) continue;
+        if (std::find(out.categorical.begin(),out.categorical.end(),*name)!=out.categorical.end())
+          reject(categorical_span,"CL10","duplicate CATEGORICAL variable; list each name once instead");
+        else out.categorical.push_back(*name);
+      }
+    }
+    if (!out.categorical.empty()) {
+      if (!out.data_plan.matrix_type.empty()) reject(categorical_span,"CT08","categorical summary-data fitting is unsupported; supply individual data instead");
+      if (out.estimator=="ML" || out.estimator=="MLR" || out.estimator=="MLF")
+        reject(categorical_span,"CL18","categorical ML-family estimation uses full-information link models and numerical integration in Mplus; use a weighted-least-squares estimator instead");
+      if (out.invariance=="METRIC") reject(categorical_span,"IV03","categorical METRIC is rejected by Mplus 9.1; use CONFIGURAL or SCALAR instead");
+    }
     if (out.nomeanstructure && out.data_plan.matrix_type.empty() && out.information != "EXPECTED")
       reject(nomean_span, "MS11", "Mplus ignores NOMEANSTRUCTURE under its default observed information and keeps the means; magmaan does not reproduce this ignored setting; add INFORMATION = EXPECTED; or remove NOMEANSTRUCTURE");
   }

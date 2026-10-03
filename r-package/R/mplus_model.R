@@ -44,6 +44,10 @@ mplus_model <- function(input = NULL, file = NULL) {
   parsed <- mplus_model_impl(input)
   out <- as_magmaan_model_spec(parsed$partable)
   out$syntax <- parsed$syntax
+  out$ordered <- parsed$ordered
+  out$parameterization <- parsed$parameterization
+  attr(out$partable, "magmaan.ordered") <- parsed$ordered
+  attr(out$partable, "magmaan.parameterization") <- parsed$parameterization
   out$mplus_source <- input
   out$mplus_data_plan <- parsed$data_plan
   out$mplus_input_dir <- if (is.null(file)) NULL else dirname(normalizePath(file))
@@ -62,6 +66,7 @@ mplus_model <- function(input = NULL, file = NULL) {
 #' @export
 print.magmaan_mplus_model_spec <- function(x, ...) {
   cat("Mplus model:", nrow(x$partable), "parameter rows\n")
+  if (length(x$ordered)) cat("Categorical:", paste(x$ordered, collapse=", "), "(", x$parameterization, ")\n")
   if (nrow(x$mplus_groups)) cat("Groups (", x$group_var, "): ",
     paste(paste0(x$mplus_groups$label, " = ", x$mplus_groups$code), collapse = ", "), "\n", sep = "")
   cat(sum(x$mplus_notes$class == "reported"), "input items reported but not imported; see $mplus_notes\n")
@@ -70,6 +75,21 @@ print.magmaan_mplus_model_spec <- function(x, ...) {
 
 # Validate only the Mplus adapter; other model frontends keep their data policy.
 .validate_mplus_groups <- function(spec, data) {
+  if (!is.null(spec$mplus_source) && length(spec$ordered) && is.data.frame(data)) {
+    for (v in spec$ordered) {
+      if (!v %in% names(data)) stop("[CT01] missing categorical column: ",v,call.=FALSE)
+      categories <- sort(unique(as.character(data[[v]][!is.na(data[[v]])])))
+      if (length(categories)>10L || length(categories)<2L)
+        stop("[CT01] Mplus categorical outcomes require two through ten categories: ",v,call.=FALSE)
+      if (nzchar(spec$group_var) && spec$group_var %in% names(data))
+        for(g in spec$group_labels) {
+          observed <- data[[v]][as.character(data[[spec$group_var]])==g]
+          if(!setequal(as.character(observed[!is.na(observed)]),categories))
+            stop("[CT07] group ",g," lacks a category of ",v,
+              "; Mplus requires every category in every group; supply the missing category or recode all groups consistently",call.=FALSE)
+        }
+    }
+  }
   if (is.null(spec$mplus_source) || !nzchar(spec$group_var) || !is.data.frame(data)) return(invisible(NULL))
   if (!spec$group_var %in% names(data)) stop("[MG03] grouping column missing: ", spec$group_var, call. = FALSE)
   codes <- as.character(data[[spec$group_var]])

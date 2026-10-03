@@ -79,7 +79,7 @@ bold stem must be written in full.
 | CL07 | VARIABLE: NAMES | S + DD | 598. |
 | CL08 | VARIABLE: USEVARIABLES | S | 599–600. Default: all NAMES variables. Original variables precede DEFINE variables; the order governs later ranges (NM03). `ALL` as first entry means all NAMES variables. |
 | CL09 | VARIABLE: MISSING | DD | 601–603. |
-| CL10 | VARIABLE: CATEGORICAL (plain list) | S, later (increment 3) | 604–608. The category-set forms `(*)`, explicit sets and `(gpcm)`, `(3pl)`, `(4pl)` are ML-only and R. |
+| CL10 | VARIABLE: CATEGORICAL (plain list) | S, increment 3 implementation in progress | 604–608. The category-set forms `(*)`, explicit sets and `(gpcm)`, `(3pl)`, `(4pl)` are ML-only and R. |
 | CL11 | VARIABLE: GROUPING | S | 612–613. Implemented explicit integer code = label pairs; count/unlabelled forms await increment 5. |
 | CL12 | VARIABLE: IDVARIABLE; AUXILIARY plain list | E | 613–615. Only saved or plotted. |
 | CL13 | VARIABLE: USEOBSERVATIONS, SUBPOPULATION | R | 599, 626. Case selection (see [trigger entry](../backlog/speculative.md#mplus-define-and-case-selection)). |
@@ -91,7 +91,7 @@ bold stem must be written in full.
 | CL19 | ANALYSIS: MODEL = NOMEANSTRUCTURE, NOCOVARIANCES | S | 652, 671. Stems NOMEAN, NOCOV. NOMEANSTRUCTURE only with TYPE = GENERAL. |
 | CL20 | ANALYSIS: MODEL = CONFIGURAL, METRIC, SCALAR | S, later (increment 2) | 652, 670–671; see IV rules. Stem CONFIG; METRIC and SCALAR in full. |
 | CL21 | ANALYSIS: MODEL = ALLFREE; ALIGNMENT and its controls | R | 671–674, 699–701. Mixture/Bayes alignment. |
-| CL22 | ANALYSIS: PARAMETERIZATION = DELTA, THETA | S, later (increment 3) | 652, 674–675. LOGIT, LOGLINEAR, PROBABILITY and RESCOVARIANCES are mixture/ML-categorical settings: R. |
+| CL22 | ANALYSIS: PARAMETERIZATION = DELTA, THETA | S, increment 3 implementation in progress | 652, 674–675. LOGIT, LOGLINEAR, PROBABILITY and RESCOVARIANCES are mixture/ML-categorical settings: R. |
 | CL23 | ANALYSIS: LINK; DISTRIBUTION other than NORMAL; MATRIX = CORRELATION | R | 652, 674, 677, 701. Link models, non-normal distributions, correlation-structure analysis. DISTRIBUTION = NORMAL and MATRIX = COVARIANCE are the defaults and E. |
 | CL24 | ANALYSIS: ROTATION, ROWSTANDARDIZATION, PARALLEL, RSTARTS and other EFA/ESEM options; REPSE, MULTIPLIER; BASEHAZARD | R | 653–655, 678–695. |
 | CL25 | ANALYSIS: NESTED (v8.1 addendum pp. 7–8), INFORMATION, BOOTSTRAP, DIFFTEST, COVERAGE, ADDFREQUENCY, iteration, convergence, start, integration-control, Bayes-engine, PROCESSORS and INTERACTIVE options | E | 654–710. Integration controls also signal a rejected model (CL18). ADDFREQUENCY changes polychoric inputs and is reported with that note. |
@@ -271,6 +271,10 @@ increment-3 boundary. The independent goldens reproduce both identification
 variants' parameter counts 38/34/30 and df 16/20/24.
 
 ## Categorical outcomes (increment 3)
+
+TASK-53 decision 17 rejects DELTA response-scale equalities and fixed non-unit
+scales: nonlinear restrictions in the residual coordinates. THETA residual
+equalities remain supported. The grammar now specifies threshold indices/ranges.
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |

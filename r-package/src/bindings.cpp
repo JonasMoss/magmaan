@@ -402,6 +402,8 @@ Rcpp::List mplus_model_impl(std::string source) {
   for(std::size_t i=0;i<parsed->input.groups.size();++i)
     if(parsed->input.groups[i].code.empty()) group_code[i]=parsed->input.groups[i].label;
   return Rcpp::List::create(
+      Rcpp::_["ordered"] = parsed->input.categorical,
+      Rcpp::_["parameterization"] = parsed->input.parameterization == "THETA" ? "theta" : "delta",
       Rcpp::_["data_plan"] = data_plan,
       Rcpp::_["partable"] = lavaan_partable_df(pt),
       Rcpp::_["syntax"] = magmaan::compat::mplus::to_lavaan_syntax(parsed->flat),
@@ -412,4 +414,19 @@ Rcpp::List mplus_model_impl(std::string source) {
       Rcpp::_["notes"] = Rcpp::DataFrame::create(Rcpp::_["class"] = klass,
           Rcpp::_["rule"] = rule, Rcpp::_["line"] = line, Rcpp::_["col"] = col,
           Rcpp::_["message"] = message));
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame mplus_ordinal_partable_impl(std::string source, Rcpp::List category_counts) {
+  std::vector<std::vector<std::int32_t>> counts;
+  for(SEXP block:category_counts) counts.push_back(Rcpp::as<std::vector<std::int32_t>>(block));
+  auto model=magmaan::compat::mplus::prepare_ordinal_model(source,counts);
+  if(!model) Rcpp::stop("magmaan Mplus ordinal error: %s",model.error().detail);
+  auto pt=magmaan::compat::lavaan::to_lavaan_partable(model->structure,model->names,model->starts);
+  auto out=lavaan_partable_df(pt);
+  Rcpp::List preparation(pt.ordinal_preparation.size());
+  for(std::size_t b=0;b<pt.ordinal_preparation.size();++b)
+    preparation[b]=Rcpp::IntegerVector(pt.ordinal_preparation[b].begin(),pt.ordinal_preparation[b].end());
+  out.attr("magmaan.ordinal_preparation")=preparation;
+  return out;
 }

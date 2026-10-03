@@ -719,6 +719,16 @@ data_mixed_ordinal_stats_hybrid_fiml_from_df <- function(x, model, ordered = NUL
 }
 
 augment_ordinal_partable <- function(model, ordinal_stats) {
+  if (!is.null(model$mplus_source) && length(model$ordered)) {
+    ov <- ordinal_stats$ov_names
+    if (!is.list(ov)) ov <- list(ov)
+    counts <- Map(function(names, levels) as.integer(levels[match(model$ordered, names)]),
+      ov, ordinal_stats$n_levels)
+    pt <- mplus_ordinal_partable_impl(model$mplus_source, counts)
+    attr(pt, "magmaan.ordered") <- model$ordered
+    attr(pt, "magmaan.parameterization") <- model$parameterization
+    return(pt)
+  }
   pt0 <- partable_arg(model)
   .validate_categorical_covariates(pt0, "augment_ordinal_partable")
   parameterization <- attr(pt0, "magmaan.parameterization", exact = TRUE) %||% "delta"
@@ -1522,6 +1532,10 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
   start <- match.arg(start)
   preconditioning <- match.arg(preconditioning)
   estimator <- toupper(as.character(estimator)[1L])
+  if (inherits(model,"magmaan_mplus_model_spec") && length(model$ordered) &&
+      !estimator %in% c("DWLS","WLS","ULS"))
+    stop("[CL18] categorical Mplus fit route '",estimator,
+      "' is unsupported: Mplus uses full-information link/integration or weighted least squares; magmaan offers all-ordinal DWLS, WLS or ULS instead",call.=FALSE)
   allowed <- c("ML", "ULS", "GLS", "WLS", "FIML")
   if (!length(estimator) || is.na(estimator) || !estimator %in% allowed) {
     stop("frontier_fit_sphere(): `estimator` must be one of ",
@@ -1542,6 +1556,13 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 parameterization = parameterization,
                                 caller = "frontier_fit_sphere")
   spec <- prep$spec
+  if (!is.null(spec$mplus_source) && length(spec$ordered)) {
+    if (any(spec$partable$exo!=0L)) stop("[CT07] conditional categorical Mplus fit route unsupported: Mplus uses conditional WLSMV moments; magmaan offers all-ordinal DWLS without observed covariates instead",call.=FALSE)
+    ov <- model_matrix_rep(spec$partable)$ov_names
+    if (!is.list(ov)) ov <- list(ov)
+    if (any(vapply(ov,function(x) !setequal(x,spec$ordered),logical(1))))
+      stop("[CT01] mixed categorical Mplus fit route unsupported: Mplus uses mixed WLSMV moments; magmaan offers all-ordinal DWLS instead",call.=FALSE)
+  }
   group_var <- prep$group_var
   if (length(spec$ordered)) {
     stop("frontier_fit_sphere(): ordinal data are not supported")
@@ -2447,6 +2468,10 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   require_none_arg(se, "se", "standard errors")
   require_none_arg(test, "test", "test statistics")
   estimator <- toupper(as.character(estimator)[1L])
+  if (inherits(model,"magmaan_mplus_model_spec") && length(model$ordered) &&
+      !estimator %in% c("DWLS","WLS","ULS"))
+    stop("[CL18] categorical Mplus fit route '",estimator,
+      "' is unsupported: Mplus uses full-information link/integration or weighted least squares; magmaan offers all-ordinal DWLS, WLS or ULS instead",call.=FALSE)
   if (identical(estimator, "ADF")) estimator <- "WLS"
   if (!is.null(weight)) {
     if (identical(tolower(weight), "custom") && is.null(W)) stop("custom weight requires W")
@@ -2495,6 +2520,13 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   prep <- .magmaan_prepare_spec(model, data, estimator, groups, dots,
                                 ordered, parameterization, caller = "fit_model")
   spec <- prep$spec
+  if (!is.null(spec$mplus_source) && length(spec$ordered)) {
+    if (any(spec$partable$exo!=0L)) stop("[CT07] conditional categorical Mplus fit route unsupported: Mplus uses conditional WLSMV moments; magmaan offers all-ordinal DWLS without observed covariates instead",call.=FALSE)
+    ov <- model_matrix_rep(spec$partable)$ov_names
+    if (!is.list(ov)) ov <- list(ov)
+    if (any(vapply(ov,function(x) !setequal(x,spec$ordered),logical(1))))
+      stop("[CT01] mixed categorical Mplus fit route unsupported: Mplus uses mixed WLSMV moments; magmaan offers all-ordinal DWLS instead",call.=FALSE)
+  }
   group_var <- prep$group_var
   if (is.data.frame(control$start)) {
     spec <- .start_from_table(spec, control$start)

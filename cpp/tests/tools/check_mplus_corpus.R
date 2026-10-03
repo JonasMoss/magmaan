@@ -3,6 +3,8 @@
 # no dependency on the corpus translator or its translated model.
 suppressPackageStartupMessages(library(magmaanlab))
 suppressPackageStartupMessages(library(jsonlite))
+script <- sub("^--file=", "", grep("^--file=",commandArgs(),value=TRUE)[1])
+source(file.path(dirname(script),"mplus_categorical_references.R"))
 args <- commandArgs(TRUE)
 corpus <- if (length(args)) args[1] else "external/textbook-corpus"
 report <- path.expand("~/.cache/magmaan-logs/mplus-corpus-gate.csv")
@@ -25,16 +27,17 @@ printed_parameters <- function(lines, groups) {
     if (grepl("^Group ", text) && nrow(groups)) {
       group <- match(tolower(sub("^Group ", "", text)), tolower(groups$label)); next
     }
-    relation <- regexec("^([A-Za-z][A-Za-z0-9_]*)\\s+(BY|ON|WITH)$",text)
+    relation <- regexec("^([A-Za-z][A-Za-z0-9_$]*)\\s+(BY|ON|WITH)$",text)
     m <- regmatches(text,relation)[[1]]
     if (length(m)) { lhs <- m[2]; op <- switch(m[3],BY="=~",ON="~",WITH="~~"); next }
-    if (text %in% c("Means","Intercepts","Variances","Residual Variances")) {
-      lhs <- ""; op <- if (text %in% c("Means","Intercepts")) "~1" else "~~"; next
+    if (text %in% c("Means","Intercepts","Variances","Residual Variances","Thresholds","Scales")) {
+      lhs <- ""; op <- if (text %in% c("Means","Intercepts")) "~1" else if(text=="Thresholds") "|" else if(text=="Scales") "~*~" else "~~"; next
     }
-    m <- regmatches(text,regexec("^([A-Za-z][A-Za-z0-9_]*)\\s+(-?[0-9]+\\.[0-9]+)\\s+",text))[[1]]
+    m <- regmatches(text,regexec("^([A-Za-z][A-Za-z0-9_$]*)\\s+(-?[0-9]+\\.[0-9]+)\\s+",text))[[1]]
     if (length(m) && nzchar(op)) {
       l <- if (nzchar(lhs)) lhs else m[2]
-      r <- if (op == "~1") "" else if (nzchar(lhs)) m[2] else l
+      r <- if (op == "~1") "" else if(op=="|") paste0("t",sub(".*[$]","",l)) else if (nzchar(lhs)) m[2] else l
+      if(op=="|") l<-sub("[$].*","",l)
       out[[length(out)+1]] <- data.frame(key=paste(group,key(l,op,r)),est=as.numeric(m[3]),printed=m[3])
     }
   }
@@ -78,9 +81,24 @@ for (folder in folders) {
     meta <- fromJSON(file.path(folder,"meta.json"))
     book <- fromJSON(bookfile)
     book_text <- paste(readLines(bookfile,warn=FALSE),collapse="\n")
-    estimator <- if(anyNA(data)) "FIML" else "ML"
+    estimator <- if(length(spec$ordered)) "DWLS" else if(anyNA(data)) "FIML" else "ML"
     fit <- fit_model(spec,data,estimator=estimator)
     fm <- fit_measures(fit)
+    convention_reference <- NULL
+    if (length(spec$ordered)) {
+      reporting <- convention_inference(fit,"WLSMV")
+      syntax <- mplus_categorical_reference(case)
+      oracle <- lapply(c("lavaan","Mplus"),function(mimic)
+        lavaan::lavaan(syntax,data=data,ordered=spec$ordered,
+          group=if(nzchar(spec$group_var)) spec$group_var else NULL,
+          estimator="WLSMV",mimic=mimic,meanstructure=TRUE,
+          auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE))
+      stopifnot(reporting$test$available,reporting$covariance_available)
+      ref <- lavaan::fitMeasures(oracle[[1]],"chisq.scaled")
+      stopifnot(abs(reporting$test$statistic-ref)<=1e-5*(1+abs(ref)))
+      fm$chisq <- reporting$test$statistic
+      convention_reference <- lavaan::fitMeasures(oracle[[2]],"chisq.scaled")
+    }
     checks <- list()
     add <- function(quantity,got,expected,tolerance=0,printed=NULL) {
       if (is.null(expected) || !length(expected)) return()
@@ -111,8 +129,17 @@ for (folder in folders) {
           if(is.na(idx[i])) NA_real_ else fit$partable$est[idx[i]],params$est[i],.001+2e-4*abs(params$est[i]),params$printed[i])
       }
     }
-    do.call(rbind,checks)
-  },error=function(e) data.frame(case=case,status="failing",rule="",quantity="fit",got=NA,expected=NA,deviation=NA,tolerance=NA,decimals=NA_integer_,detail=conditionMessage(e)))
+    result <- do.call(rbind,checks)
+    if (!is.null(convention_reference)) {
+      i <- which(result$quantity=="chisq" & result$status=="failing")
+      for(j in i) if(abs(convention_reference-result$expected[j])<=result$tolerance[j]) {
+        result$status[j] <- "convention"
+        result$detail[j] <- paste("lavaan default agrees with magmaan; mimic=Mplus",convention_reference,
+          "factor",convention_reference/result$got[j])
+      }
+    }
+    result
+  },error=function(e) data.frame(case=case,status=if(grepl("categorical Mplus fit route.*unsupported",conditionMessage(e))) "unsupported-fit" else "failing",rule="",quantity="fit",got=NA,expected=NA,deviation=NA,tolerance=NA,decimals=NA_integer_,detail=conditionMessage(e)))
   rows[[length(rows)+1]] <- result
 }
 if (!length(rows)) stop("No eligible corpus cases found at ",corpus)
@@ -120,6 +147,6 @@ out <- do.call(rbind,rows)
 write.csv(out,report,row.names=FALSE)
 accepted <- unique(out$case[out$status != "rejected"])
 failed <- unique(out$case[out$status == "failing"])
-cat("Cases:",length(unique(out$case)),"accepted:",length(accepted),"matched:",length(setdiff(accepted,failed)),"failing:",length(failed),"\n")
+cat("Cases:",length(unique(out$case)),"accepted:",length(accepted),"matched:",length(setdiff(accepted,c(failed,out$case[out$status=="unsupported-fit"]))),"unsupported-fit:",length(unique(out$case[out$status=="unsupported-fit"])),"convention:",sum(out$status=="convention"),"failing:",length(failed),"\n")
 print(table(out$rule[out$status == "rejected"]))
 if(length(failed)) { print(out[out$status=="failing",]); quit(status=1) }

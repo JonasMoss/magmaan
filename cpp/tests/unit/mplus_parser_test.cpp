@@ -120,6 +120,17 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
       CHECK(m.error().detail.find('[')!=std::string::npos); continue;
     }
     if(v["status"]!="accepted" || v["free_parameters"].empty()) continue;
+    if (!m->input.categorical.empty()) {
+      std::vector<std::int32_t> counts(m->input.categorical.size(),2);
+      for(const auto& matrix:v["tech1"]) if(matrix["name"]=="TAU")
+        for(std::size_t j=0;j<counts.size();++j) for(const auto& col:matrix["columns"]) {
+          auto name=m->input.categorical[j];for(auto& c:name) if(c>='a' && c<='z') c=static_cast<char>(c-'a'+'A');
+          const auto column=col.get<std::string>();
+          if(column.starts_with(name+"$")) counts[j]=std::max(counts[j],static_cast<std::int32_t>(std::stoi(column.substr(name.size()+1))+1));
+        }
+      m=parse::MplusParser::parse_ordinal(text,counts);REQUIRE(m);
+    }
+
     spec::LatentNames names; auto s=spec::build(m->flat,compat::mplus::build_options(m->input),nullptr,&names); REQUIRE(s);
     std::set<int> distinct(s->eq_groups.begin(),s->eq_groups.end());
     CHECK(distinct.size()==v["free_parameters"][0].get<std::size_t>()); ++checked;
@@ -134,10 +145,20 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
       if(lhs.size()>8 || rhs.size()>8) continue;
       std::vector<std::string> matrices; std::string row=lhs,col=rhs;
       if(pt.op[i]==parse::Op::Measurement) {matrices={"LAMBDA","BETA"};row=rhs;col=lhs;}
-      else if(pt.op[i]==parse::Op::Regression) matrices={"BETA"};
-      else if(pt.op[i]==parse::Op::Covariance) matrices={"THETA","PSI"};
+      else if(pt.op[i]==parse::Op::Regression) matrices={"BETA","GAMMA"};
+      else if(pt.op[i]==parse::Op::Covariance) {
+        if(lhs==rhs && m->input.parameterization=="DELTA" &&
+            std::any_of(m->input.categorical.begin(),m->input.categorical.end(),[&](auto n){return upper(n)==lhs;})) continue; // derived residual, not a TECH1 parameter
+        matrices={"THETA","PSI"};
+      }
       else if(pt.op[i]==parse::Op::Intercept) {matrices={"NU","ALPHA"};row="vector";col=lhs;}
+      else if(pt.op[i]==parse::Op::Threshold) {matrices={"TAU"};row="vector";col=lhs+"$"+rhs.substr(1);}
+      else if(pt.op[i]==parse::Op::ResponseScale) {
+        if(m->input.parameterization=="THETA") continue; // derived response scale
+        matrices={"DELTA"};row="vector";col=lhs;
+      }
       else continue;
+      INFO(lhs,std::string(parse::to_string(pt.op[i])),rhs);
       std::optional<int> number;
       for(const auto& matrix:v["tech1"]) {
         if (!m->input.groups.empty() && matrix["group"].get<std::string>()!=upper(m->input.groups[static_cast<std::size_t>(pt.group[i]-1)].label)) continue;
@@ -145,6 +166,9 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
         const auto& cells=matrix["rows"];
         if(cells.contains(row) && cells[row].contains(col)) { const int n=cells[row][col].get<int>(); if(!number || n>0) number=n; }
         else if(pt.op[i]==parse::Op::Covariance && cells.contains(col) && cells[col].contains(row)) {const int n=cells[col][row].get<int>();if(!number || n>0) number=n;}
+      }
+      if(!number && pt.op[i]==parse::Op::ResponseScale && m->input.groups.empty()) {
+        CHECK(pt.free[i]==0);CHECK(pt.ustart[i]==1);continue; // Demo omits fixed single-group DELTA scales
       }
       REQUIRE_MESSAGE(number, (lhs+std::string(parse::to_string(pt.op[i]))+rhs));
       CHECK((pt.free[i]>0)==(*number>0));
@@ -262,4 +286,30 @@ TEST_CASE("Mplus categorical probes: 9.1 shortcut evidence") {
       CHECK_FALSE(v.at("estimation_messages").empty());
     }
   }
+}
+
+TEST_CASE("Mplus categorical: CT01-CT07 materialization and restrictions") {
+  const auto text=[](std::string model,std::string parameterization="DELTA") {
+    return "DATA: FILE=x;\nVARIABLE: NAMES=u1-u4; CATEGORICAL=u1-u4;\nANALYSIS: PARAMETERIZATION="+parameterization+";\nMODEL: f BY u1-u4;\n"+model;
+  };
+  auto completed=compat::mplus::prepare_ordinal_model(text("[u1$1-u1$2]; [u2$1-u4$1] (a);"),{{3,3,3,3}});
+  REQUIRE(completed);
+  auto pt=compat::lavaan::to_lavaan_partable(completed->structure,completed->names,completed->starts);
+  int thresholds=0;
+  for(std::size_t i=0;i<pt.size();++i) {
+    if(pt.op[i]==parse::Op::Threshold) ++thresholds;
+    if(pt.op[i]==parse::Op::Intercept && pt.lhs[i][0]=='u') CHECK(pt.ustart[i]==0);
+  }
+  CHECK(thresholds==8);
+  CHECK_FALSE(compat::mplus::prepare_ordinal_model(text("[u1$3];"),{{3,3,3,3}}));
+  CHECK_FALSE(compat::mplus::prepare_ordinal_model(text(""),{{11,3,3,3}}));
+  for(const auto& [model,par,rule]:std::vector<std::tuple<std::string,std::string,std::string>>{
+      {"[u1];","DELTA","CT02"},{"u1;","DELTA","CT04"},
+      {"{u1};","THETA","CT04"},{"u2 ON u1;","DELTA","CT05"},
+      {"{u1@0.8};","DELTA","CT04"},
+      {"{u1-u2} (s);","DELTA","CT04"}}) {
+    auto actual=parse::MplusParser::parse(text(model,par));REQUIRE_FALSE(actual);
+    CHECK(actual.error().detail.find("["+rule+"]")!=std::string::npos);
+  }
+  REQUIRE(parse::MplusParser::parse(text("u1-u2 (s);","THETA")));
 }

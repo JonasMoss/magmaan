@@ -168,7 +168,7 @@ TEST_CASE("Mplus input: CL17 CL19 CL20 CL21 CL18 CL22 CL23 MS11 settings") {
     REQUIRE(fit);
     CHECK(fit->estimator == s);
   }
-  for (auto s : split("DELTA THETA LOGIT LOGLIN PROB RESCOV")) rejection(input("NAMES=y1;", "PARAMETERIZATION=" + s + ";"), "CL22");
+  for (auto s : split("LOGIT LOGLIN PROB RESCOV")) rejection(input("NAMES=y1;", "PARAMETERIZATION=" + s + ";"), "CL22");
   for (auto s : split("SKEW TDIST SKEWT")) rejection(input("NAMES=y1;", "DISTRIBUTION=" + s + ";"), "CL23");
   rejection(input("NAMES=y1;", "MATRIX=CORR;"), "CL23");
   CHECK(MplusParser::read(input("NAMES=y1;", "DISTRIBUTION=NORM; MATRIX=COVA;")).has_value());
@@ -209,7 +209,8 @@ TEST_CASE("Mplus input: CL07 CL09 CL10 CL11 CL12 CL13 CL14 CL15 VARIABLE classif
   CHECK(r->notes[1].klass == MplusClass::DataDescription);
   CHECK(r->notes[2].rule == "CL12");
   CHECK(r->notes[3].rule == "CL12");
-  rejection(input("NAMES=y1; CATEGORICAL=y1;"), "CL10", "increment 3");
+  REQUIRE(MplusParser::read(input("NAMES=y1; CATEGORICAL=y1;")));
+  for (auto p : {"DELTA", "THETA"}) REQUIRE(MplusParser::read(input("NAMES=y1;", std::string("PARAMETERIZATION=")+p+";")));
   CHECK(MplusParser::read(input("NAMES=y1 g; GROUPING=g(1=a 2=b);")));
   rejection(input("NAMES=y1; AUXILIARY=y1(m);"), "CL15");
   for (const auto& name : split("USEOBSERVATIONS SUBPOPULATION")) rejection(input("NAMES=y1; " + name + "=x;"), "CL13");

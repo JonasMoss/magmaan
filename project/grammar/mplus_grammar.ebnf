@@ -1,5 +1,5 @@
 (* ===========================================================================
-   Mplus input-file grammar, increments 1–2
+   Mplus input-file grammar, increments 1–3
    ---------------------------------------------------------------------------
    Normative for the implemented continuous parse::Mplus* frontend. mplus.md
    owns the target and increments; mplus_source_inventory.md
@@ -159,12 +159,18 @@ label_atom          ::= number | name
    in one label, '(*label)' ESEM sets and other forms are rejected [MS09]. *)
 
 variance_statement  ::= rhs_lines ';'
-mean_statement      ::= '[' rhs_item+ ']' line_label? ';'
-(* One bracket group per statement. Threshold items (name '$' number) are
-   increment 3 [CT02]. *)
+mean_statement      ::= '[' (rhs_item | threshold_item)+ ']' line_label? ';'
+threshold_item      ::= threshold_range modifier?
+threshold_range     ::= threshold_name ('-' threshold_name)?
+threshold_name      ::= name '$' integer
+categorical_value   ::= variable_range+
+parameterization_value ::= 'DELTA' | 'THETA'
+(* CT01–CT04: threshold indices start at one. A range either spans variables
+   at one threshold index or thresholds of one variable. DELTA scale equalities
+   and fixed non-unit scales are rejected: nonlinear residual-coordinate restrictions. *)
 
 scale_statement     ::= '{' rhs_item+ '}' line_label? ';'
-(* Increment 3 [CT04]; rejected in increment 1. *)
+(* CT04: DELTA response scales; THETA uses residual variances instead. *)
 
 bar_statement       ::= lhs_list '|' (token - ';')+ ';'
 (* Growth statements are increment 4 [GR01]; every '|' form is rejected in

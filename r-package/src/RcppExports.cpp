@@ -83,6 +83,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mplus_ordinal_partable_impl
+Rcpp::DataFrame mplus_ordinal_partable_impl(std::string source, Rcpp::List category_counts);
+RcppExport SEXP _magmaanlab_mplus_ordinal_partable_impl(SEXP sourceSEXP, SEXP category_countsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type source(sourceSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type category_counts(category_countsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mplus_ordinal_partable_impl(source, category_counts));
+    return rcpp_result_gen;
+END_RCPP
+}
 // model_matrix_rep
 Rcpp::List model_matrix_rep(SEXP partable);
 RcppExport SEXP _magmaanlab_model_matrix_rep(SEXP partableSEXP) {
@@ -4430,6 +4442,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_eqs_model_impl", (DL_FUNC) &_magmaanlab_eqs_model_impl, 2},
     {"_magmaanlab_lavaan_lavaanify", (DL_FUNC) &_magmaanlab_lavaan_lavaanify, 18},
     {"_magmaanlab_mplus_model_impl", (DL_FUNC) &_magmaanlab_mplus_model_impl, 1},
+    {"_magmaanlab_mplus_ordinal_partable_impl", (DL_FUNC) &_magmaanlab_mplus_ordinal_partable_impl, 2},
     {"_magmaanlab_model_matrix_rep", (DL_FUNC) &_magmaanlab_model_matrix_rep, 1},
     {"_magmaanlab_bounds_variance_impl", (DL_FUNC) &_magmaanlab_bounds_variance_impl, 1},
     {"_magmaanlab_bounds_standard_impl", (DL_FUNC) &_magmaanlab_bounds_standard_impl, 2},

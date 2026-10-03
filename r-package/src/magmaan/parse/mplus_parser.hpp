@@ -58,6 +58,8 @@ struct MplusInput {
   std::vector<MplusGroup> groups;
   std::vector<MplusGroupSection> group_sections;
   std::string invariance;
+  std::vector<std::string> categorical;
+  std::string parameterization = "DELTA";
   std::string estimator;
   std::string information;
   SourceSpan model_body;
@@ -79,6 +81,9 @@ class MplusParser {
   static parse_expected<MplusInput> read(std::string_view source);
   // production: model_body ::= model_statement*
   static parse_expected<MplusModel> parse(std::string_view source);
+  // Category counts follow CATEGORICAL order; every group must share them.
+  static parse_expected<MplusModel> parse_ordinal(std::string_view source,
+      const std::vector<std::int32_t>& category_counts);
 };
 
 }  // namespace magmaan::parse

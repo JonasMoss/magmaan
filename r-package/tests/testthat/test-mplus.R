@@ -164,3 +164,55 @@ test_that("Mplus multiple groups preserve numeric order, topology and live lavaa
   d$G[1:3] <- 3
   expect_error(fit_model(s,d),"MG03.*3 \\(3 rows\\).*Mplus drops.*filter")
 })
+
+test_that("categorical Mplus models preserve data-driven thresholds and live lavaan inference", {
+  skip_if_not_installed("lavaan")
+  data <- lavaan::HolzingerSwineford1939
+  variables <- paste0("x",1:6)
+  for (categories in c(2L,3L)) for (parameterization in c("delta","theta")) {
+    d <- data
+    for(v in variables) d[[v]] <- as.integer(cut(d[[v]],categories))
+    input <- paste0("DATA: FILE=x;\nVARIABLE: NAMES=x1-x6; CATEGORICAL=x1-x6;\n",
+      "ANALYSIS: PARAMETERIZATION=",toupper(parameterization),";\nMODEL: f1 BY x1-x3; f2 BY x4-x6;")
+    spec <- mplus_model(input)
+    expect_identical(spec$ordered,variables)
+    expect_identical(spec$parameterization,parameterization)
+    expect_identical(magmaanlab:::.rebuild_model_spec(spec)$partable,spec$partable)
+    file <- tempfile();saveRDS(spec,file);expect_identical(readRDS(file),spec);unlink(file)
+    expect_output(print(spec),"Categorical")
+    syntax <- c("f1 =~ 1*x1+x2+x3; f2 =~ 1*x4+x5+x6",
+      "f1 ~~ f1; f2 ~~ f2; f1 ~~ f2; f1 ~ 0*1; f2 ~ 0*1")
+    for(v in variables) syntax <- c(syntax,paste0(v," | ",paste0("t",seq_len(categories-1L),collapse="+")),
+      paste0(v," ~ 0*1"),paste0(v,if(parameterization=="theta") " ~~ 1*" else " ~*~ 1*",v))
+    actual <- fit_model(spec,d,estimator="DWLS")
+    oracle <- lavaan::lavaan(paste(syntax,collapse="\n"),data=d,ordered=variables,
+      parameterization=parameterization,estimator="WLSMV",meanstructure=TRUE,
+      auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
+    expect_true(actual$converged);expect_true(lavaan::lavInspect(oracle,"converged"))
+    p <- actual$partable;q <- lavaan::parTable(oracle)
+    key <- function(p) paste(p$lhs,p$op,p$rhs,p$group)
+    index <- match(key(p),key(q));use <- !is.na(index)&p$op %in% c("=~","|","~1","~*~")
+    expect_equal(p$est[use],q$est[index[use]],tolerance=1e-5)
+    inference <- convention_inference(actual,"WLSMV")
+    expect_true(inference$covariance_available);expect_true(inference$test$available)
+    expect_equal(inference$test$df,unname(lavaan::fitMeasures(oracle,"df")))
+    expect_equal(inference$test$statistic,unname(lavaan::fitMeasures(oracle,"chisq.scaled")),tolerance=1e-5)
+    use <- !is.na(index)&p$free>0&p$op %in% c("=~","|")
+    expect_equal(sqrt(diag(inference$covariance))[p$free[use]],q$se[index[use]],tolerance=1e-5)
+    expect_error(fit_model(spec,d,estimator="ML"),"categorical Mplus fit route.*DWLS")
+  }
+})
+
+test_that("categorical Mplus boundaries identify the fit route and category rule", {
+  single <- mplus_model("DATA: FILE=x;\nVARIABLE: NAMES=u1-u3; CATEGORICAL=u1-u3;\nMODEL: f BY u1-u3;")
+  d <- data.frame(u1=rep(1:11,3),u2=rep(1:3,11),u3=rep(1:3,11))
+  expect_error(fit_model(single,d,estimator="DWLS"),"CT01.*ten categories")
+  mixed <- mplus_model("DATA: FILE=x;\nVARIABLE: NAMES=u1-u3 x; CATEGORICAL=u1-u3;\nMODEL: f BY u1-u3 x;")
+  d$u1 <- rep(1:3,11);d$x <- seq_len(nrow(d))
+  expect_error(fit_model(mixed,d,estimator="DWLS"),"mixed categorical Mplus fit route.*mixed WLSMV")
+  conditional <- mplus_model("DATA: FILE=x;\nVARIABLE: NAMES=u1-u3 x; CATEGORICAL=u1-u3;\nMODEL: f BY u1-u3; f ON x;")
+  expect_error(fit_model(conditional,d,estimator="DWLS"),"conditional categorical Mplus fit route.*conditional WLSMV")
+  grouped <- mplus_model("DATA: FILE=x;\nVARIABLE: NAMES=u1-u3 g; CATEGORICAL=u1-u3; GROUPING=g(1=a 2=b);\nMODEL: f BY u1-u3;")
+  d$g <- rep(1:2,length.out=nrow(d));d$u1[d$g==2]<-1
+  expect_error(fit_model(grouped,d,estimator="DWLS"),"CT07.*lacks a category")
+})

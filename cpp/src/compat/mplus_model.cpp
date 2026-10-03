@@ -5,6 +5,8 @@
 #include <variant>
 #include <set>
 #include <tuple>
+#include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/model/matrix_rep.hpp"
 
 namespace magmaan::compat::mplus {
 namespace {
@@ -64,6 +66,49 @@ void apply_provenance(const parse::MplusModel& parsed, const spec::LatentStructu
   for(const auto& row:parsed.generated_rows) generated.insert(key(row.group,row.op,row.lhs,row.rhs));
   for(std::size_t i=0;i<names.row_lhs.size();++i)
     if(generated.contains(key(structure.group[i],structure.op[i],names.row_lhs[i],names.row_rhs[i]))) names.row_user[i]=0;
+}
+
+fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
+    const std::vector<std::vector<std::int32_t>>& category_counts) {
+  const auto fail=[](std::string detail)->fit_expected<OrdinalModel> {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,std::move(detail)});
+  };
+  if(category_counts.empty()) return fail("[CT01] missing category schema");
+  for(const auto& counts:category_counts) if(counts!=category_counts.front())
+    return fail("[CT07] a group lacks a categorical outcome category; Mplus requires every category in every group; supply matching category schemas instead");
+  auto parsed=parse::MplusParser::parse_ordinal(source,category_counts.front());
+  if(!parsed) return fail(parsed.error().detail);
+  if(category_counts.size()!=std::max<std::size_t>(1,parsed->input.groups.size()))
+    return fail("[CT07] categorical group schema differs from MODEL groups");
+  OrdinalModel out;
+  auto structure=spec::build(parsed->flat,build_options(parsed->input),&out.starts,&out.names);
+  if(!structure) return fail(structure.error().detail);
+  out.structure=std::move(*structure);
+  apply_provenance(*parsed,out.structure,out.names);
+  auto rep=model::build_matrix_rep(out.structure,&out.names);
+  if(!rep) return fail(rep.error().detail);
+  data::OrdinalStats stats;
+  for(std::size_t b=0;b<rep->ov_names.size();++b) {
+    stats.R.push_back(Eigen::MatrixXd::Identity(static_cast<Eigen::Index>(rep->ov_names[b].size()),static_cast<Eigen::Index>(rep->ov_names[b].size())));
+    stats.threshold_ov.emplace_back();stats.threshold_level.emplace_back();
+    for(std::size_t j=0;j<rep->ov_names[b].size();++j) {
+      auto name=std::find(parsed->input.categorical.begin(),parsed->input.categorical.end(),rep->ov_names[b][j]);
+      if(name==parsed->input.categorical.end()) return fail("[CT01] mixed categorical fit route unsupported; Mplus uses mixed WLSMV moments; magmaan offers all-ordinal DWLS instead");
+      const auto count=category_counts[b][static_cast<std::size_t>(name-parsed->input.categorical.begin())];
+      for(int k=1;k<count;++k) {stats.threshold_ov.back().push_back(static_cast<std::int32_t>(j));stats.threshold_level.back().push_back(k);}
+    }
+    stats.thresholds.push_back(Eigen::VectorXd::Zero(static_cast<Eigen::Index>(stats.threshold_ov.back().size())));
+  }
+  // The frontend already materialized its free residual/intercept pattern.
+  // Use a preparation mask without changing reported generated provenance.
+  auto preparation_rows=out.names.row_user;
+  for(std::size_t i=0;i<out.structure.size();++i) if(out.structure.free[i]>0)
+    preparation_rows[i]=1;
+  auto prepared=estimate::prepare_ordinal_partable(out.structure,stats,
+      parsed->input.parameterization=="THETA" ? estimate::OrdinalParameterization::Theta : estimate::OrdinalParameterization::Delta,
+      &out.starts,&preparation_rows);
+  if(!prepared) return fail(prepared.error().detail);
+  return out;
 }
 
 spec::BuildOptions build_options(const parse::MplusInput& input) {

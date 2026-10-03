@@ -21,6 +21,10 @@ mplus_model_impl <- function(source) {
     .Call(`_magmaanlab_mplus_model_impl`, source)
 }
 
+mplus_ordinal_partable_impl <- function(source, category_counts) {
+    .Call(`_magmaanlab_mplus_ordinal_partable_impl`, source, category_counts)
+}
+
 model_matrix_rep <- function(partable) {
     .Call(`_magmaanlab_model_matrix_rep`, partable)
 }

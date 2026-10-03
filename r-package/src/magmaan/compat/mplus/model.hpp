@@ -3,6 +3,7 @@
 
 #include "magmaan/parse/mplus_parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include "magmaan/data/ordinal.hpp"
 
 namespace magmaan::compat::mplus {
 
@@ -11,6 +12,16 @@ namespace magmaan::compat::mplus {
 std::string to_lavaan_syntax(const parse::FlatPartable& flat);
 
 void apply_provenance(const parse::MplusModel& parsed, const spec::LatentStructure& structure, spec::LatentNames& names);
+
+struct OrdinalModel {
+  spec::LatentStructure structure;
+  spec::LatentNames names;
+  spec::Starts starts;
+};
+// Counts are in CATEGORICAL order, one vector per group. Completion and
+// preparation preserve frontend-materialized defaults without group.equal.
+fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
+    const std::vector<std::vector<std::int32_t>>& category_counts);
 
 spec::BuildOptions build_options(const parse::MplusInput& input);
 
