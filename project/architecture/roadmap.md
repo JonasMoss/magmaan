@@ -342,10 +342,15 @@ data file from the C++ data plan (free/fixed FORMAT, missing flags, FILE and
 NGROUPS groups, summary matrices taken as N-1 and rescaled for ML as Mplus
 does). Categorical outcomes (thresholds, DELTA/THETA, grouped defaults,
 CONFIGURAL/SCALAR) fit through all-ordinal DWLS; mixed, conditional and
-categorical-ML routes are explicit boundaries. Gated against lavaan and the
-Mplus 9.1 Demo; of 68 eligible verified corpus cases, 31 are accepted: 25 match
-Mplus and 6 end in an explicit unsupported-fit route. Growth and MODEL
-CONSTRAINT/INDIRECT follow; ordinary `magmaan()` integration is TASK-57.
+categorical-ML routes are explicit boundaries. Growth (`|`, free time scores,
+piecewise, categorical and grouped), MODEL CONSTRAINT (NEW parameters as
+auxiliary coordinates, equalities, DO loops) and MODEL INDIRECT (defined
+effects with delta SEs) are imported; inequalities stay
+[deliberately refused](../scope.md#inequality-constraints-deliberately-refused).
+Gated against lavaan and the Mplus 9.1 Demo; of 68 eligible verified corpus
+cases, 50 are accepted: 44 match Mplus and 6 end in an explicit unsupported-fit
+route. Ordinal nonlinear constraints (TASK-54.2), the stability closeout
+(TASK-56) and ordinary `magmaan()` integration (TASK-57) remain.
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
