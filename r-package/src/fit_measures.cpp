@@ -184,17 +184,11 @@ Rcpp::List model_implied(Rcpp::List fit) {
 Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
                               Rcpp::List baseline) {
   Ctx ctx = ctx_from_fit(fit);
-  // Categorical standard reporting uses n_g - 1 for the reference N as well.
-  if ((fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) ||
-      (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]))) {
-    for (auto& n : ctx.samp.n_obs) --n;
-  }
   magmaan::measures::BaselineFit bl;
   bl.chi2 = Rcpp::as<double>(baseline["chi2"]);
   bl.df   = Rcpp::as<int>(baseline["df"]);
   const magmaan::measures::FitMeasures fm = magmaan::measures::fit_measures(chi2, df, bl, ctx.samp);
   const magmaan::estimate::Estimates   est = est_from_fit(fit);
-  ctx = ctx_from_fit(fit);
   auto fx = magmaan::measures::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
   const bool have = fx.has_value();
   return Rcpp::List::create(

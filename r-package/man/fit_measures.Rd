@@ -23,6 +23,8 @@ the fit does not carry \verb{$raw_data}.}
 \description{
 Convenience wrapper over the existing fit-measure primitives. By default it
 reports the standard ML chi-square, df, p-value, baseline chi-square, and
-ordinary fit measures. Passing \code{fmg = TRUE} or a character vector of FMG test
+ordinary fit measures. Categorical models report the native \code{n F} statistic;
+lavaan's \code{(n - G) F} standard reporting is available through
+\code{convention_inference()}. Passing \code{fmg = TRUE} or a character vector of FMG test
 labels adds an \verb{$fmg} diagnostic table from \code{fmg_tests()}.
 }

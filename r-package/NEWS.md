@@ -5,9 +5,8 @@
   and all-ordinal ULS/DWLS/WLS. Lab defaults use this route with the expected
   quadratic metric; expected sensitivity and fixed weights remain comparators.
 - `fit_measures()` now counts equality-reduced ordinal parameters against the
-  categorical moment layout and uses categorical n-minus-one reporting weights.
-  Grouped threshold/loading and label constraints now give lavaan-compatible
-  df, chi-square, RMSEA, CFI, TLI and p-values.
+  categorical moment layout. Grouped threshold/loading and label constraints
+  now give lavaan-compatible df; dependent indices retain native n F reporting.
 
 - DWLS global policy now reports the exact spectrum (All) weighted chi-square
   p-value on unchanged n F and robust-ordinal eigenvalues (decision study 05).

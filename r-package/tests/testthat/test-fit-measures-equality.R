@@ -43,7 +43,34 @@ test_that("fit measures use equality-reduced ordinal and continuous moments", {
       expect_true(lavaan::lavInspect(oracle,"converged"), info=info)
       fm <- fit_measures(actual)
       reference <- lavaan::fitMeasures(oracle, measures)
-      if (categorical) reference["pvalue"] <- pchisq(reference["chisq"], reference["df"], lower.tail=FALSE)
+      if (categorical) {
+        expect_equal(fm$df, unname(reference["df"]), tolerance=0, info=info)
+        # Native reporting uses sum(n_g F_g), lavaan sum((n_g - 1) F_g).
+        # n/(n-G) is exact only for equally sized groups.
+        n <- nrow(data)
+        g <- length(unique(data$g))
+        group_n <- as.numeric(lavaan::lavInspect(oracle, "nobs"))
+        factors <- group_n / (group_n - 1)
+        oracle_test <- lavaan::lavInspect(oracle, "test")$standard
+        reference["chisq"] <- sum(oracle_test$stat.group * factors)
+        baseline <- lavaan::fitMeasures(oracle, c("baseline.chisq", "baseline.df"))
+        x2 <- unname(reference["chisq"])
+        df <- unname(reference["df"])
+        x2_null <- sum(oracle@baseline$test$standard$stat.group * factors)
+        df_null <- unname(baseline["baseline.df"])
+        expect_equal(fm$baseline.chisq, x2_null, tolerance=1e-5, info=info)
+        expect_equal(fm$baseline.df, df_null, tolerance=0, info=info)
+        reference["pvalue"] <- pchisq(x2, df, lower.tail=FALSE)
+        reference["rmsea"] <- getFromNamespace("lav_fit_rmsea", "lavaan")(x2, df, n, g=g)
+        reference[c("rmsea.ci.lower", "rmsea.ci.upper")] <-
+          unlist(getFromNamespace("lav_fit_rmsea_ci", "lavaan")(x2, df, n, g=g))
+        reference["rmsea.pvalue"] <-
+          getFromNamespace("lav_fit_rmsea_closefit", "lavaan")(x2, df, n, g=g)
+        reference["cfi"] <- getFromNamespace("lav_fit_cfi", "lavaan")(x2, df, x2_null, df_null)
+        reference["tli"] <- getFromNamespace("lav_fit_tli", "lavaan")(x2, df, x2_null, df_null)
+        expect_equal(convention_inference(actual,"DWLS")$test$unscaled_statistic,
+          oracle_test$stat, tolerance=1e-5, info=info)
+      }
       expect_equal(unname(unlist(fm[measures])), unname(reference), tolerance=1e-5, info=info)
       if (categorical) {
         expect_equal(fm$df, convention_inference(actual,"WLSMV")$test$df, info=info)

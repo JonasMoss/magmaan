@@ -1131,7 +1131,9 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL, weight = NULL,
 #'
 #' Convenience wrapper over the existing fit-measure primitives. By default it
 #' reports the standard ML chi-square, df, p-value, baseline chi-square, and
-#' ordinary fit measures. Passing `fmg = TRUE` or a character vector of FMG test
+#' ordinary fit measures. Categorical models report the native `n F` statistic;
+#' lavaan's `(n - G) F` standard reporting is available through
+#' `convention_inference()`. Passing `fmg = TRUE` or a character vector of FMG test
 #' labels adds an `$fmg` diagnostic table from `fmg_tests()`.
 #'
 #' @param fit A fitted magmaan model.
@@ -1192,10 +1194,6 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
   # Partable-aware baseline: applies the fixed.x exogenous correction (lavaan
   # frees the exo (co)variances in the independence model). A no-op without
   # exogenous variables, so unchanged for non-fixed.x fits.
-  if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {
-    # The core uses N*F; lavaan's unscaled categorical reporting uses (N-G)*F.
-    chi2 <- infer_categorical_chisq_stat(fit)
-  }
   if (is.null(baseline)) baseline <- measures_baseline_fit(fit)
   fm <- measures_fit(fit, chi2, df, baseline)
   out <- c(list(

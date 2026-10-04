@@ -191,7 +191,7 @@ result under an unstated convention.
 
 - [x] **S — correct equality-constrained categorical fit measures** (task-62).
   Lab reporting uses ordinal/mixed moment counts minus the equality-reduced
-  dimension and categorical per-group n-minus-one scaling. Live DELTA/THETA
+  dimension, retaining native categorical n F reporting. Live DELTA/THETA
   group-equality and label-equality gates cover df and all df-based indices;
   continuous group/label equality reporting is checked alongside them.
 

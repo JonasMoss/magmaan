@@ -233,10 +233,6 @@ infer_fit_df_stat <- function(fit) {
     .Call(`_magmaanlab_infer_fit_df_stat`, fit)
 }
 
-infer_categorical_chisq_stat <- function(fit) {
-    .Call(`_magmaanlab_infer_categorical_chisq_stat`, fit)
-}
-
 infer_baseline <- function(sample_stats) {
     .Call(`_magmaanlab_infer_baseline`, sample_stats)
 }
