@@ -189,6 +189,12 @@ result under an unstated convention.
   inference remains
   [banked](speculative.md#fixed-design-inference-under-mean-misspecification).
 
+- [x] **S — correct equality-constrained categorical fit measures** (task-62).
+  Lab reporting uses ordinal/mixed moment counts minus the equality-reduced
+  dimension and categorical per-group n-minus-one scaling. Live DELTA/THETA
+  group-equality and label-equality gates cover df and all df-based indices;
+  continuous group/label equality reporting is checked alongside them.
+
 - [x] **M — expose named downstream inference conventions** (2026-10-02).
   `lavaan_compat` on `vcov`, `confint`, `summary` and `anova`; C++ compatibility
   composers, on-demand reporting and optional `infer(fit, lavaan_compat)` caching.

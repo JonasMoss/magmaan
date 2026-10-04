@@ -1078,6 +1078,9 @@ TEST_CASE("ordinal invariance (group.equal) theta fits match lavaan") {
         continue;
       }
       const int df = static_cast<int>(n_moments - con_or->n_alpha);
+      auto reported_df = magmaan::estimate::ordinal_df_stat(pt_for_df, h->stats);
+      REQUIRE(reported_df.has_value());
+      CHECK(*reported_df == lavaan_df);
       const double chisq = to_lavaan_ls_chisq(
           2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
           h->stats.R.size());

@@ -836,6 +836,28 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_fit_df_stat
+int infer_fit_df_stat(Rcpp::List fit);
+RcppExport SEXP _magmaanlab_infer_fit_df_stat(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_fit_df_stat(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_categorical_chisq_stat
+double infer_categorical_chisq_stat(Rcpp::List fit);
+RcppExport SEXP _magmaanlab_infer_categorical_chisq_stat(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_categorical_chisq_stat(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_baseline
 Rcpp::List infer_baseline(Rcpp::List sample_stats);
 RcppExport SEXP _magmaanlab_infer_baseline(SEXP sample_statsSEXP) {
@@ -4494,6 +4516,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_compute_defined_impl", (DL_FUNC) &_magmaanlab_compute_defined_impl, 3},
     {"_magmaanlab_infer_chi2_stat", (DL_FUNC) &_magmaanlab_infer_chi2_stat, 2},
     {"_magmaanlab_infer_df_stat", (DL_FUNC) &_magmaanlab_infer_df_stat, 2},
+    {"_magmaanlab_infer_fit_df_stat", (DL_FUNC) &_magmaanlab_infer_fit_df_stat, 1},
+    {"_magmaanlab_infer_categorical_chisq_stat", (DL_FUNC) &_magmaanlab_infer_categorical_chisq_stat, 1},
     {"_magmaanlab_infer_baseline", (DL_FUNC) &_magmaanlab_infer_baseline, 1},
     {"_magmaanlab_infer_baseline_fit", (DL_FUNC) &_magmaanlab_infer_baseline_fit, 1},
     {"_magmaanlab_inference_modification_indices", (DL_FUNC) &_magmaanlab_inference_modification_indices, 7},

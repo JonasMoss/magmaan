@@ -4,6 +4,20 @@ namespace magmaan::estimate {
 
 using namespace detail_ordinal;
 
+post_expected<int> ordinal_df_stat(const spec::LatentStructure& pt,
+                                   const data::OrdinalStats& stats) {
+  auto constraints = build_eq_constraints(pt);
+  if (!constraints) return std::unexpected(constraints.error());
+  return static_cast<int>(ordinal_moment_rows(stats) - constraints->n_alpha);
+}
+
+post_expected<int> mixed_ordinal_df_stat(const spec::LatentStructure& pt,
+                                         const data::MixedOrdinalStats& stats) {
+  auto constraints = build_eq_constraints(pt);
+  if (!constraints) return std::unexpected(constraints.error());
+  return static_cast<int>(mixed_moment_rows(stats) - constraints->n_alpha);
+}
+
 namespace {
 post_expected<measures::BaselineFit>
 ordinal_baseline_chi2(const data::OrdinalStats& stats,
@@ -216,11 +230,11 @@ fit_measures_ordinal(spec::LatentStructure pt,
   auto cr = ordinal_crmr(stats, eval->moments, parameterization);
   if (!cr.has_value()) return std::unexpected(cr.error());
 
-  auto con_or = build_eq_constraints(pt);
-  if (!con_or.has_value()) return std::unexpected(con_or.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
-  const int df = static_cast<int>(ordinal_moment_rows(stats) - con_or->n_alpha);
+  auto df_or = ordinal_df_stat(pt, stats);
+  if (!df_or) return std::unexpected(df_or.error());
+  const int df = *df_or;
   const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
   const measures::FitMeasures indices =
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
@@ -2257,11 +2271,11 @@ fit_measures_mixed_ordinal(spec::LatentStructure pt,
                                parameterization);
   if (!sr.has_value()) return std::unexpected(sr.error());
 
-  auto con_or = build_eq_constraints(pt);
-  if (!con_or.has_value()) return std::unexpected(con_or.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
-  const int df = static_cast<int>(mixed_moment_rows(stats) - con_or->n_alpha);
+  auto df_or = mixed_ordinal_df_stat(pt, stats);
+  if (!df_or) return std::unexpected(df_or.error());
+  const int df = *df_or;
   const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
   const measures::FitMeasures indices =
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());

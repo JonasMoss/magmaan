@@ -534,6 +534,11 @@
   matrix, and ordinal SRMR uses the lavaan correlation-metric denominator that
   includes zero diagonal residuals. The bfi ordinal parity fixture gates DWLS
   and WLS CFI/TLI/RMSEA/SRMR against lavaan.
+- Lab `fit_measures()` uses the fitted categorical moment layout and equality-
+  reduced dimension for df, and per-group `n_g - 1` objective/baseline weights
+  for standard categorical reporting. Live lavaan gates cover grouped DELTA/THETA
+  threshold/loading invariance, cross-group labels, df, chi-square, p-values,
+  RMSEA (including intervals), CFI and TLI; continuous equality gates also pass.
 - Weighted-χ² reducer formulas are shared across eigenvalue and trace-summary
   callers: Satorra-Bentler, mean/variance-adjusted, and scaled/shifted tests
   can consume either the UΓ spectrum or `(Σλ, Σλ²)` when a low-rank trick has

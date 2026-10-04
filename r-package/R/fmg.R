@@ -1184,10 +1184,18 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 
   ss <- fit_sample_stats(fit)
   chi2 <- infer_chi2_stat(ss, fit$fmin)
-  df <- infer_df_stat(fit$partable, ss)
+  df <- if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {
+    infer_fit_df_stat(fit)
+  } else {
+    infer_df_stat(fit$partable, ss)
+  }
   # Partable-aware baseline: applies the fixed.x exogenous correction (lavaan
   # frees the exo (co)variances in the independence model). A no-op without
   # exogenous variables, so unchanged for non-fixed.x fits.
+  if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {
+    # The core uses N*F; lavaan's unscaled categorical reporting uses (N-G)*F.
+    chi2 <- infer_categorical_chisq_stat(fit)
+  }
   if (is.null(baseline)) baseline <- measures_baseline_fit(fit)
   fm <- measures_fit(fit, chi2, df, baseline)
   out <- c(list(

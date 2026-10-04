@@ -558,6 +558,61 @@ int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
   return *r;
 }
 
+// Use the fitted moment layout, including ordinal thresholds and mixed means.
+// [[Rcpp::export]]
+int infer_fit_df_stat(Rcpp::List fit) {
+  Ctx ctx = ctx_from_fit(fit);
+  if (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) {
+    auto stats = ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"]));
+    auto result = magmaan::estimate::ordinal_df_stat(ctx.pt, stats);
+    if (!result) stop_post(result.error());
+    return *result;
+  }
+  if (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"])) {
+    auto stats = mixed_ordinal_stats_from_arg(Rcpp::List(fit["mixed_ordinal_stats"]));
+    auto result = magmaan::estimate::mixed_ordinal_df_stat(ctx.pt, stats);
+    if (!result) stop_post(result.error());
+    return *result;
+  }
+  auto result = magmaan::inference::df_stat(ctx.pt, ctx.samp,
+                                          est_from_fit(fit).theta);
+  if (!result) stop_post(result.error());
+  return *result;
+}
+
+// Compose the native LS objective with lavaan's per-group n-minus-one weights.
+// [[Rcpp::export]]
+double infer_categorical_chisq_stat(Rcpp::List fit) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  const auto weights = ordinal_weight_from_estimator(
+      ordinal_weight_for_postfit(fit, Rcpp::as<std::string>(fit["estimator"])),
+      "categorical chi-square");
+  const auto parameterization = ordinal_parameterization_from_string(
+      Rcpp::as<std::string>(fit["parameterization"]));
+  magmaan::fit_expected<magmaan::estimate::frontier::OrdinalLsObjective> objective;
+  std::int64_t total = 0;
+  if (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) {
+    auto stats = ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"]));
+    for (std::size_t b = 0; b < stats.n_obs.size(); ++b) {
+      total += --stats.n_obs[b];
+    }
+    objective = magmaan::estimate::frontier::ordinal_ls_objective(
+        ctx.pt, ctx.rep, stats, est, weights, parameterization, &ctx.names.row_user);
+  } else {
+    auto stats = mixed_ordinal_stats_from_arg(Rcpp::List(fit["mixed_ordinal_stats"]));
+    for (std::size_t b = 0; b < stats.n_obs.size(); ++b) {
+      total += --stats.n_obs[b];
+    }
+    objective = magmaan::estimate::frontier::mixed_ordinal_ls_objective(
+        ctx.pt, ctx.rep, stats, est, weights, parameterization);
+  }
+  if (!objective) stop_fit(objective.error());
+  auto residual = objective->problem.r(est.theta);
+  if (!residual) stop_fit(residual.error());
+  return static_cast<double>(total) * residual->squaredNorm();
+}
+
 // infer_baseline() — mirrors baseline_chi2(samp). Takes sample stats directly.
 //
 // [[Rcpp::export]]
@@ -586,6 +641,31 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
 // [[Rcpp::export]]
 Rcpp::List infer_baseline_fit(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
+  if ((fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) ||
+      (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]))) {
+    const auto weights = ordinal_weight_from_estimator(
+        ordinal_weight_for_postfit(fit, Rcpp::as<std::string>(fit["estimator"])),
+        "ordinal baseline fit");
+    const auto parameterization = ordinal_parameterization_from_string(
+        Rcpp::as<std::string>(fit["parameterization"]));
+    const auto est = est_from_fit(fit);
+    auto ordinal_stats = fit.containsElementNamed("ordinal_stats")
+        ? ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"])) : magmaan::data::OrdinalStats{};
+    auto mixed_stats = fit.containsElementNamed("mixed_ordinal_stats")
+        ? mixed_ordinal_stats_from_arg(Rcpp::List(fit["mixed_ordinal_stats"])) : magmaan::data::MixedOrdinalStats{};
+    for (auto& n : ordinal_stats.n_obs) --n;
+    for (auto& n : mixed_stats.n_obs) --n;
+    auto result = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])
+        ? magmaan::estimate::fit_measures_ordinal(ctx.pt, ctx.rep,
+            ordinal_stats, est,
+            weights, parameterization, &ctx.names.row_user)
+        : magmaan::estimate::fit_measures_mixed_ordinal(ctx.pt, ctx.rep,
+            mixed_stats, est,
+            weights, parameterization, &ctx.names.row_user);
+    if (!result) stop_post(result.error());
+    return Rcpp::List::create(Rcpp::_["chi2"] = result->baseline.chi2,
+                              Rcpp::_["df"] = result->baseline.df);
+  }
   const magmaan::measures::BaselineFit bl =
       magmaan::measures::baseline_chi2(ctx.pt, ctx.samp);
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
