@@ -443,6 +443,12 @@ test_that("all-ordinal DWLS preset matches live lavaan delta theta and invarianc
       fit <- fit_model(model, d, ordered = paste0("x", 1:4), estimator = "DWLS",
           groups = group, group_equal = equal %||% character(),
           parameterization = parameterization, options = list(preset = "lavaan-0.7.2"))
+      prepared <- prepare_model(fit$model, prototype = d)
+      staged <- estimate(prepared, prepare_data(prepared, d), estimator = "DWLS",
+                         options = list(preset = "lavaan-0.7.2"))
+      expect_equal(staged$theta, fit$theta, tolerance = 1e-8)
+      expect_equal(staged$fitting, fit$fitting, tolerance = 1e-8)
+      expect_equal(staged$verdict, fit$verdict, tolerance = 1e-8)
       lv <- lavaan::cfa(model, d, ordered = paste0("x", 1:4), estimator = "WLSMV",
           group = group, group.equal = equal %||% character(),
           parameterization = parameterization, se = "none", test = "none")
@@ -501,6 +507,12 @@ test_that("ordinal preset retries an invalid theta start like live lavaan", {
   fit <- suppressWarnings(fit_model(args$model, d, ordered = names(d), estimator = "DWLS",
       parameterization = "theta", control = list(start = start),
       options = list(preset = "lavaan-0.7.2")))
+  prepared <- prepare_model(fit$model, prototype = d)
+  staged <- suppressWarnings(estimate(prepared, prepare_data(prepared, d), estimator = "DWLS",
+      control = list(start = start), options = list(preset = "lavaan-0.7.2")))
+  expect_equal(staged$theta, fit$theta, tolerance = 1e-8)
+  expect_equal(staged$fitting, fit$fitting, tolerance = 1e-8)
+  expect_equal(staged$verdict, fit$verdict, tolerance = 1e-8)
   expect_length(fit$fitting$attempts, 3L)
   expect_equal(as.numeric(fit$fitting$attempts[[1]]$start), start)
   expect_equal(fit$converged, lavaan::lavInspect(lv, "converged"))

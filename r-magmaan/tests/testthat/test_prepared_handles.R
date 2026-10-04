@@ -102,15 +102,16 @@ test_that("serialized models rebuild prepared handles on PSOCK workers", {
   }
 })
 
-test_that("ML2S and ordinal DWLS fitting options retain expected fallback routes", {
+test_that("ordinal DWLS fitting options reuse prepared handles and ML2S retains its fallback", {
   count <- magmaanlab:::prepared_structure_count_impl
   d <- ordinal_hs()
   model <- magmaan_model(cfa, prototype = d, ordered = paste0("x", 1:6))
   n <- count()
   for (opts in list(list(preset = "lavaan-0.7.2"), list(start = "lavaan-0.7.2")))
     expect_prepared_parity(model, d, "DWLS", options = opts)
-  expect_identical(count(), n)
-  expect_null(model$prepared_cache$handle)
+  expect_identical(count(), n + 1)
+  expect_s3_class(model$prepared_cache$handle, "magmaan_prepared_model")
+  n <- count()
   model <- magmaan_model(cfa, prototype = hs())
   expect_prepared_parity(model, hs(), "ML2S")
   expect_identical(count(), n)

@@ -1,5 +1,8 @@
 # magmaan 0.2.0 (in development)
 
+- Ordinal DWLS fitting options now use reusable prepared handles; ML2S
+  retains its fresh-fit fallback.
+
 - DWLS global policy now reports the exact spectrum (All) weighted chi-square
   p-value on unchanged n F and robust-ordinal eigenvalues (decision study 05).
   Confirmed on fresh draws (2.9-6.8% at nominal 5%).

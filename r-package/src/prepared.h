@@ -1,6 +1,7 @@
 // Binding-owned immutable handles. Included by fit_prepared.cpp to share the result
 // converters; SEM computations remain in the core estimators.
 #pragma once
+#include "magmaan/spec/lin_constraints.hpp"
 
 namespace prepared {
 using namespace magmaan;
@@ -77,6 +78,9 @@ SEXP model(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema) {
     auto ok = estimate::prepare_ordinal_partable(m.ctx.pt, s,
         ordinal_parameterization_from_string(m.parameterization), &m.starts, &m.ctx.names.row_user);
     if (!ok) stop_fit(ok.error());
+    // Schema preparation can compact automatic intercept coordinates. Resolve
+    // ordered affine rows against the final free map used by configured fits.
+    spec::resolve_lin_constraints(m.ctx.pt, m.ctx.names);
   } else if (kind == "mixed") {
     auto s = mixed_ordinal_stats_from_arg(Rcpp::List(schema.get()));
     m.levels = s.n_levels;
@@ -283,6 +287,24 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     auto options = fitting_options_from(Rcpp::as<Rcpp::List>(ctl["fitting_options"]));
     Eigen::VectorXd explicit_start;
     if (ctl.containsElementNamed("start")) explicit_start = Rcpp::as<Eigen::VectorXd>(ctl["start"]);
+    if (d.kind == "ordinal") {
+      const auto& stats = w ? w->ordinal : d.ordinal;
+      ctx.samp.S = stats.R; ctx.samp.n_obs = stats.n_obs; ctx.meanstructure = false;
+      auto x0 = ordinal_starts_or_stop(ctx, stats, starts);
+      starts.hint.resize(ctx.pt.n_free(), std::numeric_limits<double>::quiet_NaN());
+      for (std::size_t i = 0; i < ctx.pt.size(); ++i)
+        if (ctx.pt.op[i] == parse::Op::Threshold && ctx.pt.free[i] > 0 &&
+            !std::isfinite(starts.hint[ctx.pt.free[i] - 1]))
+          starts.hint[ctx.pt.free[i] - 1] = x0(ctx.pt.free[i] - 1);
+      auto e = estimate::fit_ordinal_configured(ctx.pt, ctx.rep, stats,
+          options, starts, explicit_start, bounds_from_nullable(bounds),
+          estimate::OrdinalWeightKind::DWLS,
+          ordinal_parameterization_from_string(m.parameterization), &ctx.names.row_user);
+      if (!e) stop_fit(e.error());
+      auto out = ordinal_fit_result(ctx, stats, *e, &starts, "DWLS", m.parameterization.c_str());
+      out["ordinal_computational_weight"] = "DWLS";
+      return out;
+    }
     if (d.kind == "raw") {
       auto h1 = estimate::lavaan_fiml_h1(d.raw, *d.pack);
       if (!h1) stop_fit(h1.error());

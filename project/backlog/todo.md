@@ -131,11 +131,12 @@ result under an unstated convention.
   `fit_model()` on the constructed specification. See the
   [implementation record](../design/r-interface-vision.md#implementation-and-remaining-decisions).
 
-- [ ] **S — prepared-path fitting options for all-ordinal DWLS.** The lavaan
-  preset for ordinal DWLS (task-11) runs through `fit_model()` only; the prepared
-  `estimate()` path still rejects ordinal fitting options, so `magmaan()` falls
-  back to `fit_model()` for those calls (as for ML2S). **Check:** prepared/fresh
-  parity for preset ordinal fits, then drop the fallback. Not release-gating.
+- [x] **S — prepared-path fitting options for all-ordinal DWLS.** Prepared
+  `estimate()` reuses the fresh fitter's configured ordinal engine for presets,
+  starts, optimizer and convergence choices. `magmaan()` uses prepared handles
+  for these fits; ML2S retains its fallback. Delta/theta, single/two-group and
+  loading/Wu-Estabrook threshold invariance parity gates cover estimates,
+  verdicts, attempts and reporting metadata.
 
 - [x] **M — fit constructed ordinary models through native prepared
   handles.** `magmaan_model()` should own a prepared model so repeated fits

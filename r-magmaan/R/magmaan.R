@@ -370,8 +370,8 @@ magmaan <- function(model, data,
   }
   if (!is.null(start$control)) args$control <- start$control
   if (length(engine)) args$options <- engine
-  # Prepared ML2S and ordinal fitting options remain explicit lab gaps.
-  fallback <- estimator == "ML2S" || (length(model$ordered) && length(engine))
+  # ML2S still needs the fresh fitter's Stage-1 composition.
+  fallback <- estimator == "ML2S"
   if (fallback) {
     lab <- do.call(magmaanlab::fit_model, args)
   } else {

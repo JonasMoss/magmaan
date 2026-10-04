@@ -84,6 +84,10 @@ needs full Gamma; obtain it separately with
 \code{prepare_weight(data, "DWLS", full = TRUE)$stats} and pass it to an
 existing explicit inference function, without refitting.
 
+Versioned fitting options use the same configured engines as \code{fit_model()}
+for continuous ML/FIML and all-ordinal DWLS with unrestricted covariance,
+including \code{options = list(preset = "lavaan-0.7.2")}.
+
 The interface covers the estimators listed above.
 ML2S raises a typed \code{magmaan_unsupported_estimator} error.
 Two-level, FC-SEM, SAM and frontier methods continue using their existing

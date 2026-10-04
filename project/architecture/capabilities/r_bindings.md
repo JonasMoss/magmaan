@@ -257,8 +257,11 @@
   `magmaan_model()`) raise errors naming their replacement. Fits use a lazily built native
   prepared handle cached by reference on
   the model. Repeated fits reuse structure; serialization and process changes
-  rebuild the handle from portable fields. ML2S and ordinal DWLS with fitting
-  options retain the `fit_model()` route pending prepared support.
+  rebuild the handle from portable fields. All-ordinal DWLS fitting options
+  reuse `fit_ordinal_configured()` through prepared handles, including the
+  lavaan preset, starts, optimizer and convergence choices. Delta/theta and
+  grouped loading/threshold invariance retain fresh-fit attempts and reporting
+  metadata. ML2S retains the `fit_model()` route pending prepared support.
 - Fresh-fit parity, structural reuse, save/reload and PSOCK reconstruction are
   covered by the ordinary prepared-handle tests. Task-25.3 supplies ordinal
   equality and reporting metadata parity used by this composition.

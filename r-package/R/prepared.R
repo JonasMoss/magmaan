@@ -198,6 +198,8 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
     hints <- spec$partable
     hints$start <- hints$ustart
     pt <- .start_from_table(model$spec, hints)$partable
+    # Native parsing drops synthetic equality rows; hints follow retained rows.
+    pt <- pt[!(pt$op == "==" & pt$user == 2L), , drop = FALSE]
     start_hints <- pt$ustart
     start_hints[pt$free == 0L] <- NA_real_
     control$start <- NULL
@@ -205,8 +207,10 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
     if ("control" %in% names(route_args)) route_args["control"] <- list(control)
   }
   if (!is.null(options)) {
-    if (!estimator %in% c("ML", "FIML") || model$kind != "moments" || covariance != "unrestricted")
-      stop("fitting options currently require ordinary continuous ML or FIML")
+    if (model$kind == "mixed") stop("mixed presets are not supported")
+    if (!(estimator %in% c("ML", "FIML") && model$kind == "moments" ||
+          estimator == "DWLS" && model$kind == "ordinal") || covariance != "unrestricted")
+      stop("fitting options currently require ordinary continuous ML or FIML, or all-ordinal DWLS")
     control <- .fitting_control(options, control, optimizer)
     optimizer <- NULL
   }

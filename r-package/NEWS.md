@@ -1,5 +1,8 @@
 # magmaanlab 0.2.0 (in development)
 
+- Prepared `estimate()` now accepts all-ordinal DWLS fitting options, including
+  the lavaan preset, through the same configured engine as `fit_model()`.
+
 - Robust LS modification indices and equality releases now support observed
   sensitivity with estimated-weight influence for continuous ULS/GLS/DWLS/WLS/DLS
   and all-ordinal ULS/DWLS/WLS. Lab defaults use this route with the expected

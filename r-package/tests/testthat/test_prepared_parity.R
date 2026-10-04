@@ -183,3 +183,33 @@ test_that("prepared mixed ULS preserves the fresh fitter's diagnostic", {
   expect_error(fit_model(spec, d, estimator = "ULS"), message, fixed = TRUE)
   expect_error(estimate(m, data, estimator = "ULS"), message, fixed = TRUE)
 })
+
+
+test_that("prepared ordinal fitting options preserve attempts and reporting", {
+  skip_if_not_installed("lavaan")
+  d <- .prepared_parity_data("ordinal")
+  for (parameterization in c("delta", "theta")) {
+    equalities <- list(NULL, character(), "loadings")
+    if (parameterization == "theta") equalities <- c(equalities, list(c("loadings", "thresholds")))
+    for (eq in equalities) {
+      grouped <- !is.null(eq)
+      spec <- model_spec("visual =~ x1+x2+x3\ntextual =~ x4+x5+x6",
+          ordered = paste0("x", 1:6), parameterization = parameterization,
+          meanstructure = TRUE, fixed_x = FALSE,
+          group = if (grouped) "school" else "",
+          group_labels = if (grouped) levels(d$school) else NULL,
+          group_equal = eq %||% character())
+      for (options in list(list(preset = "lavaan-0.7.2"),
+                           list(optimizer = "nlopt-lbfgs", convergence = "newton", starts = "default"))) {
+        pair <- .prepared_parity_pair(spec, d, "DWLS", list(options = options))
+        expect_equal(pair$staged$fitting, pair$fresh$fitting, tolerance = 1e-8)
+        expect_equal(pair$staged$verdict, pair$fresh$verdict, tolerance = 1e-8)
+        .prepared_ordinal_reporting(pair, "DWLS")
+      }
+      table <- pair$fresh$partable[c("lhs", "op", "rhs", "group", "est")]
+      pair <- .prepared_parity_pair(spec, d, "DWLS",
+          list(options = list(preset = "lavaan-0.7.2"), control = list(start = table)))
+      expect_equal(pair$staged$fitting, pair$fresh$fitting, tolerance = 1e-8)
+    }
+  }
+})
