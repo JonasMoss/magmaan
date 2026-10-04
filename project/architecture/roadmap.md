@@ -349,8 +349,12 @@ effects with delta SEs) are imported; inequalities stay
 [deliberately refused](../scope.md#inequality-constraints-deliberately-refused).
 Gated against lavaan and the Mplus 9.1 Demo; of 68 eligible verified corpus
 cases, 50 are accepted: 44 match Mplus and 6 end in an explicit unsupported-fit
-route. Ordinal nonlinear constraints (TASK-54.2), the stability closeout
-(TASK-56) and ordinary `magmaan()` integration (TASK-57) remain.
+route. The stability bar is closed: per-rule rejection messages, an
+ASan/UBSan sweep of all 2,440 corpus inputs without crashes or unclassified
+rejections, lab round trips for seven model families and one coverage matrix
+keyed to the inventory. Ordinal nonlinear constraints (TASK-54.2) and ordinary
+`magmaan()` integration (TASK-57, under the
+[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api)) remain.
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
