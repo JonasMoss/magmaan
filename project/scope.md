@@ -242,6 +242,34 @@ refits a joint model in its place. The ordinary API implements this decision
 from 0.2.0 (2026-10-02); 0.1.0 kept `fixed.x = TRUE` as its default, with
 explicitly unsupported inference for fixed observed covariates.
 
+### Mplus inputs in the ordinary API
+
+Decided 2026-10-04. Ordinary `magmaan()` fits an Mplus input only if the input
+means the same model in Mplus and in magmaan's ordinary model. Construction
+reads the input and builds the model tables, so they can be inspected; fitting
+anything else fails with an error that names the one edit to the input. The
+edited input then specifies the same model in both programs, so users can
+check the agreement themselves; there is no silent translation.
+
+- **Observed covariates.** Mplus conditions on x variables by default, and the
+  ordinary API fits the joint random-X model (see the fixed-x decision above).
+  Remedy: mention every x variance and every pairwise x covariance (`x1 x2;
+  x1 WITH x2;`), which makes Mplus fit the joint model as well, including
+  keeping cases with missing x under FIML. Mentioning only some of them gives
+  Mplus's mixed conditioning and stays rejected.
+- **NOMEANSTRUCTURE.** Ordinary models always carry a mean structure. Remedy:
+  remove it; with raw data the saturated intercepts change no other estimate,
+  standard error or test.
+- **Summary data without MEANS.** The mean structure has no data. Remedy:
+  supply raw data or add MEANS.
+
+With complete data and ML, the joint and conditional models give identical
+structural estimates, standard errors and chi-square (the x block is
+saturated). With covariates missing, Mplus's conditional default deletes those
+cases, which can bias estimates when missingness depends on outcomes; the joint
+model keeps them. The lab's `mplus_model()` retains Mplus's conditional
+convention for users who need its numbers.
+
 ### Inequality constraints: deliberately refused
 
 Decided 2026-10-03. magmaan parses inequality constraints (lavaan `a > 0`,

@@ -362,11 +362,15 @@ alpha exposure.
 - **Ordinary.** Ordinary integration is the goal, unlike EQS, whose ordinary
   adoption is undecided: migrating applied users are ordinary users. The
   ordinary constructor accepts an explicitly marked Mplus source, never by
-  automatic detection, and applies the ordinary inference policy. Decide
-  first how an Mplus model with x variables meets the
-  [ordinary fixed-x decision](../scope.md#ordinary-fixed-x-decision): ordinary
-  construction rejects fixed-x specifications and never silently converts
-  them, whereas Mplus conditions on x by default.
+  automatic detection, and applies the ordinary inference policy. It fits an
+  input only if the input
+  [means the same model in both programs](../scope.md#mplus-inputs-in-the-ordinary-api);
+  otherwise construction succeeds (the tables can be inspected) and fitting
+  fails with an error that names the one edit to the input. Three cases:
+  observed covariates that Mplus conditions on (add every x variance and
+  pairwise WITH, which makes Mplus fit the joint model too), NOMEANSTRUCTURE
+  (remove it), and summary data without MEANS (add MEANS or use raw data).
+  The lab's `mplus_model()` keeps Mplus's conditional convention.
 
 ## Implementation sequence
 
