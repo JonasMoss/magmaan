@@ -37,7 +37,7 @@
 - Mplus growth, MODEL CONSTRAINT (NEW, equality equations, DO loops) and
   MODEL INDIRECT now use the shared model/constraint/defined-parameter core.
   SQRT, PHI/pnorm and LOG10 extend the shared expression language. Inequalities
-  retain the deliberate boundary; ordinal nonlinear equalities name TASK-54.2.
+  retain the deliberate boundary.
   Auxiliary NEW coordinates are safe in barrier gradients and moment curvature;
   noniterative CFA and profiled SNLLS reject these coordinates explicitly.
 

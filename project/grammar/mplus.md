@@ -366,7 +366,7 @@ Gate references (each names the maintained file rather than an increment):
 | GR05 | accepted | continuous zero intercepts; categorical time-threshold/scale defaults | H |
 | GR06 | accepted | continuous/categorical multiple-group growth defaults | H |
 | GR07 | rejected: out of family | random slope/loading/variance, interactions and varying time | H |
-| CN01 | accepted / rejected: deliberate / pending TASK-54.2 | explicit/implicit equalities; inequalities deliberately refused; ordinal nonlinear equalities pending | H |
+| CN01 | accepted / rejected: deliberate | explicit/implicit equalities, including ordinal nonlinear equalities (TASK-54.2: constrained LS fitting, expected-information lavaan inference; the ordinary policy refuses them); inequalities deliberately refused | H |
 | CN02 | accepted / rejected: Mplus error / deliberate | NEW starts, free coordinates and acyclic definitions; bounded expansion | H |
 | CN03 | accepted / reported / rejected: deliberate | bounded nested DO expansion; LOOP/PLOT reported | H |
 | CN04 | reported | Mplus INFORMATION default changes; inference conventions not imported | H |
@@ -465,8 +465,8 @@ The frontend is stable for a subset when all of the following hold:
   Every default rule also has a Demo TECH1 check or a corpus `.out` match.
 - Every rejected construct class has a diagnostic fixture with source span and
   reason class. Each rejection message states what was found, what Mplus
-  does with it, why magmaan does not reproduce it (or the exact remaining
-  TASK-54.2 restriction), and what to write instead. Examples: NOMEANSTRUCTURE without
+  does with it, why magmaan does not reproduce it, and what to write
+  instead. Examples: NOMEANSTRUCTURE without
   `INFORMATION = EXPECTED` (Mplus keeps the means and only warns: add the
   INFORMATION setting or remove NOMEANSTRUCTURE); a mentioned x variance
   (Mplus models that one variable with no covariances while conditioning on

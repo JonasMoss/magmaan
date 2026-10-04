@@ -65,8 +65,7 @@ Classes follow the [input boundary](mplus.md#input-boundary): **S** schema
 (imported), **DD** data description (data plan only), **E** execution
 (recognized, reported as not imported), **R** rejected. The
 [coverage matrix](mplus.md#coverage-matrix) records the current accepted,
-reported and rejected subsets for every ID. Only ordinal nonlinear equalities
-remain pending TASK-54.2. Setting abbreviations are the bold stems of the option tables (LX03); settings with no
+reported and rejected subsets for every ID. Setting abbreviations are the bold stems of the option tables (LX03); settings with no
 bold stem must be written in full.
 
 | ID | Command / option | Class | Evidence and notes |
@@ -635,5 +634,4 @@ fit routes, five verified convention differences and zero failures. Every
 accepted case's free count and df are gated, including independently counted
 conditional/mixed moments for the six unavailable fitting routes. Seven lab
 model kinds preserve portable partables, prepared estimates, source rebuilding
-and fresh-process serialization/refitting. Only ordinal nonlinear equality
-fitting awaits TASK-54.2; ordinary integration is TASK-57.
+and fresh-process serialization/refitting. Ordinary integration is TASK-57.

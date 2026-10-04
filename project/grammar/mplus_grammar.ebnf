@@ -10,7 +10,7 @@
    implements single/multiple-group continuous/categorical linear SEM,
    growth, constraints/indirect effects and typed data plans. Out-of-family
    constructs are rejected or reported with source spans; nothing is skipped
-   silently. Ordinal nonlinear equalities remain TASK-54.2.
+   silently.
 
    Notation as in grammar.ebnf (W3C-style EBNF). Matching of command, option
    and setting names, keywords and variable names is case-insensitive
