@@ -6,6 +6,7 @@
 #include "magmaan/robust/restriction.hpp"
 
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 
 namespace magmaan::api {
 
@@ -322,14 +323,27 @@ ConventionTest lavaan_nested_ordinal(spec::LatentStructure null_pt,
   if (auto p = estimate::prepare_ordinal_partable(null_pt, stats, parameterization,
           nullptr, null_row_user); !p)
     return unavailable(InferenceReason::NumericFailure, p.error().detail);
-  auto c1 = estimate::build_eq_constraints(alternative_pt);
-  auto c0 = estimate::build_eq_constraints(null_pt);
+  auto c1 = estimate::build_eq_constraints(alternative_pt, true);
+  auto c0 = estimate::build_eq_tangent(null_pt, null_estimates.theta);
   if (!c1 || !c0) return unavailable(InferenceReason::NumericFailure,
       !c1 ? c1.error().detail : c0.error().detail);
   auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep,
       null_pt, null_rep, null_estimates.theta, *c1, *c0, false,
       &alternative_estimates.theta);
   if (!embedding) return unavailable(reason_from(embedding.error()), embedding.error().detail);
+  if (!alternative_pt.nonlinear_eq_rows.empty()) {
+    // Curved tangents at two distinct estimates need not be nested. Check
+    // containment and the shared nonlinear restrictions at the embedded null.
+    const auto nl=estimate::build_nl_constraints(alternative_pt);
+    const Eigen::VectorXd h=nl.h(embedding->theta);
+    if (!h.allFinite() || h.lpNorm<Eigen::Infinity>()>1e-6)
+      return unavailable(InferenceReason::NotNested, "the null violates an alternative nonlinear equality");
+    c1=estimate::build_eq_tangent(alternative_pt,embedding->theta);
+    if (!c1) return unavailable(InferenceReason::NumericFailure,c1.error().detail);
+    embedding=robust::embed_nested_null(alternative_pt,alternative_rep,
+        null_pt,null_rep,null_estimates.theta,*c1,*c0,false,&alternative_estimates.theta);
+    if (!embedding) return unavailable(reason_from(embedding.error()),embedding.error().detail);
+  }
   if (embedding->restriction.A.rows() == 0)
     return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
   auto a = lavaan_inference_ordinal(null_pt, null_rep, stats, null_estimates,

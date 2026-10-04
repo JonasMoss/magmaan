@@ -321,11 +321,6 @@ Result<MplusModel> model_from_mplus(std::string_view source) {
   spec::LatentNames names;
   auto structure = spec::build(parsed->flat, options.build, &starts, &names);
   if (!structure) return std::unexpected(make_error(ErrorStage::Model, structure.error()));
-  if(!parsed->input.categorical.empty() && !structure->nonlinear_eq_rows.empty()) {
-    const auto at = parsed->input.constraint_bodies.empty() ? parsed->input.model_body : parsed->input.constraint_bodies.front();
-    const auto diagnostic = std::to_string(at.line) + ":" + std::to_string(at.col) + " [CN01] found ordinal nonlinear MODEL CONSTRAINT equality; Mplus enforces this equality in categorical estimation; magmaan's ordinal nonlinear equality backend requires TASK-54.2; instead, use a continuous equality model or retain the categorical equality analysis in Mplus";
-    return std::unexpected(make_error(ErrorStage::Model, FitError{FitError::Kind::NumericIssue, diagnostic}));
-  }
   compat::mplus::apply_provenance(*parsed,*structure,names);
   auto rep = model::build_matrix_rep(*structure, &names);
   if (!rep) return std::unexpected(make_error(ErrorStage::Model, rep.error()));

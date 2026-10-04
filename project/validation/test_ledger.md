@@ -1136,3 +1136,25 @@ intentional two-level skips, two existing covariance-admissibility warnings).
 Vendor refresh, tracked-file and dependency-layering checks pass. Logs use
 `~/.cache/magmaan-logs/task-56-*.log`. No ordinary-package code is changed;
 TASK-57 retains that integration work.
+
+### Ordinal nonlinear equalities (TASK-54.2)
+
+Native all-ordinal ULS/DWLS/WLS bounded and compact fits now enforce nonlinear
+rows through constrained LS; configured DWLS uses SLSQP with recorded preset
+substitution. DELTA free-set compaction remaps nonlinear expression leaves.
+Expected covariance, global tests, df, fit measures, nested and score inference
+use stacked affine/nonlinear fitted Jacobians. Scalar expected profile scaling
+has a regression for the formerly omitted nonlinear tangent. Ordinary policy,
+observed/IJ and misspecification profile inference explicitly refuse these
+models pending Lagrangian curvature. Categorical Mplus nonlinear equalities
+are accepted; the Demo npar=11/df=3 meaning gate has a lavaan numeric gate.
+
+Six frozen synthetic cases exercise five estimators, binary/three-category,
+THETA/DELTA, product, combined and cross-group restrictions. The frozen golden
+passes 2422 assertions. Default-start nonlinear nested/combined release-score
+oracle values are replaced only by the proved fitted-start transitive reference
+in `oracle-defects.md`; no tolerance was widened. Full required C++ ctest areas
+pass 1358 tests; ordinary full testthat passes 1775 assertions (one PSOCK skip).
+Full magmaanlab testthat passes 7025 assertions (two known warnings and two
+skips). The null calibration rejects 26/500 for both implementations; see the oracle
+entry and reproducible test-tool runner for scope and uncertainty.

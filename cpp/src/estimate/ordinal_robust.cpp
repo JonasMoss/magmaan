@@ -451,7 +451,10 @@ robust_ordinal(spec::LatentStructure pt,
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
                               est.theta, parameterization, eval->J_mu);
 
-  auto con_or = build_eq_constraints(pt);
+  if (bread == robust::Information::Observed) {
+    if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
+  }
+  auto con_or = build_eq_tangent(pt, est.theta);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
   if (K.rows() != Delta_full.cols()) {
@@ -550,6 +553,7 @@ robust_ordinal_ij(spec::LatentStructure pt,
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
                               est.theta, parameterization, eval->J_mu);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -634,6 +638,7 @@ ordinal_rbm_parts(spec::LatentStructure pt,
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
                               est.theta, parameterization, eval->J_mu);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -715,6 +720,7 @@ ordinal_casewise_influence_ij(spec::LatentStructure pt,
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
                               est.theta, parameterization, eval->J_mu);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -866,6 +872,7 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                             eval->J_sigma, eval->J_mu, est.theta,
                             parameterization);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -973,6 +980,7 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
                             eval->J_sigma, eval->J_mu, est.theta,
                             parameterization);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -1177,6 +1185,7 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
                             eval->J_sigma, eval->J_mu, est.theta,
                             parameterization);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();

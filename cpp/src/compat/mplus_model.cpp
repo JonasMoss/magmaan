@@ -89,11 +89,6 @@ fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
   OrdinalModel out;
   auto structure=spec::build(parsed->flat,build_options(parsed->input),&out.starts,&out.names);
   if(!structure) return fail(structure.error().detail);
-  if(!structure->nonlinear_eq_rows.empty()) {
-    const auto at = parsed->input.constraint_bodies.empty() ? parsed->input.model_body : parsed->input.constraint_bodies.front();
-    const auto diagnostic = std::to_string(at.line) + ":" + std::to_string(at.col) + " [CN01] found ordinal nonlinear MODEL CONSTRAINT equality; Mplus enforces this equality in categorical estimation; magmaan's ordinal nonlinear equality backend requires TASK-54.2; instead, use a continuous equality model or retain the categorical equality analysis in Mplus";
-    return fail(diagnostic);
-  }
   out.structure=std::move(*structure);
   apply_provenance(*parsed,out.structure,out.names);
   auto rep=model::build_matrix_rep(out.structure,&out.names);

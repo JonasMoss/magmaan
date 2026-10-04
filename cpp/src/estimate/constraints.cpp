@@ -12,6 +12,7 @@
 #include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/op.hpp"
 
@@ -364,6 +365,42 @@ build_eq_constraints(const spec::LatentStructure& pt, bool allow_nonlinear) {
                                "(residual " + std::to_string(final_resid) + ")"));
   }
   return out;
+}
+
+post_expected<void>
+require_linear_sensitivity(const spec::LatentStructure& pt) {
+  if (!pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+        "nonlinear equality constraints need Lagrangian curvature (multiplier term); not implemented"});
+  }
+  return {};
+}
+
+post_expected<EqConstraints>
+build_eq_tangent(const spec::LatentStructure& pt, const Eigen::VectorXd& theta) {
+  auto con = build_eq_constraints(pt, true);
+  if (!con) return std::unexpected(con.error());
+  if (pt.nonlinear_eq_rows.empty()) return con;
+  if (theta.size() != pt.n_free() || !theta.allFinite())
+    return std::unexpected(err("nonlinear equality tangent requires finite fitted coordinates"));
+  const auto nl = build_nl_constraints(pt);
+  if (nl.m() != static_cast<std::int32_t>(pt.nonlinear_eq_rows.size()))
+    return std::unexpected(err("nonlinear equality tangent has uncompiled constraints"));
+  const Eigen::MatrixXd H = nl.jacobian(theta);
+  if (!H.allFinite()) return std::unexpected(err("nonfinite nonlinear constraint Jacobian"));
+  Eigen::MatrixXd C(con->A_eq.rows() + H.rows(), pt.n_free());
+  C.topRows(con->A_eq.rows()) = con->A_eq;
+  C.bottomRows(H.rows()) = H;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
+  svd.setThreshold(1e-9);
+  con->rank = static_cast<std::int32_t>(svd.rank());
+  con->n_alpha = con->npar - con->rank;
+  con->Kmat = svd.matrixV().rightCols(con->n_alpha);
+  con->A_eq = std::move(C);
+  con->b_eq = con->A_eq * theta;
+  con->theta0 = theta;
+  con->group.clear();
+  return con;
 }
 
 }  // namespace magmaan::estimate

@@ -368,11 +368,6 @@ Rcpp::List mplus_model_impl(std::string source) {
   magmaan::spec::Starts starts;
   auto model = magmaan::spec::build(parsed->flat, options, &starts, &names);
   if (!model) Rcpp::stop("magmaan Mplus model error: %s", model.error().detail);
-  if(!parsed->input.categorical.empty() && !model->nonlinear_eq_rows.empty()) {
-    const auto at = parsed->input.constraint_bodies.empty() ? parsed->input.model_body : parsed->input.constraint_bodies.front();
-    const auto diagnostic = std::to_string(at.line) + ":" + std::to_string(at.col) + " [CN01] found ordinal nonlinear MODEL CONSTRAINT equality; Mplus enforces this equality in categorical estimation; magmaan's ordinal nonlinear equality backend requires TASK-54.2; instead, use a continuous equality model or retain the categorical equality analysis in Mplus";
-    Rcpp::stop("%s", diagnostic.c_str());
-  }
   magmaan::compat::mplus::apply_provenance(*parsed,*model,names);
   auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
   const auto n = parsed->notes.size();

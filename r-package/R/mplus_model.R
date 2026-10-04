@@ -21,8 +21,10 @@
 #' MODEL CONSTRAINT imports NEW (starts default to 0.5), explicit and implicit
 #' equalities, derived quantities, and nested DO loops. Functions include EXP,
 #' LOG, SQRT, PHI and LOG10; `**` denotes power. Continuous ML, LS and FIML
-#' use the existing equality backends. Ordinal nonlinear equalities await
-#' TASK-54.2. Inequalities are deliberately refused: active-bound inference
+#' use the existing equality backends. All-ordinal nonlinear equalities use
+#' constrained LS fitting and expected-information lavaan reporting. Native
+#' policy and observed/IJ inference require unimplemented Lagrangian curvature.
+#' Inequalities are deliberately refused: active-bound inference
 #' requires boundary asymptotics; for variance positivity drop the constraint
 #' and use covariance = "psd" or "barrier" in [fit_model()].
 #' MODEL INDIRECT imports total IND, specific IND and VIA products, including

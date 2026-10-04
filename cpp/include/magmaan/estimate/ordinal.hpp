@@ -1101,7 +1101,8 @@ fit_mixed_ordinal_snlls_full_thresholds(
 // Prepared ordinal model dimension: stage-one moments minus the equality-
 // reduced parameter dimension. Continuous covariance moments are not applicable.
 post_expected<int> ordinal_df_stat(const spec::LatentStructure& pt,
-                                   const data::OrdinalStats& stats);
+                                   const data::OrdinalStats& stats,
+                                   const Eigen::VectorXd& theta = {});
 post_expected<int> mixed_ordinal_df_stat(const spec::LatentStructure& pt,
                                          const data::MixedOrdinalStats& stats);
 

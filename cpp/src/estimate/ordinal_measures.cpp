@@ -5,8 +5,9 @@ namespace magmaan::estimate {
 using namespace detail_ordinal;
 
 post_expected<int> ordinal_df_stat(const spec::LatentStructure& pt,
-                                   const data::OrdinalStats& stats) {
-  auto constraints = build_eq_constraints(pt);
+                                   const data::OrdinalStats& stats,
+                                   const Eigen::VectorXd& theta) {
+  auto constraints = build_eq_tangent(pt, theta);
   if (!constraints) return std::unexpected(constraints.error());
   return static_cast<int>(ordinal_moment_rows(stats) - constraints->n_alpha);
 }
@@ -232,7 +233,7 @@ fit_measures_ordinal(spec::LatentStructure pt,
 
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
-  auto df_or = ordinal_df_stat(pt, stats);
+  auto df_or = ordinal_df_stat(pt, stats, est.theta);
   if (!df_or) return std::unexpected(df_or.error());
   const int df = *df_or;
   const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
@@ -286,6 +287,7 @@ catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
             eval.error().detail));
   }
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -509,6 +511,7 @@ ordinal_dwls_profile_rmsea_core(spec::LatentStructure pt,
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
                               est.theta, parameterization, eval->J_mu);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -870,6 +873,7 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
         "ordinal_crmr_misspec_inference: moment Jacobian row count mismatch"));
   }
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -1092,6 +1096,7 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
         "mismatch"));
   }
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
@@ -2144,6 +2149,7 @@ mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
                             eval->J_sigma, eval->J_mu, est.theta,
                             parameterization);
 
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();

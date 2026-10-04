@@ -45,7 +45,8 @@
   `ind_g<group>_<outcome>_via_<mediator>_<predictor>`; unlabelled regression
   coefficients receive `mi_g<group>_<outcome>_<predictor>` labels.
   Equality restrictions reach the existing affine/nonlinear fit machinery;
-  ordinal nonlinear equalities explicitly name TASK-54.2. Inequalities follow
+  all-ordinal nonlinear equalities use constrained LS fitting and expected-
+  information lavaan inference (TASK-54.2). Inequalities follow
   the permanent scope boundary and redirect admissibility to PSD/barrier fits.
   Categorical CONFIGURAL/SCALAR shortcuts follow Mplus 9.1; METRIC is
   rejected. Data-driven threshold completion preserves these defaults.
@@ -186,8 +187,12 @@
   constraint Jacobian H(θ̂). They may be combined with linear equality
   constraints in the same model — the constrained optimizer then runs in the
   linear-constraint-reduced α-space. FIML has the same NLopt SLSQP / IPOPT
-  nonlinear constraint support; ordinal and the separable (SNLLS) path reject
-  them.
+  nonlinear constraint support. All-ordinal ULS/DWLS/WLS bounded paths
+  enforce these restrictions, with expected-information covariance, global and
+  nested tests, scores and df using the fitted constraint tangent. The ordinary
+  DWLS policy and observed/IJ/misspecification profile sensitivity refuse
+  nonlinear equalities until Lagrangian curvature is implemented. SNLLS,
+  ordinal association ML and pairwise composite paths remain unsupported.
 - The expression sub-language shared by `:=` defined parameters and `==`
   constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
   `exp`, `log`, `sqrt`, `pnorm` (Mplus PHI) and `log10`; both the defined-parameter evaluator and the

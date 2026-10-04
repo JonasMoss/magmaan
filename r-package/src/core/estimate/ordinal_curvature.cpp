@@ -399,6 +399,7 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
                                 const std::vector<Eigen::MatrixXd>& Ws,
                                 const Eigen::MatrixXd& K,
                                 OrdinalParameterization parameterization) {
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
   auto eval = ev_or->evaluate(est.theta, true, true);
@@ -473,6 +474,7 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
                               const std::vector<Eigen::MatrixXd>& Ws,
                               const Eigen::MatrixXd& K,
                               OrdinalParameterization parameterization) {
+  if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
   auto eval = ev_or->evaluate(est.theta, true, true);

@@ -89,4 +89,14 @@ post_expected<EqConstraints>
 build_eq_constraints(const spec::LatentStructure& pt,
                      bool allow_nonlinear = false);
 
+// Local equality tangent at an evaluation point. This is an inference geometry,
+// not a global parameterization for a nonlinear constrained optimizer.
+post_expected<EqConstraints>
+build_eq_tangent(const spec::LatentStructure& pt,
+                 const Eigen::VectorXd& theta);
+
+// Observed sensitivity requires the multiplier-weighted constraint Hessians.
+post_expected<void>
+require_linear_sensitivity(const spec::LatentStructure& pt);
+
 }  // namespace magmaan::estimate

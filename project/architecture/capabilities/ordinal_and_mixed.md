@@ -203,6 +203,28 @@
   cross-group shared thresholds and threshold-only linear constraints.
   The maintained [workspace contract](../../design/ordinal-snlls-gamma-architecture.md)
   owns the data split, profiling algebra, cost rules and support boundaries.
+- **Nonlinear equality restrictions (TASK-54.2).** All-ordinal native
+  ULS/DWLS/WLS bounded fits enforce compiled nonlinear equalities through
+  SLSQP (or an explicit IPOPT backend), together with affine restrictions.
+  Compact DELTA fits use full moments when nonlinear equalities are present;
+  DELTA free-set compaction remaps expression leaves. Configured DWLS retains
+  the selected starts and records SLSQP/native convergence as a modified
+  lavaan preset, since PORT's affine search cannot enforce nonlinear rows.
+  Expected-information covariance and scaled/shifted global tests, nested
+  Satorra tests, release scores, fit measures and retained-estimate conventions
+  use the null space of the stacked affine and nonlinear Jacobians at the fit.
+  Fitted df counts independent local restrictions; callers without fitted
+  coordinates receive an error for nonlinear df. The ordinary DWLS policy,
+  observed/IJ and misspecification profile routes return typed refusals naming
+  the missing Lagrangian multiplier curvature. Expected-information scalar
+  profile scaling includes the nonlinear tangent. SNLLS, association ML,
+  pairwise composite and mixed ordinal nonlinear routes remain unsupported.
+  Six pinned lavaan cases cover DELTA/THETA, binary/three-category outcomes,
+  products, mixed affine/nonlinear and cross-group restrictions; a categorical
+  Mplus nonlinear example has the Demo meaning and lavaan numerical gates.
+  Nonlinear nested/combined release-score comparisons use the proved fitted-
+  start transitive reference in [the oracle ledger](../../validation/oracle-defects.md);
+  500 ordinal null replications give identical 26/500 rejection counts.
 - **Keyword `group.equal`
   ordinal measurement invariance landed 2026-06-15 (theta).**
   `BuildOptions::group_equal`/`group_partial` ties the requested families across

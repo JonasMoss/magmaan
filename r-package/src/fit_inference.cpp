@@ -575,7 +575,7 @@ int infer_fit_df_stat(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   if (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) {
     auto stats = ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"]));
-    auto result = magmaan::estimate::ordinal_df_stat(ctx.pt, stats);
+    auto result = magmaan::estimate::ordinal_df_stat(ctx.pt, stats, est_from_fit(fit).theta);
     if (!result) stop_post(result.error());
     return *result;
   }

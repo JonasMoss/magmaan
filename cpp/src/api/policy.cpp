@@ -227,6 +227,12 @@ static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
   }
   out.psd_boundary = state.psd_boundary;
   out.verdict_disagreement = verdict_disagreement(state);
+  if (auto ok = estimate::require_linear_sensitivity(pt); !ok) {
+    auto unavailable = policy_unavailable(InferenceReason::UnsupportedModel, ok.error().detail);
+    unavailable.verdict_disagreement = out.verdict_disagreement;
+    unavailable.psd_boundary = out.psd_boundary;
+    return unavailable;
+  }
   using estimate::OrdinalWeightKind;
   if (cache && !cache->ij) {
     cache->ij = estimate::robust_ordinal_ij(pt, rep, stats, estimates,
@@ -303,6 +309,11 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
     return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
   if (null_estimates.association || alternative_estimates.association)
     return unavailable(InferenceReason::UnsupportedModel, "ordinal association ML is not a DWLS fit");
+
+  for (const auto* pt : {&null_pt, &alternative_pt}) {
+    if (auto ok = estimate::require_linear_sensitivity(*pt); !ok)
+      return unavailable(InferenceReason::UnsupportedModel, ok.error().detail);
+  }
 
   Eigen::MatrixXd K, restriction;
   // Nesting: lift the null into the alternative's parameter space on the

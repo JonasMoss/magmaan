@@ -1312,8 +1312,10 @@ carry the label `mplus`.
   auxiliary coordinates and definitions, affine/nonlinear continuous equality
   restrictions, DO expansion and shared sqrt/pnorm/log10; total/specific/VIA
   indirect effects with delta-method SEs. Inequalities remain the deliberate
-  CN01 boundary with the PSD/barrier remedy; ordinal nonlinear equalities are
-  TASK-54.2. **Check:** 14 continuous and four categorical frozen independent
+  CN01 boundary with the PSD/barrier remedy. TASK-54.2 closes all-ordinal
+  nonlinear LS fitting and expected-information lavaan inference; ordinary
+  policy and observed/IJ sensitivity remain typed unsupported pending
+  Lagrangian curvature. **Check:** 14 continuous and four categorical frozen independent
   Demo/lavaan models, live lab fits and serialization, active ML/LS/FIML
   restriction checks. Auxiliary-coordinate regressions cover ML/GLS/ULS/FIML,
   PSD/barrier, linear DWLS, covariance/standardization/policy and typed

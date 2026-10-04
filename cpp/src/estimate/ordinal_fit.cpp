@@ -910,6 +910,13 @@ void attach_reconstructed_ordinal_diagnostics(
   attach_ordinal_newton_accuracy(est, pt, newton, value, gradient);
 }
 
+Backend ordinal_nonlinear_backend(Backend requested, const NonlinearEqConstraints& nl) {
+  if (!nl.active()) return requested;
+  if (requested == Backend::NloptSlsqp || requested == Backend::Ipopt ||
+      requested == Backend::NloptLbfgsSlsqpFallback) return requested;
+  return Backend::NloptSlsqp;
+}
+
 fit_expected<Estimates>
 solve_ordinal_ls_extra(const optim::GmmProblem& prob,
                        const Eigen::VectorXd& x0,
@@ -1572,7 +1579,7 @@ ordinal_scalar_profile_scaling_factor(
       weights, parameterization, *missing_or);
   if (!sw.has_value()) return std::unexpected(post_to_fit(sw.error()));
 
-  auto con_or = build_eq_constraints(pt, true);
+  auto con_or = build_eq_tangent(pt, constrained.theta);
   if (!con_or.has_value()) return std::unexpected(post_to_fit(con_or.error()));
   const Eigen::MatrixXd& K = con_or->K();
   if (K.rows() != sw->A1.rows()) {
@@ -1608,6 +1615,8 @@ ordinal_scalar_profile_misspec_scaling_factor(
     OrdinalWeightKind weights,
     OrdinalParameterization parameterization,
     const char* who) {
+  if (auto ok = require_linear_sensitivity(pt); !ok)
+    return std::unexpected(post_to_fit(ok.error()));
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -2345,8 +2354,8 @@ fit_ordinal_configured(spec::LatentStructure pt,
   if (weights != OrdinalWeightKind::DWLS)
     return fail("ordinal fitting options currently support only all-ordinal DWLS");
   if (pt.n_levels() != 1 || pt.composite_mode != spec::CompositeMode::None ||
-      !pt.nl_constraints.empty() || pt.has_inequality_constraints)
-    return fail("ordinal fitting options require a single-level model with affine equalities only");
+      pt.has_inequality_constraints)
+    return fail("ordinal fitting options require a single-level model without inequalities");
   if (auto valid = validate_stats(stats, rep, weights); !valid)
     return std::unexpected(valid.error());
   if (auto prepared = prepare_ordinal_partable(pt, stats, parameterization, &starts, row_user); !prepared)
@@ -2370,6 +2379,24 @@ fit_ordinal_configured(spec::LatentStructure pt,
   if (x0->size() != pt.n_free() || !x0->allFinite())
     return fail("configured ordinal start has wrong dimension or nonfinite values");
   FittingReport report; report.setup = *setup; report.explicit_start = explicit_start.size() != 0;
+  if (!pt.nonlinear_eq_rows.empty() && search) {
+    // Nonlinear restrictions need a constrained backend; PORT's affine QR
+    // search cannot enforce them. Keep the preset start and native criterion.
+    data::OrdinalStats driven_stats = stats;
+    for (std::size_t b=0; b<stats.n_obs.size(); ++b)
+      driven_stats.W_dwls[b] *= static_cast<double>(stats.n_obs[b]-1) /
+                                static_cast<double>(stats.n_obs[b]);
+    auto est = fit_ordinal_bounded(pt, rep, driven_stats, bounds, weights, *x0,
+                                  Backend::NloptSlsqp, {}, parameterization, row_user);
+    if (est) {
+      report.setup.optimizer = "nlopt-slsqp";
+      report.setup.convergence = "newton";
+      report.setup.modified_preset = true;
+      est->substituted_backend = Backend::NloptSlsqp;
+      est->fitting = std::move(report);
+    }
+    return est;
+  }
   if (!search) {
     if (acceptance) return fail("ordinal lavaan acceptance currently requires the lavaan optimizer");
     auto backend = backend_from_string(setup->optimizer);
@@ -2578,7 +2605,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   if (!factors_or.has_value()) return std::unexpected(factors_or.error());
   const auto& factors = *factors_or;
 
-  auto con_or = build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt, true);
   if (!con_or.has_value()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "constraint: " + con_or.error().detail));
@@ -2634,9 +2661,13 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return optim::LsEvaluation{std::move(*r), std::move(*J)};
   };
 
-  auto est = solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
-                              "fit_ordinal_bounded");
+  const auto nl = build_nl_constraints(pt);
+  auto est = solve_ordinal_ls_extra(prob, x0, bounds, con, nl, {},
+                                  ordinal_nonlinear_backend(backend, nl), opts,
+                                  "fit_ordinal_bounded");
   if (!est.has_value()) return est;
+  if (ordinal_nonlinear_backend(backend, nl) != backend)
+    est->substituted_backend = ordinal_nonlinear_backend(backend, nl);
   attach_ordinal_geometric_diagnostics(
       *est, pt, ev, con, bounds, prob, OrdinalNewtonContext{&rep, &stats, nullptr, &layout, &factors, parameterization});
   return est;
@@ -2679,7 +2710,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
             ") != prepared partable n_free (" +
             std::to_string(pt.n_free()) + ")"));
   }
-  if (parameterization == OrdinalParameterization::Theta || delta_needs_full_moments(layout)) {
+  if (parameterization == OrdinalParameterization::Theta || delta_needs_full_moments(layout) ||
+      !pt.nonlinear_eq_rows.empty()) {
     if (bounds.empty()) {
       auto b_or = bounds_from_partable(pt);
       if (!b_or.has_value()) {
@@ -2697,7 +2729,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     if (!factors_or.has_value()) return std::unexpected(factors_or.error());
     const auto& factors = *factors_or;
 
-    auto con_or = build_eq_constraints(pt);
+    auto con_or = build_eq_constraints(pt, true);
     if (!con_or.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "constraint: " + con_or.error().detail));
@@ -2752,9 +2784,13 @@ fit_ordinal_bounded(spec::LatentStructure pt,
       return optim::LsEvaluation{std::move(*r), std::move(*J)};
     };
 
-    auto est = solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
-                                 "fit_ordinal_bounded");
+    const auto nl = build_nl_constraints(pt);
+    auto est = solve_ordinal_ls_extra(prob, x0, bounds, con, nl, {},
+                                       ordinal_nonlinear_backend(backend, nl), opts,
+                                       "fit_ordinal_bounded");
     if (!est.has_value()) return est;
+    if (ordinal_nonlinear_backend(backend, nl) != backend)
+      est->substituted_backend = ordinal_nonlinear_backend(backend, nl);
     attach_ordinal_geometric_diagnostics(*est, pt, ev, con, bounds, prob,
                                          OrdinalNewtonContext{&rep, &stats, nullptr, &layout, &factors, parameterization});
     return est;

@@ -781,6 +781,17 @@ compact_free_set(spec::LatentStructure& pt,
     fr = neu;
   }
 
+  // Nonlinear expression leaves follow the same free-set permutation as the
+  // affine rows. A derived DELTA variance cannot be treated as an ambient leaf.
+  for (auto& constraint : pt.nl_constraints) for (auto& node : constraint.nodes) {
+    if (node.kind != spec::NlExprNode::Kind::Param || node.free_idx < 0) continue;
+    const auto old = static_cast<std::size_t>(node.free_idx + 1);
+    if (old >= old_to_new.size() || old_to_new[old] == 0)
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal delta does not support nonlinear constraints on derived response-scale variances"));
+    node.free_idx = old_to_new[old] - 1;
+  }
+
   std::vector<std::int32_t> eq_new(new_to_old.size(), 0);
   const bool have_eq =
       static_cast<std::int32_t>(pt.eq_groups.size()) == old_n;

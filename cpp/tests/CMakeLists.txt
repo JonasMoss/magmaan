@@ -198,6 +198,7 @@ magmaan_add_test_target(magmaan_test_ordinal ordinal
   unit/ordinal_embedding_test.cpp
   golden/ordinal_golden_test.cpp
   golden/ordinal_delta_scales_golden_test.cpp
+  golden/ordinal_nonlinear_golden_test.cpp
   golden/mplus_categorical_golden_test.cpp
   golden/parameter_reporting_golden_test.cpp
   golden/textbook_mixed_golden_test.cpp

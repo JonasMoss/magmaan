@@ -56,6 +56,52 @@ Upstream: <not filed / issue link / PR link / fixed-in-version>.
 
 ## Confirmed defects
 
+### Ordinal nonlinear nested and release-score starting tangents (TASK-54.2)
+
+**Scope:** pinned lavaan 0.7-2, all-ordinal WLSMV nonlinear equality
+restrictions; nested Satorra-2000 delta geometry and release scores with combined
+affine/nonlinear equalities. Expected covariance and global tests agree without
+this exception. This does not authorize observed/IJ or ordinary-policy inference.
+
+**Proof:** `cpp/tests/tools/prove_ordinal_nonlinear_tangent.R` generates seed
+542072, N=800 three-category observations and fits `l2 == l3^2`. The exact
+constraint row is H=(1,-2*l3); a fitted tangent K must satisfy H(theta_hat)K=0.
+The independent reconstruction obtains K from QR, maps D0 K into the alternative
+moment Jacobian D1, and takes the orthogonal restriction A. With I=D1' W D1 and
+B=D1' W Gamma W D1, its scaling is
+`tr(A I^-1 B I^-1 A') / tr(A I^-1 A')`. Public lavaan components give 6.3070077,
+matching magmaan. Default-start lavaan gives 6.2846959431. Refitting from its own
+fitted partable gives 6.3070077 while estimates change by at most 1.2e-10.
+A statistic conditional on data and fitted models cannot depend on an optimizer
+start. The original basis uses derivative 1.626897 (twice starting l3=.8134487),
+rather than 1.949846 (twice fitted l3=.9749229); its fitted constraint residual
+is .169113204. These are component observations, not an upstream code port.
+
+**Transitive gate:** `regen_ordinal_nonlinear.R` refits *both* models with
+`start=parTable(fit)` before freezing nested values, and refits the null before
+freezing release scores. For combined `a == b*c` and `b == c`, the second
+release score changes from 4.731 to 5.283 and then agrees with the fitted-tangent
+core (with the documented N/(N-G) score divisor). If the alternative is also
+nonlinear its fitted-start refit is essential. Default-start values remain
+observations in the fixture. The live R gate separately starts lavaan from
+magmaan estimates and checks the same nested statistic. Six synthetic fixture
+cases cover DELTA, THETA, binary, product, combined and cross-group restrictions.
+
+**Target-regime calibration:** reproducible runner
+`cpp/tests/tools/calibrate_ordinal_nonlinear.R 500`, seeds 542201–542700, N=800,
+three-category Gaussian latent-response CFA, true relative loadings
+l3=.875 and l2=.875^2. On 2026-10-04 all 500 fits succeeded in 145.848 seconds,
+with BLAS/OpenMP pinned to one thread under nice. Magmaan and fitted-start
+lavaan both rejected 26/500 at 5%: 5.2%, exact binomial 95% interval
+[.03424570,.07526637], p=.837 against .05. Maximum absolute statistic difference
+was 1.409237e-5; no rejection decisions differed. This licenses the documented
+expected-information ordinal regime only; it is not evidence for native
+misspecification-robust Lagrangian sensitivity.
+
+**Replacement:** fitted constraint tangents for expected-information nested and
+score inference. Frozen C++ and live R gates enforce transitive lavaan agreement
+at existing tolerances. Upstream: not filed.
+
 ```text
 Defect: lavaan multi-group categorical lavPredict(type="lv", method="EBM")
         returns a non-stationary point for non-reference groups (the returned

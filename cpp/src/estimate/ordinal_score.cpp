@@ -6,6 +6,13 @@ using namespace detail_ordinal;
 
 namespace {
 
+template<class Stats>
+post_expected<EqConstraints> ordinal_score_constraints(const spec::LatentStructure& pt,
+                                                       const Eigen::VectorXd& theta) {
+  if constexpr (std::is_same_v<Stats, data::OrdinalStats>) return build_eq_tangent(pt, theta);
+  else return build_eq_constraints(pt);
+}
+
 post_expected<Eigen::MatrixXd> ordinal_null_space(const Eigen::MatrixXd& A,
                                                   Eigen::Index n_cols) {
   if (A.rows() == 0) return Eigen::MatrixXd::Identity(n_cols, n_cols);
@@ -215,7 +222,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal modification indices: fitted theta length does not match delta partable"));
   }
-  auto con0 = build_eq_constraints(work->pt);
+  auto con0 = ordinal_score_constraints<Stats>(work->pt, est.theta);
   if (!con0.has_value()) return std::unexpected(con0.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
@@ -304,7 +311,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal score tests: fitted theta length does not match delta partable"));
   }
-  auto con = build_eq_constraints(pt);
+  auto con = ordinal_score_constraints<Stats>(pt, est.theta);
   if (!con.has_value()) return std::unexpected(con.error());
   inference::ScoreTestTable table;
   if (!con->active()) return table;
@@ -411,6 +418,9 @@ ordinal_modification_indices_robust_impl(
     JacobianFn jacobian_fn,
     MomentJacobianFn moment_jacobian_fn,
     PrepareFn prepare_fn) {
+  if (estimated_weight || bread == robust::Information::Observed) {
+    if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
+  }
   if (auto ok = require_ls_ordinal_estimates(est); !ok) {
     return std::unexpected(ok.error());
   }
@@ -432,7 +442,7 @@ ordinal_modification_indices_robust_impl(
         "ordinal robust modification indices: fitted theta length does not "
         "match delta partable"));
   }
-  auto con0 = build_eq_constraints(work->pt);
+  auto con0 = ordinal_score_constraints<Stats>(work->pt, est.theta);
   if (!con0.has_value()) return std::unexpected(con0.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
@@ -548,6 +558,9 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
                                 JacobianFn jacobian_fn,
                                 MomentJacobianFn moment_jacobian_fn,
                                 PrepareFn prepare_fn) {
+  if (estimated_weight || bread == robust::Information::Observed) {
+    if (auto ok = require_linear_sensitivity(pt); !ok) return std::unexpected(ok.error());
+  }
   if (auto ok = require_ls_ordinal_estimates(est); !ok) {
     return std::unexpected(ok.error());
   }
@@ -565,7 +578,7 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
         "ordinal robust score tests: fitted theta length does not match delta "
         "partable"));
   }
-  auto con = build_eq_constraints(pt);
+  auto con = ordinal_score_constraints<Stats>(pt, est.theta);
   if (!con.has_value()) return std::unexpected(con.error());
   inference::ScoreTestTable table;
   if (!con->active()) return table;

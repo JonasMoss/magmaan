@@ -46,9 +46,9 @@ lr_test_satorra2000_ordinal(
         "prepared ordinal partable"));
   }
 
-  auto con1 = build_eq_constraints(pt_H1);
+  auto con1 = build_eq_tangent(pt_H1, est_H1.theta);
   if (!con1.has_value()) return std::unexpected(con1.error());
-  auto con0 = build_eq_constraints(pt_H0);
+  auto con0 = build_eq_tangent(pt_H0, est_H0.theta);
   if (!con0.has_value()) return std::unexpected(con0.error());
   const int df_H1_ordinal =
       static_cast<int>(ordinal_moment_rows(stats) - con1->n_alpha);

@@ -1,4 +1,5 @@
 #include "ordinal_test_helpers.hpp"
+#include "magmaan/estimate/constraints.hpp"
 
 TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenvalues") {
   std::mt19937 rng(20240514);
@@ -424,4 +425,51 @@ TEST_CASE("frontier ordinal profile_lrt_parameter reports the ordinary df-1 stat
         doctest::Approx(omega_ci_mixture->lower_cutoff).epsilon(3e-3));
   CHECK(omega_ci_mixture->upper_profile.T ==
         doctest::Approx(omega_ci_mixture->upper_cutoff).epsilon(3e-3));
+}
+
+TEST_CASE("Ordinal nonlinear profile scaling uses the full equality tangent") {
+  using namespace magmaan;
+  std::mt19937 rng(542073);
+  std::normal_distribution<double> norm(0.0,1.0);
+  Eigen::MatrixXd X(700,4);
+  const double loading[] = {.85,.75,.7,.65};
+  for (Eigen::Index i=0;i<X.rows();++i) {
+    const double eta=norm(rng);
+    for (Eigen::Index j=0;j<X.cols();++j) {
+      const double y=loading[j]*eta+.8*norm(rng);
+      X(i,j)=1+(y>-.5)+(y>.5);
+    }
+  }
+  auto stats=data::ordinal_stats_from_integer_data({X}); REQUIRE(stats);
+  auto fp=parse::Parser::parse("f =~ x1+a*x2+b*x3+x4\na == b^2\nx1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\nx4 | t1+t2\n"); REQUIRE(fp);
+  spec::LatentNames names;
+  auto pt=spec::build(*fp,{},nullptr,&names); REQUIRE(pt);
+  auto rep=model::build_matrix_rep(*pt,&names); REQUIRE(rep);
+  REQUIRE(estimate::prepare_ordinal_partable(*pt,*stats,estimate::OrdinalParameterization::Delta,nullptr,&names.row_user));
+  auto start=estimate::ordinal_start_values(*pt,*rep,*stats,{},&names.row_user); REQUIRE(start);
+  optim::OptimOptions options; options.max_iter=4000; options.ftol=1e-13; options.gtol=1e-8;
+  auto fit=estimate::fit_ordinal_bounded(*pt,*rep,*stats,{},estimate::OrdinalWeightKind::ULS,*start,estimate::Backend::NloptSlsqp,options); REQUIRE(fit);
+  Eigen::Index k=-1;
+  for (std::size_t i=0;i<pt->size();++i) if(names.row_label[i]=="a" && pt->free[i]>0) k=pt->free[i]-1;
+  REQUIRE(k>=0);
+  auto profile=estimate::frontier::profile_lrt_parameter_ordinal(*pt,*rep,*stats,*fit,k,.98*fit->theta(k),{},
+      estimate::OrdinalWeightKind::ULS,estimate::Backend::NloptSlsqp,options,
+      estimate::OrdinalParameterization::Delta,1e-6,true);
+  REQUIRE_MESSAGE(profile.has_value(), (profile ? "" : profile.error().detail));
+  estimate::Estimates at; at.theta=profile->constrained.theta; at.fmin=profile->fmin_constrained;
+  auto tangent=estimate::build_eq_tangent(*pt,at.theta); REQUIRE(tangent);
+  auto objective=estimate::frontier::ordinal_ls_objective(*pt,*rep,*stats,at,estimate::OrdinalWeightKind::ULS); REQUIRE(objective);
+  auto J=objective->problem.J(at.theta); REQUIRE(J);
+  const Eigen::MatrixXd JK=*J*tangent->K();
+  const Eigen::VectorXd g=tangent->K().row(k).transpose();
+  const double denominator=g.dot((JK.transpose()*JK).ldlt().solve(g));
+  auto robust=estimate::robust_ordinal(*pt,*rep,*stats,at,estimate::OrdinalWeightKind::ULS); REQUIRE(robust);
+  const double expected=static_cast<double>(X.rows())*robust->vcov(k,k)/denominator;
+  CHECK(profile->scaling_factor==doctest::Approx(expected).epsilon(1e-8));
+  // The former affine-only basis treats a and b as independent and yields a
+  // different scaling factor even though the fit itself obeys a=b^2.
+  auto refused=estimate::frontier::profile_lrt_parameter_ordinal(*pt,*rep,*stats,*fit,k,.98*fit->theta(k),{},
+      estimate::OrdinalWeightKind::ULS,estimate::Backend::NloptSlsqp,options,
+      estimate::OrdinalParameterization::Delta,1e-6,true,estimate::frontier::ScalarProfileReference::MisspecScaled);
+  REQUIRE_FALSE(refused); CHECK(refused.error().detail.find("Lagrangian curvature")!=std::string::npos);
 }
