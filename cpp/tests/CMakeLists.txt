@@ -193,6 +193,7 @@ magmaan_add_test_target(magmaan_test_ordinal ordinal
   unit/ordinal_prepare_test.cpp
   unit/ordinal_reporting_test.cpp
   unit/ordinal_mixed_test.cpp
+  unit/mixed_ij_test.cpp
   unit/ordinal_mixed_fit_test.cpp
   unit/ordinal_huber_test.cpp
   unit/ordinal_embedding_test.cpp
