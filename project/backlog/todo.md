@@ -1012,15 +1012,19 @@ fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Optimization and convergence
 
-- [ ] **S/M — seed the larger nested model from the restricted fit.** Under
+- [x] **S/M — seed the larger nested model from the restricted fit.** Under
   strong misspecification the larger model sometimes converges to a worse local
   optimum than the restricted model (7 of 12,000 strong-cell draws in
   [decisions/04](../../experiments/decisions/04-nested-ml-geometry/report.qmd);
   lavaan reaches the same endpoints), so the LR difference is negative and the
   nested test reports a typed failure. Starting the larger model at the
-  restricted estimate (embedded) guarantees a fit at least as good. **Check:**
-  the failing seeds, no change for well-behaved pairs, and the native verdict
-  on the reseeded endpoint.
+  restricted estimate (embedded) supplies a feasible starting endpoint.
+  Implemented explicit native/lab `refit_from_null()` and automatic ordinary
+  `anova()` recovery for policy and lavaan compatibility comparisons. Recovery
+  requires an improved objective no worse than H0 and a passing native verdict;
+  it records and prints the refit and leaves input fits unchanged. **Gates:**
+  reconstructed failing draw, unchanged well-behaved pairs, and ML/FIML/DWLS
+  refits with retained data and original fitting options.
 
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.

@@ -388,6 +388,18 @@
   implied covariance and mean moments to relative tolerance 1e-10. Omission
   defaults to zero only for loadings, regressions and off-diagonal covariances;
   intercepts, means, variances, thresholds and scales need resolved rows.
+  `api::refit_from_null(alternative, null)` and
+  `magmaanlab::refit_from_null(fit_H1, fit_H0)` reuse this verified embedding
+  for an explicit-start refit with H1's estimator and fitting options. The lab
+  requires matching retained observations/statistics; FIML requires raw data,
+  while complete-data and ordinal refits reuse their sufficient statistics.
+  Ordinary `anova()` retries only the typed "alternative fits worse" failure
+  (policy and lavaan compatibility). It uses an improved endpoint only when
+  the native verdict passes and the recomputed LR is available, records old/new
+  objectives and the native verdict in a `refit` attribute, and prints a note.
+  Inputs are unchanged; well-behaved pairs do not refit. Unsuccessful retries
+  preserve the original typed failure. Gates reconstruct a decisions/04 failure
+  and cover ML, FIML and all-ordinal DWLS lab refits.
   The model triple (`LatentStructure`, `LatentNames`, `Starts`) and its
   partable projection are unchanged. Score inference uses H1 derivatives at
   the embedded null point, with the lifted null nuisance tangent. ML/FIML

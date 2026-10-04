@@ -8,6 +8,7 @@
 #include <numeric>
 
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/robust/restriction.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/twolevel.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -997,6 +998,28 @@ Result<Fit> fit(const Model &model, const Data &data,
                 EstimatorSpec estimator) {
   return fit(std::make_shared<Model>(model), std::make_shared<Data>(data),
              std::move(estimator));
+}
+
+Result<Fit> refit_from_null(const Fit &alternative, const Fit &null) {
+  if (alternative.estimator() != null.estimator())
+    return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "refit_from_null requires the same estimator"));
+  auto p1 = prepared_structure(alternative);
+  auto p0 = prepared_structure(null);
+  if (!p1) return std::unexpected(p1.error());
+  if (!p0) return std::unexpected(p0.error());
+  auto k1 = estimate::build_eq_constraints(*p1);
+  auto k0 = estimate::build_eq_constraints(*p0);
+  if (!k1) return std::unexpected(make_error(ErrorStage::PostFit, k1.error()));
+  if (!k0) return std::unexpected(make_error(ErrorStage::PostFit, k0.error()));
+  const bool moments = !alternative.estimator_spec().ordinal_moments &&
+      (alternative.estimator() == EstimatorKind::ML || alternative.estimator() == EstimatorKind::FIML);
+  auto embedded = robust::embed_nested_null(*p1, alternative.model().matrix_rep(),
+      *p0, null.model().matrix_rep(), null.estimates().theta, *k1, *k0,
+      moments, &alternative.estimates().theta);
+  if (!embedded) return std::unexpected(make_error(ErrorStage::PostFit, embedded.error()));
+  return fit(alternative.model(), alternative.data(),
+      alternative.estimator_spec().starts(explicit_starts(std::move(embedded->theta))));
 }
 
 namespace frontier {

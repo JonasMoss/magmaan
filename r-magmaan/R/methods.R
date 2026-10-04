@@ -341,6 +341,12 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' is the z-statistic of a defined parameter such as `d := a - b` in
 #' `coef(summary(fit))`.
 #'
+#' If the larger model fits worse than the restricted model, it is refitted
+#' from the embedded restricted estimate with its own fitting options. A better
+#' endpoint is used only when its native convergence verdict passes. The input
+#' fits are unchanged; `attr(result, "refit")` records the old and new objective
+#' and printing reports the recovery. An unsuccessful retry retains the failure.
+#'
 #' @param object,... Two [magmaan()] fits, in either order.
 #' @param lavaan_compat `NULL` (default) reports the policy's score and LR
 #'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference
@@ -377,13 +383,16 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
       null <- 1L
       if (identical(res$test$reason, "not_nested")) stop("anova(): the models are not nested", call. = FALSE)
     }
+    recovery <- .nested_recovery(res, fits[[3L - null]]$lab, fits[[null]]$lab,
+      function(h1, h0) magmaanlab::convention_nested(h1, h0, lavaan_compat), "test")
+    res <- recovery$result
     t <- res$test
     reasons <- if (isTRUE(t$available)) character() else
       c(lr = paste0(t$reason, ": ", t$detail))
     return(structure(.lavaan_compat_test_row(t), class = c("magmaan_anova", "data.frame"),
       lavaan_compat = lavaan_compat, restricted = labels[[null]], alternative = labels[[3L - null]],
       unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
-      verdict_disagreement = isTRUE(res$verdict_disagreement)))
+      verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit))
   }
   null <- 2L
   res <- magmaanlab::policy_nested(a, b)
@@ -397,6 +406,9 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
     res <- swapped
     null <- 1L
   }
+  recovery <- .nested_recovery(res, fits[[3L - null]]$lab, fits[[null]]$lab,
+    magmaanlab::policy_nested, "lr")
+  res <- recovery$result
   # The score test leads: it calibrates better than the likelihood ratio,
   # especially at small N and high df (decided 2026-10-02, todo.md).
   rows <- lapply(c("score", "lr"), function(component) {
@@ -418,7 +430,26 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
               function(t) as.integer(t$peba_blocks %||% 0L), integer(1)),
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
-            verdict_disagreement = isTRUE(res$verdict_disagreement))
+            verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit)
+}
+
+.nested_recovery <- function(result, alternative, null, compare, component) {
+  out <- list(result = result, refit = NULL)
+  test <- result[[component]]
+  if (!identical(test$reason, "not_converged") ||
+      !grepl("the alternative fits worse than the null", test$detail, fixed = TRUE)) return(out)
+  retry <- tryCatch(magmaanlab::refit_from_null(alternative, null), error = function(e) NULL)
+  if (is.null(retry) || !isTRUE(retry$converged) ||
+      !identical(retry$diagnostics$verdict$status, "passed") ||
+      !is.finite(retry$fmin) || retry$fmin > null$fmin ||
+      retry$fmin >= alternative$fmin) return(out)
+  updated <- tryCatch(compare(retry, null), error = function(e) NULL)
+  if (is.null(updated) || !isTRUE(updated[[component]]$available)) return(out)
+  out$result <- updated
+  out$refit <- list(objective_before = alternative$fmin,
+                   objective_after = retry$fmin,
+                   verdict = retry$diagnostics$verdict)
+  out
 }
 
 #' @rdname anova.magmaan
@@ -433,6 +464,10 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
   print(t, row.names = FALSE)
+  refit <- attr(x, "refit")
+  if (!is.null(refit)) cat("larger model refit from the restricted estimate; its objective improved from ",
+    format(refit$objective_before, digits = digits), " to ",
+    format(refit$objective_after, digits = digits), "\n", sep = "")
   .peba_note(x)
   if (is.null(attr(x, "lavaan_compat"))) .lr_note(t)
   u <- attr(x, "unavailable")

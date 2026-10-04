@@ -657,7 +657,7 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                 parameterization_name.c_str());
     }
   }
-  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts, control);
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::DWLS, x0,
@@ -695,7 +695,7 @@ Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
-  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts, control);
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::ULS, x0,
@@ -733,7 +733,7 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
-  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts, control);
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::WLS, x0,
@@ -781,7 +781,7 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
       ? std::vector<std::string>{}
       : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
-  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts, control);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
           ? magmaan::estimate::Backend::NloptSlsqp
@@ -879,7 +879,7 @@ Rcpp::List fit_ml_ordinal_impl(
       ? std::vector<std::string>{}
       : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
-  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts, control);
   const magmaan::estimate::Backend backend =
       optimizer.isNull()
           ? (psd ? magmaan::estimate::Backend::NloptSlsqp

@@ -9,6 +9,7 @@ using namespace magmaanr::fitglue;
 #include "score_primitives.h"
 #include "magmaan/api/policy.hpp"
 #include "magmaan/api/conventions.hpp"
+#include "magmaan/robust/restriction.hpp"
 
 namespace {
 
@@ -623,4 +624,25 @@ Rcpp::List inference_reuse_impl(SEXP context) {
 // [[Rcpp::export]]
 double prepared_structure_count_impl() {
   return static_cast<double>(prepared::structural_preparations);
+}
+
+// Verified null point in the alternative's fitted coordinates. Refit orchestration
+// replays the recorded fitting route in R; no parameter matching happens in R.
+// [[Rcpp::export]]
+Rcpp::NumericVector nested_null_start_impl(Rcpp::List fit_H1, Rcpp::List fit_H0) {
+  auto c1 = ctx_from_fit(fit_H1);
+  auto c0 = ctx_from_fit(fit_H0);
+  auto e1 = est_from_fit(fit_H1);
+  auto e0 = est_from_fit(fit_H0);
+  auto k1 = magmaan::estimate::build_eq_constraints(c1.pt);
+  auto k0 = magmaan::estimate::build_eq_constraints(c0.pt);
+  if (!k1) stop_post(k1.error());
+  if (!k0) stop_post(k0.error());
+  const auto estimator = Rcpp::as<std::string>(fit_H1["estimator"]);
+  const bool moments = !fit_H1.containsElementNamed("ordinal_stats") &&
+      (estimator == "ML" || estimator == "FIML");
+  auto embedded = magmaan::robust::embed_nested_null(c1.pt, c1.rep, c0.pt,
+      c0.rep, e0.theta, *k1, *k0, moments, &e1.theta);
+  if (!embedded) stop_post(embedded.error());
+  return Rcpp::wrap(embedded->theta);
 }

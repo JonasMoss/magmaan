@@ -440,18 +440,20 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
   using robust::Information;
   calibrate(robust::frontier::ntml_quadratic(**hypothesis, true, Information::Observed),
             out.score);
-  calibrate(robust::frontier::ntml_quadratic(**hypothesis, false, Information::Observed),
-            out.lr);
-  // A negative difference means the alternative stopped above the null's
-  // optimum, so at least one fit is not at its minimum. The score statistic
-  // needs only the null fit and stays.
+  // Detect the negative raw LR before calibration: the quadratic constructor
+  // rejects negative statistics, so checking a calibrated result hides this
+  // recoverable fit-order failure behind NumericFailure.
   const auto& h = **hypothesis;
   const double scale = inference::chi2_stat(h.null_fit->data->sample, h.null_fit->estimates);
-  if (out.lr.reason == InferenceReason::Available &&
-      out.lr.statistic < -1e-8 * std::max(1.0, scale)) {
+  const double difference = scale - inference::chi2_stat(
+      h.alternative->data->sample, h.alternative->estimates);
+  if (difference < -1e-8 * std::max(1.0, scale)) {
     set_unavailable(out.lr, InferenceReason::NotConverged,
                     "the alternative fits worse than the null (likelihood-ratio "
-                    "statistic " + std::to_string(out.lr.statistic) + ")");
+                    "statistic " + std::to_string(difference) + ")");
+  } else {
+    calibrate(robust::frontier::ntml_quadratic(**hypothesis, false, Information::Observed),
+              out.lr);
   }
   return out;
 }

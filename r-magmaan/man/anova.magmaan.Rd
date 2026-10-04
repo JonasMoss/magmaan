@@ -40,3 +40,5 @@ restriction, a Wald test
 is the z-statistic of a defined parameter such as \code{d := a - b} in
 \code{coef(summary(fit))}.
 }
+
+\details{If the larger model fits worse than the restricted model, it is refitted from the embedded restricted estimate with its own fitting options. A better endpoint is used only when its native convergence verdict passes. Input fits are unchanged. The \code{refit} attribute records the old and new objective and the native verdict; printing reports recovery. An unsuccessful retry retains the typed failure.}

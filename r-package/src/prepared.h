@@ -354,7 +354,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
       Rcpp::stop("magmaan: ordinal association ML uses no LS weight or bounds");
     if (method != "ML" && method != "ULS" && !w) Rcpp::stop("magmaan: ordinal LS requires a prepared weight");
     ctx.samp.S = s.R; ctx.samp.n_obs = s.n_obs; ctx.meanstructure = false;
-    auto x0 = ordinal_starts_or_stop(ctx, s, starts);
+    auto x0 = ordinal_starts_or_stop(ctx, s, starts, control);
     // Schema-only preparation leaves empirical threshold hints empty. Refresh
     // them locally, matching fresh augmentation without changing the structure.
     starts.hint.resize(ctx.pt.n_free(), std::numeric_limits<double>::quiet_NaN());

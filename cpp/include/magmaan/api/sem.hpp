@@ -455,6 +455,11 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
                 std::shared_ptr<const Data> data, EstimatorSpec estimator);
 Result<Fit> fit(const Model &model, const Data &data, EstimatorSpec estimator);
 
+// Refit H1 on its retained data with its estimator/options, starting at the
+// verified embedded H0 estimate. Callers must supply fits of the same data.
+// Inputs are unchanged; the returned Fit carries the endpoint's native verdict.
+Result<Fit> refit_from_null(const Fit &alternative, const Fit &null);
+
 enum class TestKind : std::uint8_t {
   StandardChiSquare,
 };

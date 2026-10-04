@@ -156,3 +156,4 @@ importFrom(stats, pchisq, setNames, uniroot)
 importFrom(utils, modifyList)
 
 export(mplus_data)
+export(refit_from_null)

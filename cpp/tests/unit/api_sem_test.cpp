@@ -1523,6 +1523,50 @@ TEST_CASE("api: ordinal moments are declared by the spec, not read off the weigh
   CHECK(api::uls().ordinal_moments != api::ordinal_wls().ordinal_moments);
 }
 
+TEST_CASE("api refit_from_null preserves inputs and embeds fixed paths") {
+  using namespace magmaan;
+  api::ModelOptions options;
+  options.build.meanstructure = true;
+  auto h0 = api::model_from_lavaan("f =~ x1 + x2 + x3 + x4", options);
+  auto h1 = api::model_from_lavaan("f =~ x1 + x2 + x3 + x4\nx1 ~~ x2", options);
+  REQUIRE_OK(h0); REQUIRE_OK(h1);
+  auto raw = fiml_interior_raw();
+  auto stats = data::sample_stats_from_raw(raw);
+  REQUIRE_OK(stats);
+  for (auto estimator : {api::ml().starts(api::fabin_starts()), api::fiml()}) {
+    auto data = estimator.kind == api::EstimatorKind::FIML
+        ? api::data_from_raw(*h1, raw) : api::data_from_sample_stats(*h1, *stats);
+    REQUIRE_OK(data);
+    auto null = api::fit(*h0, *data, estimator);
+    auto alternative = api::fit(*h1, *data, estimator);
+    REQUIRE_OK(null); REQUIRE_OK(alternative);
+    const auto before = alternative->estimates().theta;
+    auto retry = api::refit_from_null(*alternative, *null);
+    REQUIRE_OK(retry);
+    CHECK(retry->estimates().fmin <= null->estimates().fmin + 1e-8);
+    CHECK(alternative->estimates().theta.isApprox(before, 0.0));
+    CHECK(retry->estimator_spec().start_spec.kind == api::StartKind::Explicit);
+  }
+}
+
+TEST_CASE("api refit_from_null uses prepared ordinal coordinates") {
+  using namespace magmaan;
+  auto h0 = api::model_from_lavaan(ordinal_syntax());
+  auto h1 = api::model_from_lavaan(ordinal_syntax() + "\nx1 ~~ x2");
+  REQUIRE_OK(h0); REQUIRE_OK(h1);
+  auto stats = data::ordinal_stats_from_integer_data({ordinal_block()});
+  REQUIRE_OK(stats);
+  auto data = api::data_from_ordinal(*h1, *stats);
+  REQUIRE_OK(data);
+  auto null = api::fit(*h0, *data, api::ordinal_dwls());
+  auto alternative = api::fit(*h1, *data, api::ordinal_dwls());
+  REQUIRE_OK(null); REQUIRE_OK(alternative);
+  auto retry = api::refit_from_null(*alternative, *null);
+  REQUIRE_OK(retry);
+  CHECK(retry->estimates().fmin <= null->estimates().fmin + 1e-8);
+  CHECK(retry->estimates().theta.size() == alternative->estimates().theta.size());
+}
+
 #undef REQUIRE_OK
 #undef REQUIRE_OK_OR
 #undef MAGMAAN_REQUIRE_OK_IMPL

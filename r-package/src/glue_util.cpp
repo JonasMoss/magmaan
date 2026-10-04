@@ -180,7 +180,19 @@ Eigen::VectorXd start_values_or_stop(Ctx& ctx,
 
 Eigen::VectorXd ordinal_starts_or_stop(const Ctx& ctx,
                                        const magmaan::data::OrdinalStats& stats,
-                                       const magmaan::spec::Starts& starts) {
+                                       const magmaan::spec::Starts& starts,
+                                       Rcpp::Nullable<Rcpp::List> control) {
+  // Numeric starts are already in the prepared free coordinates. In
+  // particular, nested-null refits must not fall back to the old row hints.
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("start") && Rf_isNumeric(ctl["start"])) {
+      auto x = Rcpp::as<Eigen::VectorXd>(ctl["start"]);
+      if (x.size() != ctx.pt.n_free() || !x.allFinite())
+        Rcpp::stop("magmaan: ordinal numeric start must be finite and match the prepared free parameters");
+      return x;
+    }
+  }
   auto x = magmaan::estimate::ordinal_start_values(ctx.pt, ctx.rep, stats,
                                                    starts);
   if (!x.has_value()) stop_fit(x.error());

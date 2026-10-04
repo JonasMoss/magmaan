@@ -86,7 +86,8 @@ Eigen::VectorXd start_values_or_stop(Ctx& ctx,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue, bool normalize = false);
 Eigen::VectorXd ordinal_starts_or_stop(const Ctx& ctx,
                                        const magmaan::data::OrdinalStats& stats,
-                                       const magmaan::spec::Starts& starts);
+                                       const magmaan::spec::Starts& starts,
+                                       Rcpp::Nullable<Rcpp::List> control = R_NilValue);
 Eigen::VectorXd mixed_ordinal_starts_or_stop(
     const Ctx& ctx, const magmaan::data::MixedOrdinalStats& stats,
     const magmaan::spec::Starts& starts);

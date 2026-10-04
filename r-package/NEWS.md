@@ -1,5 +1,9 @@
 # magmaanlab 0.2.0 (in development)
 
+- `refit_from_null(fit_H1, fit_H0)` explicitly refits a larger model from the
+  verified embedded restricted estimate with its own estimator and options,
+  returning a new fit with native convergence diagnostics.
+
 - Prepared `estimate()` now accepts all-ordinal DWLS fitting options, including
   the lavaan preset, through the same configured engine as `fit_model()`.
 - Mixed ordinal component modification indices now use the same criterion

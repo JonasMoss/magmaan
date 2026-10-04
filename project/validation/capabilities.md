@@ -114,6 +114,14 @@ own check.
   geometry; `infer()` after `inference = FALSE` equals the default call;
   `anova()` requires the same observations in the same order and both fits'
   estimator and covariance policy; refits keep the anchor's group order.
+  `api::refit_from_null` and lab `refit_from_null(fit_H1, fit_H0)` explicitly
+  start H1 from the verified embedded H0 estimate, replaying H1's fitting
+  options. Ordinary `anova()` retries only an "alternative fits worse"
+  failure, accepts an improved endpoint no worse than H0 with a passing native
+  verdict, and records/prints the refit without replacing input fits. ML/FIML
+  use retained observations or moments; ordinal DWLS reuses retained stage-1
+  statistics. Gates: `test_nested_reseed.R`, `test_refit_from_null.R`, and
+  `api refit_from_null` C++ cases. Unsuccessful retries keep the typed failure.
 - **Intervals.** Wald only. `confint(test = "lr")` is rejected with a message;
   the LR interval interface is planned and unscheduled (task-36).
 
@@ -122,7 +130,8 @@ compatibility reporting**.
 
 ## Ordinary reporting conventions
 
-All routes use retained fits and do not optimize again. `lavaan_compat = NULL`
+Reporting uses retained fits; nested comparisons have the conditional refit
+recovery described above. `lavaan_compat = NULL`
 remains the default. Positive barrier penalties return `penalized`; failed
 selected convergence verdicts return `not_converged`. Numerical failures retain
 their reason per component. Score tests are inapplicable to lavaan reporting

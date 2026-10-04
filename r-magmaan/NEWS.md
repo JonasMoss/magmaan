@@ -1,5 +1,10 @@
 # magmaan 0.2.0 (in development)
 
+- `anova()` retries a larger model that fits worse than the restricted model
+  from the embedded restricted estimate. A better endpoint with a passing
+  native verdict is used for the comparison and reported in a printed note
+  and `refit` attribute; the supplied fit objects are unchanged.
+
 - Ordinal DWLS fitting options now use reusable prepared handles; ML2S
   retains its fresh-fit fallback.
 - Mixed ordinal component modification indices now use the same criterion

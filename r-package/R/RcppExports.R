@@ -697,6 +697,10 @@ prepared_structure_count_impl <- function() {
     .Call(`_magmaanlab_prepared_structure_count_impl`)
 }
 
+nested_null_start_impl <- function(fit_H1, fit_H0) {
+    .Call(`_magmaanlab_nested_null_start_impl`, fit_H1, fit_H0)
+}
+
 frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
     .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
 }

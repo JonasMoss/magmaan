@@ -2498,6 +2498,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// nested_null_start_impl
+Rcpp::NumericVector nested_null_start_impl(Rcpp::List fit_H1, Rcpp::List fit_H0);
+RcppExport SEXP _magmaanlab_nested_null_start_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    rcpp_result_gen = Rcpp::wrap(nested_null_start_impl(fit_H1, fit_H0));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_profile_lrt_parameter_ml_impl
 Rcpp::List frontier_profile_lrt_parameter_ml_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, SEXP raw_data, bool robust, Rcpp::Nullable<Rcpp::String> reference);
 RcppExport SEXP _magmaanlab_frontier_profile_lrt_parameter_ml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP, SEXP referenceSEXP) {
@@ -4622,6 +4634,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_prepared_structure_count_impl", (DL_FUNC) &_magmaanlab_prepared_structure_count_impl, 0},
+    {"_magmaanlab_nested_null_start_impl", (DL_FUNC) &_magmaanlab_nested_null_start_impl, 2},
     {"_magmaanlab_frontier_profile_lrt_parameter_ml_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ml_impl, 10},
     {"_magmaanlab_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_gmm_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl, 11},
