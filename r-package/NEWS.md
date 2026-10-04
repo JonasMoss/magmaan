@@ -1,5 +1,13 @@
 # magmaanlab 0.2.0 (in development)
 
+- DWLS nested tests now support moment-nested Wu–Estabrook threshold equality
+  through an implied-moment embedding and null tangent in the larger model.
+  Three-category threshold steps report `equivalent_models`; released-scale
+  thresholds+loadings versus loadings-only stays `not_nested`. Validation is
+  limited to numerical, interface and a 100-replicate mean/variance check;
+  calibration is pending.
+
+
 - `refit_from_null(fit_H1, fit_H0)` explicitly refits a larger model from the
   verified embedded restricted estimate with its own estimator and options,
   returning a new fit with native convergence diagnostics.

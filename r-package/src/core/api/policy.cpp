@@ -66,6 +66,7 @@ std::string_view reason_name(InferenceReason reason) noexcept {
     case InferenceReason::UnsupportedNesting: return "unsupported_nesting";
     case InferenceReason::BoundaryNesting:  return "boundary_nesting";
     case InferenceReason::Penalized:        return "penalized";
+    case InferenceReason::EquivalentModels: return "equivalent_models";
     case InferenceReason::Inapplicable:     return "inapplicable";
   }
   return "unknown";
@@ -321,17 +322,28 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
                          !c1 ? c1.error().detail : c0.error().detail);
     auto embedding = robust::embed_nested_null(p1, alternative_rep, p0, null_rep,
         null_estimates.theta, *c1, *c0, false, &alternative_estimates.theta);
-    if (!embedding) {
+    if (!embedding && embedding.error().kind == PostError::Kind::NotNested) {
+      auto moment = frontier::moment_nested_tangent(null_pt, null_rep, null_estimates,
+          alternative_pt, alternative_rep, alternative_estimates, stats, parameterization,
+          null_row_user, alternative_row_user);
+      if (!moment) return unavailable(
+          moment.error().kind == PostError::Kind::NotNested ? InferenceReason::NotNested
+          : moment.error().kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting
+          : moment.error().kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
+          : InferenceReason::NumericFailure, moment.error().detail);
+      restriction = moment->A;
+    } else if (!embedding) {
       const auto kind = embedding.error().kind;
       return unavailable(kind == PostError::Kind::NotNested ? InferenceReason::NotNested
           : kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
           : kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting
           : InferenceReason::NumericFailure, embedding.error().detail);
+    } else {
+      restriction = embedding->restriction.A;
     }
-    if (embedding->restriction.A.rows() == 0)
-      return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+    if (restriction.rows() == 0)
+      return unavailable(InferenceReason::EquivalentModels, "equivalent models in moment space");
     K = c1->K();
-    restriction = embedding->restriction.A;
     alternative_pt = std::move(p1);
     null_pt = std::move(p0);
   }

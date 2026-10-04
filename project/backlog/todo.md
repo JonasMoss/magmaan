@@ -563,15 +563,18 @@ required by an all-ordinal primary workflow remain current work.
   finite-difference casewise scores. Explicit lab Satorra-2000 moment drivers
   and global GOF retain their separate moment conventions. Not release-gating.
 
-- [ ] **M — threshold-invariance nested tests (Wu-Estabrook).** Imposing
-  threshold equality releases the second group's response scales and
-  intercepts, so configural vs thresholds-equal (and thresholds+loadings vs
-  loadings-only) are nested in moment space but not by parameter restriction;
-  `policy_nested()` correctly reports `not_nested`. With 3 categories the step is
-  a zero-df equivalence; with more it is testable through a restriction map (the
-  lab's ordinal Satorra-2000 delta map is the candidate). Found by task-17.1.
-  **Check:** a 5-category two-group design against the restriction-map law;
-  typed unavailability where untestable. Not release-gating.
+- [x] **M — threshold-invariance nested tests (Wu-Estabrook)** (TASK-68).
+  The DWLS policy now falls back from failed parameter nesting to a numerical
+  moment embedding and null-tangent inclusion check. The H1 observed Hessian
+  and estimated-weight IJ meat give q1 − q0 terms; parameter-nested gates agree
+  with task-17.4 within 1e-10 relative. Two-group theta configural versus equal
+  thresholds is testable with 5 categories and reports typed `equivalent_models`
+  with 3 categories. Thresholds+loadings versus loadings-only remains
+  `not_nested`: released item response scales change the standardized loading
+  ratios constrained by the loadings-only model. C++/R policy and ordinary
+  `anova()` gates cover the threshold step. A 100-replicate correct-model check
+  at 1000 observations/group agrees with the trace and variance within Monte
+  Carlo uncertainty; this is limited validation, with calibration pending.
 
 - [ ] **L — derive a nested DWLS score test, or defer it.** No joint
   least-squares nested score statistic exists; `score_tests_robust_joint` is

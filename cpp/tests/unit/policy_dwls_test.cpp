@@ -3,11 +3,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
+#include "magmaan/robust/satorra2000.hpp"
 
 #include "magmaan/api/policy.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -319,6 +322,35 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
   CHECK((t.eigenvalues - eig).norm() <= 1e-10 * eig.norm());
   CHECK(t.eigenvalues.allFinite());
   CHECK(t.eigenvalues.minCoeff() >= 0.0);
+  auto tangent = api::frontier::moment_nested_tangent(r.null_model.pt, r.null_model.rep,
+      r.null_est, r.alt_model.pt, r.alt_model.rep, r.alt_est, *stats, parameterization);
+  REQUIRE_MESSAGE(tangent.has_value(), (tangent.has_value() ? "" : tangent.error().detail));
+  auto parts = magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(p1,
+      r.alt_model.rep, *stats, r.alt_est.theta, OrdinalWeightKind::DWLS, parameterization);
+  auto ij = magmaan::estimate::robust_ordinal_ij(r.alt_model.pt, r.alt_model.rep, *stats,
+      r.alt_est, OrdinalWeightKind::DWLS, parameterization);
+  REQUIRE(parts); REQUIRE(ij);
+  const double N = std::accumulate(stats->n_obs.begin(), stats->n_obs.end(), 0.0);
+  const auto& K = c1->K();
+  const Eigen::MatrixXd H = K.transpose() * parts->hessian * K / N;
+  const Eigen::MatrixXd L = (K.transpose() * K).ldlt().solve(K.transpose());
+  const Eigen::MatrixXd V = N * L * ij->vcov * L.transpose();
+  const Eigen::MatrixXd B = H * V * H.transpose();
+  auto tangent_spectrum = magmaan::robust::compute_satorra2000_from_sandwich(H, B, tangent->A);
+  REQUIRE(tangent_spectrum);
+  CHECK((tangent_spectrum->eigenvalues - eig).norm() <= 1e-10 * eig.norm());
+  // Independently evaluate [H^-1 - T(T'HT)^-1T']B. Whiten by H and
+  // form the orthogonal complement instead of subtracting two nearly equal
+  // dense inverses (which loses precision in the released-scale coordinates).
+  Eigen::LLT<Eigen::MatrixXd> chol(H);
+  REQUIRE(chol.info() == Eigen::Success);
+  const Eigen::MatrixXd Z = chol.matrixU() * tangent->tangent;
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(Z);
+  const Eigen::MatrixXd Q = qr.householderQ() * Eigen::MatrixXd::Identity(H.rows(), H.rows());
+  const Eigen::MatrixXd Y = chol.matrixU().solve(Q.rightCols(t.df));
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> ep(Y.transpose() * B * Y);
+  REQUIRE(ep.info() == Eigen::Success);
+  CHECK((ep.eigenvalues() - eig).norm() <= 1e-10 * eig.norm());
   return eig;
 }
 
@@ -469,4 +501,125 @@ TEST_CASE("DWLS nested policy: under a true null the IJ law approaches Satorra-2
   }
   CHECK(previous < 0.02);
   }
+}
+
+
+TEST_CASE("DWLS moment nesting: Wu-Estabrook threshold steps") {
+  using magmaan::spec::GroupEqual;
+  for (const int categories : {3, 5}) {
+    std::vector<Eigen::MatrixXd> blocks;
+    for (unsigned seed : {7301u, 7302u}) {
+      std::mt19937 rng(seed);
+      std::normal_distribution<double> z;
+      Eigen::MatrixXd X(1000, 4);
+      for (Eigen::Index i = 0; i < X.rows(); ++i) {
+        const double f = z(rng);
+        for (int j = 0; j < 4; ++j) {
+          const double y = 0.7 * f + std::sqrt(0.51) * z(rng);
+          int category = 1;
+          for (int k = 1; k < categories; ++k)
+            category += y > (categories == 3 ? (k == 1 ? -0.4 : 0.6) : -1.5 + k * 0.6);
+          X(i,j) = category;
+        }
+      }
+      blocks.push_back(X);
+    }
+    auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+    REQUIRE(stats);
+    std::string syntax = "f =~ x1 + x2 + x3 + x4\n";
+    for (int j = 1; j <= 4; ++j) {
+      syntax += "x" + std::to_string(j) + " | t1";
+      for (int k = 2; k < categories; ++k) syntax += " + t" + std::to_string(k);
+      syntax += "\n";
+    }
+    const auto alt = ordinal_model(syntax, 2);
+    const auto nul = ordinal_model(syntax, 2, {GroupEqual::Thresholds});
+    const auto e1 = fit_dwls(alt, *stats, OrdinalParameterization::Theta);
+    const auto e0 = fit_dwls(nul, *stats, OrdinalParameterization::Theta);
+    const auto tangent = api::frontier::moment_nested_tangent(nul.pt, nul.rep, e0,
+        alt.pt, alt.rep, e1, *stats, OrdinalParameterization::Theta);
+    REQUIRE_MESSAGE(tangent.has_value(), (tangent.has_value() ? "" : tangent.error().detail));
+    CHECK(tangent->A.rows() == 4 * (categories - 3));
+    auto o0 = magmaan::estimate::frontier::ordinal_ls_objective(nul.pt, nul.rep,
+        *stats, e0, OrdinalWeightKind::DWLS, OrdinalParameterization::Theta);
+    auto o1 = magmaan::estimate::frontier::ordinal_ls_objective(alt.pt, alt.rep,
+        *stats, e1, OrdinalWeightKind::DWLS, OrdinalParameterization::Theta);
+    REQUIRE(o0); REQUIRE(o1);
+    CHECK((*o0->problem.r(e0.theta) - *o1->problem.r(tangent->embedding)).norm() < 1e-8);
+    const auto out = api::policy_nested_dwls(nul.pt, nul.rep, e0, api::policy_fit_state(e0), alt.pt,
+        alt.rep, e1, api::policy_fit_state(e1), *stats, OrdinalParameterization::Theta);
+    MESSAGE("categories=" << categories << " reason=" << api::reason_name(out.lr.reason)
+        << " detail=" << out.lr.detail);
+    const auto loading_alt = ordinal_model(syntax, 2, {GroupEqual::Loadings});
+    const auto loading_null = ordinal_model(syntax, 2, {GroupEqual::Thresholds, GroupEqual::Loadings});
+    const auto loading_e1 = fit_dwls(loading_alt, *stats, OrdinalParameterization::Theta);
+    const auto loading_e0 = fit_dwls(loading_null, *stats, OrdinalParameterization::Theta);
+    auto loading_tangent = api::frontier::moment_nested_tangent(loading_null.pt,
+        loading_null.rep, loading_e0, loading_alt.pt, loading_alt.rep, loading_e1,
+        *stats, OrdinalParameterization::Theta);
+    MESSAGE("threshold+loadings inside loadings-only categories=" << categories
+        << " embedding=" << loading_tangent.has_value()
+        << " detail=" << (loading_tangent ? "" : loading_tangent.error().detail));
+    REQUIRE_FALSE(loading_tangent.has_value());
+    CHECK(loading_tangent.error().kind == magmaan::PostError::Kind::NotNested);
+    const auto refused = api::policy_nested_dwls(loading_null.pt, loading_null.rep,
+        loading_e0, {}, loading_alt.pt, loading_alt.rep, loading_e1, {}, *stats,
+        OrdinalParameterization::Theta);
+    CHECK(refused.lr.reason == api::InferenceReason::NotNested);
+    if (categories == 3) CHECK(out.lr.reason == api::InferenceReason::EquivalentModels);
+    else {
+      REQUIRE(out.lr.reason == api::InferenceReason::Available);
+      CHECK(out.lr.df == 8);
+      CHECK(out.lr.eigenvalues.allFinite());
+    }
+  }
+}
+
+
+TEST_CASE("DWLS moment nesting: 100-replicate true-null moment diagnostic") {
+  const std::string syntax = "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2 + t3 + t4\nx2 | t1 + t2 + t3 + t4\n"
+      "x3 | t1 + t2 + t3 + t4\nx4 | t1 + t2 + t3 + t4\n";
+  const auto alt = ordinal_model(syntax, 2);
+  const auto nul = ordinal_model(syntax, 2, {magmaan::spec::GroupEqual::Thresholds});
+  Eigen::VectorXd statistics(100), traces(100), variances(100);
+  std::mt19937 rng(68261004u);
+  std::normal_distribution<double> z;
+  for (int rep = 0; rep < 100; ++rep) {
+    std::vector<Eigen::MatrixXd> blocks;
+    for (int group = 0; group < 2; ++group) {
+      Eigen::MatrixXd X(1000, 4);
+      for (Eigen::Index i = 0; i < X.rows(); ++i) {
+        const double f = z(rng);
+        for (int j = 0; j < 4; ++j) {
+          const double y = 0.7 * f + std::sqrt(0.51) * z(rng);
+          X(i,j) = 1.0 + (y > -0.9) + (y > -0.3) + (y > 0.3) + (y > 0.9);
+        }
+      }
+      blocks.push_back(X);
+    }
+    auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+    REQUIRE(stats);
+    const auto e1 = fit_dwls(alt, *stats, OrdinalParameterization::Theta);
+    const auto e0 = fit_dwls(nul, *stats, OrdinalParameterization::Theta);
+    const auto out = api::policy_nested_dwls(nul.pt, nul.rep, e0, api::policy_fit_state(e0), alt.pt,
+        alt.rep, e1, api::policy_fit_state(e1), *stats, OrdinalParameterization::Theta);
+    REQUIRE_MESSAGE(out.lr.reason == api::InferenceReason::Available, out.lr.detail);
+    REQUIRE(out.lr.df == 8);
+    statistics(rep) = out.lr.statistic;
+    traces(rep) = out.lr.eigenvalues.sum();
+    variances(rep) = 2.0 * out.lr.eigenvalues.squaredNorm();
+  }
+  const double mean = statistics.mean();
+  const Eigen::ArrayXd centered = statistics.array() - mean;
+  const double variance = centered.square().sum() / 99.0;
+  const double mean_se = std::sqrt(variances.mean() / 100.0);
+  const double variance_se = std::sqrt((centered.pow(4).mean() - variance * variance) / 100.0);
+  MESSAGE("MC100 seed=68261004 n/group=1000: mean=" << mean << " trace=" << traces.mean()
+      << " variance=" << variance << " 2sum(lambda^2)=" << variances.mean()
+      << " mean_SE=" << mean_se << " variance_SE=" << variance_se);
+  // Three Monte Carlo SEs, specified before running: a smoke check, not a
+  // finite-sample calibration decision or a fresh-seed size confirmation.
+  CHECK(std::abs(mean - traces.mean()) <= 3.0 * mean_se);
+  CHECK(std::abs(variance - variances.mean()) <= 3.0 * variance_se);
 }

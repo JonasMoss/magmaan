@@ -314,6 +314,23 @@
   nesting reasons and unsupported nested score are preserved. The separate-point
   profile law remains an explicitly named lab comparator. Confirmed on fresh
   draws in decision study 05 (4.3-7.8%); the global test, ML and FIML recipes are unchanged.
+- Moment-nested DWLS threshold comparisons (TASK-68) have limited validation;
+  calibration is pending. `api::frontier::moment_nested_tangent` fits H1 to the
+  null fit's implied moments using the shared DWLS weight, checks zero residual
+  and equality-reduced tangent inclusion/rank, and returns the embedding and
+  tangent T. An orthonormal row basis A annihilating T feeds the existing
+  H1 observed-Hessian/IJ sandwich law, equivalent to the nonzero spectrum of
+  `[H^-1 − T(T'HT)^-1T']B`, with q1 − q0 terms. This is a numerical local
+  inclusion witness, not a symbolic proof of arbitrary manifold containment.
+  Parameter-nested spectra agree with task-17.4 within 1e-10 relative. Two-group
+  theta configural versus thresholds-equal has eight terms for four five-category
+  indicators; three categories give typed `equivalent_models`. Thresholds+loadings
+  versus loadings-only fails the implied-moment embedding and stays `not_nested`:
+  item-scale releases change the standardized loading ratios. Policy and ordinary
+  `anova()` route the threshold step through the same core. A 100-replicate
+  correct-model check (1000/group, seed 68261004) gives mean 2.9735 versus trace
+  2.8136 and variance 2.2289 versus 2 sum(lambda²) 2.0778; discrepancies fall within
+  three Monte Carlo SEs (0.1441 and 0.4774). This is not a calibration claim.
 - Reusable DWLS policy evaluation points (TASK-23): `api::DwlsPolicyFit` owns
   the fitted structure, parameters, ordinal statistics, parameterization and
   row provenance. It lazily retains IJ covariance and exact Newton Hessian

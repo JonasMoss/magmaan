@@ -32,6 +32,7 @@ enum class InferenceReason {
   UnsupportedNesting, // nesting through moments requires an unsupported correspondence
   BoundaryNesting,   // no regular interior nested-test reference
   Penalized,         // a penalized (barrier) estimate: no validated sampling contract
+  EquivalentModels, // equal moment manifolds: no positive-df comparison
   Inapplicable,      // the component does not exist for this estimator (an LR test without a likelihood)
 };
 
@@ -224,7 +225,11 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
 // fitted ordinal_dwls_profile_lrt remains an explicitly named lab comparator.
 // At exact fit the weight channel is dormant, giving fixed-weight Satorra-2000.
 // No nested DWLS score test is derived, so `score` is UnsupportedModel.
-// Nesting is verified with the shared restriction embedding.
+// Parameter nesting uses the shared restriction embedding; failed NotNested
+// embeddings fall back to an implied-moment embedding and null tangent T.
+// The same sandwich law uses a row basis A annihilating T. Moment nesting has
+// limited numerical validation; calibration is pending. Zero-df equivalence
+// reports EquivalentModels.
 PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const model::MatrixRep& null_rep,
                                 const estimate::Estimates& null_estimates,
@@ -237,6 +242,26 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 estimate::OrdinalParameterization parameterization,
                                 const std::vector<std::int8_t>* null_row_user = nullptr,
                                 const std::vector<std::int8_t>* alternative_row_user = nullptr);
+
+namespace frontier {
+// Local moment embedding and null tangent in the alternative's equality-
+// reduced coordinates. Weighted residuals use the same sample and DWLS weight.
+// A is an orthonormal row basis annihilating tangent; embedding reproduces
+// the null fit's implied moments. This is a numerical local inclusion witness.
+struct MomentNestedTangent {
+  Eigen::VectorXd embedding;
+  Eigen::MatrixXd tangent;
+  Eigen::MatrixXd A;
+};
+post_expected<MomentNestedTangent> moment_nested_tangent(
+    spec::LatentStructure null_pt, const model::MatrixRep& null_rep,
+    const estimate::Estimates& null_estimates,
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates, const data::OrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user = nullptr,
+    const std::vector<std::int8_t>* alternative_row_user = nullptr);
+} // namespace frontier
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,
