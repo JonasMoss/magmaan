@@ -740,6 +740,61 @@ fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Optimization and convergence
 
+#### Numerical banking programme (2026-10-04)
+
+Board TASK-33.10 groups the remaining numerical work by shared objective
+mechanism and route integration. Banking means retained, reproducible evidence
+for a declared numerical scope with failures, unchecked cases and reopening
+triggers. It does not mean ordinary default adoption, statistical calibration,
+global optimality or completion of every constraint/domain combination.
+The sphere-study evidence through e9421f66 remains on its isolated branch;
+neither recording this programme nor marking a study complete merges it into
+the current library. Existing adapters and regression gates count as evidence;
+new studies fill concrete gaps rather than duplicate an estimator-by-weight grid.
+
+| Card | Remaining outcome | Evidence to share and additional checks |
+| --- | --- | --- |
+| 33.10.1 | Verified fixed-weight LS mechanisms and weight producers | Reuse ULS factor/QR/observed-correction checks. Cover identity, uneven diagonal, dense and structured NT weights, supported means/groups, original-unit objectives and conditioning. Check actual DWLS/ADF/GLS recipes and DLS endpoints/interior; add justified construction bounds only for declared scopes. |
+| 33.10.2 | Ordinal/mixed LS route integration | Reuse weighted-LS algebra after checking the threshold/correlation moment map, delta/theta identification, first-stage inputs and actual fitting weights. Include sparse categories, extreme correlations, supported means/groups and bounded actual-start/control confirmations. |
+| 33.10.3 | Direct-FIML pattern likelihood integration | Reuse likelihood/Newton kernels and existing missing-data evidence. Verify complete-data ML reduction, actual pattern derivatives/counts/means, unit normalization and bounded fresh missing-data confirmations; pairwise moments do not replace this objective. |
+| 33.10.4 | ML2S Stage-1 and handoff composition | Reuse saturated endpoint tests and ordinary Stage-2 ML/LS evidence. Capture actual fit inputs and expose separate Stage-1/handoff/Stage-2 reports; retain early EM stops, raw versus repaired curvature, transformed inputs and mismatches. All five weight recipes need correctness gates, not five independent large studies. |
+| 33.10.5 | Shared backend/domain/stopping correctness | Replay existing L-BFGS infeasible-trial and fully pinned equality-block witnesses. Retain soft-exit candidates, effective controls and independent verdicts; reuse bounded cross-route checks and distinguish outer iterative reweighting from inner fixed-weight success. |
+| 33.3 | Identification separate from local numerical accuracy | Reject the known scale-free exact-fit ridge; preserve identified/equality/unit-change controls. A tiny Newton correction cannot establish identification. |
+| 33.6.7 | Accurate unresolved sphere ML interval | Attribute the conservative numerical term; improve only justified bounds or document why it remains unresolved. Preserve saddle/rank/above-budget failures. |
+| 33.7 | Profiled PORT-NLS original-objective consistency | Replay retained mismatches and correct the owning profile/expanded-endpoint mechanism or state an explicit limit; avoid regenerating the full exploratory grid. |
+| 33.9 | Bounded sample-only starts beyond the two-factor design | Retain API defaults and reuse actual-start comparisons. Include applicable layered/FABIN unit fallbacks, Geiser start loss and reflection traps. The four signed ULS starts are development evidence, not a universal recipe. |
+| 33.6.6 | Scoped audit/default adoption decision | Prespecify supported scope, full no-options baseline, numerical criteria, every loss and cost. A covariance-only ULS/ML decision can precede other families; broader promotion needs its applicable completed gates. |
+
+Use three levels of evidence: independent fixed-point mechanism checks,
+bounded fresh route confirmations, then larger decision studies only for a
+proposed default or concrete failure needing broader diagnosis. Report local
+audit accuracy, objective consistency, chart availability, admissibility,
+identification and best-known basin recovery separately. All decisive audit
+claims must agree with their independent checks; any missed construction bound
+or unexplained verdict blocks banking that claimed verification scope. An
+unresolved accurate endpoint can remain explicitly unchecked rather than force
+a looser acceptance rule. Confirmation retains every baseline loss and cost;
+unsupported regimes inherit no pass. Freeze the confirmation recipe before its
+fresh draws, and use a prespecified decision study for default selection.
+
+Fixed in the fitting parameters is distinct from estimated from a sample.
+Conditional Stage-2 numerical evidence is reusable only with the actual moments,
+weight recipe and factor supplied to that fit. ML2S requires a separately checked
+Stage-1 and handoff; separate stage passes are not a propagated numerical-error
+bound. Ordinal and pairwise moments need their producer/count/weight checks;
+they cannot be treated as a synthetic complete dataset for sampling inference.
+SE/test variants with identical fits share numerical evidence, while TASK-69,
+TASK-71 and the inference backlog retain their own statistical questions.
+
+Primary single-level ML/FIML/all-ordinal DWLS lead. Supported mixed and secondary
+fixed weights enter through inexpensive reuse. This programme does not schedule
+two-level, SAM, FC-SEM or noniterative expansion, or PSD-face/barrier work; their
+existing gates and separately owned scope remain. Work order is shared correctness
+witnesses and weighted-LS verification first, with starts and the ML interval
+investigation independent; ordinal and ML2S then reuse the weighted mechanism,
+while direct FIML follows its pattern-likelihood checks. Adoption remains a
+separate final decision for each explicitly covered scope.
+
 - [ ] **M — complete the minimal ordinary-fit reliability programme.** Start
   with complete-data unrestricted NTML, ULS and GLS. Pair marker/sphere routes
   on identical moments; vary route-native versus shared sample-only FABIN3/layered
