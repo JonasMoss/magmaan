@@ -687,6 +687,29 @@
   0005 has independent frozen-moment df=1 Schur/robust-variance reconstruction
   and explicit (N-1)/N oracle score transport; estimated mixed weights remain
   unsupported (see the MI inventory).
+- Mixed DWLS estimated-weight IJ is not yet validated as the exact empirical
+  case-weight derivative. The diagnostic tests in `mixed_ij_test.cpp` compare
+  delta/theta single-group case perturbations implemented by integer
+  replication with the supplied moment and Gamma influence rows. At N = 150,
+  moment-row relative errors are 0.193–0.265 and Gamma-row errors are
+  0.309–0.376; reducing the weight step from 0.01 to 0.001 leaves those
+  first-stage errors unchanged. The finite differences of continuous marginal
+  means/ML variances agree with their analytic empirical derivatives at 1e-6.
+  The mixed first-stage sensitivity uses per-variable and pair score
+  cross-products, rather than the empirical score Jacobian of the fitted
+  moments. This preserves the existing lavaan Gamma convention but does not
+  establish an exact finite-sample IJ. The diagnostic checks remain failing;
+  diagonal jackknife relative errors at N = 600 → 1200 per group shrink from
+  0.0814 → 0.0420 (delta, one group), 0.0666 → 0.0374 (delta, two),
+  0.0990 → 0.00464 (theta, one) and 0.0910 → 0.00508 (theta, two).
+  IJ beats the observed fixed-weight comparator on each slice, but the
+  all-ordinal 0.04 diagonal tolerance does not hold across the mixed N = 600
+  slices. These results establish neither an O(1/N) bound nor an exact
+  empirical derivative. A sampling-law decision and independent validation
+  are required before
+  policy, nested-law or estimated-weight MI/release composition. The mixed
+  builder rejects pure ordinal/continuous endpoints with `NumericIssue`, so
+  direct endpoint-fit reductions are unavailable.
 - Mixed continuous/ordinal DWLS/WLS fit-measures are exposed through the same
   `api::fit_measures()` surface as all-ordinal fits. The mixed independence
   baseline profiles the marginal threshold/mean/variance block under the fitted

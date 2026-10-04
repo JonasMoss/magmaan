@@ -1161,6 +1161,11 @@ release, including dependencies otherwise shared with the primary programme.
   combinations. **Check:** continuous/all-ordinal reductions where defined,
   independent mixed influence/weight perturbations, rank/candidate consistency,
   grouped and misspecification calibration, and core/R agreement before exposure.
+  TASK-67's independent case-weight diagnosis finds a first-stage discrepancy:
+  mixed moment/Gamma rows use score-cross-product sensitivity and do not equal
+  empirical derivatives at finite N. Preserve the lavaan NACOV fitting
+  convention while deciding the sampling-influence contract; the diagnostic
+  gates are failing. Policy composition, nested law and calibration remain open.
 
 ### Association-ML inference
 
