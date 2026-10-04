@@ -396,17 +396,22 @@ asymptotically normal, so no boundary theory is needed, but the sandwich bread
 must include the Lagrange-multiplier curvature
 $K^\top(\nabla^2 F + \sum_j \lambda_j \nabla^2 h_j)K$ on the constraint tangent.
 The multiplier term vanishes under correct specification and not under
-misspecification. Out of scope for now (user decision 2026-10-04): the open
-question is the default inference, which needs its own validation.
+misspecification. Out of scope (user decision 2026-10-04): the open question is
+the default inference, which needs its own validation.
 **Available:** fitting on the ML, LS, FIML and all-ordinal routes with
 lavaan-compatible expected-information inference in the lab
 (`convention_inference()`, TASK-54.2); the ordinary policy refuses these models
 with a typed error. Reparameterizing the constraint away, where possible, gives
 an unconstrained model the policy accepts.
-**Build if:** a 0.4.0-or-later scope decision admits nonlinear constraints to
-the ordinary API. Implement the multiplier curvature for every policy route at
-once and validate it as a policy choice (misspecified-regime calibration), not
-by lavaan parity alone.
+Niche: in the textbook corpus most MODEL CONSTRAINT statements are derived
+quantities (post-fit functions, unaffected); about 20 distinct inputs carry
+nonlinear restrictions, mainly ACE twin models in variance-decomposition form
+(the latent A/C/E factor form needs no constraint) and autoregressive residual
+patterns.
+**Build if:** a concrete user model needs it and cannot be reparameterized.
+Implement the multiplier curvature for every policy route at once and validate
+it as a policy choice (misspecified-regime calibration), not by lavaan parity
+alone.
 
 ### Inequality-constrained estimation with boundary inference
 
