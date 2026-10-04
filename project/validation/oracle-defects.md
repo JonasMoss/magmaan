@@ -210,6 +210,18 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### Mixed ordinal MI criterion scale (TASK-33.4)
+
+The factor-two difference in score fixture 0005 was a magmaan defect, not an
+oracle defect: mixed MI multiplied both -N J'r and N J'J by two, while
+mixed equality releases already used the correct units of the fitter's N F/2.
+Removing that factor halves ordinary and fixed-weight robust MI and preserves
+EPC. The independent residual-space df=1 reconstruction and frozen-moment
+oracle comparison are described in [the MI inventory](capabilities.md#mi-and-equality-release-score-components).
+Lavaan's separate (N-1)/N score divisor is transported only for the comparison;
+no oracle exemption is claimed and no estimated mixed-weight support is added.
+
+
 ### Constrained ML retry gradients at different endpoints (2026-10-02)
 
 For the same synthetic covariance with x1 multiplied by 100 and x3 divided

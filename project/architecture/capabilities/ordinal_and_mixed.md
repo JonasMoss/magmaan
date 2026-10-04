@@ -642,7 +642,12 @@
   normal-data pairwise SEM estimator.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
-  vectors and weights used by fitting.
+  vectors and weights used by fitting. Both families use score -N J'r and
+  metric N J'J for the fitter's F/2 criterion. Mixed ordinary/fixed robust MI
+  no longer carries the former extra factor two; EPC is unchanged. Fixture
+  0005 has independent frozen-moment df=1 Schur/robust-variance reconstruction
+  and explicit (N-1)/N oracle score transport; estimated mixed weights remain
+  unsupported (see the MI inventory).
 - Mixed continuous/ordinal DWLS/WLS fit-measures are exposed through the same
   `api::fit_measures()` surface as all-ordinal fits. The mixed independence
   baseline profiles the marginal threshold/mean/variance block under the fitted

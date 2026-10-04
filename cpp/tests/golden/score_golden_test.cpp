@@ -4,11 +4,13 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <iomanip>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/QR>
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
@@ -463,10 +465,14 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       }
       mi = std::move(*mi_or);
       st = std::move(*st_or);
-      // The mixed MI scale has an unresolved factor-two oracle discrepancy;
-      // retain the existing limited-validation gate visibly, without granting
-      // raw parity. The matrix records the measured difference and follow-up.
-      ok = compare_modindices(id, mi, h->names, fit["modindices"], 1.1,
+      const auto* fixed = find_mi_row(mi, h->names, fit["modindices"][0]);
+      REQUIRE(fixed != nullptr);
+      MESSAGE(std::setprecision(17) << "mixed raw MI=" << fixed->mi << ", EPC=" << fixed->epc);
+      // Pin the pre-fix EPC: scaling score and metric together never changes it.
+      CHECK(fixed->epc == doctest::Approx(0.070407124737207519).epsilon(1e-10));
+      // Raw moments retain the oracle's (N-1)/N score divisor and small
+      // first-stage differences; a separate frozen-moment gate removes both.
+      ok = compare_modindices(id, mi, h->names, fit["modindices"], 5e-3,
                               5e-4, failures) && ok;
       ok = compare_score_tests(id, st, fit["score_tests"], 1e-2, 2e-3,
                                failures) && ok;
@@ -482,4 +488,115 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
                             << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == static_cast<int>(kScoreFixtures.size()));
+}
+
+TEST_CASE("mixed frozen moments: independent df=1 Schur MI and equality reconstruction") {
+  auto text = magmaan::test::read_fixture(magmaan::test::fixtures_dir() +
+      "/score/0005_mixed_dwls_fixed_row_and_equality.score.json");
+  REQUIRE(text.has_value());
+  auto exp = nlohmann::json::parse(*text);
+  std::vector<std::string> failures;
+  auto h = build_handles("mixed frozen", exp, failures);
+  REQUIRE(h.has_value());
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(
+      data_blocks_from_fixture(exp), ordered_masks_from_fixture(exp));
+  REQUIRE(stats.has_value());
+  // Freeze the oracle's first-stage moments AND fitting W, rather than
+  // letting independent polyserial/Gamma estimation obscure criterion units.
+  const auto& b = exp["sample_stats"][0];
+  stats->R[0] = matrix_from_json(b["cov"]);
+  stats->mean[0] = vector_from_json(b["mean"]);
+  stats->thresholds[0] = vector_from_json(b["thresholds"]);
+  stats->moments[0] = vector_from_json(b["moments"]);
+  stats->NACOV[0] = matrix_from_json(b["NACOV"]);
+  stats->W_dwls[0] = matrix_from_json(b["WLS.V"]);
+  const double n = static_cast<double>(stats->n_obs[0]);
+  const auto est = estimates_from_fixture(exp["fit"]);
+  using W = magmaan::estimate::OrdinalWeightKind;
+  auto objective = magmaan::estimate::frontier::mixed_ordinal_ls_objective(
+      h->pt, h->rep, *stats, est, W::DWLS);
+  REQUIRE(objective.has_value());
+  auto con = magmaan::estimate::build_eq_constraints(objective->pt);
+  REQUIRE(con.has_value());
+  REQUIRE(con->A_eq.rows() == 1);
+  auto mi = magmaan::estimate::modification_indices_mixed_ordinal(
+      h->pt, h->rep, *stats, est, W::DWLS);
+  auto release = magmaan::estimate::score_tests_mixed_ordinal(
+      h->pt, h->rep, *stats, est, W::DWLS);
+  auto rmi = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+      h->pt, h->rep, *stats, est, W::DWLS);
+  auto rrelease = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
+      h->pt, h->rep, *stats, est, W::DWLS);
+  REQUIRE(mi.has_value()); REQUIRE(release.has_value());
+  REQUIRE(rmi.has_value()); REQUIRE(rrelease.has_value());
+  const Eigen::MatrixXd sqrt_w = stats->W_dwls[0].diagonal().cwiseSqrt().asDiagonal();
+  const Eigen::MatrixXd gamma_w = sqrt_w * stats->NACOV[0] * sqrt_w;
+  auto reconstruct = [&](const magmaan::estimate::frontier::OrdinalLsObjective& obj,
+                         const Eigen::VectorXd& theta, const Eigen::MatrixXd& K,
+                         const Eigen::VectorXd& d,
+                         const magmaan::inference::ScoreTestResult& ordinary,
+                         const magmaan::inference::ScoreTestResult& robust) {
+    auto r = obj.problem.r(theta); auto J = obj.problem.J(theta);
+    REQUIRE(r.has_value()); REQUIRE(J.has_value());
+    // F=r'r; the actual fitter minimizes F/2. Independently differentiate
+    // that criterion, then eliminate nuisance increments in residual space.
+    const Eigen::MatrixXd nuisance = *J * K;
+    const Eigen::VectorXd jd = *J * d;
+    const Eigen::VectorXd v = jd - nuisance * nuisance.colPivHouseholderQr().solve(jd);
+    const double q = v.dot(*r), a = v.squaredNorm();
+    REQUIRE(a > 0.0);
+    CHECK(ordinary.mi == doctest::Approx(n*q*q/a).epsilon(1e-9));
+    CHECK(ordinary.epc == doctest::Approx(-q/a).epsilon(1e-9));
+    CHECK(robust.mi_scaled == doctest::Approx(n*q*q/v.dot(gamma_w*v)).epsilon(1e-9));
+    CHECK(robust.epc == doctest::Approx(ordinary.epc).epsilon(1e-12));
+    Eigen::VectorXd plus = theta + 1e-5*d, minus = theta - 1e-5*d;
+    auto rp = obj.problem.r(plus), rm = obj.problem.r(minus);
+    REQUIRE(rp.has_value()); REQUIRE(rm.has_value());
+    const double fd = (0.5*rp->squaredNorm()-0.5*rm->squaredNorm())/2e-5;
+    CHECK(fd == doctest::Approx(jd.dot(*r)).epsilon(1e-6));
+    CHECK(ordinary.df == 1);
+  };
+  // One explicit fixed covariance; its EPC cannot depend on the removed
+  // factor two because both the old score and metric carried that factor.
+  const auto* target = find_mi_row(*mi, h->names, exp["fit"]["modindices"][0]);
+  const auto* robust_target = find_mi_row(*rmi, h->names, exp["fit"]["modindices"][0]);
+  REQUIRE(target != nullptr); REQUIRE(robust_target != nullptr);
+  auto aug = objective->pt;
+  const auto row = target->candidate.row;
+  const auto p = est.theta.size();
+  Eigen::VectorXd theta(p+1); theta.head(p) = est.theta; theta(p) = aug.fixed_value[row];
+  aug.free[row] = static_cast<std::int32_t>(p+1);
+  aug.fixed_value[row] = std::numeric_limits<double>::quiet_NaN();
+  if (!aug.eq_groups.empty()) aug.eq_groups.push_back(static_cast<std::int32_t>(p));
+  auto rep = magmaan::model::build_matrix_rep(aug); REQUIRE(rep.has_value());
+  auto augmented_est = est; augmented_est.theta = theta;
+  auto augmented = magmaan::estimate::frontier::mixed_ordinal_ls_objective(
+      aug, *rep, *stats, augmented_est, W::DWLS);
+  REQUIRE(augmented.has_value());
+  Eigen::MatrixXd K = Eigen::MatrixXd::Zero(p+1, con->K().cols());
+  K.topRows(p) = con->K();
+  Eigen::VectorXd d = Eigen::VectorXd::Zero(p+1); d(p) = 1.0;
+  reconstruct(*augmented, theta, K, d, *target, *robust_target);
+  // With exactly one equality the released direction is its unit normal;
+  // reversing that normal reverses EPC, but leaves the statistic invariant.
+  d = con->A_eq.row(0).transpose().normalized();
+  auto r = objective->problem.r(est.theta); auto J = objective->problem.J(est.theta);
+  REQUIRE(r.has_value()); REQUIRE(J.has_value());
+  const Eigen::VectorXd jd = *J*d;
+  const Eigen::MatrixXd nuisance = *J*con->K();
+  const Eigen::VectorXd v = jd - nuisance*nuisance.colPivHouseholderQr().solve(jd);
+  CHECK(release->rows[0].mi == doctest::Approx(n*std::pow(v.dot(*r),2)/v.squaredNorm()).epsilon(1e-9));
+  CHECK(rrelease->rows[0].mi_scaled == doctest::Approx(n*std::pow(v.dot(*r),2)/v.dot(gamma_w*v)).epsilon(1e-9));
+  CHECK(std::abs(release->rows[0].epc) == doctest::Approx(std::abs(v.dot(*r)/v.squaredNorm())).epsilon(1e-9));
+  // Lavaan divides the candidate score by N/(N-1); transport only the
+  // comparison, never the fitting W or the core N*F/2 statistic.
+  const double divisor = (n-1.0)/n;
+  MESSAGE(std::setprecision(17) << "mixed frozen MI=" << target->mi << ", EPC=" << target->epc
+      << ", transported MI=" << target->mi*divisor*divisor
+      << ", release=" << release->rows[0].mi
+      << ", transported release=" << release->rows[0].mi*divisor*divisor);
+  CHECK(target->mi*divisor*divisor == doctest::Approx(exp["fit"]["modindices"][0]["mi"].get<double>()).epsilon(1e-8));
+  CHECK(target->epc*divisor == doctest::Approx(exp["fit"]["modindices"][0]["epc"].get<double>()).epsilon(1e-8));
+  CHECK(release->rows[0].mi*divisor*divisor == doctest::Approx(
+      exp["fit"]["score_tests"]["rows"][0]["mi"].get<double>()).epsilon(1e-8));
 }

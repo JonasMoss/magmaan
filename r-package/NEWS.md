@@ -2,6 +2,10 @@
 
 - Prepared `estimate()` now accepts all-ordinal DWLS fitting options, including
   the lavaan preset, through the same configured engine as `fit_model()`.
+- Mixed ordinal component modification indices now use the same criterion
+  scale as equality releases, removing an extra factor two from ordinary and
+  fixed-weight robust MI. EPC and fitting weights are unchanged; estimated
+  mixed-weight inference remains unsupported.
 
 - Robust LS modification indices and equality releases now support observed
   sensitivity with estimated-weight influence for continuous ULS/GLS/DWLS/WLS/DLS

@@ -257,15 +257,11 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
                          eval->J_mu, *factors, theta);
     if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
 
-    // All-ordinal moments are single-counted, including explicit fixed rows.
-    // Doubling score and information for those rows doubles their MI (but
-    // leaves EPC unchanged); fixed latent variances in the paper corpus expose
-    // this even when the absent-row and equality-release results agree.
-    const double moment_scale =
-        std::is_same_v<Stats, data::OrdinalStats> ? 1.0 : 2.0;
-    const Eigen::VectorXd score =
-        -moment_scale * n_total * (J->transpose() * *r);
-    Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);
+    // The fitter minimizes F/2, where F = r'r and r includes sqrt(W)
+    // and block fractions. The score and GN metric of N*F/2 are -N*J'r
+    // and N*J'J for both ordinal families, as for equality releases.
+    const Eigen::VectorXd score = -n_total * (J->transpose() * *r);
+    Eigen::MatrixXd info = n_total * (J->transpose() * *J);
     info = 0.5 * (info + info.transpose());
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
@@ -358,8 +354,8 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
 // {Δ_b, W_b, Γ̂_b = NACOV_b, n_b} blocks `robust_ordinal` assembles — and hand
 // the per-direction scaling to `inference::frontier::score_for_direction_robust`.
 // The sandwich uses the unwhitened estimation weight; c carries no
-// `moment_scale` factor, so `mi_scaled` inherits the estimator-family scale convention
-// of the ordinary `mi` and reduces to it exactly under WLS (W = Γ̂⁻¹).
+// additional criterion factor, so `mi_scaled` uses the same N*F/2 convention
+// as ordinary MI/releases and reduces to it under WLS (W = Γ̂⁻¹).
 
 template <class Stats>
 post_expected<void> validate_ordinal_nacov(const Stats& stats) {
@@ -508,15 +504,11 @@ ordinal_modification_indices_robust_impl(
     }();
     if (!sw.has_value()) return std::unexpected(sw.error());
 
-    // All-ordinal moments are single-counted, including explicit fixed rows.
-    // Doubling score and information for those rows doubles their MI (but
-    // leaves EPC unchanged); fixed latent variances in the paper corpus expose
-    // this even when the absent-row and equality-release results agree.
-    const double moment_scale =
-        std::is_same_v<Stats, data::OrdinalStats> ? 1.0 : 2.0;
-    const Eigen::VectorXd score =
-        -moment_scale * n_total * (J->transpose() * *r);
-    Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);
+    // The fitter minimizes F/2, where F = r'r and r includes sqrt(W)
+    // and block fractions. The score and GN metric of N*F/2 are -N*J'r
+    // and N*J'J for both ordinal families, as for equality releases.
+    const Eigen::VectorXd score = -n_total * (J->transpose() * *r);
+    Eigen::MatrixXd info = n_total * (J->transpose() * *J);
     info = 0.5 * (info + info.transpose());
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());

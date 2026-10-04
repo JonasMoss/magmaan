@@ -3302,6 +3302,7 @@ TEST_CASE("mixed ordinal MI recipe matrix gates ordinary cells and typed robust 
         REQUIRE(rst->rows.size() == release->rows.size());
         for (std::size_t k = 0; k < mi->rows.size(); ++k) {
           CHECK(rmi->rows[k].mi == doctest::Approx(mi->rows[k].mi).epsilon(1e-8));
+          CHECK(rmi->rows[k].epc == doctest::Approx(mi->rows[k].epc).epsilon(1e-10));
           CHECK(std::isfinite(rmi->rows[k].mi_scaled));
         }
         for (std::size_t k = 0; k < release->rows.size(); ++k) {

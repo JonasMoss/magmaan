@@ -682,9 +682,10 @@ The ordinary package does not expose MI in this release; the
   score-divisor transport and independent analytic score/Schur/EPC checks.
   FIML MI is gated at 2e-5; raw ULS/DWLS tolerances are tightened to measured
   finite-divisor floors. Remaining evidence limits: no direct complete-data
-  MLR MI oracle; ordinal ULS/WLS use reduction/rank gates; mixed ordinary MI
-  retains a factor-two discrepancy tracked as TASK-33.4 (0.3.0), not raw oracle
-  parity. Component closure does not establish new calibration or defaults.
+  MLR MI oracle; ordinal ULS/WLS use reduction/rank gates. Mixed MI's
+  factor-two defect is fixed (TASK-33.4): ordinary/fixed robust MI and releases
+  have independent frozen-moment Schur gates, unchanged EPC and explicit
+  finite-divisor oracle transport; raw mixed DWLS MI is gated at 0.005. Component closure does not establish new calibration or defaults.
 
 ### Release readiness
 

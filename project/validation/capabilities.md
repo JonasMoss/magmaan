@@ -411,7 +411,7 @@ GLS/WLS explicitly use the recorded score transport described above.
 | Observed FIML | 7.532795e-6 | 1.116287e-7 | 2e-5 / 5e-7 | 4.804921e-10 / 1.864403e-11 | 1e-7 / 1e-8 |
 | Raw ULS | 0.059270984 | 0.000940361 | 0.065 / 0.0012 | 0.023441073 / 0.000856438 | 0.03 / 0.0012 |
 | Raw ordinal DWLS | 0.013473879 | 0.000601743 | 0.02 / 0.001 | 0.002135256 / 0.001134891 | 0.003 / 0.002 |
-| Raw mixed DWLS | 0.829736594 | 0.000195575 | 1.1 retained / 0.0005 | 0.005409003 / 0.001345888 | 0.01 / 0.002 |
+| Raw mixed DWLS | 0.004577846 | 0.000195575 | 0.005 / 0.0005 | 0.005409003 / 0.001345888 | 0.01 / 0.002 |
 | Transported GLS | 3.013589e-6 | 4.491212e-8 | 1e-5 / 5e-7 | No equality targets | — |
 | Transported ADF/WLS | 7.960787e-6 | 1.534900e-7 | 1e-5 / 5e-7 | No equality targets | — |
 
@@ -422,15 +422,28 @@ MI ratio is (N/(N-1))^2 and EPC ratio N/(N-1), with N=301 and N=360,
 respectively. The small residual after that transport is optimizer/polychoric
 precision. Their frozen raw oracle values have not been rewritten.
 
-Mixed ordinary MI is **limited validation**, not raw lavaan parity. Its current
-worker uses score=2N J'Wr and information=2N J'WJ, while its equality-release
-worker uses N. The measured MI/oracle ratio is approximately
-2(N/(N-1))^2. The existing 1.1 absolute MI tolerance is retained solely as the
-pre-existing regression gate; it is not a justified precision tolerance and
-must not be used to claim oracle agreement. Resolving the mixed MI target/scale
-is `TASK-33.4` in the local work board (0.3.0); this lane changes no numerical convention or default.
-The new mixed matrix gates establish the retained ordinary/robust reduction
-and precise refusals, not a solved oracle discrepancy.
+Mixed ordinary and fixed-weight robust MI now use the same criterion units as
+equality releases: the fitter minimizes F/2, with F = (s-sigma)'W(s-sigma)
+(block fractions included). The score is -N J'r and the Gauss–Newton metric
+is N J'J for the whitened residual r; no extra factor two belongs to mixed
+moments. The previous doubling was a magmaan defect (TASK-33.4), fixed in
+both ordinary and robust workers without changing EPC or fitting weights.
+
+The independent C++ test `mixed frozen moments: independent df=1 Schur MI
+and equality reconstruction` uses fixture 0005's frozen first-stage moments,
+W, Gamma, theta and N. It projects the added column j off the nuisance
+columns JK, giving v; ordinary MI is N(v'r)^2/(v'v), EPC is -(v'r)/(v'v),
+and fixed-weight robust MI is N(v'r)^2/(v' sqrt(W) Gamma sqrt(W) v).
+It also differentiates F/2 numerically and reconstructs the single equality
+release using its constraint normal. This gates criterion units independently
+of the production score/Schur routines. The frozen oracle comparison separately
+transports the score by (N-1)/N, hence MI by its square and EPC by that factor;
+the MI/EPC/release comparisons are gated at 1e-8 relative tolerance (MI error
+4.3e-9 and release error 1.8e-12). This is a comparison convention, not an
+oracle-defect exemption. The raw-data
+gate retains the measured finite-divisor/first-stage floor above. Estimated
+mixed-weight influence remains refused; this fix establishes no new sampling
+calibration or ordinary-user mixed inference policy.
 
 The GLS/WLS generator checks the stationary candidate-score oracle form to
 1e-8, then checks the independently reconstructed efficient MI/EPC to 1e-5.

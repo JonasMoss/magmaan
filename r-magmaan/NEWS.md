@@ -2,6 +2,10 @@
 
 - Ordinal DWLS fitting options now use reusable prepared handles; ML2S
   retains its fresh-fit fallback.
+- Mixed ordinal component modification indices now use the same criterion
+  scale as equality releases, removing an extra factor two from ordinary and
+  fixed-weight robust MI. EPC and fitting weights are unchanged; estimated
+  mixed-weight inference remains unsupported.
 
 - DWLS global policy now reports the exact spectrum (All) weighted chi-square
   p-value on unchanged n F and robust-ordinal eigenvalues (decision study 05).
