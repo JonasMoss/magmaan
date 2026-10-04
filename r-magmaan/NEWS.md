@@ -5,6 +5,9 @@
   native verdict is used for the comparison and reported in a printed note
   and `refit` attribute; the supplied fit objects are unchanged.
 
+- Complete-data ML nested LR calibration now uses exact casewise likelihood
+  scores when the larger model has a restricted, misspecified mean structure.
+  Saturated-mean comparisons retain their calibration.
 - Ordinal DWLS fitting options now use reusable prepared handles; ML2S
   retains its fresh-fit fallback.
 - Mixed ordinal component modification indices now use the same criterion

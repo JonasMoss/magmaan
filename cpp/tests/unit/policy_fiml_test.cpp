@@ -132,6 +132,80 @@ TEST_CASE("FIML policy: complete-data reductions and typed reasons") {
   CHECK(api::policy_inference_fiml(saturated.pt,saturated.rep,raw,*pack,es,{}).lr.reason == api::InferenceReason::Saturated);
 }
 
+TEST_CASE("ML nested LR: restricted misspecified means use exact casewise scores") {
+  for (bool restricted_means : {false, true}) {
+    auto raw = rows(1200,0,2);
+    // Groups have the same covariance and differ by a common mean shift.
+    // Swapping groups about their shared fitted mean preserves the population
+    // objective, so equal group loadings hold at its symmetric pseudo-true
+    // point while the shared intercept structure is misspecified.
+    const std::string means = restricted_means
+        ? "\nx1 ~ m1*1\nx2 ~ m2*1\nx3 ~ m3*1\nx4 ~ m4*1" : "";
+    auto m1 = build(("f =~ x1 + x2 + x3 + x4" + means).c_str(),2);
+    auto m0 = build(("f =~ x1 + a*x2 + x3 + x4" + means).c_str(),2);
+    auto e1 = fit(m1,raw), e0 = fit(m0,raw);
+    auto pack = estimate::fiml::fiml_pack(raw); REQUIRE(pack);
+    auto direct = api::policy_nested_fiml(m0.pt,m0.rep,e0,{},m1.pt,m1.rep,e1,{},raw,*pack);
+    available(direct.lr,1);
+    auto mb = estimate::fiml::fiml_score_meat_bread(m1.pt,m1.rep,raw,*pack,e1); REQUIRE(mb);
+    auto k1 = estimate::build_eq_constraints(m1.pt); REQUIRE(k1);
+    auto k0 = estimate::build_eq_constraints(m0.pt); REQUIRE(k0);
+    auto embedding = robust::embed_nested_null(m1.pt,m1.rep,m0.pt,m0.rep,e0.theta,*k1,*k0); REQUIRE(embedding);
+    const auto numeric = numeric_scores(m1,raw,e1);
+    auto reference = robust::compute_satorra2000_from_sandwich(
+        (static_cast<double>(pack->cache.n_total)/2.0)*k1->K().transpose()*mb->hessian*k1->K(),
+        k1->K().transpose()*numeric.transpose()*numeric*k1->K(),embedding->restriction.A); REQUIRE(reference);
+    CHECK((direct.lr.eigenvalues-reference->eigenvalues).norm() < 1e-7);
+    for (auto storage : {robust::frontier::ContributionStorage::Casewise,
+                         robust::frontier::ContributionStorage::Tiled}) {
+      auto d = robust::frontier::prepare_ntml_data(raw,true,storage); REQUIRE(d);
+      auto ml1 = e1, ml0 = e0;
+      for (auto pair : {std::pair{&m1,&ml1},std::pair{&m0,&ml0}}) {
+        auto ev = model::ModelEvaluator::build(pair.first->pt,pair.first->rep); REQUIRE(ev);
+        auto im = ev->sigma(pair.second->theta); REQUIRE(im);
+        auto value = estimate::ml_value((*d)->sample,*im); REQUIRE(value);
+        pair.second->fmin = 0.5 * *value;
+      }
+      auto f1 = robust::frontier::prepare_ntml_fit(*d,m1.pt,m1.rep,ml1); REQUIRE(f1);
+      auto f0 = robust::frontier::prepare_ntml_fit(*d,m0.pt,m0.rep,ml0); REQUIRE(f0);
+      auto result = api::policy_nested_ml(*f0,{},*f1,{});
+      available(result.lr,1);
+      CAPTURE(restricted_means);
+      CHECK((result.lr.eigenvalues-direct.lr.eigenvalues).norm() < 1e-9);
+      CHECK((result.lr.eigenvalues-reference->eigenvalues).norm() < 1e-7);
+      auto info = robust::frontier::ntml_information(**f1); REQUIRE(info);
+      auto expected_reference = robust::compute_satorra2000_from_sandwich(
+          k1->K().transpose()* **info * k1->K(),
+          k1->K().transpose()*numeric.transpose()*numeric*k1->K(),embedding->restriction.A); REQUIRE(expected_reference);
+      auto hypothesis = robust::frontier::prepare_ntml_hypothesis(*f0,*f1); REQUIRE(hypothesis);
+      auto expected = robust::frontier::ntml_quadratic(**hypothesis,false); REQUIRE(expected);
+      auto spectrum = robust::frontier::ntml_spectrum(**expected); REQUIRE(spectrum);
+      CHECK((**spectrum-expected_reference->eigenvalues).norm() < 1e-7);
+      auto cached = robust::frontier::ntml_quadratic(**hypothesis,false); REQUIRE(cached);
+      CHECK(*cached == *expected);
+      if (!restricted_means) {
+        // Reconstruct the pre-fix centered-moment meat independently, to
+        // pin saturated-mean comparisons to their previous spectrum.
+        auto geometry = robust::frontier::ntml_geometry(**f1); REQUIRE(geometry);
+        Eigen::MatrixXd wd = (*geometry)->Delta;
+        for (const auto& block : (*geometry)->base.blocks) {
+          wd.middleRows(block.row_offset,block.pstar) = block.llt_gamma_nt.solve(
+              (*geometry)->Delta.middleRows(block.row_offset,block.pstar));
+          wd.middleRows(block.mu_off,block.p) = block.llt_M.solve(
+              (*geometry)->Delta.middleRows(block.mu_off,block.p));
+        }
+        auto moments = robust::casewise_contributions(raw,(*d)->sample,true); REQUIRE(moments);
+        const Eigen::MatrixXd old_scores = *moments * wd * k1->K();
+        auto observed = robust::frontier::ntml_observed_information(**f1); REQUIRE(observed);
+        auto old = robust::compute_satorra2000_from_sandwich(
+            k1->K().transpose()* **observed * k1->K(),
+            old_scores.transpose()*old_scores,embedding->restriction.A); REQUIRE(old);
+        CHECK((result.lr.eigenvalues-old->eigenvalues).norm()/old->eigenvalues.norm() <= 1e-12);
+      }
+    }
+  }
+}
+
 TEST_CASE("FIML policy: MCAR MAR grouped sandwich and evaluation-point score meat") {
   for (int missing : {1,2}) for (int groups : {1,2}) {
     auto raw = rows(900,missing,groups,true);

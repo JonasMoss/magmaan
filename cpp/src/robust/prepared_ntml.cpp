@@ -371,7 +371,9 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
     return std::unexpected(invalid("NTML hypothesis: singular restriction metric"));
   auto rows = project(*fit.data,fit.geometry->base,directions);
   if (!rows) return std::unexpected(rows.error());
-  if (score) likelihood_rows(fit,fit.geometry->base,directions,*rows);
+  // LR uses likelihood scores at the alternative, including a restricted
+  // fitted mean's shift; score uses the embedded null evaluation point.
+  likelihood_rows(fit,fit.geometry->base,directions,*rows);
   Eigen::MatrixXd whitened = factor.matrixL().solve(
       normalized_metric.scale.asDiagonal() * rows->transpose()).transpose();
   const double statistic = score ? whitened.colwise().sum().squaredNorm()

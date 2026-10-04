@@ -4,6 +4,9 @@
   verified embedded restricted estimate with its own estimator and options,
   returning a new fit with native convergence diagnostics.
 
+- Complete-data ML nested LR calibration now uses exact casewise likelihood
+  scores when the larger model has a restricted, misspecified mean structure.
+  Saturated-mean comparisons retain their calibration.
 - Prepared `estimate()` now accepts all-ordinal DWLS fitting options, including
   the lavaan preset, through the same configured engine as `fit_model()`.
 - Mixed ordinal component modification indices now use the same criterion

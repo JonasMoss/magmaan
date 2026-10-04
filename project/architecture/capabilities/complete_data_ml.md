@@ -514,8 +514,20 @@
 
   Casewise storage expands centered moment contributions once across models;
   automatic storage switches to tiled projection above a 64-MiB contribution
-  budget. Global score and GOF share a projection. Score applies the fitted-mean
-  linear/constant correction without reconstructing fourth-moment contributions.
+  budget. Global score and GOF share a projection. Score and nested LR apply the fitted-mean
+  linear/constant likelihood correction without reconstructing fourth-moment
+  contributions. Nested LR evaluates these rows at the alternative fit for
+  both observed and expected geometry, including cached expected reductions.
+  A two-group restricted, misspecified-mean gate matches direct complete-data
+  FIML and finite-difference likelihood scores in casewise and tiled storage.
+  Global LR remains a centered sample-moment GOF reduction: its null asserts
+  correct specification, under which the mean shift vanishes. Global score and
+  expected/observed score sandwiches already use exact likelihood rows.
+  The default lab `robust_nested_lrt()` delegates to policy and inherits this
+  fix; explicit Satorra-2000 streaming/materialized/dense drivers retain
+  their centered empirical-Gamma convention pending the lab-centering study.
+  Decisions/04 frees group intercepts and restricts only loadings, so its
+  saturated-mean design is unaffected.
   The large-N tiled path accumulates both reduced matrices in one pass instead
   of retaining N-by-df rows. The spectrum uses row space when N < df; SB-only
   calibration uses a trace and spectra are cached on demand. Distinct tiled
