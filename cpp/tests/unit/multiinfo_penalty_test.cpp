@@ -27,6 +27,8 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/mplus_parser.hpp"
+#include "magmaan/compat/mplus/model.hpp"
 #include "magmaan/spec/build.hpp"
 
 #define REQUIRE_OK(value)                                                     \
@@ -1112,4 +1114,38 @@ TEST_CASE("ordinal barriers ignore threshold cells and preserve ML saturated thr
       CHECK(std::isfinite(psd->fmin));
     }
   }
+}
+
+TEST_CASE("auxiliary NEW coordinates have zero barrier and moment curvature") {
+  auto parsed = magmaan::parse::MplusParser::parse(
+      "DATA: FILE=x;\nVARIABLE: NAMES=y1-y4;\n"
+      "MODEL: f BY y1; f BY y2 (a);\nf BY y3 (b); f BY y4;\n"
+      "MODEL CONSTRAINT: NEW(c); b=a+c;");
+  REQUIRE_OK(parsed);
+  auto pt = magmaan::spec::build(parsed->flat,
+      magmaan::compat::mplus::build_options(parsed->input));
+  REQUIRE_OK(pt);
+  auto rep = build_matrix_rep(*pt); REQUIRE_OK(rep);
+  auto ev = ModelEvaluator::build(*pt, *rep); REQUIRE_OK(ev);
+  Eigen::VectorXd theta = interior_theta(*ev);
+  const auto locs = ev->param_locations();
+  Eigen::Index auxiliary = -1;
+  for (std::size_t k = 0; k < locs.size(); ++k)
+    if (locs[k].block < 0) auxiliary = static_cast<Eigen::Index>(k);
+  REQUIRE(auxiliary >= 0);
+  auto layout = multiinfo_penalty_layout(*ev, theta); REQUIRE_OK(layout);
+  auto penalty = multiinfo_penalty(*layout, *ev, theta, true); REQUIRE_OK(penalty);
+  CHECK(penalty->gradient(auxiliary) == 0.0);
+  auto ph = magmaan::estimate::frontier::multiinfo_penalty_hessian(*layout, *ev, theta);
+  REQUIRE_OK(ph);
+  CHECK(ph->row(auxiliary).isZero(0.0));
+  auto sigma = ev->sigma(theta); REQUIRE_OK(sigma);
+  auto sample = stats_from(sigma->sigma[0], 500);
+  sample.S[0](0, 0) += .1;
+  auto h = magmaan::estimate::gmm::moment_quadratic_hessian(*ev, sample, theta, {});
+  REQUIRE_OK(h);
+  CHECK(h->row(auxiliary).isZero(0.0));
+  theta(auxiliary) += .7;
+  auto shifted = multiinfo_penalty(*layout, *ev, theta, true); REQUIRE_OK(shifted);
+  CHECK(shifted->value == penalty->value);
 }

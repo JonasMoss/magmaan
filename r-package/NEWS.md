@@ -11,6 +11,8 @@
   MODEL INDIRECT now use the shared model/constraint/defined-parameter core.
   SQRT, PHI/pnorm and LOG10 extend the shared expression language. Inequalities
   retain the deliberate boundary; ordinal nonlinear equalities name TASK-54.2.
+  Auxiliary NEW coordinates are safe in barrier gradients and moment curvature;
+  noniterative CFA and profiled SNLLS reject these coordinates explicitly.
 
 - DWLS global policy now reports the exact spectrum (All) weighted chi-square
   p-value on unchanged n F and robust-ordinal eigenvalues (decision study 05).

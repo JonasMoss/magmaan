@@ -36,7 +36,9 @@
   MODEL CONSTRAINT imports NEW starts/free coordinates/derived quantities,
   explicit/implicit linear and continuous nonlinear equalities, and nested DO
   expansion. Auxiliary `new` rows have no variable IDs or matrix cell but retain
-  their free index, label and start through partable round trips. MODEL INDIRECT
+  their free index, label and start through partable round trips. Moment derivative
+  consumers skip their missing matrix locations; noniterative CFA and profiled
+  SNLLS charts reject auxiliary NEW coordinates explicitly. MODEL INDIRECT
   enumerates simple directed indirect paths, supports specific written orders
   (absent paths give zero) and VIA filters, including paths through factors.
   Per-group defined names follow `ind_g<group>_<outcome>_ind_<names>` and

@@ -1653,6 +1653,10 @@ restricted_rows_from_partable(const spec::LatentStructure& pt,
   }
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
   const std::vector<Eigen::Index> offs = h2_offsets(layouts);
   const Eigen::Index n_h2 = offs.back();
@@ -1769,6 +1773,10 @@ restricted_rows_direction_from_partable(
         "mismatch"});
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
   const std::vector<Eigen::Index> offs = h2_offsets(layouts);
   const Eigen::Index n_h2 = offs.back();
@@ -2254,6 +2262,10 @@ split_loading_restrictions(const spec::LatentStructure& pt,
   }
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   bool any_cross = false;
   for (Eigen::Index r = 0; r < rows.R_load.rows(); ++r) {
     std::int64_t bf = -1;
@@ -2659,6 +2671,10 @@ project_loading_constraints(const model::ModelEvaluator& ev,
   if (!has_rows(rows.R_load)) return theta0;
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
   if (rows.R_load.cols() != q)
     return num_error("restricted Guttman map: loading constraint width mismatch");
@@ -2775,6 +2791,10 @@ assemble_theta_direction_multi(const model::ModelEvaluator& ev,
   };
 
   const std::vector<model::ParamLocation> locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   Eigen::VectorXd dtheta =
       Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
 
@@ -2850,6 +2870,10 @@ project_loading_constraints_direction(
                      "count mismatch");
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
   if (rows.R_load.cols() != q || theta0.size() != q || dtheta0.size() != q)
     return num_error("restricted Guttman derivative: loading projection "
@@ -2978,6 +3002,10 @@ project_loading_constraints_jacobian(
         "count mismatch"});
 
   const auto locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   const Eigen::Index q = static_cast<Eigen::Index>(locs.size());
   const Eigen::Index pstar = J0.cols();
   if (rows.R_load.cols() != q || theta0.size() != q || J0.rows() != q)
@@ -3143,6 +3171,10 @@ assemble_theta(const model::ModelEvaluator& ev,
   };
 
   const std::vector<model::ParamLocation> locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   Eigen::VectorXd theta = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
 
   for (std::size_t k = 0; k < locs.size(); ++k) {
@@ -3225,6 +3257,10 @@ assemble_theta_direction(const model::ModelEvaluator& ev,
   };
 
   const std::vector<model::ParamLocation> locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   Eigen::VectorXd dtheta = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
 
   for (std::size_t k = 0; k < locs.size(); ++k) {
@@ -3302,6 +3338,10 @@ assemble_theta_jacobian(const model::ModelEvaluator& ev,
   };
 
   const std::vector<model::ParamLocation> locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(ev.n_free()),
                                             pstar);
 
@@ -3394,6 +3434,10 @@ assemble_theta_jacobian_multi(
   };
 
   const std::vector<model::ParamLocation> locs = ev.param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   Eigen::MatrixXd J = Eigen::MatrixXd::Zero(
       static_cast<Eigen::Index>(ev.n_free()), pstar);
 
@@ -3999,6 +4043,10 @@ noniterative_cfa_theta(const spec::LatentStructure& pt,
                        AdmissibilityConfig admissibility,
                        ScoreConditioningConfig score_conditioning,
                        HConditioningConfig h_conditioning) {
+  for (const auto op : pt.op)
+    if (op == parse::Op::AuxiliaryParam)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   if (samp.S.empty()) return num_error("non-iterative CFA: empty sample stats");
   return map_multi(pt, rep, ev, samp, which, composite, admissibility,
                    score_conditioning, h_conditioning);
@@ -4011,6 +4059,10 @@ fit_noniterative_cfa(const spec::LatentStructure& pt, const model::MatrixRep& re
                      AdmissibilityConfig admissibility,
                      ScoreConditioningConfig score_conditioning,
                      HConditioningConfig h_conditioning) {
+  for (const auto op : pt.op)
+    if (op == parse::Op::AuxiliaryParam)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value())
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
@@ -4057,6 +4109,10 @@ fit_noniterative_cfa_metric(const spec::LatentStructure& pt, const model::Matrix
                             AdmissibilityConfig admissibility,
                             ScoreConditioningConfig score_conditioning,
                             HConditioningConfig h_conditioning) {
+  for (const auto op : pt.op)
+    if (op == parse::Op::AuxiliaryParam)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "non-iterative metric CFA: pure-CFA models only"});
@@ -4125,6 +4181,10 @@ fit_noniterative_cfa_restricted(const spec::LatentStructure& pt,
                                 AdmissibilityConfig admissibility,
                                 ScoreConditioningConfig score_conditioning,
                                 HConditioningConfig h_conditioning) {
+  for (const auto op : pt.op)
+    if (op == parse::Op::AuxiliaryParam)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "non-iterative CFA: auxiliary NEW coordinates are not supported"});
   if (rep.form != model::RepForm::PureCFA)
     return std::unexpected(FitError{FitError::Kind::NumericIssue,
         "restricted Guttman CFA: pure-CFA models only"});

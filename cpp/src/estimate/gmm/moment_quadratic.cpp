@@ -653,7 +653,7 @@ moment_quadratic_hessian(const model::ModelEvaluator& ev,
         std::string(who) + ": parameter-location count mismatch"));
   }
   for (const auto& l : locs) {
-    if (l.row < 0 || l.col < 0) {
+    if (l.block >= 0 && (l.row < 0 || l.col < 0)) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           std::string(who) + ": a free parameter is not a model-matrix cell"));
     }

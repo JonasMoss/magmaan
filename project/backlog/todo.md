@@ -1298,7 +1298,9 @@ carry the label `mplus`.
   CN01 boundary with the PSD/barrier remedy; ordinal nonlinear equalities are
   TASK-54.2. **Check:** 14 continuous and four categorical frozen independent
   Demo/lavaan models, live lab fits and serialization, active ML/LS/FIML
-  restriction checks. Corpus 31→50 accepted, 25→44 matched, six unsupported
+  restriction checks. Auxiliary-coordinate regressions cover ML/GLS/ULS/FIML,
+  PSD/barrier, linear DWLS, covariance/standardization/policy and typed
+  noniterative refusals; full C++ and both R suites pass. Corpus 31→50 accepted, 25→44 matched, six unsupported
   fit routes; sweep reader 456→658 and MODEL 359→614, all classified. TASK-54.
 - [x] **M — increment 5: data files.** Data plan in C++ (including FORMAT) and
   `magmaanlab::mplus_data()`, FILE/summary groups and summary mean-structure

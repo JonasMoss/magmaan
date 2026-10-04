@@ -34,7 +34,7 @@ FreeCells free_cells(const std::vector<model::ParamLocation>& locations,
                 BoolMatrix::Constant(m, m, false),
                 BoolMatrix::Constant(p, m, false)};
   for (const auto& loc : locations) {
-    if (loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != block) continue;
+    if (loc.block < 0 || loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != block) continue;
     switch (loc.mat) {
       case MatId::Psi:
         out.psi(loc.row, loc.col) = out.psi(loc.col, loc.row) = true;
@@ -495,7 +495,7 @@ multiinfo_penalty_hessian(const MultiInfoPenaltyLayout& layout,
     std::vector<RamCell> cells;
     for (Eigen::Index k = 0; k < q; ++k) {
       const auto& loc = layout.locations[static_cast<std::size_t>(k)];
-      if (loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != b) continue;
+      if (loc.block < 0 || loc.row < 0 || loc.col < 0 || static_cast<std::size_t>(loc.block) != b) continue;
       RamCell cell;
       switch (loc.mat) {
         case MatId::Psi: cell = {true, loc.row, loc.col}; break;
@@ -606,7 +606,7 @@ multiinfo_penalty(const MultiInfoPenaltyLayout& layout,
   out.gradient = Eigen::VectorXd::Zero(theta.size());
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
     const auto& loc = layout.locations[static_cast<std::size_t>(k)];
-    if (loc.row < 0 || loc.col < 0) continue;  // Stage-1/LS threshold coordinate
+    if (loc.block < 0 || loc.row < 0 || loc.col < 0) continue;  // Stage-1/LS threshold coordinate
     const std::size_t b = static_cast<std::size_t>(loc.block);
     const Eigen::Index m = layout.blocks[b].m;
     const BlockGradient& g = grads[b];

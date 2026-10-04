@@ -93,6 +93,10 @@ classify(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
         FitError::Kind::NumericIssue,
         "SNLLS compatibility: constraint: " + con_or.error().detail));
   }
+  for (const auto op : pt.op)
+    if (op == parse::Op::AuxiliaryParam)
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "SNLLS compatibility: auxiliary NEW coordinates are not supported"));
   EqConstraints con = std::move(*con_or);
   const auto locs = ev.param_locations();
   if (static_cast<std::int32_t>(locs.size()) != pt.n_free()) {

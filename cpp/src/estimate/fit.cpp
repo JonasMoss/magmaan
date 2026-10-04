@@ -2623,7 +2623,7 @@ multiinfo_start(const optim::ScalarProblem& prob,
   Eigen::VectorXd floored = x0;
   for (Eigen::Index k = 0; k < x0.size(); ++k) {
     const auto& loc = layout.locations[static_cast<std::size_t>(k)];
-    if (loc.row != loc.col || floored(k) > 0.0) continue;
+    if (loc.block < 0 || loc.row < 0 || loc.row != loc.col || floored(k) > 0.0) continue;
     if (loc.mat == model::MatId::Theta) {
       const auto b = static_cast<std::size_t>(loc.block);
       const double s = b < sample_cov.size() ? sample_cov[b](loc.row, loc.row) : 1.0;
@@ -4771,6 +4771,11 @@ fisher_snlls_split(const model::ModelEvaluator& ev,
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         "fit_ml_fisher_snlls: equality-constraint basis has wrong row count"));
   }
+
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher_snlls: auxiliary NEW coordinates are not supported"));
 
   FisherSnllsSplit split;
   constexpr double tol = 1e-10;

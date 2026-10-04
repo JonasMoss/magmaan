@@ -478,6 +478,9 @@ build_grouped_derivative(const spec::LatentStructure& pt,
   }
 
   out.locs = ev->param_locations();
+  for (const auto& loc : out.locs)
+    if (loc.block < 0)
+      return perr("non-iterative inference: auxiliary NEW coordinates are not supported");
   out.block_of_param.assign(static_cast<std::size_t>(q), -1);
   for (std::size_t k = 0; k < out.locs.size(); ++k) {
     const auto b = static_cast<std::size_t>(out.locs[k].block);
@@ -513,6 +516,7 @@ block_j_aug(const GroupedDerivative& d, const data::SampleStats& samp,
   if (!d.has_means) return Jaug;
   for (std::size_t k = 0; k < d.locs.size(); ++k) {
     const auto& loc = d.locs[k];
+    if (loc.block < 0) continue;
     if (loc.mat == model::MatId::Nu && static_cast<std::size_t>(loc.block) == b) {
       if (loc.row < 0 || loc.row >= p)
         return perr("grouped SE: intercept row out of range");
@@ -1244,6 +1248,9 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
   // cancel one-for-one in the GOF df (saturated ν_g = m_g), so the covariance-only
   // GOF df is Σ_b (p*_b − q_cov_of_block[b]).
   const std::vector<model::ParamLocation> locs = ev->param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return perr("non-iterative inference: auxiliary NEW coordinates are not supported");
   GroupedNonIterativeInference out;
   out.block_of_param.assign(static_cast<std::size_t>(q), -1);
   std::vector<int> q_of_block(nblk, 0), q_cov_of_block(nblk, 0);
@@ -1317,6 +1324,7 @@ noniterative_inference_grouped(const spec::LatentStructure& pt, const model::Mat
       Jaug.rightCols(ps) = J_b;                                 // vech columns
       for (std::size_t k = 0; k < locs.size(); ++k) {
         const auto& loc = locs[k];
+        if (loc.block < 0) continue;
         if (loc.mat == model::MatId::Nu &&
             static_cast<std::size_t>(loc.block) == b) {
           if (loc.row < 0 || loc.row >= p_b)
@@ -1567,6 +1575,9 @@ noniterative_inference_grouped_restricted(
     return perr("restricted grouped inference: Delta dimension mismatch");
 
   const std::vector<model::ParamLocation> locs = ev->param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return perr("non-iterative inference: auxiliary NEW coordinates are not supported");
   GroupedNonIterativeInference out;
   out.block_of_param.assign(static_cast<std::size_t>(q), -1);
   for (std::size_t k = 0; k < locs.size(); ++k) {
@@ -1631,6 +1642,7 @@ noniterative_inference_grouped_restricted(
       Jaug.rightCols(ps) = J_blocks[b];
       for (std::size_t k = 0; k < locs.size(); ++k) {
         const auto& loc = locs[k];
+        if (loc.block < 0) continue;
         if (loc.mat == model::MatId::Nu &&
             static_cast<std::size_t>(loc.block) == b) {
           if (loc.row < 0 || loc.row >= p_b)
@@ -1962,6 +1974,9 @@ noniterative_scalar_invariance(const spec::LatentStructure& pt,
   const Eigen::Index G1 = static_cast<Eigen::Index>(gs.size());
 
   const std::vector<model::ParamLocation> locs = ev->param_locations();
+  for (const auto& loc : locs)
+    if (loc.block < 0)
+      return perr("non-iterative inference: auxiliary NEW coordinates are not supported");
   ScalarInvarianceFit out;
   out.ref_group = ref_group;
   out.groups = gs;
@@ -1989,6 +2004,7 @@ noniterative_scalar_invariance(const spec::LatentStructure& pt,
     Eigen::MatrixXd Ag = Eigen::MatrixXd::Zero(m, q);   // ∂α_g/∂θ
     for (std::size_t k = 0; k < locs.size(); ++k) {
       const auto& loc = locs[k];
+      if (loc.block < 0) continue;
       const auto kk = static_cast<Eigen::Index>(k);
       const auto lb = static_cast<std::size_t>(loc.block);
       if (loc.mat == model::MatId::Nu && lb == b) {

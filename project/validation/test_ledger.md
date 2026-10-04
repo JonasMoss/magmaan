@@ -1021,3 +1021,12 @@ Corpus: 50/68 accepted, 44 matched, six explicit unsupported fits, zero
 failures and five verified categorical convention differences. The input
 sweep accepts 658 reader / 614 MODEL inputs from 2,440 files, all rejections
 classified. Logs: `~/.cache/magmaan-logs/task-54-*.log`.
+
+Auxiliary NEW route regressions in `test_mplus_auxiliary_routes.R` compare
+linear and nonlinear auxiliary-coordinate fits with equivalent models without
+NEW across ML, GLS, ULS, FIML, PSD and barrier, plus linear ordinal DWLS.
+They check covariance and standardized estimates/SE inputs, policy calls,
+existing typed nonlinear robust-inference refusals, and typed noniterative CFA
+refusals. The C++ multi-information penalty test independently checks zero
+auxiliary gradient and Hessian rows, unchanged penalty values after changing
+the auxiliary coordinate, and zero continuous moment curvature.
