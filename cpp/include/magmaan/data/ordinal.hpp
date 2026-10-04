@@ -85,6 +85,11 @@ struct MixedOrdinalStats {
   // (1/n_b)·Σ_i g_i g_iᵀ = NACOV[b]. Empty when not computed.
   std::vector<Eigen::MatrixXd> moment_influence;
 
+  // Optional exact empirical sampling rows, distinct from the OPG rows
+  // defining lavaan NACOV above. Mixed IJ computes these from complete raw
+  // data when absent; adapters may provide them explicitly.
+  std::vector<Eigen::MatrixXd> sampling_moment_influence;
+
   // Optional per-case influence rows for the estimated first-stage Gamma used
   // by DWLS/WLS weights. `gamma_diag_influence[b]` is n_b × m_b for
   // diag(Gamma_hat); `gamma_full_influence[b]` is n_b × (m_b*m_b) in
@@ -441,6 +446,20 @@ mixed_observed_gamma_jacobian_fd(
     const Eigen::VectorXd& mean,
     const Eigen::MatrixXd& R,
     double h_rel = 1e-4);
+
+// Empirical first-stage sampling influence in mixed moment coordinates.
+// Uses the Jacobian of the marginal and pairwise score equations, including
+// their threshold, mean and variance coupling; leaves lavaan NACOV unchanged.
+// Complete observations only. Singular Jacobians return NumericIssue.
+post_expected<Eigen::MatrixXd>
+mixed_moment_sampling_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-5);
 
 // Per-case DATA-DIRECT influence of the mixed NACOV diagonal at fixed mixed
 // kappa. Pair with `mixed_gamma_diag_jacobian_fd` and

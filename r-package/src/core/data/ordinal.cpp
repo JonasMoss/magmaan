@@ -3666,7 +3666,8 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     const Eigen::MatrixXd& R,
     double h_rel,
     bool diagonal_only,
-    bool observed) {
+    bool observed,
+    bool sampling = false) {
   auto base_or = observed
       ? mixed_observed_gamma_assembly_at_kappa(
             X, ordered, levels, thresholds, mean, R, false)
@@ -3695,7 +3696,7 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     for (Eigen::Index i = j + 1; i < p; ++i) pairs.push_back({i, j});
 
   Eigen::MatrixXd D(
-      diagonal_only ? mdim : static_cast<Eigen::Index>(mdim * mdim), mdim);
+      sampling || diagonal_only ? mdim : static_cast<Eigen::Index>(mdim * mdim), mdim);
   for (Eigen::Index l = 0; l < mdim; ++l) {
     Eigen::VectorXd th_p = thresholds, th_m = thresholds;
     Eigen::VectorXd mean_p = mean, mean_m = mean;
@@ -3774,7 +3775,10 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
         : mixed_gamma_assembly_at_kappa(
               X, ordered, levels, th_m, mean_m, R_m, false);
     if (!gm_or.has_value()) return std::unexpected(gm_or.error());
-    if (diagonal_only) {
+    if (sampling) {
+      D.col(l) = (gp_or->scores.colwise().mean() -
+                  gm_or->scores.colwise().mean()).transpose() / (2.0 * h);
+    } else if (diagonal_only) {
       D.col(l) = (gp_or->gamma.diagonal() - gm_or->gamma.diagonal()) /
                  (2.0 * h);
     } else {
@@ -3783,10 +3787,40 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
       D.col(l) = vec;
     }
   }
+  if (sampling) {
+    // Differentiate the empirical estimating equations, rather than using
+    // score-cross-product identities valid only at the working distribution.
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(D);
+    if (!lu.isInvertible()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed sampling influence: singular empirical score Jacobian"));
+    }
+    const Eigen::MatrixXd centered =
+        base_or->scores.rowwise() - base_or->scores.colwise().mean();
+    Eigen::MatrixXd influence = -lu.solve(centered.transpose()).transpose();
+    if (!influence.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed sampling influence: non-finite empirical influence"));
+    }
+    return influence;
+  }
   return D;
 }
 
 }  // namespace
+
+post_expected<Eigen::MatrixXd>
+mixed_moment_sampling_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(
+      X, ordered, levels, thresholds, mean, R, h_rel, true, false, true);
+}
 
 post_expected<Eigen::MatrixXd>
 mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,

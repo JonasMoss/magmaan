@@ -214,7 +214,7 @@ convergence rules remain fitting choices. Reported bundles target lavaan 0.7.2.
 | All-ordinal DWLS/ULS/WLS | `robust_ordinal`; `ordinal_golden_test.cpp` gates component SEs/tests. Ordinary composer adds lavaan reporting normalization and bundled method selection | `lr_test_satorra2000_ordinal` supports exact/delta and returns scaled-shifted results; lab `robust_nested_lrt()` already dispatches to it. Existing grouped DWLS/theta golden comparisons gate the delta mean-scaled result with lavaan normalization. Default WLSMV/ULSMV scaled-shifted reporting, its normalization and whole-bundle gates remain to do |
 | Continuous GLS/WLS/ULS | `robust_continuous_ls` with explicit weight/Gamma; `ls_golden_test.cpp` and weighted-inference tests. The ULS/DWLS Browne-residual NT reporting recipe is not composed here | Continuous weighted Satorra-2000 primitives exist; no checked ordinary lavaan-default bundle |
 | ML2S | `two_stage_em_ml_inference` and weighted Stage-2 inference exist | Restriction-map and scalar SB2001/2010 engines and lab dispatch exist; scalar methods are NT-only. Naive unstructured-information compatibility and a checked default two-stage reporting bundle remain to do |
-| Mixed ordinal | `robust_mixed_ordinal` and mixed component gates exist; `robust_mixed_ordinal_ij` exact empirical case-weight law remains unvalidated: `mixed_ij_test.cpp` finds first-stage moment/Gamma derivative discrepancies; see [mixed limitations](../architecture/capabilities/ordinal_and_mixed.md) | Mixed Satorra-2000 primitives exist; ordinary compatibility remains unsupported |
+| Mixed ordinal | `robust_mixed_ordinal` and mixed component gates exist; complete DWLS `robust_mixed_ordinal_ij` empirical sampling and weight channels pass case-weight, exact-fit and stratified jackknife gates in `mixed_ij_test.cpp`; other routes retain their existing contracts; see [mixed limitations](../architecture/capabilities/ordinal_and_mixed.md) | Mixed Satorra-2000 primitives exist; ordinary compatibility remains unsupported |
 
 No policy covariance is described merely as "lavaan with the weight correction
 turned on": policy and compatibility can also differ in bread, meat, sensitivity
@@ -309,12 +309,19 @@ names); a cell lists its C++ gate first and its R gate second.
 - **R-ORD-MATRIX**: `r-package/tests/testthat/test_weight_recipe_inference.R`, `ordinal recipe matrix gates releases and estimated-weight refusals` (all six recipes, both MI and releases; association-ML refusals).
 - **R-MIX-MATRIX**: same file, `mixed ordinal MI matrix gates fixed weights and explicit refusals` (DWLS/WLS MI and releases; R ULS fitting refusal).
 
-Mixed estimated-weight covariance validation does not follow from the fixed
-MI gates. TASK-67's independent replicated case-weight diagnostic fails for
-both the supplied first-stage moment rows and Gamma rows; the score-cross-product
-sensitivity convention requires resolution before composing estimated-weight
-MI/release or ordinary mixed policy. Pure endpoint fits are rejected by the
-mixed builder with `NumericIssue`, not exposed as reductions.
+Complete mixed DWLS estimated-weight IJ is independently gated by
+`mixed_ij_test.cpp`: empirical-Jacobian sampling rows and fitting-weight rows
+agree with replicated case-weight derivatives under misspecification; stratified
+single/two-group delta/theta delete-one diagonal errors shrink from N = 600 to
+1200 and stay below 2.5% at N = 1200, beating the fixed-weight OPG sandwich.
+The saturated mixed gate confirms vanishing weight influence at exact fit.
+Lavaan NACOV and fitting weights remain unchanged. The separate empirical
+sampling channel is scoped to complete ordinary mixed DWLS IJ, not the ULS/WLS,
+missing-data, robust-builder or RBM routes. Pure endpoint fits are rejected with
+`NumericIssue`; continuous marginal rows have independent analytic controls,
+but continuous empirical-Gamma fitting weights differ from mixed OPG NACOV.
+These covariance gates do not compose ordinary mixed policy or estimated-weight
+MI/release: nested law and calibration remain open.
 
 ### Cells
 

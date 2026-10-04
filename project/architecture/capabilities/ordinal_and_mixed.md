@@ -687,29 +687,36 @@
   0005 has independent frozen-moment df=1 Schur/robust-variance reconstruction
   and explicit (N-1)/N oracle score transport; estimated mixed weights remain
   unsupported (see the MI inventory).
-- Mixed DWLS estimated-weight IJ is not yet validated as the exact empirical
-  case-weight derivative. The diagnostic tests in `mixed_ij_test.cpp` compare
-  delta/theta single-group case perturbations implemented by integer
-  replication with the supplied moment and Gamma influence rows. At N = 150,
-  moment-row relative errors are 0.193–0.265 and Gamma-row errors are
-  0.309–0.376; reducing the weight step from 0.01 to 0.001 leaves those
-  first-stage errors unchanged. The finite differences of continuous marginal
-  means/ML variances agree with their analytic empirical derivatives at 1e-6.
-  The mixed first-stage sensitivity uses per-variable and pair score
-  cross-products, rather than the empirical score Jacobian of the fitted
-  moments. This preserves the existing lavaan Gamma convention but does not
-  establish an exact finite-sample IJ. The diagnostic checks remain failing;
-  diagonal jackknife relative errors at N = 600 → 1200 per group shrink from
-  0.0814 → 0.0420 (delta, one group), 0.0666 → 0.0374 (delta, two),
-  0.0990 → 0.00464 (theta, one) and 0.0910 → 0.00508 (theta, two).
-  IJ beats the observed fixed-weight comparator on each slice, but the
-  all-ordinal 0.04 diagonal tolerance does not hold across the mixed N = 600
-  slices. These results establish neither an O(1/N) bound nor an exact
-  empirical derivative. A sampling-law decision and independent validation
-  are required before
-  policy, nested-law or estimated-weight MI/release composition. The mixed
-  builder rejects pure ordinal/continuous endpoints with `NumericIssue`, so
-  direct endpoint-fit reductions are unavailable.
+- Complete mixed DWLS estimated-weight IJ uses a separate empirical sampling
+  channel: `data::mixed_moment_sampling_influence` differentiates the marginal
+  and pairwise score equations in threshold/negative-mean/variance/association
+  coordinates and solves their empirical Jacobian. The pairwise Hessian and
+  nuisance derivatives include threshold, continuous mean and variance coupling.
+  `MixedOrdinalStats::moment_influence`, NACOV and fitting weights retain the
+  lavaan OPG convention; `sampling_moment_influence` may supply empirical rows
+  explicitly. Otherwise `robust_mixed_ordinal_ij` reconstructs them from complete
+  raw data. The fitting-weight influence combines the unchanged NACOV direct
+  channel with its moment Jacobian evaluated along the empirical sampling rows.
+  `mixed_ij_test.cpp` gates independent replicated case weights under
+  misspecification (parameter rows within 1e-5 up to covariance-unobservable
+  sign; moment/Gamma row errors below 7e-8). Refits are Newton-polished to remove
+  optimizer stopping noise, with an explicit objective-gradient check. A
+  saturated delta/theta mixed model gates vanishing weight influence.
+  Stratified delete-one diagonal errors at N = 600 → 1200 per group are
+  0.491% → 0.282% (delta, one group), 0.510% → 0.275% (delta, two),
+  4.169% → 1.920% (theta, one) and 4.147% → 2.027% (theta, two).
+  Every slice beats the observed fixed-weight OPG sandwich; the N = 1200 gate
+  is 2.5%, with shrinkage checked separately, not a universal O(1/N) claim.
+  Pure ordinal/continuous endpoints remain rejected by the mixed builder with
+  `NumericIssue`, so direct endpoint-fit reductions are unavailable. Continuous
+  marginal sampling rows equal the analytic mean/ML-variance derivatives.
+  Continuous DWLS uses empirical-moment Gamma weights, while mixed fitting
+  retains the marginal/pair-score OPG NACOV, so their estimated-weight channels
+  do not share a fitting-weight convention. ULS/WLS, missing-data and robust
+  mixed builders, RBM and all-ordinal routes retain their existing influence
+  contracts; this gate does not validate those routes as exact empirical IJ.
+  Ordinary mixed policy, nested-law and estimated-weight MI/release composition
+  and calibration remain open; no ordinary exposure is added.
 - Mixed continuous/ordinal DWLS/WLS fit-measures are exposed through the same
   `api::fit_measures()` surface as all-ordinal fits. The mixed independence
   baseline profiles the marginal threshold/mean/variance block under the fitted

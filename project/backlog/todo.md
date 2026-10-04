@@ -1161,11 +1161,14 @@ release, including dependencies otherwise shared with the primary programme.
   combinations. **Check:** continuous/all-ordinal reductions where defined,
   independent mixed influence/weight perturbations, rank/candidate consistency,
   grouped and misspecification calibration, and core/R agreement before exposure.
-  TASK-67's independent case-weight diagnosis finds a first-stage discrepancy:
-  mixed moment/Gamma rows use score-cross-product sensitivity and do not equal
-  empirical derivatives at finite N. Preserve the lavaan NACOV fitting
-  convention while deciding the sampling-influence contract; the diagnostic
-  gates are failing. Policy composition, nested law and calibration remain open.
+  TASK-67 gates complete mixed DWLS covariance and weight influence using a
+  separate empirical score-Jacobian sampling channel while preserving lavaan
+  NACOV fitting weights. Independent case weights, exact-fit weight-channel
+  cancellation and stratified delta/theta jackknife shrinkage pass (2.5%
+  diagonal tolerance at N = 1200 per group). Pure endpoint routes remain
+  typed unavailable, and continuous fitting-Gamma conventions differ.
+  Policy composition, nested law, estimated-weight MI/release and calibration
+  remain open; other mixed influence routes retain their existing contracts.
 
 ### Association-ML inference
 

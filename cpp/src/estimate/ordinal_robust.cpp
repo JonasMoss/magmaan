@@ -1010,7 +1010,24 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index mb = stats.moments[b].size();
-    const Eigen::MatrixXd& G = stats.moment_influence[b];
+    Eigen::MatrixXd sampling;
+    if (weights == OrdinalWeightKind::DWLS &&
+        stats.sampling_moment_influence.size() == stats.R.size()) {
+      sampling = stats.sampling_moment_influence[b];
+    } else if (weights == OrdinalWeightKind::DWLS &&
+               stats.raw_data.size() == stats.R.size() &&
+               stats.raw_data[b].allFinite()) {
+      auto sampling_or = data::mixed_moment_sampling_influence(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!sampling_or.has_value()) return std::unexpected(sampling_or.error());
+      sampling = std::move(*sampling_or);
+    } else {
+      // Existing observed-data and robust-builder channels retain their
+      // declared influence contract; complete ordinary ML uses empirical rows.
+      sampling = stats.moment_influence[b];
+    }
+    const Eigen::MatrixXd& G = sampling;
     if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "robust_mixed_ordinal_ij: moment_influence shape mismatch in block " +
