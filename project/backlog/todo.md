@@ -901,6 +901,13 @@ ordinary-user default.
 
 ### Validation and maintenance
 
+- [x] **S — textbook WLSMV DELTA parity regression (TASK-63).** The
+  implied-correlation gate reads live prepared `~*~` response scales and
+  applies `delta_i * sigma_ij * delta_j`; THETA retains diagonal
+  standardization. The old free-residual mask belonged to the retired DELTA
+  translation. Fitting semantics, fixtures, tolerances and known gaps are
+  unchanged; the 19 supported textbook cases remain the regression gate.
+
 - [x] **M — split FIML implementation and ordinal unit tests (TASK-42).**
   FIML preparation, curvature, Gamma influence, moments, robust reporting,
   measures, Stage 1/2, two-stage inference, profiles, fitting and frontier

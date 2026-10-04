@@ -18,6 +18,13 @@ Validation has three deliberately separate surfaces:
   The same parity executable also includes the Mplus SEM corpus golden,
   generated from local `external/textbook-corpus/raw/mplus_sem` into
   `cpp/tests/fixtures/mplus_sem/`.
+  The textbook WLSMV gate covers 19 supported all-ordinal cases, including
+  Mplus categorical growth examples 6.4 and 6.15 with released DELTA scales.
+  It compares DELTA associations using live prepared `~*~` multipliers
+  (`delta_i * sigma_ij * delta_j`), and THETA correlations using the implied
+  diagonal. The additive evaluator's DELTA diagonal is not the derived
+  response variance and is excluded. Tolerances and the two known gaps stay
+  unchanged.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
   timing, not CI correctness. Active advisory cases include complete-data ML,
   controlled-missingness FIML, and continuous ULS/GLS smoke paths. The harness

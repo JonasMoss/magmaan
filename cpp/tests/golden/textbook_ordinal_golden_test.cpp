@@ -142,13 +142,8 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     auto fail = [&](const std::string& why) { failures.push_back(id + ": " + why); };
 
     auto h = model_from_json(j);
-    // fit_ordinal_bounded runs its own (single) prepare_ordinal_partable
-    // internally, so it must always be handed the pristine, never-prepped
-    // structure -- handing it one this loop already prepped would prep it a
-    // second time and undo a translation that isn't idempotent (a `~~` row
-    // freed by translating an explicitly-freed `~*~` row looks, on a second
-    // pass, identical to a `~~` row that was never released, since the
-    // sibling `~*~` is fixed either way).
+    // Keep the oracle's original model for the fitter's own preparation.
+    // The separate prepared copy below aligns its estimates and evaluator.
     const spec::LatentStructure pristine = h.structure;
     auto& pt = h.structure;
     auto stats = ordinal_from_json(j);
@@ -266,30 +261,26 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     REQUIRE(evaluator.has_value());
     auto implied = evaluator->sigma(fit->theta);
     REQUIRE(implied.has_value());
-    // Per-block, per-indicator "released" mask: a `~~` row prep left free
-    // (the delta-release translation above, or every indicator under theta)
-    // is compared standardized by its own implied variance -- see the
-    // block_released/theta_param branches of ordinal_residuals -- a row
-    // fixed at 1 (the ordinal default) is compared via raw off-diagonal
-    // entries, with the diagonal itself not meaningful under delta (nothing
-    // in the objective touches it) and excluded from the comparison.
-    std::vector<std::vector<char>> released(j["implied"].size());
-    for (auto& row : released) row.assign(static_cast<std::size_t>(p), 0);
-    if (param == estimate::OrdinalParameterization::Theta) {
-      for (auto& row : released) std::fill(row.begin(), row.end(), 1);
-    } else {
+    // ModelEvaluator returns the additive latent-response covariance. THETA
+    // correlations use its diagonal; DELTA instead uses the live response
+    // scales from the prepared partable, including fixed non-unit scales.
+    // Its residual diagonal is derived outside this evaluator, so normalizing
+    // that diagonal would compare different moments from the fitted objective.
+    std::vector<Eigen::VectorXd> delta(j["implied"].size(),
+                                      Eigen::VectorXd::Ones(p));
+    if (param == estimate::OrdinalParameterization::Delta) {
       for (std::size_t r = 0; r < pt.size(); ++r) {
-        if (pt.op[r] != parse::Op::Covariance || pt.free[r] <= 0 ||
-            pt.group[r] <= 0 || pt.lhs_var[r] < 0 ||
-            pt.rhs_var[r] != pt.lhs_var[r]) {
+        if (pt.op[r] != parse::Op::ResponseScale || pt.group[r] <= 0 ||
+            pt.lhs_var[r] < 0 || pt.rhs_var[r] != pt.lhs_var[r]) {
           continue;
         }
         const std::size_t bb = static_cast<std::size_t>(pt.group[r] - 1);
-        if (bb >= released.size()) continue;
+        if (bb >= delta.size()) continue;
         const std::int32_t ov =
             pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[r])];
-        if (ov >= 0 && static_cast<std::size_t>(ov) < released[bb].size())
-          released[bb][static_cast<std::size_t>(ov)] = 1;
+        if (ov >= 0 && ov < p)
+          delta[bb](ov) = pt.free[r] > 0 ? fit->theta(pt.free[r] - 1)
+                                       : pt.fixed_value[r];
       }
     }
     double d_cor = 0.0;
@@ -297,13 +288,9 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
       Eigen::MatrixXd expected = matrix_from_json(j["implied"][b]["cov"]);
       Eigen::MatrixXd got = implied->sigma[b];
       Eigen::VectorXd se = expected.diagonal().cwiseSqrt().cwiseInverse();
-      Eigen::VectorXd sg = Eigen::VectorXd::Ones(got.rows());
-      for (Eigen::Index k = 0;
-           k < got.rows() && static_cast<std::size_t>(k) < released[b].size();
-           ++k) {
-        if (released[b][static_cast<std::size_t>(k)])
-          sg(k) = 1.0 / std::sqrt(got(k, k));
-      }
+      Eigen::VectorXd sg = delta[b];
+      if (param == estimate::OrdinalParameterization::Theta)
+        sg = got.diagonal().cwiseSqrt().cwiseInverse();
       got = sg.asDiagonal() * got * sg.asDiagonal();
       got.diagonal().setOnes();
       expected = se.asDiagonal() * expected * se.asDiagonal();
