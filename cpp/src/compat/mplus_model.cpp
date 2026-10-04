@@ -79,17 +79,21 @@ fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
   const auto fail=[](std::string detail)->fit_expected<OrdinalModel> {
     return std::unexpected(FitError{FitError::Kind::NumericIssue,std::move(detail)});
   };
-  if(category_counts.empty()) return fail("[CT01] missing category schema");
+  if(category_counts.empty()) return fail("1:1 [CT01] found missing category schema; Mplus obtains category counts from individual data; magmaan requires explicit counts at ordinal preparation; supply category counts in CATEGORICAL order instead");
   for(const auto& counts:category_counts) if(counts!=category_counts.front())
-    return fail("[CT07] a group lacks a categorical outcome category; Mplus requires every category in every group; supply matching category schemas instead");
+    return fail("1:1 [CT07] found unequal group category schemas; Mplus requires every category in every group; magmaan needs matching response-moment dimensions; supply matching category schemas instead");
   auto parsed=parse::MplusParser::parse_ordinal(source,category_counts.front());
   if(!parsed) return fail(parsed.error().detail);
   if(category_counts.size()!=std::max<std::size_t>(1,parsed->input.groups.size()))
-    return fail("[CT07] categorical group schema differs from MODEL groups");
+    return fail("1:1 [CT07] found category-schema group count different from MODEL groups; Mplus builds moments per declared group; magmaan requires one matching schema per group; supply category counts for every MODEL group instead");
   OrdinalModel out;
   auto structure=spec::build(parsed->flat,build_options(parsed->input),&out.starts,&out.names);
   if(!structure) return fail(structure.error().detail);
-  if(!structure->nonlinear_eq_rows.empty()) return fail("[CN01] ordinal nonlinear equality constraints require TASK-54.2; use a supported continuous equality fit until that core path is implemented");
+  if(!structure->nonlinear_eq_rows.empty()) {
+    const auto at = parsed->input.constraint_bodies.empty() ? parsed->input.model_body : parsed->input.constraint_bodies.front();
+    const auto diagnostic = std::to_string(at.line) + ":" + std::to_string(at.col) + " [CN01] found ordinal nonlinear MODEL CONSTRAINT equality; Mplus enforces this equality in categorical estimation; magmaan's ordinal nonlinear equality backend requires TASK-54.2; instead, use a continuous equality model or retain the categorical equality analysis in Mplus";
+    return fail(diagnostic);
+  }
   out.structure=std::move(*structure);
   apply_provenance(*parsed,out.structure,out.names);
   auto rep=model::build_matrix_rep(out.structure,&out.names);
@@ -100,7 +104,7 @@ fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
     stats.threshold_ov.emplace_back();stats.threshold_level.emplace_back();
     for(std::size_t j=0;j<rep->ov_names[b].size();++j) {
       auto name=std::find(parsed->input.categorical.begin(),parsed->input.categorical.end(),rep->ov_names[b][j]);
-      if(name==parsed->input.categorical.end()) return fail("[CT01] mixed categorical fit route unsupported; Mplus uses mixed WLSMV moments; magmaan offers all-ordinal DWLS instead");
+      if(name==parsed->input.categorical.end()) return fail("1:1 [CT01] found mixed categorical fit route; Mplus uses mixed WLSMV moments; magmaan Mplus preparation consumes all-ordinal moments only; supply all-ordinal individual data for DWLS instead");
       const auto count=category_counts[b][static_cast<std::size_t>(name-parsed->input.categorical.begin())];
       for(int k=1;k<count;++k) {stats.threshold_ov.back().push_back(static_cast<std::int32_t>(j));stats.threshold_level.back().push_back(k);}
     }

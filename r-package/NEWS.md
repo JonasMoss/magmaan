@@ -6,6 +6,11 @@
   scale as equality releases, removing an extra factor two from ordinary and
   fixed-weight robust MI. EPC and fitting weights are unchanged; estimated
   mixed-weight inference remains unsupported.
+- Mplus stability closeout replaces generic increment-era rejections with
+  rule-specific Mplus behavior, scope reasons and remedies. A single inventory
+  coverage matrix and expanded `mplus_model()`/`mplus_data()` help document the
+  accepted subset. Optional sanitizer corpus sweeps and seven-family portable,
+  prepared and fresh-process refit gates protect the lab adapter.
 
 - Robust LS modification indices and equality releases now support observed
   sensitivity with estimated-weight influence for continuous ULS/GLS/DWLS/WLS/DLS

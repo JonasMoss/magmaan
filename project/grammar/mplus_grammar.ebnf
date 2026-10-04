@@ -1,16 +1,16 @@
 (* ===========================================================================
-   Mplus input-file grammar, increments 1–3
+   Mplus input-file grammar, implemented increments 1–5
    ---------------------------------------------------------------------------
-   Normative for the implemented continuous parse::Mplus* frontend. mplus.md
+   Normative for the implemented continuous/categorical parse::Mplus* frontend. mplus.md
    owns the target and increments; mplus_source_inventory.md
    owns the evidence, cited here by rule ID in brackets ([LX03]). Source:
    Mplus User's Guide v8 (2017) and the language addenda 8.1 to 9.1.
 
-   Increment 1 reads the whole input file, classifies every command and
-   option [CL01-CL32], and parses single-group MODEL statements for
-   continuous outcomes. Every other construct is delimited and rejected or
-   reported with its source span; nothing is skipped silently. Later
-   increments extend this file before their code.
+   The reader classifies every command and option [CL01-CL32]; lowering
+   implements single/multiple-group continuous/categorical linear SEM,
+   growth, constraints/indirect effects and typed data plans. Out-of-family
+   constructs are rejected or reported with source spans; nothing is skipped
+   silently. Ordinal nonlinear equalities remain TASK-54.2.
 
    Notation as in grammar.ebnf (W3C-style EBNF). Matching of command, option
    and setting names, keywords and variable names is case-insensitive
@@ -32,7 +32,7 @@ block_comment       ::= '!*' (char | NEWLINE)* '*!'
 (* A block comment ends at the first '*!'. It must open at a line start or
    close on its opening line; a block opened after code that closes on a
    later line is rejected, because Mplus 9.1 then also drops the preceding
-   code [LX05]. A line longer than 90 columns is rejected with its span,
+   code [LX05]. Non-TITLE/non-comment content beyond 90 columns is rejected with its span,
    because 9.1 truncates it [LX02]. *)
 
 
@@ -68,7 +68,7 @@ model_qualifier     ::= 'CONSTRAINT' | 'INDIRECT' | 'TEST' | 'PRIORS'
                         ('-' group_label)?
                       | group_label
 group_label         ::= name
-(* A `MODEL label:` section is a group section only when GROUPING declares
+(* A `MODEL label:` section is a group section only when GROUPING or FILE/NGROUPS declares
    that label; otherwise it is rejected, because since 8.9 such sections can
    denote time points of a longitudinal invariance model [CL31]. *)
 command_body        ::= title_body | option_body | model_body | opaque_body
@@ -78,11 +78,10 @@ title_body          ::= free_text
    colon ends it; other colons are text [LX06, probe P-LX3]. *)
 
 opaque_body         ::= free_text
-(* Data transformation commands, DEFINE, MODEL CONSTRAINT/INDIRECT/TEST/
-   PRIORS/POPULATION/COVERAGE/MISSING, MONTECARLO and undeclared `MODEL label:`
-   sections: the frontend delimits the body and rejects or reports the whole
-   command by class, citing the increment that will accept it [CL06,
-   CL16, CL26-CL29]. *)
+(* DEFINE, qualified DATA transformations, MODEL PRIORS/POPULATION/COVERAGE/
+   MISSING and MONTECARLO are delimited and rejected; MODEL TEST and execution
+   commands are reported [CL06, CL16, CL28-CL32]. MODEL CONSTRAINT and
+   INDIRECT use their dedicated productions below. *)
 
 
 (* === Options (DATA, VARIABLE, ANALYSIS, OUTPUT, SAVEDATA, PLOT) ===========
@@ -167,7 +166,7 @@ categorical_value   ::= variable_range+
 parameterization_value ::= 'DELTA' | 'THETA'
 (* CT01–CT04: threshold indices start at one. A range either spans variables
    at one threshold index or thresholds of one variable. DELTA scale equalities
-   and fixed non-unit scales are rejected: nonlinear residual-coordinate restrictions. *)
+   and fixed non-unit scales are retained in response coordinates (TASK-53.1). *)
 
 scale_statement     ::= '{' rhs_item+ '}' line_label? ';'
 (* CT04: DELTA response scales; THETA uses residual variances instead. *)
@@ -193,7 +192,7 @@ section_marker      ::= '%' (token - '%')+ '%'
    5. Honor NOMEANSTRUCTURE only with an explicit INFORMATION = EXPECTED;
       otherwise reject it, since Mplus would ignore it [MS11].
    6. Reject mentions of observed independent variables' moments [MS08]
-      and every construct outside the increment, with its span. *)
+      and every construct outside the accepted family, with its span. *)
 
 (* === Multiple groups (increment 2) ======================================== *)
 grouping_value      ::= name '(' grouping_pair (list_sep grouping_pair)* ')'
@@ -247,14 +246,15 @@ missing_numbers     ::= signed_number ('-' signed_number)?
 (* === Constraints and indirect effects (increment 4) ===================== *)
 constraint_body     ::= (new_statement | equality_statement | do_statement
                         | plot_statement)*
-new_statement       ::= 'NEW' '(' (name_range ('*' signed_number)?)+ ')' ';'
+new_statement       ::= 'NEW' '(' (name_generator ('*' signed_number)?)+ ')' ';'
 equality_statement  ::= mplus_expr ('=' | '<' | '>') mplus_expr ';'
 mplus_expr          ::= expr  (* shared expression grammar; ** maps to ^,
                                  PHI maps to pnorm; names case-insensitive *)
 do_statement        ::= 'DO' '(' integer ',' integer ')' constraint_body
 plot_statement      ::= ('LOOP' | 'PLOT') (token - ';')* ';'
 indirect_statement  ::= name ('IND' name+ | 'VIA' name name) ';'
-(* NEW quantities explicitly defined on the left are derived. Otherwise
+(* NEW ranges require matching numeric suffixes (unlike the letter-suffix
+   NAMES form); expansion is bounded. NEW quantities defined on the left are derived. Otherwise
    NEW supplies auxiliary free coordinates (start 0.5), with no moment cell.
    Equality constraints must identify these coordinates. Inequalities are
    deliberately refused (CN01/project/scope.md). LOOP/PLOT and MODEL TEST

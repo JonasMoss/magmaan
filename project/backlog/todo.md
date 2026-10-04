@@ -1310,9 +1310,15 @@ carry the label `mplus`.
   fixed format, summary data and missing codes against independently written
   data frames; saturated summary ML agrees with Demo and lavaan after
   group-specific N-1 to N divisor conversion.
-- [ ] **S/M — stability closeout.** Robustness sweep over every User's Guide
-  example input under sanitizers, coverage matrix keyed to inventory IDs, lab
-  help listing the accepted subset, test-ledger entries.
+- [x] **S/M — stability closeout.** Standalone ASan/UBSan reader/parser and
+  API-lowering sweeps cover 2,440 original inputs with per-input deadlines:
+  658 reader / 614 parser/API accepted; zero crashes, sanitizer reports, hangs
+  or unclassified rejections. All 33 firing IDs have rule-specific explanations
+  and remedies. One matrix covers 121 primary inventory IDs and settled aliases;
+  lab help matches the accepted subset. Seven model kinds pass partable,
+  fresh/prepared, rebuild/refit and fresh-process serialization gates. Corpus:
+  50/68 accepted, 44 matched, six unsupported fits (also dimension-gated), five
+  convention differences, zero failures. Evidence is in the test ledger. TASK-56.
 - [ ] **M — ordinary integration.** Accept explicitly marked Mplus sources in
   `magmaan_model()` with the ordinary inference policy. First decide how Mplus's
   conditioning on x variables meets the

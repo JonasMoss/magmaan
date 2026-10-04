@@ -1030,3 +1030,109 @@ existing typed nonlinear robust-inference refusals, and typed noniterative CFA
 refusals. The C++ multi-information penalty test independently checks zero
 auxiliary gradient and Hessian rows, unchanged penalty values after changing
 the auxiliary coordinate, and zero continuous moment curvature.
+
+### TASK-56 Mplus stability closeout
+
+The current language boundary is recorded once in the
+[coverage matrix](../grammar/mplus.md#coverage-matrix): 121 primary CL/LX/NM/MS/LB/
+DF/MG/IV/CT/GR/CN/DA IDs, plus settled LX02a and NM01a aliases. Lab help and
+inventory classifications match it. The normative EBNF commentary now describes
+implemented increments 1–5 and DELTA restrictions; parser utilities cite their
+productions. The 66 rejection-class contracts in `detail_mplus_diagnostic.hpp`
+were reviewed together with the reader/MODEL call sites and categorical
+preparation/API/lab boundaries. Each diagnostic identifies the construct and
+source span, describes Mplus behavior, gives the magmaan reason and a specific
+remedy. DEFINE/selection direct users to R, family exclusions cite Not planned,
+and inequalities retain the scope/PSD/barrier explanation. Only the exact
+ordinal nonlinear equality boundary names pending TASK-54.2.
+
+`cpp/tests/tools/check_mplus_sanitizers.py` builds the standalone reader/parser
+against its required parse sources and `mplus_model_sweep.cpp` against the
+ASan/UBSan library target. Neither driver is in CI. The script header records
+commands; every input gets a ten-second subprocess deadline. The 2,440-file
+manifest includes original case inputs, raw files and ZIP members. The existing
+unreadable `ex11.8imp.zip` is reported separately and supplies no extractable
+inputs. Results: reader 658 accepted / 1,782 rejected; MODEL parser and API
+lowering each 614 accepted / 1,826 rejected; **zero crashes, ASan/UBSan reports,
+hangs, unclassified rejections or incomplete parser diagnostics**. Both runs
+apply the existing expansion bounds. ASan memory-access and UBSan checks are
+active; LeakSanitizer is disabled because the ptraced sandbox cannot run it.
+No leak-check claim is made. The initial nonsanitized sweep linked a stale warm
+archive and aborted; rebuilding it restores the same 658/614 counts as the
+independently compiled sanitized reader/parser, with no source crash found.
+
+Every firing rule ID is counted below. Counts are files containing an ID,
+once per file per stage, across **all** aggregated diagnostics; they are not
+mutually exclusive first-rule counts. API counts equal MODEL counts. Example
+inputs are paths in the corpus or extracted manifest; `archive_N/` denotes the
+Nth ZIP in the R sweep's sorted archive list. Full diagnostic/example records
+remain in `~/.cache/magmaan-logs/task-56-sweep-dev/summary.json` and `results.tsv`;
+original third-party inputs remain untracked.
+
+| Rule | Reader files | MODEL/API files | One example input |
+| --- | ---: | ---: | --- |
+| CL02 | 43 | 43 | `cases/muthen_2017/muthen_2017_ch8_ex8_29_2/source/original.inp` |
+| CL04 | 88 | 88 | `raw/mplusbook/ex10.12.inp` |
+| CL06 | 66 | 66 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch11_ex11_4/source/original.inp` |
+| CL10 | 109 | 109 | `raw/little/source/CH12_mplus/LCA/LCA_T2_covid5items_1CLASS_STARTS_00100_SATURATED.inp` |
+| CL13 | 139 | 139 | `cases/muthen_2017/muthen_2017_ch2_ex2_12/source/original.inp` |
+| CL14 | 168 | 168 | `raw/mplusbook/ex5.22.inp` |
+| CL15 | 533 | 533 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch11_ex11_1/source/original.inp` |
+| CL16 | 436 | 436 | `cases/muthen_2017/muthen_2017_ch1_ex1_19_art2/source/original.inp` |
+| CL17 | 881 | 881 | `raw/brown_archive/tab11.4.inp` |
+| CL18 | 329 | 329 | `raw/brown_archive/tab11.2.inp` |
+| CL21 | 2 | 2 | `raw/mplususerguid/ex5.33.inp` |
+| CL22 | 32 | 32 | `raw/little/source/CH12_mplus/LCA/LCA_T2_covid5items_1CLASS_STARTS_00100_SATURATED.inp` |
+| CL23 | 55 | 55 | `raw/mplusbook/ex5.11_Part1.inp` |
+| CL24 | 44 | 44 | `raw/mplususerguid/ex12.10.inp` |
+| CL26 | 5 | 5 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch6_ex6_18/source/original.inp` |
+| CL29 | 628 | 628 | `raw/brown_archive/tab10.2.inp` |
+| CL31 | 108 | 108 | `raw/mplususerguid/ex12.12.inp` |
+| CL32 | 20 | 20 | `raw/brown_archive/tab11.2.inp` |
+| CN01 | 0 | 3 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch5_ex5_20/source/original.inp` |
+| CN02 | 0 | 2 | `archive_45/ex8-3b.inp` |
+| CT05 | 0 | 3 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch3_ex3_12/source/original.inp` |
+| CT07 | 0 | 3 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch5_ex5_22/source/original.inp` |
+| IV04 | 3 | 3 | `cases/brown_2015/brown_2015_tab7_16_invariance_mdd_metric/source/original.inp` |
+| LX01 | 647 | 647 | `raw/brown_archive/tab10.2.inp` |
+| LX02 | 1 | 1 | `raw/mplusbook/ex10.1_part2.inp` |
+| LX03 | 28 | 28 | `raw/geiser_companion/extracted/Chapter 3 (SEM)/1_Simple_Manifest_Linear_Regression/2_simple_regression_with_centering.inp` |
+| MG03 | 11 | 11 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch6_ex6_18/source/original.inp` |
+| MS01 | 0 | 5 | `raw/little/source/CH4_mplus/CH3/CH3.Fig.3.6.1indicatorB.inp` |
+| MS08 | 0 | 7 | `cases/brown_2015/brown_2015_tab8_12_sem_formative_stress/source/original.inp` |
+| MS09 | 0 | 21 | `raw/brown_archive/tab5.9.inp` |
+| MS10 | 57 | 57 | `raw/mplususerguid/ex10.10.inp` |
+| MS11 | 16 | 16 | `archive_45/ex5-3a.inp` |
+| NM03 | 345 | 345 | `cases/mplus_users_guide_v8/mplus_users_guide_v8_ch11_ex11_4/source/original.inp` |
+
+The end-to-end corpus gate remains **50 of 68 accepted, 44 matched, six explicit
+unsupported fits, five independently verified categorical test-convention
+differences and zero failures**. Accepted inputs with output files gate printed
+free-parameter count and df directly (also cross-checking the derived book
+metadata). The six unsupported conditional/mixed categorical routes additionally
+gate both dimensions using independently counted conditional/mixed moments,
+shared label coordinates and data-driven threshold/default-release coordinates;
+they still have no fitting/inference claim. The existing fitted routes gate N,
+convergence, dimensions, chi-square, H0 log-likelihood, printed parameter estimates,
+NEW quantities and indirect effects where conventions agree. Tolerances and
+convention classes are unchanged.
+
+`r-package/tests/testthat/test-mplus-roundtrip.R` gates seven kinds: single group,
+multiple groups, categorical, growth, NEW/constraint, indirect and an input-relative
+data file. Partable fits retain the expression projection for defined reporting
+and compare keyed rows after category completion (row order can differ).
+Original-source rebuilds preserve identical tables, and fresh/prepared/refitted
+estimates agree at 1e-5. A fresh Rscript process reloads portable specs and fits
+via saveRDS/readRDS, rereads the data file, rebuilds and refits each case from both
+spec and fitted-model metadata. All 85 assertions pass. The pending ordinal
+nonlinear equality gate additionally checks its source coordinates and four
+message parts.
+
+Validation: opt build and all 1,525 C++ ctest cases pass; standalone ASan/UBSan
+sweeps pass; rebuilt nonsanitized input sweep and end-to-end corpus gate pass;
+lane-b opt lab installation and full magmaanlab suite pass (6,708 passing
+expectations; two existing
+intentional two-level skips, two existing covariance-admissibility warnings).
+Vendor refresh, tracked-file and dependency-layering checks pass. Logs use
+`~/.cache/magmaan-logs/task-56-*.log`. No ordinary-package code is changed;
+TASK-57 retains that integration work.

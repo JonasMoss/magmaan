@@ -1,7 +1,7 @@
 # Mplus input language: source inventory
 
-Target: the linear single-level SEM subset of an Mplus input file, as planned
-in the [Mplus frontend plan](mplus.md). This inventory records source evidence,
+Target: the linear single-level SEM subset of an Mplus input file, as implemented
+in the [Mplus frontend contract](mplus.md). This inventory records source evidence,
 implementation consequences and the probes that settle open rules. It does not
 implement anything or claim Mplus numerical parity. The normative grammar is
 [mplus_grammar.ebnf](mplus_grammar.ebnf); task state is in the
@@ -63,9 +63,10 @@ says so.
 
 Classes follow the [input boundary](mplus.md#input-boundary): **S** schema
 (imported), **DD** data description (data plan only), **E** execution
-(recognized, reported as not imported), **R** rejected. "Later" marks a rule
-that is rejected until its increment lands; the diagnostic says so. Setting
-abbreviations are the bold stems of the option tables (LX03); settings with no
+(recognized, reported as not imported), **R** rejected. The
+[coverage matrix](mplus.md#coverage-matrix) records the current accepted,
+reported and rejected subsets for every ID. Only ordinal nonlinear equalities
+remain pending TASK-54.2. Setting abbreviations are the bold stems of the option tables (LX03); settings with no
 bold stem must be written in full.
 
 | ID | Command / option | Class | Evidence and notes |
@@ -80,7 +81,7 @@ bold stem must be written in full.
 | CL08 | VARIABLE: USEVARIABLES | S | 599–600. Default: all NAMES variables. Original variables precede DEFINE variables; the order governs later ranges (NM03). `ALL` as first entry means all NAMES variables. |
 | CL09 | VARIABLE: MISSING | DD | 601–603. |
 | CL10 | VARIABLE: CATEGORICAL (plain list) | S, increment 3 implemented | 604–608. The category-set forms `(*)`, explicit sets and `(gpcm)`, `(3pl)`, `(4pl)` are ML-only and R. |
-| CL11 | VARIABLE: GROUPING | S | 612–613. Implemented explicit integer code = label pairs; count/unlabelled forms await increment 5. |
+| CL11 | VARIABLE: GROUPING | S | 612–613. Implemented explicit integer code = label pairs; count/unlabelled forms are deliberately rejected: recode in R and write explicit integer pairs. |
 | CL12 | VARIABLE: IDVARIABLE; AUXILIARY plain list | E | 613–615. Only saved or plotted. |
 | CL13 | VARIABLE: USEOBSERVATIONS, SUBPOPULATION | R | 599, 626. Case selection (see [trigger entry](../backlog/speculative.md#mplus-define-and-case-selection)). |
 | CL14 | VARIABLE: CENSORED, NOMINAL, COUNT, DSURVIVAL, SURVIVAL, TIMECENSORED, LAGGED, TINTERVAL, TSCORES | R | 603–615, 635–639. Out-of-scope outcome types, survival, time series, random time scores. |
@@ -89,14 +90,14 @@ bold stem must be written in full.
 | CL17 | ANALYSIS: TYPE | S | 651, 657–665; P. GENERAL (explicit or implied) accepted. The legacy settings MISSING, MEANSTRUCTURE and `GENERAL MISSING H1` are accepted by 9.1 as no-ops (P-DF6) and reported. BASIC requests descriptives only and is rejected for lowering. RANDOM, COMPLEX, MIXTURE, TWOLEVEL, THREELEVEL, CROSSCLASSIFIED and EFA are R. |
 | CL18 | ANALYSIS: ESTIMATOR | E + screen | 652, 665–669. Reported. Screens: with CATEGORICAL, ML/MLR/MLF denote a full-information link model by numerical integration (666–667) and BAYES a Bayesian model; both R. MUML implies two-level: R. |
 | CL19 | ANALYSIS: MODEL = NOMEANSTRUCTURE, NOCOVARIANCES | S | 652, 671. Stems NOMEAN, NOCOV. NOMEANSTRUCTURE only with TYPE = GENERAL. |
-| CL20 | ANALYSIS: MODEL = CONFIGURAL, METRIC, SCALAR | S, later (increment 2) | 652, 670–671; see IV rules. Stem CONFIG; METRIC and SCALAR in full. |
+| CL20 | ANALYSIS: MODEL = CONFIGURAL, METRIC, SCALAR | S, implemented | 652, 670–671; see IV rules. Stem CONFIG; METRIC and SCALAR in full. |
 | CL21 | ANALYSIS: MODEL = ALLFREE; ALIGNMENT and its controls | R | 671–674, 699–701. Mixture/Bayes alignment. |
 | CL22 | ANALYSIS: PARAMETERIZATION = DELTA, THETA | S, increment 3 implemented | 652, 674–675. LOGIT, LOGLINEAR, PROBABILITY and RESCOVARIANCES are mixture/ML-categorical settings: R. |
 | CL23 | ANALYSIS: LINK; DISTRIBUTION other than NORMAL; MATRIX = CORRELATION | R | 652, 674, 677, 701. Link models, non-normal distributions, correlation-structure analysis. DISTRIBUTION = NORMAL and MATRIX = COVARIANCE are the defaults and E. |
 | CL24 | ANALYSIS: ROTATION, ROWSTANDARDIZATION, PARALLEL, RSTARTS and other EFA/ESEM options; REPSE, MULTIPLIER; BASEHAZARD | R | 653–655, 678–695. |
 | CL25 | ANALYSIS: NESTED (v8.1 addendum pp. 7–8), INFORMATION, BOOTSTRAP, DIFFTEST, COVERAGE, ADDFREQUENCY, iteration, convergence, start, integration-control, Bayes-engine, PROCESSORS and INTERACTIVE options | E | 654–710. Integration controls also signal a rejected model (CL18). ADDFREQUENCY changes polychoric inputs and is reported with that note. |
 | CL26 | MODEL and `MODEL label:` | S | 713–715, 781; group-specific sections in increment 2. |
-| CL27 | MODEL CONSTRAINT; MODEL INDIRECT (IND, VIA) | S, later (increment 4) | 759–772. Causal IND/MOD effects and data-dependent constraints (VARIABLE CONSTRAINT) are R. |
+| CL27 | MODEL CONSTRAINT; MODEL INDIRECT (IND, VIA) | S, implemented | 759–772. Causal IND/MOD effects and data-dependent constraints (VARIABLE CONSTRAINT) are R. |
 | CL28 | MODEL TEST | E | 772–774. A Wald-test request, reported. |
 | CL29 | MODEL PRIORS, MODEL POPULATION, MODEL COVERAGE, MODEL MISSING; MONTECARLO | R | 775–790; Chapter 19. Bayes and Monte Carlo. |
 | CL30 | OUTPUT, SAVEDATA, PLOT | E | Chapter 18; SAVEDATA NESTED (v8.1 addendum). |
@@ -112,28 +113,27 @@ multilevel, SEFA rotation) or output only.
 ### Option names by command
 
 From the language summary (UG 893–904) and the addenda. Class as in the CL
-rules; "later N" means rejected until increment N, with a diagnostic saying
-so. Option names resolve by a unique prefix of four or more letters within
+rules; increments 1–5 are implemented, subject to the coverage-matrix boundaries. Option names resolve by a unique prefix of four or more letters within
 their command (LX03); an ambiguous or unknown name is rejected, except in
 OUTPUT, SAVEDATA and PLOT, whose options are all reported without
 validation.
 
 | Command | Option names | Class |
 | --- | --- | --- |
-| DATA | FILE, FORMAT, NOBSERVATIONS, NGROUPS, LISTWISE | DD (later 5 for summary data and multi-file groups) |
-| DATA | TYPE | DD: INDIVIDUAL accepted; COVARIANCE, CORRELATION, FULLCOV, FULLCORR, MEANS, STDEVIATIONS later 5 (they change the mean structure); MONTECARLO, IMPUTATION R |
+| DATA | FILE, FORMAT, NOBSERVATIONS, NGROUPS, LISTWISE | DD, implemented |
+| DATA | TYPE | DD: INDIVIDUAL accepted; COVARIANCE, CORRELATION, FULLCOV, FULLCORR, MEANS, STDEVIATIONS accepted (they change the mean structure); MONTECARLO, IMPUTATION R |
 | DATA | VARIANCES | E |
 | DATA | SWMATRIX | R |
 | VARIABLE | NAMES, USEVARIABLES | S |
 | VARIABLE | MISSING | DD |
-| VARIABLE | GROUPING | S, later 2 |
-| VARIABLE | CATEGORICAL | S, later 3 |
+| VARIABLE | GROUPING | S, implemented |
+| VARIABLE | CATEGORICAL | S, implemented |
 | VARIABLE | IDVARIABLE; AUXILIARY without modifier | E |
 | VARIABLE | USEOBSERVATIONS, SUBPOPULATION, CENSORED, NOMINAL, COUNT, DSURVIVAL, FREQWEIGHT, TSCORES, AUXILIARY with a modifier, CONSTRAINT, PATTERN, STRATIFICATION, CLUSTER, WEIGHT, WTSCALE, BWEIGHT, B2WEIGHT, B3WEIGHT, BWTSCALE, REPWEIGHTS, FINITE, CLASSES, KNOWNCLASS, TRAINING, WITHIN, BETWEEN, SURVIVAL, TIMECENSORED, LAGGED, TINTERVAL | R |
 | ANALYSIS | TYPE | S (settings below) |
-| ANALYSIS | MODEL | S: NOMEANSTRUCTURE (see MS11), NOCOVARIANCES; CONFIGURAL, METRIC, SCALAR later 2; ALLFREE R |
+| ANALYSIS | MODEL | S: NOMEANSTRUCTURE (see MS11), NOCOVARIANCES; CONFIGURAL, METRIC, SCALAR accepted; ALLFREE R |
 | ANALYSIS | ESTIMATOR | E + screen (CL18) |
-| ANALYSIS | PARAMETERIZATION | S, later 3 (DELTA, THETA); LOGIT, LOGLINEAR, PROBABILITY, RESCOVARIANCES R |
+| ANALYSIS | PARAMETERIZATION | S, implemented (DELTA, THETA); LOGIT, LOGLINEAR, PROBABILITY, RESCOVARIANCES R |
 | ANALYSIS | INFORMATION | E, read by MS11 |
 | ANALYSIS | DISTRIBUTION | NORMAL E; other settings R |
 | ANALYSIS | MATRIX | COVARIANCE E; CORRELATION R |
@@ -236,7 +236,7 @@ independent (x) variables carry no parameters.
 | --- | --- | --- |
 | MG01 | D, 530 | One data set: GROUPING requests groups. Separate files: one `FILE (label) =` per group. Summary data: NGROUPS, labels g1, g2, …. Increment 2 supports GROUPING; separate files and summary groups belong to the data increment. |
 | MG02 | D, 530; P | With one data set, the **first group is the group with the lowest value** of the grouping variable, whatever the label order (P-MG3: `(2 = b 1 = a)` puts a first). With separate files, the first FILE statement; with summary data, g1. The first group is the reference for latent means and scale factors. |
-| MG03 | D, 538–539, 613; P | `GROUPING IS g (1 = male 2 = female)` maps codes to labels used by `MODEL label:`; unlisted codes leave the analysis (P-MG3). `g (101-200 225)` uses the values as labels; `g (2)` alone means two groups labelled g1, g2 by ascending value, and a count that does not match the data is an error (P-MG4). Only one grouping variable. |
+| MG03 | D, 538–539, 613; P | `GROUPING IS g (1 = male 2 = female)` maps codes to labels used by `MODEL label:`; unlisted codes leave the analysis (P-MG3). `g (101-200 225)` uses the values as labels; `g (2)` alone means two groups labelled g1, g2 by ascending value, and a count that does not match the data is an error (P-MG4). Only one grouping variable. The adapter accepts explicit integer code/label pairs only; data-dependent forms require recoding in R. |
 | MG04 | D, 516–518, 531 | Defaults across groups: loadings of observed factor indicators equal; intercepts and thresholds of observed factor indicators equal; residual variances free and unequal; all structural parameters (factor variances, covariances, regressions, latent intercepts) free and unequal; latent means fixed at zero in the first group and free in the others. Intercepts of observed dependent variables that are not factor indicators are free and unequal. |
 | MG05 | D, 518; P | Loading equality covers observed factor indicators only; second-order loadings are free and unequal across groups (P-MG1). |
 | MG06 | D, 532–534 | `MODEL label:` states differences from the overall model. Mentioning a parameter there relaxes its cross-group equality (frees it for that group); including the first indicator in a group-specific BY frees its marker loading. The marker rule MS02 therefore applies only in the overall MODEL. |
@@ -262,7 +262,7 @@ fixed-zero rows elsewhere; group-specific variable-role changes are rejected
 | IV01 | D, 670–671 | `MODEL = CONFIGURAL`, `METRIC` or `SCALAR` sets up a multiple-group model from a MODEL that contains only first-order BY statements, with GROUPING. Metric by a loading fixed at one in every group or the factor variance fixed at one in one group (the first group under GROUPING). No partial invariance. Not available for mixed outcome types. |
 | IV02 | D, 541–542 | Continuous outcomes. Configural: loadings, intercepts and residual variances free across groups; factor means zero in all groups. Metric: loadings equal, the rest free, factor means zero in all groups. Scalar: loadings and intercepts equal, factor means zero in one group and free elsewhere. With variance identification the variance is one in all groups (configural) or one in one group (metric, scalar). Residual variances are never equal (no strict setting). |
 | IV03 | D, 542–546; v8.9–8.11 addendum PDF p. 6 | Categorical outcomes under weighted least squares: configural and scalar only. The guide's ordinal metric model with threshold pins (pp. 544–545) is superseded by the addendum, which treats ordinal metric as not identified. Increment 3. |
-| IV04 | D, 670 | Several settings run several models and difference tests. A list is a model family plus a test plan: increment 2 accepts one setting and rejects a list until its result shape is decided. |
+| IV04 | D, 670 | Several settings run several models and difference tests. A list is a model family plus a test plan: the adapter deliberately returns one model and rejects a multi-setting test plan. |
 | IV05 | P | Mplus expands a shortcut into ordinary MODEL syntax (printed with `(MODEL)`, P-IV1): every model fixes factor means at zero in the overall MODEL; configural repeats the non-marker BY items and frees all indicator intercepts in every group section; metric frees only the intercepts; scalar is the default multiple-group model. Factor covariances are free per group. With variance identification, TECH1 shows variances fixed at one in both groups for configural and in the first group only for metric and scalar, although the printed commands show `f@1` in the overall MODEL: the printed text is a summary, TECH1 is authoritative. |
 
 IV01, IV02, IV04 and IV05 are implemented for one continuous first-order
@@ -271,9 +271,10 @@ variants' parameter counts 38/34/30 and df 16/20/24.
 
 ## Categorical outcomes (increment 3)
 
-TASK-53 decision 17 rejects DELTA response-scale equalities and fixed non-unit
-scales: nonlinear restrictions in the residual coordinates. THETA residual
-equalities remain supported. The grammar now specifies threshold indices/ranges.
+DELTA response-scale equalities and fixed non-unit scales are implemented
+in lavaan response coordinates (TASK-53.1). THETA residual equalities remain
+supported. The grammar specifies threshold indices/ranges. CT08 remains a
+deliberate fitting boundary: individual data are required for ordinal moments.
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
@@ -525,7 +526,7 @@ failures. `check_mplus_data.R` independently checks 25 Demo data cases / 28
 per-group moments at printed precision and single/multigroup raw.csv fit
 round trips. Derived evidence is `cpp/tests/fixtures/mplus/data_summary.json`.
 
-### Increment 3 prerequisite evidence (TASK-53; implementation pending)
+### Historical increment-3 prerequisite evidence (before TASK-53 implementation)
 
 `regen_mplus_probes.R --categorical` runs P-IV2 alone and writes
 `cpp/tests/fixtures/mplus/probes_categorical.json`; the original
@@ -617,3 +618,22 @@ Categorical Demo SEs remain recorded convention observations, while all native
 SEs are numerically gated against default lavaan. The categorical simulation
 uses a positive population slope variance large enough to keep the frozen
 sample's latent variances interior under both bounded and unconstrained fits.
+
+### Stability closeout (TASK-56)
+
+All 121 primary rule statuses and two settled aliases are consolidated in the
+[Mplus coverage matrix](mplus.md#coverage-matrix). The latest ASan/UBSan
+reader/parser and API-lowering sweeps cover 2,440 original inputs with
+per-input ten-second deadlines: 658 reader / 614 parser and API acceptances,
+zero crashes, sanitizer reports, hangs, unclassified rejections or incomplete
+parser diagnostics. The [test ledger](../validation/test_ledger.md#task-56-mplus-stability-closeout)
+records all 33 firing IDs with counts and one example input each. Counts there
+include every aggregated diagnostic, unlike the earlier first-rule tallies.
+
+The end-to-end gate remains 50/68 accepted, 44 matched, six explicit unsupported
+fit routes, five verified convention differences and zero failures. Every
+accepted case's free count and df are gated, including independently counted
+conditional/mixed moments for the six unavailable fitting routes. Seven lab
+model kinds preserve portable partables, prepared estimates, source rebuilding
+and fresh-process serialization/refitting. Only ordinal nonlinear equality
+fitting awaits TASK-54.2; ordinary integration is TASK-57.

@@ -24,7 +24,7 @@
 - Mplus input frontend (0.3.0): `parse::MplusParser::read()` reads whole
   input files, classifies commands/options, expands NAMES and selects
   USEVARIABLES, preserves source spans, and aggregates classified rejections.
-  Schema settings, execution/data-description notes and explicit later-increment
+  Schema settings, execution/data-description notes and explicit family
   boundaries are checked by independent unit expectations and a 134-variant
   Demo input gate (with documented LX02, NM02 and MS11 deviations).
   `parse::MplusParser::parse()` lowers continuous and categorical single- and multiple-group BY/ON/WITH,
@@ -61,15 +61,25 @@
   gate the lab surface. Ten independent categorical WLSMV goldens gate
   both parameterizations and grouped defaults; the lab fits all-ordinal DWLS
   and reports mixed, conditional and categorical ML boundaries. The local
-  corpus gate accepts 31 of 68 cases: 25 matched, six unsupported fit routes,
-  and two of the matched cases have verified SE/test convention differences (see the validation ledger). The
+  corpus gate accepts 50 of 68 cases: 44 matched, six unsupported fit routes,
+  and five verified test-convention differences (see the validation ledger).
+  Free-parameter count and df now also gate the six unsupported routes through
+  independent conditional/mixed moment dimensions. The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the
   linear SEM subset with Mplus's model defaults into the model triple, gates
   meaning against Mplus (manual, Demo TECH1, corpus `.out`) and numerics
   against lavaan, and targets ordinary integration after a stability bar.
   The [source inventory](../../grammar/mplus_source_inventory.md) and the
-  continuous [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
+  continuous/categorical [grammar](../../grammar/mplus_grammar.ebnf) own the rules;
   checked-in Demo probes supply independent behavioral evidence.
+  Stability closeout publishes one [coverage matrix](../../grammar/mplus.md#coverage-matrix)
+  for all 121 primary inventory IDs and their settled aliases, with rule-specific
+  rejection contracts and matching lab help. Standalone ASan/UBSan reader/parser
+  and API-lowering drivers gate all 2,440 corpus inputs with ten-second per-input
+  deadlines; reader acceptance is 658 and parser/API acceptance 614. All 33 firing
+  rule IDs are classified, with zero crashes, sanitizer reports or hangs.
+  Seven lab model kinds gate partable projections, fresh/prepared fits,
+  original-source rebuild/refit and saveRDS/reload in a fresh R process.
   GROUPING imports ordered integer codes and retains source labels separately.
   Per-group modifier vectors implement defaults, releases, identifier ties,
   cumulative sections and asymmetric rows (fixed zero elsewhere, with generated

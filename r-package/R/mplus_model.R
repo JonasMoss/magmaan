@@ -16,6 +16,8 @@
 #'
 #' Fixed-time polynomial and piecewise growth (`i s | y1@0 y2@1 ...`) imports
 #' outcome intercept, growth mean, threshold and scale/residual defaults.
+#' Growth accepts one through four factors; free time scores are accepted
+#' when enough scores remain fixed to identify the polynomial loadings.
 #' MODEL CONSTRAINT imports NEW (starts default to 0.5), explicit and implicit
 #' equalities, derived quantities, and nested DO loops. Functions include EXP,
 #' LOG, SQRT, PHI and LOG10; `**` denotes power. Continuous ML, LS and FIML
@@ -31,6 +33,27 @@
 #' `new` partable row, with no observed variable or moment cell; rebuilding
 #' always uses the original Mplus source. INFORMATION defaults, MODEL TEST,
 #' LOOP and PLOT are reported in notes.
+#'
+#' NAMES accepts bounded numeric- or letter-suffix ranges; MODEL and
+#' USEVARIABLES ranges follow schema order. Latent ranges follow factor-definition
+#' order. Labels apply on their physical line; subsequent mentions override
+#' earlier parameter specifications. PON and PWITH require equally sized lists.
+#' Model/option content must fit within 90 columns; wrap longer statements.
+#' TITLE and comments may be longer. Line and
+#' block comments are accepted, but a block opened after code must close on
+#' its opening line. TITLE, OUTPUT, SAVEDATA and PLOT are reported.
+#'
+#' DEFINE and DATA transformations must be performed in R; USEOBSERVATIONS and
+#' SUBPOPULATION must be applied as case selection in R before fitting.
+#' Counts, nominal/censored/survival outcomes, survey weights, mixtures,
+#' multilevel models, Bayes and full-information categorical links are outside
+#' the linear SEM family: retain those analyses in Mplus. ESEM rotation is
+#' replaced only by explicitly specified ordinary BY factors. Bare `@` uses
+#' data-dependent Mplus starts; write an explicit `@value` instead. Remove
+#' explicit observed-independent means/variances/WITH mentions to preserve
+#' fixed-x conditioning. Recode data-dependent GROUPING forms to explicit
+#' integer code/label pairs in R. Categorical summary inputs require individual
+#' observations for magmaan's moment preparation.
 #'
 #' DEFINE, mixtures, multilevel models, ESEM, unsupported name ranges
 #' and mixed conditioning on observed covariates are rejected with rule IDs

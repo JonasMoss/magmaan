@@ -88,6 +88,12 @@ test_that("Mplus growth, constraints and indirect effects fit live independent l
 test_that("Mplus deliberate inequality and pending ordinal nonlinear boundaries are explicit", {
   base <- "DATA: FILE=x;\nVARIABLE: NAMES=u1-u4; CATEGORICAL=u1-u4;\nMODEL: f BY u1; f BY u2 (a);\nf BY u3 (b); f BY u4;\nMODEL CONSTRAINT: "
   expect_error(mplus_model(paste0(base,"a=b**2;")),"TASK-54.2")
+  pending <- tryCatch(mplus_model(paste0(base,"a=b**2;")),error=identity)
+  expect_s3_class(pending,"error")
+  message <- conditionMessage(pending)
+  expect_match(message,"[1-9][0-9]*:[1-9][0-9]* \\[CN01\\]")
+  for(part in c("found ordinal nonlinear", "Mplus enforces", "magmaan", "instead"))
+    expect_match(message,part,fixed=TRUE)
   expect_error(mplus_model(paste0(base,"a>0;")),"CN01.*boundary asymptotics")
 })
 

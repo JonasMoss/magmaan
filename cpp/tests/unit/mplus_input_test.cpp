@@ -35,6 +35,9 @@ void rejection(const std::string& source, const std::string& rule, const std::st
   REQUIRE_FALSE(result.has_value());
   if (result) return;  // No-exception doctest assertions do not unwind helpers.
   CHECK(result.error().kind == magmaan::ParseError::Kind::RejectedConstruct);
+  CHECK(result.error().span.line > 0);
+  for (const auto* part : {"found '", "Mplus", "magmaan", "instead"})
+    CHECK_MESSAGE(result.error().detail.find(part) != std::string::npos, result.error().detail);
   CHECK_MESSAGE(result.error().detail.find("[" + rule + "]") != std::string::npos, result.error().detail);
   CHECK_MESSAGE(result.error().detail.find(message) != std::string::npos, result.error().detail);
 }

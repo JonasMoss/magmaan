@@ -46,6 +46,9 @@ std::map<std::string,std::string> rows(const std::string& text) {
 void reject(std::string model, std::string rule, std::string vars="y1 y2 y3 y4 x1 x2") {
   auto m = parse::MplusParser::parse(source(model,"",vars));
   REQUIRE_FALSE(m); if (m) return;
+  CHECK(m.error().span.line > 0);
+  for (const auto* part : {"found '", "Mplus", "magmaan", "instead"})
+    CHECK_MESSAGE(m.error().detail.find(part) != std::string::npos, m.error().detail);
   CHECK_MESSAGE(m.error().detail.find("["+rule+"]") != std::string::npos,m.error().detail);
 }
 }
@@ -84,7 +87,7 @@ TEST_CASE("Mplus MODEL: LB02-LB06 labels equality sets starts and ownership") {
   for(std::size_t i=0;i<pt.size();++i) if(pt.lhs[i]=="y1" && pt.op[i]==parse::Op::Regression) { CHECK(pt.label[i]=="b"); CHECK(pt.ustart[i]==doctest::Approx(.5)); }
   reject("f BY y1-y4 (a2-a4);","LB04"); reject("y1-y3 ON x1-x2 (p1-p5);","LB05"); reject("f BY y1-y3 (1) y4;","LB03"); reject("f BY y1@1 (l1) y2-y3;","LB03");
 }
-TEST_CASE("Mplus MODEL: later constructs have classified rejections") {
+TEST_CASE("Mplus MODEL: out-of-family constructs have classified rejections") {
   reject("{y1};","CT04"); reject("[y1$1];","CT02"); reject("i | y1;","GR07"); reject("%OVERALL% y1 ON x1;","MS10"); reject("y1#1;","MS10"); reject("f BY y1-y3 (*rot);","MS09"); reject("f BY y1~0 y2;","MS09");
 }
 TEST_CASE("Mplus MODEL: local corpus sweep") {
@@ -373,4 +376,38 @@ TEST_CASE("Mplus indirect: CN05 total, specific, VIA and absent reverse paths") 
   CHECK(parse::expr_to_canonical(m->flat.constraints[1].rhs)=="1*a*b*c");
   CHECK(parse::expr_to_canonical(m->flat.constraints[2].rhs)=="a*b*c");
   CHECK(parse::expr_to_canonical(m->flat.constraints[3].rhs)=="0");
+}
+
+TEST_CASE("Mplus rejection contracts cover malformed constraint growth and threshold classes") {
+  for (const auto& [model, rule, instruction] :
+       std::vector<std::tuple<std::string, std::string, std::string>>{
+         {"y1 ON x1 (a);\nMODEL CONSTRAINT: NEW (r*x);", "CN02", "numeric starts"},
+         {"y1 ON x1 (a);\nMODEL CONSTRAINT: DO (3,1) r#=a;", "CN03", "reduce loop limits"},
+         {"y1 ON x1;\nMODEL INDIRECT: y1 MOD x1;", "CN05", "y VIA m x"},
+         {"y1 s | y1@0 y2@1;", "GR01", "distinct growth factors"},
+         {"i s q | y1@0 y2@1 y3;", "GR02", "fix at least one time score"}}) {
+    const auto result = parse::MplusParser::parse(source(model));
+    REQUIRE_FALSE(result);
+    if (result) continue;
+    CHECK(result.error().span.line > 0);
+    CHECK(result.error().detail.find("["+rule+"]") != std::string::npos);
+    for (const auto* part : {"found '", "Mplus", "magmaan", "instead"})
+      CHECK_MESSAGE(result.error().detail.find(part) != std::string::npos, result.error().detail);
+    CHECK_MESSAGE(result.error().detail.find(instruction) != std::string::npos, result.error().detail);
+  }
+  for (const auto& [model, rule, instruction] :
+       std::vector<std::tuple<std::string, std::string, std::string>>{
+         {"f BY u1-u3; [u1$0];", "CT01", "two through ten categories"},
+         {"f BY u1-u3; [u1$2-u1$1];", "CT03", "ascending order"},
+         {"u2 ON u1;", "CT07", "model each CATEGORICAL variable as an outcome"}}) {
+    const auto result = parse::MplusParser::parse(
+      "DATA: FILE=x;\nVARIABLE: NAMES=u1-u3; CATEGORICAL=u1-u3;\nMODEL: "+model);
+    REQUIRE_FALSE(result);
+    if (result) continue;
+    CHECK(result.error().span.line > 0);
+    CHECK(result.error().detail.find("["+rule+"]") != std::string::npos);
+    for (const auto* part : {"found '", "Mplus", "magmaan", "instead"})
+      CHECK_MESSAGE(result.error().detail.find(part) != std::string::npos, result.error().detail);
+    CHECK_MESSAGE(result.error().detail.find(instruction) != std::string::npos, result.error().detail);
+  }
 }

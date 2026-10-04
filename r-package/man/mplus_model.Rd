@@ -34,22 +34,46 @@ all groups must contain the same categories. All-ordinal models fit with
 their unsupported route explicitly. Retained-estimate lavaan WLSMV
 reporting is available through \code{\link[=convention_inference]{convention_inference()}}.
 
-Fixed-time polynomial and piecewise growth imports outcome intercept, growth
-mean, threshold and scale/residual defaults. MODEL CONSTRAINT imports NEW
-(starts default to 0.5), explicit and implicit equalities, derived quantities,
-and nested DO loops. EXP, LOG, SQRT, PHI and LOG10 are supported; ** is power.
-Continuous ML, LS and FIML use the existing equality backends. Ordinal
-nonlinear equalities await TASK-54.2. Inequalities are deliberately refused
-because active-bound inference needs boundary asymptotics; for variance
-positivity drop the constraint and use covariance = "psd" or "barrier" in
-\code{fit_model()}.
+Fixed-time polynomial and piecewise growth (\verb{i s | y1@0 y2@1 ...}) imports
+outcome intercept, growth mean, threshold and scale/residual defaults.
+Growth accepts one through four factors; free time scores are accepted
+when enough scores remain fixed to identify the polynomial loadings.
+MODEL CONSTRAINT imports NEW (starts default to 0.5), explicit and implicit
+equalities, derived quantities, and nested DO loops. Functions include EXP,
+LOG, SQRT, PHI and LOG10; \verb{**} denotes power. Continuous ML, LS and FIML
+use the existing equality backends. Ordinal nonlinear equalities await
+TASK-54.2. Inequalities are deliberately refused: active-bound inference
+requires boundary asymptotics; for variance positivity drop the constraint
+and use covariance = "psd" or "barrier" in \code{\link[=fit_model]{fit_model()}}.
 MODEL INDIRECT imports total IND, specific IND and VIA products, including
-paths through factors. Names are \code{ind_g<group>_<outcome>_ind_<names>} or
-\code{ind_g<group>_<outcome>_via_<mediator>_<predictor>}; specific names retain
+paths through factors. Derived names are \verb{ind_g<group>_<outcome>_ind_<names>}
+or \verb{ind_g<group>_<outcome>_via_<mediator>_<predictor>}; specific names retain
 the written mediator order. Defined estimates and delta-method SEs are
-available through \code{compute_defined()}. Free NEW coordinates appear as
-\code{new} partable rows without an observed variable or moment cell.
-INFORMATION defaults, MODEL TEST, LOOP and PLOT are reported in notes.
+available through \code{\link[=compute_defined]{compute_defined()}}. A free NEW coordinate appears as a
+\code{new} partable row, with no observed variable or moment cell; rebuilding
+always uses the original Mplus source. INFORMATION defaults, MODEL TEST,
+LOOP and PLOT are reported in notes.
+
+NAMES accepts bounded numeric- or letter-suffix ranges; MODEL and
+USEVARIABLES ranges follow schema order. Latent ranges follow factor-definition
+order. Labels apply on their physical line; subsequent mentions override
+earlier parameter specifications. PON and PWITH require equally sized lists.
+Model/option content must fit within 90 columns; wrap longer statements.
+TITLE and comments may be longer. Line and
+block comments are accepted, but a block opened after code must close on
+its opening line. TITLE, OUTPUT, SAVEDATA and PLOT are reported.
+
+DEFINE and DATA transformations must be performed in R; USEOBSERVATIONS and
+SUBPOPULATION must be applied as case selection in R before fitting.
+Counts, nominal/censored/survival outcomes, survey weights, mixtures,
+multilevel models, Bayes and full-information categorical links are outside
+the linear SEM family: retain those analyses in Mplus. ESEM rotation is
+replaced only by explicitly specified ordinary BY factors. Bare \code{@} uses
+data-dependent Mplus starts; write an explicit \verb{@value} instead. Remove
+explicit observed-independent means/variances/WITH mentions to preserve
+fixed-x conditioning. Recode data-dependent GROUPING forms to explicit
+integer code/label pairs in R. Categorical summary inputs require individual
+observations for magmaan's moment preparation.
 
 DEFINE, mixtures, multilevel models, ESEM, unsupported name ranges
 and mixed conditioning on observed covariates are rejected with rule IDs

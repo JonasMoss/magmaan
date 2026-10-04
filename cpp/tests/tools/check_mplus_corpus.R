@@ -80,6 +80,44 @@ json_printed <- function(text, field) {
   match <- regmatches(text, regexec(pattern, text, perl=TRUE))[[1]]
   if (length(match)) match[2] else NULL
 }
+# Independent dimension check also covers accepted models whose fitting route
+# is intentionally unavailable. This corpus subset has shared-label equalities
+# only; a general MODEL CONSTRAINT rank must be checked by the fit machinery.
+model_dimension <- function(spec, data) {
+  pt <- spec$partable
+  if(any(pt$op == "new")) stop("Dimension gate needs constraint-rank machinery for this case")
+  free <- pt$free > 0L & pt$op != "|"
+  coordinates <- ifelse(nzchar(pt$label[free]),paste0("label:",pt$label[free]),
+                        paste0("free:",pt$free[free]))
+  npar <- length(unique(coordinates))
+  x <- unique(pt$lhs[pt$exo != 0L])
+  groups <- if(nzchar(spec$group_var)) split(data,data[[spec$group_var]]) else list(data)
+  dimensions <- vapply(groups,function(block) {
+    outcomes <- setdiff(spec$mplus_data_plan$analysis,x)
+    q <- length(setdiff(outcomes,spec$ordered))
+    thresholds <- sum(vapply(spec$ordered,function(v) length(unique(block[[v]]))-1L,integer(1)))
+    thresholds + 2L*q + choose(length(outcomes),2L) + length(outcomes)*length(x)
+  },numeric(1))
+  # Thresholds are deferred until category completion. Count them directly
+  # from data, using the manual's common indicator-threshold defaults and
+  # explicit group releases; generated fixed-zero placeholders are not fixes.
+  threshold_coordinates <- character()
+  indicators <- unique(pt$rhs[pt$op=="=~"])
+  for(g in seq_along(groups)) for(v in spec$ordered) {
+    count <- length(unique(groups[[g]][[v]]))-1L
+    for(k in seq_len(count)) {
+      row <- which(pt$lhs==v & pt$op=="|" & pt$rhs==paste0("t",k) & pt$group==g)
+      explicit <- length(row) && pt$user[row[1]] != 0L
+      if(explicit && pt$free[row[1]]==0L) next
+      coordinate <- if(explicit && nzchar(pt$label[row[1]])) paste0("label:",pt$label[row[1]]) else
+        if(explicit || !v %in% indicators) paste("threshold",g,v,k,sep=":") else
+          paste("threshold",v,k,sep=":")
+      threshold_coordinates <- c(threshold_coordinates,coordinate)
+    }
+  }
+  npar <- length(unique(c(coordinates,threshold_coordinates)))
+  list(npar=npar,df=sum(dimensions)-npar)
+}
 rows <- list()
 for (folder in folders) {
   inp <- file.path(folder,"source/original.inp")
@@ -109,7 +147,30 @@ for (folder in folders) {
     meta <- fromJSON(file.path(folder,"meta.json"))
     book <- fromJSON(bookfile)
     book_text <- paste(readLines(bookfile,warn=FALSE),collapse="\n")
+    outfile <- file.path(folder,"source/original.out")
+    if(file.exists(outfile)) {
+      printed <- readLines(outfile,warn=FALSE)
+      for(field in c("npar","df")) {
+        pattern <- if(field=="npar") "Number of Free Parameters" else "Degrees of Freedom"
+        line <- grep(paste0("^\\s*",pattern,"\\s+[0-9]+"),printed,value=TRUE)
+        if(length(line)) {
+          value <- as.numeric(sub(paste0(".*",pattern,"\\s+([0-9]+).*"),"\\1",line[1]))
+          stopifnot(is.null(book$fit[[field]]) || value==book$fit[[field]])
+          book$fit[[field]] <- value
+        }
+      }
+    }
     estimator <- if(length(spec$ordered)) "DWLS" else if(anyNA(data)) "FIML" else "ML"
+    if(length(spec$ordered) && (any(spec$partable$exo != 0L) ||
+        length(setdiff(spec$mplus_data_plan$analysis,spec$ordered)))) {
+      dimension <- model_dimension(spec,data)
+      stopifnot(identical(as.numeric(dimension$npar),as.numeric(book$fit$npar)),
+                identical(as.numeric(dimension$df),as.numeric(book$fit$df)))
+      rows[[length(rows)+1L]] <- data.frame(case=case,status="matched",rule="",
+        quantity=c("npar","df"),got=c(dimension$npar,dimension$df),
+        expected=c(book$fit$npar,book$fit$df),deviation=0,tolerance=0,
+        decimals=NA_integer_,detail="independent conditional/mixed moment dimension")
+    }
     fit <- fit_model(spec,data,estimator=estimator)
     fm <- fit_measures(fit)
     convention_reference <- NULL

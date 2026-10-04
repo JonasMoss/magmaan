@@ -4,7 +4,7 @@
 #' Relative paths are tried in the working directory, then beside the input
 #' file. Free format accepts blanks, tabs and commas, wrapped observations,
 #' and discards extra fields at the end of a completed observation's record.
-#' Fixed FORMAT supports Fw.d/w.d, X skips, Tn positions, record breaks and
+#' Fixed FORMAT supports Fw.d, Fw or w.d, X skips, Tn positions, record breaks and
 #' repeated groups. Implied decimals apply only without an explicit point.
 #' Missing flags compare after that scaling.
 #'
@@ -20,6 +20,18 @@
 #' default sample.cov.rescale, they are multiplied by (N-1)/N for fit_model().
 #' Correlations are multiplied by supplied SDs; without SDs the input has
 #' unit variances. The report retains input covariances and conversion factors.
+#'
+#' Accepted summary TYPE values are COVARIANCE, CORRELATION, FULLCOV and
+#' FULLCORR, optionally with MEANS (and STDEVIATIONS for correlations).
+#' Supply NOBSERVATIONS for every summary group; summary input uses free
+#' format. MISSING accepts one global `.`, `*` or fixed-format BLANK symbol,
+#' or numeric flags per NAMES list/ALL. Fixed blanks without BLANK missing
+#' read as zero. Empty comma fields are errors; numeric records are bounded
+#' to 10000 characters. File and matrix shape errors identify the data rule.
+#' Perform DEFINE/qualified DATA transformations and USEOBSERVATIONS or
+#' SUBPOPULATION selection in R before reading/fitting. Multiple imputation,
+#' Monte Carlo datasets and two-level weight matrices are outside this reader;
+#' supply one supported individual or summary dataset per declared group.
 #' @param model A `magmaan_mplus_model_spec` from [mplus_model()].
 #' @param file Optional path override, one path per separate-file group.
 #' @return Individual data as a data.frame, or summary moments as a list with
