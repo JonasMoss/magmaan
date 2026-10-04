@@ -1027,7 +1027,9 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   Implemented explicit native/lab `refit_from_null()` and automatic ordinary
   `anova()` recovery for policy and lavaan compatibility comparisons. Recovery
   requires an improved objective no worse than H0 and a passing native verdict;
-  it records and prints the refit and leaves input fits unchanged. **Gates:**
+  it records and prints the refit and leaves input fits unchanged. Internal
+  refit warnings are captured in `reseed$warnings` and printed as notes;
+  explicit lab refits retain fit warnings. **Gates:**
   reconstructed failing draw, unchanged well-behaved pairs, and ML/FIML/DWLS
   refits with retained data and original fitting options.
 

@@ -11,7 +11,9 @@
 - `anova()` retries a larger model that fits worse than the restricted model
   from the embedded restricted estimate. A better endpoint with a passing
   native verdict is used for the comparison and reported in a printed note
-  and `refit` attribute; the supplied fit objects are unchanged.
+  and `refit` attribute; the supplied fit objects are unchanged. Internal refit
+  warnings are retained in `attr(result, "reseed")$warnings` and printed as
+  notes instead of being emitted. Explicit lab refits still emit fit warnings.
 
 - Complete-data ML nested LR calibration now uses exact casewise likelihood
   scores when the larger model has a restricted, misspecified mean structure.

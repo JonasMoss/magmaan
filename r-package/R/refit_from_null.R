@@ -4,6 +4,7 @@
 #' native, moment-verified nesting map, then replays the larger fit's estimator
 #' and fitting options with that explicit start. Neither input is modified.
 #' The returned fit carries its own convergence diagnostics and native verdict.
+#' Fit warnings are emitted as for any explicit user-requested fit.
 #' @param fit_H1 The larger fitted model.
 #' @param fit_H0 The restricted fitted model, using the same data and estimator.
 #' @return A new estimate-only `magmaan_fit`.

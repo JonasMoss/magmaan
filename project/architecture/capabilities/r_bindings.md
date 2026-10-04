@@ -397,7 +397,9 @@
   (policy and lavaan compatibility). It uses an improved endpoint only when
   the native verdict passes and the recomputed LR is available, records old/new
   objectives and the native verdict in a `refit` attribute, and prints a note.
-  Inputs are unchanged; well-behaved pairs do not refit. Unsuccessful retries
+  Internal refit warnings are muffled, retained in `reseed$warnings` and
+  printed as notes even for unsuccessful retries; explicit lab refits still
+  emit ordinary fit warnings. Inputs are unchanged; well-behaved pairs do not refit. Unsuccessful retries
   preserve the original typed failure. Gates reconstruct a decisions/04 failure
   and cover ML, FIML and all-ordinal DWLS lab refits.
   The model triple (`LatentStructure`, `LatentNames`, `Starts`) and its

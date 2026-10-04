@@ -26,12 +26,15 @@ nested_reseed_data <- function(seed = 726270583L, skewed = FALSE) {
   syntax <- 'f1 =~ x1 + x2 + x3 + x4\nf2 =~ x5 + x6 + x7 + x8'
   fit <- function(equal = NULL) magmaan(magmaan_model(syntax,
     prototype = data, group = 'group', group.equal = equal), data, inference = FALSE)
-  h1 <- fit(); h0 <- fit('loadings')
+  # This fixture deliberately reaches covariance-inadmissible endpoints.
+  h1 <- suppressWarnings(fit()); h0 <- suppressWarnings(fit('loadings'))
   before <- lapply(list(h1, h0), function(x) list(theta = x$lab$theta, fmin = x$lab$fmin))
   failed <- magmaanlab::policy_nested(h1$lab, h0$lab)
   expect_identical(failed$lr$reason, "not_converged")
   expect_match(failed$lr$detail, "alternative fits worse")
-  out <- anova(h1, h0)
+  expect_warning(out <- anova(h1, h0), NA)
+  expect_match(attr(out, "reseed")$warnings, "covariance-admissible")
+  expect_output(print(out), "covariance-admissible")
   expect_length(attr(out, "unavailable"), 0L)
   expect_true(all(is.finite(out$statistic)))
   expect_true(all(is.finite(out$p.sb)))
@@ -39,7 +42,8 @@ nested_reseed_data <- function(seed = 726270583L, skewed = FALSE) {
   expect_identical(attr(out, "refit")$verdict$status, "passed")
   expect_output(print(out), "larger model refit from the restricted estimate")
   expect_equal(anova(h0, h1)$statistic, out$statistic, tolerance = 0)
-  compat <- anova(h1, h0, lavaan_compat = "ML")
+  expect_warning(compat <- anova(h1, h0, lavaan_compat = "ML"), NA)
+  expect_identical(attr(compat, "reseed")$warnings, attr(out, "reseed")$warnings)
   expect_true(all(is.finite(compat$statistic)))
   expect_false(is.null(attr(compat, "refit")))
   expect_identical(lapply(list(h1, h0), function(x) list(theta = x$lab$theta, fmin = x$lab$fmin)), before)
@@ -49,7 +53,8 @@ test_that("well behaved nested results are unchanged by recovery", {
   skip_if_not_installed("lavaan")
   data <- lavaan::HolzingerSwineford1939
   h0 <- magmaan('visual =~ x1 + x2 + x3 + x4', data, inference = FALSE)
-  h1 <- magmaan('visual =~ x1 + x2 + x3 + x4\nx1 ~~ x2', data, inference = FALSE)
+  expect_warning(h1 <- magmaan('visual =~ x1 + x2 + x3 + x4\nx1 ~~ x2',
+    data, inference = FALSE), "covariance-admissible")
   expected <- magmaanlab::policy_nested(h1$lab, h0$lab)
   out <- anova(h1, h0)
   expect_null(attr(out, "refit"))
@@ -92,11 +97,11 @@ test_that("FIML recovers a deliberately supplied bad basin and DWLS refits a bad
     expect_true(nested$lr$available)
     expect_true(is.finite(nested$lr$p_sb))
     if (estimator == "FIML") {
-      result <- suppressWarnings(anova(bad, h0))
+      expect_warning(result <- anova(bad, h0), NA)
       expect_true(all(is.finite(result$statistic)))
       expect_false(is.null(attr(result, "refit")))
       expect_output(print(result), "larger model refit from the restricted estimate")
-      compat <- suppressWarnings(anova(bad, h0, lavaan_compat = "ML"))
+      expect_warning(compat <- anova(bad, h0, lavaan_compat = "ML"), NA)
       expect_true(all(is.finite(compat$statistic)))
       expect_false(is.null(attr(compat, "refit")))
     } else {
@@ -121,9 +126,12 @@ test_that("an unsuccessful nested retry preserves the original typed failure", {
   calls <- 0L
   testthat::local_mocked_bindings(refit_from_null = function(...) {
     calls <<- calls + 1L
+    warning("internal refit warning")
     stop("refit unavailable")
   }, .package = "magmaanlab")
-  result <- anova(h1, h0)
+  expect_warning(result <- anova(h1, h0), NA)
+  expect_identical(attr(result, "reseed")$warnings, "internal refit warning")
+  expect_output(print(result), "internal refit warning")
   expect_identical(calls, 1L)
   expect_null(attr(result, "refit"))
   expect_identical(attr(result, "unavailable")[["lr"]],

@@ -8,4 +8,4 @@
 }
 \value{A new estimate-only \code{magmaan_fit}, with its own convergence diagnostics and native verdict.}
 \description{Embeds the restricted estimate using the native, moment-verified nesting map, then replays the larger model's estimator and fitting options with that explicit start. Neither input is modified.}
-\details{Supports single-level ML, FIML and all-ordinal DWLS, ULS and WLS fits from \code{fit_model()} or \code{estimate()}. FIML requires retained observations; complete-data and ordinal routes reuse retained sufficient statistics. This explicit lab operation returns the new endpoint even when its verdict fails; callers must inspect convergence diagnostics.}
+\details{Supports single-level ML, FIML and all-ordinal DWLS, ULS and WLS fits from \code{fit_model()} or \code{estimate()}. FIML requires retained observations; complete-data and ordinal routes reuse retained sufficient statistics. This explicit lab operation returns the new endpoint even when its verdict fails; callers must inspect convergence diagnostics. Fit warnings are emitted as for any explicit user-requested fit.}

@@ -345,7 +345,9 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' from the embedded restricted estimate with its own fitting options. A better
 #' endpoint is used only when its native convergence verdict passes. The input
 #' fits are unchanged; `attr(result, "refit")` records the old and new objective
-#' and printing reports the recovery. An unsuccessful retry retains the failure.
+#' and printing reports the recovery. Internal refit warnings are captured in
+#' `attr(result, "reseed")$warnings` and printed as notes, including when a
+#' retry is unsuccessful. An unsuccessful retry retains the failure.
 #'
 #' @param object,... Two [magmaan()] fits, in either order.
 #' @param lavaan_compat `NULL` (default) reports the policy's score and LR
@@ -392,7 +394,7 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
     return(structure(.lavaan_compat_test_row(t), class = c("magmaan_anova", "data.frame"),
       lavaan_compat = lavaan_compat, restricted = labels[[null]], alternative = labels[[3L - null]],
       unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
-      verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit))
+      verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed))
   }
   null <- 2L
   res <- magmaanlab::policy_nested(a, b)
@@ -430,15 +432,22 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
               function(t) as.integer(t$peba_blocks %||% 0L), integer(1)),
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
-            verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit)
+            verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed)
 }
 
 .nested_recovery <- function(result, alternative, null, compare, component) {
-  out <- list(result = result, refit = NULL)
+  out <- list(result = result, refit = NULL, reseed = NULL)
   test <- result[[component]]
   if (!identical(test$reason, "not_converged") ||
       !grepl("the alternative fits worse than the null", test$detail, fixed = TRUE)) return(out)
-  retry <- tryCatch(magmaanlab::refit_from_null(alternative, null), error = function(e) NULL)
+  warnings <- character()
+  retry <- tryCatch(withCallingHandlers(
+    magmaanlab::refit_from_null(alternative, null),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }), error = function(e) NULL)
+  out$reseed <- list(warnings = warnings)
   if (is.null(retry) || !isTRUE(retry$converged) ||
       !identical(retry$diagnostics$verdict$status, "passed") ||
       !is.finite(retry$fmin) || retry$fmin > null$fmin ||
@@ -468,6 +477,11 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   if (!is.null(refit)) cat("larger model refit from the restricted estimate; its objective improved from ",
     format(refit$objective_before, digits = digits), " to ",
     format(refit$objective_after, digits = digits), "\n", sep = "")
+  reseed <- attr(x, "reseed")
+  if (length(reseed$warnings)) {
+    cat("larger model refit warnings:\n")
+    cat(paste0("  ", reseed$warnings, collapse = "\n"), "\n", sep = "")
+  }
   .peba_note(x)
   if (is.null(attr(x, "lavaan_compat"))) .lr_note(t)
   u <- attr(x, "unavailable")

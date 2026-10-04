@@ -9,10 +9,16 @@ test_that("refit_from_null replays ML, FIML and ordinal DWLS fits", {
       ordered(cut(x, quantile(x, c(0, .33, .67, 1)), include.lowest = TRUE)))
     null <- fit_model(model_spec("f =~ x1 + x2 + x3 + x4", ordered = ordered),
       data, estimator = estimator)
-    alternative <- fit_model(model_spec("f =~ x1 + x2 + x3 + x4\nx1 ~~ x2", ordered = ordered),
-      data, estimator = estimator)
+    # The larger model deliberately has covariance-inadmissible endpoints.
+    alternative <- suppressWarnings(fit_model(model_spec("f =~ x1 + x2 + x3 + x4\nx1 ~~ x2", ordered = ordered),
+      data, estimator = estimator))
     before <- list(alternative$theta, null$theta, alternative$fmin, null$fmin)
-    retry <- refit_from_null(alternative, null)
+    # Explicit refits keep ordinary fit warnings; inspect the result below.
+    if (estimator == "ML") {
+      expect_warning(retry <- refit_from_null(alternative, null), "covariance-admissible")
+    } else {
+      retry <- suppressWarnings(refit_from_null(alternative, null))
+    }
     expect_s3_class(retry, "magmaan_fit")
     expect_true(isTRUE(retry$converged))
     expect_identical(retry$diagnostics$verdict$status, "passed")
