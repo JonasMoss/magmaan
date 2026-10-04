@@ -387,6 +387,27 @@ the consolidated [normal/robust scalar-interval showcase](../../experiments/show
 coverage/failure/cost criteria. Reconcile centering conventions and boundary
 failures before changing defaults; existing studies alone do not adopt a method.
 
+### Nonlinear equality constraints in the ordinary inference policy
+
+**Gap:** the misspecification-robust ordinary policy (ML, FIML, LS, DWLS) for
+models with nonlinear equality constraints (lavaan `a == b*c`, Mplus MODEL
+CONSTRAINT equations). At a regular interior point the constrained estimator is
+asymptotically normal, so no boundary theory is needed, but the sandwich bread
+must include the Lagrange-multiplier curvature
+$K^\top(\nabla^2 F + \sum_j \lambda_j \nabla^2 h_j)K$ on the constraint tangent.
+The multiplier term vanishes under correct specification and not under
+misspecification. Out of scope for now (user decision 2026-10-04): the open
+question is the default inference, which needs its own validation.
+**Available:** fitting on the ML, LS, FIML and all-ordinal routes with
+lavaan-compatible expected-information inference in the lab
+(`convention_inference()`, TASK-54.2); the ordinary policy refuses these models
+with a typed error. Reparameterizing the constraint away, where possible, gives
+an unconstrained model the policy accepts.
+**Build if:** a 0.4.0-or-later scope decision admits nonlinear constraints to
+the ordinary API. Implement the multiplier curvature for every policy route at
+once and validate it as a policy choice (misspecified-regime calibration), not
+by lavaan parity alone.
+
 ### Inequality-constrained estimation with boundary inference
 
 **Gap:** general inequality constraints (lavaan `<`/`>`, Mplus MODEL CONSTRAINT
