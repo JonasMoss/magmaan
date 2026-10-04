@@ -333,6 +333,18 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-04: the ML policy's nested LR meat now includes the exact casewise
+likelihood terms at the alternative fit, so the spectrum stays consistent when
+the larger model's restricted mean structure is misspecified (it differed by
+0.20 from direct complete-data FIML before; saturated-mean pairs, including
+decisions/04, are unchanged). `anova()` refits a larger model that stopped above
+the restricted optimum from the embedded restricted estimate and reports it
+(`refit_from_null()` in the lab); a negative ML LR is typed before calibration.
+Mixed-ordinal MI lost an extra factor of two and is gated against an independent
+reconstruction. Prepared handles accept all-ordinal DWLS fitting options, so
+`magmaan()` falls back to `fit_model()` only for ML2S. The textbook WLSMV parity
+gate reads live DELTA response scales again.
+
 2026-10-03: the Mplus input frontend (0.3.0, [mplus.md](../grammar/mplus.md))
 imports whole input files with continuous single- and multiple-group models
 (GROUPING, group sections, cross-group defaults, one CONFIGURAL/METRIC/SCALAR
