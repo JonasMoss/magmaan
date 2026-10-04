@@ -22,11 +22,12 @@ printed_parameters <- function(lines, groups) {
   lines <- lines[(start[1]+1):length(lines)]
   lhs <- op <- ""; out <- list(); group <- 1L
   for (line in lines) {
-    if (grepl("^QUALITY OF|^STANDARDIZED|^R-SQUARE|^CONFIDENCE",line)) break
+    if (grepl("^QUALITY OF|^STANDARDIZED|^R-SQUARE|^CONFIDENCE|^TOTAL, TOTAL INDIRECT",line)) break
     text <- trimws(line)
     if (grepl("^Group ", text) && nrow(groups)) {
       group <- match(tolower(sub("^Group ", "", text)), tolower(groups$label)); next
     }
+    if (text == "New/Additional Parameters") { lhs <- ""; op <- ":="; next }
     relation <- regexec("^([A-Za-z][A-Za-z0-9_$]*)\\s+(BY|ON|WITH)$",text)
     m <- regmatches(text,relation)[[1]]
     if (length(m)) { lhs <- m[2]; op <- switch(m[3],BY="=~",ON="~",WITH="~~"); next }
@@ -36,12 +37,39 @@ printed_parameters <- function(lines, groups) {
     m <- regmatches(text,regexec("^([A-Za-z][A-Za-z0-9_$]*)\\s+(-?[0-9]+\\.[0-9]+)\\s+",text))[[1]]
     if (length(m) && nzchar(op)) {
       l <- if (nzchar(lhs)) lhs else m[2]
-      r <- if (op == "~1") "" else if(op=="|") paste0("t",sub(".*[$]","",l)) else if (nzchar(lhs)) m[2] else l
+      r <- if (op == ":=") "" else if (op == "~1") "" else if(op=="|") paste0("t",sub(".*[$]","",l)) else if (nzchar(lhs)) m[2] else l
       if(op=="|") l<-sub("[$].*","",l)
-      out[[length(out)+1]] <- data.frame(key=paste(group,key(l,op,r)),est=as.numeric(m[3]),printed=m[3])
+      out[[length(out)+1]] <- data.frame(key=paste(if(op==":=") 0L else group,key(l,op,r)),est=as.numeric(m[3]),printed=m[3])
     }
   }
   if (length(out)) do.call(rbind,out) else data.frame()
+}
+# Read the printed paths independently of MODEL INDIRECT lowering. Products
+# are evaluated from fitted regression rows; total definitions are also gated.
+printed_effects <- function(lines) {
+  active <- FALSE; from <- to <- kind <- ""; path <- character(); out <- list()
+  for(line in lines) {
+    text <- trimws(line)
+    if(startsWith(text,"CONFIDENCE INTERVALS")) break
+    if(active && startsWith(text,"STANDARDIZED")) break
+    if(text=="TOTAL, TOTAL INDIRECT, SPECIFIC INDIRECT, AND DIRECT EFFECTS") {active<-TRUE;next}
+    if(!active) next
+    m <- regmatches(text,regexec("^Effects from ([A-Za-z0-9_]+) to ([A-Za-z0-9_]+)$",text))[[1]]
+    if(length(m)) {from<-tolower(m[2]);to<-tolower(m[3]);path<-character();next}
+    if(text %in% c("Specific indirect","Direct")) {kind<-text;path<-character();next}
+    m <- regmatches(text,regexec("^(Sum of indirect|Total indirect|Total) +(-?[0-9]+[.][0-9]+) +",text))[[1]]
+    if(length(m)) {
+      out[[length(out)+1]]<-data.frame(from=from,to=to,kind=m[2],path="",est=as.numeric(m[3]),printed=m[3]);next
+    }
+    m <- regmatches(text,regexec("^([A-Za-z0-9_]+)(?: +(-?[0-9]+[.][0-9]+) +.*)?$",text,perl=TRUE))[[1]]
+    if(length(m) && nzchar(kind)) {
+      path<-c(path,tolower(m[2]))
+      if(length(m)>2 && nzchar(m[3])) {
+        out[[length(out)+1]]<-data.frame(from=from,to=to,kind=kind,path=paste(path,collapse=","),est=as.numeric(m[3]),printed=m[3]);path<-character()
+      }
+    }
+  }
+  if(length(out)) do.call(rbind,out) else data.frame()
 }
 decimals <- function(value) {
   if (!grepl(".", value, fixed=TRUE)) return(0L)
@@ -91,12 +119,20 @@ for (folder in folders) {
       oracle <- lapply(c("lavaan","Mplus"),function(mimic)
         lavaan::lavaan(syntax,data=data,ordered=spec$ordered,
           group=if(nzchar(spec$group_var)) spec$group_var else NULL,
-          estimator="WLSMV",mimic=mimic,meanstructure=TRUE,
+          estimator="WLSMV",parameterization=spec$parameterization,mimic=mimic,meanstructure=TRUE,
           auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE))
       stopifnot(reporting$test$available,reporting$covariance_available)
       ref <- lavaan::fitMeasures(oracle[[1]],"chisq.scaled")
       stopifnot(abs(reporting$test$statistic-ref)<=1e-5*(1+abs(ref)))
+      fm$df <- reporting$test$df
       fm$chisq <- reporting$test$statistic
+      # Gate the ordinal model dimension directly. Generic likelihood extras
+      # can be unavailable for its latent-response moments (reporting TASK-62).
+      fm$npar <- sum(vapply(spec$ordered,function(v) length(unique(data[[v]]))-1L,integer(1))) +
+        choose(length(spec$ordered),2L) - reporting$test$df
+      if(nzchar(spec$group_var)) fm$npar <-
+        sum(vapply(split(data,data[[spec$group_var]]),function(block)
+          sum(vapply(spec$ordered,function(v) length(unique(block[[v]]))-1L,integer(1))) + choose(length(spec$ordered),2L),numeric(1))) - reporting$test$df
       convention_reference <- lavaan::fitMeasures(oracle[[2]],"chisq.scaled")
     }
     checks <- list()
@@ -122,9 +158,39 @@ for (folder in folders) {
         add("H0 loglik",fm$logl,expected,.002+1e-6*abs(expected),
             sub(".*H0 Value\\s+(-?[0-9.]+).*","\\1",h0[1]))
       }
+      effects <- printed_effects(lines)
+      if(nrow(effects)) {
+        edges <- fit$partable[fit$partable$op=="~" & fit$partable$group==1L,]
+        product <- function(path) {
+          idx<-match(paste(head(path,-1L),tail(path,-1L)),paste(edges$lhs,edges$rhs))
+          if(anyNA(idx)) 0 else prod(edges$est[idx])
+        }
+        paths <- function(node,target,seen=character()) {
+          if(node==target) return(list(c(node)))
+          if(node %in% seen) return(list())
+          unlist(lapply(edges$rhs[edges$lhs==node],function(next_node)
+            lapply(paths(next_node,target,c(seen,node)),function(p) c(node,p))),recursive=FALSE)
+        }
+        for(i in seq_len(nrow(effects))) {
+          e<-effects[i,]
+          indirect <- sum(vapply(Filter(function(p) length(p)>2L,paths(e$to,e$from)),product,numeric(1)))
+          value <- if(e$kind=="Total") indirect+product(c(e$to,e$from)) else
+            if(e$kind %in% c("Total indirect","Sum of indirect")) indirect else product(strsplit(e$path,",",fixed=TRUE)[[1]])
+          add(paste("effect",e$to,e$kind,e$from,e$path),value,e$est,.001+2e-4*abs(e$est),e$printed)
+          if(e$kind %in% c("Total indirect","Sum of indirect")) {
+            row<-which(fit$partable$op==":=" & fit$partable$lhs==paste0("ind_g1_",e$to,"_ind_",e$from))
+            if(length(row)) add(paste("total definition",e$to,e$from),fit$partable$est[row],e$est,.001+2e-4*abs(e$est),e$printed)
+          }
+        }
+      }
       params <- printed_parameters(lines,spec$mplus_groups)
       if(nrow(params)) {
-        idx <- match(params$key,paste(fit$partable$group,key(fit$partable$lhs,fit$partable$op,fit$partable$rhs)))
+        idx <- match(params$key,paste(fit$partable$group,key(fit$partable$lhs,fit$partable$op,ifelse(fit$partable$op==":=","",fit$partable$rhs))))
+        additional <- grepl(" := ",params$key,fixed=TRUE)
+        for(i in which(additional & is.na(idx))) {
+          name <- strsplit(params$key[i]," ",fixed=TRUE)[[1]][2]
+          idx[i] <- match(name,ifelse(fit$partable$op=="new",fit$partable$lhs,""))
+        }
         for(i in seq_len(nrow(params))) add(paste("estimate",params$key[i]),
           if(is.na(idx[i])) NA_real_ else fit$partable$est[idx[i]],params$est[i],.001+2e-4*abs(params$est[i]),params$printed[i])
       }

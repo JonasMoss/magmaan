@@ -129,7 +129,9 @@ build_eq_constraints(const spec::LatentStructure& pt, bool allow_nonlinear) {
     return std::unexpected(err(
         "inequality constraints (`<` / `>`) are not supported: "
         "inequality-constrained estimation needs boundary (chi-bar-squared) "
-        "asymptotics that magmaan does not implement"));
+        "asymptotics that magmaan does not implement (project/scope.md). "
+        "For variance positivity, drop the inequality and use covariance = 'psd' "
+        "or 'barrier' in fit_model(); orderings between parameters are not supported"));
   }
   if (!allow_nonlinear && !pt.nonlinear_eq_rows.empty()) {
     return std::unexpected(err(

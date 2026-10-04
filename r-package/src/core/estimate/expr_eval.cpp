@@ -118,6 +118,18 @@ post_expected<ADValue> eval_un(const parse::UnNode& u, const Scope& sc) {
       out.v  = std::exp(a.v);
       out.dv = out.v * a.dv;
       break;
+    case parse::UnOp::Sqrt:
+      if (a.v < 0.0 || (a.v == 0.0 && !a.dv.isZero())) return std::unexpected(make_err("sqrt() derivative requires a positive value for a varying argument"));
+      out.v = std::sqrt(a.v); out.dv = a.v == 0.0 ? a.dv : (a.dv / (2.0 * out.v)).eval();
+      break;
+    case parse::UnOp::Pnorm:
+      out.v = 0.5 * std::erfc(-a.v / std::sqrt(2.0));
+      out.dv = (std::exp(-0.5*a.v*a.v) / std::sqrt(2.0*std::acos(-1.0))) * a.dv;
+      break;
+    case parse::UnOp::Log10:
+      if (a.v <= 0.0) return std::unexpected(make_err("log10() of a non-positive value"));
+      out.v = std::log10(a.v); out.dv = a.dv / (a.v * std::log(10.0));
+      break;
     case parse::UnOp::Log:
       // (log u)' = u'/u — undefined at u ≤ 0.
       if (a.v <= 0.0) {

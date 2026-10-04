@@ -708,7 +708,7 @@ void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
 
     // Var-id columns: only formula rows have variable lhs/rhs. `~1` rows have
     // an empty rhs. Constraint rows have neither (their sides are expressions).
-    if (is_constraint) {
+    if (is_constraint || r.op == parse::Op::AuxiliaryParam) {
       out.lhs_var[i] = -1;
       out.rhs_var[i] = -1;
     } else {

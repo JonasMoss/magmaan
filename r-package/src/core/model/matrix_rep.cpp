@@ -150,7 +150,7 @@ build_matrix_rep(const spec::LatentStructure& pt,
 
   for (std::size_t i = 0; i < pt.size(); ++i) {
     const auto op = pt.op[i];
-    if (is_constraint_op(op)) continue;
+    if (is_constraint_op(op) || op == parse::Op::AuxiliaryParam) continue;
 
     const std::int32_t L = pt.lhs_var[i];
     const std::int32_t R = pt.rhs_var[i];

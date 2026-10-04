@@ -20,6 +20,7 @@ enum class Op : std::uint8_t {
   EqConstraint,   // ==  (parsed in P4)
   LtConstraint,   // <   (parsed in P4)
   GtConstraint,   // >   (parsed in P4)
+  AuxiliaryParam, // NEW free coordinate, no observed/latent variable or moment cell.
   Composite,      // <~  (composite / formative). A formula operator like `=~`;
                   //     `spec::build` expands it into a Henseler-Ogasawara
                   //     reflective sub-model before matrix_rep sees the rows.
@@ -37,6 +38,7 @@ constexpr std::string_view to_string(Op op) noexcept {
     case Op::EqConstraint:  return "==";
     case Op::LtConstraint:  return "<";
     case Op::GtConstraint:  return ">";
+    case Op::AuxiliaryParam: return "new";
     case Op::Composite:     return "<~";
   }
   return "?";

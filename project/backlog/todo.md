@@ -1290,11 +1290,16 @@ carry the label `mplus`.
   including equality labels, fixed non-unit values and linear constraints.
   Seven frozen WLSMV/DWLS/ULS cases and live ordinal tests gate estimates,
   scale SEs and tests; THETA retains its residual coordinates.
-- [ ] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
-  `|` statements and their defaults; NEW, equations, equalities and
-  inequalities onto existing constraint machinery; indirect effects as defined
-  parameters. **Check:** as increment 1, plus a fit-path check that no
-  accepted restriction is silently dropped.
+- [x] **M — increment 4: growth, MODEL CONSTRAINT and MODEL INDIRECT.**
+  Polynomial/free-time/piecewise and categorical/group growth defaults; NEW
+  auxiliary coordinates and definitions, affine/nonlinear continuous equality
+  restrictions, DO expansion and shared sqrt/pnorm/log10; total/specific/VIA
+  indirect effects with delta-method SEs. Inequalities remain the deliberate
+  CN01 boundary with the PSD/barrier remedy; ordinal nonlinear equalities are
+  TASK-54.2. **Check:** 14 continuous and four categorical frozen independent
+  Demo/lavaan models, live lab fits and serialization, active ML/LS/FIML
+  restriction checks. Corpus 31→50 accepted, 25→44 matched, six unsupported
+  fit routes; sweep reader 456→658 and MODEL 359→614, all classified. TASK-54.
 - [x] **M — increment 5: data files.** Data plan in C++ (including FORMAT) and
   `magmaanlab::mplus_data()`, FILE/summary groups and summary mean-structure
   lowering. **Check:** free and

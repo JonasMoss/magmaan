@@ -1,8 +1,8 @@
-# Mplus input frontend (planned)
+# Mplus input frontend
 
-Milestone 0.3.0. Increments 1–2 and 5 are accepted; increment 3 implementation awaits
-its printed-SE meaning gate. Development
-starts now, alongside 0.2.0 release work, and is not a 0.2.0 exit criterion.
+Milestone 0.3.0. Increments 1–5 are implemented with independent model-meaning
+and numerical gates. Stability closeout and ordinary-package integration
+remain separate work; this is not a 0.2.0 exit criterion.
 This document owns the target, input boundary, increments, evidence and the
 stability bar. The [backlog](../backlog/todo.md#mplus-input-frontend) owns task
 state. The [source inventory](mplus_source_inventory.md) owns manual evidence,
@@ -150,6 +150,18 @@ input targets a parked model family and has its own
 [estimation-convention preset](../backlog/speculative.md#mplus-estimation-convention-preset)
 that reproduces Mplus's printed numbers is also a trigger entry, not a planned
 increment.
+
+Indirect quantities use predictable names: `ind_g<group>_<outcome>_ind_<names>`
+for IND, with mediator names in written order, and
+`ind_g<group>_<outcome>_via_<mediator>_<predictor>` for VIA. Total indirect
+sums all simple directed paths with at least one mediator; direct paths are
+excluded. A missing specific path contributes zero, as in P-CN2. Automatic
+coefficient labels are `mi_g<group>_<outcome>_<predictor>` and remain distinct
+across groups. These quantities use the shared defined-parameter delta method.
+Free NEW coordinates use `new` rows with a label and start but no variable ID
+or matrix cell. The syntax display omits those auxiliary rows; original-source
+rebuilding and partable round trips preserve them. Derived NEW references in
+restrictions expand before affine/nonlinear classification.
 
 ## Lowering into the model triple
 

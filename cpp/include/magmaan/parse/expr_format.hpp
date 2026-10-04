@@ -78,8 +78,11 @@ inline std::string expr_to_canonical(const Expr& e, int parent_prec) {
               out += expr_to_canonical(*v.arg, /*parent_prec=*/0);
               out += ")";
               break;
+            case UnOp::Sqrt:
+            case UnOp::Pnorm:
+            case UnOp::Log10:
             case UnOp::Log:
-              out += "log(";
+              out += v.op == UnOp::Sqrt ? "sqrt(" : v.op == UnOp::Pnorm ? "pnorm(" : v.op == UnOp::Log10 ? "log10(" : "log(";
               out += expr_to_canonical(*v.arg, /*parent_prec=*/0);
               out += ")";
               break;

@@ -172,9 +172,10 @@ parameterization_value ::= 'DELTA' | 'THETA'
 scale_statement     ::= '{' rhs_item+ '}' line_label? ';'
 (* CT04: DELTA response scales; THETA uses residual variances instead. *)
 
-bar_statement       ::= lhs_list '|' (token - ';')+ ';'
-(* Growth statements are increment 4 [GR01]; every '|' form is rejected in
-   increment 1 [GR07]. *)
+bar_statement       ::= name name? name? name? '|' rhs_item+ ';'
+(* GR01–GR06: polynomial growth with one to four factors. GR07 rejects
+   random effects (ON/PON/BY/XWITH/AT) and a single bare outcome.
+   Explicit mentions override generated growth defaults in either order. *)
 
 section_marker      ::= '%' (token - '%')+ '%'
 (* Mixture and multilevel sections are rejected [MS10]. *)
@@ -242,3 +243,19 @@ missing_numbers     ::= signed_number ('-' signed_number)?
    divisor N-1 on input and are rescaled by (N-1)/N for ML (P-DA5).
    Numeric missing flags
    are compared after fixed-format implied-decimal scaling (P-DA2). *)
+
+(* === Constraints and indirect effects (increment 4) ===================== *)
+constraint_body     ::= (new_statement | equality_statement | do_statement
+                        | plot_statement)*
+new_statement       ::= 'NEW' '(' (name_range ('*' signed_number)?)+ ')' ';'
+equality_statement  ::= mplus_expr ('=' | '<' | '>') mplus_expr ';'
+mplus_expr          ::= expr  (* shared expression grammar; ** maps to ^,
+                                 PHI maps to pnorm; names case-insensitive *)
+do_statement        ::= 'DO' '(' integer ',' integer ')' constraint_body
+plot_statement      ::= ('LOOP' | 'PLOT') (token - ';')* ';'
+indirect_statement  ::= name ('IND' name+ | 'VIA' name name) ';'
+(* NEW quantities explicitly defined on the left are derived. Otherwise
+   NEW supplies auxiliary free coordinates (start 0.5), with no moment cell.
+   Equality constraints must identify these coordinates. Inequalities are
+   deliberately refused (CN01/project/scope.md). LOOP/PLOT and MODEL TEST
+   are reported. Causal-effect value and MOD forms are rejected (CN05). *)

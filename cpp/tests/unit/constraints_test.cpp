@@ -1508,3 +1508,26 @@ TEST_CASE("constraints: general-linear equality LS fits via K-reparameterization
       (con.A_eq * est_or->theta - con.b_eq).cwiseAbs().maxCoeff();
   CHECK(eq_resid < 1e-9);
 }
+
+TEST_CASE("nonlinear equality AD: sqrt pnorm log10 values and Jacobian") {
+  auto flat=Parser::parse("f =~ x1+a*x2+b*x3\na == sqrt(b)+pnorm(b)+log10(b)");REQUIRE(flat);
+  magmaan::spec::LatentNames names;
+  auto pt=build(*flat,{},nullptr,&names);REQUIRE(pt);
+  auto nl=build_nl_constraints(*pt);REQUIRE(nl.m()==1);
+  Eigen::VectorXd theta=Eigen::VectorXd::Ones(pt->n_free());
+  Eigen::Index a=-1,b=-1;
+  for(std::size_t i=0;i<pt->size();++i) {
+    if(names.row_label[i]=="a") a=pt->free[i]-1;
+    if(names.row_label[i]=="b") b=pt->free[i]-1;
+  }
+  REQUIRE(a>=0);REQUIRE(b>=0);theta[a]=2.;theta[b]=.7;
+  CHECK(nl.h(theta)[0]==doctest::Approx(2.-std::sqrt(.7)-.5*std::erfc(-.7/std::sqrt(2.))-std::log10(.7)).epsilon(1e-12));
+  const auto J=nl.jacobian(theta);
+  CHECK(J(0,a)==doctest::Approx(1.));
+  const double derivative=-1./(2.*std::sqrt(.7))-std::exp(-.5*.7*.7)/std::sqrt(2.*std::acos(-1.))-1./(.7*std::log(10.));
+  CHECK(J(0,b)==doctest::Approx(derivative).epsilon(1e-12));
+  for(Eigen::Index k=0;k<theta.size();++k) {
+    auto plus=theta,minus=theta;plus[k]+=1e-6;minus[k]-=1e-6;
+    CHECK(J(0,k)==doctest::Approx((nl.h(plus)[0]-nl.h(minus)[0])/2e-6).epsilon(1e-8));
+  }
+}

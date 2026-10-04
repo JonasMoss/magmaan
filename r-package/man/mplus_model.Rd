@@ -34,8 +34,24 @@ all groups must contain the same categories. All-ordinal models fit with
 their unsupported route explicitly. Retained-estimate lavaan WLSMV
 reporting is available through \code{\link[=convention_inference]{convention_inference()}}.
 
-DEFINE, growth, MODEL CONSTRAINT,
-MODEL INDIRECT, mixtures, multilevel models, ESEM, unsupported name ranges
+Fixed-time polynomial and piecewise growth imports outcome intercept, growth
+mean, threshold and scale/residual defaults. MODEL CONSTRAINT imports NEW
+(starts default to 0.5), explicit and implicit equalities, derived quantities,
+and nested DO loops. EXP, LOG, SQRT, PHI and LOG10 are supported; ** is power.
+Continuous ML, LS and FIML use the existing equality backends. Ordinal
+nonlinear equalities await TASK-54.2. Inequalities are deliberately refused
+because active-bound inference needs boundary asymptotics; for variance
+positivity drop the constraint and use covariance = "psd" or "barrier" in
+\code{fit_model()}.
+MODEL INDIRECT imports total IND, specific IND and VIA products, including
+paths through factors. Names are \code{ind_g<group>_<outcome>_ind_<names>} or
+\code{ind_g<group>_<outcome>_via_<mediator>_<predictor>}; specific names retain
+the written mediator order. Defined estimates and delta-method SEs are
+available through \code{compute_defined()}. Free NEW coordinates appear as
+\code{new} partable rows without an observed variable or moment cell.
+INFORMATION defaults, MODEL TEST, LOOP and PLOT are reported in notes.
+
+DEFINE, mixtures, multilevel models, ESEM, unsupported name ranges
 and mixed conditioning on observed covariates are rejected with rule IDs
 and an explanation of what to write instead. Data descriptions are parsed into
 \verb{$mplus_data_plan}; \code{\link[=mplus_data]{mplus_data()}} reads them. This constructor does not

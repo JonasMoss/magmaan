@@ -291,7 +291,7 @@ equalities remain supported. The grammar now specifies threshold indices/ranges.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | GR01 | D, 746–747 | `i s q | y1@0 y2@1 y3@2 y4@3` names growth factors on the left and outcomes with time scores on the right. It equals BY statements with unit intercept loadings, time-score slope loadings and squared scores for q, with outcome intercepts fixed at zero and free growth-factor means. Lower to those rows. |
-| GR02 | D, 747; P | An outcome without `@` has a free time score. A quadratic with free time scores is an error (too few fixed scores); four growth factors give a cubic with loadings t³ (P-GR3). |
+| GR02 | D, 747; P | An outcome without `@` has a free time score. A quadratic with free time scores is an error (too few fixed scores); four growth factors give a cubic with loadings t³ (P-GR3). Explicit mentions override generated rows regardless of statement order. |
 | GR03 | D, 746–747; P | Defaults are overridden by mentioning parameters, before or after the `|` statement alike (P-GR3). |
 | GR04 | D, 752–753 | Growth-factor variances and covariances are free. Means: free for continuous outcomes; for categorical outcomes and multiple-indicator growth the intercept-factor mean is zero (first group in multiple groups) and slope means free. |
 | GR05 | D, 747–753 | Continuous outcomes: intercepts zero, residual variances free, residual covariances zero (A from DF12). Categorical: thresholds equal over time per index; Delta scale factor fixed at time one and free later; Theta residual variance likewise. |
@@ -576,3 +576,44 @@ Categorical SEs are recorded observations: single-group ordinal DELTA U3
 `gamma.vcov.mplus=FALSE` explains sqrt(599/600), but not the remaining
 printed-precision differences. This is a convention observation, not an oracle
 exemption; magmaan SEs remain gated against default lavaan. See the test ledger.
+
+
+### Increment-4 corpus and independent growth/constraint evidence (TASK-54)
+
+The same 2,440-file manifest (1,117 distinct inputs) increases reader acceptance
+from **456 to 658** and MODEL lowering from **359 to 614**. No crashes,
+hangs or unclassified rejections occur; the existing unreadable
+`ex11.8imp.zip` remains separately reported. MODEL first-rule blockers:
+CL02 43, CL04 88, CL06 12, CL10 9, CL13 38, CL14 72, CL15 427, CL16 91,
+CL17 19, CL18 84, CL24 6, CN01 3, CN02 2, CT05 3, CT07 3, IV04 3,
+LX01 643, LX03 2, MG03 11, MS01 5, MS08 7, MS09 21, MS11 8, NM03 226.
+CN02's two malformed constraint inputs contain an unmatched closing parenthesis;
+CN01 is the deliberate inequality boundary.
+
+The 68-case end-to-end gate increases **31→50 accepted and 25→44 matched**,
+with six unchanged explicit unsupported-fit routes and zero failures. Five
+matched categorical cases have independently verified reporting-convention
+differences (default lavaan versus `mimic="Mplus"`). Remaining first-rule
+rejections: CL02 1, CL13 3, CL15 1, CL16 1, CN01 1, CT05 1, CT07 1,
+IV04 1, MG03 1 and NM03 7. Additional parameters (including NEW auxiliary
+coordinates) and printed total/specific indirect effects are checked as such.
+LOOP/PLOT functions are reported rather than treated as estimable equations.
+Independent categorical corpus references now include binary/ordinal growth
+and multiple-indicator growth. Ordinal dimensions/tests use the explicit
+convention bundle; generic fit-measure extras/THETA df reporting are a separate
+reporting surface (TASK-62), not a model-meaning reference.
+
+`regen_oracle_mplus_growth.R` freezes 14 independently authored continuous
+Demo/lavaan references in `golden_growth.json`: linear, quadratic, cubic,
+free-time and shared-intercept piecewise growth; grouped growth; explicit and
+implicit nonlinear restrictions, affine equality, a free NEW coordinate,
+derived NEW, functions/DO, and total/specific/VIA and factor indirect effects.
+The NEW reference uses an independently specified zero-loading phantom
+variance coordinate in lavaan. `regen_oracle_mplus_growth_categorical.R`
+freezes four DELTA/THETA single/group growth models. Both scripts require the
+pinned lavaan version and gate Demo free count, df, estimates and tests at
+unchanged printed precision; continuous derived/indirect values are gated too.
+Categorical Demo SEs remain recorded convention observations, while all native
+SEs are numerically gated against default lavaan. The categorical simulation
+uses a positive population slope variance large enough to keep the frozen
+sample's latent variances interior under both bounded and unconstrained fits.

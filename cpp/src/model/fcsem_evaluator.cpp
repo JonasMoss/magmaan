@@ -163,7 +163,7 @@ evaluate_fcsem(const spec::LatentStructure& pt, std::size_t n_free,
     }
 
     for (std::size_t i = 0; i < pt.size(); ++i) {
-      if (is_constraint_op(pt.op[i])) continue;
+      if (is_constraint_op(pt.op[i]) || pt.op[i] == parse::Op::AuxiliaryParam) continue;
       if (pt.group[i] != static_cast<std::int32_t>(b + 1)) continue;
 
       const std::int32_t L = pt.lhs_var[i];

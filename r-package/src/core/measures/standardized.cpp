@@ -635,6 +635,7 @@ fcsem_standardized_row_value(const spec::LatentStructure& pt,
     case parse::Op::Intercept:
     case parse::Op::Threshold:
     case parse::Op::ResponseScale:
+    case parse::Op::AuxiliaryParam:
     case parse::Op::DefineParam:
     case parse::Op::EqConstraint:
     case parse::Op::LtConstraint:

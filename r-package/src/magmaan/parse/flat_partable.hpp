@@ -79,7 +79,7 @@ struct Num   { double value = 0.0; };
 struct Param { std::string_view text; };
 
 enum class BinOp : std::uint8_t { Add, Sub, Mul, Div, Pow };
-enum class UnOp  : std::uint8_t { Neg, Pos, Exp, Log };
+enum class UnOp  : std::uint8_t { Neg, Pos, Exp, Log, Sqrt, Pnorm, Log10 };
 
 struct BinNode {
   BinOp   op = BinOp::Add;
@@ -133,6 +133,7 @@ struct FlatPartable {
   // Alternate frontends can intern normalized/mapped names without changing
   // source_text or invalidating diagnostic spans. Populate before taking views.
   std::vector<char>       symbol_text;
+  std::vector<char>       expression_text; // Alternate frontend expression backing.
   std::vector<BlockKind>  block_kinds;   // header order, parallel to 1-based row blocks
 
   FlatPartable() : mods(1) {}            // mods[0] sentinel

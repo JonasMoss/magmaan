@@ -559,16 +559,16 @@ parse_expected<Expr> parse_unary_or_primary(State& st) noexcept {
     // `exp(` / `log(` is a unary function call; the same identifier without a
     // following `(` is an ordinary parameter reference (a user may even label
     // a parameter `exp`).
-    if ((t.text == "exp" || t.text == "log") &&
+    if ((t.text == "exp" || t.text == "log" || t.text == "sqrt" || t.text == "pnorm" || t.text == "log10") &&
         st.peek().kind == TokenKind::LParen) {
-      const UnOp op = (t.text == "exp") ? UnOp::Exp : UnOp::Log;
+      const UnOp op = t.text == "exp" ? UnOp::Exp : t.text == "log" ? UnOp::Log : t.text == "sqrt" ? UnOp::Sqrt : t.text == "pnorm" ? UnOp::Pnorm : UnOp::Log10;
       st.consume();  // '('
       auto inner = parse_expr(st, 0);
       if (!inner.has_value()) return std::unexpected(inner.error());
       if (st.peek().kind != TokenKind::RParen) {
         return std::unexpected(make_err(
             ParseError::Kind::ExpectedRhsTerm, st.peek().span,
-            "expected ')' to close exp()/log() argument"));
+            "expected ')' to close unary function argument"));
       }
       st.consume();  // ')'
       return Expr{UnNode{op, std::make_unique<Expr>(std::move(*inner))}};
@@ -681,6 +681,7 @@ StatementShape classify_statement(const State& st) noexcept {
           case Op::LtConstraint:
           case Op::GtConstraint:
             out.kind = StatementShape::Kind::Constraint; break;
+          case Op::AuxiliaryParam:
           case Op::DefineParam:
             out.kind = StatementShape::Kind::Define; break;
           case Op::Intercept:

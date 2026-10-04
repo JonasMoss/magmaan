@@ -704,7 +704,8 @@ class Reader {
           const auto q = resolve(std::string_view(section.qualifier).substr(0, dash),
               {"CONSTRAINT", "INDIRECT", "TEST", "PRIORS", "POPULATION", "COVERAGE", "MISSING"});
           if (q == "TEST") diagnostic(MplusClass::Reported, at, "CL28", "MODEL TEST is not imported");
-          else if (q == "CONSTRAINT" || q == "INDIRECT") reject(at, "CL27", "MODEL '" + q + "' not yet supported; planned for increment 4; write explicit BY/ON parameters instead");
+          else if (q == "CONSTRAINT") {out.constraint_bodies.push_back(span(section.body,section.end));diagnostic(MplusClass::Reported,at,"CN04","MODEL CONSTRAINT changes Mplus default INFORMATION to OBSERVED; magmaan retains caller-selected inference conventions");}
+          else if (q == "INDIRECT") out.indirect_bodies.push_back(span(section.body,section.end));
           else if (q == "PRIORS") reject(at, "CL32", "MODEL PRIORS penalties are outside scope");
           else if (q == "POPULATION" || q == "COVERAGE" || q == "MISSING" ||
                    section.qualifier.starts_with("POPULATION-") || section.qualifier.starts_with("COVERAGE-") || section.qualifier.starts_with("MISSING-"))

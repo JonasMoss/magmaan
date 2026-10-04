@@ -13,10 +13,12 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -166,6 +168,7 @@ post_expected<FitExtras>
 fit_extras_from_implied(const spec::LatentStructure& pt,
                         const SampleStats& samp,
                         const model::ImpliedMoments& sm,
+                        const Eigen::VectorXd& theta,
                         std::string_view label) {
   if (sm.sigma.size() != samp.S.size() || samp.n_obs.size() != samp.S.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -173,9 +176,15 @@ fit_extras_from_implied(const spec::LatentStructure& pt,
             ": SampleStats and implied moments have different block counts"));
   }
 
-  auto con_or = build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  const int npar = static_cast<int>(con_or->n_alpha);
+  int npar = static_cast<int>(con_or->n_alpha);
+  if(!pt.nl_constraints.empty()) {
+    if(theta.size()!=pt.n_free()) return std::unexpected(make_err(PostError::Kind::NumericIssue,"fit_extras: nonlinear equality rank requires the fitted coordinates"));
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(estimate::build_nl_constraints(pt).jacobian(theta));
+    svd.setThreshold(1e-9);
+    npar-=static_cast<int>(svd.rank());
+  }
 
   FitExtras out;
   out.npar = npar;
@@ -588,7 +597,7 @@ fit_extras(spec::LatentStructure        pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ev.sigma(θ̂) failed: " + sm_or.error().detail));
   }
-  return fit_extras_from_implied(pt, samp, *sm_or, "fit_extras");
+  return fit_extras_from_implied(pt, samp, *sm_or, est.theta, "fit_extras");
 }
 
 post_expected<FitExtras>
@@ -616,7 +625,7 @@ fit_extras_fcsem(const spec::LatentStructure& pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "FcSemEvaluator::sigma failed: " + sm_or.error().detail));
   }
-  return fit_extras_from_implied(pt, samp, *sm_or, "fit_extras_fcsem");
+  return fit_extras_from_implied(pt, samp, *sm_or, est.theta, "fit_extras_fcsem");
 }
 
 }  // namespace magmaan::measures

@@ -6,6 +6,7 @@
 #include <set>
 #include <tuple>
 #include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/parse/expr_format.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 
 namespace magmaan::compat::mplus {
@@ -22,6 +23,7 @@ std::string number(double value) {
 std::string to_lavaan_syntax(const parse::FlatPartable& flat) {
   std::string result;
   for (const auto& row : flat.rows) {
+    if(row.op==parse::Op::AuxiliaryParam) continue;
     result.append(row.lhs);
     result += " ";
     result.append(row.op==parse::Op::Intercept ? "~" : parse::to_string(row.op));
@@ -53,6 +55,10 @@ std::string to_lavaan_syntax(const parse::FlatPartable& flat) {
     else result.append(row.rhs);
     result += "\n";
   }
+  for(const auto& c:flat.constraints) {
+    result+=c.kind==parse::ConstraintKind::Define ? std::string(c.name)+" := " : parse::expr_to_canonical(c.lhs)+" == ";
+    result+=parse::expr_to_canonical(c.rhs)+"\n";
+  }
   return result;
 }
 
@@ -83,6 +89,7 @@ fit_expected<OrdinalModel> prepare_ordinal_model(std::string_view source,
   OrdinalModel out;
   auto structure=spec::build(parsed->flat,build_options(parsed->input),&out.starts,&out.names);
   if(!structure) return fail(structure.error().detail);
+  if(!structure->nonlinear_eq_rows.empty()) return fail("[CN01] ordinal nonlinear equality constraints require TASK-54.2; use a supported continuous equality fit until that core path is implemented");
   out.structure=std::move(*structure);
   apply_provenance(*parsed,out.structure,out.names);
   auto rep=model::build_matrix_rep(out.structure,&out.names);

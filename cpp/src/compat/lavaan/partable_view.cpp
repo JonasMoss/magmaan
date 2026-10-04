@@ -206,7 +206,7 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
     s.free[j]  = pt.free[i];
     s.exo[j]   = pt.exo[i];
     if (s.free[j] > n_free) n_free = s.free[j];
-    if (is_constraint_op(pt.op[i])) {
+    if (is_constraint_op(pt.op[i]) || pt.op[i] == parse::Op::AuxiliaryParam) {
       s.lhs_var[j] = -1;
       s.rhs_var[j] = -1;
     } else {

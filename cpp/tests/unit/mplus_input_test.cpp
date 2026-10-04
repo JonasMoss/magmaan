@@ -236,7 +236,7 @@ TEST_CASE("Mplus input: CL06 CL16 CL26 CL27 CL28 CL29 CL31 CL32 opaque commands"
     rejection(input() + "DATA " + q + ": anything;\n", "CL06");
   rejection(input() + "DEFINE: y1=y2;\n", "CL16");
   rejection(input() + "MONTECARLO: anything;\n", "CL29");
-  for (const auto& q : {"CONSTRAINT", "INDIRECT"}) rejection(input() + "MODEL " + q + ": anything;\n", "CL27", "increment 4");
+  for (const auto& q : {"CONSTRAINT", "INDIRECT"}) CHECK(MplusParser::read(input() + "MODEL " + q + ": anything;\n"));
   for (const auto& q : {"POPULATION", "COVERAGE", "MISSING", "POPULATION-g1"}) rejection(input() + "MODEL " + q + ": anything;\n", "CL29");
   rejection(input() + "MODEL PRIORS: anything;\n", "CL32");
   rejection(input() + "MODEL TEST: 0=a;\nMODEL TEST: 0=b;\n", "LX01", "repeated command");

@@ -554,7 +554,7 @@ fiml_observed_hessian_analytic(spec::LatentStructure pt,
     for (Eigen::Index b = a; b < q; ++b) {
       const auto& la = locs[static_cast<std::size_t>(a)];
       const auto& lb = locs[static_cast<std::size_t>(b)];
-      if (la.block != lb.block) continue;
+      if (la.block < 0 || la.block != lb.block) continue;
       const auto blk = static_cast<std::size_t>(la.block);
       const auto& bm = am_or->blocks[blk];
       double h2 = detail::second_sigma_trace(la, lb, sow[blk], bm);

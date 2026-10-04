@@ -986,3 +986,38 @@ Final decision-24 regeneration passes all ten Demo model-meaning cases. All
 ten default-lavaan reference payloads remain exactly unchanged; only Demo
 observations were added. Rechecked categorical C++ goldens: 2,398 assertions;
 reader/lowering: 68 assertions; tracked-file, layering and diff checks pass.
+
+
+### TASK-54 growth, constraint and indirect frontend validation
+
+Fourteen continuous and four categorical independent Demo/lavaan goldens
+protect polynomial/free-time/piecewise/group growth, DELTA/THETA growth,
+NEW free/derived coordinates, affine and nonlinear equalities, DO, shared
+sqrt/pnorm/log10 and total/specific/VIA/factor indirect effects. Demo gates
+model meaning at existing printed precision; frozen default-lavaan gates
+estimates, SEs, definitions, df and tests at 1e-5. Sources are the two
+`regen_oracle_mplus_growth*.R` tools; fixtures are the two
+`cpp/tests/fixtures/mplus/golden_growth*.json` files. C++ consumers are the
+spec growth golden and ordinal categorical golden tests. Live lab tests in
+`test-mplus-growth.R` cover independent references, saveRDS/rebuild and active
+LS/FIML restrictions. Inequalities are deliberately refused with the CN01
+PSD/barrier redirect; ordinal nonlinear equalities explicitly name TASK-54.2.
+
+Regression: auxiliary NEW coordinates have no matrix cell. Initializing their
+location to block -1 and excluding them from FIML analytic second derivatives
+prevents invalid block access while preserving restriction derivatives.
+Guard: the new-free ML frozen/live fit and ULS/missing-FIML restriction gates.
+Regression: nonlinear fit extras and the lab df adapter previously rejected or
+omitted fitted equality rank; both now use the fitted coordinates.
+Guard: explicit/implicit nonlinear ML df/test parity and LS/FIML residual checks.
+
+Opt validation: spec 215 cases / 16,935 assertions; API 28 / 788;
+constraint checks 42 / 534; defined/effect checks 7 / 71; categorical golden
+1 / 3,144. Full installed lab: 6,367 expectations, two existing skips and
+two existing two-level warnings. Live R growth data use independently
+specified interior population moments; the frozen C++ continuous cases retain
+their original sample and oracle admissibility observations.
+Corpus: 50/68 accepted, 44 matched, six explicit unsupported fits, zero
+failures and five verified categorical convention differences. The input
+sweep accepts 658 reader / 614 MODEL inputs from 2,440 files, all rejections
+classified. Logs: `~/.cache/magmaan-logs/task-54-*.log`.

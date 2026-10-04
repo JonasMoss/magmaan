@@ -368,6 +368,7 @@ Rcpp::List mplus_model_impl(std::string source) {
   magmaan::spec::Starts starts;
   auto model = magmaan::spec::build(parsed->flat, options, &starts, &names);
   if (!model) Rcpp::stop("magmaan Mplus model error: %s", model.error().detail);
+  if(!parsed->input.categorical.empty() && !model->nonlinear_eq_rows.empty()) Rcpp::stop("[CN01] ordinal nonlinear equality constraints require TASK-54.2; use a supported continuous equality fit until that core path is implemented");
   magmaan::compat::mplus::apply_provenance(*parsed,*model,names);
   auto pt = magmaan::compat::lavaan::to_lavaan_partable(*model, names, starts);
   const auto n = parsed->notes.size();

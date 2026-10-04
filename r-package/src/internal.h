@@ -182,6 +182,7 @@ inline lv::parse::Op op_from_string(const std::string& s) {
   if (s == "~*~") return O::ResponseScale;
   if (s == "~1") return O::Intercept;
   if (s == ":=") return O::DefineParam;
+  if (s == "new") return O::AuxiliaryParam;
   if (s == "==") return O::EqConstraint;
   if (s == "<")  return O::LtConstraint;
   if (s == ">")  return O::GtConstraint;

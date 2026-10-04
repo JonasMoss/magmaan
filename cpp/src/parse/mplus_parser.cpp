@@ -6,6 +6,8 @@
 #include <optional>
 #include <tuple>
 #include <cmath>
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/expr_format.hpp"
 
 namespace magmaan::parse {
 namespace {
@@ -32,8 +34,11 @@ class Lowerer {
   std::map<std::tuple<std::string,Op,std::string>,std::size_t> row_indices;
   std::optional<ParseError> error;
   std::set<std::string> dependent, predictors, indicators, defined, factor_has_loading;
+  std::set<std::string> growth_outcomes, growth_factors;
+  std::string constraint_syntax;
+  SourceSpan overall_body;
   explicit Lowerer(MplusInput input) {
-    out.input = std::move(input); out.notes = out.input.notes;
+    out.input = std::move(input); out.notes = out.input.notes; overall_body=out.input.model_body;
     for (const auto& name : out.input.analysis) { observed.push_back(lower(name)); observed_set.insert(lower(name)); spelling[lower(name)] = name; }
   }
   void reject(SourceSpan span, std::string rule, std::string detail) {
@@ -189,6 +194,257 @@ class Lowerer {
       row_indices.emplace(key,rows.size()); rows.push_back(std::move(row));
     } else if (replace) rows[found->second] = std::move(row);
   }
+  // production: constraint_body ::= (new_statement | equality_statement | do_statement | plot_statement)*
+  std::vector<std::vector<Token>> constraint_statements() {
+    std::vector<std::vector<Token>> result;
+    const auto original = out.input.model_body;
+    for (const auto body : out.input.constraint_bodies) {
+      out.input.model_body = body; tokens.clear(); lex();
+      std::vector<Token> current;
+      for (const auto& token : tokens) {
+        if (token.text == ";") { if (!current.empty()) result.push_back(current); current.clear(); }
+        else current.push_back(token);
+      }
+      if (!current.empty()) reject(current.front().span,"CN01","unterminated constraint; Mplus requires ';'; add a terminator");
+    }
+    out.input.model_body = original;
+    return result;
+  }
+  // production: do_statement ::= 'DO' '(' integer ',' integer ')' constraint_body
+  void expand_do(std::vector<Token> ts, std::size_t depth,
+                 std::vector<std::vector<Token>>& expanded) {
+    if (ts.empty() || error) return;
+    if (expanded.size() >= 100000) {reject(ts.front().span,"CN03","DO expansion exceeds 100000 statements; reduce the loop limits"); return;}
+    if (ts.front().text != "do") {expanded.push_back(std::move(ts)); return;}
+    if (depth >= 3 || ts.size() < 6 || ts[1].text != "(" || ts[4].text != ")") {
+      reject(ts.front().span,"CN03","malformed DO loop; Mplus uses DO (first,last) and at most three nested indices (#, $, %); write that form"); return;
+    }
+    int a=0,b=0;
+    auto pa=std::from_chars(ts[2].text.data(),ts[2].text.data()+ts[2].text.size(),a);
+    auto pb=std::from_chars(ts[3].text.data(),ts[3].text.data()+ts[3].text.size(),b);
+    if(pa.ec!=std::errc{} || pa.ptr!=ts[2].text.data()+ts[2].text.size() || pb.ec!=std::errc{} || pb.ptr!=ts[3].text.data()+ts[3].text.size() || a<0 || b<a || b-a>10000) {
+      reject(ts.front().span,"CN03","invalid DO limits; use ascending nonnegative integer limits within the bounded expansion");return;
+    }
+    const std::string marker=depth==0 ? "#" : depth==1 ? "$" : "%";
+    for(int n=a;n<=b && !error;++n) {
+      std::vector<Token> body;
+      for(std::size_t i=5;i<ts.size();++i) {
+        if(ts[i].text==marker) {
+          if(!body.empty() && body.back().span.end==ts[i].span.begin) {body.back().text+=std::to_string(n);body.back().span.end=ts[i].span.end;}
+          else body.push_back({std::to_string(n),ts[i].span});
+        } else body.push_back(ts[i]);
+      }
+      expand_do(std::move(body),depth+1,expanded);
+    }
+  }
+  // production: mplus_expr ::= expr
+  std::string expression(const std::vector<Token>& ts, std::size_t first, std::size_t last) {
+    std::string value;
+    for(auto i=first;i<last;++i) {
+      auto text=ts[i].text;
+      if(text=="*" && i+1<last && ts[i+1].text=="*") {text="^";++i;}
+      if(text=="phi" && i+1<last && ts[i+1].text=="(") text="pnorm";
+      value+=text+" ";
+    }
+    return value;
+  }
+  // production: new_statement ::= 'NEW' '(' (name_range ('*' signed_number)?)+ ')' ';'
+  void constraints() {
+    std::vector<std::vector<Token>> statements;
+    for(auto ts:constraint_statements()) expand_do(std::move(ts),0,statements);
+    std::map<std::string,double> newly_declared;
+    for(const auto& ts:statements) if(ts.front().text=="new") {
+      if(ts.size()<4 || ts[1].text!="(" || ts.back().text!=")") {reject(ts.front().span,"CN02","malformed NEW declaration; write NEW (name*start ...)");return;}
+      for(std::size_t i=2;i+1<ts.size();) {
+        auto name=ts[i++];std::vector<std::string> names_to_add{name.text};
+        if(i+1<ts.size() && ts[i].text=="-") {
+          ++i;auto last=ts[i++];auto n=name.text.size(),m=last.text.size();
+          while(n && name.text[n-1]>='0' && name.text[n-1]<='9') --n;
+          while(m && last.text[m-1]>='0' && last.text[m-1]<='9') --m;
+          int a=0,b=0;auto pa=std::from_chars(name.text.data()+n,name.text.data()+name.text.size(),a);auto pb=std::from_chars(last.text.data()+m,last.text.data()+last.text.size(),b);
+          if(pa.ec!=std::errc{} || pb.ec!=std::errc{} || name.text.substr(0,n)!=last.text.substr(0,m) || b<a || b-a>10000) {reject(name.span,"CN02","invalid NEW range; list names or use matching numeric suffixes");return;}
+          names_to_add.clear();for(int j=a;j<=b;++j) names_to_add.push_back(name.text.substr(0,n)+std::to_string(j));
+        }
+        double start=.5;
+        if(i+1<ts.size() && ts[i].text=="*") {++i;auto v=number(ts,i);if(!v) {reject(name.span,"CN02","NEW start must be numeric; supply a number after '*'");return;}start=*v;}
+        for(const auto& n:names_to_add) {
+          if(n.empty() || n.front()<'a' || n.front()>'z' || !std::all_of(n.begin(),n.end(),[](char c){return (c>='a' && c<='z') || (c>='0' && c<='9') || c=='_';}) || observed_set.contains(n) || latent_set.contains(n) || newly_declared.contains(n) || std::any_of(rows.begin(),rows.end(),[&](const auto& row){return row.label==n;})) {
+            reject(name.span,"CN02","NEW name conflicts with an existing name or is invalid; declare a distinct parameter name");return;
+          }
+          newly_declared[n]=start;
+        }
+      }
+    }
+    std::set<std::string> loop_names, plot_names;
+    for(const auto& ts:statements) {
+      if(ts.size()>2 && ts[0].text=="loop") loop_names.insert(ts[2].text);
+      if(ts[0].text=="plot") for(std::size_t i=2;i+1<ts.size();++i) plot_names.insert(ts[i].text);
+    }
+    const auto plot_expression=[&](const auto& ts) {
+      return std::any_of(ts.begin(),ts.end(),[&](const auto& token){return loop_names.contains(token.text);}) ||
+        (plot_names.contains(ts[0].text) && !newly_declared.contains(ts[0].text));
+    };
+    std::set<std::string> derived;
+    for(const auto& ts:statements) if(ts.size()>2 && ts[1].text=="=" && newly_declared.contains(ts[0].text)) derived.insert(ts[0].text);
+    std::map<std::string,std::vector<Token>> definitions;
+    for(const auto& ts:statements) if(ts.size()>2 && ts[1].text=="=" && derived.contains(ts[0].text) && !plot_expression(ts)) {
+      definitions.try_emplace(ts[0].text,ts.begin()+2,ts.end());
+    }
+    std::set<std::string> expanding;
+    const auto expand_definition=[&](auto&& self,const std::vector<Token>& input)->std::vector<Token> {
+      std::vector<Token> result;
+      for(const auto& token:input) {
+        auto hit=definitions.find(token.text);
+        if(hit==definitions.end()) result.push_back(token);
+        else {
+          if(expanding.contains(token.text)) {reject(token.span,"CN02","cyclic NEW definition; use acyclic derived parameters");return {};}
+          expanding.insert(token.text);auto body=self(self,hit->second);expanding.erase(token.text);
+          result.push_back({"(",token.span});result.insert(result.end(),body.begin(),body.end());result.push_back({")",token.span});
+        }
+        if(result.size()>100000) {reject(token.span,"CN02","derived expression expansion exceeds 100000 tokens; simplify the definitions");return {};}
+      }
+      return result;
+    };
+    std::set<std::string> emitted_definitions;
+    for(const auto& ts:statements) {
+      if(ts.front().text=="new") continue;
+      if(ts.front().text=="loop" || ts.front().text=="plot") {out.notes.push_back({MplusClass::Reported,ts.front().span,"CN03","LOOP/PLOT plotting request is not imported"});continue;}
+      if(plot_expression(ts)) {out.notes.push_back({MplusClass::Reported,ts.front().span,"CN03","LOOP/PLOT expression is a plotting function, not an estimable parameter"});continue;}
+      auto eq=std::find_if(ts.begin(),ts.end(),[](const auto& t){return t.text=="=" || t.text=="<" || t.text==">";});
+      if(eq==ts.end()) {reject(ts.front().span,"CN01","constraint needs '='; write an explicit or implicit equality");return;}
+      if(eq->text!="=") {reject(eq->span,"CN01","Mplus enforces inequalities during estimation; magmaan deliberately refuses them because active-bound inference needs boundary asymptotics (project/scope.md). For variance positivity drop the inequality and use covariance = 'psd' or 'barrier' in fit_model(); parameter orderings are not supported");return;}
+      auto i=static_cast<std::size_t>(eq-ts.begin());
+      if(i==1 && derived.contains(ts[0].text) && emitted_definitions.insert(ts[0].text).second) constraint_syntax+=expression(ts,0,i)+":= "+expression(ts,i+1,ts.size())+"\n";
+      else {
+        auto lhs=expand_definition(expand_definition,{ts.begin(),eq});
+        auto rhs=expand_definition(expand_definition,{eq+1,ts.end()});if(error) return;
+        constraint_syntax+=expression(lhs,0,lhs.size())+"== "+expression(rhs,0,rhs.size())+"\n";
+      }
+    }
+    for(const auto& [name,start]:newly_declared) if(!derived.contains(name)) {
+      rows.push_back({name,"",name,Op::AuxiliaryParam,{},start,out.input.model_body});
+      if(!grouped_rows.empty()) for(std::size_t g=0;g<grouped_rows.size();++g)
+        grouped_rows[g].push_back({name,"",g==0 ? name : "",Op::AuxiliaryParam,g==0 ? std::nullopt : std::optional<double>{0},start,out.input.model_body});
+    }
+  }
+  // production: indirect_statement ::= name ('IND' name+ | 'VIA' name name) ';'
+  void indirect(std::vector<Row>& model_rows, const std::vector<Token>& ts, std::size_t group) {
+    if(ts.size()<3 || (ts[1].text!="ind" && ts[1].text!="via") || (ts[1].text=="via" && ts.size()!=4) ||
+       std::any_of(ts.begin(),ts.end(),[](const auto& t){return t.text=="(" || t.text==")" || t.text=="mod";})) {
+      reject(ts.front().span,"CN05","causal-effect value/MOD form or malformed indirect request; causal-effect models are outside scope; use y IND [mediators] x or y VIA m x");return;
+    }
+    for(std::size_t i=0;i<ts.size();++i) if(i!=1 && !observed_set.contains(ts[i].text) && !latent_set.contains(ts[i].text)) {reject(ts[i].span,"CN05","unknown indirect path name; use analysis variables or defined factors");return;}
+    std::map<std::string,std::vector<std::pair<std::string,std::string>>> edges;
+    for(std::size_t i=0;i<model_rows.size();++i) {
+      auto& row=model_rows[i];if(row.op!=Op::Regression) continue;
+      std::string coefficient;
+      if(row.fixed) coefficient=std::to_string(*row.fixed);
+      else {if(row.label.empty()) row.label="mi_g"+std::to_string(group)+"_"+row.lhs+"_"+row.rhs;coefficient=row.label;}
+      edges[row.rhs].push_back({row.lhs,coefficient});
+    }
+    const auto& target=ts.front().text;const auto& origin=ts.back().text;
+    std::vector<std::string> terms;
+    if(ts[1].text=="ind" && ts.size()>3) {
+      std::string product="1",from=origin;
+      for(auto i=ts.size()-1;i>1;--i) {
+        const auto to=i==2 ? target : ts[i-1].text;
+        auto edge=std::find_if(edges[from].begin(),edges[from].end(),[&](const auto& item){return item.first==to;});
+        if(edge==edges[from].end()) {product="0";break;}product+="*"+edge->second;from=to;
+      }
+      terms.push_back(product);
+    } else {
+      std::set<std::string> visited{origin};
+      const auto walk=[&](auto&& self,const std::string& from,std::string product,std::size_t length,bool via)->void {
+        if(error) return;
+        for(const auto& [to,coefficient]:edges[from]) {
+          if(visited.contains(to)) continue;
+          const auto term=product.empty() ? coefficient : product+"*"+coefficient;
+          const bool through=via || (ts[1].text=="via" && to==ts[2].text);
+          if(to==target) {if(length>=1 && (ts[1].text=="ind" || through)) terms.push_back(term);}
+          else {visited.insert(to);self(self,to,term,length+1,through);visited.erase(to);}
+          if(terms.size()>100000) {reject(ts.front().span,"CN05","indirect path expansion exceeds 100000 paths; reduce the graph");return;}
+        }
+      };
+      walk(walk,origin,"",0,false);
+    }
+    std::string name="ind_g"+std::to_string(group)+"_"+target;
+    for(std::size_t i=1;i<ts.size();++i) name+="_"+ts[i].text;
+    std::string sum;for(const auto& term:terms) {if(!sum.empty()) sum+=" + ";sum+=term;}
+    constraint_syntax+=name+" := "+(sum.empty() ? "0" : sum)+"\n";
+  }
+  // production: indirect_statement ::= name ('IND' name+ | 'VIA' name name) ';'
+  void indirects() {
+    const auto original=out.input.model_body;
+    for(const auto body:out.input.indirect_bodies) {
+      out.input.model_body=body;tokens.clear();lex();std::vector<Token> current;
+      for(const auto& token:tokens) {
+        if(token.text==";") {
+          if(!current.empty()) {
+            if(grouped_rows.empty()) indirect(rows,current,1);
+            else for(std::size_t g=0;g<grouped_rows.size();++g) indirect(grouped_rows[g],current,g+1);
+          }
+          current.clear();
+        } else current.push_back(token);
+        if(error) break;
+      }
+      if(!current.empty() && !error) reject(current.front().span,"CN05","unterminated indirect request; add ';'");
+    }
+    out.input.model_body=original;
+  }
+  bool append_expressions() {
+    if(constraint_syntax.empty()) return true;
+    auto parsed=Parser::parse(constraint_syntax);
+    if(!parsed) {reject(out.input.model_body,"CN01","invalid expression: "+parsed.error().detail);return false;}
+    out.flat.expression_text=std::move(parsed->source_text);
+    out.flat.constraints=std::move(parsed->constraints);
+    return true;
+  }
+  void put_growth(Row row) {
+    row.span=overall_body;
+    auto found=row_indices.find(std::tuple{row.lhs,row.op,row.rhs});
+    const bool replace=group_mode && found!=row_indices.end() && rows[found->second].span.begin==overall_body.begin;
+    put(std::move(row),replace);
+  }
+  // production: bar_statement ::= name name? name? name? '|' rhs_item+ ';'
+  void growth(const std::vector<Token>& ts) {
+    const auto bar=std::find_if(ts.begin(),ts.end(),[](const auto& t){return t.text=="|";});
+    if(bar==ts.end()) return;
+    const auto n=static_cast<std::size_t>(bar-ts.begin());
+    if(n<1 || n>4 || std::any_of(ts.begin(),ts.end(),[](const auto& t){return t.text=="on" || t.text=="pon" || t.text=="by" || t.text=="xwith" || t.text=="at";})) {
+      reject(bar->span,"GR07","random slope/loading, interaction or individually varying time form; these Mplus model families are outside project/scope.md; write fixed-time polynomial growth instead");return;
+    }
+    auto outcomes=items(ts,n+1,ts.size());if(error) return;
+    if(outcomes.empty() || (outcomes.size()==1 && !outcomes.front().fixed)) {
+      reject(bar->span,"GR07","bare single outcome after '|'; Mplus interprets a random variance; write a growth series with explicit time scores instead");return;
+    }
+    const auto fixed_count=std::count_if(outcomes.begin(),outcomes.end(),[](const auto& item){return item.fixed.has_value();});
+    if(n>2 && fixed_count<static_cast<std::ptrdiff_t>(n)) {
+      reject(bar->span,"GR02","insufficient fixed time scores for polynomial growth; Mplus requires enough fixed scores; fix at least one score per growth factor instead");return;
+    }
+    for(std::size_t k=0;k<n;++k) {
+      const auto& factor=ts[k].text;
+      if(!is_latent(factor)) {reject(ts[k].span,"GR01","growth factor was not declared in the overall MODEL; put the common growth topology in MODEL and override group parameters explicitly");return;}
+      growth_factors.insert(factor);defined.insert(factor);factor_has_loading.insert(factor);
+      const bool categorical=is_categorical(outcomes.front().name) || is_latent(outcomes.front().name);
+      put_growth({factor,"","",Op::Intercept,k==0 && categorical && (!group_mode || grouped_rows.empty()) ? std::optional<double>{0} : std::nullopt,{},out.input.model_body});
+      for(std::size_t j=0;j<outcomes.size();++j) {
+        const auto& outcome=outcomes[j];
+        growth_outcomes.insert(outcome.name);indicators.insert(outcome.name);dependent.insert(outcome.name);
+        std::optional<double> loading=k==0 ? std::optional<double>{1} : outcome.fixed ? std::optional<double>{std::pow(*outcome.fixed,static_cast<int>(k))} : std::nullopt;
+        std::string label;
+        if(!loading) {
+          label="gr_"+factor+"_"+outcome.name;
+          if(k>1) constraint_syntax+=label+" == gr_"+ts[1].text+"_"+outcome.name+"^"+std::to_string(k)+"\n";
+        }
+        put_growth({factor,outcome.name,label,Op::Measurement,loading,outcome.start,out.input.model_body});
+        if(!is_categorical(outcome.name)) put_growth({outcome.name,"","",Op::Intercept,0,{},out.input.model_body});
+        else {
+          const bool theta=out.input.parameterization=="THETA";
+          put_growth({outcome.name,outcome.name,"",theta ? Op::Covariance : Op::ResponseScale,j==0 && (!group_mode || grouped_rows.empty()) ? std::optional<double>{1} : std::nullopt,{},out.input.model_body});
+        }
+      }
+    }
+  }
   // production: model_statement ::= relation | variance_statement | mean_statement | scale_statement | bar_statement | section_marker
   void statement(const std::vector<Token>& ts) {
     if (ts.empty()) return;
@@ -198,7 +454,7 @@ class Lowerer {
     }
     for (const auto& t : ts) {
       if ((t.text == "{" || t.text == "$") && out.input.categorical.empty()) { reject(t.span,t.text == "{" ? "CT04" : "CT02","categorical scale or threshold without CATEGORICAL; declare categorical outcomes instead"); return; }
-      if (t.text == "|") { reject(t.span,"GR01","found '|'; Mplus defines growth or random effects; not yet supported, planned for increment 4; write explicit BY and ON statements instead"); return; }
+      if (t.text == "|") return; // Growth defaults were expanded before explicit mentions.
       if (t.text == "#" || t.text == "%") { reject(t.span,"MS10","found '"+t.text+"'; Mplus selects mixture or multilevel sections; these families are outside scope; supply a single-group model instead"); return; }
       if (t.text == "~" || (t.text == "*" && &t != &ts.front() && (&t-1)->text == "(")) { reject(t.span,"MS09","found ESEM modifier; Mplus defines rotation targets or factor sets; ESEM is outside scope; specify ordinary BY loadings instead"); return; }
     }
@@ -338,7 +594,7 @@ class Lowerer {
     std::size_t equality=0;
     std::map<std::tuple<std::string,Op,std::string>,std::string> defaults;
     for (const auto& row:common) if (row.label.empty() && !row.fixed &&
-        ((row.op==Op::Measurement && !is_latent(row.rhs)) || ((row.op==Op::Intercept || row.op==Op::Threshold) && indicators.contains(row.lhs))))
+        ((row.op==Op::Measurement && !is_latent(row.rhs) && !growth_factors.contains(row.lhs)) || ((row.op==Op::Intercept || row.op==Op::Threshold) && indicators.contains(row.lhs))))
       defaults[key(row)]=".mg"+std::to_string(++equality)+".";
     for (std::size_t g=0; g<out.input.groups.size(); ++g) {
       rows=common; row_indices.clear();
@@ -364,6 +620,12 @@ class Lowerer {
       for (const auto& section:out.input.group_sections) if (lower(section.label)==lower(out.input.groups[g].label)) {
         const auto body=out.input.model_body; out.input.model_body=section.body;
         tokens.clear(); lex(); std::vector<Token> current;
+        // Expand growth in a group before its explicit overrides, as overall.
+        for(std::size_t begin=0;begin<tokens.size();) {
+          auto end=begin;while(end<tokens.size() && tokens[end].text!=";") ++end;
+          growth(std::vector<Token>(tokens.begin()+static_cast<std::ptrdiff_t>(begin),tokens.begin()+static_cast<std::ptrdiff_t>(end)));
+          if(error) break;begin=end+1;
+        }
         for (const auto& token:tokens) {if (token.text==";") {statement(current);current.clear();} else current.push_back(token); if(error) break;}
         if (!current.empty()) reject(current.front().span,"MS01","group MODEL statement lacks a terminator; Mplus requires ';'; add ';' instead");
         out.input.model_body=body;
@@ -419,6 +681,22 @@ class Lowerer {
       }
       begin = end+1;
     }
+    for(std::size_t begin=0;begin<tokens.size();) {
+      auto end=begin;while(end<tokens.size() && tokens[end].text!=";") ++end;
+      auto bar=begin;while(bar<end && tokens[bar].text!="|") ++bar;
+      if(bar<end) for(auto j=begin;j<bar;++j) {
+        const auto& t=tokens[j];
+        if(t.text.empty() || !(t.text.front()>='a' && t.text.front()<='z') || observed_set.contains(t.text)) {reject(t.span,"GR01","growth factor must be a distinct latent name; rename the factor instead");return std::unexpected(*error);}
+        if(!is_latent(t.text)) {latent.push_back(t.text);latent_set.insert(t.text);spelling[t.text]=out.input.source.substr(t.span.begin,t.span.end-t.span.begin);}
+      }
+      begin=end+1;
+    }
+    for(std::size_t begin=0;begin<tokens.size();) {
+      auto end=begin;while(end<tokens.size() && tokens[end].text!=";") ++end;
+      growth(std::vector<Token>(tokens.begin()+static_cast<std::ptrdiff_t>(begin),tokens.begin()+static_cast<std::ptrdiff_t>(end)));
+      if(error) return std::unexpected(*error);
+      begin=end+1;
+    }
     std::vector<Token> current;
     for (const auto& token : tokens) { if (token.text == ";") { statement(current); current.clear(); } else current.push_back(token); if (error) return std::unexpected(*error); }
     if (!current.empty() && std::any_of(current.begin(),current.end(),[](const Token& token) {return token.text == "%";})) { statement(current); if (error) return std::unexpected(*error); }
@@ -434,7 +712,7 @@ class Lowerer {
           int index=0;std::from_chars(row.rhs.data()+1,row.rhs.data()+row.rhs.size(),index);
           if(index>=n) {reject(row.span,"CT02","threshold index exceeds the data's categories; remove the threshold or supply the missing categories instead");return std::unexpected(*error);}
         }
-        for(int k=1;k<n;++k) put({name,"t"+std::to_string(k),"",Op::Threshold,{},{},out.input.model_body},false);
+        for(int k=1;k<n;++k) put({name,"t"+std::to_string(k),growth_outcomes.contains(name) ? "gr_threshold_"+std::to_string(k) : "",Op::Threshold,{},{},out.input.model_body},false);
       }
     }
     std::set<std::string> x;
@@ -464,6 +742,8 @@ class Lowerer {
       if(!dependent.contains(name)) {reject(out.input.model_body,"CT07","CATEGORICAL variable '"+name+"' is not dependent; Mplus requires categorical outcomes; remove it from CATEGORICAL or model it as an outcome instead");return std::unexpected(*error);}
       if(out.input.parameterization=="DELTA" && predictors.contains(name)) {reject(out.input.model_body,"CT05","categorical outcome '"+name+"' both influences and is influenced; Mplus requires THETA; use PARAMETERIZATION = THETA instead");return std::unexpected(*error);}
     }
+    constraints(); if(error) return std::unexpected(*error);
+    indirects(); if(error) return std::unexpected(*error);
     // Resolve names only after role/default calculations; labels remain case-folded.
     for (auto& row : rows) {
       if(row.op==Op::Threshold && !category_counts.empty()) {
@@ -473,10 +753,12 @@ class Lowerer {
           reject(row.span,"CT02","threshold index exceeds the data's categories; remove the threshold instead");return std::unexpected(*error);
         }
       }
+      if(row.op==Op::AuxiliaryParam) continue;
       row.lhs = spelling.at(row.lhs);
       if (!row.rhs.empty() && row.op!=Op::Threshold) row.rhs = spelling.at(row.rhs);
     }
     for (auto& group:grouped_rows) for (auto& row:group) {
+      if(row.op==Op::AuxiliaryParam) continue;
       row.lhs=spelling.at(row.lhs);if(!row.rhs.empty() && row.op!=Op::Threshold) row.rhs=spelling.at(row.rhs);
     }
     for (std::size_t g=0;g<grouped_rows.size();++g) for (const auto& row:grouped_rows[g])
@@ -504,6 +786,7 @@ class Lowerer {
         if(any_start) flat.rows.push_back({view(row.lhs),row.op,view(row.rhs),1,flat.add_modifier(std::move(starts)),row.span});
         flat.rows.push_back({view(row.lhs),row.op,view(row.rhs),1,flat.add_modifier(std::move(values)),row.span});
       }
+      if(!append_expressions()) return std::unexpected(*error);
       return std::move(out);
     }
     for (const auto& row : rows) {
@@ -518,6 +801,7 @@ class Lowerer {
       else if (row.start) mod = flat.add_modifier(StartValue{*row.start});
       flat.rows.push_back({view(row.lhs),row.op,view(row.rhs),1,mod,row.span});
     }
+    if(!append_expressions()) return std::unexpected(*error);
     return std::move(out);
   }
 };

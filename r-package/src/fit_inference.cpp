@@ -546,14 +546,25 @@ double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
 
 // infer_df_stat() — mirrors df_stat(pt, samp). Returns Σ_b p_b(p_b+1)/2 (+ means)
 // − fixed_x − n_free + constraint.rank. Pure function of the model and the
-// data dimensions; doesn't depend on θ̂. Errors on unenforced constraints.
+// data dimensions for affine constraints. Nonlinear rank uses fitted `est`
+// values from the supplied partable. Errors on unenforced constraints.
 //
 // [[Rcpp::export]]
 int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto r = magmaan::inference::df_stat(ctx.pt, ctx.samp);
+  magmaan::post_expected<int> r;
+  if(!ctx.pt.nonlinear_eq_rows.empty()) {
+    Rcpp::DataFrame table(partable);
+    if(!table.containsElementNamed("est")) Rcpp::stop("infer_df_stat(): nonlinear equality df requires a fitted partable with est values");
+    const Rcpp::NumericVector values=table["est"];
+    const Rcpp::IntegerVector free=table["free"];
+    Eigen::VectorXd theta=Eigen::VectorXd::Constant(ctx.pt.n_free(),std::numeric_limits<double>::quiet_NaN());
+    for(R_xlen_t i=0;i<free.size();++i) if(free[i]>0 && free[i]<=theta.size()) theta[free[i]-1]=values[i];
+    if(!theta.allFinite()) Rcpp::stop("infer_df_stat(): fitted nonlinear equality coordinates are missing or nonfinite");
+    r=magmaan::inference::df_stat(ctx.pt,ctx.samp,theta);
+  } else r=magmaan::inference::df_stat(ctx.pt,ctx.samp);
   if (!r.has_value()) stop_post(r.error());
   return *r;
 }

@@ -49,6 +49,16 @@ void eval_pool(const spec::NlConstraint& c, const Eigen::VectorXd& theta,
             val[i] = e;  g[i] = e * g[L];
             break;
           }
+          case parse::UnOp::Sqrt:
+            val[i] = std::sqrt(a); g[i] = g[L] / (2.0 * std::sqrt(a > 0.0 ? a : 1e-300));
+            break;
+          case parse::UnOp::Pnorm:
+            val[i] = 0.5 * std::erfc(-a / std::sqrt(2.0));
+            g[i] = (std::exp(-0.5*a*a) / std::sqrt(2.0*std::acos(-1.0))) * g[L];
+            break;
+          case parse::UnOp::Log10:
+            val[i] = std::log10(a); g[i] = g[L] / ((a > 0.0 ? a : 1e-300) * std::log(10.0));
+            break;
           case parse::UnOp::Log: {
             // (log u)' = u'/u. A transient u ≤ 0 mid-optimization surfaces as
             // a NaN value to the nonlinear optimizer feasibility check (as

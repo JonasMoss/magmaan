@@ -63,6 +63,7 @@ struct MplusInput {
   std::string estimator;
   std::string information;
   SourceSpan model_body;
+  std::vector<SourceSpan> constraint_bodies, indirect_bodies;
   std::vector<MplusDiagnostic> notes;
 };
 

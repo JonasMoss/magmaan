@@ -154,6 +154,15 @@ analyze_linear(const parse::Expr& e, int n_free,
               if (!is_constant(*a)) return std::nullopt;
               { LinearForm f = zero_form(n_free); f.cst = std::exp(a->cst);
                 return f; }
+            case parse::UnOp::Sqrt:
+              if (!is_constant(*a) || a->cst < 0.0) return std::nullopt;
+              { LinearForm f = zero_form(n_free); f.cst = std::sqrt(a->cst); return f; }
+            case parse::UnOp::Pnorm:
+              if (!is_constant(*a)) return std::nullopt;
+              { LinearForm f = zero_form(n_free); f.cst = 0.5 * std::erfc(-a->cst / std::sqrt(2.0)); return f; }
+            case parse::UnOp::Log10:
+              if (!is_constant(*a) || a->cst <= 0.0) return std::nullopt;
+              { LinearForm f = zero_form(n_free); f.cst = std::log10(a->cst); return f; }
             case parse::UnOp::Log:
               if (!is_constant(*a) || a->cst <= 0.0) return std::nullopt;
               { LinearForm f = zero_form(n_free); f.cst = std::log(a->cst);

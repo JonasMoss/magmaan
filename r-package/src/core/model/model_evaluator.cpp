@@ -154,8 +154,8 @@ ModelEvaluator::build(const spec::LatentStructure& pt, const MatrixRep& rep) {
   // Walk rows; build the write table.
   std::int32_t max_free = 0;
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (is_constraint_op(pt.op[i])) continue;
     if (pt.free[i] > max_free) max_free = pt.free[i];
+    if (is_constraint_op(pt.op[i]) || pt.op[i] == parse::Op::AuxiliaryParam) continue;
     const Cell& c = rep.cell_for_row[i];
     if (!c.used) continue;       // P5.1 sentinel for ~ / ~1 rows
 
@@ -595,6 +595,9 @@ ModelEvaluator::assembled(Eigen::Ref<const Eigen::VectorXd> theta) const {
 std::vector<ParamLocation>
 ModelEvaluator::param_locations() const {
   std::vector<ParamLocation> out(n_free_);
+  // Auxiliary coordinates affect restrictions but have no moment derivative.
+  // A missing matrix location must never enter analytic second derivatives.
+  for(auto& location:out) location.block=-1;
   for (const auto& w : writes_) {
     if (!w.is_free) continue;
     const std::size_t k = static_cast<std::size_t>(w.free_idx - 1);

@@ -12,6 +12,11 @@
 #include "magmaan/compat/mplus/model.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/expr_format.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
+#include <Eigen/SVD>
 
 namespace {
 using namespace magmaan;
@@ -80,7 +85,7 @@ TEST_CASE("Mplus MODEL: LB02-LB06 labels equality sets starts and ownership") {
   reject("f BY y1-y4 (a2-a4);","LB04"); reject("y1-y3 ON x1-x2 (p1-p5);","LB05"); reject("f BY y1-y3 (1) y4;","LB03"); reject("f BY y1@1 (l1) y2-y3;","LB03");
 }
 TEST_CASE("Mplus MODEL: later constructs have classified rejections") {
-  reject("{y1};","CT04"); reject("[y1$1];","CT02"); reject("i s | y1@0 y2@1;","GR01"); reject("%OVERALL% y1 ON x1;","MS10"); reject("y1#1;","MS10"); reject("f BY y1-y3 (*rot);","MS09"); reject("f BY y1~0 y2;","MS09");
+  reject("{y1};","CT04"); reject("[y1$1];","CT02"); reject("i | y1;","GR07"); reject("%OVERALL% y1 ON x1;","MS10"); reject("y1#1;","MS10"); reject("f BY y1-y3 (*rot);","MS09"); reject("f BY y1~0 y2;","MS09");
 }
 TEST_CASE("Mplus MODEL: local corpus sweep") {
   const auto* path=std::getenv("MAGMAAN_MPLUS_CORPUS"); if(!path) return;
@@ -132,8 +137,13 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
     }
 
     spec::LatentNames names; auto s=spec::build(m->flat,compat::mplus::build_options(m->input),nullptr,&names); REQUIRE(s);
-    std::set<int> distinct(s->eq_groups.begin(),s->eq_groups.end());
-    CHECK(distinct.size()==v["free_parameters"][0].get<std::size_t>()); ++checked;
+    auto affine=estimate::build_eq_constraints(*s,true);REQUIRE(affine);
+    auto dimension=affine->n_alpha;
+    if(!s->nl_constraints.empty()) {
+      Eigen::JacobiSVD<Eigen::MatrixXd> svd(estimate::build_nl_constraints(*s).jacobian(Eigen::VectorXd::Constant(s->n_free(),.7)));
+      svd.setThreshold(1e-9);dimension-=static_cast<std::int32_t>(svd.rank());
+    }
+    CHECK(dimension==v["free_parameters"][0].get<int>()); ++checked;
     auto pt=compat::lavaan::to_lavaan_partable(*s,names,{});
     std::map<int,int> our_to_demo,demo_to_our;
     auto upper=[](std::string name){for(auto& c:name) if(c>='a' && c<='z') c=static_cast<char>(c-'a'+'A'); return name;};
@@ -312,4 +322,55 @@ TEST_CASE("Mplus categorical: CT01-CT07 materialization and restrictions") {
   REQUIRE(parse::MplusParser::parse(text("u1-u2 (s);","THETA")));
   REQUIRE(parse::MplusParser::parse(text("{u1@0.8};")));
   REQUIRE(parse::MplusParser::parse(text("{u1-u2} (s);")));
+}
+
+TEST_CASE("Mplus growth: GR01-GR07 polynomial defaults, scores and overrides") {
+  auto r=rows(source("i s | y1@0 y2@1 y3@2 y4@3;","","y1 y2 y3 y4"));
+  CHECK(r.at("i=~y1")=="1.000000"); CHECK(r.at("s=~y4")=="3.000000");
+  CHECK(r.at("i~1")=="free"); CHECK(r.at("s~1")=="free");
+  CHECK(r.at("y1~1")=="0.000000"); CHECK(r.at("i~~s")=="free");
+  r=rows(source("i s q | y1@0 y2@1 y3@2 y4@3;","","y1 y2 y3 y4"));
+  CHECK(r.at("q=~y4")=="9.000000");
+  r=rows(source("i s | y1@0 y2@1 y3 y4;","","y1 y2 y3 y4"));
+  CHECK(r.at("s=~y3")=="gr_s_y3");
+  for(auto m:{"[y1@2]; i s | y1@0 y2@1 y3@2 y4@3;", "i s | y1@0 y2@1 y3@2 y4@3; [y1@2];"}) {
+    r=rows(source(m,"","y1 y2 y3 y4"));CHECK(r.at("y1~1")=="2.000000");
+  }
+  r=rows(source("i s1 | y1@0 y2@1 y3@2 y4@2; i s2 | y1@0 y2@0 y3@0 y4@1;","","y1 y2 y3 y4"));
+  CHECK(r.at("i=~y1")=="1.000000"); CHECK(r.at("s2=~y4")=="1.000000");
+  reject("i s q | y1@0 y2@1 y3 y4;","GR02");
+  reject("s | y1 ON x1;","GR07");
+}
+TEST_CASE("Mplus constraints: CN01-CN04 declarations, equations, loops and lifetime") {
+  auto m=parse::MplusParser::parse(source("y1 ON x1 (p1);\ny2 ON x1 (p2);\nMODEL CONSTRAINT:\nNEW(c*.6 r); p2=p1+c; r=PHI(p1)+SQRT(p2**2)+LOG10(10);"));
+  REQUIRE_MESSAGE(m,(m ? "" : m.error().detail));
+  auto moved=std::move(*m);spec::LatentNames names;spec::Starts starts;
+  auto st=spec::build(moved.flat,compat::mplus::build_options(moved.input),&starts,&names);
+  REQUIRE_MESSAGE(st,(st ? "" : st.error().detail));
+  CHECK(st->lin_constraint_d.size()==1); CHECK(moved.flat.constraints.size()==2);
+  CHECK(std::count(st->op.begin(),st->op.end(),parse::Op::AuxiliaryParam)==1);
+  for(std::size_t i=0;i<st->size();++i) if(st->op[i]==parse::Op::AuxiliaryParam) {
+    CHECK(names.row_label[i]=="c");CHECK(st->lhs_var[i]==-1);CHECK(starts.hint[static_cast<std::size_t>(st->free[i]-1)]==doctest::Approx(.6));
+  }
+  auto projected=compat::lavaan::to_lavaan_partable(*st,names,starts);
+  auto rebuilt=compat::lavaan::from_lavaan_partable(projected);
+  CHECK(rebuilt.structure.n_free()==st->n_free());
+  CHECK(rebuilt.structure.lin_constraint_d==st->lin_constraint_d);
+  auto rep=model::build_matrix_rep(*st,&names);REQUIRE(rep);
+  auto ev=model::ModelEvaluator::build(*st,*rep);REQUIRE(ev);CHECK(ev->n_free()==static_cast<std::size_t>(st->n_free()));
+  m=parse::MplusParser::parse(source("y1 ON x1 (p1);\ny2 ON x1 (p2);\nMODEL CONSTRAINT:\nNEW(r1-r2); DO (1,2) r#=p#**2; LOOP(t,0,1,.1); PLOT(r1);"));
+  REQUIRE_MESSAGE(m,(m ? "" : m.error().detail));CHECK(m->flat.constraints.size()==2);
+  m=parse::MplusParser::parse(source("y1 ON x1 (p1);\nMODEL CONSTRAINT:\nNEW(r11 r12 r21 r22); DO (1,2) DO (1,2) r#$=p1+#*$;"));
+  REQUIRE_MESSAGE(m,(m ? "" : m.error().detail));CHECK(m->flat.constraints.size()==4);
+  m=parse::MplusParser::parse(source("y1 ON x1 (p1);\nMODEL CONSTRAINT:\nNEW(r); r=p1**2; LOOP(z,4,6,.1); PLOT(indirect,direct); indirect=r*z; direct=p1+z;"));
+  REQUIRE_MESSAGE(m,(m ? "" : m.error().detail));CHECK(m->flat.constraints.size()==1);
+  reject("y1 ON x1 (a);\nMODEL CONSTRAINT: a>0;","CN01");
+}
+TEST_CASE("Mplus indirect: CN05 total, specific, VIA and absent reverse paths") {
+  auto m=parse::MplusParser::parse(source("y1 ON x1 (a);\ny2 ON y1 (b);\ny3 ON y2 (c);\ny3 ON y1 (d);\nMODEL INDIRECT: y3 IND x1; y3 IND y2 y1 x1; y3 VIA y2 x1; y3 IND y1 y2 x1;"));
+  REQUIRE_MESSAGE(m,(m ? "" : m.error().detail)); REQUIRE(m->flat.constraints.size()==4);
+  CHECK(parse::expr_to_canonical(m->flat.constraints[0].rhs)=="a*b*c+a*d");
+  CHECK(parse::expr_to_canonical(m->flat.constraints[1].rhs)=="1*a*b*c");
+  CHECK(parse::expr_to_canonical(m->flat.constraints[2].rhs)=="a*b*c");
+  CHECK(parse::expr_to_canonical(m->flat.constraints[3].rhs)=="0");
 }

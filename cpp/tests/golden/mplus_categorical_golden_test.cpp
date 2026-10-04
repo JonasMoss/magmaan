@@ -13,7 +13,9 @@ bool categorical_close(double actual,double reference) {
 }
 TEST_CASE("Mplus categorical lowering matches independent frozen lavaan models") {
   using namespace magmaan;
-  auto raw=test::read_fixture(test::fixtures_dir()+"/mplus/golden_categorical.json");REQUIRE(raw);
+  for(const auto* filename:{"/mplus/golden_categorical.json","/mplus/golden_growth_categorical.json"}) {
+  CAPTURE(filename);
+  auto raw=test::read_fixture(test::fixtures_dir()+filename);REQUIRE(raw);
   auto fixture=nlohmann::json::parse(*raw,nullptr,false);REQUIRE_FALSE(fixture.is_discarded());
   for(const auto& item:fixture["cases"].items()) {
     CAPTURE(item.key());const auto& c=item.value();
@@ -28,7 +30,7 @@ TEST_CASE("Mplus categorical lowering matches independent frozen lavaan models")
       stats.NACOV.push_back(test::matrix_from_json(c["nacov"][b]));
       stats.W_dwls.push_back(test::vector_from_json(c["weight"][b]).asDiagonal());
       std::vector<std::int32_t> ov,level;
-      for(std::int32_t j=0;j<6;++j) for(std::int32_t t=1;t<counts[b][static_cast<std::size_t>(j)];++t) {ov.push_back(j);level.push_back(t);}
+      for(std::int32_t j=0;j<static_cast<std::int32_t>(counts[b].size());++j) for(std::int32_t t=1;t<counts[b][static_cast<std::size_t>(j)];++t) {ov.push_back(j);level.push_back(t);}
       stats.threshold_ov.push_back(ov);stats.threshold_level.push_back(level);stats.n_levels.push_back(counts[b]);
     }
     auto rep=model::build_matrix_rep(pt,&triple->names);REQUIRE(rep);
@@ -59,4 +61,5 @@ TEST_CASE("Mplus categorical lowering matches independent frozen lavaan models")
     const auto expected=std::count_if(c["partable"].begin(),c["partable"].end(),[](const auto& r){return r["group"].template get<int>()>0;});
     CHECK(matched==static_cast<std::size_t>(expected));
   }
+}
 }

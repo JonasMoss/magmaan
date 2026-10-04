@@ -94,8 +94,8 @@ define_param        ::= identifier ':=' expr
 
 
 (* === Expression sublanguage ================================================
-   Used for both `:=` definitions and `==` / `<` / `>` constraints. The only
-   function calls are the unary `exp` / `log`; an identifier followed by `(`
+   Used for both `:=` definitions and `==` / `<` / `>` constraints. The
+   function calls are unary `exp`, `log`, `sqrt`, `pnorm`, `log10`; an identifier followed by `(`
    is a function call, an identifier alone is a parameter reference.
    ============================================================================*)
 
@@ -105,7 +105,7 @@ factor              ::= power
 power               ::= unary ('^' power)?                 /* right-associative */
 unary               ::= ('+' | '-') unary | primary
 primary             ::= num_lit | function_call | identifier | '(' expr ')'
-function_call       ::= ('exp' | 'log') '(' expr ')'
+function_call       ::= ('exp' | 'log' | 'sqrt' | 'pnorm' | 'log10') '(' expr ')'
 
 
 (* === Rejected operators ====================================================

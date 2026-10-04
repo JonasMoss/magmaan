@@ -31,6 +31,20 @@
   PON/PWITH, variances, means, modifiers, line-local labels and ranges into
   an owned `MplusModel`. It materializes marker, role, mean and covariance
   defaults explicitly, including thresholds, DELTA scales and THETA residuals.
+  Polynomial/free-time and shared-intercept piecewise growth materialize BY,
+  zero outcome intercepts, growth means and categorical time-invariance rows.
+  MODEL CONSTRAINT imports NEW starts/free coordinates/derived quantities,
+  explicit/implicit linear and continuous nonlinear equalities, and nested DO
+  expansion. Auxiliary `new` rows have no variable IDs or matrix cell but retain
+  their free index, label and start through partable round trips. MODEL INDIRECT
+  enumerates simple directed indirect paths, supports specific written orders
+  (absent paths give zero) and VIA filters, including paths through factors.
+  Per-group defined names follow `ind_g<group>_<outcome>_ind_<names>` and
+  `ind_g<group>_<outcome>_via_<mediator>_<predictor>`; unlabelled regression
+  coefficients receive `mi_g<group>_<outcome>_<predictor>` labels.
+  Equality restrictions reach the existing affine/nonlinear fit machinery;
+  ordinal nonlinear equalities explicitly name TASK-54.2. Inequalities follow
+  the permanent scope boundary and redirect admissibility to PSD/barrier fits.
   Categorical CONFIGURAL/SCALAR shortcuts follow Mplus 9.1; METRIC is
   rejected. Data-driven threshold completion preserves these defaults.
   `compat::mplus::build_options()` disables lavaan
@@ -164,6 +178,6 @@
   them.
 - The expression sub-language shared by `:=` defined parameters and `==`
   constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
-  `exp` / `log`; both the defined-parameter evaluator and the
+  `exp`, `log`, `sqrt`, `pnorm` (Mplus PHI) and `log10`; both the defined-parameter evaluator and the
   nonlinear-constraint evaluator evaluate them with forward-mode AD.
 - Effect coding for loadings.
