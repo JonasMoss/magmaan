@@ -5,3 +5,9 @@
 
 # Smoke attempts are local construction diagnostics; only pilot summaries freeze.
 nested-geometry/smoke*/
+
+# Task-73 keeps only frozen summary/provenance; component arrays stay local.
+score-diagnostic/smoke*/
+score-diagnostic/*/raw/
+score-diagnostic/production-replay/
+score-diagnostic/production-replay-fixed/

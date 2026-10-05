@@ -167,3 +167,17 @@ The production run of 2026-10-03 used
 Each run uses a fresh output directory and separate mode seeds. Raw batches
 stay local; frozen pilot summaries and source/native fingerprints provide
 pricing provenance. Earlier failed smoke attempts remain local diagnostics.
+
+## Small-sample score mechanism replay
+
+The [task-73 diagnostic](diagnostics/note.md) replays 200 production draws in
+each N=100 correct/mild normal/skewed null cell. The observed statistic's
+variance is 34–58% below the expected-sensitivity comparator's, while raw meat
+traces closely match Monte Carlo projected-score covariance traces. Freezing
+population sensitivity recovers part of the variance; fixing the population
+metric recovers more. This implicates fitted projection and studentization,
+with additional reference-shape error under skewness. It motivates a registered
+nuisance-refitting bootstrap or higher-order moment study, not a scalar meat
+correction or a default change. Frozen summaries and provenance are under
+`results/score-diagnostic/frozen-2026-10-05/`; the note describes normalization,
+uncertainty and reproduction.

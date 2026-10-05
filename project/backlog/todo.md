@@ -476,6 +476,10 @@ ordinary API exposes barrier fitting experimentally as
   misspecification (a corrected reference law, or multiplier/bootstrap
   calibration). **Check:** decisions/04 cells plus a larger-df family; size and
   size-adjusted power; no expected-sensitivity fallback. Not release-gating.
+  Task-73 replay (decisions/04 diagnostics): 200 production draws per small-N
+  correct/mild normal/skewed cell implicate fitted projection/metric variance
+  compression rather than uniform meat inflation. Next: register nuisance-
+  refitting bootstrap or higher-order joint-moment correction; no default change.
 
 - [x] **M — compose the FIML policy.** Implemented C++ global/nested
   composers and R dispatch: observed-bread casewise-score covariance,
