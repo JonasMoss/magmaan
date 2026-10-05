@@ -555,6 +555,30 @@ association_ml_ij(spec::LatentStructure pt, const model::MatrixRep& rep,
                   const std::vector<std::int8_t>* row_user = nullptr,
                   bool penalized = false);
 
+// One-dimensional lab score releases. Statistic uses empirical efficient meat;
+// EPC and the unscaled quadratic use observed Schur sensitivity. Each candidate
+// keeps its typed refusal instead of silently disappearing from the sweep.
+struct AssociationMlScore {
+  inference::ScoreCandidate candidate;
+  post_expected<inference::ScoreTestResult> result;
+  Eigen::VectorXd efficient_direction, epc_full;
+  Eigen::VectorXd score;
+  Eigen::MatrixXd H, B, K, nuisance;
+};
+struct AssociationMlScoreTable { std::vector<AssociationMlScore> rows; };
+
+post_expected<AssociationMlScoreTable>
+association_ml_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const Estimates& est, const inference::ModificationIndexOptions& options = {},
+    const std::vector<std::int8_t>* row_user = nullptr, bool penalized = false);
+
+// Rows refer to the original build_eq_constraints() A_eq, as in LS releases.
+post_expected<AssociationMlScoreTable>
+association_ml_score_tests(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& stats, const Estimates& est,
+    const std::vector<std::int8_t>* row_user = nullptr, bool penalized = false);
+
 // Zero df is a successful typed result with no reference law (NaN p-values).
 struct AssociationMlTest {
   double statistic = 0.0;

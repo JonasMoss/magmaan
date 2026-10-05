@@ -1849,3 +1849,78 @@ Rcpp::List association_ml_nested_test(Rcpp::List fit_alt, Rcpp::List fit_null,
       alt.pt,alt.rep,stats,est_from_fit(fit_alt,true),
       null.pt,null.rep,est_from_fit(fit_null,true)));
 }
+
+namespace {
+Rcpp::List association_score_list(
+    const magmaan::post_expected<magmaan::estimate::frontier::AssociationMlScoreTable>& result,
+    const magmaan::spec::LatentNames& names) {
+  if (!result) return Rcpp::List::create(Rcpp::_["available"]=false,
+      Rcpp::_["reason"]=result.error().kind==magmaan::PostError::Kind::UnsupportedInference
+          ? "unsupported_inference" : (result.error().kind==magmaan::PostError::Kind::InfoMatrixSingular
+          ? "singular_information" : "numeric_issue"),
+      Rcpp::_["detail"]=result.error().detail);
+  Rcpp::List rows(result->rows.size());
+  for (std::size_t i=0;i<result->rows.size();++i) {
+    const auto& r=result->rows[i];
+    Rcpp::List row=Rcpp::List::create(Rcpp::_["row"]=r.candidate.row+1,
+        Rcpp::_["group"]=r.candidate.group,
+        Rcpp::_["lhs_var"]=r.candidate.lhs_var+1,
+        Rcpp::_["rhs_var"]=r.candidate.rhs_var+1,
+        Rcpp::_["op"]=std::string(magmaan::parse::to_string(r.candidate.op)),
+        Rcpp::_["kind"]=r.candidate.kind==magmaan::inference::ScoreCandidateKind::FixedParam
+            ? "fixed" : "equality_release",
+        Rcpp::_["available"]=r.result.has_value());
+    auto name=[&](std::int32_t v) {
+      return v>=0 && static_cast<std::size_t>(v)<names.var_name.size()
+          ? names.var_name[static_cast<std::size_t>(v)] : std::string();
+    };
+    row["lhs"]=name(r.candidate.lhs_var); row["rhs"]=name(r.candidate.rhs_var);
+    if (!r.result) {
+      row["reason"]=r.result.error().kind==magmaan::PostError::Kind::UnsupportedInference
+          ? "unsupported_inference" : (r.result.error().kind==magmaan::PostError::Kind::InfoMatrixSingular
+          ? "singular_information" : "numeric_issue");
+      row["detail"]=r.result.error().detail;
+    } else {
+      const auto& x=*r.result;
+      row["statistic"]=x.mi_scaled; row["df"]=x.df; row["p_value"]=x.p_value;
+      row["epc"]=x.epc; row["mi"]=x.mi; row["score"]=x.score;
+      row["information"]=x.information; row["meat"]=x.v_eff;
+      row["epc_full"]=r.epc_full; row["H"]=r.H; row["B"]=r.B;
+      row["K"]=r.K; row["nuisance"]=r.nuisance;
+      row["efficient_direction"]=r.efficient_direction;
+      row["augmented_score"]=r.score;
+    }
+    rows[i]=row;
+  }
+  return Rcpp::List::create(Rcpp::_["available"]=true,
+      Rcpp::_["metric"]="observed",Rcpp::_["rows"]=rows);
+}
+}
+
+// [[Rcpp::export]]
+Rcpp::List association_ml_modification_indices(Rcpp::List fit, Rcpp::List ordinal_stats,
+                                               bool absent = true) {
+  auto refusal=association_fit_refusal(fit);
+  if (refusal.size()) return refusal;
+  auto stats=ordinal_stats_from_arg(ordinal_stats);
+  if (!association_same_stage1(fit,stats)) return Rcpp::List::create(
+      Rcpp::_["available"]=false,Rcpp::_["reason"]="incompatible_stage1");
+  Ctx ctx=ctx_from_fit(fit);
+  magmaan::inference::ModificationIndexOptions options;
+  options.candidates=absent ? magmaan::inference::ScoreCandidateSet::WithAbsentRows
+                           : magmaan::inference::ScoreCandidateSet::FixedRowsOnly;
+  return association_score_list(magmaan::estimate::frontier::association_ml_modification_indices(
+      ctx.pt,ctx.rep,stats,est_from_fit(fit,true),options),ctx.names);
+}
+
+// [[Rcpp::export]]
+Rcpp::List association_ml_score_tests(Rcpp::List fit, Rcpp::List ordinal_stats) {
+  auto refusal=association_fit_refusal(fit);
+  if (refusal.size()) return refusal;
+  auto stats=ordinal_stats_from_arg(ordinal_stats);
+  if (!association_same_stage1(fit,stats)) return Rcpp::List::create(
+      Rcpp::_["available"]=false,Rcpp::_["reason"]="incompatible_stage1");
+  Ctx ctx=ctx_from_fit(fit);
+  return association_score_list(magmaan::estimate::frontier::association_ml_score_tests(
+      ctx.pt,ctx.rep,stats,est_from_fit(fit,true)),ctx.names);
+}

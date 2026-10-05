@@ -975,6 +975,144 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
       h.moment_jacobian, h.prepare);
 }
 
+
+namespace {
+AssociationMlScore association_score_direction(
+    const inference::ScoreCandidate& candidate,
+    const post_expected<AssociationMlIJ>& ij,
+    const Eigen::MatrixXd& nuisance_full, const Eigen::VectorXd& direction,
+    double N) {
+  AssociationMlScore out{candidate, std::unexpected(make_post_err(
+      PostError::Kind::InfoMatrixSingular, "association score: degenerate release")),
+      {}, {}, {}, {}, {}, {}, {}};
+  if (!ij) { out.result = std::unexpected(ij.error()); return out; }
+  const auto& H = ij->sensitivity;
+  const auto& K = ij->coordinates;
+  // Pull both the original nuisance tangent and release direction into the
+  // augmented active chart. QR avoids assuming either chart is orthonormal.
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> chart(K);
+  Eigen::MatrixXd L = chart.solve(nuisance_full);
+  Eigen::VectorXd d = chart.solve(direction);
+  if ((K*L-nuisance_full).norm() > 1e-8 || (K*d-direction).norm() > 1e-8)
+    return out;
+  Eigen::VectorXd v = d;
+  if (L.cols()) {
+    Eigen::MatrixXd Hnn = L.transpose()*H*L;
+    Eigen::LDLT<Eigen::MatrixXd> solve(Hnn);
+    if (solve.info()!=Eigen::Success || !solve.isPositive()) return out;
+    v -= L*solve.solve(L.transpose()*H*d);
+  }
+  const double score = v.dot(ij->score);
+  const double h = v.dot(H*v), b = v.dot(ij->meat*v);
+  out.efficient_direction = v;
+  out.score = ij->score; out.H = H; out.B = ij->meat;
+  out.K = K; out.nuisance = L;
+  if (!(h > 0) || !(b > 0) || !std::isfinite(h+b+score)) return out;
+  inference::ScoreTestResult r;
+  r.candidate = candidate; r.score = score; r.information = h;
+  r.v_eff = b; r.mi = N*score*score/h; r.scaling_factor = b/h;
+  r.mi_scaled = N*score*score/b;
+  r.p_value = std::erfc(std::sqrt(r.mi_scaled/2));
+  r.epc = -score/h;
+  out.epc_full = K*v*r.epc;
+  out.result = r;
+  return out;
+}
+}
+
+post_expected<AssociationMlScoreTable>
+association_ml_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const Estimates& est, const inference::ModificationIndexOptions& options,
+    const std::vector<std::int8_t>* row_user, bool penalized) {
+  if (!est.association) return std::unexpected(make_post_err(
+      PostError::Kind::UnsupportedInference, "association ML estimates required"));
+  auto base = association_ml_ij(pt,rep,stats,est,row_user,penalized);
+  if (!base) return std::unexpected(base.error());
+  auto work = prepare_ordinal_modification_index_model(pt,rep,options);
+  if (!work) return std::unexpected(work.error());
+  auto count = total_n_obs(stats);
+  if (!count) return std::unexpected(fit_to_post(count.error()));
+  AssociationMlScoreTable table;
+  for (std::size_t row = 0; row < work->pt.size(); ++row) {
+    const bool scale = work->pt.op[row] == parse::Op::ResponseScale && work->pt.free[row]==0;
+    if (!scale && !ordinal_fixed_candidate(work->pt,work->rep,row)) continue;
+    inference::ScoreCandidate cand;
+    cand.row=row; cand.op=work->pt.op[row]; cand.lhs_var=work->pt.lhs_var[row];
+    cand.rhs_var=work->pt.rhs_var[row]; cand.group=work->pt.group[row];
+    const bool variance = cand.op==parse::Op::Covariance && cand.lhs_var==cand.rhs_var &&
+        ordinal_var_is_indicator(work->pt,cand.lhs_var);
+    if (scale || variance || cand.op==parse::Op::Threshold || cand.op==parse::Op::Intercept) {
+      table.rows.push_back(AssociationMlScore{cand,std::unexpected(make_post_err(
+          PostError::Kind::UnsupportedInference,
+          "association score: threshold, mean and response-scale releases change the estimator")),
+          {},{},{},{},{},{},{}});
+      continue;
+    }
+    auto aug = work->pt;
+    const auto n = aug.n_free();
+    const double value = aug.fixed_value[row];
+    aug.free[row]=n+1; aug.fixed_value[row]=std::numeric_limits<double>::quiet_NaN();
+    // Preparation can remove parameters without compacting merge IDs. The
+    // new direction must not collide with a surviving threshold's raw ID.
+    if (aug.eq_groups.size()==static_cast<std::size_t>(n)) {
+      const auto next=aug.eq_groups.empty() ? 0
+          : *std::max_element(aug.eq_groups.begin(),aug.eq_groups.end())+1;
+      aug.eq_groups.push_back(next);
+    } else if (!aug.eq_groups.empty()) aug.eq_groups.clear();
+    // General affine constraints are row-major over the old parameter vector.
+    if (!aug.lin_constraint_d.empty()) {
+      std::vector<double> R;
+      for (std::size_t j=0;j<aug.lin_constraint_d.size();++j) {
+        for (int k=0;k<n;++k) R.push_back(aug.lin_constraint_R[j*static_cast<std::size_t>(n)+static_cast<std::size_t>(k)]);
+        R.push_back(0);
+      }
+      aug.lin_constraint_R=std::move(R);
+    }
+    Estimates point=est; point.theta.conservativeResize(n+1); point.theta(n)=value;
+    auto mr = model::build_matrix_rep(aug);
+    if (!mr) return std::unexpected(model_to_post(mr.error()));
+    Eigen::MatrixXd nuisance=Eigen::MatrixXd::Zero(n+1,base->coordinates.cols());
+    nuisance.topRows(n)=base->coordinates;
+    Eigen::VectorXd direction=Eigen::VectorXd::Zero(n+1); direction(n)=1;
+    auto ij=association_ml_ij(aug,*mr,stats,point,row_user,penalized);
+    table.rows.push_back(association_score_direction(cand,ij,nuisance,direction,static_cast<double>(*count)));
+  }
+  return table;
+}
+
+post_expected<AssociationMlScoreTable>
+association_ml_score_tests(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& stats, const Estimates& est,
+    const std::vector<std::int8_t>* row_user, bool penalized) {
+  if (!est.association) return std::unexpected(make_post_err(
+      PostError::Kind::UnsupportedInference, "association ML estimates required"));
+  auto base=association_ml_ij(pt,rep,stats,est,row_user,penalized);
+  if (!base) return std::unexpected(base.error());
+  auto con=build_eq_constraints(pt);
+  if (!con) return std::unexpected(con.error());
+  auto count=total_n_obs(stats);
+  if (!count) return std::unexpected(fit_to_post(count.error()));
+  AssociationMlScoreTable table;
+  for (Eigen::Index row=0;row<con->A_eq.rows();++row) {
+    auto direction=ordinal_release_direction(*con,row);
+    if (!direction) return std::unexpected(direction.error());
+    auto aug=pt;
+    aug.eq_groups.clear(); aug.lin_constraint_R.clear(); aug.lin_constraint_d.clear();
+    for (Eigen::Index j=0;j<con->A_eq.rows();++j) {
+      if (j==row) continue;
+      for (Eigen::Index k=0;k<con->A_eq.cols();++k) aug.lin_constraint_R.push_back(con->A_eq(j,k));
+      aug.lin_constraint_d.push_back(con->b_eq(j));
+    }
+    inference::ScoreCandidate cand;
+    cand.kind=inference::ScoreCandidateKind::EqualityRelease;
+    cand.row=static_cast<std::size_t>(row); cand.op=parse::Op::EqConstraint;
+    auto ij=association_ml_ij(aug,rep,stats,est,row_user,penalized);
+    table.rows.push_back(association_score_direction(cand,ij,base->coordinates,*direction,static_cast<double>(*count)));
+  }
+  return table;
+}
+
 }  // namespace frontier
 
 }  // namespace magmaan::estimate

@@ -3891,6 +3891,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// association_ml_modification_indices
+Rcpp::List association_ml_modification_indices(Rcpp::List fit, Rcpp::List ordinal_stats, bool absent);
+RcppExport SEXP _magmaanlab_association_ml_modification_indices(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP absentSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< bool >::type absent(absentSEXP);
+    rcpp_result_gen = Rcpp::wrap(association_ml_modification_indices(fit, ordinal_stats, absent));
+    return rcpp_result_gen;
+END_RCPP
+}
+// association_ml_score_tests
+Rcpp::List association_ml_score_tests(Rcpp::List fit, Rcpp::List ordinal_stats);
+RcppExport SEXP _magmaanlab_association_ml_score_tests(SEXP fitSEXP, SEXP ordinal_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(association_ml_score_tests(fit, ordinal_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sim_ig_batch_impl
 Rcpp::List sim_ig_batch_impl(Rcpp::NumericMatrix sigma, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int n, int reps, double seed_base, std::string root, std::string generator_family, int quadrature_points, int max_iter, int grid_points_g, int grid_points_h, double objective_tol, double parameter_tol, double finite_diff_step, double tukey_g_bound, double tukey_h_upper, double johnson_gamma_bound, double johnson_log_delta_lower, double johnson_log_delta_upper, double root_eigen_tol, double moment_solve_tol);
 RcppExport SEXP _magmaanlab_sim_ig_batch_impl(SEXP sigmaSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP rootSEXP, SEXP generator_familySEXP, SEXP quadrature_pointsSEXP, SEXP max_iterSEXP, SEXP grid_points_gSEXP, SEXP grid_points_hSEXP, SEXP objective_tolSEXP, SEXP parameter_tolSEXP, SEXP finite_diff_stepSEXP, SEXP tukey_g_boundSEXP, SEXP tukey_h_upperSEXP, SEXP johnson_gamma_boundSEXP, SEXP johnson_log_delta_lowerSEXP, SEXP johnson_log_delta_upperSEXP, SEXP root_eigen_tolSEXP, SEXP moment_solve_tolSEXP) {
@@ -4761,6 +4786,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_association_ml_ij", (DL_FUNC) &_magmaanlab_association_ml_ij, 2},
     {"_magmaanlab_association_ml_global_test", (DL_FUNC) &_magmaanlab_association_ml_global_test, 2},
     {"_magmaanlab_association_ml_nested_test", (DL_FUNC) &_magmaanlab_association_ml_nested_test, 3},
+    {"_magmaanlab_association_ml_modification_indices", (DL_FUNC) &_magmaanlab_association_ml_modification_indices, 3},
+    {"_magmaanlab_association_ml_score_tests", (DL_FUNC) &_magmaanlab_association_ml_score_tests, 2},
     {"_magmaanlab_sim_ig_batch_impl", (DL_FUNC) &_magmaanlab_sim_ig_batch_impl, 22},
     {"_magmaanlab_sim_ig_calibrate_impl", (DL_FUNC) &_magmaanlab_sim_ig_calibrate_impl, 19},
     {"_magmaanlab_sim_ig_draw_impl", (DL_FUNC) &_magmaanlab_sim_ig_draw_impl, 5},

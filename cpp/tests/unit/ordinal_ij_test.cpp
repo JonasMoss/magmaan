@@ -912,3 +912,155 @@ TEST_CASE("association ML global and nested spectral reconstruction") {
   REQUIRE(test.has_value()); CHECK(test->df==0); CHECK(test->spectrum.size()==0);
   CHECK(std::isnan(test->all.p_value));
 }
+
+TEST_CASE("association ML lab MI and releases use observed Schur and exact meat") {
+  using namespace magmaan;
+  const std::string thresholds="\nx1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\nx4 | t1+t2";
+  for (bool grouped : {false,true}) {
+    CAPTURE(grouped);
+    auto X=ordinal_test_block(3244,500,{.8,.73,.66,.59},-.45,.55);
+    auto stats=data::ordinal_stats_from_integer_data(grouped
+        ? std::vector<Eigen::MatrixXd>{X,X} : std::vector<Eigen::MatrixXd>{X},false);
+    REQUIRE(stats.has_value());
+    auto build=[&](const std::string& syntax) {
+      auto parsed=parse::Parser::parse(syntax+thresholds); REQUIRE(parsed.has_value());
+      spec::BuildOptions options; options.n_groups=grouped ? 2 : 1;
+      auto pt=spec::build(*parsed,options); REQUIRE(pt.has_value());
+      REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+      return *pt;
+    };
+    auto fit=[&](const spec::LatentStructure& pt,const model::MatrixRep& rep) {
+      auto start=estimate::ordinal_start_values(pt,rep,*stats,{}); REQUIRE(start.has_value());
+      optim::OptimOptions options; options.ftol=1e-14; options.gtol=1e-10; options.max_iter=1000;
+      auto fitted=estimate::frontier::fit_ml(pt,rep,*stats,*start,estimate::Backend::NloptLbfgs,options);
+      REQUIRE_MESSAGE(fitted.has_value(),(fitted ? "" : fitted.error().detail));
+      return *fitted;
+    };
+    const double N=500*(grouped ? 2 : 1);
+    auto pt=build("f =~ x1+x2+x3+x4\nx1 ~~ 0*x4");
+    auto rep=model::build_matrix_rep(pt); REQUIRE(rep.has_value());
+    auto est=fit(pt,*rep);
+    inference::ModificationIndexOptions options;
+    options.candidates=inference::ScoreCandidateSet::WithAbsentRows;
+    auto mi=estimate::frontier::association_ml_modification_indices(pt,*rep,*stats,est,options);
+    REQUIRE_MESSAGE(mi.has_value(),(mi ? "" : mi.error().detail));
+    int fixed=0, absent=0, refused=0;
+    std::string refusal_details;
+    for (const auto& row : mi->rows) {
+      if (!row.result) { ++refused; refusal_details += row.result.error().detail+"\n"; continue; }
+      if (row.candidate.op!=parse::Op::Covariance) continue;
+      if (row.candidate.row<pt.size()) ++fixed; else ++absent;
+      const auto& r=*row.result;
+      const Eigen::VectorXd v=row.efficient_direction;
+      CHECK(std::abs((row.nuisance.transpose()*row.H*v).norm())<1e-10);
+      const double s=v.dot(row.score), h=v.dot(row.H*v), b=v.dot(row.B*v);
+      CHECK(r.mi_scaled==doctest::Approx(N*s*s/b).epsilon(1e-12));
+      CHECK(r.epc==doctest::Approx(-s/h).epsilon(1e-12));
+      CHECK(r.p_value==doctest::Approx(std::erfc(std::sqrt(N*s*s/b/2))).epsilon(1e-12));
+      // Reconstruct the augmented model independently and differentiate q.
+      auto aug=pt;
+      if (row.candidate.row>=aug.size()) {
+        aug.op.push_back(row.candidate.op); aug.lhs_var.push_back(row.candidate.lhs_var);
+        aug.rhs_var.push_back(row.candidate.rhs_var); aug.group.push_back(row.candidate.group);
+        aug.free.push_back(0); aug.exo.push_back(0); aug.fixed_value.push_back(0);
+      }
+      const auto index=row.candidate.row<pt.size() ? row.candidate.row : aug.size()-1;
+      const int n=aug.n_free(); const double value=aug.fixed_value[index];
+      aug.free[index]=n+1; aug.fixed_value[index]=std::numeric_limits<double>::quiet_NaN();
+      if (!aug.eq_groups.empty()) aug.eq_groups.push_back(
+          *std::max_element(aug.eq_groups.begin(),aug.eq_groups.end())+1);
+      auto ar=model::build_matrix_rep(aug); REQUIRE(ar.has_value());
+      auto ae=model::ModelEvaluator::build(aug,*ar); REQUIRE(ae.has_value());
+      Eigen::VectorXd theta(n+1); theta.head(n)=est.theta; theta(n)=value;
+      data::SampleStats sample{stats->R,{},stats->n_obs};
+      auto cache=estimate::ml_prepare(sample,model::MomentTarget::Correlation); REQUIRE(cache.has_value());
+      auto q=[&](const Eigen::VectorXd& point) {
+        auto evaluation=ae->evaluate(point,true,false); REQUIRE(evaluation.has_value());
+        auto corr=model::correlation_evaluation(*evaluation); REQUIRE(corr.has_value());
+        auto vg=estimate::ml_value_gradient(sample,*cache,corr->moments,corr->J_sigma);
+        REQUIRE(vg.has_value()); return *vg;
+      };
+      Eigen::VectorXd direction=row.K*v;
+      CHECK((.5*row.K.transpose()*q(theta).gradient-row.score).norm()<1e-10);
+      const double step=1e-5;
+      CHECK(std::abs((q(theta+step*direction).value-q(theta-step*direction).value)/(4*step)-s)<1e-9);
+      const double curvature=.5*direction.dot(q(theta+step*direction).gradient-q(theta-step*direction).gradient)/(2*step);
+      CHECK(std::abs(curvature-h)<1e-8);
+      CHECK(std::abs(-s/curvature-r.epc)<1e-8);
+      CHECK((row.epc_full-direction*r.epc).norm()<1e-12);
+    }
+    INFO(refusal_details);
+    CHECK(fixed==(grouped ? 2 : 1)); CHECK(absent>0); CHECK(refused>0);
+    auto equality=build(grouped ? "f =~ x1+l*x2+x3+x4" : "f =~ x1+a*x2+b*x3+x4\na == 1.1*b");
+    auto er=model::build_matrix_rep(equality); REQUIRE(er.has_value());
+    auto ee=fit(equality,*er);
+    auto releases=estimate::frontier::association_ml_score_tests(equality,*er,*stats,ee);
+    REQUIRE(releases.has_value()); REQUIRE(releases->rows.size()==1);
+    const auto& release=releases->rows[0]; REQUIRE(release.result.has_value());
+    const auto& r=*release.result;
+    // Independent Schur block reconstruction in the augmented chart.
+    Eigen::MatrixXd L=release.nuisance;
+    Eigen::VectorXd v=release.efficient_direction;
+    Eigen::MatrixXd inv=release.H.inverse();
+    auto con=estimate::build_eq_constraints(equality); REQUIRE(con.has_value());
+    Eigen::RowVectorXd A=con->A_eq.row(0)*release.K;
+    Eigen::VectorXd explicit_v=inv*A.transpose()/(A*inv*A.transpose())(0,0);
+    explicit_v *= (A*v)(0);
+    CHECK((v-explicit_v).norm()<1e-10);
+    CHECK((L.transpose()*release.H*v).norm()<1e-10);
+    CHECK(r.mi_scaled==doctest::Approx(N*std::pow(v.dot(release.score),2)/v.dot(release.B*v)).epsilon(1e-12));
+    // At exact fit the score and LR local metrics have the same spectrum.
+    auto augmented=equality; augmented.eq_groups.clear();
+    augmented.lin_constraint_R.clear(); augmented.lin_constraint_d.clear();
+    auto exact=*stats;
+    auto evaluator=model::ModelEvaluator::build(equality,*er); REQUIRE(evaluator.has_value());
+    auto evaluation=evaluator->evaluate(ee.theta,true,false); REQUIRE(evaluation.has_value());
+    auto correlation=model::correlation_evaluation(*evaluation); REQUIRE(correlation.has_value());
+    exact.R=correlation->moments.sigma;
+    auto exact_release=estimate::frontier::association_ml_score_tests(equality,*er,exact,ee);
+    REQUIRE(exact_release.has_value()); REQUIRE(exact_release->rows[0].result.has_value());
+    const auto& exact_score=*exact_release->rows[0].result;
+    auto nested=estimate::frontier::association_ml_nested_test(augmented,*er,exact,ee,equality,*er,ee);
+    REQUIRE_MESSAGE(nested.has_value(),(nested ? "" : nested.error().detail));
+    REQUIRE(nested->df==1);
+    CHECK(nested->spectrum(0)==doctest::Approx(exact_score.v_eff/exact_score.information).epsilon(1e-9));
+    CHECK(exact_score.mi_scaled<1e-20);
+    // Finite-difference refits from an exact null: observed Newton EPC agrees
+    // to first order with the actual released-model parameter displacement.
+    auto perturbed=exact;
+    for (auto& R : perturbed.R) { R(2,0)+=1e-5; R(0,2)+=1e-5; }
+    optim::OptimOptions tight; tight.ftol=1e-16; tight.gtol=1e-12; tight.max_iter=1000;
+    auto restricted=estimate::frontier::fit_ml(equality,*er,perturbed,ee.theta,
+        estimate::Backend::NloptLbfgs,tight);
+    REQUIRE(restricted.has_value());
+    auto full=estimate::frontier::fit_ml(augmented,*er,perturbed,restricted->theta,
+        estimate::Backend::NloptLbfgs,tight);
+    REQUIRE(full.has_value());
+    auto one_step=estimate::frontier::association_ml_score_tests(equality,*er,perturbed,*restricted);
+    REQUIRE(one_step.has_value()); REQUIRE(one_step->rows[0].result.has_value());
+    const Eigen::VectorXd change=full->theta-restricted->theta;
+    CHECK((change-one_step->rows[0].epc_full).norm()<1e-7);
+    auto missing=*stats; missing.int_data[0](0,0)=-1;
+    auto refusal=estimate::frontier::association_ml_score_tests(equality,*er,missing,ee);
+    REQUIRE_FALSE(refusal.has_value()); CHECK(refusal.error().kind==PostError::Kind::UnsupportedInference);
+    auto fixed_threshold=pt;
+    for (std::size_t row=0;row<fixed_threshold.size();++row) {
+      if (fixed_threshold.op[row]!=parse::Op::Threshold) continue;
+      fixed_threshold.free[row]=0; fixed_threshold.fixed_value[row]=0; break;
+    }
+    auto threshold_refusal=estimate::frontier::association_ml_modification_indices(fixed_threshold,*rep,*stats,est,options);
+    REQUIRE_FALSE(threshold_refusal.has_value());
+    CHECK(threshold_refusal.error().kind==PostError::Kind::UnsupportedInference);
+    auto boundary_est=est;
+    for (std::size_t row=0;row<pt.size();++row)
+      if (pt.op[row]==parse::Op::Covariance && pt.lhs_var[row]==pt.rhs_var[row] &&
+          pt.lhs_var[row]>=0 && pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[row])]<0 && pt.free[row]>0)
+        boundary_est.theta(pt.free[row]-1)=0;
+    auto boundary=estimate::frontier::association_ml_modification_indices(pt,*rep,*stats,boundary_est,options);
+    REQUIRE_FALSE(boundary.has_value()); CHECK(boundary.error().kind==PostError::Kind::UnsupportedInference);
+    auto untagged=est; untagged.association.reset();
+    auto mixed_refusal=estimate::frontier::association_ml_score_tests(pt,*rep,*stats,untagged);
+    REQUIRE_FALSE(mixed_refusal.has_value()); CHECK(mixed_refusal.error().kind==PostError::Kind::UnsupportedInference);
+    CHECK_FALSE(estimate::frontier::association_ml_modification_indices(pt,*rep,*stats,est,options,nullptr,true).has_value());
+  }
+}

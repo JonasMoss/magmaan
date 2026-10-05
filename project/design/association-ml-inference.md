@@ -2,8 +2,8 @@
 
 TASK-32.1 audits the fitter and specifies implementation gates; TASK-32.2
 implements the lab evaluation-point covariance component, and TASK-32.3 adds
-lab global/nested reference laws. Ordinary exposure remains gated by subcards
-4–5. The ordinary policy must satisfy the
+lab global/nested reference laws. TASK-32.4 adds lab MI and linear releases;
+ordinary exposure remains gated by subcard 5. The ordinary policy must satisfy the
 [misspecification requirement](../scope.md#misspecification-robust-inference-requirement).
 Initial scope is independent complete rows, all-ordinal indicators, saturated
 thresholds, fixed response scales and linear association constraints. Missing
@@ -81,7 +81,7 @@ are 0.117626, 0.029646 and 0.00728114 at total N = 250, 1000 and 4000. These
 are deterministic numerical validation, not policy coverage calibration.
 Subcards 1 (the exact sampling channel and its outstanding gates) and 2 (lab
 score/sensitivity/covariance) are implemented; subcard 3 adds lab spectral laws
-and subcards 4–5 remain open.
+and subcard 5 remains open.
 The lab `association_ml_global_test()` reports T = 2N q and All (negative
 weights truncated), SB and PEBA4. For correlation basis E_j, its local null
 metric is V_b[j,k] = w_b tr(C_b^-1 E_j C_b^-1 E_k)/2. With Delta the active
@@ -107,7 +107,29 @@ constraints, covariance faces and singular active information remain refused.
 Independent explicit metric/Gamma and restriction reconstructions, exact-fit,
 saturated, identical-model, one-restriction and identical misspecified-stratum
 gates live in `ordinal_ij_test.cpp`. These lab references do not select an
-ordinary-user policy; MI/releases and calibration remain subcards 4–5.
+ordinary-user policy; policy calibration remains subcard 5.
+
+The lab `association_ml_modification_indices()` and `association_ml_score_tests()`
+reuse the LS candidate enumeration and affine release directions, with separate
+association kernels. For an augmented active chart, let L be the original
+nuisance tangent and d the release direction. Define
+v = d - L (L' H L)^(-1) L' H d, s_eff = v' s,
+h_eff = v' H v and b_eff = v' B v. The robust statistic is
+N s_eff^2 / b_eff with a one-df chi-square reference; the unscaled diagnostic
+is N s_eff^2 / h_eff and EPC is -s_eff / h_eff. Thus both nuisance projection
+and the declared EPC metric use observed H. `epc_full = K v EPC` includes
+nuisance adjustment. Fixed-row EPC uses the new parameter's units; equality
+EPC uses the existing normalized affine release direction. Every candidate
+retains a typed result/refusal. No multi-df release is exposed.
+At exact fit, its local unscaled score metric has spectrum b_eff/h_eff,
+matching the nested LR reference for the same restriction. Away from exact
+fit the score and LR statistics need not agree at finite N. Independent Schur,
+augmented q/gradient/curvature, small-perturbation released refits, grouped
+fixed/absent rows and cross-group equality gates live in `ordinal_ij_test.cpp`;
+lab reconstruction/refusal gates are in `test_association_ml_scores.R`.
+Threshold, mean and response-scale releases, singular augmented information,
+primitive PSD faces, penalties, missing rows and mixed estimators are refused.
+The LS workers and ordinary policy guards retain their previous behavior.
 
 Lavaan NACOV/OPG is a compatibility comparator only. A caller-provided NACOV
 without a declared, validated sampling meaning cannot grant ordinary inference.
@@ -152,12 +174,12 @@ refuse current association inference. Preserve those guards until gates pass.
    under larger-model misspecification. Compare lavaan only where its estimator
    and recipe demonstrably match; otherwise use independent derivative and
    quadratic references, without inventing a parity exemption.
-4. **Association MI and linear releases; C++/R composition.** Acceptance:
+4. **Association MI and linear releases (complete lab component).** Acceptance:
    independent one-direction Schur reconstruction, augmented-model gradient and
    finite-difference EPC gates; grouped absent/fixed rows and equality releases;
-   agreement with the nested score for the same restriction; C++/both-R results
-   and typed unsupported threshold/scale/boundary/penalty routes. Remove only
-   the guards covered by these gates.
+   agreement with the nested score for the same restriction; C++/lab-R results
+   and typed unsupported threshold/scale/boundary/penalty routes. Ordinary guards remain until
+   subcard 5 calibration.
 5. **Frozen policy calibration before ordinary exposure.** Predeclare covariance
    coverage and global/nested/MI size panels over N, category imbalance, group
    constraints and latent nonnormality/model misspecification. Acceptance:

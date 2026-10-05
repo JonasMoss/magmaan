@@ -1245,8 +1245,10 @@ release, including dependencies otherwise shared with the primary programme.
   derivatives, nonnormal case weights, stratified delete-one, exact-fit and
   identification-chart gates. TASK-32.3 adds lab global/nested All, SB and PEBA4
   reference laws with explicit spectrum/normalization, zero-df, exact-fit and
-  misspecified pseudo-true restriction gates. MI/releases and policy calibration
-  remain open (subcards 4–5). Ordinary association-ML components retain typed
+  misspecified pseudo-true restriction gates. TASK-32.4 adds lab fixed/absent-row
+  MI and linear releases with observed Schur EPC and exact projected meat,
+  independent reconstruction, derivative/refit and grouped gates. Policy
+  calibration remains open (subcard 5). Ordinary association-ML components retain typed
   refusal until those contracts and their calibration pass.
 
 ### Barrier fitting and inference

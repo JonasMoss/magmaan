@@ -81,13 +81,19 @@
 
 ## Lab changes
 
+- Lab `association_ml_modification_indices()` and `association_ml_score_tests()`
+  add fixed/absent association MI and linear equality releases. Nuisance
+  projection and EPC use observed sensitivity; robust one-df tests use exact
+  empirical Stage-1 projected meat. Candidate refusals stay visible. Ordinary
+  association inference remains guarded pending policy calibration.
+
 - Lab-only `association_ml_global_test()` and `association_ml_nested_test()`
   report All, SB and PEBA4 references using exact empirical Stage-1 influence.
   Global tests use the local correlation ML residual metric; nested tests use
   observed sensitivity and exact parameter restrictions, including grouped
   pseudo-true restrictions under larger-model misspecification. Zero df and
   unsupported channels have typed reasons; moment nesting is refused.
-  Ordinary association inference remains gated by MI/release and calibration.
+  Ordinary association inference remains gated by policy calibration.
 
 - Lab-only `association_ml_ij()` composes exact empirical first-stage rows
   with the observed association-ML Hessian and target derivatives. It returns

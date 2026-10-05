@@ -998,8 +998,14 @@ exact Stage-1 Gamma, or observed H/IJ meat and an exact parameter restriction.
 Explicit matrix reconstructions, zero-df/exact-fit reductions, one-restriction,
 grouped and misspecified pseudo-true restriction gates are in `ordinal_ij_test.cpp`.
 Moment nesting is refused. Ordinary covariance, global/nested tests and
-MI/releases remain typed unavailable pending subcards 4–5. No policy guard
-is removed.
+MI/releases remain typed unavailable pending subcard 5. Lab
+`association_ml_modification_indices` and `association_ml_score_tests` now
+compose observed Schur nuisance projection/EPC with exact empirical projected
+meat and one-df chi-square statistics. Fixed/absent association rows and
+linear equality releases retain per-candidate typed refusals. Independent
+Schur, augmented gradient/curvature, released-refit and grouped gates are in
+`ordinal_ij_test.cpp`; lab reconstruction/refusals are in
+`test_association_ml_scores.R`. No policy guard is removed.
 
 ### Mixed DWLS ordinary policy
 
