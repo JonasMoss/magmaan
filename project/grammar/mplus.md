@@ -308,7 +308,7 @@ Gate references (each names the maintained file rather than an increment):
 | MS05 | accepted / rejected: Mplus error | PON/PWITH paired lists of equal size | P |
 | MS06 | accepted | WITH crossing, unordered pair collapse, categorical WLS boundary | P, C |
 | MS07 | accepted | variance/residual variance mentions; categorical form follows CT04 | P, C |
-| MS08 | rejected: deliberate | explicit observed x moments imply mixed conditioning | P |
+| MS08 | accepted / rejected: deliberate | complete x mentions lower the joint model; partial mentions name the complete variance statement | P |
 | MS09 | rejected: out of family | ESEM factor sets/target rotation | P |
 | MS10 | rejected: out of family | mixture/class/level sections | P |
 | MS11 | accepted / rejected: deliberate | NOMEANSTRUCTURE only with INFORMATION=EXPECTED | I, P |
@@ -505,9 +505,16 @@ alpha exposure.
   otherwise construction succeeds (the tables can be inspected) and fitting
   fails with an error that names the one edit to the input. Three cases:
   observed covariates that Mplus conditions on (add every x variance and
-  pairwise WITH, which makes Mplus fit the joint model too), NOMEANSTRUCTURE
-  (remove it), and summary data without MEANS (add MEANS or use raw data).
-  The lab's `mplus_model()` keeps Mplus's conditional convention.
+  statements, e.g. `x1 x2;`, which make Mplus fit the joint model too;
+  P-MS08b shows means and covariances are automatic), NOMEANSTRUCTURE
+  (remove it), and summary data without MEANS (supply raw observations through `mplus_data()`;
+  ordinary fitting accepts raw data frames only).
+  Supply `magmaanlab::mplus_model()` to `magmaan_model()`; plain strings remain
+  lavaan syntax. Models record `$fittable` and `$mplus_refusals`; fitting a
+  refused model raises `magmaan_mplus_error` with `reason` and `edit` fields.
+  ESTIMATOR stays reported metadata; callers select ordinary ML/FIML or DWLS
+  (Mplus WLSMV denotes DWLS estimation with corrected inference). The lab's
+  `mplus_model()` keeps conditioning unless the source explicitly brings all x in.
 
 ## Implementation sequence
 

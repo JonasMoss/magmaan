@@ -22,7 +22,10 @@ string has the default structural choices: one group, continuous
 variables and marker identification. Data with ordered factors need
 \code{magmaan_model(ordered = )}.}
 
-\item{data}{A data frame of raw observations.}
+\item{data}{A data frame of raw observations. Mplus ESTIMATOR settings are
+reported, not imported: choose the ordinary estimator explicitly. Mplus
+ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
+to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.}
 
 \item{estimator}{\code{"ML"}, \code{"FIML"}, \code{"ML2S"}, \code{"GLS"} or \code{"ULS"} for
 continuous variables; \code{"DWLS"}, \code{"WLS"} or \code{"ULS"} for ordered variables.

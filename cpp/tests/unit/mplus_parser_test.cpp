@@ -69,7 +69,7 @@ TEST_CASE("Mplus MODEL: DF01-DF13 roles and explicit defaults") {
   r=rows(source("f1 BY y1-y2; f2 BY y3-y4; g BY f1 f2; f1 f2 ON x1;")); CHECK_FALSE(r.contains("f1~~f2"));
   r=rows(source("f1 BY y1-y2; f2 BY y3-y4; y1 WITH y3;","MODEL=NOCOVARIANCES;")); CHECK_FALSE(r.contains("f1~~f2")); CHECK(r.at("y1~~y3")=="free");
   r=rows(source("f BY y1-y3;","MODEL=NOMEANSTRUCTURE; INFORMATION=EXPECTED;")); CHECK_FALSE(r.contains("f~1")); CHECK_FALSE(r.contains("y1~1"));
-  for (auto model : {"y1 ON x1; x1;","y1 ON x1; [x1];","y1 ON x1; x1 WITH x2;"}) reject(model,"MS08");
+  for (auto model : {"y1 ON x1 x2; x1;","y1 ON x1 x2; [x1];"}) reject(model,"MS08");
 }
 TEST_CASE("Mplus MODEL: NM03 NM04 NM05 MS03 MS05 MS06 ranges and pairing") {
   auto r=rows(source("f BY y1-y3;","","y1 x1 y2 y3")); CHECK(r.contains("f=~x1"));
@@ -112,6 +112,8 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
   auto categorical_raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_categorical.json"); REQUIRE(categorical_raw);
   auto categorical=nlohmann::json::parse(*categorical_raw,nullptr,false); REQUIRE_FALSE(categorical.is_discarded());
   probes.update(categorical);
+  auto joint_raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_joint_x.json"); REQUIRE(joint_raw);
+  probes.update(nlohmann::json::parse(*joint_raw,nullptr,false));
   int checked=0;
   for(auto probe=probes.begin();probe!=probes.end();++probe) for(auto variant=probe.value()["variants"].begin();variant!=probe.value()["variants"].end();++variant) {
     INFO(probe.key(),"/",variant.key()); const auto& v=variant.value();
@@ -409,5 +411,15 @@ TEST_CASE("Mplus rejection contracts cover malformed constraint growth and thres
     for (const auto* part : {"found '", "Mplus", "magmaan", "instead"})
       CHECK_MESSAGE(result.error().detail.find(part) != std::string::npos, result.error().detail);
     CHECK_MESSAGE(result.error().detail.find(instruction) != std::string::npos, result.error().detail);
+  }
+}
+
+TEST_CASE("Mplus MODEL: complete observed X mentions lower the joint model") {
+  for (const auto& mention : {"x1 x2;", "[x1 x2];", "x1 WITH x2;"}) {
+    auto parsed=parse::MplusParser::parse(source(std::string("f BY y1-y3; f ON x1 x2; ")+mention));
+    REQUIRE(parsed); CHECK(parsed->input.joint_x);
+    auto r=rows(source(std::string("f BY y1-y3; f ON x1 x2; ")+mention));
+    CHECK(r.at("x1~~x1")=="free"); CHECK(r.at("x2~~x2")=="free");
+    CHECK(r.at("x1~~x2")=="free"); CHECK(r.at("x1~1")=="free"); CHECK(r.at("x2~1")=="free");
   }
 }

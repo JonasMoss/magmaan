@@ -72,8 +72,11 @@ multilevel models, Bayes and full-information categorical links are outside
 the linear SEM family: retain those analyses in Mplus. ESEM rotation is
 replaced only by explicitly specified ordinary BY factors. Bare \code{@} uses
 data-dependent Mplus starts; write an explicit \verb{@value} instead. Remove
-explicit observed-independent means/variances/WITH mentions to preserve
-fixed-x conditioning. Recode data-dependent GROUPING forms to explicit
+all observed-independent means/variances/WITH mentions to preserve
+fixed-x conditioning, or bring every observed independent variable into the
+joint random-X model (e.g. \verb{x1 x2;}). Complete mentions free X means,
+variances and default covariances; partial mentions are rejected with the
+exact variance statement that completes the joint model. Recode data-dependent GROUPING forms to explicit
 integer code/label pairs in R. Categorical summary inputs require individual
 observations for magmaan's moment preparation.
 

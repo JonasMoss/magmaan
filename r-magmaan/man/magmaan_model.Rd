@@ -21,7 +21,14 @@ magmaan_model(
 its own ordered variables, grouping, identification, parameterization and
 equality constraints; explicit arguments must agree with it. A
 specification that fixes exogenous covariates (\code{fixed_x = TRUE} with
-observed covariates) is rejected.}
+observed covariates) is rejected. Explicit \code{magmaanlab::mplus_model()}
+specifications preserve their source and tables; plain strings are never
+detected as Mplus. Mplus construction records \code{fittable} and
+\code{mplus_refusals}; fitting refuses conditional observed X, NOMEANSTRUCTURE,
+and summary inputs without MEANS with a \code{magmaan_mplus_error} condition
+carrying \code{reason} and \code{edit}. Add all X variance mentions (\verb{x1 x2;}) to
+specify the joint model, remove NOMEANSTRUCTURE, or supply raw observations
+through \code{magmaanlab::mplus_data()}, respectively.}
 
 \item{prototype}{A data frame that declares the data schema: the model's
 variables, the grouping column's groups and their order, and the

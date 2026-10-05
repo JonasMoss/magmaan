@@ -97,7 +97,7 @@ test_that("Mplus rejects unsupported inputs and construction overrides explicitl
   base <- mplus_input(mplus_cases[[1]])
   for (item in list(c(paste0(base,"DEFINE: x1=2;\n"),"CL16"),
                     c(sub("NAMES=", "GROUPING=g(1=a 2=b); NAMES=",base),"MG03"),
-                    c(sub("F BY X1 X2 X3;", "x2 ON x1; x1;",base),"MS08"),
+                    c(sub("F BY X1 X2 X3;", "x2 ON x1 x3; x1;",base),"MS08"),
                     c(paste0(base,"ANALYSIS: MODEL=NOMEANSTRUCTURE;\n"),"MS11"),
                     c(sub("x1 x2 x3", "a1b-a3b",base),"NM02"))) {
     expect_error(mplus_model(item[1]), item[2])

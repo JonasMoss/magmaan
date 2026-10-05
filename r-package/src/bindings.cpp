@@ -411,6 +411,8 @@ Rcpp::List mplus_model_impl(std::string source) {
       Rcpp::_["group_labels"] = group_code,
       Rcpp::_["groups"] = Rcpp::DataFrame::create(Rcpp::_["label"] = group_label, Rcpp::_["code"] = group_code),
       Rcpp::_["meanstructure"] = options.meanstructure,
+      Rcpp::_["fixed_x"] = options.fixed_x,
+      Rcpp::_["observed_x"] = parsed->input.observed_x,
       Rcpp::_["notes"] = Rcpp::DataFrame::create(Rcpp::_["class"] = klass,
           Rcpp::_["rule"] = rule, Rcpp::_["line"] = line, Rcpp::_["col"] = col,
           Rcpp::_["message"] = message));

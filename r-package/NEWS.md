@@ -1,5 +1,9 @@
 # magmaanlab 0.2.0 (in development)
 
+- `mplus_model()` accepts complete observed-X moment mentions as joint random-X
+  models; partial mentions name the exact completion statement. Mplus 9.1
+  probes show all X variance mentions suffice without means or WITH.
+
 - DWLS nested tests now support moment-nested Wu–Estabrook threshold equality
   through an implied-moment embedding and null tangent in the larger model.
   Three-category threshold steps report `equivalent_models`; released-scale

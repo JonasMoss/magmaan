@@ -190,7 +190,7 @@ OFF.
 | MS05 | D, 725–726 | `a b PON c d` pairs elements; both sides need equal length. `a b WITH c d` crosses all left and right elements; PWITH pairs them. |
 | MS06 | D, 726, 745; A | WITH frees covariances among continuous variables (residual covariances for dependent variables); for categorical or censored variables only with weighted least squares. `y1-y3 WITH y1-y3` yields the distinct unordered pairs and no variances (shown by the label example on p. 745). Self-pairs and duplicate orientations collapse to one parameter. |
 | MS07 | D, 728 | A bare variable list refers to variances of independent and residual variances of dependent variables; mentioning frees them. Categorical observed variables have no variance parameter (Theta exceptions belong to increment 3). |
-| MS08 | D, 723; P | Mentioning the variance or mean of an observed independent variable brings that variable into the model: it gains a free mean and variance, its cases with missing values are kept (N 450 to 500), and it has no covariance with the independent variables that stay conditioned on. `x1 WITH x2` brings both in with their covariance (P-MS2). This mixed conditioning has no single-convention counterpart in magmaan, so increment 1 rejects such mentions. Bringing every independent variable in with all their covariances equals the joint random-x model; supporting that case later needs its own design. |
+| MS08 | D, 723; P | A variance or mean mention brings that observed independent variable into the model; WITH brings both endpoints. Complete x mentions specify the joint random-X model: free means, variances and default covariances. P-MS08b establishes that `x1 x2;` suffices, with no explicit means or WITH needed; ML/FIML matches lavaan fixed.x=FALSE and keeps missing-x cases. Partial mentions remain rejected, naming the exact complete variance statement (or removal of all mentions). Group overrides preserve the overall conditioning convention. |
 | MS09 | D, 719–722 | `(*label)` after BY defines ESEM factor sets; `~` gives target-rotation values. Both belong to ESEM and are rejected. |
 | MS10 | D, 714–715, 723–725, 742–743 | `#` labels (latent classes, nominal categories, inflation parts, hazards), `%OVERALL%`, `%class%`, `%WITHIN%`, `%BETWEEN%` and the MODEL variants for mixtures, multilevel models and Monte Carlo belong to out-of-scope families and are rejected. |
 | MS11 | D, 729–730; P | Means, intercepts and thresholds are in the model by default. ANALYSIS `MODEL = NOMEANSTRUCTURE` removes them for TYPE = GENERAL, but 9.1 ignores it with a warning under observed information, the default with raw-data ML (P-DF5). Increment 1 honors NOMEANSTRUCTURE only with an explicit `INFORMATION = EXPECTED` and otherwise rejects it, saying that Mplus would ignore it. `[x]` refers to means, intercepts or thresholds (`u$k`) by the variable's role. |
@@ -347,6 +347,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-NM2 | NM01, NM01a | `NAMES = longname_1 longname_2 y3;` and two names sharing their first 8 characters | Error, warning, truncation or collision |
 | P-NM3 | NM03, NM04 | (a) `NAMES = y1 x1 y2 y3; USEV = y1-y3;` (b) `USEV = y3 y1 y2 x1;` with `f BY y1-y3` (c) a range spanning a factor and an observed variable | (a) Is x1 analyzed? (b) Variable order in sample statistics and TECH1; marker chosen (c) Error or expansion |
 | P-MS1 | MS02, LB07 | (a) `f BY y1 y2; f BY y3 y4;` (b) `f BY y1-y3; f BY y1;` (c) `f BY y1-y4*0.5 y2@1;` | Which loading is fixed at one in each case |
+| P-MS08b | MS08 | MIMIC with every x variance; cross x WITH and means mentions, complete and missing-x data | TECH1 x means/variances/covariance, ML estimates/df/chi-square and N |
 | P-MS2 | MS08, DF01 | `y1 ON x1 x2;` plus, in turn, `x1;`, `[x1];`, `x1 WITH x2;`, and data with 10% missing on x1 | Rows (does x1 gain variance, mean or covariance parameters; is x2 also brought in); N used |
 | P-LB1 | LB01 | `f BY y1-y3; f@;` and `f BY y1* y2-y3; y1@;` | Fixed value printed in results; rows |
 | P-LB2 | LB05 | `y1-y3 ON x1-x2 (p1-p6);` with `MODEL CONSTRAINT: NEW(d); d = p2 - p3;` | Accepted? Which coefficients p2, p3 label (row-major or not) |
@@ -635,3 +636,16 @@ accepted case's free count and df are gated, including independently counted
 conditional/mixed moments for the six unavailable fitting routes. Seven lab
 model kinds preserve portable partables, prepared estimates, source rebuilding
 and fresh-process serialization/refitting. Ordinary integration is TASK-57.
+
+### P-MS08b: complete observed-X moments (TASK-57)
+
+`regen_mplus_probes.R --joint-x` writes the isolated `probes_joint_x.json`
+fixture without changing earlier seeds or fixtures. Eight MIMIC variants cross
+complete/missing-X data, explicit WITH and explicit means. `x1 x2;` alone
+frees both means, both variances and their covariance (16 free parameters,
+4 df); WITH and means add nothing. Every variant uses N=500, including 50
+missing x1 values. Complete-data chi-square is 1.974; FIML is 1.596.
+Independent explicit lavaan joint models agree on all printed estimates within
+0.001 and chi-square within 0.002. Numeric references and synthetic rows are
+recorded beside TECH1. The minimal completion statement lists every observed
+independent variable; no pairwise WITH or bracketed mean line is required.

@@ -1,5 +1,11 @@
 # magmaan 0.2.0 (in development)
 
+- `magmaan_model()` accepts explicit `magmaanlab::mplus_model()` specs, preserving
+  source, groups and category schema through prepared fits and serialization.
+  Conditional X, NOMEANSTRUCTURE and summary-without-MEANS fits raise
+  `magmaan_mplus_error` with a reason and input edit. Joint inputs use ordinary
+  estimator choices and inference; plain strings remain lavaan syntax.
+
 - DWLS nested tests now support moment-nested Wu–Estabrook threshold equality
   through an implied-moment embedding and null tangent in the larger model.
   Three-category threshold steps report `equivalent_models`; released-scale

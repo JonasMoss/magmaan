@@ -166,9 +166,14 @@ compatible prepared models. Source language is metadata, not a requirement to
 carry a lavaan string. Future EQS input should enter the same validated model
 contract through its adapter; this design neither adds automatic language
 detection nor promises ordinary EQS support before adapter checks. Mplus input
-will enter the same way; unlike EQS, ordinary Mplus support is the stated goal
-of the [Mplus plan](../grammar/mplus.md), after its stability bar and a
-decision on Mplus's conditioning on x variables. Native
+enters through an explicit `magmaanlab::mplus_model()` specification. Construction
+preserves the source and tables, group codes and prototype category schema.
+`fittable` and `mplus_refusals` record whether the input matches ordinary meaning;
+fitting raises `magmaan_mplus_error` with a reason and input edit for conditional X,
+NOMEANSTRUCTURE or summary data without MEANS. Complete X mentions (`x1 x2;`)
+specify the joint model in both programs. Ordinary fitting takes raw observations
+only and uses its own estimator choice and inference policy; Mplus ESTIMATOR is
+reported metadata. No source language is detected from plain strings. Native
 FC-SEM and parked model families remain outside this constructor's ordinary slice.
 
 `LatentStructure` owns estimands, identification and constraints; `LatentNames`

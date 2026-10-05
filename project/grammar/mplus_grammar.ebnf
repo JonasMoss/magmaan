@@ -191,8 +191,13 @@ section_marker      ::= '%' (token - '%')+ '%'
       free residual covariances [DF08-DF10].
    5. Honor NOMEANSTRUCTURE only with an explicit INFORMATION = EXPECTED;
       otherwise reject it, since Mplus would ignore it [MS11].
-   6. Reject mentions of observed independent variables' moments [MS08]
-      and every construct outside the accepted family, with its span. *)
+   6. Explicit moments must bring every observed independent variable into
+      the joint model [MS08]. Each variance or mean mention brings its x
+      into the model; WITH brings both endpoints. Complete mentions add
+      free x means, variances and default pairwise covariances (P-MS08b).
+      Partial mentions are rejected with the complete variance statement.
+      Group overrides must preserve the overall conditioning convention.
+      Reject every construct outside the accepted family, with its span. *)
 
 (* === Multiple groups (increment 2) ======================================== *)
 grouping_value      ::= name '(' grouping_pair (list_sep grouping_pair)* ')'

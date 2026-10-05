@@ -643,10 +643,12 @@ class Lowerer {
       if (dependent!=original_dependent || predictors!=original_predictors || indicators!=original_indicators) {
         reject(out.input.model_body,"MG06","a group section changes a variable's indicator, predictor or dependent role; Mplus accepts extra indicators but rejects overall-absent group regressions as ignored statements (P-MG13); magmaan's common variable-role contract cannot preserve such differences; put the relation in the overall MODEL and fix its coefficient in the other groups instead"); return;
       }
-      for (const auto& row:rows) if ((row.op==Op::Covariance || row.op==Op::Intercept) &&
+      for (const auto& row:rows) if (!out.input.joint_x && (row.op==Op::Covariance || row.op==Op::Intercept) &&
           ((observed_set.contains(row.lhs) && predictors.contains(row.lhs) && !dependent.contains(row.lhs)) ||
            (observed_set.contains(row.rhs) && predictors.contains(row.rhs) && !dependent.contains(row.rhs)))) {
-        reject(row.span,"MS08","a group section explicitly mentions an observed independent variable's moment; Mplus models that variable while conditioning on others, but magmaan does not reproduce mixed conditioning; remove its variance, mean or WITH mention instead");return;
+        std::string completion;
+        for (const auto& name : out.input.observed_x) completion += (completion.empty() ? "" : " ") + name;
+        reject(row.span,"MS08","a group section changes overall x conditioning; complete the joint form in overall MODEL with `"+completion+";`, or remove its variance, mean or WITH mention instead");return;
       }
       grouped_rows.push_back(rows);
     }
@@ -726,7 +728,29 @@ class Lowerer {
     }
     std::set<std::string> x;
     for (const auto& name : observed) if (predictors.contains(name) && !dependent.contains(name)) x.insert(name);
-    for (const auto& row : rows) if ((row.op == Op::Covariance || row.op == Op::Intercept) && (x.contains(row.lhs) || x.contains(row.rhs))) { reject(row.span,"MS08","observed independent variable '"+(x.contains(row.lhs) ? row.lhs : row.rhs)+"' has an explicit moment; Mplus models that variable while conditioning on the others; magmaan does not reproduce mixed conditioning; remove its variance, mean or WITH mention"); return std::unexpected(*error); }
+    std::set<std::string> mentioned_x;
+    for (const auto& name : observed) if (x.contains(name))
+      out.input.observed_x.push_back(spelling.at(name));
+    for (const auto& row : rows) if (row.op == Op::Covariance || row.op == Op::Intercept) {
+      if (x.contains(row.lhs)) mentioned_x.insert(row.lhs);
+      if (x.contains(row.rhs)) mentioned_x.insert(row.rhs);
+    }
+    if (!mentioned_x.empty() && mentioned_x != x) {
+      std::string completion;
+      for (const auto& name : out.input.observed_x) completion += (completion.empty() ? "" : " ") + name;
+      reject(out.input.model_body,"MS08","partial observed independent moments give mixed conditioning; complete the joint model by adding `"+completion+";` to MODEL, or remove all x moment mentions instead");
+      return std::unexpected(*error);
+    }
+    out.input.joint_x = !mentioned_x.empty();
+    if (out.input.joint_x) {
+      for (const auto& name : x) {
+        put({name,name,"",Op::Covariance,{},{},out.input.model_body},false);
+        if (!out.input.nomeanstructure) put({name,"","",Op::Intercept,{},{},out.input.model_body},false);
+      }
+      if (!out.input.nocovariances) for (auto a=x.begin(); a!=x.end(); ++a)
+        for (auto b=std::next(a); b!=x.end(); ++b)
+          put({*a,*b,"",Op::Covariance,{},{},out.input.model_body},false);
+    }
     auto all = observed; all.insert(all.end(),latent.begin(),latent.end());
     for (const auto& name : all) if (!x.contains(name)) {
       put({name,name,"",Op::Covariance,is_categorical(name) ? std::optional<double>{1} : std::nullopt,{},out.input.model_body},false);

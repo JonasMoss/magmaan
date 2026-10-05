@@ -129,7 +129,7 @@ spec::BuildOptions build_options(const parse::MplusInput& input) {
   options.auto_cov_y = false;
   options.auto_fix_first = false;
   options.auto_fix_single = false;
-  options.fixed_x = true;
+  options.fixed_x = !input.joint_x;
   options.meanstructure = !input.nomeanstructure;
   return options;
 }

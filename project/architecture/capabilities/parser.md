@@ -25,7 +25,7 @@
   input files, classifies commands/options, expands NAMES and selects
   USEVARIABLES, preserves source spans, and aggregates classified rejections.
   Schema settings, execution/data-description notes and explicit family
-  boundaries are checked by independent unit expectations and a 134-variant
+  boundaries are checked by independent unit expectations and a 142-variant
   Demo input gate (with documented LX02, NM02 and MS11 deviations).
   `parse::MplusParser::parse()` lowers continuous and categorical single- and multiple-group BY/ON/WITH,
   PON/PWITH, variances, means, modifiers, line-local labels and ranges into
@@ -51,7 +51,11 @@
   Categorical CONFIGURAL/SCALAR shortcuts follow Mplus 9.1; METRIC is
   rejected. Data-driven threshold completion preserves these defaults.
   `compat::mplus::build_options()` disables lavaan
-  automatic defaults and retains fixed-x sample moments. Combined starts and
+  automatic defaults and retains fixed-x sample moments for conditional sources;
+  complete observed-X mentions lower the joint random-X model (P-MS08b).
+  Ordinary construction accepts explicit lab Mplus specs, preserves source/schema
+  and records fittability; conditional-X, NOMEANSTRUCTURE and summary-without-MEANS
+  fits raise a classed refusal naming the input edit. Combined starts and
   labels use duplicate formula rows, as supported by `spec::build()`; the
   gate compares unique parameter keys and checks both modifier components.
   `api::model_from_mplus()` retains the whole source and diagnostics;

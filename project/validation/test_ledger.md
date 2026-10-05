@@ -1158,3 +1158,35 @@ pass 1358 tests; ordinary full testthat passes 1775 assertions (one PSOCK skip).
 Full magmaanlab testthat passes 7025 assertions (two known warnings and two
 skips). The null calibration rejects 26/500 for both implementations; see the oracle
 entry and reproducible test-tool runner for scope and uncertainty.
+
+### TASK-57 Mplus ordinary integration
+
+P-MS08b adds eight isolated Mplus 9.1 Demo variants to
+`cpp/tests/fixtures/mplus/probes_joint_x.json`; regenerate with
+`Rscript cpp/tests/tools/regen_mplus_probes.R --joint-x`. All use the same
+synthetic seed 58052. Every x variance mention (`x1 x2;`) brings both variables
+into the joint model: TECH1 frees both means, both variances and their covariance,
+without explicit WITH or mean statements. Complete and missing-X variants each
+use 500 cases, 16 parameters and 4 df; printed ML/FIML chi-squares are 1.974 and
+1.596. Independent explicit lavaan fixed.x=FALSE models agree on printed
+estimates within 0.001 and chi-square within 0.002. The fixture also freezes
+synthetic rows and lavaan estimates; the C++ TECH1 consumer checks free/fixed
+cells, counts and equality partitions, including the earlier WITH-only probe.
+
+`r-magmaan/tests/testthat/test_mplus.R` independently reconstructs the synthetic
+observations and gates ordinary ML/FIML against live lavaan (estimates and
+chi-square within 2e-5), the Demo's printed chi-square and N. It checks classed
+refusals and exact completion text, applies input edits (including raw data via
+`mplus_data()`), and verifies their fitted estimates. Continuous, grouped and
+categorical inputs preserve source/schema through prepared fitting, reconstruction
+and saveRDS/readRDS in a fresh R process (1e-8 estimate tolerance). Plain strings
+remain lavaan; existing lab fixed-X rejection and ordinary defaults are unchanged.
+
+Validation: opt build; all 1,534 C++ CTest cases passed; full magmaanlab testthat
+7,147 assertions passed (two skips: unavailable lavaan multi-group two-level
+reference and opt-in simulation; two existing two-level admissibility warnings);
+full ordinary testthat 1,956 assertions passed (one existing PSOCK socket skip).
+New fresh-process serialization gates ran without skips. Corpus unchanged:
+68 inputs, 50 accepted, 44 matched, six unsupported fits, five convention
+differences and zero failures. Vendor regeneration and tracked/layering guards
+passed. No tolerance or ordinary inference default changed.

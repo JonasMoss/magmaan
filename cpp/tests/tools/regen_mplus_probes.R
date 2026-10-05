@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 # =============================================================================
 # Mplus 9.1 Demo language probes: independent maintainer evidence, not an oracle
-# exemption or a frontend policy. Standalone base R + jsonlite; no magmaan/Rcpp.
+# exemption or a frontend policy. Base R + jsonlite; joint-X numeric gates
+# also use pinned lavaan. No magmaan/Rcpp.
 # Run: Rscript cpp/tests/tools/regen_mplus_probes.R
 # Inputs, data and original Demo output remain under ~/.cache/magmaan-logs/
 # mplus-probes. Only our input text and regex-derived facts are serialized.
@@ -15,6 +16,8 @@ scratch <- path.expand('~/.cache/magmaan-logs/mplus-probes')
 mpdemo <- '/home/jonas/mplusdemo/mpdemo'
 Sys.setenv(OPENBLAS_NUM_THREADS = '1', OMP_NUM_THREADS = '1', MKL_NUM_THREADS = '1')
 if (!file.exists(mpdemo)) stop('Mplus Demo binary unavailable')
+joint_x_only <- '--joint-x' %in% commandArgs(trailingOnly = TRUE)
+if (joint_x_only) scratch <- paste0(scratch, '-joint-x')
 categorical_only <- '--categorical' %in% commandArgs(trailingOnly = TRUE)
 if (categorical_only) scratch <- paste0(scratch, '-categorical')
 probes <- list()
@@ -351,10 +354,22 @@ for (parameterization in c('DELTA', 'THETA')) {
   }
 }
 
+# Append probes to preserve every existing seed. The same data serve all variants.
+for (missing in c(FALSE, TRUE)) for (with in c(FALSE, TRUE)) for (means in c(FALSE, TRUE)) {
+  add('P-MS08b', paste(if (missing) 'missing' else 'complete',
+      if (with) 'with' else 'no_with', if (means) 'means' else 'no_means', sep = '_'),
+      paste('f BY y1-y3; f ON x1 x2; x1 x2;',
+            if (with) 'x1 WITH x2;' else '', if (means) '[x1 x2];' else ''),
+      'y1 y2 y3 x1 x2', 'MISSING = ALL (-99);',
+      analysis = 'ESTIMATOR = ML; CONVERGENCE = 0.00000001; ITERATIONS = 10000;',
+      kind = if (missing) 'missing_x' else 'continuous')
+}
+
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))
 if (!setequal(ids,names(settles))) stop('Probe inventory mismatch')
+if (joint_x_only) probes <- Filter(function(p) p$id == 'P-MS08b', probes)
 if (categorical_only) probes <- Filter(function(p) p$id == 'P-IV2', probes)
 unlink(scratch,recursive=TRUE)
 dir.create(scratch,recursive=TRUE)
@@ -378,6 +393,42 @@ for (p in probes) {
   parsed <- parse_output(out)
   if(status != 0 && parsed$status != 'error') stop('Demo execution failed without an input diagnostic: ',p$id,'/',p$variant)
   if(is.null(all_results[[p$id]])) all_results[[p$id]] <- list(settles=settles[[p$id]],variants=list())
+  if (p$id == 'P-MS08b') {
+    if (as.character(utils::packageVersion('lavaan')) !=
+        gsub('-', '.', trimws(readLines(file.path(root, 'cpp/tests/fixtures/lavaan_version.txt'))[1]), fixed = TRUE))
+      stop('Pinned lavaan mismatch')
+    observed <- as.data.frame(x); observed[observed == -99] <- NA_real_
+    syntax <- paste('f =~ 1*y1 + y2 + y3; f ~ x1 + x2;',
+      'f ~~ f; f ~ 0*1; y1 ~~ y1; y2 ~~ y2; y3 ~~ y3;',
+      'y1 ~ 1; y2 ~ 1; y3 ~ 1; x1 ~ 1; x2 ~ 1;',
+      'x1 ~~ x1 + x2; x2 ~~ x2;')
+    fit <- lavaan::lavaan(syntax, data = observed, fixed.x = FALSE,
+      meanstructure = TRUE, missing = if (anyNA(observed)) 'ml' else 'listwise',
+      auto.var = FALSE, auto.cov.lv.x = FALSE, auto.cov.y = FALSE,
+      control = list(iter.max = 10000))
+    pt <- lavaan::parTable(fit)
+    fm <- lavaan::fitMeasures(fit, c('df', 'chisq'))
+    stopifnot(lavaan::lavInspect(fit, 'converged'), fm['df'] == parsed$chi_square[[1]]$df,
+      abs(fm['chisq'] - parsed$chi_square[[1]]$value) < .002,
+      parsed$observations[[1]]$n == nrow(observed))
+    for (row in parsed$model_results) {
+      relation <- strsplit(row$block, ' +')[[1]]
+      if (length(relation) == 2 && relation[2] %in% c('BY','ON','WITH')) {
+        lhs <- tolower(relation[1]); rhs <- tolower(row$parameter)
+        op <- c(BY='=~', ON='~', WITH='~~')[[relation[2]]]
+      } else if (row$block %in% c('Means', 'Intercepts')) {
+        lhs <- tolower(row$parameter); rhs <- ''; op <- '~1'
+      } else if (row$block %in% c('Variances', 'Residual Variances')) {
+        lhs <- rhs <- tolower(row$parameter); op <- '~~'
+      } else stop('Unmapped Demo block: ', row$block)
+      hit <- which(pt$lhs == lhs & pt$op == op & pt$rhs == rhs)
+      if (!length(hit) && op == '~~') hit <- which(pt$lhs == rhs & pt$op == op & pt$rhs == lhs)
+      stopifnot(length(hit) == 1, abs(pt$est[hit] - row$estimate) < .001)
+    }
+    parsed$numeric_gate <- list(lavaan_version = as.character(utils::packageVersion('lavaan')),
+      syntax = syntax, data = unname(as.matrix(observed)), rows = pt[,c('lhs','op','rhs','free','est')],
+      chisq = unname(fm['chisq']), df = unname(fm['df']))
+  }
   all_results[[p$id]]$variants[[p$variant]] <- c(list(variable=variable,analysis=p$analysis,
     model=p$model,data=p$data,title=p$title,seed=58000L+match(p$id,ids),note=p$note),parsed)
   cat(p$id,p$variant,parsed$status,'\n')
@@ -388,6 +439,7 @@ write_fixture <- function(results, name) {
   writeLines(toJSON(results, auto_unbox = TRUE, pretty = TRUE, digits = NA,
                    null = 'null'), fixture)
 }
-if (!categorical_only) write_fixture(all_results[names(all_results) != 'P-IV2'], 'probes.json')
-write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
+if (!categorical_only && !joint_x_only) write_fixture(all_results[!names(all_results) %in% c('P-IV2', 'P-MS08b')], 'probes.json')
+if (!joint_x_only) write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
+if (!categorical_only) write_fixture(all_results[names(all_results) == 'P-MS08b'], 'probes_joint_x.json')
 cat(length(unique(vapply(probes, `[[`, character(1), 'id'))), 'probes;', length(probes), 'variants\n')

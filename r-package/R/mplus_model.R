@@ -52,8 +52,11 @@
 #' the linear SEM family: retain those analyses in Mplus. ESEM rotation is
 #' replaced only by explicitly specified ordinary BY factors. Bare `@` uses
 #' data-dependent Mplus starts; write an explicit `@value` instead. Remove
-#' explicit observed-independent means/variances/WITH mentions to preserve
-#' fixed-x conditioning. Recode data-dependent GROUPING forms to explicit
+#' all observed-independent means/variances/WITH mentions to preserve
+#' fixed-x conditioning, or bring every observed independent variable into the
+#' joint random-X model (e.g. `x1 x2;`). Complete mentions free X means,
+#' variances and default covariances; partial mentions are rejected with the
+#' exact variance statement that completes the joint model. Recode data-dependent GROUPING forms to explicit
 #' integer code/label pairs in R. Categorical summary inputs require individual
 #' observations for magmaan's moment preparation.
 #'
@@ -100,6 +103,7 @@ mplus_model <- function(input = NULL, file = NULL) {
   out$parameterization <- parsed$parameterization
   attr(out$partable, "magmaan.ordered") <- parsed$ordered
   attr(out$partable, "magmaan.parameterization") <- parsed$parameterization
+  out$mplus_observed_x <- parsed$observed_x
   out$mplus_source <- input
   out$mplus_data_plan <- parsed$data_plan
   out$mplus_input_dir <- if (is.null(file)) NULL else dirname(normalizePath(file))
@@ -110,7 +114,7 @@ mplus_model <- function(input = NULL, file = NULL) {
   out$requested_meanstructure <- parsed$meanstructure
   out$options <- list(auto_var = FALSE, auto_cov_lv_x = FALSE,
     auto_cov_y = FALSE, auto_fix_first = FALSE, auto_fix_single = FALSE,
-    fixed_x = TRUE, meanstructure = parsed$meanstructure)
+    fixed_x = parsed$fixed_x, meanstructure = parsed$meanstructure)
   class(out) <- c("magmaan_mplus_model_spec", class(out))
   out
 }

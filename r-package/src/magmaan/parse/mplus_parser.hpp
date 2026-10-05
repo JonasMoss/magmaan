@@ -53,6 +53,8 @@ struct MplusInput {
   std::vector<std::string> analysis;
   std::vector<std::string> type_settings;
   bool nomeanstructure = false;
+  bool joint_x = false;
+  std::vector<std::string> observed_x;
   bool nocovariances = false;
   std::string grouping_variable;
   std::vector<MplusGroup> groups;

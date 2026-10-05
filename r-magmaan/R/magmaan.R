@@ -54,7 +54,14 @@
 #'   its own ordered variables, grouping, identification, parameterization and
 #'   equality constraints; explicit arguments must agree with it. A
 #'   specification that fixes exogenous covariates (`fixed_x = TRUE` with
-#'   observed covariates) is rejected.
+#'   observed covariates) is rejected. Explicit `magmaanlab::mplus_model()`
+#'   specifications preserve their source and tables; plain strings are never
+#'   detected as Mplus. Mplus construction records `fittable` and
+#'   `mplus_refusals`; fitting refuses conditional observed X, NOMEANSTRUCTURE,
+#'   and summary inputs without MEANS with a `magmaan_mplus_error` condition
+#'   carrying `reason` and `edit`. Add all X variance mentions (`x1 x2;`) to
+#'   specify the joint model, remove NOMEANSTRUCTURE, or supply raw observations
+#'   through `magmaanlab::mplus_data()`, respectively.
 #' @param prototype A data frame that declares the data schema: the model's
 #'   variables, the grouping column's groups and their order, and the
 #'   categories of the ordered variables and their order. Factor levels
@@ -107,6 +114,7 @@ magmaan_model <- function(model, prototype = NULL,
     return(model)
   }
   is_spec <- inherits(model, "magmaan_model_spec")
+  is_mplus <- inherits(model, "magmaan_mplus_model_spec")
   if (!is_spec && (!is.character(model) || length(model) != 1L || is.na(model))) {
     stop("magmaan_model(): `model` must be lavaan model syntax in one string or a model specification",
          call. = FALSE)
@@ -142,7 +150,7 @@ magmaan_model <- function(model, prototype = NULL,
              call. = FALSE)
       }
     }
-    if (isTRUE(model$options$fixed_x) && any(model$partable$exo == 1L)) {
+    if (!is_mplus && isTRUE(model$options$fixed_x) && any(model$partable$exo == 1L)) {
       stop(paste0("magmaan_model(): this specification fixes its exogenous covariates (fixed_x = TRUE). ",
                   "magmaan() fits the joint model with random covariates: rebuild the specification ",
                   "with fixed_x = FALSE, or pass its syntax. Fixed-x fits remain available in ",
@@ -157,8 +165,10 @@ magmaan_model <- function(model, prototype = NULL,
     options <- model$options
     if (length(model$group_labels)) labels <- as.character(model$group_labels)
   }
-  options$meanstructure <- TRUE
-  options$fixed_x <- FALSE
+  if (!is_mplus) {
+    options$meanstructure <- TRUE
+    options$fixed_x <- FALSE
+  }
 
   if (!is.null(group)) {
     labels <- .group_schema(group, labels, prototype)
@@ -167,7 +177,7 @@ magmaan_model <- function(model, prototype = NULL,
     stop("magmaan_model(): ordered variables need `prototype` to declare their categories",
          call. = FALSE)
   }
-  spec <- do.call(magmaanlab::model_spec,
+  spec <- if (is_mplus) model else do.call(magmaanlab::model_spec,
                   c(list(syntax = syntax), options,
                     list(group = group, group_labels = labels)))
   observed <- magmaanlab::magmaan_core$model_matrix_rep(spec$partable)$ov_names
@@ -185,6 +195,8 @@ magmaan_model <- function(model, prototype = NULL,
          group = group, groups = labels, group.equal = group.equal,
          group.partial = group.partial, identification = identification,
          parameterization = parameterization,
+         mplus_refusals = if (is_mplus) .mplus_refusals(spec) else list(),
+         fittable = !is_mplus || !length(.mplus_refusals(spec)),
          prepared_cache = new.env(parent = emptyenv())),
     class = "magmaan_model")
 }
@@ -231,7 +243,10 @@ print.magmaan_model <- function(x, ...) {
 #'   string has the default structural choices: one group, continuous
 #'   variables and marker identification. Data with ordered factors need
 #'   `magmaan_model(ordered = )`.
-#' @param data A data frame of raw observations.
+#' @param data A data frame of raw observations. Mplus ESTIMATOR settings are
+#'   reported, not imported: choose the ordinary estimator explicitly. Mplus
+#'   ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
+#'   to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.
 #' @param estimator `"ML"`, `"FIML"`, `"ML2S"`, `"GLS"` or `"ULS"` for
 #'   continuous variables; `"DWLS"`, `"WLS"` or `"ULS"` for ordered variables.
 #'   Estimators other than FIML and ML2S delete incomplete rows listwise.
@@ -328,6 +343,9 @@ magmaan <- function(model, data,
                     options = NULL, ...) {
   dots <- match.call(expand.dots = FALSE)$...
   if (length(dots)) .check_removed_arguments(names(dots))
+  if (inherits(model, "magmaan_model")) .check_mplus_fittable(model)
+  if (inherits(model, "magmaan_mplus_model_spec"))
+    .check_mplus_fittable(list(mplus_refusals = .mplus_refusals(model)))
   if (!is.data.frame(data)) {
     stop("magmaan(): `data` must be a data frame of raw observations; ",
          "summary-statistic input is available in magmaanlab", call. = FALSE)
@@ -340,6 +358,7 @@ magmaan <- function(model, data,
     }
     model <- magmaan_model(model, prototype = data)
   }
+  .check_mplus_fittable(model)
   estimator <- .check_estimator(estimator)
   covariance <- .check_covariance(covariance)
   .check_flag(inference, "inference")
@@ -798,4 +817,35 @@ as_lab_fit <- function(fit) {
   if (length(used) != length(total)) used <- rep(NA_integer_, length(total))
   data.frame(group = labels, rows = total, used = used, deleted = total - used,
              stringsAsFactors = FALSE)
+}
+
+# Frontend metadata describes meaning; ordinary construction preserves that
+# specification so refused models remain inspectable and portable.
+.mplus_refusals <- function(spec) {
+  out <- list()
+  x <- spec$mplus_observed_x
+  if (isTRUE(spec$options$fixed_x) && length(x))
+    out$conditional_x <- paste0("Add `", paste(x, collapse = " "),
+      ";` to MODEL to bring every observed covariate into the joint model.")
+  plan <- spec$mplus_data_plan
+  if (!isTRUE(spec$requested_meanstructure)) {
+    if (!is.null(plan$matrix_type) && plan$matrix_type != "raw" &&
+        nzchar(plan$matrix_type) && !isTRUE(plan$means)) {
+      out$summary_without_means <- paste(
+        "Supply raw observations via magmaanlab::mplus_data() and replace the",
+        "summary DATA declaration with a raw FILE declaration; ordinary magmaan()",
+        "accepts raw data frames only. The lab also accepts summary data with MEANS.")
+    } else out$nomeanstructure <- "Remove NOMEANSTRUCTURE from ANALYSIS to include the ordinary mean structure."
+  }
+  out
+}
+
+.check_mplus_fittable <- function(model) {
+  refusals <- model$mplus_refusals
+  if (!length(refusals)) return(invisible(NULL))
+  reason <- names(refusals)[1L]
+  edit <- refusals[[1L]]
+  stop(structure(list(message = paste0("magmaan(): Mplus input is unfittable: ", edit),
+                      call = NULL, reason = reason, edit = edit),
+                 class = c("magmaan_mplus_error", "error", "condition")))
 }

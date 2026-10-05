@@ -1341,12 +1341,16 @@ carry the label `mplus`.
   fresh/prepared, rebuild/refit and fresh-process serialization gates. Corpus:
   50/68 accepted, 44 matched, six unsupported fits (also dimension-gated), five
   convention differences, zero failures. Evidence is in the test ledger. TASK-56.
-- [ ] **M — ordinary integration.** Accept explicitly marked Mplus sources in
-  `magmaan_model()` with the ordinary inference policy. First decide how Mplus's
-  conditioning on x variables meets the
-  [ordinary fixed-x decision](../scope.md#ordinary-fixed-x-decision); route that
-  question to "Needs decision". **Check:** prepared parity, worker
-  reconstruction and explicit refusals, with no change to ordinary defaults.
+- [x] **M — ordinary integration.** Explicit `magmaanlab::mplus_model()` specs
+  enter `magmaan_model()` without source detection or semantic conversion.
+  P-MS08b establishes that every x variance mention (`x1 x2;`) frees the joint
+  x means, variances and default covariances; complete-data ML and missing-x
+  FIML match Demo/lavaan. Partial mentions name the completion statement.
+  Construction preserves inspectable tables and records fittability; fitting
+  refuses conditional X, NOMEANSTRUCTURE and summary-without-MEANS with a
+  classed reason and input edit. Prepared/fresh parity and continuous/grouped/
+  categorical fresh-process reconstruction pass; ordinary defaults are unchanged.
+  Full C++ and both R suites and the unchanged corpus gate pass. TASK-57.
 
 ## Related work
 
