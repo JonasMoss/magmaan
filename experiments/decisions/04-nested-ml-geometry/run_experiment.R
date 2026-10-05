@@ -1,10 +1,12 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(TRUE)
-usage <- 'Usage: Rscript run_experiment.R --smoke|--pilot|--production [--lane nested-geometry|structured-mean] [--cells IDs] [--run-id ID] [--workers W]
+usage <- 'Usage: Rscript run_experiment.R --smoke|--pilot|--production [--lane nested-geometry|structured-mean] [--cells IDs|--cell ID] [--out-dir PATH] [--run-id ID] [--workers W]
   --smoke       2 replicates per cell, separate development seeds
   --pilot       20 replicates per cell; compute pricing only
   --production  2000 null / 1000 power per cell; requires registered compute approval
   --lane NAME   nested-geometry (default) or structured-mean (TASK-75 draft)
+  --cell ID     single stable cell ID (Modal worker)
+  --out-dir PATH fresh explicit output directory
   --cells IDs   optional comma-separated stable cell IDs, default all
   --workers W   default 1; maximum 4, one math thread per worker
   --run-id ID   fresh immutable result directory (default mode)
@@ -16,7 +18,7 @@ opt <- function(key, default) {
   if (at == length(args) || startsWith(args[at+1], '--')) stop('Missing value for ', key)
   args[at+1]
 }
-if (any(startsWith(args, '--') & !args %in% c('--smoke','--pilot','--production','--run-id','--workers','--lane','--cells'))) stop('Unknown option')
+if (any(startsWith(args, '--') & !args %in% c('--smoke','--pilot','--production','--run-id','--workers','--lane','--cells','--cell','--out-dir'))) stop('Unknown option')
 mode <- intersect(args, c('--smoke','--pilot','--production'))
 if (length(mode) != 1) stop(usage)
 mode <- substring(mode, 3)
@@ -32,11 +34,12 @@ if(!lane %in% c('nested-geometry','structured-mean')) stop('Unknown lane')
 if(lane=='structured-mean') source(file.path(here,'R','structured_mean.R'))
 run_id <- opt('--run-id', mode)
 if (!grepl('^[a-zA-Z0-9_-]+$', run_id)) stop('Invalid run ID')
-out <- file.path(here,'results',lane,run_id)
+out <- opt('--out-dir',file.path(here,'results',lane,run_id))
 if (dir.exists(out)) stop('Run exists; choose a fresh --run-id')
 dir.create(file.path(out,'raw'), recursive=TRUE)
 cells <- if(lane=='structured-mean') structured_cells() else geometry_cells()
-selected <- opt('--cells','all')
+if(all(c('--cell','--cells') %in% args)) stop('Choose --cell or --cells')
+selected <- opt('--cell',opt('--cells','all'))
 if(selected!='all') {
   ids <- as.integer(strsplit(selected,',',fixed=TRUE)[[1]])
   if(anyNA(ids)||any(!ids %in% cells$cell_id)||anyDuplicated(ids)) stop('Invalid cells')
@@ -49,8 +52,8 @@ hashes <- tools::md5sum(c(script, file.path(here,'R',c('compute.R','summaries.R'
                          file.path(here,'criteria',if(lane=='structured-mean') 'structured_mean.md' else 'nested_geometry.md'),
                          if(lane=='structured-mean') file.path(here,'R','structured_mean.R'), binary))
 write_metadata(file.path(out,'metadata.csv'), list(mode=mode, lane=lane, selected_cells=selected, seed_base=seed_base,
-  workers=workers, cells=nrow(cells), git_head=git_scalar(c('rev-parse','HEAD')),
-  git_dirty=git_dirty(), source_hashes=paste(hashes,collapse=','), hash_files=paste(names(hashes),collapse=','),
+  workers=workers, cells=nrow(cells), git_head=if(nzchar(Sys.getenv('MAGMAAN_GIT_HEAD'))) Sys.getenv('MAGMAAN_GIT_HEAD') else git_scalar(c('rev-parse','HEAD')),
+  git_dirty=if(nzchar(Sys.getenv('MAGMAAN_GIT_HEAD'))) NA else git_dirty(), source_hashes=paste(hashes,collapse=','), hash_files=paste(names(hashes),collapse=','),
   magmaanlab_path=find.package('magmaanlab'), native_md5=paste(tools::md5sum(binary),collapse=',')),
   packages=c('magmaanlab','magmaan','lavaan'))
 write_csv(cells,file.path(out,'cells.csv'))
@@ -69,6 +72,7 @@ for (i in seq_len(nrow(cells))) {
   }
 }
 raw <- do.call(rbind,all)
+saveRDS(raw,file.path(out,'raw.rds'))
 s <- if(lane=='structured-mean') structured_summaries(raw,cells,mode) else geometry_summaries(raw,cells,mode)
 for (name in names(s)) write_csv(s[[name]],file.path(out,paste0(name,'.csv')))
 cat('Results: ',out,'\n',sep='')

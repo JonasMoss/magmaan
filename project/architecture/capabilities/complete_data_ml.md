@@ -533,7 +533,10 @@
   full-grid pilot is development/pricing only. One intermittent R/native
   conversion failure remains counted and unexplained after 201 successful
   authorized replays. Future failures capture per-arm condition message, call
-  and stage; registration acceptance and production await merger review.
+  and stage; production remains pending. TASK-76 provides two-worker Modal
+  cell fan-out for both decisions/04 lanes, preserving cell seeds and local
+  Git provenance, plus provenance-checked summaries and a two-cell local
+  reconstruction check. No Modal launch was performed.
   The large-N tiled path accumulates both reduced matrices in one pass instead
   of retaining N-by-df rows. The spectrum uses row space when N < df; SB-only
   calibration uses a trace and spectra are cached on demand. Distinct tiled

@@ -570,6 +570,9 @@ required by an all-ordinal primary workflow remain current work.
   and cost. The original intermittent R/native conversion failure remains
   counted; 201 authorized replays passed. Per-arm condition message/call/stage
   capture is ready for production, pending merger registration review.
+  TASK-76 adds two-worker Modal cell fan-out for both decisions/04 lanes,
+  with local cell/output selection and provenance-checked recombination.
+  Local two-cell checks cover deterministic summaries; no Modal launch.
   No production or default change in the lane. Not release-gating.
 
 - [x] **M — threshold-invariance nested tests (Wu-Estabrook)** (TASK-68).

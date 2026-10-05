@@ -251,3 +251,36 @@ nice -n 10 Rscript run_experiment.R --lane structured-mean --pilot --workers 2 -
 
 No production run was launched by TASK-75. Prior saturated-mean evidence and
 its conclusions remain separate from this new calibration question.
+
+
+### Cell fan-out
+
+Both lanes have a Modal cell runner (TASK-76), with two CPUs and two workers
+per cell. Each launch appends a fresh UUID to `--run-id`; the printed ID names
+the volume directory. Cell seeds retain the registered lane/mode bases. The
+local launcher passes its Git commit through `MAGMAAN_GIT_HEAD`, since the
+container has no Git. The combiner rejects missing draws or mismatched
+provenance and uses the selected lane's own summaries. No Modal or production
+run was launched by TASK-76.
+
+From this study directory, check two cells locally:
+
+```bash
+nice -n 10 Rscript modal/check_local.R
+nice -n 10 Rscript modal/check_local.R --lane nested-geometry
+```
+
+The check compares independent two-cell runs using two workers, then splits
+the single-process raw rows and reconstructs every summary byte-for-byte.
+Elapsed times and execution metadata vary between independent runs; timing
+summaries are compared exactly using the same recorded raw rows.
+
+A single container's command can also run locally with
+`run_experiment.R --lane structured-mean --smoke --cell 1 --workers 2 --out-dir PATH`.
+After compute approval, the launcher accepts `--lane`, `--mode`, `--run-id`
+and optional comma-separated `--cells`:
+
+```bash
+modal run modal/app.py --lane structured-mean --mode smoke --run-id new_smoke --cells 1,2
+modal volume get magmaan-nested-ml-geometry PRINTED_RUN_ID/final ./downloaded_run
+```

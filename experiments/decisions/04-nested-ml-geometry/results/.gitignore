@@ -31,3 +31,7 @@ structured-mean/pilot-2026-10-05/*
 structured-mean/replay-2026-10-05/*
 !structured-mean/replay-2026-10-05/checks.csv
 !structured-mean/replay-2026-10-05/metadata.csv
+
+# Modal raw rows and local fan-out checks are construction diagnostics.
+**/raw.rds
+local-fanout-*/
