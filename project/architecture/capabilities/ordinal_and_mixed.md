@@ -1,5 +1,37 @@
 ### Ordinal and mixed categorical LS
 
+TASK-83 accelerates complete-data exact first-stage sampling influence with a
+block-sparse central FD Jacobian of empirical mean scores. Each perturbation
+visits only its marginal and incident pairs, or its single association pair;
+ordinal means reduce over category counts and share bivariate-normal corner
+CDF/PDF grids. Mixed polyserial and continuous-pair blocks retain FD. No
+per-case Jacobians, perturbed bread matrices or perturbed Gamma matrices are
+built. The dense implementation remains callable through private test probes.
+Binary/five-category, skewed-threshold and one/two-group ordinal/mixed gates
+compare Jacobians, rows and Gamma at 1e-7 relative tolerance. Existing
+policy/lab delta/theta tests are unchanged.
+
+Five-call medians with BLAS/OpenMP pinned to one thread, fresh policy caches,
+12 indicators, two equally sized groups and five ordinal categories are:
+
+| Data | Total N | Dense FD policy (s) | Sparse FD policy (s) | OPG IJ call (s) |
+| --- | ---: | ---: | ---: | ---: |
+| All ordinal | 1000 | 1.909 | 0.138 | 0.100 |
+| All ordinal | 4000 | 3.933 | 0.195 | 0.120 |
+| Six continuous + six ordinal | 1000 | 3.435 | 2.052 | — |
+| Six continuous + six ordinal | 4000 | 12.603 | 7.758 | — |
+
+The benchmark uses R seed 83, one Gaussian factor with loadings 0.7, thresholds
+(-1.2, -0.3, 0.4, 1.1), and excludes data preparation/fitting from timing.
+Before/after calls use newly fitted live handles; deserialized handles add
+reconstruction overhead. OPG is the existing lab IJ covariance comparator.
+A separate component profile (C++ seed 83, two 500-row blocks, five-call
+medians) isolates the mean-score Jacobian at 3.541 s dense versus 0.021 s
+sparse, confirming the targeted bottleneck.
+Fresh ordinal policy calls cost 1.38x/1.63x that comparator; policy outputs
+match their dense-FD snapshots within 1e-7. Mixed timing includes unchanged
+estimated-weight/Gamma work beyond the exact sampling Jacobian.
+
 - TASK-74 adds complete-data all-ordinal exact sampling rows and Gamma via
   `data::ordinal_moment_sampling_influence()`, reusing the mixed empirical
   score-Jacobian assembly. `robust_ordinal_ij()` accepts `OrdinalFirstStage`
@@ -25,8 +57,9 @@
   agrees with OPG Gamma within 1e-6 at N = 4000: its three first-stage coordinates
   saturate each pair, so remaining discrepancy is numerical, rather than the
   unsaturated normal-pair O_p(N^-1/2) information-equality discrepancy.
-  A two-group 12-indicator five-category fit (N = 1000 total, one thread) costs
-  median 80 ms before versus 1643 ms after on five fresh R policy calls;
+  Before TASK-83, adopting Exact for a two-group 12-indicator five-category
+  fit (N = 1000 total, one thread) cost median 80 ms before versus 1643 ms
+  after on five fresh R policy calls;
   cached calls have median 1 ms. Sampling rows are built once per policy fit.
   The theta jackknife gate uses N = 2400 with the unchanged 4% tolerance
   (1.32% discrepancy); delta designs remain at N = 600. Exact covariance

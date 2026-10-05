@@ -1,5 +1,10 @@
 # magmaanlab 0.2.0 (in development)
 
+- Exact ordinal and mixed first-stage sampling influence now differentiates
+  only affected mean-score blocks. Ordinal pairs reuse category-cell counts and
+  bivariate-normal corner grids, reducing inference time while preserving
+  sampling rows, Gamma and policy outputs within 1e-7.
+
 - All-ordinal DWLS ordinary policy now uses exact empirical first-stage
   influence. Policy SEs and global/nested p-values change; OPG fitting weights
   and estimates, `lavaan_compat`, and all lab defaults are unchanged. Global

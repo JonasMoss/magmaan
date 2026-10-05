@@ -6,6 +6,7 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 #include <random>
+#include "../../src/data/detail_sampling_reference.hpp"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 
@@ -271,5 +272,67 @@ TEST_CASE("Mixed DWLS empirical IJ weight channel vanishes at exact fit") {
         OrdinalWeightKind::DWLS,parameterization);
     REQUIRE(without_weight.has_value());
     CHECK((with_weight->vcov-without_weight->vcov).norm()/without_weight->vcov.norm() < 1e-6);
+  }
+}
+
+TEST_CASE("Sparse exact first-stage Jacobian preserves dense FD scores and sampling rows") {
+  using namespace magmaan;
+  for (bool mixed : {false, true}) {
+    for (int levels : {2, 5}) {
+      for (int groups : {1, 2}) {
+        CAPTURE(mixed); CAPTURE(levels); CAPTURE(groups);
+        for (int group = 0; group < groups; ++group) {
+          std::mt19937 rng(8300u + static_cast<unsigned>(group));
+          std::normal_distribution<double> normal;
+          Eigen::MatrixXd X(450, 6);
+          std::vector<std::int32_t> ordered(6, 1);
+          if (mixed) ordered = {1,1,1,0,0,0};
+          for (Eigen::Index r = 0; r < X.rows(); ++r) {
+            const double factor = normal(rng);
+            for (Eigen::Index j = 0; j < X.cols(); ++j) {
+              const double y = .65 * factor + .76 * normal(rng);
+              if (ordered[static_cast<std::size_t>(j)]) {
+                double category = 1;
+                if (levels == 2) category += y > .7;
+                else for (double threshold : {-1.4, -.6, .15, .9})
+                  category += y > threshold;
+                X(r,j) = category;
+              } else X(r,j) = .3 + (1.2 + .1 * static_cast<double>(j)) * y;
+            }
+          }
+          Eigen::VectorXd thresholds, mean;
+          Eigen::MatrixXd R;
+          std::vector<std::int32_t> n_levels;
+          if (mixed) {
+            auto stats = data::mixed_ordinal_stats_from_data({X}, {ordered}, false);
+            REQUIRE(stats.has_value());
+            thresholds = stats->thresholds[0]; mean = stats->mean[0];
+            R = stats->R[0]; n_levels = stats->n_levels[0];
+          } else {
+            auto stats = data::ordinal_stats_from_integer_data({X}, false);
+            REQUIRE(stats.has_value());
+            thresholds = stats->thresholds[0]; R = stats->R[0];
+            mean = Eigen::VectorXd::Zero(6); n_levels = stats->n_levels[0];
+          }
+          auto dense = data::validation::mixed_sampling_jacobian_for_validation(
+              X, ordered, n_levels, thresholds, mean, R, false);
+          auto sparse = data::validation::mixed_sampling_jacobian_for_validation(
+              X, ordered, n_levels, thresholds, mean, R, true);
+          REQUIRE(dense.has_value()); REQUIRE(sparse.has_value());
+          const double jacobian_error = (*dense-*sparse).norm()/dense->norm();
+          CAPTURE(jacobian_error);
+          CHECK(jacobian_error <= 1e-7);
+          auto reference = data::validation::mixed_sampling_influence_dense_reference(
+              X, ordered, n_levels, thresholds, mean, R);
+          auto rows = data::mixed_moment_sampling_influence(
+              X, ordered, n_levels, thresholds, mean, R);
+          REQUIRE(reference.has_value()); REQUIRE(rows.has_value());
+          CHECK((*reference-*rows).norm()/reference->norm() <= 1e-7);
+          const Eigen::MatrixXd gamma = rows->transpose()*(*rows)/450.0;
+          const Eigen::MatrixXd gamma_reference = reference->transpose()*(*reference)/450.0;
+          CHECK((gamma-gamma_reference).norm()/gamma_reference.norm() <= 1e-7);
+        }
+      }
+    }
   }
 }

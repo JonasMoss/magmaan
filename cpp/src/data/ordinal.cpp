@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -22,6 +23,7 @@
 #include "magmaan/optim/nlopt_optimizer.hpp"
 
 #include "detail_linalg.hpp"
+#include "detail_sampling_reference.hpp"
 
 namespace magmaan::data {
 
@@ -3656,6 +3658,123 @@ mixed_observed_gamma_data_influence(
 
 namespace {
 
+// Only the empirical score means are needed by the sampling Jacobian.
+// Ordinal scores are constant within category cells, so their reduction costs
+// O(levels_i * levels_j), independent of the number of observations.
+struct SamplingScoreMeans {
+  const Eigen::MatrixXd& X;
+  const std::vector<std::int32_t>& ordered;
+  std::vector<Eigen::Index> starts, lengths, cont, owner;
+  std::vector<Eigen::VectorXd> counts;
+  std::vector<GammaDiagonalCells> cells;
+  Eigen::MatrixXi categories;
+  Eigen::Index nth = 0, nc = 0;
+
+  SamplingScoreMeans(const Eigen::MatrixXd& x,
+      const std::vector<std::int32_t>& ord,
+      const std::vector<std::int32_t>& levels) : X(x), ordered(ord),
+      starts(static_cast<std::size_t>(x.cols()), -1),
+      lengths(static_cast<std::size_t>(x.cols()), 0),
+      cont(static_cast<std::size_t>(x.cols()), -1),
+      counts(static_cast<std::size_t>(x.cols())), categories(x.rows(), x.cols()) {
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      if (ordered[static_cast<std::size_t>(j)]) {
+        starts[static_cast<std::size_t>(j)] = nth;
+        lengths[static_cast<std::size_t>(j)] = levels[static_cast<std::size_t>(j)] - 1;
+        nth += lengths[static_cast<std::size_t>(j)];
+        counts[static_cast<std::size_t>(j)] = Eigen::VectorXd::Zero(levels[static_cast<std::size_t>(j)]);
+        for (Eigen::Index r = 0; r < X.rows(); ++r) {
+          categories(r,j) = static_cast<int>(X(r,j)) - 1;
+          counts[static_cast<std::size_t>(j)](categories(r,j)) += 1.0;
+        }
+        for (Eigen::Index k = 0; k < lengths[static_cast<std::size_t>(j)]; ++k) owner.push_back(j);
+      } else cont[static_cast<std::size_t>(j)] = nc++;
+    }
+    for (int pass = 0; pass < 2; ++pass)
+      for (Eigen::Index j = 0; j < X.cols(); ++j)
+        if (!ordered[static_cast<std::size_t>(j)]) owner.push_back(j);
+    for (Eigen::Index j = 0; j < X.cols(); ++j)
+      for (Eigen::Index i = j + 1; i < X.cols(); ++i) {
+        if (ordered[static_cast<std::size_t>(i)] && ordered[static_cast<std::size_t>(j)])
+          cells.push_back(gamma_diagonal_cells(categories, i, j, levels[static_cast<std::size_t>(i)], levels[static_cast<std::size_t>(j)]));
+        else cells.emplace_back();
+      }
+  }
+
+  post_expected<Eigen::VectorXd> evaluate(const Eigen::VectorXd& thresholds,
+      const Eigen::VectorXd& mean, const Eigen::MatrixXd& R,
+      Eigen::Index coordinate) const {
+    const Eigen::Index s1 = nth + 2 * nc;
+    Eigen::VectorXd out = Eigen::VectorXd::Zero(s1 + static_cast<Eigen::Index>(cells.size()));
+    const Eigen::Index variable = coordinate < s1 ? owner[static_cast<std::size_t>(coordinate)] : -1;
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      if (j != variable) continue;
+      if (ordered[static_cast<std::size_t>(j)]) {
+        const auto th = thresholds.segment(starts[static_cast<std::size_t>(j)], lengths[static_cast<std::size_t>(j)]);
+        for (Eigen::Index c = 0; c <= lengths[static_cast<std::size_t>(j)]; ++c) {
+          const double lo = c == 0 ? -kInf : th(c-1);
+          const double hi = c == lengths[static_cast<std::size_t>(j)] ? kInf : th(c);
+          const double weight = counts[static_cast<std::size_t>(j)](c) /
+              std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+          if (c < lengths[static_cast<std::size_t>(j)]) out(starts[static_cast<std::size_t>(j)]+c) += weight * normal_pdf(th(c));
+          if (c > 0) out(starts[static_cast<std::size_t>(j)]+c-1) -= weight * normal_pdf(th(c-1));
+        }
+      } else {
+        const double v = R(j,j);
+        out(nth+cont[static_cast<std::size_t>(j)]) = (X.col(j).array()-mean(j)).sum()/v;
+        out(nth+nc+cont[static_cast<std::size_t>(j)]) =
+            ((X.col(j).array()-mean(j)).square()-v).sum()/(2.0*v*v);
+      }
+    }
+    Eigen::Index pair = 0;
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      for (Eigen::Index i = j+1; i < X.cols(); ++i, ++pair) {
+        if (coordinate < s1 ? (i != variable && j != variable)
+                            : (pair != coordinate-s1)) continue;
+        if (ordered[static_cast<std::size_t>(i)] && ordered[static_cast<std::size_t>(j)]) {
+          const auto& cell = cells[static_cast<std::size_t>(pair)];
+          const auto ti = thresholds.segment(starts[static_cast<std::size_t>(i)],
+              lengths[static_cast<std::size_t>(i)]);
+          const auto tj = thresholds.segment(starts[static_cast<std::size_t>(j)],
+              lengths[static_cast<std::size_t>(j)]);
+          // Share rectangle corners across adjacent cells; keep the same
+          // subtraction order, probability clamp and floor as the row scores.
+          Eigen::MatrixXd cdf, pdf;
+          ordinal_bvn_corner_cdf(ti, tj, R(i,j), cdf);
+          ordinal_bvn_corner_pdf(ti, tj, R(i,j), pdf);
+          for (Eigen::Index c = 0; c < cell.counts.size(); ++c) {
+            if (cell.counts(c) == 0.0) continue;
+            const int ci = cell.category_i(c), cj = cell.category_j(c);
+            const double probability = std::max(kProbFloor, std::clamp(
+                cdf(ci+1,cj+1) - cdf(ci,cj+1) - cdf(ci+1,cj) + cdf(ci,cj),
+                0.0, 1.0));
+            const double derivative = pdf(ci+1,cj+1) - pdf(ci,cj+1) -
+                pdf(ci+1,cj) + pdf(ci,cj);
+            out(s1+pair) += cell.counts(c) * derivative / probability;
+          }
+        } else if (ordered[static_cast<std::size_t>(i)] || ordered[static_cast<std::size_t>(j)]) {
+          const Eigen::Index o = ordered[static_cast<std::size_t>(i)] ? i : j;
+          const Eigen::Index c = ordered[static_cast<std::size_t>(i)] ? j : i;
+          const double sd = std::sqrt(R(c,c));
+          const Eigen::VectorXd u = (X.col(c).array()-mean(c))/sd;
+          auto scores = polyserial_pair_scores(categories.col(o), u, R(i,j)/sd,
+              thresholds.segment(starts[static_cast<std::size_t>(o)],lengths[static_cast<std::size_t>(o)]));
+          if (!scores) return std::unexpected(scores.error());
+          out(s1+pair) = scores->rho.sum();
+        } else {
+          auto scores = continuous_pair_normal_scores(X.col(i), X.col(j),
+              mean(i), mean(j), R(i,i), R(j,j), R(i,j));
+          if (!scores) return std::unexpected(scores.error());
+          out(s1+pair) = std::sqrt(R(i,i)*R(j,j)) *
+              scores->score_contributions.col(4).sum();
+        }
+      }
+    }
+    out /= static_cast<double>(X.rows());
+    return out;
+  }
+};
+
 post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     const Eigen::MatrixXd& X,
     const std::vector<std::int32_t>& ordered,
@@ -3666,7 +3785,9 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     double h_rel,
     bool diagonal_only,
     bool observed,
-    bool sampling = false) {
+    bool sampling = false,
+    bool sparse_sampling = true,
+    bool return_jacobian = false) {
   auto base_or = observed
       ? mixed_observed_gamma_assembly_at_kappa(
             X, ordered, levels, thresholds, mean, R, false)
@@ -3693,6 +3814,10 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
   pairs.reserve(static_cast<std::size_t>(p * (p - 1) / 2));
   for (Eigen::Index j = 0; j < p; ++j)
     for (Eigen::Index i = j + 1; i < p; ++i) pairs.push_back({i, j});
+
+  // Construction follows the validated complete-data base assembly.
+  std::optional<SamplingScoreMeans> score_means;
+  if (sampling && sparse_sampling) score_means.emplace(X, ordered, levels);
 
   Eigen::MatrixXd D(
       sampling || diagonal_only ? mdim : static_cast<Eigen::Index>(mdim * mdim), mdim);
@@ -3762,6 +3887,15 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
       R_m(i, j) = R_m(j, i) = R(i, j) - h;
     }
 
+    if (score_means) {
+      auto plus = score_means->evaluate(th_p, mean_p, R_p, l);
+      if (!plus) return std::unexpected(plus.error());
+      auto minus = score_means->evaluate(th_m, mean_m, R_m, l);
+      if (!minus) return std::unexpected(minus.error());
+      D.col(l) = (*plus - *minus) / (2.0 * h);
+      continue;
+    }
+
     auto gp_or = observed
         ? mixed_observed_gamma_assembly_at_kappa(
               X, ordered, levels, th_p, mean_p, R_p, false)
@@ -3786,6 +3920,7 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
       D.col(l) = vec;
     }
   }
+  if (return_jacobian) return D;
   if (sampling) {
     // Differentiate the empirical estimating equations, rather than using
     // score-cross-product identities valid only at the working distribution.
@@ -3807,6 +3942,27 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
 }
 
 }  // namespace
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace validation {
+post_expected<Eigen::MatrixXd> mixed_sampling_jacobian_for_validation(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, bool sparse,
+    double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(X, ordered, levels, thresholds, mean, R,
+      h_rel, true, false, true, sparse, true);
+}
+
+post_expected<Eigen::MatrixXd> mixed_sampling_influence_dense_reference(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel) {
+  return mixed_gamma_jacobian_fd_impl(X, ordered, levels, thresholds, mean, R,
+      h_rel, true, false, true, false);
+}
+}  // namespace validation
+#endif
 
 post_expected<OrdinalSamplingInfluence>
 ordinal_moment_sampling_influence(

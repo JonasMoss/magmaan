@@ -501,6 +501,15 @@ ordinary API exposes barrier fitting experimentally as
 
 #### All-ordinal DWLS
 
+- [x] **M — speed the exact first-stage score Jacobian** (TASK-83).
+  Block-sparse FD differentiates only affected marginal/pair mean scores;
+  ordinal category counts and shared bivariate-normal corners avoid repeated
+  casewise assembly. Dense FD remains a private test reference. Jacobian,
+  sampling-row and Gamma gates retain 1e-7 tolerance for ordinal/mixed,
+  binary/five-category, skewed-threshold and one/two-group data. Public
+  functions and inference policy are unchanged; timing evidence is recorded
+  in the ordinal capability area.
+
 - [x] **M — adopt exact first-stage influence for the ordinary policy** (TASK-69).
   Covariance and both nested laws use Exact estimated-weight IJ; global Gamma
   uses exact sampling rows cached once per policy fit. OPG fitting weights,
