@@ -75,7 +75,13 @@ structured_draw <- function(cell,rep,seed) {
     arm=c('policy_lr','policy_score','pre66_lr'),test=c('lr','score','lr'))
   rows$converged_h0 <- rows$converged_h1 <- FALSE
   rows$statistic <- rows$df <- rows$p_sb <- rows$p_peba4 <- rows$reference_gap <- NA_real_
-  rows$error <- ''
+  rows$error <- rows$error_call <- rows$error_stage <- ''
+  stage <- 'fit_and_prepare'
+  record_error <- function(e,i=seq_len(nrow(rows))) {
+    rows$error[i] <<- conditionMessage(e)
+    rows$error_call[i] <<- paste(deparse(conditionCall(e)),collapse=' ')
+    rows$error_stage[i] <<- stage
+  }
   tryCatch({
     set.seed(seed); p <- 6*cell$factors
     data <- do.call(rbind,lapply(c('a','b'),function(g) {
@@ -93,21 +99,28 @@ structured_draw <- function(cell,rep,seed) {
     shared <- magmaanlab::prepare_inference_data(f1)
     i1 <- magmaanlab::prepare_inference(f1,shared)
     hyp <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(f0,shared),i1)
-    lr <- magmaanlab::inference_quadratic(hyp,'lr')
-    score <- magmaanlab::inference_quadratic(hyp,'score')
-    if(lr$df!=5*cell$factors || score$df!=lr$df) stop('unexpected restriction df')
-    ref <- structured_lr_reference(f1,i1,data,lr$statistic,lr$df)
-    actual <- eigen(crossprod(magmaanlab::inference_rows(lr)),symmetric=TRUE,only.values=TRUE)$values
-    gap <- max(abs(sort(actual)-sort(ref$exact)))/max(1,max(abs(actual)))
-    if(!is.finite(gap) || gap>1e-6) stop('independent exact-row LR reconstruction differs from policy')
-    quadratics <- list(lr,score,ref$old)
     for(i in 1:3) {
-      z <- magmaanlab::calibrate_quadratic(quadratics[[i]],c('sb','peba4'))
-      rows$statistic[i] <- quadratics[[i]]$statistic; rows$df[i] <- quadratics[[i]]$df
-      rows$p_sb[i] <- z$p_value[1]; rows$p_peba4[i] <- z$p_value[2]; rows$reference_gap[i] <- gap
+      stage <- paste0(rows$arm[i],':quadratic')
+      tryCatch({
+        q <- magmaanlab::inference_quadratic(hyp,rows$test[i])
+        if(q$df!=5*cell$factors) stop('unexpected restriction df')
+        if(i!=2) {
+          stage <- paste0(rows$arm[i],':reference')
+          ref <- structured_lr_reference(f1,i1,data,q$statistic,q$df)
+          actual <- eigen(crossprod(magmaanlab::inference_rows(q)),symmetric=TRUE,only.values=TRUE)$values
+          gap <- max(abs(sort(actual)-sort(ref$exact)))/max(1,max(abs(actual)))
+          if(!is.finite(gap) || gap>1e-6) stop('independent exact-row LR reconstruction differs from policy')
+          rows$reference_gap[i] <- gap
+          if(i==3) q <- ref$old
+        }
+        stage <- paste0(rows$arm[i],':calibrate')
+        z <- magmaanlab::calibrate_quadratic(q,c('sb','peba4'))
+        rows$statistic[i] <- q$statistic; rows$df[i] <- q$df
+        rows$p_sb[i] <- z$p_value[1]; rows$p_peba4[i] <- z$p_value[2]
+        if(any(!is.finite(c(rows$p_sb[i],rows$p_peba4[i])))) stop('nonfinite calibration')
+      },error=function(e) record_error(e,i))
     }
-    if(any(!is.finite(rows$p_sb)) || any(!is.finite(rows$p_peba4))) stop('nonfinite calibration')
-  },error=function(e) rows$error <<- conditionMessage(e))
+  },error=record_error)
   rows$elapsed_s <- proc.time()[['elapsed']]-started; rows
 }
 structured_summaries <- function(raw,cells,mode) {
@@ -150,7 +163,7 @@ structured_summaries <- function(raw,cells,mode) {
   }))
   paired <- do.call(rbind,paired)
   list(rates=do.call(rbind,rates),paired=paired,timing=timing,
-    failures=raw[nzchar(raw$error),c('cell_id','rep','seed','arm','error')],
+    failures=raw[nzchar(raw$error),c('cell_id','rep','seed','arm','error','error_call','error_stage')],
     checks=data.frame(draws=nrow(draws),failed_arms=sum(nzchar(raw$error)),
       max_reference_gap=max(c(0,raw$reference_gap),na.rm=TRUE)),
     decisions=data.frame(status=if(mode!='production') 'open_development_only' else

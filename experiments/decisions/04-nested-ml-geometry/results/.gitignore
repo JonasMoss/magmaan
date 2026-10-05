@@ -25,3 +25,9 @@ structured-mean/pilot-2026-10-05/*
 !structured-mean/pilot-2026-10-05/checks.csv
 !structured-mean/pilot-2026-10-05/decisions.csv
 !structured-mean/pilot-2026-10-05/metadata.csv
+
+# Bounded authorized replay: summary/provenance only; raw draws remain local.
+!structured-mean/replay-2026-10-05/
+structured-mean/replay-2026-10-05/*
+!structured-mean/replay-2026-10-05/checks.csv
+!structured-mean/replay-2026-10-05/metadata.csv

@@ -1,0 +1,9 @@
+key,value
+operation,authorized bounded development replay
+seed_base,1526120031
+original_seed,1526120047
+cell_id,2
+parent_preparation,original draw built inference before fork
+command,R_LIBS=~/.cache/magmaan-rlib/lane-e OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript experiments/decisions/04-nested-ml-geometry/diagnostics/replay_structured_mean.R
+library_ref,b2e9ee6c
+purpose,failure investigation only; original pilot unchanged

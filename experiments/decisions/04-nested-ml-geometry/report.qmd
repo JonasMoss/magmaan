@@ -201,8 +201,15 @@ conversion error (`type=character; target=double`) after both fits converged.
 All three arms for that draw are retained as unavailable. A fresh serial replay,
 a fresh two-worker cell replay, and a replay including the population-check
 setup all succeeded; the original failure remains frozen and unresolved.
-The runner exited with its failure guard. Registration acceptance and production
-are blocked pending the maintainer decision on this failure.
+The runner exited with its failure guard. A maintainer-authorized bounded
+investigation then replayed `r read.csv("results/structured-mean/replay-2026-10-05/checks.csv")$draws` draws (the original seed serially and ten
+20-draw two-worker cell-2 batches after parent-side inference preparation),
+with no failures. An injected reference error verified per-arm message, call
+and stage capture without suppressing the score arm. The original cause
+remains unknown; its recorded message is retained, and its call cannot be
+recovered retrospectively. Future failures record these details. Registration
+review and production remain with the merger; the unreproduced failure remains
+counted under the registered rule.
 
 The full-grid twenty-draw pilot checks construction and prices production;
 it cannot establish size or choose a default. Policy LR and score SB/PEBA4

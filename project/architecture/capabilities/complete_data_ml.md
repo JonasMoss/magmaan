@@ -530,9 +530,10 @@
   saturated-mean design is unaffected. TASK-75 adds a registered structured-mean
   calibration lane in the same study: symmetric unequal group means, equal
   intercepts, true loading restrictions, explicit pre-66 meat reconstruction;
-  full-grid pilot is development/pricing only. One unexplained intermittent
-  R/native conversion failure leaves TASK-75 needing a decision; registration
-  acceptance and production await its resolution and merger review.
+  full-grid pilot is development/pricing only. One intermittent R/native
+  conversion failure remains counted and unexplained after 201 successful
+  authorized replays. Future failures capture per-arm condition message, call
+  and stage; registration acceptance and production await merger review.
   The large-N tiled path accumulates both reduced matrices in one pass instead
   of retaining N-by-df rows. The spectrum uses row space when N < df; SB-only
   calibration uses a trace and spectra are cached on demand. Distinct tiled
