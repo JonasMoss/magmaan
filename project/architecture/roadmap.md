@@ -388,8 +388,10 @@ delta nested tests, gated at identical parameter points against installed
 lavaan for one/two groups and delta/theta. Retained-fit parity is validated
 for one-group delta; grouped/theta retained fits differ because lavaan weights
 unequal groups by n_g - 1 and stops earlier (magmaan's endpoint has the better
-canonical objective), so that slice is limited validation until the mixed
-lavaan preset (TASK-91).
+canonical objective). The lavaan-0.7.2 preset now covers complete mixed DWLS
+(TASK-91: mixed FABIN3/sample starts, n_g - 1 search weighting, ordered
+equality coordinates, pinned PORT stopping), and all eight retained WLSMV
+cases pass under it; default mixed fitting is bit-identical.
 A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
 passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
 label (32 tests) and `R CMD check --no-manual` for both packages with no
