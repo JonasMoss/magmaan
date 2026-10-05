@@ -71,3 +71,16 @@ Freeze pilot cells, metadata, population targets, summaries, failures and timing
 raw rows stay ignored. Price production in CPU-hours from representative pilot
 strata, identifying unpriced cells. Local two-cell fan-out must reproduce the
 single-process summary and reject mismatched source/package/seed provenance.
+
+## Registration (merger, 2026-10-05, after the pilot, before production)
+
+Registered as written above, with one amendment made after the pricing pilot
+and before production: the nested family adds an `all` comparator arm, the
+exact weighted chi-square tail with every positive eigenvalue of the same
+nested spectrum. It reports evidence for the separate nested-reference
+decision (board TASK-81) after decisions/06 found SB/PEBA4 over-rejecting with
+many threshold restrictions; it is not rule-gating and changes no policy arm.
+The frozen pilot predates this arm. The lavaan comparator judged by lavaan's own
+convergence and the unavailable mixed OPG-first-stage IJ comparator are
+accepted limitations, reported as such. Production runs on Modal with seed base
+1617000001 and the registered replicate counts.

@@ -93,7 +93,7 @@ mixed_population <- function(cells,out) {
 }
 mixed_arms <- function(cell) if(cell$family=='coverage') c('policy_ij','lavaan_robust') else
   if(cell$family=='global') c('policy_all','policy_sb','policy_peba4','lavaan_wlsmv') else
-    c('policy_sb','policy_peba4','lavaan_lrt')
+    c('policy_sb','policy_peba4','all','lavaan_lrt')
 mixed_replicate <- function(cell,replicate,seed_base,population) {
   seed <- seed_base+10000L*cell$cell_id+replicate; start <- proc.time()
   rows <- list(); h1_converged <- h0_converged <- NA; gap <- NA_real_
@@ -116,6 +116,10 @@ mixed_replicate <- function(cell,replicate,seed_base,population) {
       gap <- max(abs(c(test$p_sb-cal$p_sb,test$p_peba4-cal$p_peba4)))
       for(a in c('sb','peba4')) add(paste0('policy_',a),test[[paste0('p_',a)]],
         statistic=test$statistic,df=test$df,spectrum_size=length(test$eigenvalues))
+      # Merger amendment 2026-10-05: All on the same nested spectrum, a
+      # comparator for the TASK-81 reference decision (not rule-gating).
+      all <- magmaanlab::magmaan_core$robust_fmg_test(test$statistic,test$df,test$eigenvalues,'all',0,truncate_negative=TRUE)
+      add('all',all$p_value,statistic=test$statistic,df=test$df,spectrum_size=length(test$eigenvalues))
     } else {
       policy <- magmaanlab::policy_inference(h1)
       if(cell$family=='coverage') {
@@ -163,7 +167,7 @@ mixed_replicate <- function(cell,replicate,seed_base,population) {
   targets <- if(cell$family=='coverage') c('continuous_loading','ordinal_loading','threshold','intercept','correlation') else ''
   for(arm in mixed_arms(cell)) for(target in targets) {
     if(!any(vapply(rows,function(x) x$arm==arm && x$target==target,logical(1))))
-      add(arm,target=target,reason=if(startsWith(arm,'policy')) policy_error else comparator_error)
+      add(arm,target=target,reason=if(startsWith(arm,'policy') || arm=='all') policy_error else comparator_error)
   }
   z <- do.call(rbind,rows); z$cell_id <- cell$cell_id; z$replicate <- replicate; z$seed <- seed
   z$h1_converged <- h1_converged; z$h0_converged <- h0_converged; z$policy_gap <- gap
