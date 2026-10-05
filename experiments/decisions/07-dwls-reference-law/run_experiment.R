@@ -7,7 +7,7 @@ opt <- function(key,default=NULL) if(key %in% args) args[match(key,args)+1] else
 if('--help' %in% args) {
   cat('DWLS reference law study: --smoke | --pilot | --production\n',
     '--cell ID[,ID] --reps N --workers 1|2 --out-dir NEW_DIRECTORY\n',
-    'Default smoke cells 1,8; pilot cells 1:8 (two draws). Production 1000 draws/cell.\n',
+    'Default smoke cells 1,8; pilot cells 1:8 (two draws). Production 1000 draws/cell; excludes long30 seven-category cells (184 cells).\n',
     '--combine DIR[,DIR] --out-dir NEW_DIRECTORY validates COMPLETE and exact provenance.\n',
     'Frozen population JSON requires no corpus. Raw spectra are in raw.rds; summaries CSV.\n'); quit()
 }
@@ -37,8 +37,10 @@ if('--combine' %in% args) {
   base <- c(smoke=210000001,pilot=410000001,production=1910000001)[[mode]]
   reps <- as.integer(opt('--reps',c(smoke=1,pilot=2,production=1000)[[mode]]))
   workers <- as.integer(opt('--workers','1')); stopifnot(workers %in% 1:2,reps>=1,reps<=1000)
-  ids <- as.integer(strsplit(opt('--cell',if(mode=='production') paste(1:192,collapse=',') else if(mode=='pilot') paste(1:8,collapse=',') else '1,8'),',',fixed=TRUE)[[1]])
+  production_ids <- with(reference_cells(),cell_id[!(model=='long30' & categories==7)])
+  ids <- as.integer(strsplit(opt('--cell',if(mode=='production') paste(production_ids,collapse=',') else if(mode=='pilot') paste(1:8,collapse=',') else '1,8'),',',fixed=TRUE)[[1]])
   all_cells <- reference_cells(); stopifnot(!anyDuplicated(ids),all(ids %in% all_cells$cell_id))
+  if(mode=='production' && any(!ids %in% production_ids)) stop('Cell excluded by registered cost amendment')
   cells <- all_cells[match(ids,all_cells$cell_id),]
   provenance <- list(fingerprint=fingerprint,mode=mode,base=base,reps=reps,cells=ids)
   write_csv(cells,file.path(out,'cells.csv')); saveRDS(provenance,file.path(out,'provenance.rds'))

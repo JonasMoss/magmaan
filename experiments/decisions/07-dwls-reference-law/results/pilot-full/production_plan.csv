@@ -1,0 +1,2 @@
+"cells","draws","cpu_hours","ideal_hours_12","ideal_hours_16","excluded_cells","reason"
+184,184000,44.5380555555556,3.71150462962963,2.78362847222222,"22,46,70,94,118,142,166,190","registered cost reduction after pilot; excludes overhead"

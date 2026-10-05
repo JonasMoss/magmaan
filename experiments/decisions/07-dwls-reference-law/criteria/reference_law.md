@@ -100,3 +100,20 @@ the averaged Risk-path population is not positive definite (standardized paths
 −1.59/−2.31; response-correlation minimum eigenvalue −0.217). Replace that
 null with equal second/third Cognitive loadings, preserving published paths.
 Apply the same validity gate; if it fails, retain Worland global cells only.
+
+## Cost amendment 2026-10-05, after development pilot, before production
+
+The complete 192-cell, two-draw-per-cell development pilot projects 72.56
+CPU-hours for 1,000 draws per cell. Under the registered cost rule, omit the
+seven-category cells of long30 from production (IDs 22, 46, 70, 94, 118,
+142, 166, 190). Retain all other cells and their original IDs/seeds: 184 cells,
+184,000 draws, projected 44.54 CPU-hours (ideal 3.71 h on 12 cores or 2.78 h
+on 16 cores). This is a cost-driven amendment after seeing development timing
+and availability, not a reference selection. Comparator evaluation, I/O and
+startup add overhead; two timing draws per cell leave substantial uncertainty.
+The pilot still reports all 192 cells. Seven-category long30 conclusions stay
+open; no pooling may imply they were confirmed. No production is authorized.
+Pilot source and criteria are recoverable at commit 021d31bc. Combining those
+old pilot attempts requires that version; current provenance checks deliberately
+reject it after the production amendment. Reproduction under current sources
+requires fresh attempts, and production uses the new fingerprint and fresh base.

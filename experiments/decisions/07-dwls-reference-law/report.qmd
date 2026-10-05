@@ -29,8 +29,9 @@ The study is ready for production planning, but does not yet answer the
 reference-law question. Eight frozen positive-definite populations cover CFA,
 MTMM, higher-order, bifactor, longitudinal, structural and grouped invariance
 models. Development draws check execution, availability and cost; two draws
-per cell cannot establish calibration or select a default. Production has not
-been launched. Simbox remains unavailable.
+per cell cannot establish calibration or select a default. The original grid projects 72.6 CPU-hours; the registered cost reduction
+omits seven-category cells for the 30-item model, leaving 184 production cells
+and a 44.5 CPU-hour planning estimate. Production has not been launched. Simbox remains unavailable.
 
 ## Development evidence
 
@@ -61,10 +62,18 @@ seed, convergence verdicts and failure reason for each test. All fourteen
 reference labels are evaluated from that artifact. PEBA4 and pEBA4 both call
 `peba` with four blocks and are retained as identical labels to match the
 requested candidate list. The All tail truncates negative eigenvalues as in
-the current policy; the same library truncation convention is used for the
+the current policy: $T \sim \sum_j \max(\lambda_j,0) Z_j^2$, with independent standard-normal $Z_j$.
+The same library truncation convention is used for the
 comparator calls.
 
 ## Cost and scope
+
+The permitted cost amendment removes eight seven-category long30 cells, while
+preserving all other stable cell IDs and seeds. The reduced plan projects
+44.54 CPU-hours: ideal 3.71 hours on 12 cores or 2.78 on 16. This estimate has
+little margin against 45 CPU-hours, and actual elapsed time can exceed it.
+Seven-category long30 evidence remains development-only and cannot support
+adoption. The table below retains the original full-grid pricing.
 
 ```{r}
 cost <- read.csv(file.path(root, "cost.csv"))
@@ -130,6 +139,10 @@ After compute authorization, the per-cell contract is
 `cells/cell_XXX`, fresh attempts and completion-last promotion. It skips finished
 cells and refuses to overwrite an incomplete cell target. It can be used with
 `smoke` to validate the driver. Keep the workstation's aggregate core budget.
+
+The full-grid pilot source is commit `021d31bc`; use that version to
+recombine the original attempts. Current sources register the reduced production
+grid and require fresh attempts, as intended by the strict fingerprint check.
 
 Combine with `run_experiment.R --combine DIR1,DIR2 --out-dir NEW_DIRECTORY`.
 The combiner refuses incomplete attempts, differing source/binary/population/
