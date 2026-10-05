@@ -67,3 +67,10 @@ fan-out uses the same seeds and strict source/package provenance; verify two
 cells against the serial summaries. Raw rows and generated reports stay ignored.
 Production uses single-threaded cells and bounded population memory; simbox
 is unavailable until explicitly re-enabled by the user.
+
+## Pre-pilot amendment (2026-10-05, after development smoke)
+
+The development smoke verified Stage-1 reconstruction. Pilot population targets
+will use the full two independent million-row draws, as in production; only
+smoke uses 20000 rows. Price a bounded subset rather than reducing target
+precision. No calibration decisions are made from the pilot.
