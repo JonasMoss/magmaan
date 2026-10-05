@@ -92,6 +92,26 @@ double relative(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) {
   return (a - b).norm() / b.norm();
 }
 
+std::string category_syntax(std::string syntax, int categories) {
+  for (int j = 1; j <= 4; ++j) {
+    const auto name = "x" + std::to_string(j);
+    syntax += "\n" + name + " | t1";
+    for (int k = 2; k < categories; ++k) syntax += " + t" + std::to_string(k);
+    syntax += "\n" + name + " ~*~ 1*" + name;
+  }
+  return syntax;
+}
+
+magmaan::data::OrdinalStats exact_gamma(magmaan::data::OrdinalStats stats) {
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    auto sampling = magmaan::data::ordinal_moment_sampling_influence(stats.int_data[b],
+        stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+    REQUIRE(sampling);
+    stats.NACOV[b] = sampling->rows.transpose() * sampling->rows / double(stats.n_obs[b]);
+  }
+  return stats;
+}
+
 }  // namespace
 
 TEST_CASE("DWLS policy: IJ covariance and one fit-function global test") {
@@ -103,8 +123,8 @@ TEST_CASE("DWLS policy: IJ covariance and one fit-function global test") {
   const auto out = api::policy_inference_dwls(m.pt, m.rep, *stats, est,
                                               OrdinalParameterization::Delta, {});
   REQUIRE(out.covariance_reason == api::InferenceReason::Available);
-  auto ij = magmaan::estimate::robust_ordinal_ij(m.pt, m.rep, *stats, est, OrdinalWeightKind::DWLS);
-  auto fixed = magmaan::estimate::robust_ordinal(m.pt, m.rep, *stats, est, OrdinalWeightKind::DWLS);
+  auto ij = magmaan::estimate::robust_ordinal_ij(m.pt, m.rep, *stats, est, OrdinalWeightKind::DWLS, OrdinalParameterization::Delta, nullptr, magmaan::estimate::OrdinalFirstStage::Exact);
+  auto fixed = magmaan::estimate::robust_ordinal(m.pt, m.rep, exact_gamma(*stats), est, OrdinalWeightKind::DWLS);
   auto fixed_observed = magmaan::estimate::robust_ordinal(m.pt, m.rep, *stats, est,
       OrdinalWeightKind::DWLS, OrdinalParameterization::Delta, magmaan::robust::Information::Observed);
   REQUIRE(ij.has_value()); REQUIRE(fixed.has_value()); REQUIRE(fixed_observed.has_value());
@@ -144,26 +164,53 @@ TEST_CASE("DWLS policy: IJ covariance and one fit-function global test") {
 TEST_CASE("DWLS global All reference: delta and theta, one and two groups") {
   for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
     for (int groups : {1, 2}) {
-      CAPTURE(groups);
-      CAPTURE(static_cast<int>(parameterization));
-      std::vector<Eigen::MatrixXd> blocks;
-      for (int g = 0; g < groups; ++g)
-        blocks.push_back(misspecified_block(20261003u + static_cast<std::uint32_t>(g), 400, -0.4, 0.6));
-      auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
-      REQUIRE(stats.has_value());
-      const auto m = ordinal_model(kOneFactor, groups);
-      const auto est = fit_dwls(m, *stats, parameterization);
-      const auto out = api::policy_inference_dwls(m.pt, m.rep, *stats, est, parameterization, {});
-      REQUIRE(out.score.reason == api::InferenceReason::Available);
-      CHECK(out.score.reference == "all");
-      CHECK(out.lr.reference == "sb_peba4");
-      const auto explicit_all = magmaan::robust::frontier::fmg_test(out.score.statistic,
-          out.score.df, out.score.eigenvalues,
-          {magmaan::robust::frontier::FmgMethod::All, 0.0, true});
-      CHECK(std::abs(out.score.p_all - explicit_all.p_value) <= 1e-7);
-      CHECK(std::isnan(out.score.p_sb));
-      CHECK(std::isnan(out.score.p_peba4));
-      CHECK(out.score.peba_blocks == 0);
+      for (int categories : {2, 5}) {
+        CAPTURE(categories);
+        CAPTURE(groups);
+        CAPTURE(static_cast<int>(parameterization));
+        std::vector<Eigen::MatrixXd> blocks;
+        for (int g = 0; g < groups; ++g)
+          blocks.push_back(misspecified_block(20261003u + static_cast<std::uint32_t>(g), 400, -0.4, 0.6));
+        unsigned seed = 6900u;
+        for (auto& block : blocks) {
+          // Deterministic latent-normal draws with all categories occupied.
+          std::mt19937 rng(seed++); std::normal_distribution<double> z;
+          for (Eigen::Index i = 0; i < block.rows(); ++i) {
+            const double f = z(rng);
+            for (int j = 0; j < 4; ++j) {
+              const double y = .7*f + std::sqrt(.51)*z(rng);
+              int category = 1;
+              for (int k = 1; k < categories; ++k) category += y > -.9 + 1.8*k/categories;
+              block(i,j) = category;
+            }
+          }
+        }
+        auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
+        REQUIRE(stats.has_value());
+        const auto m = ordinal_model(category_syntax("f =~ x1 + x2 + x3 + x4", categories), groups);
+        const auto est = fit_dwls(m, *stats, parameterization);
+        const auto out = api::policy_inference_dwls(m.pt, m.rep, *stats, est, parameterization, {});
+        REQUIRE(out.score.reason == api::InferenceReason::Available);
+        auto ij = magmaan::estimate::robust_ordinal_ij(m.pt, m.rep, *stats, est,
+            OrdinalWeightKind::DWLS, parameterization, nullptr, magmaan::estimate::OrdinalFirstStage::Exact);
+        auto global = magmaan::estimate::robust_ordinal(m.pt, m.rep, exact_gamma(*stats), est,
+            OrdinalWeightKind::DWLS, parameterization);
+        REQUIRE(ij); REQUIRE(global);
+        CHECK((out.covariance - ij->vcov).norm() == 0.0);
+        CHECK((out.score.eigenvalues - global->eigvals).norm() <= 1e-10);
+        auto missing = *stats; missing.int_data.clear();
+        CHECK(api::policy_inference_dwls(m.pt, m.rep, missing, est, parameterization, {}).covariance_reason
+            == api::InferenceReason::UnsupportedModel);
+        CHECK(out.score.reference == "all");
+        CHECK(out.lr.reference == "sb_peba4");
+        const auto explicit_all = magmaan::robust::frontier::fmg_test(out.score.statistic,
+            out.score.df, out.score.eigenvalues,
+            {magmaan::robust::frontier::FmgMethod::All, 0.0, true});
+        CHECK(std::abs(out.score.p_all - explicit_all.p_value) <= 1e-7);
+        CHECK(std::isnan(out.score.p_sb));
+        CHECK(std::isnan(out.score.p_peba4));
+        CHECK(out.score.peba_blocks == 0);
+      }
     }
   }
 }
@@ -185,7 +232,7 @@ TEST_CASE("DWLS policy: at exact fit the IJ covariance is the fixed-weight sandw
   REQUIRE(out.covariance_reason == api::InferenceReason::Available);
   CHECK(out.score.reason == api::InferenceReason::Saturated);
   CHECK(out.lr.reason == api::InferenceReason::Inapplicable);
-  auto fixed = magmaan::estimate::robust_ordinal(m.pt, m.rep, *stats, est, OrdinalWeightKind::DWLS);
+  auto fixed = magmaan::estimate::robust_ordinal(m.pt, m.rep, exact_gamma(*stats), est, OrdinalWeightKind::DWLS);
   REQUIRE(fixed.has_value());
   CHECK(relative(out.covariance, fixed->vcov) < 1e-6);
 }
@@ -312,14 +359,8 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
   auto embed = magmaan::robust::embed_nested_null(p1, r.alt_model.rep, p0,
       r.null_model.rep, r.null_est.theta, *c1, *c0);
   REQUIRE(embed);
-  auto common_null = magmaan::robust::embedded_null_structure(p1, embed->null_constraints);
-  auto common = magmaan::estimate::ordinal_dwls_profile_lrt(p1, r.alt_model.rep,
-      *stats, r.alt_est, common_null, r.alt_model.rep, r.alt_est, parameterization);
-  REQUIRE(common);
   const auto& t = r.out.lr;
-  Eigen::VectorXd eig = common->eigvals.tail(t.df);
   REQUIRE(t.eigenvalues.size() == t.df);
-  CHECK((t.eigenvalues - eig).norm() <= 1e-10 * eig.norm());
   CHECK(t.eigenvalues.allFinite());
   CHECK(t.eigenvalues.minCoeff() >= 0.0);
   auto tangent = api::frontier::moment_nested_tangent(r.null_model.pt, r.null_model.rep,
@@ -328,7 +369,7 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
   auto parts = magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(p1,
       r.alt_model.rep, *stats, r.alt_est.theta, OrdinalWeightKind::DWLS, parameterization);
   auto ij = magmaan::estimate::robust_ordinal_ij(r.alt_model.pt, r.alt_model.rep, *stats,
-      r.alt_est, OrdinalWeightKind::DWLS, parameterization);
+      r.alt_est, OrdinalWeightKind::DWLS, parameterization, nullptr, magmaan::estimate::OrdinalFirstStage::Exact);
   REQUIRE(parts); REQUIRE(ij);
   const double N = std::accumulate(stats->n_obs.begin(), stats->n_obs.end(), 0.0);
   const auto& K = c1->K();
@@ -338,7 +379,8 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
   const Eigen::MatrixXd B = H * V * H.transpose();
   auto tangent_spectrum = magmaan::robust::compute_satorra2000_from_sandwich(H, B, tangent->A);
   REQUIRE(tangent_spectrum);
-  CHECK((tangent_spectrum->eigenvalues - eig).norm() <= 1e-10 * eig.norm());
+  const Eigen::VectorXd eig = tangent_spectrum->eigenvalues;
+  CHECK((t.eigenvalues - eig).norm() <= 1e-10 * eig.norm());
   // Independently evaluate [H^-1 - T(T'HT)^-1T']B. Whiten by H and
   // form the orthogonal complement instead of subtracting two nearly equal
   // dense inverses (which loses precision in the released-scale coordinates).
@@ -408,7 +450,7 @@ TEST_CASE("DWLS nested policy: delta and theta match their common-point laws; tw
   check_common_law(theta, *stats, OrdinalParameterization::Theta);
   // Away from the nested null, the affine restrictions at H1 describe
   // different tangents under nonlinear delta/theta response scaling. The
-  // r-term law must match the common-point profile in each coordinate system;
+  // r-term law must match the direct Exact IJ law in each coordinate system;
   // equal statistics do not imply equal reference spectra there.
 
   auto grouped = magmaan::data::ordinal_stats_from_integer_data(
@@ -571,6 +613,23 @@ TEST_CASE("DWLS moment nesting: Wu-Estabrook threshold steps") {
       REQUIRE(out.lr.reason == api::InferenceReason::Available);
       CHECK(out.lr.df == 8);
       CHECK(out.lr.eigenvalues.allFinite());
+      auto prepared = alt.pt;
+      REQUIRE(magmaan::estimate::prepare_ordinal_partable(prepared, *stats, OrdinalParameterization::Theta));
+      auto constraints = magmaan::estimate::build_eq_constraints(prepared); REQUIRE(constraints);
+      const auto& K = constraints->K();
+      auto parts = magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(prepared,
+          alt.rep, *stats, e1.theta, OrdinalWeightKind::DWLS, OrdinalParameterization::Theta);
+      auto ij = magmaan::estimate::robust_ordinal_ij(alt.pt, alt.rep, *stats, e1,
+          OrdinalWeightKind::DWLS, OrdinalParameterization::Theta, nullptr,
+          magmaan::estimate::OrdinalFirstStage::Exact);
+      REQUIRE(parts); REQUIRE(ij);
+      const double N = std::accumulate(stats->n_obs.begin(), stats->n_obs.end(), 0.0);
+      const Eigen::MatrixXd H = K.transpose() * parts->hessian * K / N;
+      const Eigen::MatrixXd L = (K.transpose() * K).ldlt().solve(K.transpose());
+      const Eigen::MatrixXd B = H * (N * L * ij->vcov * L.transpose()) * H.transpose();
+      auto direct = magmaan::robust::compute_satorra2000_from_sandwich(H, B, tangent->A);
+      REQUIRE(direct);
+      CHECK((out.lr.eigenvalues - direct->eigenvalues).norm() <= 1e-10);
     }
   }
 }
@@ -622,4 +681,56 @@ TEST_CASE("DWLS moment nesting: 100-replicate true-null moment diagnostic") {
   // finite-sample calibration decision or a fresh-seed size confirmation.
   CHECK(std::abs(mean - traces.mean()) <= 3.0 * mean_se);
   CHECK(std::abs(variance - variances.mean()) <= 3.0 * variance_se);
+}
+
+TEST_CASE("DWLS exact policy: binary and five-category nested laws in both parameterizations") {
+  for (int categories : {2, 5}) {
+    for (int groups : {1, 2}) {
+      for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+        CAPTURE(categories); CAPTURE(groups); CAPTURE(static_cast<int>(parameterization));
+        std::vector<Eigen::MatrixXd> blocks;
+        for (int g = 0; g < groups; ++g) {
+          std::mt19937 rng(6969u + static_cast<unsigned>(g)); std::normal_distribution<double> z;
+          Eigen::MatrixXd X(600,4);
+          for (Eigen::Index i = 0; i < X.rows(); ++i) {
+            const double f = z(rng);
+            for (int j = 0; j < 4; ++j) {
+              const double y = .7*f + std::sqrt(.51)*z(rng);
+              int category = 1;
+              for (int k = 1; k < categories; ++k) category += y > -1.5 + 3.0*k/categories;
+              X(i,j) = category;
+            }
+          }
+          blocks.push_back(X);
+        }
+        auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks,true); REQUIRE(stats);
+        const auto alt = ordinal_model(category_syntax("f =~ x1 + x2 + x3 + x4", categories), groups);
+        const auto nul = ordinal_model(category_syntax("f =~ x1 + a*x2 + a*x3 + a*x4", categories), groups);
+        NestedDwls r{{}, {}, {}, nul, alt};
+        r.null_est = fit_dwls(nul,*stats,parameterization);
+        r.alt_est = fit_dwls(alt,*stats,parameterization);
+        r.out = api::policy_nested_dwls(nul.pt,nul.rep,r.null_est,{},alt.pt,alt.rep,
+            r.alt_est,{},*stats,parameterization);
+        REQUIRE_MESSAGE(r.out.lr.reason == api::InferenceReason::Available, r.out.lr.detail);
+        check_common_law(r,*stats,parameterization);
+      }
+    }
+  }
+}
+
+TEST_CASE("DWLS exact first stage: binary pairwise saturation agrees with OPG at large N") {
+  // Each binary pair has three free cell probabilities and three first-stage
+  // coordinates. Information equality holds empirically at its saturated MLE;
+  // remaining error is solver/finite-difference error, rather than a 1/sqrt(N)
+  // discrepancy. Unsaturated multi-category normal pairs converge at that rate.
+  std::mt19937 rng(6974u); std::normal_distribution<double> z;
+  Eigen::MatrixXd X(4000,4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double f = z(rng);
+    for (int j = 0; j < 4; ++j) X(i,j) = 1.0 + (.7*f + std::sqrt(.51)*z(rng) > .2);
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X},true); REQUIRE(stats);
+  auto sampling = magmaan::data::ordinal_moment_sampling_influence(stats->int_data[0],
+      stats->n_levels[0],stats->thresholds[0],stats->R[0]); REQUIRE(sampling);
+  CHECK(relative(sampling->gamma,stats->NACOV[0]) < 1e-6);
 }

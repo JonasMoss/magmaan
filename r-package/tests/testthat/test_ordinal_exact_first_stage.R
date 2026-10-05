@@ -1,4 +1,4 @@
-test_that("all-ordinal exact first-stage comparator preserves OPG and policy defaults", {
+test_that("all-ordinal exact first-stage comparator preserves OPG defaults and supplies ordinary policy", {
   set.seed(74)
   n <- 400L
   f <- rnorm(n)
@@ -17,6 +17,7 @@ test_that("all-ordinal exact first-stage comparator preserves OPG and policy def
       expect_identical(baseline, magmaan_core$robust_ordinal_ij(fit, fit$ordinal_stats, first_stage = "opg"))
       policy <- policy_inference(fit)
       exact <- magmaan_core$robust_ordinal_ij(fit, fit$ordinal_stats, first_stage = "exact")
+      expect_equal(policy$covariance, exact$vcov, tolerance = 1e-12, ignore_attr = TRUE)
       expect_true(all(is.finite(exact$vcov)))
       expect_gt(max(abs(exact$vcov-baseline$vcov)), 0)
       expect_length(exact$sampling_gamma, if (grouped) 2L else 1L)

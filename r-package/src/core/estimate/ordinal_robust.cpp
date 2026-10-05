@@ -583,15 +583,27 @@ robust_ordinal_ij(spec::LatentStructure pt,
 
   std::vector<Eigen::MatrixXd> sampling_rows;
   if (first_stage == OrdinalFirstStage::Exact) {
-    if (stats.int_data.size() != stats.R.size()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "exact ordinal first stage requires complete integer data"));
+    if (stats.sampling_moment_influence.size() == stats.R.size()) {
+      sampling_rows = stats.sampling_moment_influence;
+    } else {
+      if (stats.int_data.size() != stats.R.size()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "exact ordinal first stage requires complete integer data"));
+      }
+      for (std::size_t b = 0; b < stats.R.size(); ++b) {
+        auto sampling = data::ordinal_moment_sampling_influence(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+        if (!sampling) return std::unexpected(sampling.error());
+        sampling_rows.push_back(std::move(sampling->rows));
+      }
     }
+  }
+
+  if (first_stage == OrdinalFirstStage::Exact) {
     for (std::size_t b = 0; b < stats.R.size(); ++b) {
-      auto sampling = data::ordinal_moment_sampling_influence(
-          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
-      if (!sampling) return std::unexpected(sampling.error());
-      sampling_rows.push_back(std::move(sampling->rows));
+      if (block_has_missing[b] || !sampling_rows[b].allFinite())
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "exact ordinal first stage requires finite complete-data sampling rows"));
     }
   }
 

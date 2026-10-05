@@ -202,13 +202,13 @@ PolicyNested policy_nested_fiml(spec::LatentStructure null_pt,
 // All-ordinal DWLS, delta or theta parameterization, one or more groups.
 //
 // Parameter covariance: the infinitesimal-jackknife sandwich
-// (estimate::robust_ordinal_ij): observed bread, Stage-1 threshold and
+// (estimate::robust_ordinal_ij, Exact first stage): observed bread, threshold and
 // polychoric influence, and the influence of the estimated diagonal weight,
 // which is leading order when the model is misspecified and vanishes at
 // exact fit.
 //
 // Global test against the saturated model: the fit-function statistic n F
-// with the fixed-weight UGamma spectrum (estimate::robust_ordinal), calibrated
+// with UGamma from exact sampling rows and unchanged OPG fitting weights, calibrated
 // with the exact weighted chi-square All tail on every positive sample
 // eigenvalue (decision study 05; limited validation, confirmation pending).
 // The objective is quadratic in the saturated moments and

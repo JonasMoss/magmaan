@@ -36,6 +36,10 @@ struct OrdinalStats {
   // fixed-weight observed-bread sandwich omits. Empty when not computed.
   std::vector<Eigen::MatrixXd> moment_influence;
 
+  // Optional complete-data empirical score-Jacobian sampling rows, distinct
+  // from OPG moment_influence. Used only when Exact first stage is selected.
+  std::vector<Eigen::MatrixXd> sampling_moment_influence;
+
   // 0-based integer category data (n_b × p), one matrix per block, -1 for
   // missing in observed/pairwise-overlap blocks. Carried so the IJ can
   // finite-difference ∂Γ̂/∂κ (the "bread" piece of the weight influence):

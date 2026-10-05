@@ -501,6 +501,17 @@ ordinary API exposes barrier fitting experimentally as
 
 #### All-ordinal DWLS
 
+- [ ] **M — adopt exact first-stage influence for the ordinary policy** (TASK-69).
+  Covariance and both nested laws use Exact estimated-weight IJ; global Gamma
+  uses exact sampling rows cached once per policy fit. OPG fitting weights,
+  estimates, lavaan compatibility and lab defaults are unchanged. Global All
+  and nested SB/PEBA4 references remain. Earlier decisions/05 calibration
+  applies to OPG; fresh exact-first-stage and latent non-normality confirmation
+  remains TASK-79. Lane implementation is pending validation: the existing
+  theta delete-one jackknife 4% gate gives 5.23%, and the single-seed OPG
+  Satorra trace gap no longer decreases monotonically with N. No tolerance
+  or gate has been relaxed; TASK-69 needs a decision on investigation scope.
+
 Mixed continuous/ordered completion is assigned to 0.3.0. Shared fixes
 required by an all-ordinal primary workflow remain current work.
 

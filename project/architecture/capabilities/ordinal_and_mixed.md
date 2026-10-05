@@ -6,8 +6,12 @@
   (OPG default, Exact comparator); the lab `first_stage = "exact"` also returns
   `sampling_moment_influence` and `sampling_gamma`. Both the sampling term and
   fitted-OPG-weight movement use the selected rows. Missing-data exact sampling
-  is explicitly unavailable. Ordinary policy and fitting NACOV stay unchanged;
-  TASK-69 owns policy adoption. The shared implementation differentiates the
+  is explicitly unavailable. TASK-69 adopts Exact for the ordinary all-ordinal policy, caching sampling
+  rows once per `DwlsPolicyFit`; fitting NACOV, lavaan compatibility and lab
+  defaults retain OPG. Global Gamma is the exact-row cross-product; nested
+  parameter and moment-tangent laws use the exact estimated-weight IJ meat.
+  All global and SB/PEBA4 nested references stay unchanged. Exact-first-stage
+  calibration and latent non-normality evidence remain pending (TASK-79). The shared implementation differentiates the
   empirical score means with relative step 1e-5, then solves the centered
   equations (threshold Hessian and pair-score threshold/rho derivatives).
   Replicated case-weight row errors are below 8e-9 in the registered samples.
@@ -15,6 +19,18 @@
   are 0.0900/0.0483/0.0269: a 3.34-fold reduction over sixteenfold N, consistent
   with the O_p(N^-1/2) information-identity discrepancy. This numerical
   convergence gate is not a coverage calibration.
+  TASK-69 policy gates compare Exact IJ covariance, exact-row global Gamma,
+  parameter-space nested and moment-nested tangent spectra (1e-10), with one/two
+  groups, delta/theta, binary and five-category items. Binary pairwise saturation
+  agrees with OPG Gamma within 1e-6 at N = 4000: its three first-stage coordinates
+  saturate each pair, so remaining discrepancy is numerical, rather than the
+  unsaturated normal-pair O_p(N^-1/2) information-equality discrepancy.
+  A two-group 12-indicator five-category fit (N = 1000 total, one thread) costs
+  median 80 ms before versus 1643 ms after on five fresh R policy calls;
+  cached calls have median 1 ms. Sampling rows are built once per policy fit.
+  Adoption remains blocked on existing policy gates: theta jackknife discrepancy
+  5.23% exceeds 4%; the single-seed OPG Satorra trace gap is nonmonotone.
+  These assertions remain unchanged (TASK-69 Needs decision).
 
 - C++ `fit_ordinal_configured()` supports the `lavaan-0.7.2` preset for
   all-ordinal DWLS, with delta/theta and ordered affine equality coordinates.

@@ -1,5 +1,11 @@
 # magmaan 0.2.0 (in development)
 
+- All-ordinal DWLS ordinary policy now uses exact empirical first-stage
+  influence. Policy SEs and global/nested p-values change; OPG fitting weights
+  and estimates, `lavaan_compat`, and all lab defaults are unchanged. Global
+  All and nested SB/PEBA4 references remain. Exact-first-stage calibration
+  reconfirmation is pending (TASK-79).
+
 - Mplus fitting refusals list all needed input edits in order, with vector
   `reason` and named vector `edit` condition fields. Printing a Mplus model
   shows fittability and every needed edit.

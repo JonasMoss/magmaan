@@ -90,7 +90,7 @@ test_that("FIML policy uses retained missing-pattern scores for global and neste
 })
 
 
-test_that("DWLS nested policy equals the parameter-IJ diagnostic and common-point law", {
+test_that("DWLS nested policy equals the exact parameter-IJ construction", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   ord <- paste0("x",1:6)
@@ -107,12 +107,12 @@ test_that("DWLS nested policy equals the parameter-IJ diagnostic and common-poin
   K <- parts$K; A <- parts$A
   H <- crossprod(K,parts$hessian_total%*%K)/f1$ntotal
   L <- solve(crossprod(K),t(K))
-  V <- f1$ntotal*L%*%magmaan_core$robust_ordinal_ij(f1,f1$ordinal_stats)$vcov%*%t(L)
+  V <- f1$ntotal*L%*%magmaan_core$robust_ordinal_ij(f1,f1$ordinal_stats, first_stage = "exact")$vcov%*%t(L)
   Ri <- solve(chol(A%*%solve(H,t(A))))
   e <- sort(eigen(t(Ri)%*%A%*%V%*%t(A)%*%Ri,symmetric=TRUE,only.values=TRUE)$values)
   expect_length(policy$eigenvalues,policy$df)
   expect_equal(policy$eigenvalues,e,tolerance=1e-10)
-  expect_equal(policy$eigenvalues,tail(sort(parts$common$eigvals),policy$df),tolerance=1e-10)
+  # parts$common is the explicit OPG lab comparator, whose sampling law differs.
   profile <- magmaan_core$ordinal_profile_lrt(f1,f0,f1$ordinal_stats)
   expect_equal(policy$statistic,profile$T_diff,tolerance=1e-10)
   expect_equal(robust_nested_lrt(f1,f0)$eigenvalues,policy$eigenvalues,tolerance=1e-10)
@@ -140,6 +140,11 @@ test_that("DWLS global policy exposes the exact spectrum All reference", {
       expect_identical(policy$lr$reference, "sb_peba4")
       fixed <- robust_ordinal(fit, fit$ordinal_stats, bread = "expected")
       expect_equal(t$statistic, fixed$chisq_standard)
+      exact <- magmaan_core$robust_ordinal_ij(fit, fit$ordinal_stats, first_stage = "exact")
+      sampling_stats <- fit$ordinal_stats
+      sampling_stats$NACOV <- exact$sampling_gamma
+      exact_global <- robust_ordinal(fit, sampling_stats, bread = "expected")
+      expect_equal(t$eigenvalues, sort(exact_global$eigvals), tolerance = 1e-10)
       explicit <- robust_fmg_test(t$statistic, t$df, t$eigenvalues, "all", 0,
         truncate_negative = TRUE)
       expect_equal(t$p_all, explicit$p_value, tolerance = 1e-7)

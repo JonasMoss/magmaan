@@ -32,6 +32,7 @@ struct DwlsPolicyFit::Impl {
   const spec::LatentStructure pt;
   const model::MatrixRep rep;
   const data::OrdinalStats stats;
+  std::optional<std::vector<Eigen::MatrixXd>> sampling;
   const estimate::Estimates estimates;
   const estimate::OrdinalParameterization parameterization;
   const std::vector<std::int8_t> row_user;
@@ -61,7 +62,7 @@ DwlsPolicyFit::DwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
     data::OrdinalStats stats, estimate::Estimates estimates,
     estimate::OrdinalParameterization parameterization, std::vector<std::int8_t> row_user)
     : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
-        std::move(stats), std::move(estimates), parameterization,
+        std::move(stats), {}, std::move(estimates), parameterization,
         std::move(row_user), {}, {}, {}, 0})) {}
 MixedDwlsPolicyFit::MixedDwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
     data::MixedOrdinalStats stats, estimate::Estimates estimates,
@@ -282,7 +283,40 @@ template<class Stats, class Cache>
 static post_expected<Stats> dwls_policy_stats(const Stats& input, Cache* cache) {
   if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
     return mixed_policy_stats(input, cache);
-  else return input;
+  else {
+    auto stats = input;
+    const auto blocks = stats.R.size();
+    if (stats.n_levels.size() != blocks || stats.thresholds.size() != blocks ||
+        stats.n_obs.size() != blocks || stats.NACOV.size() != blocks ||
+        stats.W_dwls.size() != blocks)
+      return std::unexpected(PostError{PostError::Kind::NumericIssue,
+          "all-ordinal DWLS policy: inconsistent first-stage block layout"});
+    if (cache && cache->sampling) stats.sampling_moment_influence = *cache->sampling;
+    if (stats.sampling_moment_influence.size() != blocks) {
+      if (stats.int_data.size() != blocks)
+        return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+            "all-ordinal DWLS policy requires complete integer data for exact first-stage influence"});
+      stats.sampling_moment_influence.clear();
+      for (std::size_t b = 0; b < blocks; ++b) {
+        if ((stats.int_data[b].array() < 0).any())
+          return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+              "all-ordinal DWLS policy requires complete observations for exact first-stage influence"});
+        auto sampling = data::ordinal_moment_sampling_influence(stats.int_data[b],
+            stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+        if (!sampling) return std::unexpected(sampling.error());
+        stats.sampling_moment_influence.push_back(std::move(sampling->rows));
+      }
+      if (cache) cache->sampling = stats.sampling_moment_influence;
+    }
+    for (std::size_t b = 0; b < blocks; ++b) {
+      const auto& rows = stats.sampling_moment_influence[b];
+      if (stats.n_obs[b] <= 0 || rows.rows() != stats.n_obs[b] ||
+          rows.cols() != stats.NACOV[b].rows() || !rows.allFinite())
+        return std::unexpected(PostError{PostError::Kind::NumericIssue,
+            "all-ordinal DWLS policy: invalid exact sampling influence rows"});
+    }
+    return stats;
+  }
 }
 
 template<class Stats>
@@ -292,7 +326,7 @@ static auto dwls_policy_ij(spec::LatentStructure pt, const model::MatrixRep& rep
     const std::vector<std::int8_t>* row_user) {
   if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
     return estimate::robust_mixed_ordinal_ij(std::move(pt), rep, stats, estimates, weights, parameterization, row_user);
-  else return estimate::robust_ordinal_ij(std::move(pt), rep, stats, estimates, weights, parameterization, row_user);
+  else return estimate::robust_ordinal_ij(std::move(pt), rep, stats, estimates, weights, parameterization, row_user, estimate::OrdinalFirstStage::Exact);
 }
 
 template<class Stats>
@@ -300,15 +334,15 @@ static auto dwls_policy_global(spec::LatentStructure pt, const model::MatrixRep&
     const Stats& stats, const estimate::Estimates& estimates,
     estimate::OrdinalWeightKind weights, estimate::OrdinalParameterization parameterization,
     robust::Information information, const std::vector<std::int8_t>* row_user) {
-  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
-    // Preserve OPG fitting weights; only the global sampling law changes.
-    auto exact = stats;
-    for (std::size_t b = 0; b < stats.R.size(); ++b) {
-      const auto& rows = stats.sampling_moment_influence[b];
-      exact.NACOV[b] = rows.transpose() * rows / static_cast<double>(stats.n_obs[b]);
-    }
+  // Sampling Gamma changes; fitting weights retain their OPG provenance.
+  auto exact = stats;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const auto& rows = stats.sampling_moment_influence[b];
+    exact.NACOV[b] = rows.transpose() * rows / static_cast<double>(stats.n_obs[b]);
+  }
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
     return estimate::robust_mixed_ordinal(std::move(pt), rep, exact, estimates, weights, parameterization, information, row_user);
-  } else return estimate::robust_ordinal(std::move(pt), rep, stats, estimates, weights, parameterization, information, row_user);
+  else return estimate::robust_ordinal(std::move(pt), rep, exact, estimates, weights, parameterization, information, row_user);
 }
 
 template<class Stats>

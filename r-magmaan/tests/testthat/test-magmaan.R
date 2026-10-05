@@ -128,7 +128,7 @@ test_that("all-ordinal DWLS gets the estimated-weight covariance and one global 
   expect_equal(s$available, c(TRUE, TRUE, FALSE))
   expect_equal(s$reason[s$component == "global_lr"], "inapplicable")
   lab <- as_lab_fit(fit)
-  expect_equal(unname(vcov(fit)), unname(vcov(lab, regime = "sandwich_ij")), tolerance = 1e-12)
+  expect_equal(unname(vcov(fit)), unname(magmaanlab::magmaan_core$robust_ordinal_ij(lab, lab$ordinal_stats, first_stage = "exact")$vcov), tolerance = 1e-12)
   tests <- coef(summary(fit))
   expect_false(anyNA(tests$se[tests$free]))
   g <- summary(fit)$tests

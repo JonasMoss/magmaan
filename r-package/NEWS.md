@@ -1,9 +1,14 @@
 # magmaanlab 0.2.0 (in development)
 
+- All-ordinal DWLS ordinary policy now uses exact empirical first-stage
+  influence. Policy SEs and global/nested p-values change; OPG fitting weights
+  and estimates, `lavaan_compat`, and all lab defaults are unchanged. Global
+  All and nested SB/PEBA4 references remain. Exact-first-stage calibration
+  reconfirmation is pending (TASK-79).
+
 - `robust_ordinal_ij(..., first_stage = "exact")` provides a complete-data
   all-ordinal empirical-Jacobian comparator, with sampling influence rows and
-  Gamma. The default remains `"opg"`; fitting weights and ordinary policy
-  outputs are unchanged. TASK-69 owns the later policy adoption.
+  Gamma. The default remains `"opg"`; fitting weights are unchanged. The ordinary policy now selects exact influence.
 
 - Complete mixed continuous/ordinal DWLS now composes the exact first-stage IJ
   covariance, global fit-function All test, and observed-Hessian parameter-space
