@@ -1,0 +1,6 @@
+"cell_id","exact_arm","opg_arm","target","attempted","paired","excluded","exact_minus_opg","bootstrap_low","bootstrap_high","attempted_difference"
+7,"policy_ij","opg_ij","loading",1,1,0,0,0,0,0
+7,"policy_ij","opg_ij","threshold",1,1,0,0,0,0,0
+12,"policy_ij","opg_ij","loading",1,1,0,0,0,0,0
+12,"policy_ij","opg_ij","threshold",1,1,0,0,0,0,0
+12,"policy_ij","opg_ij","correlation",1,1,0,0,0,0,0

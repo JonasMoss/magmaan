@@ -45,8 +45,11 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   All global and SB/PEBA4 nested references stay unchanged. Exact-first-stage
   calibration remains pending: TASK-79 registers fresh-draw exact/OPG paired
   reconfirmation and supplies a full-grid mechanics/pricing pilot; production
-  awaits merger registration and compute approval. TASK-84 owns latent
-  non-normality evidence. The shared implementation differentiates the
+  awaits merger registration and compute approval. TASK-84 supplies a registered
+  latent non-normality lane with streamed million-row pseudo-targets, independent
+  Monte Carlo target checks, descriptive globals and paired exact/OPG coverage
+  and identical-group nested tests. Local smoke/pricing evidence is retained;
+  production calibration remains pending. The shared implementation differentiates the
   empirical score means with relative step 1e-5, then solves the centered
   equations (threshold Hessian and pair-score threshold/rho derivatives).
   Replicated case-weight row errors are below 8e-9 in the registered samples.

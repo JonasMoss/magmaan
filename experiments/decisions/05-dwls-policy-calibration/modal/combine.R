@@ -21,9 +21,9 @@ source(file.path(study, "R", "summarize.R"))
 if(!mode %in% c('smoke','pilot','production','explore','confirm')) stop('Unknown mode')
 family <- if('--family' %in% args) opt('--family') else 'all'
 lane <- if('--lane' %in% args) opt('--lane') else 'dwls-policy'
-if(lane=='exact-first-stage') {
+if(lane %in% c('exact-first-stage','latent-nonnormal')) {
   source(file.path(study,'modal','exact_combine.R'))
-  exact_combine(run_dir,mode,git_head,family,opt,study)
+  exact_combine(run_dir,mode,git_head,family,opt,study,lane)
   quit(save='no')
 }
 if(lane=='mixed') {

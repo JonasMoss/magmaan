@@ -1,6 +1,12 @@
 # Called by combine.R after loading the lane's compute helpers.
-exact_combine <- function(run_dir,mode,git_head,family,opt,study) {
+exact_combine <- function(run_dir,mode,git_head,family,opt,study,lane="exact-first-stage") {
   source(file.path(study,'R','exact_first_stage.R'))
+  if(lane=='latent-nonnormal') {
+    source(file.path(study,'R','latent_nonnormal.R'))
+    exact_cells <- latent_cells; exact_seed_base <- latent_seed_base
+    exact_validate_seeds <- latent_validate_seeds
+    exact_summarize <- function(raw,cells,out) latent_summarize(raw,cells,out,study)
+  }
   cells <- exact_cells()
   if(family!='all') cells <- cells[cells$family==family,]
   if('--cell' %in% args) {
@@ -16,13 +22,14 @@ exact_combine <- function(run_dir,mode,git_head,family,opt,study) {
     'population_n_per_group','population_seed_base','package_magmaanlab','package_lavaan')
   # Some helper versions prefix package keys differently: compare every
   # package/version key in addition to the mandatory provenance fields.
+  if(lane=='latent-nonnormal') same <- c(same,'population_second_seed_base',
+    'population_chunk_size','population_method','n_convention')
   same <- unique(c(same[!startsWith(same,'package_')],
     metadata[[1]]$key[grepl('package|version',metadata[[1]]$key)]))
   for(key in same) if(length(unique(vapply(metadata,value,'',key=key)))!=1) stop('Provenance mismatch: ',key)
-  if(value(metadata[[1]],'lane')!='exact-first-stage' || value(metadata[[1]],'mode')!=mode) stop('Lane/mode mismatch')
+  if(value(metadata[[1]],'lane')!=lane || value(metadata[[1]],'mode')!=mode) stop('Lane/mode mismatch')
   binary <- list.files(file.path(find.package('magmaanlab'),'libs'),'\\.so$',full.names=TRUE)
-  sources <- c(file.path(study,'run_experiment.R'),sort(list.files(file.path(study,'R'),full.names=TRUE)),
-    file.path(study,'criteria','exact_first_stage.md'),binary)
+  sources <- if(lane=='latent-nonnormal') latent_sources(study) else exact_source_files(study)
   if(value(metadata[[1]],'source_hashes')!=paste(tools::md5sum(sources),collapse=',')) stop('Current source/package provenance mismatch')
   for(package in c('magmaanlab','lavaan'))
     if(value(metadata[[1]],paste0(package,'_version'))!=as.character(packageVersion(package))) stop('Current package version mismatch')
@@ -56,12 +63,15 @@ exact_combine <- function(run_dir,mode,git_head,family,opt,study) {
   })
   pop <- do.call(rbind,populations)
   if(!is.null(pop)) {
-    for(key in unique(pop$key)) for(target in unique(pop$target)) {
-      values <- pop$estimate[pop$key==key & pop$target==target]
-      if(length(unique(values))>1) stop('Population target mismatch')
-    }
-    pop <- pop[!duplicated(pop[c('key','target')]),]
+    keys <- intersect(c('key','target','draw'),names(pop))
+    for(group in split(pop,interaction(pop[keys],drop=TRUE)))
+      if(length(unique(group$estimate))>1) stop('Population target mismatch')
+    pop <- pop[!duplicated(pop[keys]),]
     write_csv(pop,file.path(out,'population_targets.csv'))
+  }
+  if(lane=='latent-nonnormal') for(name in c('population_stage1','population_uncertainty')) {
+    z <- do.call(rbind,lapply(roots,function(root) read.csv(file.path(root,paste0(name,'.csv')))))
+    write_csv(unique(z),file.path(out,paste0(name,'.csv')))
   }
   exact_summarize(raw,cells,out)
   writeLines('complete',file.path(out,'COMPLETE'))

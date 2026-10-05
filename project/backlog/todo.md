@@ -518,7 +518,9 @@ ordinary API exposes barrier fitting experimentally as
   applies to OPG. TASK-79 supplies a preregistered exact/OPG paired
   reconfirmation runner, full-grid local pricing pilot and preemption-safe
   Modal support; production awaits merger registration and compute approval.
-  Latent non-normality confirmation belongs to TASK-84. Exact delta/theta covariance transport agrees within 1e-6;
+  TASK-84 adds the registered latent non-normality lane, streamed pair-table
+  million-row pseudo-targets with independent Monte Carlo checks, exact/OPG
+  paired arms and a bounded local pricing pilot; production remains pending. Exact delta/theta covariance transport agrees within 1e-6;
   tighter delete-one refits leave discrepancies unchanged. The theta jackknife
   design uses N = 2400 (1.32% error), retaining the 4% tolerance; delta designs
   retain N = 600. The N = 600 theta error (5.23%) reflects finite-sample

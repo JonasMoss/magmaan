@@ -13,7 +13,7 @@ usage <- 'Usage: Rscript run_experiment.R MODE [--run-id ID] [--workers W]
   --run-id ID  fresh immutable output directory (default mode name)
   --cell IDs   comma-separated cell IDs; run selected cells only and save its raw rows (Modal fan-out; see modal/)
   --out-dir D  write to D instead of results/dwls-policy/<run-id>
-  --lane dwls-policy|mixed|exact-first-stage (default dwls-policy); mixed has smoke/pilot/production
+  --lane dwls-policy|mixed|exact-first-stage|latent-nonnormal (default dwls-policy); mixed has smoke/pilot/production
   --help       show help
 No automatic production launch. Frozen summaries exclude raw per-fit rows.'
 if ('--help' %in% args) { cat(usage,'\n'); quit(save='no') }
@@ -35,7 +35,12 @@ set_single_threaded_math()
 source(file.path(here,'R','compute.R'))
 source(file.path(here,'R','summarize.R'))
 lane <- opt('--lane','dwls-policy')
-if(!lane %in% c('dwls-policy','mixed','exact-first-stage')) stop('Unknown lane')
+if(!lane %in% c('dwls-policy','mixed','exact-first-stage','latent-nonnormal')) stop('Unknown lane')
+if(lane=='latent-nonnormal') {
+  source(file.path(here,'R','latent_nonnormal.R'))
+  latent_run(args,mode,workers,here,opt)
+  quit(save='no')
+}
 if(lane=='exact-first-stage') {
   source(file.path(here,'R','exact_first_stage.R'))
   exact_run(args,mode,workers,here,opt)

@@ -19,6 +19,7 @@ execute:
 | Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), SB and PEBA4 | Replaced the separate-point profile law after diagnosis; confirmed on fresh draws | Profile law 0.1–2% (SB) and 3–17% (PEBA4); parameter-space law 4.3–7.8% |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
 | All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmation open | TASK-79 fresh-draw registration and local pricing pilot; production pending merger review |
+| Latent non-normality | Exact policy versus OPG comparator | Calibration open | TASK-84 registration, bounded million-row targets and local pilot; production pending review |
 | Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global All; nested SB/PEBA4 | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
 ## Question
@@ -38,7 +39,9 @@ The all-ordinal findings below are retained **OPG-first-stage** evidence. The
 current exact-first-stage policy has a registered reconfirmation lane; its
 local two-draw-per-cell pilot tests mechanics and price, not calibration. Mixed DWLS has a
 registered lane and pricing pilot; its calibration is still open pending
-reviewed production.
+reviewed production. The latent non-normality lane has a registered paired
+design and a bounded local pilot; it does not yet establish coverage or nested
+size under non-Gaussian response distributions.
 
 **The IJ covariance is calibrated.** Across 42 coverage cells (misspecification
 0, .2 and .4; N 150 to 1000; binary and five categories; one and two groups)
@@ -362,3 +365,89 @@ R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL
 # Only after registration/compute approval and Modal workspace restoration:
 modal run modal/app.py --lane exact-first-stage --mode production --run-id production-fresh
 ```
+
+## Latent non-normality: exact versus OPG (lane B)
+
+The latent non-normality pilot checks computation and price, with two draws per
+cell. It cannot establish the anticipated OPG coverage drift or exact-policy
+calibration. Coverage targets are DWLS pseudo-true values, estimated with two
+independent million-row population draws. Nested groups have the same
+population, so the restrictions hold by symmetry even when the factor model
+does not reproduce the polychorics. Global rejection is descriptive: nonzero
+population discrepancy can make it approach one with increasing N.
+
+The generators combine Gaussian or standardized centered chi-square (df 8 or
+2) factors and residuals before thresholding. Latent covariance matches the
+specified factor covariance. Normal-copula polychorics need not recover that
+covariance under non-normal responses ([Jin and Yang-Wallentin,
+2017](https://pmc.ncbi.nlm.nih.gov/articles/PMC5591612/)). Direct factor-response
+generation avoids the discretized Vale–Maurelli problem documented by
+[Grønneberg and Foldnes, 2019](https://www.cambridge.org/core/services/aop-cambridge-core/content/view/27066B62E5EE7AA1104B992BBA8803D6/S0033312300003069a.pdf/problem_with_discretizing_valemaurelli_in_simulation_studies.pdf).
+Binary items are the pairwise-saturated first-stage control; agreement of the
+exact and OPG first stages is expected asymptotically, regardless of whether
+the second-stage factor model fits.
+
+```{r}
+latent_dir <- 'results/latent-nonnormal/pilot-verified-2026-10-05'
+if(!file.exists(file.path(latent_dir,'summary.csv')))
+  stop('Missing latent pilot: run --lane latent-nonnormal --pilot with the registered selected cells')
+latent_summary <- read.csv(file.path(latent_dir,'summary.csv'))
+latent_cost <- read.csv(file.path(latent_dir,'cost.csv'))
+latent_cells <- read.csv(file.path(latent_dir,'cells.csv'))
+latent_pop <- read.csv(file.path(latent_dir,'population_targets.csv'))
+latent_uncertainty <- read.csv(file.path(latent_dir,'population_uncertainty.csv'))
+latent_timing <- read.csv(file.path(latent_dir,'population_timing.csv'))
+latent_checks <- read.csv(file.path(latent_dir,'checks.csv'))
+knitr::kable(data.frame(
+  `Priced Cells`=nrow(latent_cells),`Planned Cells`=latent_cost$total_cells,
+  `Attempted Draws`=sum(read.csv(file.path(latent_dir,'timing.csv'))$attempted),
+  `Failed Arms`=sum(latent_summary$failed),
+  `Priced Production CPU Hours`=round(latent_cost$production_cpu_hours_priced,2)),
+  check.names=FALSE)
+```
+
+The selected cells cover Gaussian controls, both skew levels, binary and
+five-category items, six and twelve indicators, N=300/1000/4000 per group,
+delta and a theta nested comparison. Both methods use identical draws and
+fitted estimates. The complete 174-cell design remains registered; cost is
+partial, and unpriced IDs are listed in `cost.csv`. The population target
+construction took `r round(latent_timing$elapsed_seconds)` seconds for the
+selected populations. A separate twelve-indicator million-row benchmark used
+462 MiB peak memory; the complete two-worker pilot peaked at 548 MiB.
+Production cells remain single-threaded. The priced CPU-hours cover repeated
+sample fits; population setup is recorded separately and repeats per cell in
+fan-out, so this partial price is not the full executor bill. No production
+or Modal run was launched, and simbox remains unavailable.
+
+Two independent population draws give a largest absolute target difference
+of `r signif(max(abs(latent_uncertainty$target_difference)),3)`. This is
+Monte Carlo uncertainty in the coverage target, not uncertainty from the
+small-N simulation draws. Full target differences, thresholds, polychorics,
+OPG weights, population F and RMSEA are frozen in the population CSVs.
+Cell/arm coverage and descriptive rejection with Wilson intervals are in
+`summary.csv`; jointly available exact-minus-OPG differences with paired
+bootstrap intervals are in `paired.csv`. Pilot flags are diagnostics only.
+Global tests and Gaussian controls never gate.
+
+All `r nrow(latent_checks)` reconstruction/fan-out checks passed. Pair-table
+assembly agreed with the ordinary constructor within 1e-7; a local two-cell
+fan-out reproduced serial summaries and targets within 1e-12. The initial
+second population seed base was too close to an earlier smoke base. Its
+correction is recorded in the criteria, and the earlier attempts remain local
+development data; frozen evidence uses the corrected independent draw.
+
+```bash
+R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript run_experiment.R --lane latent-nonnormal --pilot --workers 2 \
+  --cell 1,7,13,6,12,18,23,35,47,30,42,54,61,66,89,96,115,120,143,150,174 \
+  --run-id fresh-latent-pilot
+```
+
+Criteria and amendments are in `criteria/latent_nonnormal.md`. Cell fan-out
+uses `--cell ID --out-dir DIR`; combine with `modal/combine.R --lane
+latent-nonnormal --mode pilot --run-dir DIR --git-head HEAD --family all
+--cell IDS`. Resume and combine check source/native/package versions, seeds,
+counts and completion. `scripts/validate_latent.R SERIAL_DIR COMBINED_DIR
+CHECKS_CSV` checks population reconstruction and fan-out equivalence. Modal
+support is prepared for review; registration and production approval remain
+separate from this pilot.

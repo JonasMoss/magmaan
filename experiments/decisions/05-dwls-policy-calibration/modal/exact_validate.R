@@ -6,10 +6,16 @@ study <- dirname(dirname(script))
 source(file.path(study,'R','compute.R'))
 source(file.path(study,'R','exact_first_stage.R'))
 root <- args[1]; mode <- args[2]; id <- as.integer(args[3])
+lane <- if(length(args)>3) args[4] else 'exact-first-stage'
+if(lane=='latent-nonnormal') {
+  source(file.path(study,'R','latent_nonnormal.R'))
+  exact_cells <- latent_cells; exact_seed_base <- latent_seed_base
+  exact_source_files <- latent_sources
+}
 if(!file.exists(file.path(root,'COMPLETE'))) stop('Missing completion marker')
 meta <- read.csv(file.path(root,'metadata.csv'))
 value <- function(key) { z <- meta$value[meta$key==key]; if(length(z)!=1) stop('Missing ',key); z }
-if(value('lane')!='exact-first-stage' || value('mode')!=mode ||
+if(value('lane')!=lane || value('mode')!=mode ||
    value('selected_cells')!=as.character(id) ||
    value('seed_base')!=as.character(exact_seed_base(mode))) stop('Cell provenance mismatch')
 if(value('source_hashes')!=paste(tools::md5sum(exact_source_files(study)),collapse=',')) stop('Source/package mismatch')

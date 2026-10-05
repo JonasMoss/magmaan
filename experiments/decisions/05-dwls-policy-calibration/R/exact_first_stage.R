@@ -1,3 +1,5 @@
+exact_target_names <- function(cell) c('loading','threshold',
+  if(cell$model=='sem') 'path' else if(cell$factors>1) 'correlation')
 exact_seed_base <- function(mode) {
   c(smoke=317000001L,pilot=517000001L,production=1817000001L)[[mode]]
 }
@@ -123,7 +125,7 @@ exact_replicate <- function(cell,replicate,seed_base,population) {
       }
     },error=function(e) errors[stage] <<- conditionMessage(e))
   }
-  targets <- if(cell$family=='coverage') c('loading','threshold',if(cell$model=='sem') 'path' else 'correlation') else ''
+  targets <- if(cell$family=='coverage') exact_target_names(cell) else ''
   for(arm in exact_arms(cell)) for(target in targets) {
     stage <- if(startsWith(arm,'opg')) 'opg' else 'exact'
     if(!any(vapply(rows,function(x) x$arm==arm && x$target==target,logical(1))))
@@ -203,7 +205,7 @@ exact_summarize <- function(raw,cells,out) {
   summary <- list()
   for(i in seq_len(nrow(cells))) {
     cell <- cells[i,]; total <- timing$attempted[i]
-    targets <- if(cell$family=='coverage') c('loading','threshold',if(cell$model=='sem') 'path' else 'correlation') else ''
+    targets <- if(cell$family=='coverage') exact_target_names(cell) else ''
     for(arm in exact_arms(cell)) for(target in targets) {
       x <- raw[raw$cell_id==cell$cell_id & raw$arm==arm & raw$target==target,]
       valid <- !nzchar(x$error) & if(target=='') is.finite(x$p) else !is.na(x$covered)
@@ -242,7 +244,7 @@ exact_paired <- function(raw,cells,out) {
     arms <- if(cell$family=='coverage') c(policy_ij='opg_ij') else
       if(cell$family=='global') c(policy_all='opg_all') else
         c(policy_sb='opg_sb',policy_peba4='opg_peba4',exact_all='opg_all')
-    targets <- if(cell$family=='coverage') c('loading','threshold',if(cell$model=='sem') 'path' else 'correlation') else ''
+    targets <- if(cell$family=='coverage') exact_target_names(cell) else ''
     for(a in names(arms)) for(target in targets) {
       index <- index+1L
       x <- raw[raw$cell_id==cell$cell_id & raw$arm==a & raw$target==target,]

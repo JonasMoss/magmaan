@@ -111,7 +111,7 @@ dwls_targets <- function(fit, covariance=NULL) {
   if(grepl('f2 ~ f1',fit$syntax,fixed=TRUE)) {
     i <- row('f2','~','f1')
     targets$path <- list(value=value(i),gradient=replace(numeric(fit$npar),i,1))
-  } else {
+  } else if(any(pt$lhs=='f2')) {
     i <- row('f1','~~','f2'); a <- row('f1','~~','f1'); b <- row('f2','~~','f2')
     v <- value(i)/sqrt(value(a)*value(b)); g <- numeric(fit$npar)
     g[i] <- 1/sqrt(value(a)*value(b)); g[a] <- -v/(2*value(a)); g[b] <- -v/(2*value(b))

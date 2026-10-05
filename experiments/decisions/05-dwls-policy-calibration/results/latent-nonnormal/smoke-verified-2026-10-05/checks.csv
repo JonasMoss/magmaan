@@ -1,0 +1,12 @@
+"check","max_gap","tolerance","passed"
+"population_1_moments",2.22044604925031e-16,1e-07,TRUE
+"population_1_W_dwls",1.0769163338864e-14,1e-07,TRUE
+"population_20_moments",1.26485866225323e-09,1e-07,TRUE
+"population_20_W_dwls",1.08121966935215e-08,1e-07,TRUE
+"population_30_moments",1.27199240029796e-09,1e-07,TRUE
+"population_30_W_dwls",7.60604046412539e-09,1e-07,TRUE
+"fanout_summary",NA,1e-12,TRUE
+"fanout_paired",NA,1e-12,TRUE
+"fanout_population_targets",NA,1e-12,TRUE
+"fanout_population_stage1",NA,1e-12,TRUE
+"fanout_population_uncertainty",NA,1e-12,TRUE

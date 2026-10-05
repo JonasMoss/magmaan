@@ -1,0 +1,3 @@
+"factors","categories","skew","generator","n","model","cross","role","nesting","groups","parameterization","family","cell_id","production_reps"
+1,2,"symmetric","gaussian",1000,"cfa",0,"null","none",1,"delta","coverage",7,2000
+2,2,"symmetric","chisq2",1000,"cfa",0,"null","none",1,"delta","coverage",12,2000
