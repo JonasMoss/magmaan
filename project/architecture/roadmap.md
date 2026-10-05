@@ -333,6 +333,17 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
+(TASK-71): exact first-stage IJ covariance, the global n F test with the All
+reference on the spectrum from exact sampling rows (OPG NACOV still sets the
+fitting weights), and the observed-Hessian parameter-space nested law with
+SB/PEBA4, including moment-nested pairs. One- and two-group delta/theta
+composition gates give limited validation; calibration, nested score, mixed
+ULS/WLS policy and mixed `lavaan_compat` remain open. The user decided that the
+all-ordinal policy also adopts the exact first stage (TASK-69, via TASK-74),
+with decisions/05 reconfirmation. The decisions/04 structured-mean production
+found no flag for the exact-row ML nested LR meat.
+
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
 the larger model's restricted mean structure is misspecified (it differed by
