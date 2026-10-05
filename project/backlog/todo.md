@@ -843,10 +843,13 @@ gates a release unless an exit criterion names it.
   [inventory](../validation/lab_inference_defaults.md) records robust generic
   defaults, explicit compatibility/diagnostic routes and typed unsupported
   cases; ordinary implementation is unchanged.
-- [ ] **M — derive structured versus saturated moment evaluation for lab robust
-  covariance and nested components.** TASK-61 decisions retain existing
-  moments arguments pending a joint bread/meat derivation. Resolve every
-  inventory Q row before claiming either moment evaluation universally valid.
+- [x] **M — derive structured versus saturated moment evaluation for lab robust
+  covariance and nested components** (TASK-77). All 19 audit Q rows in
+  [lab_inference_defaults.md](../validation/lab_inference_defaults.md) are
+  resolved: empirical ML SE/score/MI defaults use exact uncentered likelihood
+  projections; structured/unstructured remain explicit comparators; GOF moment
+  primitives keep their named conventions; grouped centered LS meats are
+  fixed-allocation.
 
 ### EQS language extension
 
