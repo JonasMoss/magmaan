@@ -15,7 +15,7 @@ execute:
 |---|---|---|---|
 | Nested ML LR spectrum | Observed information at the larger model | Adopted by principle; confirmed | Production 2026-10-03: expected drifts under strong misspecification (11–16% at nominal 5%), observed approaches 5% as N grows |
 | Nested ML score projection | Observed sensitivity, expected metric | Adopted by principle; conservative at N = 100 per group | Production 2026-10-03: 2–3% at N = 100, 3.6–5.7% at N = 300; finite-sample follow-up open |
-| Nested ML restricted-mean meat | Exact likelihood rows at the larger fit | Adopted; calibration open | Structured-mean lane pilot checks mechanics and prices held-out production |
+| Nested ML restricted-mean meat | Exact likelihood rows at the larger fit | Adopted; calibrated, no flag | Structured-mean production 2026-10-05: 108,000 draws, no failures; never worse than the pre-66 meat by the registered rule |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
 ## Question
@@ -49,6 +49,16 @@ The LR tests over-reject with skewed data at N = 100 in every geometry
 draws (strong cells) produced no LR test: the larger model converged to a worse
 local optimum than the restricted model (lavaan reaches the same endpoints), so
 the difference statistic is negative and the policy reports a typed failure.
+
+**With unmodeled group mean differences, the corrected LR meat calibrates at
+least as well as the old one.** In the structured-mean production (108,000
+draws, no failures) the adopted LR never lost to the pre-66 meat under the
+registered rule; it was clearly better with skewed data at N = 100 per group
+(two factors, strong shift: 10.0% against 11.7%, SB). At these shift sizes the
+two meats differ by at most two points elsewhere. The usual small-sample
+pattern persists: LR over-rejects with skewed data at N = 100 (up to 10.8%),
+the score test is conservative there (2.1–4.3%), and both are within 4.0–6.5%
+at N = 1000.
 
 ```{r}
 prod <- file.path('results', 'nested-geometry', 'production-2026-10-03')
@@ -186,7 +196,7 @@ uncertainty and reproduction.
 
 ## Restricted-mean misspecification lane (TASK-75)
 
-The [structured-mean registration draft](criteria/structured_mean.md) extends
+The [structured-mean registration](criteria/structured_mean.md) extends
 this study beyond saturated means. Equal observed intercepts and fixed zero
 latent means in the larger model leave group mean differences unmodeled.
 Symmetric shifts of .2 SD on one item or .4 SD on two items preserve the
@@ -207,9 +217,8 @@ investigation then replayed `r read.csv("results/structured-mean/replay-2026-10-
 with no failures. An injected reference error verified per-arm message, call
 and stage capture without suppressing the score arm. The original cause
 remains unknown; its recorded message is retained, and its call cannot be
-recovered retrospectively. Future failures record these details. Registration
-review and production remain with the merger; the unreproduced failure remains
-counted under the registered rule.
+recovered retrospectively. Future failures record these details. The unreproduced
+failure remains counted in the pilot; production had none.
 
 The full-grid twenty-draw pilot checks construction and prices production;
 it cannot establish size or choose a default. Policy LR and score SB/PEBA4
@@ -217,8 +226,8 @@ are compared with an explicit pre-66 LR meat, using centered moment influence
 without the fitted-mean likelihood correction. An independent exact-row
 reconstruction checks that the observed bread and restriction projection agree
 with the policy spectrum. The flag rule remains the parent's paired size-error
-rule; a flag calls for finite-sample work on the adopted policy. The merger must
-review this draft before any held-out production on Modal.
+rule; a flag calls for finite-sample work on the adopted policy. The merger
+registered it on 2026-10-05; the held-out production follows below.
 
 ```{r}
 structured <- file.path('results','structured-mean','pilot-2026-10-05')
@@ -249,8 +258,42 @@ nice -n 10 Rscript run_experiment.R --lane structured-mean --smoke --workers 2 -
 nice -n 10 Rscript run_experiment.R --lane structured-mean --pilot --workers 2 --run-id new_structured_pilot
 ```
 
-No production run was launched by TASK-75. Prior saturated-mean evidence and
-its conclusions remain separate from this new calibration question.
+### Structured-mean production (2026-10-05)
+
+Production ran on Modal under the merger's registration (seed base
+1726100041, 2,000 null and 1,000 power draws per cell, 108,000 draws,
+8.5 CPU hours). Every draw produced all three arms. The independent
+numerical-Jacobian reconstruction matches the policy LR spectrum to
+`r signif(read.csv("results/structured-mean/production-2026-10-05/checks.csv")$max_reference_gap, 2)`
+(registered tolerance 1e-6). The registered rule returned
+`r read.csv("results/structured-mean/production-2026-10-05/decisions.csv")$status`:
+in no misspecified null cell did the adopted LR's size error exceed the
+pre-66 comparator's by more than one point with a paired interval excluding
+zero. Where the paired interval excludes zero, the adopted LR is the better
+one (skewed data, N = 100 per group). Size-adjusted power of the two LR meats
+differs by at most one point, and the score test's power matches theirs.
+
+```{r}
+sp <- file.path('results','structured-mean','production-2026-10-05')
+if (!file.exists(file.path(sp,'rates.csv')))
+  stop('Structured-mean production absent: modal run modal/app.py --lane structured-mean --mode production --run-id production-structured-mean-2026-10-05')
+sr <- read.csv(file.path(sp,'rates.csv'))
+sn <- sr[sr$role=='null' & sr$method=='peba4',]
+sw <- reshape(sn[,c('n','distribution','larger','factors','arm','rejection')],
+  idvar=c('n','distribution','larger','factors'), timevar='arm', direction='wide')
+sw <- sw[order(sw$factors, match(sw$larger,c('correct','mild','strong')), sw$distribution, sw$n),]
+knitr::kable(data.frame(Factors=sw$factors, `Mean restriction`=sw$larger,
+  Data=sw$distribution, `N per group`=sw$n,
+  `Policy LR (%)`=round(100*sw$rejection.policy_lr,2),
+  `Pre-66 LR (%)`=round(100*sw$rejection.pre66_lr,2),
+  `Policy score (%)`=round(100*sw$rejection.policy_score,2), check.names=FALSE),
+  caption='Null rejection at nominal 5%, PEBA4, 2,000 draws per cell. SB rows, Wilson intervals, paired intervals and size-adjusted power are in the frozen CSVs.')
+```
+
+The small-sample LR over-rejection and score conservatism match the
+saturated-mean production and stay with the open finite-sample work on the
+observed geometry. Prior saturated-mean evidence and its conclusions remain
+separate.
 
 
 ### Cell fan-out
@@ -260,8 +303,8 @@ per cell. Each launch appends a fresh UUID to `--run-id`; the printed ID names
 the volume directory. Cell seeds retain the registered lane/mode bases. The
 local launcher passes its Git commit through `MAGMAAN_GIT_HEAD`, since the
 container has no Git. The combiner rejects missing draws or mismatched
-provenance and uses the selected lane's own summaries. No Modal or production
-run was launched by TASK-76.
+provenance and uses the selected lane's own summaries. TASK-76 launched no run;
+the structured-mean production above used this runner.
 
 From this study directory, check two cells locally:
 

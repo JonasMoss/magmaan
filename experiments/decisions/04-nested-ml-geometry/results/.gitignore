@@ -35,3 +35,16 @@ structured-mean/replay-2026-10-05/*
 # Modal raw rows and local fan-out checks are construction diagnostics.
 **/raw.rds
 local-fanout-*/
+
+# Registered production (Modal, 2026-10-05): summaries and provenance only.
+!structured-mean/production-2026-10-05/
+structured-mean/production-2026-10-05/*
+!structured-mean/production-2026-10-05/cells.csv
+!structured-mean/production-2026-10-05/population.csv
+!structured-mean/production-2026-10-05/rates.csv
+!structured-mean/production-2026-10-05/paired.csv
+!structured-mean/production-2026-10-05/timing.csv
+!structured-mean/production-2026-10-05/failures.csv
+!structured-mean/production-2026-10-05/checks.csv
+!structured-mean/production-2026-10-05/decisions.csv
+!structured-mean/production-2026-10-05/metadata.csv

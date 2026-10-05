@@ -568,11 +568,12 @@ required by an all-ordinal primary workflow remain current work.
   and global GOF retain their separate moment conventions. TASK-75 registers
   decisions/04 structured-mean calibration, with frozen full-grid 20-draw pilot
   and cost. The original intermittent R/native conversion failure remains
-  counted; 201 authorized replays passed. Per-arm condition message/call/stage
-  capture is ready for production, pending merger registration review.
-  TASK-76 adds two-worker Modal cell fan-out for both decisions/04 lanes,
-  with local cell/output selection and provenance-checked recombination.
-  Local two-cell checks cover deterministic summaries; no Modal launch.
+  counted; 201 authorized replays passed. TASK-76 adds two-worker Modal cell
+  fan-out for both decisions/04 lanes. The registered structured-mean
+  production (Modal, 2026-10-05, 108,000 draws, no failures) returned no flag:
+  the exact-row LR never lost to the pre-66 meat and was better with skewed
+  data at N = 100. The complete-data ML policy's restricted-mean case is
+  closed; the lab moment drivers remain (TASK-77).
   No production or default change in the lane. Not release-gating.
 
 - [x] **M — threshold-invariance nested tests (Wu-Estabrook)** (TASK-68).
