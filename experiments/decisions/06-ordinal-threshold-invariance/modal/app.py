@@ -54,8 +54,8 @@ def combine(mode: str, run_id: str, cells: str):
 
 @app.local_entrypoint()
 def main(mode: str = "smoke", run_id: str = "smoke-modal", cells: str = ""):
-    if mode not in ("smoke", "pilot", "production"):
-        raise ValueError("mode must be smoke, pilot or production")
+    if mode not in ("smoke", "pilot", "production", "confirm"):
+        raise ValueError("mode must be smoke, pilot, production or confirm")
     ids = [int(x) for x in cells.split(",")] if cells else list(range(1, 385))
     if len(set(ids)) != len(ids) or any(x < 1 or x > 384 for x in ids):
         raise ValueError("unique cell IDs 1..384 required")

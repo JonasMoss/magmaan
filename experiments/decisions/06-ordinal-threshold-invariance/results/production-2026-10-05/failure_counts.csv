@@ -1,0 +1,741 @@
+cell_id,arm,reason,detail,draws
+1,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+2,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+3,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+4,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+5,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+6,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+7,all,equivalent_models,equivalent models in moment space,2000
+7,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+7,policy_peba4,equivalent_models,equivalent models in moment space,2000
+7,policy_sb,equivalent_models,equivalent models in moment space,2000
+8,all,equivalent_models,equivalent models in moment space,2000
+8,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+8,policy_peba4,equivalent_models,equivalent models in moment space,2000
+8,policy_sb,equivalent_models,equivalent models in moment space,2000
+9,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+10,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+11,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+12,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+13,all,error,data_ordinal_stats_from_df(): empty ordinal category for x5 in group '2',1
+13,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x5 in group '2',1
+13,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+13,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x5 in group '2',1
+13,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x5 in group '2',1
+14,all,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+14,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+14,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+14,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+14,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+15,all,equivalent_models,equivalent models in moment space,2000
+15,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+15,policy_peba4,equivalent_models,equivalent models in moment space,2000
+15,policy_sb,equivalent_models,equivalent models in moment space,2000
+16,all,equivalent_models,equivalent models in moment space,2000
+16,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+16,policy_peba4,equivalent_models,equivalent models in moment space,2000
+16,policy_sb,equivalent_models,equivalent models in moment space,2000
+17,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+18,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+19,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+20,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+21,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+22,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+23,all,equivalent_models,equivalent models in moment space,2000
+23,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+23,policy_peba4,equivalent_models,equivalent models in moment space,2000
+23,policy_sb,equivalent_models,equivalent models in moment space,2000
+24,all,equivalent_models,equivalent models in moment space,2000
+24,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+24,policy_peba4,equivalent_models,equivalent models in moment space,2000
+24,policy_sb,equivalent_models,equivalent models in moment space,2000
+25,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+26,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+27,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+28,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+29,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+30,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+31,all,equivalent_models,equivalent models in moment space,2000
+31,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+31,policy_peba4,equivalent_models,equivalent models in moment space,2000
+31,policy_sb,equivalent_models,equivalent models in moment space,2000
+32,all,equivalent_models,equivalent models in moment space,2000
+32,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+32,policy_peba4,equivalent_models,equivalent models in moment space,2000
+32,policy_sb,equivalent_models,equivalent models in moment space,2000
+33,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+34,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+35,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+36,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+37,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+38,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+39,all,equivalent_models,equivalent models in moment space,2000
+39,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+39,policy_peba4,equivalent_models,equivalent models in moment space,2000
+39,policy_sb,equivalent_models,equivalent models in moment space,2000
+40,all,equivalent_models,equivalent models in moment space,2000
+40,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+40,policy_peba4,equivalent_models,equivalent models in moment space,2000
+40,policy_sb,equivalent_models,equivalent models in moment space,2000
+41,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+42,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+43,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+44,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+45,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+46,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+47,all,equivalent_models,equivalent models in moment space,2000
+47,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+47,policy_peba4,equivalent_models,equivalent models in moment space,2000
+47,policy_sb,equivalent_models,equivalent models in moment space,2000
+48,all,equivalent_models,equivalent models in moment space,2000
+48,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+48,policy_peba4,equivalent_models,equivalent models in moment space,2000
+48,policy_sb,equivalent_models,equivalent models in moment space,2000
+49,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+50,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+51,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+52,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+53,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+54,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+55,all,equivalent_models,equivalent models in moment space,2000
+55,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+55,policy_peba4,equivalent_models,equivalent models in moment space,2000
+55,policy_sb,equivalent_models,equivalent models in moment space,2000
+56,all,equivalent_models,equivalent models in moment space,2000
+56,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+56,policy_peba4,equivalent_models,equivalent models in moment space,2000
+56,policy_sb,equivalent_models,equivalent models in moment space,2000
+57,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+58,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+59,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+60,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+61,all,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+61,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+61,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+61,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+61,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+62,all,error,data_ordinal_stats_from_df(): empty ordinal category for x4 in group '1',1
+62,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x4 in group '1',1
+62,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+62,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x4 in group '1',1
+62,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x4 in group '1',1
+63,all,equivalent_models,equivalent models in moment space,2000
+63,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+63,policy_peba4,equivalent_models,equivalent models in moment space,2000
+63,policy_sb,equivalent_models,equivalent models in moment space,2000
+64,all,equivalent_models,equivalent models in moment space,2000
+64,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+64,policy_peba4,equivalent_models,equivalent models in moment space,2000
+64,policy_sb,equivalent_models,equivalent models in moment space,2000
+65,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+66,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+67,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+68,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+69,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+70,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+71,all,equivalent_models,equivalent models in moment space,2000
+71,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+71,policy_peba4,equivalent_models,equivalent models in moment space,2000
+71,policy_sb,equivalent_models,equivalent models in moment space,2000
+72,all,equivalent_models,equivalent models in moment space,2000
+72,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+72,policy_peba4,equivalent_models,equivalent models in moment space,2000
+72,policy_sb,equivalent_models,equivalent models in moment space,2000
+73,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+74,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+75,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+76,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+77,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+78,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+79,all,equivalent_models,equivalent models in moment space,2000
+79,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+79,policy_peba4,equivalent_models,equivalent models in moment space,2000
+79,policy_sb,equivalent_models,equivalent models in moment space,2000
+80,all,equivalent_models,equivalent models in moment space,2000
+80,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+80,policy_peba4,equivalent_models,equivalent models in moment space,2000
+80,policy_sb,equivalent_models,equivalent models in moment space,2000
+81,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+82,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+83,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+84,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+85,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+86,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+87,all,equivalent_models,equivalent models in moment space,2000
+87,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+87,policy_peba4,equivalent_models,equivalent models in moment space,2000
+87,policy_sb,equivalent_models,equivalent models in moment space,2000
+88,all,equivalent_models,equivalent models in moment space,2000
+88,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+88,policy_peba4,equivalent_models,equivalent models in moment space,2000
+88,policy_sb,equivalent_models,equivalent models in moment space,2000
+89,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+90,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+91,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+92,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+93,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+94,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+95,all,equivalent_models,equivalent models in moment space,2000
+95,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+95,policy_peba4,equivalent_models,equivalent models in moment space,2000
+95,policy_sb,equivalent_models,equivalent models in moment space,2000
+96,all,equivalent_models,equivalent models in moment space,2000
+96,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+96,policy_peba4,equivalent_models,equivalent models in moment space,2000
+96,policy_sb,equivalent_models,equivalent models in moment space,2000
+97,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+98,all,error,not_converged,2
+98,delta_wlsmv,error,not_converged,2
+98,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1998
+98,policy_peba4,error,not_converged,2
+98,policy_sb,error,not_converged,2
+99,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+100,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+101,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+102,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+103,all,equivalent_models,equivalent models in moment space,2000
+103,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+103,policy_peba4,equivalent_models,equivalent models in moment space,2000
+103,policy_sb,equivalent_models,equivalent models in moment space,2000
+104,all,equivalent_models,equivalent models in moment space,1996
+104,all,error,not_converged,4
+104,delta_wlsmv,error,not_converged,4
+104,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1996
+104,policy_peba4,equivalent_models,equivalent models in moment space,1996
+104,policy_peba4,error,not_converged,4
+104,policy_sb,equivalent_models,equivalent models in moment space,1996
+104,policy_sb,error,not_converged,4
+105,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+106,all,error,not_converged,6
+106,delta_wlsmv,error,not_converged,6
+106,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1994
+106,policy_peba4,error,not_converged,6
+106,policy_sb,error,not_converged,6
+107,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+108,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+109,all,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+109,all,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+109,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+109,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+109,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1998
+109,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+109,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+109,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+109,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+110,all,error,data_ordinal_stats_from_df(): empty ordinal category for x9 in group '2',1
+110,all,error,not_converged,1
+110,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x9 in group '2',1
+110,delta_wlsmv,error,not_converged,1
+110,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1998
+110,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x9 in group '2',1
+110,policy_peba4,error,not_converged,1
+110,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x9 in group '2',1
+110,policy_sb,error,not_converged,1
+111,all,equivalent_models,equivalent models in moment space,2000
+111,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+111,policy_peba4,equivalent_models,equivalent models in moment space,2000
+111,policy_sb,equivalent_models,equivalent models in moment space,2000
+112,all,equivalent_models,equivalent models in moment space,1993
+112,all,error,not_converged,7
+112,delta_wlsmv,error,not_converged,7
+112,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1993
+112,policy_peba4,equivalent_models,equivalent models in moment space,1993
+112,policy_peba4,error,not_converged,7
+112,policy_sb,equivalent_models,equivalent models in moment space,1993
+112,policy_sb,error,not_converged,7
+113,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+114,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+115,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+116,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+117,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+118,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+119,all,equivalent_models,equivalent models in moment space,2000
+119,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+119,policy_peba4,equivalent_models,equivalent models in moment space,2000
+119,policy_sb,equivalent_models,equivalent models in moment space,2000
+120,all,equivalent_models,equivalent models in moment space,2000
+120,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+120,policy_peba4,equivalent_models,equivalent models in moment space,2000
+120,policy_sb,equivalent_models,equivalent models in moment space,2000
+121,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+122,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+123,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+124,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+125,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+126,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+127,all,equivalent_models,equivalent models in moment space,2000
+127,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+127,policy_peba4,equivalent_models,equivalent models in moment space,2000
+127,policy_sb,equivalent_models,equivalent models in moment space,2000
+128,all,equivalent_models,equivalent models in moment space,2000
+128,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+128,policy_peba4,equivalent_models,equivalent models in moment space,2000
+128,policy_sb,equivalent_models,equivalent models in moment space,2000
+129,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+130,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+131,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+132,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+133,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+134,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+135,all,equivalent_models,equivalent models in moment space,2000
+135,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+135,policy_peba4,equivalent_models,equivalent models in moment space,2000
+135,policy_sb,equivalent_models,equivalent models in moment space,2000
+136,all,equivalent_models,equivalent models in moment space,2000
+136,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+136,policy_peba4,equivalent_models,equivalent models in moment space,2000
+136,policy_sb,equivalent_models,equivalent models in moment space,2000
+137,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+138,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+139,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+140,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+141,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+142,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+143,all,equivalent_models,equivalent models in moment space,2000
+143,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+143,policy_peba4,equivalent_models,equivalent models in moment space,2000
+143,policy_sb,equivalent_models,equivalent models in moment space,2000
+144,all,equivalent_models,equivalent models in moment space,2000
+144,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+144,policy_peba4,equivalent_models,equivalent models in moment space,2000
+144,policy_sb,equivalent_models,equivalent models in moment space,2000
+145,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+146,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+147,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+148,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+149,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+150,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+151,all,equivalent_models,equivalent models in moment space,2000
+151,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+151,policy_peba4,equivalent_models,equivalent models in moment space,2000
+151,policy_sb,equivalent_models,equivalent models in moment space,2000
+152,all,equivalent_models,equivalent models in moment space,2000
+152,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+152,policy_peba4,equivalent_models,equivalent models in moment space,2000
+152,policy_sb,equivalent_models,equivalent models in moment space,2000
+153,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+154,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+155,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+156,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+157,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+158,all,error,data_ordinal_stats_from_df(): empty ordinal category for x7 in group '1',1
+158,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x7 in group '1',1
+158,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+158,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x7 in group '1',1
+158,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x7 in group '1',1
+159,all,equivalent_models,equivalent models in moment space,2000
+159,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+159,policy_peba4,equivalent_models,equivalent models in moment space,2000
+159,policy_sb,equivalent_models,equivalent models in moment space,2000
+160,all,equivalent_models,equivalent models in moment space,2000
+160,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+160,policy_peba4,equivalent_models,equivalent models in moment space,2000
+160,policy_sb,equivalent_models,equivalent models in moment space,2000
+161,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+162,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+163,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+164,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+165,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+166,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+167,all,equivalent_models,equivalent models in moment space,2000
+167,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+167,policy_peba4,equivalent_models,equivalent models in moment space,2000
+167,policy_sb,equivalent_models,equivalent models in moment space,2000
+168,all,equivalent_models,equivalent models in moment space,2000
+168,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+168,policy_peba4,equivalent_models,equivalent models in moment space,2000
+168,policy_sb,equivalent_models,equivalent models in moment space,2000
+169,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+170,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+171,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+172,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+173,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+174,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+175,all,equivalent_models,equivalent models in moment space,2000
+175,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+175,policy_peba4,equivalent_models,equivalent models in moment space,2000
+175,policy_sb,equivalent_models,equivalent models in moment space,2000
+176,all,equivalent_models,equivalent models in moment space,2000
+176,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+176,policy_peba4,equivalent_models,equivalent models in moment space,2000
+176,policy_sb,equivalent_models,equivalent models in moment space,2000
+177,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+178,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+179,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+180,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+181,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+182,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+183,all,equivalent_models,equivalent models in moment space,2000
+183,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+183,policy_peba4,equivalent_models,equivalent models in moment space,2000
+183,policy_sb,equivalent_models,equivalent models in moment space,2000
+184,all,equivalent_models,equivalent models in moment space,2000
+184,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+184,policy_peba4,equivalent_models,equivalent models in moment space,2000
+184,policy_sb,equivalent_models,equivalent models in moment space,2000
+185,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+186,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+187,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+188,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+189,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+190,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+191,all,equivalent_models,equivalent models in moment space,2000
+191,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+191,policy_peba4,equivalent_models,equivalent models in moment space,2000
+191,policy_sb,equivalent_models,equivalent models in moment space,2000
+192,all,equivalent_models,equivalent models in moment space,2000
+192,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+192,policy_peba4,equivalent_models,equivalent models in moment space,2000
+192,policy_sb,equivalent_models,equivalent models in moment space,2000
+193,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+194,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+195,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+196,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+197,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+198,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+199,all,equivalent_models,equivalent models in moment space,1000
+199,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+199,policy_peba4,equivalent_models,equivalent models in moment space,1000
+199,policy_sb,equivalent_models,equivalent models in moment space,1000
+200,all,equivalent_models,equivalent models in moment space,1000
+200,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+200,policy_peba4,equivalent_models,equivalent models in moment space,1000
+200,policy_sb,equivalent_models,equivalent models in moment space,1000
+201,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+202,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+203,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+204,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+205,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+206,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+207,all,equivalent_models,equivalent models in moment space,1000
+207,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+207,policy_peba4,equivalent_models,equivalent models in moment space,1000
+207,policy_sb,equivalent_models,equivalent models in moment space,1000
+208,all,equivalent_models,equivalent models in moment space,1000
+208,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+208,policy_peba4,equivalent_models,equivalent models in moment space,1000
+208,policy_sb,equivalent_models,equivalent models in moment space,1000
+209,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+210,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+211,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+212,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+213,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+214,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+215,all,equivalent_models,equivalent models in moment space,1000
+215,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+215,policy_peba4,equivalent_models,equivalent models in moment space,1000
+215,policy_sb,equivalent_models,equivalent models in moment space,1000
+216,all,equivalent_models,equivalent models in moment space,1000
+216,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+216,policy_peba4,equivalent_models,equivalent models in moment space,1000
+216,policy_sb,equivalent_models,equivalent models in moment space,1000
+217,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+218,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+219,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+220,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+221,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+222,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+223,all,equivalent_models,equivalent models in moment space,1000
+223,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+223,policy_peba4,equivalent_models,equivalent models in moment space,1000
+223,policy_sb,equivalent_models,equivalent models in moment space,1000
+224,all,equivalent_models,equivalent models in moment space,1000
+224,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+224,policy_peba4,equivalent_models,equivalent models in moment space,1000
+224,policy_sb,equivalent_models,equivalent models in moment space,1000
+225,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+226,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+227,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+228,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+229,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+230,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+231,all,equivalent_models,equivalent models in moment space,1000
+231,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+231,policy_peba4,equivalent_models,equivalent models in moment space,1000
+231,policy_sb,equivalent_models,equivalent models in moment space,1000
+232,all,equivalent_models,equivalent models in moment space,1000
+232,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+232,policy_peba4,equivalent_models,equivalent models in moment space,1000
+232,policy_sb,equivalent_models,equivalent models in moment space,1000
+233,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+234,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+235,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+236,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+237,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+238,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+239,all,equivalent_models,equivalent models in moment space,1000
+239,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+239,policy_peba4,equivalent_models,equivalent models in moment space,1000
+239,policy_sb,equivalent_models,equivalent models in moment space,1000
+240,all,equivalent_models,equivalent models in moment space,1000
+240,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+240,policy_peba4,equivalent_models,equivalent models in moment space,1000
+240,policy_sb,equivalent_models,equivalent models in moment space,1000
+241,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+242,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+243,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+244,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+245,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+246,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+247,all,equivalent_models,equivalent models in moment space,1000
+247,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+247,policy_peba4,equivalent_models,equivalent models in moment space,1000
+247,policy_sb,equivalent_models,equivalent models in moment space,1000
+248,all,equivalent_models,equivalent models in moment space,1000
+248,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+248,policy_peba4,equivalent_models,equivalent models in moment space,1000
+248,policy_sb,equivalent_models,equivalent models in moment space,1000
+249,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+250,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+251,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+252,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+253,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+254,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+255,all,equivalent_models,equivalent models in moment space,1000
+255,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+255,policy_peba4,equivalent_models,equivalent models in moment space,1000
+255,policy_sb,equivalent_models,equivalent models in moment space,1000
+256,all,equivalent_models,equivalent models in moment space,1000
+256,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+256,policy_peba4,equivalent_models,equivalent models in moment space,1000
+256,policy_sb,equivalent_models,equivalent models in moment space,1000
+257,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+258,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+259,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+260,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+261,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+262,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+263,all,equivalent_models,equivalent models in moment space,1000
+263,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+263,policy_peba4,equivalent_models,equivalent models in moment space,1000
+263,policy_sb,equivalent_models,equivalent models in moment space,1000
+264,all,equivalent_models,equivalent models in moment space,1000
+264,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+264,policy_peba4,equivalent_models,equivalent models in moment space,1000
+264,policy_sb,equivalent_models,equivalent models in moment space,1000
+265,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+266,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+267,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+268,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+269,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+270,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+271,all,equivalent_models,equivalent models in moment space,1000
+271,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+271,policy_peba4,equivalent_models,equivalent models in moment space,1000
+271,policy_sb,equivalent_models,equivalent models in moment space,1000
+272,all,equivalent_models,equivalent models in moment space,1000
+272,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+272,policy_peba4,equivalent_models,equivalent models in moment space,1000
+272,policy_sb,equivalent_models,equivalent models in moment space,1000
+273,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+274,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+275,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+276,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+277,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+278,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+279,all,equivalent_models,equivalent models in moment space,1000
+279,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+279,policy_peba4,equivalent_models,equivalent models in moment space,1000
+279,policy_sb,equivalent_models,equivalent models in moment space,1000
+280,all,equivalent_models,equivalent models in moment space,1000
+280,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+280,policy_peba4,equivalent_models,equivalent models in moment space,1000
+280,policy_sb,equivalent_models,equivalent models in moment space,1000
+281,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+282,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+283,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+284,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+285,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+286,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+287,all,equivalent_models,equivalent models in moment space,1000
+287,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+287,policy_peba4,equivalent_models,equivalent models in moment space,1000
+287,policy_sb,equivalent_models,equivalent models in moment space,1000
+288,all,equivalent_models,equivalent models in moment space,1000
+288,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+288,policy_peba4,equivalent_models,equivalent models in moment space,1000
+288,policy_sb,equivalent_models,equivalent models in moment space,1000
+289,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+290,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+291,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+292,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+293,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+294,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+295,all,equivalent_models,equivalent models in moment space,1000
+295,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+295,policy_peba4,equivalent_models,equivalent models in moment space,1000
+295,policy_sb,equivalent_models,equivalent models in moment space,1000
+296,all,equivalent_models,equivalent models in moment space,998
+296,all,error,not_converged,2
+296,delta_wlsmv,error,not_converged,2
+296,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,998
+296,policy_peba4,equivalent_models,equivalent models in moment space,998
+296,policy_peba4,error,not_converged,2
+296,policy_sb,equivalent_models,equivalent models in moment space,998
+296,policy_sb,error,not_converged,2
+297,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+298,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+299,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+300,all,error,not_converged,1
+300,delta_wlsmv,error,not_converged,1
+300,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,999
+300,policy_peba4,error,not_converged,1
+300,policy_sb,error,not_converged,1
+301,all,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+301,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+301,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,999
+301,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+301,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x2 in group '1',1
+302,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+303,all,equivalent_models,equivalent models in moment space,1000
+303,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+303,policy_peba4,equivalent_models,equivalent models in moment space,1000
+303,policy_sb,equivalent_models,equivalent models in moment space,1000
+304,all,equivalent_models,equivalent models in moment space,998
+304,all,error,not_converged,2
+304,delta_wlsmv,error,not_converged,2
+304,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,998
+304,policy_peba4,equivalent_models,equivalent models in moment space,998
+304,policy_peba4,error,not_converged,2
+304,policy_sb,equivalent_models,equivalent models in moment space,998
+304,policy_sb,error,not_converged,2
+305,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+306,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+307,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+308,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+309,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+310,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+311,all,equivalent_models,equivalent models in moment space,1000
+311,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+311,policy_peba4,equivalent_models,equivalent models in moment space,1000
+311,policy_sb,equivalent_models,equivalent models in moment space,1000
+312,all,equivalent_models,equivalent models in moment space,1000
+312,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+312,policy_peba4,equivalent_models,equivalent models in moment space,1000
+312,policy_sb,equivalent_models,equivalent models in moment space,1000
+313,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+314,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+315,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+316,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+317,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+318,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+319,all,equivalent_models,equivalent models in moment space,1000
+319,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+319,policy_peba4,equivalent_models,equivalent models in moment space,1000
+319,policy_sb,equivalent_models,equivalent models in moment space,1000
+320,all,equivalent_models,equivalent models in moment space,1000
+320,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+320,policy_peba4,equivalent_models,equivalent models in moment space,1000
+320,policy_sb,equivalent_models,equivalent models in moment space,1000
+321,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+322,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+323,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+324,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+325,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+326,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+327,all,equivalent_models,equivalent models in moment space,1000
+327,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+327,policy_peba4,equivalent_models,equivalent models in moment space,1000
+327,policy_sb,equivalent_models,equivalent models in moment space,1000
+328,all,equivalent_models,equivalent models in moment space,1000
+328,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+328,policy_peba4,equivalent_models,equivalent models in moment space,1000
+328,policy_sb,equivalent_models,equivalent models in moment space,1000
+329,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+330,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+331,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+332,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+333,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+334,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+335,all,equivalent_models,equivalent models in moment space,1000
+335,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+335,policy_peba4,equivalent_models,equivalent models in moment space,1000
+335,policy_sb,equivalent_models,equivalent models in moment space,1000
+336,all,equivalent_models,equivalent models in moment space,1000
+336,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+336,policy_peba4,equivalent_models,equivalent models in moment space,1000
+336,policy_sb,equivalent_models,equivalent models in moment space,1000
+337,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+338,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+339,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+340,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+341,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+342,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+343,all,equivalent_models,equivalent models in moment space,1000
+343,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+343,policy_peba4,equivalent_models,equivalent models in moment space,1000
+343,policy_sb,equivalent_models,equivalent models in moment space,1000
+344,all,equivalent_models,equivalent models in moment space,1000
+344,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+344,policy_peba4,equivalent_models,equivalent models in moment space,1000
+344,policy_sb,equivalent_models,equivalent models in moment space,1000
+345,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+346,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+347,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+348,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+349,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+350,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+351,all,equivalent_models,equivalent models in moment space,1000
+351,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+351,policy_peba4,equivalent_models,equivalent models in moment space,1000
+351,policy_sb,equivalent_models,equivalent models in moment space,1000
+352,all,equivalent_models,equivalent models in moment space,1000
+352,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+352,policy_peba4,equivalent_models,equivalent models in moment space,1000
+352,policy_sb,equivalent_models,equivalent models in moment space,1000
+353,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+354,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+355,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+356,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+357,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+358,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+359,all,equivalent_models,equivalent models in moment space,1000
+359,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+359,policy_peba4,equivalent_models,equivalent models in moment space,1000
+359,policy_sb,equivalent_models,equivalent models in moment space,1000
+360,all,equivalent_models,equivalent models in moment space,1000
+360,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+360,policy_peba4,equivalent_models,equivalent models in moment space,1000
+360,policy_sb,equivalent_models,equivalent models in moment space,1000
+361,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+362,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+363,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+364,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+365,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+366,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+367,all,equivalent_models,equivalent models in moment space,1000
+367,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+367,policy_peba4,equivalent_models,equivalent models in moment space,1000
+367,policy_sb,equivalent_models,equivalent models in moment space,1000
+368,all,equivalent_models,equivalent models in moment space,1000
+368,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+368,policy_peba4,equivalent_models,equivalent models in moment space,1000
+368,policy_sb,equivalent_models,equivalent models in moment space,1000
+369,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+370,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+371,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+372,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+373,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+374,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+375,all,equivalent_models,equivalent models in moment space,1000
+375,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+375,policy_peba4,equivalent_models,equivalent models in moment space,1000
+375,policy_sb,equivalent_models,equivalent models in moment space,1000
+376,all,equivalent_models,equivalent models in moment space,1000
+376,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+376,policy_peba4,equivalent_models,equivalent models in moment space,1000
+376,policy_sb,equivalent_models,equivalent models in moment space,1000
+377,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+378,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+379,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+380,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+381,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+382,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+383,all,equivalent_models,equivalent models in moment space,1000
+383,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+383,policy_peba4,equivalent_models,equivalent models in moment space,1000
+383,policy_sb,equivalent_models,equivalent models in moment space,1000
+384,all,equivalent_models,equivalent models in moment space,1000
+384,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1000
+384,policy_peba4,equivalent_models,equivalent models in moment space,1000
+384,policy_sb,equivalent_models,equivalent models in moment space,1000

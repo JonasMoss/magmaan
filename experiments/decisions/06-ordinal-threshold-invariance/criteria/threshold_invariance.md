@@ -59,3 +59,25 @@ their development values. The one-factor omitted residual correlation .3
 between items 1 and 2 is accepted as the misspecified family for one factor.
 The WLSMV comparator returns a typed not_nested reason for this moment-nested
 step and is retained as such. Everything else is registered as written above.
+
+
+## Amendment (merger, 2026-10-05, after production, before confirmation)
+
+Written after seeing the production results
+(`results/production-2026-10-05`). Production flagged 22 policy arm-cells,
+all with seven categories: SB 7.05-7.95% and PEBA4 7.05-7.5% at N >= 500 per
+group. SB and PEBA4 rise with the number of categories (at N >= 500, medians
+about 5.0% with four, 5.5% with five and 6.5-7.1% with seven categories),
+while the registered All comparator stayed within 3.5-6.0% in every null cell.
+Size-adjusted power was equal across arms. As registered, the flags call for
+investigation and fresh confirmation and do not switch the recipe. Adopting
+All for the nested DWLS reference, as the user chose for the global DWLS test
+(decisions/05, 2026-10-03), is a user decision recorded on the board.
+
+To give that decision fresh evidence, a confirmation reruns all 144 null cells
+with four, five or seven categories on fresh draws: mode `confirm`, seed base
+840150001 (seeds 840160001 to about 843,850,000, disjoint from every earlier
+range), 2,000 draws per cell, the same arms and summaries. Criterion fixed now:
+All rejection within [3%, 7%] in every null cell with N >= 500 per group. SB and
+PEBA4 are reported under the original rule. Choosing All from the production
+rates is post hoc; the confirmation does not tune anything.

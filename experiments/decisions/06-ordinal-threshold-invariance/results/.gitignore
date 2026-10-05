@@ -10,3 +10,13 @@ pilot/*
 !pilot/timing.csv
 !pilot/cost.csv
 !pilot/failures.csv
+# Registered production (Modal, 2026-10-05): summaries, compact failure counts
+# and provenance. Raw rows, spectra and per-draw failures stay on the volume.
+!production-2026-10-05/
+production-2026-10-05/*
+!production-2026-10-05/summary.csv
+!production-2026-10-05/cells.csv
+!production-2026-10-05/metadata.csv
+!production-2026-10-05/timing.csv
+!production-2026-10-05/cost.csv
+!production-2026-10-05/failure_counts.csv
