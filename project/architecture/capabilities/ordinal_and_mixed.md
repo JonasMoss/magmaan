@@ -1005,7 +1005,11 @@ meat and one-df chi-square statistics. Fixed/absent association rows and
 linear equality releases retain per-candidate typed refusals. Independent
 Schur, augmented gradient/curvature, released-refit and grouped gates are in
 `ordinal_ij_test.cpp`; lab reconstruction/refusals are in
-`test_association_ml_scores.R`. No policy guard is removed.
+`test_association_ml_scores.R`. No policy guard is removed. TASK-32.5
+registers [decisions/08](../../../experiments/decisions/08-association-ml-policy/report.qmd)
+for covariance/global/nested/MI calibration, with bounded smoke/pilot evidence
+and provenance-checked per-cell execution; production and ordinary exposure
+remain pending.
 
 ### Mixed DWLS ordinary policy
 

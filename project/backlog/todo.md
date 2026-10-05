@@ -1256,7 +1256,11 @@ release, including dependencies otherwise shared with the primary programme.
   misspecified pseudo-true restriction gates. TASK-32.4 adds lab fixed/absent-row
   MI and linear releases with observed Schur EPC and exact projected meat,
   independent reconstruction, derivative/refit and grouped gates. Policy
-  calibration remains open (subcard 5). Ordinary association-ML components retain typed
+  calibration remains open (subcard 5). TASK-32.5 registers
+  [decisions/08](../../experiments/decisions/08-association-ml-policy/report.qmd)
+  with exact-IJ coverage, global/nested references and robust MI panels;
+  the bounded registration/pilot card does not authorize production or exposure.
+  Ordinary association-ML components retain typed
   refusal until those contracts and their calibration pass.
 
 ### Barrier fitting and inference

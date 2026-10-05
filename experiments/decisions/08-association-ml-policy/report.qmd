@@ -6,33 +6,118 @@ format:
     html-math-method: mathml
 execute:
   echo: false
+  warning: false
+  message: false
 ---
+
+```{r}
+paths <- file.path('results','pilot',c('summary.csv','failures.csv','timing.csv','cost.csv','population_timing.csv','population_uncertainty.csv'))
+if(!all(file.exists(paths))) stop('Pilot absent: Rscript run_experiment.R --pilot --workers 2')
+s <- read.csv(paths[1]); failures <- read.csv(paths[2]); timing <- read.csv(paths[3]); cost <- read.csv(paths[4])
+pt <- read.csv(paths[5]); uncertainty <- read.csv(paths[6])
+```
 
 ## Default register
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
 | Ordinary association-ML inference | Typed unavailable | Open | Production calibration pending |
-| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; pilot pending |
-| Lab global / nested references | All, SB, PEBA4 | Open | Pilot and production pending |
-| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; pilot pending |
+| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; bounded pilot mechanics |
+| Lab global / nested references | All, SB, PEBA4 | Open | Bounded pilot; no reference choice yet |
+| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; bounded pilot mechanics |
 
 ## Question and short answer
 
 Does the lab association-ML recipe calibrate well enough for ordinary exposure?
-This registration has no calibration evidence yet. The bounded pilot will
-check mechanics and cost; ordinary exposure remains pending production.
+The smoke and bounded pilot exercise all four components and the DWLS comparator,
+but cannot answer the calibration question. The pilot contains two draws each
+in two cells (two-factor, five skewed categories, chi-square2 innovations,
+omitted cross-loading, total N=300). It records `r nrow(failures)` unavailable
+panel results. Ordinary exposure remains pending production.
 
 ## Evidence
 
-Frozen CSV summaries will be read from this study's own `results/pilot/`.
+The pilot covers a difficult non-Gaussian misspecified population, single-group
+coverage/global/MI and two-group metric nesting. It prices only
+`r sum(cost$priced)` of `r nrow(cost)` registered cells. Gaussian global size,
+other sample sizes and category imbalance panels remain unpriced. Per-cell
+rates, attempted and successful denominators and Wilson intervals are in
+`results/pilot/summary.csv`; the tiny rates are mechanics, not calibration.
 
-## Caveats
+```{r}
+shown <- s[startsWith(s$arm,'association') & s$target %in% c('loading','threshold','correlation','mi','nested'),]
+shown <- shown[!grepl('_nested_(SB|PEBA4)$',shown$arm),]
+knitr::kable(data.frame(Component=shown$arm,Target=shown$target,
+  Attempts=shown$attempted,Available=shown$successful,
+  Rate=round(shown$rate,2),`Wilson lower`=round(shown$lower,2),`Wilson upper`=round(shown$upper,2)),check.names=FALSE)
+```
 
-Tiny smoke and pilot rates cannot settle defaults. Coverage uses association-ML
-pseudo-true values, with separate DWLS targets. Global rejection under latent
-non-normality or model misspecification is descriptive.
+The covariance recipe is $\mathrm{Cov}(\hat\alpha)=H^{-1}BH^{-\mathsf T}/N$,
+where $H$ is observed sensitivity and $B$ transports exact Stage-1 influence.
+The global All reference uses the residual correlation-ML metric and exact
+Stage-1 sampling Gamma. The nested reference uses the larger model's observed
+sensitivity and parameter-space IJ spectrum. Robust MI fixes a loading at its
+unrestricted pseudo-true value for size, then 0.15 away for reported power.
+DWLS uses its own weighted-discrepancy pseudo-true targets; its coverage is
+reported separately and does not estimate a paired method effect.
+
+Population setup uses two independent million-row draws, streamed into pair
+counts and passed through library Stage 1. Association-ML and DWLS population
+fits share the same first-stage summaries. Both sets of targets and their
+differences are frozen in the population CSVs. The largest absolute target
+difference is `r signif(max(abs(uncertainty$target_difference)),3)`; production
+interpretation must assess these errors relative to interval widths and MI
+null sensitivity.
+
+## Cost and caveats
+
+```{r}
+priced <- cost[cost$priced,]
+knitr::kable(data.frame(`Total N`=priced$n,Groups=priced$groups,
+  `Mean seconds per draw`=round(priced$mean_draw_seconds,3),
+  `CPU hours for 2,000 draws`=round(priced$production_cpu_hours,3)),check.names=FALSE)
+```
+
+Population construction took `r round(sum(pt$elapsed_seconds),1)` seconds on
+this workstation. The cost CSV lists every unpriced cell explicitly; the
+per-cell estimates above exclude population setup and driver/package startup.
+They do not price the full study. Worker parallelism is bounded at two and
+math libraries use one thread. Simbox remains unavailable.
+
+Coverage targets are finite population-draw approximations. Gaussian correct
+models supply global size gates; global rejection under non-normality or
+misspecification is descriptive because the association model need not hold.
+Identical groups preserve the pseudo-true metric null. Flags below 93% coverage
+or outside 3–7% size at the registered sample sizes request finite-sample work,
+never an inconsistent recipe. These pilot flags cannot settle defaults.
+
+Initial development smoke/pilot attempts exposed an extraction error: DWLS
+nested `p_all` is intentionally unavailable in that returned bundle. The final
+runner computes All from its spectrum using the lab reference primitive.
+The corrected smoke and pilot were rerun before freezing; no library change,
+criterion change or inference-policy choice followed those attempts.
 
 ## Reproduce
 
-See `Rscript run_experiment.R --help`. Production requires separate authorization.
+Criteria were committed before smoke in `e3333269`. Frozen CSVs are a narrow
+exception for registered evidence; raw rows and provenance checkpoints remain
+local and ignored. Completed local directories contain checksummed raw and
+population files plus `COMPLETE`. Combine refuses source/binary/design,
+checksum, mode, seed, replicate-count, duplicate-cell or target disagreements.
+
+```bash
+Rscript run_experiment.R --help
+Rscript run_experiment.R --plan
+Rscript run_experiment.R --smoke --out-dir results/smoke-new
+Rscript run_experiment.R --pilot --workers 2 --out-dir results/pilot-new
+bash scripts/run_cells.sh "$PWD" "$R_LIBS" results/fanout-new 2 smoke 1 97
+Rscript run_experiment.R --combine results/fanout-new/cells/cell_001,results/fanout-new/cells/cell_097 --out-dir results/combined-new
+quarto render report.qmd
+```
+
+Run compute under `nice -n 10` with `OPENBLAS_NUM_THREADS=1`,
+`OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1`. The local two-cell fan-out check
+matches serial smoke statistical summaries and population targets; times are
+allowed to vary. Use `--population-dir` only with a complete directory carrying
+the same source/package fingerprint and mode. Production commands are supported
+for the later driver, but no production was run or authorized here.

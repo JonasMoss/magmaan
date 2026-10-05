@@ -1,0 +1,8 @@
+"check","passed"
+"two_worker_fanout_statistical_summary",TRUE
+"two_worker_fanout_population_targets",TRUE
+"reject_duplicate_cells",TRUE
+"reject_incomplete",TRUE
+"reject_corrupt_population",TRUE
+"reject_source_mismatch",TRUE
+"reject_wrong_seed",TRUE

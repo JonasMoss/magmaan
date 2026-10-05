@@ -185,7 +185,10 @@ refuse current association inference. Preserve those guards until gates pass.
    constraints and latent nonnormality/model misspecification. Acceptance:
    reproducible frozen evidence, Monte Carlo uncertainty, failure accounting and
    recorded reporting decisions. Calibration cannot substitute OPG/expected bread
-   for a required consistent recipe. Pricing/long runs need separate authorization.
+   for a required consistent recipe. Pricing/long runs need separate authorization. TASK-32.5 registers
+   [decisions/08](../../experiments/decisions/08-association-ml-policy/report.qmd)
+   for smoke and a bounded pricing pilot only; production and ordinary exposure
+   remain separate decisions.
 
 The existing [MI capability matrix](../validation/capabilities.md) remains
 unsupported until implementation and calibration establish these contracts.
