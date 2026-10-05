@@ -31,9 +31,18 @@ def run_cell(cell_id: int, lane: str, mode: str, run_id: str, git_head: str):
     # The container has no git; the local entrypoint passes the commit.
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                MAGMAAN_GIT_HEAD=git_head)
+    import shutil
+    out = f"/vol/{run_id}/cells/cell_{cell_id:03d}"
+    # Cells are seed-stable: skip a finished cell, redo a partial one (left by a
+    # preempted container that Modal restarts, or by an interrupted launch).
+    volume.reload()
+    if os.path.exists(f"{out}/raw.rds") and os.path.exists(f"{out}/rates.csv"):
+        return
+    if os.path.exists(out):
+        shutil.rmtree(out)
     subprocess.run(["Rscript", f"/repo/{STUDY}/run_experiment.R", f"--{mode}",
                     "--lane", lane, "--cell", str(cell_id), "--workers", "2", "--out-dir",
-                    f"/vol/{run_id}/cells/cell_{cell_id:03d}"], check=True, env=env)
+                    out], check=True, env=env)
     volume.commit()
 
 
@@ -47,7 +56,8 @@ def combine(lane: str, mode: str, run_id: str, cells: str):
 
 
 @app.local_entrypoint()
-def main(lane: str = "structured-mean", mode: str = "smoke", run_id: str = "", cells: str = ""):
+def main(lane: str = "structured-mean", mode: str = "smoke", run_id: str = "", cells: str = "",
+         resume: bool = False):
     import re
     import subprocess
     import uuid
@@ -59,7 +69,8 @@ def main(lane: str = "structured-mean", mode: str = "smoke", run_id: str = "", c
     label = run_id or f"{lane}-{mode}"
     if not re.fullmatch(r"[A-Za-z0-9_-]+", label):
         raise ValueError("invalid run ID")
-    run_id = f"{label}-{uuid.uuid4().hex}"
+    # --resume reuses an exact earlier run ID (finished cells are skipped).
+    run_id = label if resume else f"{label}-{uuid.uuid4().hex}"
     count = 72 if lane == "structured-mean" else 48
     ids = [int(x) for x in cells.split(",")] if cells else list(range(1, count + 1))
     if len(set(ids)) != len(ids) or any(x < 1 or x > count for x in ids):
