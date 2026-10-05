@@ -334,6 +334,16 @@ Rcpp::List convention_inference_impl(Rcpp::List fit, SEXP context,
     out = convention_unavailable(c, InferenceReason::Penalized, std::string(penalized_detail), fit_state);
   } else if (!fit_state.converged) {
     out = convention_unavailable(c, InferenceReason::NotConverged, "the fit did not pass its convergence verdict", fit_state);
+  } else if (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"])) {
+    auto ctx = ctx_from_fit(fit);
+    const auto est = est_from_fit(fit);
+    const auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(fit, R_NilValue,
+        "mixed_ordinal_stats", "convention_inference"));
+    const std::string estimator = Rcpp::as<std::string>(fit["estimator"]);
+    const std::string parameterization = Rcpp::as<std::string>(fit["parameterization"]);
+    out = lavaan_inference_mixed_ordinal(std::move(ctx.pt), ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "convention_inference"),
+        ordinal_parameterization_from_string(parameterization), c, fit_state);
   } else if (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) {
     auto ctx = ctx_from_fit(fit);
     const auto est = est_from_fit(fit);
@@ -378,6 +388,26 @@ Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
     out.reason = InferenceReason::Penalized; out.detail = penalized_detail;
   } else if (!s0.converged || !s1.converged) {
     out.reason = InferenceReason::NotConverged; out.detail = "a fit did not pass its convergence verdict";
+  } else if (null_fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(null_fit["mixed_ordinal"]) && alternative_fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(alternative_fit["mixed_ordinal"])) {
+    const auto p0 = Rcpp::as<std::string>(null_fit["parameterization"]);
+    const auto p1 = Rcpp::as<std::string>(alternative_fit["parameterization"]);
+    const auto w0 = Rcpp::as<std::string>(null_fit["estimator"]);
+    const auto w1 = Rcpp::as<std::string>(alternative_fit["estimator"]);
+    if (p0 != p1 || w0 != w1) {
+      out.reason = InferenceReason::UnsupportedModel;
+      out.detail = "the two fits use different ordinal parameterizations or estimators";
+    } else {
+      auto a = ctx_from_fit(null_fit), b = ctx_from_fit(alternative_fit);
+      const auto e0 = est_from_fit(null_fit), e1 = est_from_fit(alternative_fit);
+      const auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(alternative_fit,
+          R_NilValue, "mixed_ordinal_stats", "convention_nested"));
+      out = lavaan_nested_mixed_ordinal(std::move(a.pt), a.rep, e0, s0,
+          std::move(b.pt), b.rep, e1, s1, stats,
+          ordinal_weight_from_estimator(w1, "convention_nested"),
+          ordinal_parameterization_from_string(p1), c, &a.names.row_user, &b.names.row_user);
+    }
   } else if (null_fit.containsElementNamed("ordinal") &&
       Rcpp::as<bool>(null_fit["ordinal"]) && alternative_fit.containsElementNamed("ordinal") &&
       Rcpp::as<bool>(alternative_fit["ordinal"])) {

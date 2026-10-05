@@ -426,3 +426,35 @@ test_that("FIML compatibility refuses invalid pairs explicitly", {
   expect_identical(err$reason, "penalized")
   expect_match(attr(anova(penalized, penalized, lavaan_compat = "MLR"), "unavailable")[[1]], "penalized")
 })
+
+test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
+  skip_if_not_installed("lavaan")
+  d <- hs(); ord <- paste0("x", 1:3)
+  for (v in ord) d[[v]] <- ordered(cut(d[[v]], quantile(d[[v]], c(0, 1/3, 2/3, 1)),
+                                     include.lowest = TRUE, labels = FALSE))
+  for (p in c("delta", "theta")) for (grouped in c(FALSE, TRUE)) {
+    fits <- refs <- vector("list", 2)
+    for (i in 1:2) {
+      eq <- if (grouped && i == 2) "loadings" else NULL
+      s <- if (!grouped && i == 2) paste(cfa, "visual ~~ 0*textual", sep = "\n") else cfa
+      model <- magmaan_model(s, prototype = d, ordered = ord, parameterization = p,
+        group = if (grouped) "school" else NULL, group.equal = eq)
+      fits[[i]] <- magmaan(model, d, estimator = "DWLS", inference = FALSE)
+      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
+        group = if (grouped) "school" else NULL,
+        group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
+      lavaan_compat_reference(fits[[i]], refs[[i]], "WLSMV", tolerance = 2e-3)
+      cached <- infer(fits[[i]], lavaan_compat = "WLSMV")
+      expect_identical(cached$inference, fits[[i]]$inference)
+      expect_equal(vcov(unserialize(serialize(cached, NULL)), lavaan_compat = "WLSMV"),
+                   vcov(fits[[i]], lavaan_compat = "WLSMV"))
+    }
+    ref <- lavaan::lavTestLRT(refs[[1]], refs[[2]])
+    for (pair in list(fits, rev(fits))) {
+      ours <- anova(pair[[1]], pair[[2]], lavaan_compat = "WLSMV")
+      expect_equal(ours$statistic, ref[2, "Chisq diff"], tolerance = 2e-3)
+      expect_equal(ours$df, ref[2, "Df diff"])
+      expect_equal(ours$pvalue, ref[2, "Pr(>Chisq)"], tolerance = 2e-3)
+    }
+  }
+})

@@ -31,7 +31,9 @@ infer <- function(fit, lavaan_compat = NULL) {
   choices <- c("ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS")
   if (is.null(lavaan_compat)) return(NULL)
   lavaan_compat <- .check_choice(lavaan_compat, "lavaan_compat", choices, caller = caller)
-  compatible <- if (isTRUE(fit$lab$ordinal)) {
+  compatible <- if (isTRUE(fit$lab$mixed_ordinal)) {
+    c("DWLS", "WLSMV", "ULS", "ULSMV", "WLS")
+  } else if (isTRUE(fit$lab$ordinal)) {
     switch(fit$estimator, DWLS = c("DWLS", "WLSMV"), ULS = c("ULS", "ULSMV"), WLS = "WLS", character())
   } else switch(fit$estimator, ML = c("ML", "MLM", "MLR"), FIML = c("ML", "MLR"),
                ULS = "ULS", WLS = "WLS", character())

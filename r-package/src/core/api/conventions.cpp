@@ -382,6 +382,159 @@ ConventionTest lavaan_nested_ordinal(spec::LatentStructure null_pt,
   return t;
 }
 
+ConventionInference lavaan_inference_mixed_ordinal(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& stats,
+    const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,
+    estimate::OrdinalParameterization parameterization,
+    LavaanConvention c, const PolicyFitState& state) {
+  using estimate::OrdinalWeightKind;
+  const bool compatible = weight == OrdinalWeightKind::DWLS && c == LavaanConvention::WLSMV;
+  for (const auto& raw : stats.raw_data)
+    if (!raw.allFinite()) return convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "mixed WLSMV compatibility requires complete observations", state);
+  if (!compatible)
+    return convention_unavailable(c, InferenceReason::UnsupportedModel, "this convention requires a different fitted estimator", state);
+  if (state.penalized)
+    return convention_unavailable(c, InferenceReason::Penalized, std::string(penalized_detail), state);
+  if (!state.converged)
+    return convention_unavailable(c, InferenceReason::NotConverged, "the fit did not pass its convergence verdict", state);
+  // lavaan reports ordinal inference with n_g - 1 per group. Keep the fit,
+  // moments and weights intact and evaluate their quadratic criterion at the
+  // retained theta under these reporting counts (including unequal groups).
+  auto reporting_stats = stats;
+  for (auto& n : reporting_stats.n_obs) {
+    if (n <= 1) return convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "ordinal compatibility inference requires at least two observations per group", state);
+    --n;
+  }
+  auto reporting_estimates = estimates;
+  auto objective = estimate::frontier::mixed_ordinal_ls_objective(pt, rep, reporting_stats,
+      estimates, weight, parameterization);
+  if (!objective) return convention_unavailable(c, InferenceReason::NumericFailure, objective.error().detail, state);
+  auto residual = objective->problem.r(estimates.theta);
+  if (!residual) return convention_unavailable(c, InferenceReason::NumericFailure, residual.error().detail, state);
+  double n = 0, reporting_n = 0;
+  for (const auto count : stats.n_obs) n += static_cast<double>(count);
+  for (const auto count : reporting_stats.n_obs) reporting_n += static_cast<double>(count);
+  reporting_estimates.fmin = 0.5 * residual->squaredNorm() * reporting_n / n;
+  auto result = estimate::robust_mixed_ordinal(std::move(pt), rep, stats,
+      reporting_estimates, weight, parameterization);
+  if (!result) return convention_unavailable(c, InferenceReason::NumericFailure, result.error().detail, state);
+  ConventionInference out;
+  out.convention = convention_name(c);
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  // lavaan retains n_g/N geometry, with total reporting denominator N-G.
+  out.covariance = result->vcov * n / reporting_n;
+  auto& t = out.test;
+  t.df = result->df;
+  t.unscaled_statistic = t.statistic = result->chisq_standard;
+  t.method = "standard";
+  if ((c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) && t.df <= 0) {
+    t.reason = InferenceReason::Saturated;
+    t.detail = "the model has no positive degrees of freedom for a scaled test";
+    t.statistic = std::numeric_limits<double>::quiet_NaN();
+    return out;
+  }
+  if ((c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) && t.df > 0) {
+    t.method = "scaled.shifted";
+    t.statistic = result->scaled_shifted.chi2_adj;
+    t.scale = 1.0 / result->scaled_shifted.scale_a;
+    t.shift = result->scaled_shifted.shift_b;
+  }
+  finish(t);
+  // An unscaled DWLS/ULS objective has no standard chi-square reference;
+  // lavaan retains its statistic and leaves the p-value unavailable.
+  if (c == LavaanConvention::DWLS || c == LavaanConvention::ULS)
+    t.p_value = std::numeric_limits<double>::quiet_NaN();
+  return out;
+}
+
+ConventionTest lavaan_nested_mixed_ordinal(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::MixedOrdinalStats& stats,
+    estimate::OrdinalWeightKind weight, estimate::OrdinalParameterization parameterization,
+    LavaanConvention c, const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  if (null_state.penalized || alternative_state.penalized)
+    return unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!null_state.converged || !alternative_state.converged)
+    return unavailable(InferenceReason::NotConverged, "a fit did not pass its convergence verdict");
+  auto reason_from = [](const PostError& error) {
+    return error.kind == PostError::Kind::NotNested ? InferenceReason::NotNested :
+        error.kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting :
+        error.kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting :
+        InferenceReason::NumericFailure;
+  };
+  // Establish actual nesting before computing the delta restriction map:
+  // a Jacobian rank difference alone does not establish nested models.
+  if (auto p = estimate::prepare_mixed_ordinal_partable(alternative_pt, stats, parameterization,
+          nullptr, alternative_row_user); !p)
+    return unavailable(InferenceReason::NumericFailure, p.error().detail);
+  if (auto p = estimate::prepare_mixed_ordinal_partable(null_pt, stats, parameterization,
+          nullptr, null_row_user); !p)
+    return unavailable(InferenceReason::NumericFailure, p.error().detail);
+  auto c1 = estimate::build_eq_constraints(alternative_pt, true);
+  auto c0 = estimate::build_eq_tangent(null_pt, null_estimates.theta);
+  if (!c1 || !c0) return unavailable(InferenceReason::NumericFailure,
+      !c1 ? c1.error().detail : c0.error().detail);
+  auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep,
+      null_pt, null_rep, null_estimates.theta, *c1, *c0, false,
+      &alternative_estimates.theta);
+  if (!embedding) return unavailable(reason_from(embedding.error()), embedding.error().detail);
+  if (!alternative_pt.nonlinear_eq_rows.empty()) {
+    // Curved tangents at two distinct estimates need not be nested. Check
+    // containment and the shared nonlinear restrictions at the embedded null.
+    const auto nl=estimate::build_nl_constraints(alternative_pt);
+    const Eigen::VectorXd h=nl.h(embedding->theta);
+    if (!h.allFinite() || h.lpNorm<Eigen::Infinity>()>1e-6)
+      return unavailable(InferenceReason::NotNested, "the null violates an alternative nonlinear equality");
+    c1=estimate::build_eq_tangent(alternative_pt,embedding->theta);
+    if (!c1) return unavailable(InferenceReason::NumericFailure,c1.error().detail);
+    embedding=robust::embed_nested_null(alternative_pt,alternative_rep,
+        null_pt,null_rep,null_estimates.theta,*c1,*c0,false,&alternative_estimates.theta);
+    if (!embedding) return unavailable(reason_from(embedding.error()),embedding.error().detail);
+  }
+  if (embedding->restriction.A.rows() == 0)
+    return unavailable(InferenceReason::NotNested, "the models impose the same restrictions");
+  auto a = lavaan_inference_mixed_ordinal(null_pt, null_rep, stats, null_estimates,
+      weight, parameterization, c, null_state);
+  auto b = lavaan_inference_mixed_ordinal(alternative_pt, alternative_rep, stats,
+      alternative_estimates, weight, parameterization, c, alternative_state);
+  if (a.test.reason != InferenceReason::Available) return a.test;
+  if (b.test.reason != InferenceReason::Available &&
+      !(b.test.reason == InferenceReason::Saturated && b.test.df == 0)) return b.test;
+  ConventionTest t;
+  t.df = a.test.df - b.test.df;
+  t.statistic = t.unscaled_statistic = a.test.unscaled_statistic - b.test.unscaled_statistic;
+  t.method = "standard";
+  if (t.df <= 0) return unavailable(InferenceReason::NotNested,
+      "the comparison needs a positive difference in degrees of freedom");
+  if (t.statistic < -1e-8 * std::max(1.0, a.test.unscaled_statistic))
+    return unavailable(InferenceReason::NotConverged, "the alternative fits worse than the null");
+  if (c == LavaanConvention::WLSMV || c == LavaanConvention::ULSMV) {
+    // lavaan 0.7.2 lavTestLRT defaults: satorra.2000, A.method=delta,
+    // scaled.shifted=TRUE, H1 information/Jacobian. The standard objective
+    // above uses n_g-1; the sandwich uses original n_g/N group fractions.
+    auto result = estimate::lr_test_satorra2000_mixed_ordinal(alternative_pt,
+        alternative_rep, stats, alternative_estimates, null_pt, null_rep,
+        null_estimates, weight, a.test.unscaled_statistic, b.test.unscaled_statistic,
+        a.test.df, b.test.df, robust::SatorraAMethod::Delta, parameterization,
+        alternative_row_user, null_row_user);
+    if (!result) return unavailable(reason_from(result.error()), result.error().detail);
+    t.method = "satorra.2000";
+    t.statistic = result->scaled_shifted.chi2_adj;
+    t.scale = 1.0 / result->scaled_shifted.scale_a;
+    t.shift = result->scaled_shifted.shift_b;
+  }
+  finish(t);
+  if (c == LavaanConvention::DWLS || c == LavaanConvention::ULS)
+    t.p_value = std::numeric_limits<double>::quiet_NaN();
+  return t;
+}
+
 ConventionTest lavaan_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
     const PolicyFitState& null_state,
     std::shared_ptr<robust::frontier::NTMLFit> alternative,
