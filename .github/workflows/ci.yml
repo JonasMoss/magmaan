@@ -109,5 +109,5 @@ jobs:
       - name: Build
         run: cmake --build --preset default --parallel 4
 
-      - name: Test
-        run: ctest --preset default
+      - name: Test (slow gates run in optimized merge validation)
+        run: ctest --preset default -LE slow

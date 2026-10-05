@@ -508,6 +508,14 @@ ordinary API exposes barrier fitting experimentally as
 
 #### All-ordinal DWLS
 
+- [x] **S — keep slow jackknife gates off Debug checks** (TASK-87).
+  Nine numerical gates carry the per-case CTest `slow` label; Debug check,
+  quick checks and CI exclude it, while optimized merge validation runs all
+  cases. Assertions, tolerances and the complete test count are unchanged.
+  Debug CTest wall time fell from the TASK-31.2 baseline of 2021.14 s to
+  338.08 s (1541 selected cases, two workers); full opt CTest passed all
+  1550 cases in 318.78 s.
+
 - [x] **M — speed the exact first-stage score Jacobian** (TASK-83).
   Block-sparse FD differentiates only affected marginal/pair mean scores;
   ordinal category counts and shared bivariate-normal corners avoid repeated

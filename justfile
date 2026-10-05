@@ -46,18 +46,18 @@ configure:
 fast:
     cmake --build cpp/build/fast --parallel {{jobs}}
 
-# Build + run the fast local C++ test suite.
+# Build + run the fast local C++ tests excluding slow gates (test-opt runs all).
 test-fast: fast
-    ctest --test-dir cpp/build/fast --output-on-failure
+    ctest --test-dir cpp/build/fast --output-on-failure -LE slow
 
 # Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|api|sim|parity|robcat); optional 2nd arg filters test names by regex.
 test-area area regex="":
     cmake --build cpp/build/fast --target magmaan_test_{{area}} --parallel {{jobs}}
     ctest --test-dir cpp/build/fast --output-on-failure -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
 
-# Build + run the fast suite minus the heavy real-data parity tests.
+# Build + run the fast suite excluding parity and slow gates.
 test-quick: fast
-    ctest --test-dir cpp/build/fast --output-on-failure -LE parity
+    ctest --test-dir cpp/build/fast --output-on-failure -LE "parity|slow"
 
 # Build the sanitizer validation tree (Debug + AddressSanitizer + UBSan).
 dev:
@@ -145,13 +145,13 @@ build: fast
 # Back-compatible alias for the normal local C++ test suite.
 test: test-fast
 
-# Build + run the fast C++ test suite and write JUnit XML.
+# Build + run fast tests excluding slow gates and write JUnit XML.
 test-report: fast
-    ctest --test-dir cpp/build/fast --output-on-failure --output-junit "$PWD/build/fast/test-results.xml"
+    ctest --test-dir cpp/build/fast --output-on-failure -LE slow --output-junit "$PWD/build/fast/test-results.xml"
 
 # Build + run the quick fast-suite and write JUnit XML.
 test-quick-report: fast
-    ctest --test-dir cpp/build/fast --output-on-failure -LE parity --output-junit "$PWD/build/fast/test-quick-results.xml"
+    ctest --test-dir cpp/build/fast --output-on-failure -LE "parity|slow" --output-junit "$PWD/build/fast/test-quick-results.xml"
 
 # Local maintainer health check: quick report plus source-coverage summary.
 health: test-quick-report coverage

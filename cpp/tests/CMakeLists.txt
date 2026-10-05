@@ -277,3 +277,7 @@ magmaan_add_test_target(magmaan_test_twolevel twolevel
   golden/twolevel_golden_test.cpp)
 
 add_custom_target(magmaan_tests DEPENDS ${MAGMAAN_TEST_TARGETS})
+
+# Apply per-case labels after doctest has populated the discovered CTest tests.
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/slow_tests.cmake")

@@ -57,13 +57,13 @@ already mirrors the namespace tier.
 
 Run root recipes from the repository root, or direct presets from `cpp/`:
 
-- `just build` / `just test`: `fast` Debug build without sanitizers.
+- `just build` / `just test`: `fast` Debug build without sanitizers; tests exclude `slow`.
 - `just test-area <area> [regex]`: one fast test executable. Areas include
   smoke, spec, estimate, inference, ordinal, api, sim, parity and robcat;
   inspect `justfile` and CMake targets for the current mapping.
-- `just test-quick`: fast tests excluding heavy real-data parity.
+- `just test-quick`: fast tests excluding heavy real-data parity and `slow`.
 - `just test-dev`: `dev`, AddressSanitizer and UBSan.
-- `just opt` / `just test-opt`: `opt`, Release with native CPU tuning.
+- `just opt` / `just test-opt`: `opt`, Release with native CPU tuning; runs every test, including `slow`.
 - `ceres` / `ipopt`: optional optimized backend presets; PORT is enabled by
   default. Portable `default` / `release` and legacy `ubsan` remain available.
 
@@ -73,3 +73,10 @@ R/lavaan at runtime. `just check` also runs structural guards, vendor refresh/dr
 checking, C++ tests and R checks; it is broader than an ordinary focused loop.
 Root recipes cap build jobs by available RAM; preserve that cap unless explicitly
 overridden. Avoid importing tests or experiment code into the library.
+
+CTest's `slow` label marks individual gates observed above about 60 seconds in
+Debug (delete-one jackknives and repeated-fit diagnostics). Labels are assigned
+in `tests/slow_tests.cmake` after doctest discovery, preserving area labels and
+test counts. `just check`, `test-quick` and the Debug CI job exclude `slow`;
+optimized full CTest and merge validation retain it. Direct CTest without a
+label filter runs all gates.

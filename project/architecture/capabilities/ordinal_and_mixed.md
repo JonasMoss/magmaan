@@ -1023,3 +1023,12 @@ is pending. TASK-80 adds a registered mixed calibration lane to decisions/05,
 with a full-grid local pricing pilot; production requires merger review.
 Nested score, mixed ULS/WLS policy and mixed `lavaan_compat` remain
 unsupported. Exact sampling rows or complete raw observations are required.
+
+### Slow numerical validation gates
+
+The all-ordinal and mixed DWLS delete-one jackknife gates retain their original
+assertions and tolerances. CTest's per-case `slow` label (TASK-87) covers these
+and seven other numerical gates observed above about 60 seconds in Debug;
+`cpp/tests/slow_tests.cmake` records the list. Debug checks and primary CI
+exclude these nine cases; full optimized CTest and merge validation run them
+all, preserving the complete test count.
