@@ -359,6 +359,11 @@ keep OPG. decisions/05 validated the OPG version; reconfirmation and the
 latent non-normality study are TASK-79. decisions/06 found SB/PEBA4
 over-rejecting for the threshold step with seven categories while All passed
 a fresh-draw confirmation; the nested reference choice is TASK-81.
+Association ML (Gaussian ML on Stage-1 polychorics) has a lab-only
+`association_ml_ij()` (TASK-32.2): observed correlation-map sensitivity and
+exact Stage-1 transport give active/full covariance with joint threshold
+influence; ordinary association inference stays refused until reference laws,
+MI/releases and calibration (TASK-32 subcards 3-5).
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
