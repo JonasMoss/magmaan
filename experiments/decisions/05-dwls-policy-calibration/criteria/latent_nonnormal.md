@@ -74,3 +74,12 @@ The development smoke verified Stage-1 reconstruction. Pilot population targets
 will use the full two independent million-row draws, as in production; only
 smoke uses 20000 rows. Price a bounded subset rather than reducing target
 precision. No calibration decisions are made from the pilot.
+
+## Seed correction (2026-10-05, after development target calculations)
+
+The initially listed second population base 227000001 was only 90000000 from
+TASK-79's smoke base. Replace it with 15000001, which is at least 100000000
+from every earlier study draw base and all four primary lane bases. The first
+pilot attempt and earlier smoke/fan-out runs are development only and retained
+locally; rerun all frozen checks and the pilot using this corrected second
+draw. No inferential rule, population distribution or production seed changes.
