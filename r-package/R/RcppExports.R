@@ -245,6 +245,10 @@ evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL,
     .Call(`_magmaanlab_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
 }
 
+frontier_ordinal_newton_audit_impl <- function(fit, theta = NULL) {
+    .Call(`_magmaanlab_frontier_ordinal_newton_audit_impl`, fit, theta)
+}
+
 data_ordinal_stats_from_raw_impl <- function(X, full_wls_weight = TRUE) {
     .Call(`_magmaanlab_data_ordinal_stats_from_raw_impl`, X, full_wls_weight)
 }

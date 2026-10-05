@@ -3292,7 +3292,8 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
                                 const ThresholdLayout& layout,
                                 const std::vector<Eigen::MatrixXd>& Ws,
                                 const Eigen::MatrixXd& K,
-                                OrdinalParameterization parameterization) {
+                                OrdinalParameterization parameterization,
+                                Eigen::MatrixXd* correction = nullptr) {
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
   auto eval = ev_or->evaluate(est.theta, true, true);
@@ -3314,6 +3315,7 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
   }
   const std::vector<char> threshold_mask = threshold_parameter_mask(layout, q);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd C = Eigen::MatrixXd::Zero(q, q);
   Eigen::Index sigma_off = 0;
   Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
@@ -3339,7 +3341,7 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
     const bool has_mu_rows =
         eval->J_mu.rows() > 0 && mu_off + p <= eval->J_mu.rows();
     add_lisrel_second_order(
-        H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
+        correction != nullptr ? C : H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
         w_b, [&](Eigen::Index a, Eigen::Index c) {
           return ordinal_curvature_extra(
               stats, layout, eval->moments, eval->J_sigma, eval->J_mu,
@@ -3348,6 +3350,8 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
     sigma_off += vech_len(p);
     mu_off += p;
   }
+  if (correction != nullptr) *correction = 0.5 * (C + C.transpose()).eval();
+  if (correction != nullptr) H += C;
   if (!H.allFinite()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal observed bread: non-finite Hessian"));
@@ -3365,7 +3369,8 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
                               const ThresholdLayout& layout,
                               const std::vector<Eigen::MatrixXd>& Ws,
                               const Eigen::MatrixXd& K,
-                              OrdinalParameterization parameterization) {
+                              OrdinalParameterization parameterization,
+                                Eigen::MatrixXd* correction = nullptr) {
   auto ev_or = model::ModelEvaluator::build(pt, rep);
   if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
   auto eval = ev_or->evaluate(est.theta, true, true);
@@ -3387,6 +3392,7 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
   }
   const std::vector<char> threshold_mask = threshold_parameter_mask(layout, q);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd C = Eigen::MatrixXd::Zero(q, q);
   const Eigen::MatrixXd Delta_full = mixed_moment_jacobian(
       stats, layout, eval->moments, eval->J_sigma, eval->J_mu, est.theta,
       parameterization);
@@ -3415,7 +3421,7 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
     const bool has_mu_rows =
         eval->J_mu.rows() > 0 && mu_off + p <= eval->J_mu.rows();
     add_lisrel_second_order(
-        H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
+        correction != nullptr ? C : H, curv, assembled->blocks[b], locs, threshold_mask, b, has_mu_rows,
         w_b, [&](Eigen::Index a, Eigen::Index c) {
           return mixed_curvature_extra(
               stats, layout, eval->moments, eval->J_sigma, est.theta, h,
@@ -3425,6 +3431,8 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
     mu_off += p;
     moment_off += mb;
   }
+  if (correction != nullptr) *correction = 0.5 * (C + C.transpose()).eval();
+  if (correction != nullptr) H += C;
   if (!H.allFinite()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed ordinal observed bread: non-finite Hessian"));
@@ -3442,6 +3450,9 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
 struct OrdinalNewtonRaw {
   Eigen::MatrixXd hessian;
   Eigen::MatrixXd metric;
+  Eigen::MatrixXd correction;
+  Eigen::MatrixXd factor;
+  Eigen::VectorXd score_residual;
 };
 
 std::vector<Eigen::MatrixXd> dense_weights_from_factors(const WhitenFactors& factors) {
@@ -3459,10 +3470,12 @@ ordinal_newton_parts_prepared(const spec::LatentStructure& pt,
                               const model::MatrixRep& rep,
                               const data::OrdinalStats& stats,
                               const ThresholdLayout& layout,
-                              const std::vector<Eigen::MatrixXd>& Ws,
+                              const WhitenFactors& factors,
                               const Eigen::VectorXd& theta,
                               OrdinalParameterization parameterization) {
   const Eigen::Index q = theta.size();
+  const auto Ws = dense_weights_from_factors(factors);
+  Eigen::MatrixXd C;
   if (Ws.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal Newton parts: weight block count mismatch"));
@@ -3472,13 +3485,17 @@ ordinal_newton_parts_prepared(const spec::LatentStructure& pt,
   Estimates at;
   at.theta = theta;
   auto H = ordinal_observed_bread_analytic(pt, rep, stats, at, layout, Ws,
-      Eigen::MatrixXd::Identity(q, q), parameterization);
+      Eigen::MatrixXd::Identity(q, q), parameterization, &C);
   if (!H.has_value()) return std::unexpected(H.error());
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return std::unexpected(model_to_post(ev.error()));
   auto eval = ev->evaluate(theta, true, true);
   if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(q, q);
+  Eigen::Index rows = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) rows += Ws[b].rows();
+  Eigen::MatrixXd A(rows, q);
+  Eigen::VectorXd score(rows);
+  Eigen::Index off = 0;
   Eigen::Index sigma_off = 0, mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -3489,13 +3506,22 @@ ordinal_newton_parts_prepared(const spec::LatentStructure& pt,
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "ordinal Newton parts: weight dimension mismatch"));
     }
-    M.noalias() += static_cast<double>(stats.n_obs[b]) *
-                   (Delta.transpose() * Ws[b] * Delta);
+    const double root_n = std::sqrt(static_cast<double>(stats.n_obs[b]));
+    A.middleRows(off, Delta.rows()) = factors[b].t_apply(root_n, Delta);
+    const Eigen::VectorXd residual = ordinal_block_residual(
+        stats, layout, eval->moments, theta, parameterization, b);
+    score.segment(off, Delta.rows()) = factors[b].t_apply(root_n, residual);
+    off += Delta.rows();
     sigma_off += vech_len(p);
     mu_off += p;
   }
-  return OrdinalNewtonRaw{static_cast<double>(*n_or) * (*H),
-                          Eigen::MatrixXd(0.5 * (M + M.transpose()))};
+  // Keep the factor and residual correction: neither is recovered by
+  // subtracting or factoring rounded cross-products in weak directions.
+  Eigen::MatrixXd M = A.transpose() * A;
+  C *= static_cast<double>(*n_or);
+  Eigen::MatrixXd observed = M + C;
+  return OrdinalNewtonRaw{std::move(observed), std::move(M), std::move(C),
+                          std::move(A), std::move(score)};
 }
 
 post_expected<OrdinalNewtonRaw>
@@ -3503,10 +3529,12 @@ mixed_newton_parts_prepared(const spec::LatentStructure& pt,
                             const model::MatrixRep& rep,
                             const data::MixedOrdinalStats& stats,
                             const ThresholdLayout& layout,
-                            const std::vector<Eigen::MatrixXd>& Ws,
+                            const WhitenFactors& factors,
                             const Eigen::VectorXd& theta,
                             OrdinalParameterization parameterization) {
   const Eigen::Index q = theta.size();
+  const auto Ws = dense_weights_from_factors(factors);
+  Eigen::MatrixXd C;
   if (Ws.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed ordinal Newton parts: weight block count mismatch"));
@@ -3516,7 +3544,7 @@ mixed_newton_parts_prepared(const spec::LatentStructure& pt,
   Estimates at;
   at.theta = theta;
   auto H = mixed_observed_bread_analytic(pt, rep, stats, at, layout, Ws,
-      Eigen::MatrixXd::Identity(q, q), parameterization);
+      Eigen::MatrixXd::Identity(q, q), parameterization, &C);
   if (!H.has_value()) return std::unexpected(H.error());
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) return std::unexpected(model_to_post(ev.error()));
@@ -3524,7 +3552,8 @@ mixed_newton_parts_prepared(const spec::LatentStructure& pt,
   if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
   const Eigen::MatrixXd Delta_full = mixed_moment_jacobian(
       stats, layout, eval->moments, eval->J_sigma, eval->J_mu, theta, parameterization);
-  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd A(Delta_full.rows(), q);
+  Eigen::VectorXd score(Delta_full.rows());
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index mb = stats.moments[b].size();
@@ -3533,12 +3562,20 @@ mixed_newton_parts_prepared(const spec::LatentStructure& pt,
           "mixed ordinal Newton parts: weight dimension mismatch"));
     }
     const Eigen::MatrixXd Delta = Delta_full.block(off, 0, mb, q);
-    M.noalias() += static_cast<double>(stats.n_obs[b]) *
-                   (Delta.transpose() * Ws[b] * Delta);
+    const double root_n = std::sqrt(static_cast<double>(stats.n_obs[b]));
+    A.middleRows(off, mb) = factors[b].t_apply(root_n, Delta);
+    const Eigen::VectorXd residual = mixed_model_moments(
+        stats, layout, eval->moments, theta, b, parameterization) - stats.moments[b];
+    score.segment(off, mb) = factors[b].t_apply(root_n, residual);
     off += mb;
   }
-  return OrdinalNewtonRaw{static_cast<double>(*n_or) * (*H),
-                          Eigen::MatrixXd(0.5 * (M + M.transpose()))};
+  // Keep the factor and residual correction: neither is recovered by
+  // subtracting or factoring rounded cross-products in weak directions.
+  Eigen::MatrixXd M = A.transpose() * A;
+  C *= static_cast<double>(*n_or);
+  Eigen::MatrixXd observed = M + C;
+  return OrdinalNewtonRaw{std::move(observed), std::move(M), std::move(C),
+                          std::move(A), std::move(score)};
 }
 
 fit_expected<Eigen::VectorXd>
@@ -9530,9 +9567,14 @@ ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
   auto factors = weight_factors(stats, weights);
   if (!factors.has_value()) return std::unexpected(factors.error());
   auto raw = ordinal_newton_parts_prepared(pt, rep, stats, *layout,
-      dense_weights_from_factors(*factors), theta, parameterization);
+      *factors, theta, parameterization);
   if (!raw.has_value()) return std::unexpected(newton_parts_error(who, raw.error().detail));
-  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric)};
+  std::vector<Eigen::MatrixXd> retained;
+  for (const auto& factor : *factors) retained.push_back(factor.to_dense());
+  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric),
+                            std::move(raw->correction), std::move(raw->factor),
+                            std::move(raw->score_residual), std::move(retained)};
+
 }
 
 fit_expected<OrdinalNewtonParts>
@@ -9568,9 +9610,14 @@ mixed_ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
   auto factors = weight_factors(stats, weights);
   if (!factors.has_value()) return std::unexpected(factors.error());
   auto raw = mixed_newton_parts_prepared(pt, rep, stats, *layout,
-      dense_weights_from_factors(*factors), theta, parameterization);
+      *factors, theta, parameterization);
   if (!raw.has_value()) return std::unexpected(newton_parts_error(who, raw.error().detail));
-  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric)};
+  std::vector<Eigen::MatrixXd> retained;
+  for (const auto& factor : *factors) retained.push_back(factor.to_dense());
+  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric),
+                            std::move(raw->correction), std::move(raw->factor),
+                            std::move(raw->score_residual), std::move(retained)};
+
 }
 
 post_expected<std::vector<Eigen::MatrixXd>>
@@ -10264,15 +10311,19 @@ void attach_ordinal_newton_accuracy(Estimates& est,
   d.objective = value;
   d.gradient = n * gradient;
   if (std::isfinite(value) && d.gradient.allFinite()) {
-    const auto Ws = dense_weights_from_factors(*c.factors);
     auto raw = c.stats != nullptr
-        ? ordinal_newton_parts_prepared(pt, *c.rep, *c.stats, *c.layout, Ws,
+        ? ordinal_newton_parts_prepared(pt, *c.rep, *c.stats, *c.layout, *c.factors,
                                         est.theta, c.parameterization)
-        : mixed_newton_parts_prepared(pt, *c.rep, *c.mixed, *c.layout, Ws,
+        : mixed_newton_parts_prepared(pt, *c.rep, *c.mixed, *c.layout, *c.factors,
                                       est.theta, c.parameterization);
     if (raw.has_value() && raw->hessian.allFinite() && raw->metric.allFinite()) {
       d.hessian = std::move(raw->hessian);
       d.metric = std::move(raw->metric);
+      d.ls_curvature_correction = std::move(raw->correction);
+      d.whitened_jacobian = raw->factor / std::sqrt(n);
+      d.whitened_residual = raw->score_residual / std::sqrt(n);
+      d.metric_factor = std::move(raw->factor);
+      d.metric_score_residual = std::move(raw->score_residual);
       d.status = NewtonAccuracyStatus::Available;
     } else {
       d.detail = raw.has_value() ? "non-finite ordinal Hessian" : raw.error().detail;

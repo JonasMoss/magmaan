@@ -383,6 +383,9 @@ NewtonDerivatives ordinal_derivatives(const OrdinalLsObjective& original,
   d.whitened_jacobian = std::move(*J);
   d.hessian = parts->hessian;
   d.metric = parts->gradient_variance;
+  d.ls_curvature_correction = parts->curvature_correction;
+  d.metric_factor = parts->metric_factor;
+  d.metric_score_residual = parts->metric_score_residual;
   d.status = NewtonAccuracyStatus::Available;
   return d;
 }

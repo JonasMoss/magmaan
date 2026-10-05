@@ -1,7 +1,9 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: weighted_audit
+  lane: ordinal_audit
+  ordinal_run: ordinal-audit-confirm-v2
+  ordinal_retained: ordinal-audit-retained-v1
   weighted_run: weighted-audit-confirm-v1
   search_retained_stock: uls-search-retained-stock-v1
   search_retained_tight: uls-search-retained-tight-v1
@@ -41,6 +43,41 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "ordinal_audit")) {
+  read_ordinal <- function(run,name) {
+    path <- file.path("results",run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing ordinal evidence: ",path,
+      "; run --ordinary --ordinal-audit --run-id ",run)
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  gates <- read_ordinal(params$ordinal_run,"verification")
+  retained_gates <- read_ordinal(params$ordinal_retained,"verification")
+  if(any(gates$failed!=0)||any(retained_gates$failed!=0))stop("Ordinal verification failed; inspect its CSVs")
+  fits <- read_ordinal(params$ordinal_run,"fits")
+  retained_fits <- read_ordinal(params$ordinal_retained,"fits")
+  points <- read_ordinal(params$ordinal_run,"comparisons")
+  retained_points <- read_ordinal(params$ordinal_retained,"comparisons")
+  recipes <- read_ordinal(params$ordinal_run,"producer_checks")
+  metadata <- read_ordinal(params$ordinal_run,"metadata")
+  reference <- read_ordinal(params$ordinal_run,"reference_metadata")
+  failed <- retained_fits[!retained_fits$fit_passed | is.na(retained_fits$fit_passed),]
+  cat("## Question\n\nCan ordinal and mixed least squares reuse the more stable continuous-LS Newton audit after accounting for their actual moment maps and weights?\n\n")
+  cat(sprintf("## Short answer\n\nYes, for the tested original, unprofiled numerical objectives. All %d fresh fits pass, and all %d audited points agree with an independent 90-digit reconstruction. The 80 displaced points and 12 zero-loading saddles remain unaccepted. The earlier run retains %d sparse-theta fitting failures: the audit correctly rejects them, but their starts/search still need work.\n\n",nrow(fits),nrow(points),nrow(failed)))
+  cat("The audit now retains the actual whitened Jacobian and residual curvature correction before forming cross-products. That lets it use QR coordinates for curvature and the distance metric. Its distance uses the fitting-weight working scale; this is a numerical convergence check, not a sampling covariance or inference recommendation.\n\n")
+  cat("## Evidence\n\n")
+  evidence <- data.frame(Check=c("Fresh terminal fits","Independent original-objective points","Conditional weights and empirical thresholds","Displaced points rejected","Zero-loading saddles rejected","Retained sparse-theta failures"),
+    Tested=c(nrow(fits),nrow(points),nrow(recipes),80,12,nrow(failed)),
+    Outcome=c("160 pass","252 agree","46 agree","80 rejected","12 rejected","6 correctly rejected; search unresolved"))
+  cat(knitr::kable(evidence),sep="\n")
+  cat("\n\nBoth parameterizations cover ordinary all-ordinal ULS/DWLS/WLS and the existing mixed DWLS/WLS slice. The bounded grid includes shared loadings, unequal groups with equal thresholds and released means/scales, sparse categories, extreme correlations and mixed continuous units. Each recipe uses the public fitting wrapper's default starts with either its default L-BFGS controls or PORT-NLS and a 1000-iteration limit. No portfolio or polishing is added. All returned fits and every failed verdict are retained.\n\n")
+  cat(sprintf("The largest relative gradient/correction discrepancy is %.2g; Hessian, metric and factor discrepancies are below %.2g. Fitting and artifact collection took %.1f seconds; the reference took %.1f seconds on one math thread. Missing WLS weights and a constant-category variable reject explicitly. Existing ordinal regression tests also cover polychoric/polyserial moments, NACOV and weights against lavaan, pairwise counts, full/profiled fits and parameter reporting.\n\n",
+    max(points$gradient_relative_error,points$curvature_correction_relative_error),
+    max(points$hessian_relative_error,points$metric_relative_error,points$metric_factor_relative_error),
+    as.numeric(metadata$value[metadata$key=="elapsed_s"]),reference$elapsed_s))
+  cat("## Caveats\n\nThe bank conditions on the actual first-stage moments and whitening factors. Empirical univariate thresholds and Gamma-to-weight recipes are independently checked; first-stage polychoric/polyserial and Gamma construction retain their existing oracle gates. There is no propagated first-stage error bound. Ordinal construction certificates explicitly remain unsupported.\n\nThe retained run has 154 passing fits and six sparse-theta failures, with distances 0.44–1.11 versus the 0.01 budget; three also hit the conditioning guard. They occur under both backends and all three weights on one draw. The corrected reference replay preserves those failures. Before the fresh confirmation, its grouped-delta release mask was corrected to read prepared free response variances. The final confirmation uses a new seed and the frozen corrected reference.\n\nThese small engineering runs do not choose defaults or establish identification, global optimality, basin recovery, or sparse-data fitting reliability. Sphere, active bounds, PSD faces, barriers and mixed-data inference are outside this bank. Fresh pairwise route reliability and a stronger ordinal interval certificate require their own evidence; existing pairwise regression gates remain useful without treating the inputs as a synthetic complete sample.\n\n")
+  cat("## Reproduce\n\nUse matching worktree bindings and Python with mpmath 1.3.0; choose a fresh run ID. Raw cases, fit objects and matrix artifacts remain ignored; compact judgments and provenance are frozen.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --smoke --run-id ordinal-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --reps 2 --seed-base 865051301 --run-id ordinal-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:ordinal_audit -P ordinal_run:ordinal-confirm-new\n```\n\nReopen numerical integration for a moment-map mismatch, a wrong verdict, a new first-stage/weight representation or a new domain. Resolve the retained sparse-theta search failures separately. Other lanes, including `weighted_audit` and `uls_search`, remain selectable.\n\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "weighted_audit")) {
   read_weighted <- function(name) {
     path <- file.path("results",params$weighted_run,paste0(name,".csv"))

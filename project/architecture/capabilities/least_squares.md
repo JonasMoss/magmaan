@@ -164,3 +164,34 @@ optimality. Some winners have negative residual variances or indefinite latent
 covariances under this unrestricted target. The two-factor-specific signed recipe
 needs broader-model construction and cost evidence; adoption requires a separate
 prespecified actual-default decision study. No implementation/default changes.
+
+## Ordinal and mixed numerical integration
+
+Ordinal/mixed numerical integration (2026-10-05, isolated sphere-study) now
+retains the total-scale whitened Jacobian, score residual, actual fitting factors
+and analytic observed correction before adding Gauss-Newton. Ordinary telemetry
+and explicit original full-threshold audits reuse QR curvature and square-root
+distances with the existing fitting-weight working metric and acceptance policy.
+The opt-in `magmaan_core$frontier_ordinal_newton_audit(fit, theta)` exposes raw
+coordinates, the prepared partable and owning artifacts. Ordinal construction
+bounds remain explicitly unsupported; this is not a sampling-Gamma or inference
+policy change. Experiment 15's fresh confirmation has 160 passing cold fits,
+252 agreeing independent 90-digit points and 46 agreeing empirical-threshold/
+conditional-weight checks in delta/theta, including shared loadings, groups and
+mixed units. All 80 displaced points and 12 saddles remain unaccepted. A corrected
+replay retains six earlier sparse-theta failures at distance 0.44–1.11 (three
+also ill-conditioned), owned by TASK-33.10.6. Existing first-stage and pairwise
+oracle gates pass. Propagated construction bounds, fresh pairwise reliability,
+sphere/PSD/barrier coverage, inference policy, identification/global recovery
+and default adoption remain outside this bank.
+
+`OrdinalNewtonParts` stores `A = stack_b sqrt(n_b) F_b' Delta_b` and
+`b = stack_b sqrt(n_b) F_b' residual_b`, with actual `W_b = F_b F_b'`.
+The working metric is `A'A`, and the distance is `sqrt(G' (A'A)^-1 G)` after
+applicable equality reduction, with positive full observed curvature required.
+The analytic residual correction is retained directly; it is not recovered by
+subtracting rounded cross-products. This preserves the fit-time convention
+that needs no NACOV, rather than substituting an estimated sampling sandwich.
+The explicit point artifact is ambient; active bounds and nonlinear constraints
+need their applicable route. Thresholds are included in full even when fitting
+profiled them. No new propagated ordinal construction certificate is supplied.

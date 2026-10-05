@@ -1299,3 +1299,30 @@ compact judgments, all endpoint failures and provenance are frozen.
 The 572-test optimized estimation suite passes. Ordinary acceptance defaults,
 statistical identification, robust inference and best-basin recovery remain
 separate decisions.
+
+### Ordinal/mixed conditional numerical checks
+
+Ordinal/mixed numerical integration (2026-10-05, isolated sphere-study) now
+retains the total-scale whitened Jacobian, score residual, actual fitting factors
+and analytic observed correction before adding Gauss-Newton. Ordinary telemetry
+and explicit original full-threshold audits reuse QR curvature and square-root
+distances with the existing fitting-weight working metric and acceptance policy.
+The opt-in `magmaan_core$frontier_ordinal_newton_audit(fit, theta)` exposes raw
+coordinates, the prepared partable and owning artifacts. Ordinal construction
+bounds remain explicitly unsupported; this is not a sampling-Gamma or inference
+policy change. Experiment 15's fresh confirmation has 160 passing cold fits,
+252 agreeing independent 90-digit points and 46 agreeing empirical-threshold/
+conditional-weight checks in delta/theta, including shared loadings, groups and
+mixed units. All 80 displaced points and 12 saddles remain unaccepted. A corrected
+replay retains six earlier sparse-theta failures at distance 0.44–1.11 (three
+also ill-conditioned), owned by TASK-33.10.6. Existing first-stage and pairwise
+oracle gates pass. Propagated construction bounds, fresh pairwise reliability,
+sphere/PSD/barrier coverage, inference policy, identification/global recovery
+and default adoption remain outside this bank.
+
+The independent reference reconstructs the prepared LISREL model, threshold
+and correlation maps, and their second-order scalar chains at 90 digits from
+retained binary64 primitives. Conditional point agreement and empirical
+threshold/Gamma-to-weight checks are separate from the polychoric/polyserial/
+NACOV oracle gates. They do not enclose first-stage numerical error.
+`newton_input_error_bounds` remains unsupported for ordinal objective kinds.
