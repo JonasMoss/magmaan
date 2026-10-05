@@ -364,9 +364,12 @@ cases, 50 are accepted: 44 match Mplus and 6 end in an explicit unsupported-fit
 route. The stability bar is closed: per-rule rejection messages, an
 ASan/UBSan sweep of all 2,440 corpus inputs without crashes or unclassified
 rejections, lab round trips for seven model families and one coverage matrix
-keyed to the inventory. Ordinal nonlinear constraints (TASK-54.2) and ordinary
-`magmaan()` integration (TASK-57, under the
-[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api)) remain.
+keyed to the inventory. All-ordinal nonlinear equality constraints fit with
+lavaan-compatible expected-information inference (TASK-54.2; lavaan 0.7-2's
+start-value Jacobian in nonlinear nested and score tests is an
+[oracle defect](../validation/oracle-defects.md)); the ordinary policy refuses
+nonlinear constraints. Ordinary `magmaan()` integration (TASK-57, under the
+[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api)) remains.
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
