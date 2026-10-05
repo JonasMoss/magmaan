@@ -348,6 +348,10 @@ exact joint-sampling likelihood projections (TASK-77) for raw, centered-Zc and
 caller-Gamma inputs; structured/unstructured moments remain explicit
 comparators, GOF moment primitives keep their named conventions, and grouped
 centered LS meats are documented as fixed-allocation.
+Complete all-ordinal data have exact empirical score-Jacobian first-stage
+sampling rows and Gamma, with `first_stage = "exact"` as a lab IJ comparator
+(TASK-74); OPG stays the lab and current policy default until TASK-69 switches
+the policy.
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
