@@ -1,0 +1,4 @@
+"cell_id","attempted","mean_seconds","mean_cpu_seconds","production_reps","production_cpu_hours"
+1,1,0.386,0.386,2000,0.214444444444445
+53,1,0.342,0.342,2000,0.19
+85,1,0.0409999999999999,0.04,2000,0.0222222222222222

@@ -3,6 +3,7 @@ title: "DWLS policy calibration"
 format:
   html:
     toc: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -17,6 +18,7 @@ execute:
 | Global test | $nF$ on the `robust_ordinal` spectrum, exact weighted chi-square tail with every positive eigenvalue (All) | Chosen after exploration (user, 2026-10-03); confirmed on fresh draws | SB and PEBA4 over-reject at df ≥ 53; All 2.9–6.8% at confirmation |
 | Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), SB and PEBA4 | Replaced the separate-point profile law after diagnosis; confirmed on fresh draws | Profile law 0.1–2% (SB) and 3–17% (PEBA4); parameter-space law 4.3–7.8% |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
+| All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmation open | TASK-79 fresh-draw registration and local pricing pilot; production pending merger review |
 | Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global All; nested SB/PEBA4 | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
 ## Question
@@ -32,7 +34,9 @@ criteria are in `criteria/dwls_policy.md`.
 
 ## Short answer
 
-The all-ordinal findings below remain the retained evidence. Mixed DWLS has a
+The all-ordinal findings below are retained **OPG-first-stage** evidence. The
+current exact-first-stage policy has a registered reconfirmation lane; its
+local two-draw-per-cell pilot tests mechanics and price, not calibration. Mixed DWLS has a
 registered lane and pricing pilot; its calibration is still open pending
 reviewed production.
 
@@ -299,4 +303,62 @@ Rscript run_experiment.R --pilot --lane mixed --workers 2 --run-id mixed-pilot
 # After merger review and compute authorization only:
 modal run modal/app.py --lane mixed --mode production --run-id mixed-production-YYYY-MM-DD
 modal volume get magmaan-dwls-policy mixed/<run-id>/final <local-dir>
+```
+
+
+## Exact first-stage reconfirmation (lane A)
+
+The policy now uses exact first-stage sampling influence while keeping the
+OPG fitting weights. Earlier all-ordinal results therefore do not establish
+calibration of the current policy. `criteria/exact_first_stage.md` registers
+fresh Gaussian-copula draws for the same 146 cells and counts; latent
+non-normality belongs to TASK-84. On each draw, exact and OPG inference share
+fitted points, with paired rejection/coverage differences and bootstrap
+intervals. Nested All is a comparator for TASK-81; policy SB/PEBA4 remain.
+
+```{r}
+exact_root <- file.path('results','exact-first-stage','pilot-2026-10-05')
+if(!file.exists(file.path(exact_root,'summary.csv')))
+  stop('Exact pilot missing: run run_experiment.R --pilot --lane exact-first-stage --run-id pilot-2026-10-05')
+exact_cells <- read.csv(file.path(exact_root,'cells.csv'))
+exact_summary <- read.csv(file.path(exact_root,'summary.csv'))
+exact_timing <- read.csv(file.path(exact_root,'timing.csv'))
+exact_cost <- read.csv(file.path(exact_root,'cost.csv'))
+exact_failures <- read.csv(file.path(exact_root,'failures.csv'))
+knitr::kable(data.frame(
+  Cells=nrow(exact_cells), Draws=sum(exact_timing$attempted),
+  `Failed arm rows`=nrow(exact_failures),
+  `Projected production CPU hours`=round(exact_cost$production_cpu_hours_priced,1),
+  check.names=FALSE))
+```
+
+The full-grid pilot completed 292 draws in 265.5 seconds, plus 9.6 seconds
+for population targets, with no failed arm outcomes. The largest policy
+reconstruction gap was 1.37e-14. Its projected production cost is 67.6 CPU-hours.
+Two draws per cell cannot resolve rejection or coverage rates. `paired.csv` retains each cell/target/arm difference and jointly
+available/excluded counts; `summary.csv` retains attempted-denominator rates,
+Wilson intervals and successful-arm diagnostics. Each family and every loss
+remains visible. Policy flags use [3%,7%] null rejection for N >= 500 and
+93% coverage for N >= 300; a flag calls for finite-sample work, never OPG
+restoration. Production pricing is a linear extrapolation from two draws,
+not a runtime guarantee. Population pseudo-targets use a fresh fixed 100000-row
+sample per group and remain Monte Carlo approximations.
+
+Local two-cell fan-out (cells 1 and 53) reproduces full-pilot summaries and
+paired intervals exactly. Completed cell outputs are published only after
+all draws and policy-equivalence gates; resume and combine reject altered
+sources, native packages, mode, seeds or replicate counts. Partial attempts
+remain separate. Modal support is implemented but has not been launched.
+Merger registration and a separate compute decision are required before
+production.
+
+```bash
+R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript run_experiment.R --smoke --lane exact-first-stage \
+  --cell 1,53,85 --run-id smoke-fresh
+R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript run_experiment.R --pilot --lane exact-first-stage \
+  --workers 1 --run-id pilot-fresh
+# Only after registration/compute approval and Modal workspace restoration:
+modal run modal/app.py --lane exact-first-stage --mode production --run-id production-fresh
 ```

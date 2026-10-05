@@ -23,7 +23,7 @@ image = (
     .add_local_dir(str(REPO / "r-package"),
                    "/repo/r-package", copy=True,
                    ignore=["**/*.o", "**/*.so", "**/*.a", "build-rdev/**", "src/Makevars"])
-    .run_commands("MAKEFLAGS=-j4 R CMD INSTALL /repo/r-package",
+    .run_commands("MAKEFLAGS=-j2 R CMD INSTALL /repo/r-package",
                   "mkdir -p /repo/cpp && touch /repo/cpp/CMakeLists.txt")
     .add_local_dir(str(REPO / "experiments/_support"),
                    "/repo/experiments/_support")
@@ -60,10 +60,10 @@ def run_cell(cell_id: int, run_id: str, mode: str, lane: str = "dwls-policy"):
 def combine(run_id: str, mode: str, git_head: str, family: str, lane: str = "dwls-policy"):
     import subprocess
     vol.reload()
-    subprocess.run(["Rscript", f"/repo/{STUDY}/modal/combine.R", "--run-dir", f"/vol/mixed/{run_id}" if lane == "mixed" else f"/vol/{run_id}",
+    subprocess.run(["Rscript", f"/repo/{STUDY}/modal/combine.R", "--run-dir", f"/vol/{lane}/{run_id}" if lane in ("mixed", "exact-first-stage") else f"/vol/{run_id}",
                     "--mode", mode, "--git-head", git_head, "--family", family, "--lane", lane], check=True)
     vol.commit()
-    return f"/vol/mixed/{run_id}/final" if lane == "mixed" else f"/vol/{run_id}/final"
+    return f"/vol/{lane}/{run_id}/final" if lane in ("mixed", "exact-first-stage") else f"/vol/{run_id}/final"
 
 
 @app.local_entrypoint()
@@ -90,11 +90,14 @@ def main(mode: str = "smoke", run_id: str = "smoke-modal", family: str = "all", 
             ids = list(range(1, 49)) + list(range(153, 157))
         elif family == "nested":
             ids = list(range(49, 129)) + list(range(157, 161))
+    elif lane == "exact-first-stage":
+        if mode not in ("smoke", "pilot", "production"):
+            raise SystemExit("exact-first-stage supports smoke, pilot, production")
     elif lane != "dwls-policy":
         raise SystemExit("unknown lane")
     if not ids:
         raise SystemExit("no cells for this mode/family")
-    done = list(run_cell.starmap([(i, run_id, mode, lane) for i in ids]))
+    done = list(run_exact_cell.starmap([(i, run_id, mode) for i in ids])) if lane == "exact-first-stage" else list(run_cell.starmap([(i, run_id, mode, lane) for i in ids]))
     print(f"cells: {len(done)}/{len(ids)}")
     print(combine.remote(run_id, mode, head, family, lane))
 
@@ -113,6 +116,31 @@ def run_mixed_cell(cell_id: int, run_id: str, mode: str):
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")
     subprocess.run(["Rscript", RUNNER, f"--{mode}", "--lane", "mixed", "--cell", str(cell_id),
                     "--workers", "4", "--out-dir", attempt], check=True, env=env)
+    if not os.path.exists(os.path.join(attempt, "COMPLETE")):
+        raise RuntimeError("incomplete cell")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    os.rename(attempt, out)
+    vol.commit()
+    return cell_id
+
+
+@app.function(image=image, volumes={"/vol": vol}, timeout=8 * 60 * 60,
+              cpu=2.0, memory=4096, retries=1)
+def run_exact_cell(cell_id: int, run_id: str, mode: str):
+    import os, subprocess, uuid
+    if not run_id or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in run_id):
+        raise ValueError("invalid run ID")
+    root = f"/vol/exact-first-stage/{run_id}"
+    out = f"{root}/cells/cell_{cell_id:03d}"
+    vol.reload()
+    env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    if os.path.exists(os.path.join(out, "COMPLETE")):
+        subprocess.run(["Rscript", f"/repo/{STUDY}/modal/exact_validate.R",
+                        out, mode, str(cell_id)], check=True, env=env)
+        return cell_id
+    attempt = f"{root}/attempts/cell_{cell_id:03d}_{uuid.uuid4().hex}"
+    subprocess.run(["nice", "-n", "10", "Rscript", RUNNER, f"--{mode}", "--lane", "exact-first-stage",
+                    "--cell", str(cell_id), "--workers", "2", "--out-dir", attempt], check=True, env=env)
     if not os.path.exists(os.path.join(attempt, "COMPLETE")):
         raise RuntimeError("incomplete cell")
     os.makedirs(os.path.dirname(out), exist_ok=True)

@@ -1,0 +1,4 @@
+"factors","categories","skew","n","groups","parameterization","cross","nesting","role","model","family","cell_id","production_reps"
+1,2,"symmetric",200,1,"delta",0,"none","null","cfa","global",1,2000
+2,2,"symmetric",400,2,"theta",0,"metric","null","cfa","nested",53,2000
+2,2,"symmetric",150,1,"delta",0,"none","null","cfa","coverage",85,2000

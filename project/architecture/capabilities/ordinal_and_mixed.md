@@ -43,7 +43,10 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   defaults retain OPG. Global Gamma is the exact-row cross-product; nested
   parameter and moment-tangent laws use the exact estimated-weight IJ meat.
   All global and SB/PEBA4 nested references stay unchanged. Exact-first-stage
-  calibration and latent non-normality evidence remain pending (TASK-79). The shared implementation differentiates the
+  calibration remains pending: TASK-79 registers fresh-draw exact/OPG paired
+  reconfirmation and supplies a full-grid mechanics/pricing pilot; production
+  awaits merger registration and compute approval. TASK-84 owns latent
+  non-normality evidence. The shared implementation differentiates the
   empirical score means with relative step 1e-5, then solves the centered
   equations (threshold Hessian and pair-score threshold/rho derivatives).
   Replicated case-weight row errors are below 8e-9 in the registered samples.

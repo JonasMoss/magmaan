@@ -1,0 +1,15 @@
+"cell_id","arm","target","attempted","successful","failed","successes","rate","successful_rate","wilson_low","wilson_high","size_adjusted_power","matched_null_successful","finite_sample_followup","unavailable","df","spectrum_size"
+1,"policy_all","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,9,9
+1,"opg_all","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,9,9
+53,"policy_sb","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+53,"policy_peba4","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+53,"exact_all","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+53,"opg_sb","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+53,"opg_peba4","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+53,"opg_all","",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,10,10
+85,"policy_ij","loading",1,1,0,1,1,1,0.206549314377237,1,,0,FALSE,FALSE,,
+85,"policy_ij","threshold",1,1,0,1,1,1,0.206549314377237,1,,0,FALSE,FALSE,,
+85,"policy_ij","correlation",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,,
+85,"opg_ij","loading",1,1,0,1,1,1,0.206549314377237,1,,0,FALSE,FALSE,,
+85,"opg_ij","threshold",1,1,0,1,1,1,0.206549314377237,1,,0,FALSE,FALSE,,
+85,"opg_ij","correlation",1,1,0,0,0,0,0,0.793450685622763,,0,FALSE,FALSE,,

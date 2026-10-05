@@ -1,0 +1,7 @@
+check,result,detail
+three_family_smoke,pass,"cells 1/53/85; exit 0; no failed arm rows"
+full_grid_pilot,pass,"146 cells; 292 draws; exit 0; no failed arm rows"
+policy_reconstruction,pass,"maximum gap 1.369126e-14; registered tolerance 1e-7"
+two_cell_fanout,pass,"cells 1/53 summaries and paired intervals equal full-pilot slices exactly; compare CSV fields as character to avoid subset-dependent type inference"
+resume_provenance,pass,"reject changed source hashes/package version/seed, missing replicate, missing COMPLETE"
+layering,pass,"just check-layering"
