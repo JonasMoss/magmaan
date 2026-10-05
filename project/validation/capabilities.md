@@ -81,7 +81,8 @@ These rules apply to every setup above; the reason is typed per component.
 | ML | Validated: lavaan parity goldens and ordinary `ML estimates come from magmaanlab and match lavaan` | Exact-Hessian Newton check | Validated: unrestricted, linear equalities (task-9) |
 | FIML | Validated: `fiml_golden_test.cpp` | Newton check | Validated for unrestricted and supported linear equalities: pinned MCAR/MAR fixtures, single and grouped (task-10) |
 | All-ordinal DWLS/ULS/WLS | Validated: `ordinal_golden_test.cpp`, grouped and threshold-equality gates | Newton check | Unsupported: errors (task-11) |
-| ML2S, GLS, continuous ULS, mixed DWLS/WLS | Validated by component goldens (area files) | Newton check | Unsupported: errors |
+| Complete mixed DWLS | Validated: mixed component goldens | Newton check | Validated: delta/theta, single/unequal groups and equal loadings; mixed preset fixture plus live retained WLSMV gates (TASK-91) |
+| ML2S, GLS, continuous ULS, mixed WLS | Validated by component goldens (area files) | Newton check | Unsupported: errors |
 | PSD and barrier fits | PSD: validated on the classical slice, hardening 0.3.0; barrier: experimental | Face-restricted Newton check | Unsupported: errors |
 
 Rescaled retry endpoints and their verdicts can depend on floating-point search
@@ -155,7 +156,7 @@ bundles and are not replaced by policy score tests.
 | All-ordinal WLS / WLS | Validated: standard covariance | Validated: standard | Validated: standard difference | Delta/theta, single group and two unequal groups with loading equality; theta threshold equalities; per-group n minus one |
 | FIML / ML or MLR | Validated: observed Hessian / Huber–White sandwich | Validated: standard / Yuan–Bentler Mplus | Validated: standard / SB2001 with YB-Mplus scales | HS MCAR/MAR CFA; school loading/intercept invariance; missing random covariate; both argument orders and saturated alternative; retained estimates/policy and cached/deferred/serialized reporting |
 | FIML / MLM | Inapplicable | Inapplicable | Inapplicable | Rejected: MLM's missing-data handling would change estimation |
-| Complete mixed DWLS / WLSMV | Validated at identical parameter points: NACOV sandwich | Validated at identical points: scaled-shifted | Validated at identical points: Satorra-2000 delta, scaled-shifted | Single/two groups delta/theta; Stage-1 parity; strict single-group delta retained gates; grouped/theta endpoints have limited validation due to stopping differences (oracle observations ledger); missing and other mixed bundles typed unsupported |
+| Complete mixed DWLS / WLSMV | Validated: preset retained / native identical-point NACOV sandwich | Validated: preset retained / native identical-point scaled-shifted | Validated: preset retained / native identical-point Satorra-2000 delta, scaled-shifted | Single/two groups delta/theta; Stage-1 parity; strict retained-fit gates for all eight preset cases (TASK-91), plus TASK-90 identical-point gates for native fits; missing and other mixed bundles typed unsupported |
 | Continuous GLS, ULS, WLS; ML2S; other mixed bundles | Unsupported | Unsupported | Unsupported | No checked ordinary compatibility composition; see lab inventory below |
 
 The whole-bundle installed-lavaan gates are

@@ -76,7 +76,7 @@ result under an unstated convention.
    messages, and the checks of the [API tasks](#ordinary-api) pass.
 2. **lavaan-compatible fitting.** `options = list(preset = "lavaan-0.7.2")`
    fits complete-data ML with linear equality constraints (shared labels,
-   `group.equal`, `==` rows), FIML and all-ordinal DWLS, single- and
+   `group.equal`, `==` rows), FIML, all-ordinal and complete mixed DWLS, single- and
    multi-group. Pinned fixtures match lavaan's starts, search coordinates,
    derivatives at identical parameter points, endpoint/objective tolerances
    and verdicts for path-stable cases; each actual endpoint is checked under the
@@ -323,7 +323,18 @@ with each actual endpoint's declared acceptance checked separately.
   Native DWLS remains on its existing path. Both R packages now route through
   the configured entry, with live installed-lavaan WLSMV comparisons for
   delta/theta, grouping, loading/threshold invariance and invalid-start retries.
-  ULS/WLS/mixed presets remain unavailable.
+  ULS/WLS presets remain unavailable.
+
+- [x] **M — complete mixed DWLS under the lavaan preset (TASK-91).**
+  The shared configured engine supplies mixed FABIN3/sample starts, ordered
+  equality coordinates, `(n_g-1)/N` search weights and pinned PORT stopping.
+  Eight frozen/live HS cases cover delta/theta, one/two unequal groups and
+  configural/restricted pairs (zero factor covariance or equal loadings).
+  Prepared `estimate()`, `fit_model()` and ordinary `magmaan()` retain matching
+  endpoints; TASK-90's WLSMV retained covariance/global/nested gates pass at
+  their existing tolerances for all cases. Native outputs are bit-identical
+  across the eight fits. Mixed missing data, nonlinear constraints and finite
+  bounds remain explicit errors; ULS/WLS presets remain unavailable.
 
 - [x] **Task-59 — named simulation parity set (exit 2).** The opt-in
   `MAGMAAN_PARITY=1` test above uses fitted public lavaan datasets as normal
@@ -1223,8 +1234,9 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   Satorra-2000 delta nested tests in C++ and both R reporting interfaces.
   Complete one/two-group delta/theta Stage-1 and identical-point parity gates
   pass at 1e-5 relative tolerance; single-group delta has retained-fit gates.
-  Grouped/theta stopping differences have objective/gradient evidence in the
-  oracle observations ledger and limited endpoint validation. Missing stats
+  TASK-91 extends retained-fit validation to all eight complete mixed preset
+  delta/theta grouped/restricted cases; native grouped/theta stopping differences
+  remain recorded in the oracle observations ledger. Missing stats
   and uncomposed mixed bundles remain typed unavailable; policy is unchanged.
 
 Existing mixed delta/theta fits and inference APIs retain their documented

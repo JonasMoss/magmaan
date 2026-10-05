@@ -487,8 +487,8 @@ test_that("all-ordinal DWLS preset matches live lavaan delta theta and invarianc
             options = list(preset = "lavaan-0.7.2")), "ordinary continuous")
     }
   }
-  expect_error(fit_model(model, d, ordered = c("x1", "x2"), estimator = "DWLS",
-      options = list(preset = "lavaan-0.7.2")), "mixed presets")
+  expect_true(fit_model(model, d, ordered = c("x1", "x2"), estimator = "DWLS",
+      options = list(preset = "lavaan-0.7.2"))$converged)
 })
 
 test_that("ordinal preset retries an invalid theta start like live lavaan", {

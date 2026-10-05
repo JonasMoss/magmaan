@@ -305,6 +305,18 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
       out["ordinal_computational_weight"] = "DWLS";
       return out;
     }
+    if (d.kind == "mixed") {
+      spec::resolve_lin_constraints(ctx.pt, ctx.names);
+      const auto& stats = w ? w->mixed : d.mixed;
+      ctx.samp.S = stats.R; ctx.samp.mean = stats.mean; ctx.samp.n_obs = stats.n_obs;
+      ctx.meanstructure = true;
+      auto e = estimate::fit_ordinal_configured(ctx.pt, ctx.rep, stats,
+          options, starts, explicit_start, bounds_from_nullable(bounds),
+          estimate::OrdinalWeightKind::DWLS,
+          ordinal_parameterization_from_string(m.parameterization), &ctx.names.row_user);
+      if (!e) stop_fit(e.error());
+      return mixed_ordinal_fit_result(ctx, stats, *e, &starts, "DWLS", m.parameterization.c_str());
+    }
     if (d.kind == "raw") {
       auto h1 = estimate::lavaan_fiml_h1(d.raw, *d.pack);
       if (!h1) stop_fit(h1.error());

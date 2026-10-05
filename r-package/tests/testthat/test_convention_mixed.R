@@ -94,6 +94,88 @@ test_that("mixed WLSMV global and nested bundles match lavaan", {
   }
 })
 
+# Mixed WLSMV point gates, doctest-relative 1e-5.
+# Versioned fitting retains the actual endpoint for every reporting gate.
+test_that("mixed preset retained WLSMV bundles match lavaan", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ord <- paste0("x", 1:3)
+  for (v in ord) d[[v]] <- ordered(cut(d[[v]],
+    quantile(d[[v]], c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE))
+  syntax <- "f =~ x1 + x2 + x3\ng =~ x4 + x5 + x6"
+  relative <- function(x, y) expect_lte(max(abs(x-y)),
+    1e-5 * max(abs(x), abs(y)) + 1e-14)
+  for (p in c("delta", "theta")) for (grouped in c(FALSE, TRUE)) {
+    fits <- refs <- vector("list", 2)
+    for (i in 1:2) {
+      eq <- if (grouped && i == 2) "loadings" else NULL
+      s <- if (!grouped && i == 2) paste(syntax, "f ~~ 0*g", sep = "\n") else syntax
+      spec <- model_spec(s, ordered = ord, meanstructure = TRUE,
+        parameterization = p, group = if (grouped) "school" else NULL,
+        group_labels = if (grouped) levels(d$school) else NULL, group_equal = eq)
+      fits[[i]] <- fit_model(spec, d, estimator = "DWLS", options = list(preset = "lavaan-0.7.2"))
+      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV",
+        parameterization = p, group = if (grouped) "school" else NULL,
+        group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
+      expect_true(fits[[i]]$converged)
+      # Stage 1 uses the same threshold/negative-mean/variance/correlation
+      # ordering as lavaan; Gamma is lavaan's inspect name for NACOV.
+      obs <- lavaan::lavInspect(refs[[i]], "wls.obs")
+      gamma <- lavaan::lavInspect(refs[[i]], "gamma")
+      if (!grouped) { obs <- list(obs); gamma <- list(gamma) }
+      for (g in seq_along(obs)) {
+        relative(fits[[i]]$mixed_ordinal_stats$moments[[g]], obs[[g]])
+        relative(fits[[i]]$mixed_ordinal_stats$NACOV[[g]], gamma[[g]])
+      }
+      a <- fits[[i]]$partable; b <- lavaan::parTable(refs[[i]])
+      a <- a[a$free > 0 & !duplicated(a$free), ]; a <- a[order(a$free), ]
+      b <- b[b$free > 0 & !duplicated(b$free), ]; b <- b[order(b$free), ]
+      key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
+      ix <- match(key(a), key(b)); expect_false(anyNA(ix))
+      expect_true(all(abs(a$est - b$est[ix]) <=
+        1e-5 * (1 + pmax(abs(a$est), abs(b$est[ix])))))
+      attempt <- fits[[i]]$fitting$attempts[[1]]
+      expect_lte(max(abs(attempt$start - b$start[ix])), 1e-8)
+      expect_identical(fits[[i]]$fitting$effective$optimizer, "lavaan-0.7.2")
+      # Pin search units on identical Stage 1: independently computed
+      # polyserial moments differ slightly even when endpoints agree.
+      sample <- refs[[i]]@SampleStats
+      sample@WLS.obs <- fits[[i]]$mixed_ordinal_stats$moments
+      sample@WLS.VD <- lapply(fits[[i]]$mixed_ordinal_stats$W_dwls, diag)
+      model_at <- lavaan:::lav_model_set_parameters(refs[[i]]@Model,
+        x = a$est[match(key(b), key(a))])
+      common_objective <- lavaan:::lav_model_objective(lavmodel = model_at,
+        glist = model_at@GLIST, lavsamplestats = sample,
+        lavdata = refs[[i]]@Data, lavcache = refs[[i]]@Cache)
+      expect_lte(abs(fits[[i]]$fmin - common_objective), 1e-14)
+      handle <- prepare_model(spec, prototype = d)
+      prepared <- estimate(handle, prepare_data(handle, d),
+        estimator = "DWLS", options = list(preset = "lavaan-0.7.2"))
+      expect_equal(prepared$theta, fits[[i]]$theta, tolerance = 1e-12)
+      ours <- convention_inference(fits[[i]], "WLSMV")
+      expect_true(ours$covariance_available, info = ours$covariance_detail)
+      relative(ours$covariance, lavaan::vcov(refs[[i]])[ix, ix])
+      t <- lavaan::lavInspect(refs[[i]], "test")$scaled.shifted
+      relative(ours$test$statistic, t$stat); expect_equal(ours$test$df, t$df)
+      relative(ours$test$pvalue, t$pvalue)
+      relative(ours$test$scale, t$scaling.factor)
+      relative(ours$test$shift, t$shift.parameter)
+    }
+    ref <- lavaan::lavTestLRT(refs[[1]], refs[[2]])
+    explicit <- lavaan::lavTestLRT(refs[[1]], refs[[2]],
+      method = "satorra.2000", A.method = "delta", scaled.shifted = TRUE)
+    expect_equal(ref, explicit)
+    ours <- convention_nested(fits[[1]], fits[[2]], "WLSMV")$test
+    expect_true(ours$available, info = ours$detail)
+    relative(ours$statistic, ref[2, "Chisq diff"])
+    expect_equal(ours$df, ref[2, "Df diff"])
+    relative(ours$pvalue, ref[2, "Pr(>Chisq)"])
+    relative(ours$scale, 1/attr(ref, "scale")[[2]])
+    relative(ours$shift, attr(ref, "shift")[[2]])
+    expect_identical(convention_inference(fits[[1]], "ULSMV")$test$reason, "unsupported_model")
+  }
+})
+
 test_that("mixed compatibility returns typed refusals", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
@@ -125,4 +207,27 @@ test_that("mixed compatibility returns typed refusals", {
   expect_match(refused$covariance_detail, "complete observations")
   expect_identical(convention_nested(missing, b, "WLSMV")$test$reason, "unsupported_model")
   expect_identical(convention_nested(b, missing, "WLSMV")$test$reason, "unsupported_model")
+})
+
+test_that("mixed preset refuses missing data nonlinear constraints and bounds", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ord <- paste0("x", 1:3)
+  for (v in ord) d[[v]] <- ordered(cut(d[[v]],
+    quantile(d[[v]], c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE))
+  s <- "f =~ x1 + a*x2 + b*x3\ng =~ x4 + x5 + x6"
+  spec <- model_spec(s, ordered = ord, meanstructure = TRUE)
+  opts <- list(preset = "lavaan-0.7.2")
+  nonlinear <- model_spec(paste(s, "a == b*b", sep = "\n"), ordered = ord, meanstructure = TRUE)
+  expect_error(fit_model(nonlinear, d, estimator = "DWLS", options = opts),
+    "mixed preset excludes nonlinear constraints")
+  good <- fit_model(spec, d, estimator = "DWLS", options = opts)
+  bounds <- list(lower = rep(-Inf, length(good$theta)), upper = rep(Inf, length(good$theta)))
+  bounds$lower[1] <- .1
+  expect_error(fit_model(spec, d, estimator = "DWLS", options = opts, bounds = bounds),
+    "mixed preset excludes bounds")
+  d$x4[1] <- NA_real_
+  stats <- data_mixed_ordinal_stats_observed_from_df(d, spec, full_wls_weight = FALSE)
+  expect_error(fit_model(spec, stats, estimator = "DWLS", options = opts),
+    "mixed preset requires complete observations")
 })

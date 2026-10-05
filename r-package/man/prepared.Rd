@@ -85,7 +85,7 @@ needs full Gamma; obtain it separately with
 existing explicit inference function, without refitting.
 
 Versioned fitting options use the same configured engines as \code{fit_model()}
-for continuous ML/FIML and all-ordinal DWLS with unrestricted covariance,
+for continuous ML/FIML and ordinal/complete mixed DWLS with unrestricted covariance,
 including \code{options = list(preset = "lavaan-0.7.2")}.
 
 The interface covers the estimators listed above.

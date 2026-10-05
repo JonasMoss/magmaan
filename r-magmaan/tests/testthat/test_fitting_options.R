@@ -84,6 +84,6 @@ test_that("ordinary all-ordinal DWLS exposes the lavaan fitting preset", {
           options = list(preset = "lavaan-0.7.2")), "continuous ML or FIML")
   }
   mixed <- magmaan_model("f =~ x1+x2+x3+x4", d, ordered = c("x1", "x2"))
-  expect_error(magmaan(mixed, d, estimator = "DWLS", inference = FALSE,
-      options = list(preset = "lavaan-0.7.2")), "mixed presets")
+  expect_true(as_lab_fit(magmaan(mixed, d, estimator = "DWLS", inference = FALSE,
+      options = list(preset = "lavaan-0.7.2")))$converged)
 })

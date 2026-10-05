@@ -2301,7 +2301,11 @@ fit_ordinal_stage2 <- function(model, data,
 }
 
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
-                                   control = NULL, bounds = NULL) {
+                                   control = NULL, bounds = NULL, options = NULL) {
+  if (!is.null(options)) {
+    control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
+    optimizer <- NULL
+  }
   pt <- augment_mixed_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_dwls_mixed_ordinal")
   fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
@@ -2569,7 +2573,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   if (!is.null(options) && (!(estimator %in% c("ML", "FIML") && !ordinal_requested ||
       estimator == "DWLS" && ordinal_requested) || psd ||
       !is.null(barrier) || !is.null(cluster) || missing == "pairwise" || pairwise_moments))
-    stop("fitting options currently require ordinary continuous ML or FIML, or all-ordinal DWLS")
+    stop("fitting options currently require ordinary continuous ML or FIML, or ordinal/mixed DWLS")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
 
   if (!is.null(cluster)) {
@@ -2689,7 +2693,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
-      if (!is.null(options)) stop("fitting options require all-ordinal DWLS; mixed presets are unavailable")
+      if (!is.null(options) && estimator != "DWLS") stop("mixed fitting options require DWLS")
       if (estimator %in% c("GLS", "DLS") || !is.null(W)) stop("fit_model(): mixed fixed-weight expansion is deferred")
       if (!is.null(barrier)) stop("fit_model(): mixed/polyserial barrier fitting is deferred")
       if (identical(estimator, "ML")) {
@@ -2705,7 +2709,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
       fit <- if (identical(estimator, "DWLS")) {
         fit_dwls_mixed_ordinal(spec, data, optimizer = optimizer,
-                               control = control, bounds = bounds)
+                               control = control, bounds = bounds, options = options)
       } else {
         fit_wls_mixed_ordinal(spec, data, optimizer = optimizer,
                               control = control, bounds = bounds)

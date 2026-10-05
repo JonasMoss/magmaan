@@ -795,4 +795,126 @@ TEST_CASE("configured ordinal DWLS matches lavaan starts coordinates gradients r
       CHECK_FALSE(estimate::fit_ordinal_configured(pt,*rep,stats,options,{}, {}, {},weight,param,&table.user));
   }
 }
+TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients retries and verdicts") {
+  using namespace magmaan;
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR)+"/fitting/lavaan_mixed_0_7_2.json");
+  REQUIRE_OR_RETURN(in.good());
+  const auto root=nlohmann::json::parse(in,nullptr,false);
+  REQUIRE_OR_RETURN(!root.is_discarded());
+  auto vector=[](const nlohmann::json& a) {
+    Eigen::VectorXd v(a.is_array()?static_cast<Eigen::Index>(a.size()):1);
+    if(a.is_array()) for(Eigen::Index j=0;j<v.size();++j) v(j)=a[static_cast<std::size_t>(j)].get<double>();
+    else v(0)=a.get<double>();
+    return v;
+  };
+  auto matrix=[](const nlohmann::json& a) {
+    Eigen::MatrixXd m(static_cast<Eigen::Index>(a.size()),static_cast<Eigen::Index>(a.front().size()));
+    for(Eigen::Index i=0;i<m.rows();++i) for(Eigen::Index j=0;j<m.cols();++j)
+      m(i,j)=a[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)].get<double>();
+    return m;
+  };
+  for(const auto& c:root["cases"]) {
+    CAPTURE(c["parameterization"]); CAPTURE(c["groups"]); CAPTURE(c.value("invalid_start",false));
+    compat::lavaan::LavaanParTable table;
+    for(const auto& row:c["partable"]) {
+      table.id.push_back(row["id"]); table.lhs.push_back(row["lhs"]); table.rhs.push_back(row["rhs"]);
+      parse::Op op=parse::Op::Measurement;
+      for(auto candidate:{parse::Op::Measurement,parse::Op::Regression,parse::Op::Covariance,
+          parse::Op::Threshold,parse::Op::ResponseScale,parse::Op::Intercept,parse::Op::EqConstraint})
+        if(parse::to_string(candidate)==row["op"].get<std::string>()) op=candidate;
+      table.op.push_back(op); table.user.push_back(row["user"]); table.block.push_back(row["block"]);
+      table.group.push_back(row["group"]); table.free.push_back(row["free"]); table.exo.push_back(row["exo"]);
+      table.ustart.push_back(row["ustart"].is_null()?std::numeric_limits<double>::quiet_NaN():row["ustart"].get<double>());
+      table.label.push_back(row["label"]); table.plabel.push_back(row["plabel"]);
+    }
+    auto triple=compat::lavaan::from_lavaan_partable(table);
+    auto& pt=triple.structure;
+    if(!c["group_equal"].is_null()) {
+      pt.group_equal={spec::GroupEqual::Loadings};
+    }
+    auto rep=model::build_matrix_rep(pt,&triple.names); REQUIRE_OR_RETURN(rep);
+    data::MixedOrdinalStats stats;
+    const auto counts=vector(c["n_obs"]);
+    for(std::size_t b=0;b<c["R"].size();++b) {
+      stats.R.push_back(matrix(c["R"][b])); stats.thresholds.push_back(vector(c["thresholds"][b]));
+      stats.W_dwls.push_back(vector(c["weight"][b]).asDiagonal());
+      stats.NACOV.push_back(matrix(c["nacov"][b]));
+      stats.n_obs.push_back(static_cast<std::int64_t>(counts(static_cast<Eigen::Index>(b))));
+      stats.threshold_ov.push_back({0,0,1,1,2,2}); stats.threshold_level.push_back({1,2,1,2,1,2});
+      stats.n_levels.push_back({3,3,3,0,0,0});
+      stats.ordered.push_back({1,1,1,0,0,0});
+      stats.mean.push_back(vector(c["mean"][b]));
+      stats.moments.push_back(vector(c["moments"][b]));
+    }
+    const auto param=c["parameterization"]=="theta"?estimate::OrdinalParameterization::Theta:estimate::OrdinalParameterization::Delta;
+    estimate::FittingOptions options; options.preset="lavaan-0.7.2";
+    Eigen::VectorXd explicit_start;
+    if(!c["explicit_start"].empty()) explicit_start=vector(c["explicit_start"]);
+    auto est=estimate::fit_ordinal_configured(pt,*rep,stats,options,{},explicit_start,{},
+        estimate::OrdinalWeightKind::DWLS,param,&table.user);
+    const std::string fit_error=est ? "" : est.error().detail;
+    CAPTURE(fit_error);
+    REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    const auto& attempts=est->fitting->attempts;
+    REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
+    CHECK((estimate::fit_verdict(*est).status==estimate::FitCheck::Passed)==c["converged"].get<bool>());
+    CHECK(est->fmin==doctest::Approx(c["fmin"].get<double>()).epsilon(1e-8));
+    if(c["converged"].get<bool>()) CHECK(est->diagnostics.objective.consistent);
+    for(std::size_t i=0;i<pt.size();++i) if(pt.free[i]>0) {
+      bool found=false;
+      for(const auto& row:c["parameters"]) {
+        if(row["lhs"]!=triple.names.row_lhs[i] || row["rhs"]!=triple.names.row_rhs[i] ||
+           row["op"].get<std::string>()!=parse::to_string(pt.op[i]) || row["group"]!=pt.group[i]) continue;
+        found=true;
+        CHECK(attempts.front().start(pt.free[i]-1)==doctest::Approx(row["start"].get<double>()).epsilon(1e-9));
+        CHECK(est->theta(pt.free[i]-1)==doctest::Approx(row["est"].get<double>()).epsilon(1e-5));
+      }
+      CHECK(found);
+    }
+    auto coords=estimate::lavaan_ml_coordinates(pt); REQUIRE_OR_RETURN(coords);
+    if(coords->active()) {
+      CHECK((coords->Kmat-matrix(c["basis"])).cwiseAbs().maxCoeff()<1e-12);
+      CHECK((coords->theta0-vector(c["offset"])).norm()<1e-12);
+    }
+    auto adjusted=stats;
+    for(std::size_t b=0;b<stats.n_obs.size();++b)
+      adjusted.W_dwls[b]*=static_cast<double>(stats.n_obs[b]-1)/static_cast<double>(stats.n_obs[b]);
+    estimate::Estimates seed; seed.theta=attempts.back().start;
+    auto objective=estimate::frontier::mixed_ordinal_ls_objective(pt,*rep,adjusted,seed,
+        estimate::OrdinalWeightKind::DWLS,param); REQUIRE_OR_RETURN(objective);
+    const auto scalar=optim::scalarize(objective->problem);
+    for(std::size_t a=0;a<attempts.size();++a) {
+      const auto& actual=attempts[a]; const auto& oracle=c["attempts"][a];
+      CHECK(actual.simple_start==oracle["simple"].get<bool>());
+      CHECK(actual.standardized==oracle["standardized"].get<bool>());
+      CHECK(actual.accepted==oracle["accepted"].get<bool>());
+      const auto z=vector(oracle["start"]);
+      CHECK(actual.accepted==(actual.raw_status>=3 && actual.raw_status<=6 &&
+          std::isfinite(actual.gradient_max) && actual.gradient_max<=1e-3));
+      REQUIRE_OR_RETURN(z.size()==actual.optimizer_start.size());
+      CHECK((actual.optimizer_start-z).cwiseAbs().maxCoeff()<1e-9);
+      CHECK((actual.parameter_scale-vector(oracle["parameter_scale"])).norm()<1e-9);
+      CHECK((actual.port_scale-vector(oracle["port_scale"])).norm()<1e-9);
+      if(!oracle["gradient"].empty()) {
+        const auto g=vector(oracle["gradient"]);
+        REQUIRE_OR_RETURN(g.size()==actual.optimizer_gradient.size());
+        CHECK((actual.optimizer_gradient-g).cwiseAbs().maxCoeff()<1e-6);
+        Eigen::VectorXd identical_gradient;
+        scalar.f(vector(oracle["theta"]),identical_gradient);
+        identical_gradient.array()/=actual.parameter_scale.array();
+        if(coords->active()) identical_gradient=(coords->Kmat.transpose()*identical_gradient).eval();
+        CHECK((identical_gradient-g).cwiseAbs().maxCoeff()<1e-9);
+        const Eigen::VectorXd expanded=coords->active() ?
+            Eigen::VectorXd(coords->Kmat*actual.optimizer_end+coords->theta0) : actual.optimizer_end;
+        Eigen::VectorXd actual_gradient;
+        REQUIRE_OR_RETURN(std::isfinite(scalar.f(expanded.cwiseQuotient(actual.parameter_scale),actual_gradient)));
+        actual_gradient.array()/=actual.parameter_scale.array();
+        if(coords->active()) actual_gradient=(coords->Kmat.transpose()*actual_gradient).eval();
+        CHECK((actual.optimizer_gradient-actual_gradient).cwiseAbs().maxCoeff()<1e-10);
+      }
+    }
+    for(auto weight:{estimate::OrdinalWeightKind::ULS,estimate::OrdinalWeightKind::WLS})
+      CHECK_FALSE(estimate::fit_ordinal_configured(pt,*rep,stats,options,{}, {}, {},weight,param,&table.user));
+  }
+}
 #endif

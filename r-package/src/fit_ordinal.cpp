@@ -1084,6 +1084,23 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = true;
+  if (control.isNotNull()) {
+    Rcpp::List ctl(control.get());
+    if (ctl.containsElementNamed("fitting_options")) {
+      check_optim_control_names(ctl, {"fitting_options", "start"});
+      if (optimizer.isNotNull()) Rcpp::stop("select optimizer through fitting options");
+      auto options = fitting_options_from(Rcpp::as<Rcpp::List>(ctl["fitting_options"]));
+      Eigen::VectorXd explicit_start;
+      if (ctl.containsElementNamed("start")) explicit_start = Rcpp::as<Eigen::VectorXd>(ctl["start"]);
+      auto est = magmaan::estimate::fit_ordinal_configured(ctx.pt, ctx.rep, stats,
+          options, starts, explicit_start, bounds_from_nullable(bounds),
+          magmaan::estimate::OrdinalWeightKind::DWLS, parameterization,
+          &ctx.names.row_user);
+      if (!est) stop_fit(est.error());
+      return mixed_ordinal_fit_result(ctx, stats, *est, &starts, "DWLS",
+                                parameterization_name.c_str());
+    }
+  }
   const Eigen::VectorXd x0 = mixed_ordinal_starts_or_stop(ctx, stats, starts);
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),

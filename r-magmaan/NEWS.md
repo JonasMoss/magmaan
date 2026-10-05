@@ -1,10 +1,17 @@
 # magmaan 0.2.0 (in development)
 
+- The lavaan 0.7.2 fitting preset now supports complete mixed DWLS, including
+  delta/theta and grouped equal loadings. It reproduces lavaan's starts,
+  group weighting and stopping through fresh and prepared fitting. Retained
+  WLSMV covariance/global/nested reporting passes the existing tolerances in
+  all eight mixed parity cases. Native fitting is unchanged; missing mixed
+  observations, nonlinear constraints and finite bounds remain unsupported.
+
 - Complete mixed DWLS fits support the WLSMV lavaan compatibility bundle for
   covariance, Wald intervals, scaled-shifted global and Satorra-2000 nested
   reporting. One/two-group delta/theta reporting is gated at identical parameter
-  points; grouped/theta retained endpoints have limited validation because
-  optimizer stopping differs. The ordinary policy is unchanged; missing mixed
+  points; the fitting preset additionally validates grouped/theta retained
+  endpoints, while native optimizer stopping differs. The ordinary policy is unchanged; missing mixed
   stats and other mixed bundles retain typed unavailable reasons.
 
 - Pairwise-missing ordinal and mixed DWLS estimated-weight inference evaluates

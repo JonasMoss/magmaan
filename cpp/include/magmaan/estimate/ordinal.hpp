@@ -1056,8 +1056,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                         OrdinalParameterization::Delta,
                     const std::vector<std::int8_t>* row_user = nullptr);
 
-// Versioned all-ordinal DWLS search. Native fitting remains in
-// fit_ordinal_bounded; ULS/WLS and mixed data have no versioned preset.
+// Versioned ordinal and complete mixed DWLS search. Native fitting remains
+// in the bounded fitters; ULS/WLS have no versioned preset.
 fit_expected<Eigen::VectorXd>
 lavaan_ordinal_start_values(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& stats,
@@ -1067,6 +1067,21 @@ lavaan_ordinal_start_values(spec::LatentStructure pt,
 fit_expected<Estimates>
 fit_ordinal_configured(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const FittingOptions& options, spec::Starts starts = {},
+    const Eigen::VectorXd& explicit_start = {}, Bounds bounds = {},
+    OrdinalWeightKind weights = OrdinalWeightKind::DWLS,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta,
+    const std::vector<std::int8_t>* row_user = nullptr);
+
+fit_expected<Eigen::VectorXd>
+lavaan_ordinal_start_values(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& stats,
+    spec::Starts starts = {}, bool simple = false,
+    const std::vector<std::int8_t>* row_user = nullptr);
+
+fit_expected<Estimates>
+fit_ordinal_configured(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& stats,
     const FittingOptions& options, spec::Starts starts = {},
     const Eigen::VectorXd& explicit_start = {}, Bounds bounds = {},
     OrdinalWeightKind weights = OrdinalWeightKind::DWLS,

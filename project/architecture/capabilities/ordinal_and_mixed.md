@@ -88,7 +88,15 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   live lavaan tests cover delta/theta, grouped loading/threshold invariance,
   starts, coordinates, acceptance gradients and invalid-start retries.
   Native fitting is unchanged.
-  ULS/WLS and mixed versioned presets remain unavailable.
+  Complete mixed DWLS also uses this configured engine (TASK-91), with sample
+  thresholds/continuous means, half continuous-variance residual starts,
+  FABIN3 loadings and sample-response retry scales. Eight frozen HS cases and
+  installed-lavaan retained WLSMV gates cover delta/theta, one/two unequal
+  groups, a zero factor covariance and equal loadings. Fresh `fit_model()`,
+  prepared `estimate()` and ordinary `magmaan()` agree. Missing observations,
+  nonlinear constraints and finite bounds return explicit fit errors for the
+  mixed preset. Native mixed fitting remains unchanged; ULS/WLS versioned
+  presets remain unavailable.
 - Explicit ordinal rows retain user provenance through lab DWLS/ULS/WLS,
   PSD, fixed-stage-2 and native prepared handles. DELTA response-scale `~*~`
   rows are live coordinates: free, labelled/equal, linearly constrained or
@@ -1121,9 +1129,14 @@ both ordinary argument orders and cached/serialized bundles. Stage-1 moments
 and NACOV agree before reporting is compared. Reporting at identical oracle
 parameter points has strict 1e-5 relative lab gates; a checked-in single-group
 mixed golden also gates the composer. Single-group delta additionally has
-strict retained-fit gates. Grouped and theta endpoint comparisons have limited
-validation: optimizer stopping differences are recorded with objective and
-canonical tangent-gradient evidence in the oracle observations ledger. No
+strict retained-fit gates for native fits. Under `preset = "lavaan-0.7.2"`,
+all eight one/two-group delta/theta configural/restricted retained fits pass
+these same reporting tolerances, including nested statistics, df, p, scale
+and shift. Search objectives agree with black-box lavaan evaluations on
+identical Stage 1 within 1e-14; the small independently computed Stage-1
+polyserial differences are kept separate from the search-unit gate.
+Native grouped/theta endpoints retain the stopping differences recorded with
+objective and canonical tangent-gradient evidence in the oracle observations ledger. No
 oracle exemption or tolerance widening is used. This is numerical compatibility,
 not a policy calibration claim. Missing-observation mixed stats and uncomposed
 mixed bundles (including WLSM, ULSMV and plain DWLS/WLS) return `unsupported_model`;

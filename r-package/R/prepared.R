@@ -207,10 +207,9 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
     if ("control" %in% names(route_args)) route_args["control"] <- list(control)
   }
   if (!is.null(options)) {
-    if (model$kind == "mixed") stop("mixed presets are not supported")
     if (!(estimator %in% c("ML", "FIML") && model$kind == "moments" ||
-          estimator == "DWLS" && model$kind == "ordinal") || covariance != "unrestricted")
-      stop("fitting options currently require ordinary continuous ML or FIML, or all-ordinal DWLS")
+          estimator == "DWLS" && model$kind %in% c("ordinal", "mixed")) || covariance != "unrestricted")
+      stop("fitting options currently require ordinary continuous ML or FIML, or ordinal/mixed DWLS")
     control <- .fitting_control(options, control, optimizer)
     optimizer <- NULL
   }
