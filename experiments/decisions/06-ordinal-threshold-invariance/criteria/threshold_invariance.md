@@ -1,6 +1,6 @@
-# Threshold-invariance calibration — registration draft
+# Threshold-invariance calibration — registered criteria
 
-Status: draft for merger review and commit before production. Smoke and pilot
+Status: registered by the merger on 2026-10-05, before production. Smoke and pilot
 are development timing/availability controls, never confirming evidence.
 No default change is authorized by this study.
 
@@ -18,8 +18,8 @@ variance; categories 4, 5, 7; symmetric normal-quantile cuts or cuts shifted .65
 N per group 250, 500, 1000; theta and delta parameterizations; correct model or
 omitted cross-loading .3 on item 2 onto factor 2, equal in both groups. For the
 one-factor misspecified family (where a cross-loading is undefined), use an
-omitted residual correlation .3 between items 1 and 2. This explicit design
-extension needs merger review. Identical distributions across groups define the
+omitted residual correlation .3 between items 1 and 2. The merger accepts this
+extension (2026-10-05). Identical distributions across groups define the
 pseudo-null even under misspecification. Three-category controls record the
 zero-df `equivalent_models` reason only; they never gate calibration or power.
 
@@ -48,3 +48,14 @@ arms. The default remains provisional until the registered production evidence.
 
 Cost uses pilot CPU seconds by factor/parameterization family extrapolated over
 the full grid. It excludes container build/startup and is a planning estimate.
+
+
+## Registration amendment (merger, 2026-10-05, before production)
+
+The production seed base is 830150001 (seed = base + 10000 * cell_id +
+replicate). With at most 384 cells its range, 830160001 to 834,0xx,xxx, is
+disjoint from the smoke (818130001) and pilot (818140001) ranges, which keep
+their development values. The one-factor omitted residual correlation .3
+between items 1 and 2 is accepted as the misspecified family for one factor.
+The WLSMV comparator returns a typed not_nested reason for this moment-nested
+step and is retained as such. Everything else is registered as written above.

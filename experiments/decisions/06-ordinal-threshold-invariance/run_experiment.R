@@ -4,7 +4,7 @@ if("--help" %in% args) {
   cat("Threshold invariance calibration (criteria draft; production requires merger registration).\n",
       "Rscript run_experiment.R --smoke|--pilot|--production [--cell 1,2] [--workers 1|2] --out-dir PATH\n",
       "Smoke: 2 draws/cell; pilot: 20; production: 2000 null/1000 power.\n",
-      "Seeds: 818130001/818140001/818150001 + 10000*cell + replicate. Fresh output required.\n")
+      "Seeds: 818130001/818140001/830150001 + 10000*cell + replicate. Fresh output required.\n")
   quit(status=0)
 }
 file <- sub("^--file=","",grep("^--file=",commandArgs(FALSE),value=TRUE)[1])
@@ -25,7 +25,7 @@ if(!is.null(opt("--cell"))) {
 out <- opt("--out-dir",file.path(study,"results",mode))
 if(dir.exists(out)) stop("Output exists: use a fresh directory")
 dir.create(out,recursive=TRUE)
-seed_base <- c(smoke=818130001L,pilot=818140001L,production=818150001L)[[mode]]
+seed_base <- c(smoke=818130001L,pilot=818140001L,production=830150001L)[[mode]]
 write_csv(cells,file.path(out,"cells.csv"))
 write_metadata(file.path(out,"metadata.csv"),list(mode=mode,seed_base=seed_base,
   workers=workers,git_head=system2("git",c("-C",root,"rev-parse","HEAD"),stdout=TRUE),

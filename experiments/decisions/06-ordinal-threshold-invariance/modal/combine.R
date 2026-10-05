@@ -5,7 +5,7 @@ file <- sub("^--file=","",grep("^--file=",commandArgs(FALSE),value=TRUE)[1])
 study <- dirname(dirname(normalizePath(file))); root <- normalizePath(file.path(study,"../../.."))
 source(file.path(root,"experiments/_support/R/helpers.R")); source(file.path(study,"R/study.R"))
 run <- get("--run-dir"); mode <- get("--mode")
-seed <- c(smoke=818130001L,pilot=818140001L,production=818150001L)[[mode]]
+seed <- c(smoke=818130001L,pilot=818140001L,production=830150001L)[[mode]]
 cells <- threshold_cells()
 if("--cell" %in% args) cells <- cells[cells$cell_id %in% as.integer(strsplit(get("--cell"),",",fixed=TRUE)[[1]]),]
 files <- file.path(run,"cells",sprintf("cell_%03d",cells$cell_id),"raw.rds")
