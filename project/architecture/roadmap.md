@@ -420,7 +420,10 @@ nonlinear constraints. Ordinary `magmaan()` accepts explicit
 always succeeds, and fitting refuses conditional observed covariates,
 NOMEANSTRUCTURE and summary data without MEANS with a classed error naming the
 input edit (`x1 x2;` brings every covariate into the joint model, as Mplus 9.1
-does; probe P-MS08b).
+does; probe P-MS08b). A data-free output gate (`check_mplus_outputs.R`) checks
+groups, free parameters and df for all 130 accepted inputs among the corpus's
+1,337 Mplus outputs; it found and fixed silent label loss in consecutive
+bracket groups (means, thresholds, scales) and leaves no mismatch.
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
