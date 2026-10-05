@@ -1,0 +1,38 @@
+---
+title: "Association-ML policy calibration"
+format:
+  html:
+    toc: true
+    html-math-method: mathml
+execute:
+  echo: false
+---
+
+## Default register
+
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Ordinary association-ML inference | Typed unavailable | Open | Production calibration pending |
+| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; pilot pending |
+| Lab global / nested references | All, SB, PEBA4 | Open | Pilot and production pending |
+| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; pilot pending |
+
+## Question and short answer
+
+Does the lab association-ML recipe calibrate well enough for ordinary exposure?
+This registration has no calibration evidence yet. The bounded pilot will
+check mechanics and cost; ordinary exposure remains pending production.
+
+## Evidence
+
+Frozen CSV summaries will be read from this study's own `results/pilot/`.
+
+## Caveats
+
+Tiny smoke and pilot rates cannot settle defaults. Coverage uses association-ML
+pseudo-true values, with separate DWLS targets. Global rejection under latent
+non-normality or model misspecification is descriptive.
+
+## Reproduce
+
+See `Rscript run_experiment.R --help`. Production requires separate authorization.

@@ -1,0 +1,8 @@
+*
+!.gitignore
+!smoke/
+!pilot/
+smoke/*
+pilot/*
+!smoke/*.csv
+!pilot/*.csv
