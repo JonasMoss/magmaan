@@ -363,7 +363,11 @@ Association ML (Gaussian ML on Stage-1 polychorics) has a lab-only
 `association_ml_ij()` (TASK-32.2): observed correlation-map sensitivity and
 exact Stage-1 transport give active/full covariance with joint threshold
 influence; ordinary association inference stays refused until reference laws,
-MI/releases and calibration (TASK-32 subcards 3-5).
+MI/releases and calibration (TASK-32 subcards 4-5). Its lab global and nested
+spectral tests (`association_ml_global_test()`, `association_ml_nested_test()`,
+TASK-32.3) report All, SB and PEBA4 on the exact Stage-1 Gamma, with the
+correlation-ML residual metric for the global test and the observed-H/IJ
+parameter-space law for nested tests.
 The exact ordinal and mixed first-stage Jacobians use block-sparse mean-score
 finite differences (TASK-83), gated against the dense reference at 1e-7: a
 fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
