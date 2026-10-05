@@ -11,3 +11,17 @@ score-diagnostic/smoke*/
 score-diagnostic/*/raw/
 score-diagnostic/production-replay/
 score-diagnostic/production-replay-fixed/
+
+# TASK-75 freezes only registered pilot summaries and pricing provenance.
+structured-mean/*/
+!structured-mean/pilot-2026-10-05/
+structured-mean/pilot-2026-10-05/*
+!structured-mean/pilot-2026-10-05/cells.csv
+!structured-mean/pilot-2026-10-05/population.csv
+!structured-mean/pilot-2026-10-05/rates.csv
+!structured-mean/pilot-2026-10-05/paired.csv
+!structured-mean/pilot-2026-10-05/timing.csv
+!structured-mean/pilot-2026-10-05/failures.csv
+!structured-mean/pilot-2026-10-05/checks.csv
+!structured-mean/pilot-2026-10-05/decisions.csv
+!structured-mean/pilot-2026-10-05/metadata.csv
