@@ -1,4 +1,5 @@
 #include "ordinal_test_helpers.hpp"
+#include "../../src/data/detail_gamma_reference.hpp"
 
 namespace {
 
@@ -452,4 +453,82 @@ TEST_CASE("Ordinal exact sampling refuses missing data and invalid steps") {
     CHECK_FALSE(magmaan::data::ordinal_moment_sampling_influence(X,{2,2},th,R,step).has_value());
   X(0,0) = -1;
   CHECK_FALSE(magmaan::data::ordinal_moment_sampling_influence(X,{2,2},th,R).has_value());
+}
+
+TEST_CASE("Sparse Gamma movement matches dense FD for ordinal and mixed missing groups") {
+  for (bool mixed : {false, true}) for (int categories : {2, 5, 7})
+    for (int groups : {1, 2}) for (int group = 0; group < groups; ++group) {
+      CAPTURE(mixed); CAPTURE(categories); CAPTURE(groups); CAPTURE(group);
+      std::mt19937 rng(static_cast<unsigned>(89000 + categories * 100 + groups * 10 + group));
+      std::normal_distribution<double> normal;
+      const std::vector<std::int32_t> ordered = mixed
+          ? std::vector<std::int32_t>{1, 0, 1, 0}
+          : std::vector<std::int32_t>{1, 1, 1, 1};
+      std::vector<std::int32_t> levels(4, categories);
+      Eigen::VectorXd thresholds((mixed ? 2 : 4) * (categories - 1));
+      Eigen::Index start = 0;
+      for (int j = 0; j < 4; ++j) {
+        if (!ordered[static_cast<std::size_t>(j)]) { levels[static_cast<std::size_t>(j)] = 0; continue; }
+        for (int k = 0; k < categories - 1; ++k)
+          thresholds(start++) = categories == 2 ? 0.35 : -1.15 + 2.6 * k / (categories - 2.0) + 0.08 * j;
+      }
+      Eigen::MatrixXd x(500, 4);
+      for (Eigen::Index r = 0; r < x.rows(); ++r) {
+        const double factor = normal(rng);
+        Eigen::Index offset = 0;
+        for (Eigen::Index j = 0; j < x.cols(); ++j) {
+          const double z = 0.5 * factor + normal(rng);
+          if (ordered[static_cast<std::size_t>(j)]) {
+            int category = 1;
+            for (int k = 0; k < categories - 1; ++k) category += z > thresholds(offset + k);
+            x(r, j) = category;
+            offset += categories - 1;
+          } else x(r, j) = 0.2 + 1.1 * z;
+        }
+      }
+      Eigen::MatrixXd R = Eigen::MatrixXd::Constant(4, 4, 0.2);
+      R.diagonal().setOnes();
+      Eigen::VectorXd mean = Eigen::VectorXd::Zero(4);
+      for (int j = 0; j < 4; ++j) if (!ordered[static_cast<std::size_t>(j)]) {
+        R(j, j) = 1.3; mean(j) = 0.2;
+      }
+      for (bool missing : {false, true}) {
+        CAPTURE(missing);
+        Eigen::MatrixXd data = x;
+        if (missing) for (Eigen::Index r = 0; r < data.rows(); ++r)
+          for (Eigen::Index j = 0; j < data.cols(); ++j)
+            if ((r * 7 + j * 11) % 17 == 0)
+              data(r, j) = std::numeric_limits<double>::quiet_NaN();
+        auto sparse = missing
+            ? magmaan::data::mixed_observed_gamma_diag_jacobian_fd(data, ordered, levels, thresholds, mean, R, 1e-4)
+            : magmaan::data::mixed_gamma_diag_jacobian_fd(data, ordered, levels, thresholds, mean, R, 1e-4);
+        auto dense = missing
+            ? magmaan::data::mixed_observed_gamma_diag_jacobian_fd_dense(data, ordered, levels, thresholds, mean, R, 1e-4)
+            : magmaan::data::mixed_gamma_diag_jacobian_fd_dense(data, ordered, levels, thresholds, mean, R, 1e-4);
+        REQUIRE_MESSAGE(sparse.has_value(), (sparse.has_value() ? "" : sparse.error().detail));
+        REQUIRE(dense.has_value());
+        CHECK(sparse->isApprox(*dense, 1e-8));
+        CHECK(((sparse.value() - dense.value()).array().abs() /
+              (1.0 + dense->array().abs())).maxCoeff() <= 1e-8);
+        if (!mixed) {
+          Eigen::MatrixXi cat(data.rows(), data.cols());
+          for (Eigen::Index r = 0; r < data.rows(); ++r)
+            for (Eigen::Index j = 0; j < data.cols(); ++j)
+              cat(r, j) = std::isfinite(data(r, j)) ? static_cast<int>(data(r, j)) - 1 : -1;
+          auto ordinal = missing
+              ? magmaan::data::ordinal_observed_gamma_diag_jacobian_fd(cat, levels, thresholds, R, 1e-4)
+              : magmaan::data::ordinal_gamma_diag_jacobian_fd(cat, levels, thresholds, R, 1e-4);
+          REQUIRE_MESSAGE(ordinal.has_value(), (ordinal.has_value() ? "" : ordinal.error().detail));
+          CHECK(ordinal->isApprox(*dense, 1e-8));
+          CHECK(((ordinal.value() - dense.value()).array().abs() /
+                (1.0 + dense->array().abs())).maxCoeff() <= 1e-8);
+          if (missing) {
+            auto reference = magmaan::data::ordinal_observed_gamma_diag_jacobian_fd_dense(cat, levels, thresholds, R, 1e-4);
+            REQUIRE(reference.has_value());
+            CHECK(((ordinal.value() - reference.value()).array().abs() /
+                  (1.0 + reference->array().abs())).maxCoeff() <= 1e-8);
+          }
+        }
+      }
+    }
 }

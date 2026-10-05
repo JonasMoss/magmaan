@@ -1,5 +1,9 @@
 # magmaan 0.2.0 (in development)
 
+- Pairwise-missing ordinal and mixed DWLS estimated-weight inference evaluates
+  Gamma-diagonal movement with sparse item/pair finite differences, reducing
+  post-fit cost without changing inference.
+
 - Mixed DWLS estimated-weight inference computes diagonal Gamma influence
   from sparse case blocks, reducing post-fit cost without changing inference.
 

@@ -1,0 +1,33 @@
+#pragma once
+
+#include "magmaan/data/ordinal.hpp"
+
+// Dense global FD paths retained as callable numerical references.
+namespace magmaan::data {
+
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_diag_jacobian_fd_dense(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
+post_expected<Eigen::MatrixXd>
+mixed_gamma_diag_jacobian_fd_dense(const Eigen::MatrixXd& X,
+                             const std::vector<std::int32_t>& ordered,
+                             const std::vector<std::int32_t>& levels,
+                             const Eigen::VectorXd& thresholds,
+                             const Eigen::VectorXd& mean,
+                             const Eigen::MatrixXd& R,
+                             double h_rel = 1e-4);
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_jacobian_fd_dense(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-4);
+
+}  // namespace magmaan::data

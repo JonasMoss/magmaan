@@ -963,6 +963,14 @@ ordinary-user default.
   require 1e-10 relative agreement. Policy and smoke timings are recorded in
   the task completion summary.
 
+- [x] **TASK-89 — sparse Gamma-diagonal kappa movement.** Extend the
+  complete-ordinal category-count FD to pairwise-missing data, including
+  singleton-observed marginal contributions. Mixed complete/observed FD uses
+  incident item/pair subsystems with the original step rule and global marginal
+  PD cutoff. Dense callable references gate binary/five/seven-category,
+  skew-threshold, one/two-group cases at 1e-8 relative agreement; policy/IJ/MI
+  and jackknife tests retain their existing assertions.
+
 - [ ] **M — profile cell-score cost and repeated post-fit reuse.** Measure
   multi-category work before another algorithm change; retain reusable influence
   and cache ownership. **Check:** equivalent ingredients, setup/fit/reporting

@@ -25,6 +25,7 @@
 
 #include "detail_linalg.hpp"
 #include "detail_sampling_reference.hpp"
+#include "detail_gamma_reference.hpp"
 
 namespace magmaan::data {
 
@@ -1937,7 +1938,7 @@ struct GammaDiagonalWorkspace {
 
 post_expected<GammaDiagonalWorkspace> gamma_diagonal_workspace(
     const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
-    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R) {
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R, bool observed = false) {
   const Eigen::Index p = Xcat.cols();
   if (Xcat.rows() == 0 || p == 0 || levels.size() != static_cast<std::size_t>(p) ||
       R.rows() != p || R.cols() != p || !R.allFinite() || !thresholds.allFinite()) {
@@ -1963,6 +1964,7 @@ post_expected<GammaDiagonalWorkspace> gamma_diagonal_workspace(
     Eigen::VectorXd counts = Eigen::VectorXd::Zero(levels[jz]);
     for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
       const int c = Xcat(r, j);
+      if (observed && c < 0) continue;
       if (c < 0 || c >= levels[jz]) {
         return std::unexpected(make_err(PostError::Kind::NumericIssue,
             "ordinal Gamma diagonal: category outside threshold range (complete data required)"));
@@ -1997,8 +1999,10 @@ GammaDiagonalCells gamma_diagonal_cells(const Eigen::MatrixXi& Xcat,
       out.category_j(cell) = static_cast<int>(cj);
     }
   }
-  for (Eigen::Index r = 0; r < Xcat.rows(); ++r)
+  for (Eigen::Index r = 0; r < Xcat.rows(); ++r) {
+    if (Xcat(r, i) < 0 || Xcat(r, j) < 0) continue;
     out.counts(Xcat(r, i) * nj + Xcat(r, j)) += 1.0;
+  }
   return out;
 }
 
@@ -2011,7 +2015,11 @@ struct GammaDiagonalPair {
 
 post_expected<GammaDiagonalPair> gamma_diagonal_pair(
     const GammaDiagonalCells& cells, const GammaDiagonalItem& item_i,
-    const GammaDiagonalItem& item_j, double rho, double n) {
+    const GammaDiagonalItem& item_j, double rho, double n, bool observed = false) {
+  if (observed && cells.counts.sum() < 2.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal Gamma diagonal: pair has fewer than two observed rows"));
+  }
   auto scores = ordinal_pair_scores(cells.category_i, cells.category_j, rho,
       item_i.thresholds, item_j.thresholds);
   if (!scores) return std::unexpected(scores.error());
@@ -2021,7 +2029,7 @@ post_expected<GammaDiagonalPair> gamma_diagonal_pair(
   const Eigen::VectorXd weighted_rho =
       (cells.counts.array() * scores->rho.array()).matrix();
   const double a22 = weighted_rho.dot(scores->rho);
-  if (!(a22 > 0.0) || !std::isfinite(a22)) {
+  if (!(a22 > (observed ? 1e-12 : 0.0)) || !std::isfinite(a22)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ordinal Gamma diagonal: singular polychoric score block"));
   }
@@ -2042,6 +2050,19 @@ post_expected<GammaDiagonalPair> gamma_diagonal_pair(
   sc.col(last) = scores->rho;
   out.influence = n * sc * out.inverse.transpose();
   out.gamma = out.influence.transpose() * cells.counts.asDiagonal() * out.influence / n;
+  if (observed) {
+    // Rows observing only one endpoint still contribute its marginal influence
+    // to the pair sandwich. Overlap cell counts alone would omit these terms.
+    Eigen::VectorXd only_i = item_i.counts, only_j = item_j.counts;
+    for (Eigen::Index cell = 0; cell < cells.counts.size(); ++cell) {
+      only_i(cells.category_i(cell)) -= cells.counts(cell);
+      only_j(cells.category_j(cell)) -= cells.counts(cell);
+    }
+    const Eigen::MatrixXd gi = n * item_i.scores * out.inverse.leftCols(li).transpose();
+    const Eigen::MatrixXd gj = n * item_j.scores * out.inverse.middleCols(li, lj).transpose();
+    out.gamma.noalias() += gi.transpose() * only_i.asDiagonal() * gi / n;
+    out.gamma.noalias() += gj.transpose() * only_j.asDiagonal() * gj / n;
+  }
   out.scores = std::move(*scores);
   if (!out.gamma.allFinite()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -2339,16 +2360,16 @@ static post_expected<Eigen::MatrixXd> observed_gamma_at_kappa(
 
 }  // namespace
 
-post_expected<Eigen::MatrixXd>
-ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
+static post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_jacobian_fd_impl(const Eigen::MatrixXi& Xcat,
                                const std::vector<std::int32_t>& levels,
                                const Eigen::VectorXd& thresholds,
-                               const Eigen::MatrixXd& R, double h_rel) {
+                               const Eigen::MatrixXd& R, double h_rel, bool observed) {
   if (!(h_rel > 0.0) || !std::isfinite(h_rel)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ordinal_gamma_diag_jacobian_fd: step must be finite and positive"));
   }
-  auto ws = gamma_diagonal_workspace(Xcat, levels, thresholds, R);
+  auto ws = gamma_diagonal_workspace(Xcat, levels, thresholds, R, observed);
   if (!ws) return std::unexpected(ws.error());
   const Eigen::Index p = Xcat.cols();
   const double n = static_cast<double>(Xcat.rows());
@@ -2389,20 +2410,20 @@ ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
       const auto cells = gamma_diagonal_cells(Xcat, i, j, levels[iz], levels[jz]);
       const double rho = R(i, j);
       const double h = h_rel * std::max(1.0, std::abs(rho));
-      auto gp = gamma_diagonal_pair(cells, item_i, item_j, rho + h, n);
+      auto gp = gamma_diagonal_pair(cells, item_i, item_j, rho + h, n, observed);
       if (!gp) return std::unexpected(gp.error());
-      auto gm = gamma_diagonal_pair(cells, item_i, item_j, rho - h, n);
+      auto gm = gamma_diagonal_pair(cells, item_i, item_j, rho - h, n, observed);
       if (!gm) return std::unexpected(gm.error());
       D(row, row) = (gp->gamma(last, last) - gm->gamma(last, last)) / (2.0 * h);
       for (const auto v : {iz, jz}) {
         for (std::size_t k = 0; k < plus[v].size(); ++k) {
           auto tp = gamma_diagonal_pair(cells,
               v == iz ? plus[v][k] : item_i,
-              v == jz ? plus[v][k] : item_j, rho, n);
+              v == jz ? plus[v][k] : item_j, rho, n, observed);
           if (!tp) return std::unexpected(tp.error());
           auto tm = gamma_diagonal_pair(cells,
               v == iz ? minus[v][k] : item_i,
-              v == jz ? minus[v][k] : item_j, rho, n);
+              v == jz ? minus[v][k] : item_j, rho, n, observed);
           if (!tm) return std::unexpected(tm.error());
           const Eigen::Index col = ws->starts[v] + static_cast<Eigen::Index>(k);
           D(row, col) = (tp->gamma(last, last) - tm->gamma(last, last)) /
@@ -2412,6 +2433,13 @@ ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
     }
   }
   return D;
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R, double h_rel) {
+  return ordinal_gamma_diag_jacobian_fd_impl(Xcat, levels, thresholds, R, h_rel, false);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -2462,7 +2490,7 @@ ordinal_gamma_jacobian_fd(const Eigen::MatrixXi& Xcat,
 }
 
 post_expected<Eigen::MatrixXd>
-ordinal_observed_gamma_diag_jacobian_fd(
+ordinal_observed_gamma_diag_jacobian_fd_dense(
     const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
     const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R,
     double h_rel) {
@@ -2504,6 +2532,18 @@ ordinal_observed_gamma_diag_jacobian_fd(
     D.col(l) = (gp->diagonal() - gm->diagonal()) / (2.0 * h);
   }
   return D;
+}
+
+// Zero-count missing cells retain the full n scale and item-specific margins.
+post_expected<Eigen::MatrixXd>
+ordinal_observed_gamma_diag_jacobian_fd(
+    const Eigen::MatrixXi& Xcat, const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::MatrixXd& R, double h_rel) {
+  if (Xcat.rows() < 2) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal observed sparse Gamma Jacobian: fewer than two rows"));
+  }
+  return ordinal_gamma_diag_jacobian_fd_impl(Xcat, levels, thresholds, R, h_rel, true);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -3819,6 +3859,35 @@ struct SamplingScoreMeans {
   }
 };
 
+post_expected<std::pair<double, double>> mixed_marginal_spectrum(
+    const MixedGammaAssembly& a, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels) {
+  double smallest = kInf, largest = 0.0;
+  Eigen::Index start = 0, cp = 0;
+  for (Eigen::Index j = 0; j < static_cast<Eigen::Index>(ordered.size()); ++j) {
+    Eigen::MatrixXd score;
+    if (ordered[static_cast<std::size_t>(j)]) {
+      const Eigen::Index len = levels[static_cast<std::size_t>(j)] - 1;
+      score = a.scores.middleCols(start, len);
+      start += len;
+    } else {
+      score.resize(a.scores.rows(), 2);
+      score.col(0) = a.scores.col(a.nth + cp);
+      score.col(1) = a.scores.col(a.nth + a.n_cont + cp);
+      ++cp;
+    }
+    const Eigen::MatrixXd bread = score.transpose() * score;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(bread);
+    if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed sparse Gamma Jacobian: marginal eigendecomposition failed"));
+    }
+    smallest = std::min(smallest, es.eigenvalues().minCoeff());
+    largest = std::max(largest, es.eigenvalues().maxCoeff());
+  }
+  return std::pair{smallest, largest};
+}
+
 post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     const Eigen::MatrixXd& X,
     const std::vector<std::int32_t>& ordered,
@@ -3831,7 +3900,8 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     bool observed,
     bool sampling = false,
     bool sparse_sampling = true,
-    bool return_jacobian = false) {
+    bool return_jacobian = false,
+    double unchanged_min = kInf, double unchanged_max = 0.0) {
   auto base_or = observed
       ? mixed_observed_gamma_assembly_at_kappa(
             X, ordered, levels, thresholds, mean, R, false)
@@ -3952,6 +4022,17 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
         : mixed_gamma_assembly_at_kappa(
               X, ordered, levels, th_m, mean_m, R_m, false);
     if (!gm_or.has_value()) return std::unexpected(gm_or.error());
+    if (unchanged_max > 0.0) {
+      for (const auto* perturbed : {&*gp_or, &*gm_or}) {
+        auto spectrum = mixed_marginal_spectrum(*perturbed, ordered, levels);
+        if (!spectrum) return std::unexpected(spectrum.error());
+        if (!(std::min(unchanged_min, spectrum->first) >
+              1e-10 * std::max(1.0, std::max(unchanged_max, spectrum->second)))) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "mixed sparse Gamma Jacobian: global marginal bread is not positive definite"));
+        }
+      }
+    }
     if (sampling) {
       D.col(l) = (gp_or->scores.colwise().mean() -
                   gm_or->scores.colwise().mean()).transpose() / (2.0 * h);
@@ -4044,8 +4125,122 @@ mixed_moment_sampling_influence(
       X, ordered, levels, thresholds, mean, R, h_rel, true, false, true);
 }
 
+namespace {
+
+// Local mixed moment indices map back to [thresholds; -means; variances;
+// associations]. Continuous mean/variance changes affect every incident pair,
+// including the covariance transform, rather than just one association.
+post_expected<Eigen::MatrixXd> mixed_gamma_diag_jacobian_sparse(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R,
+    double h_rel, bool observed) {
+  auto base = observed
+      ? mixed_observed_gamma_assembly_at_kappa(X, ordered, levels, thresholds, mean, R, false)
+      : mixed_gamma_assembly_at_kappa(X, ordered, levels, thresholds, mean, R, false);
+  if (!base) return std::unexpected(base.error());
+  const Eigen::Index p = X.cols();
+  std::vector<std::vector<Eigen::Index>> marginal(static_cast<std::size_t>(p));
+  Eigen::Index start = 0, cp = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    auto& indices = marginal[static_cast<std::size_t>(j)];
+    if (ordered[static_cast<std::size_t>(j)]) {
+      for (Eigen::Index k = 0; k < levels[static_cast<std::size_t>(j)] - 1; ++k)
+        indices.push_back(start++);
+    } else {
+      indices = {base->nth + cp, base->nth + base->n_cont + cp};
+      ++cp;
+    }
+  }
+  std::vector<std::pair<double, double>> spectra;
+  spectra.reserve(static_cast<std::size_t>(p));
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto& indices = marginal[static_cast<std::size_t>(j)];
+    Eigen::MatrixXd score(base->scores.rows(), static_cast<Eigen::Index>(indices.size()));
+    for (Eigen::Index k = 0; k < score.cols(); ++k)
+      score.col(k) = base->scores.col(indices[static_cast<std::size_t>(k)]);
+    const Eigen::MatrixXd bread = score.transpose() * score;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(bread);
+    if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed sparse Gamma Jacobian: marginal eigendecomposition failed"));
+    }
+    spectra.emplace_back(es.eigenvalues().minCoeff(), es.eigenvalues().maxCoeff());
+  }
+  Eigen::MatrixXd D = Eigen::MatrixXd::Zero(base->mdim, base->mdim);
+  auto evaluate = [&](const std::vector<Eigen::Index>& vars,
+                      Eigen::Index association) -> post_expected<void> {
+    const Eigen::Index q = static_cast<Eigen::Index>(vars.size());
+    Eigen::MatrixXd local(X.rows(), q), corr(q, q);
+    Eigen::VectorXd mu(q);
+    std::vector<std::int32_t> ord, lev;
+    std::vector<Eigen::Index> map;
+    for (Eigen::Index a = 0; a < q; ++a) {
+      const auto v = vars[static_cast<std::size_t>(a)];
+      local.col(a) = X.col(v); mu(a) = mean(v);
+      ord.push_back(ordered[static_cast<std::size_t>(v)]);
+      lev.push_back(levels[static_cast<std::size_t>(v)]);
+      if (ord.back())
+        for (auto k : marginal[static_cast<std::size_t>(v)]) map.push_back(k);
+      for (Eigen::Index b = 0; b < q; ++b) corr(a, b) = R(v, vars[static_cast<std::size_t>(b)]);
+    }
+    const Eigen::Index nth = static_cast<Eigen::Index>(map.size());
+    Eigen::VectorXd th(nth);
+    for (Eigen::Index k = 0; k < nth; ++k) th(k) = thresholds(map[static_cast<std::size_t>(k)]);
+    for (int channel = 0; channel < 2; ++channel)
+      for (auto v : vars) if (!ordered[static_cast<std::size_t>(v)])
+        map.push_back(marginal[static_cast<std::size_t>(v)][static_cast<std::size_t>(channel)]);
+    if (association >= 0) map.push_back(association);
+    double unchanged_min = kInf, unchanged_max = 0.0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (std::find(vars.begin(), vars.end(), j) != vars.end()) continue;
+      const auto& spectrum = spectra[static_cast<std::size_t>(j)];
+      unchanged_min = std::min(unchanged_min, spectrum.first);
+      unchanged_max = std::max(unchanged_max, spectrum.second);
+    }
+    auto jac = mixed_gamma_jacobian_fd_impl(local, ord, lev, th, mu, corr,
+        h_rel, true, observed, false, true, false, unchanged_min, unchanged_max);
+    if (!jac) return std::unexpected(jac.error());
+    if (association >= 0) {
+      const Eigen::Index last = jac->rows() - 1;
+      for (Eigen::Index k = 0; k < jac->cols(); ++k)
+        D(association, map[static_cast<std::size_t>(k)]) = (*jac)(last, k);
+    } else {
+      for (Eigen::Index a = 0; a < jac->rows(); ++a)
+        for (Eigen::Index b = 0; b < jac->cols(); ++b)
+          D(map[static_cast<std::size_t>(a)], map[static_cast<std::size_t>(b)]) = (*jac)(a, b);
+    }
+    return {};
+  };
+  for (Eigen::Index j = 0; j < p; ++j) {
+    auto result = evaluate({j}, -1);
+    if (!result) return std::unexpected(result.error());
+  }
+  Eigen::Index row = base->s1;
+  for (Eigen::Index j = 0; j < p; ++j)
+    for (Eigen::Index i = j + 1; i < p; ++i, ++row) {
+      auto result = evaluate({j, i}, row);
+      if (!result) return std::unexpected(result.error());
+    }
+  return D;
+}
+
+}  // namespace
+
 post_expected<Eigen::MatrixXd>
 mixed_gamma_diag_jacobian_fd(const Eigen::MatrixXd& X,
+                             const std::vector<std::int32_t>& ordered,
+                             const std::vector<std::int32_t>& levels,
+                             const Eigen::VectorXd& thresholds,
+                             const Eigen::VectorXd& mean,
+                             const Eigen::MatrixXd& R,
+                             double h_rel) {
+  return mixed_gamma_diag_jacobian_sparse(
+      X, ordered, levels, thresholds, mean, R, h_rel, false);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_gamma_diag_jacobian_fd_dense(const Eigen::MatrixXd& X,
                              const std::vector<std::int32_t>& ordered,
                              const std::vector<std::int32_t>& levels,
                              const Eigen::VectorXd& thresholds,
@@ -4070,6 +4265,19 @@ mixed_gamma_jacobian_fd(const Eigen::MatrixXd& X,
 
 post_expected<Eigen::MatrixXd>
 mixed_observed_gamma_diag_jacobian_fd(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel) {
+  return mixed_gamma_diag_jacobian_sparse(
+      X, ordered, levels, thresholds, mean, R, h_rel, true);
+}
+
+post_expected<Eigen::MatrixXd>
+mixed_observed_gamma_diag_jacobian_fd_dense(
     const Eigen::MatrixXd& X,
     const std::vector<std::int32_t>& ordered,
     const std::vector<std::int32_t>& levels,

@@ -915,8 +915,9 @@ Gamma-diagonal influence channels using local item/pair subsystems. The public
 `ordinal_gamma_diag_data_influence` and `ordinal_gamma_diag_jacobian_fd` shapes
 and moment ordering are preserved. The Jacobian still uses central finite
 differences with the caller's `h_rel`; there is no statistical approximation or
-change to the fitted criterion. Full-WLS, observed/missing, and mixed Gamma
-helpers retain their existing implementations.
+change to the fitted criterion. Full-WLS Gamma helpers retain their existing
+implementations. Pairwise-missing ordinal and mixed diagonal movement use the
+sparse extensions described below.
 
 The private workspace in `cpp/src/data/ordinal.cpp` builds marginal category counts
 and score/bread blocks once per call. A correlation's local subsystem contains
@@ -936,6 +937,54 @@ builds instead of 52,326. The returned 171×171 Jacobian is initialized to zero
 and has only 477 possible nonzero entries. The full threshold block's relative
 positive-definiteness cutoff is retained across items and at perturbed moments;
 independent item cutoffs alone would accept badly scaled global blocks.
+
+Pairwise-missing ordinal movement now uses the same cached marginal category
+counts and incident-pair cell grids. The sandwich adds rows observing only one
+endpoint through that endpoint's marginal influence; overlap counts alone do
+not reproduce the diagonal. The full sample size, item-specific observed rows,
+relative threshold-bread cutoff, and central FD step are retained. The previous
+observed global assembly remains callable through the private
+`detail_gamma_reference.hpp` reference interface; complete-ordinal validation
+also uses the unchanged full-Gamma FD helper.
+
+Mixed complete and observed movement assemble one marginal item or one incident
+pair at a time and scatter the resulting diagonal FD rows into the original
+moment order. A threshold affects its item's marginal block and incident pairs;
+a continuous mean or variance affects its marginal block and every incident
+association (including the covariance transform); an association affects only
+its own row. Steps use the existing threshold-spacing, variance and correlation
+margin rules. Unchanged marginal spectral bounds are cached, and each local
+perturbation retains the full marginal bread's relative PD gate. The dense mixed
+FD references remain callable through the same private reference interface.
+The regression gate covers one/two groups, two/five/seven categories, skewed
+thresholds, complete and pairwise-missing ordinal/mixed data, at 1e-8 relative
+agreement with identical steps. Existing policy, IJ, MI and jackknife assertions
+are unchanged.
+
+TASK-89's one-thread policy timing uses a two-group, twelve-indicator one-factor
+model, with either twelve five-category ordinal items or six ordinal and six
+continuous items. Each group has the stated N. The generator uses seed 89001,
+loading 0.65, residual SD 0.76, and cuts at -1, -0.3, 0.3 and 1; three fresh
+converged fits are prepared outside the timer. Medians below time the first
+`policy_inference()` call per fit, under the warm Clang opt build, `nice -n 10`,
+and single-thread BLAS/OpenMP. Temporary scoped timers measured movement only;
+a temporary switch selected the retained dense mixed FD within the same build.
+Both were removed before final validation. The complete all-ordinal movement
+was already sparse before this task, so that row is an unchanged control.
+
+| Items | N per group | Policy seconds, before → after | Movement seconds, before → after | Policy speedup |
+|---|---:|---:|---:|---:|
+| 12 ordinal | 1000 | 0.097 → 0.095 | 0.04748 → 0.04671 | unchanged |
+| 12 ordinal | 4000 | 0.147 → 0.146 | 0.04772 → 0.04668 | unchanged |
+| 6 ordinal + 6 continuous | 1000 | 1.997 → 0.454 | 1.81713 → 0.27512 | 4.40x |
+| 6 ordinal + 6 continuous | 4000 | 7.631 → 2.014 | 6.85624 → 1.17410 | 3.79x |
+
+The mixed movement channel accounted for about 90–91% of policy time before
+this change; its own median cost fell by 5.84–6.60x. These are local timings,
+not statistical calibration or CI timing gates. The standalone R generator and
+raw timing logs are untracked under `~/.cache/magmaan-logs/task89_timing.R` and
+`task89-profile-{dense,sparse}-clean.log`. A separate uninstrumented baseline
+agrees with the unchanged ordinal control and confirms the mixed bottleneck.
 
 The small timing protocol lives in `benchmarks/README.md` and
 `benchmarks/ordinal_gamma_influence_bench.cpp`: three fixed synthetic samples,
