@@ -376,7 +376,10 @@ The exact ordinal and mixed first-stage Jacobians use block-sparse mean-score
 finite differences (TASK-83), gated against the dense reference at 1e-7: a
 fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
 takes 0.14 s against 0.10 s for OPG; mixed calls remain dominated by their
-estimated-weight/Gamma work (about 2 s for 6+6 items at N = 1000).
+estimated-weight/Gamma work. TASK-88 replaced the dense per-case diagonal
+Gamma-influence products with sparse contractions (dense WLS path kept as a
+1e-10 reference): a mixed policy call (6+6 items) drops from 3.5 to 1.1 s at
+N = 1000 (one group); the finite-difference Gamma movement is the next cost.
 A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
 passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
 label (32 tests) and `R CMD check --no-manual` for both packages with no
