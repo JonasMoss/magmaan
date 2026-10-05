@@ -3,7 +3,9 @@ from pathlib import Path
 import modal
 
 STUDY = "experiments/decisions/06-ordinal-threshold-invariance"
-REPO = Path(__file__).resolve().parents[4]
+# Inside the container this file is /root/app.py; only the local side needs the
+# repository path to assemble the image.
+REPO = Path(__file__).resolve().parents[4] if modal.is_local() else Path("/repo")
 image = (
     modal.Image.from_registry("rocker/r-ver:4.5.1", add_python="3.11")
     .run_commands("Rscript -e 'install.packages(c(\"Rcpp\",\"RcppEigen\",\"nloptr\",\"lavaan\"))'")
