@@ -83,3 +83,14 @@ from every earlier study draw base and all four primary lane bases. The first
 pilot attempt and earlier smoke/fan-out runs are development only and retained
 locally; rerun all frozen checks and the pilot using this corrected second
 draw. No inferential rule, population distribution or production seed changes.
+
+## Registration (merger, 2026-10-05, after the pilot, before production)
+
+Registered as written above, with the seed correction. The pilot priced 21 of
+174 cells; per-draw means (coverage 0.09-0.17 s, global 0.06 s, nested 0.87 s
+at N = 1000) put the full grid at roughly 60-80 CPU-hours plus per-cell
+population setup (two million-row draws per needed population key, at most a
+few minutes per cell). This estimate is a planning figure, not a registered
+quantity. Production runs on the maintainer's simbox workstation with
+single-threaded cells (at most ten at a time: peak pilot RSS 548 MiB against
+10 GB of RAM) and the provenance-checked combine; the executor is recorded.
