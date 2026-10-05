@@ -587,8 +587,9 @@ required by an all-ordinal primary workflow remain current work.
   at 1000 observations/group agrees with the trace and variance within Monte
   Carlo uncertainty; this is limited validation. decisions/06 production
   (2026-10-05, 576,000 draws) flags SB/PEBA4 with seven categories (7.0–8.0% at
-  N >= 500 per group) while All stays within 3.5–6.0%; a fresh-draw All
-  confirmation is running and the nested reference choice is with the user.
+  N >= 500 per group) while All stays within 3.5–6.0%; the fresh-draw All
+  confirmation passed (3.45–6.0% in all 144 null cells). The nested reference
+  choice is with the user (TASK-81).
 
 - [ ] **L — derive a nested DWLS score test, or defer it.** No joint
   least-squares nested score statistic exists; `score_tests_robust_joint` is

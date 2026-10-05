@@ -1,0 +1,181 @@
+cell_id,arm,reason,detail,draws
+1,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+2,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+3,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+4,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+5,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+6,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+9,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+10,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+11,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+12,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+13,all,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+13,all,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+13,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+13,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+13,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1998
+13,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+13,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+13,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+13,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+14,all,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+14,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+14,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+14,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+14,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x3 in group '2',1
+17,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+18,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+19,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+20,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+21,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+22,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+25,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+26,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+27,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+28,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+29,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+30,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+33,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+34,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+35,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+36,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+37,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+38,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+41,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+42,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+43,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+44,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+45,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+46,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+49,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+50,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+51,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+52,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+53,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+54,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+57,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+58,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+59,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+60,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+61,all,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+61,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+61,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+61,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+61,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '1',1
+62,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+65,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+66,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+67,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+68,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+69,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+70,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+73,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+74,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+75,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+76,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+77,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+78,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+81,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+82,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+83,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+84,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+85,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+86,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+89,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+90,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+91,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+92,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+93,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+94,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+97,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+98,all,error,not_converged,1
+98,delta_wlsmv,error,not_converged,1
+98,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+98,policy_peba4,error,not_converged,1
+98,policy_sb,error,not_converged,1
+99,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+100,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+101,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+102,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+105,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+106,all,error,not_converged,2
+106,delta_wlsmv,error,not_converged,2
+106,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1998
+106,policy_peba4,error,not_converged,2
+106,policy_sb,error,not_converged,2
+107,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+108,all,error,not_converged,1
+108,delta_wlsmv,error,not_converged,1
+108,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+108,policy_peba4,error,not_converged,1
+108,policy_sb,error,not_converged,1
+109,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+110,all,error,not_converged,1
+110,delta_wlsmv,error,not_converged,1
+110,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+110,policy_peba4,error,not_converged,1
+110,policy_sb,error,not_converged,1
+113,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+114,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+115,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+116,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+117,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+118,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+121,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+122,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+123,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+124,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+125,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+126,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+129,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+130,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+131,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+132,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+133,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+134,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+137,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+138,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+139,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+140,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+141,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+142,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+145,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+146,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+147,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+148,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+149,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+150,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+153,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+154,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+155,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+156,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+157,all,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+157,delta_wlsmv,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+157,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,1999
+157,policy_peba4,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+157,policy_sb,error,data_ordinal_stats_from_df(): empty ordinal category for x6 in group '2',1
+158,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+161,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+162,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+163,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+164,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+165,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+166,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+169,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+170,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+171,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+172,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+173,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+174,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+177,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+178,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+179,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+180,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+181,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+182,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+185,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+186,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+187,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+188,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+189,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000
+190,delta_wlsmv,not_nested,nested embedding: H0 changes an H1 fixed parameter,2000

@@ -20,3 +20,12 @@ production-2026-10-05/*
 !production-2026-10-05/timing.csv
 !production-2026-10-05/cost.csv
 !production-2026-10-05/failure_counts.csv
+# Fresh-draw All confirmation (cells on Modal, combined locally 2026-10-05).
+!confirm-2026-10-05/
+confirm-2026-10-05/*
+!confirm-2026-10-05/summary.csv
+!confirm-2026-10-05/cells.csv
+!confirm-2026-10-05/metadata.csv
+!confirm-2026-10-05/timing.csv
+!confirm-2026-10-05/cost.csv
+!confirm-2026-10-05/failure_counts.csv
