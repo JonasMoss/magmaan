@@ -100,6 +100,12 @@ Consequences:
   recipes, robust or not, and is labelled as compatibility rather than policy.
 - The robustness concerns the structural model. Identifiability, regularity
   and the sampling law above remain required.
+- Two-stage first stages count as part of the sampling law. Their influence
+  uses the exact empirical Jacobian of the stacked first-stage estimating
+  equations, not the outer-product (information-equality) shortcut, which is
+  valid only when the first stage's own model holds (for polychorics, latent
+  normality). Decided 2026-10-05 for ordinal and mixed DWLS (TASK-67, TASK-69);
+  the shortcut stays in `lavaan_compat`.
 
 ### Group allocation and likelihood-score covariance
 

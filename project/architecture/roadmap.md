@@ -350,8 +350,15 @@ comparators, GOF moment primitives keep their named conventions, and grouped
 centered LS meats are documented as fixed-allocation.
 Complete all-ordinal data have exact empirical score-Jacobian first-stage
 sampling rows and Gamma, with `first_stage = "exact"` as a lab IJ comparator
-(TASK-74); OPG stays the lab and current policy default until TASK-69 switches
-the policy.
+(TASK-74). The all-ordinal ordinary DWLS policy now uses them (TASK-69, user
+decision): complete-data exact first-stage rows cached once per fit, the
+estimated-weight IJ covariance and nested meat on those rows, and the global
+spectrum from their Gamma. OPG NACOV still sets the fitting weights, so
+estimates and fit statistics are unchanged; `lavaan_compat` and lab defaults
+keep OPG. decisions/05 validated the OPG version; reconfirmation and the
+latent non-normality study are TASK-79. decisions/06 found SB/PEBA4
+over-rejecting for the threshold step with seven categories while All passed
+a fresh-draw confirmation; the nested reference choice is TASK-81.
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
