@@ -364,6 +364,11 @@ Association ML (Gaussian ML on Stage-1 polychorics) has a lab-only
 exact Stage-1 transport give active/full covariance with joint threshold
 influence; ordinary association inference stays refused until reference laws,
 MI/releases and calibration (TASK-32 subcards 3-5).
+The exact ordinal and mixed first-stage Jacobians use block-sparse mean-score
+finite differences (TASK-83), gated against the dense reference at 1e-7: a
+fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
+takes 0.14 s against 0.10 s for OPG; mixed calls remain dominated by their
+estimated-weight/Gamma work (about 2 s for 6+6 items at N = 1000).
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
