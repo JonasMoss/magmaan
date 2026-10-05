@@ -1,0 +1,58 @@
+---
+title: "DWLS spectral reference laws across realistic models"
+format:
+  html:
+    toc: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Default register
+
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Global DWLS policy reference | All | Settled in the existing supported slice; broader validation open | Earlier calibration; no evidence from this study yet |
+| Nested DWLS policy reference | SB and PEBA4 | Provisional, TASK-81 | Broader textbook-model study awaiting a population decision |
+| First-stage influence | Exact | Fixed baseline | This study compares references on the same policy spectrum |
+
+## Question and short answer
+
+Which spectral reference law calibrates global and nested DWLS policy tests
+across realistic textbook models? No calibration evidence is available yet.
+The population builder stopped before smoke: imposing equal standardized Risk
+paths in the Worland model made its proposed latent-response correlation matrix
+indefinite. The study requires a population-design decision before it can proceed.
+
+## Evidence and caveats
+
+The original Worland correlation is positive definite (minimum eigenvalue
+0.290773). Its standardized Risk paths to Achieve and Adjust are −1.592146
+and −2.310772. Replacing both by their mean and adjusting observed residual
+diagonals to retain unit response variances produces minimum eigenvalues
+−0.327866 for the residual covariance and −0.216976 for the response
+correlation. This invalid construction is refused, as registered; no population
+repair or simulation was performed. Six earlier population constructions passed
+the validity checks, but the builder publishes nothing until all eight pass.
+The MDD construction has not yet been checked.
+
+The proposal awaiting a decision is to replace the Worland path equality by
+equality of its second and third Cognitive loadings, preserving its published
+structural paths. That alternative has not been built or validated. A dated
+criteria amendment must precede any smoke if the design changes.
+
+## Reproduce
+
+From the repository root:
+
+```sh
+Rscript experiments/decisions/07-dwls-reference-law/scripts/build_populations.R --help
+Rscript experiments/decisions/07-dwls-reference-law/scripts/build_populations.R \
+  --corpus /home/jonas/Files/research/magmaan/external/textbook-corpus
+```
+
+The second command currently exits nonzero at the registered invalid-population
+gate. Runner implementation, smoke, pilot, fan-out validation and pricing remain
+outstanding. Production remains unlaunched; simbox is unavailable.
