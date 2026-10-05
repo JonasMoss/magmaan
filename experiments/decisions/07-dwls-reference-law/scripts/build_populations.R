@@ -75,8 +75,9 @@ for (id in names(ids)) {
   if(id=='worland11') {
     cat('Original standardized Risk paths: ',paste(directed[c('Achieve','Adjust'),'Risk'],collapse=', '), '\n')
     cat('Original correlation minimum eigenvalue: ',original_min_rho,'\n')
-    directed[c('Achieve','Adjust'),'Risk'] <- mean(directed[c('Achieve','Adjust'),'Risk'])
-    restrictions <- 'b_Achieve_Risk == b_Adjust_Risk'
+    targets <- load_rows[['Cognitive']][2:3]
+    directed[targets,'Cognitive'] <- mean(directed[targets,'Cognitive'])
+    restrictions <- paste(labels[targets[1],'Cognitive'], '==', labels[targets[2],'Cognitive'])
   }
   # Reset observed residual variances after changing loadings. Preserve off-diagonals.
   inverse <- solve(diag(q)-directed)

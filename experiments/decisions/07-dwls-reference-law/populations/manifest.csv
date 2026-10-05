@@ -1,0 +1,9 @@
+"model","source_case","source_md5","items","groups","restriction_df","min_residual","min_rho"
+"ptsd8","brown_2015_tab8_8_reliability_ptsd","4582d34b17a8b21305d68fedca264344",8,1,2,0.0997348731098029,0.171010858286052
+"mtmm9","brown_2015_tab6_3_mtmm_correlated_uniqueness","505af3bb2ad6f6b9021da49f49b5b16e",9,1,3,0.0459731785159886,0.0863004828353511
+"coping12","brown_2015_tab8_2_higher_order_coping","8df441691ca71ff62fee68d2d86a3fbc",12,1,3,0.17047291877286,0.192112903803443
+"bifactor15","brown_2015_tab8_6_bifactor_perceived_control","0d5f83ec7e92cb0188ebe5f8606ed322",15,1,9,0.46159581474321,0.461596165451123
+"long18","little_2013_ch5_tab5_5_configfi_2by3","7481beab987018ea46bd00f23388cae4",18,1,18,0.174015681938947,0.177812686645441
+"long30","little_2013_ch8_tab8_bull_config","7cdab058d60ea557f16bfbc9f337fe58",30,1,16,0.125649707366326,0.141278510065282
+"worland11","kline_2023_ch15_worland_sr_step2a","b420f63ed18a332a1d1194b3edb6777f",11,1,1,0.0556039662667057,0.292589317510803
+"mdd9","brown_2015_tab7_14_invariance_mdd_scalar","560c95bcc3831c0d296adda2c5b2b634",9,2,0,0.390197427687872,0.390373786110941

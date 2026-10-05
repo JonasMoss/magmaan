@@ -23,7 +23,7 @@ stop and request a design decision. Record source hashes and minimum eigenvalues
 | Brown bifactor perceived control, 15 items | Equal standardized specific loadings within each specific factor (9 df) |
 | Little longitudinal 2 constructs x 3 waves, 18 items | No lagged residual covariances (18 df) |
 | Little longitudinal 2 constructs x 5 waves, 30 items | Equal standardized item loadings across waves per construct; marker rescaling gives weak invariance (16 df) |
-| Kline Worland structural regression, 11 items | Equal Risk paths to Achieve and Adjust (1 df) |
+| Kline Worland structural regression, 11 items | Equal second and third Cognitive loadings, preserving structural paths (1 df) |
 | Brown MDD two-group CFA, 9 items | Identical replicated group-1 latent-response population; configural-to-metric step and configural-to-Wu–Estabrook threshold step |
 
 The MDD replication deliberately removes published group mean and variance
@@ -92,3 +92,11 @@ replicates; never claim a full-grid estimate from unmatched timing. If a
 credible grid estimate exceeds about 45 CPU-hours, propose dropping N=2000
 or seven categories for the largest model in a dated amendment before
 production. Simbox remains unavailable; do not launch there or on Modal.
+
+## Amendment 2026-10-05, before smoke
+
+Approved in TASK-86 comment 5 after population validation, before simulation:
+the averaged Risk-path population is not positive definite (standardized paths
+−1.59/−2.31; response-correlation minimum eigenvalue −0.217). Replace that
+null with equal second/third Cognitive loadings, preserving published paths.
+Apply the same validity gate; if it fails, retain Worland global cells only.
