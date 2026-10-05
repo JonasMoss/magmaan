@@ -11,19 +11,62 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Threshold-step reference | Moment-nested policy SB / PEBA4 | Open calibration | Development pilot only |
+| Threshold-step reference | Moment-nested policy SB / PEBA4 | Flagged; All confirmation running; recipe choice with the user | Production 2026-10-05 (576,000 draws) |
 
-## Question and short answer
+## Question
 
-Does the DWLS configural-to-threshold-invariant test retain nominal size when
-the larger model is correct or misspecified? Production evidence is pending.
-The frozen pilot completed 20 draws in each of eight cells (160 fit pairs),
-all converged and returned the three policy reference arms. Its full-grid
-extrapolation is 36.2 CPU-hours. The delta WLSMV comparator returned typed
-`not_nested` throughout. These development draws cannot establish calibration
-or justify changing the policy.
+Does the DWLS configural-to-threshold-invariant test keep nominal size when the
+larger model is correct or misspecified?
 
-## Pilot evidence
+## Short answer
+
+**Not with SB or PEBA4 once items have many categories.** Their null rejection
+rises with the number of categories, that is with the number of threshold
+restrictions: at N ≥ 500 per group the SB medians are about 5.0% with four
+categories, 5.5% with five and 7% with seven. The registered rule flags 22
+policy arm-cells, all with seven categories (SB 7.05–7.95%, PEBA4 7.05–7.5%).
+The pattern is the same with a correct or a misspecified larger model and with
+symmetric or skewed cuts.
+
+**The All reference stays calibrated everywhere.** The exact weighted
+chi-square tail on every positive eigenvalue of the same spectrum rejects
+3.5–6.0% in every null cell, at every N, category count and misspecification.
+Size-adjusted power is the same for all three arms (median 91%). This mirrors
+the global DWLS test, where the user chose All on 2026-10-03.
+
+As registered, flags call for investigation and fresh confirmation, never a
+silent recipe switch. A dated post-production amendment
+([criteria](criteria/threshold_invariance.md)) reruns the 144 null cells with
+four or more categories on fresh draws, with All's criterion fixed in advance.
+Whether the nested DWLS reference becomes All is the user's decision.
+
+```{r}
+prod <- file.path("results", "production-2026-10-05")
+if (!file.exists(file.path(prod, "summary.csv")))
+  stop("Production summaries absent: modal run modal/app.py --mode production --run-id production-2026-10-05")
+s <- merge(read.csv(file.path(prod, "summary.csv")), read.csv(file.path(prod, "cells.csv")), by = "cell_id")
+x <- s[s$role == "null" & s$categories > 3 & s$arm %in% c("policy_sb", "policy_peba4", "all"), ]
+f <- function(v) sprintf("%.1f (%.1f–%.1f)", 100 * median(v), 100 * min(v), 100 * max(v))
+w <- aggregate(rate ~ categories + n + arm, x, f)
+w <- reshape(w, idvar = c("categories", "n"), timevar = "arm", direction = "wide")
+w <- w[order(w$categories, w$n), ]
+knitr::kable(data.frame(Categories = w$categories, `N per group` = w$n,
+  `Policy SB (%)` = w$rate.policy_sb, `Policy PEBA4 (%)` = w$rate.policy_peba4,
+  `All (%)` = w$rate.all, check.names = FALSE),
+  caption = "Null rejection at nominal 5%: median (range) over the 16 cells per row (one or two factors, symmetric or skewed cuts, correct or misspecified larger model, delta or theta), 2,000 draws per cell. Per-cell Wilson intervals are in summary.csv.")
+```
+
+## Production evidence
+
+Production ran on Modal under the registered criteria (seed base 830150001):
+384 cells, 2,000 null and 1,000 power draws per cell, 576,000 draws and about
+52 CPU-hours. 34 draws produced no test (25 non-converged fits, 9 with an empty
+category in one group); they stay in the denominators. Three-category
+controls return the registered zero-df `equivalent_models` reason, and the
+delta WLSMV comparator returns `not_nested` for this moment-nested step, as
+registered. `failure_counts.csv` lists every typed reason by cell and arm.
+
+## Pilot (development)
 
 ```{r}
 base <- "results/pilot"
@@ -52,8 +95,8 @@ group distributions preserve the pseudo-null; the one-factor misspecification
 uses a residual correlation because a cross-loading requires two factors.
 The requested phase seed bases overlap across the 384-cell grid; registration
 must amend them to disjoint ranges before held-out production.
-The criteria remain a draft for merger review. No production or Modal job has
-been launched.
+The registration amended the production seed base to 830150001 before
+production.
 
 ## Reproduce
 
@@ -65,6 +108,8 @@ Rscript run_experiment.R --smoke --workers 2 --out-dir results/smoke
 Rscript run_experiment.R --pilot --cell 17,18,65,66,209,210,257,258 --workers 2 --out-dir results/pilot
 ```
 
-Production requires the merger to commit `criteria/threshold_invariance.md`.
+Production and the confirmation run on Modal from `modal/`:
+`modal run app.py --mode production --run-id production-2026-10-05` and
+`modal run app.py --mode confirm --run-id confirm-2026-10-05 --cells <the 144 null cells with four or more categories>`.
 Modal fans out stable cell IDs; `modal/combine.R` applies the same summary
 function to the cell outputs and validates seeds, provenance and completeness.
