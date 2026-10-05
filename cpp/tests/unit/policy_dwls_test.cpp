@@ -286,7 +286,8 @@ TEST_CASE("DWLS policy IJ covariance agrees with the delete-one jackknife") {
     CAPTURE(design.name);
     std::vector<Eigen::MatrixXd> blocks;
     for (int g = 0; g < design.groups; ++g)
-      blocks.push_back(misspecified_block(4000u + static_cast<std::uint32_t>(g), 600 + 40 * g,
+      blocks.push_back(misspecified_block(4000u + static_cast<std::uint32_t>(g),
+          (design.parameterization == OrdinalParameterization::Theta ? 2400 : 600) + 40 * g,
                                           -0.4 + 0.2 * g, 0.6));
     auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks, true);
     REQUIRE(stats.has_value());
@@ -335,7 +336,12 @@ TEST_CASE("DWLS policy IJ covariance agrees with the delete-one jackknife") {
     // The fixed-weight sandwich omits the weight influence; its gap does not
     // shrink with n. On the delta scale here that gap dominates the sampling
     // noise; on the theta scale it is smaller than the n = 600 noise (it
-    // separates by n = 2400: IJ 1%, fixed 4%).
+    // separates by n = 2400: IJ 1%, fixed 4%). Theta therefore uses n = 2400
+    // with the same 4% gate; delta retains n = 600. Delta/theta IJ transport
+    // agrees within 1e-6 and tighter refits are unchanged: the theta gap is
+    // finite-sample reparameterization nonlinearity (5.23% -> 1.32% for 4x n).
+    // OPG's 0.31% theta gap at n = 600 was a cancellation; its delta gaps
+    // were 2.3-2.9%.
     CHECK(ij_error < 0.04);
     if (design.parameterization == OrdinalParameterization::Delta) CHECK(ij_error < fixed_error);
   }

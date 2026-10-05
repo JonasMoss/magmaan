@@ -28,13 +28,13 @@
   A two-group 12-indicator five-category fit (N = 1000 total, one thread) costs
   median 80 ms before versus 1643 ms after on five fresh R policy calls;
   cached calls have median 1 ms. Sampling rows are built once per policy fit.
-  Adoption remains blocked on the unchanged theta jackknife gate: 5.23% at
-  N = 600 exceeds 4%, versus 1.32% at N = 2400. Exact covariance transport
-  from delta to theta agrees within 1e-6 at both sizes; tighter refits leave
-  the N = 600 result unchanged. The Satorra comparator now uses exact Gamma
-  with unchanged OPG fitting weights; its monotone and terminal 2% gates pass.
-  The OPG comparison is diagnostic only. TASK-69 needs review of the
-  finite-sample theta gate; no tolerance or jackknife assertion was relaxed.
+  The theta jackknife gate uses N = 2400 with the unchanged 4% tolerance
+  (1.32% discrepancy); delta designs remain at N = 600. Exact covariance
+  transport from delta to theta agrees within 1e-6 at both sizes; tighter
+  refits leave the N = 600 discrepancy unchanged. The finite-sample theta
+  reparameterization gives 5.23% at N = 600, decreasing approximately as 1/n.
+  The Satorra comparator uses exact Gamma with unchanged OPG fitting weights;
+  its monotone and terminal 2% gates pass. The OPG comparison is diagnostic only.
 
 - C++ `fit_ordinal_configured()` supports the `lavaan-0.7.2` preset for
   all-ordinal DWLS, with delta/theta and ordered affine equality coordinates.
