@@ -1,4 +1,4 @@
-# Structured-mean lane: registration draft, 2026-10-05 (TASK-75)
+# Structured-mean lane: registered criteria, 2026-10-05 (TASK-75)
 
 Decision: calibrate the adopted observed nested ML policy after TASK-66 under
 restricted-mean misspecification. No default change. Merger reviews/amends this
@@ -64,3 +64,13 @@ cell design, cost and metadata are frozen; raw rows stay ignored. Fingerprints
 cover runner/helpers/criteria and native binary. Production needs fresh seeds
 and a committed, merger-approved registration; any amendment after pilot must
 be dated and explicitly post-results.
+
+
+## Registration (merger, 2026-10-05, before production)
+
+Registered as written above. The population symmetry/curvature and power
+departure checks reported by TASK-75 are accepted as the pre-production checks.
+The one pilot failure (cell 2, replicate 16, seed 1526120047; unreproduced in
+201 replays) stays frozen and counted; production records the underlying
+condition message for any failure. Production runs on Modal with the
+registered seed base 1726100041 and replicate counts.
