@@ -379,7 +379,9 @@ takes 0.14 s against 0.10 s for OPG; mixed calls remain dominated by their
 estimated-weight/Gamma work. TASK-88 replaced the dense per-case diagonal
 Gamma-influence products with sparse contractions (dense WLS path kept as a
 1e-10 reference): a mixed policy call (6+6 items) drops from 3.5 to 1.1 s at
-N = 1000 (one group); the finite-difference Gamma movement is the next cost.
+N = 1000 (one group). TASK-89 made the Gamma-diagonal kappa movement sparse for
+observed ordinal and mixed data (dense references kept, 1e-8 gates): a
+two-group mixed call falls from 2.0 to 0.45 s at N = 1000 per group.
 A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
 passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
 label (32 tests) and `R CMD check --no-manual` for both packages with no
