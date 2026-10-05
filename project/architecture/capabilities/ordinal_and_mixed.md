@@ -898,3 +898,11 @@ goldens and live grouped/scale tests gate fitting and inference; Demo meaning
 gates cover parameter count, df, estimates and scaled tests. Demo SEs remain
 convention observations, as recorded in the test ledger. Mixed, conditional
 and categorical ML fitting remain explicit unsupported routes.
+
+### Association-ML inference contract plan
+
+The [association-ML audit](../../design/association-ml-inference.md) records the
+existing correlation-target ML criterion and proposes exact all-ordinal Stage-1
+sampling influence, observed sensitivity, covariance, spectral tests and
+MI/release gates. These components remain typed unavailable; the ordered
+implementation and calibration subcards are proposals, not enabled capability.

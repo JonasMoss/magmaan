@@ -358,7 +358,7 @@ guards reject attempts to request one. Mixed ordinal currently reports
 | Mixed ordinal / DWLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
 | Mixed ordinal / WLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
 | Mixed ordinal / ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | NumericIssue: mixed robust score supports DWLS/WLS only; C-MIX-MATRIX / R fitting refusal | Same core NumericIssue / R fitting refusal |
-| Prepared ordinal association ML | UnsupportedInference: LS score is not the ML-target score; C-ORD-MATRIX / R-ORD-MATRIX | Same rejection and gates | Same rejection and gates | Same rejection and gates |
+| Prepared ordinal association ML ([contract plan](../design/association-ml-inference.md)) | UnsupportedInference: LS score is not the ML-target score; C-ORD-MATRIX / R-ORD-MATRIX | Same rejection and gates | Same rejection and gates | Same rejection and gates |
 
 ### Conventions and limits
 

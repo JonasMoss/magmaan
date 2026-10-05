@@ -1175,7 +1175,9 @@ release, including dependencies otherwise shared with the primary programme.
 
 ### Association-ML inference
 
-- [ ] **L — define association-ML MI/release and sampling inference.** Gate
+- [ ] **L — define association-ML MI/release and sampling inference.** The
+  [audit and ordered contract plan](../design/association-ml-inference.md) is
+  complete (TASK-32.1); implementation and calibration remain open. Gate
   the active association Jacobian, saturated-threshold/NACOV transport and the
   matching ML information before exposing MI/release, covariance or tests for
   ordinal association-ML fits. **Check:** reductions where defined,
