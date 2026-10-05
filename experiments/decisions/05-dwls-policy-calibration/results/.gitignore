@@ -64,3 +64,19 @@ dwls-policy/confirm-nested-2026-10-03/*
 !dwls-policy/confirm-nested-2026-10-03/metadata.csv
 !dwls-policy/confirm-nested-2026-10-03/summary.csv
 !dwls-policy/confirm-nested-2026-10-03/timing.csv
+
+# TASK-80: tiny frozen full-grid pilot evidence, raw/checkpoints ignored.
+!mixed/
+mixed/*
+!mixed/pilot-2026-10-05/
+mixed/pilot-2026-10-05/*
+!mixed/pilot-2026-10-05/cells.csv
+!mixed/pilot-2026-10-05/metadata.csv
+!mixed/pilot-2026-10-05/population_targets.csv
+!mixed/pilot-2026-10-05/population_timing.csv
+!mixed/pilot-2026-10-05/summary.csv
+!mixed/pilot-2026-10-05/timing.csv
+!mixed/pilot-2026-10-05/cost.csv
+!mixed/pilot-2026-10-05/failures.csv
+!mixed/pilot-2026-10-05/progress.csv
+!mixed/pilot-2026-10-05/scheduling.csv

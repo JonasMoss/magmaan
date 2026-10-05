@@ -1,0 +1,2 @@
+"workers","math_threads_per_worker","nice","batch_size","grid","cells","replicates","replication_wall_seconds","population_wall_seconds","production_launched","modal_launched","fanout_summary_rows_exact","provenance_rejection_checked","seed_rejection_checked"
+2,1,10,4,"full",160,320,662.005,23.612,FALSE,FALSE,7,TRUE,TRUE

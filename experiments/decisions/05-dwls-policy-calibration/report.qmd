@@ -17,6 +17,7 @@ execute:
 | Global test | $nF$ on the `robust_ordinal` spectrum, exact weighted chi-square tail with every positive eigenvalue (All) | Chosen after exploration (user, 2026-10-03); confirmed on fresh draws | SB and PEBA4 over-reject at df ≥ 53; All 2.9–6.8% at confirmation |
 | Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), SB and PEBA4 | Replaced the separate-point profile law after diagnosis; confirmed on fresh draws | Profile law 0.1–2% (SB) and 3–17% (PEBA4); parameter-space law 4.3–7.8% |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
+| Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global All; nested SB/PEBA4 | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
 ## Question
 
@@ -30,6 +31,10 @@ study answers. The registered design, its amendments and the confirmation
 criteria are in `criteria/dwls_policy.md`.
 
 ## Short answer
+
+The all-ordinal findings below remain the retained evidence. Mixed DWLS has a
+registered lane and pricing pilot; its calibration is still open pending
+reviewed production.
 
 **The IJ covariance is calibrated.** Across 42 coverage cells (misspecification
 0, .2 and .4; N 150 to 1000; binary and five categories; one and two groups)
@@ -224,3 +229,74 @@ modal volume get magmaan-dwls-policy <run-id>/final <local-dir>
 Single-process runs use `Rscript run_experiment.R --<mode> --workers 4`
 (`--help` lists modes and options). Rendering reads only the frozen summaries
 under `results/dwls-policy/`; raw rows and spectra stay untracked.
+
+
+## Mixed continuous/ordinal lane
+
+The mixed policy is composed, but its calibration remains open. The registered
+160-cell design in `criteria/mixed_policy.md` covers Gaussian responses with
+three continuous and three ordinal indicators on each of two factors, binary
+and five-category symmetric/skewed thresholds, N 300–2000, and one/two groups
+under delta/theta. A smoke checks global, metric, threshold moment nesting and
+coverage availability. The full-grid pilot uses two draws per cell, with two
+workers and one math thread per worker under `nice -n 10`. These draws price
+production; they cannot resolve a 3–7% size rule or 93% coverage rule.
+
+Policy inference uses the library convergence verdict. Failed or unavailable
+arms remain in attempted denominators, with Wilson intervals and a separate
+successful-arm rate. The policy's global All reference is compared with SB and
+PEBA4 on the same spectrum and installed lavaan's default mixed WLSMV test.
+Nested SB/PEBA4 is compared with `lavTestLRT`; five-category theta cells include
+thresholds-equal versus configural moment nesting. Coverage targets are a
+continuous loading, ordinal loading, correlation, threshold and continuous
+intercept under omitted cross-loadings 0, .2 and .4. Population targets use
+fixed 100,000-row Gaussian draws and population DWLS weights. The mixed lab
+interface has no OPG-first-stage IJ comparator or mixed `evaluate_at` adapter;
+lavaan arms use lavaan's convergence verdict. That difference needs review
+before production and prevents claiming a common acceptance audit.
+
+```{r}
+mixed_root <- file.path('results','mixed','pilot-2026-10-05')
+if (!file.exists(file.path(mixed_root,'cost.csv')))
+  stop('Mixed pilot missing: Rscript run_experiment.R --pilot --lane mixed --workers 2 --run-id pilot-2026-10-05')
+mixed_cost <- read.csv(file.path(mixed_root,'cost.csv'))
+mixed_summary <- read.csv(file.path(mixed_root,'summary.csv'))
+mixed_timing <- read.csv(file.path(mixed_root,'timing.csv'))
+knitr::kable(data.frame(
+  `Priced cells`=mixed_cost$priced_cells,
+  `Attempted draws`=sum(mixed_timing$attempted),
+  `Failed arm outcomes`=sum(mixed_summary$failed),
+  `Production CPU hours`=round(mixed_cost$production_cpu_hours_priced,1),
+  `Ideal four-worker hours`=round(mixed_cost$production_cpu_hours_priced/4,1),
+  check.names=FALSE),row.names=FALSE)
+```
+
+The pilot completed all 320 draws in 662 seconds, plus 24 seconds for the
+population targets. Four of 1,400 arm outcomes were unavailable: two policy
+nested outcomes from one nonconverged larger fit, one lavaan nonconvergence,
+and one lavaan empty-category error. The full-grid production estimate is
+320.4 CPU-hours, or 80.1 hours at an ideal four-worker allocation.
+
+The production price multiplies each cell's observed mean replicate CPU time by
+2,000 (null/coverage) or 1,000 (power). It excludes the one-time population-target
+cost, cloud startup, billing overhead and retry costs. Two draws give a noisy
+price. Cell-level rates, Wilson intervals, failures and timing are frozen CSVs;
+raw draws stay ignored. No pilot flag changes the recipe. Production uses fresh
+seed base 1617000001 and requires merger review of the registration before any
+launch. Power is size-adjusted using matched nulls, reported without gating.
+
+The two-cell local fan-out reproduces single-process summaries exactly and
+rejects mixed native-library provenance. Completed cells carry a marker written
+after all draws and gates; remote attempts use separate directories and publish
+atomically, so partial `raw.rds` checkpoints cannot count as completed cells.
+Resuming a run ID reuses completed cells, and combine checks source/native
+fingerprints, seeds, replicate counts and population targets before summarizing.
+No Modal or production run was launched for TASK-80.
+
+```sh
+Rscript run_experiment.R --smoke --lane mixed --cell 1,49,113,129 --workers 1 --run-id mixed-smoke
+Rscript run_experiment.R --pilot --lane mixed --workers 2 --run-id mixed-pilot
+# After merger review and compute authorization only:
+modal run modal/app.py --lane mixed --mode production --run-id mixed-production-YYYY-MM-DD
+modal volume get magmaan-dwls-policy mixed/<run-id>/final <local-dir>
+```

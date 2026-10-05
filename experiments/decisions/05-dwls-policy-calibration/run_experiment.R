@@ -13,6 +13,7 @@ usage <- 'Usage: Rscript run_experiment.R MODE [--run-id ID] [--workers W]
   --run-id ID  fresh immutable output directory (default mode name)
   --cell IDs   comma-separated cell IDs; run selected cells only and save its raw rows (Modal fan-out; see modal/)
   --out-dir D  write to D instead of results/dwls-policy/<run-id>
+  --lane dwls-policy|mixed (default dwls-policy); mixed has smoke/pilot/production
   --help       show help
 No automatic production launch. Frozen summaries exclude raw per-fit rows.'
 if ('--help' %in% args) { cat(usage,'\n'); quit(save='no') }
@@ -21,7 +22,7 @@ opt <- function(key,default) {
   if(at==length(args) || startsWith(args[at+1],'--')) stop('Missing value for ',key)
   args[at+1]
 }
-if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--explore','--confirm','--reps','--run-id','--workers','--cell','--out-dir','--family'))) stop('Unknown option')
+if(any(startsWith(args,'--') & !args %in% c('--help','--preflight','--smoke','--pilot','--production','--explore','--confirm','--reps','--run-id','--workers','--cell','--out-dir','--family','--lane'))) stop('Unknown option')
 modes <- intersect(args,c('--preflight','--smoke','--pilot','--production','--explore','--confirm'))
 if(length(modes)!=1) stop(usage)
 mode <- substring(modes,3)
@@ -33,6 +34,13 @@ source(file.path(here,'..','..','_support','R','helpers.R'))
 set_single_threaded_math()
 source(file.path(here,'R','compute.R'))
 source(file.path(here,'R','summarize.R'))
+lane <- opt('--lane','dwls-policy')
+if(!lane %in% c('dwls-policy','mixed')) stop('Unknown lane')
+if(lane=='mixed') {
+  source(file.path(here,'R','mixed.R'))
+  mixed_run(args,mode,workers,here,opt)
+  quit(save='no')
+}
 run_id <- opt('--run-id',mode)
 if(!grepl('^[a-zA-Z0-9_-]+$',run_id)) stop('Invalid run ID')
 out <- opt('--out-dir',file.path(here,'results','dwls-policy',run_id))

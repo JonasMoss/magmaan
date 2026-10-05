@@ -1,0 +1,9 @@
+"arm","target","statistic","df","spectrum_size","reason","cell_id","replicate","seed","h1_converged","h0_converged","policy_gap","error","elapsed_seconds","cpu_seconds","comparator_judge"
+"policy_sb","",,,,"H1 did not converge",66,1,1417660002,FALSE,,,"H1 did not converge",1.63900000000001,1.64,"lavaan convergence only; mixed evaluate_at adapter unavailable"
+"policy_peba4","",,,,"H1 did not converge",66,1,1417660002,FALSE,,,"H1 did not converge",1.63900000000001,1.64,"lavaan convergence only; mixed evaluate_at adapter unavailable"
+"lavaan_lrt","",,,,"lavaan H1 did not converge",66,1,1417660002,FALSE,,,"lavaan H1 did not converge",1.63900000000001,1.64,"lavaan convergence only; mixed evaluate_at adapter unavailable"
+"lavaan_lrt","",,,,"lavaan->lav_samp_step1():
+   some categories of variable `x10' are empty in group 1; frequencies are
+   [88, 26, 14, 22, 0]",100,1,1418000002,TRUE,TRUE,1.94289029309402e-16,"lavaan->lav_samp_step1():
+   some categories of variable `x10' are empty in group 1; frequencies are
+   [88, 26, 14, 22, 0]",1.80599999999998,1.805,"lavaan convergence only; mixed evaluate_at adapter unavailable"

@@ -1176,7 +1176,10 @@ release, including dependencies otherwise shared with the primary programme.
   the observed-Hessian/IJ nested parameter-space law (including moment tangents)
   in C++ and both R interfaces. One/two-group delta/theta numerical composition
   gates give limited validation; mixed calibration and estimated-weight
-  MI/release remain open. Other mixed influence routes retain their contracts.
+  MI/release remain open. TASK-80 registers the mixed lane in
+  `experiments/decisions/05-dwls-policy-calibration/criteria/mixed_policy.md`;
+  its pilot prices production without establishing calibration. Merger review
+  precedes production. Other mixed influence routes retain their contracts.
 
 - [x] **M — all-ordinal exact first-stage lab comparator (TASK-74).**
   Complete empirical score-Jacobian sampling rows and Gamma, plus explicit

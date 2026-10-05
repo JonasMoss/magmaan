@@ -935,5 +935,7 @@ continues to define fitting weights. These spectra differ in finite samples
 and converge under regular latent-normal first-stage specification.
 Moment-nested comparisons use the shared implied-moment embedding and tangent.
 One/two-group delta/theta composition gates give limited validation; calibration
-is pending. Nested score, mixed ULS/WLS policy and mixed `lavaan_compat` remain
+is pending. TASK-80 adds a registered mixed calibration lane to decisions/05,
+with a full-grid local pricing pilot; production requires merger review.
+Nested score, mixed ULS/WLS policy and mixed `lavaan_compat` remain
 unsupported. Exact sampling rows or complete raw observations are required.

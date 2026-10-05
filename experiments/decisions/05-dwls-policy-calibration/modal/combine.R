@@ -20,6 +20,13 @@ source(file.path(study, "R", "summarize.R"))
 
 if(!mode %in% c('smoke','pilot','production','explore','confirm')) stop('Unknown mode')
 family <- if('--family' %in% args) opt('--family') else 'all'
+lane <- if('--lane' %in% args) opt('--lane') else 'dwls-policy'
+if(lane=='mixed') {
+  source(file.path(study,'modal','mixed_combine.R'))
+  mixed_combine(run_dir,mode,git_head,family,opt,study)
+  quit(save='no')
+}
+if(lane!='dwls-policy') stop('Unknown lane')
 cells <- dwls_mode_cells(mode,family)
 files <- sort(list.files(file.path(run_dir, "cells"), pattern = "^raw[.]rds$",
                          recursive = TRUE, full.names = TRUE))
