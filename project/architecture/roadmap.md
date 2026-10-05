@@ -367,7 +367,11 @@ MI/releases and calibration (TASK-32 subcards 4-5). Its lab global and nested
 spectral tests (`association_ml_global_test()`, `association_ml_nested_test()`,
 TASK-32.3) report All, SB and PEBA4 on the exact Stage-1 Gamma, with the
 correlation-ML residual metric for the global test and the observed-H/IJ
-parameter-space law for nested tests.
+parameter-space law for nested tests. Lab modification indices and affine
+releases (`association_ml_modification_indices()`,
+`association_ml_score_tests()`, TASK-32.4) use observed Schur sensitivity/EPC
+and the exact projected Stage-1 meat; ordinary exposure awaits the subcard-5
+calibration.
 The exact ordinal and mixed first-stage Jacobians use block-sparse mean-score
 finite differences (TASK-83), gated against the dense reference at 1e-7: a
 fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
