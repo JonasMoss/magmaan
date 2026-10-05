@@ -38,29 +38,17 @@ void likelihood_rows(const NTMLFit& fit, const UFactor& base,
                      const Eigen::MatrixXd& directions, Eigen::MatrixXd& rows,
                      const RawData* subset = nullptr) {
   const auto& raw = subset ? *subset : fit.data->raw;
+  const auto map = likelihood_projection(base, fit.data->sample,
+                                         fit.geometry->mean_hat, directions);
   Eigen::Index offset = 0;
   for (std::size_t b = 0; b < base.blocks.size(); ++b) {
-    const auto& block = base.blocks[b];
     const auto n = raw.X[b].rows();
-    const auto k = directions.cols();
-    Eigen::VectorXd shift = Eigen::VectorXd::Zero(block.p);
-    if (base.has_means) shift = fit.data->sample.mean[b] - fit.geometry->mean_hat[b];
-    Eigen::MatrixXd linear = Eigen::MatrixXd::Zero(block.p, k);
-    Eigen::RowVectorXd constant = Eigen::RowVectorXd::Zero(k);
-    if (base.has_means) constant += shift.transpose() * directions.middleRows(block.mu_off, block.p);
-    Eigen::Index v = block.row_offset;
-    for (Eigen::Index j = 0; j < block.p; ++j) {
-      for (Eigen::Index i = j; i < block.p; ++i, ++v) {
-        constant += (block.S(i,j) - block.Sigma_hat(i,j) + shift(i)*shift(j)) * directions.row(v);
-        linear.row(i) += shift(j) * directions.row(v);
-        linear.row(j) += shift(i) * directions.row(v);
-      }
-    }
     if (base.has_means) {
-      Eigen::MatrixXd centered = raw.X[b].rowwise() - fit.data->sample.mean[b].transpose();
-      rows.middleRows(offset,n).noalias() += centered * linear;
+      const Eigen::MatrixXd centered = raw.X[b].rowwise() - fit.data->sample.mean[b].transpose();
+      rows.middleRows(offset,n).noalias() += centered *
+          map.mean_corrections[b];
     }
-    rows.middleRows(offset,n).rowwise() += constant;
+    rows.middleRows(offset,n).rowwise() += map.group_means.row(static_cast<Eigen::Index>(b));
     offset += n;
   }
 }
@@ -93,6 +81,38 @@ post_expected<std::shared_ptr<NTMLQuadratic>> from_rows(
   q->statistic = std::max(0.0,statistic); q->df = df; q->rows = std::move(rows);
   return q;
 }
+}
+
+LikelihoodProjection likelihood_projection(
+    const UFactor& base, const SampleStats& sample,
+    const std::vector<Eigen::VectorXd>& mean_hat,
+    const Eigen::MatrixXd& directions) {
+  LikelihoodProjection out;
+  out.directions = directions;
+  out.group_means = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(base.blocks.size()), directions.cols());
+  out.mean_corrections.reserve(base.blocks.size());
+  for (std::size_t b = 0; b < base.blocks.size(); ++b) {
+    const auto& block = base.blocks[b];
+    Eigen::VectorXd shift = Eigen::VectorXd::Zero(block.p);
+    if (base.has_means) shift = sample.mean[b] - mean_hat[b];
+    Eigen::MatrixXd linear = Eigen::MatrixXd::Zero(block.p,directions.cols());
+    auto constant = out.group_means.row(static_cast<Eigen::Index>(b));
+    if (base.has_means)
+      constant += shift.transpose() * directions.middleRows(block.mu_off,block.p);
+    Eigen::Index v = block.row_offset;
+    for (Eigen::Index j = 0; j < block.p; ++j) {
+      for (Eigen::Index i = j; i < block.p; ++i, ++v) {
+        constant += (block.S(i,j) - block.Sigma_hat(i,j) + shift(i)*shift(j)) * directions.row(v);
+        if (base.has_means) {
+          linear.row(i) += shift(j)*directions.row(v);
+          linear.row(j) += shift(i)*directions.row(v);
+        }
+      }
+    }
+    if (base.has_means) out.directions.middleRows(block.mu_off,block.p) += linear;
+    out.mean_corrections.push_back(std::move(linear));
+  }
+  return out;
 }
 
 post_expected<std::shared_ptr<NTMLData>> prepare_ntml_data(

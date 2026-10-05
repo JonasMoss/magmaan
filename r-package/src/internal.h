@@ -93,10 +93,11 @@ inline magmaan::robust::Information info_from_string(const std::string& s) {
   Rcpp::stop("magmaan: `bread` must be 'expected' or 'observed' (got '%s')", s);
 }
 inline magmaan::robust::WeightMoments moments_from_string(const std::string& s) {
+  if (s == "likelihood") return magmaan::robust::WeightMoments::Likelihood;
   if (s == "structured")   return magmaan::robust::WeightMoments::Structured;
   if (s == "unstructured") return magmaan::robust::WeightMoments::Unstructured;
   if (s == "pairwise")     return magmaan::robust::WeightMoments::Pairwise;
-  Rcpp::stop("magmaan: `moments` must be 'structured', 'unstructured', or 'pairwise' (got '%s')", s);
+  Rcpp::stop("magmaan: `moments` must be 'likelihood', 'structured', 'unstructured', or 'pairwise' (got '%s')", s);
 }
 inline magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
   if (s == "model_implied")   return magmaan::robust::ScoreCovariance::ModelImplied;
@@ -108,13 +109,14 @@ inline magmaan::robust::InferenceSpec spec_from(const std::string& bread,
                                                 const std::string& moments) {
   magmaan::robust::InferenceSpec s;
   s.bread = info_from_string(bread);
-  s.moments = moments_from_string(moments);
+  s.moments = moments_from_string(moments == "auto" ? "likelihood" : moments);
   return s;
 }
 inline magmaan::robust::InferenceSpec spec_from(const std::string& bread,
                                                 const std::string& moments,
                                                 const std::string& cov) {
-  magmaan::robust::InferenceSpec s = spec_from(bread, moments);
+  magmaan::robust::InferenceSpec s = spec_from(bread,
+      moments == "auto" && cov != "empirical" ? "structured" : moments);
   s.cov = cov_from_string(cov);
   return s;
 }

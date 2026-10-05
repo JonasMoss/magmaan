@@ -552,20 +552,18 @@ required by an all-ordinal primary workflow remain current work.
   confirmed at 4.3-7.8% with SB/PEBA4. Out of scope and reopen triggers:
   heavier-tailed latent responses; threshold-invariance restriction maps.
 
-- [ ] **M — derive the misspecification-consistent moment centering for lab
-  robust meats.** Lab robust SE/test functions take `moments = "structured"` or
-  `"saturated"`. Which centering keeps the meat consistent under mean or
-  covariance misspecification depends on each estimator's estimating equation
-  (ML casewise scores are consistent at the structured point; raw moment
-  covariances may need saturated centering). Found by the task-61 audit
-  (project/validation/lab_inference_defaults.md, 'needs derivation' rows).
-  **Check:** a derivation per function family plus a misspecified-mean
-  simulation check before any default changes. The complete-data ML policy's
-  nested LR case is resolved (TASK-66): observed and expected hypothesis
-  geometry now use exact likelihood rows at the larger fit, including the
-  fitted-mean shift; grouped misspecified-mean gates match direct FIML and
-  finite-difference casewise scores. Explicit lab Satorra-2000 moment drivers
-  and global GOF retain their separate moment conventions. TASK-75 registers
+- [x] **M — derive the misspecification-consistent moment choice for lab
+  robust meats (TASK-77).** Empirical ML SE/score/MI defaults now use exact
+  likelihood rows, sharing TASK-66's mean-shift and uncentered group constants;
+  raw/Zc/Gamma gates agree with finite-difference scores. Explicit structured
+  and unstructured weights remain comparators. Global U-factor/test-moment
+  builders retain correct-null conventions. All 19 audit Q rows are resolved;
+  derivations and supported sampling contracts live in
+  `project/validation/lab_inference_defaults.md`. Continuous LS retains its
+  sample-centered fitting-weight law: the grouped fixed-allocation influence
+  is gated, while joint allocation under nonzero group estimating-equation
+  means remains a documented limitation (banked fixed-design scope).
+  TASK-75 registers
   decisions/04 structured-mean calibration, with frozen full-grid 20-draw pilot
   and cost. The original intermittent R/native conversion failure remains
   counted; 201 authorized replays passed. TASK-76 adds two-worker Modal cell

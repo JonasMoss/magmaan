@@ -835,7 +835,7 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_modification_indices_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
-    std::string bread = "observed", std::string moments = "structured",
+    std::string bread = "observed", std::string moments = "auto",
     std::string cov = "empirical", std::string information = "expected",
     std::string candidates = "fixed", bool include_loadings = true,
     bool include_covariances = true, bool estimated_weight = true,
@@ -845,6 +845,11 @@ Rcpp::DataFrame inference_modification_indices_robust(
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"])
       : "";
+  if (moments == "auto")
+    moments = ((estimator == "ML" || estimator.empty()) && cov == "empirical")
+        ? "likelihood" : "structured";
+  if (moments == "likelihood" && estimator != "ML" && !estimator.empty())
+    Rcpp::stop("magmaan: likelihood moments require complete-data ML; other estimators use their own fitting-weight law");
   const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
                               Rcpp::as<bool>(fit["ordinal"]);
   const bool is_mixed_ordinal_fit =
@@ -986,7 +991,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
 // [[Rcpp::export]]
 Rcpp::DataFrame inference_score_tests_robust(
     Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
-    std::string bread = "observed", std::string moments = "structured",
+    std::string bread = "observed", std::string moments = "auto",
     std::string cov = "empirical", bool estimated_weight = true,
     SEXP gamma = R_NilValue) {
   Ctx ctx = ctx_from_fit(fit);
@@ -994,6 +999,11 @@ Rcpp::DataFrame inference_score_tests_robust(
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"])
       : "";
+  if (moments == "auto")
+    moments = ((estimator == "ML" || estimator.empty()) && cov == "empirical")
+        ? "likelihood" : "structured";
+  if (moments == "likelihood" && estimator != "ML" && !estimator.empty())
+    Rcpp::stop("magmaan: likelihood moments require complete-data ML; other estimators use their own fitting-weight law");
   const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
                               Rcpp::as<bool>(fit["ordinal"]);
   const bool is_mixed_ordinal_fit =

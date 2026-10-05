@@ -249,11 +249,11 @@ inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
     .Call(`_magmaanlab_inference_score_tests`, fit, weight, h_step)
 }
 
-inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE, gamma = NULL) {
+inference_modification_indices_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "auto", cov = "empirical", information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, estimated_weight = TRUE, gamma = NULL) {
     .Call(`_magmaanlab_inference_modification_indices_robust`, fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances, estimated_weight, gamma)
 }
 
-inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "structured", cov = "empirical", estimated_weight = TRUE, gamma = NULL) {
+inference_score_tests_robust <- function(fit, raw = NULL, weight = NULL, bread = "observed", moments = "auto", cov = "empirical", estimated_weight = TRUE, gamma = NULL) {
     .Call(`_magmaanlab_inference_score_tests_robust`, fit, raw, weight, bread, moments, cov, estimated_weight, gamma)
 }
 
@@ -1001,15 +1001,15 @@ infer_mixed_ordinal_profile_lrt <- function(fit_H1, fit_H0, mixed_stats, eig_tol
     .Call(`_magmaanlab_infer_mixed_ordinal_profile_lrt`, fit_H1, fit_H0, mixed_stats, eig_tol)
 }
 
-infer_robust_se <- function(fit, gamma_hat, bread = "observed", moments = "structured", cov = "empirical") {
+infer_robust_se <- function(fit, gamma_hat, bread = "observed", moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se`, fit, gamma_hat, bread, moments, cov)
 }
 
-infer_robust_se_parts <- function(partable, sample_stats, theta, gamma_hat, bread = "observed", moments = "structured", cov = "empirical") {
+infer_robust_se_parts <- function(partable, sample_stats, theta, gamma_hat, bread = "observed", moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_parts`, partable, sample_stats, theta, gamma_hat, bread, moments, cov)
 }
 
-infer_robust_se_raw <- function(fit, X, bread = "observed", moments = "structured", cov = "empirical") {
+infer_robust_se_raw <- function(fit, X, bread = "observed", moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_raw`, fit, X, bread, moments, cov)
 }
 
@@ -1017,23 +1017,23 @@ infer_casewise_scores_fit <- function(fit, X) {
     .Call(`_magmaanlab_infer_casewise_scores_fit`, fit, X)
 }
 
-infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "observed", moments = "structured", cov = "empirical") {
+infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "observed", moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
 
-infer_robust_se_zc <- function(fit, Zc, n_total, bread = "observed", moments = "structured", cov = "empirical") {
+infer_robust_se_zc <- function(fit, Zc, n_total, bread = "observed", moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_zc`, fit, Zc, n_total, bread, moments, cov)
 }
 
-infer_robust_se_both_breads <- function(fit, gamma_hat, moments = "structured", cov = "empirical") {
+infer_robust_se_both_breads <- function(fit, gamma_hat, moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_both_breads`, fit, gamma_hat, moments, cov)
 }
 
-infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov = "empirical") {
+infer_robust_se_both_breads_raw <- function(fit, X, moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_both_breads_raw`, fit, X, moments, cov)
 }
 
-infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
+infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "auto", cov = "empirical") {
     .Call(`_magmaanlab_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
 

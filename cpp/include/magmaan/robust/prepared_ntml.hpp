@@ -49,6 +49,17 @@ struct NTMLHypothesis {
   std::shared_ptr<NTMLQuadratic> score, lr;                    // expected geometry
   std::shared_ptr<NTMLQuadratic> score_observed, lr_observed;  // observed geometry
 };
+// Affine map from centered sample-moment rows to likelihood projections.
+// group_means contains one uncentered score mean per sampling group.
+struct LikelihoodProjection {
+  Eigen::MatrixXd directions;
+  Eigen::MatrixXd group_means;
+  std::vector<Eigen::MatrixXd> mean_corrections;
+};
+LikelihoodProjection likelihood_projection(
+    const UFactor& base, const SampleStats& sample,
+    const std::vector<Eigen::VectorXd>& mean_hat,
+    const Eigen::MatrixXd& directions);
 post_expected<std::shared_ptr<NTMLData>> prepare_ntml_data(
     RawData raw, bool has_means, ContributionStorage storage = ContributionStorage::Auto);
 post_expected<std::shared_ptr<NTMLFit>> prepare_ntml_fit(

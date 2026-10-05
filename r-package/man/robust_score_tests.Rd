@@ -6,11 +6,11 @@
 equality-release tests, with a direction-specific sandwich correction.}
 \usage{
 modification_indices_robust(fit, data = NULL, weight = NULL,
-  bread = "observed", moments = "structured", cov = "empirical",
+  bread = "observed", moments = "auto", cov = "empirical",
   candidates = "all", include_loadings = TRUE, include_covariances = TRUE,
   information = "expected", estimated_weight = TRUE, gamma = NULL)
 score_tests_robust(fit, data = NULL, weight = NULL,
-  bread = "observed", moments = "structured", cov = "empirical",
+  bread = "observed", moments = "auto", cov = "empirical",
   estimated_weight = TRUE, gamma = NULL)
 }
 \arguments{
@@ -27,8 +27,13 @@ it. Unsupported for FIML and ML2S.}
 For FIML, omitted arguments select \code{"observed"}; explicitly requesting
 \code{"expected"} is unsupported. Bread defaults to observed for all
 estimators; the complete-data score metric may remain expected.}
-\item{moments,cov}{Continuous moment and covariance conventions. FIML accepts
-only the default \code{moments="structured"}, \code{cov="empirical"} combination,
+\item{moments,cov}{Continuous moment and covariance conventions.
+\code{moments="auto"} selects exact likelihood-score meat for empirical
+complete-data ML, including fitted-mean shifts and joint group-score means.
+Explicit \code{"structured"} and \code{"unstructured"} select fitted/sample
+normal-theory weights on centered moment influence. Continuous LS retains
+its fitting-weight moment law (fixed group allocation for centered group
+meats). FIML auto selects \code{moments="structured"}, \code{cov="empirical"} combination,
 which selects observed-pattern casewise score covariance.}
 \item{candidates}{\code{"fixed"} for existing fixed parameter rows or
 \code{"all"} to include absent cross-loadings and covariances.}

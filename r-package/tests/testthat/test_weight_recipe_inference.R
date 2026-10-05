@@ -156,7 +156,7 @@ test_that("ordinal NT, DLS and supplied weights refuse the weight influence", {
   expect_error(modification_indices_robust(ml, estimated_weight = FALSE, bread = "expected"), "association")
 })
 
-test_that("two-stage MI and releases reduce to complete-data robust tests", {
+test_that("two-stage MI and releases reduce to complete-data moment comparators", {
   d <- recipe_data(n = 300L)
   spec <- model_spec("f =~ x1 + x2 + x3 + x4 + x5", meanstructure = TRUE)
   spec_eq <- model_spec("f =~ x1 + a*x2 + a*x3 + x4 + x5", meanstructure = TRUE)
@@ -170,7 +170,10 @@ test_that("two-stage MI and releases reduce to complete-data robust tests", {
       for (ew in c(FALSE, TRUE)) {
         if (ew && w %in% c("nt", "uls")) next
         a <- run(two, estimated_weight = ew, bread = "expected")
-        b <- run(one, data = d, estimated_weight = ew, bread = "expected")
+        # NT Stage 2 propagates centered moment influence; exact ML score
+        # rows also carry candidate/group constants at the evaluation point.
+        b <- run(one, data = d, estimated_weight = ew, bread = "expected",
+                 moments = if (w == "nt") "structured" else "auto")
         expect_identical(attr(a, "mi_type"), "naive_stage2")
         expect_equal(a$mi, b$mi, tolerance = 1e-10, info = paste(w, ew))
         expect_equal(a$mi.scaled, b$mi.scaled, tolerance = 1e-10, info = paste(w, ew))
@@ -214,7 +217,7 @@ test_that("two-stage MI under missing data uses the recorded Stage-2 weight", {
   expect_true(all(is.finite(est_change_raw_approx(dls, type = "estimated.weight"))))
 })
 
-test_that("two-stage unequal groups reduce to complete-data robust tests", {
+test_that("two-stage unequal groups reduce to complete-data moment comparators", {
   d <- rbind(recipe_data(240L, 20261003L), recipe_data(160L, 20261004L))
   d$g <- rep(c("a", "b"), c(240L, 160L))
   estimators <- c(nt = "ML", uls = "ULS", dwls = "DWLS", adf = "WLS", dls = "DLS")
@@ -234,7 +237,8 @@ test_that("two-stage unequal groups reduce to complete-data robust tests", {
         for (ew in c(FALSE, TRUE)) {
           a <- worker(two, estimated_weight = ew, bread = "expected")
           b <- worker(one, data = d,
-                       estimated_weight = ew && !w %in% c("nt", "uls"), bread = "expected")
+                       estimated_weight = ew && !w %in% c("nt", "uls"), bread = "expected",
+                       moments = if (w == "nt") "structured" else "auto")
           expect_true(nrow(a) > 0L, info = paste(w, release, ew))
           expect_identical(attr(a, "mi_type"), "naive_stage2")
           expect_equal(a$mi, ordinary$mi, tolerance = 1e-8)

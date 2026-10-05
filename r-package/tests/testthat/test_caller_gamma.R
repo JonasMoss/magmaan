@@ -50,7 +50,20 @@ test_that("caller Gamma reproduces continuous ML and LS MI and releases", {
         doubled <- worker(fit, gamma = lapply(blocks, function(G) 2 * G),
                           bread = "expected", estimated_weight = FALSE)
         expect_equal(doubled$mi, raw$mi, tolerance = 1e-10)
-        expect_equal(doubled$scaling.factor, 2 * raw$scaling.factor, tolerance = 1e-10)
+        if (estimator == "ML") {
+          # Exact likelihood meat includes group-score constants, which do not
+          # scale when only the centered NACOV is multiplied by two.
+          expect_true(all(doubled$scaling.factor <= 2 * raw$scaling.factor + 1e-10))
+          expect_true(all(doubled$scaling.factor >= raw$scaling.factor - 1e-10))
+          comparator <- worker(fit, gamma = gamma, bread = "expected",
+                               moments = "structured", estimated_weight = FALSE)
+          comparator_doubled <- worker(fit, gamma = lapply(blocks, function(G) 2 * G),
+                               bread = "expected", moments = "structured", estimated_weight = FALSE)
+          expect_equal(comparator_doubled$scaling.factor,
+                       2 * comparator$scaling.factor, tolerance = 1e-10)
+        } else {
+          expect_equal(doubled$scaling.factor, 2 * raw$scaling.factor, tolerance = 1e-10)
+        }
       }
       if (estimator == "ML") {
         raw <- score_tests_robust(fit, data = d, estimated_weight = FALSE)
@@ -150,7 +163,10 @@ test_that("explicit Gamma_NT is available for complete ML releases", {
   G <- magmaan_core$robust_gamma_nt(Sigma)
   ordinary <- score_tests(fit, cov = "model_implied", estimated_weight = FALSE,
                           bread = "expected")
-  explicit <- score_tests_robust(fit, gamma = G, bread = "expected", estimated_weight = FALSE)
+  # Gamma_NT reduction is a structured metric convention, not the exact
+  # likelihood recipe's affine mean/score correction.
+  explicit <- score_tests_robust(fit, gamma = G, bread = "expected",
+                                  moments = "structured", estimated_weight = FALSE)
   expect_equal(explicit$mi.scaled, ordinary$mi, tolerance = 1e-10)
   expect_equal(explicit$scaling.factor, rep(1, nrow(explicit)), tolerance = 1e-10)
   expect_error(score_tests(fit, gamma = G, cov = "model_implied", estimated_weight = FALSE),

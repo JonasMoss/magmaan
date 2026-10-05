@@ -241,6 +241,34 @@ TEST_CASE("policy covariance: exact scores under a misspecified structured mean"
   const Eigen::MatrixXd V = observed_bread(p);
   const Eigen::MatrixXd S = numeric_scores(p);
   CHECK(relative(out.covariance, V * S.transpose() * S * V) < 1e-6);
+  // Lab raw, centered-moment and caller-Gamma entry points must estimate
+  // the same exact joint-sampling covariance as numeric log-density scores.
+  namespace rob = magmaan::robust;
+  const rob::InferenceSpec exact{rob::Information::Observed,
+      rob::WeightMoments::Likelihood, rob::ScoreCovariance::Empirical};
+  auto z = rob::casewise_contributions(p.raw,p.data->sample,true);
+  REQUIRE(z.has_value());
+  const double n = static_cast<double>(S.rows());
+  const Eigen::MatrixXd gamma = z->transpose()* *z/n;
+  auto raw_se = rob::robust_se(p.model.pt,p.model.rep,p.data->sample,p.est,p.raw,exact);
+  auto z_se = rob::robust_se(p.model.pt,p.model.rep,p.data->sample,p.est,*z,n,exact);
+  auto g_se = rob::robust_se(p.model.pt,p.model.rep,p.data->sample,p.est,gamma,exact);
+  REQUIRE(raw_se.has_value()); REQUIRE(z_se.has_value()); REQUIRE(g_se.has_value());
+  CHECK(relative(raw_se->vcov,out.covariance) < 1e-10);
+  CHECK(relative(z_se->vcov,out.covariance) < 1e-10);
+  CHECK(relative(g_se->vcov,out.covariance) < 1e-10);
+  auto pair = rob::robust_se_both_breads(p.model.pt,p.model.rep,p.data->sample,p.est,
+      p.raw,rob::WeightMoments::Likelihood,rob::ScoreCovariance::Empirical);
+  REQUIRE(pair.has_value());
+  CHECK(relative(pair->observed.vcov,out.covariance) < 1e-10);
+  auto meat = rob::param_space_sandwich(p.model.pt,p.model.rep,p.data->sample,p.est,
+      p.raw,exact,false);
+  REQUIRE(meat.has_value());
+  CHECK(relative(meat->B1,S.transpose()*S/n) < 1e-6);
+  auto gm = rob::param_space_sandwich(p.model.pt,p.model.rep,p.data->sample,p.est,
+      gamma,exact,false);
+  REQUIRE(gm.has_value());
+  CHECK(relative(gm->B1,meat->B1) < 1e-12);
   // Sample-mean-centered scores would give a different, inconsistent meat.
   auto centered = inf::casewise_scores(p.model.pt, p.model.rep, p.data->sample, p.raw, p.est);
   REQUIRE(centered.has_value());

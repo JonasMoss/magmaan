@@ -6,6 +6,13 @@
   global spectrum uses exact sampling rows. Validation is limited and calibration
   is pending. Nested score and mixed lavaan compatibility remain unavailable.
 
+- Lab ML robust SEs and score/MI meats now default to exact casewise likelihood
+  projections, including restricted-mean shifts and joint-sampling group score
+  means. `moments="auto"` chooses this empirical recipe; `"structured"` and
+  `"unstructured"` remain explicit weight comparators. Raw, centered Zc and
+  caller Gamma routes agree. Global GOF moment primitives retain their named
+  conventions; grouped centered LS meats retain their fixed-allocation scope.
+
 - `mplus_model()` accepts complete observed-X moment mentions as joint random-X
   models; partial mentions name the exact completion statement. Mplus 9.1
   probes show all X variance mentions suffice without means or WITH.

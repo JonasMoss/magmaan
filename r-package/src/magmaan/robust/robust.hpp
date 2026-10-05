@@ -82,8 +82,9 @@ using estimate::resolve_fixed_x_from_sample;
 // path (`build_u_factor` + `reduced_gamma_*`). Mirrors lavaan's `information`
 // / `h1.information` but *without* lavaan's `first.order` corner: there is no
 // "K-as-bread" mode — for ML the gradient-outer-product `K` is not a distinct
-// quantity, it equals `Δᵀ·W·Γ̂·W·Δ` (the empirical meat below), so we expose
-// it only as a meat choice, never inverted-as-a-bread.
+// quantity. Centered-moment comparators use `Δᵀ·W·Γ̂·W·Δ`; the exact
+// likelihood recipe additionally carries mean shifts and group constants.
+// We expose score covariance only as a meat choice, never inverted as bread.
 
 // The "bread" — the q × q curvature matrix that gets inverted (for SEs:
 // `vcov = bread⁻¹` naive, `bread⁻¹·meat·bread⁻¹` robust; for the test:
@@ -116,7 +117,10 @@ enum class Information { Expected, Observed };
 //                  Empirical` meat (`Ψ̂'Ψ̂/n`) it becomes the pairwise +
 //                  non-normal robust SE — the principled SE for a pairwise
 //                  SEM fit.
-enum class WeightMoments { Structured, Unstructured, Pairwise };
+// Likelihood retains the structured metric and adds the exact likelihood
+// mean-shift and group-score constants to empirical SE/score meats. It is not
+// a GOF moment convention; U-factor callers choose Structured explicitly.
+enum class WeightMoments { Structured, Unstructured, Pairwise, Likelihood };
 
 // The "meat" — the ACOV estimate of vech(S).
 //   ModelImplied   = Γ_NT(M):  SE sandwich collapses to bread⁻¹ (= the naive

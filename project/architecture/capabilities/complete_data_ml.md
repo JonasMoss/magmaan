@@ -386,8 +386,15 @@
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling
   `c = gᵀB1g / gᵀA1g`, where A1/B1 are the parameter-space sandwich bread/meat
-  surfaced by `robust::param_space_sandwich` (the same Δ'WΔ / Δ'WΓ̂WΔ that
-  `robust_se` uses) and g is the efficient-score direction. Goes beyond lavaan,
+  surfaced by `robust::param_space_sandwich` and shared with `robust_se`.
+  Lab empirical defaults use `moments="auto"` -> `WeightMoments::Likelihood`:
+  exact casewise likelihood projections, including restricted-mean shifts and
+  uncentered group-score means under joint sampling. Raw, centered Zc and
+  caller-Gamma paths share TASK-66's affine correction and agree with
+  finite-difference log-density scores. Explicit Structured/Unstructured retain
+  the Δ'WΓ̂WΔ metric comparators; model-implied covariance automatically selects
+  the structured convention. The primitive C++ spec remains explicit.
+  Here g is the efficient-score direction. Goes beyond lavaan,
   which falls back to the ordinary statistic when `se != "standard"`. Covers
   complete-data ML, both breads (`Information::Expected` ≈ robust.sem/MLM;
   `Information::Observed` ≈ robust.huber.white/MLR), single or multi-group (the

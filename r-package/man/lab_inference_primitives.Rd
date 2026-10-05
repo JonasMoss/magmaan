@@ -33,11 +33,17 @@ measures_reliability_omega_multidim(S, block, target = "total",
 \item{X_per_group}{Raw observations in fitted group order, used when gamma
 is NULL. Omit when supplying Gamma.}
 \item{eig_tol}{Relative tolerance for profile-law eigenvalues.}
-\item{bread}{Required geometry for U factors: observed for covariance or
-nested restrictions at a pseudo-true target; expected is admissible for
-complete-data global goodness-of-fit under the correct-model null.}
-\item{moments}{Existing structured or saturated moment evaluation.
-The joint bread/meat derivation remains pending; this argument is unchanged.}
+\item{bread}{Required geometry for U factors: expected for complete-data global
+goodness-of-fit under the correct-model null; observed requests the explicit
+Hessian convention. U factors alone do not certify pseudo-true covariance or
+nested sampling laws.}
+\item{moments}{For U factors, \code{"structured"} or \code{"unstructured"} selects the
+fitted/sample normal-theory weight, not centering. These correct-null GOF
+conventions retain their defaults and reject \code{"likelihood"}. Lab ML
+SE/score meats instead default to \code{"auto"}: exact uncentered likelihood
+projections for empirical covariance, structured for model-implied comparators.
+Exact likelihood projections include fitted-mean shifts and group score means;
+centered Zc and caller Gamma use the same affine transformation.}
 \item{partable,sample_stats,theta}{Model, observed moments and fitted parameters.}
 \item{X,mask}{Raw observations and optional observation mask.
 Pass \code{mask} by name in the pairwise builder.}
@@ -57,7 +63,10 @@ Gamma from raw_data and errors if those observations are absent.}
 \item{fixed_weight}{Explicitly request the caller-fixed-weight LS law.
 For data-estimated nt/adf/dwls/dls recipes, use
 \code{infer_casewise_influence_ij_fit()} for parameter covariance.
-This primitive errors unless fixed_weight = TRUE requests its comparator.}
+This primitive errors unless fixed_weight = TRUE requests its comparator.
+Grouped sample-centered moment meats describe fixed group allocation;
+random composition with nonzero group estimating-equation means requires
+additional allocation influence.}
 \item{S}{Observed covariance matrix in the same metric as Gamma.}
 \item{n}{Sample size; inferred from reliability raw_data if zero.}
 \item{block}{Integer item-to-factor allocation.}

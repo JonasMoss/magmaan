@@ -262,7 +262,7 @@ score_tests <- function(fit, data = NULL, ...) {
 #'   estimated_weight = FALSE and cov = "empirical". FIML/ML2S refuse it.
 modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         bread = "observed",
-                                        moments = "structured",
+                                        moments = "auto",
                                         cov = "empirical",
                                         candidates = "all",
                                         include_loadings = TRUE,
@@ -296,7 +296,7 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
 #'   Supplying gamma replaces the meat, preserves fitting weights, and requires
 #'   estimated_weight = FALSE and cov = "empirical". FIML/ML2S refuse it.
 score_tests_robust <- function(fit, data = NULL, weight = NULL,
-                               bread = "observed", moments = "structured",
+                               bread = "observed", moments = "auto",
                                cov = "empirical", estimated_weight = TRUE, gamma = NULL) {
   if (.is_noniterative(fit)) .guard_noniterative("score_tests_robust()")
   if (identical(fit$estimator, "FIML") && missing(bread)) bread <- "observed"

@@ -37,6 +37,7 @@ const char* moments_to_string(magmaan::robust::WeightMoments m) {
     case magmaan::robust::WeightMoments::Structured:   return "structured";
     case magmaan::robust::WeightMoments::Unstructured: return "unstructured";
     case magmaan::robust::WeightMoments::Pairwise:     return "pairwise";
+    case magmaan::robust::WeightMoments::Likelihood:   return "likelihood";
   }
   return "structured";
 }
@@ -1515,13 +1516,14 @@ Rcpp::List infer_mixed_ordinal_profile_lrt(Rcpp::List fit_H1,
 // =============================================================================
 
 // infer_robust_se() — mirrors robust_se(pt, rep, samp, est, gamma_hat, {bread,
-// moments, cov}). `gamma_hat` a p* x p* matrix. `cov` in {"model_implied",
-// "empirical","browne_unbiased"} (the last errors for now). Single-block only
-// (for multi-group the per-block weighting is implicit — use infer_robust_se_raw()).
+// moments, cov}). Gamma uses the centered [mean; vech covariance] layout
+// when means are fitted (covariance only otherwise). Group blocks must already
+// carry n_b/N weighting. Auto selects exact likelihood meat for empirical Gamma;
+// structured/unstructured retain the explicit normal-theory weight comparators.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
-                           std::string bread = "observed", std::string moments = "structured",
+                           std::string bread = "observed", std::string moments = "auto",
                            std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1540,7 +1542,7 @@ Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
                                  Rcpp::NumericVector theta,
                                  Rcpp::NumericMatrix gamma_hat,
                                  std::string bread = "observed",
-                                 std::string moments = "structured",
+                                 std::string moments = "auto",
                                  std::string cov = "empirical") {
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
                                            "infer_robust_se_parts");
@@ -1556,12 +1558,12 @@ Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
 // infer_robust_se_raw() — mirrors robust_se(pt, rep, samp, est, raw, {bread,
 // moments, cov}). Derives Γ̂ from raw data `X` (a matrix, or a list of per-group
 // matrices) via casewise contributions — never forms the p* x p* matrix. Works
-// multi-group for the `Expected` bread (≙ lavaan `se = "robust.sem"` / MLM);
-// the `Observed` bread (MLR) is single-block only.
+// single- or multi-group for both breads. The empirical auto recipe projects
+// exact likelihood rows with fitted-mean shifts and uncentered group constants.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
-                               std::string bread = "observed", std::string moments = "structured",
+                               std::string bread = "observed", std::string moments = "auto",
                                std::string cov = "empirical") {
   if (auto cached=magmaanr::ntml_snapshot(fit);
       cached && bread=="expected" && moments=="structured" &&
@@ -1603,7 +1605,7 @@ Rcpp::NumericMatrix infer_casewise_scores_fit(Rcpp::List fit, SEXP X) {
 Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
                                      Rcpp::NumericVector theta, SEXP X,
                                      std::string bread = "observed",
-                                     std::string moments = "structured",
+                                     std::string moments = "auto",
                                      std::string cov = "empirical") {
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
                                            "infer_robust_se_raw_parts");
@@ -1627,7 +1629,7 @@ Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List infer_robust_se_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc,
                               double n_total,
                               std::string bread = "observed",
-                              std::string moments = "structured",
+                              std::string moments = "auto",
                               std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1664,28 +1666,28 @@ Rcpp::List pair_to_list(const magmaan::robust::RobustSeBothBreads& r) {
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_both_breads(Rcpp::List fit,
                                        Rcpp::NumericMatrix gamma_hat,
-                                       std::string moments = "structured",
+                                       std::string moments = "auto",
                                        std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma_hat);
   auto r_or = magmaan::robust::robust_se_both_breads(
       ctx.pt, ctx.rep, ctx.samp, est, G,
-      moments_from_string(moments), cov_from_string(cov));
+      spec_from("expected", moments, cov).moments, cov_from_string(cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return pair_to_list(*r_or);
 }
 
 // [[Rcpp::export]]
 Rcpp::List infer_robust_se_both_breads_raw(Rcpp::List fit, SEXP X,
-                                           std::string moments = "structured",
+                                           std::string moments = "auto",
                                            std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
   auto r_or = magmaan::robust::robust_se_both_breads(
       ctx.pt, ctx.rep, ctx.samp, est, raw,
-      moments_from_string(moments), cov_from_string(cov));
+      spec_from("expected", moments, cov).moments, cov_from_string(cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return pair_to_list(*r_or);
 }
@@ -1694,14 +1696,14 @@ Rcpp::List infer_robust_se_both_breads_raw(Rcpp::List fit, SEXP X,
 Rcpp::List infer_robust_se_both_breads_zc(Rcpp::List fit,
                                           Rcpp::NumericMatrix Zc,
                                           double n_total,
-                                          std::string moments = "structured",
+                                          std::string moments = "auto",
                                           std::string cov = "empirical") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   Eigen::Map<const Eigen::MatrixXd> Zc_m(Zc.begin(), Zc.nrow(), Zc.ncol());
   auto r_or = magmaan::robust::robust_se_both_breads(
       ctx.pt, ctx.rep, ctx.samp, est, Zc_m, n_total,
-      moments_from_string(moments), cov_from_string(cov));
+      spec_from("expected", moments, cov).moments, cov_from_string(cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return pair_to_list(*r_or);
 }

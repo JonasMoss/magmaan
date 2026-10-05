@@ -2961,12 +2961,12 @@ infer_build_u_factor_fit <- function(fit, bread, moments = "structured") {
 }
 
 infer_robust_se_fit <- function(fit, gamma_hat, bread = "observed",
-                                moments = "structured", cov = "empirical") {
+                                moments = "auto", cov = "empirical") {
   infer_robust_se(fit, gamma_hat, bread = bread, moments = moments, cov = cov)
 }
 
 infer_robust_se_raw_fit <- function(fit, X, bread = "observed",
-                                    moments = "structured", cov = "empirical") {
+                                    moments = "auto", cov = "empirical") {
   infer_robust_se_raw(fit, X, bread = bread, moments = moments, cov = cov)
 }
 

@@ -117,6 +117,13 @@
   statistics are lavaan-backed for the non-fixed.x continuous LS fixtures;
   GLS/WLS robust paths have shape and scaling coverage because lavaan does not
   expose matching robust scaled-test targets for those estimators.
+  Grouped centered sample-moment meats describe fixed group allocation;
+  the TASK-77 unequal-mean ULS gate matches finite-difference case-weight
+  influence within that contract. Random group composition with nonzero group
+  estimating-equation means needs additional allocation influence and is not
+  certified by these centered routes. Empirical LS SE/score/MI paths retain
+  their fitting weight, independent of the structured/unstructured NT metric
+  comparator; data-estimated weights retain their separate IJ requirement.
 - GLS/WLS reporting follows lavaan's `2 * N * fmin` convention; ULS
   standard chi-square is pinned to lavaan's Browne residual NT statistic,
   including lavaan's `fixed.x` convention of zeroing the fixed exogenous

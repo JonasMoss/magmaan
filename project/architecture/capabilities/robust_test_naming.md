@@ -79,3 +79,18 @@ over the same C++ primitives so methods scripts can choose the intended
 surface directly.
 
 2026-10-02: FMG `blocks_effective` and policy `peba_blocks` report actual nonempty PEBA blocks; ordinary global/nested output adds a footnote below four formed blocks without changing tails or default columns.
+
+### Lab likelihood meats and moment conventions
+
+Lab empirical ML sandwich SEs and robust score/MI tables select exact
+likelihood-score projections through `moments="auto"` (`"likelihood"` for ML).
+The affine correction is shared with prepared NTML policy rows, including
+restricted-mean shifts and group score means for joint sampling. Centered Zc
+and caller Gamma routes apply the same affine map; Gamma must include the
+mean/covariance cross blocks and documented group weighting. `structured` and
+`unstructured` remain explicit NT metric comparators. U-factor/test-moment
+builders retain correct-null GOF conventions and reject `likelihood`.
+Continuous LS retains sample-centered fitting-weight influence, conditional on
+fixed group allocation; arbitrary joint allocation with nonzero group equation
+means remains unsupported by that centered law. See the per-family derivation
+and numerical gates in [the lab inventory](../../validation/lab_inference_defaults.md#task-77-estimating-equations-and-consistent-meats).
