@@ -28,9 +28,18 @@ def run_cell(cell_id: int, mode: str, run_id: str, git_head: str = ""):
     # The container has no git; the local entrypoint passes the commit.
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                MAGMAAN_GIT_HEAD=git_head)
+    import shutil
+    out = f"/vol/{run_id}/cells/cell_{cell_id:03d}"
+    # Cells are seed-stable, so a finished cell is skipped and a partial one
+    # (left by a preempted container that Modal restarts) is redone from scratch.
+    volume.reload()
+    if os.path.exists(f"{out}/raw.rds") and os.path.exists(f"{out}/summary.csv"):
+        return
+    if os.path.exists(out):
+        shutil.rmtree(out)
     subprocess.run(["Rscript", f"/repo/{STUDY}/run_experiment.R", f"--{mode}",
-                    "--cell", str(cell_id), "--workers", "2", "--out-dir",
-                    f"/vol/{run_id}/cells/cell_{cell_id:03d}"], check=True, env=env)
+                    "--cell", str(cell_id), "--workers", "2", "--out-dir", out],
+                   check=True, env=env)
     volume.commit()
 
 
