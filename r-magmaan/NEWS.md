@@ -1,5 +1,9 @@
 # magmaan 0.2.0 (in development)
 
+- Mplus fitting refusals list all needed input edits in order, with vector
+  `reason` and named vector `edit` condition fields. Printing a Mplus model
+  shows fittability and every needed edit.
+
 - `magmaan_model()` accepts explicit `magmaanlab::mplus_model()` specs, preserving
   source, groups and category schema through prepared fits and serialization.
   Conditional X, NOMEANSTRUCTURE and summary-without-MEANS fits raise

@@ -106,6 +106,42 @@ test_that('Mplus refusals preserve tables and name the input edit', {
   expect_error(magmaan_model(mplus_ordinary_input(base))) # strings are lavaan only
 })
 
+test_that('Mplus errors list all edits and printing shows fittability', {
+  base <- 'f BY y1-y3; f ON x1 x2;'
+  model <- magmaan_model(magmaanlab::mplus_model(mplus_ordinary_input(
+    base, 'MODEL=NOMEANSTRUCTURE; INFORMATION=EXPECTED;')))
+  e <- tryCatch(magmaan(model, data.frame()), error = identity)
+  expect_s3_class(e, 'magmaan_mplus_error')
+  expect_identical(e$reason, c('conditional_x', 'nomeanstructure'))
+  expect_identical(names(e$edit), e$reason)
+  expect_identical(unname(e$edit), unlist(model$mplus_refusals, use.names=FALSE))
+  expect_identical(conditionMessage(e), paste0(
+    'magmaan(): this Mplus input needs 2 edits before magmaan() can fit it:\n',
+    '1) ', e$edit[[1]], '\n2) ', e$edit[[2]]))
+  expect_output(print(model), 'Mplus input:    not fittable; 2 input edit(s) needed (see $mplus_refusals)', fixed=TRUE)
+  expect_output(print(model), paste0('    1) ', e$edit[[1]]), fixed=TRUE)
+  expect_output(print(model), paste0('    2) ', e$edit[[2]]), fixed=TRUE)
+  conditional <- magmaan_model(magmaanlab::mplus_model(mplus_ordinary_input(base)))
+  single <- tryCatch(magmaan(conditional, data.frame()), error=identity)
+  expect_identical(names(single$edit), single$reason)
+  expect_identical(conditionMessage(single), paste0(
+    'magmaan(): Mplus input is unfittable: ', single$edit))
+  expect_output(print(conditional), 'not fittable; 1 input edit(s) needed', fixed=TRUE)
+  summary <- magmaan_model(magmaanlab::mplus_model(mplus_ordinary_input(
+    base, data='FILE=x; TYPE=COVARIANCE; NOBSERVATIONS=500;')))
+  summary_error <- tryCatch(magmaan(summary, list()), error=identity)
+  expect_identical(summary_error$reason, c('conditional_x', 'summary_without_means'))
+  expect_identical(names(summary_error$edit), summary_error$reason)
+  expect_identical(conditionMessage(summary_error), paste0(
+    'magmaan(): this Mplus input needs 2 edits before magmaan() can fit it:\n',
+    '1) ', summary_error$edit[[1]], '\n2) ', summary_error$edit[[2]]))
+  joint <- magmaan_model(magmaanlab::mplus_model(mplus_ordinary_input(paste(base, 'x1 x2;'))))
+  expect_output(print(joint), '  Mplus input:    fittable', fixed=TRUE)
+  ordinary <- magmaan_model('f =~ y1 + y2 + y3')
+  expect_identical(capture.output(print(ordinary)), c('magmaan model',
+    '  observed:       y1, y2, y3', '  identification: marker'))
+})
+
 test_that('continuous grouped and categorical Mplus models rebuild in a fresh process', {
   set.seed(5701)
   f <- rnorm(300)

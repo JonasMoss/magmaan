@@ -26,7 +26,9 @@ specifications preserve their source and tables; plain strings are never
 detected as Mplus. Mplus construction records \code{fittable} and
 \code{mplus_refusals}; fitting refuses conditional observed X, NOMEANSTRUCTURE,
 and summary inputs without MEANS with a \code{magmaan_mplus_error} condition
-carrying \code{reason} and \code{edit}. Add all X variance mentions (\verb{x1 x2;}) to
+listing every needed edit, with a character vector \code{reason} and a named
+character vector \code{edit} (names equal to \code{reason}). Printing the model shows
+fittability and all needed edits. Add all X variance mentions (\verb{x1 x2;}) to
 specify the joint model, remove NOMEANSTRUCTURE, or supply raw observations
 through \code{magmaanlab::mplus_data()}, respectively.}
 

@@ -20,7 +20,10 @@ string (or a \code{magmaanlab::model_spec()} specification) as a shortcut that
 constructs the model with \code{data} as its prototype on every call. A syntax
 string has the default structural choices: one group, continuous
 variables and marker identification. Data with ordered factors need
-\code{magmaan_model(ordered = )}.}
+\code{magmaan_model(ordered = )}. Unfittable Mplus specifications raise one
+\code{magmaan_mplus_error} listing all input edits, with a character vector
+\code{reason} and named character vector \code{edit} (names equal to \code{reason});
+printing the constructed model shows its fittability and edits.}
 
 \item{data}{A data frame of raw observations. Mplus ESTIMATOR settings are
 reported, not imported: choose the ordinary estimator explicitly. Mplus

@@ -1366,6 +1366,11 @@ carry the label `mplus`.
   categorical fresh-process reconstruction pass; ordinary defaults are unchanged.
   Full C++ and both R suites and the unchanged corpus gate pass. TASK-57.
 
+- [x] **S — ordinary Mplus refusal reporting.** One error lists all needed
+  input edits in stable order, with vector reason/edit fields; model printing
+  shows fittability and the edits. Full ordinary R suite gates the contract.
+  TASK-78.
+
 ## Related work
 
 - [Simulation backlog](simulation.md) owns generator/projection/calibration

@@ -59,7 +59,9 @@
 #'   detected as Mplus. Mplus construction records `fittable` and
 #'   `mplus_refusals`; fitting refuses conditional observed X, NOMEANSTRUCTURE,
 #'   and summary inputs without MEANS with a `magmaan_mplus_error` condition
-#'   carrying `reason` and `edit`. Add all X variance mentions (`x1 x2;`) to
+#'   listing every needed edit, with a character vector `reason` and a named
+#'   character vector `edit` (names equal to `reason`). Printing the model shows
+#'   fittability and all needed edits. Add all X variance mentions (`x1 x2;`) to
 #'   specify the joint model, remove NOMEANSTRUCTURE, or supply raw observations
 #'   through `magmaanlab::mplus_data()`, respectively.
 #' @param prototype A data frame that declares the data schema: the model's
@@ -227,6 +229,18 @@ print.magmaan_model <- function(x, ...) {
     cat("  groups:         ", x$group, ": ", paste(x$groups, collapse = ", "), "\n", sep = "")
   }
   cat("  identification: ", x$identification, "\n", sep = "")
+  if (!is.null(x$spec$mplus_source)) {
+    refusals <- x$mplus_refusals
+    if (!length(refusals)) {
+      cat("  Mplus input:    fittable\n")
+    } else {
+      cat("  Mplus input:    not fittable; ", length(refusals),
+          " input edit(s) needed (see $mplus_refusals)\n", sep = "")
+      cat(paste0("    ", seq_along(refusals), ") ", unlist(refusals, use.names = FALSE)),
+          sep = "\n")
+      cat("\n")
+    }
+  }
   invisible(x)
 }
 
@@ -242,7 +256,10 @@ print.magmaan_model <- function(x, ...) {
 #'   constructs the model with `data` as its prototype on every call. A syntax
 #'   string has the default structural choices: one group, continuous
 #'   variables and marker identification. Data with ordered factors need
-#'   `magmaan_model(ordered = )`.
+#'   `magmaan_model(ordered = )`. Unfittable Mplus specifications raise one
+#'   `magmaan_mplus_error` listing all input edits, with a character vector
+#'   `reason` and named character vector `edit` (names equal to `reason`);
+#'   printing the constructed model shows its fittability and edits.
 #' @param data A data frame of raw observations. Mplus ESTIMATOR settings are
 #'   reported, not imported: choose the ordinary estimator explicitly. Mplus
 #'   ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
@@ -843,9 +860,16 @@ as_lab_fit <- function(fit) {
 .check_mplus_fittable <- function(model) {
   refusals <- model$mplus_refusals
   if (!length(refusals)) return(invisible(NULL))
-  reason <- names(refusals)[1L]
-  edit <- refusals[[1L]]
-  stop(structure(list(message = paste0("magmaan(): Mplus input is unfittable: ", edit),
+  reason <- names(refusals)
+  edit <- unlist(refusals, use.names = TRUE)
+  message <- if (length(refusals) == 1L) {
+    paste0("magmaan(): Mplus input is unfittable: ", edit)
+  } else {
+    paste0("magmaan(): this Mplus input needs ", length(refusals),
+           " edits before magmaan() can fit it:\n",
+           paste0(seq_along(edit), ") ", edit, collapse = "\n"))
+  }
+  stop(structure(list(message = message,
                       call = NULL, reason = reason, edit = edit),
                  class = c("magmaan_mplus_error", "error", "condition")))
 }

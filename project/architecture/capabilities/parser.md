@@ -55,7 +55,9 @@
   complete observed-X mentions lower the joint random-X model (P-MS08b).
   Ordinary construction accepts explicit lab Mplus specs, preserves source/schema
   and records fittability; conditional-X, NOMEANSTRUCTURE and summary-without-MEANS
-  fits raise a classed refusal naming the input edit. Combined starts and
+  fits raise one classed refusal listing all input edits in order, with vector
+  `reason` and named vector `edit` fields. Printing the ordinary model shows
+  fittability and each needed edit. Combined starts and
   labels use duplicate formula rows, as supported by `spec::build()`; the
   gate compares unique parameter keys and checks both modifier components.
   `api::model_from_mplus()` retains the whole source and diagnostics;
