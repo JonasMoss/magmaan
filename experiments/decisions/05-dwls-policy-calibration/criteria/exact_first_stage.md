@@ -59,3 +59,12 @@ List unpriced cells rather than extrapolating an unmeasured full-grid cost.
 Preemption-safe cell attempts publish COMPLETE only after draws and gates;
 resume and combine must reject changed source/package/seed/count provenance.
 Local two-cell fan-out must reproduce summaries (excluding timing fields).
+
+## Registration (merger, 2026-10-05, after the pilot, before production)
+
+Registered as written above, without amendment. The pilot's mechanics
+(146 cells, zero failed arms, policy equivalence gap 1.4e-14) and pricing
+(about 68 CPU-hours) are accepted. Production runs with seed base 1817000001
+and the registered replicate counts. Because Modal is unavailable, the cells
+may run on the maintainer's simbox workstation with the same per-cell runner
+and provenance-checked combine; the executor is recorded in the metadata.
