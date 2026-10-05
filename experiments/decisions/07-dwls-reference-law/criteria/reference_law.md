@@ -117,3 +117,14 @@ Pilot source and criteria are recoverable at commit 021d31bc. Combining those
 old pilot attempts requires that version; current provenance checks deliberately
 reject it after the production amendment. Reproduction under current sources
 requires fresh attempts, and production uses the new fingerprint and fresh base.
+
+## Registration (merger, 2026-10-05, after the pilot, before production)
+
+Registered as written above, including the Worland loading-null amendment and
+the cost amendment (184 cells, 1,000 draws each, seed base 1910000001). The
+development pilot's availability (761/816 tests; Worland non-convergence about
+one draw in four, binary threshold steps typed `equivalent_models`) is
+accepted: failures stay in the attempted denominators and references are
+compared on jointly available draws, as registered. Production runs on the
+maintainer's simbox workstation (Modal disabled), with the per-cell runner and
+provenance-checked combine; the executor is recorded in the metadata.
