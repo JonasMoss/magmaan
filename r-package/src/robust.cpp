@@ -1764,3 +1764,88 @@ Rcpp::List association_ml_ij(Rcpp::List fit, Rcpp::List ordinal_stats) {
       Rcpp::_["influence_active"] = r.influence_active,
       Rcpp::_["influence"] = r.influence);
 }
+
+namespace {
+Rcpp::List association_test_list(
+    const magmaan::post_expected<magmaan::estimate::frontier::AssociationMlTest>& result) {
+  if (!result) {
+    const auto kind = result.error().kind;
+    std::string reason = "numeric_issue";
+    if (kind == magmaan::PostError::Kind::UnsupportedInference) reason = "unsupported_inference";
+    if (kind == magmaan::PostError::Kind::InfoMatrixSingular) reason = "singular_information";
+    if (kind == magmaan::PostError::Kind::NotNested) reason = "not_nested";
+    if (kind == magmaan::PostError::Kind::UnsupportedNesting) reason = "unsupported_nesting";
+    if (kind == magmaan::PostError::Kind::BoundaryNesting) reason = "boundary_nesting";
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = reason, Rcpp::_["detail"] = result.error().detail);
+  }
+  auto reference = [](const magmaan::robust::frontier::FmgTestResult& r) {
+    return Rcpp::List::create(Rcpp::_["p_value"] = r.p_value,
+        Rcpp::_["lambdas_reference"] = r.lambdas_reference,
+        Rcpp::_["n_truncated"] = r.n_truncated,
+        Rcpp::_["blocks_effective"] = r.blocks_effective);
+  };
+  const auto& r = *result;
+  return Rcpp::List::create(Rcpp::_["available"] = r.df > 0,
+      Rcpp::_["reason"] = r.df ? "available" : "zero_df",
+      Rcpp::_["statistic"] = r.statistic, Rcpp::_["df"] = r.df,
+      Rcpp::_["spectrum"] = r.spectrum,
+      Rcpp::_["All"] = reference(r.all), Rcpp::_["SB"] = reference(r.sb),
+      Rcpp::_["PEBA4"] = reference(r.peba4), Rcpp::_["V"] = r.metric,
+      Rcpp::_["Delta"] = r.tangent, Rcpp::_["U"] = r.residual,
+      Rcpp::_["Gamma"] = r.gamma, Rcpp::_["A"] = r.restriction,
+      Rcpp::_["C"] = r.C, Rcpp::_["S"] = r.S);
+}
+bool association_same_stage1(Rcpp::List fit, const magmaan::data::OrdinalStats& stats) {
+  if (!fit.containsElementNamed("ordinal_stats")) return false;
+  auto fitted = ordinal_stats_from_arg(Rcpp::as<Rcpp::List>(fit["ordinal_stats"]));
+  if (fitted.n_obs != stats.n_obs || fitted.n_levels != stats.n_levels ||
+      fitted.R.size() != stats.R.size() || fitted.int_data.size() != stats.int_data.size() ||
+      fitted.thresholds.size() != stats.thresholds.size() ||
+      stats.int_data.size() != stats.R.size() || stats.thresholds.size() != stats.R.size()) return false;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    if (!fitted.R[b].isApprox(stats.R[b],1e-12) ||
+        !fitted.thresholds[b].isApprox(stats.thresholds[b],1e-12) ||
+        fitted.int_data[b].rows() != stats.int_data[b].rows() ||
+        fitted.int_data[b].cols() != stats.int_data[b].cols() ||
+        !(fitted.int_data[b].array() == stats.int_data[b].array()).all()) return false;
+  }
+  return true;
+}
+Rcpp::List association_fit_refusal(Rcpp::List fit) {
+  if (!fit.containsElementNamed("association"))
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = "unsupported_estimator");
+  if (fit.containsElementNamed("penalty"))
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = "penalty");
+  return Rcpp::List();
+}
+}
+
+// [[Rcpp::export]]
+Rcpp::List association_ml_global_test(Rcpp::List fit, Rcpp::List ordinal_stats) {
+  auto refusal = association_fit_refusal(fit);
+  if (refusal.size()) return refusal;
+  Ctx ctx = ctx_from_fit(fit);
+  return association_test_list(magmaan::estimate::frontier::association_ml_global_test(
+      ctx.pt,ctx.rep,ordinal_stats_from_arg(ordinal_stats),est_from_fit(fit,true)));
+}
+
+// [[Rcpp::export]]
+Rcpp::List association_ml_nested_test(Rcpp::List fit_alt, Rcpp::List fit_null,
+                                     Rcpp::List ordinal_stats) {
+  for (auto fit : {fit_alt,fit_null}) {
+    auto refusal = association_fit_refusal(fit);
+    if (refusal.size()) return refusal;
+  }
+  auto stats = ordinal_stats_from_arg(ordinal_stats);
+  if (!association_same_stage1(fit_alt,stats) || !association_same_stage1(fit_null,stats))
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = "incompatible_stage1",
+        Rcpp::_["detail"] = "Both fits must use the same supplied Stage-1 data and group order");
+  Ctx alt = ctx_from_fit(fit_alt), null = ctx_from_fit(fit_null);
+  return association_test_list(magmaan::estimate::frontier::association_ml_nested_test(
+      alt.pt,alt.rep,stats,est_from_fit(fit_alt,true),
+      null.pt,null.rep,est_from_fit(fit_null,true)));
+}

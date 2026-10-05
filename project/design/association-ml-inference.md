@@ -1,8 +1,9 @@
 # Association-ML inference contract
 
 TASK-32.1 audits the fitter and specifies implementation gates; TASK-32.2
-implements the lab evaluation-point covariance component. Ordinary exposure
-remains gated by subcards 3–5. The ordinary policy must satisfy the
+implements the lab evaluation-point covariance component, and TASK-32.3 adds
+lab global/nested reference laws. Ordinary exposure remains gated by subcards
+4–5. The ordinary policy must satisfy the
 [misspecification requirement](../scope.md#misspecification-robust-inference-requirement).
 Initial scope is independent complete rows, all-ordinal indicators, saturated
 thresholds, fixed response scales and linear association constraints. Missing
@@ -79,7 +80,35 @@ the 1e-5 relative-error gate. Stratified delete-one covariance errors against IJ
 are 0.117626, 0.029646 and 0.00728114 at total N = 250, 1000 and 4000. These
 are deterministic numerical validation, not policy coverage calibration.
 Subcards 1 (the exact sampling channel and its outstanding gates) and 2 (lab
-score/sensitivity/covariance) are implemented; subcards 3–5 remain open.
+score/sensitivity/covariance) are implemented; subcard 3 adds lab spectral laws
+and subcards 4–5 remain open.
+The lab `association_ml_global_test()` reports T = 2N q and All (negative
+weights truncated), SB and PEBA4. For correlation basis E_j, its local null
+metric is V_b[j,k] = w_b tr(C_b^-1 E_j C_b^-1 E_k)/2. With Delta the active
+correlation tangent, U = V - V Delta (Delta' V Delta)^-1 Delta' V. Independent
+strata have Cov(sqrt(N) r_b) = Gamma_b/w_b, where Gamma_b selects association
+rows after the joint empirical Stage-1 solve. Consequently the reference
+spectrum is eig(U blockdiag(Gamma_b/w_b)); no extra factor of two is needed.
+The metric is evaluated at fitted C: under the global null it agrees with the
+observed curvature at the population target. It does not give a global null
+law under misspecification.
+
+The lab `association_ml_nested_test()` reports T = 2N(q_null-q_alt). In the
+alternative's active coordinates the exact parameter restriction A gives
+C = A H^-1 A' and S = A H^-1 B H^-T A'; its spectrum solves S v = lambda C v.
+This targets restrictions true at the larger model's pseudo-true parameter,
+using observed H even when the larger model is misspecified. Thresholds are
+held at their common Stage-1 values when embedding the null. Moment-only
+nesting is refused; no tangent fallback is enabled. Both R fits must use the
+same supplied raw rows, Stage-1 targets, group order and sizes. Zero df is a
+typed unavailable reference (`zero_df` in R), with empty spectrum and NaN
+p-values. Penalties, missing raw rows, fixed/restricted thresholds, nonlinear
+constraints, covariance faces and singular active information remain refused.
+Independent explicit metric/Gamma and restriction reconstructions, exact-fit,
+saturated, identical-model, one-restriction and identical misspecified-stratum
+gates live in `ordinal_ij_test.cpp`. These lab references do not select an
+ordinary-user policy; MI/releases and calibration remain subcards 4–5.
+
 Lavaan NACOV/OPG is a compatibility comparator only. A caller-provided NACOV
 without a declared, validated sampling meaning cannot grant ordinary inference.
 Unlike DWLS, this criterion has no estimated-weight/Gamma-influence channel;
@@ -116,7 +145,7 @@ refuse current association inference. Preserve those guards until gates pass.
    exact-fit fixed-metric sandwich reduction; grouped linear constraints,
    rank-deficiency refusals and unit/coordinate transport. Gate threshold
    cross-covariance as well as active parameter covariance.
-3. **Global and nested reference laws.** Compose spectral laws and reportable
+3. **Global and nested reference laws (complete lab component).** Compose spectral laws and reportable
    availability. Acceptance: saturated global zero-df and exact-fit quadratic
    reductions; independent matrix reconstruction of spectra and normalization;
    identical-model/one-restriction/grouped controls; nested pseudo-true restriction

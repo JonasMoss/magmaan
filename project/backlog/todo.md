@@ -1221,8 +1221,10 @@ release, including dependencies otherwise shared with the primary programme.
   complete (TASK-32.1). TASK-32.2 implements the lab-only evaluation-point
   score, observed sensitivity and joint exact Stage-1 covariance, with independent
   derivatives, nonnormal case weights, stratified delete-one, exact-fit and
-  identification-chart gates. Reference laws, MI/releases and policy calibration
-  remain open (subcards 3–5). Ordinary association-ML components retain typed
+  identification-chart gates. TASK-32.3 adds lab global/nested All, SB and PEBA4
+  reference laws with explicit spectrum/normalization, zero-df, exact-fit and
+  misspecified pseudo-true restriction gates. MI/releases and policy calibration
+  remain open (subcards 4–5). Ordinary association-ML components retain typed
   refusal until those contracts and their calibration pass.
 
 ### Barrier fitting and inference

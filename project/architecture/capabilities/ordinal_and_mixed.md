@@ -983,8 +983,13 @@ Full covariance retains saturated thresholds and their association cross-covaria
 The independent derivative, nonnormal case-weight, stratified delete-one,
 exact-fit and identification-chart gates pass in `ordinal_ij_test.cpp`. The
 lab wrapper gates covariance reconstruction and threshold cross-covariance.
-Ordinary covariance, global/nested tests and
-MI/releases remain typed unavailable until subcards 3–5 pass. No policy guard
+Lab `association_ml_global_test` and `association_ml_nested_test` compose
+All, SB and PEBA4 spectra from the local correlation ML residual metric and
+exact Stage-1 Gamma, or observed H/IJ meat and an exact parameter restriction.
+Explicit matrix reconstructions, zero-df/exact-fit reductions, one-restriction,
+grouped and misspecified pseudo-true restriction gates are in `ordinal_ij_test.cpp`.
+Moment nesting is refused. Ordinary covariance, global/nested tests and
+MI/releases remain typed unavailable pending subcards 4–5. No policy guard
 is removed.
 
 ### Mixed DWLS ordinary policy

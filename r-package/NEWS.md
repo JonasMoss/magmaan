@@ -5,6 +5,14 @@
   bivariate-normal corner grids, reducing inference time while preserving
   sampling rows, Gamma and policy outputs within 1e-7.
 
+- Lab-only `association_ml_global_test()` and `association_ml_nested_test()`
+  report All, SB and PEBA4 references using exact empirical Stage-1 influence.
+  Global tests use the local correlation ML residual metric; nested tests use
+  observed sensitivity and exact parameter restrictions, including grouped
+  pseudo-true restrictions under larger-model misspecification. Zero df and
+  unsupported channels have typed reasons; moment nesting is refused.
+  Ordinary association inference remains gated by MI/release and calibration.
+
 - All-ordinal DWLS ordinary policy now uses exact empirical first-stage
   influence. Policy SEs and global/nested p-values change; OPG fitting weights
   and estimates, `lavaan_compat`, and all lab defaults are unchanged. Global

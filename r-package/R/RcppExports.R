@@ -1045,6 +1045,14 @@ association_ml_ij <- function(fit, ordinal_stats) {
     .Call(`_magmaanlab_association_ml_ij`, fit, ordinal_stats)
 }
 
+association_ml_global_test <- function(fit, ordinal_stats) {
+    .Call(`_magmaanlab_association_ml_global_test`, fit, ordinal_stats)
+}
+
+association_ml_nested_test <- function(fit_alt, fit_null, ordinal_stats) {
+    .Call(`_magmaanlab_association_ml_nested_test`, fit_alt, fit_null, ordinal_stats)
+}
+
 sim_ig_batch_impl <- function(sigma, target_skewness, target_excess_kurtosis, n, reps, seed_base, root = "cholesky", generator_family = "tukey_gh", quadrature_points = 81L, max_iter = 80L, grid_points_g = 29L, grid_points_h = 25L, objective_tol = 1e-8, parameter_tol = 1e-8, finite_diff_step = 1e-4, tukey_g_bound = 3.0, tukey_h_upper = 0.249, johnson_gamma_bound = 6.0, johnson_log_delta_lower = -1.3862943611198906, johnson_log_delta_upper = 2.0794415416798357, root_eigen_tol = 1e-12, moment_solve_tol = 1e-8) {
     .Call(`_magmaanlab_sim_ig_batch_impl`, sigma, target_skewness, target_excess_kurtosis, n, reps, seed_base, root, generator_family, quadrature_points, max_iter, grid_points_g, grid_points_h, objective_tol, parameter_tol, finite_diff_step, tukey_g_bound, tukey_h_upper, johnson_gamma_bound, johnson_log_delta_lower, johnson_log_delta_upper, root_eigen_tol, moment_solve_tol)
 }

@@ -159,3 +159,5 @@ export(mplus_data)
 export(refit_from_null)
 
 export(association_ml_ij)
+export(association_ml_global_test)
+export(association_ml_nested_test)

@@ -15,6 +15,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/inference/score.hpp"
@@ -554,6 +555,32 @@ association_ml_ij(spec::LatentStructure pt, const model::MatrixRep& rep,
                   const data::OrdinalStats& stats, const Estimates& est,
                   const std::vector<std::int8_t>* row_user = nullptr,
                   bool penalized = false);
+
+// Zero df is a successful typed result with no reference law (NaN p-values).
+struct AssociationMlTest {
+  double statistic = 0.0;
+  int df = 0;
+  Eigen::VectorXd spectrum;
+  robust::frontier::FmgTestResult all, sb, peba4;
+  // Global: metric V, tangent Delta, residual U and stratified Gamma.
+  // Nested: exact restriction A, C = A H^-1 A', S = A H^-1 B H^-1 A'.
+  Eigen::MatrixXd metric, tangent, residual, gamma, restriction, C, S;
+};
+
+post_expected<AssociationMlTest>
+association_ml_global_test(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& stats, const Estimates& est,
+    const std::vector<std::int8_t>* row_user = nullptr, bool penalized = false);
+
+// Alternative first; both models use the supplied common Stage-1 target.
+// Only exact parameter nesting is supported, never a moment-tangent fallback.
+post_expected<AssociationMlTest>
+association_ml_nested_test(spec::LatentStructure pt_alt, const model::MatrixRep& rep_alt,
+    const data::OrdinalStats& stats, const Estimates& est_alt,
+    spec::LatentStructure pt_null, const model::MatrixRep& rep_null,
+    const Estimates& est_null,
+    const std::vector<std::int8_t>* row_user_alt = nullptr,
+    const std::vector<std::int8_t>* row_user_null = nullptr, bool penalized = false);
 
 struct OrdinalLsObjective {
   spec::LatentStructure pt;

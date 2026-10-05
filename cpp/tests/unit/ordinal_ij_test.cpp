@@ -759,3 +759,156 @@ TEST_CASE("association ML IJ identification charts and typed refusals") {
     }
   }
 }
+
+TEST_CASE("association ML global and nested spectral reconstruction") {
+  using namespace magmaan;
+  const std::string thresholds = "\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2";
+  for (bool grouped : {false,true}) {
+    CAPTURE(grouped);
+    auto block = ordinal_test_block(3233,500,{.8,.73,.66,.59},-.45,.55);
+    auto stats = data::ordinal_stats_from_integer_data(
+        grouped ? std::vector<Eigen::MatrixXd>{block,block} : std::vector<Eigen::MatrixXd>{block},false);
+    REQUIRE(stats.has_value());
+    // Identical strata have identical pseudo-true parameters even when the
+    // larger one-factor model is misspecified by a residual association.
+    if (grouped) for (auto& R : stats->R) { R(3,0) += .07; R(0,3) += .07; }
+    auto build = [&](const std::string& syntax, spec::LatentNames* names = nullptr) {
+      auto parsed = parse::Parser::parse(syntax+thresholds); REQUIRE(parsed.has_value());
+      spec::BuildOptions opts; opts.n_groups = grouped ? 2 : 1;
+      auto pt = spec::build(*parsed,opts,nullptr,names); REQUIRE(pt.has_value());
+      REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+      return *pt;
+    };
+    spec::LatentNames alt_names, null_names;
+    auto alt = build("f =~ x1 + x2 + x3 + x4",&alt_names);
+    auto null = build(grouped ? "f =~ x1 + l2*x2 + x3 + x4" : "f =~ x1 + l*x2 + l*x3 + x4",&null_names);
+    auto ra = model::build_matrix_rep(alt,&alt_names), rn = model::build_matrix_rep(null,&null_names);
+    REQUIRE(ra.has_value()); REQUIRE(rn.has_value());
+    auto fit = [&](const spec::LatentStructure& pt,const model::MatrixRep& rep) {
+      auto start = estimate::ordinal_start_values(pt,rep,*stats,{}); REQUIRE(start.has_value());
+      optim::OptimOptions opts; opts.ftol = 1e-14; opts.gtol = 1e-10; opts.max_iter = 1000;
+      auto result = estimate::frontier::fit_ml(pt,rep,*stats,*start,estimate::Backend::NloptLbfgs,opts);
+      REQUIRE_MESSAGE(result.has_value(),(result ? "" : result.error().detail));
+      return *result;
+    };
+    auto ea = fit(alt,*ra), en = fit(null,*rn);
+    auto ij = estimate::frontier::association_ml_ij(alt,*ra,*stats,ea); REQUIRE(ij.has_value());
+    auto global = estimate::frontier::association_ml_global_test(alt,*ra,*stats,ea);
+    REQUIRE_MESSAGE(global.has_value(),(global ? "" : global.error().detail));
+    const int groups = grouped ? 2 : 1;
+    const double N = 500*groups;
+    CHECK(global->df == 2*groups);
+    CHECK(global->statistic == doctest::Approx(2*N*ij->value).epsilon(1e-12));
+    auto ev = model::ModelEvaluator::build(alt,*ra); REQUIRE(ev.has_value());
+    auto evaluated = ev->evaluate(ea.theta,true,false); REQUIRE(evaluated.has_value());
+    auto corr = model::correlation_evaluation(*evaluated); REQUIRE(corr.has_value());
+    Eigen::MatrixXd V = Eigen::MatrixXd::Zero(6*groups,6*groups);
+    Eigen::MatrixXd G = V;
+    Eigen::MatrixXd Delta(6*groups,ij->coordinates.cols());
+    // Independent explicit basis reconstruction, including stratified N scale.
+    for (int b = 0; b < groups; ++b) {
+      const auto block_index = static_cast<std::size_t>(b);
+      Eigen::MatrixXd inverse = corr->moments.sigma[block_index].inverse();
+      std::vector<Eigen::MatrixXd> E;
+      for (int c = 0; c < 4; ++c) for (int r = c+1; r < 4; ++r) {
+        Eigen::MatrixXd basis = Eigen::MatrixXd::Zero(4,4); basis(r,c)=basis(c,r)=1;
+        E.push_back(basis);
+        const int vech = c*4-c*(c-1)/2+r-c;
+        Delta.row(6*b+static_cast<int>(E.size())-1) = corr->J_sigma.row(10*b+vech)*ij->coordinates;
+      }
+      for (int j=0;j<6;++j) for (int k=0;k<6;++k)
+        V(6*b+j,6*b+k) = (inverse*E[static_cast<std::size_t>(j)]*inverse*E[static_cast<std::size_t>(k)]).trace()/(2*groups);
+      auto sampling = data::ordinal_moment_sampling_influence(stats->int_data[block_index],stats->n_levels[block_index],stats->thresholds[block_index],stats->R[block_index]);
+      REQUIRE(sampling.has_value());
+      Eigen::MatrixXd rows = sampling->rows.rightCols(6);
+      G.block(6*b,6*b,6,6) = groups*rows.transpose()*rows/500;
+    }
+    Eigen::MatrixXd U = V-V*Delta*(Delta.transpose()*V*Delta).inverse()*Delta.transpose()*V;
+    Eigen::EigenSolver<Eigen::MatrixXd> eigen(U*G,false);
+    REQUIRE(eigen.info()==Eigen::Success);
+    Eigen::VectorXd lambda = eigen.eigenvalues().real();
+    std::sort(lambda.data(),lambda.data()+lambda.size());
+    CHECK((global->spectrum-lambda.tail(global->df)).norm() < 1e-10);
+    CHECK((global->metric-V).norm() < 1e-12);
+    CHECK((global->gamma-G).norm() < 1e-12);
+    CHECK((global->tangent-Delta).norm() < 1e-12);
+    auto nested = estimate::frontier::association_ml_nested_test(alt,*ra,*stats,ea,null,*rn,en);
+    REQUIRE_MESSAGE(nested.has_value(),(nested ? "" : nested.error().detail));
+    CHECK(nested->df == 1);
+    auto i0 = estimate::frontier::association_ml_ij(null,*rn,*stats,en); REQUIRE(i0.has_value());
+    CHECK(nested->statistic == doctest::Approx(std::max(0.0,2*N*(i0->value-ij->value))).scale(1).epsilon(1e-12));
+    const Eigen::MatrixXd Hinv = ij->sensitivity.inverse();
+    // Construct the known loading restriction without the nesting worker.
+    Eigen::RowVectorXd full_A = Eigen::RowVectorXd::Zero(ea.theta.size());
+    int found = 0;
+    for (std::size_t row = 0; row < alt.size(); ++row) {
+      if (alt.op[row] != parse::Op::Measurement || alt.free[row] <= 0) continue;
+      const auto ov = alt.ov_pos[static_cast<std::size_t>(alt.rhs_var[row])];
+      if ((grouped && ov == 1) || (!grouped && (ov == 1 || ov == 2)))
+        full_A(alt.free[row]-1) = found++ == 0 ? 1 : -1;
+    }
+    REQUIRE(found==2);
+    Eigen::MatrixXd independent_A = full_A*ij->coordinates;
+    Eigen::MatrixXd independent_C = independent_A*Hinv*independent_A.transpose();
+    Eigen::MatrixXd independent_S = independent_A*Hinv*ij->meat*Hinv.transpose()*independent_A.transpose();
+    CHECK(nested->spectrum(0) == doctest::Approx(independent_S(0,0)/independent_C(0,0)).epsilon(1e-10));
+    const auto& A = nested->restriction;
+    Eigen::MatrixXd C = A*Hinv*A.transpose();
+    Eigen::MatrixXd S = A*Hinv*ij->meat*Hinv.transpose()*A.transpose();
+    CHECK((nested->C-C).norm() < 1e-10);
+    CHECK((nested->S-S).norm() < 1e-10);
+    CHECK(nested->spectrum(0) == doctest::Approx(S(0,0)/C(0,0)).epsilon(1e-10));
+    for (const auto* reference : {&nested->all,&nested->sb,&nested->peba4}) {
+      CHECK(reference->p_value >= 0); CHECK(reference->p_value <= 1);
+      CHECK(reference->lambdas_reference.sum() == doctest::Approx(nested->spectrum.sum()).epsilon(1e-12));
+    }
+    if (grouped) {
+      CHECK(ij->value > 1e-4);
+      CHECK(nested->statistic < 1e-7);
+    }
+    auto identical = estimate::frontier::association_ml_nested_test(alt,*ra,*stats,ea,alt,*ra,ea);
+    REQUIRE(identical.has_value()); CHECK(identical->df==0); CHECK(identical->statistic==0);
+    CHECK(std::isnan(identical->all.p_value));
+    auto refused = estimate::frontier::association_ml_global_test(alt,*ra,*stats,ea,nullptr,true);
+    REQUIRE_FALSE(refused.has_value()); CHECK(refused.error().kind==PostError::Kind::UnsupportedInference);
+    if (!grouped) {
+      spec::LatentNames other_names;
+      auto other_model = build("g =~ x1 + x2 + x3 + x4",&other_names);
+      auto other_rep = model::build_matrix_rep(other_model,&other_names); REQUIRE(other_rep.has_value());
+      auto other_fit = fit(other_model,*other_rep);
+      auto moment_pair = estimate::frontier::association_ml_nested_test(
+          alt,*ra,*stats,ea,other_model,*other_rep,other_fit);
+      REQUIRE_FALSE(moment_pair.has_value());
+      CHECK((moment_pair.error().kind == PostError::Kind::NotNested ||
+             moment_pair.error().kind == PostError::Kind::UnsupportedNesting));
+      auto reversed = estimate::frontier::association_ml_nested_test(null,*rn,*stats,en,alt,*ra,ea);
+      CHECK_FALSE(reversed.has_value());
+      auto exact = *stats; exact.R = corr->moments.sigma;
+      exact.int_data[0] = exact.int_data[0].replicate(8,1).eval();
+      exact.n_obs[0] *= 8;  // N=4000 with the same empirical target distribution.
+      auto test = estimate::frontier::association_ml_global_test(alt,*ra,exact,ea); REQUIRE(test.has_value());
+      auto exact_ij = estimate::frontier::association_ml_ij(alt,*ra,exact,ea); REQUIRE(exact_ij.has_value());
+      CHECK(test->statistic < 1e-9);
+      CHECK((exact_ij->sensitivity-Delta.transpose()*V*Delta).norm() < 1e-8);
+      Eigen::EigenSolver<Eigen::MatrixXd> reconstructed(test->residual*test->gamma,false);
+      Eigen::VectorXd l = reconstructed.eigenvalues().real(); std::sort(l.data(),l.data()+l.size());
+      CHECK((test->spectrum-l.tail(test->df)).norm() < 1e-10);
+    }
+  }
+  // Three-indicator one-factor model is saturated in association coordinates.
+  Eigen::MatrixXd block = ordinal_test_block(3234,500,{.8,.73,.66,.59},-.45,.55).leftCols(3);
+  auto stats = data::ordinal_stats_from_integer_data({block},false); REQUIRE(stats.has_value());
+  auto parsed = parse::Parser::parse("f =~ x1 + x2 + x3\nx1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2"); REQUIRE(parsed.has_value());
+  auto pt = spec::build(*parsed); REQUIRE(pt.has_value());
+  REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+  auto rep = model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+  auto start = estimate::ordinal_start_values(*pt,*rep,*stats,{});
+  REQUIRE_MESSAGE(start.has_value(),(start ? "" : start.error().detail));
+  if (!start) return;
+  auto fit = estimate::frontier::fit_ml(*pt,*rep,*stats,*start);
+  REQUIRE_MESSAGE(fit.has_value(),(fit ? "" : fit.error().detail));
+  if (!fit) return;
+  auto test = estimate::frontier::association_ml_global_test(*pt,*rep,*stats,*fit);
+  REQUIRE(test.has_value()); CHECK(test->df==0); CHECK(test->spectrum.size()==0);
+  CHECK(std::isnan(test->all.p_value));
+}

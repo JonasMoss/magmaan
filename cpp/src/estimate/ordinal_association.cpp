@@ -152,4 +152,148 @@ association_ml_ij(spec::LatentStructure pt, const model::MatrixRep& rep,
   out.vcov_active = H_inv*out.meat*H_inv.transpose()/N;
   return out;
 }
+
+namespace {
+void association_references(AssociationMlTest& out) {
+  using namespace robust::frontier;
+  out.all = fmg_test(out.statistic, out.df, out.spectrum, {FmgMethod::All, 0, true});
+  out.sb = fmg_test(out.statistic, out.df, out.spectrum, {FmgMethod::SatorraBentler, 0, true});
+  out.peba4 = fmg_test(out.statistic, out.df, out.spectrum, {FmgMethod::Peba, 4, true});
+}
+}
+
+post_expected<AssociationMlTest>
+association_ml_global_test(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& stats, const Estimates& est,
+    const std::vector<std::int8_t>* row_user, bool penalized) {
+  if (!est.association) return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+      "association_ml_global_test: association ML estimates required"));
+  auto ij = association_ml_ij(pt, rep, stats, est, row_user, penalized);
+  if (!ij) return std::unexpected(ij.error());
+  auto prepared = prepare_ordinal_partable(pt, stats, OrdinalParameterization::Delta,
+                                          nullptr, row_user);
+  if (!prepared) return std::unexpected(fit_to_post(prepared.error()));
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return std::unexpected(model_to_post(ev.error()));
+  auto eval = ev->evaluate(est.theta, true, false);
+  if (!eval) return std::unexpected(model_to_post(eval.error()));
+  auto corr = model::correlation_evaluation(std::move(*eval));
+  if (!corr) return std::unexpected(model_to_post(corr.error()));
+  AssociationMlTest out;
+  double N = 0;
+  Eigen::Index m = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    N += static_cast<double>(stats.n_obs[b]);
+    const auto p = stats.R[b].rows();
+    m += p*(p-1)/2;
+  }
+  out.statistic = 2*N*ij->value;
+  if (out.statistic < -1e-8 || !std::isfinite(out.statistic))
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "association_ml_global_test: invalid discrepancy"));
+  out.statistic = std::max(0.0, out.statistic);
+  out.df = static_cast<int>(m-ij->coordinates.cols());
+  if (out.df < 0) return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+      "association_ml_global_test: association tangent exceeds target dimension"));
+  out.metric = Eigen::MatrixXd::Zero(m,m);
+  out.gamma = Eigen::MatrixXd::Zero(m,m);
+  out.tangent.resize(m,ij->coordinates.cols());
+  Eigen::Index offset = 0, vech_offset = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const auto& C = corr->moments.sigma[b];
+    const Eigen::Index p = C.rows(), mb = p*(p-1)/2;
+    const double w = static_cast<double>(stats.n_obs[b])/N;
+    Eigen::MatrixXd inverse = C.inverse();
+    std::vector<Eigen::MatrixXd> basis;
+    for (Eigen::Index c = 0; c < p; ++c) for (Eigen::Index r = c+1; r < p; ++r) {
+      Eigen::MatrixXd E = Eigen::MatrixXd::Zero(p,p);
+      E(r,c) = E(c,r) = 1;
+      basis.push_back(E);
+      out.tangent.row(offset+static_cast<Eigen::Index>(basis.size())-1) =
+          corr->J_sigma.row(vech_offset+vech_index(p,r,c))*ij->coordinates;
+    }
+    // q = sum_b w_b/2 * F_b. Its null local Hessian is
+    // V_b[j,k] = w_b/2 tr(C_b^-1 E_j C_b^-1 E_k).
+    // Cov(sqrt(N) r_b) = Gamma_b/w_b for independent strata.
+    // Thus 2Nq -> z' U z, with no additional 2 or group-N factor.
+    for (Eigen::Index j = 0; j < mb; ++j) for (Eigen::Index k = 0; k < mb; ++k)
+      out.metric(offset+j,offset+k) = 0.5*w*(inverse*basis[static_cast<std::size_t>(j)]*inverse*basis[static_cast<std::size_t>(k)]).trace();
+    auto sampling = data::ordinal_moment_sampling_influence(stats.int_data[b],
+        stats.n_levels[b],stats.thresholds[b],stats.R[b]);
+    if (!sampling) return std::unexpected(sampling.error());
+    out.gamma.block(offset,offset,mb,mb) = sampling->gamma.bottomRightCorner(mb,mb)/w;
+    offset += mb;
+    vech_offset += vech_len(p);
+  }
+  out.residual = out.metric;
+  if (out.tangent.cols()) {
+    Eigen::MatrixXd VD = out.metric*out.tangent;
+    Eigen::MatrixXd information = out.tangent.transpose()*VD;
+    Eigen::LDLT<Eigen::MatrixXd> solve(information);
+    if (solve.info() != Eigen::Success || !solve.isPositive() ||
+        solve.vectorD().minCoeff() <= 1e-12*solve.vectorD().cwiseAbs().maxCoeff())
+      return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+          "association_ml_global_test: singular association tangent"));
+    out.residual.noalias() -= VD*solve.solve(VD.transpose());
+  }
+  out.residual = (0.5*(out.residual+out.residual.transpose())).eval();
+  if (out.df) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> gs(out.gamma);
+    if (gs.info() != Eigen::Success || gs.eigenvalues().minCoeff() < -1e-10)
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "association_ml_global_test: invalid sampling covariance"));
+    Eigen::MatrixXd root = gs.eigenvectors()*gs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
+    Eigen::MatrixXd reduced = root.transpose()*out.residual*root;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> spectrum(reduced);
+    if (spectrum.info() != Eigen::Success)
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "association_ml_global_test: spectrum decomposition failed"));
+    out.spectrum = spectrum.eigenvalues().tail(out.df);
+  }
+  association_references(out);
+  return out;
+}
+
+post_expected<AssociationMlTest>
+association_ml_nested_test(spec::LatentStructure pt_alt, const model::MatrixRep& rep_alt,
+    const data::OrdinalStats& stats, const Estimates& est_alt,
+    spec::LatentStructure pt_null, const model::MatrixRep& rep_null,
+    const Estimates& est_null, const std::vector<std::int8_t>* row_user_alt,
+    const std::vector<std::int8_t>* row_user_null, bool penalized) {
+  if (!est_alt.association || !est_null.association)
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "association_ml_nested_test: association ML estimates required"));
+  auto ij = association_ml_ij(pt_alt,rep_alt,stats,est_alt,row_user_alt,penalized);
+  if (!ij) return std::unexpected(ij.error());
+  auto null_ij = association_ml_ij(pt_null,rep_null,stats,est_null,row_user_null,penalized);
+  if (!null_ij) return std::unexpected(null_ij.error());
+  auto p1 = prepare_ordinal_partable(pt_alt,stats,OrdinalParameterization::Delta,nullptr,row_user_alt);
+  auto p0 = prepare_ordinal_partable(pt_null,stats,OrdinalParameterization::Delta,nullptr,row_user_null);
+  if (!p1) return std::unexpected(fit_to_post(p1.error()));
+  if (!p0) return std::unexpected(fit_to_post(p0.error()));
+  auto c1 = ordinal_association_layout(pt_alt,rep_alt,stats,est_alt.theta);
+  auto c0 = ordinal_association_layout(pt_null,rep_null,stats,est_null.theta);
+  if (!c1) return std::unexpected(fit_to_post(c1.error()));
+  if (!c0) return std::unexpected(fit_to_post(c0.error()));
+  auto embedding = robust::embed_nested_null(pt_alt,rep_alt,pt_null,rep_null,
+      est_null.theta,c1->constraints,c0->constraints);
+  if (!embedding) return std::unexpected(embedding.error());
+  AssociationMlTest out;
+  out.restriction = embedding->restriction.A;
+  out.df = static_cast<int>(out.restriction.rows());
+  double N = 0;
+  for (auto n : stats.n_obs) N += static_cast<double>(n);
+  out.statistic = 2*N*(null_ij->value-ij->value);
+  if (out.statistic < -1e-7 || !std::isfinite(out.statistic))
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "association_ml_nested_test: alternative discrepancy exceeds null; refit required"));
+  out.statistic = std::max(0.0,out.statistic);
+  auto law = robust::compute_satorra2000_from_sandwich(ij->sensitivity,ij->meat,out.restriction);
+  if (!law) return std::unexpected(law.error());
+  out.C = law->C;
+  out.S = law->S;
+  out.spectrum = law->eigenvalues;
+  association_references(out);
+  return out;
+}
 }  // namespace magmaan::estimate::frontier
