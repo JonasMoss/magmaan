@@ -80,7 +80,7 @@ These rules apply to every setup above; the reason is typed per component.
 | --- | --- | --- | --- |
 | ML | Validated: lavaan parity goldens and ordinary `ML estimates come from magmaanlab and match lavaan` | Exact-Hessian Newton check | Validated: unrestricted, linear equalities (task-9) |
 | FIML | Validated: `fiml_golden_test.cpp` | Newton check | Validated for unrestricted and supported linear equalities: pinned MCAR/MAR fixtures, single and grouped (task-10) |
-| All-ordinal DWLS/ULS/WLS | Validated: `ordinal_golden_test.cpp`, grouped and threshold-equality gates | Newton check | Unsupported: errors (task-11) |
+| All-ordinal DWLS/ULS/WLS | Validated: `ordinal_golden_test.cpp`, grouped and threshold-equality gates | Newton check | DWLS validated: delta/theta, single and grouped loading/threshold invariance, frozen and live-oracle start/search/endpoint gates (task-11); ULS/WLS unsupported: errors |
 | Complete mixed DWLS | Validated: mixed component goldens | Newton check | Validated: delta/theta, single/unequal groups and equal loadings; mixed preset fixture plus live retained WLSMV gates (TASK-91) |
 | ML2S, GLS, continuous ULS, mixed WLS | Validated by component goldens (area files) | Newton check | Unsupported: errors |
 | PSD and barrier fits | PSD: validated on the classical slice, hardening 0.3.0; barrier: experimental | Face-restricted Newton check | Unsupported: errors |
