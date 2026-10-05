@@ -16,7 +16,7 @@ same question; speculative ideas start in the trigger register.
 | [Decisions](#decisions) | 4 | Maintained registers and held-out evidence for library defaults. |
 | [Showcases](#showcases) | 8 | Capabilities, parity and performance demonstrations. |
 | [Replications](#replications-and-reference-studies) | 8 | Published results and reference reconstructions. |
-| [Research](#research) | 24 | 8 active, 11 banked, 5 retained evidence studies. |
+| [Research](#research) | 25 | 8 active, 12 banked, 5 retained evidence studies. |
 | [Engineering](#engineering-checks) | 8 | 4 active, 3 banked, 1 completed paper-evidence study. |
 | [Archive](#archived) | 15 | Settled investigations and predecessors, with sources/results retained. |
 
@@ -78,7 +78,7 @@ Reproduce published results or reconstruct the reference method needed to interp
 
 Investigate statistical behavior, new methods, estimands and inferential validity.
 
-### Active research (7)
+### Active research (8)
 
 Concrete remaining checks and protected ongoing paper pipelines.
 
@@ -91,6 +91,8 @@ Concrete remaining checks and protected ongoing paper pipelines.
 | 47 | [multiinfo-penalty-improper](research/active/47-multiinfo-penalty-improper/report.qmd) | benchmark | active | Do the joint and latent-determinacy (Q) barriers remove improper solutions without costing PSD-constrained ML's accuracy, also with the truth on a face, which fit test goes with a barrier estimate, and does the barrier's local limit hold? | Paper pipeline: barrier properness trades risk near a face; complete boundary/path and fit-test checks rather than selecting a weight from pooled RMSE. |
 | 48 | [multiinfo-jeffreys-posterior](research/active/48-multiinfo-jeffreys-posterior/report.qmd) | benchmark | active | Does the multi-information barrier approximate the Jeffreys-prior posterior over admissible solutions, for which weight, and is that posterior a better estimator? | Paper pipeline: posterior accuracy depends on functional, prior and ESS; recover substantive outputs and finish joint/Q/path comparisons (local main run: smoke; posterior rankings remain exploratory). |
 | 49 | [spectral-tail-calibration](research/active/49-spectral-tail-calibration/report.qmd) | benchmark | active | Can spectral shrinkage and debiased moment corrections improve score and LRT calibration under non-normality? | IG oracle spectra can calibrate while estimated moments fail; investigate heterogeneous spectral estimation bias and failure conditioning. |
+
+| 54 | [nested-score-small-n](research/active/54-nested-score-small-n/report.qmd) | probe | active | Can recentered case bootstraps repair small-N observed nested ML score calibration while preserving misspecification consistency? | TASK-93: 40 fresh draws/cell, B=199, 9.9 minutes; current/fixed size 0–2.5%, refit 0–5.1%, three refitted tests unavailable. Development only; next is registered size/power across strong misspecification and larger rank. |
 
 ### Banked research ideas (12)
 

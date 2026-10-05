@@ -1,0 +1,8 @@
+*
+!.gitignore
+!pilot/
+pilot/*
+!pilot/rates.csv
+!pilot/cells.csv
+!pilot/metadata.csv
+!pilot/failures.csv

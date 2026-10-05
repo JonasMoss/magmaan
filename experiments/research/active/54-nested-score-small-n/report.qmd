@@ -1,0 +1,173 @@
+---
+title: "Recentered bootstrap calibration of the small-N nested ML score"
+format:
+  html:
+    toc: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Question
+
+Can case resampling with recentered likelihood scores and refitted observed
+geometry reduce the small-N conservatism of the nested ML score, while allowing
+the larger working SEM to be misspecified?
+
+```{r}
+pilot <- file.path('results','pilot')
+if (!file.exists(file.path(pilot,'rates.csv')))
+  stop('Pilot absent. Run Rscript run_experiment.R --reps 40 --bootstrap 199 --run-id pilot.')
+rates <- read.csv(file.path(pilot,'rates.csv'))
+cells <- read.csv(file.path(pilot,'cells.csv'))
+meta <- read.csv(file.path(pilot,'metadata.csv'))
+value <- function(k) meta$value[match(k,meta$key)]
+rates <- merge(cells,rates,by='cell_id',sort=FALSE)
+failure <- read.csv(file.path(pilot,'failures.csv'))
+```
+
+## Short answer
+
+This development run establishes bootstrap feasibility and compute cost, not a
+correction to adopt. It completed `r value('completed_reps')` fresh draws per
+cell, with `r value('bootstrap')` resamples per draw, in
+`r round(as.numeric(value('elapsed_s'))/60,1)` minutes on two workers.
+Current SB/pEBA4 and fixed-geometry bootstrap rejected 0–2.5% in each cell;
+refitted geometry rejected 0–5.1% among available tests. Eight bootstrap
+optimization failures made three of 160 refitted tests unavailable (all in
+skewed cells); the other arms were available on every draw. Per-cell Wilson
+intervals below are too imprecise to distinguish 2% from 5% size.
+The fixed-geometry arm controls resampling cost; the refitted arm addresses the
+joint nuisance-projection/metric mechanism. Neither the library nor its
+ordinary inference defaults changes.
+
+## Evidence
+
+```{r}
+labels <- c(current_sb='Current SB',current_peba4='Current pEBA4',
+            fixed='Fixed geometry bootstrap',refit='Refitted geometry bootstrap')
+x <- rates[order(rates$cell_id,match(rates$arm,names(labels))),]
+knitr::kable(data.frame(Population=paste(x$distribution,x$larger),
+  Test=unname(labels[x$arm]),Available=paste0(x$available,'/',x$attempted),
+  `Rejection (%)`=round(100*x$rejection,1),
+  `95% Wilson interval (%)`=sprintf('%.1f–%.1f',100*x$lower,100*x$upper),check.names=FALSE),
+  caption='Nominal 5% null tests; fresh development draws, no pooled estimate.')
+```
+
+These four cells use decisions/04's frozen constants: two factors with four
+indicators each, loadings .7/.8/.75/.65, factor correlation .4, two groups
+with 100 rows each, and six loading-equality restrictions. Mild
+misspecification omits a residual correlation .3 between x1 and x5. Both
+groups have the same population, so equality holds at the symmetric
+pseudo-true solution. Skewed indicators use Vale–Maurelli skewness 2 and excess
+kurtosis 7. Only design constants were copied; this leaf reads no sibling code
+or results. Complete cell summaries are deliberately retained here because
+four development cells are the full scope, with uncertainty essential to their
+interpretation. Raw resample statistics and per-draw rows remain ignored.
+
+## Caveats and methods
+
+Let $S$ be the total score at the restricted fit. The adopted test projects
+with observed sensitivity $H$ and measures the quadratic with expected
+information $I$:
+
+$$
+G=D-K(K^\top H K)^{-1}K^\top H D,
+\qquad Q=(G^\top S)^\top(G^\top I G)^{-1}(G^\top S).
+$$
+
+The current SB/pEBA4 references use the fitted raw case-score spectrum. The
+fixed bootstrap resamples those case rows within each group, subtracts their
+original total and keeps $G,I$ fixed. The refitted bootstrap resamples cases,
+refits restricted and larger models using ordinary ML, obtains $S_b,H_b,I_b$,
+and replaces $S_b$ by $S_b-S$ in common parameter coordinates. It then
+recomputes the quadratic geometry. Bootstrap p-values are
+$(1+\#\{Q_b\ge Q\})/(B+1)$; ties count in the upper tail.
+All arms use the strict rejection rule $p<.05$. With B=199 the largest
+rejected bootstrap p-value is .045; this finite-grid conservatism must be
+considered when comparing rates. Production should preregister its tie and
+threshold convention, with larger B.
+
+The [design note](../../../../project/design/nested-score-finite-sample.md)
+derives first-order validity of this post-fit recentering and describes an
+exactly recentered objective, which has not been implemented or run. It also
+derives a bootstrap-assisted moment adjustment and explains why an analytic
+Bartlett coefficient is not yet available. No bootstrap from a fitted Gaussian
+SEM is used: that would discard the misspecification being protected against.
+Fixed B leaves Monte Carlo calibration error, and B=199 has a coarse tail.
+These identical-group cells do not validate heterogeneous-group score-mean
+handling. Strong misspecification, ten-restriction models, power and larger N
+are absent. Bootstrap failure makes the refitted arm unavailable for that
+draw; resamples are never dropped or replaced. Wilson intervals condition on
+available arms; failures remain separate against all attempted draws.
+
+The maximum independently reconstructed policy statistic discrepancy was
+`r format(as.numeric(value('max_policy_gap')),digits=3)`. The pilot deliberately exits nonzero after writing all summaries when any
+bootstrap fails. Its eight failures were line-search/convergence failures,
+not a statistic reconstruction discrepancy. The smoke completed without
+failures. No convergence rule was altered.
+
+Summary CSVs are frozen
+as tiny development/pricing evidence with source/native fingerprints and
+package versions, not as confirmation or an optimizer gate.
+
+## Next registration and price
+
+Proposed follow-up: six- and ten-restriction families; N=100/300/1000 per group;
+normal/skewed; correct/mild/strong shared misspecification; null and matched
+power. This yields 72 cells, 2000 null and 1000 power draws per cell (108000
+outer draws), B=999. Current observed SB/pEBA4, fixed-geometry and post-fit
+refitted-geometry bootstraps are required arms; add exact adjusted-objective
+recentring only after gradient/stationarity gates and an independent
+implementation audit. Population pseudo-null/curvature and actual power
+restrictions must be checked and committed before registration. Report size,
+paired size-error differences, size-adjusted power, every loss and failures
+per cell. No default follows from this pilot.
+
+```{r}
+wall <- as.numeric(value('elapsed_s'))
+draws <- 4*as.numeric(value('completed_reps'))
+b <- as.numeric(value('bootstrap'))
+cpu_per_draw <- 2*wall/draws
+hours <- cpu_per_draw*(999/b)*108000/3600
+knitr::kable(data.frame(
+  Quantity=c('Pilot CPU seconds per outer draw (two-worker wall bound)',
+             'Proposed 108000-draw B=999 run (CPU hours)',
+             'With 20% contingency (CPU hours)'),
+  Estimate=round(c(cpu_per_draw,hours,1.2*hours),1)),
+  caption='Rough pricing extrapolates N=100, six-restriction fits; larger models/N need a new timing pilot.')
+```
+
+This CPU bound charges both workers for all elapsed wall time. It is not a
+measurement of user+system CPU and excludes an additional exact-objective arm.
+The extrapolation assumes linear B cost and unchanged fit cost, which larger
+models and larger N may violate. A stratified timing pilot is required before
+booking compute. Proposed fresh draw base 1226100101 and summary base
+1426100101 are reserved and unused. Production must assign nonoverlapping
+resample streams. Pilot draw seeds are base 1126100091 + 10000*cell ID + draw;
+bootstrap index seeds add 1000000 + resample ID (overlap across outer draws is
+recorded and should be removed for production). Simbox is unavailable; this
+report proposes a later registration and authorizes no remote run.
+
+## Reproduce
+
+From the repository root, with installed lane packages:
+
+```sh
+Rscript experiments/research/active/54-nested-score-small-n/run_experiment.R --help
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+R_LIBS="$HOME/.cache/magmaan-rlib/lane-e" nice -n 10 Rscript \
+  experiments/research/active/54-nested-score-small-n/run_experiment.R \
+  --smoke --run-id fresh-smoke
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+R_LIBS="$HOME/.cache/magmaan-rlib/lane-e" nice -n 10 Rscript \
+  experiments/research/active/54-nested-score-small-n/run_experiment.R \
+  --reps 40 --bootstrap 199 --workers 2 --run-id fresh-pilot
+quarto render experiments/research/active/54-nested-score-small-n/report.qmd
+```
+
+Fresh directories are mandatory; the runner checkpoints every balanced batch
+and stops starting batches before its 1100-second budget. Rendering reads only
+this leaf's frozen pilot summaries and performs no fits or simulations.

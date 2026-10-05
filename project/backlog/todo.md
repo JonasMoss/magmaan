@@ -496,8 +496,15 @@ ordinary API exposes barrier fitting experimentally as
   size-adjusted power; no expected-sensitivity fallback. Not release-gating.
   Task-73 replay (decisions/04 diagnostics): 200 production draws per small-N
   correct/mild normal/skewed cell implicate fitted projection/metric variance
-  compression rather than uniform meat inflation. Next: register nuisance-
-  refitting bootstrap or higher-order joint-moment correction; no default change.
+  compression rather than uniform meat inflation. TASK-93 adds the
+  [finite-sample design](../design/nested-score-finite-sample.md)
+  and [research/54 pilot](../../experiments/research/active/54-nested-score-small-n/report.qmd):
+  recentered fixed/refitted-geometry bootstrap, 40 fresh draws/cell, B=199,
+  9.9 minutes; eight bootstrap convergence failures affect three refitted tests.
+  Wide intervals preclude a calibration claim.
+  Next: freeze size/power registration with strong misspecification and ten
+  restrictions; validate an exactly recentered objective before including it.
+  No default change; production requires a later compute decision.
 
 - [x] **M — compose the FIML policy.** Implemented C++ global/nested
   composers and R dispatch: observed-bread casewise-score covariance,

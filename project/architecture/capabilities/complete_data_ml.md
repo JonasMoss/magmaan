@@ -658,7 +658,10 @@
   dependent projection/metric variance compression at N=100 per group:
   200 draws in each correct/mild normal/skewed null cell, no default change.
   Uniform meat inflation is not supported; registered finite-sample correction
-  and larger-df/strong-misspecification confirmation remain open.
+  and larger-df/strong-misspecification confirmation remain open. TASK-93
+  supplies a [design derivation](../../design/nested-score-finite-sample.md)
+  and independent research/54 bounded development bootstrap pilot; these are
+  research artifacts, with no new library capability or policy default.
   The C++ frontier option additionally has a deterministic verification-only
   exact-enumeration path capped at n=20. Its unit gate enumerates all 4,096
   sign vectors at n=12, is seed-invariant, and returns zero Monte Carlo error;
