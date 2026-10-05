@@ -10,6 +10,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
 #include "magmaan/robust/satorra2000.hpp"
 
 #include "magmaan/api/policy.hpp"
@@ -235,6 +236,42 @@ TEST_CASE("DWLS policy: at exact fit the IJ covariance is the fixed-weight sandw
   auto fixed = magmaan::estimate::robust_ordinal(m.pt, m.rep, exact_gamma(*stats), est, OrdinalWeightKind::DWLS);
   REQUIRE(fixed.has_value());
   CHECK(relative(out.covariance, fixed->vcov) < 1e-6);
+}
+
+TEST_CASE("DWLS exact policy covariance transports from delta to theta") {
+  // Matching moment-map Jacobians gives the local delta-to-theta coordinate
+  // derivative. The observed IJ covariance must obey this reparameterization
+  // even when the one-factor model is misspecified.
+  for (const Eigen::Index n : {Eigen::Index{600}, Eigen::Index{2400}}) {
+    CAPTURE(n);
+    auto stats = magmaan::data::ordinal_stats_from_integer_data(
+        {misspecified_block(4000u, n, -0.4, 0.6)}, true);
+    REQUIRE(stats);
+    const auto m = ordinal_model(kOneFactor, 1);
+    const auto est = fit_dwls(m, *stats, OrdinalParameterization::Theta);
+    const auto out = api::policy_inference_dwls(m.pt, m.rep, *stats, est,
+        OrdinalParameterization::Theta, {});
+    REQUIRE(out.covariance_reason == api::InferenceReason::Available);
+    const auto delta_est = fit_dwls(m, *stats, OrdinalParameterization::Delta);
+    const auto delta_out = api::policy_inference_dwls(m.pt, m.rep, *stats, delta_est,
+        OrdinalParameterization::Delta, {});
+    REQUIRE(delta_out.covariance_reason == api::InferenceReason::Available);
+    auto delta_obj = magmaan::estimate::frontier::ordinal_ls_objective(m.pt, m.rep, *stats,
+        delta_est, OrdinalWeightKind::DWLS, OrdinalParameterization::Delta);
+    auto theta_obj = magmaan::estimate::frontier::ordinal_ls_objective(m.pt, m.rep, *stats,
+        est, OrdinalWeightKind::DWLS, OrdinalParameterization::Theta);
+    REQUIRE(delta_obj); REQUIRE(theta_obj);
+    auto jd = delta_obj->problem.J(delta_est.theta);
+    auto jt = theta_obj->problem.J(est.theta);
+    REQUIRE(jd); REQUIRE(jt);
+    const Eigen::MatrixXd transport = jt->colPivHouseholderQr().solve(*jd);
+    const Eigen::MatrixXd transported = transport * delta_out.covariance * transport.transpose();
+    MESSAGE("delta/theta transport error " << relative(out.covariance, transported)
+        << " Jacobian residual " << relative((*jt * transport).eval(), *jd)
+        << " objective difference " << est.fmin - delta_est.fmin);
+    CHECK(relative(out.covariance, transported) < 1e-6);
+    CHECK(relative((*jt * transport).eval(), *jd) < 1e-8);
+  }
 }
 
 TEST_CASE("DWLS policy IJ covariance agrees with the delete-one jackknife") {
@@ -528,8 +565,20 @@ TEST_CASE("DWLS nested policy: under a true null the IJ law approaches Satorra-2
     auto g1 = magmaan::estimate::robust_ordinal(r.alt_model.pt, r.alt_model.rep, *stats,
                                                 r.alt_est, OrdinalWeightKind::DWLS, parameterization);
     REQUIRE(g0.has_value()); REQUIRE(g1.has_value());
-    auto satorra = magmaan::estimate::lr_test_satorra2000_ordinal(r.alt_model.pt, r.alt_model.rep,
+    // Match the sampling Gamma while retaining the fitted OPG weights. With
+    // OPG Gamma the comparison also contains random information-equality noise.
+    const auto matched_stats = exact_gamma(*stats);
+    CHECK((matched_stats.W_dwls[0] - stats->W_dwls[0]).norm() == 0.0);
+    auto opg_satorra = magmaan::estimate::lr_test_satorra2000_ordinal(r.alt_model.pt, r.alt_model.rep,
         *stats, r.alt_est, r.null_model.pt, r.null_model.rep, r.null_est, OrdinalWeightKind::DWLS,
+        g0->chisq_standard, g1->chisq_standard, g0->df, g1->df,
+        magmaan::robust::SatorraAMethod::Exact, parameterization);
+    REQUIRE(opg_satorra);
+    MESSAGE("n " << n << ": OPG Gamma trace gap " <<
+        std::abs(r.out.lr.eigenvalues.sum() - opg_satorra->eigenvalues.sum()) /
+        opg_satorra->eigenvalues.sum());
+    auto satorra = magmaan::estimate::lr_test_satorra2000_ordinal(r.alt_model.pt, r.alt_model.rep,
+        matched_stats, r.alt_est, r.null_model.pt, r.null_model.rep, r.null_est, OrdinalWeightKind::DWLS,
         g0->chisq_standard, g1->chisq_standard, g0->df, g1->df,
         magmaan::robust::SatorraAMethod::Exact, parameterization);
     REQUIRE(satorra.has_value());

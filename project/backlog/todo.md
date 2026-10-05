@@ -508,9 +508,12 @@ ordinary API exposes barrier fitting experimentally as
   and nested SB/PEBA4 references remain. Earlier decisions/05 calibration
   applies to OPG; fresh exact-first-stage and latent non-normality confirmation
   remains TASK-79. Lane implementation is pending validation: the existing
-  theta delete-one jackknife 4% gate gives 5.23%, and the single-seed OPG
-  Satorra trace gap no longer decreases monotonically with N. No tolerance
-  or gate has been relaxed; TASK-69 needs a decision on investigation scope.
+  theta delete-one jackknife 4% gate gives 5.23% at N = 600, falling to 1.32%
+  at N = 2400. Exact delta/theta covariance transport agrees within 1e-6;
+  tighter delete-one refits leave the discrepancies unchanged. The Satorra
+  comparison now uses the same exact Gamma and retains both original gates.
+  No tolerance or jackknife gate has been relaxed; TASK-69 needs review of
+  the finite-sample theta gate before adoption.
 
 Mixed continuous/ordered completion is assigned to 0.3.0. Shared fixes
 required by an all-ordinal primary workflow remain current work.
