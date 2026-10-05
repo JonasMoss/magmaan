@@ -382,6 +382,14 @@ Gamma-influence products with sparse contractions (dense WLS path kept as a
 N = 1000 (one group). TASK-89 made the Gamma-diagonal kappa movement sparse for
 observed ordinal and mixed data (dense references kept, 1e-8 gates): a
 two-group mixed call falls from 2.0 to 0.45 s at N = 1000 per group.
+Complete mixed DWLS now has an explicit `lavaan_compat = "WLSMV"` bundle
+(TASK-90): NACOV covariance, scaled-shifted global and default Satorra-2000
+delta nested tests, gated at identical parameter points against installed
+lavaan for one/two groups and delta/theta. Retained-fit parity is validated
+for one-group delta; grouped/theta retained fits differ because lavaan weights
+unequal groups by n_g - 1 and stops earlier (magmaan's endpoint has the better
+canonical objective), so that slice is limited validation until the mixed
+lavaan preset (TASK-91).
 A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
 passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
 label (32 tests) and `R CMD check --no-manual` for both packages with no
