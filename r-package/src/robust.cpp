@@ -1733,3 +1733,34 @@ double weighted_chisq_diagnostic_impl(Rcpp::NumericVector eigenvalues, double st
   const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigenvalues);
   return magmaan::robust::weighted_chisq_upper(ev, statistic);
 }
+
+// [[Rcpp::export]]
+Rcpp::List association_ml_ij(Rcpp::List fit, Rcpp::List ordinal_stats) {
+  if (!fit.containsElementNamed("association"))
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = "unsupported_estimator");
+  if (fit.containsElementNamed("penalty"))
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = "penalty");
+  Ctx ctx = ctx_from_fit(fit);
+  auto result = magmaan::estimate::frontier::association_ml_ij(
+      ctx.pt, ctx.rep, ordinal_stats_from_arg(ordinal_stats), est_from_fit(fit, true));
+  if (!result) {
+    const auto kind = result.error().kind;
+    const std::string reason = kind == magmaan::PostError::Kind::UnsupportedInference
+        ? "unsupported_inference"
+        : (kind == magmaan::PostError::Kind::InfoMatrixSingular
+            ? "singular_information" : "numeric_issue");
+    return Rcpp::List::create(Rcpp::_["available"] = false,
+        Rcpp::_["reason"] = reason, Rcpp::_["detail"] = result.error().detail);
+  }
+  const auto& r = *result;
+  return Rcpp::List::create(Rcpp::_["available"] = true,
+      Rcpp::_["value"] = r.value, Rcpp::_["score"] = r.score,
+      Rcpp::_["H"] = r.sensitivity, Rcpp::_["B"] = r.meat,
+      Rcpp::_["K"] = r.coordinates, Rcpp::_["vcov_active"] = r.vcov_active,
+      Rcpp::_["vcov"] = r.vcov,
+      Rcpp::_["D"] = r.target_derivative,
+      Rcpp::_["influence_active"] = r.influence_active,
+      Rcpp::_["influence"] = r.influence);
+}

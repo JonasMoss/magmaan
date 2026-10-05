@@ -132,6 +132,7 @@ add_library(magmaan STATIC
   src/estimate/ordinal_prepare.cpp
   src/estimate/ordinal_moments.cpp
   src/estimate/ordinal_curvature.cpp
+  src/estimate/ordinal_association.cpp
   src/estimate/ordinal_robust.cpp
   src/estimate/ordinal_score.cpp
   src/estimate/ordinal_measures.cpp

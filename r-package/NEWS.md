@@ -6,6 +6,13 @@
   All and nested SB/PEBA4 references remain. Exact-first-stage calibration
   reconfirmation is pending (TASK-79).
 
+- Lab-only `association_ml_ij()` composes exact empirical first-stage rows
+  with the observed association-ML Hessian and target derivatives. It returns
+  active/full covariance and joint threshold influence; ordinary covariance,
+  tests and modification indices remain unavailable pending reference laws
+  and calibration. Missing data, mixed indicators, nonlinear constraints,
+  covariance boundaries and penalized fits are unsupported.
+
 - `robust_ordinal_ij(..., first_stage = "exact")` provides a complete-data
   all-ordinal empirical-Jacobian comparator, with sampling influence rows and
   Gamma. The default remains `"opg"`; fitting weights are unchanged. The ordinary policy now selects exact influence.

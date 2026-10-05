@@ -157,3 +157,5 @@ importFrom(utils, modifyList)
 
 export(mplus_data)
 export(refit_from_null)
+
+export(association_ml_ij)

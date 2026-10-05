@@ -533,6 +533,27 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 // non-robust mixed sweep. Single group only (v1).
 namespace frontier {
 
+// Lab-only evaluation-point sandwich. Rows are unscaled influence functions;
+// sum_b rows_b' rows_b / N^2 reproduces vcov. Threshold rows include 1/w_b.
+struct AssociationMlIJ {
+  double value = 0.0;
+  Eigen::VectorXd score;
+  Eigen::MatrixXd sensitivity;
+  Eigen::MatrixXd meat;
+  Eigen::MatrixXd coordinates;
+  Eigen::MatrixXd vcov_active;
+  Eigen::MatrixXd vcov;
+  std::vector<Eigen::MatrixXd> target_derivative;
+  std::vector<Eigen::MatrixXd> influence_active;
+  std::vector<Eigen::MatrixXd> influence;
+};
+
+post_expected<AssociationMlIJ>
+association_ml_ij(spec::LatentStructure pt, const model::MatrixRep& rep,
+                  const data::OrdinalStats& stats, const Estimates& est,
+                  const std::vector<std::int8_t>* row_user = nullptr,
+                  bool penalized = false);
+
 struct OrdinalLsObjective {
   spec::LatentStructure pt;
   optim::GmmProblem problem;

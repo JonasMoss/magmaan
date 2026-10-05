@@ -1207,12 +1207,12 @@ release, including dependencies otherwise shared with the primary programme.
 
 - [ ] **L — define association-ML MI/release and sampling inference.** The
   [audit and ordered contract plan](../design/association-ml-inference.md) is
-  complete (TASK-32.1); implementation and calibration remain open. Gate
-  the active association Jacobian, saturated-threshold/NACOV transport and the
-  matching ML information before exposing MI/release, covariance or tests for
-  ordinal association-ML fits. **Check:** reductions where defined,
-  independent derivatives, grouped/constrained controls and calibration; until
-  then every component is rejected with a typed reason.
+  complete (TASK-32.1). TASK-32.2 implements the lab-only evaluation-point
+  score, observed sensitivity and joint exact Stage-1 covariance, with independent
+  derivatives, nonnormal case weights, stratified delete-one, exact-fit and
+  identification-chart gates. Reference laws, MI/releases and policy calibration
+  remain open (subcards 3–5). Ordinary association-ML components retain typed
+  refusal until those contracts and their calibration pass.
 
 ### Barrier fitting and inference
 

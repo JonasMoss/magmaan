@@ -1,3 +1,4 @@
+#include "magmaan/estimate/nt.hpp"
 #include "ordinal_test_helpers.hpp"
 
 TEST_CASE("robust_ordinal_ij DWLS and WLS support observed MCAR ordinal stats") {
@@ -476,4 +477,285 @@ TEST_CASE("Ordinal exact and OPG IJ converge under a Gaussian copula") {
   // variation across the eight deterministic Gaussian samples.
   CHECK(errors[0]/errors[2] > 2.0);
   CHECK(errors[0]/errors[2] < 8.0);
+}
+
+TEST_CASE("association ML IJ joint transport and independent objective derivatives") {
+  using namespace magmaan;
+  auto stats = data::ordinal_stats_from_integer_data({ordinal_test_block(
+      322, 500, {0.82,0.76,0.7,0.64}, -0.45,0.55)}, false);
+  REQUIRE(stats.has_value());
+  auto parsed = parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2");
+  REQUIRE(parsed.has_value());
+  auto pt = spec::build(*parsed); REQUIRE(pt.has_value());
+  REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+  auto rep = model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+  auto start = estimate::ordinal_start_values(*pt,*rep,*stats,{}); REQUIRE(start.has_value());
+  auto fit = estimate::frontier::fit_ml(*pt,*rep,*stats,*start);
+  REQUIRE_MESSAGE(fit.has_value(), (fit ? "" : fit.error().detail));
+  // Evaluate off the optimum to ensure observed curvature is being tested.
+  fit->theta(0) *= 1.04;
+  auto ij = estimate::frontier::association_ml_ij(*pt,*rep,*stats,*fit);
+  REQUIRE_MESSAGE(ij.has_value(), (ij ? "" : ij.error().detail));
+  auto ev = model::ModelEvaluator::build(*pt,*rep); REQUIRE(ev.has_value());
+  auto q = [&](const Eigen::VectorXd& theta) {
+    auto evaluation = ev->evaluate(theta,false,false); REQUIRE(evaluation.has_value());
+    auto corr = model::correlation_evaluation(*evaluation); REQUIRE(corr.has_value());
+    const auto& C = corr->moments.sigma[0];
+    return 0.5*(std::log(C.determinant()) + (stats->R[0]*C.inverse()).trace()
+                - std::log(stats->R[0].determinant())-static_cast<double>(C.rows()));
+  };
+  CHECK(ij->value == doctest::Approx(q(fit->theta)).epsilon(1e-10));
+  const auto& K = ij->coordinates;
+  constexpr double h = 1e-4;
+  for (Eigen::Index j = 0; j < K.cols(); ++j) {
+    CHECK(ij->score(j) == doctest::Approx((q(fit->theta+h*K.col(j))-q(fit->theta-h*K.col(j)))/(2*h)).scale(1).epsilon(1e-7));
+    for (Eigen::Index k = 0; k < K.cols(); ++k) {
+      double H = (q(fit->theta+h*K.col(j)+h*K.col(k))
+                - q(fit->theta+h*K.col(j)-h*K.col(k))
+                - q(fit->theta-h*K.col(j)+h*K.col(k))
+                + q(fit->theta-h*K.col(j)-h*K.col(k)))/(4*h*h);
+      CHECK(ij->sensitivity(j,k) == doctest::Approx(H).scale(1).epsilon(2e-6));
+    }
+  }
+  CHECK((ij->vcov-ij->influence[0].transpose()*ij->influence[0]/250000.0).norm() < 1e-14);
+  CHECK((ij->vcov_active-ij->influence_active[0].transpose()*ij->influence_active[0]/250000.0).norm() < 1e-12);
+  CHECK(ij->influence[0].colwise().mean().norm() < 1e-10);
+  // Perturb the association target while holding the evaluation point fixed.
+  for (Eigen::Index c = 0, col = 0; c < 4; ++c) for (Eigen::Index r = c+1; r < 4; ++r, ++col) {
+    auto plus = *stats, minus = *stats;
+    plus.R[0](r,c) += 1e-5; plus.R[0](c,r) += 1e-5;
+    minus.R[0](r,c) -= 1e-5; minus.R[0](c,r) -= 1e-5;
+    auto hi = estimate::frontier::association_ml_ij(*pt,*rep,plus,*fit);
+    auto lo = estimate::frontier::association_ml_ij(*pt,*rep,minus,*fit);
+    REQUIRE(hi.has_value()); REQUIRE(lo.has_value());
+    CHECK(((hi->score-lo->score)/2e-5-ij->target_derivative[0].col(col)).norm() < 1e-9);
+  }
+  // A population target exactly on the model eliminates the curvature term.
+  auto evaluated = ev->evaluate(fit->theta,true,false); REQUIRE(evaluated.has_value());
+  auto correlation = model::correlation_evaluation(*evaluated); REQUIRE(correlation.has_value());
+  const auto& population = correlation->moments.sigma[0];
+  std::array<double,4> loading;
+  loading[0] = std::sqrt(population(0,1)*population(0,2)/population(1,2));
+  for (std::size_t j = 1; j < loading.size(); ++j)
+    loading[j] = population(0,static_cast<Eigen::Index>(j))/loading[0];
+  auto large = data::ordinal_stats_from_integer_data({ordinal_test_block(
+      3224,4000,loading,-0.45,0.55)},false);
+  REQUIRE(large.has_value());
+  auto exact_stats = *large;
+  exact_stats.R = correlation->moments.sigma;
+  auto exact_fit = *fit;
+  auto exact_layout = estimate::ordinal_association_layout(*pt,*rep,exact_stats,fit->theta);
+  REQUIRE(exact_layout.has_value()); exact_fit.theta = exact_layout->theta;
+  auto exact = estimate::frontier::association_ml_ij(*pt,*rep,exact_stats,exact_fit);
+  REQUIRE(exact.has_value());
+  const Eigen::MatrixXd inverse = exact_stats.R[0].inverse();
+  const Eigen::MatrixXd J = correlation->J_sigma*K;
+  Eigen::MatrixXd expected = Eigen::MatrixXd::Zero(K.cols(),K.cols());
+  for (Eigen::Index j = 0; j < K.cols(); ++j) {
+    Eigen::MatrixXd dC(4,4);
+    for (Eigen::Index c = 0, row = 0; c < 4; ++c) for (Eigen::Index r = c; r < 4; ++r, ++row)
+      dC(r,c) = dC(c,r) = J(row,j);
+    for (Eigen::Index k = 0; k < K.cols(); ++k) {
+      Eigen::MatrixXd eC(4,4);
+      for (Eigen::Index c = 0, row = 0; c < 4; ++c) for (Eigen::Index r = c; r < 4; ++r, ++row)
+        eC(r,c) = eC(c,r) = J(row,k);
+      expected(j,k) = .5*(inverse*dC*inverse*eC).trace();
+    }
+  }
+  CHECK((exact->sensitivity-expected).norm()/expected.norm() < 1e-7);
+  auto sampling = data::ordinal_moment_sampling_influence(exact_stats.int_data[0],exact_stats.n_levels[0],
+      exact_stats.thresholds[0],exact_stats.R[0]); REQUIRE(sampling.has_value());
+  const Eigen::MatrixXd fixed = expected.inverse()*exact->target_derivative[0]*
+      sampling->gamma.bottomRightCorner(6,6)*exact->target_derivative[0].transpose()*expected.inverse()/4000.0;
+  CHECK((fixed-exact->vcov_active).norm()/fixed.norm() < 1e-7);
+  auto missing = *stats; missing.int_data[0](0,0) = -1;
+  CHECK_FALSE(estimate::frontier::association_ml_ij(*pt,*rep,missing,*fit).has_value());
+  CHECK_FALSE(estimate::frontier::association_ml_ij(*pt,*rep,*stats,*fit,nullptr,true).has_value());
+}
+
+namespace {
+Eigen::MatrixXd association_skewed_cases(unsigned seed, int n) {
+  std::mt19937 rng(seed);
+  std::gamma_distribution<double> factor(1.5,2.0), error(2.5,2.0);
+  Eigen::MatrixXd X(n,4);
+  for (int i = 0; i < n; ++i) {
+    const double f = (factor(rng)-3)/std::sqrt(6.0);
+    for (int j = 0; j < 4; ++j) {
+      const double l = .8-.07*j;
+      const double z = l*f+std::sqrt(1-l*l)*(error(rng)-5)/std::sqrt(10.0);
+      X(i,j) = z < -.45 ? 1 : (z < .55 ? 2 : 3);
+    }
+  }
+  return X;
+}
+}
+
+TEST_CASE("association ML IJ nonnormal case weights and stratified delete one") {
+  using namespace magmaan;
+  auto parsed = parse::Parser::parse("f =~ x1 + l2*x2 + l3*x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2");
+  REQUIRE(parsed.has_value());
+  for (int n : {250,1000,4000}) {
+    CAPTURE(n);
+    std::vector<Eigen::MatrixXd> X{association_skewed_cases(3221,n/2),
+                                 association_skewed_cases(3222,n-n/2)};
+    auto stats = data::ordinal_stats_from_integer_data(X,false); REQUIRE(stats.has_value());
+    spec::BuildOptions build; build.n_groups = 2;
+    auto pt = spec::build(*parsed,build); REQUIRE(pt.has_value());
+    REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+    auto rep = model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+    auto start = estimate::ordinal_start_values(*pt,*rep,*stats,{}); REQUIRE(start.has_value());
+    optim::OptimOptions options; options.ftol = 1e-14; options.gtol = 1e-11; options.max_iter = 1000;
+    auto refit = [&](const data::OrdinalStats& target, const Eigen::VectorXd& initial) {
+      auto fitted = estimate::frontier::fit_ml(*pt,*rep,target,initial,estimate::Backend::NloptLbfgs,options);
+      REQUIRE_MESSAGE(fitted.has_value(), (fitted ? "" : fitted.error().detail));
+      // Newton polish analytic objective gradients independently of the IJ.
+      auto layout = estimate::ordinal_association_layout(*pt,*rep,target,fitted->theta); REQUIRE(layout.has_value());
+      const auto K = layout->constraints.K();
+      auto ev = model::ModelEvaluator::build(*pt,*rep); REQUIRE(ev.has_value());
+      data::SampleStats sample{target.R,{},target.n_obs};
+      auto cache = estimate::ml_prepare(sample,model::MomentTarget::Correlation); REQUIRE(cache.has_value());
+      auto gradient = [&](const Eigen::VectorXd& theta) {
+        auto e = ev->evaluate(theta,true,false); REQUIRE(e.has_value());
+        auto c = model::correlation_evaluation(*e); REQUIRE(c.has_value());
+        auto vg = estimate::ml_value_gradient(sample,*cache,c->moments,c->J_sigma); REQUIRE(vg.has_value());
+        return Eigen::VectorXd(.5*K.transpose()*vg->gradient);
+      };
+      for (int iter = 0; iter < 8; ++iter) {
+        auto s = gradient(fitted->theta);
+        if (s.norm() < 1e-13) break;
+        Eigen::MatrixXd H(K.cols(),K.cols());
+        for (Eigen::Index j = 0; j < K.cols(); ++j)
+          H.col(j) = (gradient(fitted->theta+1e-4*K.col(j))-gradient(fitted->theta-1e-4*K.col(j)))/2e-4;
+        fitted->theta -= K*H.fullPivLu().solve(s);
+      }
+      return *fitted;
+    };
+    auto fitted = refit(*stats,*start);
+    auto ij = estimate::frontier::association_ml_ij(*pt,*rep,*stats,fitted);
+    REQUIRE_MESSAGE(ij.has_value(), (ij ? "" : ij.error().detail));
+    if (n == 250) for (std::size_t b = 0; b < X.size(); ++b) {
+      auto plus = *stats, minus = *stats;
+      plus.R[b](1,0) += 1e-4; plus.R[b](0,1) += 1e-4;
+      minus.R[b](1,0) -= 1e-4; minus.R[b](0,1) -= 1e-4;
+      const Eigen::VectorXd fd = (refit(plus,fitted.theta).theta-refit(minus,fitted.theta).theta)/2e-4;
+      const double w = static_cast<double>(stats->n_obs[b])/n;
+      const Eigen::VectorXd prediction = -w*ij->coordinates*ij->sensitivity.fullPivLu().solve(ij->target_derivative[b].col(0));
+      CHECK((fd-prediction).norm()/prediction.norm() < 1e-5);
+    }
+    Eigen::MatrixXd jk = Eigen::MatrixXd::Zero(fitted.theta.size(),fitted.theta.size());
+    for (std::size_t b = 0; b < X.size(); ++b) {
+      const auto nb = X[b].rows();
+      Eigen::MatrixXd deleted(nb,fitted.theta.size());
+      for (Eigen::Index i = 0; i < nb; ++i) {
+        auto blocks = X;
+        blocks[b].resize(nb-1,4);
+        if (i > 0) blocks[b].topRows(i) = X[b].topRows(i);
+        if (i+1 < nb) blocks[b].bottomRows(nb-i-1) = X[b].bottomRows(nb-i-1);
+        auto target = data::ordinal_stats_from_integer_data(blocks,false); REQUIRE(target.has_value());
+        // Fixed allocation: deleting a row changes its empirical distribution,
+        // not the Stage-2 stratum proportion.
+        target->n_obs = stats->n_obs;
+        deleted.row(i) = refit(*target,fitted.theta).theta;
+      }
+      const Eigen::RowVectorXd mean = deleted.colwise().mean();
+      deleted.rowwise() -= mean;
+      jk.noalias() += (static_cast<double>(nb-1)/static_cast<double>(nb))*deleted.transpose()*deleted;
+      if (n == 250) for (int row : {0,17,91}) for (int copies : {50,100}) {
+        // Keep perturbations above the pairwise solver's 1e-9 rho resolution;
+        // two central-difference steps gate both truncation and solver error.
+        Eigen::VectorXd weighted[2], stage1[2];
+        for (int side = 0; side < 2; ++side) {
+          const int step = side == 0 ? -1 : 1;
+          auto blocks = X;
+          blocks[b].resize(nb*copies+step,4);
+          Eigen::Index off = 0;
+          for (Eigen::Index i = 0; i < nb; ++i)
+            for (int j = 0; j < copies+(i == row ? step : 0); ++j)
+              blocks[b].row(off++) = X[b].row(i);
+          auto target = data::ordinal_stats_from_integer_data(blocks,false); REQUIRE(target.has_value());
+          stage1[side].resize(target->thresholds[b].size()+6);
+          stage1[side].head(target->thresholds[b].size()) = target->thresholds[b];
+          Eigen::Index kappa_col = target->thresholds[b].size();
+          for (int c = 0; c < 4; ++c) for (int r = c+1; r < 4; ++r)
+            stage1[side](kappa_col++) = target->R[b](r,c);
+          target->n_obs = stats->n_obs;
+          weighted[side] = refit(*target,fitted.theta).theta;
+        }
+        Eigen::VectorXd fd = (weighted[1]-weighted[0])*(n*copies/2.0);
+        const double relative = (fd-ij->influence[b].row(row).transpose()).norm()/fd.norm();
+        auto stage = data::ordinal_moment_sampling_influence(stats->int_data[b],stats->n_levels[b],stats->thresholds[b],stats->R[b]);
+        REQUIRE(stage.has_value());
+        const Eigen::VectorXd stage_fd = (stage1[1]-stage1[0])*(static_cast<double>(nb)*copies/2.0);
+        MESSAGE("association nonnormal case-weight error " << relative << " group " << b
+                << " Stage1 error " << (stage_fd-stage->rows.row(row).transpose()).norm()/stage_fd.norm());
+        CHECK(relative <= 1e-5);
+        const Eigen::VectorXd alpha_fd = ij->coordinates.colPivHouseholderQr().solve(fd);
+        CHECK((alpha_fd-ij->influence_active[b].row(row).transpose()).norm()/alpha_fd.norm() <= 1e-5);
+        CHECK((stage_fd-stage->rows.row(row).transpose()).norm()/stage_fd.norm() <= 1e-5);
+      }
+    }
+    const double relative = (jk-ij->vcov).norm()/ij->vcov.norm();
+    MESSAGE("association stratified delete-one N=" << n << " relative covariance error " << relative);
+    CHECK(relative < (n == 250 ? .2 : (n == 1000 ? .08 : .03)));
+  }
+}
+
+TEST_CASE("association ML IJ identification charts and typed refusals") {
+  using namespace magmaan;
+  auto X = association_skewed_cases(3223,700);
+  auto stats = data::ordinal_stats_from_integer_data({X},false); REQUIRE(stats.has_value());
+  auto parsed = parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2");
+  REQUIRE(parsed.has_value());
+  auto unidentified_parsed = parse::Parser::parse("f =~ NA*x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2");
+  REQUIRE(unidentified_parsed.has_value());
+  auto unidentified = spec::build(*unidentified_parsed); REQUIRE(unidentified.has_value());
+  REQUIRE(estimate::prepare_ordinal_delta_partable(*unidentified,*stats).has_value());
+  auto unidentified_rep = model::build_matrix_rep(*unidentified); REQUIRE(unidentified_rep.has_value());
+  auto unidentified_start = estimate::ordinal_start_values(*unidentified,*unidentified_rep,*stats,{});
+  REQUIRE(unidentified_start.has_value());
+  estimate::Estimates unidentified_point; unidentified_point.theta = *unidentified_start;
+  auto unidentified_result = estimate::frontier::association_ml_ij(*unidentified,*unidentified_rep,*stats,unidentified_point);
+  REQUIRE_FALSE(unidentified_result.has_value());
+  CHECK(unidentified_result.error().detail.find("unidentified") != std::string::npos);
+  CHECK(unidentified_result.error().kind == PostError::Kind::InfoMatrixSingular);
+  Eigen::MatrixXd correlation_covariance;
+  for (bool std_lv : {false,true}) {
+    spec::BuildOptions options; options.std_lv = std_lv;
+    auto pt = spec::build(*parsed,options); REQUIRE(pt.has_value());
+    REQUIRE(estimate::prepare_ordinal_delta_partable(*pt,*stats).has_value());
+    auto rep = model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+    auto start = estimate::ordinal_start_values(*pt,*rep,*stats,{}); REQUIRE(start.has_value());
+    optim::OptimOptions opts; opts.ftol = 1e-14; opts.gtol = 1e-10;
+    auto fit = estimate::frontier::fit_ml(*pt,*rep,*stats,*start,estimate::Backend::NloptLbfgs,opts);
+    REQUIRE(fit.has_value());
+    auto ij = estimate::frontier::association_ml_ij(*pt,*rep,*stats,*fit); REQUIRE(ij.has_value());
+    auto ev = model::ModelEvaluator::build(*pt,*rep); REQUIRE(ev.has_value());
+    auto evaluation = ev->evaluate(fit->theta,true,false); REQUIRE(evaluation.has_value());
+    auto corr = model::correlation_evaluation(*evaluation); REQUIRE(corr.has_value());
+    Eigen::MatrixXd covariance = corr->J_sigma*ij->vcov*corr->J_sigma.transpose();
+    if (!std_lv) correlation_covariance = covariance;
+    else CHECK((correlation_covariance-covariance).norm()/covariance.norm() < 1e-5);
+    auto unsupported = *stats; unsupported.n_levels[0][0] = 0;
+    CHECK_FALSE(estimate::frontier::association_ml_ij(*pt,*rep,unsupported,*fit).has_value());
+    auto nonlinear = *pt; nonlinear.nonlinear_eq_rows.push_back(0);
+    auto refusal = estimate::frontier::association_ml_ij(nonlinear,*rep,*stats,*fit);
+    REQUIRE_FALSE(refusal.has_value());
+    CHECK(refusal.error().kind == PostError::Kind::UnsupportedInference);
+    // A vanishing latent variance destroys the association Jacobian rank.
+    if (!std_lv) {
+      auto deficient = *fit;
+      for (std::size_t row = 0; row < pt->size(); ++row)
+        if (pt->op[row] == parse::Op::Covariance && pt->lhs_var[row] == pt->rhs_var[row] &&
+            pt->lhs_var[row] >= 0 && pt->ov_pos[static_cast<std::size_t>(pt->lhs_var[row])] < 0 && pt->free[row] > 0)
+          deficient.theta(pt->free[row]-1) = 0;
+      auto boundary = estimate::frontier::association_ml_ij(*pt,*rep,*stats,deficient);
+      REQUIRE_FALSE(boundary.has_value());
+      CHECK(boundary.error().kind == PostError::Kind::UnsupportedInference);
+      CHECK(boundary.error().detail.find("PSD boundary") != std::string::npos);
+    }
+  }
 }

@@ -1,7 +1,8 @@
 # Association-ML inference contract
 
-TASK-32.1 audits the existing fitter and proposes implementation gates; no
-inference is enabled by this note. The ordinary policy must satisfy the
+TASK-32.1 audits the fitter and specifies implementation gates; TASK-32.2
+implements the lab evaluation-point covariance component. Ordinary exposure
+remains gated by subcards 3–5. The ordinary policy must satisfy the
 [misspecification requirement](../scope.md#misspecification-robust-inference-requirement).
 Initial scope is independent complete rows, all-ordinal indicators, saturated
 thresholds, fixed response scales and linear association constraints. Missing
@@ -62,9 +63,23 @@ through the joint Stage-1/Stage-2 influence, retaining cross-covariances.
 `MixedOrdinalStats::sampling_moment_influence` are the TASK-67 template.
 TASK-74 adds `data::ordinal_moment_sampling_influence` for complete all-ordinal
 data, returning centered empirical rows and their sampling Gamma, also exposed
-by the lab IJ comparator. Association-ML transport and a supplied-channel
-adapter remain to be implemented; the broader subcard-1 nonnormality and
-stratified delete-one gates remain open.
+by the lab IJ comparator. Association-ML transport is implemented by
+`estimate::frontier::association_ml_ij` in `ordinal_association.cpp`, exposed
+as the lab `association_ml_ij()`. It returns the evaluation-point score,
+observed sensitivity (central differences of the analytic correlation score),
+unweighted group target derivatives, active/full influence and covariance.
+The full influence adds within-stratum threshold rows divided by w_b, retaining
+threshold-parameter cross-covariance. A supplied-channel adapter remains open.
+Subcard-1 nonnormality and stratified delete-one gates and subcard-2 validation
+are recorded in `ordinal_ij_test.cpp`. The non-Gaussian copula gate uses centered
+chi-square factors (3 df) and errors (5 df), with three categories and two
+strata sharing loading constraints. Replicated case-weight central differences
+at two steps keep the existing pairwise solver resolution visible and retain
+the 1e-5 relative-error gate. Stratified delete-one covariance errors against IJ
+are 0.117626, 0.029646 and 0.00728114 at total N = 250, 1000 and 4000. These
+are deterministic numerical validation, not policy coverage calibration.
+Subcards 1 (the exact sampling channel and its outstanding gates) and 2 (lab
+score/sensitivity/covariance) are implemented; subcards 3–5 remain open.
 Lavaan NACOV/OPG is a compatibility comparator only. A caller-provided NACOV
 without a declared, validated sampling meaning cannot grant ordinary inference.
 Unlike DWLS, this criterion has no estimated-weight/Gamma-influence channel;
@@ -86,15 +101,17 @@ implementations. Candidate enumeration and release directions in
 and dispatch in `cpp/src/api/sem.cpp` and `cpp/src/api/policy.cpp` deliberately
 refuse current association inference. Preserve those guards until gates pass.
 
-## Ordered implementation subcards (proposed)
+## Ordered implementation subcards
 
-1. **Exact all-ordinal Stage-1 sampling channel.** Add explicit empirical rows
-   and sampling Gamma without altering fitting NACOV. Acceptance: marginal and
+1. **Exact all-ordinal Stage-1 sampling channel (complete raw-row channel).**
+   Explicit empirical rows and sampling Gamma leave fitting NACOV unchanged.
+   Acceptance gates completed by TASK-74 and TASK-32.2: marginal and
    pairwise score/Jacobian finite differences; independent replicated case-weight
    derivatives under latent nonnormality; threshold coupling and centered rows;
    stratified delete-one convergence; typed missing-data/invalid-Gamma refusals.
-2. **Association evaluation-point score, sensitivity and covariance.** Add s,
-   H, D and joint influence in active/full coordinates. Acceptance: independent
+2. **Association evaluation-point score, sensitivity and covariance (complete
+   lab component).** Supplies s, H, D and joint influence in active/full
+   coordinates. Acceptance gates completed by TASK-32.2: independent
    q/gradient/Hessian and target derivatives; influence versus reweighted refits;
    exact-fit fixed-metric sandwich reduction; grouped linear constraints,
    rank-deficiency refusals and unit/coordinate transport. Gate threshold

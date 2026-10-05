@@ -53,6 +53,7 @@ evidence for the adopted recipe (exit criterion 3).
 | | Global n F, All spectrum from exact sampling influence | Limited validation | Explicit exact-row cross-product construction; OPG-spectrum difference; one/two groups delta/theta | Calibration pending | OPG NACOV fitting weights retained |
 | | Nested fit-function difference, observed-Hessian/IJ SB/PEBA4 law; moment-tangent nesting | Limited validation | Common-point profile and direct parameter-space laws agree <= 1e-10; lab and ordinary nested reporting | Calibration pending | Local moment embedding witness |
 | | Global LR; nested score | Inapplicable; unsupported | Typed `inapplicable`; `unsupported_model` | | DWLS has no likelihood; nested score is not derived |
+| All-ordinal association ML | Every ordinary component | Unsupported | Typed association-ML refusal; lab covariance below | | Reference laws, MI/releases and calibration remain TASK-32 subcards 3–5 |
 | ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
 | Continuous WLS (ADF), mixed ULS | Estimation | Unsupported in `magmaan()` | The call errors and names `magmaanlab::estimate()` / DWLS or WLS | | Consumer-gated |
 | Two-level, SAM, composites, closed-form estimators | Every component | Not offered in `magmaan()` | Lab interfaces keep their own gates (area files) | | No 0.2.0 requirement |
@@ -211,6 +212,13 @@ convergence rules remain fitting choices. Reported bundles target lavaan 0.7.2.
 
 ## Existing lab components and remaining composition gates
 
+Association-ML covariance is a lab-only component in
+`estimate::frontier::association_ml_ij` / `magmaanlab::association_ml_ij()`.
+It uses observed sensitivity and exact empirical Stage-1 influence, including
+threshold cross-covariance; independent numerical gates pass. Ordinary
+association-ML inference remains unsupported pending reference laws and
+calibration (TASK-32 subcards 3–5).
+
 The complete all-ordinal lab IJ has an explicit exact empirical-Jacobian
 first-stage comparator (`first_stage = "exact"`), returning sampling rows and
 Gamma alongside covariance. OPG remains the default and the ordinary policy is
@@ -222,6 +230,7 @@ composition and Gaussian-copula convergence; TASK-69 owns policy adoption.
 | --- | --- | --- |
 | Complete ML | `ntml_covariance`, `ntml_score_sandwich`, expected UGamma, `fiml_robust_mlr` complete-data trace reduction. SE/SB fixtures: `inference_golden_test.cpp`, `multigroup_inference_golden_test.cpp`; complete bundles above | `lr_test_satorra_bentler2001`/2010 and restriction-map Satorra-2000 exist. SB2001 bundles above are checked; SB2010 is not an ordinary bundle |
 | FIML | `fiml_observed_information`, `fiml_robust_mlr` and spectrum primitives exist; `fiml_golden_test.cpp` checks robust SEs, MLR statistics, scales and H1/H0 traces. Lab `vcov()` exposes observed-information and observed-sandwich routes. Ordinary ML/MLR bundles compose these primitives; live `test_lavaan_compat.R` gates covariance, intervals, global and default nested reports | Restriction-map and scalar SB2001/2010 engines and lab adapters exist. The scalar engines derive their single-model scales from a residual-projector spectrum, so their names alone do not establish agreement with lavaan's MLR trace recipe. The ordinary default MLR bundle uses the scalar SB2001 reducer with explicit `fiml_robust_mlr` YB-Mplus scales, gated on single/grouped missing-data pairs and a saturated alternative; the frozen Satorra-2000 fixture remains a separate gate |
+| All-ordinal association ML | Lab-only `association_ml_ij`: observed H, exact empirical Stage-1 meat, active/full covariance and joint thresholds. Independent q/score/H/D, nonnormal case-weight, stratified delete-one (N=250/1000/4000), exact-fit and chart gates in `ordinal_ij_test.cpp`; lab covariance reconstruction and threshold cross-covariance | Global/nested reference laws and MI/releases remain unsupported; policy calibration remains subcard 5 |
 | All-ordinal DWLS/ULS/WLS | `robust_ordinal`; `ordinal_golden_test.cpp` gates component SEs/tests. Ordinary composer adds lavaan reporting normalization and bundled method selection | `lr_test_satorra2000_ordinal` supports exact/delta and returns scaled-shifted results; lab `robust_nested_lrt()` already dispatches to it. Existing grouped DWLS/theta golden comparisons gate the delta mean-scaled result with lavaan normalization. Default WLSMV/ULSMV scaled-shifted reporting, its normalization and whole-bundle gates remain to do |
 | Continuous GLS/WLS/ULS | `robust_continuous_ls` with explicit weight/Gamma; `ls_golden_test.cpp` and weighted-inference tests. The ULS/DWLS Browne-residual NT reporting recipe is not composed here | Continuous weighted Satorra-2000 primitives exist; no checked ordinary lavaan-default bundle |
 | ML2S | `two_stage_em_ml_inference` and weighted Stage-2 inference exist | Restriction-map and scalar SB2001/2010 engines and lab dispatch exist; scalar methods are NT-only. Naive unstructured-information compatibility and a checked default two-stage reporting bundle remain to do |

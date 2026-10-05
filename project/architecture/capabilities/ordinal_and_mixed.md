@@ -935,13 +935,21 @@ gates cover parameter count, df, estimates and scaled tests. Demo SEs remain
 convention observations, as recorded in the test ledger. Mixed, conditional
 and categorical ML fitting remain explicit unsupported routes.
 
-### Association-ML inference contract plan
+### Association-ML lab inference
 
 The [association-ML audit](../../design/association-ml-inference.md) records the
 existing correlation-target ML criterion and proposes exact all-ordinal Stage-1
 sampling influence, observed sensitivity, covariance, spectral tests and
-MI/release gates. These components remain typed unavailable; the ordered
-implementation and calibration subcards are proposals, not enabled capability.
+MI/release gates. Lab-only `estimate::frontier::association_ml_ij` and
+`magmaanlab::association_ml_ij()` now compose the empirical Stage-1 rows with
+observed correlation-score sensitivity and unweighted group target derivatives.
+Full covariance retains saturated thresholds and their association cross-covariance.
+The independent derivative, nonnormal case-weight, stratified delete-one,
+exact-fit and identification-chart gates pass in `ordinal_ij_test.cpp`. The
+lab wrapper gates covariance reconstruction and threshold cross-covariance.
+Ordinary covariance, global/nested tests and
+MI/releases remain typed unavailable until subcards 3–5 pass. No policy guard
+is removed.
 
 ### Mixed DWLS ordinary policy
 
