@@ -343,6 +343,11 @@ ULS/WLS policy and mixed `lavaan_compat` remain open. The user decided that the
 all-ordinal policy also adopts the exact first stage (TASK-69, via TASK-74),
 with decisions/05 reconfirmation. The decisions/04 structured-mean production
 found no flag for the exact-row ML nested LR meat.
+Lab empirical complete-data ML robust SEs and score/MI meats now default to
+exact joint-sampling likelihood projections (TASK-77) for raw, centered-Zc and
+caller-Gamma inputs; structured/unstructured moments remain explicit
+comparators, GOF moment primitives keep their named conventions, and grouped
+centered LS meats are documented as fixed-allocation.
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
