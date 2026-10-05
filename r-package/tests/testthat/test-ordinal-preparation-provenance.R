@@ -70,8 +70,9 @@ test_that("explicit grouped theta residuals survive lab preparation", {
 test_that("live DELTA scale restrictions and invariance match lavaan", {
   skip_if_not_installed("lavaan")
   skip_if_not_installed("jsonlite")
-  fixture <- file.path("..", "..", "..", "cpp", "tests", "fixtures", "ordinal", "delta_scales.json")
-  reference <- jsonlite::fromJSON(fixture, simplifyVector=FALSE)$cases
+  # Keep the live-oracle model declarations in the source package as well as the checkout.
+  fixture <- test_path("fixtures", "delta_scale_models.json")
+  reference <- jsonlite::fromJSON(fixture, simplifyVector=FALSE)
   set.seed(531072)
   n <- 600L
   eta <- matrix(rnorm(2*n),n,2)

@@ -768,6 +768,19 @@ The ordinary package does not expose MI in this release; the
   PSOCK test skip that preserves local serialization coverage. The worker test
   also passes with sockets available. Versions and publishing remain pending.
 
+- [x] **S/M — release dry run 2 and NEWS consolidation (task-31.2).** On the
+  integrated TASK-32.3 baseline, `just check` passes (1,550 Debug C++ tests,
+  all R examples and 1,980 ordinary-package assertions); opt parity passes
+  32 tests. Both portable packages finish `R CMD check --no-manual` with
+  Status OK and no NOTEs. Fixed the lab IJ help usage, made all seven live
+  DELTA model declarations self-contained in the source package, and updated
+  the score example to create a distinct FIML snapshot despite fit-owned
+  caching. Both 0.2.0 NEWS sections are grouped and retain the in-development
+  heading; earlier OPG calibration evidence is distinguished from pending
+  exact-first-stage reconfirmation. The capability inventory gate passes
+  52 assertions; stale wording proposals are recorded on the board without
+  promoting validation statuses. Versions and publishing remain pending.
+
 - [ ] **S — align versions and publish.** Set the CMake project version
   (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;
   push `main` and the tags. As of 2026-10-02 `main` is 74 commits ahead of

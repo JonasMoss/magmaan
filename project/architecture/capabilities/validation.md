@@ -42,3 +42,9 @@ The ordinary R package tests local prepared-handle reuse and serialization
 independently of its PSOCK worker check. The worker check probes socket access
 and skips with the socket error when a check sandbox disallows listeners;
 local serialization assertions still run in that environment.
+
+The lab's live DELTA response-scale comparisons carry their model declarations
+in `r-package/tests/testthat/fixtures/delta_scale_models.json`, so portable
+source-package checks run the same seven cases without a checkout of C++ test
+fixtures. Estimates, standard errors, global tests, standardized reporting and
+factor scores are still compared with installed lavaan.

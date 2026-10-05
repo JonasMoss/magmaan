@@ -38,7 +38,10 @@ check_score <- function(fit, data = NULL) {
     w <- wald_test(context, R, V)
     expected <- drop(crossprod(R %*% context$theta, solve(R %*% V %*% t(R), R %*% context$theta)))
     stopifnot(abs(w$chi2 - expected) < 1e-7)
-    context2 <- prepare_inference(fit, data)
+    # FIML reuses a fit-owned snapshot; clear the cache to exercise a distinct one.
+    uncached <- fit
+    attr(uncached, "policy_cache") <- NULL
+    context2 <- prepare_inference(uncached, data)
     reject(wald_test(context2, R, V), 'another fit snapshot')
     reject(parameter_covariance(context2, I), 'another fit snapshot')
     saved <- context$theta

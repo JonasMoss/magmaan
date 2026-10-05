@@ -3,7 +3,7 @@
 \alias{infer_ordinal_robust_ij}
 \title{All-ordinal estimated-weight IJ covariance}
 \usage{
-magmaan_core$robust_ordinal_ij(fit, ordinal_stats, weight = "", first_stage = "opg")
+robust_ordinal_ij(fit, ordinal_stats, weight = "", first_stage = "opg")
 }
 \arguments{
 \item{fit}{An all-ordinal fitted lab model.}
