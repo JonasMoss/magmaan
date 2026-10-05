@@ -795,35 +795,57 @@ retain their existing tolerances. The full installed magmaanlab suite passes
 5,643 expectations (two existing skips and two existing two-level warnings);
 the ordinary R suite passes 1,736 expectations without failures or skips.
 
-### TASK-85 output meaning gate (blocked)
+### TASK-85 output meaning gate
 
-The draft local `cpp/tests/tools/check_mplus_outputs.R` reads disk outputs and
-ZIP members in place, retains relative corpus paths and Mplus versions, and
-stores only hashes and derived counts in `mplus/out_meaning_summary.json`.
-It scans 1,933 outputs: 1,337 Mplus, seven Mplus-error outputs skipped, and
-682 distinct normalized echoed inputs; 130 accepted and 552 rejected with
-rule IDs. Of accepted inputs, 95 match all available printed dimensions,
-two disagree, and 33 have unresolved counting (30 nontrivial constraints,
-three missing threshold rows). All-output printed matches per input: groups
-97, npar 79, df 95; missing printed values are not counted as matches.
-The gate deliberately exits with failure; this is not a completed stability gate.
+The local `cpp/tests/tools/check_mplus_outputs.R` reads disk outputs and ZIP
+members in place, retains relative corpus paths and Mplus versions, and stores
+only hashes and derived counts in `mplus/out_meaning_summary.json`. It scans
+1,933 outputs, 1,337 Mplus outputs, seven Mplus-error outputs skipped, and
+683 distinct echoed inputs; 130 accepted / 553 rejected with rule IDs. Every
+accepted input matches all three printed dimensions: groups 130, npar 130, df 130.
+No mismatch or counting case remains unresolved, and no version exemption
+was needed. Sixteen Mplus 5.1/5.2 inputs indent the printed free-parameter
+heading; trimming headings fixes that gate artifact and restores their direct
+free-count comparisons.
 
-Threshold counts use unstandardized MODEL RESULTS rows per variable/group.
-Shared labels reduce coordinates; generated redundant equalities are already
-accounted for by labels. Deferred growth thresholds share indices across each
-time-score statement (GR05); means and conditioned x follow the lowered model.
-General constraint rank and missing-threshold fallback remain unfinished.
-No data files are read and no estimation or frontend code was changed.
+Equality restrictions reduce the count by the rank of an independently
+constructed symbolic Jacobian, checked at three deterministic generic points.
+Parameter labels and plabels map to the same independent coordinates;
+redundant label equalities have zero residual derivatives. Free NEW coordinates
+count as parameters; NEW declaration metadata and derived quantities do not.
+Six independently specified counting examples gate redundancy, nonlinear
+restrictions, derived quantities and auxiliary coordinates. Threshold counts
+come from unstandardized MODEL RESULTS per variable/group, with a fallback to
+positive-count categories in the printed categorical proportions section for
+three inputs. Group matching uses Mplus group labels rather than projected
+numeric codes. Growth thresholds share indices across each time-score statement
+(GR05); means and conditioned x follow the lowered model. No data files are read.
 
-Two Mplus 7 outputs, `raw/little/source/CH6_mplus/CH5/` files
-`ch5.fig.5.3.factor.strong.out` (hash `2212f31d89051cc4`) and
-`ch5.fig.5.3.marker.strong.out` (`2ed1e7ddc67a271e`), print npar 18 / df 9;
-the lowered partable gives npar 20 / df 7. In consecutive bracketed intercept
-entries terminated by one semicolon, only the first entry's label survives;
-the next two revert to unlabeled default intercept rows. The output prints
-those equalities. TASK-85 is Needs decision because correcting this changes
-meaning of an accepted statement form beyond the gate; a canonical fix needs
-independent unit rows and the full frontend checks before this gate can pass.
+Eight Little inputs exercise the fixed bracket-group defect: six previously
+could not resolve later intercept labels in constraints, and two Mplus 7
+strong-invariance outputs printed npar 18 / df 9 while the frontend gave 20 / 7.
+The latter files are `raw/little/source/CH6_mplus/CH5/`
+`ch5.fig.5.3.factor.strong.out` (hash `9bf71b28ab3693ad`) and
+`ch5.fig.5.3.marker.strong.out` (`776ae6ac019c541b`). They now match 18 / 9.
+The parser consumes all consecutive bracket groups and retains each segment's
+labels and modifiers. The same defect affected threshold and DELTA scale groups;
+multiline variance segments already retained their labels and modifiers.
+P-LB7 provides nine independent Mplus 9.1 Demo variants, including shared labels,
+equality numbers, fixed modifiers and same-line rejections. Independent unit rows
+and the TECH1 partition gate check the canonical fix. The summary records these
+eight resolved cases as `fixed_magmaan_bug` and the 16 legacy heading cases as
+`gate_artifact`; counting corrections carry no frontend statistical-policy change.
+
+Input normalization preserves physical line boundaries because LB02/LB03 make
+lines semantically relevant. This yields 683 distinct inputs rather than the
+draft's 682. Canonical parser and vendored copy are synchronized. Validation:
+opt build, all 1,550 C++ tests, 18 focused Mplus MODEL cases / 12,163 assertions,
+full magmaanlab testthat suite (7,327 passed, two two-level admissibility
+warnings and two unavailable/opt-in oracle skips), six counting examples,
+the output-only gate,
+and the unchanged numerical corpus gate pass. The latter remains 50/68 accepted,
+44 matched, six unsupported fitting routes and zero failures. Tracking, layering
+and whitespace checks pass.
 
 ## Validation Areas
 

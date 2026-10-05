@@ -407,11 +407,14 @@ six report unsupported fit routes. Independently verified SE/test convention
 differences retain separate classes. The 2,440-input baseline accepts 658 at
 the reader and 614 at MODEL lowering; the closeout ledger records fresh runs.
 
-The TASK-85 draft output-only gate, `check_mplus_outputs.R`, compares groups,
-free count and printed H0 df without reading data. Its derived summary records
-1,933 scanned outputs and 682 distinct Mplus inputs. It currently fails on two
-meaning discrepancies and 33 counting limitations; see the test ledger.
-This broader gate is pending and does not establish stability for all outputs.
+The TASK-85 output-only gate, `check_mplus_outputs.R`, compares groups, free
+count and printed H0 df without reading data. Its derived summary records
+1,933 scanned outputs and 683 distinct Mplus inputs: 130 accepted,
+553 rejected by rule. All accepted inputs match every available printed
+dimension. Independent constraint-Jacobian rank handles equality restrictions;
+printed thresholds or categorical proportions supply data-dependent category
+counts. P-LB7 and independent row regressions gate every consecutive bracket
+segment's labels/modifiers. See the test ledger for scope and extraction methods.
 
 **Meaning** (which model an input denotes) is gated against Mplus:
 
@@ -486,6 +489,12 @@ The frontend is stable for a subset when all of the following hold:
   corpus inputs match their `.out` on free-parameter
   count and df, and on chi-square, log-likelihood and estimates where fit
   conventions agree.
+- The local output-only sweep covers disk outputs and ZIP members, retaining
+  versions and line-sensitive input identities; every accepted input matches
+  groups, equality-reduced free count and H0 df wherever printed.
+- The local output-only sweep covers disk outputs and ZIP members, retaining
+  versions and line-sensitive input identities; every accepted input matches
+  groups, equality-reduced free count and H0 df wherever printed.
 - Lab round trips agree: partable, fresh versus prepared fit, rebuild/refit and
   save/reload into a fresh worker.
 - A coverage matrix keyed to inventory IDs is in this document, and the lab

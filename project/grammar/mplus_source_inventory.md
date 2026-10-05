@@ -200,7 +200,7 @@ OFF.
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
 | LB01 | D, 732–733, 736; P | `*` and `@` apply to the preceding item; after a range they apply to every element. A bare `*` frees at the default start. A bare `@` fixes at Mplus's default starting value, which depends on the data (0.05 for a factor variance, half the sample variance for a residual variance; P-LB1); the frontend rejects bare `@`. Starts go to `Starts`; Mplus's automatic starts are not emulated. |
-| LB02 | D, 734–735, 744 | Only one parenthesized label or equality may appear per line, and it applies only to the items on its own line. Statements spanning lines can carry one label per line. The parser therefore keeps line segments inside statements. |
+| LB02 | D, 734–735, 744; P | Only one parenthesized label or equality may appear per line, and it applies only to the items on its own line. Statements spanning lines can carry one label per line. The parser therefore keeps line segments inside statements, including every consecutive bracket group (P-LB7). |
 | LB03 | D, 742; P | The guide says text after an equality label on the same line is ignored; 9.1 instead reports an error for characters after the right parenthesis (P-LB5, P-LB6). The frontend rejects such tokens, matching 9.1. |
 | LB04 | D, 734–735, 737; P | The same number in parentheses makes parameters equal. A number list pairs with right-hand items, `f BY y1-y4 (1-4)`, with the marker left fixed and unconstrained. A label list must also have one label per item: `(a2-a4)` for four items is an error, so the p. 744 example is wrong for 9.1, and the label paired with the fixed marker is not a usable label (P-LB4). A list cannot follow individually listed items. |
 | LB05 | D, 738, 745; P | With a left-hand list, one number or label per left-hand element. With lists on both sides, either one group per left-hand element or a single list assigned row by row (`y1-y3 ON x1-x2 (p1-p6)` labels y1/x1, y1/x2, y2/x1, …; P-LB2). The p. 740 statement that a single list cannot be used does not hold in 9.1. |
@@ -355,6 +355,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-LB4 | LB04, LB06 | `f BY y1-y4 (1-4);`, `f BY y1-y4 (a2-a4);`, `f BY y1-y4 (a1-a4);` (each with a constraint naming every label) | Accepted forms; which loading each label attaches to |
 | P-LB5 | LB03 | `f BY y1-y4 (1) y5;` on one line | Is y5's loading in the model? |
 | P-LB6 | LB06, NM01 | `f BY y1@1 (l1) y2-y3;` with `MODEL CONSTRAINT: NEW(r); r = l1;`; a mixed-case label referenced in another case; a 9-character label | Accepted? Errors |
+| P-LB7 | LB02, LB03 | Consecutive bracket groups with distinct/shared labels or equality numbers on separate lines; two labeled groups on one line | TECH1 intercept numbering and acceptance |
 | P-DF1 | DF10 | `f BY y1-y3; f ON x1; y4 ON x1;` | Is f WITH y4 free? |
 | P-DF2 | DF07 | `USEV = y1-y4 x1; MODEL: f BY y1-y3;` | Rows for y4 and x1; warnings |
 | P-DF3 | DF09 | `f1 BY y1-y2; f2 BY y3-y4; f3 BY f1 f2; f1 f2 ON x1;` and `f1 BY y1-y3; f2 BY y4-y6; f1 ON x1; f2 ON x1;` | Is the f1–f2 residual covariance free in each? |
@@ -495,16 +496,21 @@ suggests the order of value after increment 1: categorical outcomes, MODEL
 CONSTRAINT/INDIRECT and multiple groups each block several hundred inputs;
 DEFINE blocks 239.
 
-### Output-only meaning sweep (TASK-85, pending)
+### Output-only meaning sweep (TASK-85)
 
 Disk and ZIP-member scan: 1,933 outputs, 1,337 Mplus outputs, seven Mplus-error
-outputs, 682 distinct echoed inputs; 130 accepted / 552 rejected by rule.
-95 accepted inputs match available printed dimensions, two differ, and 33
-need counting completion. The two Mplus 7 Little strong-invariance examples
-lose later bracket-entry labels in the lowered table (npar 20 / df 7 versus
-18 / 9). The gate fails and TASK-85 awaits a decision on the accepted-rule fix.
+outputs skipped, and 683 distinct echoed inputs; 130 accepted / 553 rejected
+with rule IDs.
+All 130 accepted inputs match every available printed dimension; per-input
+matches are groups 130, npar 130, df 130.
+Eight Little inputs now retain later bracket-entry labels (P-LB7); the two
+strong-invariance models match npar 18 / df 9. Independent symbolic constraint
+rank resolves 30 constraint inputs; printed category proportions complete the
+three inputs without threshold rows. The gate passes with no unexplained
+mismatches or version exemptions. Normalization preserves physical lines.
 Only derived counts/provenance are tracked; originals stay in the corpus.
-See the test ledger for hashes, scope and limitations.
+Sixteen older outputs required indented-heading extraction (gate artifacts).
+See the test ledger for hashes and methods.
 
 ### Increment-2 corpus comparison (TASK-52)
 
@@ -660,3 +666,19 @@ Independent explicit lavaan joint models agree on all printed estimates within
 0.001 and chi-square within 0.002. Numeric references and synthetic rows are
 recorded beside TECH1. The minimal completion statement lists every observed
 independent variable; no pairwise WITH or bracketed mean line is required.
+
+
+### P-LB7: consecutive bracket segments (TASK-85)
+
+`regen_mplus_probes.R --brackets` writes the isolated `probes_brackets.json`
+fixture, preserving earlier fixtures and seeds. Nine Mplus 9.1 Demo variants
+check consecutive means, thresholds, DELTA scales and variance segments.
+Distinct intercept labels on separate lines give TECH1 NU numbers 1/2/3 and
+nine free parameters; shared labels or equality number 1 give NU 1/1/1 and
+seven free parameters. Two labeled bracket groups on one line are rejected
+under LB03; unlabeled same-line groups are also rejected. Separate threshold and scale groups retain both labels; ordinary
+multiline variance statements retain both labels and the final fixed value.
+The previous frontend silently stopped after the first bracket group, losing
+later intercept, threshold and scale labels/modifiers. The canonical parser
+now consumes every group; independent row regressions and the existing TECH1
+partition gate consume the new fixture. LB02/LB03 label ownership is unchanged.

@@ -70,9 +70,11 @@
   and reports mixed, conditional and categorical ML boundaries. The local
   corpus gate accepts 50 of 68 cases: 44 matched, six unsupported fit routes,
   and five verified test-convention differences (see the validation ledger).
-  The pending TASK-85 output-only sweep scans 1,933 outputs / 682 distinct
-  Mplus inputs; its draft fails on two bracket-entry label discrepancies and
-  33 counting limitations. It does not yet establish broader meaning parity.
+  The TASK-85 output-only sweep scans 1,933 outputs / 683 distinct
+  Mplus inputs; all 130 accepted inputs match groups, free counts
+  and df. Independent equality-Jacobian rank and printed category counts
+  complete the dimensions. Nine Demo variants and independent row regressions
+  gate the repaired ownership of later bracket-group labels and modifiers.
   Free-parameter count and df now also gate the six unsupported routes through
   independent conditional/mixed moment dimensions. The
   [Mplus plan](../../grammar/mplus.md) reads whole input files, lowers the

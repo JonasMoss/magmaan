@@ -158,7 +158,11 @@ label_atom          ::= number | name
    in one label, '(*label)' ESEM sets and other forms are rejected [MS09]. *)
 
 variance_statement  ::= rhs_lines ';'
-mean_statement      ::= '[' (rhs_item | threshold_item)+ ']' line_label? ';'
+mean_statement      ::= mean_group+ ';'
+mean_group          ::= '[' (rhs_item | threshold_item)+ ']' line_label?
+(* Consecutive bracket groups retain their own labels (P-LB7). LB02/LB03
+   still require labels on their item line and no following same-line token.
+   Consecutive bracket groups start on separate lines (P-LB7). *)
 threshold_item      ::= threshold_range modifier?
 threshold_range     ::= threshold_name ('-' threshold_name)?
 threshold_name      ::= name '$' integer
@@ -168,7 +172,8 @@ parameterization_value ::= 'DELTA' | 'THETA'
    at one threshold index or thresholds of one variable. DELTA scale equalities
    and fixed non-unit scales are retained in response coordinates (TASK-53.1). *)
 
-scale_statement     ::= '{' rhs_item+ '}' line_label? ';'
+scale_statement     ::= scale_group+ ';'
+scale_group         ::= '{' rhs_item+ '}' line_label?
 (* CT04: DELTA response scales; THETA uses residual variances instead. *)
 
 bar_statement       ::= name name? name? name? '|' rhs_item+ ';'

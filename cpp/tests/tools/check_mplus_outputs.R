@@ -1,20 +1,18 @@
 #!/usr/bin/env Rscript
 # Local, data-free output meaning gate. Originals remain in the corpus/ZIPs.
-# TASK-85 draft: nontrivial constraint rank and missing threshold rows fail.
-# Exit failure is intentional until every accepted case is resolved.
+# Dimensions use an independent symbolic constraint Jacobian and printed categories.
 suppressPackageStartupMessages(library(magmaanlab))
 suppressPackageStartupMessages(library(jsonlite))
 suppressPackageStartupMessages(library(digest))
 args <- commandArgs(TRUE)
-corpus <- normalizePath(if(length(args)) args[1] else 'external/textbook-corpus')
 report <- if(length(args)>1) args[2] else 'cpp/tests/fixtures/mplus/out_meaning_summary.json'
 number <- function(lines, pattern) {
-  hit <- grep(pattern,lines,value=TRUE,ignore.case=TRUE)
+  hit <- grep(pattern,trimws(lines),value=TRUE,ignore.case=TRUE)
   if(!length(hit)) return(NA_integer_)
   as.integer(sub('.*?([0-9]+)\\s*$', '\\1', hit[1],perl=TRUE))
 }
 # Threshold counts come only from unstandardized MODEL RESULTS, per group.
-# Missing threshold rows fail explicitly; no category count is guessed.
+# Missing rows fall back to positive-count categories in the printed proportions.
 threshold_counts <- function(lines, spec, ng) {
   counts <- matrix(NA_integer_,ng,length(spec$ordered),dimnames=list(NULL,spec$ordered))
   start <- grep('^MODEL RESULTS\\s*$',lines)
@@ -24,7 +22,7 @@ threshold_counts <- function(lines, spec, ng) {
       text <- trimws(line)
       if(grepl('^(STANDARDIZED|QUALITY OF|R-SQUARE|CONFIDENCE)',text)) break
       if(startsWith(text,'Group ')) {
-        group <- match(tolower(sub('^Group ','',text)),tolower(spec$group_labels));active<-FALSE
+        group <- match(tolower(sub('^Group ','',text)),tolower(spec$mplus_groups$label));active<-FALSE
       }
       if(text=='Thresholds') {active<-TRUE;next}
       if(active) {
@@ -36,18 +34,77 @@ threshold_counts <- function(lines, spec, ng) {
       }
     }
   }
+  category_counts <- matrix(0L,ng,length(spec$ordered))
+  start <- grep('^UNIVARIATE PROPORTIONS AND COUNTS FOR CATEGORICAL VARIABLES',lines)
+  if(length(start)) {
+    group <- 1L; variable <- NA_integer_
+    for(line in lines[seq.int(start[1]+1L,length(lines))]) {
+      text <- trimws(line)
+      if(grepl('^(UNIVARIATE SAMPLE|MODEL FIT|SUMMARY OF|THE MODEL)',text)) break
+      if(startsWith(text,'Group ')) {
+        group <- match(tolower(sub('^Group ','',text)),tolower(spec$mplus_groups$label))
+        variable <- NA_integer_
+      }
+      if(tolower(text) %in% tolower(spec$ordered)) variable <- match(tolower(text),tolower(spec$ordered))
+      m <- regmatches(text,regexec('^Category +[0-9]+ +([0-9.]+) +([0-9.]+)',text))[[1]]
+      if(length(m) && !is.na(group) && !is.na(variable) && as.numeric(m[3])>0)
+        category_counts[group,variable] <- category_counts[group,variable]+1L
+    }
+  }
+  fallback <- is.na(counts) & category_counts>1L
+  counts[fallback] <- category_counts[fallback]-1L
+  attr(counts,'fallback_cells') <- sum(fallback)
   counts
+}
+# Replace parameter aliases by independent coordinate symbols, then differentiate
+# the equality residuals. Derived := quantities are substitutions, not restrictions.
+constraint_rank <- function(pt, coordinates, row_coordinates) {
+  equalities <- pt[pt$op=='==',,drop=FALSE]
+  if(!nrow(equalities)) return(0L)
+  symbols <- paste0('q',seq_along(coordinates))
+  aliases <- list()
+  for(i in seq_len(nrow(pt))) if(!pt$op[i] %in% c('==',':=','<','>')) {
+    if(pt$op[i]=='new' && pt$free[i]==0L) next # declaration metadata, not a fixed coordinate
+    value <- if(pt$free[i]>0L) as.name(symbols[match(row_coordinates[i],coordinates)]) else pt$ustart[i]
+    for(name in c(pt$plabel[i],pt$label[i],if(pt$op[i]=='new') pt$lhs[i] else ''))
+      if(nzchar(name)) aliases[[name]] <- value
+  }
+  definitions <- pt[pt$op==':=',,drop=FALSE]
+  substitute_alias <- function(expr, visiting=character()) {
+    if(is.name(expr)) {
+      name <- as.character(expr)
+      if(name %in% names(aliases)) return(aliases[[name]])
+      hit <- match(name,definitions$lhs)
+      if(!is.na(hit)) {
+        if(name %in% visiting) stop('cyclic derived quantity')
+        return(substitute_alias(str2lang(definitions$rhs[hit]),c(visiting,name)))
+      }
+      stop('unknown constraint parameter: ',name)
+    }
+    if(is.call(expr)) {
+      for(i in seq.int(2L,length(expr))) expr[[i]] <- substitute_alias(expr[[i]],visiting)
+    }
+    expr
+  }
+  residuals <- lapply(seq_len(nrow(equalities)),function(i)
+    substitute_alias(call('-',str2lang(equalities$lhs[i]),str2lang(equalities$rhs[i]))))
+  derivatives <- lapply(residuals,function(expr) lapply(symbols,function(v) D(expr,v)))
+  ranks <- vapply(1:3,function(point) {
+    values <- as.list(1.2+sin(seq_along(symbols)*point)*.3); names(values) <- symbols
+    jacobian <- t(vapply(derivatives,function(row) vapply(row,function(expr)
+      as.numeric(eval(expr,values)),numeric(1)),numeric(length(symbols))))
+    if(any(!is.finite(jacobian))) stop('nonfinite generic constraint Jacobian')
+    singular <- svd(jacobian,nu=0,nv=0)$d
+    # Absolute floor handles exact zero label equalities after substitution.
+    sum(singular>max(1e-9,max(c(0,singular))*1e-8))
+  },integer(1))
+  if(length(unique(ranks))!=1L) stop('unstable generic constraint rank')
+  ranks[1]
 }
 model_dimension <- function(spec, lines) {
   pt <- spec$partable
   ng <- max(c(1L,pt$group))
-  if(any(pt$op %in% c('<','>','new'))) stop('constraint rank needs independent counting')
-  equalities<-pt[pt$op=='==',,drop=FALSE]
-  for(i in seq_len(nrow(equalities))) {
-    lhs<-match(equalities$lhs[i],pt$plabel);rhs<-match(equalities$rhs[i],pt$plabel)
-    if(is.na(lhs)||is.na(rhs)||!nzchar(pt$label[lhs])||pt$label[lhs]!=pt$label[rhs])
-      stop('constraint rank needs independent counting')
-  }
+  if(any(pt$op %in% c('<','>'))) stop('inequality dimension requires an interior regime')
   # Growth thresholds are completed from categories after lowering. The same
   # index is shared across the outcomes of each | time-score statement (GR05).
   source<-gsub('!.*?(\\n|$)',' ',spec$mplus_source,perl=TRUE)
@@ -59,6 +116,7 @@ model_dimension <- function(spec, lines) {
     if(length(tokens)) growth[[length(growth)+1L]]<-tolower(tokens)
   }
   free <- pt$free>0L & pt$op!='|'
+  row_coordinates <- ifelse(nzchar(pt$label),paste0('label:',pt$label),paste0('free:',pt$free))
   coordinates <- ifelse(nzchar(pt$label[free]),paste0('label:',pt$label[free]),paste0('free:',pt$free[free]))
   thresholds <- threshold_counts(lines,spec,ng)
   if(anyNA(thresholds)) stop('threshold counts absent from MODEL RESULTS')
@@ -72,16 +130,38 @@ model_dimension <- function(spec, lines) {
           bundle<-which(vapply(growth,function(vars) tolower(v) %in% vars,logical(1)))
           paste('threshold',if(length(bundle)) paste0('growth',bundle[1]) else v,k,sep=':')
         }
+    if(length(row)) row_coordinates[row] <- coordinate
     coordinates<-c(coordinates,coordinate)
   }
-  npar<-length(unique(coordinates))
+  rank <- constraint_rank(pt,unique(coordinates),row_coordinates)
+  npar<-length(unique(coordinates))-rank
   x<-spec$mplus_observed_x
   outcomes<-setdiff(spec$mplus_data_plan$analysis,x)
   q<-length(setdiff(outcomes,spec$ordered))
   means<-any(pt$op=='~1' & pt$lhs %in% outcomes)
   moments<-sum(thresholds)+ng*(q+as.integer(means)*q+choose(length(outcomes),2L)+length(outcomes)*length(x))
-  list(groups=ng,npar=npar,df=moments-npar)
+  list(groups=ng,npar=npar,df=moments-npar,constraint_rank=rank,
+       threshold_fallback_cells=attr(thresholds,'fallback_cells'))
 }
+if('--self-test' %in% args) {
+  stopifnot(number('          Number of Free Parameters             21','^Number of Free Parameters')==21L)
+  input <- function(model) paste('DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3;\nMODEL:',model)
+  base <- 'f BY y1* (l1)\ny2 (l2)\ny3 (l3); f@1;'
+  examples <- list(
+    list(model=base,rank=0L,npar=9L),
+    list(model=paste(base,'\nMODEL CONSTRAINT: NEW(d); d=l1*l2;'),rank=0L,npar=9L),
+    list(model=paste(base,'\nMODEL CONSTRAINT: l1=l2*l3; 2*l1=2*l2*l3;'),rank=1L,npar=8L),
+    list(model=paste(base,'\nMODEL CONSTRAINT: NEW(c); l1=c*l2;'),rank=1L,npar=9L),
+    list(model=paste(base,'\nMODEL CONSTRAINT: l1=l2; l2=l3;'),rank=2L,npar=7L),
+    list(model=paste(base,'\nMODEL CONSTRAINT: NEW(d); d=l1-l2; d=0;'),rank=1L,npar=8L))
+  for(example in examples) {
+    actual <- model_dimension(mplus_model(input=input(example$model)),character())
+    stopifnot(actual$constraint_rank==example$rank,actual$npar==example$npar)
+  }
+  cat('Independent dimension examples: 6 passed\n')
+  quit(status=0)
+}
+corpus <- normalizePath(if(length(args)) args[1] else 'external/textbook-corpus')
 entries <- list()
 for(path in sort(list.files(corpus,'\\.out$',recursive=TRUE,full.names=TRUE,ignore.case=TRUE)))
   entries[[length(entries)+1L]]<-list(path=substring(path,nchar(corpus)+2L),file=path)
@@ -105,9 +185,11 @@ for(entry in entries) {
   end<-end[end>start[1]]
   if(!length(start)||!length(end)) {missing_input<-missing_input+1L;next}
   input<-paste(sub('^  ','',lines[seq.int(start[1]+1L,end[1]-1L)]),collapse='\n')
-  normalized<-tolower(gsub('\\s+',' ',trimws(input)))
+  # Physical line boundaries carry label semantics (LB02/LB03).
+  normalized<-tolower(paste(trimws(strsplit(gsub('[ \t]+',' ',input),'\n',fixed=TRUE)[[1]]),collapse='\n'))
   hash<-substr(digest(normalized,algo='sha256',serialize=FALSE),1,16)
-  expected<-list(groups=number(lines,'^Number of groups'),npar=number(lines,'^Number of Free Parameters'))
+  expected<-list(groups=number(lines,'^Number of groups'),npar=number(lines,'^Number of Free Parameters'),
+    npar_format=if(any(grepl('^\\s+Number of Free Parameters',lines))) 'indented' else 'unindented')
   fit<-grep('^Chi-Square Test of Model Fit\\s*$',lines)
   expected$df<-if(length(fit)) number(lines[seq.int(fit[1]+1L,min(length(lines),fit[1]+12L))],'Degrees of Freedom') else NA_integer_
   # Keep separate observations of the same input: versions can change meaning.
@@ -128,6 +210,11 @@ for(entry in entries) {
   }
   records[[length(records)+1L]]<-record;assign(hash,length(records),seen)
 }
+# Cases diagnosed with the old frontend before the bracket fix. The six
+# constraint cases had missing aliases; the last two had wrong printed counts.
+fixed_bracket_inputs <- c('f99385dddd126fa1','772cdc7a02a0ff2e','2cd02d04b1c14118',
+  'c758f64bac0d0647','11654563391d771e','8c3d405408061b13',
+  '9bf71b28ab3693ad','776ae6ac019c541b')
 for(i in seq_along(records)) {
   r<-records[[i]]
   if(r$status!='accepted' || is.null(r$actual)) next
@@ -138,12 +225,20 @@ for(i in seq_along(records)) {
     r$outputs[[j]]<-o
   }
   r$classification<-if(any(vapply(r$outputs,function(o) any(unlist(o$comparison)=='mismatch'),logical(1)))) 'unclassified_mismatch' else 'match'
+  if(r$hash %in% fixed_bracket_inputs && r$classification=='match')
+    r$resolution <- list(class='fixed_magmaan_bug',rule='LB02',
+      detail='later bracket-group labels were silently dropped; canonical regression and P-LB7')
+  if(is.null(r$resolution) && r$classification=='match' &&
+     any(vapply(r$outputs,function(o) o$expected$npar_format=='indented',logical(1))))
+    r$resolution <- list(class='gate_artifact',rule='output_format',
+      detail='Mplus 5.1/5.2 indents the printed free-parameter heading; trim before extraction')
   records[[i]]<-r
 }
 totals<-list(outputs_scanned=length(entries),mplus_outputs=mplus,mplus_error_outputs=errors,missing_input=missing_input,
              distinct_inputs=length(records),status=as.list(table(vapply(records,function(r)r$status,character(1)))))
 accepted<-Filter(function(r)r$status=='accepted',records)
 totals$rejected_by_rule<-as.list(table(unlist(lapply(Filter(function(r)r$status=='rejected',records),function(r)r$rules))))
+totals$resolved_by_class<-as.list(table(vapply(accepted,function(r) if(is.null(r$resolution)) 'unchanged_match' else r$resolution$class,character(1))))
 totals$classification<-as.list(table(vapply(accepted,function(r)r$classification,character(1))))
 for(f in c('groups','npar','df')) totals[[paste0(f,'_match')]]<-sum(vapply(accepted,function(r) !is.null(r$actual) && all(vapply(r$outputs,function(o) identical(o$comparison[[f]],'match'),logical(1))),logical(1)))
 write_json(list(totals=totals,inputs=records),report,pretty=TRUE,auto_unbox=TRUE,na='null')

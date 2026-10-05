@@ -87,6 +87,24 @@ TEST_CASE("Mplus MODEL: LB02-LB06 labels equality sets starts and ownership") {
   for(std::size_t i=0;i<pt.size();++i) if(pt.lhs[i]=="y1" && pt.op[i]==parse::Op::Regression) { CHECK(pt.label[i]=="b"); CHECK(pt.ustart[i]==doctest::Approx(.5)); }
   reject("f BY y1-y4 (a2-a4);","LB04"); reject("y1-y3 ON x1-x2 (p1-p5);","LB05"); reject("f BY y1-y3 (1) y4;","LB03"); reject("f BY y1@1 (l1) y2-y3;","LB03");
 }
+TEST_CASE("Mplus MODEL: consecutive bracket segments retain labels and modifiers") {
+  auto r=rows(source("f BY y1-y3;\n[y1] (i1)\n[y2] (i2)\n[y3] (i3);"));
+  CHECK(r.at("y1~1")=="i1"); CHECK(r.at("y2~1")=="i2"); CHECK(r.at("y3~1")=="i3");
+  for (const auto& label : {std::string("i"),std::string("1")}) {
+    r=rows(source("f BY y1-y3;\n[y1] ("+label+")\n[y2] ("+label+")\n[y3] ("+label+");"));
+    for (const auto* name : {"y1~1","y2~1","y3~1"}) CHECK(r.at(name)==(label=="1" ? ".eq1." : "i"));
+  }
+  r=rows(source("[y1@2]\n[y2@3]\n[y3@4];"));
+  CHECK(r.at("y1~1")=="2.000000"); CHECK(r.at("y2~1")=="3.000000"); CHECK(r.at("y3~1")=="4.000000");
+  r=rows(source("y1 (v1)\ny2 (v2)\ny3@4;"));
+  CHECK(r.at("y1~~y1")=="v1"); CHECK(r.at("y2~~y2")=="v2"); CHECK(r.at("y3~~y3")=="4.000000");
+  reject("[y1] (i1) [y2] (i2);","LB03");
+  reject("[y1] [y2];","MS01");
+  reject("[y1] (i1)\ny2 (i2);","MS01");
+  r=rows("DATA: FILE=x;\nVARIABLE: NAMES=y1 y2 y3; CATEGORICAL=y1-y3;\nMODEL: f BY y1-y3;\n[y1$1] (t1)\n[y2$1] (t2);\n{y1*} (s1)\n{y2*} (s2);\n");
+  CHECK(r.at("y1|t1")=="t1"); CHECK(r.at("y2|t1")=="t2");
+  CHECK(r.at("y1~*~y1")=="s1"); CHECK(r.at("y2~*~y2")=="s2");
+}
 TEST_CASE("Mplus MODEL: out-of-family constructs have classified rejections") {
   reject("{y1};","CT04"); reject("[y1$1];","CT02"); reject("i | y1;","GR07"); reject("%OVERALL% y1 ON x1;","MS10"); reject("y1#1;","MS10"); reject("f BY y1-y3 (*rot);","MS09"); reject("f BY y1~0 y2;","MS09");
 }
@@ -114,6 +132,8 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
   probes.update(categorical);
   auto joint_raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_joint_x.json"); REQUIRE(joint_raw);
   probes.update(nlohmann::json::parse(*joint_raw,nullptr,false));
+  auto bracket_raw=test::read_fixture(test::fixtures_dir()+"/mplus/probes_brackets.json"); REQUIRE(bracket_raw);
+  probes.update(nlohmann::json::parse(*bracket_raw,nullptr,false));
   int checked=0;
   for(auto probe=probes.begin();probe!=probes.end();++probe) for(auto variant=probe.value()["variants"].begin();variant!=probe.value()["variants"].end();++variant) {
     INFO(probe.key(),"/",variant.key()); const auto& v=variant.value();
@@ -123,13 +143,24 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
     auto text="TITLE: "+title+"\nDATA: FILE=x;\n"+v["data"].get<std::string>()+"\nVARIABLE: "+v["variable"].get<std::string>()+"\nANALYSIS: "+v["analysis"].get<std::string>()+"\nMODEL: "+body+"\n";
     auto m=parse::MplusParser::parse(text);
     if((probe.key()=="P-NM3" && (variant.key()=="use_order" || variant.key()=="mixed_range")) || probe.key()=="P-LB5" || (probe.key()=="P-LB6" && variant.key()=="fixed_label")) { CHECK_FALSE(m); continue; }
+    if(probe.key()=="P-LB7") { CHECK(bool(m)==(v["status"]=="accepted")); }
     if(!m) {
       // Deliberate boundaries: LX02 truncation, LX05 multiline comments,
       // NM02 unusual generators, MS08 mixed x conditioning, MS11 ignored
       // NOMEANSTRUCTURE, bare @ LB01, later commands CL/CT/GR/MS10/MS09.
       CHECK(m.error().detail.find('[')!=std::string::npos); continue;
     }
-    if(v["status"]!="accepted" || v["free_parameters"].empty()) continue;
+    if(v["status"]!="accepted") continue;
+    int demo_dimension = 0;
+    if (!v["free_parameters"].empty()) demo_dimension=v["free_parameters"][0].get<int>();
+    else if (probe.key()=="P-LB7") {
+      // Synthetic identification failures still print authoritative TECH1 cells.
+      auto visit = [&](const auto& self, const nlohmann::json& cell) -> void {
+        if (cell.is_number_integer()) demo_dimension=std::max(demo_dimension,cell.get<int>());
+        else if (cell.is_structured()) for (const auto& child:cell) self(self,child);
+      };
+      for (const auto& matrix:v["tech1"]) visit(visit,matrix["rows"]);
+    } else continue;
     if (!m->input.categorical.empty()) {
       std::vector<std::int32_t> counts(m->input.categorical.size(),2);
       for(const auto& matrix:v["tech1"]) if(matrix["name"]=="TAU")
@@ -148,7 +179,7 @@ TEST_CASE("Mplus MODEL: Demo TECH1 parameter counts cells and equality partition
       Eigen::JacobiSVD<Eigen::MatrixXd> svd(estimate::build_nl_constraints(*s).jacobian(Eigen::VectorXd::Constant(s->n_free(),.7)));
       svd.setThreshold(1e-9);dimension-=static_cast<std::int32_t>(svd.rank());
     }
-    CHECK(dimension==v["free_parameters"][0].get<int>()); ++checked;
+    CHECK(dimension==demo_dimension); ++checked;
     auto pt=compat::lavaan::to_lavaan_partable(*s,names,{});
     std::map<int,int> our_to_demo,demo_to_our;
     auto upper=[](std::string name){for(auto& c:name) if(c>='a' && c<='z') c=static_cast<char>(c-'a'+'A'); return name;};

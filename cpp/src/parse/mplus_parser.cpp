@@ -456,6 +456,35 @@ class Lowerer {
   // production: model_statement ::= relation | variance_statement | mean_statement | scale_statement | bar_statement | section_marker
   void statement(const std::vector<Token>& ts) {
     if (ts.empty()) return;
+    // production: mean_statement ::= mean_group+ ';'; scale_statement ::= scale_group+ ';'
+    // Each bracket group is a complete segment; never discard later labels.
+    if ((ts.front().text == "[" || ts.front().text == "{") &&
+        std::count_if(ts.begin(),ts.end(),[&](const auto& t){return t.text == ts.front().text;}) > 1) {
+      const auto open = ts.front().text;
+      const auto close = open == "[" ? "]" : "}";
+      for (std::size_t cursor = 0; cursor < ts.size() && !error;) {
+        if (ts[cursor].text != open) { reject(ts[cursor].span,"MS01","unexpected token after bracket group; write a complete bracket group instead"); return; }
+        auto end = cursor+1;
+        while (end < ts.size() && ts[end].text != close) ++end;
+        if (end == ts.size()) { reject(ts[cursor].span,"MS01","unclosed bracket group; close the group instead"); return; }
+        ++end;
+        if (end < ts.size() && ts[end].text != "(" && ts[end].span.line == ts[end-1].span.line) {
+          reject(ts[end].span,"MS01","another bracket group on the same line; Mplus 9.1 rejects it; move each group to a new line instead"); return;
+        }
+        if (end < ts.size() && ts[end].text == "(") {
+          const auto label = end;
+          while (end < ts.size() && ts[end].text != ")") ++end;
+          if (end == ts.size()) { reject(ts[label].span,"LB04","unclosed label; close its parentheses instead"); return; }
+          ++end;
+          if (end < ts.size() && ts[end].span.line == ts[end-1].span.line) {
+            reject(ts[end].span,"LB03","token after a label on the same line; Mplus 9.1 rejects it; move the next group to a new line instead"); return;
+          }
+        }
+        statement(std::vector<Token>(ts.begin()+static_cast<std::ptrdiff_t>(cursor),ts.begin()+static_cast<std::ptrdiff_t>(end)));
+        cursor = end;
+      }
+      return;
+    }
     if (!out.input.data_plan.matrix_type.empty() && !out.input.data_plan.means &&
         std::any_of(ts.begin(),ts.end(),[](const auto& t){return t.text=="[" || t.text=="$";})) {
       reject(ts.front().span,"DA02","an explicit intercept, mean or threshold with summary data without MEANS; Mplus requires MEANS for these parameters (P-DA3); add MEANS and supply a mean vector instead");return;
@@ -474,6 +503,13 @@ class Lowerer {
     auto end = ts.size();
     if (mean) { auto close = std::find_if(ts.begin(),ts.end(),[](const auto& t) { return t.text == "]" || t.text == "}"; }); if (close == ts.end()) { reject(ts.front().span,"MS01","unclosed mean list; Mplus requires ']'; close the bracket before ';'"); return; } end = static_cast<std::size_t>(close-ts.begin()); }
     if (mean && end+1 < ts.size() && ts[end+1].text != "(") { reject(ts[end+1].span,"MS01","token '"+ts[end+1].text+"' after mean bracket; Mplus accepts a label or semicolon here; finish this statement and write a separate statement instead"); return; }
+    if (mean && end+1 < ts.size() && ts[end+1].text == "(") {
+      auto label_end = end+2;
+      while (label_end < ts.size() && ts[label_end].text != ")") ++label_end;
+      if (label_end+1 < ts.size() && ts[label_end+1].span.line != ts[label_end].span.line) {
+        reject(ts[label_end+1].span,"MS01","unexpected token after mean or scale label; Mplus requires another bracket group; write a complete bracket group instead"); return;
+      }
+    }
     auto lhs = relation < ts.size() ? items(ts,0,relation) : std::vector<Item>{};
     if (error) return;
     for (const auto& item : lhs) if (item.fixed || item.start || item.explicit_free) { reject(item.span,"MS01","modifier on left-hand name '"+item.name+"'; Mplus attaches modifiers to right-hand items; write the modifier after the right-hand variable instead"); return; }

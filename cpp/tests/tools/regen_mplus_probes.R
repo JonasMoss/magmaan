@@ -20,6 +20,8 @@ joint_x_only <- '--joint-x' %in% commandArgs(trailingOnly = TRUE)
 if (joint_x_only) scratch <- paste0(scratch, '-joint-x')
 categorical_only <- '--categorical' %in% commandArgs(trailingOnly = TRUE)
 if (categorical_only) scratch <- paste0(scratch, '-categorical')
+bracket_only <- '--brackets' %in% commandArgs(trailingOnly = TRUE)
+if (bracket_only) scratch <- paste0(scratch, '-brackets')
 probes <- list()
 add <- function(id, variant, model = 'f BY y1-y3;', names = 'y1 y2 y3',
                 variable = '', analysis = 'ESTIMATOR = ML;', data = '',
@@ -365,10 +367,21 @@ for (missing in c(FALSE, TRUE)) for (with in c(FALSE, TRUE)) for (means in c(FAL
       kind = if (missing) 'missing_x' else 'continuous')
 }
 
+add('P-LB7', 'distinct_lines', 'f BY y1-y3;\n[y1] (i1)\n[y2] (i2)\n[y3] (i3);')
+add('P-LB7', 'shared_lines', 'f BY y1-y3;\n[y1] (i)\n[y2] (i)\n[y3] (i);')
+add('P-LB7', 'numbers_lines', 'f BY y1-y3;\n[y1] (1)\n[y2] (1)\n[y3] (1);')
+catadd('P-LB7', 'threshold_lines', 'f BY u1-u3;\n[u1$1] (t1)\n[u2$1] (t2);')
+catadd('P-LB7', 'scale_lines', 'f BY u1-u3;\n{u1*} (s1)\n{u2*} (s2);')
+add('P-LB7', 'variance_lines', 'f BY y1-y3;\ny1 (v1)\ny2 (v2)\ny3@4;')
+add('P-LB7', 'modifiers_lines', 'f BY y1-y3;\n[y1@2]\n[y2@3]\n[y3@4];')
+add('P-LB7', 'bare_same_line', 'f BY y1-y3; [y1] [y2] [y3];')
+add('P-LB7', 'same_line', 'f BY y1-y3;\n[y1] (i1) [y2] (i2);')
+
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))
 if (!setequal(ids,names(settles))) stop('Probe inventory mismatch')
+if (bracket_only) probes <- Filter(function(p) p$id == 'P-LB7', probes)
 if (joint_x_only) probes <- Filter(function(p) p$id == 'P-MS08b', probes)
 if (categorical_only) probes <- Filter(function(p) p$id == 'P-IV2', probes)
 unlink(scratch,recursive=TRUE)
@@ -439,7 +452,8 @@ write_fixture <- function(results, name) {
   writeLines(toJSON(results, auto_unbox = TRUE, pretty = TRUE, digits = NA,
                    null = 'null'), fixture)
 }
-if (!categorical_only && !joint_x_only) write_fixture(all_results[!names(all_results) %in% c('P-IV2', 'P-MS08b')], 'probes.json')
-if (!joint_x_only) write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
-if (!categorical_only) write_fixture(all_results[names(all_results) == 'P-MS08b'], 'probes_joint_x.json')
+if (!joint_x_only && !categorical_only) write_fixture(all_results[names(all_results) == 'P-LB7'], 'probes_brackets.json')
+if (!bracket_only && !categorical_only && !joint_x_only) write_fixture(all_results[!names(all_results) %in% c('P-IV2', 'P-MS08b', 'P-LB7')], 'probes.json')
+if (!bracket_only && !joint_x_only) write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
+if (!bracket_only && !categorical_only) write_fixture(all_results[names(all_results) == 'P-MS08b'], 'probes_joint_x.json')
 cat(length(unique(vapply(probes, `[[`, character(1), 'id'))), 'probes;', length(probes), 'variants\n')
