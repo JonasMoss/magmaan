@@ -228,17 +228,18 @@ zero-df, common-Stage-1 and unsupported-channel gates are in
 
 The complete all-ordinal lab IJ has an explicit exact empirical-Jacobian
 first-stage comparator (`first_stage = "exact"`), returning sampling rows and
-Gamma alongside covariance. OPG remains the default and the ordinary policy is
-unchanged. TASK-74 gates case-weight derivatives, one/two-group delta/theta
-composition and Gaussian-copula convergence; TASK-69 owns policy adoption.
+Gamma alongside covariance. OPG remains the lab default; the ordinary
+all-ordinal DWLS policy uses the exact empirical influence (TASK-69), with
+reconfirmation pending (TASK-79). TASK-74 gates case-weight derivatives,
+one/two-group delta/theta composition and Gaussian-copula convergence.
 
 
 | Setup | Existing covariance/global primitives and gates | Nested primitives and remaining gates |
 | --- | --- | --- |
-| Complete ML | `ntml_covariance`, `ntml_score_sandwich`, expected UGamma, `fiml_robust_mlr` complete-data trace reduction. SE/SB fixtures: `inference_golden_test.cpp`, `multigroup_inference_golden_test.cpp`; complete bundles above | `lr_test_satorra_bentler2001`/2010 and restriction-map Satorra-2000 exist. SB2001 bundles above are checked; SB2010 is not an ordinary bundle |
+| Complete ML | `ntml_covariance`, `ntml_score_sandwich`, expected UGamma, `fiml_robust_mlr` complete-data trace reduction. Lab empirical SE/score/MI meats default to exact casewise likelihood projections (TASK-77), with structured/unstructured moments as explicit comparators. SE/SB fixtures: `inference_golden_test.cpp`, `multigroup_inference_golden_test.cpp`; complete bundles above | `lr_test_satorra_bentler2001`/2010 and restriction-map Satorra-2000 exist. SB2001 bundles above are checked; SB2010 is not an ordinary bundle |
 | FIML | `fiml_observed_information`, `fiml_robust_mlr` and spectrum primitives exist; `fiml_golden_test.cpp` checks robust SEs, MLR statistics, scales and H1/H0 traces. Lab `vcov()` exposes observed-information and observed-sandwich routes. Ordinary ML/MLR bundles compose these primitives; live `test_lavaan_compat.R` gates covariance, intervals, global and default nested reports | Restriction-map and scalar SB2001/2010 engines and lab adapters exist. The scalar engines derive their single-model scales from a residual-projector spectrum, so their names alone do not establish agreement with lavaan's MLR trace recipe. The ordinary default MLR bundle uses the scalar SB2001 reducer with explicit `fiml_robust_mlr` YB-Mplus scales, gated on single/grouped missing-data pairs and a saturated alternative; the frozen Satorra-2000 fixture remains a separate gate |
 | All-ordinal association ML | Lab-only `association_ml_ij`: observed H, exact empirical Stage-1 meat, active/full covariance and joint thresholds. Independent q/score/H/D, nonnormal case-weight, stratified delete-one (N=250/1000/4000), exact-fit and chart gates in `ordinal_ij_test.cpp`; lab covariance reconstruction and threshold cross-covariance | Lab global/nested All/SB/PEBA4 with independent spectra, normalization, exact-fit, zero-df and grouped pseudo-true restriction gates; moment nesting refused. MI/releases remain unsupported; policy calibration remains subcard 5 |
-| All-ordinal DWLS/ULS/WLS | `robust_ordinal`; `ordinal_golden_test.cpp` gates component SEs/tests. Ordinary composer adds lavaan reporting normalization and bundled method selection | `lr_test_satorra2000_ordinal` supports exact/delta and returns scaled-shifted results; lab `robust_nested_lrt()` already dispatches to it. Existing grouped DWLS/theta golden comparisons gate the delta mean-scaled result with lavaan normalization. Default WLSMV/ULSMV scaled-shifted reporting, its normalization and whole-bundle gates remain to do |
+| All-ordinal DWLS/ULS/WLS | `robust_ordinal`; `ordinal_golden_test.cpp` gates component SEs/tests. Ordinary composer adds lavaan reporting normalization and bundled method selection | `lr_test_satorra2000_ordinal` supports exact/delta and returns scaled-shifted results; lab `robust_nested_lrt()` already dispatches to it. Existing grouped DWLS/theta golden comparisons gate the delta mean-scaled result with lavaan normalization. Retained-fit WLSMV/ULSMV scaled-shifted reporting is gated by `test_convention_nested_ordinal.R` and `test_lavaan_compat.R`; unsupported slices stay explicit |
 | Continuous GLS/WLS/ULS | `robust_continuous_ls` with explicit weight/Gamma; `ls_golden_test.cpp` and weighted-inference tests. The ULS/DWLS Browne-residual NT reporting recipe is not composed here | Continuous weighted Satorra-2000 primitives exist; no checked ordinary lavaan-default bundle |
 | ML2S | `two_stage_em_ml_inference` and weighted Stage-2 inference exist | Restriction-map and scalar SB2001/2010 engines and lab dispatch exist; scalar methods are NT-only. Naive unstructured-information compatibility and a checked default two-stage reporting bundle remain to do |
 | Mixed ordinal | `robust_mixed_ordinal` and mixed component gates exist; complete DWLS `robust_mixed_ordinal_ij` empirical sampling and weight channels pass case-weight, exact-fit and stratified jackknife gates in `mixed_ij_test.cpp`; other routes retain their existing contracts; see [mixed limitations](../architecture/capabilities/ordinal_and_mixed.md) | Mixed Satorra-2000 primitives exist; ordinary compatibility remains unsupported |
@@ -293,8 +294,10 @@ tests in [`constraints_test.cpp`](../../cpp/tests/unit/constraints_test.cpp),
 The following 23 estimator/weight rows cover 92 component cells. A named gate
 validates its stated numerical slice; explicit refusals are unsupported, and
 estimated quadratic-weight channels for likelihood fits are inapplicable.
-Mixed ordinary MI remains **limited validation** because its oracle scale
-discrepancy is unresolved. These states describe the lab/C++ component routes;
+Mixed ordinary MI remains **limited validation**: TASK-33.4 fixed its
+factor-of-two scale defect and ordinary/fixed robust MI has independent
+equality-release reconstruction gates, but estimated mixed-weight MI remains
+unsupported. These states describe the lab/C++ component routes;
 ordinary magmaan inference and lavaan reporting remain governed by their own
 composition gates above.
 

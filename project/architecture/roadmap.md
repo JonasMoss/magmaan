@@ -373,6 +373,11 @@ finite differences (TASK-83), gated against the dense reference at 1e-7: a
 fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
 takes 0.14 s against 0.10 s for OPG; mixed calls remain dominated by their
 estimated-weight/Gamma work (about 2 s for 6+6 items at N = 1000).
+A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
+passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
+label (32 tests) and `R CMD check --no-manual` for both packages with no
+errors, warnings or notes; both NEWS files are consolidated into 0.2.0 release
+notes. Versions, tag and push remain the user's (TASK-31/29).
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when
