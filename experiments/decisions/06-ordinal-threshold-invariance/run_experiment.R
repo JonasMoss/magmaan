@@ -28,9 +28,9 @@ dir.create(out,recursive=TRUE)
 seed_base <- c(smoke=818130001L,pilot=818140001L,production=830150001L)[[mode]]
 write_csv(cells,file.path(out,"cells.csv"))
 write_metadata(file.path(out,"metadata.csv"),list(mode=mode,seed_base=seed_base,
-  workers=workers,git_head=system2("git",c("-C",root,"rev-parse","HEAD"),stdout=TRUE),
+  workers=workers,git_head=if(nzchar(Sys.getenv("MAGMAAN_GIT_HEAD"))) Sys.getenv("MAGMAAN_GIT_HEAD") else git_scalar(c("rev-parse","HEAD"),root),
   package_dll_md5=unname(tools::md5sum(system.file("libs",paste0("magmaanlab",.Platform$dynlib.ext),package="magmaanlab"))),
-  criteria_status="draft; pilot is non-gating",
+  criteria_status=if(mode=="production") "registered 2026-10-05" else "development run; non-gating",
   source_md5=paste(tools::md5sum(c(file,file.path(study,"R/study.R"))),collapse=";"),
   criteria_md5=unname(tools::md5sum(file.path(study,"criteria/threshold_invariance.md")))),packages=c("magmaanlab","lavaan"))
 raw <- list()

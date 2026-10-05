@@ -22,10 +22,12 @@ volume = modal.Volume.from_name("magmaan-threshold-invariance", create_if_missin
 
 @app.function(image=image, volumes={"/vol": volume}, cpu=2, memory=8192,
               timeout=12 * 60 * 60)
-def run_cell(cell_id: int, mode: str, run_id: str):
+def run_cell(cell_id: int, mode: str, run_id: str, git_head: str = ""):
     import os
     import subprocess
-    env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    # The container has no git; the local entrypoint passes the commit.
+    env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
+               MAGMAAN_GIT_HEAD=git_head)
     subprocess.run(["Rscript", f"/repo/{STUDY}/run_experiment.R", f"--{mode}",
                     "--cell", str(cell_id), "--workers", "2", "--out-dir",
                     f"/vol/{run_id}/cells/cell_{cell_id:03d}"], check=True, env=env)
@@ -48,5 +50,8 @@ def main(mode: str = "smoke", run_id: str = "smoke-modal", cells: str = ""):
     ids = [int(x) for x in cells.split(",")] if cells else list(range(1, 385))
     if len(set(ids)) != len(ids) or any(x < 1 or x > 384 for x in ids):
         raise ValueError("unique cell IDs 1..384 required")
-    list(run_cell.starmap([(i, mode, run_id) for i in ids]))
+    import subprocess
+    head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    list(run_cell.starmap([(i, mode, run_id, head) for i in ids]))
     combine.remote(mode, run_id, ",".join(map(str, ids)))
