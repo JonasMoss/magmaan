@@ -15,6 +15,7 @@ execute:
 |---|---|---|---|
 | Nested ML LR spectrum | Observed information at the larger model | Adopted by principle; confirmed | Production 2026-10-03: expected drifts under strong misspecification (11–16% at nominal 5%), observed approaches 5% as N grows |
 | Nested ML score projection | Observed sensitivity, expected metric | Adopted by principle; conservative at N = 100 per group | Production 2026-10-03: 2–3% at N = 100, 3.6–5.7% at N = 300; finite-sample follow-up open |
+| Nested ML restricted-mean meat | Exact likelihood rows at the larger fit | Adopted; calibration open | Structured-mean lane pilot checks mechanics and prices held-out production |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
 ## Question
@@ -181,3 +182,65 @@ nuisance-refitting bootstrap or higher-order moment study, not a scalar meat
 correction or a default change. Frozen summaries and provenance are under
 `results/score-diagnostic/frozen-2026-10-05/`; the note describes normalization,
 uncertainty and reproduction.
+
+
+## Restricted-mean misspecification lane (TASK-75)
+
+The [structured-mean registration draft](criteria/structured_mean.md) extends
+this study beyond saturated means. Equal observed intercepts and fixed zero
+latent means in the larger model leave group mean differences unmodeled.
+Symmetric shifts of .2 SD on one item or .4 SD on two items preserve the
+loading-equality null at the symmetric pseudo-true solution. Exact-moment
+population fits verify this local null and positive observed curvature; global
+uniqueness is not established. Power changes one group loading by .15 and has
+a verified nonzero pseudo-true loading departure.
+
+The full-grid twenty-draw pilot completed 1,440 draws, but one draw
+(cell 2, replicate 16, seed 1526120047) returned an unexplained R/native
+conversion error (`type=character; target=double`) after both fits converged.
+All three arms for that draw are retained as unavailable. A fresh serial replay,
+a fresh two-worker cell replay, and a replay including the population-check
+setup all succeeded; the original failure remains frozen and unresolved.
+The runner exited with its failure guard. Registration acceptance and production
+are blocked pending the maintainer decision on this failure.
+
+The full-grid twenty-draw pilot checks construction and prices production;
+it cannot establish size or choose a default. Policy LR and score SB/PEBA4
+are compared with an explicit pre-66 LR meat, using centered moment influence
+without the fitted-mean likelihood correction. An independent exact-row
+reconstruction checks that the observed bread and restriction projection agree
+with the policy spectrum. The flag rule remains the parent's paired size-error
+rule; a flag calls for finite-sample work on the adopted policy. The merger must
+review this draft before any held-out production on Modal.
+
+```{r}
+structured <- file.path('results','structured-mean','pilot-2026-10-05')
+if (!file.exists(file.path(structured,'checks.csv')))
+  stop('Structured-mean pilot absent: run Rscript run_experiment.R --lane structured-mean --pilot --workers 2 --run-id pilot-2026-10-05')
+sc <- read.csv(file.path(structured,'checks.csv'))
+st <- read.csv(file.path(structured,'timing.csv'))
+knitr::kable(data.frame(Draws=sc$draws, `Failed arms`=sc$failed_arms,
+  `Maximum spectrum discrepancy`=signif(sc$max_reference_gap,3),
+  `Projected production CPU hours`=round(sum(st$production_cpu_hours),2),
+  `Ideal two-worker hours`=round(sum(st$production_cpu_hours)/2,2),
+  check.names=FALSE))
+```
+
+The frozen summaries cover all 72 cells: one-factor/six-indicator and
+two-factor/twelve-indicator models, normal/skewed data, N=100/300/1000 per group,
+correct/mild/strong mean restrictions, and matched null/power. Production is
+108,000 draws (2,000 null and 1,000 power per cell). CPU pricing includes the
+explicit numerical-Jacobian comparator and generator; ideal scaling excludes
+startup, summaries, cloud overhead and monetary rates. Per-cell rates, Wilson
+intervals, paired flags, failures and population checks remain in the frozen
+CSVs. Pilot flags are development diagnostics and the decision stays open.
+
+```bash
+export R_LIBS="$HOME/.cache/magmaan-rlib/lane-e"
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+nice -n 10 Rscript run_experiment.R --lane structured-mean --smoke --workers 2 --run-id new_structured_smoke
+nice -n 10 Rscript run_experiment.R --lane structured-mean --pilot --workers 2 --run-id new_structured_pilot
+```
+
+No production run was launched by TASK-75. Prior saturated-mean evidence and
+its conclusions remain separate from this new calibration question.

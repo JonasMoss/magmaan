@@ -527,7 +527,12 @@
   fix; explicit Satorra-2000 streaming/materialized/dense drivers retain
   their centered empirical-Gamma convention pending the lab-centering study.
   Decisions/04 frees group intercepts and restricts only loadings, so its
-  saturated-mean design is unaffected.
+  saturated-mean design is unaffected. TASK-75 adds a registered structured-mean
+  calibration lane in the same study: symmetric unequal group means, equal
+  intercepts, true loading restrictions, explicit pre-66 meat reconstruction;
+  full-grid pilot is development/pricing only. One unexplained intermittent
+  R/native conversion failure leaves TASK-75 needing a decision; registration
+  acceptance and production await its resolution and merger review.
   The large-N tiled path accumulates both reduced matrices in one pass instead
   of retaining N-by-df rows. The spectrum uses row space when N < df; SB-only
   calibration uses a trace and spectra are cached on demand. Distinct tiled

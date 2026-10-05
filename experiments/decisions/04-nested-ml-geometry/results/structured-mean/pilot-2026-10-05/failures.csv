@@ -1,0 +1,4 @@
+"cell_id","rep","seed","arm","error"
+2,16,1526120047,"policy_lr","Not compatible with requested type: [type=character; target=double]."
+2,16,1526120047,"policy_score","Not compatible with requested type: [type=character; target=double]."
+2,16,1526120047,"pre66_lr","Not compatible with requested type: [type=character; target=double]."

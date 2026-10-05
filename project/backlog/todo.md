@@ -565,7 +565,11 @@ required by an all-ordinal primary workflow remain current work.
   geometry now use exact likelihood rows at the larger fit, including the
   fitted-mean shift; grouped misspecified-mean gates match direct FIML and
   finite-difference casewise scores. Explicit lab Satorra-2000 moment drivers
-  and global GOF retain their separate moment conventions. Not release-gating.
+  and global GOF retain their separate moment conventions. TASK-75 registers
+  decisions/04 structured-mean calibration, with frozen full-grid 20-draw pilot
+  and cost; one unexplained intermittent R/native conversion error needs a
+  maintainer decision before registration acceptance and held-out production.
+  No production or default change in the lane. Not release-gating.
 
 - [x] **M — threshold-invariance nested tests (Wu-Estabrook)** (TASK-68).
   The DWLS policy now falls back from failed parameter nesting to a numerical
