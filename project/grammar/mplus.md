@@ -407,6 +407,12 @@ six report unsupported fit routes. Independently verified SE/test convention
 differences retain separate classes. The 2,440-input baseline accepts 658 at
 the reader and 614 at MODEL lowering; the closeout ledger records fresh runs.
 
+The TASK-85 draft output-only gate, `check_mplus_outputs.R`, compares groups,
+free count and printed H0 df without reading data. Its derived summary records
+1,933 scanned outputs and 682 distinct Mplus inputs. It currently fails on two
+meaning discrepancies and 33 counting limitations; see the test ledger.
+This broader gate is pending and does not establish stability for all outputs.
+
 **Meaning** (which model an input denotes) is gated against Mplus:
 
 - The User's Guide v8 language chapters (VARIABLE/DATA/DEFINE, ANALYSIS,

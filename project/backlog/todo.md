@@ -1430,6 +1430,12 @@ carry the label `mplus`.
   categorical fresh-process reconstruction pass; ordinary defaults are unchanged.
   Full C++ and both R suites and the unchanged corpus gate pass. TASK-57.
 
+- [ ] **M — output-only corpus meaning gate (TASK-85).** Draft scan covers
+  1,933 outputs / 682 distinct Mplus inputs; 130 accepted. Two Little
+  strong-invariance models lose later bracket-entry labels (20/7 vs 18/9
+  npar/df); 33 cases still need counting completion. Needs decision before
+  changing the accepted bracket-statement rule. See the test ledger.
+
 - [x] **S — ordinary Mplus refusal reporting.** One error lists all needed
   input edits in stable order, with vector reason/edit fields; model printing
   shows fittability and the edits. Full ordinary R suite gates the contract.

@@ -495,6 +495,17 @@ suggests the order of value after increment 1: categorical outcomes, MODEL
 CONSTRAINT/INDIRECT and multiple groups each block several hundred inputs;
 DEFINE blocks 239.
 
+### Output-only meaning sweep (TASK-85, pending)
+
+Disk and ZIP-member scan: 1,933 outputs, 1,337 Mplus outputs, seven Mplus-error
+outputs, 682 distinct echoed inputs; 130 accepted / 552 rejected by rule.
+95 accepted inputs match available printed dimensions, two differ, and 33
+need counting completion. The two Mplus 7 Little strong-invariance examples
+lose later bracket-entry labels in the lowered table (npar 20 / df 7 versus
+18 / 9). The gate fails and TASK-85 awaits a decision on the accepted-rule fix.
+Only derived counts/provenance are tracked; originals stay in the corpus.
+See the test ledger for hashes, scope and limitations.
+
 ### Increment-2 corpus comparison (TASK-52)
 
 On the same extracted manifest, the pre-increment branch accepted 253 inputs
