@@ -36,7 +36,11 @@
 on demand without refitting. For parity, compare lavaan fits with the same
 model and estimation settings, including \code{meanstructure = TRUE} and
 \code{fixed.x = FALSE}. FIML supports \code{"ML"} and \code{"MLR"} with lavaan's
-\code{missing = "ml"} recipes. Unchecked components remain unavailable.}
+\code{missing = "ml"} recipes. Complete mixed DWLS supports \code{"WLSMV"},
+with NACOV covariance and scaled-shifted global/Satorra-2000 nested tests.
+Mixed delta/theta reporting is validated at identical parameter points;
+grouped/theta retained endpoints have limited validation. Other mixed
+bundles and missing mixed observations remain unavailable.}
 
 \item{parm}{Parameter names or positive integer indices; omitted for all
 free parameters. Indices distinguish parameters with repeated labels.}

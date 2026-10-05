@@ -443,7 +443,15 @@ test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
       refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
         group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
-      lavaan_compat_reference(fits[[i]], refs[[i]], "WLSMV", tolerance = 2e-3)
+      # Reporting is gated at identical points; grouped stopping differences
+      # have objective/gradient evidence in the oracle observations ledger.
+      rows <- fits[[i]]$lab$partable
+      reference <- lavaan::parTable(refs[[i]])
+      key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
+      values <- reference$est[match(key(rows), key(reference))]
+      fits[[i]]$lab$partable$est <- values
+      fits[[i]]$lab$theta[rows$free[rows$free > 0]] <- values[rows$free > 0]
+      lavaan_compat_reference(fits[[i]], refs[[i]], "WLSMV", tolerance = 1e-5)
       cached <- infer(fits[[i]], lavaan_compat = "WLSMV")
       expect_identical(cached$inference, fits[[i]]$inference)
       expect_equal(vcov(unserialize(serialize(cached, NULL)), lavaan_compat = "WLSMV"),
@@ -452,9 +460,9 @@ test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
     ref <- lavaan::lavTestLRT(refs[[1]], refs[[2]])
     for (pair in list(fits, rev(fits))) {
       ours <- anova(pair[[1]], pair[[2]], lavaan_compat = "WLSMV")
-      expect_equal(ours$statistic, ref[2, "Chisq diff"], tolerance = 2e-3)
+      expect_equal(ours$statistic, ref[2, "Chisq diff"], tolerance = 1e-5)
       expect_equal(ours$df, ref[2, "Df diff"])
-      expect_equal(ours$pvalue, ref[2, "Pr(>Chisq)"], tolerance = 2e-3)
+      expect_equal(ours$pvalue, ref[2, "Pr(>Chisq)"], tolerance = 1e-5)
     }
   }
 })

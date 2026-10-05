@@ -5,6 +5,32 @@
 using namespace magmaanr;
 using namespace magmaanr::fitglue;
 
+// No optimization: inspect the canonical mixed LS criterion and its gradient
+// in the equality tangent at the retained (possibly externally supplied) theta.
+// [[Rcpp::export]]
+Rcpp::List evaluate_mixed_ordinal_at_impl(Rcpp::List fit) {
+  auto ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  const auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+      fit, R_NilValue, "mixed_ordinal_stats", "evaluate_mixed_ordinal_at"));
+  auto objective = magmaan::estimate::frontier::mixed_ordinal_ls_objective(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_weight_from_estimator(Rcpp::as<std::string>(fit["estimator"]),
+          "evaluate_mixed_ordinal_at"),
+      ordinal_parameterization_from_string(Rcpp::as<std::string>(fit["parameterization"])));
+  if (!objective) stop_fit(objective.error());
+  auto r = objective->problem.r(est.theta);
+  auto j = objective->problem.J(est.theta);
+  if (!r) stop_fit(r.error());
+  if (!j) stop_fit(j.error());
+  auto tangent = magmaan::estimate::build_eq_tangent(objective->pt, est.theta);
+  if (!tangent) stop_post(tangent.error());
+  const Eigen::VectorXd gradient = tangent->Kmat.transpose() * j->transpose() * *r;
+  return Rcpp::List::create(Rcpp::_["fmin"] = 0.5 * r->squaredNorm(),
+      Rcpp::_["gradient"] = gradient,
+      Rcpp::_["grad_norm"] = gradient.lpNorm<Eigen::Infinity>());
+}
+
 namespace {
 
 std::string ordinal_stage2_label(const std::string& s);

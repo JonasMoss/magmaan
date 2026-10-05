@@ -13,7 +13,7 @@ convention_nested(fit_H1, fit_H0, convention)
 \item{fit}{A fitted \code{magmaan_fit}.}
 
 \item{convention}{A lavaan bundle: \code{"ML"}, \code{"MLM"}, \code{"MLR"}, \code{"DWLS"},
-\code{"WLSMV"}, \code{"ULS"}, \code{"ULSMV"} or \code{"WLS"}.}
+\code{"WLSMV"}, \code{"WLSM"} (unsupported), \code{"ULS"}, \code{"ULSMV"} or \code{"WLS"}.}
 
 \item{fit_H1, fit_H0}{Alternative and restricted fits to the same data.}
 }
@@ -24,5 +24,9 @@ convergence metadata. Nested inference returns one difference test.
 \description{
 Thin adapters to C++ compatibility composers. A convention changes the
 reported inference without changing fitting. Components outside the checked
-model/data slice return an unavailable reason.
+model/data slice return an unavailable reason. Complete mixed DWLS supports
+\code{"WLSMV"}: expected-bread NACOV covariance, scaled-shifted global and
+Satorra-2000 delta nested tests. Missing mixed observations and other mixed
+bundles are unsupported. Delta/theta reporting is point-gated; grouped/theta
+retained endpoints have limited validation due to optimizer stopping differences.
 }

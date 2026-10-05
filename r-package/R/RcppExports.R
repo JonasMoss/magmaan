@@ -469,6 +469,10 @@ noniterative_cfa_scalar_impl <- function(fit, ref_group = 1L, estimator = "auto"
     .Call(`_magmaanlab_noniterative_cfa_scalar_impl`, fit, ref_group, estimator, discrepancy, gamma, data)
 }
 
+evaluate_mixed_ordinal_at_impl <- function(fit) {
+    .Call(`_magmaanlab_evaluate_mixed_ordinal_at_impl`, fit)
+}
+
 ordinal_fixed_weight_stats_impl <- function(ordinal_stats, method, W = NULL, dls_a = 0.5) {
     .Call(`_magmaanlab_ordinal_fixed_weight_stats_impl`, ordinal_stats, method, W, dls_a)
 }

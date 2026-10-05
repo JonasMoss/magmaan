@@ -17,6 +17,7 @@ std::string_view convention_name(LavaanConvention c) noexcept {
     case LavaanConvention::MLR: return "MLR";
     case LavaanConvention::DWLS: return "DWLS";
     case LavaanConvention::WLSMV: return "WLSMV";
+    case LavaanConvention::WLSM: return "WLSM";
     case LavaanConvention::ULS: return "ULS";
     case LavaanConvention::ULSMV: return "ULSMV";
     case LavaanConvention::WLS: return "WLS";

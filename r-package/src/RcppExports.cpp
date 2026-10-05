@@ -1710,6 +1710,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// evaluate_mixed_ordinal_at_impl
+Rcpp::List evaluate_mixed_ordinal_at_impl(Rcpp::List fit);
+RcppExport SEXP _magmaanlab_evaluate_mixed_ordinal_at_impl(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(evaluate_mixed_ordinal_at_impl(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ordinal_fixed_weight_stats_impl
 Rcpp::List ordinal_fixed_weight_stats_impl(Rcpp::List ordinal_stats, std::string method, SEXP W, double dls_a);
 RcppExport SEXP _magmaanlab_ordinal_fixed_weight_stats_impl(SEXP ordinal_statsSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP dls_aSEXP) {
@@ -4640,6 +4651,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_noniterative_cfa_pseudo_lrt_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_pseudo_lrt_impl, 6},
     {"_magmaanlab_noniterative_cfa_constrained_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_constrained_impl, 5},
     {"_magmaanlab_noniterative_cfa_scalar_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_scalar_impl, 6},
+    {"_magmaanlab_evaluate_mixed_ordinal_at_impl", (DL_FUNC) &_magmaanlab_evaluate_mixed_ordinal_at_impl, 1},
     {"_magmaanlab_ordinal_fixed_weight_stats_impl", (DL_FUNC) &_magmaanlab_ordinal_fixed_weight_stats_impl, 4},
     {"_magmaanlab_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaanlab_data_ordinal_stats_from_raw_impl, 2},
     {"_magmaanlab_data_ordinal_stats_observed_from_raw_impl", (DL_FUNC) &_magmaanlab_data_ordinal_stats_observed_from_raw_impl, 3},

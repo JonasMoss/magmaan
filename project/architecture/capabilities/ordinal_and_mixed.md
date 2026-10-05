@@ -1101,8 +1101,33 @@ Moment-nested comparisons use the shared implied-moment embedding and tangent.
 One/two-group delta/theta composition gates give limited validation; calibration
 is pending. TASK-80 adds a registered mixed calibration lane to decisions/05,
 with a full-grid local pricing pilot; production requires merger review.
-Nested score, mixed ULS/WLS policy and mixed `lavaan_compat` remain
-unsupported. Exact sampling rows or complete raw observations are required.
+Nested score and mixed ULS/WLS policy remain unsupported. Exact sampling
+rows or complete raw observations are required.
+
+### Mixed DWLS lavaan compatibility
+
+Complete mixed DWLS supports `lavaan_compat = "WLSMV"` through the C++
+`lavaan_inference_mixed_ordinal` / `lavaan_nested_mixed_ordinal` composers and
+both R interfaces. Covariance uses expected-bread NACOV sandwich geometry
+with original n_g/N fractions and the total N/(N-G) covariance multiplier.
+The global scaled-shifted test uses the criterion evaluated with n_g-1 counts;
+nested reporting uses lavaan's default Satorra-2000 delta map, scaled-shifted
+reference and original n_g/N sandwich fractions. The ordinary exact-IJ policy
+and retained estimates are unchanged.
+
+Installed-lavaan 0.7.2 gates cover single/two groups, delta/theta, covariance,
+intervals, summary and configural-to-equal-loadings nested reporting, including
+both ordinary argument orders and cached/serialized bundles. Stage-1 moments
+and NACOV agree before reporting is compared. Reporting at identical oracle
+parameter points has strict 1e-5 relative lab gates; a checked-in single-group
+mixed golden also gates the composer. Single-group delta additionally has
+strict retained-fit gates. Grouped and theta endpoint comparisons have limited
+validation: optimizer stopping differences are recorded with objective and
+canonical tangent-gradient evidence in the oracle observations ledger. No
+oracle exemption or tolerance widening is used. This is numerical compatibility,
+not a policy calibration claim. Missing-observation mixed stats and uncomposed
+mixed bundles (including WLSM, ULSMV and plain DWLS/WLS) return `unsupported_model`;
+penalties and failed verdicts retain their typed reasons.
 
 ### Slow numerical validation gates
 

@@ -15,5 +15,16 @@ test_that("ordinary mixed DWLS inference and reporting use the exact policy", {
   a <- anova(f0, f1)
   expect_match(attr(a, "unavailable")[["score"]], "unsupported_model")
   expect_true(is.finite(a$p.sb[a$test == "fit-function difference"]))
-  expect_error(infer(f1, lavaan_compat = "WLSMV"), "incompatible")
+  cached <- infer(f1, lavaan_compat = "WLSMV")
+  expect_identical(cached$inference, f1$inference)
+  expect_equal(vcov(cached), vcov(f1))
+  expect_true(all(is.finite(vcov(cached, lavaan_compat = "WLSMV"))))
+  unsupported <- infer(f1, lavaan_compat = "ULSMV")
+  expect_identical(unsupported$lavaan_compat$ULSMV$status$reason,
+                   rep("unsupported_model", 2))
+  wlsm <- infer(f1, lavaan_compat = "WLSM")
+  expect_identical(wlsm$lavaan_compat$WLSM$status$reason, rep("unsupported_model", 2))
+  err <- tryCatch(vcov(f1, lavaan_compat = "ULSMV"),
+                  magmaan_inference_unavailable = identity)
+  expect_identical(err$reason, "unsupported_model")
 })

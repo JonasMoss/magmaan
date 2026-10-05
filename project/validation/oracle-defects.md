@@ -256,6 +256,48 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### Mixed WLSMV endpoint and reporting-weight conventions (TASK-90)
+
+Installed lavaan 0.7.2, HolzingerSwineford1939, two factors on x1:x3 and x4:x6,
+with x1:x3 cut at pooled tertiles, gives different retained DWLS endpoints in
+school groups ordered Grant-White/Pasteur. Both delta and theta Stage-1 vectors
+(thresholds, negative continuous means, variances and associations) agree to
+1.78e-8 absolute; NACOV agrees to 5.34e-8 absolute (1.00e-8 relative).
+`lavInspect(..., "gamma")` supplies lavaan's NACOV.
+
+The canonical mixed objective F = sum_g (n_g/N) r_g' W_g r_g / 2,
+evaluated without optimization on the same magmaan Stage 1, gives:
+
+| Parameterization / restrictions | F at magmaan | F at lavaan | Tangent gradient infinity norm, magmaan / lavaan | Maximum parameter gap |
+| --- | --- | --- | --- | --- |
+| Delta / configural | 0.029531998667952055 | 0.029531998677258746 | 4.69e-9 / 5.91e-7 | 1.29e-5 |
+| Delta / equal loadings | 0.038327300755246610 | 0.038327301259996782 | 5.79e-10 / 9.62e-6 | 5.21e-5 |
+| Theta / configural | 0.029531998667952641 | 0.029531998673523279 | 9.73e-9 / 9.17e-7 | 6.35e-4 |
+| Theta / equal loadings | 0.037259343480420655 | 0.037259344025859446 | 7.50e-9 / 6.74e-6 | 7.59e-4 |
+
+Magmaan uses ftol=1e-14, gtol=1e-10, max_iter=5000; lavaan uses its defaults.
+Magmaan has the lower fitted n_g/N objective and smaller canonical tangent
+gradient in each witness. Evaluating lavaan's objective with the same Stage-1
+moments and diagonal weights agrees with the bundle's reporting objective
+(sum_g (n_g-1) r_g' W_g r_g / (2N)) within 1.4e-17 at both endpoints.
+The fitted and reporting group weights differ for unequal groups: for equal
+loadings, lavaan's endpoint has a slightly lower reporting objective (by
+4.99e-10 delta and 5.15e-10 theta), while magmaan's endpoint has the lower
+fitted objective above. Thus grouped constrained differences include the
+finite-sample weighting convention; configural differences also show stopping
+sensitivity. The point-gated bundle handles reporting weights explicitly.
+At the
+identical lavaan parameter points covariance differences are below 4.6e-9
+relative for these grouped cases; global scale/shift differences are below
+1.3e-8 absolute. The live test also gates nested statistic/df/p/scale/shift
+at 1e-5 relative tolerance. Single-group delta retains endpoint gates; theta
+and grouped reporting uses point gates because covariance is sensitive to
+endpoint differences. `test_convention_mixed.R` reproduces Stage 1, common-point
+reporting and endpoint objective/gradient checks via the thin internal
+`evaluate_mixed_ordinal_at_impl` adapter. Ordinary whole-bundle point gates are
+in `test_lavaan_compat.R`. This records endpoint/convention observations, not
+an oracle defect or exemption; no tolerances are widened.
+
 ### Mixed ordinal MI criterion scale (TASK-33.4)
 
 The factor-two difference in score fixture 0005 was a magmaan defect, not an

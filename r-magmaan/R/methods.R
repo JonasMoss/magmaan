@@ -45,7 +45,11 @@
 #'   on demand without refitting. For parity, compare lavaan fits with the same
 #'   model and estimation settings, including `meanstructure = TRUE` and
 #'   `fixed.x = FALSE`. FIML supports `"ML"` and `"MLR"` with lavaan's
-#'   `missing = "ml"` recipes. Unchecked components remain unavailable.
+#'   `missing = "ml"` recipes. Complete mixed DWLS supports `"WLSMV"`,
+#'   with NACOV covariance and scaled-shifted global/Satorra-2000 nested tests.
+#'   Mixed delta/theta reporting is validated at identical parameter points;
+#'   grouped/theta retained endpoints have limited validation. Other mixed
+#'   bundles and missing mixed observations remain unavailable.
 #' @param ... Unused.
 #' @return `coef()` returns a named numeric vector for fits and a data frame
 #'   for summaries. `vcov()` returns the parameter covariance matrix;

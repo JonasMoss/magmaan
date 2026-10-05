@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
+#include "magmaan/api/conventions.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -1537,6 +1538,22 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
         }
         const auto& robust = fit_item.value()["robust"];
         const Eigen::VectorXd lavaan_se = vector_from_json(robust["se"]);
+        // Compose reporting at the oracle point without substituting its
+        // objective: the bundle must derive the n_g-1 statistic itself.
+        const auto bundle = magmaan::api::lavaan_inference_mixed_ordinal(
+            h->pt, h->rep, h->stats, lavaan_est, kind,
+            magmaan::estimate::OrdinalParameterization::Delta,
+            magmaan::api::LavaanConvention::WLSMV, {});
+        REQUIRE(bundle.covariance_reason == magmaan::api::InferenceReason::Available);
+        REQUIRE(bundle.test.reason == magmaan::api::InferenceReason::Available);
+        const Eigen::VectorXd bundle_se = bundle.covariance.diagonal().cwiseSqrt();
+        CHECK(max_abs_diff(bundle_se, lavaan_se) <= 1e-5 * lavaan_se.cwiseAbs().maxCoeff());
+        CHECK(bundle.test.statistic == doctest::Approx(
+            robust["scaled_shifted"]["chisq"].get<double>()).epsilon(1e-5));
+        CHECK(bundle.test.scale == doctest::Approx(
+            robust["scaled_shifted"]["scale"].get<double>()).epsilon(1e-5));
+        CHECK(bundle.test.shift == doctest::Approx(
+            robust["scaled_shifted"]["shift"].get<double>()).epsilon(1e-5));
         const Eigen::VectorXd lavaan_ev = vector_from_json(robust["eigvals"]);
         const double d_se = max_abs_diff(rob_or->se, lavaan_se);
         const double d_ev = max_abs_diff(rob_or->eigvals, lavaan_ev);

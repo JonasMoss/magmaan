@@ -1218,6 +1218,15 @@ fitting can use the lavaan-compatible preset from 0.2.0.
 
 ### Mixed continuous/ordered models
 
+- [x] **M — mixed DWLS WLSMV compatibility bundles (TASK-90).** Compose
+  NACOV sandwich covariance/intervals, scaled-shifted global and lavaan-default
+  Satorra-2000 delta nested tests in C++ and both R reporting interfaces.
+  Complete one/two-group delta/theta Stage-1 and identical-point parity gates
+  pass at 1e-5 relative tolerance; single-group delta has retained-fit gates.
+  Grouped/theta stopping differences have objective/gradient evidence in the
+  oracle observations ledger and limited endpoint validation. Missing stats
+  and uncomposed mixed bundles remain typed unavailable; policy is unchanged.
+
 Existing mixed delta/theta fits and inference APIs retain their documented
 regression gates. New mixed-only work and broader completion follow in this
 release, including dependencies otherwise shared with the primary programme.

@@ -1,5 +1,12 @@
 # magmaan 0.2.0 (in development)
 
+- Complete mixed DWLS fits support the WLSMV lavaan compatibility bundle for
+  covariance, Wald intervals, scaled-shifted global and Satorra-2000 nested
+  reporting. One/two-group delta/theta reporting is gated at identical parameter
+  points; grouped/theta retained endpoints have limited validation because
+  optimizer stopping differs. The ordinary policy is unchanged; missing mixed
+  stats and other mixed bundles retain typed unavailable reasons.
+
 - Pairwise-missing ordinal and mixed DWLS estimated-weight inference evaluates
   Gamma-diagonal movement with sparse item/pair finite differences, reducing
   post-fit cost without changing inference.

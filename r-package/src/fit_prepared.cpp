@@ -65,7 +65,7 @@ static magmaan::api::PolicyFitState policy_state_from(const Rcpp::LogicalVector&
 
 static magmaan::api::LavaanConvention lavaan_convention_from(const std::string& name) {
   using C = magmaan::api::LavaanConvention;
-  for (const auto c : {C::ML, C::MLM, C::MLR, C::DWLS, C::WLSMV, C::ULS, C::ULSMV, C::WLS})
+  for (const auto c : {C::ML, C::MLM, C::MLR, C::DWLS, C::WLSMV, C::WLSM, C::ULS, C::ULSMV, C::WLS})
     if (magmaan::api::convention_name(c) == name) return c;
   Rcpp::stop("unknown lavaan inference convention: %s", name);
   return C::ML;
@@ -395,7 +395,14 @@ Rcpp::List convention_nested_impl(SEXP null_context, SEXP alternative_context,
     const auto p1 = Rcpp::as<std::string>(alternative_fit["parameterization"]);
     const auto w0 = Rcpp::as<std::string>(null_fit["estimator"]);
     const auto w1 = Rcpp::as<std::string>(alternative_fit["estimator"]);
-    if (p0 != p1 || w0 != w1) {
+    const auto null_stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(null_fit,
+        R_NilValue, "mixed_ordinal_stats", "convention_nested"));
+    const bool null_missing = std::any_of(null_stats.raw_data.begin(), null_stats.raw_data.end(),
+        [](const Eigen::MatrixXd& x) { return !x.allFinite(); });
+    if (null_missing) {
+      out.reason = InferenceReason::UnsupportedModel;
+      out.detail = "mixed WLSMV compatibility requires complete observations";
+    } else if (p0 != p1 || w0 != w1) {
       out.reason = InferenceReason::UnsupportedModel;
       out.detail = "the two fits use different ordinal parameterizations or estimators";
     } else {

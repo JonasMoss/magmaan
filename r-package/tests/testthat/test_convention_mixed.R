@@ -1,4 +1,5 @@
-# Retained-fit mixed WLSMV gates, doctest-relative 1e-5.
+# Mixed WLSMV point gates, doctest-relative 1e-5.
+# Grouped optimizer stopping differences are recorded in oracle-defects.md.
 test_that("mixed WLSMV global and nested bundles match lavaan", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
@@ -21,14 +22,56 @@ test_that("mixed WLSMV global and nested bundles match lavaan", {
         parameterization = p, group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
       expect_true(fits[[i]]$converged)
-      ours <- convention_inference(fits[[i]], "WLSMV")
-      expect_true(ours$covariance_available, info = ours$covariance_detail)
+      # Stage 1 uses the same threshold/negative-mean/variance/correlation
+      # ordering as lavaan; Gamma is lavaan's inspect name for NACOV.
+      obs <- lavaan::lavInspect(refs[[i]], "wls.obs")
+      gamma <- lavaan::lavInspect(refs[[i]], "gamma")
+      if (!grouped) { obs <- list(obs); gamma <- list(gamma) }
+      for (g in seq_along(obs)) {
+        relative(fits[[i]]$mixed_ordinal_stats$moments[[g]], obs[[g]])
+        relative(fits[[i]]$mixed_ordinal_stats$NACOV[[g]], gamma[[g]])
+      }
       a <- fits[[i]]$partable; b <- lavaan::parTable(refs[[i]])
       a <- a[a$free > 0 & !duplicated(a$free), ]; a <- a[order(a$free), ]
       b <- b[b$free > 0 & !duplicated(b$free), ]; b <- b[order(b$free), ]
       key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
       ix <- match(key(a), key(b)); expect_false(anyNA(ix))
-      relative(a$est, b$est[ix])
+      if (!grouped && p == "delta") relative(a$est, b$est[ix])
+      # Align by model rows, never free indices across implementations.
+      point <- fits[[i]]
+      rows <- point$partable
+      ref_rows <- lavaan::parTable(refs[[i]])
+      values <- ref_rows$est[match(key(rows), key(ref_rows))]
+      point$partable$est <- values
+      point$theta[rows$free[rows$free > 0]] <- values[rows$free > 0]
+      own <- magmaanlab:::evaluate_mixed_ordinal_at_impl(fits[[i]])
+      oracle <- magmaanlab:::evaluate_mixed_ordinal_at_impl(point)
+      expect_lte(own$fmin, oracle$fmin + 1e-14)
+      expect_lt(own$grad_norm, 1e-7)
+      if (grouped) expect_lt(own$grad_norm, oracle$grad_norm)
+      # Black-box lavaan objective evaluation on exactly the same Stage 1.
+      # This distinguishes reporting group weights from the fitted n_g/N
+      # criterion above; unequal-group restrictions need not share an optimum.
+      sample <- refs[[i]]@SampleStats
+      sample@WLS.obs <- point$mixed_ordinal_stats$moments
+      sample@WLS.VD <- lapply(point$mixed_ordinal_stats$W_dwls, diag)
+      for (q in list(fits[[i]], point)) {
+        x <- q$partable$est[match(key(b), key(q$partable))]
+        reference_model <- lavaan:::lav_model_set_parameters(refs[[i]]@Model, x = x)
+        objective <- lavaan:::lav_model_objective(lavmodel = reference_model,
+          glist = reference_model@GLIST, lavsamplestats = sample,
+          lavdata = refs[[i]]@Data, lavcache = refs[[i]]@Cache)
+        reported <- convention_inference(q, "WLSMV")$test$unscaled_statistic / (2 * sum(q$nobs))
+        expect_lte(abs(reported - objective), 1e-14)
+      }
+      ours <- convention_inference(point, "WLSMV")
+      expect_true(ours$covariance_available, info = ours$covariance_detail)
+      if (!grouped && p == "delta") {
+        retained <- convention_inference(fits[[i]], "WLSMV")
+        relative(retained$covariance, lavaan::vcov(refs[[i]])[ix, ix])
+        relative(retained$test$pvalue, ours$test$pvalue)
+      }
+      fits[[i]] <- point
       relative(ours$covariance, lavaan::vcov(refs[[i]])[ix, ix])
       t <- lavaan::lavInspect(refs[[i]], "test")$scaled.shifted
       relative(ours$test$statistic, t$stat); expect_equal(ours$test$df, t$df)
@@ -49,4 +92,37 @@ test_that("mixed WLSMV global and nested bundles match lavaan", {
     relative(ours$shift, attr(ref, "shift")[[2]])
     expect_identical(convention_inference(fits[[1]], "ULSMV")$test$reason, "unsupported_model")
   }
+})
+
+test_that("mixed compatibility returns typed refusals", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  ord <- paste0("x", 1:3)
+  for (v in ord) d[[v]] <- ordered(cut(d[[v]],
+    quantile(d[[v]], c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE))
+  syntax <- "f =~ x1 + x2 + x3\ng =~ x4 + x5 + x6"
+  spec <- model_spec(syntax, ordered = ord, meanstructure = TRUE)
+  a <- fit_model(spec, d, estimator = "DWLS")
+  b <- fit_model(model_spec(paste(syntax, "f ~~ 0*g", sep = "\n"),
+    ordered = ord, meanstructure = TRUE), d, estimator = "DWLS")
+  for (bundle in c("ULSMV", "WLSM", "DWLS", "ULS", "WLS", "MLM")) {
+    expect_identical(convention_inference(a, bundle)$covariance_reason, "unsupported_model")
+    expect_identical(convention_nested(a, b, bundle)$test$reason, "unsupported_model")
+  }
+  bad <- b; bad$converged <- FALSE
+  expect_identical(convention_inference(bad, "WLSMV")$test$reason, "not_converged")
+  expect_identical(convention_nested(a, bad, "WLSMV")$test$reason, "not_converged")
+  bad <- b; bad$penalty_inference <- "not_validated"; bad$composition$penalty_weight <- .1
+  expect_identical(convention_inference(bad, "WLSMV")$covariance_reason, "penalized")
+  expect_identical(convention_nested(a, bad, "WLSMV")$test$reason, "penalized")
+  bad <- b; bad$parameterization <- "theta"
+  expect_identical(convention_nested(a, bad, "WLSMV")$test$reason, "unsupported_model")
+  d$x4[seq(1, nrow(d), 17)] <- NA_real_
+  stats <- data_mixed_ordinal_stats_observed_from_df(d, spec, full_wls_weight = FALSE)
+  missing <- fit_model(spec, stats, estimator = "DWLS")
+  refused <- convention_inference(missing, "WLSMV")
+  expect_identical(refused$covariance_reason, "unsupported_model")
+  expect_match(refused$covariance_detail, "complete observations")
+  expect_identical(convention_nested(missing, b, "WLSMV")$test$reason, "unsupported_model")
+  expect_identical(convention_nested(b, missing, "WLSMV")$test$reason, "unsupported_model")
 })

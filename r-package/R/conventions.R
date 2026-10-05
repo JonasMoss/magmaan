@@ -2,17 +2,21 @@
 #'
 #' Thin adapters to C++ compatibility composers. A convention changes the
 #' reported inference without changing fitting. Components outside the checked
-#' model/data slice return an unavailable reason.
+#' model/data slice return an unavailable reason. Complete mixed DWLS supports
+#' `"WLSMV"`: expected-bread NACOV covariance, scaled-shifted global and
+#' Satorra-2000 delta nested tests. Missing mixed observations and other mixed
+#' bundles are unsupported. Delta/theta reporting is point-gated; grouped/theta
+#' retained endpoints have limited validation due to optimizer stopping differences.
 #' @param fit A fitted `magmaan_fit`.
 #' @param convention A lavaan bundle: `"ML"`, `"MLM"`, `"MLR"`, `"DWLS"`,
-#'   `"WLSMV"`, `"ULS"`, `"ULSMV"` or `"WLS"`.
+#'   `"WLSMV"`, `"WLSM"` (unsupported), `"ULS"`, `"ULSMV"` or `"WLS"`.
 #' @return A list with covariance and test results, component availability and
 #'   convergence metadata. Nested inference returns one difference test.
 #' @name convention_inference
 #' @export
 convention_inference <- function(fit, convention) {
   if (!inherits(fit, "magmaan_fit")) stop("convention_inference(): supply a fitted model")
-  convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS"))
+  convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS"))
   state <- .policy_state(fit)
   context <- NULL
   if (fit$estimator %in% c("ML", "FIML") && !isTRUE(fit$ordinal) &&
@@ -28,7 +32,7 @@ convention_inference <- function(fit, convention) {
 convention_nested <- function(fit_H1, fit_H0, convention) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("convention_nested(): supply two fitted models")
-  convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "ULS", "ULSMV", "WLS"))
+  convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS"))
   if (!identical(fit_H1$raw_data, fit_H0$raw_data))
     stop("convention_nested(): the fits must use the same observations in the same order")
   states <- list(H0 = .policy_state(fit_H0), H1 = .policy_state(fit_H1))

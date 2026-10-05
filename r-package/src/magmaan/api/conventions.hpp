@@ -8,7 +8,7 @@ namespace magmaan::api {
 
 // Complete compatibility bundles, evaluated at retained estimates. These names
 // select inference only; they never change the estimator or refit the model.
-enum class LavaanConvention { ML, MLM, MLR, DWLS, WLSMV, ULS, ULSMV, WLS };
+enum class LavaanConvention { ML, MLM, MLR, DWLS, WLSMV, WLSM, ULS, ULSMV, WLS };
 std::string_view convention_name(LavaanConvention convention) noexcept;
 
 struct ConventionTest {

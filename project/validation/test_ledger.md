@@ -891,8 +891,22 @@ Protected by:
 - `experiments/_archive/ordinal-inference-cache-probe` and
   `experiments/_archive/ordinal-snlls-speed`
 
-Known weak spots: mixed robust scaled-test parity has loose guards, and lazy
-mixed WLS construction plus mixed theta SNLLS are still open.
+Mixed WLSMV compatibility (TASK-90) has strict 1e-5 relative reporting gates
+at identical parameter points in `test_convention_mixed.R`, whole-bundle
+ordinary gates in `test_lavaan_compat.R`, and a checked-in mixed golden composer
+gate. Stage-1 moments/NACOV agree within 1.78e-8 / 5.34e-8 absolute. Grouped
+theta endpoints differ by up to 7.59e-4: the equal-loadings canonical objective
+is 0.037259343480420655 at magmaan versus 0.037259344025859446 at lavaan, with
+tangent gradient norms 7.50e-9 versus 6.74e-6. Common-Stage-1 lavaan and bundle
+reporting objectives agree within 1.4e-17 at both endpoints. Unequal-group
+n_g-1 reporting weights differ from fitted n_g weights, so constrained endpoint
+differences also include that convention. Single-group delta retains endpoint
+gates; grouped/theta endpoint reporting has limited validation. Full evidence
+is in [the convention observation](oracle-defects.md#mixed-wlsmv-endpoint-and-reporting-weight-conventions-task-90);
+no oracle exemption or wider tolerance is used.
+
+Known weak spots: older mixed robust primitive gates retain loose guards, and
+lazy mixed WLS construction plus mixed theta SNLLS are still open.
 
 ### Robust U-Gamma and FMG Reductions
 
