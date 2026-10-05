@@ -368,8 +368,13 @@ keyed to the inventory. All-ordinal nonlinear equality constraints fit with
 lavaan-compatible expected-information inference (TASK-54.2; lavaan 0.7-2's
 start-value Jacobian in nonlinear nested and score tests is an
 [oracle defect](../validation/oracle-defects.md)); the ordinary policy refuses
-nonlinear constraints. Ordinary `magmaan()` integration (TASK-57, under the
-[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api)) remains.
+nonlinear constraints. Ordinary `magmaan()` accepts explicit
+`magmaanlab::mplus_model()` specs under the
+[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api): construction
+always succeeds, and fitting refuses conditional observed covariates,
+NOMEANSTRUCTURE and summary data without MEANS with a classed error naming the
+input edit (`x1 x2;` brings every covariate into the joint model, as Mplus 9.1
+does; probe P-MS08b).
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
