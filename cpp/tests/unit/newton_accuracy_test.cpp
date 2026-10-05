@@ -43,12 +43,13 @@ struct Model {
 // Builds the model, takes simple start values as the population point (after
 // projecting onto the equality constraints), and sets S to its implied
 // covariance, so theta0 is the exact ML solution.
-Model exact_model(std::string_view syntax, std::int64_t n = 250) {
+Model exact_model(std::string_view syntax, std::int64_t n = 250,bool means = false) {
   Model m;
   auto flat = magmaan::parse::Parser::parse(syntax);
   REQUIRE(flat.has_value());
   magmaan::spec::BuildOptions opts;
   opts.fixed_x = false;
+  opts.meanstructure = means;
   auto pt = magmaan::spec::build(*flat, opts);
   REQUIRE(pt.has_value());
   m.pt = std::move(*pt);
@@ -61,6 +62,7 @@ Model exact_model(std::string_view syntax, std::int64_t n = 250) {
   S0.diagonal().array() = 1.0;
   m.samp.S = {S0};
   m.samp.n_obs = {n};
+  if(means) m.samp.mean={Eigen::VectorXd::Zero(p)};
   auto x0 = magmaan::estimate::simple_start_values(m.pt, m.rep, m.samp, {});
   REQUIRE(x0.has_value());
   auto con = magmaan::estimate::build_eq_constraints(m.pt, /*allow_nonlinear=*/true);
@@ -68,9 +70,10 @@ Model exact_model(std::string_view syntax, std::int64_t n = 250) {
   m.theta0 = con->expand(con->contract(*x0));
   auto ev = ModelEvaluator::build(m.pt, m.rep);
   REQUIRE(ev.has_value());
-  auto e = ev->evaluate(m.theta0, false, false);
+  auto e = ev->evaluate(m.theta0, false, means);
   REQUIRE(e.has_value());
   m.samp.S = {e->moments.sigma[0]};
+  if(means) m.samp.mean=e->moments.mu;
   return m;
 }
 
@@ -887,8 +890,55 @@ TEST_CASE("Newton input enclosures: independently evaluated covariance models") 
       auto mismatch=m.theta0; mismatch[0]+=.1;
       CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,mismatch,a,estimator).status==NewtonAccuracyStatus::Unavailable);
       auto means=m.samp; means.mean={Eigen::VectorXd::Zero(m.samp.S[0].rows())};
-      CHECK(newton_input_error_bounds(m.pt,m.rep,means,m.theta0,a,estimator).status==NewtonAccuracyStatus::Unsupported);
-      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,a,Estimator::GLS).status==NewtonAccuracyStatus::Unsupported);
+      CHECK(newton_input_error_bounds(m.pt,m.rep,means,m.theta0,a,estimator).status!=NewtonAccuracyStatus::Available);
+      auto unknown=a; unknown.derivatives.ls_weight.reset();
+      if(estimator==Estimator::ULS) CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,unknown,Estimator::WLS).status==NewtonAccuracyStatus::Unsupported);
     }
+  }
+}
+
+
+TEST_CASE("Newton input enclosures: retained fixed weights and mean coordinates") {
+  using namespace magmaan::estimate;
+  using namespace magmaan::estimate::frontier;
+  for(const auto syntax : {"f =~ x1 + x2 + x3 + x4\nf ~ .2*1",
+      "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nX ~ .2*Y\nY ~ X\nX ~ .2*1\nY ~ -.1*1"})
+    for(bool means : {false,true}) {
+    auto m=exact_model(syntax,250,means);
+    const Eigen::Index p=m.samp.S[0].rows(),r=p*(p+1)/2+(means ? p : 0);
+    Eigen::VectorXd diagonal(r);
+    for(Eigen::Index i=0;i<r;++i) diagonal[i]=std::pow(10.0,-2+4.0*static_cast<double>(i)/static_cast<double>(r-1));
+    Eigen::MatrixXd dense=diagonal.asDiagonal();
+    dense+=.03*diagonal.cwiseSqrt()*diagonal.cwiseSqrt().transpose();
+    auto full=gmm::BlockWeight::dense(dense,magmaan::FitError::Kind::NumericIssue,"test weight"); REQUIRE(full.has_value());
+    auto nt=gmm::BlockWeight::normal_theory(m.samp.S[0],means,magmaan::FitError::Kind::NumericIssue,"test NT"); REQUIRE(nt.has_value());
+    const std::vector<gmm::Weight> weights={{},{gmm::BlockWeight::identity(r)},
+      {gmm::BlockWeight::diagonal(diagonal)},{*full},{*nt}};
+    for(const auto& weight:weights) {
+      auto audit=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,weight); REQUIRE(audit.has_value());
+      REQUIRE(audit->derivatives.ls_weight.has_value());
+      const auto bounds=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*audit,Estimator::WLS);
+      REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+      CHECK(bounds.curvature_lower_bound>0);
+      CHECK(newton_input_distance_interval(*audit,bounds).decision==NewtonBudgetDecision::WithinBudget);
+      auto point=m.theta0; point[0]+=.001;
+      auto changed=audit_newton_gmm(m.pt,m.rep,m.samp,point,weight); REQUIRE(changed.has_value());
+      const auto input=newton_input_error_bounds(m.pt,m.rep,m.samp,point,*changed,Estimator::WLS);
+      REQUIRE_MESSAGE(input.status==NewtonAccuracyStatus::Available,input.detail);
+      const auto interval=newton_input_distance_interval(*changed,input);
+      CHECK(interval.lower<=changed->diagnostics.distance); CHECK(interval.upper>=changed->diagnostics.distance);
+      auto unknown=*changed; unknown.derivatives.ls_weight.reset();
+      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,point,unknown,Estimator::WLS).status==NewtonAccuracyStatus::Unsupported);
+    }
+    // Negative diagonal weights are not silently clipped into a verified target.
+    auto invalid=weights[2]; diagonal[0]=-1; invalid[0]=gmm::BlockWeight::diagonal(diagonal);
+    auto a=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,weights[0]); REQUIRE(a.has_value());
+    a->derivatives.ls_weight=invalid;
+    CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*a,Estimator::WLS).status==NewtonAccuracyStatus::Unavailable);
+    const gmm::Weight singular={gmm::BlockWeight::diagonal(Eigen::VectorXd::Zero(r))};
+    const auto rank_lost=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,singular); REQUIRE(rank_lost.has_value());
+    const auto no_bound=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*rank_lost,Estimator::WLS);
+    CHECK(no_bound.status!=NewtonAccuracyStatus::Available);
+    CHECK(newton_input_distance_interval(*rank_lost,no_bound).decision!=NewtonBudgetDecision::WithinBudget);
   }
 }

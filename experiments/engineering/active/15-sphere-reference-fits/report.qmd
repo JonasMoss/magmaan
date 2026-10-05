@@ -1,7 +1,8 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: uls_search
+  lane: weighted_audit
+  weighted_run: weighted-audit-confirm-v1
   search_retained_stock: uls-search-retained-stock-v1
   search_retained_tight: uls-search-retained-tight-v1
   search_stock: uls-search-confirm-stock-v1
@@ -40,7 +41,38 @@ execute:
 
 ```{r}
 #| results: asis
-if (identical(params$lane, "uls_search")) {
+if (identical(params$lane, "weighted_audit")) {
+  read_weighted <- function(name) {
+    path <- file.path("results",params$weighted_run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing weighted evidence: ",path,
+      "; run --ordinary --weighted-audit --run-id ",params$weighted_run)
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  gates <- read_weighted("verification"); families <- read_weighted("family_summary")
+  comparisons <- read_weighted("comparisons"); producers <- read_weighted("producer_checks")
+  metadata <- read_weighted("metadata"); reference <- read_weighted("reference_metadata")
+  if(any(gates$failed!=0))stop("Weighted verification has failed gates; inspect its retained CSVs")
+  identified <- families[families$family!="feedback_ridge",]
+  tested <- function(k)gates$tested[gates$check==k]
+  cat("## Question\n\nCan the construction-aware ULS audit be shared by fixed-weight least squares, including means, while separately checking the recipes that produce DWLS, ADF/WLS, GLS and DLS weights?\n\n")
+  cat(sprintf("## Short answer\n\nYes, within the declared single-level, unrestricted scope. On the fresh confirmation, all %d available construction bounds enclose independent 90-digit calculations, all %d available distance intervals cover, and no decisive classification is wrong. All %d independently reconstructed weight blocks agree, including DLS endpoints and an interior mix. Of %d cold fits on identified controls, %d qualify; the %d deliberately unidentified feedback fits remain failed or unchecked. There are %d legacy losses.\n\n",
+    tested("bounds_covers"),tested("interval_covers"),nrow(producers),sum(identified$fits),sum(identified$verified_passed),sum(families$fits[families$family=="feedback_ridge"]),sum(families$legacy_losses)))
+  cat("The study exposed and fixed a unit-sensitive rank check in the continuous dense-weight producers: rank is now checked after moment-unit equilibration and the inverse is transported back. This changes the arithmetic used to construct ADF/DLS weights, with no ridge or pseudoinverse. The opt-in audit now supports identity, diagonal, dense-factor and structured normal-theory weights, including complete mean blocks. This banks a shared numerical mechanism, not a search recipe or ordinary default decision.\n\n## Evidence\n\n### Independent verification\n\n")
+  labels <- c(weight_recipe="Weight recipes",producer_returned="Producer returns",bounds_covers="Construction bounds",
+    curvature_lower_covers="Positive-curvature lower bounds",interval_covers="Distance intervals",objective_agrees="Original objectives",
+    wrong_decision="Incorrect distance decisions",saddle_rank_rejected="Stationary saddle/rank controls",budget_controls="Budget boundary controls")
+  cat(knitr::kable(data.frame(Check=unname(labels[gates$check]),Tested=gates$tested,Failures=gates$failed),row.names=FALSE),sep="\n")
+  cat("\n\nWeights are checked against independent empirical centered-moment covariance and normal-theory formulas. DWLS uses the inverse empirical diagonal; ADF inverts the full empirical matrix. DLS inverts the mixture of Gamma matrices, with a = 0, 0.4 and 1. Mean blocks include empirical third-moment cross-covariances. These recipe comparisons have a numerical tolerance; their errors are not propagated into the fitting certificate. The audit distance retains its normal-theory gradient-variance metric; the skewed-data checks establish arithmetic, not robust sampling calibration.\n\nThe fitting reference instead conditions on the exact retained representation: nominal binary64 diagonal weights, the exact product of the retained dense factor, or the normal-theory operator defined by its retained root. It reconstructs LISREL moments, first and second derivatives, equality and sphere maps, observed curvature, and the sampling-gradient factor independently. Lower-vech residuals mirror the sample lower triangle. Component tests also exercise native diagonal arithmetic, zero-weight rank loss, negative diagonal rejection and nonlinear mean coordinates.\n\n### Fresh fitting confirmation\n\nTwo new datasets per family use skewed latent scores and N = 120; the second group has N = 180. The regular and mean families cover all weights; ties, identified feedback, groups and mixed units use GLS, DWLS and DLS. The deliberately redundant feedback model is a separate rejection control. All marker fits use advertised complete-data APIs with automatic weight construction; sphere checks use supplied fixed weights for a small subset.\n\n")
+  shown <- data.frame(Family=families$family,Chart=families$chart,Fits=families$fits,
+    Qualified=families$verified_passed,Failed=families$failed,Unchecked=families$unchecked,
+    `Legacy losses`=families$legacy_losses,check.names=FALSE)
+  cat(knitr::kable(shown,row.names=FALSE),sep="\n")
+  value <- function(k)metadata$value[metadata$key==k]
+  cat(sprintf("\n\nThe R generation/fitting/audit/export phase took %.1f seconds and the serial 90-digit reference phase %.1f seconds on this workstation. The times include binding and artifact costs and are not a standalone optimizer benchmark. The complete failed/unchecked endpoint inventory is retained in `failures.csv`.\n\n",
+    as.numeric(value("elapsed_s")),reference$elapsed_s[1]))
+  cat("## Caveats\n\nThis is a bounded numerical check with actual default starts, PORT-NLS stock controls and sample-unit coordinates. It is not the full no-options fitter, a population reliability estimate, a comparison of starts, or a claim of best-basin recovery. The signed two-factor ULS recipe is not used. Positive local curvature and a small distance do not establish statistical identification or global optimality.\n\nThe supported enclosure conditions on binary64 model, sample, weight and map inputs. Producer recipe checks are separate from propagation of first-stage numerical error. Complete mean blocks and unequal groups are covered; partial mean blocks, ordinal/mixed threshold maps, ML2S handoffs, FIML patterns, PSD faces, boxes and barriers need their own integration or supported bounds. ML remains covariance-only in this interval producer. Supplied singular weights and deficient metrics authorize no pass. Ordinary acceptance defaults are unchanged.\n\n## Reproduce\n\nUse the matching worktree magmaanlab build and Python with mpmath 1.3.0. Choose fresh run IDs; raw samples, matrices and fitted objects remain ignored. Frozen comparison, recipe, failure and summary CSVs preserve the judgments and provenance.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --weighted-audit --smoke --run-id weighted-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --weighted-audit --run-id weighted-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:weighted_audit -P weighted_run:weighted-confirm-new\n```\n\nReopen for a missed enclosure, producer/unit mismatch, unexplained acceptance, or a new moment/domain representation. Ordinal and ML2S can now reuse this mechanism after their own map, producer and handoff checks. Previous lanes, including `uls_search`, remain selectable.\n\n")
+  knitr::knit_exit()
+} else if (identical(params$lane, "uls_search")) {
   read_search <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))
     if (!file.exists(path)) stop("Missing search evidence: ",path,

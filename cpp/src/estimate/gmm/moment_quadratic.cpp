@@ -24,6 +24,7 @@
 #include "detail_second_order.hpp"
 #include "detail_linalg.hpp"
 #include "detail_vech.hpp"
+#include "detail_weight_inverse.hpp"
 
 namespace magmaan::estimate::gmm {
 
@@ -870,7 +871,7 @@ fixed_moment_weight(const model::ModelEvaluator& ev, const data::SampleStats& sa
         return std::unexpected(make_err(FitError::Kind::NumericIssue, "fixed_moment_weight: non-positive Gamma diagonal"));
       out.push_back(BlockWeight::diagonal(gamma->diagonal().cwiseInverse()));
     } else if (kind == FixedWeightKind::Wls) {
-      auto inverse = detail::symmetric_inverse_pd_gated(*gamma);
+      auto inverse = equilibrated_weight_inverse(*gamma);
       if (!inverse.ok) return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "fixed_moment_weight: observed Gamma is rank deficient"));
       auto weight = BlockWeight::dense(inverse.inverse, FitError::Kind::NumericIssue, who);

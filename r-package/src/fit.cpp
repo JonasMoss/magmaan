@@ -1162,6 +1162,23 @@ Rcpp::List geometric_stationarity_to_r(
           d.cone_projection_iterations);
 }
 
+SEXP retained_ls_weights_to_r(const magmaan::estimate::frontier::NewtonDerivatives& d) {
+  if(!d.ls_weight) return R_NilValue;
+  Rcpp::List out(d.ls_weight->size());
+  using Kind=magmaan::estimate::gmm::BlockWeight::Kind;
+  for(std::size_t k=0;k<d.ls_weight->size();++k) {
+    const auto& w=(*d.ls_weight)[k];
+    const char* kind=w.kind()==Kind::Identity ? "identity" :
+        w.kind()==Kind::Diagonal ? "diagonal" : w.kind()==Kind::Dense ? "dense_factor" : "normal_theory_root";
+    out[k]=Rcpp::List::create(Rcpp::_["kind"]=kind,
+        Rcpp::_["diagonal"]=Rcpp::wrap(w.diagonal_values()),
+        Rcpp::_["factor"]=Rcpp::wrap(w.dense_factor()),
+        Rcpp::_["root"]=Rcpp::wrap(w.normal_theory_root()),
+        Rcpp::_["has_means"]=w.has_means());
+  }
+  return out;
+}
+
 Rcpp::List newton_accuracy_to_r(
     const magmaan::estimate::NewtonAccuracyDiagnostics& a) {
   auto num = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
@@ -2859,6 +2876,7 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
   native_audit["compatibility_assessment"]=verified_assessment_to_r(
       magmaan::estimate::frontier::assess_convergence(a,legacy_policy));
   native_audit["n_obs"] = computations.derivatives.n_obs;
+  native_audit["retained_ls_weights"] = retained_ls_weights_to_r(computations.derivatives);
   auto system = [](const magmaan::estimate::frontier::NewtonSystem& s) {
     return Rcpp::List::create(
         Rcpp::_["status"] = std::string(magmaan::estimate::to_string(s.status)),
@@ -3264,7 +3282,10 @@ Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats,
   if (!weight) stop_fit(weight.error());
   std::vector<Eigen::MatrixXd> blocks;
   for (const auto& block : *weight) blocks.push_back(block.to_dense());
-  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks));
+  magmaan::estimate::frontier::NewtonDerivatives retained;
+  retained.ls_weight=std::move(*weight);
+  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks),
+      Rcpp::_["retained_ls_weights"]=retained_ls_weights_to_r(retained));
 }
 
 // Select fitting weights while retaining ordinal moments and sampling Gamma.
@@ -6148,6 +6169,7 @@ Rcpp::List evaluate_at_impl(
         Rcpp::_["curvature_scale"] = Rcpp::wrap(a.system.scale),
         Rcpp::_["detail"] = a.derivatives.detail);
     Rcpp::List artifacts(out["newton_audit"]);
+    artifacts["retained_ls_weights"] = retained_ls_weights_to_r(a.derivatives);
     artifacts["derivative_basis"] = Rcpp::wrap(
         (a.geometry.equality_basis * a.geometry.tangent_basis).eval());
     auto interval_to_r = [](const magmaan::estimate::frontier::NewtonDistanceInterval& x) {

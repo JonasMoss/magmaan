@@ -1109,8 +1109,10 @@ ambient single-level ULS and complete-data ML. The model, sample, point, free
 parameter order and audit must match. Feasibility and statistical identification
 remain separate checks. Retained equality/tangent bases and coordinate maps
 define the numerical coordinates being bounded; no exact-nullspace claim is
-inferred from their rounded entries. Means, other LS weights, PSD faces and barriers are unsupported. Native sphere
-normalization is covered by the subsequent extension below.
+inferred from their rounded entries. This initial covariance-only scope was
+extended to fixed-weight LS and complete mean blocks below; PSD faces and
+barriers remain unsupported. Native sphere normalization is covered by the
+subsequent extension below.
 
 Primitive Lambda, Psi, Theta and Beta cells come from the owning evaluator's
 direct binary64 write contract, including fixed structural cells and later
@@ -1234,3 +1236,66 @@ ULS endpoints are inaccurate at .697/.514. No perturbation passes. This is
 numerical confirmation on sampled controls, not a default adoption or
 population-reliability study. It preserves the remaining start/search and
 audit-conservatism questions separately.
+
+## Retained fixed-weight LS and means (2026-10-05)
+
+The isolated sphere-study implementation extends `newton_input_error_bounds`
+to single-level, unboxed ambient fixed-weight moment LS. Estimator labels ULS,
+GLS and WLS dispatch the shared family; the retained `ls_weight`, not the label,
+defines the conditional target. An absent weight is unsupported; a present empty
+weight is implicit identity. Blocks support identity, a nonnegative nominal
+binary64 diagonal, the exact product F F' of the retained binary64 dense factor,
+or the normal-theory operator defined by the retained lower root. Dense/NT
+representations do not retain their original producer matrix. A certificate
+conditional on that representation cannot establish exact inversion of Gamma
+or propagate numerical error from the producer.
+
+Complete sample mean blocks add Nu and Alpha cell writes. With A = (I-Beta)^-1
+and M = Lambda A, the interval evaluator constructs mu = Nu + M Alpha,
+its first derivative dNu + dM Alpha + M dAlpha, and its second derivative
+d2M Alpha + dM_i dAlpha_j + dM_j dAlpha_i. Moment order is
+[mean; lower-vech covariance]. The observed correction sums each weighted
+residual times that moment's second derivative, including nonzero mean terms.
+The Gauss-Newton term is formed after the full equality/sphere/QR coordinate
+map. The sphere normalization correction uses the full weighted total gradient.
+
+The gradient-variance factor still uses normal-theory Gamma constructed from
+the sample covariance: the mean factor is L', and covariance columns are the
+symmetric tensor products of L rows divided by sqrt(2). The score residual is
+sqrt(N) L^-1(mu-m) followed by sqrt(N/2) vec(L^-1 R L^-T), where R mirrors the
+lower-vech residual. These factors define the existing audit's distance metric;
+they do not claim robust sampling calibration for nonnormal data. Interval
+sample roots use that same lower triangle, including any binary64 asymmetry.
+Means must be present in every supplied block; mismatched moment layouts,
+negative diagonal weights, deficient metrics and unresolved sample positivity
+authorize no verified pass. ML remains covariance-only. Boxes, PSD faces,
+ordinal/mixed maps, FIML and ML2S composition require their own supported path.
+
+Continuous WLS/ADF and DLS Gamma inverses now use the existing diagonal
+equilibration before the positive-definiteness/rank gate, then transport the
+inverse to original moment units. Diagnostics describe the scaled gate. This
+retains the 1e-10 eigenvalue-floor policy in dimensionless coordinates without
+changing Gamma, adding a ridge or allowing a pseudoinverse. Regression tests
+verify unit transport with/without means and retain deficient-ADF rejection.
+
+Experiment 15's `weighted_audit` lane separately reconstructs empirical Gamma
+from complete centered observations, normal-theory Gamma, DWLS diagonals and
+DLS mixtures at a = 0, 0.4 and 1. Its producer criterion is relative error below
+1e-9 after congruence by moment units; dense/root reconstruction uses 1e-12.
+This is recipe validation, not a propagated producer-error certificate.
+The fresh confirmation uses two datasets in each of seven families, including
+ties, nonlinear identified feedback, unequal groups and mixed units. The
+advertised complete-data fitting APIs construct named weights automatically;
+custom diagonal/dense inputs and a small supplied-weight sphere subset complete
+the mechanism checks. All 64 producer blocks agree (maximum relative recipe
+error 2.82e-14), all 136 available construction bounds/intervals cover independent
+90-digit derivatives, all 150 original objectives agree, and every decisive
+classification is correct (74 within budget, 62 above, 14 unresolved).
+Two stationary saddle/rank controls reject and four points bracket .01 correctly.
+All 72 cold fits on identified models pass; six intentionally redundant
+feedback fits give four failures and two unchecked assessments. There are no
+legacy losses. Raw matrices/data/fits and failed development pilots remain local;
+compact judgments, all endpoint failures and provenance are frozen.
+The 572-test optimized estimation suite passes. Ordinary acceptance defaults,
+statistical identification, robust inference and best-basin recovery remain
+separate decisions.

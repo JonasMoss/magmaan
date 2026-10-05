@@ -10,6 +10,7 @@
 #include <Eigen/QR>
 
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/estimate/fit.hpp"  // Estimates
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -87,6 +88,11 @@ struct NewtonDerivatives {
   // H = N J'J + this analytic observed correction (TOTAL scale).
   // Empty unless independently supplied by the owning LS adapter.
   Eigen::MatrixXd ls_curvature_correction;
+  // Exact retained fitting-weight representation for analytic moment LS.
+  // Present and empty means identity; absent means the owning weight is
+  // unknown and cannot authorize construction-aware verification.
+  std::optional<gmm::Weight> ls_weight;
+
   // Coordinates absent from the objective, explicitly held fixed by its
   // adapter (CatML's Stage-1 thresholds). Never inferred from Hessian rank.
   std::vector<Eigen::Index> fixed_coordinates;
@@ -284,13 +290,15 @@ struct NewtonSphereMap {
   std::vector<NewtonSphereUnit> spheres;
 };
 
-// Independent outward interval evaluation of covariance-only linear SEM
-// moments/derivatives and sample roots at the exact supplied binary64 point.
-// ULS or complete-data ML only; ambient, unboxed geometry, matching audit.
+// Independent outward interval evaluation of linear SEM moments/derivatives,
+// retained fitting weights and sample roots at the exact binary64 inputs.
+// Fixed-weight moment LS (including complete mean blocks) or covariance-only
+// ML; ambient, unboxed geometry, matching analytic audit. LS retains its exact
+// weight representation; labels dispatch a family, not a producer recipe.
 // With a sphere map, theta is the retained driven point; normalization, its
 // Jacobian and full second-derivative chain are independently enclosed.
 // Values are in the interval primitives' retained coordinates. Unsupported
-// means/weights/faces remain explicit; no dimensional allowance is substituted.
+// moment layouts/faces remain explicit; no dimensional allowance is substituted.
 NewtonInputErrorBounds newton_input_error_bounds(
     const spec::LatentStructure& pt, const model::MatrixRep& rep,
     const SampleStats& sample, const Eigen::VectorXd& theta,

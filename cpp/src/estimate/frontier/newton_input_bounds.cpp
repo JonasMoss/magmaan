@@ -19,20 +19,23 @@ Eigen::Index vech_index(Eigen::Index p,Eigen::Index i,Eigen::Index j) {
   return j*p-j*(j-1)/2+i-j;
 }
 struct MomentIntervals {
-  IntervalMatrix lambda, psi, covariance, A, M;
-  std::vector<IntervalMatrix> d_lambda, d_psi, d_theta, d_beta, d_A, d_M, d_sigma;
+  IntervalMatrix lambda, psi, covariance, A, M, alpha, mu;
+  std::vector<IntervalMatrix> d_lambda, d_psi, d_theta, d_beta, d_A, d_M, d_sigma, d_mu, d_alpha, d_nu;
 };
 std::optional<MomentIntervals> moments(
     const spec::LatentStructure& pt,const model::MatrixRep& rep,
     const model::BlockMatrices& block,std::size_t b,Eigen::Index q,
-    const IntervalMatrix& point) {
+    const IntervalMatrix& point,bool has_means) {
   MomentIntervals out;
   out.lambda=IntervalMatrix(block.Lambda); out.psi=IntervalMatrix(block.Psi);
-  IntervalMatrix theta(block.Theta), beta(block.Beta);
+  IntervalMatrix theta(block.Theta), beta(block.Beta),nu(block.Nu);
+  out.alpha=IntervalMatrix(block.Alpha);
   const Eigen::Index p=block.Theta.rows(), m=block.Beta.rows();
+  if(has_means && (block.Nu.size()!=p || block.Alpha.size()!=m)) return std::nullopt;
   for(Eigen::Index k=0;k<q;++k) {
     out.d_lambda.emplace_back(p,m); out.d_psi.emplace_back(m,m);
     out.d_theta.emplace_back(p,p); out.d_beta.emplace_back(m,m);
+    out.d_alpha.emplace_back(m,1); out.d_nu.emplace_back(p,1);
   }
   // Mirror ModelEvaluator's direct cell-write contract. Sharing and repeated
   // writes are handled in row order, including a later fixed-cell overwrite.
@@ -40,17 +43,23 @@ std::optional<MomentIntervals> moments(
     const auto cell=rep.cell_for_row[row];
     if(!cell.used || static_cast<std::size_t>(cell.block)!=b) continue;
     if(cell.mat==MatId::Nu || cell.mat==MatId::Alpha) {
-      if(pt.free[row]>0) return std::nullopt;
-      continue;
+      if(!has_means) {
+        if(pt.free[row]>0) return std::nullopt;
+        continue;
+      }
     }
     auto* derivatives=&out.d_lambda;
     if(cell.mat==MatId::Psi) derivatives=&out.d_psi;
     else if(cell.mat==MatId::Theta) derivatives=&out.d_theta;
     else if(cell.mat==MatId::Beta) derivatives=&out.d_beta;
+    else if(cell.mat==MatId::Alpha) derivatives=&out.d_alpha;
+    else if(cell.mat==MatId::Nu) derivatives=&out.d_nu;
     auto* primitive=&out.lambda;
     if(cell.mat==MatId::Psi) primitive=&out.psi;
     else if(cell.mat==MatId::Theta) primitive=&theta;
     else if(cell.mat==MatId::Beta) primitive=&beta;
+    else if(cell.mat==MatId::Alpha) primitive=&out.alpha;
+    else if(cell.mat==MatId::Nu) primitive=&nu;
     if(pt.free[row]>0) {
       (*primitive)(cell.row,cell.col)=point(pt.free[row]-1,0);
       if((cell.mat==MatId::Psi || cell.mat==MatId::Theta) && cell.row!=cell.col)
@@ -61,7 +70,9 @@ std::optional<MomentIntervals> moments(
       if(cell.mat==MatId::Psi) fixed=&block.Psi;
       else if(cell.mat==MatId::Theta) fixed=&block.Theta;
       else if(cell.mat==MatId::Beta) fixed=&block.Beta;
-      (*primitive)(cell.row,cell.col)=Interval(static_cast<Wide>((*fixed)(cell.row,cell.col)));
+      const double value=cell.mat==MatId::Alpha ? block.Alpha[cell.row] :
+          cell.mat==MatId::Nu ? block.Nu[cell.row] : (*fixed)(cell.row,cell.col);
+      (*primitive)(cell.row,cell.col)=Interval(static_cast<Wide>(value));
       if((cell.mat==MatId::Psi || cell.mat==MatId::Theta) && cell.row!=cell.col)
         (*primitive)(cell.col,cell.row)=(*primitive)(cell.row,cell.col);
     }
@@ -76,11 +87,13 @@ std::optional<MomentIntervals> moments(
   if(!inverse) return std::nullopt;
   out.A=std::move(*inverse); out.M=out.lambda*out.A;
   out.covariance=out.M*out.psi*out.M.transpose()+theta;
+  if(has_means) out.mu=nu+out.M*out.alpha;
   for(Eigen::Index k=0;k<q;++k) {
     const auto idx=static_cast<std::size_t>(k);
     out.d_A.push_back(out.A*out.d_beta[idx]*out.A);
     out.d_M.push_back(out.d_lambda[idx]*out.A+out.lambda*out.d_A.back());
     const auto& dm=out.d_M.back();
+    if(has_means) out.d_mu.push_back(out.d_nu[idx]+dm*out.alpha+out.M*out.d_alpha[idx]);
     out.d_sigma.push_back(dm*out.psi*out.M.transpose()+
         out.M*out.d_psi[idx]*out.M.transpose()+out.M*out.psi*dm.transpose()+out.d_theta[idx]);
   }
@@ -94,6 +107,48 @@ IntervalMatrix second_covariance(const MomentIntervals& x,std::size_t i,std::siz
       x.d_M[i]*x.psi*x.d_M[j].transpose()+x.d_M[j]*x.psi*x.d_M[i].transpose()+
       x.d_M[i]*x.d_psi[j]*mt+x.M*x.d_psi[j]*x.d_M[i].transpose()+
       x.d_M[j]*x.d_psi[i]*mt+x.M*x.d_psi[i]*x.d_M[j].transpose();
+}
+IntervalMatrix second_mean(const MomentIntervals& x,std::size_t i,std::size_t j) {
+  const auto d2a=x.d_A[j]*x.d_beta[i]*x.A+x.A*x.d_beta[i]*x.d_A[j];
+  const auto d2m=x.d_lambda[i]*x.d_A[j]+x.d_lambda[j]*x.d_A[i]+x.lambda*d2a;
+  return d2m*x.alpha+x.d_M[i]*x.d_alpha[j]+x.d_M[j]*x.d_alpha[i];
+}
+// Enclose the intended operator of its retained representation. Dense and NT
+// producer inputs are not recoverable from that representation; their recipe
+// validation must remain separate from this conditional arithmetic bound.
+std::optional<IntervalMatrix> weight_matrix(const gmm::BlockWeight& weight,Eigen::Index p,bool means) {
+  const Eigen::Index off=means ? p : 0,n=off+p*(p+1)/2;
+  if(!weight.valid(n)) return std::nullopt;
+  using Kind=gmm::BlockWeight::Kind;
+  if(weight.kind()==Kind::Identity) return detail::identity(n);
+  if(weight.kind()==Kind::Diagonal) {
+    if(weight.diagonal_values().size()!=n || !weight.diagonal_values().allFinite() ||
+        (weight.diagonal_values().array()<0).any()) return std::nullopt;
+    IntervalMatrix out(n,n);
+    for(Eigen::Index i=0;i<n;++i) out(i,i)=Interval(static_cast<Wide>(weight.diagonal_values()[i]));
+    return out;
+  }
+  if(weight.kind()==Kind::Dense) {
+    const IntervalMatrix F(weight.dense_factor());
+    return F*F.transpose();
+  }
+  if(weight.has_means()!=means || weight.normal_theory_root().rows()!=p) return std::nullopt;
+  auto inverse=detail::lower_inverse(IntervalMatrix(weight.normal_theory_root()));
+  if(!inverse) return std::nullopt;
+  const auto A=inverse->transpose()*(*inverse);
+  IntervalMatrix out(n,n);
+  if(means) for(Eigen::Index i=0;i<p;++i) for(Eigen::Index j=0;j<p;++j) out(i,j)=A(i,j);
+  for(Eigen::Index c1=0;c1<p;++c1) for(Eigen::Index r1=c1;r1<p;++r1)
+    for(Eigen::Index c2=0;c2<p;++c2) for(Eigen::Index r2=c2;r2<p;++r2) {
+      // Symmetric lower-vech basis: off-diagonal elements occur twice.
+      const std::pair<Eigen::Index,Eigen::Index> first[]={{r1,c1},{c1,r1}};
+      const std::pair<Eigen::Index,Eigen::Index> second[]={{r2,c2},{c2,r2}};
+      Interval value;
+      for(int i=0;i<(r1==c1 ? 1 : 2);++i) for(int j=0;j<(r2==c2 ? 1 : 2);++j)
+        value=value+A(first[i].second,second[j].first)*A(second[j].second,first[i].first);
+      out(off+vech_index(p,r1,c1),off+vech_index(p,r2,c2))=Interval(Wide(.5))*value;
+    }
+  return out;
 }
 IntervalMatrix sample_matrix(const Eigen::MatrixXd& S) {
   IntervalMatrix out(S);
@@ -176,13 +231,21 @@ NewtonInputErrorBounds newton_input_error_bounds(
     const SampleStats& sample,const Eigen::VectorXd& theta,
     const NewtonAudit& audit,Estimator estimator,const NewtonSphereMap* sphere_map) {
   NewtonInputErrorBounds out;
-  const bool uls=estimator==Estimator::ULS;
+  const bool uls=estimator==Estimator::ULS || estimator==Estimator::GLS || estimator==Estimator::WLS;
+  const bool has_means=!sample.mean.empty();
   if((!uls && estimator!=Estimator::ML) ||
       audit.derivatives.objective_kind!=(uls ? NewtonObjectiveKind::LeastSquares : NewtonObjectiveKind::CompleteDataMl) ||
       audit.derivatives.curvature_kind!=NewtonCurvatureKind::AnalyticObserved || audit.box.applied ||
       audit.geometry.domain!=StationarityDomain::Ambient ||
-      !sample.mean.empty() || pt.n_levels()!=1) {
-    out.detail="interval input bounds support unboxed ambient covariance-only ULS/ML"; return out;
+      (!uls && has_means) || pt.n_levels()!=1) {
+    out.detail="interval input bounds support unboxed ambient fixed-weight moment LS and covariance-only ML"; return out;
+  }
+  if(uls && (!audit.derivatives.ls_weight ||
+      (!audit.derivatives.ls_weight->empty() && audit.derivatives.ls_weight->size()!=sample.S.size()))) {
+    out.detail="retained analytic LS fitting weights required"; return out;
+  }
+  if(has_means && sample.mean.size()!=sample.S.size()) {
+    out.detail="all mean blocks must be supplied"; return out;
   }
   if((!sphere_map && theta.size()!=pt.n_free()) ||
       (sphere_map && (sphere_map->offset.size()!=pt.n_free() || sphere_map->rounded_point.size()!=pt.n_free())) ||
@@ -216,7 +279,10 @@ NewtonInputErrorBounds newton_input_error_bounds(
   const IntervalMatrix full_map=uls ? basis*IntervalMatrix(audit.system.coordinate_map) : basis;
   IntervalMatrix transformed_gn(full_map.cols,full_map.cols);
   Eigen::Index total_rows=0;
-  for(const auto& S:sample.S) total_rows+=S.rows()*S.rows();
+  for(const auto& S:sample.S) total_rows+=S.rows()*S.rows()+(has_means ? S.rows() : 0);
+  if(uls && audit.derivatives.metric_score_residual.size()!=total_rows) {
+    out.status=NewtonAccuracyStatus::Unavailable; out.detail="matching moment layout required"; return out;
+  }
   IntervalMatrix target_factor(total_rows,q),target_residual(total_rows,1);
   Eigen::Index offset=0;
   for(std::size_t b=0;b<sample.S.size();++b) {
@@ -224,39 +290,62 @@ NewtonInputErrorBounds newton_input_error_bounds(
     if(S.rows()!=rep.dims[b].n_observed || S.cols()!=S.rows() || !S.allFinite() || sample.n_obs[b]<=0) {
       out.status=NewtonAccuracyStatus::Unavailable; out.detail="invalid sample block"; return out;
     }
-    auto x=moments(pt,rep,assembled->blocks[b],b,q,target_point);
+    auto x=moments(pt,rep,assembled->blocks[b],b,q,target_point,has_means);
     if(!x) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="model inverse or moment enclosure unresolved"; return out;}
     const Interval N(detail::below(static_cast<Wide>(sample.n_obs[b])),detail::above(static_cast<Wide>(sample.n_obs[b])));
-    const Eigen::Index p=S.rows(); const auto s=uls ? sample_matrix(S) : IntervalMatrix(S);
-    IntervalMatrix J(p*(p+1)/2,q),residual(p*(p+1)/2,1);
+    const Eigen::Index p=S.rows(),mean_rows=has_means ? p : 0; const auto s=uls ? sample_matrix(S) : IntervalMatrix(S);
+    IntervalMatrix J(mean_rows+p*(p+1)/2,q),residual(mean_rows+p*(p+1)/2,1);
+    if(has_means) {
+      if(sample.mean[b].size()!=p || !sample.mean[b].allFinite()) {
+        out.status=NewtonAccuracyStatus::Unavailable; out.detail="invalid sample mean block"; return out;
+      }
+      for(Eigen::Index i=0;i<p;++i) {
+        residual(i,0)=x->mu(i,0)-Interval(static_cast<Wide>(sample.mean[b][i]));
+        for(Eigen::Index k=0;k<q;++k) J(i,k)=x->d_mu[static_cast<std::size_t>(k)](i,0);
+      }
+    }
     for(Eigen::Index j=0;j<p;++j) for(Eigen::Index i=j;i<p;++i) {
-      const Eigen::Index row=vech_index(p,i,j); residual(row,0)=x->covariance(i,j)-s(i,j);
+      const Eigen::Index row=mean_rows+vech_index(p,i,j); residual(row,0)=x->covariance(i,j)-s(i,j);
       for(Eigen::Index k=0;k<q;++k) J(row,k)=x->d_sigma[static_cast<std::size_t>(k)](i,j);
     }
     IntervalMatrix score_matrix, W, K;
     if(uls) {
-      total_g=total_g+N*(J.transpose()*residual);
+      const auto& weights=*audit.derivatives.ls_weight;
+      auto enclosed=weights.empty() ? std::optional<IntervalMatrix>(detail::identity(J.rows)) :
+          weight_matrix(weights[b],p,has_means);
+      if(!enclosed) {out.status=NewtonAccuracyStatus::Unavailable; out.detail="invalid retained LS weight representation"; return out;}
+      W=std::move(*enclosed);
+      total_g=total_g+N*(J.transpose()*W*residual);
       auto L=detail::cholesky(s);
       if(!L) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="sample positive definiteness unresolved"; return out;}
       auto inverse=detail::lower_inverse(*L);
       if(!inverse) {out.status=NewtonAccuracyStatus::IllConditioned; out.detail="sample root inverse unresolved"; return out;}
       const Interval root_n=detail::square_root(N),root_two=detail::square_root(Interval(2));
-      IntervalMatrix F(p*p,J.rows);
+      IntervalMatrix F(mean_rows+p*p,J.rows);
+      if(has_means) for(Eigen::Index i=0;i<p;++i) for(Eigen::Index j=0;j<p;++j) F(i,j)=(*L)(j,i);
       for(Eigen::Index j=0;j<p;++j) for(Eigen::Index i=j;i<p;++i)
         for(Eigen::Index col=0;col<p;++col) for(Eigen::Index row=0;row<p;++row)
-          F(row+p*col,vech_index(p,i,j))=((*L)(i,row)*(*L)(j,col)+(*L)(j,row)*(*L)(i,col))/root_two;
-      const auto factor=root_n*(F*J);
+          F(mean_rows+row+p*col,mean_rows+vech_index(p,i,j))=((*L)(i,row)*(*L)(j,col)+(*L)(j,row)*(*L)(i,col))/root_two;
+      const auto factor=root_n*(F*W*J);
+      if(has_means) {
+        IntervalMatrix delta(p,1);
+        for(Eigen::Index i=0;i<p;++i) delta(i,0)=residual(i,0);
+        const auto white_mean=root_n*((*inverse)*delta);
+        for(Eigen::Index i=0;i<p;++i) target_residual(offset+i,0)=white_mean(i,0);
+      }
+      for(Eigen::Index i=0;i<mean_rows;++i) for(Eigen::Index k=0;k<q;++k)
+        target_factor(offset+i,k)=factor(i,k);
       IntervalMatrix R=x->covariance-s;
       for(Eigen::Index j=0;j<p;++j) for(Eigen::Index i=0;i<j;++i) R(i,j)=R(j,i);
       const auto white=(root_n/root_two)*((*inverse)*R*inverse->transpose());
       for(Eigen::Index col=0;col<p;++col) for(Eigen::Index row=0;row<p;++row) {
-        const Eigen::Index pos=offset+row+p*col; target_residual(pos,0)=white(row,col);
-        for(Eigen::Index k=0;k<q;++k) target_factor(pos,k)=factor(row+p*col,k);
+        const Eigen::Index pos=offset+mean_rows+row+p*col; target_residual(pos,0)=white(row,col);
+        for(Eigen::Index k=0;k<q;++k) target_factor(pos,k)=factor(mean_rows+row+p*col,k);
       }
       // Form the Gauss-Newton contribution after the full coordinate map,
       // never transport an already cancelled cross-product Hessian.
       const auto mapped=J*full_map;
-      transformed_gn=transformed_gn+N*(mapped.transpose()*mapped);
+      transformed_gn=transformed_gn+N*(mapped.transpose()*W*mapped);
     } else {
       if(!detail::cholesky(x->covariance)) {
         out.status=NewtonAccuracyStatus::IllConditioned; out.detail="implied covariance positive definiteness unresolved"; return out;
@@ -266,12 +355,17 @@ NewtonInputErrorBounds newton_input_error_bounds(
       W=std::move(*inverse); K=W*s*W; score_matrix=Interval(Wide(.5))*(W-K);
       for(Eigen::Index i=0;i<q;++i) total_g(i,0)=total_g(i,0)+N*detail::trace_product(score_matrix,x->d_sigma[static_cast<std::size_t>(i)]);
     }
+    const auto weighted_residual=uls ? W*residual : IntervalMatrix();
     for(Eigen::Index j=0;j<q;++j) for(Eigen::Index i=0;i<=j;++i) {
       const auto second=second_covariance(*x,static_cast<std::size_t>(i),static_cast<std::size_t>(j));
       Interval value;
       if(uls) {
         for(Eigen::Index col=0;col<p;++col) for(Eigen::Index row=col;row<p;++row)
-          value=value+residual(vech_index(p,row,col),0)*second(row,col);
+          value=value+weighted_residual(mean_rows+vech_index(p,row,col),0)*second(row,col);
+        if(has_means) {
+          const auto mu2=second_mean(*x,static_cast<std::size_t>(i),static_cast<std::size_t>(j));
+          for(Eigen::Index row=0;row<p;++row) value=value+weighted_residual(row,0)*mu2(row,0);
+        }
         total_correction(i,j)=total_correction(i,j)+N*value;
         total_correction(j,i)=total_correction(i,j);
       } else {
@@ -281,7 +375,7 @@ NewtonInputErrorBounds newton_input_error_bounds(
         total_h(i,j)=total_h(i,j)+N*value; total_h(j,i)=total_h(i,j);
       }
     }
-    offset+=p*p;
+    offset+=mean_rows+p*p;
   }
   if(uls) {
     const auto scaled=target_factor*basis*diagonal(audit.metric_factor_system.scale);
@@ -308,7 +402,7 @@ NewtonInputErrorBounds newton_input_error_bounds(
   }
   out.curvature_lower_bound=newton_curvature_lower_bound(audit.system,out.curvature);
   out.status=NewtonAccuracyStatus::Available;
-  out.detail="outward long-double interval SEM moments/derivatives and sample roots at binary64 inputs";
+  out.detail="outward long-double interval SEM moments/derivatives, retained fitting weights and sample roots at binary64 inputs";
   return out;
 }
 NewtonDistanceInterval newton_input_distance_interval(

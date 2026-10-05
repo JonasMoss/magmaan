@@ -1,0 +1,10 @@
+check,tested,failed
+weight_recipe,64,0
+producer_returned,64,0
+bounds_covers,136,0
+curvature_lower_covers,136,0
+interval_covers,136,0
+objective_agrees,150,0
+wrong_decision,150,0
+saddle_rank_rejected,2,0
+budget_controls,4,0

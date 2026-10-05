@@ -1,0 +1,7 @@
+"case_id","family","method","chart","returned","legacy_passed","selected_passed","source_status","reference_positive","reference_distance","loss","message"
+9,"feedback_ridge","DLS40","marker",TRUE,FALSE,FALSE,"nonpositive_curvature","False",,FALSE,""
+9,"feedback_ridge","DWLS","marker",TRUE,FALSE,,"ill_conditioned","False",,FALSE,""
+9,"feedback_ridge","GLS","marker",TRUE,FALSE,FALSE,"nonpositive_curvature","False",,FALSE,""
+10,"feedback_ridge","DLS40","marker",TRUE,FALSE,,"ill_conditioned","True",1.42238756167235e-06,FALSE,""
+10,"feedback_ridge","DWLS","marker",TRUE,FALSE,FALSE,"nonpositive_curvature","False",,FALSE,""
+10,"feedback_ridge","GLS","marker",TRUE,FALSE,FALSE,"nonpositive_curvature","False",,FALSE,""

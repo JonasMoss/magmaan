@@ -853,6 +853,25 @@ two are above budget. Default adoption, start/search reliability, means/other
 weights and constraints remain separate. No statistical regularization or
 acceptance default follows.
 
+The fixed-weight extension (2026-10-05, isolated sphere-study branch) retains
+the actual LS weight representation and supplies construction bounds for
+identity, diagonal, dense-factor and structured NT weights, including complete
+mean blocks, unequal groups, linear equalities and native sphere maps. The
+explicit R point/sphere audit exports that representation; the complete-data
+weight builder also exports its retained representation for separate recipe
+checks. Bounds condition on the retained binary64 weight, not on an exact
+inverse of its original producer inputs. Ordinal maps and ML2S handoffs remain
+separate integrations. Continuous ADF/DLS producers now gate their Gamma after
+moment-unit equilibration and transport the inverse back, retaining rejection
+of deficient Gamma without a ridge. On 14 fresh sampled controls (78 cold fits,
+150 audited points), all 136 available construction bounds and distance
+intervals cover 90-digit references; all 64 producer checks agree. All 72 fits
+on identified controls qualify, while six deliberately redundant feedback fits
+give four failures and two unchecked assessments. No legacy pass is lost.
+The full optimized estimation suite passes 572 tests. This banks the shared
+weighted-LS numerical mechanism; it changes no acceptance/start/optimizer
+default and makes no inference-calibration or basin-recovery claim.
+
 The subsequent ULS search lane holds PORT-NLS and sample-unit scaling fixed,
 comparing actual API starts to a default-plus-four-signed portfolio. Ten fresh
 draws per family give 10/10 regular, weak-marker and mixed-unit sphere

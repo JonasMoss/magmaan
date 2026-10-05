@@ -163,6 +163,16 @@ class BlockWeight {
   Eigen::Index cols() const { return dim_; }
   bool is_identity() const { return kind_ == Kind::Identity; }
 
+  // Retained binary64 representation used by the operator. These accessors
+  // support independent arithmetic audits, not reconstruction of the original
+  // matrix/recipe passed to a producer. Dense targets F F'; NT targets the
+  // inverse metric of the retained Cholesky root. Producer error is separate.
+  const Eigen::VectorXd& diagonal_values() const { return w_diag_; }
+  const Eigen::MatrixXd& dense_factor() const { return f_dense_; }
+  const Eigen::MatrixXd& normal_theory_root() const { return chol_; }
+  bool has_means() const { return has_means_; }
+
+
   bool valid(Eigen::Index n) const {
     if (dim_ != n) return false;
     switch (kind_) {

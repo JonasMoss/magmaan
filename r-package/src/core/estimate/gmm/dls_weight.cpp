@@ -14,6 +14,7 @@
 
 #include "detail_linalg.hpp"
 #include "detail_vech.hpp"
+#include "detail_weight_inverse.hpp"
 
 namespace magmaan::estimate::frontier {
 
@@ -31,7 +32,7 @@ FitError make_err(FitError::Kind k, std::string detail) {
 std::string gamma_singular_detail(std::size_t b, const char* which,
                                   const detail::SymInverseResult& r) {
   return "dls_weight: block " + std::to_string(b) + ": " + which +
-         " is rank deficient (dim=" + std::to_string(r.dim) +
+         " is rank deficient after moment-unit equilibration (dim=" + std::to_string(r.dim) +
          ", numerical rank=" + std::to_string(r.rank) +
          ", rcond=" + std::to_string(r.rcond) +
          ", lambda_min=" + std::to_string(r.min_eval) +
@@ -151,7 +152,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
       const Eigen::MatrixXd gamma_dls_full =
           (1.0 - opts.a) * gamma_nt_full + opts.a * (*g_adf_full);
 
-      auto inv_full = detail::symmetric_inverse_pd_gated(gamma_dls_full);
+      auto inv_full = gmm::equilibrated_weight_inverse(gamma_dls_full);
       if (!inv_full.ok) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             gamma_singular_detail(b, "stacked Gamma", inv_full)));
@@ -179,7 +180,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
 
     // W_DLS = Γ_DLS⁻¹. At a = 0 this equals gmm::normal_theory_weight's
     // covariance block (its 0.5 scaling cancels the symmetric-basis factor 2).
-    auto inv_mix = detail::symmetric_inverse_pd_gated(gamma_dls);
+    auto inv_mix = gmm::equilibrated_weight_inverse(gamma_dls);
     if (!inv_mix.ok) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           gamma_singular_detail(b, "mixed Gamma", inv_mix)));

@@ -1,5 +1,16 @@
 *
 !.gitignore
+# Compact weighted-mechanism judgments/provenance and all rejected endpoints.
+# Raw samples, matrices, fitted objects and development pilots remain ignored.
+!weighted-audit-confirm-v1/
+weighted-audit-confirm-v1/*
+!weighted-audit-confirm-v1/comparisons.csv
+!weighted-audit-confirm-v1/producer_checks.csv
+!weighted-audit-confirm-v1/verification.csv
+!weighted-audit-confirm-v1/family_summary.csv
+!weighted-audit-confirm-v1/failures.csv
+!weighted-audit-confirm-v1/metadata.csv
+!weighted-audit-confirm-v1/reference_metadata.csv
 # Small frozen evidence for the exploratory reference pilot; raw fits/starts
 # and historical runs stay local. No default is selected by these summaries.
 !reference-pilot/

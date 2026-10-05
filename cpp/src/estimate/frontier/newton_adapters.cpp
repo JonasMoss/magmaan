@@ -176,6 +176,7 @@ NewtonDerivatives evaluate_newton_moment_quadratic(
   }
   d.metric_factor = std::move(factor->factor);
   d.metric_score_residual = std::move(factor->score_residual);
+  d.ls_weight = weight;
   d.status = NewtonAccuracyStatus::Available;
   return d;
 }
