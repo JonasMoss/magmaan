@@ -1,5 +1,8 @@
 # magmaanlab 0.2.0 (in development)
 
+- Mixed DWLS estimated-weight inference computes diagonal Gamma influence
+  from sparse case blocks, reducing post-fit cost without changing inference.
+
 ## Lavaan-compatible fitting preset
 
 - The lavaan 0.7.2 fitting preset supports continuous ML/FIML and all-ordinal

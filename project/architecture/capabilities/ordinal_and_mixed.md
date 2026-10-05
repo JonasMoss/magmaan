@@ -555,7 +555,34 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   same raw mixed blocks with dense mixed data-direct `IF(Gamma)` and
   finite-difference `d Gamma / d kappa`; its dense case-weight derivative is
   finite-difference gated and its diagonal extraction is pinned to the DWLS
-  helper. For observed/pairwise-missing mixed ordinal/polyserial stats,
+  helper. The mixed data-direct diagonal influence contracts sparse case-bread
+  blocks with precomputed transformed bread/Gamma factors, avoiding dense
+  per-case matrix products. The retained full-matrix WLS path gates agreement
+  at 1e-10 relative for binary/five-category, one/two-group, mixed/all-ordinal
+  inputs under complete and observed assembly. TASK-88 local one-thread
+  policy-call medians (three fresh fits, six continuous plus six five-category
+  items, seed 88001, total N across groups) were:
+
+  | Groups | N | Dense (s) | Sparse (s) |
+  |---|---:|---:|---:|
+  | 1 | 1000 | 3.511 | 1.069 |
+  | 1 | 4000 | 8.497 | 4.263 |
+  | 2 | 1000 | 1.900 | 1.220 |
+  | 2 | 4000 | 11.003 | 4.054 |
+
+  The matched decisions/05 mixed smoke cell 3 (one draw) took 0.982 versus
+  0.629 s. Temporary native instrumentation separated assembly from case
+  processing: for one group at N=1000/4000, assembly took 0.009/0.037 s
+  dense and 0.010/0.043 s sparse; case processing took 0.225/1.002 s dense
+  and 0.034/0.152 s sparse. Native sampling was unavailable (`perf` permission
+  restriction). These workstation timings describe cost, not calibration;
+  the remaining policy cost includes finite-difference Gamma movement.
+  Timings use `mixed_draw` / `mixed_fit` from decisions/05 with five categories,
+  then time only `policy_inference` on each fresh fit; smoke uses
+  `--lane mixed --smoke --cell 3 --workers 1`. Run metadata and logs remain
+  local under task88-named results and `~/.cache/magmaan-logs/`.
+
+  For observed/pairwise-missing mixed ordinal/polyserial stats,
   `mixed_ordinal_stats_from_observed_data` now materializes support-aligned
   rows for thresholds, continuous means/variances, polychorics, polyserial
   covariances, and Pearson covariances; the rows reproduce the overlap NACOV

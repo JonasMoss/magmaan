@@ -679,3 +679,61 @@ TEST_CASE("robust_mixed_ordinal_ij supports mixed ULS DWLS and WLS") {
   CHECK(missing_wls.error().detail.find("estimated-weight influence unavailable") !=
         std::string::npos);
 }
+
+TEST_CASE("Sparse mixed Gamma diagonal agrees with retained dense case matrices") {
+  // Each group is evaluated independently, as in grouped post-fit inference.
+  for (bool all_ordinal : {false, true})
+  for (int categories : {2, 5}) for (int groups : {1, 2}) {
+    std::mt19937 rng(static_cast<unsigned>(88000 + categories + groups));
+    std::normal_distribution<double> normal;
+    for (int group = 0; group < groups; ++group) {
+      Eigen::MatrixXd x(160, 4);
+      for (Eigen::Index i = 0; i < x.rows(); ++i) {
+        const double factor = normal(rng);
+        for (Eigen::Index j = 0; j < x.cols(); ++j) {
+          const double z = 0.6 * factor + normal(rng);
+          x(i, j) = all_ordinal || j % 2 == 0
+              ? (categories == 2 ? 1.0 + (z > 0.0)
+                                : 1.0 + (z > -1.0) + (z > -0.3) +
+                                  (z > 0.3) + (z > 1.0))
+              : z;
+        }
+      }
+      const std::vector<std::int32_t> ordered = all_ordinal
+          ? std::vector<std::int32_t>{1, 1, 1, 1}
+          : std::vector<std::int32_t>{1, 0, 1, 0};
+      // The mixed influence primitive also accepts the all-ordinal endpoint.
+      magmaan::data::MixedOrdinalStats mixed;
+      if (!all_ordinal) {
+        auto built = magmaan::data::mixed_ordinal_stats_from_data({x}, {ordered}, false);
+        REQUIRE(built.has_value());
+        mixed = std::move(*built);
+      } else {
+        auto stats = magmaan::data::ordinal_stats_from_integer_data({x}, false);
+        REQUIRE(stats.has_value());
+        mixed.n_levels = stats->n_levels;
+        mixed.thresholds = stats->thresholds;
+        mixed.R = stats->R;
+        mixed.mean = {Eigen::VectorXd::Zero(x.cols())};
+      }
+      for (bool observed : {false, true}) {
+        auto diagonal = observed
+            ? magmaan::data::mixed_observed_gamma_diag_data_influence(
+                x, ordered, mixed.n_levels[0], mixed.thresholds[0], mixed.mean[0], mixed.R[0])
+            : magmaan::data::mixed_gamma_diag_data_influence(
+                x, ordered, mixed.n_levels[0], mixed.thresholds[0], mixed.mean[0], mixed.R[0]);
+        auto full = observed
+            ? magmaan::data::mixed_observed_gamma_data_influence(
+                x, ordered, mixed.n_levels[0], mixed.thresholds[0], mixed.mean[0], mixed.R[0])
+            : magmaan::data::mixed_gamma_data_influence(
+                x, ordered, mixed.n_levels[0], mixed.thresholds[0], mixed.mean[0], mixed.R[0]);
+        REQUIRE(diagonal.has_value());
+        REQUIRE(full.has_value());
+        const Eigen::Index m = diagonal->cols();
+        Eigen::MatrixXd reference(x.rows(), m);
+        for (Eigen::Index j = 0; j < m; ++j) reference.col(j) = full->col(j * (m + 1));
+        CHECK(diagonal->isApprox(reference, 1e-10));
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 # magmaan 0.2.0 (in development)
 
+- Mixed DWLS estimated-weight inference computes diagonal Gamma influence
+  from sparse case blocks, reducing post-fit cost without changing inference.
+
 ## Ordinary API and migrations
 
 Calls written for 0.1.0 need changes. Each removed argument raises an error

@@ -3554,6 +3554,49 @@ post_expected<Eigen::MatrixXd> mixed_gamma_data_influence_impl(
 
   Eigen::MatrixXd IFG(
       n, diagonal_only ? a.mdim : static_cast<Eigen::Index>(a.mdim * a.mdim));
+  if (diagonal_only) {
+    // diag(L bi Q) is the rowwise contraction of L bi with Q'.
+    // The transpose term has the same diagonal because gamma_theta is symmetric.
+    const Eigen::MatrixXd left = a.transform * a.bread_inv;
+    const Eigen::MatrixXd right = a.gamma_theta * a.transform.transpose();
+    for (Eigen::Index r = 0; r < n; ++r) {
+      Eigen::VectorXd correction = Eigen::VectorXd::Zero(a.mdim);
+      Eigen::Index start = 0;
+      Eigen::Index cp = 0;
+      for (Eigen::Index j = 0; j < p; ++j) {
+        if (ordered[static_cast<std::size_t>(j)] != 0) {
+          const Eigen::Index len = levels[static_cast<std::size_t>(j)] - 1;
+          const Eigen::VectorXd score = a.scores.row(r).segment(start, len).transpose();
+          correction.array() +=
+              (left.middleCols(start, len) * score).array() *
+              (score.transpose() * right.middleRows(start, len)).transpose().array();
+          start += len;
+        } else {
+          const Eigen::Index mu = a.nth + cp;
+          const Eigen::Index va = a.nth + a.n_cont + cp;
+          const Eigen::VectorXd l = left.col(mu) * a.scores(r, mu) +
+                                    left.col(va) * a.scores(r, va);
+          const Eigen::VectorXd q = right.row(mu).transpose() * a.scores(r, mu) +
+                                    right.row(va).transpose() * a.scores(r, va);
+          correction.array() += l.array() * q.array();
+          ++cp;
+        }
+      }
+      for (Eigen::Index k = 0; k < a.n_assoc; ++k) {
+        const Eigen::Index index = a.s1 + k;
+        const Eigen::VectorXd q =
+            (a.pair_a21_case[static_cast<std::size_t>(k)].row(r) *
+             right.topRows(a.s1)).transpose();
+        correction.array() += left.col(index).array() *
+            (q.array() + a.scores(r, index) * a.scores(r, index) *
+                         right.row(index).transpose().array());
+      }
+      IFG.row(r) = G.row(r).array().square() +
+          a.gamma.diagonal().transpose().array() -
+          2.0 * static_cast<double>(n) * correction.transpose().array();
+    }
+    return IFG;
+  }
   for (Eigen::Index r = 0; r < n; ++r) {
     Eigen::MatrixXd bi = Eigen::MatrixXd::Zero(a.mdim, a.mdim);
     for (Eigen::Index j = 0; j < p; ++j) {

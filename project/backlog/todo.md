@@ -956,6 +956,13 @@ ordinary-user default.
 
 ### Ordinal DWLS Gamma influence performance
 
+- [x] **TASK-88 — sparse mixed estimated-weight diagonal influence.**
+  Contract ordinal outer products, continuous 2x2 blocks and association rows
+  against precomputed transformed factors. Retain dense WLS as the test
+  reference; binary/five-category and one/two-group mixed/all-ordinal gates
+  require 1e-10 relative agreement. Policy and smoke timings are recorded in
+  the task completion summary.
+
 - [ ] **M — profile cell-score cost and repeated post-fit reuse.** Measure
   multi-category work before another algorithm change; retain reusable influence
   and cache ownership. **Check:** equivalent ingredients, setup/fit/reporting
