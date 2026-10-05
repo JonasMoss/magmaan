@@ -3497,15 +3497,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_ordinal_robust_ij
-Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight);
-RcppExport SEXP _magmaanlab_infer_ordinal_robust_ij(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP weightSEXP) {
+Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_ordinal_robust_ij(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP weightSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
     Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_ordinal_robust_ij(fit, ordinal_stats, weight));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_robust_ij(fit, ordinal_stats, weight, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4695,7 +4696,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_gamma_nt", (DL_FUNC) &_magmaanlab_infer_gamma_nt, 1},
     {"_magmaanlab_infer_empirical_gamma_with_means", (DL_FUNC) &_magmaanlab_infer_empirical_gamma_with_means, 1},
     {"_magmaanlab_infer_ordinal_robust", (DL_FUNC) &_magmaanlab_infer_ordinal_robust, 4},
-    {"_magmaanlab_infer_ordinal_robust_ij", (DL_FUNC) &_magmaanlab_infer_ordinal_robust_ij, 3},
+    {"_magmaanlab_infer_ordinal_robust_ij", (DL_FUNC) &_magmaanlab_infer_ordinal_robust_ij, 4},
     {"_magmaanlab_infer_ordinal_casewise_influence_ij_fit", (DL_FUNC) &_magmaanlab_infer_ordinal_casewise_influence_ij_fit, 3},
     {"_magmaanlab_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_robust, 4},
     {"_magmaanlab_infer_mixed_ordinal_robust_ij", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_robust_ij, 3},

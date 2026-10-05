@@ -443,3 +443,13 @@ TEST_CASE("robust_ordinal_ij ULS supports observed MCAR ordinal stats") {
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
 }
+
+TEST_CASE("Ordinal exact sampling refuses missing data and invalid steps") {
+  Eigen::MatrixXi X(4,2); X << 0,0,0,1,1,0,1,1;
+  const auto th = Eigen::VectorXd::Zero(2).eval();
+  const auto R = Eigen::MatrixXd::Identity(2,2).eval();
+  for (double step : {0.0,-1e-5,std::numeric_limits<double>::infinity()})
+    CHECK_FALSE(magmaan::data::ordinal_moment_sampling_influence(X,{2,2},th,R,step).has_value());
+  X(0,0) = -1;
+  CHECK_FALSE(magmaan::data::ordinal_moment_sampling_influence(X,{2,2},th,R).has_value());
+}

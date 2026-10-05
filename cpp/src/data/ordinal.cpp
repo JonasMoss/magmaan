@@ -3808,6 +3808,29 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
 
 }  // namespace
 
+post_expected<OrdinalSamplingInfluence>
+ordinal_moment_sampling_influence(
+    const Eigen::MatrixXi& int_data,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    double h_rel) {
+  if (!(h_rel > 0.0) || !std::isfinite(h_rel) ||
+      (int_data.array() < 0).any()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal sampling influence requires complete category data and a positive finite step"));
+  }
+  // The shared score assembly accepts all-ordinal coordinates even though
+  // the public mixed statistics builder requires both variable types.
+  const Eigen::MatrixXd X = (int_data.cast<double>().array() + 1.0).matrix();
+  auto rows = mixed_gamma_jacobian_fd_impl(
+      X, std::vector<std::int32_t>(static_cast<std::size_t>(int_data.cols()), 1), levels, thresholds,
+      Eigen::VectorXd::Zero(int_data.cols()), R, h_rel, true, false, true);
+  if (!rows) return std::unexpected(rows.error());
+  Eigen::MatrixXd gamma = rows->transpose() * (*rows) / static_cast<double>(X.rows());
+  return OrdinalSamplingInfluence{std::move(*rows), std::move(gamma)};
+}
+
 post_expected<Eigen::MatrixXd>
 mixed_moment_sampling_influence(
     const Eigen::MatrixXd& X,

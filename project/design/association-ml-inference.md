@@ -59,9 +59,12 @@ Then Cov(alpha_hat) = H^(-1) B H^(-T)/N; parameter influence is
 through the joint Stage-1/Stage-2 influence, retaining cross-covariances.
 
 `data::mixed_moment_sampling_influence` in `cpp/src/data/ordinal.cpp` and
-`MixedOrdinalStats::sampling_moment_influence` are the TASK-67 template, but
-currently reject the pure-ordinal endpoint. An all-ordinal implementation and
-an explicit supplied exact-row/sampling-Gamma contract are missing.
+`MixedOrdinalStats::sampling_moment_influence` are the TASK-67 template.
+TASK-74 adds `data::ordinal_moment_sampling_influence` for complete all-ordinal
+data, returning centered empirical rows and their sampling Gamma, also exposed
+by the lab IJ comparator. Association-ML transport and a supplied-channel
+adapter remain to be implemented; the broader subcard-1 nonnormality and
+stratified delete-one gates remain open.
 Lavaan NACOV/OPG is a compatibility comparator only. A caller-provided NACOV
 without a declared, validated sampling meaning cannot grant ordinary inference.
 Unlike DWLS, this criterion has no estimated-weight/Gamma-influence channel;

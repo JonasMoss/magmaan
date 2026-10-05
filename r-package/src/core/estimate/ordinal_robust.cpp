@@ -267,7 +267,8 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization,
                         const std::vector<bool>& block_has_missing,
-                        bool estimated_weight) {
+                        bool estimated_weight,
+                        const std::vector<Eigen::MatrixXd>* sampling_rows) {
   if (stats.moment_influence.size() != stats.R.size() ||
       stats.NACOV.size() != stats.R.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -285,7 +286,8 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
-    const Eigen::MatrixXd& G = stats.moment_influence[b];   // n_b × mb
+    const Eigen::MatrixXd& G = sampling_rows ? (*sampling_rows)[b]
+                                            : stats.moment_influence[b];
     if (G.cols() != mb || G.rows() != stats.n_obs[b]) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "robust_ordinal_ij: moment_influence shape mismatch in block " +
@@ -514,7 +516,8 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   const Estimates& est,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization,
-                  const std::vector<std::int8_t>* row_user) {
+                  const std::vector<std::int8_t>* row_user,
+                  OrdinalFirstStage first_stage) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -578,9 +581,24 @@ robust_ordinal_ij(spec::LatentStructure pt,
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 
+  std::vector<Eigen::MatrixXd> sampling_rows;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    if (stats.int_data.size() != stats.R.size()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "exact ordinal first stage requires complete integer data"));
+    }
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      auto sampling = data::ordinal_moment_sampling_influence(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!sampling) return std::unexpected(sampling.error());
+      sampling_rows.push_back(std::move(sampling->rows));
+    }
+  }
+
   auto ij_blocks = build_ordinal_ij_blocks(
       stats, *layout_or, eval->moments, est.theta, Ws, Delta_full, weights,
-      parameterization, block_has_missing);
+      parameterization, block_has_missing, true,
+      first_stage == OrdinalFirstStage::Exact ? &sampling_rows : nullptr);
   if (!ij_blocks.has_value()) return std::unexpected(ij_blocks.error());
 
   auto out = robust_weighted_moment_ij(*ij_blocks, K, 2.0 * est.fmin, A);

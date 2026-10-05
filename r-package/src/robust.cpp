@@ -995,7 +995,7 @@ Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X) {
 // Empty `weight` means reuse fit$ordinal_computational_weight when present,
 // otherwise fit$estimator ("ULS", "DWLS", or "WLS").
 //
-Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight);
+Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight, std::string first_stage);
 
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
@@ -1004,7 +1004,7 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
   if (bread == "ij") {
     // The global correct-model spectrum keeps expected geometry; covariance
     // includes estimated-weight influence at a potentially misspecified fit.
-    Rcpp::List covariance = infer_ordinal_robust_ij(fit, ordinal_stats, weight);
+    Rcpp::List covariance = infer_ordinal_robust_ij(fit, ordinal_stats, weight, "opg");
     Rcpp::List result = infer_ordinal_robust(fit, ordinal_stats, weight, "expected");
     result["vcov"] = covariance["vcov"];
     result["se"] = covariance["se"];
@@ -1049,11 +1049,13 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
 // infer_ordinal_robust(bread="observed"), this carries the influence of the
 // estimated weight Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term), so it needs the
 // per-case influence functions `ordinal_stats$moment_influence`; DWLS also
-// needs complete `ordinal_stats$int_data`. ULS/DWLS only.
+// needs `ordinal_stats$int_data`. Exact first-stage sampling requires complete
+// data and returns sampling rows/Gamma; OPG remains the default.
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats,
-                                   std::string weight = "") {
+                                   std::string weight = "",
+                                   std::string first_stage = "opg") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
@@ -1072,16 +1074,33 @@ Rcpp::List infer_ordinal_robust_ij(Rcpp::List fit, Rcpp::List ordinal_stats,
       fit.containsElementNamed("parameterization")
           ? Rcpp::as<std::string>(fit["parameterization"])
           : "delta";
+  if (first_stage != "opg" && first_stage != "exact")
+    Rcpp::stop("magmaan: first_stage must be 'opg' or 'exact'");
   auto r_or = magmaan::estimate::robust_ordinal_ij(
       ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
-      ordinal_parameterization_from_string(parameterization_name));
+      ordinal_parameterization_from_string(parameterization_name), nullptr,
+      first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact
+                             : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::OrdinalRobustResult& r = *r_or;
-  return Rcpp::List::create(
+  Rcpp::List result = Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
       Rcpp::_["se"] = Rcpp::wrap(r.se),
       Rcpp::_["df"] = r.df,
       Rcpp::_["chisq_standard"] = r.chisq_standard);
+  if (first_stage == "exact") {
+    Rcpp::List rows(stats.R.size()), gamma(stats.R.size());
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      auto sampling = magmaan::data::ordinal_moment_sampling_influence(
+          stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+      if (!sampling.has_value()) stop_post(sampling.error());
+      rows[b] = Rcpp::wrap(sampling->rows);
+      gamma[b] = Rcpp::wrap(sampling->gamma);
+    }
+    result["sampling_moment_influence"] = rows;
+    result["sampling_gamma"] = gamma;
+  }
+  return result;
 }
 
 // infer_ordinal_casewise_influence_ij_fit() — per-case one-step

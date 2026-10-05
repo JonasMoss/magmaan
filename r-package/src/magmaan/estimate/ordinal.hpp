@@ -319,6 +319,9 @@ robust_ordinal(spec::LatentStructure pt,
 // pairwise-overlap observed stats, so the estimated-weight influence is not
 // silently approximated. `row_user` is the fit-time mask, as for
 // robust_ordinal().
+// Exact is a complete-data lab comparator; OPG remains the policy default.
+enum class OrdinalFirstStage { OPG, Exact };
+
 post_expected<OrdinalRobustResult>
 robust_ordinal_ij(spec::LatentStructure pt,
                   const model::MatrixRep& rep,
@@ -327,7 +330,8 @@ robust_ordinal_ij(spec::LatentStructure pt,
                   OrdinalWeightKind weights,
                   OrdinalParameterization parameterization =
                       OrdinalParameterization::Delta,
-                  const std::vector<std::int8_t>* row_user = nullptr);
+                  const std::vector<std::int8_t>* row_user = nullptr,
+                  OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 post_expected<WeightedMomentRBMParts>
 ordinal_rbm_parts(spec::LatentStructure pt,

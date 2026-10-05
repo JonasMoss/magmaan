@@ -610,7 +610,8 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
                         OrdinalWeightKind weights,
                         OrdinalParameterization parameterization,
                         const std::vector<bool>& block_has_missing,
-                        bool estimated_weight = true);
+                        bool estimated_weight = true,
+                        const std::vector<Eigen::MatrixXd>* sampling_rows = nullptr);
 post_expected<robust::ParamSpaceSandwich>
 ordinal_param_space_sandwich_ij(const data::OrdinalStats& stats,
                                 const ThresholdLayout& layout,

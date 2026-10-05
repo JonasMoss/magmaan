@@ -1178,6 +1178,14 @@ release, including dependencies otherwise shared with the primary programme.
   gates give limited validation; mixed calibration and estimated-weight
   MI/release remain open. Other mixed influence routes retain their contracts.
 
+- [x] **M — all-ordinal exact first-stage lab comparator (TASK-74).**
+  Complete empirical score-Jacobian sampling rows and Gamma, plus explicit
+  `robust_ordinal_ij(first_stage = "exact")`; OPG remains the lab default and
+  ordinary policy is unchanged. Case-weight, delta/theta one/two-group and
+  Gaussian convergence gates cover the comparator. TASK-69 owns subsequent
+  policy adoption; the explicit sampling Gamma also supplies TASK-32's first
+  association-ML building block.
+
 ### Association-ML inference
 
 - [ ] **L — define association-ML MI/release and sampling inference.** The

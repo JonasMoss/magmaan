@@ -1,5 +1,10 @@
 # magmaanlab 0.2.0 (in development)
 
+- `robust_ordinal_ij(..., first_stage = "exact")` provides a complete-data
+  all-ordinal empirical-Jacobian comparator, with sampling influence rows and
+  Gamma. The default remains `"opg"`; fitting weights and ordinary policy
+  outputs are unchanged. TASK-69 owns the later policy adoption.
+
 - Complete mixed continuous/ordinal DWLS now composes the exact first-stage IJ
   covariance, global fit-function All test, and observed-Hessian parameter-space
   nested difference test with SB/PEBA4. Fitting keeps OPG NACOV weights; the

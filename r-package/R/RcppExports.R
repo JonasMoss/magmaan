@@ -941,8 +941,8 @@ infer_ordinal_robust <- function(fit, ordinal_stats, weight = "", bread = "ij") 
     .Call(`_magmaanlab_infer_ordinal_robust`, fit, ordinal_stats, weight, bread)
 }
 
-infer_ordinal_robust_ij <- function(fit, ordinal_stats, weight = "") {
-    .Call(`_magmaanlab_infer_ordinal_robust_ij`, fit, ordinal_stats, weight)
+infer_ordinal_robust_ij <- function(fit, ordinal_stats, weight = "", first_stage = "opg") {
+    .Call(`_magmaanlab_infer_ordinal_robust_ij`, fit, ordinal_stats, weight, first_stage)
 }
 
 infer_ordinal_casewise_influence_ij_fit <- function(fit, ordinal_stats, weight = "") {

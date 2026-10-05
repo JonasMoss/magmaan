@@ -1,5 +1,21 @@
 ### Ordinal and mixed categorical LS
 
+- TASK-74 adds complete-data all-ordinal exact sampling rows and Gamma via
+  `data::ordinal_moment_sampling_influence()`, reusing the mixed empirical
+  score-Jacobian assembly. `robust_ordinal_ij()` accepts `OrdinalFirstStage`
+  (OPG default, Exact comparator); the lab `first_stage = "exact"` also returns
+  `sampling_moment_influence` and `sampling_gamma`. Both the sampling term and
+  fitted-OPG-weight movement use the selected rows. Missing-data exact sampling
+  is explicitly unavailable. Ordinary policy and fitting NACOV stay unchanged;
+  TASK-69 owns policy adoption. The shared implementation differentiates the
+  empirical score means with relative step 1e-5, then solves the centered
+  equations (threshold Hessian and pair-score threshold/rho derivatives).
+  Replicated case-weight row errors are below 8e-9 in the registered samples.
+  Over eight Gaussian seeds, RMS IJ covariance gaps at N = 250/1000/4000
+  are 0.0900/0.0483/0.0269: a 3.34-fold reduction over sixteenfold N, consistent
+  with the O_p(N^-1/2) information-identity discrepancy. This numerical
+  convergence gate is not a coverage calibration.
+
 - C++ `fit_ordinal_configured()` supports the `lavaan-0.7.2` preset for
   all-ordinal DWLS, with delta/theta and ordered affine equality coordinates.
   Sample thresholds, polychoric FABIN3 loadings, unit response scales and

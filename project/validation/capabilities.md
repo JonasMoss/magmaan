@@ -211,6 +211,13 @@ convergence rules remain fitting choices. Reported bundles target lavaan 0.7.2.
 
 ## Existing lab components and remaining composition gates
 
+The complete all-ordinal lab IJ has an explicit exact empirical-Jacobian
+first-stage comparator (`first_stage = "exact"`), returning sampling rows and
+Gamma alongside covariance. OPG remains the default and the ordinary policy is
+unchanged. TASK-74 gates case-weight derivatives, one/two-group delta/theta
+composition and Gaussian-copula convergence; TASK-69 owns policy adoption.
+
+
 | Setup | Existing covariance/global primitives and gates | Nested primitives and remaining gates |
 | --- | --- | --- |
 | Complete ML | `ntml_covariance`, `ntml_score_sandwich`, expected UGamma, `fiml_robust_mlr` complete-data trace reduction. SE/SB fixtures: `inference_golden_test.cpp`, `multigroup_inference_golden_test.cpp`; complete bundles above | `lr_test_satorra_bentler2001`/2010 and restriction-map Satorra-2000 exist. SB2001 bundles above are checked; SB2010 is not an ordinary bundle |

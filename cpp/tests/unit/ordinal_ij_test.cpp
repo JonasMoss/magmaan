@@ -373,3 +373,107 @@ TEST_CASE("Observed ordinal stats count four-variable moment support overlaps") 
   const Eigen::MatrixXd& Gn = nominal->NACOV[0];
   CHECK(Gp(4, 4) / Gn(4, 4) == doctest::Approx(12.0 / 10.0).epsilon(1e-10));
 }
+
+TEST_CASE("Ordinal exact first stage matches replicated case weights and keeps OPG default") {
+  using namespace magmaan;
+  for (int groups : {1, 2}) {
+    std::vector<Eigen::MatrixXd> blocks;
+    for (int g = 0; g < groups; ++g)
+      blocks.push_back(ordinal_test_block(7400u + static_cast<unsigned>(g), 150, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55));
+    auto stats = data::ordinal_stats_from_integer_data(blocks, false);
+    REQUIRE(stats.has_value());
+    for (int g = 0; g < groups; ++g) {
+      const auto b = static_cast<std::size_t>(g);
+      auto exact = data::ordinal_moment_sampling_influence(stats->int_data[b],
+          stats->n_levels[b], stats->thresholds[b], stats->R[b]);
+      REQUIRE_MESSAGE(exact.has_value(), (exact.has_value() ? "" : exact.error().detail));
+      CHECK((exact->gamma - exact->rows.transpose()*exact->rows/150.0).norm() == 0.0);
+      for (int row : {0, 17, 91}) {
+        constexpr int copies = 1000;
+        Eigen::VectorXd kappa[2];
+        for (int side = 0; side < 2; ++side) {
+          const int step = side == 0 ? -1 : 1;
+          Eigen::MatrixXd repeated(150*copies+step, 4);
+          int off = 0;
+          for (int i = 0; i < 150; ++i)
+            for (int j = 0; j < copies+(i == row ? step : 0); ++j)
+              repeated.row(off++) = blocks[b].row(i);
+          auto perturbed = data::ordinal_stats_from_integer_data({repeated}, false);
+          REQUIRE(perturbed.has_value());
+          kappa[side].resize(stats->thresholds[b].size()+6);
+          kappa[side].head(stats->thresholds[b].size()) = perturbed->thresholds[0];
+          Eigen::Index k = stats->thresholds[b].size();
+          for (int j = 0; j < 4; ++j)
+            for (int i = j+1; i < 4; ++i) kappa[side](k++) = perturbed->R[0](i,j);
+        }
+        const Eigen::VectorXd fd = (kappa[1]-kappa[0])*(150*copies/2.0);
+        const double error = (fd-exact->rows.row(row).transpose()).norm()/fd.norm();
+        MESSAGE("exact ordinal case-weight relative error " << error);
+        CHECK(error <= 1e-5);
+        const Eigen::Index nth = stats->thresholds[b].size();
+        CHECK((fd.head(nth)-exact->rows.row(row).head(nth).transpose()).norm()/fd.head(nth).norm() <= 1e-5);
+        CHECK((fd.tail(6)-exact->rows.row(row).tail(6).transpose()).norm()/fd.tail(6).norm() <= 1e-5);
+      }
+    }
+    auto parsed = parse::Parser::parse(
+        "f =~ x1 + 0.9*x2 + x3 + x4\n"
+        "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+        "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n");
+    REQUIRE(parsed.has_value());
+    spec::BuildOptions build; build.n_groups = groups;
+    auto pt = spec::build(*parsed, build);
+    REQUIRE(pt.has_value());
+    auto rep = model::build_matrix_rep(*pt);
+    REQUIRE(rep.has_value());
+    for (auto par : {estimate::OrdinalParameterization::Delta, estimate::OrdinalParameterization::Theta}) {
+      optim::OptimOptions options; options.max_iter = 1500;
+      auto fit = test::fit_ordinal_bounded(*pt, *rep, *stats, {},
+          estimate::OrdinalWeightKind::DWLS, estimate::Backend::NloptLbfgs, options, par);
+      REQUIRE_MESSAGE(fit.has_value(), (fit.has_value() ? "" : fit.error().detail));
+      auto implicit = estimate::robust_ordinal_ij(*pt,*rep,*stats,*fit,estimate::OrdinalWeightKind::DWLS,par);
+      auto opg = estimate::robust_ordinal_ij(*pt,*rep,*stats,*fit,estimate::OrdinalWeightKind::DWLS,par,nullptr,estimate::OrdinalFirstStage::OPG);
+      auto exact = estimate::robust_ordinal_ij(*pt,*rep,*stats,*fit,estimate::OrdinalWeightKind::DWLS,par,nullptr,estimate::OrdinalFirstStage::Exact);
+      REQUIRE(implicit.has_value()); REQUIRE(opg.has_value());
+      REQUIRE_MESSAGE(exact.has_value(), (exact.has_value() ? "" : exact.error().detail));
+      CHECK((implicit->vcov.array() == opg->vcov.array()).all());
+      CHECK((implicit->se.array() == opg->se.array()).all());
+      CHECK(exact->vcov.allFinite());
+      CHECK((exact->vcov-opg->vcov).norm() > 0.0);
+    }
+  }
+}
+
+TEST_CASE("Ordinal exact and OPG IJ converge under a Gaussian copula") {
+  using namespace magmaan;
+  auto parsed = parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n");
+  REQUIRE(parsed.has_value());
+  auto pt = spec::build(*parsed); REQUIRE(pt.has_value());
+  auto rep = model::build_matrix_rep(*pt); REQUIRE(rep.has_value());
+  double errors[3]{};
+  const int sizes[3]{250, 1000, 4000};
+  for (int k = 0; k < 3; ++k) {
+    for (unsigned seed = 0; seed < 8; ++seed) {
+      auto X = ordinal_test_block(7450u+seed, sizes[k], {0.82,0.76,0.70,0.64}, -0.45,0.55);
+      auto stats = data::ordinal_stats_from_integer_data({X},false); REQUIRE(stats.has_value());
+      auto fit = test::fit_ordinal_bounded(*pt,*rep,*stats,{},estimate::OrdinalWeightKind::DWLS);
+      REQUIRE(fit.has_value());
+      auto opg = estimate::robust_ordinal_ij(*pt,*rep,*stats,*fit,estimate::OrdinalWeightKind::DWLS);
+      auto exact = estimate::robust_ordinal_ij(*pt,*rep,*stats,*fit,estimate::OrdinalWeightKind::DWLS,
+          estimate::OrdinalParameterization::Delta,nullptr,estimate::OrdinalFirstStage::Exact);
+      REQUIRE(opg.has_value()); REQUIRE(exact.has_value());
+      const double error = (opg->vcov-exact->vcov).norm()/exact->vcov.norm();
+      errors[k] += error*error/8.0;
+    }
+    errors[k] = std::sqrt(errors[k]);
+    MESSAGE("Gaussian ordinal IJ RMS relative gap N=" << sizes[k] << ": " << errors[k]);
+  }
+  CHECK(errors[1] < errors[0]);
+  CHECK(errors[2] < errors[1]);
+  // Sixteenfold N should give about a fourfold reduction; allow Monte Carlo
+  // variation across the eight deterministic Gaussian samples.
+  CHECK(errors[0]/errors[2] > 2.0);
+  CHECK(errors[0]/errors[2] < 8.0);
+}

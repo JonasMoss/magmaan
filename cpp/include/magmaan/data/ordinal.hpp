@@ -447,6 +447,20 @@ mixed_observed_gamma_jacobian_fd(
     const Eigen::MatrixXd& R,
     double h_rel = 1e-4);
 
+// Complete all-ordinal empirical-Jacobian sampling channel. Rows follow
+// [thresholds; polychorics]; Gamma is rows'rows / N, distinct from OPG NACOV.
+struct OrdinalSamplingInfluence {
+  Eigen::MatrixXd rows;
+  Eigen::MatrixXd gamma;
+};
+post_expected<OrdinalSamplingInfluence>
+ordinal_moment_sampling_influence(
+    const Eigen::MatrixXi& int_data,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-5);
+
 // Empirical first-stage sampling influence in mixed moment coordinates.
 // Uses the Jacobian of the marginal and pairwise score equations, including
 // their threshold, mean and variance coupling; leaves lavaan NACOV unchanged.
