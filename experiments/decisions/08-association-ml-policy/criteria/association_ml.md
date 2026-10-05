@@ -86,3 +86,13 @@ serial smoke summaries. Freeze summary, failures, timing, cost, cells,
 metadata, population targets/Stage 1/uncertainty and population timing.
 Raw draws and serialized checkpoints remain ignored. Production is deferred;
 simbox remains unavailable until the user explicitly enables it.
+
+## Registration (merger, 2026-10-05, after the pilot, before production)
+
+Registered as written above. The pilot priced two difficult cells (0.36 and
+0.54 s per draw plus about 55 s of population setup per cell); the full grid is
+planned at roughly 50-60 CPU-hours, a planning figure rather than a registered
+quantity. Production runs with seed base 2117000001 and 2,000 replicates per
+cell on the maintainer's simbox workstation after the queued decisions/05 and
+decisions/07 runs, with single-threaded cells, the study's per-cell runner and
+its provenance-checked combine; the executor is recorded in the metadata.
