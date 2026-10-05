@@ -1,0 +1,5 @@
+.quarto/
+report.html
+report_files/
+resources/
+modal/__pycache__/

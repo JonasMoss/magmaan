@@ -1,0 +1,12 @@
+# Frozen pilot summaries document availability, timing and the cost estimate.
+# Raw rows/spectra, smoke and failed attempts remain local.
+*
+!.gitignore
+!pilot/
+pilot/*
+!pilot/summary.csv
+!pilot/metadata.csv
+!pilot/cells.csv
+!pilot/timing.csv
+!pilot/cost.csv
+!pilot/failures.csv

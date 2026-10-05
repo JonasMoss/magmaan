@@ -1,0 +1,70 @@
+---
+title: "DWLS threshold-invariance calibration"
+format:
+  html:
+    toc: true
+execute:
+  echo: false
+---
+
+## Default register
+
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Threshold-step reference | Moment-nested policy SB / PEBA4 | Open calibration | Development pilot only |
+
+## Question and short answer
+
+Does the DWLS configural-to-threshold-invariant test retain nominal size when
+the larger model is correct or misspecified? Production evidence is pending.
+The frozen pilot completed 20 draws in each of eight cells (160 fit pairs),
+all converged and returned the three policy reference arms. Its full-grid
+extrapolation is 36.2 CPU-hours. The delta WLSMV comparator returned typed
+`not_nested` throughout. These development draws cannot establish calibration
+or justify changing the policy.
+
+## Pilot evidence
+
+```{r}
+base <- "results/pilot"
+if (!file.exists(file.path(base, "summary.csv")))
+  stop("Run run_experiment.R --pilot --cell 17,18,65,66,209,210,257,258 --workers 2 --out-dir results/pilot")
+s <- read.csv(file.path(base, "summary.csv"))
+cost <- read.csv(file.path(base, "cost.csv"))
+tab <- cost[c("observed_cells", "full_cells", "production_cpu_hours", "unpriced_cells")]
+names(tab) <- c("Pilot Cells", "Full Grid Cells", "Estimated CPU Hours", "Unpriced Cells")
+knitr::kable(tab, digits=2)
+```
+
+Full cell rates, Wilson intervals, availability and failures are in the frozen
+CSV files. Pilot flags are development diagnostics. The cost extrapolation uses
+factor/parameterization family means and excludes cloud startup/build time.
+
+## Caveats
+
+Six policy cell/arm rates fall outside the registered band in this tiny pilot;
+these are diagnostic flags, not confirming evidence. Twenty draws have
+substantial sampling uncertainty. The bounded pilot covers matched null/power cells for both factor counts and
+parameterizations at N = 500 with four symmetric categories and correct models.
+It does not cover other categories, sample sizes or misspecification. The full
+20-draw grid would exceed the ten-minute pilot budget based on smoke timing. Identical
+group distributions preserve the pseudo-null; the one-factor misspecification
+uses a residual correlation because a cross-loading requires two factors.
+The requested phase seed bases overlap across the 384-cell grid; registration
+must amend them to disjoint ranges before held-out production.
+The criteria remain a draft for merger review. No production or Modal job has
+been launched.
+
+## Reproduce
+
+From this directory, using a lane R library and one BLAS/OpenMP thread:
+
+```sh
+Rscript run_experiment.R --help
+Rscript run_experiment.R --smoke --workers 2 --out-dir results/smoke
+Rscript run_experiment.R --pilot --cell 17,18,65,66,209,210,257,258 --workers 2 --out-dir results/pilot
+```
+
+Production requires the merger to commit `criteria/threshold_invariance.md`.
+Modal fans out stable cell IDs; `modal/combine.R` applies the same summary
+function to the cell outputs and validates seeds, provenance and completeness.

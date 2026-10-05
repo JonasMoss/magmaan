@@ -1,0 +1,9 @@
+"factors","categories","skew","n","parameterization","misspecified","role","cell_id","production_reps"
+1,4,FALSE,500,"theta",FALSE,"null",17,2000
+2,4,FALSE,500,"theta",FALSE,"null",18,2000
+1,4,FALSE,500,"delta",FALSE,"null",65,2000
+2,4,FALSE,500,"delta",FALSE,"null",66,2000
+1,4,FALSE,500,"theta",FALSE,"power",209,1000
+2,4,FALSE,500,"theta",FALSE,"power",210,1000
+1,4,FALSE,500,"delta",FALSE,"power",257,1000
+2,4,FALSE,500,"delta",FALSE,"power",258,1000
