@@ -1,5 +1,5 @@
 *
 !.gitignore
-!pilot/
-pilot/*
-!pilot/*.csv
+!pilot-full/
+pilot-full/*
+!pilot-full/*.csv

@@ -14,45 +14,129 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Global DWLS policy reference | All | Settled in the existing supported slice; broader validation open | Earlier calibration; no evidence from this study yet |
-| Nested DWLS policy reference | SB and PEBA4 | Provisional, TASK-81 | Broader textbook-model study awaiting a population decision |
-| First-stage influence | Exact | Fixed baseline | This study compares references on the same policy spectrum |
+| Global DWLS policy reference | All | Broader validation open | Earlier calibration; this study has development draws only |
+| Nested DWLS policy reference | SB and PEBA4 | Provisional, TASK-81 | Textbook-model confirmation has not run |
+| First-stage influence | Exact | Fixed baseline | Every comparator uses the same retained policy spectrum |
 
-## Question and short answer
+## Question
 
 Which spectral reference law calibrates global and nested DWLS policy tests
-across realistic textbook models? No calibration evidence is available yet.
-The population builder stopped before smoke: imposing equal standardized Risk
-paths in the Worland model made its proposed latent-response correlation matrix
-indefinite. The study requires a population-design decision before it can proceed.
+across realistic textbook models?
 
-## Evidence and caveats
+## Short answer
 
-The original Worland correlation is positive definite (minimum eigenvalue
-0.290773). Its standardized Risk paths to Achieve and Adjust are −1.592146
-and −2.310772. Replacing both by their mean and adjusting observed residual
-diagonals to retain unit response variances produces minimum eigenvalues
-−0.327866 for the residual covariance and −0.216976 for the response
-correlation. This invalid construction is refused, as registered; no population
-repair or simulation was performed. Six earlier population constructions passed
-the validity checks, but the builder publishes nothing until all eight pass.
-The MDD construction has not yet been checked.
+The study is ready for production planning, but does not yet answer the
+reference-law question. Eight frozen positive-definite populations cover CFA,
+MTMM, higher-order, bifactor, longitudinal, structural and grouped invariance
+models. Development draws check execution, availability and cost; two draws
+per cell cannot establish calibration or select a default. Production has not
+been launched. Simbox remains unavailable.
 
-The proposal awaiting a decision is to replace the Worland path equality by
-equality of its second and third Cognitive loadings, preserving its published
-structural paths. That alternative has not been built or validated. A dated
-criteria amendment must precede any smoke if the design changes.
+## Development evidence
+
+```{r}
+root <- file.path("results", "pilot-full")
+if (!file.exists(file.path(root, "summary.csv")))
+  stop("Pilot summaries absent: run run_experiment.R --pilot --cell <pricing IDs> into fresh directories, then --combine <directories> --out-dir results/pilot-full")
+s <- read.csv(file.path(root, "summary.csv"))
+t <- read.csv(file.path(root, "timing.csv"))
+x <- s[s$reference == "All", ]
+x$step <- paste(x$model, x$test)
+rows <- lapply(split(x, x$model), function(a) data.frame(
+  Model = a$model[1], `Draws with tests available` = sum(a$available),
+  `Attempted tests` = sum(a$attempted), `Unavailable tests` = sum(a$failed),
+  check.names = FALSE))
+knitr::kable(do.call(rbind, rows), caption = "Development availability across all cells. Global and nested tests are counted separately; typed binary threshold equivalence remains unavailable.")
+```
+
+Per-cell rejection rates, successful and attempted denominators, Wilson intervals,
+joint reference availability, failures and ranking diagnostics are retained in
+CSV. Those rankings are development diagnostics. A decision requires the
+registered 1,000 fresh production draws per retained cell, with each model and
+nested step reported separately. Per-model losses compare outside-band counts
+and RMSE against All globally and against SB/PEBA4 for nested tests.
+
+The per-draw raw artifact saves the statistic, df, full eigenvalue vector,
+seed, convergence verdicts and failure reason for each test. All fourteen
+reference labels are evaluated from that artifact. PEBA4 and pEBA4 both call
+`peba` with four blocks and are retained as identical labels to match the
+requested candidate list. The All tail truncates negative eigenvalues as in
+the current policy; the same library truncation convention is used for the
+comparator calls.
+
+## Cost and scope
+
+```{r}
+cost <- read.csv(file.path(root, "cost.csv"))
+knitr::kable(data.frame(
+  `Priced cells` = cost$observed_cells,
+  `Unpriced cells` = cost$unpriced_cells,
+  `Projected CPU hours` = round(cost$full_grid_cpu_hours, 1),
+  `Ideal hours on 12 cores` = round(cost$full_grid_cpu_hours / 12, 1),
+  `Ideal hours on 16 cores` = round(cost$full_grid_cpu_hours / 16, 1),
+  check.names = FALSE), caption = "Matched-cell extrapolation to 1,000 draws per cell; ideal wall time excludes startup, serialization, reference evaluation and scheduling overhead.")
+```
+
+Timing includes generation, H1/H0 fitting and policy inference, with one math
+thread per worker. Reference evaluation and summary writing happen after the
+fit loop and are excluded from the recorded per-draw CPU time, so the estimate
+is a lower planning estimate. Only two draws price each cell; difficult search
+paths can vary substantially. The 30-item longitudinal model dominates cost.
+Production requires a separate compute authorization and a working machine;
+this task neither accesses simbox nor launches Modal. A Modal job can invoke
+the same single-cell command and persist its attempt directory before marking
+completion; the runner has no corpus or sibling-study dependency.
+
+Small-N skewed cells can have empty categories or optimizer nonconvergence.
+They retain failures rather than deleting categories, loosening tolerances or
+changing the registered ordinary fitting defaults. Missing or numerically
+unresolved cells leave the affected reference choice open. Binary MDD
+threshold steps can be equivalent in moment space and retain that typed reason.
+
+## Population construction
+
+Only derived correlations, thresholds, syntax, restrictions and source hashes
+are frozen. No corpus observations, paper code or source mirror is shipped.
+Responses are standardized and null restrictions imposed as registered.
+The MDD population replicates standardized group 1 in both groups; it does not
+replicate the book's group differences.
+
+Before simulation, the original Worland equal-Risk-path construction failed
+the validity gate (standardized paths −1.59/−2.31; response-correlation minimum
+eigenvalue −0.217). The approved, committed amendment instead equates the
+second and third Cognitive loadings while preserving structural paths. Its
+response-correlation minimum eigenvalue is 0.293. No PSD repair is used.
+All eight residual covariance and response-correlation matrices pass the
+positive-definiteness gate; the manifest records their eigenvalue minima.
 
 ## Reproduce
 
-From the repository root:
+Use an installed current `magmaanlab` in a lane R library. From the repository root:
 
 ```sh
-Rscript experiments/decisions/07-dwls-reference-law/scripts/build_populations.R --help
-Rscript experiments/decisions/07-dwls-reference-law/scripts/build_populations.R \
-  --corpus /home/jonas/Files/research/magmaan/external/textbook-corpus
+Rscript experiments/decisions/07-dwls-reference-law/run_experiment.R --help
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  R_LIBS="$HOME/.cache/magmaan-rlib/lane-d" nice -n 10 Rscript \
+  experiments/decisions/07-dwls-reference-law/run_experiment.R \
+  --smoke --cell 1,8 --workers 1 --out-dir /tmp/reference-smoke-new
 ```
 
-The second command currently exits nonzero at the registered invalid-population
-gate. Runner implementation, smoke, pilot, fan-out validation and pricing remain
-outstanding. Production remains unlaunched; simbox is unavailable.
+Rebuilding populations is optional and local: use `scripts/build_populations.R
+--corpus ROOT`. Production needs only the committed frozen inputs.
+
+After compute authorization, the per-cell contract is
+`run_experiment.R --production --cell ID --workers 1 --out-dir ATTEMPT`.
+`scripts/run_cells.sh STUDY RLIB RUN_DIR WORKERS MODE IDS...` implements
+`cells/cell_XXX`, fresh attempts and completion-last promotion. It skips finished
+cells and refuses to overwrite an incomplete cell target. It can be used with
+`smoke` to validate the driver. Keep the workstation's aggregate core budget.
+
+Combine with `run_experiment.R --combine DIR1,DIR2 --out-dir NEW_DIRECTORY`.
+The combiner refuses incomplete attempts, differing source/binary/population/
+design fingerprints, inconsistent modes/seeds/counts and duplicate cells.
+Local two-cell fan-out reproduces serial summaries exactly; a deliberately
+wrong fingerprint is rejected. Interrupted attempts remain diagnostic artifacts
+and are rerun into fresh output directories.
+
+The committed pilot summaries are small frozen development evidence. Raw RDS
+spectra, p-values, generated reports and incomplete attempts remain ignored.

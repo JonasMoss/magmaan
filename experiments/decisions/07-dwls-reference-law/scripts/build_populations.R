@@ -112,6 +112,8 @@ for (id in names(ids)) {
     stop('Invalid null population ',id,': residual min=',min_residual,', rho min=',min_rho)
   z <- list(id=id,source_case=ids[[id]],source_md5=unname(tools::md5sum(path)),
     source_lavaan_version=solution$lavaan_version,observed=obs,groups=if(id=='mdd9') 2L else 1L,
+    thresholds=list(symmetric=lapply(c(2L,5L,7L),function(k) qnorm(seq_len(k-1)/k)),
+      skewed=lapply(list(c(.85,.15),c(.45,.25,.15,.10,.05),c(.35,.25,.15,.10,.07,.05,.03)),function(p) qnorm(cumsum(p)[seq_len(length(p)-1)]))),
     correlation=unname(rho),h1=paste(syntax,collapse='\n'),
     h0=paste(c(syntax,restrictions),collapse='\n'),restriction_df=length(restrictions),
     min_residual_eigenvalue=min_residual,min_correlation_eigenvalue=min_rho,

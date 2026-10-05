@@ -1,0 +1,771 @@
+"cell_id","replicate","test","seed","reference","p","reason","detail","statistic","df","spectrum_size","h1_converged","h0_converged","joint"
+104,1,"thresholds",411040002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,1,"thresholds",411040002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+104,2,"thresholds",411040003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+127,2,"global",411270003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"global",411270003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+127,2,"nested",411270003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+128,1,"thresholds",411280002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,1,"thresholds",411280002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+128,2,"thresholds",411280003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+135,2,"global",411350003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"global",411350003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+135,2,"nested",411350003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+143,1,"global",411430002,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"global",411430002,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+143,1,"nested",411430002,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0210332: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+152,1,"thresholds",411520002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,1,"thresholds",411520002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+152,2,"thresholds",411520003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+159,1,"global",411590002,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"global",411590002,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+159,1,"nested",411590002,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.00747148: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+176,1,"thresholds",411760002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,1,"thresholds",411760002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+176,2,"thresholds",411760003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+25,2,"global",410250003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"global",410250003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+25,2,"nested",410250003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"global",410270003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+27,2,"nested",410270003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"global",410290003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+29,2,"nested",410290003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"global",410310002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,1,"nested",410310002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+31,2,"global",410310003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"global",410310003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+31,2,"nested",410310003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.060367: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+32,1,"thresholds",410320002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,1,"thresholds",410320002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+32,2,"thresholds",410320003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+39,2,"global",410390003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"global",410390003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+39,2,"nested",410390003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.0581532: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+47,2,"global",410470003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"global",410470003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+47,2,"nested",410470003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+48,1,"global",410480002,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"global",410480002,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"metric",410480002,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,1,"thresholds",410480002,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M9 in group '1'",,,0,,,FALSE
+48,2,"global",410480003,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"global",410480003,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"metric",410480003,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"All",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"SB",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"PEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"scaled_shifted",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"mean_variance",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"scaled_F",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"EBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"EBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"EBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"pEBA2",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"pEBA4",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"pEBA6",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"pOLS",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+48,2,"thresholds",410480003,"pAll",,"error","data_ordinal_stats_from_df(): empty ordinal category for M2 in group '2'",,,0,,,FALSE
+55,2,"global",410550003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"global",410550003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+55,2,"nested",410550003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+56,1,"thresholds",410560002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,1,"thresholds",410560002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+56,2,"thresholds",410560003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+7,2,"global",410070003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"global",410070003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+7,2,"nested",410070003,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+73,1,"nested",410730002,"All",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"SB",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"PEBA4",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"scaled_shifted",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"mean_variance",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"scaled_F",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"EBA2",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"EBA4",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"EBA6",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"pEBA2",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"pEBA4",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"pEBA6",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"pOLS",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+73,1,"nested",410730002,"pAll",,"error","h0_not_converged",,,0,TRUE,FALSE,FALSE
+77,1,"global",410770002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"global",410770002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+77,1,"nested",410770002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"global",410790002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"All",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"SB",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"PEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"scaled_shifted",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"mean_variance",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"scaled_F",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"EBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"EBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"EBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"pEBA2",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"pEBA4",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"pEBA6",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"pOLS",,"error","h1_not_converged",,,0,FALSE,,FALSE
+79,1,"nested",410790002,"pAll",,"error","h1_not_converged",,,0,FALSE,,FALSE
+8,1,"thresholds",410080002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,1,"thresholds",410080002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+8,2,"thresholds",410080003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,1,"thresholds",410800002,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"All",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"SB",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"PEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"scaled_shifted",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"mean_variance",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"scaled_F",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"EBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"EBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"EBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"pEBA2",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"pEBA4",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"pEBA6",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"pOLS",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+80,2,"thresholds",410800003,"pAll",,"equivalent_models","equivalent models in moment space",,0,0,TRUE,TRUE,FALSE
+95,2,"global",410950003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"global",410950003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"All",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"SB",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"PEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"scaled_shifted",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"mean_variance",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"scaled_F",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"EBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"EBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"EBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"pEBA2",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"pEBA4",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"pEBA6",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"pOLS",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE
+95,2,"nested",410950003,"pAll",,"error","magmaan fit error [OptimizerNonConvergence] after 1000 iters, f=0.017637: nlopt Limited-memory BFGS (L-BFGS) (local, derivative-based): evaluation budget exhausted without convergence",,,0,,,FALSE

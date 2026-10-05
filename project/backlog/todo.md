@@ -173,6 +173,13 @@ result under an unstated convention.
   structural work before and weight preparation after. These are boundary
   measurements, not end-to-end speedup evidence.
 
+- [x] **L — prepare realistic-model DWLS reference-law study** (task-86).
+  `experiments/decisions/07-dwls-reference-law` registers eight textbook
+  latent-response families, exact null restrictions, 192 cells and fourteen
+  references on identical saved policy spectra. Frozen derived populations,
+  development smoke/pilot, per-cell completion/provenance checks and pricing
+  support production planning; no production or default change is authorized.
+
 - [x] **M — diagnose DWLS nested profile-law excess rank** (task-17.3).
   Three production-seed cells, 100 draws each, isolate separate-point profile
   cancellation and positive-tail truncation. Common-point spectra equal the

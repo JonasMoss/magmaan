@@ -963,6 +963,12 @@ unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
 study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
 it on fresh draws (2.9-6.8%).
 
+Decision study 07 prepares broader global and nested reference-law validation
+across eight frozen textbook latent-response populations, including structural,
+longitudinal and grouped invariance models. Its development pilot retains full
+exact-first-stage policy spectra for fourteen reference comparisons. Production
+and TASK-81 adoption remain open; this preparation changes no inference recipe.
+
 DELTA response-scale equalities, fixed non-unit scales and linear scale
 constraints use live lavaan coordinates (TASK-53.1); see the ordinal LS contract
 and the frozen `ordinal/delta_scales.json` gates above.
