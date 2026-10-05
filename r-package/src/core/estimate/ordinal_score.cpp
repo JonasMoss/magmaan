@@ -452,7 +452,7 @@ ordinal_modification_indices_robust_impl(
   if (!Ws.has_value()) return std::unexpected(Ws.error());
 
   // Estimated-weight (complete-sandwich) meat: precompute the per-block missing
-  // pattern once (all-ordinal only); mixed-ordinal is not yet wired.
+  // pattern once for all-ordinal stats; mixed blocks retain their own recipe.
   std::vector<bool> block_has_missing;
   if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
     if (estimated_weight) {
@@ -460,10 +460,6 @@ ordinal_modification_indices_robust_impl(
       if (!missing_or.has_value()) return std::unexpected(missing_or.error());
       block_has_missing = std::move(*missing_or);
     }
-  } else if (estimated_weight) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "mixed-ordinal estimated-weight modification indices are not yet "
-        "implemented; use estimated_weight = false"));
   }
 
   inference::ScoreTestTable table;
@@ -510,6 +506,13 @@ ordinal_modification_indices_robust_impl(
           return ordinal_param_space_sandwich_ij(
               stats, *layout, eval->moments, theta, *Ws, Delta_full, weights,
               parameterization, block_has_missing);
+      } else if (estimated_weight || bread == robust::Information::Observed) {
+        if (!estimated_weight && stats.raw_data.empty() && stats.sampling_moment_influence.empty())
+          return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+        auto blocks = build_mixed_ordinal_ij_blocks(stats, *layout, eval->moments,
+            theta, *Ws, Delta_full, weights, parameterization, estimated_weight, true);
+        if (!blocks) return std::unexpected(blocks.error());
+        return weighted_param_space_sandwich_ij(*blocks);
       }
       return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
     }();
@@ -626,10 +629,13 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
             stats, *layout, eval->moments, est.theta, *Ws, Delta_full, weights,
             parameterization, *missing_or);
       }
-    } else if (estimated_weight) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "mixed-ordinal estimated-weight score tests are not yet implemented; "
-          "use estimated_weight = false"));
+    } else if (estimated_weight || bread == robust::Information::Observed) {
+      if (!estimated_weight && stats.raw_data.empty() && stats.sampling_moment_influence.empty())
+        return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+      auto blocks = build_mixed_ordinal_ij_blocks(stats, *layout, eval->moments,
+          est.theta, *Ws, Delta_full, weights, parameterization, estimated_weight, true);
+      if (!blocks) return std::unexpected(blocks.error());
+      return weighted_param_space_sandwich_ij(*blocks);
     }
     return ordinal_param_space_sandwich(stats, *Ws, Delta_full);
   }();
@@ -868,7 +874,8 @@ auto ordinal_robust_handles(OrdinalParameterization parameterization) {
                  std::move(moment_jacobian_fn), std::move(prepare_fn)};
 }
 
-auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
+auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user) {
   auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
@@ -896,8 +903,8 @@ auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
     return mixed_moment_jacobian(s, layout, moments, J_sigma, J_mu, theta,
                                  parameterization);
   };
-  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
-    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  auto prepare_fn = [row_user](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr, row_user);
   };
   struct Handles {
     decltype(residual_fn) residual;
@@ -952,11 +959,12 @@ modification_indices_mixed_ordinal_robust(
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options,
     OrdinalParameterization parameterization,
-    bool estimated_weight) {
-  auto h = mixed_ordinal_robust_handles(parameterization);
+    bool estimated_weight, robust::Information bread,
+    const std::vector<std::int8_t>* row_user) {
+  auto h = mixed_ordinal_robust_handles(parameterization, row_user);
   return ordinal_modification_indices_robust_impl(
       std::move(pt), rep, stats, est, weights, options, parameterization,
-      estimated_weight, robust::Information::Expected, h.residual, h.jacobian,
+      estimated_weight, bread, h.residual, h.jacobian,
       h.moment_jacobian, h.prepare);
 }
 
@@ -967,11 +975,12 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
                                  const Estimates& est,
                                  OrdinalWeightKind weights,
                                  OrdinalParameterization parameterization,
-                                 bool estimated_weight) {
-  auto h = mixed_ordinal_robust_handles(parameterization);
+                                 bool estimated_weight, robust::Information bread,
+    const std::vector<std::int8_t>* row_user) {
+  auto h = mixed_ordinal_robust_handles(parameterization, row_user);
   return ordinal_score_tests_robust_impl(
       std::move(pt), rep, stats, est, weights, parameterization,
-      estimated_weight, robust::Information::Expected, h.residual, h.jacobian,
+      estimated_weight, bread, h.residual, h.jacobian,
       h.moment_jacobian, h.prepare);
 }
 

@@ -1928,10 +1928,11 @@ modification_indices(const Fit &fit,
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().mixed_ordinal()) {
-    auto out = estimate::modification_indices_mixed_ordinal(
+    auto out = estimate::frontier::modification_indices_mixed_ordinal_robust(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight, options,
-        fit.estimator_spec().ordinal_parameterization,
+        fit.estimator_spec().ordinal_parameterization, true,
+        robust::Information::Observed,
         &fit.model().names().row_user);
     return post_result(std::move(out));
   }
@@ -1978,10 +1979,11 @@ Result<inference::ScoreTestTable> score_tests(const Fit &fit) {
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().mixed_ordinal()) {
-    auto out = estimate::score_tests_mixed_ordinal(
+    auto out = estimate::frontier::score_tests_mixed_ordinal_robust(
         fit.model().structure(), fit.model().matrix_rep(), *stats,
         fit.estimates(), fit.estimator_spec().ordinal_weight,
-        fit.estimator_spec().ordinal_parameterization,
+        fit.estimator_spec().ordinal_parameterization, true,
+        robust::Information::Observed,
         &fit.model().names().row_user);
     return post_result(std::move(out));
   }

@@ -181,10 +181,10 @@ test_that("caller NACOV reaches supported mixed ordinal LS score routes", {
                      ordered = c("x1", "x2"))
     G <- fit$mixed_ordinal_stats$NACOV
     for (worker in list(modification_indices_robust, score_tests_robust)) {
-      raw <- worker(fit, estimated_weight = FALSE)
+      raw <- worker(fit, estimated_weight = FALSE, bread = "expected")
       expect_gt(nrow(raw), 0L)
-      expect_equal(worker(fit, gamma = G, estimated_weight = FALSE), raw, tolerance = 1e-10)
-      doubled <- worker(fit, gamma = lapply(G, function(g) 2 * g), estimated_weight = FALSE)
+      expect_equal(worker(fit, gamma = G, estimated_weight = FALSE, bread = "expected"), raw, tolerance = 1e-10)
+      doubled <- worker(fit, gamma = lapply(G, function(g) 2 * g), estimated_weight = FALSE, bread = "expected")
       expect_equal(doubled$mi, raw$mi, tolerance = 1e-10)
       expect_equal(doubled$scaling.factor, 2 * raw$scaling.factor, tolerance = 1e-10)
       expect_error(worker(fit, gamma = G), "UnsupportedInference.*casewise")

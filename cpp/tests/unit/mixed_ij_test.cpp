@@ -7,8 +7,10 @@
 #include "magmaan/spec/build.hpp"
 #include <random>
 #include "../../src/data/detail_sampling_reference.hpp"
+#include "../../src/estimate/ordinal_internal.hpp"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
+#include "magmaan/robust/lr_test_satorra.hpp"
 
 namespace {
 using namespace magmaan;
@@ -34,11 +36,13 @@ Eigen::MatrixXd mixed_block(unsigned seed, Eigen::Index n) {
   return x;
 }
 struct MixedModel { spec::LatentStructure pt; model::MatrixRep rep; };
-MixedModel mixed_model(int groups) {
+MixedModel mixed_model(int groups, bool score = false, bool equal = false) {
   auto parsed = parse::Parser::parse(
-      "f =~ x1 + x2 + x3 + x4 + x5 + x6\n"
+      std::string(equal ? "f =~ x1 + x2 + x3 + a*x4 + a*x5 + x6\n"
+                        : "f =~ x1 + x2 + x3 + x4 + x5 + x6\n") +
       "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\n"
-      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\n");
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\n" +
+      std::string(score ? "x4 ~~ 0*x5\n" : ""));
   REQUIRE(parsed.has_value());
   spec::BuildOptions opts;
   opts.meanstructure = true;
@@ -240,6 +244,41 @@ TEST_CASE("Mixed DWLS IJ agrees with replicated case-weight finite differences")
   }
 }
 
+TEST_CASE("Mixed WLS Gamma influence agrees with replicated case weights") {
+  const int n = 150, copies = 100;
+  const auto x = mixed_block(6700u, n);
+  const std::vector<std::vector<std::int32_t>> ordered{{1,1,1,0,0,0}};
+  auto stats = data::mixed_ordinal_stats_from_data({x}, ordered, false);
+  REQUIRE(stats.has_value());
+  auto sampling = data::mixed_moment_sampling_influence(x, stats->ordered[0],
+      stats->n_levels[0], stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto direct = data::mixed_gamma_data_influence(x, stats->ordered[0],
+      stats->n_levels[0], stats->thresholds[0], stats->mean[0], stats->R[0]);
+  auto movement = data::mixed_gamma_jacobian_fd(x, stats->ordered[0],
+      stats->n_levels[0], stats->thresholds[0], stats->mean[0], stats->R[0]);
+  REQUIRE(sampling.has_value()); REQUIRE(direct.has_value()); REQUIRE(movement.has_value());
+  const Eigen::MatrixXd rows = *direct + *sampling * movement->transpose();
+  for (int row : {0,17,91}) {
+    Eigen::MatrixXd gamma[2];
+    for (int side = 0; side < 2; ++side) {
+      const int step = side == 0 ? -1 : 1;
+      Eigen::MatrixXd repeated(n*copies+step, x.cols());
+      int off = 0;
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < copies+(i == row ? step : 0); ++j)
+          repeated.row(off++) = x.row(i);
+      auto st = data::mixed_ordinal_stats_from_data({repeated}, ordered, false);
+      REQUIRE(st.has_value());
+      gamma[side] = st->NACOV[0];
+    }
+    const Eigen::MatrixXd difference = (gamma[1]-gamma[0])*(n*copies/2.0);
+    const Eigen::Map<const Eigen::VectorXd> fd(difference.data(), difference.size());
+    const double error = (fd-rows.row(row).transpose()).norm()/fd.norm();
+    MESSAGE("Full Gamma case-weight relative error " << error);
+    CHECK(error < 1e-5);
+  }
+}
+
 TEST_CASE("Mixed DWLS empirical IJ weight channel vanishes at exact fit") {
   const Eigen::MatrixXd x=mixed_block(6711u,300).rightCols(4);
   const std::vector<std::vector<std::int32_t>> ordered{{1,0,0,0}};
@@ -331,6 +370,198 @@ TEST_CASE("Sparse exact first-stage Jacobian preserves dense FD scores and sampl
           const Eigen::MatrixXd gamma = rows->transpose()*(*rows)/450.0;
           const Eigen::MatrixXd gamma_reference = reference->transpose()*(*reference)/450.0;
           CHECK((gamma-gamma_reference).norm()/gamma_reference.norm() <= 1e-7);
+        }
+      }
+    }
+  }
+}
+
+TEST_CASE("Mixed estimated-weight MI reconstructs observed projection and augmented case scores") {
+  using namespace estimate::detail_ordinal;
+  for (auto weight : {OrdinalWeightKind::DWLS, OrdinalWeightKind::WLS}) {
+    for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+      for (int groups : {1, 2}) {
+        const int n = 150, copies = 100;
+        const auto m = mixed_model(groups, true, true);
+        std::vector<Eigen::MatrixXd> raw;
+        for (std::size_t g = 0; g < static_cast<std::size_t>(groups); ++g) raw.push_back(mixed_block(6700u+static_cast<unsigned>(g), n));
+        std::vector<std::vector<std::int32_t>> ordered(static_cast<std::size_t>(groups), {1,1,1,0,0,0});
+        auto stats = data::mixed_ordinal_stats_from_data(raw, ordered, true);
+        REQUIRE(stats.has_value());
+        auto fit = test::fit_mixed_ordinal_bounded(m.pt, m.rep, *stats, {}, weight,
+            estimate::Backend::NloptLbfgs, tight(), parameterization);
+        REQUIRE(fit.has_value());
+        auto objective = estimate::frontier::mixed_ordinal_ls_objective(
+            m.pt, m.rep, *stats, *fit, weight, parameterization);
+        REQUIRE(objective.has_value());
+        auto aug = objective->pt;
+        std::size_t row = 0;
+        for (; row < aug.size(); ++row)
+          if (aug.op[row] == parse::Op::Covariance && aug.free[row] == 0 &&
+              aug.lhs_var[row] != aug.rhs_var[row]) break;
+        REQUIRE(row < aug.size());
+        const int q = aug.n_free();
+        const double fixed = aug.fixed_value[row];
+        aug.free[row] = q+1;
+        aug.fixed_value[row] = std::numeric_limits<double>::quiet_NaN();
+        if (static_cast<int>(aug.eq_groups.size()) == q) aug.eq_groups.push_back(q);
+        else if (!aug.eq_groups.empty()) aug.eq_groups.clear();
+        Eigen::VectorXd theta(q+1); theta.head(q) = fit->theta; theta(q) = fixed;
+        auto layout = make_threshold_layout(aug, m.rep, *stats);
+        auto ev = model::ModelEvaluator::build(aug, m.rep);
+        REQUIRE(layout.has_value()); REQUIRE(ev.has_value());
+        auto eval = ev->evaluate(theta, true, true);
+        REQUIRE(eval.has_value());
+        const auto delta = mixed_moment_jacobian(*stats, *layout, eval->moments,
+            eval->J_sigma, eval->J_mu, theta, parameterization);
+        auto parts = estimate::frontier::mixed_ordinal_ls_newton_parts_prepared(
+            aug, m.rep, *stats, theta, weight, parameterization);
+        REQUIRE(parts.has_value());
+        const double N = n*groups;
+        const Eigen::MatrixXd H = parts->hessian/N;
+        const auto& weights = weight == OrdinalWeightKind::DWLS ? stats->W_dwls : stats->W_wls;
+        Eigen::MatrixXd B = Eigen::MatrixXd::Zero(q+1,q+1);
+        Eigen::VectorXd score = Eigen::VectorXd::Zero(q+1);
+        Eigen::Index off = 0;
+        for (std::size_t g = 0; g < static_cast<std::size_t>(groups); ++g) {
+          const auto& x = raw[g];
+          const auto& W = weights[g];
+          const Eigen::Index mb = stats->moments[g].size();
+          const Eigen::MatrixXd D = delta.middleRows(off, mb);
+          const Eigen::VectorXd residual = mixed_model_moments(*stats, *layout,
+              eval->moments, theta, g, parameterization)-stats->moments[g];
+          auto sampling = data::mixed_moment_sampling_influence(x, ordered[g],
+              stats->n_levels[g], stats->thresholds[g], stats->mean[g], stats->R[g]);
+          REQUIRE(sampling.has_value());
+          auto direct = weight == OrdinalWeightKind::DWLS
+              ? data::mixed_gamma_diag_data_influence(x, ordered[g], stats->n_levels[g],
+                  stats->thresholds[g], stats->mean[g], stats->R[g])
+              : data::mixed_gamma_data_influence(x, ordered[g], stats->n_levels[g],
+                  stats->thresholds[g], stats->mean[g], stats->R[g]);
+          auto movement = weight == OrdinalWeightKind::DWLS
+              ? data::mixed_gamma_diag_jacobian_fd(x, ordered[g], stats->n_levels[g],
+                  stats->thresholds[g], stats->mean[g], stats->R[g])
+              : data::mixed_gamma_jacobian_fd(x, ordered[g], stats->n_levels[g],
+                  stats->thresholds[g], stats->mean[g], stats->R[g]);
+          REQUIRE(direct.has_value()); REQUIRE(movement.has_value());
+          const Eigen::MatrixXd gamma = *direct+*sampling*movement->transpose();
+          Eigen::MatrixXd influence = *sampling*W;
+          for (int i = 0; i < n; ++i) {
+            Eigen::MatrixXd dW;
+            if (weight == OrdinalWeightKind::DWLS) {
+              dW = Eigen::MatrixXd::Zero(mb,mb);
+              for (Eigen::Index k = 0; k < mb; ++k)
+                dW(k,k) = -gamma(i,k)*W(k,k)*W(k,k);
+            } else {
+              const Eigen::VectorXd v = gamma.row(i).transpose();
+              const Eigen::Map<const Eigen::MatrixXd> dGamma(v.data(),mb,mb);
+              dW = -W*dGamma*W;
+            }
+            influence.row(i) -= residual.transpose()*dW;
+          }
+          const Eigen::MatrixXd rows = influence*D;
+          B += rows.transpose()*rows/N;
+          score -= D.transpose()*W*residual/groups;
+          // Differentiate the augmented analytic score at a fixed parameter point.
+          Eigen::VectorXd perturbed_score[2];
+          for (int side = 0; side < 2; ++side) {
+            const int step = side == 0 ? -1 : 1;
+            auto blocks = raw;
+            Eigen::MatrixXd repeated(n*copies+step, x.cols());
+            int at = 0;
+            for (int i = 0; i < n; ++i)
+              for (int j = 0; j < copies+(i == 17 ? step : 0); ++j)
+                repeated.row(at++) = x.row(i);
+            // Replicate other groups equally, keeping group fractions fixed below.
+            blocks[g] = std::move(repeated);
+            auto st = data::mixed_ordinal_stats_from_data(blocks, ordered, true);
+            REQUIRE(st.has_value());
+            const auto& pw = weight == OrdinalWeightKind::DWLS ? st->W_dwls[g] : st->W_wls[g];
+            perturbed_score[side] = -D.transpose()*pw*(
+                mixed_model_moments(*stats, *layout, eval->moments, theta, g, parameterization)-st->moments[g]);
+          }
+          const Eigen::VectorXd fd = (perturbed_score[1]-perturbed_score[0])*(n*copies/2.0);
+          CHECK((fd-rows.row(17).transpose()).norm()/fd.norm() < 1e-5);
+          off += mb;
+        }
+        Eigen::VectorXd v = Eigen::VectorXd::Zero(q+1); v(q) = 1;
+        auto constraints = estimate::build_eq_constraints(objective->pt);
+        REQUIRE(constraints.has_value());
+        const Eigen::MatrixXd K = constraints->K();
+        Eigen::MatrixXd nuisance = Eigen::MatrixXd::Zero(q+1,K.cols());
+        nuisance.topRows(q) = K;
+        v -= nuisance*(nuisance.transpose()*H*nuisance).ldlt().solve(nuisance.transpose()*H*v);
+        const double u = v.dot(score), variance = v.dot(B*v);
+        // At a common evaluation point, the policy one-restriction law is
+        // b/h in observed geometry; its corrected local quadratic is N*u²/b.
+        Eigen::MatrixXd chart(q+1,K.cols()+1);
+        chart.leftCols(K.cols()) = nuisance;
+        chart.col(K.cols()) = Eigen::VectorXd::Unit(q+1,q);
+        Eigen::MatrixXd restriction = Eigen::MatrixXd::Zero(1,chart.cols());
+        restriction(0,chart.cols()-1) = 1;
+        const Eigen::MatrixXd Hc = chart.transpose()*H*chart;
+        const Eigen::MatrixXd Bc = chart.transpose()*B*chart;
+        auto law = robust::compute_satorra2000_from_sandwich(Hc, Bc, restriction);
+        REQUIRE(law.has_value());
+        REQUIRE(law->eigenvalues.size() == 1);
+        const double h = v.dot(H*v);
+        CHECK(law->eigenvalues(0) == doctest::Approx(variance/h).epsilon(1e-10));
+        CHECK((N*u*u/h)/law->eigenvalues(0) == doctest::Approx(N*u*u/variance).epsilon(1e-10));
+        auto exact = *stats;
+        for (std::size_t g = 0; g < static_cast<std::size_t>(groups); ++g)
+          exact.moments[g] = mixed_model_moments(*stats, *layout, eval->moments,
+              theta, g, parameterization);
+        auto fixed_blocks = build_mixed_ordinal_ij_blocks(exact, *layout,
+            eval->moments, theta, weights, delta, weight, parameterization, false);
+        auto estimated_blocks = build_mixed_ordinal_ij_blocks(exact, *layout,
+            eval->moments, theta, weights, delta, weight, parameterization, true);
+        REQUIRE(fixed_blocks.has_value()); REQUIRE(estimated_blocks.has_value());
+        auto fixed_meat = estimate::weighted_param_space_sandwich_ij(*fixed_blocks);
+        auto estimated_meat = estimate::weighted_param_space_sandwich_ij(*estimated_blocks);
+        REQUIRE(fixed_meat.has_value()); REQUIRE(estimated_meat.has_value());
+        CHECK((fixed_meat->B1-estimated_meat->B1).norm() < 1e-10);
+        auto mi = estimate::frontier::modification_indices_mixed_ordinal_robust(
+            m.pt, m.rep, *stats, *fit, weight, {}, parameterization, true,
+            robust::Information::Observed);
+        REQUIRE(mi.has_value());
+        bool found = false;
+        for (const auto& result : mi->rows) if (result.candidate.row == row) {
+          found = true;
+          CHECK(result.mi_scaled == doctest::Approx(N*u*u/variance).epsilon(1e-10));
+        }
+        CHECK(found);
+        auto releases = estimate::frontier::score_tests_mixed_ordinal_robust(
+            m.pt, m.rep, *stats, *fit, weight, parameterization, true,
+            robust::Information::Observed);
+        REQUIRE(releases.has_value());
+        REQUIRE_FALSE(releases->rows.empty());
+        const Eigen::MatrixXd H0 = H.topLeftCorner(q,q), B0 = B.topLeftCorner(q,q);
+        for (Eigen::Index r = 0; r < constraints->A_eq.rows(); ++r) {
+          Eigen::MatrixXd remaining(constraints->A_eq.rows()-1,q);
+          Eigen::Index at = 0;
+          for (Eigen::Index i = 0; i < constraints->A_eq.rows(); ++i)
+            if (i != r) remaining.row(at++) = constraints->A_eq.row(i);
+          Eigen::MatrixXd relaxed;
+          if (remaining.rows() == 0) relaxed = Eigen::MatrixXd::Identity(q,q);
+          else {
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(remaining,Eigen::ComputeFullV);
+            svd.setThreshold(1e-9);
+            relaxed = svd.matrixV().rightCols(q-svd.rank());
+          }
+          const Eigen::MatrixXd overlap = K.transpose()*relaxed;
+          Eigen::JacobiSVD<Eigen::MatrixXd> complement(overlap,Eigen::ComputeFullV);
+          complement.setThreshold(1e-9);
+          REQUIRE(relaxed.cols()-complement.rank() == 1);
+          const Eigen::VectorXd d = relaxed*complement.matrixV().col(relaxed.cols()-1);
+          const Eigen::VectorXd efficient = d-K*(K.transpose()*H0*K).ldlt().solve(K.transpose()*H0*d);
+          const double u0 = efficient.dot(score.head(q));
+          const double b0 = efficient.dot(B0*efficient);
+          bool matched = false;
+          for (const auto& result : releases->rows) if (result.candidate.row == static_cast<std::size_t>(r)) {
+            matched = true;
+            CHECK(result.mi_scaled == doctest::Approx(N*u0*u0/b0).epsilon(1e-10));
+          }
+          CHECK(matched);
         }
       }
     }

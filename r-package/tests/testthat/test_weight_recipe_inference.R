@@ -388,7 +388,16 @@ test_that("mixed ordinal MI matrix gates fixed weights and explicit refusals", {
       fixed <- worker(fit, estimated_weight = FALSE, bread = "expected")
       expect_equal(fixed$mi, ordinary$mi, tolerance = 1e-8)
       expect_true(all(is.finite(fixed$mi.scaled) & fixed$scaling.factor > 0))
-      expect_error(worker(fit, estimated_weight = TRUE, bread = "expected"), "not yet implemented")
+      estimated <- worker(fit, estimated_weight = TRUE, bread = "observed")
+      expect_gt(nrow(estimated), 0L)
+      expect_true(all(is.finite(estimated$mi.scaled)))
+      expect_equal(worker(fit), estimated)
+      supplied <- worker(fit, estimated_weight = FALSE, bread = "observed",
+                         gamma = fit$mixed_ordinal_stats$NACOV)
+      doubled <- worker(fit, estimated_weight = FALSE, bread = "observed",
+                        gamma = lapply(fit$mixed_ordinal_stats$NACOV, function(G) 2*G))
+      expect_equal(doubled$scaling.factor, 2*supplied$scaling.factor, tolerance = 1e-10)
+      expect_equal(doubled$mi, supplied$mi, tolerance = 1e-10)
     }
   }
 })
@@ -407,4 +416,29 @@ test_that("lab estimated-weight switches default to misspecification-robust weig
   }
   expect_true("frontier_rbm" %in% checked)
   expect_true("fit_measures_misspec" %in% checked)
+})
+
+
+test_that("mixed estimated-weight MI and releases reach lab defaults across groups and coordinates", {
+  d <- recipe_data(500L)[1:4]
+  d[1:2] <- lapply(d[1:2], function(x) ordered(cut(x, c(-Inf, -0.5, 0.5, Inf))))
+  for (groups in c(1L, 2L)) {
+    data <- d
+    if (groups == 2L) data$group <- rep(c("A", "B"), each = nrow(d)/2)
+    for (parameterization in c("delta", "theta")) {
+      spec <- model_spec("f =~ x1+a*x2+a*x3+x4\nx3 ~~ 0*x4",
+        ordered = names(d)[1:2], parameterization = parameterization,
+        group = if (groups == 2L) "group" else NULL,
+        group_labels = if (groups == 2L) c("A", "B") else NULL)
+      for (estimator in c("DWLS", "WLS")) {
+        fit <- fit_model(spec, data, estimator = estimator)
+        for (worker in list(modification_indices, score_tests)) {
+          result <- worker(fit)
+          expect_gt(nrow(result), 0L)
+          expect_true(all(is.finite(result$mi.scaled)))
+          expect_equal(result, worker(fit, bread = "observed", estimated_weight = TRUE))
+        }
+      }
+    }
+  }
 })

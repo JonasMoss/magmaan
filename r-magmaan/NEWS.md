@@ -1,5 +1,10 @@
 # magmaan 0.2.0 (in development)
 
+- The lab mixed DWLS/WLS MI and equality-release workers now support
+  estimated weights with exact first-stage influence and observed sensitivity.
+  The ordinary package continues to defer its MI API; covariance and nested
+  policy entry points are unchanged.
+
 - The lavaan 0.7.2 fitting preset now supports complete mixed DWLS, including
   delta/theta and grouped equal loadings. It reproduces lavaan's starts,
   group weighting and stopping through fresh and prepared fitting. Retained

@@ -1,5 +1,12 @@
 # magmaanlab 0.2.0 (in development)
 
+- Complete mixed DWLS/WLS modification indices and equality releases now
+  include estimated-weight influence and exact empirical first-stage rows.
+  Lab defaults and the C++ convenience mixed score API use observed nuisance
+  sensitivity; expected sensitivity and
+  fixed weights remain explicit comparators. Missing recipes are typed
+  unavailable. Mixed WLS IJ also uses the exact sampling channel.
+
 - The lavaan 0.7.2 fitting preset now supports complete mixed DWLS, including
   delta/theta and grouped equal loadings. It reproduces lavaan's starts,
   group weighting and stopping through fresh and prepared fitting. Retained

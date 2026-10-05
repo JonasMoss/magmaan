@@ -89,14 +89,17 @@ the unstructured one and differs.
 Identification-only releases are excluded. Ordinal and mixed-ordinal methods
 use their retained categorical moment covariance and weight conventions; the
 all-ordinal \code{bread} selects observed or expected nuisance sensitivity,
-while mixed methods retain their expected projection. Categorical
-\code{moments} and \code{cov} choices use the retained NACOV.
+and mixed methods now honor the same selection. Complete mixed estimated-weight
+MI/releases use exact empirical first-stage rows and mixed Gamma influence.
+Expected mixed projection and caller-Gamma comparators retain NACOV.
+All-ordinal \code{moments} and \code{cov} choices use the retained NACOV.
 
 Generic \code{modification_indices()} and \code{score_tests()} compose empirical
 robust inference. To request the historical unscaled comparator explicitly, use
 \code{cov = "model_implied"}, \code{estimated_weight = FALSE}, and the desired
 bread/information. Continuous ULS/GLS/DWLS/WLS/DLS and all-ordinal
-ULS/DWLS/WLS support observed-Hessian nuisance sensitivity with estimated-weight
+ULS/DWLS/WLS and complete mixed DWLS/WLS support observed-Hessian
+nuisance sensitivity with estimated-weight
 influence. Their quadratic metric stays expected and their reference law uses
 the matching projected meat. Selecting expected bread or fixed weights requests
 a comparator. At exact fit the observed and expected projections coincide and

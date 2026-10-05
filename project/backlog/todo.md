@@ -719,8 +719,11 @@ The ordinary package does not expose MI in this release; the
   and all-ordinal ULS/DWLS/WLS (TASK-4.2), using exact objective Hessians,
   observed nuisance projection, and the expected quadratic metric. Unequal-group
   case-weight finite differences gate the pooled IJ normalization. Unknown
-  supplied-weight recipes require fixed-weight inference; ordinal NT/DLS and
-  mixed estimated-weight scores remain explicit unavailable cells. Association-ML
+  supplied-weight recipes require fixed-weight inference; ordinal NT/DLS
+  estimated-weight scores remain explicit unavailable cells. Complete mixed
+  DWLS/WLS MI/releases now compose exact sampling rows, mixed Gamma influence
+  and observed sensitivity (TASK-92), with independent augmented-score and
+  one-restriction reconstruction gates. Association-ML
   MI remains a 0.3.0 contract. The maintained
   [component matrix](../validation/capabilities.md#mi-and-equality-release-score-components)
   records the comparator and supported-default regimes.
@@ -1276,8 +1279,11 @@ release, including dependencies otherwise shared with the primary programme.
   TASK-71 composes exact-IJ covariance, the global exact-sampling All law and
   the observed-Hessian/IJ nested parameter-space law (including moment tangents)
   in C++ and both R interfaces. One/two-group delta/theta numerical composition
-  gates give limited validation; mixed calibration and estimated-weight
-  MI/release remain open. TASK-80 registers the mixed lane in
+  gates give limited validation. TASK-92 composes mixed DWLS/WLS estimated-weight
+  MI/releases with observed sensitivity and exact sampling rows; explicit H/B,
+  replicated augmented scores, exact-fit cancellation and common-point nested
+  identity gates cover one/two groups and delta/theta. Mixed calibration remains
+  separate. TASK-80 registers the mixed lane in
   `experiments/decisions/05-dwls-policy-calibration/criteria/mixed_policy.md`;
   its pilot prices production without establishing calibration. Merger review
   precedes production. Other mixed influence routes retain their contracts.

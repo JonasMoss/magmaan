@@ -795,8 +795,20 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   metric N J'J for the fitter's F/2 criterion. Mixed ordinary/fixed robust MI
   no longer carries the former extra factor two; EPC is unchanged. Fixture
   0005 has independent frozen-moment df=1 Schur/robust-variance reconstruction
-  and explicit (N-1)/N oracle score transport; estimated mixed weights remain
-  unsupported (see the MI inventory).
+  and explicit (N-1)/N oracle score transport. Complete mixed DWLS/WLS
+  estimated-weight MI/releases now use exact empirical first-stage rows, the
+  mixed IJ Gamma channel, and observed nuisance sensitivity by default in lab R.
+  Expected sensitivity and fixed weights remain explicit comparators.
+  The score metric remains expected; one-direction robust MI is N u²/B_eff.
+  `mixed_ij_test.cpp` gates explicit H/B reconstruction, replicated augmented
+  case-score derivatives, exact-fit cancellation and the common-point
+  one-restriction nested-law identity across groups and parameterizations.
+  In observed geometry the local nested quadratic N u²/H_eff, divided by its
+  one-restriction eigenvalue B_eff/H_eff, equals the robust MI N u²/B_eff.
+  ULS and genuinely absent estimated-weight recipes return UnsupportedInference.
+  The ordinary package still defers its MI API; lab ordinary names now reach
+  the robust result instead of refusing. The C++ convenience MI/release API
+  switches from unscaled workers to this robust route, retaining `row_user`.
 - Complete mixed DWLS estimated-weight IJ uses a separate empirical sampling
   channel: `data::mixed_moment_sampling_influence` differentiates the marginal
   and pairwise score equations in threshold/negative-mean/variance/association
@@ -822,11 +834,12 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   marginal sampling rows equal the analytic mean/ML-variance derivatives.
   Continuous DWLS uses empirical-moment Gamma weights, while mixed fitting
   retains the marginal/pair-score OPG NACOV, so their estimated-weight channels
-  do not share a fitting-weight convention. ULS/WLS, missing-data and robust
+  do not share a fitting-weight convention. ULS, missing-data and robust
   mixed builders, RBM and all-ordinal routes retain their existing influence
   contracts; this gate does not validate those routes as exact empirical IJ.
-  Ordinary mixed policy, nested-law and estimated-weight MI/release composition
-  and calibration remain open; no ordinary exposure is added.
+  Complete mixed WLS IJ now also selects empirical sampling rows for its full
+  Gamma influence. The mixed policy and MI/release composition are available;
+  calibration remains separate.
 - Mixed continuous/ordinal DWLS/WLS fit-measures are exposed through the same
   `api::fit_measures()` surface as all-ordinal fits. The mixed independence
   baseline profiles the marginal threshold/mean/variance block under the fitted

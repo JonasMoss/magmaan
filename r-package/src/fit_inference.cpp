@@ -882,6 +882,12 @@ Rcpp::DataFrame inference_modification_indices_robust(
         fit, R_NilValue, "mixed_ordinal_stats",
         "mixed ordinal robust modification indices"));
     replace_score_nacov(stats, gamma);
+    if (!Rf_isNull(gamma)) {
+      // Caller Gamma owns the fixed-weight sampling law; keep observed
+      // sensitivity but prevent raw-data reconstruction from replacing it.
+      stats.raw_data.clear();
+      stats.sampling_moment_influence.clear();
+    }
     out = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -892,7 +898,7 @@ Rcpp::DataFrame inference_modification_indices_robust(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
-        estimated_weight);
+        estimated_weight, spec_from(bread, moments, cov).bread, &ctx.names.row_user);
   } else if (estimator == "FIML") {
     validate_fiml_robust_score_options(bread, moments, cov, weight,
                                      estimated_weight);
@@ -1032,6 +1038,12 @@ Rcpp::DataFrame inference_score_tests_robust(
         fit, R_NilValue, "mixed_ordinal_stats",
         "mixed ordinal robust score tests"));
     replace_score_nacov(stats, gamma);
+    if (!Rf_isNull(gamma)) {
+      // Caller Gamma owns the fixed-weight sampling law; keep observed
+      // sensitivity but prevent raw-data reconstruction from replacing it.
+      stats.raw_data.clear();
+      stats.sampling_moment_influence.clear();
+    }
     out = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
@@ -1041,7 +1053,7 @@ Rcpp::DataFrame inference_score_tests_robust(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
                 : ordinal_parameterization_attr(fit["partable"])),
-        estimated_weight);
+        estimated_weight, spec_from(bread, moments, cov).bread, &ctx.names.row_user);
   } else if (estimator == "FIML") {
     validate_fiml_robust_score_options(bread, moments, cov, weight,
                                      estimated_weight);

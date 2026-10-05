@@ -3290,11 +3290,11 @@ TEST_CASE("mixed ordinal MI recipe matrix gates ordinary cells and typed robust 
           h.pt, h.rep, *stats, *est, weight, options, delta, estimated);
       auto rst = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
           h.pt, h.rep, *stats, *est, weight, delta, estimated);
-      if (weight == W::ULS || estimated) {
+      if (weight == W::ULS) {
         REQUIRE_FALSE(rmi.has_value());
         REQUIRE_FALSE(rst.has_value());
-        CHECK(rmi.error().kind == magmaan::PostError::Kind::NumericIssue);
-        CHECK(rst.error().kind == magmaan::PostError::Kind::NumericIssue);
+        CHECK(rmi.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+        CHECK(rst.error().kind == magmaan::PostError::Kind::UnsupportedInference);
       } else {
         REQUIRE(rmi.has_value());
         REQUIRE(rst.has_value());
@@ -3311,6 +3311,17 @@ TEST_CASE("mixed ordinal MI recipe matrix gates ordinary cells and typed robust 
         }
       }
     }
+    if (weight != W::ULS) {
+      auto absent = *stats;
+      absent.raw_data.clear();
+      absent.gamma_diag_influence.clear();
+      absent.gamma_full_influence.clear();
+      auto missing = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
+          h.pt, h.rep, absent, *est, weight, delta, true, magmaan::robust::Information::Observed);
+      REQUIRE_FALSE(missing.has_value());
+      CHECK(missing.error().kind == magmaan::PostError::Kind::UnsupportedInference);
+    }
+
   }
 }
 

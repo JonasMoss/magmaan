@@ -44,10 +44,10 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/optim/reparameterize.hpp"
 
-#include "detail_linalg.hpp"
+#include "../detail_linalg.hpp"
 #include "magmaan/parse/op.hpp"
 
-#include "detail_second_order.hpp"
+#include "../detail_second_order.hpp"
 #include "detail_ordinal_psd.hpp"
 #include "detail_theta_threshold_profile.hpp"
 #include "detail_whiten_factor.hpp"
@@ -611,6 +611,13 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
                         const std::vector<bool>& block_has_missing,
                         bool estimated_weight = true,
                         const std::vector<Eigen::MatrixXd>* sampling_rows = nullptr);
+post_expected<std::vector<WeightedMomentIJBlock>>
+build_mixed_ordinal_ij_blocks(const data::MixedOrdinalStats& stats,
+    const ThresholdLayout& layout, const model::ImpliedMoments& moments,
+    const Eigen::VectorXd& theta, const std::vector<Eigen::MatrixXd>& Ws,
+    const Eigen::MatrixXd& Delta_full, OrdinalWeightKind weights,
+    OrdinalParameterization parameterization, bool estimated_weight,
+    bool require_exact_sampling = false);
 post_expected<robust::ParamSpaceSandwich>
 ordinal_param_space_sandwich_ij(const data::OrdinalStats& stats,
                                 const ThresholdLayout& layout,

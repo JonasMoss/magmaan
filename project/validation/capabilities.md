@@ -301,8 +301,9 @@ validates its stated numerical slice; explicit refusals are unsupported, and
 estimated quadratic-weight channels for likelihood fits are inapplicable.
 Mixed ordinary MI remains **limited validation**: TASK-33.4 fixed its
 factor-of-two scale defect and ordinary/fixed robust MI has independent
-equality-release reconstruction gates, but estimated mixed-weight MI remains
-unsupported. These states describe the lab/C++ component routes;
+equality-release reconstruction gates. Complete mixed DWLS/WLS estimated-weight
+MI/releases additionally use exact empirical first-stage rows and observed
+sensitivity, with independent augmented-score and Schur gates (TASK-92). These states describe the lab/C++ component routes;
 ordinary magmaan inference and lavaan reporting remain governed by their own
 composition gates above.
 
@@ -340,9 +341,10 @@ names); a cell lists its C++ gate first and its R gate second.
 
 - **C-LS-MATRIX**: `cpp/tests/unit/score_robust_test.cpp`, `continuous LS recipe matrix gates means constraints and ordinary score reductions` (ULS, NT, DWLS, ADF and DLS; ordinary and fixed/estimated robust MI and releases).
 - **C-ORD-MATRIX**: same file, `ordinal MI recipe matrix gates ordinary releases and typed refusals` (ULS, DWLS, WLS, NT, DLS and supplied W; both ordinary statistics and both robust channels). The association-tagged estimates assert `UnsupportedInference` in all four workers; the genuine association fit is also gated by `cpp/tests/unit/api_sem_test.cpp`, `api ML dispatches ordinal associations without granting Gaussian inference`.
-- **C-MIX-MATRIX**: same file, `mixed ordinal MI recipe matrix gates ordinary cells and typed robust refusals` (ULS, DWLS and WLS; ordinary MI/releases, fixed robust DWLS/WLS, ULS and estimated robust refusals).
+- **C-MIX-MATRIX**: same file, `mixed ordinal MI recipe matrix gates ordinary cells and typed robust refusals` (ULS, DWLS and WLS; ordinary MI/releases, fixed robust DWLS/WLS, ULS refusal and estimated robust DWLS/WLS).
 - **R-ORD-MATRIX**: `r-package/tests/testthat/test_weight_recipe_inference.R`, `ordinal recipe matrix gates releases and estimated-weight refusals` (all six recipes, both MI and releases; association-ML refusals).
-- **R-MIX-MATRIX**: same file, `mixed ordinal MI matrix gates fixed weights and explicit refusals` (DWLS/WLS MI and releases; R ULS fitting refusal).
+- **R-MIX-MATRIX**: same file, `mixed ordinal MI matrix gates fixed weights and explicit refusals` (DWLS/WLS fixed and estimated-weight MI and releases; R ULS fitting refusal).
+- **C-MIX-IJ-SCORE**: `mixed_ij_test.cpp`, `Mixed estimated-weight MI reconstructs observed projection and augmented case scores`: explicit H/B Schur reconstruction (1e-10), integer-replicated augmented-score differences (1e-5 relative), exact-fit weight-channel cancellation, and the common-point one-restriction nested-law identity; DWLS/WLS, one/two groups, delta/theta. Full-Gamma case-weight rows have a separate reconstruction gate.
 
 Complete mixed DWLS estimated-weight IJ is independently gated by
 `mixed_ij_test.cpp`: empirical-Jacobian sampling rows and fitting-weight rows
@@ -390,9 +392,9 @@ guards reject attempts to request one. Mixed ordinal currently reports
 | All-ordinal GLS / NT | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: NT weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal DLS(a) | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: DLS weight influence not derived; C-ORD-MATRIX / R-ORD-MATRIX |
 | All-ordinal LS / supplied W | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | C-ORD-MATRIX / R-ORD-MATRIX | UnsupportedInference: unknown influence of supplied W; C-ORD-MATRIX / R-ORD-MATRIX |
-| Mixed ordinal / DWLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
-| Mixed ordinal / WLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | NumericIssue: mixed weight influence not implemented; C-MIX-MATRIX / R-MIX-MATRIX |
-| Mixed ordinal / ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | NumericIssue: mixed robust score supports DWLS/WLS only; C-MIX-MATRIX / R fitting refusal | Same core NumericIssue / R fitting refusal |
+| Mixed ordinal / DWLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | C-MIX-MATRIX / R-MIX-MATRIX; exact empirical first-stage and estimated-weight channels, observed projection; C-MIX-IJ-SCORE |
+| Mixed ordinal / WLS | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX | C-MIX-MATRIX / R-MIX-MATRIX; R-GAMMA | C-MIX-MATRIX / R-MIX-MATRIX; exact empirical first-stage and estimated-weight channels, observed projection; C-MIX-IJ-SCORE |
+| Mixed ordinal / ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | C-MIX-MATRIX / R-MIX-MATRIX rejects fitting ULS | UnsupportedInference: mixed robust score supports DWLS/WLS only; C-MIX-MATRIX / R fitting refusal | Same core UnsupportedInference / R fitting refusal |
 | Prepared ordinal association ML ([contract plan](../design/association-ml-inference.md)) | UnsupportedInference: LS score is not the ML-target score; C-ORD-MATRIX / R-ORD-MATRIX | Same rejection and gates | Same rejection and gates | Same rejection and gates |
 
 ### Conventions and limits

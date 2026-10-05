@@ -44,7 +44,7 @@ post_expected<std::vector<Eigen::MatrixXd>>
 ordinal_sandwich_weights(const data::MixedOrdinalStats& stats,
                          OrdinalWeightKind kind) {
   if (kind == OrdinalWeightKind::ULS) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
         "mixed ordinal robust score tests support DWLS/WLS weights only"));
   }
   const auto& Ws = kind == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
@@ -947,6 +947,159 @@ robust_mixed_ordinal(spec::LatentStructure pt,
   return ordinal_result_from_weighted(*out);
 }
 
+
+namespace detail_ordinal {
+post_expected<std::vector<WeightedMomentIJBlock>>
+build_mixed_ordinal_ij_blocks(const data::MixedOrdinalStats& stats,
+    const ThresholdLayout& layout, const model::ImpliedMoments& moments,
+    const Eigen::VectorXd& theta, const std::vector<Eigen::MatrixXd>& Ws,
+    const Eigen::MatrixXd& Delta_full, OrdinalWeightKind weights,
+    OrdinalParameterization parameterization, bool estimated_weight,
+    bool require_exact_sampling) {
+  const bool has_diag_gamma_if = stats.gamma_diag_influence.size() == stats.R.size();
+  const bool has_full_gamma_if = stats.gamma_full_influence.size() == stats.R.size();
+  if (stats.moment_influence.size() != stats.R.size())
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "mixed score influence: sampling recipe unavailable"));
+  if (estimated_weight && stats.raw_data.size() != stats.R.size() &&
+      !(weights == OrdinalWeightKind::DWLS ? has_diag_gamma_if : has_full_gamma_if))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "mixed score influence: estimated-weight recipe unavailable"));
+  if (estimated_weight) {
+    auto recipe = require_nacov_weight(Ws, stats.NACOV, weights, "mixed score influence");
+    if (!recipe) return std::unexpected(recipe.error());
+  }
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(stats.R.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = stats.moments[b].size();
+    Eigen::MatrixXd sampling;
+    if (weights != OrdinalWeightKind::ULS && stats.sampling_moment_influence.size() == stats.R.size()) {
+      sampling = stats.sampling_moment_influence[b];
+    } else if (weights != OrdinalWeightKind::ULS && stats.raw_data.size() == stats.R.size() &&
+               stats.raw_data[b].allFinite()) {
+      auto sampling_or = data::mixed_moment_sampling_influence(
+          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+          stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!sampling_or.has_value()) return std::unexpected(sampling_or.error());
+      sampling = std::move(*sampling_or);
+    } else {
+      if (require_exact_sampling)
+        return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+            "mixed robust score: exact first-stage sampling recipe unavailable; "
+            "provide empirical sampling rows or complete raw observations"));
+      // Existing observed-data and robust-builder channels retain their
+      // declared influence contract; complete ordinary ML uses empirical rows.
+      sampling = stats.moment_influence[b];
+    }
+    const Eigen::MatrixXd& G = sampling;
+    if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_mixed_ordinal_ij: moment_influence shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::VectorXd model_m = mixed_model_moments(
+        stats, layout, moments, theta, b, parameterization);
+    const Eigen::VectorXd d_b = model_m - stats.moments[b];
+    Eigen::MatrixXd correction;
+    if (estimated_weight && weights == OrdinalWeightKind::DWLS) {
+      Eigen::MatrixXd if_gamma;
+      if (has_diag_gamma_if) {
+        if_gamma = stats.gamma_diag_influence[b];
+        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "robust_mixed_ordinal_ij: precomputed Gamma diagonal influence "
+              "shape mismatch in block " + std::to_string(b)));
+        }
+      } else {
+        const bool observed_raw = !stats.raw_data[b].allFinite();
+        auto inf_or = observed_raw
+            ? data::mixed_observed_gamma_diag_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_diag_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+        auto D_or = observed_raw
+            ? data::mixed_observed_gamma_diag_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_diag_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!D_or.has_value()) return std::unexpected(D_or.error());
+        if (inf_or->rows() != G.rows() || inf_or->cols() != mb ||
+            D_or->rows() != mb || D_or->cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "robust_mixed_ordinal_ij: mixed Gamma diagonal influence shape "
+              "mismatch in block " + std::to_string(b)));
+        }
+        if_gamma = (*inf_or + G * D_or->transpose()).eval();
+      }
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        const double gkk = stats.NACOV[b](k, k);
+        if (!(gkk > 0.0)) continue;
+        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_gamma.col(k);
+      }
+    } else if (estimated_weight && weights == OrdinalWeightKind::WLS) {
+      Eigen::MatrixXd if_gamma;
+      if (has_full_gamma_if) {
+        if_gamma = stats.gamma_full_influence[b];
+        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb * mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "robust_mixed_ordinal_ij: precomputed Gamma full influence "
+              "shape mismatch in block " + std::to_string(b)));
+        }
+      } else {
+        const bool observed_raw = !stats.raw_data[b].allFinite();
+        auto inf_or = observed_raw
+            ? data::mixed_observed_gamma_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_data_influence(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
+        auto D_or = observed_raw
+            ? data::mixed_observed_gamma_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b])
+            : data::mixed_gamma_jacobian_fd(
+                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
+                  stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!D_or.has_value()) return std::unexpected(D_or.error());
+        if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
+            D_or->rows() != mb * mb || D_or->cols() != mb) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "robust_mixed_ordinal_ij: mixed full Gamma influence shape "
+              "mismatch in block " + std::to_string(b)));
+        }
+        if_gamma = (*inf_or + G * D_or->transpose()).eval();
+      }
+      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
+      for (Eigen::Index i = 0; i < G.rows(); ++i) {
+        const Eigen::VectorXd if_vec = if_gamma.row(i).transpose();
+        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
+        correction.row(i) = lhs * IFGamma * Ws[b];
+      }
+    }
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .moment_influence = G,
+        .weight_correction = std::move(correction),
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+
+  return ij_blocks;
+}
+}  // namespace detail_ordinal
+
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal_ij(spec::LatentStructure pt,
                         const model::MatrixRep& rep,
@@ -1035,132 +1188,11 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 
-  std::vector<WeightedMomentIJBlock> ij_blocks;
-  ij_blocks.reserve(stats.R.size());
-  Eigen::Index off = 0;
-  for (std::size_t b = 0; b < stats.R.size(); ++b) {
-    const Eigen::Index mb = stats.moments[b].size();
-    Eigen::MatrixXd sampling;
-    if (weights == OrdinalWeightKind::DWLS &&
-        stats.sampling_moment_influence.size() == stats.R.size()) {
-      sampling = stats.sampling_moment_influence[b];
-    } else if (weights == OrdinalWeightKind::DWLS &&
-               stats.raw_data.size() == stats.R.size() &&
-               stats.raw_data[b].allFinite()) {
-      auto sampling_or = data::mixed_moment_sampling_influence(
-          stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-          stats.thresholds[b], stats.mean[b], stats.R[b]);
-      if (!sampling_or.has_value()) return std::unexpected(sampling_or.error());
-      sampling = std::move(*sampling_or);
-    } else {
-      // Existing observed-data and robust-builder channels retain their
-      // declared influence contract; complete ordinary ML uses empirical rows.
-      sampling = stats.moment_influence[b];
-    }
-    const Eigen::MatrixXd& G = sampling;
-    if (G.rows() != stats.n_obs[b] || G.cols() != mb) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "robust_mixed_ordinal_ij: moment_influence shape mismatch in block " +
-              std::to_string(b)));
-    }
-    const Eigen::VectorXd model_m = mixed_model_moments(
-        stats, *layout_or, eval->moments, est.theta, b, parameterization);
-    const Eigen::VectorXd d_b = model_m - stats.moments[b];
-    Eigen::MatrixXd correction;
-    if (weights == OrdinalWeightKind::DWLS) {
-      Eigen::MatrixXd if_gamma;
-      if (has_diag_gamma_if) {
-        if_gamma = stats.gamma_diag_influence[b];
-        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb) {
-          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-              "robust_mixed_ordinal_ij: precomputed Gamma diagonal influence "
-              "shape mismatch in block " + std::to_string(b)));
-        }
-      } else {
-        const bool observed_raw = !stats.raw_data[b].allFinite();
-        auto inf_or = observed_raw
-            ? data::mixed_observed_gamma_diag_data_influence(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b])
-            : data::mixed_gamma_diag_data_influence(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b]);
-        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-        auto D_or = observed_raw
-            ? data::mixed_observed_gamma_diag_jacobian_fd(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b])
-            : data::mixed_gamma_diag_jacobian_fd(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b]);
-        if (!D_or.has_value()) return std::unexpected(D_or.error());
-        if (inf_or->rows() != G.rows() || inf_or->cols() != mb ||
-            D_or->rows() != mb || D_or->cols() != mb) {
-          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-              "robust_mixed_ordinal_ij: mixed Gamma diagonal influence shape "
-              "mismatch in block " + std::to_string(b)));
-        }
-        if_gamma = (*inf_or + G * D_or->transpose()).eval();
-      }
-      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
-      for (Eigen::Index k = 0; k < mb; ++k) {
-        const double gkk = stats.NACOV[b](k, k);
-        if (!(gkk > 0.0)) continue;
-        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_gamma.col(k);
-      }
-    } else if (weights == OrdinalWeightKind::WLS) {
-      Eigen::MatrixXd if_gamma;
-      if (has_full_gamma_if) {
-        if_gamma = stats.gamma_full_influence[b];
-        if (if_gamma.rows() != G.rows() || if_gamma.cols() != mb * mb) {
-          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-              "robust_mixed_ordinal_ij: precomputed Gamma full influence "
-              "shape mismatch in block " + std::to_string(b)));
-        }
-      } else {
-        const bool observed_raw = !stats.raw_data[b].allFinite();
-        auto inf_or = observed_raw
-            ? data::mixed_observed_gamma_data_influence(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b])
-            : data::mixed_gamma_data_influence(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b]);
-        if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-        auto D_or = observed_raw
-            ? data::mixed_observed_gamma_jacobian_fd(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b])
-            : data::mixed_gamma_jacobian_fd(
-                  stats.raw_data[b], stats.ordered[b], stats.n_levels[b],
-                  stats.thresholds[b], stats.mean[b], stats.R[b]);
-        if (!D_or.has_value()) return std::unexpected(D_or.error());
-        if (inf_or->rows() != G.rows() || inf_or->cols() != mb * mb ||
-            D_or->rows() != mb * mb || D_or->cols() != mb) {
-          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-              "robust_mixed_ordinal_ij: mixed full Gamma influence shape "
-              "mismatch in block " + std::to_string(b)));
-        }
-        if_gamma = (*inf_or + G * D_or->transpose()).eval();
-      }
-      const Eigen::RowVectorXd lhs = d_b.transpose() * Ws[b];
-      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
-      for (Eigen::Index i = 0; i < G.rows(); ++i) {
-        const Eigen::VectorXd if_vec = if_gamma.row(i).transpose();
-        Eigen::Map<const Eigen::MatrixXd> IFGamma(if_vec.data(), mb, mb);
-        correction.row(i) = lhs * IFGamma * Ws[b];
-      }
-    }
-    ij_blocks.push_back(WeightedMomentIJBlock{
-        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
-        .weight = Ws[b],
-        .moment_influence = G,
-        .weight_correction = std::move(correction),
-        .n_obs = stats.n_obs[b]});
-    off += mb;
-  }
+  auto blocks = build_mixed_ordinal_ij_blocks(stats, *layout_or, eval->moments,
+      est.theta, Ws, Delta_full, weights, parameterization, true);
+  if (!blocks) return std::unexpected(blocks.error());
 
-  auto out = robust_weighted_moment_ij(ij_blocks, K, 2.0 * est.fmin, A);
+  auto out = robust_weighted_moment_ij(*blocks, K, 2.0 * est.fmin, A);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }

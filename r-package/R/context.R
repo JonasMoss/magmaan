@@ -216,16 +216,18 @@ score_tests <- function(fit, data = NULL, ...) {
 #
 # Ordinal/mixed fits use the polychoric NACOV the fit already carries, so the
 # scaling is intrinsic to the diagonal/identity weight (DWLS/ULS scale even on
-# normal data). All-ordinal `bread` selects observed or expected nuisance
-# sensitivity; mixed fits retain their expected projection. Categorical
-# `moments`/`cov` choices use the retained NACOV. Continuous ML/ULS/GLS/WLS
+# normal data). Ordinal and mixed `bread` select observed or expected nuisance
+# sensitivity; complete mixed estimated weights use exact first-stage rows.
+# Expected mixed projection and caller-Gamma comparators retain NACOV;
+# observed mixed raw-data projection uses empirical sampling rows.
+# Continuous ML/ULS/GLS/WLS
 # build the meat from `cov`: 'empirical' needs the fitting `data` (raw
 # observations); 'model_implied' uses Gamma_NT from the chosen moments.
 # WLS-computed fits (WLS/ADF, DWLS, DLS, supplied W) use the fitting weight
 # recorded in fit$W; `weight=` is needed only for fits without that record and
 # must otherwise equal it. The ordinary statistic is recovered only when the
 # weight is the inverse of the selected Gamma.
-# Continuous and all-ordinal LS use observed-Hessian nuisance sensitivity by
+# Continuous, all-ordinal and complete mixed LS use observed sensitivity by
 # default, with the expected quadratic metric and matching projected meat.
 # Expected sensitivity and fixed weights remain explicit comparators.
 # Continuous LS does not implement 'browne_unbiased', and estimated-weight mode
@@ -236,8 +238,8 @@ score_tests <- function(fit, data = NULL, ...) {
 # recorded weight recipe (NT, ADF, DWLS or DLS with its mixing weight; ULS has
 # none). A supplied W has no recipe, and ordinal NT/DLS weights have no derived
 # influence yet, so both are refused with UnsupportedInference. It needs the
-# fitting `data` for the continuous tier and is not available for ML or
-# mixed-ordinal.
+# fitting `data` for the continuous tier and retained raw observations or
+# explicit influence rows for complete mixed DWLS/WLS; unavailable for ML.
 # FIML uses observed information and observed-pattern casewise score meat;
 # omitted bread/information select 'observed'. It uses retained raw observations
 # unless `data` is supplied. Expected information, alternative covariance/moment

@@ -953,7 +953,8 @@ ordinal_stats_with_stage2_weight(const data::OrdinalStats& stats,
 // the global SB scalar. DWLS/WLS only (ULS has a fixed weight); requires the
 // per-case `moment_influence` and `int_data` carried by the fit's OrdinalStats.
 // `bread` selects expected or exact observed nuisance sensitivity; the score
-// metric stays expected. Not implemented for mixed-ordinal estimated weights.
+// metric stays expected. Mixed DWLS/WLS use exact empirical sampling rows
+// and the mixed estimated-weight channel.
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,
@@ -987,7 +988,9 @@ modification_indices_mixed_ordinal_robust(
     OrdinalWeightKind weights,
     const inference::ModificationIndexOptions& options = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
-    bool estimated_weight = false);
+    bool estimated_weight = false,
+    robust::Information bread = robust::Information::Expected,
+    const std::vector<std::int8_t>* row_user = nullptr);
 
 post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
@@ -997,7 +1000,9 @@ score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
                                  OrdinalWeightKind weights,
                                  OrdinalParameterization parameterization =
                                      OrdinalParameterization::Delta,
-                                 bool estimated_weight = false);
+                                 bool estimated_weight = false,
+                                 robust::Information bread = robust::Information::Expected,
+                                 const std::vector<std::int8_t>* row_user = nullptr);
 
 }  // namespace frontier
 
