@@ -148,9 +148,22 @@ PolicyNested policy_nested_fiml(FimlPolicyFit& null, const PolicyFitState& null_
 PolicyInference policy_inference_dwls(DwlsPolicyFit& fit, const PolicyFitState& state);
 PolicyNested policy_nested_dwls(DwlsPolicyFit& null, const PolicyFitState& null_state,
     DwlsPolicyFit& alternative, const PolicyFitState& alternative_state);
+class MixedDwlsPolicyFit {
+ public:
+  MixedDwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
+      data::MixedOrdinalStats stats, estimate::Estimates estimates,
+      estimate::OrdinalParameterization parameterization,
+      std::vector<std::int8_t> row_user = {});
+  struct Impl;
+  const std::shared_ptr<Impl> impl;
+};
+PolicyInference policy_inference_dwls(MixedDwlsPolicyFit& fit, const PolicyFitState& state);
+PolicyNested policy_nested_dwls(MixedDwlsPolicyFit& null, const PolicyFitState& null_state,
+    MixedDwlsPolicyFit& alternative, const PolicyFitState& alternative_state);
 // Number of expensive evaluation-point builds, for reuse diagnostics.
 std::size_t policy_ingredient_builds(const FimlPolicyFit& fit);
 std::size_t policy_ingredient_builds(const DwlsPolicyFit& fit);
+std::size_t policy_ingredient_builds(const MixedDwlsPolicyFit& fit);
 
 // Complete-data normal-theory ML.
 //
@@ -243,6 +256,29 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
                                 const std::vector<std::int8_t>* null_row_user = nullptr,
                                 const std::vector<std::int8_t>* alternative_row_user = nullptr);
 
+// Mixed DWLS uses exact empirical first-stage sampling rows for the global
+// spectrum, retaining OPG NACOV fitting weights. Covariance and nested law
+// include estimated-weight influence. Limited validation; calibration pending.
+PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const data::MixedOrdinalStats& stats,
+                                      const estimate::Estimates& estimates,
+                                      estimate::OrdinalParameterization parameterization,
+                                      const PolicyFitState& state,
+                                      const std::vector<std::int8_t>* row_user = nullptr);
+PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+                                const model::MatrixRep& null_rep,
+                                const estimate::Estimates& null_estimates,
+                                const PolicyFitState& null_state,
+                                spec::LatentStructure alternative_pt,
+                                const model::MatrixRep& alternative_rep,
+                                const estimate::Estimates& alternative_estimates,
+                                const PolicyFitState& alternative_state,
+                                const data::MixedOrdinalStats& stats,
+                                estimate::OrdinalParameterization parameterization,
+                                const std::vector<std::int8_t>* null_row_user = nullptr,
+                                const std::vector<std::int8_t>* alternative_row_user = nullptr);
+
 namespace frontier {
 // Local moment embedding and null tangent in the alternative's equality-
 // reduced coordinates. Weighted residuals use the same sample and DWLS weight.
@@ -258,6 +294,14 @@ post_expected<MomentNestedTangent> moment_nested_tangent(
     const estimate::Estimates& null_estimates,
     spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
     const estimate::Estimates& alternative_estimates, const data::OrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user = nullptr,
+    const std::vector<std::int8_t>* alternative_row_user = nullptr);
+post_expected<MomentNestedTangent> moment_nested_tangent(
+    spec::LatentStructure null_pt, const model::MatrixRep& null_rep,
+    const estimate::Estimates& null_estimates,
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates, const data::MixedOrdinalStats& stats,
     estimate::OrdinalParameterization parameterization,
     const std::vector<std::int8_t>* null_row_user = nullptr,
     const std::vector<std::int8_t>* alternative_row_user = nullptr);

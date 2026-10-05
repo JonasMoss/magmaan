@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numeric>
 #include <utility>
+#include <type_traits>
 
 #include <Eigen/Cholesky>
 #include "magmaan/inference/score.hpp"
@@ -40,6 +41,19 @@ struct DwlsPolicyFit::Impl {
   std::optional<PolicyInference> inference;
   std::size_t builds = 0;
 };
+struct MixedDwlsPolicyFit::Impl {
+  const spec::LatentStructure pt;
+  const model::MatrixRep rep;
+  const data::MixedOrdinalStats stats;
+  std::optional<std::vector<Eigen::MatrixXd>> sampling;
+  const estimate::Estimates estimates;
+  const estimate::OrdinalParameterization parameterization;
+  const std::vector<std::int8_t> row_user;
+  std::optional<post_expected<estimate::OrdinalRobustResult>> ij;
+  std::optional<fit_expected<estimate::frontier::OrdinalNewtonParts>> parts;
+  std::optional<PolicyInference> inference;
+  std::size_t builds = 0;
+};
 FimlPolicyFit::FimlPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
     data::RawData raw, estimate::fiml::FIMLPack pack, estimate::Estimates estimates)
     : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
@@ -50,8 +64,15 @@ DwlsPolicyFit::DwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
     : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
         std::move(stats), std::move(estimates), parameterization,
         std::move(row_user), {}, {}, {}, 0})) {}
+MixedDwlsPolicyFit::MixedDwlsPolicyFit(spec::LatentStructure pt, model::MatrixRep rep,
+    data::MixedOrdinalStats stats, estimate::Estimates estimates,
+    estimate::OrdinalParameterization parameterization, std::vector<std::int8_t> row_user)
+    : impl(std::make_shared<Impl>(Impl{std::move(pt), std::move(rep),
+        std::move(stats), {}, std::move(estimates), parameterization,
+        std::move(row_user), {}, {}, {}, 0})) {}
 std::size_t policy_ingredient_builds(const FimlPolicyFit& fit) { return fit.impl->builds; }
 std::size_t policy_ingredient_builds(const DwlsPolicyFit& fit) { return fit.impl->builds; }
+std::size_t policy_ingredient_builds(const MixedDwlsPolicyFit& fit) { return fit.impl->builds; }
 
 
 
@@ -205,13 +226,118 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
   return out;
 }
 
+static post_expected<data::MixedOrdinalStats> mixed_policy_stats(
+    const data::MixedOrdinalStats& input, MixedDwlsPolicyFit::Impl* cache) {
+  auto stats = input;
+  const auto blocks = stats.R.size();
+  if (stats.moments.size() != blocks || stats.mean.size() != blocks ||
+      stats.ordered.size() != blocks || stats.n_levels.size() != blocks ||
+      stats.thresholds.size() != blocks || stats.n_obs.size() != blocks ||
+      stats.NACOV.size() != blocks)
+    return std::unexpected(PostError{PostError::Kind::NumericIssue,
+        "mixed DWLS policy: inconsistent first-stage block layout"});
+  if (stats.W_dwls.size() != blocks)
+    return std::unexpected(PostError{PostError::Kind::NumericIssue,
+        "mixed DWLS policy: fitting weights unavailable"});
+  for (std::size_t b = 0; b < blocks; ++b) {
+    const auto m = stats.moments[b].size();
+    const auto& gamma = stats.NACOV[b];
+    const auto& weight = stats.W_dwls[b];
+    if (gamma.rows() != m || gamma.cols() != m || weight.rows() != m ||
+        weight.cols() != m || !gamma.allFinite() || !weight.allFinite() ||
+        (gamma.diagonal().array() <= 0.0).any())
+      return std::unexpected(PostError{PostError::Kind::NumericIssue,
+          "mixed DWLS policy: invalid NACOV or fitting weight"});
+    const Eigen::MatrixXd expected = gamma.diagonal().cwiseInverse().asDiagonal();
+    if ((weight - expected).norm() > 1e-6 * expected.norm())
+      return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+          "mixed DWLS policy requires the DWLS weight diag(NACOV)^-1"});
+  }
+  if (cache && cache->sampling) stats.sampling_moment_influence = *cache->sampling;
+  if (stats.sampling_moment_influence.size() != stats.R.size()) {
+    if (stats.raw_data.size() != stats.R.size())
+      return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+          "mixed DWLS policy requires complete raw data or exact sampling influence rows"});
+    stats.sampling_moment_influence.clear();
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      if (!stats.raw_data[b].allFinite())
+        return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+            "mixed DWLS policy requires complete observations for exact first-stage influence"});
+      auto rows = data::mixed_moment_sampling_influence(stats.raw_data[b],
+          stats.ordered[b], stats.n_levels[b], stats.thresholds[b], stats.mean[b], stats.R[b]);
+      if (!rows) return std::unexpected(rows.error());
+      stats.sampling_moment_influence.push_back(std::move(*rows));
+    }
+    if (cache) cache->sampling = stats.sampling_moment_influence;
+  }
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const auto& rows = stats.sampling_moment_influence[b];
+    if (stats.n_obs[b] <= 0 || rows.rows() != stats.n_obs[b] || rows.cols() != stats.moments[b].size() || !rows.allFinite())
+      return std::unexpected(PostError{PostError::Kind::NumericIssue,
+          "mixed DWLS policy: invalid exact sampling influence rows"});
+  }
+  return stats;
+}
+
+template<class Stats, class Cache>
+static post_expected<Stats> dwls_policy_stats(const Stats& input, Cache* cache) {
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
+    return mixed_policy_stats(input, cache);
+  else return input;
+}
+
+template<class Stats>
+static auto dwls_policy_ij(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const Stats& stats, const estimate::Estimates& estimates,
+    estimate::OrdinalWeightKind weights, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* row_user) {
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
+    return estimate::robust_mixed_ordinal_ij(std::move(pt), rep, stats, estimates, weights, parameterization, row_user);
+  else return estimate::robust_ordinal_ij(std::move(pt), rep, stats, estimates, weights, parameterization, row_user);
+}
+
+template<class Stats>
+static auto dwls_policy_global(spec::LatentStructure pt, const model::MatrixRep& rep,
+    const Stats& stats, const estimate::Estimates& estimates,
+    estimate::OrdinalWeightKind weights, estimate::OrdinalParameterization parameterization,
+    robust::Information information, const std::vector<std::int8_t>* row_user) {
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
+    // Preserve OPG fitting weights; only the global sampling law changes.
+    auto exact = stats;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const auto& rows = stats.sampling_moment_influence[b];
+      exact.NACOV[b] = rows.transpose() * rows / static_cast<double>(stats.n_obs[b]);
+    }
+    return estimate::robust_mixed_ordinal(std::move(pt), rep, exact, estimates, weights, parameterization, information, row_user);
+  } else return estimate::robust_ordinal(std::move(pt), rep, stats, estimates, weights, parameterization, information, row_user);
+}
+
+template<class Stats>
+static auto dwls_policy_prepare(spec::LatentStructure& pt, const Stats& stats,
+    estimate::OrdinalParameterization parameterization, spec::Starts* starts,
+    const std::vector<std::int8_t>* row_user) {
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
+    return estimate::prepare_mixed_ordinal_partable(pt, stats, parameterization, starts, row_user);
+  else return estimate::prepare_ordinal_partable(pt, stats, parameterization, starts, row_user);
+}
+
+template<class Stats>
+static auto dwls_policy_parts(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const Stats& stats, const Eigen::VectorXd& theta, estimate::OrdinalWeightKind weights,
+    estimate::OrdinalParameterization parameterization) {
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
+    return estimate::frontier::mixed_ordinal_ls_newton_parts_prepared(pt, rep, stats, theta, weights, parameterization);
+  else return estimate::frontier::ordinal_ls_newton_parts_prepared(pt, rep, stats, theta, weights, parameterization);
+}
+
+template<class Stats, class Cache>
 static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
-                                      const data::OrdinalStats& stats,
+                                      const Stats& input_stats,
                                       const estimate::Estimates& estimates,
                                       estimate::OrdinalParameterization parameterization,
                                       const PolicyFitState& state,
-                                      const std::vector<std::int8_t>* row_user, DwlsPolicyFit::Impl* cache) {
+                                      const std::vector<std::int8_t>* row_user, Cache* cache) {
   PolicyInference out;
   if (state.penalized) {
     out = policy_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
@@ -234,13 +360,16 @@ static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
     unavailable.psd_boundary = out.psd_boundary;
     return unavailable;
   }
+  auto exact = dwls_policy_stats(input_stats, cache);
+  if (!exact) return policy_unavailable(reason_from(exact.error()), exact.error().detail);
+  const auto& stats = *exact;
   using estimate::OrdinalWeightKind;
   if (cache && !cache->ij) {
-    cache->ij = estimate::robust_ordinal_ij(pt, rep, stats, estimates,
+    cache->ij = dwls_policy_ij(pt, rep, stats, estimates,
         OrdinalWeightKind::DWLS, parameterization, row_user);
     ++cache->builds;
   }
-  auto ij = cache ? *cache->ij : estimate::robust_ordinal_ij(pt, rep, stats,
+  auto ij = cache ? *cache->ij : dwls_policy_ij(pt, rep, stats,
       estimates, OrdinalWeightKind::DWLS, parameterization, row_user);
   if (ij) {
     out.covariance = ij->vcov;
@@ -251,7 +380,7 @@ static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
   out.lr.reason = InferenceReason::Inapplicable;
   out.lr.detail = "DWLS has no likelihood; its global test is the fit-function "
                   "statistic, reported as the score test, which it equals";
-  auto fixed = estimate::robust_ordinal(std::move(pt), rep, stats, estimates,
+  auto fixed = dwls_policy_global(std::move(pt), rep, stats, estimates,
                                         OrdinalWeightKind::DWLS, parameterization,
                                         robust::Information::Expected, row_user);
   if (!fixed) {
@@ -283,6 +412,7 @@ static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
   return out;
 }
 
+template<class Stats, class Cache>
 static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
                                 const model::MatrixRep& null_rep,
                                 const estimate::Estimates& null_estimates,
@@ -291,10 +421,10 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
                                 const model::MatrixRep& alternative_rep,
                                 const estimate::Estimates& alternative_estimates,
                                 const PolicyFitState& alternative_state,
-                                const data::OrdinalStats& stats,
+                                const Stats& input_stats,
                                 estimate::OrdinalParameterization parameterization,
                                 const std::vector<std::int8_t>* null_row_user,
-                                const std::vector<std::int8_t>* alternative_row_user, DwlsPolicyFit::Impl* cache) {
+                                const std::vector<std::int8_t>* alternative_row_user, Cache* cache) {
   PolicyNested out;
   out.psd_boundary = null_state.psd_boundary || alternative_state.psd_boundary;
   out.verdict_disagreement =
@@ -316,13 +446,16 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
       return unavailable(InferenceReason::UnsupportedModel, ok.error().detail);
   }
 
+  auto exact = dwls_policy_stats(input_stats, cache);
+  if (!exact) return unavailable(reason_from(exact.error()), exact.error().detail);
+  const auto& stats = *exact;
   Eigen::MatrixXd K, restriction;
   // Nesting: lift the null into the alternative's parameter space on the
   // prepared (threshold- and scale-augmented) structures.
   {
     spec::LatentStructure p1 = alternative_pt, p0 = null_pt;
-    auto prepared1 = estimate::prepare_ordinal_partable(p1, stats, parameterization, nullptr, alternative_row_user);
-    auto prepared0 = estimate::prepare_ordinal_partable(p0, stats, parameterization, nullptr, null_row_user);
+    auto prepared1 = dwls_policy_prepare(p1, stats, parameterization, nullptr, alternative_row_user);
+    auto prepared0 = dwls_policy_prepare(p0, stats, parameterization, nullptr, null_row_user);
     if (!prepared1 || !prepared0)
       return unavailable(InferenceReason::NumericFailure,
                          !prepared1 ? prepared1.error().detail : prepared0.error().detail);
@@ -362,12 +495,12 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   set_unavailable(out.score, InferenceReason::UnsupportedModel,
       "no nested DWLS score test is derived; the fit-function difference test is reported");
   if (cache && !cache->ij) {
-    cache->ij = estimate::robust_ordinal_ij(alternative_pt, alternative_rep, stats,
+    cache->ij = dwls_policy_ij(alternative_pt, alternative_rep, stats,
         alternative_estimates, estimate::OrdinalWeightKind::DWLS, parameterization,
         alternative_row_user);
     ++cache->builds;
   }
-  auto ij = cache ? *cache->ij : estimate::robust_ordinal_ij(alternative_pt,
+  auto ij = cache ? *cache->ij : dwls_policy_ij(alternative_pt,
       alternative_rep, stats, alternative_estimates, estimate::OrdinalWeightKind::DWLS,
       parameterization, alternative_row_user);
   if (!ij) {
@@ -375,13 +508,13 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
     return out;
   }
   if (cache && !cache->parts) {
-    cache->parts = estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
+    cache->parts = dwls_policy_parts(alternative_pt,
         alternative_rep, stats, alternative_estimates.theta,
         estimate::OrdinalWeightKind::DWLS, parameterization);
     ++cache->builds;
   }
   auto parts = cache ? *cache->parts :
-      estimate::frontier::ordinal_ls_newton_parts_prepared(alternative_pt,
+      dwls_policy_parts(alternative_pt,
           alternative_rep, stats, alternative_estimates.theta,
           estimate::OrdinalWeightKind::DWLS, parameterization);
   if (!parts) {
@@ -427,6 +560,7 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   calibrate_spectrum(out.lr);
   return out;
 }
+
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,
@@ -696,7 +830,7 @@ PolicyInference policy_inference_dwls(spec::LatentStructure pt,
     const estimate::Estimates& estimates, estimate::OrdinalParameterization parameterization,
     const PolicyFitState& state, const std::vector<std::int8_t>* row_user) {
   return policy_inference_dwls_cached(std::move(pt), rep, stats, estimates,
-      parameterization, state, row_user, nullptr);
+      parameterization, state, row_user, static_cast<DwlsPolicyFit::Impl*>(nullptr));
 }
 PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
     const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
@@ -708,7 +842,26 @@ PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
     const std::vector<std::int8_t>* alternative_row_user) {
   return policy_nested_dwls_cached(std::move(null_pt), null_rep, null_estimates,
       null_state, std::move(alternative_pt), alternative_rep, alternative_estimates,
-      alternative_state, stats, parameterization, null_row_user, alternative_row_user, nullptr);
+      alternative_state, stats, parameterization, null_row_user, alternative_row_user, static_cast<DwlsPolicyFit::Impl*>(nullptr));
+}
+PolicyInference policy_inference_dwls(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& stats,
+    const estimate::Estimates& estimates, estimate::OrdinalParameterization parameterization,
+    const PolicyFitState& state, const std::vector<std::int8_t>* row_user) {
+  return policy_inference_dwls_cached(std::move(pt), rep, stats, estimates,
+      parameterization, state, row_user, static_cast<MixedDwlsPolicyFit::Impl*>(nullptr));
+}
+PolicyNested policy_nested_dwls(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::MixedOrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return policy_nested_dwls_cached(std::move(null_pt), null_rep, null_estimates,
+      null_state, std::move(alternative_pt), alternative_rep, alternative_estimates,
+      alternative_state, stats, parameterization, null_row_user, alternative_row_user, static_cast<MixedDwlsPolicyFit::Impl*>(nullptr));
 }
 namespace {
 template<class Matrix> bool same_blocks(const std::vector<Matrix>& a,
@@ -779,6 +932,40 @@ PolicyNested policy_nested_dwls(DwlsPolicyFit& null, const PolicyFitState& null_
       !same_blocks(a.stats.NACOV, b.stats.NACOV) || !same_blocks(a.stats.W_dwls, b.stats.W_dwls) ||
       !same_blocks(a.stats.moment_influence, b.stats.moment_influence) ||
       !same_blocks(a.stats.moment_bread, b.stats.moment_bread)))
+    return different_policy_data(null_state, alternative_state);
+  return policy_nested_dwls_cached(a.pt, a.rep, a.estimates, null_state,
+      b.pt, b.rep, b.estimates, alternative_state, b.stats, b.parameterization,
+      a.row_user.empty() ? nullptr : &a.row_user,
+      b.row_user.empty() ? nullptr : &b.row_user, &b);
+}
+
+PolicyInference policy_inference_dwls(MixedDwlsPolicyFit& fit, const PolicyFitState& state) {
+  auto& f = *fit.impl;
+  const auto* row_user = f.row_user.empty() ? nullptr : &f.row_user;
+  if (state.penalized || !state.converged)
+    return policy_inference_dwls_cached(f.pt, f.rep, f.stats, f.estimates,
+        f.parameterization, state, row_user, &f);
+  if (!f.inference) f.inference = policy_inference_dwls_cached(f.pt, f.rep,
+      f.stats, f.estimates, f.parameterization, {true, true, false, false}, row_user, &f);
+  auto out = *f.inference;
+  out.psd_boundary = out.psd_boundary && state.psd_boundary;
+  out.verdict_disagreement = out.verdict_disagreement && verdict_disagreement(state);
+  return out;
+}
+PolicyNested policy_nested_dwls(MixedDwlsPolicyFit& null, const PolicyFitState& null_state,
+    MixedDwlsPolicyFit& alternative, const PolicyFitState& alternative_state) {
+  auto& a = *null.impl; auto& b = *alternative.impl;
+  if (!null_state.penalized && !alternative_state.penalized &&
+      null_state.converged && alternative_state.converged &&
+      (a.parameterization != b.parameterization || a.stats.n_obs != b.stats.n_obs ||
+      !same_blocks(a.stats.R, b.stats.R) || !same_blocks(a.stats.thresholds, b.stats.thresholds) ||
+      !same_blocks(a.stats.raw_data, b.stats.raw_data) ||
+      !same_blocks(a.stats.NACOV, b.stats.NACOV) || !same_blocks(a.stats.W_dwls, b.stats.W_dwls) ||
+      !same_blocks(a.stats.moment_influence, b.stats.moment_influence) ||
+      !same_blocks(a.stats.mean, b.stats.mean) || !same_blocks(a.stats.moments, b.stats.moments) ||
+      !same_blocks(a.stats.sampling_moment_influence, b.stats.sampling_moment_influence) ||
+      a.stats.ordered != b.stats.ordered || a.stats.n_levels != b.stats.n_levels ||
+      !same_blocks(a.stats.gamma_diag_influence, b.stats.gamma_diag_influence)))
     return different_policy_data(null_state, alternative_state);
   return policy_nested_dwls_cached(a.pt, a.rep, a.estimates, null_state,
       b.pt, b.rep, b.estimates, alternative_state, b.stats, b.parameterization,

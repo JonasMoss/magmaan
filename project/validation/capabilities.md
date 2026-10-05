@@ -49,7 +49,11 @@ evidence for the adopted recipe (exit criterion 3).
 | | Nested score | Unsupported (intentional for 0.2.0) | Typed `unsupported_model` | | Joint nested score primitive absent (task-18, decision D4) |
 | | Wald intervals, defined parameters | Validated (with the covariance) | As covariance | As covariance | None |
 | FIML (complete or incomplete continuous data) | Covariance; global and nested score/LR with SB and PEBA4 | Limited validation | `policy_fiml_test.cpp`: complete-data reductions, MCAR/MAR lavaan-gated sandwich, grouped components, direct-score finite differences under larger-model misspecification, typed reasons | research/44 global; decisions/03 nested observed score (one df-1 normal family) | No MAR latent sensitivity panel or frozen confirmatory run; growing score conservatism with df; FIML compatibility has separate ML/MLR reporting gates below |
-| ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed DWLS/WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
+| Mixed DWLS (complete data, delta/theta) | Covariance (exact first-stage estimated-weight IJ) | Limited validation | TASK-67 stratified jackknife; `Mixed DWLS policy: exact sampling global law and IJ nested law`; ordinary inventory and mixed policy gates | Calibration pending | Empirical sampling rows differ from fitting OPG NACOV |
+| | Global n F, All spectrum from exact sampling influence | Limited validation | Explicit exact-row cross-product construction; OPG-spectrum difference; one/two groups delta/theta | Calibration pending | OPG NACOV fitting weights retained |
+| | Nested fit-function difference, observed-Hessian/IJ SB/PEBA4 law; moment-tangent nesting | Limited validation | Common-point profile and direct parameter-space laws agree <= 1e-10; lab and ordinary nested reporting | Calibration pending | Local moment embedding witness |
+| | Global LR; nested score | Inapplicable; unsupported | Typed `inapplicable`; `unsupported_model` | | DWLS has no likelihood; nested score is not derived |
+| ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
 | Continuous WLS (ADF), mixed ULS | Estimation | Unsupported in `magmaan()` | The call errors and names `magmaanlab::estimate()` / DWLS or WLS | | Consumer-gated |
 | Two-level, SAM, composites, closed-form estimators | Every component | Not offered in `magmaan()` | Lab interfaces keep their own gates (area files) | | No 0.2.0 requirement |
 
@@ -320,8 +324,8 @@ sampling channel is scoped to complete ordinary mixed DWLS IJ, not the ULS/WLS,
 missing-data, robust-builder or RBM routes. Pure endpoint fits are rejected with
 `NumericIssue`; continuous marginal rows have independent analytic controls,
 but continuous empirical-Gamma fitting weights differ from mixed OPG NACOV.
-These covariance gates do not compose ordinary mixed policy or estimated-weight
-MI/release: nested law and calibration remain open.
+TASK-71 composes the ordinary mixed DWLS policy; these gates do not establish estimated-weight
+MI/release or sampling calibration.
 
 ### Cells
 

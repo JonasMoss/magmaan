@@ -295,7 +295,7 @@ print.magmaan_model <- function(x, ...) {
 #'   supported linear equality constraints. Inspect `as_lab_fit(fit)$fitting`
 #'   for the resolved settings and attempts. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
-#'   The policy covers complete-data ML, observed-data FIML and all-ordinal DWLS. DWLS
+#'   The policy covers complete-data ML, observed-data FIML and ordinal or mixed DWLS. DWLS
 #'   reports one global test, the fit-function statistic (equal to its score
 #'   statistic), and marks the likelihood-ratio test `"inapplicable"`; its
 #'   covariance includes the influence of the estimated weight.

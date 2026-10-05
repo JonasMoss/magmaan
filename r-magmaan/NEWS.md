@@ -4,6 +4,12 @@
   `reason` and named vector `edit` condition fields. Printing a Mplus model
   shows fittability and every needed edit.
 
+- Complete mixed continuous/ordinal DWLS now composes the exact first-stage IJ
+  covariance, global fit-function All test, and observed-Hessian parameter-space
+  nested difference test with SB/PEBA4. Fitting keeps OPG NACOV weights; the
+  global spectrum uses exact sampling rows. Validation is limited and calibration
+  is pending. Nested score and mixed lavaan compatibility remain unavailable.
+
 - `magmaan_model()` accepts explicit `magmaanlab::mplus_model()` specs, preserving
   source, groups and category schema through prepared fits and serialization.
   Conditional X, NOMEANSTRUCTURE and summary-without-MEANS fits raise

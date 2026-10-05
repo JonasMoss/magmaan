@@ -268,7 +268,7 @@ inference_covariance <- function(context, robust = TRUE) {
 }
 
 inference_reuse <- function(context) {
-  if (inherits(context, "magmaan_fit") && isTRUE(context$ordinal))
+  if (inherits(context, "magmaan_fit") && (isTRUE(context$ordinal) || isTRUE(context$mixed_ordinal)))
     return(list(ingredient_builds = dwls_policy_reuse_impl(.policy_context(context,
       "dwls", function() prepare_policy_dwls_impl(context)))))
   stopifnot(inherits(context,"magmaan_inference"))
@@ -278,7 +278,7 @@ inference_reuse <- function(context) {
 
 # magmaan's default inference policy for one fit, as applied by the
 # ordinary-user package: the observed-information sandwich covariance and the
-# global score and likelihood-ratio tests, each with SB and PEBA4. All-ordinal
+# global score and likelihood-ratio tests, each with SB and PEBA4. Ordinal and mixed
 # DWLS uses the estimated-weight (IJ) sandwich and one global test, the
 # fit-function statistic (labelled "fit_function") with the exact spectrum All
 # reference (reference="all", p_all); its LR is "inapplicable". Components
@@ -289,7 +289,7 @@ policy_inference <- function(fit, data = NULL) {
   state <- .policy_state(fit)
   if (state[[4]]) return(policy_inference_impl(NULL, state))
   estimator <- toupper(fit$estimator %||% "")
-  if (isTRUE(fit$ordinal) && identical(estimator, "DWLS")) {
+  if ((isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(estimator, "DWLS")) {
     out <- tryCatch(policy_inference_dwls_impl(fit, state,
       .policy_context(fit, "dwls", function() prepare_policy_dwls_impl(fit))), error = function(e) e)
     if (inherits(out, "error"))
@@ -298,7 +298,7 @@ policy_inference <- function(fit, data = NULL) {
   }
   if (!estimator %in% c("ML", "FIML") || !is.null(fit$nclusters)) {
     return(.policy_unavailable("unsupported_model",
-      "the inference policy covers single-level ML, FIML and all-ordinal DWLS", state))
+      "the inference policy covers single-level ML, FIML and ordinal or mixed DWLS", state))
   }
   context <- tryCatch(prepare_inference(fit, data), error = function(e) e)
   if (inherits(context, "error")) {
@@ -349,9 +349,10 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
            .verdict_disagreement(states$H1))
   }
   dwls <- vapply(list(fit_H1, fit_H0), function(fit)
-    isTRUE(fit$ordinal) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))
+    (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))
   if (all(dwls)) {
-    if (!identical(fit_H1$ordinal_stats, fit_H0$ordinal_stats))
+    if (!identical(fit_H1$ordinal_stats, fit_H0$ordinal_stats) ||
+        !identical(fit_H1$mixed_ordinal_stats, fit_H0$mixed_ordinal_stats))
       stop("policy_nested(): the two fits must use the same observations in the same order")
     out <- tryCatch(policy_nested_dwls_impl(fit_H1, fit_H0, states$H0, states$H1,
       .policy_context(fit_H0, "dwls", function() prepare_policy_dwls_impl(fit_H0)),
@@ -362,7 +363,7 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   }
   for (fit in list(fit_H1, fit_H0)) {
     if (!toupper(fit$estimator %||% "") %in% c("ML", "FIML") || !is.null(fit$nclusters))
-      return(unsupported("the inference policy covers single-level ML, FIML and all-ordinal DWLS"))
+      return(unsupported("the inference policy covers single-level ML, FIML and ordinal or mixed DWLS"))
   }
   fiml <- identical(toupper(fit_H1$estimator), "FIML")
   if ((is.null(data) || fiml) && !identical(fit_H1$raw_data, fit_H0$raw_data))

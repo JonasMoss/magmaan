@@ -11,3 +11,9 @@ policy_nested(fit_H1, fit_H0, data = NULL)
 \item{data}{Observed data frame, named matrix or sample-moment list compatible with the model. FIML requires raw observations.}
 }
 \value{A nested inference bundle with availability status and supported test summaries.}
+
+\details{Plain ordinal and complete mixed DWLS use estimated-weight IJ covariance
+and observed-Hessian/IJ nested fit-function differences with SB/PEBA4. The global
+fit-function test uses the All tail; mixed spectra use exact empirical first-stage
+sampling influence while fitting retains OPG NACOV weights. Mixed validation is
+limited and calibration is pending. Nested DWLS score tests are unavailable.}

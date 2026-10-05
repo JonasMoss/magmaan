@@ -36,7 +36,7 @@ test_that("the inventory's ordinary policy rows match each estimator's component
     list("ULS", d, NULL, all3("unsupported_model")),
     list("ULS", ord, paste0("x", 1:6), all3("unsupported_model")),
     list("WLS", ord, paste0("x", 1:6), all3("unsupported_model")),
-    list("DWLS", mixed, paste0("x", 1:3), all3("unsupported_model"))
+    list("DWLS", mixed, paste0("x", 1:3), c(covariance = "computed", global_score = "computed", global_lr = "inapplicable"))
   )
   for (r in rows) {
     label <- paste(r[[1]], if (is.null(r[[3]])) "continuous" else paste(length(r[[3]]), "ordered"))

@@ -1171,8 +1171,11 @@ release, including dependencies otherwise shared with the primary programme.
   cancellation and stratified delta/theta jackknife shrinkage pass (2.5%
   diagonal tolerance at N = 1200 per group). Pure endpoint routes remain
   typed unavailable, and continuous fitting-Gamma conventions differ.
-  Policy composition, nested law, estimated-weight MI/release and calibration
-  remain open; other mixed influence routes retain their existing contracts.
+  TASK-71 composes exact-IJ covariance, the global exact-sampling All law and
+  the observed-Hessian/IJ nested parameter-space law (including moment tangents)
+  in C++ and both R interfaces. One/two-group delta/theta numerical composition
+  gates give limited validation; mixed calibration and estimated-weight
+  MI/release remain open. Other mixed influence routes retain their contracts.
 
 ### Association-ML inference
 

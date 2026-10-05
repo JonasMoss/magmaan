@@ -906,3 +906,18 @@ existing correlation-target ML criterion and proposes exact all-ordinal Stage-1
 sampling influence, observed sensitivity, covariance, spectral tests and
 MI/release gates. These components remain typed unavailable; the ordered
 implementation and calibration subcards are proposals, not enabled capability.
+
+### Mixed DWLS ordinary policy
+
+Complete mixed DWLS has exact empirical first-stage IJ covariance, a global
+fit-function statistic with the All reference, and a nested fit-function
+difference with the observed-Hessian/IJ parameter-space SB/PEBA4 law.
+`api::MixedDwlsPolicyFit` retains sampling rows and caches the IJ and observed
+Hessian; `policy_inference`/`policy_nested` dispatch through both R packages.
+Global Gamma is the cross-product of exact sampling rows, while OPG NACOV
+continues to define fitting weights. These spectra differ in finite samples
+and converge under regular latent-normal first-stage specification.
+Moment-nested comparisons use the shared implied-moment embedding and tangent.
+One/two-group delta/theta composition gates give limited validation; calibration
+is pending. Nested score, mixed ULS/WLS policy and mixed `lavaan_compat` remain
+unsupported. Exact sampling rows or complete raw observations are required.

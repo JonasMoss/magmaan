@@ -2,6 +2,7 @@
 #include "magmaan/api/policy.hpp"
 
 #include <algorithm>
+#include <type_traits>
 
 #include <Eigen/QR>
 #include <Eigen/SVD>
@@ -9,11 +10,12 @@
 
 namespace magmaan::api::frontier {
 
-post_expected<MomentNestedTangent> moment_nested_tangent(
+template<class Stats>
+static post_expected<MomentNestedTangent> moment_nested_tangent_impl(
     spec::LatentStructure null_pt, const model::MatrixRep& null_rep,
     const estimate::Estimates& null_estimates,
     spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
-    const estimate::Estimates& alternative_estimates, const data::OrdinalStats& stats,
+    const estimate::Estimates& alternative_estimates, const Stats& stats,
     estimate::OrdinalParameterization parameterization,
     const std::vector<std::int8_t>* null_row_user,
     const std::vector<std::int8_t>* alternative_row_user) {
@@ -25,10 +27,18 @@ post_expected<MomentNestedTangent> moment_nested_tangent(
       null_pt.n_groups() != alternative_pt.n_groups() ||
       null_pt.n_levels() != alternative_pt.n_levels())
     return fail(PostError::Kind::NotNested, "observed variables or group/level layouts differ");
-  auto o0 = estimate::frontier::ordinal_ls_objective(null_pt, null_rep, stats,
-      null_estimates, estimate::OrdinalWeightKind::DWLS, parameterization, null_row_user);
-  auto o1 = estimate::frontier::ordinal_ls_objective(alternative_pt, alternative_rep, stats,
-      alternative_estimates, estimate::OrdinalWeightKind::DWLS, parameterization, alternative_row_user);
+  auto objective = [&](spec::LatentStructure& pt, const model::MatrixRep& rep,
+                       const estimate::Estimates& estimates, const std::vector<std::int8_t>* row_user) {
+    if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
+      auto prepared = estimate::prepare_mixed_ordinal_partable(pt, stats, parameterization, nullptr, row_user);
+      if (!prepared) return fit_expected<estimate::frontier::OrdinalLsObjective>(std::unexpected(prepared.error()));
+      return estimate::frontier::mixed_ordinal_ls_objective(pt, rep, stats, estimates,
+          estimate::OrdinalWeightKind::DWLS, parameterization);
+    } else return estimate::frontier::ordinal_ls_objective(pt, rep, stats, estimates,
+        estimate::OrdinalWeightKind::DWLS, parameterization, row_user);
+  };
+  auto o0 = objective(null_pt, null_rep, null_estimates, null_row_user);
+  auto o1 = objective(alternative_pt, alternative_rep, alternative_estimates, alternative_row_user);
   if (!o0 || !o1) return fail(PostError::Kind::NumericIssue,
       !o0 ? o0.error().detail : o1.error().detail);
   auto c0 = estimate::build_eq_constraints(o0->pt);
@@ -89,6 +99,32 @@ post_expected<MomentNestedTangent> moment_nested_tangent(
       "null tangent is rank deficient");
   return MomentNestedTangent{std::move(theta), T,
       svd.matrixU().rightCols(q1 - q0).transpose()};
+}
+
+post_expected<MomentNestedTangent> moment_nested_tangent(
+    spec::LatentStructure null_pt, const model::MatrixRep& null_rep,
+    const estimate::Estimates& null_estimates,
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates, const data::OrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return moment_nested_tangent_impl(std::move(null_pt), null_rep, null_estimates,
+      std::move(alternative_pt), alternative_rep, alternative_estimates, stats,
+      parameterization, null_row_user, alternative_row_user);
+}
+
+post_expected<MomentNestedTangent> moment_nested_tangent(
+    spec::LatentStructure null_pt, const model::MatrixRep& null_rep,
+    const estimate::Estimates& null_estimates,
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates, const data::MixedOrdinalStats& stats,
+    estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return moment_nested_tangent_impl(std::move(null_pt), null_rep, null_estimates,
+      std::move(alternative_pt), alternative_rep, alternative_estimates, stats,
+      parameterization, null_row_user, alternative_row_user);
 }
 
 } // namespace magmaan::api::frontier

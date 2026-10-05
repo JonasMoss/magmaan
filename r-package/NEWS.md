@@ -1,5 +1,11 @@
 # magmaanlab 0.2.0 (in development)
 
+- Complete mixed continuous/ordinal DWLS now composes the exact first-stage IJ
+  covariance, global fit-function All test, and observed-Hessian parameter-space
+  nested difference test with SB/PEBA4. Fitting keeps OPG NACOV weights; the
+  global spectrum uses exact sampling rows. Validation is limited and calibration
+  is pending. Nested score and mixed lavaan compatibility remain unavailable.
+
 - `mplus_model()` accepts complete observed-X moment mentions as joint random-X
   models; partial mentions name the exact completion statement. Mplus 9.1
   probes show all X variance mentions suffice without means or WITH.

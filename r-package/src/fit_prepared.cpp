@@ -446,24 +446,34 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
 SEXP prepare_policy_dwls_impl(Rcpp::List fit) {
   auto ctx = ctx_from_fit(fit);
   auto est = est_from_fit(fit);
-  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
-      fit, R_NilValue, "ordinal_stats", "policy_inference"));
   const std::string parameterization = fit.containsElementNamed("parameterization")
       ? Rcpp::as<std::string>(fit["parameterization"])
       : ordinal_parameterization_attr(fit["partable"]);
+  if (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"])) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "mixed_ordinal_stats", "policy_inference"));
+    return score_bindings::handle(magmaan::api::MixedDwlsPolicyFit(std::move(ctx.pt),
+        std::move(ctx.rep), std::move(stats), std::move(est),
+        ordinal_parameterization_from_string(parameterization), std::move(ctx.names.row_user)), "magmaan_mixed_dwls_policy");
+  }
+  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+      fit, R_NilValue, "ordinal_stats", "policy_inference"));
   return score_bindings::handle(magmaan::api::DwlsPolicyFit(std::move(ctx.pt),
       std::move(ctx.rep), std::move(stats), std::move(est),
-      ordinal_parameterization_from_string(parameterization)), "magmaan_dwls_policy");
+      ordinal_parameterization_from_string(parameterization), std::move(ctx.names.row_user)), "magmaan_dwls_policy");
 }
 
 // [[Rcpp::export]]
 double dwls_policy_reuse_impl(SEXP context) {
+  if (TYPEOF(context) == EXTPTRSXP && R_ExternalPtrTag(context) == Rf_install("magmaan_mixed_dwls_policy"))
+    return static_cast<double>(magmaan::api::policy_ingredient_builds(
+        score_bindings::get<magmaan::api::MixedDwlsPolicyFit>(context, "magmaan_mixed_dwls_policy")));
   return static_cast<double>(magmaan::api::policy_ingredient_builds(
       score_bindings::get<magmaan::api::DwlsPolicyFit>(context, "magmaan_dwls_policy")));
 }
 
 // policy_inference_dwls_impl() — mirrors api::policy_inference_dwls() for an
-// all-ordinal DWLS fit, from the fit's partable, estimates and retained
+// ordinal or mixed DWLS fit, from the fit's partable, estimates and retained
 // ordinal statistics. Only plain DWLS (weight diag(NACOV)^-1) qualifies;
 // Stage-2 NT/DLS, supplied-weight, ULS and WLS fits are unavailable.
 //
@@ -475,7 +485,8 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state,
     return fit.containsElementNamed(name) && !Rf_isNull(fit[name])
         ? Rcpp::as<std::string>(fit[name]) : std::string();
   };
-  const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+  const bool mixed = fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]);
+  const bool ordinal = mixed || (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]));
   const std::string computational = text("ordinal_computational_weight");
   const std::string recipe = text("moment_weight");
   magmaan::api::PolicyInference out;
@@ -486,26 +497,35 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state,
              (!computational.empty() && computational != "DWLS") ||
              (!recipe.empty() && recipe != "dwls")) {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
-        "the categorical inference policy covers plain all-ordinal DWLS fits");
+        "the categorical inference policy covers plain ordinal or mixed DWLS fits");
   } else {
     Ctx ctx = ctx_from_fit(fit);
     const magmaan::estimate::Estimates est = est_from_fit(fit);
-    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
-        fit, R_NilValue, "ordinal_stats", "policy_inference"));
     const std::string parameterization = fit.containsElementNamed("parameterization")
         ? Rcpp::as<std::string>(fit["parameterization"])
         : ordinal_parameterization_attr(fit["partable"]);
-    if (!Rf_isNull(context)) out = magmaan::api::policy_inference_dwls(
-        score_bindings::get<magmaan::api::DwlsPolicyFit>(context, "magmaan_dwls_policy"), fit_state);
-    else out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
-        ordinal_parameterization_from_string(parameterization), fit_state);
+    if (mixed) {
+      auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+          fit, R_NilValue, "mixed_ordinal_stats", "policy_inference"));
+      if (!Rf_isNull(context)) out = magmaan::api::policy_inference_dwls(
+          score_bindings::get<magmaan::api::MixedDwlsPolicyFit>(context, "magmaan_mixed_dwls_policy"), fit_state);
+      else out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
+          ordinal_parameterization_from_string(parameterization), fit_state, &ctx.names.row_user);
+    } else {
+      auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+          fit, R_NilValue, "ordinal_stats", "policy_inference"));
+      if (!Rf_isNull(context)) out = magmaan::api::policy_inference_dwls(
+          score_bindings::get<magmaan::api::DwlsPolicyFit>(context, "magmaan_dwls_policy"), fit_state);
+      else out = magmaan::api::policy_inference_dwls(std::move(ctx.pt), ctx.rep, stats, est,
+          ordinal_parameterization_from_string(parameterization), fit_state, &ctx.names.row_user);
+    }
   }
   out.verdict_disagreement = magmaan::api::verdict_disagreement(fit_state);
   return policy_inference_list(out);
 }
 
 // policy_nested_dwls_impl() — mirrors api::policy_nested_dwls() for two plain
-// all-ordinal DWLS fits to the same ordinal statistics (the caller checks that
+// ordinal or mixed DWLS fits to the same statistics (the caller checks that
 // they are the same observations).
 //
 // [[Rcpp::export]]
@@ -521,13 +541,14 @@ Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
         ? Rcpp::as<std::string>(fit[name]) : std::string();
   };
   for (Rcpp::List fit : {fit_H1, fit_H0}) {
-    const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+    const bool ordinal = (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"])) ||
+        (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]));
     const std::string computational = text(fit, "ordinal_computational_weight");
     const std::string recipe = text(fit, "moment_weight");
     if (!ordinal || text(fit, "estimator") != "DWLS" ||
         (!computational.empty() && computational != "DWLS") ||
         (!recipe.empty() && recipe != "dwls")) {
-      Rcpp::stop("the categorical nested policy covers plain all-ordinal DWLS fits");
+      Rcpp::stop("the categorical nested policy covers plain ordinal or mixed DWLS fits");
     }
   }
   auto parameterization_of = [&](Rcpp::List fit) {
@@ -542,15 +563,31 @@ Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
   Ctx c0 = ctx_from_fit(fit_H0);
   const magmaan::estimate::Estimates e1 = est_from_fit(fit_H1);
   const magmaan::estimate::Estimates e0 = est_from_fit(fit_H0);
-  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
-      fit_H1, R_NilValue, "ordinal_stats", "policy_nested"));
-  auto out = !Rf_isNull(null_context) && !Rf_isNull(alternative_context)
-      ? magmaan::api::policy_nested_dwls(
-          score_bindings::get<magmaan::api::DwlsPolicyFit>(null_context, "magmaan_dwls_policy"), null_fit,
-          score_bindings::get<magmaan::api::DwlsPolicyFit>(alternative_context, "magmaan_dwls_policy"), alternative_fit)
-      : magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
-          std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
-          ordinal_parameterization_from_string(parameterization));
+  magmaan::api::PolicyNested out;
+  const bool mixed = fit_H1.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit_H1["mixed_ordinal"]);
+  const bool mixed0 = fit_H0.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit_H0["mixed_ordinal"]);
+  if (mixed != mixed0) Rcpp::stop("the two fits use different moment layouts");
+  if (mixed) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit_H1, R_NilValue, "mixed_ordinal_stats", "policy_nested"));
+    out = !Rf_isNull(null_context) && !Rf_isNull(alternative_context)
+        ? magmaan::api::policy_nested_dwls(
+            score_bindings::get<magmaan::api::MixedDwlsPolicyFit>(null_context, "magmaan_mixed_dwls_policy"), null_fit,
+            score_bindings::get<magmaan::api::MixedDwlsPolicyFit>(alternative_context, "magmaan_mixed_dwls_policy"), alternative_fit)
+        : magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
+            std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
+            ordinal_parameterization_from_string(parameterization), &c0.names.row_user, &c1.names.row_user);
+  } else {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit_H1, R_NilValue, "ordinal_stats", "policy_nested"));
+    out = !Rf_isNull(null_context) && !Rf_isNull(alternative_context)
+        ? magmaan::api::policy_nested_dwls(
+            score_bindings::get<magmaan::api::DwlsPolicyFit>(null_context, "magmaan_dwls_policy"), null_fit,
+            score_bindings::get<magmaan::api::DwlsPolicyFit>(alternative_context, "magmaan_dwls_policy"), alternative_fit)
+        : magmaan::api::policy_nested_dwls(std::move(c0.pt), c0.rep, e0, null_fit,
+            std::move(c1.pt), c1.rep, e1, alternative_fit, stats,
+            ordinal_parameterization_from_string(parameterization), &c0.names.row_user, &c1.names.row_user);
+  }
   return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
                             Rcpp::_["lr"] = policy_test_list(out.lr),
                             Rcpp::_["psd_boundary"] = out.psd_boundary,
