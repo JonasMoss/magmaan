@@ -36,7 +36,9 @@ vol = modal.Volume.from_name("magmaan-dwls-policy", create_if_missing=True)
 RUNNER = f"/repo/{STUDY}/run_experiment.R"
 
 
-@app.function(image=image, volumes={"/vol": vol}, timeout=3 * 60 * 60,
+# Mixed pilot timing reaches about 6 CPU-hours for the heaviest cell (1.5 h on
+# four workers); the timeout leaves room for pilot timing noise.
+@app.function(image=image, volumes={"/vol": vol}, timeout=8 * 60 * 60,
               cpu=4.0, memory=4096, retries=1)
 def run_cell(cell_id: int, run_id: str, mode: str, lane: str = "dwls-policy"):
     if lane == "mixed":
