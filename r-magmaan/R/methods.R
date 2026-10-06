@@ -245,7 +245,7 @@ print.magmaan <- function(x, ...) {
 #' integer limit). Output names are lower case. Each available test has one
 #' row per requested reference, using its policy statistic and stored spectrum;
 #' covariance and fitting choices stay fixed. Defaults are PEBA4 for ML/FIML
-#' and All for DWLS global tests. Use `references = c("sb", "peba4")`
+#' and All for DWLS global and nested tests. Use `references = c("sb", "peba4")`
 #' to include the SB comparator. The base columns are `test`, `statistic`, `df`,
 #' `reference`, `pvalue`, `recommended`, `reason`. `test` uses stable codes
 #' `score`, `lr`, `fit_function`, `fit_function_difference`. Unavailable tests retain one
@@ -401,9 +401,9 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' See [summary.magmaan()] for the reference grammar and uniform base columns.
 #' Each available nested test has one row per reference; an unavailable test
 #' retains one row with its typed `reason` and missing `reference`/`pvalue`.
-#' Defaults are PEBA4 for ML/FIML and SB/PEBA4 for DWLS. `recommended` is TRUE only for the policy's
+#' Defaults are PEBA4 for ML/FIML and All for DWLS. `recommended` is TRUE only for the policy's
 #' recommended p-values: score with PEBA4 for ML/FIML, or
-#' fit_function_difference with SB/PEBA4 for DWLS. The likelihood-ratio test
+#' fit_function_difference with All for DWLS. The likelihood-ratio test
 #' is reported because it is the standard statistic, not recommended;
 #' `references = "std"` gives its plain chi-square p-value. Alternatives
 #' use the same policy statistic and retained nested spectrum (`spectra` attribute),
@@ -534,6 +534,8 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
     cat("larger model refit warnings:\n")
     cat(paste0("  ", reseed$warnings, collapse = "\n"), "\n", sep = "")
   }
+  if (any(x$test == "fit_function_difference" & x$reference %in% "all"))
+    cat("Reference: exact spectrum (All); decisions/05-dwls-policy-calibration and decisions/06-ordinal-threshold-invariance.\n")
   .peba_note(x)
   if (is.null(attr(x, "lavaan_compat"))) .lr_note(t)
   u <- attr(x, "unavailable")

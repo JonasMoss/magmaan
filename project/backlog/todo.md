@@ -667,7 +667,10 @@ required by an all-ordinal primary workflow remain current work.
   (2026-10-05, 576,000 draws) flags SB/PEBA4 with seven categories (7.0–8.0% at
   N >= 500 per group) while All stays within 3.5–6.0%; the fresh-draw All
   confirmation passed (3.45–6.0% in all 144 null cells). The nested reference
-  choice is with the user (TASK-81).
+  choice was adopted on 2026-10-06 (TASK-81): All for every DWLS nested
+  spectral test, with SB/PEBA4 comparators retained. decisions/05 fresh-draw
+  parameter-nested All confirmation gives 3.9–6.9% at N = 400 and 4.3–6.4%
+  at N = 1000; decisions/07 cross-model confirmation remains pending.
 
 - [ ] **L — derive a nested DWLS score test, or defer it.** No joint
   least-squares nested score statistic exists; `score_tests_robust_joint` is

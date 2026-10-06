@@ -403,6 +403,10 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
       r.null_model.rep, r.null_est.theta, *c1, *c0);
   REQUIRE(embed);
   const auto& t = r.out.lr;
+  CHECK(t.reference == "all");
+  CHECK(t.p_all == doctest::Approx(magmaan::robust::frontier::fmg_test(
+      t.statistic, t.df, t.eigenvalues,
+      {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-12));
   REQUIRE(t.eigenvalues.size() == t.df);
   CHECK(t.eigenvalues.allFinite());
   CHECK(t.eigenvalues.minCoeff() >= 0.0);
@@ -465,7 +469,6 @@ TEST_CASE("DWLS nested policy: fit-function difference with the parameter-space 
   CHECK(t.statistic == doctest::Approx(g0->chisq_standard - g1->chisq_standard).epsilon(1e-8));
   const auto eig = check_common_law(r, *stats, OrdinalParameterization::Delta);
   CHECK(t.sb_scale == doctest::Approx(eig.sum() / 2.0));
-  CHECK(t.reference == "sb_peba4");
   CHECK(t.p_sb == doctest::Approx(magmaan::inference::chi2_pvalue(t.statistic / t.sb_scale, 2)));
   CHECK(std::isfinite(t.p_peba4));
   const int m = static_cast<int>(t.eigenvalues.size());
@@ -667,6 +670,11 @@ TEST_CASE("DWLS moment nesting: Wu-Estabrook threshold steps") {
     else {
       REQUIRE(out.lr.reason == api::InferenceReason::Available);
       CHECK(out.lr.df == 8);
+      CHECK(out.lr.reference == "all");
+      CHECK(out.lr.p_all == doctest::Approx(magmaan::robust::frontier::fmg_test(
+          out.lr.statistic, out.lr.df, out.lr.eigenvalues,
+          {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-12));
+
       CHECK(out.lr.eigenvalues.allFinite());
       auto prepared = alt.pt;
       REQUIRE(magmaan::estimate::prepare_ordinal_partable(prepared, *stats, OrdinalParameterization::Theta));

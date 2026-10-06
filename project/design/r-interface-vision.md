@@ -537,7 +537,7 @@ All test tables use `test`, `statistic`, `df`, `reference`, `pvalue`,
 `recommended`, `reason`. Available tests have one row per reference and
 unavailable tests one row with missing reference/p-value and a typed reason.
 Test codes are `score`, `lr`, `fit_function`, `fit_function_difference`; print methods show readable labels.
-Defaults remain SB/PEBA4 for ML/FIML and nested DWLS, All for global DWLS.
+Defaults are PEBA4 for ML/FIML and All for global and nested DWLS.
 Reference names are lower case; `recommended` marks default laws. C++ FMG
 partitions the retained spectrum, including zeros, into blocks of size
 `ceiling(df/k)`; k at or beyond df yields singleton blocks (EBA = All,
@@ -621,7 +621,7 @@ Global tests against the saturated model:
   rejection in all 32 cells. FIML follows the ML reference choice because its
   complete-data policy reduces to ML. Global and nested score/LR tables
   retain only PEBA4 by default; `references = c("sb", "peba4")` includes
-  the stored SB comparator. DWLS global All and nested SB/PEBA4 are unchanged.
+  the stored SB comparator.
 - **The score test is primary (decided 2026-10-02).** It comes first in
   `summary()` and `anova()`, and the likelihood-ratio row follows with a
   printed caveat that it tends to over-reject when N is small relative to its
@@ -636,8 +636,17 @@ Global tests against the saturated model:
   fit-function statistic n F. It is reported once, labelled as the fit-function
   statistic, since it is not a likelihood ratio. All-ordinal DWLS reports the
   exact weighted chi-square All tail on every positive robust-ordinal sample
-  eigenvalue (decision study 05); SB/PEBA4 are comparators only for that global
-  test. Confirmed on fresh draws (2.9-6.8% at nominal 5%).
+  eigenvalue (decision study 05); SB/PEBA4 are comparators. Confirmed on fresh draws (2.9-6.8% at nominal 5%).
+- **DWLS nested All reference (decided 2026-10-06).** All-ordinal and mixed
+  DWLS use the exact weighted chi-square tail on every positive nested-spectrum
+  eigenvalue for parameter-nested and moment-nested pairs. SB/PEBA4 remain
+  comparators through `references = c("sb", "peba4")`; the nested score remains
+  typed unavailable. The registered [decisions/06 confirmation](../../experiments/decisions/06-ordinal-threshold-invariance/report.qmd)
+  passed its [3%, 7%] criterion at N >= 500 per group: All rejected 3.45–6.0%
+  in all 144 null cells. The [decisions/05 nested confirmation](../../experiments/decisions/05-dwls-policy-calibration/report.qmd)
+  All comparator on fresh draws rejected 3.9–6.9% at N = 400 and 4.3–6.4%
+  at N = 1000 in 32 null cells, with equal size-adjusted power. decisions/07
+  remains the pending cross-model confirmation before tagging.
 - Profiling: when the score uses the estimator's own weight, the nuisance part
   of the score is zero at the estimate (the first-order condition), so the
   effective (profile) score vector equals the raw score. The statistic is that

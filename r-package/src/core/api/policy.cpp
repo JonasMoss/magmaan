@@ -592,8 +592,13 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   out.lr.df = static_cast<int>(restriction.rows());
   out.lr.eigenvalues = spectrum->eigenvalues;
   out.lr.label = "fit_function_difference";
-  out.lr.reference = "sb_peba4";
+  out.lr.reference = "all";
   calibrate_spectrum(out.lr);
+  out.lr.p_all = robust::frontier::fmg_test(out.lr.statistic, out.lr.df,
+      out.lr.eigenvalues, {robust::frontier::FmgMethod::All, 0.0, true}).p_value;
+  if (!std::isfinite(out.lr.p_all))
+    set_unavailable(out.lr, InferenceReason::NumericFailure,
+                    "DWLS nested test: All reference tail evaluation failed");
   return out;
 }
 

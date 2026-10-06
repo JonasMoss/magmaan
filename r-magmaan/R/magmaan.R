@@ -345,7 +345,7 @@ print.magmaan_model <- function(x, ...) {
 #' for alternative reference laws in simulation studies. The score test is primary
 #' and comes first. `recommended` is TRUE only for the policy's recommended
 #' p-values: score with PEBA4 for ML/FIML, fit_function with All for DWLS
-#' global tests, and fit_function_difference with SB/PEBA4 for DWLS nested tests.
+#' global tests, and fit_function_difference with All for DWLS nested tests.
 #' Use `references = c("sb", "peba4")` in `summary()` or `anova()` to
 #' include SB alongside the ML/FIML default.
 #' The likelihood-ratio test is reported because it is the standard statistic,

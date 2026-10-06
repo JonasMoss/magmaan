@@ -35,7 +35,7 @@ interval. \code{coef(fit)} stays the vector of free estimates that matches
 integer limit). Output names are lower case. Each available test has one
 row per requested reference, using its policy statistic and stored spectrum;
 covariance and fitting choices stay fixed. Defaults are PEBA4 for ML/FIML
-and All for DWLS global tests. Use \code{references = c("sb", "peba4")}
+and All for DWLS global and nested tests. Use \code{references = c("sb", "peba4")}
 to include the SB comparator. The base columns are \code{test}, \code{statistic}, \code{df},
 \code{reference}, \code{pvalue}, \code{recommended}, \code{reason}. \code{test} uses stable codes
 \code{score}, \code{lr}, \code{fit_function}, \code{fit_function_difference}. Unavailable tests retain one

@@ -77,13 +77,25 @@ test_that("global and nested references reuse policy spectra across regimes and 
       expect_identical(unique(nested$test), if (estimator == "DWLS") c("score", "fit_function_difference") else c("score", "lr"))
       native_nested <- magmaanlab::policy_nested(h1$lab, h0$lab)
       expect_true(native_nested$lr$available, info = native_nested$lr$detail)
-      nested_defaults <- if (estimator == "DWLS") c("sb", "peba4") else "peba4"
+      nested_defaults <- if (estimator == "DWLS") "all" else "peba4"
       expect_reference_rows(nested, native_nested$score, "score", nested_defaults)
       expect_reference_rows(nested, native_nested$lr,
         if (estimator == "DWLS") "fit_function_difference" else "lr",
-        if (estimator == "DWLS") c("sb", "peba4") else character())
+        if (estimator == "DWLS") "all" else character())
       expect_identical(attr(nested, "spectra"), lapply(native_nested[c("score", "lr")], function(t) t$eigenvalues))
+      if (estimator == "DWLS") {
+        comparators <- anova(h1, h0, references = c("sb", "peba4"))
+        z <- comparators[comparators$test == "fit_function_difference", ]
+        expect_identical(z$pvalue, c(native_nested$lr$p_sb, native_nested$lr$p_peba4))
+        expect_false(any(z$recommended))
+        expect_output(print(anova(h1, h0)), "exact spectrum (All)", fixed = TRUE)
+      }
       default_nested <- anova(h1, h0)
+      if (estimator == "DWLS") {
+        expect_equal(nrow(default_nested), 2L)
+        expect_identical(default_nested$reason[default_nested$test == "score"], "unsupported_model")
+        expect_identical(default_nested$recommended, c(FALSE, TRUE))
+      }
       for (component in c("score", "lr")) {
         t <- native_nested[[component]]
         if (!isTRUE(t$available)) next
@@ -91,8 +103,8 @@ test_that("global and nested references reuse policy spectra across regimes and 
           if (estimator == "DWLS") "fit_function_difference" else "lr"
         z <- default_nested[default_nested$test == label, ]
         expect_identical(z$reference, nested_defaults)
-        expect_identical(t$reference, if (estimator == "DWLS") "sb_peba4" else "peba4")
-        expect_identical(z$pvalue, if (estimator == "DWLS") c(t$p_sb, t$p_peba4) else t$p_peba4)
+        expect_identical(t$reference, if (estimator == "DWLS") "all" else "peba4")
+        expect_identical(z$pvalue, if (estimator == "DWLS") t$p_all else t$p_peba4)
       }
       for (pair in list(list(global, default_global, native_global,
                             if (estimator == "DWLS") "fit_function" else "score"),

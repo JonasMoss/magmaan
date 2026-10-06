@@ -79,7 +79,7 @@ struct PolicyTest {
   // Mean eigenvalue of the UGamma spectrum: the SB scaling divisor.
   double sb_scale = std::numeric_limits<double>::quiet_NaN();
   // Default reporting law; SB remains a comparator for ML/FIML.
-  // DWLS selects All globally and SB/PEBA4 for nested tests.
+  // DWLS selects All for global and nested tests; SB/PEBA4 remain comparators.
   std::string reference = "peba4";
   double p_all = std::numeric_limits<double>::quiet_NaN();
   double p_sb = std::numeric_limits<double>::quiet_NaN();

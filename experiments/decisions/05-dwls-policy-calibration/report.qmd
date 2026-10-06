@@ -16,11 +16,11 @@ execute:
 |---|---|---|---|
 | Covariance | Estimated-weight IJ sandwich | Adopted by principle; calibrated | Production 2026-10-03: median coverage about 95% for every target |
 | Global test | $nF$ on the `robust_ordinal` spectrum, exact weighted chi-square tail with every positive eigenvalue (All) | Chosen after exploration (user, 2026-10-03); confirmed on fresh draws | SB and PEBA4 over-reject at df ≥ 53; All 2.9–6.8% at confirmation |
-| Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), SB and PEBA4 | Replaced the separate-point profile law after diagnosis; confirmed on fresh draws | Profile law 0.1–2% (SB) and 3–17% (PEBA4); parameter-space law 4.3–7.8% |
+| Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), All; SB/PEBA4 comparators | All adopted 2026-10-06; comparator arm confirmed on fresh draws | All 3.9–6.9% at N = 400 and 4.3–6.4% at N = 1000 in 32 null cells |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
 | All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmation open | TASK-79 fresh-draw registration and local pricing pilot; production pending merger review |
 | Latent non-normality | Exact policy versus OPG comparator | Calibration open | TASK-84 registration, bounded million-row targets and local pilot; production pending review |
-| Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global All; nested SB/PEBA4 | Calibration open | TASK-80 registration and pricing pilot; production pending |
+| Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global and nested All; SB/PEBA4 nested comparators | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
 ## Question
 
@@ -158,6 +158,8 @@ The only null cell outside [3%, 7%] is binary, skewed, df = 132, N = 200
 (2.95%), below the judged sample sizes.
 
 ## Nested test
+
+**Decision (2026-10-06):** Adopt All for every DWLS nested spectral test; the fresh-draw All comparator arm rejected 3.9–6.9% at N = 400 and 4.3–6.4% at N = 1000 in 32 null cells; retain SB/PEBA4 as comparators (TASK-81).
 
 Two groups with identical populations; metric versus configural and the
 Wu–Estabrook step (thresholds versus thresholds plus loadings, theta); the

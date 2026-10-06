@@ -42,7 +42,8 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   rows once per `DwlsPolicyFit`; fitting NACOV, lavaan compatibility and lab
   defaults retain OPG. Global Gamma is the exact-row cross-product; nested
   parameter and moment-tangent laws use the exact estimated-weight IJ meat.
-  All global and SB/PEBA4 nested references stay unchanged. Exact-first-stage
+  Global All remains; nested All was adopted in TASK-81 (2026-10-06), with
+  SB/PEBA4 comparators. Exact-first-stage
   calibration remains pending: TASK-79 registers fresh-draw exact/OPG paired
   reconfirmation and supplies a full-grid mechanics/pricing pilot; production
   awaits merger registration and compute approval. TASK-84 supplies a registered
@@ -415,7 +416,7 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
 - DWLS nested policy (task-17.4) uses the observed-Hessian parameter-space
   estimated-weight IJ law at H1 with the exact embedding restriction map.
   Its spectrum has exactly df_diff terms and matches the common-point profile
-  and task-17.3 diagnostic construction. T = N(F_H0 − F_H1), SB/PEBA4, typed
+  and task-17.3 diagnostic construction. T = N(F_H0 − F_H1), All (SB/PEBA4 comparators), typed
   nesting reasons and unsupported nested score are preserved. The separate-point
   profile law remains an explicitly named lab comparator. Confirmed on fresh
   draws in decision study 05 (4.3-7.8%); the global test, ML and FIML recipes are unchanged.
@@ -1052,12 +1053,26 @@ SE difference 2.27e-14. The existing `ordinal_dwls_wls.R` workflow passes. The
 repository-wide layering check still reports unrelated existing paper-to-tests
 references in `covariance-honest-sem` and `target-specific-distinguishability`.
 
+### Ordinary DWLS nested reference
+
+Every all-ordinal and mixed DWLS nested spectral test uses All (TASK-81,
+decision 2026-10-06), retaining SB/PEBA4 and the SB scale as comparators.
+Parameter-nested and moment-nested paths share the observed-Hessian/IJ law;
+All uses every positive eigenvalue with the global test's negative truncation.
+The registered decisions/06 fresh-draw threshold confirmation passed [3%, 7%]
+at N >= 500/group (3.45–6.0% in all 144 null cells). decisions/05's fresh-draw
+parameter-nested All comparator gave 3.9–6.9% at N = 400 and 4.3–6.4% at
+N = 1000 in 32 null cells, with equal size-adjusted power. decisions/07 remains
+pending as cross-model confirmation. Ordinary `anova()` recommends only
+fit_function_difference/all and retains the typed unsupported score row.
+
 ### Ordinary DWLS global reference
 
 `api::policy_inference_dwls` reports n F with its unchanged `robust_ordinal`
 spectrum and the exact weighted chi-square All tail (every positive sample
 eigenvalue), exposed as `reference = "all"` and `p_all`. SB/PEBA4 fields are
-unset for this component; ML/FIML select `peba4`; nested DWLS retains `sb_peba4`. Decision
+unset for this component; ML/FIML select `peba4`; nested DWLS also selects
+`all` (TASK-81, decision 2026-10-06), with SB/PEBA4 comparator fields retained. Decision
 study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
 it on fresh draws (2.9-6.8%).
 
@@ -1113,7 +1128,7 @@ remain pending.
 
 Complete mixed DWLS has exact empirical first-stage IJ covariance, a global
 fit-function statistic with the All reference, and a nested fit-function
-difference with the observed-Hessian/IJ parameter-space SB/PEBA4 law.
+difference with the observed-Hessian/IJ law and All reference; SB/PEBA4 remain comparators.
 `api::MixedDwlsPolicyFit` retains sampling rows and caches the IJ and observed
 Hessian; `policy_inference`/`policy_nested` dispatch through both R packages.
 Global Gamma is the cross-product of exact sampling rows, while OPG NACOV

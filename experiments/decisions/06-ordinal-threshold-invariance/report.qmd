@@ -11,7 +11,9 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Threshold-step reference | Moment-nested policy SB / PEBA4 | Flagged; All confirmed on fresh draws; adoption is the user's choice (board TASK-81) | Production and confirmation 2026-10-05 (576,000 + 288,000 draws) |
+| Threshold-step reference | Moment-nested policy All; SB/PEBA4 comparators | Adopted 2026-10-06 (board TASK-81); confirmed on fresh draws | Production and confirmation 2026-10-05 (576,000 + 288,000 draws) |
+
+**Decision (2026-10-06):** Adopt All for every DWLS nested spectral test; retain SB/PEBA4 as comparators (TASK-81).
 
 ## Question
 
@@ -40,8 +42,8 @@ post-production amendment ([criteria](criteria/threshold_invariance.md))
 reran the 144 null cells with four or more categories on fresh draws, with
 All's criterion fixed in advance: rejection within [3%, 7%] at N ≥ 500 per
 group. All rejected 3.45–6.0% in every cell, at every N; SB again exceeded 7%
-in 13 cells and PEBA4 in 3, all with five or seven categories. Whether the
-nested DWLS reference becomes All is the user's decision.
+in 13 cells and PEBA4 in 3, all with five or seven categories. The user adopted
+All for nested DWLS on 2026-10-06.
 
 ```{r}
 prod <- file.path("results", "production-2026-10-05")

@@ -75,6 +75,11 @@ test_that("the inventory's nested rows match ML, DWLS and the unsupported setups
     f1 <- magmaan(mk(cfa), case[[2]], estimator = case[[1]])
     f0 <- magmaan(mk(restricted_cfa), case[[2]], estimator = case[[1]])
     expect_identical(nested_states(f0, f1), case[[4]], label = case[[1]])
+    if (case[[1]] == "DWLS") {
+      t <- anova(f0, f1)
+      expect_identical(t$reference[t$recommended], "all")
+      expect_identical(t$test[t$recommended], "fit_function_difference")
+    }
   }
 })
 

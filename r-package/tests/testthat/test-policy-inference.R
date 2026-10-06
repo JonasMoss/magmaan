@@ -105,6 +105,9 @@ test_that("DWLS nested policy equals the exact parameter-IJ construction", {
   expect_true(f1$converged); expect_true(f0$converged)
   policy <- policy_nested(f1,f0)$lr
   expect_true(policy$available,info=policy$detail)
+  expect_identical(policy$reference, "all")
+  expect_equal(policy$p_all, magmaan_core$robust_fmg_test(policy$statistic,
+    policy$df, policy$eigenvalues, "all", 0)$p_value, tolerance = 1e-12)
   parts <- magmaanlab:::ordinal_nested_diagnostic_impl(f1,f0)
   K <- parts$K; A <- parts$A
   H <- crossprod(K,parts$hessian_total%*%K)/f1$ntotal

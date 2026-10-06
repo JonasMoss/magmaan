@@ -108,6 +108,11 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
       REQUIRE_MESSAGE(nested.lr.reason==api::InferenceReason::Available,nested.lr.detail);
       CHECK(nested.score.reason==api::InferenceReason::UnsupportedModel);
       CHECK(nested.lr.label=="fit_function_difference");
+      CHECK(nested.lr.reference == "all");
+      CHECK(nested.lr.p_all == doctest::Approx(magmaan::robust::frontier::fmg_test(
+          nested.lr.statistic, nested.lr.df, nested.lr.eigenvalues,
+          {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-12));
+
       auto p1=m.pt,p0=m0.pt;
       REQUIRE(estimate::prepare_mixed_ordinal_partable(p1,*stats,parameterization));
       REQUIRE(estimate::prepare_mixed_ordinal_partable(p0,*stats,parameterization));
@@ -169,6 +174,10 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
       const auto moment_nested=api::policy_nested_dwls(reparameterized.pt,
           reparameterized.rep,*fit_reparameterized,{},m.pt,m.rep,*fit,{},*stats,parameterization);
       REQUIRE_MESSAGE(moment_nested.lr.reason==api::InferenceReason::Available,moment_nested.lr.detail);
+      CHECK(moment_nested.lr.reference == "all");
+      CHECK(moment_nested.lr.p_all == doctest::Approx(magmaan::robust::frontier::fmg_test(
+          moment_nested.lr.statistic, moment_nested.lr.df, moment_nested.lr.eigenvalues,
+          {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-12));
       CHECK(moment_nested.lr.df==nested.lr.df);
       CHECK(moment_nested.lr.statistic==doctest::Approx(nested.lr.statistic).epsilon(1e-7));
       CHECK((moment_nested.lr.eigenvalues-nested.lr.eigenvalues).norm()<1e-10);

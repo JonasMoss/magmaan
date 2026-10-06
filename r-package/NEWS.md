@@ -1,5 +1,10 @@
 # magmaanlab 0.2.0 (in development)
 
+- DWLS nested policy tests now default to the exact weighted chi-square All
+  reference for all-ordinal and mixed data, including parameter-nested and
+  moment-nested pairs (decision 2026-10-06). SB/PEBA4 remain comparators;
+  `references = c("sb", "peba4")` reproduces their previous p-values.
+
 - ML/FIML global and nested policy tests now default to PEBA4 only. SB no
   longer appears in default ordinary test tables; use
   `references = c("sb", "peba4")` to include it. Lab policy results label the

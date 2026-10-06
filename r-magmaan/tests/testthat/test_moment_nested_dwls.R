@@ -19,7 +19,7 @@ test_that("anova routes Wu-Estabrook moment-nested threshold steps", {
     } else {
       expect_equal(out$df[2L], 12L)
       expect_true(is.finite(out$statistic[2L]))
-      expect_true(is.finite(out$pvalue[out$reference %in% "sb"][1L]))
+      expect_true(is.finite(out$pvalue[out$reference %in% "all"][1L]))
       expect_equal(anova(h0, h1)$statistic, out$statistic)
     }
   }

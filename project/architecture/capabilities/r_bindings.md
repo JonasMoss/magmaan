@@ -379,7 +379,8 @@
   Nested DWLS comparisons (`api::policy_nested_dwls`, routed by
   `policy_nested()` and `magmaan::anova()`) report the fit-function
   difference with the df-length parameter-space estimated-weight IJ law:
-  observed Hessian at H1, exact restriction map, and SB/PEBA4. The separate-point
+  observed Hessian at H1, exact restriction map, and All (decision 2026-10-06);
+  SB/PEBA4 remain comparators. The separate-point
   `ordinal_dwls_profile_lrt` is an explicit lab comparator. Nested score remains
   typed unavailable. Gates cover the global-statistic difference, common-point
   profile equality (delta and two-group theta invariance), diagnostic IJ
@@ -544,8 +545,8 @@ vector selects std/sb/ss/mv/scaled_f/all/pall or eba<k>/peba<k> through lab
 Test codes are `score`, `lr`, `fit_function`, `fit_function_difference`; print
 methods show readable labels. Defaults
 retain the recorded p-values exactly; unavailable tests keep one typed row.
-`recommended` selects primary policy p-values: ML/FIML score SB/PEBA4, DWLS
-global fit_function All, and DWLS nested fit_function_difference SB/PEBA4.
+`recommended` selects primary policy p-values: ML/FIML score PEBA4, DWLS
+global fit_function All, and DWLS nested fit_function_difference All.
 LR, compatibility and unavailable rows are never recommended. Default printing
 retains every row, including LR with its small-sample caveat.
 Compatibility appends unscaled.statistic/scale/shift, uses lavaan's method
