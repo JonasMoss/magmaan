@@ -1,6 +1,6 @@
 # Inference under magmaan's policy (project/design/r-interface-vision.md):
 # the observed-information sandwich for parameter uncertainty, and global
-# ML/FIML score and likelihood-ratio tests calibrated with SB and PEBA4,
+# ML/FIML score and likelihood-ratio tests calibrated with PEBA4 (SB on request),
 # and DWLS global and nested fit-function tests with the exact spectrum All tail. The
 # policy is composed in C++ (magmaanlab::policy_inference()); a component it
 # cannot compute carries a reason instead of a substitute result.
