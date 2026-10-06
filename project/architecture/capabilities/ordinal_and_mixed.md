@@ -1144,9 +1144,14 @@ and NACOV agree before reporting is compared. Reporting at identical oracle
 parameter points has strict 1e-5 relative lab gates; a checked-in single-group
 mixed golden also gates the composer. Single-group delta additionally has
 strict retained-fit gates for native fits. Under `preset = "lavaan-0.7.2"`,
-all eight one/two-group delta/theta configural/restricted retained fits pass
-these same reporting tolerances, including nested statistics, df, p, scale
-and shift. Search objectives agree with black-box lavaan evaluations on
+seven of eight one/two-group delta/theta configural/restricted retained fits
+pass these same reporting tolerances, including nested statistics, df, p, scale
+and shift. The grouped theta configural case is path-unstable (TASK-94): both
+fits must converge, search objectives must agree within 1e-8 times max(1, |F|),
+and the canonical objective must be no worse than lavaan within 1e-12 times
+max(1, |F_lavaan|). Its global and nested reporting gates use the identical
+lavaan parameter point at the unchanged 1e-5 relative tolerance. Search
+objectives agree with black-box lavaan evaluations on
 identical Stage 1 within 1e-14; the small independently computed Stage-1
 polyserial differences are kept separate from the search-unit gate.
 Native grouped/theta endpoints retain the stopping differences recorded with

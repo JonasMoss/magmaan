@@ -298,6 +298,34 @@ reporting and endpoint objective/gradient checks via the thin internal
 in `test_lavaan_compat.R`. This records endpoint/convention observations, not
 an oracle defect or exemption; no tolerances are widened.
 
+### Mixed preset grouped theta configural search path (TASK-94)
+
+CI run 37425355241 (lavaan 0.7-2, R 4.6, reference BLAS) exposed a
+path-unstable endpoint in the TASK-91 preset gate on the same HS mixed design
+above. Only theta / school groups / configural is affected: lavaan takes about
+110 iterations, and its maximum endpoint gap from magmaan is 3.1e-5 with
+OpenBLAS and 5.1e-4 with reference BLAS. Magmaan's endpoint is BLAS-independent;
+objectives agree to about 1e-8 relative and magmaan's is marginally lower.
+The other seven cases agree within 7e-7. Covariance is sensitive to the endpoint
+(the CI discrepancy was 0.16 relative).
+
+`test_convention_mixed.R` keeps starts, search-coordinate and prepared-path
+checks unchanged. For this single case it requires both fits to converge,
+compares the common search objective with lavaan's own endpoint objective at
+1e-8 times max(1, |F|), and requires magmaan's canonical objective to be no
+worse than lavaan's within 1e-12 times max(1, |F_lavaan|). Covariance and
+scaled-shifted statistic/df/p/scale/shift, including the nested comparison,
+use TASK-90's identical-point machinery at the unchanged 1e-5 relative
+tolerance. The other seven preset cases retain strict endpoint parity.
+The ordinary `test_lavaan_compat.R` uses the same acceptance and point mapping
+for this case; the frozen `configured_ml_test.cpp` consumer keeps its starts,
+search-coordinate, gradient and verdict checks and uses objective acceptance
+for this endpoint. No fixture values change.
+The revised mixed convention file passes with both OpenBLAS and
+`LD_PRELOAD=/usr/lib/x86_64-linux-gnu/blas/libblas.so.3:/usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3`
+(reference BLAS): 365 assertions each, no warnings or skips.
+This is a search-path observation, not an oracle defect or exemption.
+
 ### Mixed ordinal MI criterion scale (TASK-33.4)
 
 The factor-two difference in score fixture 0005 was a magmaan defect, not an

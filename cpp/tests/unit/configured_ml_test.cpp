@@ -858,7 +858,17 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
     const auto& attempts=est->fitting->attempts;
     REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
     CHECK((estimate::fit_verdict(*est).status==estimate::FitCheck::Passed)==c["converged"].get<bool>());
-    CHECK(est->fmin==doctest::Approx(c["fmin"].get<double>()).epsilon(1e-8));
+    // TASK-94: only grouped theta configural is path-unstable: endpoint
+    // gaps 3.1e-5 (OpenBLAS) / 5.1e-4 (reference BLAS), objectives ~1e-8.
+    const bool path_unstable=c["parameterization"]=="theta" &&
+        c["groups"]==2 && c["group_equal"].is_null();
+    if(path_unstable) {
+      CHECK(c["converged"].get<bool>());
+      CHECK(estimate::fit_verdict(*est).status==estimate::FitCheck::Passed);
+      CHECK(std::abs(est->fmin-c["fmin"].get<double>())<=
+          1e-8*std::max(1.0,std::abs(est->fmin)));
+    } else CHECK(est->fmin==doctest::Approx(c["fmin"].get<double>()).epsilon(1e-8));
+    Eigen::VectorXd oracle_theta=est->theta;
     if(c["converged"].get<bool>()) CHECK(est->diagnostics.objective.consistent);
     for(std::size_t i=0;i<pt.size();++i) if(pt.free[i]>0) {
       bool found=false;
@@ -867,7 +877,9 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
            row["op"].get<std::string>()!=parse::to_string(pt.op[i]) || row["group"]!=pt.group[i]) continue;
         found=true;
         CHECK(attempts.front().start(pt.free[i]-1)==doctest::Approx(row["start"].get<double>()).epsilon(1e-9));
-        CHECK(est->theta(pt.free[i]-1)==doctest::Approx(row["est"].get<double>()).epsilon(1e-5));
+        oracle_theta(pt.free[i]-1)=row["est"].get<double>();
+        if(!path_unstable)
+          CHECK(est->theta(pt.free[i]-1)==doctest::Approx(row["est"].get<double>()).epsilon(1e-5));
       }
       CHECK(found);
     }
@@ -883,6 +895,19 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
     auto objective=estimate::frontier::mixed_ordinal_ls_objective(pt,*rep,adjusted,seed,
         estimate::OrdinalWeightKind::DWLS,param); REQUIRE_OR_RETURN(objective);
     const auto scalar=optim::scalarize(objective->problem);
+    if(path_unstable) {
+      Eigen::VectorXd gradient;
+      const double common_objective=scalar.f(est->theta,gradient);
+      CHECK(std::abs(est->fmin-common_objective)<=1e-14);
+      auto canonical=estimate::frontier::mixed_ordinal_ls_objective(pt,*rep,stats,seed,
+          estimate::OrdinalWeightKind::DWLS,param); REQUIRE_OR_RETURN(canonical);
+      const auto own_residual=canonical->problem.r(est->theta);
+      const auto oracle_residual=canonical->problem.r(oracle_theta);
+      REQUIRE_OR_RETURN(own_residual); REQUIRE_OR_RETURN(oracle_residual);
+      const double own_fmin=0.5*own_residual->squaredNorm();
+      const double oracle_fmin=0.5*oracle_residual->squaredNorm();
+      CHECK(own_fmin-oracle_fmin<=1e-12*std::max(1.0,std::abs(oracle_fmin)));
+    }
     for(std::size_t a=0;a<attempts.size();++a) {
       const auto& actual=attempts[a]; const auto& oracle=c["attempts"][a];
       CHECK(actual.simple_start==oracle["simple"].get<bool>());

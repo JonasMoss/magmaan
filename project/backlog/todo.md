@@ -332,7 +332,9 @@ with each actual endpoint's declared acceptance checked separately.
   configural/restricted pairs (zero factor covariance or equal loadings).
   Prepared `estimate()`, `fit_model()` and ordinary `magmaan()` retain matching
   endpoints; TASK-90's WLSMV retained covariance/global/nested gates pass at
-  their existing tolerances for all cases. Native outputs are bit-identical
+  their existing tolerances for seven retained cases; TASK-94 gates the
+  path-unstable grouped theta configural case by objective acceptance and
+  identical-point reporting. Native outputs are bit-identical
   across the eight fits. Mixed missing data, nonlinear constraints and finite
   bounds remain explicit errors; ULS/WLS presets remain unavailable.
 
@@ -1247,8 +1249,10 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   Satorra-2000 delta nested tests in C++ and both R reporting interfaces.
   Complete one/two-group delta/theta Stage-1 and identical-point parity gates
   pass at 1e-5 relative tolerance; single-group delta has retained-fit gates.
-  TASK-91 extends retained-fit validation to all eight complete mixed preset
-  delta/theta grouped/restricted cases; native grouped/theta stopping differences
+  TASK-91 validates seven retained complete mixed preset delta/theta
+  grouped/restricted cases; TASK-94 uses objective acceptance and identical-point
+  reporting for the eighth, grouped theta configural. Native grouped/theta
+  stopping differences
   remain recorded in the oracle observations ledger. Missing stats
   and uncomposed mixed bundles remain typed unavailable; policy is unchanged.
 
