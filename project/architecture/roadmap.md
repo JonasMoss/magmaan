@@ -356,7 +356,10 @@ the policy's primary test (score, or the DWLS fit-function statistic) with its
 default references; the likelihood-ratio rows are reported because they are
 standard, never recommended (TASK-96). ML and FIML policy tests default to
 PEBA4 alone (user decision 2026-10-06; SB stays a `references` comparator),
-so their default tables hold one row per test (TASK-97).
+so their default tables hold one row per test (TASK-97). DWLS nested tests
+(all-ordinal and mixed, parameter- and moment-nested) use the All reference
+like the DWLS global test, with SB/PEBA4 as comparators (TASK-81, user
+decision 2026-10-06); decisions/07 is the pending cross-model confirmation.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
