@@ -1,0 +1,2 @@
+precision_digits,elapsed_s,source_sha256,convention,limitation
+90,0.1507428280001477,dcbf09d3b5cbe63fbd89433c4617f5a778a075a3edbba88963d87011b76661cc,c_j=lambda_j sqrt(phi)/sqrt(1+lambda_j^2 phi); correlations=c_i c_j; thresholds eliminated with actual W Schur complement,"single local face in positive-factor chart; no global infimum, construction certificate, alternate basin or inference claim"

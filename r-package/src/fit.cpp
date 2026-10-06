@@ -6596,8 +6596,11 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -6633,8 +6636,11 @@ Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "ULS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "ULS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -6670,8 +6676,11 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "WLS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "WLS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // All-ordinal ULS/DWLS/WLS with PSD primitive LISREL covariance matrices.

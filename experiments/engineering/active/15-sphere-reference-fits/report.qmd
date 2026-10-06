@@ -1,7 +1,9 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: ordinal_audit
+  lane: sparse_search
+  sparse_run: sparse-search-confirm-v2
+  sparse_retained: sparse-search-retained-v5
   ordinal_run: ordinal-audit-confirm-v2
   ordinal_retained: ordinal-audit-retained-v1
   weighted_run: weighted-audit-confirm-v1
@@ -43,6 +45,51 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "sparse_search")) {
+  read_sparse <- function(run,name) {
+    path <- file.path("results",run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing sparse search evidence: ",path,
+      "; run --ordinary --ordinal-audit --sparse-search --run-id ",run)
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  for(run in c(params$sparse_run,params$sparse_retained))for(name in c("verification","boundary_verification")) {
+    gate <- read_sparse(run,name)
+    if(any(gate$failed!=0))stop("Sparse search verification failed: ",run,"/",name)
+  }
+  fits <- read_sparse(params$sparse_run,"fits")
+  cases <- read_sparse(params$sparse_run,"cases")
+  retained <- read_sparse(params$sparse_retained,"fits")
+  faces <- read_sparse(params$sparse_retained,"boundaries")
+  replay <- read_sparse(params$sparse_retained,"replay_checks")
+  points <- read_sparse(params$sparse_retained,"comparisons")
+  fresh_points <- read_sparse(params$sparse_run,"comparisons")
+  metadata <- read_sparse(params$sparse_run,"metadata")
+  reference <- read_sparse(params$sparse_run,"reference_metadata")
+  cat("## Question\n\nDo the six retained sparse-theta ULS/DWLS/WLS failures call for better starts or tighter optimization, or do they approach a boundary that finite theta parameters cannot represent?\n\n")
+  cat(sprintf("## Short answer\n\nThe retained failures have a verified local boundary explanation. All six cold endpoints reproduce exactly. Three independent 90-digit face calculations show strict outward descent; finite theta paths approach the faces while remaining above the Newton budget. Tighter L-BFGS recovers none of the three weight-specific fits. All %d fits on the fresh controls pass and their independent point checks agree; two of the ten fresh sparse draws fail first-stage construction and remain recorded.\n\n",nrow(fits)))
+  cat("Bank this as an explicit limit of the finite interior theta audit. No optimizer, start or audit default changes. The local evidence does not prove a global infimum or exclude a different finite basin.\n\n")
+  cat("## Evidence\n\n")
+  evidence <- do.call(rbind,lapply(split(fits,interaction(fits$family,fits$parameterization,drop=TRUE)),function(x) {
+    result <- function(arm) {
+      z <- x[x$arm==arm,];sprintf("%d/%d",sum(z$returned & z$fit_passed,na.rm=TRUE),nrow(z))
+    }
+    data.frame(Family=x$family[1],Parameterization=x$parameterization[1],Default=result("default"),PORT=result("port_nls"),`Tight L-BFGS`=result("tight_lbfgs"),check.names=FALSE)
+  }))
+  cat(knitr::kable(evidence),sep="\n")
+  cat("\n\nThese are ten regular and ten sparse draws, with ULS/DWLS/WLS conditional on the same first-stage inputs. The two rejected sparse draws have singular polychoric score blocks; no fits are imputed for them. All returned fits are audited. There are no gains or losses among the three arms on these fresh controls. This small engineering comparison is not a default-selection study.\n\n")
+  cat(sprintf("The retained replay has %d agreeing independent points: 18 terminal points, 18 actual starts and 15 finite boundary-path points. All 12 stock delta/theta endpoints reproduce their original parameter vectors exactly; all three configurations receive identical actual starts. The six original theta failures and three tighter-control failures remain rejected. The earlier bank's saddle/rank controls retain their checks; this study changes only start telemetry at the R boundary.\n\n",nrow(points)))
+  native <- metadata$value[metadata$key=="elapsed_s"]
+  independent <- reference$elapsed_s[1]
+  cat(sprintf("The fresh R phase took %.1f seconds and the independent reference %.1f seconds on one thread each. Summed fitting time was %.3f seconds across %d fits; median fit times were 3–4 ms. These short, sequential timings do not establish an optimizer speed ranking.\n\n",as.numeric(native),independent,sum(fits$seconds),nrow(fits)))
+  cat("## Why these theta fits escape\n\nFor this single-factor model, positive factor variance $\\phi$ and unit theta residual variances give standardized loadings $c_j=\\lambda_j\\sqrt{\\phi}/\\sqrt{1+\\lambda_j^2\\phi}$, with $r_{ij}=c_ic_j$ and $|c_j|<1$ at every finite point. Thresholds can be eliminated exactly using the Schur complement of the retained fitting weight. The independent reduced objective then has only four loading coordinates.\n\n")
+  cat("At the locally optimal face $c_1=1$, the other three loading derivatives vanish, their Hessian is positive, and the derivative toward larger $c_1$ is strictly negative for every weight. The finite path at factor variances from 100 to one million strictly lowers the original objective toward this face. The marker constraint fixes $\\lambda_1=1$; reaching the face therefore requires $\\phi\\to\\infty$.\n\n")
+  cat(sprintf("The delta fits instead have standardized x1 loadings of %.3f–%.3f and negative x1 residual variances. They cannot be transported into the positive-residual theta chart by finite real rescaling. Their convergence is a numerical result for an unrestricted objective, not evidence of an admissible fitted covariance decomposition.\n\n",min(faces$delta_max_abs_loading),max(faces$delta_max_abs_loading)))
+  cat("## Caveats\n\nThis is a local face certificate in the positive-factor-variance chart, conditional on retained first-stage moments and weights. It supplies no global nonattainment theorem, first-stage error propagation, statistical regularization or inference recommendation. A boundary/PSD route needs its own constrained audit; the interior Newton audit must continue rejecting these finite endpoints.\n\n")
+  cat("The development probe at factor variance $10^8$ is retained in `sparse-search-retained-v2`. Its ill-conditioned native ULS distance differs from the 90-digit value by 1.42e-8 relative, exceeding that probe's comparison tolerance; derivatives and the rejecting verdict still agree. The final native path comparison deliberately stops at $10^6$. That rejected diagnostic is not an accuracy certificate.\n\n")
+  cat("PORT-NLS scalar objective telemetry remains unavailable (`f_recomputed=NaN`, `f_consistent=false`). The explicit full-threshold objective agrees with the reported objective and independent calculation; both the unavailable backend flag and explicit comparison are retained. The first fresh attempt also exposed an empty-table writer error when no theta endpoints failed. That harness error was fixed, and the same fresh draws were replayed without changing a statistical or optimization setting.\n\n")
+  cat("## Reproduce\n\nUse matching isolated-worktree bindings and Python with mpmath 1.3.0; use fresh output IDs. The retained replay reads this leaf's saved `ordinal-audit-confirm-v1/case_9.rds` and original fit objects. Recreate them with the earlier ordinal lane at seed 865051201, two replicates, when local raw artifacts are absent.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --sparse-search --retained --run-id sparse-retained-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --sparse-search --reps 10 --seed-base 865052301 --run-id sparse-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:sparse_search -P sparse_run:sparse-confirm-new -P sparse_retained:sparse-retained-new\n```\n\nReopen for a finite accurate theta endpoint that improves on the retained local face, an unexplained failure within the regular finite scope, or implementation of a boundary/PSD audit. Broader starts, FIML patterns, ML2S handoffs, shared stopping behavior and default adoption retain their own cards. Other report lanes remain selectable.\n\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "ordinal_audit")) {
   read_ordinal <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))
@@ -62,12 +109,12 @@ if (identical(params$lane, "ordinal_audit")) {
   reference <- read_ordinal(params$ordinal_run,"reference_metadata")
   failed <- retained_fits[!retained_fits$fit_passed | is.na(retained_fits$fit_passed),]
   cat("## Question\n\nCan ordinal and mixed least squares reuse the more stable continuous-LS Newton audit after accounting for their actual moment maps and weights?\n\n")
-  cat(sprintf("## Short answer\n\nYes, for the tested original, unprofiled numerical objectives. All %d fresh fits pass, and all %d audited points agree with an independent 90-digit reconstruction. The 80 displaced points and 12 zero-loading saddles remain unaccepted. The earlier run retains %d sparse-theta fitting failures: the audit correctly rejects them, but their starts/search still need work.\n\n",nrow(fits),nrow(points),nrow(failed)))
+  cat(sprintf("## Short answer\n\nYes, for the tested original, unprofiled numerical objectives. All %d fresh fits pass, and all %d audited points agree with an independent 90-digit reconstruction. The 80 displaced points and 12 zero-loading saddles remain unaccepted. The earlier run retains %d sparse-theta fitting failures: the audit correctly rejects them, but their local boundary limit is examined in the later `sparse_search` lane.\n\n",nrow(fits),nrow(points),nrow(failed)))
   cat("The audit now retains the actual whitened Jacobian and residual curvature correction before forming cross-products. That lets it use QR coordinates for curvature and the distance metric. Its distance uses the fitting-weight working scale; this is a numerical convergence check, not a sampling covariance or inference recommendation.\n\n")
   cat("## Evidence\n\n")
   evidence <- data.frame(Check=c("Fresh terminal fits","Independent original-objective points","Conditional weights and empirical thresholds","Displaced points rejected","Zero-loading saddles rejected","Retained sparse-theta failures"),
     Tested=c(nrow(fits),nrow(points),nrow(recipes),80,12,nrow(failed)),
-    Outcome=c("160 pass","252 agree","46 agree","80 rejected","12 rejected","6 correctly rejected; search unresolved"))
+    Outcome=c("160 pass","252 agree","46 agree","80 rejected","12 rejected","6 rejected; see sparse_search follow-up"))
   cat(knitr::kable(evidence),sep="\n")
   cat("\n\nBoth parameterizations cover ordinary all-ordinal ULS/DWLS/WLS and the existing mixed DWLS/WLS slice. The bounded grid includes shared loadings, unequal groups with equal thresholds and released means/scales, sparse categories, extreme correlations and mixed continuous units. Each recipe uses the public fitting wrapper's default starts with either its default L-BFGS controls or PORT-NLS and a 1000-iteration limit. No portfolio or polishing is added. All returned fits and every failed verdict are retained.\n\n")
   cat(sprintf("The largest relative gradient/correction discrepancy is %.2g; Hessian, metric and factor discrepancies are below %.2g. Fitting and artifact collection took %.1f seconds; the reference took %.1f seconds on one math thread. Missing WLS weights and a constant-category variable reject explicitly. Existing ordinal regression tests also cover polychoric/polyserial moments, NACOV and weights against lavaan, pairwise counts, full/profiled fits and parameter reporting.\n\n",
@@ -75,7 +122,7 @@ if (identical(params$lane, "ordinal_audit")) {
     max(points$hessian_relative_error,points$metric_relative_error,points$metric_factor_relative_error),
     as.numeric(metadata$value[metadata$key=="elapsed_s"]),reference$elapsed_s))
   cat("## Caveats\n\nThe bank conditions on the actual first-stage moments and whitening factors. Empirical univariate thresholds and Gamma-to-weight recipes are independently checked; first-stage polychoric/polyserial and Gamma construction retain their existing oracle gates. There is no propagated first-stage error bound. Ordinal construction certificates explicitly remain unsupported.\n\nThe retained run has 154 passing fits and six sparse-theta failures, with distances 0.44–1.11 versus the 0.01 budget; three also hit the conditioning guard. They occur under both backends and all three weights on one draw. The corrected reference replay preserves those failures. Before the fresh confirmation, its grouped-delta release mask was corrected to read prepared free response variances. The final confirmation uses a new seed and the frozen corrected reference.\n\nThese small engineering runs do not choose defaults or establish identification, global optimality, basin recovery, or sparse-data fitting reliability. Sphere, active bounds, PSD faces, barriers and mixed-data inference are outside this bank. Fresh pairwise route reliability and a stronger ordinal interval certificate require their own evidence; existing pairwise regression gates remain useful without treating the inputs as a synthetic complete sample.\n\n")
-  cat("## Reproduce\n\nUse matching worktree bindings and Python with mpmath 1.3.0; choose a fresh run ID. Raw cases, fit objects and matrix artifacts remain ignored; compact judgments and provenance are frozen.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --smoke --run-id ordinal-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --reps 2 --seed-base 865051301 --run-id ordinal-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:ordinal_audit -P ordinal_run:ordinal-confirm-new\n```\n\nReopen numerical integration for a moment-map mismatch, a wrong verdict, a new first-stage/weight representation or a new domain. Resolve the retained sparse-theta search failures separately. Other lanes, including `weighted_audit` and `uls_search`, remain selectable.\n\n")
+  cat("## Reproduce\n\nUse matching worktree bindings and Python with mpmath 1.3.0; choose a fresh run ID. Raw cases, fit objects and matrix artifacts remain ignored; compact judgments and provenance are frozen.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --smoke --run-id ordinal-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ordinal-audit --reps 2 --seed-base 865051301 --run-id ordinal-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:ordinal_audit -P ordinal_run:ordinal-confirm-new\n```\n\nReopen numerical integration for a moment-map mismatch, a wrong verdict, a new first-stage/weight representation or a new domain. The later sparse_search lane banks the retained local theta boundary limit separately. Other lanes, including `weighted_audit` and `uls_search`, remain selectable.\n\n")
   knitr::knit_exit()
 }
 if (identical(params$lane, "weighted_audit")) {

@@ -886,7 +886,16 @@ policy change. Experiment 15's fresh confirmation has 160 passing cold fits,
 conditional-weight checks in delta/theta, including shared loadings, groups and
 mixed units. All 80 displaced points and 12 saddles remain unaccepted. A corrected
 replay retains six earlier sparse-theta failures at distance 0.44–1.11 (three
-also ill-conditioned), owned by TASK-33.10.6. Existing first-stage and pairwise
+also ill-conditioned). The focused TASK-33.10.6 follow-up (2026-10-06) reproduces
+these six exactly and verifies three local positive-factor theta boundary faces
+with strict outward descent using an independent 90-digit Schur-profiled map.
+Fifteen finite approach points remain rejected; negative-residual delta fits
+have no finite positive-residual theta transport. This banks a local domain
+limit, not a global nonattainment theorem or start/recovery/default change.
+Fresh controls give 324 passing fits/independent points from 18 usable draws;
+two singular first-stage sparse draws are retained. All-ordinal LS bindings
+retain actual start vectors; stronger construction and boundary audits remain
+open. Existing first-stage and pairwise
 oracle gates pass. Propagated construction bounds, fresh pairwise reliability,
 sphere/PSD/barrier coverage, inference policy, identification/global recovery
 and default adoption remain outside this bank.

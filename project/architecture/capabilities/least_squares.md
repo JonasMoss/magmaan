@@ -180,7 +180,20 @@ policy change. Experiment 15's fresh confirmation has 160 passing cold fits,
 conditional-weight checks in delta/theta, including shared loadings, groups and
 mixed units. All 80 displaced points and 12 saddles remain unaccepted. A corrected
 replay retains six earlier sparse-theta failures at distance 0.44–1.11 (three
-also ill-conditioned), owned by TASK-33.10.6. Existing first-stage and pairwise
+also ill-conditioned). TASK-33.10.6's focused follow-up (2026-10-06) reproduces
+all six and banks an explicit local finite-theta domain limit: three 90-digit
+Schur-profiled loading faces have positive tangent curvature and strict outward
+descent; 15 finite approach points retain above-budget rejection. Negative
+residual delta fits cannot be transported into finite positive-residual theta
+coordinates. Tighter L-BFGS recovers none; no global nonattainment theorem or
+alternate-basin exclusion is claimed. Fresh regular/sparse controls return 324
+passing fits/independent points; two singular first-stage sparse draws reject.
+All-ordinal ULS/DWLS/WLS bindings now retain the actual `start$theta` and producer
+name `ordinal-simple`. PORT-NLS scalar recomputation telemetry remains unavailable,
+so this lane explicitly checks reported versus full-threshold objectives.
+The native path scope stops at factor variance 1e6; an ill-conditioned 1e8 probe
+retains a diagnostic-distance precision failure and the correct rejection.
+Existing first-stage and pairwise
 oracle gates pass. Propagated construction bounds, fresh pairwise reliability,
 sphere/PSD/barrier coverage, inference policy, identification/global recovery
 and default adoption remain outside this bank.
