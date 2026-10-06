@@ -2,8 +2,9 @@
 
 - Complete mixed DWLS/WLS modification indices and equality releases now
   include estimated-weight influence and exact empirical first-stage rows.
-  Lab defaults and the C++ convenience mixed score API use observed nuisance
-  sensitivity; expected sensitivity and
+  Lab robust defaults use observed nuisance sensitivity; the plain C++
+  `api::modification_indices()` keeps the standard statistic. Expected
+  sensitivity and
   fixed weights remain explicit comparators. Missing recipes are typed
   unavailable. Mixed WLS IJ also uses the exact sampling channel.
 

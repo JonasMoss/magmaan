@@ -981,28 +981,22 @@ TEST_CASE("api mixed ordinal post-fit preserves explicit residual rows") {
   CHECK(*fm->ordinal_srmr == doctest::Approx(expected_fm->srmr).epsilon(1e-12));
   const auto mi = api::modification_indices(*fit);
   REQUIRE_OK(mi);
-  const auto expected_mi = estimate::frontier::modification_indices_mixed_ordinal_robust(
+  const auto expected_mi = estimate::modification_indices_mixed_ordinal(
       model->structure(), model->matrix_rep(), *stats, fit->estimates(),
-      estimator.ordinal_weight, {}, estimator.ordinal_parameterization, true,
-      robust::Information::Observed,
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
       &model->names().row_user);
   REQUIRE_OK(expected_mi);
   REQUIRE_FALSE(mi->rows.empty());
   check_same_score_table(*mi, *expected_mi, 1e-12);
-  for (std::size_t i = 0; i < mi->rows.size(); ++i)
-    CHECK(mi->rows[i].mi_scaled == doctest::Approx(expected_mi->rows[i].mi_scaled).epsilon(1e-12));
   const auto scores = api::score_tests(*fit);
   REQUIRE_OK(scores);
-  const auto expected_scores = estimate::frontier::score_tests_mixed_ordinal_robust(
+  const auto expected_scores = estimate::score_tests_mixed_ordinal(
       model->structure(), model->matrix_rep(), *stats, fit->estimates(),
-      estimator.ordinal_weight, estimator.ordinal_parameterization, true,
-      robust::Information::Observed,
+      estimator.ordinal_weight, estimator.ordinal_parameterization,
       &model->names().row_user);
   REQUIRE_OK(expected_scores);
   REQUIRE_FALSE(scores->rows.empty());
   check_same_score_table(*scores, *expected_scores, 1e-12);
-  for (std::size_t i = 0; i < scores->rows.size(); ++i)
-    CHECK(scores->rows[i].mi_scaled == doctest::Approx(expected_scores->rows[i].mi_scaled).epsilon(1e-12));
 }
 
 TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {

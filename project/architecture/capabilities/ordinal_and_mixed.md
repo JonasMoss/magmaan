@@ -806,9 +806,10 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   In observed geometry the local nested quadratic N u²/H_eff, divided by its
   one-restriction eigenvalue B_eff/H_eff, equals the robust MI N u²/B_eff.
   ULS and genuinely absent estimated-weight recipes return UnsupportedInference.
-  The ordinary package still defers its MI API; lab ordinary names now reach
-  the robust result instead of refusing. The C++ convenience MI/release API
-  switches from unscaled workers to this robust route, retaining `row_user`.
+  The ordinary package still defers its MI API; lab robust workers now reach
+  the estimated-weight result instead of refusing. The plain C++
+  `api::modification_indices()`/`api::score_tests()` keep the standard
+  statistic for every estimator; the robust route is explicit.
 - Complete mixed DWLS estimated-weight IJ uses a separate empirical sampling
   channel: `data::mixed_moment_sampling_influence` differentiates the marginal
   and pairwise score equations in threshold/negative-mean/variance/association
