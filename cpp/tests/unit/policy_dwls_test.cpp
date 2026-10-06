@@ -797,3 +797,37 @@ TEST_CASE("DWLS exact first stage: binary pairwise saturation agrees with OPG at
       stats->n_levels[0],stats->thresholds[0],stats->R[0]); REQUIRE(sampling);
   CHECK(relative(sampling->gamma,stats->NACOV[0]) < 1e-6);
 }
+
+TEST_CASE("DWLS policy fit measures: Exact comparator and unchanged OPG default") {
+  const auto x = misspecified_block(101u, 400, -0.4, 0.6);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({x}, true);
+  REQUIRE(stats);
+  const auto m = ordinal_model(kOneFactor, 1);
+  const auto est = fit_dwls(m, *stats, OrdinalParameterization::Delta);
+  const auto policy = api::policy_fit_measures(m.pt,m.rep,*stats,est,{});
+  using magmaan::estimate::OrdinalFirstStage;
+  auto rm = magmaan::estimate::ordinal_rmsea_misspec_inference(m.pt,m.rep,*stats,est,
+      OrdinalParameterization::Delta,true,0.9,1e-10,OrdinalFirstStage::Exact);
+  auto ct = magmaan::estimate::ordinal_cfi_tli_misspec_inference(m.pt,m.rep,*stats,est,
+      OrdinalParameterization::Delta,true,0.9,1e-10,OrdinalFirstStage::Exact);
+  auto cr = magmaan::estimate::ordinal_crmr_misspec_inference(m.pt,m.rep,*stats,est,
+      OrdinalParameterization::Delta,true,false,0.9,1e-10,OrdinalFirstStage::Exact);
+  REQUIRE(rm); REQUIRE(ct); REQUIRE(cr);
+  CHECK(policy.user.trace == rm->bias_trace);
+  CHECK(policy.user.trace == ct->gendf_user);
+  CHECK(policy.baseline.trace == ct->gendf_baseline);
+  for (const auto& i : policy.indices) {
+    REQUIRE_MESSAGE(i.reason == api::InferenceReason::Available,i.detail);
+    if (i.index == "rmsea") CHECK(i.estimate == rm->point);
+    if (i.index == "cfi") CHECK(i.estimate == ct->cfi);
+    if (i.index == "crmr") CHECK(i.estimate == cr->point_bias_corrected);
+  }
+  auto defaults = magmaan::estimate::ordinal_fit_measures_misspec_inference(m.pt,m.rep,*stats,est);
+  auto opg = magmaan::estimate::ordinal_fit_measures_misspec_inference(m.pt,m.rep,*stats,est,
+      OrdinalParameterization::Delta,true,0.9,1e-10,OrdinalFirstStage::OPG);
+  REQUIRE(defaults); REQUIRE(opg);
+  CHECK(defaults->rmsea == opg->rmsea);
+  CHECK(defaults->cfi == opg->cfi);
+  CHECK(defaults->tli == opg->tli);
+  CHECK(defaults->crmr == opg->crmr);
+}

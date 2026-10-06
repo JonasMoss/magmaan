@@ -1353,7 +1353,8 @@ Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
                                               Rcpp::List ordinal_stats,
                                               bool estimated_weight = true,
                                               double conf_level = 0.90,
-                                              double eig_tol = 1e-10) {
+                                              double eig_tol = 1e-10, std::string first_stage = "opg") {
+  if (first_stage != "opg" && first_stage != "exact") Rcpp::stop("first_stage must be opg or exact");
   require_dwls_fit(fit, "infer_ordinal_fit_measures_misspec()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1365,7 +1366,7 @@ Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit,
   auto r_or = magmaan::estimate::ordinal_fit_measures_misspec_inference(
       ctx.pt, ctx.rep, stats, est,
       ordinal_parameterization_from_string(parameterization_name),
-      estimated_weight, conf_level, eig_tol);
+      estimated_weight, conf_level, eig_tol, first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   return misspec_fit_measures_to_list(*r_or);
 }
@@ -1378,7 +1379,8 @@ Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
                                              Rcpp::List mixed_stats,
                                              bool estimated_weight = true,
                                              double conf_level = 0.90,
-                                             double eig_tol = 1e-10) {
+                                             double eig_tol = 1e-10, std::string first_stage = "opg") {
+  if (first_stage != "opg" && first_stage != "exact") Rcpp::stop("first_stage must be opg or exact");
   require_dwls_fit(fit, "infer_mixed_ordinal_rmsea_misspec()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1391,7 +1393,7 @@ Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit,
   auto r_or = magmaan::estimate::mixed_ordinal_rmsea_misspec_inference(
       ctx.pt, ctx.rep, stats, est,
       ordinal_parameterization_from_string(parameterization_name),
-      estimated_weight, conf_level, eig_tol);
+      estimated_weight, conf_level, eig_tol, first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   return rmsea_inference_to_list(*r_or);
 }
@@ -1407,7 +1409,8 @@ Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
                                             bool estimated_weight = true,
                                             bool srmr_denominator = false,
                                             double conf_level = 0.90,
-                                            double eig_tol = 1e-10) {
+                                            double eig_tol = 1e-10, std::string first_stage = "opg") {
+  if (first_stage != "opg" && first_stage != "exact") Rcpp::stop("first_stage must be opg or exact");
   require_dwls_fit(fit, "infer_mixed_ordinal_crmr_misspec()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1420,7 +1423,7 @@ Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit,
   auto r_or = magmaan::estimate::mixed_ordinal_crmr_misspec_inference(
       ctx.pt, ctx.rep, stats, est,
       ordinal_parameterization_from_string(parameterization_name),
-      estimated_weight, srmr_denominator, conf_level, eig_tol);
+      estimated_weight, srmr_denominator, conf_level, eig_tol, first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   return crmr_inference_to_list(*r_or);
 }
@@ -1434,7 +1437,8 @@ Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
                                                Rcpp::List mixed_stats,
                                                bool estimated_weight = true,
                                                double conf_level = 0.90,
-                                               double eig_tol = 1e-10) {
+                                               double eig_tol = 1e-10, std::string first_stage = "opg") {
+  if (first_stage != "opg" && first_stage != "exact") Rcpp::stop("first_stage must be opg or exact");
   require_dwls_fit(fit, "infer_mixed_ordinal_cfi_tli_misspec()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1447,7 +1451,7 @@ Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit,
   auto r_or = magmaan::estimate::mixed_ordinal_cfi_tli_misspec_inference(
       ctx.pt, ctx.rep, stats, est,
       ordinal_parameterization_from_string(parameterization_name),
-      estimated_weight, conf_level, eig_tol);
+      estimated_weight, conf_level, eig_tol, first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   return incremental_inference_to_list(*r_or);
 }
@@ -1461,7 +1465,8 @@ Rcpp::List infer_mixed_ordinal_fit_measures_misspec(
     Rcpp::List mixed_stats,
     bool estimated_weight = true,
     double conf_level = 0.90,
-    double eig_tol = 1e-10) {
+    double eig_tol = 1e-10, std::string first_stage = "opg") {
+  if (first_stage != "opg" && first_stage != "exact") Rcpp::stop("first_stage must be opg or exact");
   require_dwls_fit(fit, "infer_mixed_ordinal_fit_measures_misspec()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
@@ -1474,7 +1479,7 @@ Rcpp::List infer_mixed_ordinal_fit_measures_misspec(
   auto r_or = magmaan::estimate::mixed_ordinal_fit_measures_misspec_inference(
       ctx.pt, ctx.rep, stats, est,
       ordinal_parameterization_from_string(parameterization_name),
-      estimated_weight, conf_level, eig_tol);
+      estimated_weight, conf_level, eig_tol, first_stage == "exact" ? magmaan::estimate::OrdinalFirstStage::Exact : magmaan::estimate::OrdinalFirstStage::OPG);
   if (!r_or.has_value()) stop_post(r_or.error());
   return misspec_fit_measures_to_list(*r_or);
 }

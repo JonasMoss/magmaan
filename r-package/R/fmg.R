@@ -1225,8 +1225,10 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 #' absolute and incremental fit indices RMSEA, CRMR, SRMR, CFI and TLI, each with
 #' a confidence interval that propagates the sampling variability of the
 #' estimated polychoric weight (the gamma channel). The single consolidated
-#' surface over the per-index entry points. Single-group all-ordinal DWLS fits
-#' only.
+#' surface over the per-index entry points. Single- and multi-group all-ordinal DWLS fits
+#' only. Exact residual inference includes pooled weights and cross-group
+#' parameter influence; the OPG default keeps its legacy blockwise approximation.
+#' Residual point fields in this consolidated table remain uncorrected.
 #'
 #' CFI carries a trustworthy interval and is largely robust to weight estimation;
 #' TLI's point is calibrated but its interval is conservative and unreliable at
@@ -1243,13 +1245,16 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
 #'   propagates the polychoric-weight sampling variability; `FALSE` is the fixed-weight comparator.
 #' @param conf_level Two-sided confidence level for the intervals.
 #' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
+#' @param first_stage OPG (default lab convention) or exact empirical sampling
+#'   influence. Exact requires complete raw data or supplied exact rows; fitting
+#'   weights remain the NACOV weights used for estimation.
 #' @return A named list: `rmsea`/`crmr`/`srmr`/`cfi`/`tli` with `.ci.lower` and
 #'   `.ci.upper`, the exact-fit `rmsea.pvalue` and `crmr.pvalue`, the user and
 #'   baseline `chisq`/`df`, `conf.level`, `estimated.weight`, and `warnings`.
 #' @export
 fit_measures_misspec <- function(fit, ordinal_stats = NULL,
                                  estimated_weight = TRUE, conf_level = 0.90,
-                                 eig_tol = 1e-10) {
+                                 eig_tol = 1e-10, first_stage = c("opg", "exact")) {
   if (is.null(ordinal_stats)) {
     stop("fit_measures_misspec(): `ordinal_stats` is required (the categorical ",
          "sample statistics used for the fit, with moment_influence and ",
@@ -1258,10 +1263,16 @@ fit_measures_misspec <- function(fit, ordinal_stats = NULL,
          call. = FALSE)
   }
   infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight,
-                                     conf_level, eig_tol)
+                                     conf_level, eig_tol, match.arg(first_stage))
 }
 
 #' Misspecification-robust mixed continuous/ordinal DWLS fit measures
+#'
+#' Exact discrepancy points also include the known N-divisor bias of the
+#' continuous covariance moments. Polychoric/polyserial bias remains omitted.
+#' Exact residual inference uses the full pooled influence map; OPG retains
+#' its legacy blockwise approximation and defaults. The consolidated residual
+#' point fields remain uncorrected.
 #'
 #' @param fit A mixed continuous/ordinal DWLS fit returned by the core mixed
 #'   ordinal fitting helpers.
@@ -1272,12 +1283,15 @@ fit_measures_misspec <- function(fit, ordinal_stats = NULL,
 #'   propagates the mixed DWLS weight sampling variability; `FALSE` is the fixed-weight comparator.
 #' @param conf_level Two-sided confidence level for the intervals.
 #' @param eig_tol Eigenvalue tolerance for the profile-contrast spectrum.
+#' @param first_stage OPG (default lab convention) or exact empirical sampling
+#'   influence. Exact requires complete raw data or supplied exact rows; fitting
+#'   weights remain the NACOV weights used for estimation.
 #' @return A named list with the same fields as [fit_measures_misspec()].
 #' @export
 fit_measures_misspec_mixed_ordinal <- function(fit, mixed_stats = NULL,
                                                estimated_weight = TRUE,
                                                conf_level = 0.90,
-                                               eig_tol = 1e-10) {
+                                               eig_tol = 1e-10, first_stage = c("opg", "exact")) {
   if (is.null(mixed_stats)) {
     stop("fit_measures_misspec_mixed_ordinal(): `mixed_stats` is required ",
          "(the mixed continuous/ordinal sample statistics used for the fit, ",
@@ -1287,5 +1301,5 @@ fit_measures_misspec_mixed_ordinal <- function(fit, mixed_stats = NULL,
          call. = FALSE)
   }
   infer_mixed_ordinal_fit_measures_misspec(fit, mixed_stats, estimated_weight,
-                                           conf_level, eig_tol)
+                                           conf_level, eig_tol, match.arg(first_stage))
 }

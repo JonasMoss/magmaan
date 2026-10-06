@@ -121,6 +121,14 @@ result under an unstated convention.
 
 ### Ordinary API
 
+- [x] **L — C++ policy fit-index point composer** (task-101): ML/FIML
+  Takeuchi differences, ULS profile plus covariance moment bias, Exact
+  ordinal/mixed DWLS corrections, corrected pooled residuals and lab adapter.
+  Component validation only; the ordinary interface is task-102, and point
+  bias / intervals require the registered task-103 evaluation. Unsupported
+  estimator corrections carry explicit missing-ingredient reasons.
+
+
 - [x] **M/L — implement the adopted ordinary API surface** (2026-10-02).
   `magmaan_model()` with frozen group/category schema and zero-row prototypes;
   `magmaan(model, data, estimator, covariance, inference, options)` with

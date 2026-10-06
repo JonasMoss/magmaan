@@ -170,6 +170,7 @@ add_library(magmaan STATIC
   src/estimate/gmm/dls_weight.cpp
   src/api/sem.cpp
   src/api/policy.cpp
+  src/api/policy_fit_measures.cpp
   src/api/moment_nested.cpp
   src/api/conventions.cpp
   src/inference/inference.cpp

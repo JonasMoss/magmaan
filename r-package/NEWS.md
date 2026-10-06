@@ -1,5 +1,12 @@
 # magmaanlab 0.2.0 (in development)
 
+- `policy_fit_measures()` returns misspecification-robust point indices with
+  per-index reasons and discrepancy/trace/df details for ML, FIML, continuous
+  ULS, ML2S-NT profile indices and ordinal/mixed DWLS. It fits a matching independence baseline;
+  residual points use the corrected pooled metric. No policy intervals yet.
+  Ordinal/mixed misspecification wrappers accept `first_stage = "exact"`;
+  their OPG defaults and generalized-df TLI remain unchanged.
+
 - DWLS nested policy tests now default to the exact weighted chi-square All
   reference for all-ordinal and mixed data, including parameter-nested and
   moment-nested pairs (decision 2026-10-06). SB/PEBA4 remain comparators;

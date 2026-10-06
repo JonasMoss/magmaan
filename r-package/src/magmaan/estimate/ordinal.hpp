@@ -1237,7 +1237,8 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                bool estimated_weight = true,
                                bool srmr_denominator = false,
                                double conf_level = 0.90,
-                               double eig_tol = 1e-10);
+                               double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Mixed continuous/ordinal counterpart of `ordinal_crmr_misspec_inference`.
 // The association residuals use the same standardization convention as
@@ -1255,7 +1256,8 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                      bool estimated_weight = true,
                                      bool srmr_denominator = false,
                                      double conf_level = 0.90,
-                                     double eig_tol = 1e-10);
+                                     double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Estimated-weight (γ-channel-aware) misspecification confidence interval for
 // RMSEA. Reuses `ordinal_dwls_profile_rmsea` for the Hessian/Γ_x/bias/spectrum
@@ -1270,7 +1272,8 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                     OrdinalParameterization::Delta,
                                 bool estimated_weight = true,
                                 double conf_level = 0.90,
-                                double eig_tol = 1e-10);
+                                double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Mixed continuous/ordinal counterpart of `ordinal_rmsea_misspec_inference`.
 // Reuses `mixed_ordinal_dwls_profile_rmsea` for the profile Hessian, signed
@@ -1285,7 +1288,8 @@ mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                           OrdinalParameterization::Delta,
                                       bool estimated_weight = true,
                                       double conf_level = 0.90,
-                                      double eig_tol = 1e-10);
+                                      double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Estimated-weight (γ-channel-aware) misspecification inference for the
 // incremental fit indices CFI and TLI. Runs the user model through
@@ -1303,7 +1307,8 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                       OrdinalParameterization::Delta,
                                   bool estimated_weight = true,
                                   double conf_level = 0.90,
-                                  double eig_tol = 1e-10);
+                                  double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Mixed continuous/ordinal counterpart of `ordinal_cfi_tli_misspec_inference`.
 // The baseline is the same mixed independence model used by
@@ -1319,7 +1324,8 @@ mixed_ordinal_cfi_tli_misspec_inference(
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     bool estimated_weight = true,
     double conf_level = 0.90,
-    double eig_tol = 1e-10);
+    double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Consolidated estimated-weight misspecification fit table (RMSEA + CRMR/SRMR +
 // CFI/TLI with CIs) for an all-ordinal DWLS fit. Delegates to the per-index
@@ -1336,7 +1342,8 @@ ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
                                            OrdinalParameterization::Delta,
                                        bool estimated_weight = true,
                                        double conf_level = 0.90,
-                                       double eig_tol = 1e-10);
+                                       double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Mixed continuous/ordinal counterpart of
 // `ordinal_fit_measures_misspec_inference`. Bundles the mixed DWLS RMSEA,
@@ -1351,7 +1358,8 @@ mixed_ordinal_fit_measures_misspec_inference(
     OrdinalParameterization parameterization = OrdinalParameterization::Delta,
     bool estimated_weight = true,
     double conf_level = 0.90,
-    double eig_tol = 1e-10);
+    double eig_tol = 1e-10,
+    OrdinalFirstStage first_stage = OrdinalFirstStage::OPG);
 
 // Fixed-misspecification estimated-weight (categorical DWLS) profile-RMSEA for
 // an all-ordinal fit. The first-stage object is the EXTENDED moment vector

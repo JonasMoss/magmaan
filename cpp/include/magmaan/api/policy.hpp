@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -67,6 +68,49 @@ inline constexpr std::string_view penalized_detail =
 // recomputed for it: callers report the disagreement next to results that
 // follow the selected rule.
 bool verdict_disagreement(const PolicyFitState& state) noexcept;
+
+class Fit;
+struct PolicyFitIndex {
+  std::string index;
+  double estimate = std::numeric_limits<double>::quiet_NaN();
+  InferenceReason reason = InferenceReason::Available;
+  std::string detail;
+};
+struct PolicyFitDiscrepancy {
+  double discrepancy = std::numeric_limits<double>::quiet_NaN();
+  double trace = std::numeric_limits<double>::quiet_NaN();
+  double corrected = std::numeric_limits<double>::quiet_NaN();
+  int df = 0;
+};
+struct PolicyFitMeasures {
+  std::vector<PolicyFitIndex> indices;
+  PolicyFitDiscrepancy user, baseline;
+  std::int64_t ntotal = 0;
+  std::size_t n_groups = 0;
+  double residual_uncorrected = std::numeric_limits<double>::quiet_NaN();
+  double residual_trace = std::numeric_limits<double>::quiet_NaN();
+};
+// Point estimates only. Natural pooled discrepancy, N divisor, Steiger's G
+// factor for RMSEA, nominal-df truncated TLI. Independence is unconstrained
+// across groups and uses the same data treatment and estimator.
+PolicyFitMeasures policy_fit_measures(const Fit& fit);
+PolicyFitMeasures policy_fit_measures_unavailable(InferenceReason reason,
+    std::string detail, bool ordinal = false, bool likelihood = true);
+PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::Estimates& est, const PolicyFitState& state, bool fiml = false, bool uls = false);
+PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& est, const PolicyFitState& state,
+    estimate::OrdinalParameterization parameterization = estimate::OrdinalParameterization::Delta);
+PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& stats,
+    const estimate::Estimates& est, const PolicyFitState& state,
+    estimate::OrdinalParameterization parameterization = estimate::OrdinalParameterization::Delta);
+
+PolicyFitMeasures policy_fit_measures_two_stage(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const estimate::Estimates& est,
+    const estimate::SaturatedMoments& stage1, const PolicyFitState& state);
 
 // One test statistic with its calibrations: a global test against the
 // saturated model, or a nested test of a null against an alternative.

@@ -1,5 +1,15 @@
 ### Continuous FIML
 
+TASK-101 composes point fit measures with an independence baseline fitted
+under the same missing-data likelihood, observed-information raw-score
+Takeuchi correction, EM-moment residual influence correction and existing
+likelihood accounting. Residual roots pool squared standardized residuals;
+compatibility keeps the existing per-group-root average. Delete-one residual influence agrees within 2.11% on the retained gate.
+ML2S-NT reuses the Stage-1-Gamma profile primitive; its residual adapter and
+non-NT policy profiles remain typed unavailable. No policy fit-index
+intervals are supplied; bias calibration remains TASK-103.
+
+
 ## Lavaan compatibility reporting
 
 `api::lavaan_inference_fiml` and `lavaan_nested_fiml` compose ML/MLR

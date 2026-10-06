@@ -1,5 +1,16 @@
 ### Complete-data ML and inference
 
+- TASK-101 adds the policy point fit-index composer and lab data-frame
+  adapter: complete ML uses the observed raw-score Takeuchi trace difference,
+  including profiled mean nuisance traces for covariance-only fits. Continuous
+  ULS uses its natural profile trace plus the N-divisor covariance bias.
+  SRMR uses pooled squared residuals with its residual influence correction.
+  Nominal-df truncated TLI and multigroup RMSEA are explicit policy contracts.
+  GLS/WLS lack the estimated-weight profile correction in this composer;
+  raw-free and unsupported fits carry named unavailable reasons. Component
+  evidence is limited until the TASK-103 point-bias evaluation.
+
+
 - ML global and nested score/LR policy tests select `reference = "peba4"`
   (TASK-97; decision 2026-10-06). SB p-values/scales remain comparator fields.
   Ordinary default tables have score/PEBA4 and LR/PEBA4, with only score

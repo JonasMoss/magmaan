@@ -1,5 +1,19 @@
 ### Ordinal and mixed categorical LS
 
+TASK-101 adds policy DWLS fit-index points using exact first-stage rows and
+the estimated-weight observed geometry. The misspecification primitives and
+lab wrappers accept `first_stage = "exact"` while retaining OPG defaults.
+Exact residual corrections include the pooled group weights and the
+cross-group influence through shared parameters. The legacy OPG residual
+primitive retains its previous blockwise calculation; its multigroup corrected
+residuals need a separate default-preserving migration decision.
+Policy CRMR/SRMR use the Exact primitive's corrected point; the consolidated lab
+family retains its uncorrected residual fields and generalized-df TLI.
+Policy TLI uses nominal df and truncated discrepancies. Polychoric/polyserial
+moment-bias terms remain underived and omitted; Exact mixed discrepancy
+corrections include the known continuous covariance moment bias; TASK-103 evaluates point bias.
+
+
 TASK-83 accelerates complete-data exact first-stage sampling influence with a
 block-sparse central FD Jacobian of empirical mean scores. Each perturbation
 visits only its marginal and incident pairs, or its single association pair;

@@ -3176,6 +3176,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_fit_measures_impl
+Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector state);
+RcppExport SEXP _magmaanlab_policy_fit_measures_impl(SEXP fitSEXP, SEXP stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_fit_measures_impl(fit, state));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_build_u_factor
 Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread, std::string moments);
 RcppExport SEXP _magmaanlab_infer_build_u_factor(SEXP fitSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
@@ -3616,8 +3628,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_ordinal_fit_measures_misspec
-Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit, Rcpp::List ordinal_stats, bool estimated_weight, double conf_level, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_ordinal_fit_measures_misspec(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_ordinal_fit_measures_misspec(Rcpp::List fit, Rcpp::List ordinal_stats, bool estimated_weight, double conf_level, double eig_tol, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_ordinal_fit_measures_misspec(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -3626,13 +3638,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight, conf_level, eig_tol));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_fit_measures_misspec(fit, ordinal_stats, estimated_weight, conf_level, eig_tol, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_mixed_ordinal_rmsea_misspec
-Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_mixed_ordinal_rmsea_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_mixed_ordinal_rmsea_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_mixed_ordinal_rmsea_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -3641,13 +3654,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_rmsea_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_rmsea_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_mixed_ordinal_crmr_misspec
-Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, bool srmr_denominator, double conf_level, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_mixed_ordinal_crmr_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP srmr_denominatorSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_mixed_ordinal_crmr_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, bool srmr_denominator, double conf_level, double eig_tol, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_mixed_ordinal_crmr_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP srmr_denominatorSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -3657,13 +3671,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type srmr_denominator(srmr_denominatorSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_crmr_misspec(fit, mixed_stats, estimated_weight, srmr_denominator, conf_level, eig_tol));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_crmr_misspec(fit, mixed_stats, estimated_weight, srmr_denominator, conf_level, eig_tol, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_mixed_ordinal_cfi_tli_misspec
-Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_mixed_ordinal_cfi_tli_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_mixed_ordinal_cfi_tli_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_mixed_ordinal_cfi_tli_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -3672,13 +3687,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_cfi_tli_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_cfi_tli_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_mixed_ordinal_fit_measures_misspec
-Rcpp::List infer_mixed_ordinal_fit_measures_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol);
-RcppExport SEXP _magmaanlab_infer_mixed_ordinal_fit_measures_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP) {
+Rcpp::List infer_mixed_ordinal_fit_measures_misspec(Rcpp::List fit, Rcpp::List mixed_stats, bool estimated_weight, double conf_level, double eig_tol, std::string first_stage);
+RcppExport SEXP _magmaanlab_infer_mixed_ordinal_fit_measures_misspec(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP estimated_weightSEXP, SEXP conf_levelSEXP, SEXP eig_tolSEXP, SEXP first_stageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -3687,7 +3703,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type estimated_weight(estimated_weightSEXP);
     Rcpp::traits::input_parameter< double >::type conf_level(conf_levelSEXP);
     Rcpp::traits::input_parameter< double >::type eig_tol(eig_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_fit_measures_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol));
+    Rcpp::traits::input_parameter< std::string >::type first_stage(first_stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_fit_measures_misspec(fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4744,6 +4761,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_ml2s_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaanlab_infer_ml2s_lr_test_satorra_bentler2010, 3},
     {"_magmaanlab_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaanlab_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2010, 8},
+    {"_magmaanlab_policy_fit_measures_impl", (DL_FUNC) &_magmaanlab_policy_fit_measures_impl, 2},
     {"_magmaanlab_infer_build_u_factor", (DL_FUNC) &_magmaanlab_infer_build_u_factor, 3},
     {"_magmaanlab_infer_build_u_factor_parts", (DL_FUNC) &_magmaanlab_infer_build_u_factor_parts, 5},
     {"_magmaanlab_infer_reduced_gamma_nt", (DL_FUNC) &_magmaanlab_infer_reduced_gamma_nt, 1},
@@ -4778,11 +4796,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_ordinal_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ordinal_profile_lrt, 4},
     {"_magmaanlab_ordinal_nested_diagnostic_impl", (DL_FUNC) &_magmaanlab_ordinal_nested_diagnostic_impl, 2},
     {"_magmaanlab_infer_ml_profile_lrt", (DL_FUNC) &_magmaanlab_infer_ml_profile_lrt, 5},
-    {"_magmaanlab_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_ordinal_fit_measures_misspec, 5},
-    {"_magmaanlab_infer_mixed_ordinal_rmsea_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_rmsea_misspec, 5},
-    {"_magmaanlab_infer_mixed_ordinal_crmr_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_crmr_misspec, 6},
-    {"_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec, 5},
-    {"_magmaanlab_infer_mixed_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_fit_measures_misspec, 5},
+    {"_magmaanlab_infer_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_ordinal_fit_measures_misspec, 6},
+    {"_magmaanlab_infer_mixed_ordinal_rmsea_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_rmsea_misspec, 6},
+    {"_magmaanlab_infer_mixed_ordinal_crmr_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_crmr_misspec, 7},
+    {"_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec, 6},
+    {"_magmaanlab_infer_mixed_ordinal_fit_measures_misspec", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_fit_measures_misspec, 6},
     {"_magmaanlab_infer_mixed_ordinal_profile_rmsea", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_profile_rmsea, 3},
     {"_magmaanlab_infer_mixed_ordinal_profile_lrt", (DL_FUNC) &_magmaanlab_infer_mixed_ordinal_profile_lrt, 4},
     {"_magmaanlab_infer_robust_se", (DL_FUNC) &_magmaanlab_infer_robust_se, 5},

@@ -1,8 +1,132 @@
 #include "ordinal_internal.hpp"
+#include <numeric>
 
 namespace magmaan::estimate {
 
+namespace {
+template<class Stats>
+post_expected<Stats> misspec_first_stage(const Stats& input) {
+  auto stats = input;
+  const auto blocks = stats.R.size();
+  if (blocks == 0 || stats.n_obs.size() != blocks || stats.NACOV.size() != blocks ||
+      stats.n_levels.size() != blocks || stats.thresholds.size() != blocks)
+    return std::unexpected(PostError{PostError::Kind::NumericIssue, "inconsistent exact first-stage block layout"});
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
+    if (stats.ordered.size() != blocks || stats.mean.size() != blocks || stats.moments.size() != blocks)
+      return std::unexpected(PostError{PostError::Kind::NumericIssue, "inconsistent exact mixed first-stage block layout"});
+  }
+  if (stats.sampling_moment_influence.size() != blocks) {
+    stats.sampling_moment_influence.clear();
+    for (std::size_t b = 0; b < blocks; ++b) {
+      if constexpr (std::is_same_v<Stats, data::OrdinalStats>) {
+        if (stats.int_data.size() != blocks || (stats.int_data[b].array() < 0).any())
+          return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+              "exact fit-measure first stage requires complete integer data or exact rows"});
+        auto rows = data::ordinal_moment_sampling_influence(stats.int_data[b],
+            stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+        if (!rows) return std::unexpected(rows.error());
+        stats.sampling_moment_influence.push_back(std::move(rows->rows));
+      } else {
+        if (stats.raw_data.size() != blocks || !stats.raw_data[b].allFinite())
+          return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+              "exact fit-measure first stage requires complete mixed raw data or exact rows"});
+        auto rows = data::mixed_moment_sampling_influence(stats.raw_data[b],
+            stats.ordered[b], stats.n_levels[b], stats.thresholds[b], stats.mean[b], stats.R[b]);
+        if (!rows) return std::unexpected(rows.error());
+        stats.sampling_moment_influence.push_back(std::move(*rows));
+      }
+    }
+  }
+  for (std::size_t b = 0; b < blocks; ++b) {
+    const auto& rows = stats.sampling_moment_influence[b];
+    if (rows.rows() != stats.n_obs[b] || rows.cols() != stats.NACOV[b].rows() || !rows.allFinite())
+      return std::unexpected(PostError{PostError::Kind::NumericIssue,
+          "invalid exact fit-measure first-stage rows"});
+  }
+  // Only the influence channel changes; fitted weights remain the OPG NACOV
+  // weights actually used by the estimator. Its movement uses the exact rows.
+  if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
+    if (!stats.gamma_diag_influence.empty()) {
+      if (stats.raw_data.size() != blocks)
+        return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+            "exact estimated-weight fit measures require raw data to rebuild OPG Gamma movement"});
+      stats.gamma_diag_influence.clear();
+      stats.gamma_full_influence.clear();
+    }
+  }
+  stats.moment_influence = stats.sampling_moment_influence;
+  return stats;
+}
+} // namespace
+
 using namespace detail_ordinal;
+
+namespace {
+template<class Stats>
+Eigen::MatrixXd pooled_residual_jacobian(const Stats& stats,
+    const Eigen::MatrixXd& d, const Eigen::MatrixXd& e_inv,
+    const std::vector<Eigen::VectorXd>& residuals, std::size_t output_block) {
+  const double n = std::accumulate(stats.n_obs.begin(), stats.n_obs.end(), 0.0);
+  Eigen::Index output_offset = 0;
+  for (std::size_t b = 0; b < output_block; ++b) output_offset += stats.NACOV[b].rows();
+  const auto mb = stats.NACOV[output_block].rows();
+  const Eigen::MatrixXd db = d.middleRows(output_offset, mb);
+  Eigen::MatrixXd result = Eigen::MatrixXd::Zero(mb, 2 * d.rows());
+  Eigen::Index moff = 0, xoff = 0;
+  for (std::size_t a = 0; a < stats.R.size(); ++a) {
+    const auto ma = stats.NACOV[a].rows();
+    const double scale = std::sqrt(static_cast<double>(stats.n_obs[output_block]) / n) *
+                         std::sqrt(static_cast<double>(stats.n_obs[a]) / n);
+    const Eigen::MatrixXd projection = scale * db * e_inv * d.middleRows(moff,ma).transpose();
+    result.middleCols(xoff, ma) = projection * stats.W_dwls[a];
+    if (a == output_block) result.middleCols(xoff, ma).diagonal().array() -= 1.0;
+    const Eigen::VectorXd gamma_movement = residuals[a].array() / stats.NACOV[a].diagonal().array().square();
+    result.middleCols(xoff + ma, ma) = projection * gamma_movement.asDiagonal();
+    moff += ma; xoff += 2 * ma;
+  }
+  return result;
+}
+
+post_expected<std::pair<double,double>> mixed_covariance_moment_bias(
+    spec::LatentStructure pt, const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats, const Estimates& est,
+    OrdinalParameterization parameterization) {
+  auto prepared = prepare_mixed_ordinal_partable(pt, stats, parameterization, nullptr);
+  if (!prepared) return std::unexpected(fit_to_post(prepared.error()));
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout) return std::unexpected(fit_to_post(layout.error()));
+  auto evaluator = model::ModelEvaluator::build(pt, rep);
+  if (!evaluator) return std::unexpected(model_to_post(evaluator.error()));
+  auto eval = evaluator->evaluate(est.theta, true, true);
+  if (!eval) return std::unexpected(model_to_post(eval.error()));
+  double user = 0.0, baseline = 0.0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const auto p = stats.R[b].rows();
+    Eigen::Index continuous = 0;
+    for (const auto flag : stats.ordered[b]) if (!flag) ++continuous;
+    const auto nth = stats.thresholds[b].size(), nmarg = nth + 2 * continuous;
+    Eigen::VectorXd bias = Eigen::VectorXd::Zero(stats.moments[b].size());
+    Eigen::Index c = 0;
+    for (Eigen::Index j = 0; j < p; ++j) if (!stats.ordered[b][static_cast<std::size_t>(j)]) {
+      bias(nth + continuous + c) = -stats.R[b](j,j);
+      ++c;
+    }
+    Eigen::Index row = nmarg;
+    for (Eigen::Index j = 0; j < p; ++j) for (Eigen::Index i = j + 1; i < p; ++i, ++row)
+      if (!stats.ordered[b][static_cast<std::size_t>(i)] && !stats.ordered[b][static_cast<std::size_t>(j)])
+        bias(row) = -stats.R[b](i,j);
+    const Eigen::VectorXd residual = mixed_model_moments(stats, *layout,
+        eval->moments, est.theta, b, parameterization) - stats.moments[b];
+    Eigen::VectorXd base = Eigen::VectorXd::Zero(bias.size());
+    base.tail(bias.size()-nmarg) = -stats.moments[b].tail(bias.size()-nmarg);
+    // (n_g/N)*(b_g/n_g) leaves a 1/N contribution per group.
+    user -= 2.0 * residual.dot(stats.W_dwls[b] * bias);
+    baseline -= 2.0 * base.dot(stats.W_dwls[b] * bias);
+  }
+  return std::pair{user, baseline};
+}
+} // namespace
+
 
 post_expected<int> ordinal_df_stat(const spec::LatentStructure& pt,
                                    const data::OrdinalStats& stats,
@@ -743,13 +867,22 @@ mixed_diag_gamma_influence_block(const data::MixedOrdinalStats& stats,
 post_expected<OrdinalCrmrInference>
 ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                const model::MatrixRep& rep,
-                               const data::OrdinalStats& stats,
+                               const data::OrdinalStats& input_stats,
                                const Estimates& est,
                                OrdinalParameterization parameterization,
                                bool estimated_weight,
                                bool srmr_denominator,
                                double conf_level,
-                               double eig_tol) {
+                               double eig_tol, OrdinalFirstStage first_stage) {
+  data::OrdinalStats selected;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto exact = misspec_first_stage(input_stats);
+    if (!exact) return std::unexpected(exact.error());
+    selected = std::move(*exact);
+  }
+  const auto& stats = first_stage == OrdinalFirstStage::Exact ? selected : input_stats;
+
+
   if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
       !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
@@ -902,6 +1035,10 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   // the block-diagonal of the per-group stacked-influence cross-products, and
   // g_G carries the √(n_b/N) scaling so grad_var = g_Gᵀ Γ_x g_G and
   // Var(N·G) = N·grad_var pool the independent groups (note's Multi-group sec).
+  std::vector<Eigen::VectorXd> all_residuals;
+  if (first_stage == OrdinalFirstStage::Exact)
+    for (std::size_t a = 0; a < stats.R.size(); ++a)
+      all_residuals.push_back(ordinal_block_residual(stats, *layout_or, eval->moments, est.theta, parameterization, a));
   Eigen::MatrixXd Q_G = Eigen::MatrixXd::Zero(2 * M, 2 * M);
   Eigen::MatrixXd Gamma_x = Eigen::MatrixXd::Zero(2 * M, 2 * M);
   Eigen::VectorXd g_G = Eigen::VectorXd::Zero(2 * M);
@@ -923,16 +1060,22 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
     const Eigen::VectorXd dg2 =
         (d_b.array() / gamma_b.array().square()).matrix();
     Dphi.rightCols(mb) = DeinvDt * dg2.asDiagonal();
+    if (first_stage == OrdinalFirstStage::Exact)
+      Dphi = pooled_residual_jacobian(stats, D, e_inv, all_residuals, bb);
 
     Eigen::VectorXd v0diag = Eigen::VectorXd::Zero(mb);
     v0diag.tail(ncb).setOnes();  // correlation-selector
     const Eigen::MatrixXd V0Dphi = v0diag.asDiagonal() * Dphi;
     Eigen::MatrixXd Q_Gb = Dphi.transpose() * V0Dphi;  // 2mb × 2mb
     Q_Gb = 0.5 * (Q_Gb + Q_Gb.transpose()).eval();
-    Q_G.block(xoff, xoff, 2 * mb, 2 * mb) = Q_Gb;
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[bb]) / N_total);
-    g_G.segment(xoff, 2 * mb) =
-        sw * (2.0 * (Dphi.transpose() * (v0diag.asDiagonal() * d_b)));
+    if (first_stage == OrdinalFirstStage::Exact) {
+      Q_G += Q_Gb;
+      g_G += sw * (2.0 * (Dphi.transpose() * (v0diag.asDiagonal() * d_b)));
+    } else {
+      Q_G.block(xoff, xoff, 2 * mb, 2 * mb) = Q_Gb;
+      g_G.segment(xoff, 2 * mb) = sw * (2.0 * (Dphi.transpose() * (v0diag.asDiagonal() * d_b)));
+    }
     weighted_G +=
         static_cast<double>(stats.n_obs[bb]) * d_b.tail(ncb).squaredNorm();
 
@@ -1014,13 +1157,22 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
 post_expected<OrdinalCrmrInference>
 mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                      const model::MatrixRep& rep,
-                                     const data::MixedOrdinalStats& stats,
+                                     const data::MixedOrdinalStats& input_stats,
                                      const Estimates& est,
                                      OrdinalParameterization parameterization,
                                      bool estimated_weight,
                                      bool srmr_denominator,
                                      double conf_level,
-                                     double eig_tol) {
+                                     double eig_tol, OrdinalFirstStage first_stage) {
+  data::MixedOrdinalStats selected;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto exact = misspec_first_stage(input_stats);
+    if (!exact) return std::unexpected(exact.error());
+    selected = std::move(*exact);
+  }
+  const auto& stats = first_stage == OrdinalFirstStage::Exact ? selected : input_stats;
+
+
   if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
       !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
@@ -1119,6 +1271,10 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
   if (!Binv_or.has_value()) return std::unexpected(Binv_or.error());
   const Eigen::MatrixXd e_inv = K * (*Binv_or) * K.transpose();
 
+  std::vector<Eigen::VectorXd> all_residuals;
+  if (first_stage == OrdinalFirstStage::Exact)
+    for (std::size_t a = 0; a < stats.R.size(); ++a)
+      all_residuals.push_back(mixed_model_moments(stats, *layout_or, eval->moments, est.theta, a, parameterization) - stats.moments[a]);
   Eigen::MatrixXd Q_G = Eigen::MatrixXd::Zero(2 * M, 2 * M);
   Eigen::MatrixXd Gamma_x = Eigen::MatrixXd::Zero(2 * M, 2 * M);
   Eigen::VectorXd g_G = Eigen::VectorXd::Zero(2 * M);
@@ -1162,8 +1318,10 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
     const Eigen::VectorXd dg2 =
         (d_b.array() / gamma_b.array().square()).matrix();
     Dphi.rightCols(mb) = DeinvDt * dg2.asDiagonal();
+    if (first_stage == OrdinalFirstStage::Exact)
+      Dphi = pooled_residual_jacobian(stats, D, e_inv, all_residuals, b);
 
-    Eigen::MatrixXd Dstd(n_assoc_b, 2 * mb);
+    Eigen::MatrixXd Dstd(n_assoc_b, Dphi.cols());
     Eigen::VectorXd z = Eigen::VectorXd::Zero(n_assoc_b);
     Eigen::Index k = 0;
     for (Eigen::Index j = 0; j < pb; ++j) {
@@ -1204,7 +1362,7 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                 "mixed_ordinal_crmr_misspec_inference: missing continuous "
                 "variance row in standardization"));
           }
-          Dstd(k, vr) += d_b(assoc_row) *
+          Dstd(k, (first_stage == OrdinalFirstStage::Exact ? xoff : 0) + vr) += d_b(assoc_row) *
                          (-0.5 * inv_scale / stats.R[b](c, c));
         }
         ++k;
@@ -1213,9 +1371,14 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
 
     Eigen::MatrixXd Q_Gb = Dstd.transpose() * Dstd;
     Q_Gb = 0.5 * (Q_Gb + Q_Gb.transpose()).eval();
-    Q_G.block(xoff, xoff, 2 * mb, 2 * mb) = Q_Gb;
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) / N_total);
-    g_G.segment(xoff, 2 * mb) = sw * (2.0 * (Dstd.transpose() * z));
+    if (first_stage == OrdinalFirstStage::Exact) {
+      Q_G += Q_Gb;
+      g_G += sw * (2.0 * (Dstd.transpose() * z));
+    } else {
+      Q_G.block(xoff, xoff, 2 * mb, 2 * mb) = Q_Gb;
+      g_G.segment(xoff, 2 * mb) = sw * (2.0 * (Dstd.transpose() * z));
+    }
     weighted_G += static_cast<double>(stats.n_obs[b]) * z.squaredNorm();
 
     const Eigen::MatrixXd& Gmat = stats.moment_influence[b];
@@ -1281,7 +1444,13 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                 OrdinalParameterization parameterization,
                                 bool estimated_weight,
                                 double conf_level,
-                                double eig_tol) {
+                                double eig_tol, OrdinalFirstStage first_stage) {
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto selected = misspec_first_stage(stats);
+    if (!selected) return std::unexpected(selected.error());
+    return ordinal_rmsea_misspec_inference(pt, rep, *selected, est, parameterization, estimated_weight, conf_level, eig_tol, OrdinalFirstStage::OPG);
+  }
+
   if (!(conf_level > 0.0 && conf_level < 1.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal_rmsea_misspec_inference: conf_level must lie in (0,1)"));
@@ -1409,12 +1578,21 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
 post_expected<OrdinalRmseaInference>
 mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
-                                      const data::MixedOrdinalStats& stats,
+                                      const data::MixedOrdinalStats& input_stats,
                                       const Estimates& est,
                                       OrdinalParameterization parameterization,
                                       bool estimated_weight,
                                       double conf_level,
-                                      double eig_tol) {
+                                      double eig_tol, OrdinalFirstStage first_stage) {
+  data::MixedOrdinalStats selected;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto exact = misspec_first_stage(input_stats);
+    if (!exact) return std::unexpected(exact.error());
+    selected = std::move(*exact);
+  }
+  const auto& stats = first_stage == OrdinalFirstStage::Exact ? selected : input_stats;
+
+
   if (!(conf_level > 0.0 && conf_level < 1.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_rmsea_misspec_inference: conf_level must lie in (0,1)"));
@@ -1492,6 +1670,11 @@ mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
   }
   const double grad_var = std::max(0.0, g_F.dot(Gamma_used * g_F));
 
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto correction = mixed_covariance_moment_bias(pt, rep, stats, est, parameterization);
+    if (!correction) return std::unexpected(correction.error());
+    bias += correction->first;
+  }
   const double F = prof.fmin;
   const double Gn = static_cast<double>(prof.n_groups);
   const int df = prof.df;
@@ -1530,7 +1713,13 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   OrdinalParameterization parameterization,
                                   bool estimated_weight,
                                   double conf_level,
-                                  double eig_tol) {
+                                  double eig_tol, OrdinalFirstStage first_stage) {
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto selected = misspec_first_stage(stats);
+    if (!selected) return std::unexpected(selected.error());
+    return ordinal_cfi_tli_misspec_inference(pt, rep, *selected, est, parameterization, estimated_weight, conf_level, eig_tol, OrdinalFirstStage::OPG);
+  }
+
   if (!(conf_level > 0.0 && conf_level < 1.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal_cfi_tli_misspec_inference: conf_level must lie in (0,1)"));
@@ -1750,12 +1939,21 @@ post_expected<OrdinalIncrementalFitInference>
 mixed_ordinal_cfi_tli_misspec_inference(
     spec::LatentStructure pt,
     const model::MatrixRep& rep,
-    const data::MixedOrdinalStats& stats,
+    const data::MixedOrdinalStats& input_stats,
     const Estimates& est,
     OrdinalParameterization parameterization,
     bool estimated_weight,
     double conf_level,
-    double eig_tol) {
+    double eig_tol, OrdinalFirstStage first_stage) {
+  data::MixedOrdinalStats selected;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto exact = misspec_first_stage(input_stats);
+    if (!exact) return std::unexpected(exact.error());
+    selected = std::move(*exact);
+  }
+  const auto& stats = first_stage == OrdinalFirstStage::Exact ? selected : input_stats;
+
+
   if (!(conf_level > 0.0 && conf_level < 1.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_cfi_tli_misspec_inference: conf_level must lie in (0,1)"));
@@ -1894,6 +2092,14 @@ mixed_ordinal_cfi_tli_misspec_inference(
   out.stat_baseline = prof_b.chisq_standard;
   out.gendf_user = biasU;
   out.gendf_baseline = biasB;
+  if (first_stage == OrdinalFirstStage::Exact) {
+    auto correction = mixed_covariance_moment_bias(pt, rep, stats, est, parameterization);
+    if (!correction) return std::unexpected(correction.error());
+    biasU += correction->first;
+    biasB += correction->second;
+    out.gendf_user = biasU;
+    out.gendf_baseline = biasB;
+  }
   out.delta_user = out.stat_user - biasU;
   out.delta_baseline = out.stat_baseline - biasB;
   out.df_user = prof.df;
@@ -1965,13 +2171,15 @@ ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
                                        OrdinalParameterization parameterization,
                                        bool estimated_weight,
                                        double conf_level,
-                                       double eig_tol) {
+                                       double eig_tol, OrdinalFirstStage first_stage) {
+
+
   OrdinalMisspecFitMeasures out;
   out.conf_level = conf_level;
   out.fixed_weight = !estimated_weight;
 
   auto rm = ordinal_rmsea_misspec_inference(pt, rep, stats, est, parameterization,
-                                            estimated_weight, conf_level, eig_tol);
+                                            estimated_weight, conf_level, eig_tol, first_stage);
   if (!rm.has_value()) return std::unexpected(rm.error());
   out.rmsea = rm->point;
   out.rmsea_ci_lower = rm->ci_lower;
@@ -1981,7 +2189,7 @@ ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
   auto cr = ordinal_crmr_misspec_inference(pt, rep, stats, est, parameterization,
                                            estimated_weight,
                                            /*srmr_denominator=*/false, conf_level,
-                                           eig_tol);
+                                           eig_tol, first_stage);
   if (!cr.has_value()) return std::unexpected(cr.error());
   out.crmr = cr->point;
   out.crmr_ci_lower = cr->ci_lower;
@@ -1997,7 +2205,7 @@ ordinal_fit_measures_misspec_inference(spec::LatentStructure pt,
   out.srmr_ci_upper = cr->ci_upper * srmr_scale;
 
   auto ct = ordinal_cfi_tli_misspec_inference(pt, rep, stats, est, parameterization,
-                                              estimated_weight, conf_level, eig_tol);
+                                              estimated_weight, conf_level, eig_tol, first_stage);
   if (!ct.has_value()) return std::unexpected(ct.error());
   out.cfi = ct->cfi;
   out.cfi_ci_lower = ct->cfi_ci_lower;
@@ -2032,14 +2240,14 @@ mixed_ordinal_fit_measures_misspec_inference(
     OrdinalParameterization parameterization,
     bool estimated_weight,
     double conf_level,
-    double eig_tol) {
+    double eig_tol, OrdinalFirstStage first_stage) {
   OrdinalMisspecFitMeasures out;
   out.conf_level = conf_level;
   out.fixed_weight = !estimated_weight;
 
   auto rm = mixed_ordinal_rmsea_misspec_inference(
       pt, rep, stats, est, parameterization, estimated_weight, conf_level,
-      eig_tol);
+      eig_tol, first_stage);
   if (!rm.has_value()) return std::unexpected(rm.error());
   out.rmsea = rm->point;
   out.rmsea_ci_lower = rm->ci_lower;
@@ -2048,7 +2256,7 @@ mixed_ordinal_fit_measures_misspec_inference(
 
   auto cr = mixed_ordinal_crmr_misspec_inference(
       pt, rep, stats, est, parameterization, estimated_weight,
-      /*srmr_denominator=*/false, conf_level, eig_tol);
+      /*srmr_denominator=*/false, conf_level, eig_tol, first_stage);
   if (!cr.has_value()) return std::unexpected(cr.error());
   out.crmr = cr->point;
   out.crmr_ci_lower = cr->ci_lower;
@@ -2057,7 +2265,7 @@ mixed_ordinal_fit_measures_misspec_inference(
 
   auto sr = mixed_ordinal_crmr_misspec_inference(
       pt, rep, stats, est, parameterization, estimated_weight,
-      /*srmr_denominator=*/true, conf_level, eig_tol);
+      /*srmr_denominator=*/true, conf_level, eig_tol, first_stage);
   if (!sr.has_value()) return std::unexpected(sr.error());
   out.srmr = sr->point;
   out.srmr_ci_lower = sr->ci_lower;
@@ -2065,7 +2273,7 @@ mixed_ordinal_fit_measures_misspec_inference(
 
   auto ct = mixed_ordinal_cfi_tli_misspec_inference(
       pt, rep, stats, est, parameterization, estimated_weight, conf_level,
-      eig_tol);
+      eig_tol, first_stage);
   if (!ct.has_value()) return std::unexpected(ct.error());
   out.cfi = ct->cfi;
   out.cfi_ci_lower = ct->cfi_ci_lower;

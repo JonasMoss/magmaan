@@ -841,6 +841,10 @@ infer_lr_test_satorra_bentler2010 <- function(fit_H1, fit_H0, X_per_group, T_H1,
     .Call(`_magmaanlab_infer_lr_test_satorra_bentler2010`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
 
+policy_fit_measures_impl <- function(fit, state) {
+    .Call(`_magmaanlab_policy_fit_measures_impl`, fit, state)
+}
+
 infer_build_u_factor <- function(fit, bread, moments = "structured") {
     .Call(`_magmaanlab_infer_build_u_factor`, fit, bread, moments)
 }
@@ -977,24 +981,24 @@ infer_ml_profile_lrt <- function(fit_H1, fit_H0, X_per_group = NULL, eig_tol = 1
     .Call(`_magmaanlab_infer_ml_profile_lrt`, fit_H1, fit_H0, X_per_group, eig_tol, gamma)
 }
 
-infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_ordinal_fit_measures_misspec`, fit, ordinal_stats, estimated_weight, conf_level, eig_tol)
+infer_ordinal_fit_measures_misspec <- function(fit, ordinal_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10, first_stage = "opg") {
+    .Call(`_magmaanlab_infer_ordinal_fit_measures_misspec`, fit, ordinal_stats, estimated_weight, conf_level, eig_tol, first_stage)
 }
 
-infer_mixed_ordinal_rmsea_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_mixed_ordinal_rmsea_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+infer_mixed_ordinal_rmsea_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10, first_stage = "opg") {
+    .Call(`_magmaanlab_infer_mixed_ordinal_rmsea_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage)
 }
 
-infer_mixed_ordinal_crmr_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, srmr_denominator = FALSE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_mixed_ordinal_crmr_misspec`, fit, mixed_stats, estimated_weight, srmr_denominator, conf_level, eig_tol)
+infer_mixed_ordinal_crmr_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, srmr_denominator = FALSE, conf_level = 0.90, eig_tol = 1e-10, first_stage = "opg") {
+    .Call(`_magmaanlab_infer_mixed_ordinal_crmr_misspec`, fit, mixed_stats, estimated_weight, srmr_denominator, conf_level, eig_tol, first_stage)
 }
 
-infer_mixed_ordinal_cfi_tli_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+infer_mixed_ordinal_cfi_tli_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10, first_stage = "opg") {
+    .Call(`_magmaanlab_infer_mixed_ordinal_cfi_tli_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage)
 }
 
-infer_mixed_ordinal_fit_measures_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10) {
-    .Call(`_magmaanlab_infer_mixed_ordinal_fit_measures_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol)
+infer_mixed_ordinal_fit_measures_misspec <- function(fit, mixed_stats, estimated_weight = TRUE, conf_level = 0.90, eig_tol = 1e-10, first_stage = "opg") {
+    .Call(`_magmaanlab_infer_mixed_ordinal_fit_measures_misspec`, fit, mixed_stats, estimated_weight, conf_level, eig_tol, first_stage)
 }
 
 infer_mixed_ordinal_profile_rmsea <- function(fit, mixed_stats, eig_tol = 1e-10) {

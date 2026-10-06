@@ -196,3 +196,32 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
     }
   }
 }
+
+TEST_CASE("Mixed DWLS policy fit measures: exact primitive points") {
+  auto stats = data::mixed_ordinal_stats_from_data({mixed_block(101u,400)},{{1,1,1,0,0,0}},false);
+  REQUIRE(stats);
+  const auto m = mixed_model(1);
+  auto est = test::fit_mixed_ordinal_bounded(m.pt,m.rep,*stats,{},OrdinalWeightKind::DWLS,
+      estimate::Backend::NloptLbfgs,tight(),OrdinalParameterization::Delta);
+  REQUIRE(est);
+  auto policy = api::policy_fit_measures(m.pt,m.rep,*stats,*est,{});
+  const auto exact = estimate::OrdinalFirstStage::Exact;
+  auto rm = estimate::mixed_ordinal_rmsea_misspec_inference(m.pt,m.rep,*stats,*est,
+      OrdinalParameterization::Delta,true,0.9,1e-10,exact);
+  auto ct = estimate::mixed_ordinal_cfi_tli_misspec_inference(m.pt,m.rep,*stats,*est,
+      OrdinalParameterization::Delta,true,0.9,1e-10,exact);
+  auto cr = estimate::mixed_ordinal_crmr_misspec_inference(m.pt,m.rep,*stats,*est,
+      OrdinalParameterization::Delta,true,false,0.9,1e-10,exact);
+  auto sr = estimate::mixed_ordinal_crmr_misspec_inference(m.pt,m.rep,*stats,*est,
+      OrdinalParameterization::Delta,true,true,0.9,1e-10,exact);
+  REQUIRE(rm); REQUIRE(ct); REQUIRE(cr); REQUIRE(sr);
+  CHECK(policy.user.trace == rm->bias_trace);
+  CHECK(policy.baseline.trace == ct->gendf_baseline);
+  for (const auto& i : policy.indices) {
+    REQUIRE_MESSAGE(i.reason == api::InferenceReason::Available,i.detail);
+    if (i.index == "rmsea") CHECK(i.estimate == rm->point);
+    if (i.index == "cfi") CHECK(i.estimate == ct->cfi);
+    if (i.index == "crmr") CHECK(i.estimate == cr->point_bias_corrected);
+    if (i.index == "srmr") CHECK(i.estimate == sr->point_bias_corrected);
+  }
+}

@@ -524,3 +524,14 @@ The lane package was installed by `just jobs=1 r-dev fast` into
 `/tmp/rlib-task-3`, reusing the fast core and its normal O1 development glue.
 The pinned generator's independent guards, focused recipe gates, layering
 guard and tracked-file checks also passed.
+
+## Policy fit-index points (TASK-101)
+
+| Route | Point correction | Validation and limits |
+| --- | --- | --- |
+| Complete ML | Raw-score observed Takeuchi difference; profiled mean nuisance included | Independent profile plus covariance-bias term, exact-fit robust reduction, residual influence; point bias awaits TASK-103 |
+| FIML | Observed-pattern Takeuchi difference and EM-moment residual influence | Likelihood helper reduction and residual influence; point bias awaits TASK-103 |
+| Continuous ULS | Natural profile trace plus covariance moment bias | Group-duplication and component profile checks; point bias awaits TASK-103 |
+| All-ordinal / mixed DWLS | Exact first-stage, estimated-weight observed trace and corrected residual primitive | Exact primitive agreement; no polychoric/polyserial moment bias derived; TASK-103 pending |
+| ML2S-NT | Stage-1-Gamma natural Stage-2 profile trace | Component profile comparator; EM-moment bias and residual adapter remain unavailable |
+| GLS/WLS, ordinal ULS/WLS, non-NT ML2S | Named typed unavailable ingredient | No policy substitution with a different discrepancy or fixed-weight correction |

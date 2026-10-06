@@ -9,7 +9,8 @@ fit_measures_misspec_mixed_ordinal(
   mixed_stats = NULL,
   estimated_weight = TRUE,
   conf_level = 0.9,
-  eig_tol = 1e-10
+  eig_tol = 1e-10,
+  first_stage = c("opg", "exact")
 )
 }
 \arguments{
@@ -26,10 +27,18 @@ propagates the mixed DWLS weight sampling variability; \code{FALSE} is the fixed
 \item{conf_level}{Two-sided confidence level for the intervals.}
 
 \item{eig_tol}{Eigenvalue tolerance for the profile-contrast spectrum.}
+
+\item{first_stage}{OPG (default lab convention) or exact empirical sampling
+influence. Exact requires complete raw data or supplied exact rows; fitting
+weights remain the NACOV weights used for estimation.}
 }
 \value{
 A named list with the same fields as \code{\link[=fit_measures_misspec]{fit_measures_misspec()}}.
 }
 \description{
-Misspecification-robust mixed continuous/ordinal DWLS fit measures
+Exact discrepancy points also include the known N-divisor bias of the
+continuous covariance moments. Polychoric/polyserial bias remains omitted.
+Exact residual inference uses the full pooled influence map; OPG retains
+its legacy blockwise approximation and defaults. The consolidated residual
+point fields remain uncorrected.
 }

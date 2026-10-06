@@ -9,7 +9,8 @@ fit_measures_misspec(
   ordinal_stats = NULL,
   estimated_weight = TRUE,
   conf_level = 0.9,
-  eig_tol = 1e-10
+  eig_tol = 1e-10,
+  first_stage = c("opg", "exact")
 )
 }
 \arguments{
@@ -27,6 +28,10 @@ propagates the polychoric-weight sampling variability; \code{FALSE} is the fixed
 \item{conf_level}{Two-sided confidence level for the intervals.}
 
 \item{eig_tol}{Eigenvalue tolerance for the profile-contrast spectrum.}
+
+\item{first_stage}{OPG (default lab convention) or exact empirical sampling
+influence. Exact requires complete raw data or supplied exact rows; fitting
+weights remain the NACOV weights used for estimation.}
 }
 \value{
 A named list: \code{rmsea}/\code{crmr}/\code{srmr}/\code{cfi}/\code{tli} with \code{.ci.lower} and
@@ -38,8 +43,10 @@ Estimated-weight (categorical DWLS) misspecification inference for the
 absolute and incremental fit indices RMSEA, CRMR, SRMR, CFI and TLI, each with
 a confidence interval that propagates the sampling variability of the
 estimated polychoric weight (the gamma channel). The single consolidated
-surface over the per-index entry points. Single-group all-ordinal DWLS fits
-only.
+surface over the per-index entry points. Single- and multi-group all-ordinal DWLS fits
+only. Exact residual inference includes pooled weights and cross-group
+parameter influence; the OPG default keeps its legacy blockwise approximation.
+Residual point fields in this consolidated table remain uncorrected.
 }
 \details{
 CFI carries a trustworthy interval and is largely robust to weight estimation;

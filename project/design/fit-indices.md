@@ -24,7 +24,7 @@ $$
 and the indices are functions of it:
 
 $$
-\mathrm{RMSEA}_0=\sqrt{F_0/\mathrm{df}},\qquad
+\mathrm{RMSEA}_0=\sqrt{G\,F_0/\mathrm{df}},\qquad
 \mathrm{CFI}_0=1-\frac{F_0}{F_{0,b}},\qquad
 \mathrm{TLI}_0=1-\frac{F_0/\mathrm{df}}{F_{0,b}/\mathrm{df}_b},
 $$
@@ -97,14 +97,30 @@ noncentral chi-square intervals ignore.
   estimated-weight intervals. The Monte Carlo harness
   (`cpp/tests/checks/ordinal_cfi_inference`) reports the CFI interval
   calibrated, the TLI interval conservative at strong misfit, and RMSEA
-  intervals sensitive to weight estimation. The R help still says
-  single-group only while the area file records multi-group pooling; reconcile.
+  intervals sensitive to weight estimation. R help now describes multi-group
+  pooling; the Exact selector preserves OPG defaults.
 - **Continuous moment-quadratic tier** (GLS/ULS/WLS): profile-RMSEA primitives
   with the observed-geometry trace.
-- **Missing**: the misspecification-robust trace for ML and FIML (the ML
-  discrepancy is not a moment quadratic; the observed profile Hessian and the
-  casewise score rows already exist in the policy nested machinery), and an
-  ordinary composer that selects one recipe per estimator.
+- **Policy point composer (TASK-101)**: `api::policy_fit_measures()` and
+  `magmaanlab::policy_fit_measures()` compose ML/FIML Takeuchi trace differences,
+  continuous ULS profile traces plus N-divisor covariance bias, and ordinal /
+  mixed DWLS observed-geometry corrections with exact first-stage rows.
+  ML2S-NT composes its Stage-1-Gamma profile points; its residual adapter
+  and non-NT recipes remain typed unavailable. Independence baselines are
+  unconstrained across groups and use the same
+  estimator/data treatment. Per-index unavailable reasons preserve fit-state
+  gating. The lab result has index/estimate/reason columns and a details
+  attribute with discrepancies, traces, corrected values and nominal df.
+  Residual points subtract the residual influence trace in the pooled metric.
+  GLS/WLS estimated-weight profile corrections, ordinal ULS/WLS and non-NT ML2S
+  policy composition remain unavailable with named missing ingredients.
+  Numerical reductions and influence checks are component evidence; point
+  bias and interval calibration remain TASK-103 work.
+- **Exact lab comparator**: the ordinal/mixed misspecification primitives and
+  lab wrappers accept an explicit Exact first stage. OPG remains the default;
+  the consolidated family's residual fields remain uncorrected and its TLI
+  retains generalized df. Policy residuals instead use the primitive's
+  `point_bias_corrected`; policy TLI uses nominal df and truncation.
 
 ## Decisions (adopted as recommended, 2026-10-06)
 
@@ -131,8 +147,9 @@ noncentral chi-square intervals ignore.
 ## Validation
 
 - Reductions: at a correct model the observed-geometry trace equals the
-  expected-geometry trace, so the indices equal lavaan's robust indices
-  (`lavaan_compat`); under normal ML they equal the naive ones.
+  expected-geometry trace, so exact-fit RMSEA/CFI equal lavaan's robust points and policy TLI equals
+  its truncated comparator; no baseline trace equality is asserted under
+  independence-model misspecification.
 - Point-estimate bias study (registered, simbox): misspecified populations
   with exactly computed $F_0$ (fit the population), ML, FIML (MAR) and DWLS,
   several N; compare the three corrections by bias and RMSE of RMSEA and CFI.
@@ -148,3 +165,32 @@ noncentral chi-square intervals ignore.
 2. Ordinary `fit_measures()`, `summary(fit_measures = TRUE)` and the
    `lavaan_compat` route, with reduction and lavaan gates. Medium.
 3. The registered bias study. Medium; about a simbox evening.
+
+## Component validation conventions
+
+The ML/FIML correction uses observed likelihood Hessians and raw casewise
+score cross-products. Covariance-only complete ML profiles out unrestricted
+means; their nuisance trace is included in the model and saturated traces.
+The independent complete-ML calculation includes both the profile-Hessian
+trace and the first-order N-divisor covariance bias. Plain profile equality
+is used at exact fit, where the discrepancy gradient and bias term vanish.
+At exact fit RMSEA/CFI reduce to lavaan robust points; truncated policy TLI
+reduces to `min(lavaan_tli_robust, 1)`. The interval family's generalized-df
+TLI remains unchanged. Mixed DWLS's Exact comparator also includes the known N-divisor bias of
+its continuous variance and continuous-continuous covariance moments. The
+OPG default is unchanged. Polychoric/polyserial and EM-moment first-order
+bias terms remain omitted because those terms have not been derived.
+
+The Exact residual primitives use the full pooled residual influence map,
+including sqrt(n_g/N) weights and cross-group parameter influence. The legacy
+OPG calculation omitted those terms; its default output is preserved. This
+is an identified missing-term correction under the TASK-101 standing rule.
+
+Numerical gates pass for the independent ML profile Hessian plus moment bias,
+exact-fit MLM reductions (TLI truncated), Exact DWLS primitive points,
+unconstrained group duplication and likelihood helpers. Delete-one residual
+trace comparisons give relative gaps 0.0344136 (ML) and 0.0210847 (FIML),
+both within the specified 0.05 gate. These are component gates rather than a
+point-bias calibration. `details$srmr_trace` is normalized to the pooled mean
+squared residual metric, so SRMR is
+`sqrt(max(srmr_uncorrected^2 - srmr_trace/N, 0))` on every supported route.

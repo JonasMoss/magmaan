@@ -1155,6 +1155,12 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
   }
+  if (x.containsElementNamed("sampling_moment_influence")) {
+    Rcpp::List rows(x["sampling_moment_influence"]);
+    if (rows.size() != nb) Rcpp::stop("sampling_moment_influence has incompatible block count");
+    for (R_xlen_t b = 0; b < nb; ++b)
+      out.sampling_moment_influence.push_back(Rcpp::as<Eigen::MatrixXd>(rows[b]));
+  }
   return out;
 }
 

@@ -163,3 +163,5 @@ export(association_ml_modification_indices)
 export(association_ml_score_tests)
 export(association_ml_global_test)
 export(association_ml_nested_test)
+
+export(policy_fit_measures)
