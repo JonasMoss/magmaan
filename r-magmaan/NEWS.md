@@ -34,6 +34,10 @@
 
 # magmaan 0.2.0 (in development)
 
+- Grouped all-ordinal lavaan compatibility covariance preserves n_g/N
+  sandwich geometry with the N-G reporting denominator, correcting unequal-
+  group WLSMV covariance and derived standard errors.
+
 - DWLS nested policy tests now default to the exact weighted chi-square All
   reference for all-ordinal and mixed data, including parameter-nested and
   moment-nested pairs (decision 2026-10-06). SB/PEBA4 remain comparators;

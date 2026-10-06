@@ -179,6 +179,59 @@ test_that("grouped ordinal reporting uses each group's n minus one", {
   }
 })
 
+test_that("unequal-group WLSMV covariance retains n_g/N sandwich geometry", {
+  d <- ordinal_hs()
+  ord <- paste0("x", 1:6)
+  for (par in c("delta", "theta")) {
+    fit <- magmaan(magmaan_model(cfa, prototype = d, ordered = ord,
+      parameterization = par, group = "school"), d, estimator = "DWLS",
+      options = list(preset = "lavaan-0.7.2"))
+    lav <- lav_cfa(cfa, d, ordered = ord, parameterization = par,
+      group = "school", estimator = "WLSMV", fixed.x = FALSE)
+    pt <- lavaan::parTable(lav)
+    rows <- fit$lab$partable
+    own <- rows[rows$free > 0 & !duplicated(rows$free), ]
+    own <- own[order(own$free), ]
+    ref <- pt[pt$free > 0 & !duplicated(pt$free), ]
+    index <- match(.key(own, fit$lab$group_labels), .key(ref, .lav_labels(lav)))
+    expect_false(anyNA(index))
+    target <- lavaan::vcov(lav)[ref$free[index], ref$free[index]]
+
+    # Independent expected-bread sandwich: A = sum f_g D_g' W_g D_g,
+    # B = sum f_g D_g' W_g Gamma_g W_g D_g, V = A^-1 B A^-1 / (N-G).
+    delta <- lavaan::lavInspect(lav, "delta")
+    weight <- lavaan::lavInspect(lav, "wls.v")
+    gamma <- lavaan::lavInspect(lav, "gamma")
+    counts <- unlist(lavaan::lavInspect(lav, "nobs"))
+    expect_length(unique(counts), 2L)
+    A <- B <- matrix(0, ncol(delta[[1]]), ncol(delta[[1]]))
+    for (g in seq_along(counts)) {
+      WD <- weight[[g]] %*% delta[[g]]
+      fraction <- counts[g] / sum(counts)
+      A <- A + fraction * crossprod(delta[[g]], WD)
+      B <- B + fraction * crossprod(WD, gamma[[g]] %*% WD)
+    }
+    inverse <- solve(A)
+    explicit <- inverse %*% B %*% inverse / (sum(counts) - length(counts))
+    explicit <- explicit[ref$free[index], ref$free[index]]
+    expect_lt(max(abs(explicit - target)) / max(abs(target)), 1e-10)
+
+    for (point in c("retained", "identical")) {
+      if (point == "identical") {
+        match_rows <- match(.key(rows, fit$lab$group_labels), .key(pt, .lav_labels(lav)))
+        free <- rows$free > 0 & !is.na(match_rows)
+        fit$lab$theta[rows$free[free]] <- pt$est[match_rows[free]]
+        fit$lavaan_compat <- NULL
+      }
+      actual <- vcov(fit, lavaan_compat = "WLSMV")
+      expect_lt(max(abs(actual - target)) / max(abs(target)), 1e-5,
+                label = paste(par, point))
+      expect_lt(max(abs(diag(actual) / diag(target) - 1)), 1e-5,
+                label = paste(par, point))
+    }
+  }
+})
+
 test_that("grouped theta threshold equalities match lavaan reporting bundles", {
   # Theta only: under delta lavaan's released ~*~ scale is not identified
   # (see project/architecture/capabilities/ordinal_and_mixed.md).

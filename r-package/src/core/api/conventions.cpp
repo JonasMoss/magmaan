@@ -253,7 +253,7 @@ ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
     return convention_unavailable(c, InferenceReason::Penalized, std::string(penalized_detail), state);
   if (!state.converged)
     return convention_unavailable(c, InferenceReason::NotConverged, "the fit did not pass its convergence verdict", state);
-  // lavaan reports ordinal inference with n_g - 1 per group. Keep the fit,
+  // lavaan reports the ordinal objective with n_g - 1 per group. Keep the fit,
   // moments and weights intact and evaluate their quadratic criterion at the
   // retained theta under these reporting counts (including unequal groups).
   auto reporting_stats = stats;
@@ -268,15 +268,19 @@ ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
   if (!objective) return convention_unavailable(c, InferenceReason::NumericFailure, objective.error().detail, state);
   auto residual = objective->problem.r(estimates.theta);
   if (!residual) return convention_unavailable(c, InferenceReason::NumericFailure, residual.error().detail, state);
-  reporting_estimates.fmin = 0.5 * residual->squaredNorm();
-  auto result = estimate::robust_ordinal(std::move(pt), rep, reporting_stats,
+  double n = 0, reporting_n = 0;
+  for (const auto count : stats.n_obs) n += static_cast<double>(count);
+  for (const auto count : reporting_stats.n_obs) reporting_n += static_cast<double>(count);
+  reporting_estimates.fmin = 0.5 * residual->squaredNorm() * reporting_n / n;
+  auto result = estimate::robust_ordinal(std::move(pt), rep, stats,
       reporting_estimates, weight, parameterization);
   if (!result) return convention_unavailable(c, InferenceReason::NumericFailure, result.error().detail, state);
   ConventionInference out;
   out.convention = convention_name(c);
   out.psd_boundary = state.psd_boundary;
   out.verdict_disagreement = verdict_disagreement(state);
-  out.covariance = result->vcov;
+  // Sandwich geometry uses n_g/N; only its reporting denominator is N-G.
+  out.covariance = result->vcov * n / reporting_n;
   auto& t = out.test;
   t.df = result->df;
   t.unscaled_statistic = t.statistic = result->chisq_standard;

@@ -6,14 +6,6 @@ standardized_parity <- function(fit, lav, bundle) {
   idx <- match(.key(rows, fit$lab$group_labels), .key(target, .lav_labels(lav)))
   free <- rows$free > 0 & !is.na(idx)
   fit$lab$theta[rows$free[free]] <- target$est[idx[free]]
-  # Standardization parity needs identical covariance inputs. Bundle covariance
-  # parity has separate convention gates (and fitting-weight contracts).
-  V <- vcov(fit, lavaan_compat = bundle)
-  pt <- target[target$free > 0 & !duplicated(target$free), ]
-  own <- rows[rows$free > 0 & !duplicated(rows$free), ]
-  own <- own[order(own$free), ]
-  vi <- match(.key(own, fit$lab$group_labels), .key(pt, .lav_labels(lav)))
-  lav@vcov$vcov[pt$free[vi], pt$free[vi]] <- unname(V)
   s <- summary(fit, standardized = TRUE, lavaan_compat = bundle)
   p <- coef(s)
   for (type in c("std.lv", "std.all")) {

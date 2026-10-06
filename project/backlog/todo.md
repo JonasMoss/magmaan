@@ -241,6 +241,13 @@ result under an unstated convention.
   **Check:** installed-lavaan whole-bundle comparisons, typed unavailable
   reasons, incompatible-regime rejection and preserved estimates/default policy.
 
+- [x] **S — repair grouped all-ordinal compatibility covariance (task-104).**
+  Preserve n_g/N bread/meat fractions and use N-G only as the covariance
+  denominator; n_g−1 remains the objective count. Unequal-group HS delta/theta
+  WLSMV has retained/identical-point 1e-5 relative covariance gates and an
+  independent expected-bread sandwich check. Removed the standardization
+  covariance substitution.
+
 - [x] **M — extend checked reporting conventions to FIML and ordinal nested
   tests** (2026-10-03, task-7.2 and task-14). Both reuse existing C++
   algorithms and lavaan features: FIML standard/robust covariance, global MLR

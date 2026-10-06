@@ -36,6 +36,10 @@
 
 # magmaanlab 0.2.0 (in development)
 
+- Grouped all-ordinal lavaan compatibility covariance preserves n_g/N
+  sandwich geometry with the N-G reporting denominator, correcting unequal-
+  group WLSMV covariance and derived standard errors.
+
 - `mplus_data()` accepts terminal DOS Ctrl-Z EOF markers in numeric files and
   rejects embedded markers with a DA01 diagnostic rather than truncating data.
 

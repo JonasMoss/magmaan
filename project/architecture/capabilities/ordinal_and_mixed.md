@@ -404,6 +404,12 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   for mixed continuous/ordinal data. Method-specific Rcpp names remain
   callable compatibility aliases rather than entries in the displayed
   `magmaan_core` data group.
+- All-ordinal compatibility covariance retains original n_g/N fractions in
+  both expected bread and NACOV meat, with reporting denominator N-G;
+  only the quadratic objective uses n_g−1 counts. Unequal-school HS
+  delta/theta WLSMV covariance is gated at retained and identical parameter
+  points at 1e-5 relative, with an independent sandwich calculation against
+  installed lavaan. Standardization uses lavaan's own covariance reference.
 - Retained-fit `lavaan_nested_ordinal` composes lavaan 0.7.2's default
   WLSMV/ULSMV nested reporting: Satorra-2000 with delta restrictions,
   scaled-shifted reduction and larger-model information/Jacobian. Actual
