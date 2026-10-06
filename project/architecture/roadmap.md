@@ -345,7 +345,13 @@ for every estimator; ULS and absent recipes return `UnsupportedInference`.
 Seven mixed preset cases keep strict retained WLSMV parity; grouped theta
 configural is gated by objective acceptance and identical-point reporting,
 because BLAS-dependent search paths move lavaan's endpoint in a flat region
-(TASK-94).
+(TASK-94). Ordinary `summary()`/`anova()` test tables share one layout
+(`test, statistic, df, reference, pvalue, recommended, reason`) with stable
+test codes (`score`, `lr`, `fit_function`, `fit_function_difference`) and
+typed rows for unavailable tests; `references =` adds any of std, sb, ss, mv,
+scaled_f, all, pall, peba<k>, eba<k> computed from the policy statistic and
+its retained spectrum, so simulation studies compare tests in `magmaan` alone
+(TASK-95). Default rows and p-values are unchanged.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
