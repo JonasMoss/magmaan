@@ -529,6 +529,24 @@ Covariance matrices and intervals carry a `lavaan_compat` attribute; summaries a
 nested reports label the selected bundle as lavaan compatibility and name the
 actual test method.
 
+`summary()` and `anova()` accept `references = NULL` for policy defaults, or
+case-insensitive `std`, `sb`, `ss`, `mv`, `scaled_f`, `all`, `pall`, `eba<k>`
+and `peba<k>` (positive integer k fitting a C++ int). These alternatives reuse
+the policy statistic and stored spectrum; they do not change bread or Gamma.
+All test tables use `test`, `statistic`, `df`, `reference`, `pvalue`,
+`recommended`, `reason`. Available tests have one row per reference and
+unavailable tests one row with missing reference/p-value and a typed reason.
+Test codes are `score`, `lr`, `fit_function`, `fit_function_difference`; print methods show readable labels.
+Defaults remain SB/PEBA4 for ML/FIML and nested DWLS, All for global DWLS.
+Reference names are lower case; `recommended` marks default laws. C++ FMG
+partitions the retained spectrum, including zeros, into blocks of size
+`ceiling(df/k)`; k at or beyond df yields singleton blocks (EBA = All,
+pEBA = pAll). Requested references print in full. Compatibility rows have
+`recommended = FALSE`, name lavaan's method in `reference`, and append
+`unscaled.statistic`, `scale`, `shift`. Combining references with a
+compatibility bundle errors. Simulation callers select by test and reference
+rather than position; former `p.sb`/`p.peba4` columns become `pvalue` rows.
+
 The [single capability inventory](../validation/capabilities.md) distinguishes
 primitives from checked compositions, component by component. Compatibility
 claims need convention-matched lavaan gates. They do not adopt a policy default

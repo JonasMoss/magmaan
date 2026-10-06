@@ -534,3 +534,17 @@ Fixed-weight LS, Satorra, lavaan bundles and FMG/semTests APIs remain explicit
 comparators. Noniterative NT defaults are postponed; SAM/case-change scaling
 remains diagnostic. Structured/saturated moments await a recorded derivation.
 The ordinary package implementation is unchanged.
+
+### Ordinary test-table references
+
+`summary()` and `anova()` expose the uniform base columns `test`, `statistic`,
+`df`, `reference`, `pvalue`, `recommended`, `reason`. The optional `references`
+vector selects std/sb/ss/mv/scaled_f/all/pall or eba<k>/peba<k> through lab
+`calibrate_quadratic()` and C++ FMG on the stored policy spectrum.
+Test codes are `score`, `lr`, `fit_function`, `fit_function_difference`; print
+methods show readable labels. Defaults
+retain the recorded p-values exactly; unavailable tests keep one typed row.
+Compatibility appends unscaled.statistic/scale/shift, uses lavaan's method
+name and disallows references. Nested results retain spectra after recovery.
+The reporting-reference gates cover ML, MAR FIML, ordinal and mixed DWLS,
+one and two groups; no inference ingredients or policy defaults change.

@@ -123,9 +123,12 @@ compatibility rule such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \c
 when the rule and magmaan's check reach different verdicts; inference
 follows the rule.
 
-\code{summary(fit)$tests} is \code{NULL} when no global test is available, otherwise a
-data frame with \code{test}, \code{statistic}, \code{df}, \code{p.sb}, \code{p.peba4}, and \code{sb.scale}.
-The score test is primary and comes first; the likelihood-ratio row follows
+\code{summary(fit)$tests} is \code{NULL} before inference is computed, otherwise a
+data frame with \code{test}, \code{statistic}, \code{df}, \code{reference}, \code{pvalue},
+\code{recommended}, and \code{reason}.
+Unavailable tests retain a row with their typed reason. See \code{\link[=summary.magmaan]{summary.magmaan()}}
+for alternative reference laws in simulation studies. The score test is primary
+and comes first; the likelihood-ratio test follows
 and tends to over-reject when N is small relative to its df.
 Store both package versions with simulation results. Saved fits retain their
 estimates and inference; reusing them with another package version is not a

@@ -1,5 +1,16 @@
 # magmaanlab 0.2.0 (in development)
 
+- Ordinary `summary()` and `anova()` now accept `references` for simulation
+  studies, reusing the policy statistic and spectrum through lab C++ calibration.
+  Test tables have uniform base columns `test`, `statistic`, `df`, `reference`,
+  `pvalue`, `recommended`, `reason`, with stable test codes score/lr/fit_function/
+  fit_function_difference. This breaks the previous wide layout:
+  migrate `p.sb`/`p.peba4` to `pvalue` selected by `reference == "sb"`/`"peba4"`.
+  Unavailable tests retain one typed row. Compatibility tables append their
+  unscaled statistic, scale and shift; `references` with `lavaan_compat` errors.
+  Lab `calibrate_quadratic()` accepts std/sb/ss/mv/scaled_f/all/pall and
+  eba<k>/peba<k>; block counts beyond df use singleton blocks.
+
 - Complete mixed DWLS/WLS modification indices and equality releases now
   include estimated-weight influence and exact empirical first-stage rows.
   Lab robust defaults use observed nuisance sensitivity; the plain C++

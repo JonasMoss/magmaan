@@ -338,9 +338,12 @@ print.magmaan_model <- function(x, ...) {
 #' when the rule and magmaan's check reach different verdicts; inference
 #' follows the rule.
 #'
-#' `summary(fit)$tests` is `NULL` when no global test is available, otherwise a
-#' data frame with `test`, `statistic`, `df`, `p.sb`, `p.peba4`, and `sb.scale`.
-#' The score test is primary and comes first; the likelihood-ratio row follows
+#' `summary(fit)$tests` is `NULL` before inference is computed, otherwise a
+#' data frame with `test`, `statistic`, `df`, `reference`, `pvalue`,
+#' `recommended`, and `reason`.
+#' Unavailable tests retain a row with their typed reason. See [summary.magmaan()]
+#' for alternative reference laws in simulation studies. The score test is primary
+#' and comes first; the likelihood-ratio test follows
 #' and tends to over-reject when N is small relative to its df.
 #' Store both package versions with simulation results. Saved fits retain their
 #' estimates and inference; reusing them with another package version is not a

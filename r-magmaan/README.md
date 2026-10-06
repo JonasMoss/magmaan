@@ -109,9 +109,13 @@ For repeatable extraction:
   `global_score`, and `global_lr`. Unavailable covariance raises a
   `magmaan_inference_unavailable` condition from `vcov()`/`confint()`, with
   machine-readable `component` and `reason`.
-- `summary(fit)$tests` is `NULL` when no global test is available, otherwise a
-  table of `test`, `statistic`, `df`, `p.sb`, `p.peba4`, and `sb.scale`.
-  Nested comparisons have the same columns and an `unavailable` attribute.
+- `summary(fit)$tests` is `NULL` before inference is computed, otherwise a
+  table of `test`, `statistic`, `df`, `reference`, `pvalue`, `recommended`, and `reason`.
+  Nested comparisons have the same base columns and an `unavailable` attribute.
+  Unavailable tests keep one row with a typed reason. Test codes are `score`,
+  `lr`, `fit_function`, `fit_function_difference`; print methods show readable
+  labels. For simulation comparisons, use `summary(fit, references = c("sb", "peba4", "all"))` or the same argument
+  to `anova()`; select p-values by `test` and `reference`.
 
 Record provenance once per simulation run:
 

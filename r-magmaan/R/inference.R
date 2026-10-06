@@ -60,7 +60,7 @@ infer <- function(fit, lavaan_compat = NULL) {
     if (any(fit$lab$partable$op == ":="))
       out$defined <- magmaanlab::compute_defined(fit$lab$syntax, fit$lab, res$covariance)
   }
-  if (isTRUE(res$test$available)) out$global_lr <- res$test
+  out$global_lr <- res$test
   out
 }
 
@@ -165,40 +165,74 @@ infer <- function(fit, lavaan_compat = NULL) {
                 collapse = ", "))
 }
 
-.global_tests <- function(fit) {
-  inf <- fit$inference
-  if (is.null(inf)) return(NULL)
-  if (!is.null(inf$lavaan_compat)) {
-    t <- inf$global_lr
-    if (is.null(t)) return(NULL)
-    return(.lavaan_compat_test_row(t))
+.check_references <- function(references, lavaan_compat, caller) {
+  if (is.null(references)) return(NULL)
+  if (!is.null(lavaan_compat))
+    stop(paste0(caller, ": references cannot be combined with lavaan_compat"), call. = FALSE)
+  # Validation uses the lab's single grammar, even when all tests are unavailable.
+  magmaanlab::calibrate_quadratic(magmaanlab::quadratic_reference(0, 1, 1),
+                                 references)$method
+}
+
+.policy_test_rows <- function(t, label, references = NULL) {
+  if (!isTRUE(t$available))
+    return(data.frame(test = label, statistic = t$statistic, df = t$df,
+      reference = NA_character_, pvalue = NA_real_, recommended = FALSE,
+      reason = t$reason, stringsAsFactors = FALSE))
+  defaults <- if (identical(t$reference, "all")) "all" else c("sb", "peba4")
+  methods <- references %||% defaults
+  if (is.null(references)) {
+    p <- if (identical(defaults, "all")) t$p_all else c(t$p_sb, t$p_peba4)
+  } else if (t$df == 0L) {
+    # Saturated tests have no positive-df reference law.
+    p <- rep(NA_real_, length(methods))
+  } else {
+    p <- magmaanlab::calibrate_quadratic(
+      magmaanlab::quadratic_reference(t$statistic, t$df, t$eigenvalues), methods)$p_value
+    # Preserve the recorded policy values exactly for its recommended laws.
+    stored <- c(sb = t$p_sb, peba4 = t$p_peba4, all = t$p_all)
+    known <- methods %in% defaults
+    p[known] <- stored[methods[known]]
   }
-  rows <- lapply(c("global_score", "global_lr"), function(component) {
-    t <- inf[[component]]
-    if (is.null(t)) return(NULL)
-    label <- if (component == "global_lr") "likelihood ratio" else
-      if (identical(t$label, "fit_function")) "fit function" else "score"
-    if (identical(t$reference, "all"))
-      return(data.frame(test = label, statistic = t$statistic, df = t$df,
-                        pvalue = t$p_all, reference = "exact spectrum (All)",
-                        stringsAsFactors = FALSE))
-    data.frame(test = label,
-               statistic = t$statistic, df = t$df, p.sb = t$p_sb,
-               p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
-               stringsAsFactors = FALSE)
-  })
-  rows <- Filter(Negate(is.null), rows)
-  if (!length(rows)) return(NULL)
-  out <- do.call(rbind, rows)
-  tests <- Filter(Negate(is.null), inf[c("global_score", "global_lr")])
-  attr(out, "peba_blocks") <- vapply(tests,
-    function(t) as.integer(t$peba_blocks %||% 0L), integer(1))
+  out <- data.frame(test = label, statistic = t$statistic, df = t$df,
+    reference = methods, pvalue = unname(p), recommended = methods %in% defaults,
+    reason = NA_character_, stringsAsFactors = FALSE)
+  attr(out, "peba_blocks") <- rep(as.integer(t$peba_blocks %||% 0L), nrow(out))
   out
 }
 
-.lavaan_compat_test_row <- function(t) {
-  data.frame(test = t$method, statistic = t$statistic, df = t$df,
-             pvalue = t$pvalue, unscaled.statistic = t$unscaled_statistic,
+.bind_test_rows <- function(rows) {
+  out <- do.call(rbind, rows)
+  attr(out, "peba_blocks") <- unlist(lapply(rows, function(r)
+    attr(r, "peba_blocks") %||% rep(0L, nrow(r))), use.names = FALSE)
+  out
+}
+
+.global_tests <- function(fit, references = NULL) {
+  inf <- fit$inference
+  if (is.null(inf)) return(NULL)
+  if (!is.null(inf$lavaan_compat)) return(.lavaan_compat_test_row(inf$global_lr,
+    if (fit$estimator %in% c("ML", "FIML")) "lr" else "fit_function"))
+  rows <- lapply(c("global_score", "global_lr"), function(component) {
+    t <- inf[[component]]
+    if (is.null(t)) {
+      status <- inf$status[inf$status$component == component, , drop = FALSE]
+      t <- list(available = FALSE, reason = status$reason,
+                statistic = NA_real_, df = NA_integer_)
+    }
+    label <- if (component == "global_lr") "lr" else
+      if (identical(t$label, "fit_function") || fit$estimator == "DWLS") "fit_function" else "score"
+    .policy_test_rows(t, label, references)
+  })
+  .bind_test_rows(rows)
+}
+
+.lavaan_compat_test_row <- function(t, label) {
+  data.frame(test = label, statistic = t$statistic, df = t$df,
+             reference = if (isTRUE(t$available)) t$method else NA_character_,
+             pvalue = if (isTRUE(t$available)) t$pvalue else NA_real_, recommended = FALSE,
+             reason = if (isTRUE(t$available)) NA_character_ else t$reason,
+             unscaled.statistic = t$unscaled_statistic,
              scale = t$scale, shift = t$shift, stringsAsFactors = FALSE)
 }
 
@@ -207,7 +241,7 @@ infer <- function(fit, lavaan_compat = NULL) {
 .peba_note <- function(t) {
   blocks <- attr(t, "peba_blocks")
   if (is.null(blocks)) return(invisible(NULL))
-  reduced <- which(blocks > 0L & blocks < 4L & is.finite(t$p.peba4))
+  reduced <- which(blocks > 0L & blocks < 4L & t$reference %in% "peba4" & is.finite(t$pvalue))
   if (length(reduced)) {
     notes <- unique(paste0(blocks[reduced], " eigenvalue blocks (df = ", t$df[reduced], ")"))
     cat("PEBA4 formed ", paste(notes, collapse = "; "), ".\n", sep = "")

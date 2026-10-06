@@ -65,8 +65,11 @@ score. This is not within-pattern centering.}
 \item{meat}{Symmetric score covariance in total units. Required for score_quadratic. For parameter_covariance, NULL derives empirical meat from retained fitting data; explicit "model" requests inverse information.}
 \item{statistic,df,eigenvalues}{A precomputed quadratic statistic, nominal
 positive integer degrees of freedom, and optional spectrum including zero weights.}
-\item{methods}{One or more of std, sb, peba2, peba4, all. Only all requests
-exact-mixture integration.}
+\item{methods}{Case-insensitive names std, sb, ss, mv, scaled_f, all, pall,
+peba<k>, eba<k>, with integer k >= 1 (up to the C++ integer limit).
+Output names are lower case. Calibration calls the C++ FMG routine.
+EBA/pEBA use blocks of size ceiling(df / k) in the retained spectrum,
+including zero weights. When k >= df, EBA equals All and pEBA equals pAll.}
 \item{n_flips,seed,multiplier,two_point_skewness}{Explicit multiplier simulation
 settings. Reuses the projected metric factorization and retained rows.}
 \item{type}{Expected Fisher or realized observed information.}

@@ -11,8 +11,8 @@ test_that("anova accepts omitted, fixed-zero and equality-written null paths", {
     expect_s3_class(x, "magmaan_anova")
     expect_length(attr(x, "unavailable"), 0L)
     expect_equal(x$statistic, results[[3L]]$statistic, tolerance = 1e-5)
-    expect_equal(x$p.sb, results[[3L]]$p.sb, tolerance = 1e-6)
-    expect_equal(x$p.peba4, results[[3L]]$p.peba4, tolerance = 1e-6)
+    expect_equal(x$pvalue[x$reference %in% "sb"], results[[3L]]$pvalue[results[[3L]]$reference %in% "sb"], tolerance = 1e-6)
+    expect_equal(x$pvalue[x$reference %in% "peba4"], results[[3L]]$pvalue[results[[3L]]$reference %in% "peba4"], tolerance = 1e-6)
   }
   expect_equal(anova(nulls[[1L]], h1)$statistic, results[[1L]]$statistic)
 })

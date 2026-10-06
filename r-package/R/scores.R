@@ -109,15 +109,31 @@ quadratic_reference <- function(statistic, df, eigenvalues = NULL) {
                 "magmaan_quadratic_reference")
 }
 
-calibrate_quadratic <- function(object, methods = "peba4") {
+# Keep the public grammar in one place; ordinary reporting validates through
+# this wrapper as well, so it cannot drift from lab calibration.
+.quadratic_methods <- function(methods) {
+  grammar <- "std, sb, ss, mv, scaled_f, all, pall, peba<k>, eba<k> (integer k >= 1)"
+  if (!is.character(methods) || !length(methods) || anyNA(methods))
+    stop(paste0("calibrate_quadratic(): use ", grammar), call. = FALSE)
   methods <- tolower(methods)
-  if (!length(methods) || any(!methods %in% c("std", "sb", "peba2", "peba4", "all")))
-    stop("calibrate_quadratic(): use std, sb, peba2, peba4, or all (exact mixture)")
+  valid <- grepl("^(std|sb|ss|mv|scaled_f|all|pall|peba[1-9][0-9]*|eba[1-9][0-9]*)$", methods)
+  block <- startsWith(methods, "peba") | startsWith(methods, "eba")
+  k <- suppressWarnings(as.numeric(sub("^p?eba", "", methods[block])))
+  # The C++ block count is an int; reject values outside that representation.
+  if (any(!valid) || any(!is.finite(k) | k > .Machine$integer.max))
+    stop(paste0("calibrate_quadratic(): use ", grammar,
+                "; k must fit a C++ integer"), call. = FALSE)
+  methods
+}
+
+calibrate_quadratic <- function(object, methods = "peba4") {
+  methods <- .quadratic_methods(methods)
+  needs_spectrum <- any(!methods %in% c("std", "sb"))
   if (inherits(object, "magmaan_ntml_quadratic"))
-    object <- .score_object(ntml_reference_impl(object$native,
-      any(methods %in% c("peba2", "peba4", "all"))), "magmaan_quadratic_reference")
+    object <- .score_object(ntml_reference_impl(object$native, needs_spectrum),
+                            "magmaan_quadratic_reference")
   if (inherits(object, "magmaan_projected_score")) {
-    if (any(methods %in% c("peba2", "peba4", "all"))) object <- score_spectrum(object) else if ("sb" %in% methods)
+    if (needs_spectrum) object <- score_spectrum(object) else if ("sb" %in% methods)
       object <- .score_object(score_reference_impl(object$native, FALSE), "magmaan_quadratic_reference")
   }
   if (!inherits(object, c("magmaan_quadratic_reference", "magmaan_projected_score")))
@@ -127,9 +143,10 @@ calibrate_quadratic <- function(object, methods = "peba4") {
     if (method == "sb" && !is.null(object$mean_scale))
       return(infer_chi2_pvalue(object$statistic / object$mean_scale, as.integer(object$df)))
     if (is.null(object$eigenvalues)) stop("calibrate_quadratic(): this reference has no spectrum")
+    block <- startsWith(method, "peba") | startsWith(method, "eba")
     infer_fmg_test(object$statistic, object$df, object$eigenvalues,
-      method = if (method %in% c("peba2", "peba4")) "peba" else method,
-      param = switch(method, peba2 = 2, peba4 = 4, 0))$p_value
+      method = if (block) sub("[0-9]+$", "", method) else method,
+      param = if (block) as.numeric(sub("^p?eba", "", method)) else 0)$p_value
   }, numeric(1))
   data.frame(method = methods, statistic = object$statistic, df = object$df,
              p_value = unname(p), row.names = NULL)

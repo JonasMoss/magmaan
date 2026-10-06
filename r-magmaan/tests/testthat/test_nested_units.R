@@ -18,10 +18,12 @@ test_that("anova and robust nested LR preserve units in a two-group path model",
     if (is.list(observed)) observed <- observed[[1L]]
     robust <- magmaanlab::robust_nested_lrt(as_lab_fit(f1), as_lab_fit(f0),
                                              data = split(changed[observed], changed$group))
-    lr <- ordinary$test == "likelihood ratio"
-    expect_equal(ordinary$statistic[lr] / ordinary$sb.scale[lr],
+    lr <- ordinary$test == "lr"
+    expect_equal(ordinary$statistic[lr & ordinary$reference %in% "sb"] /
+      magmaanlab::policy_nested(as_lab_fit(f1), as_lab_fit(f0))$lr$sb_scale,
                  robust$T_scaled, tolerance = 1e-6)
-    list(ordinary = ordinary, robust = robust)
+    list(ordinary = ordinary, robust = robust,
+         policy_scale = magmaanlab::policy_nested(as_lab_fit(f1), as_lab_fit(f0))$lr$sb_scale)
   }
   reference <- compare(1)
   # Includes the approximately 300-fold variance contrast from the handoff,
@@ -30,10 +32,9 @@ test_that("anova and robust nested LR preserve units in a two-group path model",
     changed <- compare(units)
     expect_equal(changed$ordinary$statistic, reference$ordinary$statistic,
                  tolerance = 1e-5)
-    expect_equal(changed$ordinary$sb.scale, reference$ordinary$sb.scale,
-                 tolerance = 1e-5)
-    expect_equal(changed$ordinary$p.sb, reference$ordinary$p.sb, tolerance = 1e-5)
-    expect_equal(changed$ordinary$p.peba4, reference$ordinary$p.peba4,
+    expect_equal(changed$policy_scale, reference$policy_scale, tolerance = 1e-5)
+    expect_equal(changed$ordinary$pvalue[changed$ordinary$reference %in% "sb"], reference$ordinary$pvalue[reference$ordinary$reference %in% "sb"], tolerance = 1e-5)
+    expect_equal(changed$ordinary$pvalue[changed$ordinary$reference %in% "peba4"], reference$ordinary$pvalue[reference$ordinary$reference %in% "peba4"],
                  tolerance = 1e-5)
     expect_equal(changed$robust$T_scaled, reference$robust$T_scaled,
                  tolerance = 1e-5)

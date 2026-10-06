@@ -4,7 +4,7 @@
 \alias{summary.magmaan}
 \title{Summary of a magmaan fit}
 \usage{
-\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, ...)
+\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, references = NULL, ...)
 }
 \arguments{
 \item{object}{A \code{\link[=magmaan]{magmaan()}} fit.}
@@ -12,6 +12,8 @@
 \item{level}{Confidence level of the intervals.}
 
 \item{lavaan_compat}{Inference bundle, as in \code{\link[=vcov.magmaan]{vcov.magmaan()}}.}
+
+\item{references}{Character vector of reference laws, or \code{NULL} for the policy defaults.}
 
 \item{...}{Unused.}
 }
@@ -25,4 +27,23 @@ including defined (\verb{:=}) parameters, with the estimate and, when inference
 is available, its selected standard error, z-statistic, p-value and Wald
 interval. \code{coef(fit)} stays the vector of free estimates that matches
 \code{vcov(fit)}.
+}
+\section{Simulation studies}{
+
+\code{references} accepts case-insensitive \code{std}, \code{sb}, \code{ss}, \code{mv}, \code{scaled_f},
+\code{all}, \code{pall}, \verb{peba<k>} and \verb{eba<k>} (integer \code{k >= 1}, up to the C++
+integer limit). Output names are lower case. Each available test has one
+row per requested reference, using its policy statistic and stored spectrum;
+covariance and fitting choices stay fixed. Defaults are SB/PEBA4 for ML/FIML
+and All for DWLS global tests. The base columns are \code{test}, \code{statistic}, \code{df},
+\code{reference}, \code{pvalue}, \code{recommended}, \code{reason}. \code{test} uses stable codes
+\code{score}, \code{lr}, \code{fit_function}, \code{fit_function_difference}. Unavailable tests retain one
+row with missing reference and p-value and a typed reason. Select rows by
+\code{test} and \code{reference}; migrate \code{p.sb}/\code{p.peba4} to \code{pvalue} on the corresponding
+rows. \code{recommended} marks default laws. Requested references are all printed.
+EBA/pEBA partition the retained spectrum (including zero eigenvalues) into
+blocks of size \code{ceiling(df / k)}; when \code{k >= df}, blocks are singletons.
+EBA then equals All, and pEBA equals pAll. References cannot be combined
+with \code{lavaan_compat}; compatibility rows append \code{unscaled.statistic}, \code{scale}
+and \code{shift} and are never marked recommended.
 }

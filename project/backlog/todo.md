@@ -377,9 +377,15 @@ ordinary API exposes barrier fitting experimentally as
 
 - [x] **S — expose effective pEBA block counts.** C++ FMG, policy and lab results
   report actual nonempty eigenvalue blocks from the existing partition. Ordinary
-  global/nested reporting retains `p.peba4` and prints one footnote when fewer
+  global/nested reporting retains the `peba4` reference row and prints one footnote when fewer
   than four blocks formed, including df=5 or 6 (three blocks). Computed tails
   are unchanged; targeted checks cover df 1, 2, 3, 4, 5, 6 and 8.
+
+- [x] **M — uniform ordinary test tables and simulation references (task-95).**
+  Summary/anova expose one row per test/reference with typed unavailable rows;
+  alternatives reuse the policy statistic/spectrum via C++ FMG. Lab calibration
+  accepts the shared fixed-name and EBA/pEBA block grammar. Default p-values,
+  compatibility metadata and nested recovery are retained.
 
 #### ML and FIML
 

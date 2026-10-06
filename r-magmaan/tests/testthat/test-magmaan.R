@@ -132,16 +132,16 @@ test_that("all-ordinal DWLS gets the estimated-weight covariance and one global 
   tests <- coef(summary(fit))
   expect_false(anyNA(tests$se[tests$free]))
   g <- summary(fit)$tests
-  expect_equal(g$test, "fit function")
-  expect_identical(g$reference, "exact spectrum (All)")
+  expect_equal(g$test, c("fit_function", "lr"))
+  expect_identical(g$reference, c("all", NA_character_))
   expect_false(any(c("p.sb", "p.peba4", "sb.scale") %in% names(g)))
   policy <- fit$inference$global_score
   expect_identical(policy$reference, "all")
   expect_true(is.nan(policy$p_sb) && is.nan(policy$p_peba4))
   explicit <- magmaanlab::magmaan_core$robust_fmg_test(policy$statistic, policy$df,
     policy$eigenvalues, "all", 0, truncate_negative = TRUE)
-  expect_equal(g$pvalue, explicit$p_value, tolerance = 1e-7)
-  expect_true(is.finite(g$statistic) && g$df > 0)
+  expect_equal(g$pvalue[1L], explicit$p_value, tolerance = 1e-7)
+  expect_true(is.finite(g$statistic[1L]) && g$df[1L] > 0)
   out <- capture.output(print(summary(fit)))
   expect_false(any(grepl("Unavailable inference", out)))
   expect_true(any(grepl("exact spectrum (All)", out, fixed = TRUE)))
@@ -159,9 +159,9 @@ test_that("anova() compares nested all-ordinal DWLS fits with the fit-function d
   f1 <- magmaan(m1, o, estimator = "DWLS")
   f0 <- magmaan(m0, o, estimator = "DWLS")
   a <- anova(f0, f1)
-  expect_equal(a$test, c("score", "fit-function difference"))
+  expect_equal(a$test, c("score", rep("fit_function_difference", 2)))
   expect_equal(a$df[2], 1L)
-  expect_true(is.finite(a$p.sb[2]) && is.finite(a$p.peba4[2]))
+  expect_true(is.finite(a$pvalue[a$reference %in% "sb"][1]) && is.finite(a$pvalue[a$reference %in% "peba4"][1]))
   expect_true(is.na(a$statistic[1]))
   lab <- magmaanlab::policy_nested(as_lab_fit(f1), as_lab_fit(f0))
   expect_equal(a$statistic[2], lab$lr$statistic, tolerance = 1e-12)
@@ -235,10 +235,10 @@ test_that("anova() nests configural, metric and scalar invariance with released 
   reference <- lavaan::lavTestLRT(lav(character()), lav("loadings"), lav(c("loadings", "intercepts")))
   for (pair in list(list(configural, metric, 2L), list(metric, scalar, 3L))) {
     a <- anova(pair[[2]], pair[[1]])
-    expect_equal(a$test, c("score", "likelihood ratio"))
-    expect_equal(a$statistic[2], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
+    expect_equal(a$test, rep(c("score", "lr"), each = 2))
+    expect_equal(a$statistic[3], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
     expect_equal(a$df[2], reference[pair[[3]], "Df diff"])
-    expect_true(is.finite(a$statistic[1]) && is.finite(a$p.sb[1]))
+    expect_true(is.finite(a$statistic[1]) && is.finite(a$pvalue[a$reference %in% "sb"][1]))
   }
 })
 
@@ -403,7 +403,7 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_s3_class(a, "magmaan_anova")
   expect_equal(attr(a, "restricted"), "f0")
   expect_equal(unclass(anova(f1, f0)), unclass(a), ignore_attr = TRUE)
-  expect_equal(a$df, c(2L, 2L))
+  expect_equal(a$df, rep(2L, 4))
   # Both tests are the lab's hypothesis quadratics in the observed nested
   # geometry, calibrated explicitly.
   shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))
@@ -413,15 +413,15 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
     test <- c("score", "lr")[k]
     cal <- magmaanlab::calibrate_quadratic(
       magmaanlab::inference_quadratic(h, test, geometry = "observed"), c("sb", "peba4"))
-    expect_equal(a$statistic[k], cal$statistic[1], tolerance = 1e-10)
-    expect_equal(c(a$p.sb[k], a$p.peba4[k]), cal$p_value, tolerance = 1e-10)
+    expect_equal(a$statistic[(k - 1L)*2L + 1L], cal$statistic[1], tolerance = 1e-10)
+    expect_equal(c(a$pvalue[a$reference %in% "sb"][k], a$pvalue[a$reference %in% "peba4"][k]), cal$p_value, tolerance = 1e-10)
   }
   # The LR statistic is the normal-theory difference. In the expected
   # geometry the lab's SB is lavaan's Satorra (2000) with the exact
   # restriction map; the policy's observed geometry is not a lavaan method.
   nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
-  expect_equal(a$test, c("score", "likelihood ratio"))
-  expect_equal(a$statistic[2], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
+  expect_equal(a$test, rep(c("score", "lr"), each = 2))
+  expect_equal(a$statistic[3], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
   sb <- lavaan::lavTestLRT(lav_cfa(m0, d, estimator = "MLM"), lav_cfa(m1, d, estimator = "MLM"),
                            method = "satorra.2000", A.method = "exact", scaled.shifted = FALSE)
   lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr", geometry = "expected"), "sb")
@@ -444,8 +444,8 @@ test_that("anova() refuses pairs it cannot compare", {
   other <- magmaan("visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ 0*textual", d,
                    inference = FALSE)
   fixed <- anova(f1, other)
-  expect_equal(fixed$df, c(1L, 1L))
-  expect_true(all(is.finite(fixed$p.sb)))
+  expect_equal(fixed$df, rep(1L, 4))
+  expect_true(all(is.finite(fixed$pvalue[fixed$reference %in% "sb"])))
   expect_error(anova(f1, magmaan(cfa, d[-1, ], inference = FALSE)), "same observations")
   expect_error(anova(f1, magmaan(cfa, d, covariance = "psd", inference = FALSE)),
                "covariance policy")
@@ -454,6 +454,6 @@ test_that("anova() refuses pairs it cannot compare", {
   labeled <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ c*textual"
   zero <- paste(labeled, "c == 0", sep = "\n")
   z <- anova(magmaan(zero, d, inference = FALSE), magmaan(labeled, d, inference = FALSE))
-  expect_equal(z$df, c(1L, 1L))
-  expect_true(all(is.finite(z$p.sb)))
+  expect_equal(z$df, rep(1L, 4))
+  expect_true(all(is.finite(z$pvalue[z$reference %in% "sb"])))
 })

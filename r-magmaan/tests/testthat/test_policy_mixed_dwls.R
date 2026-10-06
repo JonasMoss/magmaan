@@ -14,7 +14,7 @@ test_that("ordinary mixed DWLS inference and reporting use the exact policy", {
   expect_output(print(summary(f1)), "fit.function")
   a <- anova(f0, f1)
   expect_match(attr(a, "unavailable")[["score"]], "unsupported_model")
-  expect_true(is.finite(a$p.sb[a$test == "fit-function difference"]))
+  expect_true(is.finite(a$pvalue[a$reference %in% "sb" & a$test == "fit_function_difference"]))
   cached <- infer(f1, lavaan_compat = "WLSMV")
   expect_identical(cached$inference, f1$inference)
   expect_equal(vcov(cached), vcov(f1))

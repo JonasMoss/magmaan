@@ -233,15 +233,34 @@ print.magmaan <- function(x, ...) {
 #' @param object A [magmaan()] fit.
 #' @param level Confidence level of the intervals.
 #' @param lavaan_compat Inference bundle, as in [vcov.magmaan()].
+#' @param references Character vector of reference laws, or `NULL` for the policy defaults.
 #' @param ... Unused.
 #' @return An object of class `summary.magmaan`.
+#' @section Simulation studies:
+#' `references` accepts case-insensitive `std`, `sb`, `ss`, `mv`, `scaled_f`,
+#' `all`, `pall`, `peba<k>` and `eba<k>` (integer `k >= 1`, up to the C++
+#' integer limit). Output names are lower case. Each available test has one
+#' row per requested reference, using its policy statistic and stored spectrum;
+#' covariance and fitting choices stay fixed. Defaults are SB/PEBA4 for ML/FIML
+#' and All for DWLS global tests. The base columns are `test`, `statistic`, `df`,
+#' `reference`, `pvalue`, `recommended`, `reason`. `test` uses stable codes
+#' `score`, `lr`, `fit_function`, `fit_function_difference`. Unavailable tests retain one
+#' row with missing reference and p-value and a typed reason. Select rows by
+#' `test` and `reference`; migrate `p.sb`/`p.peba4` to `pvalue` on the corresponding
+#' rows. `recommended` marks default laws. Requested references are all printed.
+#' EBA/pEBA partition the retained spectrum (including zero eigenvalues) into
+#' blocks of size `ceiling(df / k)`; when `k >= df`, blocks are singletons.
+#' EBA then equals All, and pEBA equals pAll. References cannot be combined
+#' with `lavaan_compat`; compatibility rows append `unscaled.statistic`, `scale`
+#' and `shift` and are never marked recommended.
 #' @export
-summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, ...) {
+summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, references = NULL, ...) {
   .check_level(level, "summary()")
+  references <- .check_references(references, lavaan_compat, "summary()")
   view <- .with_lavaan_compat(object, lavaan_compat, "summary()")
   structure(list(fit = object, inference = view$inference,
                  coefficients = .parameter_table(view, level = level),
-                 tests = .global_tests(view), level = level),
+                 tests = .global_tests(view, references), level = level, references = references),
             class = "summary.magmaan")
 }
 
@@ -270,9 +289,11 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   if (!is.null(x$tests)) {
     cat("\nGlobal tests against the saturated model\n")
     t <- x$tests
+    if (is.null(x$references) && is.null(fit$inference$lavaan_compat))
+      t <- t[t$recommended | !is.na(t$reason), , drop = FALSE]
     num <- vapply(t, is.numeric, logical(1))
     t[num] <- lapply(t[num], function(v) round(v, digits))
-    print(t, row.names = FALSE)
+    .print_test_table(t)
     if (identical(fit$inference$global_score$reference, "all"))
       cat("Reference: exact spectrum (All); decisions/05-dwls-policy-calibration.\n")
     .peba_note(x$tests)
@@ -301,9 +322,17 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   invisible(x)
 }
 
+.print_test_table <- function(t) {
+  labels <- c(score = "score", lr = "likelihood ratio", fit_function = "fit function",
+              fit_function_difference = "fit-function difference")
+  code <- t$test %in% names(labels)
+  t$test[code] <- labels[t$test[code]]
+  print(t, row.names = FALSE)
+}
+
 # Printed under policy output that shows a likelihood-ratio test.
 .lr_note <- function(t) {
-  if (any(t$test == "likelihood ratio" & is.finite(t$statistic)))
+  if (any(t$test == "lr" & is.finite(t$statistic)))
     cat("The score test is primary; the likelihood-ratio test tends to over-reject",
         "when N is small relative to its df.\n")
   invisible(NULL)
@@ -361,9 +390,19 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #'   the statistic without a p-value, and `"WLS"` reports the standard difference.
 #'   FIML supports `"ML"` (standard) and `"MLR"` (SB2001 using Yuan-Bentler
 #'   Mplus scales); `"MLM"` is inapplicable.
-#' @return A data frame with one row per test, of class `magmaan_anova`.
+#' @param references Character vector of reference laws, or `NULL` for the policy defaults.
+#' @section Simulation studies:
+#' See [summary.magmaan()] for the reference grammar and uniform base columns.
+#' Each available nested test has one row per reference; an unavailable test
+#' retains one row with its typed `reason` and missing `reference`/`pvalue`.
+#' Defaults are SB and PEBA4. `recommended` identifies default laws. Alternatives
+#' use the same policy statistic and retained nested spectrum (`spectra` attribute),
+#' including after recovery. Select by `test` and `reference` rather than position.
+#' References cannot be combined with `lavaan_compat`.
+#' @return A data frame of class `magmaan_anova`.
 #' @export
-anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
+anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) {
+  references <- .check_references(references, lavaan_compat, "anova()")
   fits <- c(list(object), list(...))
   labels <- vapply(as.list(substitute(list(object, ...)))[-1L],
                    function(e) paste(deparse(e), collapse = ""), character(1))
@@ -395,7 +434,8 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
     t <- res$test
     reasons <- if (isTRUE(t$available)) character() else
       c(lr = paste0(t$reason, ": ", t$detail))
-    return(structure(.lavaan_compat_test_row(t), class = c("magmaan_anova", "data.frame"),
+    return(structure(.lavaan_compat_test_row(t,
+      if (fits[[1L]]$estimator %in% c("ML", "FIML")) "lr" else "fit_function_difference"), class = c("magmaan_anova", "data.frame"),
       lavaan_compat = lavaan_compat, restricted = labels[[null]], alternative = labels[[3L - null]],
       unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
       verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed))
@@ -420,20 +460,18 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL) {
   rows <- lapply(c("score", "lr"), function(component) {
     t <- res[[component]]
     label <- if (component == "score") "score" else
-      if (identical(t$label, "fit_function_difference")) "fit-function difference" else "likelihood ratio"
-    data.frame(test = label,
-               statistic = t$statistic, df = t$df, p.sb = t$p_sb,
-               p.peba4 = t$p_peba4, sb.scale = t$sb_scale,
-               stringsAsFactors = FALSE)
+      if (identical(t$label, "fit_function_difference") || fits[[1L]]$estimator == "DWLS")
+        "fit_function_difference" else "lr"
+    .policy_test_rows(t, label, references)
   })
-  out <- do.call(rbind, rows)
+  out <- .bind_test_rows(rows)
   reasons <- vapply(res[c("score", "lr")], function(t)
     if (isTRUE(t$available)) "" else paste0(t$reason, if (nzchar(t$detail)) paste0(": ", t$detail)),
     character(1))
   structure(out, class = c("magmaan_anova", "data.frame"),
             restricted = labels[[null]], alternative = labels[[3L - null]],
-            peba_blocks = vapply(res[c("score", "lr")],
-              function(t) as.integer(t$peba_blocks %||% 0L), integer(1)),
+            references = references, spectra = lapply(res[c("score", "lr")], function(t) t$eigenvalues),
+            peba_blocks = attr(out, "peba_blocks"),
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
             verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed)
@@ -474,9 +512,11 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
       attr(x, "alternative"), "\n", sep = "")
   if (!is.null(attr(x, "lavaan_compat"))) cat("lavaan compatibility: ", attr(x, "lavaan_compat"), "\n", sep = "")
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
+  if (is.null(attr(x, "references")) && is.null(attr(x, "lavaan_compat")))
+    t <- t[t$recommended | !is.na(t$reason), , drop = FALSE]
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
-  print(t, row.names = FALSE)
+  .print_test_table(t)
   refit <- attr(x, "refit")
   if (!is.null(refit)) cat("larger model refit from the restricted estimate; its objective improved from ",
     format(refit$objective_before, digits = digits), " to ",

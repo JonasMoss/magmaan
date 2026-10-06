@@ -5,7 +5,7 @@
 \alias{print.magmaan_anova}
 \title{Compare two nested magmaan fits}
 \usage{
-\method{anova}{magmaan}(object, ..., lavaan_compat = NULL)
+\method{anova}{magmaan}(object, ..., lavaan_compat = NULL, references = NULL)
 
 \method{print}{magmaan_anova}(x, digits = 3, ...)
 }
@@ -20,12 +20,14 @@ the statistic without a p-value, and \code{"WLS"} reports the standard differenc
 FIML supports \code{"ML"} (standard) and \code{"MLR"} (SB2001 using Yuan-Bentler
 Mplus scales); \code{"MLM"} is inapplicable.}
 
+\item{references}{Character vector of reference laws, or \code{NULL} for the policy defaults.}
+
 \item{x}{A nested-test result.}
 
 \item{digits}{Number of digits printed after the decimal point.}
 }
 \value{
-A data frame with one row per test, of class \code{magmaan_anova}.
+A data frame of class \code{magmaan_anova}.
 }
 \description{
 Score and likelihood-ratio tests of the restricted fit against the other,
@@ -40,5 +42,22 @@ restriction, a Wald test
 is the z-statistic of a defined parameter such as \code{d := a - b} in
 \code{coef(summary(fit))}.
 }
+\details{
+If the larger model fits worse than the restricted model, it is refitted
+from the embedded restricted estimate with its own fitting options. A better
+endpoint is used only when its native convergence verdict passes. The input
+fits are unchanged; \code{attr(result, "refit")} records the old and new objective
+and printing reports the recovery. Internal refit warnings are captured in
+\code{attr(result, "reseed")$warnings} and printed as notes, including when a
+retry is unsuccessful. An unsuccessful retry retains the failure.
+}
+\section{Simulation studies}{
 
-\details{If the larger model fits worse than the restricted model, it is refitted from the embedded restricted estimate with its own fitting options. A better endpoint is used only when its native convergence verdict passes. Input fits are unchanged. The \code{refit} attribute records the old and new objective and the native verdict; printing reports recovery. Internal refit warnings are captured in \code{attr(result, "reseed")$warnings} and printed as notes, including when a retry is unsuccessful. An unsuccessful retry retains the typed failure.}
+See \code{\link[=summary.magmaan]{summary.magmaan()}} for the reference grammar and uniform base columns.
+Each available nested test has one row per reference; an unavailable test
+retains one row with its typed \code{reason} and missing \code{reference}/\code{pvalue}.
+Defaults are SB and PEBA4. \code{recommended} identifies default laws. Alternatives
+use the same policy statistic and retained nested spectrum (\code{spectra} attribute),
+including after recovery. Select by \code{test} and \code{reference} rather than position.
+References cannot be combined with \code{lavaan_compat}.
+}
