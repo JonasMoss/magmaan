@@ -70,11 +70,12 @@
   and reports mixed, conditional and categorical ML boundaries. The local
   corpus gate accepts 50 of 68 cases: 44 matched, six unsupported fit routes,
   and five verified test-convention differences (see the validation ledger).
-  The TASK-108 real-data gate reads 373 resolvable pairs; 235 match available
-  references (including 34 verified User's Guide samples), 129 have no printed
-  reference, and nine fail on two DOS EOF-terminated Brown files that Demo
-  BASIC accepts. Terminal Ctrl-Z recognition is a pending reader contract
-  decision; the gate remains failing and sample selection stays in the gate.
+  The TASK-108 real-data gate reads all 373 resolvable pairs and matches
+  available references, including 34 accepted verified User's Guide samples.
+  Terminal DOS Ctrl-Z is accepted; embedded markers are rejected with a DA01
+  diagnostic because Demo silently ignores later records. Unavailable references
+  and six rejected verified inputs remain explicit; sample selection stays in
+  the gate. FREE/fixed synthetic regressions and the full lab suite gate the fix.
   The TASK-85 output-only sweep scans 1,933 outputs / 683 distinct
   Mplus inputs; all 130 accepted inputs match groups, free counts
   and df. Independent equality-Jacobian rank and printed category counts

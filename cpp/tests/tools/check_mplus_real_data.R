@@ -92,6 +92,24 @@ printed_moments <- function(lines,spec) {
   }
   out
 }
+# Independent BASIC references for the two real legacy EOF files. The Demo
+# stays optional for other pairs; these diagnosed reader regressions require it.
+demo_eof_reference <- function(files, spec, hashes) {
+  known <- c('1907b41d217bbcdf', 'ddbc84b438fc77c2')
+  if(length(files) != 1L || !hashes[1L] %in% known) return(NA_character_)
+  binary <- hashes[1L] == known[1L]
+  dir <- file.path(scratch, paste0('demo-eof-', hashes[1L]))
+  dir.create(dir, showWarnings=FALSE)
+  file.copy(files[1L], file.path(dir,'data.dat'), overwrite=TRUE)
+  writeLines(c('DATA: FILE=data.dat;', if(binary) 'FORMAT=6F1;',
+    paste0('VARIABLE: NAMES=', paste(spec$mplus_data_plan$names,collapse=' '), ';'),
+    'ANALYSIS: TYPE=BASIC;', 'OUTPUT: SAMPSTAT;'), file.path(dir,'probe.inp'))
+  old <- getwd(); on.exit(setwd(old)); setwd(dir)
+  status <- system2('/home/jonas/mplusdemo/mpdemo', c('probe.inp','probe.out'),
+    stdout='console.log',stderr='console.err',timeout=120)
+  if(status != 0L || !file.exists('probe.out')) stop('EOF real-file Demo probe failed')
+  normalizePath('probe.out')
+}
 records <- list()
 for(entry in entries) {
   if(length(records) %% 100L == 0L) {cat('Inputs processed:',length(records),'/',length(entries),'\n');flush.console()}
@@ -143,6 +161,10 @@ for(entry in entries) {
       }
     }
     out <- resolve(sub('\\.inp$','.out',basename(entry$file),ignore.case=TRUE),entry)
+    if(is.na(out)) {
+      out <- demo_eof_reference(files,spec,r$data_hash)
+      if(!is.na(out)) r$reference_kind <- 'Mplus_9.1_Demo_BASIC_real_file'
+    }
     n_match <- pattern_match <- moment_match <- NULL
     if(!is.na(out)) {
       lines <- read_text(out)
@@ -183,11 +205,6 @@ for(entry in entries) {
     r$classification<-if(length(checks) && any(!checks)) 'unclassified_mismatch' else if(length(checks)) 'match' else 'read_without_reference'
     r
   },error=function(e) {r$classification<-'unclassified_error';r$detail<-conditionMessage(e)
-    eof <- vapply(files,function(f) { con<-file(f,'rb');on.exit(close(con));seek(con,max(0,file.info(f)$size-1));identical(readBin(con,'raw',n=1),as.raw(26)) },TRUE)
-    if(any(eof) && grepl('\\[DA01\\]',r$detail)) {
-      r$classification<-'reader_bug_needs_decision'
-      r$evidence<-'Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision.'
-    }
     r})
   records[[length(records)+1L]]<-result
 }
@@ -198,7 +215,15 @@ totals<-list(inputs=length(entries),accepted=length(accepted),archives_unreadabl
   n_comparisons=sum(vapply(accepted,function(r)!is.null(r$n_match),TRUE)),
   pattern_comparisons=sum(vapply(accepted,function(r)!is.null(r$pattern_match),TRUE)),
   moment_comparisons=sum(vapply(accepted,function(r)!is.null(r$moment_cells)&&r$moment_cells>0L,TRUE)))
+# Explicitly account for all verified UG samples, including rejected originals.
+verified <- lapply(sort(list.dirs(file.path(corpus,'cases/mplus_users_guide_v8'), recursive=FALSE)), function(folder) {
+  input <- file.path(folder,'source/original.inp')
+  spec <- tryCatch(mplus_model(file=input), error=function(e)e)
+  if (inherits(spec,'error')) return(list(case=basename(folder), status='input_rejected', rules=unique(regmatches(conditionMessage(spec), gregexpr('\\[[A-Z]+[0-9]+\\]',conditionMessage(spec)))[[1L]])))
+  hits <- Filter(function(r) identical(r$raw_reference, substring(folder,nchar(corpus)+2L)), records)
+  list(case=basename(folder), status=if(length(hits)) 'compared' else 'reference_unresolved', comparisons=length(hits))
+})
 saveRDS(records,file.path(scratch,'records.rds'))
-write_json(list(sample_rules='Gate only: missing fixed-X; all dependent variables missing; declared LISTWISE. Reader retains these rows.',totals=totals,inputs=records),report,pretty=TRUE,auto_unbox=TRUE,na='null',digits=NA)
+write_json(list(sample_rules='Gate only: missing fixed-X; all dependent variables missing; declared LISTWISE. Reader retains these rows.',totals=totals,verified_cases=verified,inputs=records),report,pretty=TRUE,auto_unbox=TRUE,na='null',digits=NA)
 print(totals)
 if(any(vapply(accepted,function(r)r$classification %in% c('unclassified_error','unclassified_mismatch','reader_bug_needs_decision'),TRUE))) quit(status=1)

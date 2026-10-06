@@ -313,7 +313,7 @@ deliberate fitting boundary: individual data are required for ordinal moments.
 
 | ID | Evidence | Rule and implementation consequence |
 | --- | --- | --- |
-| DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT has its own bounded grammar production and typed plan; Fw without a decimal suffix means zero decimal places. |
+| DA01 | D, 564, 567–569 | Numeric ASCII data; records at most 10,000 characters. Terminal DOS Ctrl-Z is accepted (optional whitespace suffix by explicit reader policy); embedded markers are rejected because Mplus silently ignores subsequent records (P-DA6, N=250). Other control bytes remain rejected. Free format (default): entries separated by comma, blank or tab; read until one value per NAMES variable, then continue with the next record. Fixed format: a Fortran-like FORMAT (`F`, `x`, `t`, `/`, repeat counts, implied decimals). FORMAT has its own bounded grammar production and typed plan; Fw without a decimal suffix means zero decimal places. |
 | DA02 | D, 570–571, 539–540 | Summary data are free-format: lower-triangular or full covariance or correlation matrices, means and standard deviations, each type starting on a new record; groups follow one another with NOBSERVATIONS per group and NGROUPS. Input matrices use divisor N-1; convert by (N-1)/N to magmaan's divisor-N sample statistics for ML (P-DA5); means unchanged. |
 | DA03 | D, 601–603; P | MISSING: one non-numeric flag (`.`, `*`, `BLANK` with fixed format only; global symbol syntax has no parentheses) for all variables, or numeric flags per variable or ALL, with value ranges and comma-separated negatives. Flags compare with the value after FORMAT scaling: with F2.1 the field `99` reads as 9.9 and only the flag `9.9` matches; `-9` and `-9.0` are the same flag (P-DA2). |
 | DA04 | D, 613 | Rows with an unlisted GROUPING value are excluded; the reader reports how many. |
@@ -396,6 +396,7 @@ independent, u ordinal (3 categories unless noted), g grouping.
 | P-DA2 | DA03 | `FORMAT = 3F2.1; MISSING = ALL (99);` versus `(9.9)`; `-9` versus `-9.0` | N and sample means |
 | P-DA3 | DA02 | COVARIANCE without MEANS, explicit intercept/factor mean, and with MEANS | TECH1 NU/ALPHA presence and DATA errors |
 | P-DA5 | DA02 | Saturated ML: covariance/full covariance, correlation, SD, means and NGROUPS | Summary input divisor N-1 and group-specific (N-1)/N analysis rescaling |
+| P-DA6 | DA01 | Bare terminal Ctrl-Z accepted; terminal whitespace suffix errors; embedded marker silently truncates at N=250. Reader accepts terminal whitespace by explicit policy and rejects embedded markers. `regen_mplus_probes.R --eof`. |
 | P-DA4 | DA02 | CORRELATION with and without STDEVIATIONS | Unit-variance covariance interpretation |
 
 
@@ -683,16 +684,15 @@ later intercept, threshold and scale labels/modifiers. The canonical parser
 now consumes every group; independent row regressions and the existing TECH1
 partition gate consume the new fixture. LB02/LB03 label ownership is unchanged.
 
-### Real data-file sweep (TASK-108; decision pending)
+### Real data-file sweep (TASK-108)
 
-The local gate scans 2,440 inputs / 621 MODEL acceptances. All files resolve for
-373 pairs: 235 reference matches, 129 reads without a printed reference, nine
-reader failures (two distinct EOF-terminated Brown files). References include
-45 raw.csv comparisons / 34 verified User's Guide samples, 235 N, two missing
-patterns and 89 sample-moment comparisons. The remaining 248 accepted inputs
-lack a complete resolvable file set; one ZIP remains unreadable. CL02/CL03/CL09
+The local gate scans 2,440 inputs; 621 are accepted and all 373 resolvable
+pairs are read: 244 reference matches and 129 reads without a reference.
+All 45 CSV, 244 N, two missing-pattern and 98 moment comparisons match after
+the terminal DOS EOF reader fix. The 34 accepted verified User's Guide cases are compared with
+raw.csv; all six remaining verified original inputs are rejected by existing
+frontend rules and recorded with their reasons. Missing files, unavailable
+printed references and incomplete-data H1 moments stay explicit. CL02/CL03/CL09
 and DA01–DA06 receive real-file evidence without moving DA05 sample rules into
-the reader. Terminal DOS Ctrl-Z handling is a pending DA01 contract decision;
-Demo BASIC accepts the unchanged files with N=750 and 870. The derived summary
-and [ledger](../validation/test_ledger.md#task-108-real-mplus-data-file-gate-decision-pending)
-retain this failing status rather than promote the stability bar.
+the reader. See `mplus/real_data_summary.json` and the
+[ledger](../validation/test_ledger.md#task-108-real-mplus-data-file-gate).

@@ -23,7 +23,9 @@ file. Free format accepts blanks, tabs and commas, wrapped observations,
 and discards extra fields at the end of a completed observation's record.
 Fixed FORMAT supports Fw.d, Fw or w.d, X skips, Tn positions, record breaks and
 repeated groups. Implied decimals apply only without an explicit point.
-Missing flags compare after that scaling.
+Missing flags compare after that scaling. A terminal DOS Ctrl-Z, optionally
+followed only by whitespace, denotes EOF. Embedded EOF markers and other
+control bytes are rejected; remove the marker or the trailing records.
 }
 \details{
 Separate-file groups use a reserved \code{.mplus_group} column containing FILE

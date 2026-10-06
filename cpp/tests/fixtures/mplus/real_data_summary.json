@@ -7,16 +7,217 @@
       "raw/mplususerguid/ex11.8imp.zip"
     ],
     "classifications": {
-      "match": 235,
+      "match": 244,
       "read_without_reference": 129,
-      "reader_bug_needs_decision": 9,
       "unresolved_file": 248
     },
     "raw_comparisons": 45,
-    "n_comparisons": 235,
+    "n_comparisons": 244,
     "pattern_comparisons": 2,
-    "moment_comparisons": 89
+    "moment_comparisons": 98
   },
+  "verified_cases": [
+    {
+      "case": "mplus_users_guide_v8_ch11_ex11_1",
+      "status": "input_rejected",
+      "rules": "[CL15]"
+    },
+    {
+      "case": "mplus_users_guide_v8_ch11_ex11_4",
+      "status": "input_rejected",
+      "rules": ["[NM03]", "[CL06]"]
+    },
+    {
+      "case": "mplus_users_guide_v8_ch12_ex12_7step1",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_1",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_11",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_12",
+      "status": "input_rejected",
+      "rules": "[CT05]"
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_13",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_14",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_16",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch3_ex3_4",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_1",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_10",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_11",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_12",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_14",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_15",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_16",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_17",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_18",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_19",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_2",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_20",
+      "status": "input_rejected",
+      "rules": "[CN01]"
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_21",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_22",
+      "status": "input_rejected",
+      "rules": "[CT07]"
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_3",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_6",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_8",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch5_ex5_9",
+      "status": "compared",
+      "comparisons": 1
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_1",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_10",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_11",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_13",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_14",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_15",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_17",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_18",
+      "status": "input_rejected",
+      "rules": ["[MG03]", "[CL26]"]
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_4",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_5",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_8",
+      "status": "compared",
+      "comparisons": 2
+    },
+    {
+      "case": "mplus_users_guide_v8_ch6_ex6_9",
+      "status": "compared",
+      "comparisons": 2
+    }
+  ],
   "inputs": [
     {
       "path": "raw/geiser_companion/archives/Chapter_3_SEM.zip!Chapter 3 (SEM)/1_Simple_Manifest_Linear_Regression/1_simple_regression.inp",
@@ -10181,9 +10382,15 @@
       "status": "accepted",
       "data_hash": "1907b41d217bbcdf",
       "data_path": "raw/brown_archive/BINARY.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] non-numeric field for Y1: '\u001a'",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 750,
+      "analysis_n": 750,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 750,
+      "moment_cells": 27,
+      "moment_max_error": 0.000497777777777743,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown_archive/tab9.13a.inp",
@@ -10209,9 +10416,15 @@
       "status": "accepted",
       "data_hash": "ddbc84b438fc77c2",
       "data_path": "raw/brown_archive/NONML.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] incomplete observation: wrong number of values",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 870,
+      "analysis_n": 870,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 870,
+      "moment_cells": 20,
+      "moment_max_error": 0.000482758620689694,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown_archive/tab9.3.inp",
@@ -10224,9 +10437,15 @@
       "status": "accepted",
       "data_hash": "ddbc84b438fc77c2",
       "data_path": "raw/brown_archive/NONML.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] incomplete observation: wrong number of values",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 870,
+      "analysis_n": 870,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 870,
+      "moment_cells": 20,
+      "moment_max_error": 0.000482758620689694,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown_archive/tab9.8.inp",
@@ -10234,9 +10453,15 @@
       "status": "accepted",
       "data_hash": "1907b41d217bbcdf",
       "data_path": "raw/brown_archive/BINARY.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] non-numeric field for Y1: '\u001a'",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 750,
+      "analysis_n": 750,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 750,
+      "moment_cells": 27,
+      "moment_max_error": 0.000497777777777743,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown/mplus_demo/brown_2015_tab7_17_mimic_phobia.inp",
@@ -10289,9 +10514,14 @@
       "status": "accepted",
       "data_hash": "ddbc84b438fc77c2",
       "data_path": "raw/brown/mplus_demo/NONML.DAT",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] incomplete observation: wrong number of values",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 870,
+      "analysis_n": 870,
+      "output_n": 870,
+      "moment_cells": 20,
+      "moment_max_error": 0.000482758620689694,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown/source/tab10.2.inp",
@@ -10519,9 +10749,15 @@
       "status": "accepted",
       "data_hash": "1907b41d217bbcdf",
       "data_path": "raw/brown/source/BINARY.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] non-numeric field for Y1: '\u001a'",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 750,
+      "analysis_n": 750,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 750,
+      "moment_cells": 27,
+      "moment_max_error": 0.000497777777777743,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown/source/tab9.13a.inp",
@@ -10547,9 +10783,15 @@
       "status": "accepted",
       "data_hash": "ddbc84b438fc77c2",
       "data_path": "raw/brown/source/NONML.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] incomplete observation: wrong number of values",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 870,
+      "analysis_n": 870,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 870,
+      "moment_cells": 20,
+      "moment_max_error": 0.000482758620689694,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown/source/tab9.3.inp",
@@ -10562,9 +10804,15 @@
       "status": "accepted",
       "data_hash": "ddbc84b438fc77c2",
       "data_path": "raw/brown/source/NONML.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] incomplete observation: wrong number of values",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 870,
+      "analysis_n": 870,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 870,
+      "moment_cells": 20,
+      "moment_max_error": 0.000482758620689694,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/brown/source/tab9.8.inp",
@@ -10572,9 +10820,15 @@
       "status": "accepted",
       "data_hash": "1907b41d217bbcdf",
       "data_path": "raw/brown/source/BINARY.dat",
-      "classification": "reader_bug_needs_decision",
-      "detail": "[DA01] non-numeric field for Y1: '\u001a'",
-      "evidence": "Real numeric file ends in DOS Ctrl-Z (0x1a); reader attempts to parse it as an observation. Handling a legacy EOF marker needs an explicit reader contract decision."
+      "reader_n": 750,
+      "analysis_n": 750,
+      "reference_kind": "Mplus_9.1_Demo_BASIC_real_file",
+      "output_n": 750,
+      "moment_cells": 27,
+      "moment_max_error": 0.000497777777777743,
+      "moment_status": "match",
+      "n_match": true,
+      "classification": "match"
     },
     {
       "path": "raw/geiser_companion/1_Latent_State_Analysis/1_Latent_State_Model_Figure_4.1.inp",

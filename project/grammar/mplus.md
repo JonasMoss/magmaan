@@ -372,7 +372,7 @@ Gate references (each names the maintained file rather than an increment):
 | CN04 | reported | Mplus INFORMATION default changes; inference conventions not imported | H |
 | CN05 | accepted / rejected: out of family | total/specific IND/VIA and absent-path zero; causal forms rejected | H |
 | CN06 | reported | MODEL TEST Wald request | I, H |
-| DA01 | accepted / rejected: Mplus error / deliberate | numeric ASCII; bounded FREE/fixed FORMAT and records | I, D |
+| DA01 | accepted / rejected: Mplus error / deliberate | numeric ASCII; bounded FREE/fixed FORMAT and records; terminal DOS EOF accepted, embedded EOF rejected | I, D |
 | DA02 | accepted / rejected: Mplus error | free-format summary matrices, means/SD/counts; N-1 to N conversion | I, D |
 | DA03 | accepted / rejected: Mplus error | global symbols or per-variable numeric missing flags after scaling | I, D |
 | DA04 | accepted | drop/report unlisted GROUPING codes | D |
@@ -381,15 +381,18 @@ Gate references (each names the maintained file rather than an increment):
 
 ## Oracles and evidence
 
-The TASK-108 real-data gate reads 373 resolvable input/file pairs among 621
-accepted inputs in the 2,440-input corpus. Available references match for 235
-pairs, including 34 verified User's Guide samples (45 CSV comparisons), 235
-printed N, two missing-pattern and 89 sample-moment comparisons. Another 129
-pairs read without a printed reference. Nine reads fail on two Brown files with
-a terminal DOS Ctrl-Z; Mplus 9.1 Demo BASIC accepts them (N=750/870). A reader
-contract decision is pending before fixing that EOF handling. See the
-[test ledger](../validation/test_ledger.md#task-108-real-mplus-data-file-gate-decision-pending)
-and `mplus/real_data_summary.json`; this gate currently exits 1.
+The TASK-108 real-data gate reads all 373 resolvable input/file pairs among
+621 accepted inputs in the 2,440-input corpus: 244 reference matches and 129
+reads without available references; no errors or mismatches. Terminal DOS
+Ctrl-Z is accepted,
+including trailing whitespace by the planner's explicit reader contract;
+embedded markers are rejected rather than silently truncating records.
+The isolated P-DA6 Demo probe accepts a bare terminal marker, rejects its
+whitespace suffix, and silently truncates the embedded-marker file at N=250.
+Other control bytes remain rejected. Available references, absent references,
+rejected verified cases and incomplete-data H1 moments are recorded separately
+in the [test ledger](../validation/test_ledger.md#task-108-real-mplus-data-file-gate)
+and `mplus/real_data_summary.json`.
 
 
 Categorical numerical gates retain native/lavaan conventions. An independently
@@ -479,9 +482,8 @@ gates run locally when present and are recorded in the
 
 The frontend is stable for a subset when all of the following hold:
 
-- Real DATA files must pass the local real-file gate; TASK-108 remains blocked
-  on the terminal DOS EOF contract decision, with missing references and
-  incomplete-data H1 moments reported separately.
+- Real DATA files must pass the local real-file gate, with missing references
+  and incomplete-data H1 moments reported separately (TASK-108).
 - A normative `mplus_grammar.ebnf` covers it, and every parser function cites
   its production.
 - Every accepted rule has a fixture with independently written expected rows.

@@ -6,7 +6,9 @@
 #' and discards extra fields at the end of a completed observation's record.
 #' Fixed FORMAT supports Fw.d, Fw or w.d, X skips, Tn positions, record breaks and
 #' repeated groups. Implied decimals apply only without an explicit point.
-#' Missing flags compare after that scaling.
+#' Missing flags compare after that scaling. A terminal DOS Ctrl-Z, optionally
+#' followed only by whitespace, denotes EOF. Embedded EOF markers and other
+#' control bytes are rejected; remove the marker or the trailing records.
 #'
 #' Separate-file groups use a reserved `.mplus_group` column containing FILE
 #' labels in declaration order. NGROUPS summary groups are named g1, g2, ... .
@@ -68,7 +70,7 @@ mplus_data <- function(model, file = NULL) {
     out$S <- Map(function(S, factor) S * factor, out$S, report$covariance_scale)
   } else {
     blocks <- lapply(seq_along(paths), function(g) {
-      lines <- readLines(paths[g], warn = FALSE)
+      lines <- .mplus_numeric_lines(paths[g])
       if (any(nchar(lines, type = "bytes") > 10000L)) stop("[DA01] record exceeds 10000 characters", call. = FALSE)
       n <- if (length(plan$n_observations)) plan$n_observations[g] else Inf
       x <- if (length(plan$format)) .mplus_fixed(lines, plan, n) else .mplus_free(lines, plan, n)
@@ -93,6 +95,26 @@ mplus_data <- function(model, file = NULL) {
   }
   attr(out, "mplus_data_report") <- report
   out
+}
+
+# Validate the whole file before NOBSERVATIONS or fixed-format skips can hide bytes.
+.mplus_numeric_lines <- function(path) {
+  bytes <- readBin(path, "raw", n = file.info(path)$size)
+  codes <- as.integer(bytes)
+  eof <- which(codes == 26L)
+  if (length(eof)) {
+    first <- eof[1L]
+    tail <- if (first < length(codes)) codes[seq.int(first + 1L, length(codes))] else integer()
+    if (any(!tail %in% c(9L, 10L, 11L, 12L, 13L, 32L)))
+      stop("[DA01] found an end-of-file marker before the last record; Mplus ignores the rest; remove the marker or the trailing records", call. = FALSE)
+    bytes <- if (first > 1L) bytes[seq_len(first - 1L)] else raw()
+    codes <- as.integer(bytes)
+  }
+  if (any(codes < 32L & !codes %in% c(9L, 10L, 13L)) || any(codes == 127L))
+    stop("[DA01] unsupported control byte in numeric data", call. = FALSE)
+  con <- rawConnection(bytes)
+  on.exit(close(con))
+  readLines(con, warn = FALSE)
 }
 
 .mplus_value <- function(field, variable, plan, decimals = 0L) {
@@ -157,7 +179,7 @@ mplus_data <- function(model, file = NULL) {
   p <- length(plan$names); full <- plan$matrix_type %in% c("FULLCOV", "FULLCORR")
   count <- if (full) p*p else p*(p+1L)/2L
   blocks <- lapply(paths, function(path) {
-    lines <- readLines(path, warn = FALSE)
+    lines <- .mplus_numeric_lines(path)
     row <- 1L
     take <- function(n) {
       values <- numeric()

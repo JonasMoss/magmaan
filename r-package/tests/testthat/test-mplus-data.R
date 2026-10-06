@@ -108,3 +108,21 @@ test_that("reader rejects file and summary shape errors and reports LISTWISE", {
   with_dat("99-910",data_spec("FORMAT=3F2.1;", "MISSING=ALL (99);"),function(x) expect_equal(x$y1,9.9))
   with_dat("99 98 97",data_spec(variable="MISSING=ALL (98 99);"),function(x) expect_true(all(is.na(x[1,1:2]))))
 })
+
+test_that("DOS EOF is accepted only after the last numeric record", {
+  path <- tempfile(); on.exit(unlink(path))
+  for (fixed in c(FALSE, TRUE)) {
+    spec <- data_spec(if (fixed) "FORMAT=3F1.0;" else "")
+    text <- if (fixed) "123\n456\n" else "1 2 3\n4 5 6\n"
+    writeBin(charToRaw(text), path)
+    expected <- mplus_data(spec, file=path)
+    for (tail in c("", " \t\r\n")) {
+      writeBin(charToRaw(paste0(text, intToUtf8(26), tail)), path)
+      expect_identical(mplus_data(spec, file=path), expected)
+    }
+    writeBin(charToRaw(paste0(text, intToUtf8(26), "\n", text)), path)
+    expect_error(mplus_data(spec, file=path), "\\[DA01\\].*Mplus ignores the rest")
+    writeBin(charToRaw(paste0(text, intToUtf8(1))), path)
+    expect_error(mplus_data(spec, file=path), "unsupported control byte")
+  }
+})

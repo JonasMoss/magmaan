@@ -22,6 +22,8 @@ categorical_only <- '--categorical' %in% commandArgs(trailingOnly = TRUE)
 if (categorical_only) scratch <- paste0(scratch, '-categorical')
 bracket_only <- '--brackets' %in% commandArgs(trailingOnly = TRUE)
 if (bracket_only) scratch <- paste0(scratch, '-brackets')
+eof_only <- '--eof' %in% commandArgs(trailingOnly = TRUE)
+if (eof_only) scratch <- paste0(scratch, '-eof')
 probes <- list()
 add <- function(id, variant, model = 'f BY y1-y3;', names = 'y1 y2 y3',
                 variable = '', analysis = 'ESTIMATOR = ML;', data = '',
@@ -181,7 +183,12 @@ make_data <- function(p, seed) {
   x
 }
 write_data <- function(p, x, path) {
-  if (p$kind == 'divisor_summary') {
+  if (p$kind == 'eof') {
+    lines <- apply(round(x, 6), 1, paste, collapse=' ')
+    text <- paste0(paste(lines[1:250], collapse='\n'), '\n', intToUtf8(26),
+      if (p$variant == 'embedded') paste0('\n', paste(lines[251:nrow(x)], collapse='\n')) else if (p$variant == 'terminal_whitespace') ' \t\r\n' else '')
+    writeBin(charToRaw(text), path)
+  } else if (p$kind == 'divisor_summary') {
     S <- matrix(c(2,.5,.5,1),2)
     if(grepl('CORR',p$data)) {
       sd <- sqrt(diag(S)); S <- cov2cor(S)
@@ -377,10 +384,14 @@ add('P-LB7', 'modifiers_lines', 'f BY y1-y3;\n[y1@2]\n[y2@3]\n[y3@4];')
 add('P-LB7', 'bare_same_line', 'f BY y1-y3; [y1] [y2] [y3];')
 add('P-LB7', 'same_line', 'f BY y1-y3;\n[y1] (i1) [y2] (i2);')
 
+for (v in c('terminal', 'terminal_whitespace', 'embedded')) add('P-DA6', v, model='y1-y3;',
+  analysis='TYPE=BASIC;', kind='eof')
+
 settles <- setNames(lapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][3])),
                     vapply(probe_lines,function(x) trimws(strsplit(x,'|',fixed=TRUE)[[1]][2]),character(1)))
 ids <- unique(vapply(probes,`[[`,character(1),'id'))
 if (!setequal(ids,names(settles))) stop('Probe inventory mismatch')
+if (eof_only) probes <- Filter(function(p) p$id == 'P-DA6', probes)
 if (bracket_only) probes <- Filter(function(p) p$id == 'P-LB7', probes)
 if (joint_x_only) probes <- Filter(function(p) p$id == 'P-MS08b', probes)
 if (categorical_only) probes <- Filter(function(p) p$id == 'P-IV2', probes)
@@ -404,6 +415,10 @@ for (p in probes) {
   out <- readLines(path,warn=FALSE)
   if(!any(grepl('Mplus VERSION',out))) stop('Demo did not produce a version header')
   parsed <- parse_output(out)
+  if (p$kind == 'eof') {
+    if (p$variant == 'terminal_whitespace') stopifnot(parsed$status == 'error')
+    else stopifnot(parsed$status == 'accepted', parsed$observations[[1L]]$n == 250L)
+  }
   if(status != 0 && parsed$status != 'error') stop('Demo execution failed without an input diagnostic: ',p$id,'/',p$variant)
   if(is.null(all_results[[p$id]])) all_results[[p$id]] <- list(settles=settles[[p$id]],variants=list())
   if (p$id == 'P-MS08b') {
@@ -452,8 +467,13 @@ write_fixture <- function(results, name) {
   writeLines(toJSON(results, auto_unbox = TRUE, pretty = TRUE, digits = NA,
                    null = 'null'), fixture)
 }
+if (eof_only) {
+  write_fixture(all_results, 'probes_eof.json')
+  quit(status=0)
+}
+if (!bracket_only && !joint_x_only && !categorical_only) write_fixture(all_results[names(all_results) == 'P-DA6'], 'probes_eof.json')
 if (!joint_x_only && !categorical_only) write_fixture(all_results[names(all_results) == 'P-LB7'], 'probes_brackets.json')
-if (!bracket_only && !categorical_only && !joint_x_only) write_fixture(all_results[!names(all_results) %in% c('P-IV2', 'P-MS08b', 'P-LB7')], 'probes.json')
+if (!bracket_only && !categorical_only && !joint_x_only) write_fixture(all_results[!names(all_results) %in% c('P-IV2', 'P-MS08b', 'P-LB7', 'P-DA6')], 'probes.json')
 if (!bracket_only && !joint_x_only) write_fixture(all_results[names(all_results) == 'P-IV2'], 'probes_categorical.json')
 if (!bracket_only && !categorical_only) write_fixture(all_results[names(all_results) == 'P-MS08b'], 'probes_joint_x.json')
 cat(length(unique(vapply(probes, `[[`, character(1), 'id'))), 'probes;', length(probes), 'variants\n')

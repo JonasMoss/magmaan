@@ -1,5 +1,8 @@
 # magmaanlab 0.2.0 (in development)
 
+- `mplus_data()` accepts terminal DOS Ctrl-Z EOF markers in numeric files and
+  rejects embedded markers with a DA01 diagnostic rather than truncating data.
+
 - `policy_fit_measures()` returns misspecification-robust point indices with
   per-index reasons and discrepancy/trace/df details for ML, FIML, continuous
   ULS, ML2S-NT profile indices and ordinal/mixed DWLS. It fits a matching independence baseline;

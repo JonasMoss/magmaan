@@ -269,3 +269,7 @@ indirect_statement  ::= name ('IND' name+ | 'VIA' name name) ';'
    Equality constraints must identify these coordinates. Inequalities are
    deliberately refused (CN01/project/scope.md). LOOP/PLOT and MODEL TEST
    are reported. Causal-effect value and MOD forms are rejected (CN05). *)
+
+(* DA01 numeric-file envelope: an optional terminal DOS Ctrl-Z (0x1a),
+   followed only by ASCII whitespace, denotes EOF. Embedded EOF markers and
+   other control bytes (except tab/CR/LF) are rejected by the reader. *)
