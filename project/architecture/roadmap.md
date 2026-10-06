@@ -375,8 +375,10 @@ Ordinary `modindices()` reports robust one-df score modification indices and
 equality releases (chi-square(1), EPC, standardized EPC) for ML, FIML and
 all-ordinal/mixed DWLS through `api::policy_modification_indices()`, with
 optional `test = "lr"` refits via lab `policy_mi_refit()` and the nested
-policy (TASK-99). ML/FIML candidates whose observed efficient curvature is not
-positive are typed `numeric_failure` until TASK-106; regressions are TASK-105.
+policy (TASK-99). ML/FIML robust MI and releases project nuisance scores with
+observed sensitivity and use the expected metric, bread and EPC, so saddle
+directions keep their generalized score statistic (TASK-106; HS reports all
+54 candidates); regressions are TASK-105.
 `summary(fit, standardized = TRUE)` adds std.lv/std.all estimates with
 delta-method SEs from the active covariance and an R-squared table (lab
 `standardized_rows()`), lavaan-gated at matching covariance (TASK-98).
