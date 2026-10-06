@@ -1,8 +1,10 @@
 # Mplus input frontend
 
-Milestone 0.3.0. Increments 1–5 are implemented with independent model-meaning
-and numerical gates. Stability closeout checks the full documented subset; ordinary-package integration
-remains separate work; this is not a 0.2.0 exit criterion.
+Milestone 0.3.0; not a 0.2.0 exit criterion. Increments 1–5, the stability
+closeout and ordinary-package integration (under the
+[same-model rule](../scope.md#mplus-inputs-in-the-ordinary-api)) are implemented,
+with independent model-meaning and numerical gates, a data-free output gate over
+every accepted corpus input and a real data-file gate.
 This document owns the target, input boundary, increments, evidence and the
 stability bar. The [backlog](../backlog/todo.md#mplus-input-frontend) owns task
 state. The [source inventory](mplus_source_inventory.md) owns manual evidence,
