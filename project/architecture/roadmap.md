@@ -382,6 +382,9 @@ directions keep their generalized score statistic (TASK-106; HS reports all
 `summary(fit, standardized = TRUE)` adds std.lv/std.all estimates with
 delta-method SEs from the active covariance and an R-squared table (lab
 `standardized_rows()`), lavaan-gated at matching covariance (TASK-98).
+Ordinary `fit_measures(fit)` and `summary(fit, fit_measures = TRUE)` report the
+policy point indices with fixed row sets per estimator (TASK-102);
+lavaan-compatible fit measures are TASK-109.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
