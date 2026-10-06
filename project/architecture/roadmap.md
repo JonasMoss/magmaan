@@ -685,8 +685,27 @@ NLopt gradient/step tolerances, memory and evaluation budgets are distinct,
 as are PORT step/function criteria and evaluation/iteration budgets. See
 [optimizer controls](../reference/optimizer-controls.md) for support, sentinel
 values and compatibility rules. These settings govern search termination;
-they do not alter the independent terminal audit. Effective-control and raw
-stopping-code reporting across fitted results remains backlog work.
+they do not alter the independent terminal audit. NLopt now retains finite,
+evaluable budget/line-search candidates, raw return codes and resolved adapter
+controls through coordinate re-auditing. Fit acceptance remains independent;
+invalid settings and unevaluable endpoints remain errors. Its explicit
+L-BFGS/SLSQP fallback counts both stages and retains a failed candidate without
+displacing a previously usable first-stage return. Complete attempt histories,
+uniform reporting for other backends and outer-loop stopping remain open.
+
+Layered starts recognize equality components that completely pin a parameter
+as constants during measurement and latent-scale construction. Projecting only
+the final start could otherwise turn an effects-coded, tau-equivalent loading
+block into enormous starting latent variances. Native tests compare the
+constrained and explicitly fixed formulations across scales; experiment 15's
+optimizer lane replays the Little Table 10.3 corpus data and fresh paired draws.
+Its 51-fit confirmation retains all 28 passing equality/fixed comparisons,
+seven failed early-stop candidates, six passing ordinary defaults and ten
+mixed-unit ML2S candidates (six still rejected). Controlled-unit references
+are transported back to independently verify the original ML likelihood;
+failed raw-unit reference and execution attempts remain recorded. R sample
+means remain protected through allocations and serialization.
+Generic L-BFGS domain recovery and broader start/default decisions remain open.
 
 Complete-data ML now defaults to the validated NLopt profile (5000 evaluations,
 relative objective/step tolerances 1e-12/1e-10). High-level ML uses transported
@@ -3166,8 +3185,12 @@ an unconstrained gradient test to constrained solutions.
   fits rebuild packs; legacy/missing records stay unchecked, mismatches fail.
   Fresh independent 90-digit checks agree at 156 stage points, 210 conditional
   producer checks and 78 handoffs. All 12 ordinary Stage-1 endpoints and 56
-  returned fits pass; six mixed-unit ULS/DWLS/ADF L-BFGS errors remain, feeding
-  TASK-33.10.5. Negative raw curvature still fails after information repair;
+  returned fits pass; six mixed-unit ULS/DWLS/ADF L-BFGS errors fed
+  TASK-33.10.5. Its later candidate-retention bank returns these six endpoints
+  with failed Stage-2/composed verdicts; it does not recover their optima.
+  Automatic ordinary ML2S inference now requires the C++ convergence verdict
+  to pass; failed/unchecked fits retain their stage inputs for explicit audits.
+  Extreme-tail inference cost remains a separate backlog item. Negative raw curvature still fails after information repair;
   its repaired ACOV remains unchecked. Separate stage passes imply no
   propagated structural-parameter accuracy or inference/default recommendation.
   Nonordinary covariance policies are explicitly outside this adapter. See

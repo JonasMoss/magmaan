@@ -1,0 +1,9 @@
+run_id,seed_base,exit_code,outcome,observed_cause_or_resolution
+optimizer-prechange-smoke-v1,865081051,not_recorded,harness_failure,Pre-change pinned starts/soft errors; missing ordinal layout; fixed-model label substitution incomplete
+optimizer-smoke-v1,865081101,1,reference_gate_failure,Incomplete fixed-model loading-label substitution
+optimizer-smoke-v2,865081101,0,passed,Corrected label substitution; 17 attempts
+optimizer-confirm-v1,865081301,139,serialization_crash,R sample-mean list ownership before fit list owns it; fixed in bindings
+optimizer-confirm-v2,865081301,143,terminated_tail_calculation,42 rows checkpointed; next rejected ULS ML2S candidate entered automatic RMSEA inference; gdb located noncentral chi-square CDF
+optimizer-confirm-v3,865081401,1,reference_gate_failure,51 returned; raw-unit lavaan reference stopped early; native endpoints agree with normalized reference recheck
+optimizer-confirm-v4,865081501,0,passed,Fresh confirmation with normalized reference transport; all six gates pass
+optimizer-confirm-v5,865081601,0,passed,Fresh confirmation retaining all adapter controls and evaluation costs; all nine gates pass

@@ -249,6 +249,32 @@ TEST_CASE("layered start: user start hints win") {
   CHECK(x(static_cast<Eigen::Index>(k)) == doctest::Approx(0.3));
 }
 
+TEST_CASE("layered start: equalities pin loading blocks like explicit constants") {
+  BuildOptions o;
+  o.meanstructure = true;
+  const Built constrained = build(
+      "f =~ NA*a*y1 + b*y2 + c*y3\n"
+      "g =~ NA*d*y4 + e*y5 + h*y6\n"
+      "a + b + c == 3\na == b\nb == c\n"
+      "d + e + h == 3\nd == e\ne == h\n", o);
+  const Built fixed = build(
+      "f =~ 1*y1 + 1*y2 + 1*y3\n"
+      "g =~ 1*y4 + 1*y5 + 1*y6\n", o);
+  const auto con = build_eq_constraints(constrained.pt);
+  REQUIRE(con.has_value());
+  for (double scale : {1.0, 0.001, 1000.0}) {
+    const auto pop = sigma(fixed, truth(fixed));
+    const SampleStats s = stats({scale * scale * perturb(pop[0], 0.01)},
+                                {scale * mu(fixed, truth(fixed))[0]});
+    const Eigen::VectorXd x = layered(constrained, s);
+    const Eigen::VectorXd xf = layered(fixed, s);
+    CHECK((con->A_eq * x - con->b_eq).norm() < 1e-8);
+    CHECK(max_rel_diff(sigma(constrained, x)[0], sigma(fixed, xf)[0]) < 1e-9);
+    CHECK((mu(constrained, x)[0] - mu(fixed, xf)[0]).norm() < 1e-8 * scale);
+    CHECK(pd(sigma(constrained, x)[0]));
+  }
+}
+
 TEST_CASE("layered start: the start pipeline exposes the layered method untransported") {
   Built b = build(phantom_model);
   const auto S = sigma(b, truth(b));

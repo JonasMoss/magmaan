@@ -260,8 +260,28 @@ nlopt_lbfgs_slsqp_fallback(const ScalarProblem& prob,
   opts.nlopt.tolg.reset();
   opts.nlopt.vector_storage.reset();
   auto second = nlopt_slsqp(prob, x0, bounds, opts);
-  if (second.has_value()) return second;
-  if (first.has_value()) return first;
+  auto failed_candidate = [](const OptimResult& r) {
+    return !r.audit.stationary &&
+        (r.status == OptimStatus::BudgetExhausted ||
+         r.status == OptimStatus::LineSearchFailed);
+  };
+  // Retaining a failed SLSQP candidate must not displace a formerly usable
+  // L-BFGS result. If both stages failed, retain the lower original objective.
+  const bool choose_second = second &&
+      (!failed_candidate(*second) || !first ||
+       (failed_candidate(*first) && second->fmin <= first->fmin));
+  if (choose_second) {
+    const int n = first ? first->f_evals : first.error().iterations;
+    second->f_evals += n;
+    second->g_evals += first ? first->g_evals : n;
+    return second;
+  }
+  if (first) {
+    const int n = second ? second->f_evals : second.error().iterations;
+    first->f_evals += n;
+    first->g_evals += second ? second->g_evals : n;
+    return first;
+  }
 
   FitError err = second.error();
   err.detail = "SLSQP fallback after L-BFGS failure also failed; L-BFGS: " +

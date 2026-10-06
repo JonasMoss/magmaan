@@ -1,0 +1,11 @@
+"fit_id","control","status","stage1","handoff","stage2","distance"
+42,"independent_composed_reaudit","passed","passed","passed","passed",8.59486510827364e-08
+43,"independent_composed_reaudit","failed","passed","passed","failed",
+44,"independent_composed_reaudit","failed","passed","passed","failed",
+45,"independent_composed_reaudit","failed","passed","passed","failed",
+46,"independent_composed_reaudit","passed","passed","passed","passed",3.08216645229128e-08
+47,"independent_composed_reaudit","passed","passed","passed","passed",1.42082662266351e-07
+48,"independent_composed_reaudit","failed","passed","passed","failed",
+49,"independent_composed_reaudit","failed","passed","passed","failed",
+50,"independent_composed_reaudit","failed","passed","passed","failed",
+51,"independent_composed_reaudit","passed","passed","passed","passed",3.97969943231486e-08

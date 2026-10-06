@@ -502,6 +502,7 @@ const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
   using magmaan::optim::OptimStatus;
   return status == OptimStatus::Converged           ? "converged"
        : status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+       : status == OptimStatus::LineSearchFailed   ? "line_search_failed"
        : status == OptimStatus::SingularConvergence ? "singular_convergence"
        : status == OptimStatus::NoisyObjective     ? "noisy_objective"
        : status == OptimStatus::FalseConvergence   ? "false_convergence"
@@ -1070,12 +1071,23 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 // from L2's `active_bounds_full` (which indexes the expanded θ).
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
   const char* advisory = optim_status_to_r(a.advisory_status);
+  Rcpp::List controls = Rcpp::List::create();
+  if (a.nlopt_controls) {
+    const auto& c = *a.nlopt_controls;
+    auto real = [&](const char* key, const std::optional<double>& value) { if (value) controls[key] = *value; };
+    real("ftol_rel", c.ftol_rel); real("ftol_abs", c.ftol_abs);
+    real("xtol_rel", c.xtol_rel); real("xtol_abs", c.xtol_abs);
+    real("tolg", c.tolg); real("constraint_tol", c.constraint_tol);
+    if (c.max_eval) controls["max_eval"] = *c.max_eval;
+    if (c.vector_storage) controls["vector_storage"] = *c.vector_storage;
+  }
   Rcpp::IntegerVector active(static_cast<R_xlen_t>(a.active_set.size()));
   for (std::size_t i = 0; i < a.active_set.size(); ++i)
     active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
   return Rcpp::List::create(
       Rcpp::_["stationary"]       = a.stationary,
       Rcpp::_["raw_backend_status"] = a.raw_backend_status,
+      Rcpp::_["nlopt_controls"] = controls,
       Rcpp::_["backend_gradient_max"] = a.backend_gradient_max,
       Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
       Rcpp::_["raw_grad_inf_norm"] = a.raw_grad_inf_norm,
@@ -1270,7 +1282,9 @@ Rcpp::List fit_result(Ctx& ctx,
     Sb.attr("dimnames") = Rcpp::List::create(nm, nm);
     S_out[static_cast<R_xlen_t>(b)] = Sb;
   }
-  SEXP mean_out = R_NilValue;
+  // Keep the means protected after the temporary list leaves its block;
+  // constructing the partable/verdict can trigger GC before out owns them.
+  Rcpp::RObject mean_out = R_NilValue;
   if (!ctx.samp.mean.empty()) {
     Rcpp::List Ml(static_cast<R_xlen_t>(nb));
     for (std::size_t b = 0; b < nb; ++b)
@@ -5352,7 +5366,7 @@ sample_stats_to_r(const magmaan::data::SampleStats& samp,
             : std::vector<std::string>{};
     S_out[b] = matrix_to_r(samp.S[static_cast<std::size_t>(b)], nm, nm);
   }
-  SEXP mean_out = R_NilValue;
+  Rcpp::RObject mean_out = R_NilValue;
   if (!samp.mean.empty()) {
     Rcpp::List M_out(nb);
     for (R_xlen_t b = 0; b < nb; ++b) {

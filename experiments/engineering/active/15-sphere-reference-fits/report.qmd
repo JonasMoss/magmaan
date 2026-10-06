@@ -1,7 +1,8 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: ml2s_audit
+  lane: optimizer_audit
+  optimizer_run: optimizer-confirm-v5
   ml2s_run: ml2s-audit-confirm-v1
   ml2s_development: ml2s-audit-development-v2
   fiml_run: fiml-audit-confirm-v2
@@ -50,6 +51,48 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "optimizer_audit")) {
+  read_optimizer <- function(name) {
+    path <- file.path("results",params$optimizer_run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing optimizer evidence: ",path,"; run --ordinary --optimizer-audit")
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  checks <- read_optimizer("verification")
+  if(anyNA(checks$passed)||!all(checks$passed))stop("Optimizer mechanism verification failed")
+  fits <- read_optimizer("fits")
+  pinned <- fits[fits$expected=="pass",]
+  early <- fits[fits$expected=="failed_candidate",]
+  retained <- fits[fits$expected=="retained_candidate",]
+  defaults <- fits[fits$expected=="observe",]
+  cat("## Question\n\nDo equality constraints that pin a loading block produce the same start and fitted optimum as explicit constants, and can failed optimizer endpoints remain available for an independent audit?\n\n")
+  cat(sprintf("## Short answer\n\nTwo shared defects are repaired. Layered starts now treat fully pinned parameters as constants during measurement and scale construction. All %d paired equality/fixed fits converge and match the independently fitted lavaan objective, including Little Table 10.3 corpus data and fresh draws at three scales. Finite NLopt budget and line-search exits now preserve their candidates, raw stop codes and actual adapter controls. All %d deliberate early stops return candidates and fail the numerical verdict.\n\n",nrow(pinned),nrow(early)))
+  summary <- data.frame(Scope=c("Pinned equality and explicit fixed models","Deliberate evaluation stops","Ordinary default route controls","Retained mixed-unit ML2S fits"),
+    Attempts=c(nrow(pinned),nrow(early),nrow(defaults),nrow(retained)),
+    Returned=c(sum(pinned$returned),sum(early$returned),sum(defaults$returned),sum(retained$returned)),
+    Passed=c(sum(pinned$fit_passed,na.rm=TRUE),sum(early$fit_passed,na.rm=TRUE),sum(defaults$fit_passed,na.rm=TRUE),sum(retained$fit_passed,na.rm=TRUE)))
+  print(knitr::kable(summary))
+  cat(sprintf("\nThe largest paired-reference objective gap is %.2g. A separate determinant/trace calculation checks the original complete-data ML objective at every paired endpoint. The early-stop checks cover ML, ULS, DWLS, WLS, direct FIML and all-ordinal DWLS, preserving a one-evaluation budget and explicit objective/step controls. The explicit FIML L-BFGS/SLSQP policy runs two stages and now counts both.\n\n",max(pinned$objective_gap)))
+  oracle <- read_optimizer("oracle_controls")
+  cat("The reference is fitted in known uniform data units, then its means/covariance are transported back and checked against the original likelihood. Fixed unit loadings and homogeneous mean constraints describe the same model under this transformation. Raw-unit lavaan attempts are also retained. In the preserved v3 confirmation, raw-unit lavaan stopped about 0.000222 above both native backends on one scale-100 draw; independently normalizing that reference closes the gap below $1.2\\times10^{-13}$. The original failed comparison gate remains frozen. This changes reference controls, not the native fit or comparison tolerance.\n\n")
+  oracle_summary <- do.call(rbind,lapply(split(oracle,oracle$scale),function(z)
+    data.frame(`Unit multiplier`=z$scale[1],References=nrow(z),
+      `Largest raw-reference gap`=max(abs(z$raw_fmin-z$reference_fmin)),
+      `Largest transported-likelihood gap`=max(abs(z$transported_objective-z$reference_fmin)),
+      check.names=FALSE)))
+  print(knitr::kable(oracle_summary,digits=10,row.names=FALSE))
+  cat("\nEarlier confirmations also exposed an R ownership defect during serialization and expensive automatic inference at a rejected ML2S endpoint. Sample-mean lists now remain protected across allocations; automatic ML2S inference requires the C++ fit verdict to pass. Failed fits still own the stage inputs needed for explicit audits. The crash, terminated tail calculation and failed reference comparison are retained in the execution register and partial/full attempt CSVs. Noncentral chi-square tail cost remains a separate follow-up.\n\n")
+  metadata <- read_optimizer("metadata")
+  cat(sprintf("\nThe complete final run took %.2f seconds; summed native fit-call time was %.2f seconds, including existing post-fit work. Per-attempt function/gradient counts, all NLopt adapter fields and oracle iterations are retained. These sequential timings do not rank fitting engines.\n\n",as.numeric(metadata$value[metadata$key=="seconds"]),sum(fits$seconds)))
+  cat("## What the repair explains\n\nOn the retained Little corpus data, the equality formulation previously constructed latent starting variances around $10^{14}$ and stopped at an objective above 124, while its explicitly fixed equivalent converged at about 0.7142. The constraint reduction already described the correct feasible model; recognizing its fully pinned rows before measurement/scale construction repairs the start. The corpus result corresponds to chi-square about 537.10; it is a reconstructed witness of the reported mechanism, not a replay of the supplement's particular draw with chi-square 271.\n\n")
+  cat("The scalar variance domain probe still exposes the generic L-BFGS limitation: variances 1 and 0.01 solve, but variance $10^{-6}$ aborts after 12 evaluations from ten times its optimum, despite a budget of 5,000. Expressing that same scalar objective in variance units solves the diagnostic example. The adapter adds no retry, finite penalty, longer line search or new optimizer default. Candidate retention makes the failure reviewable; it does not recover it.\n\n")
+  if(nrow(retained)) {
+    losses <- retained[!is.na(retained$fit_passed)&!retained$fit_passed,]
+    cat(sprintf("All %d mixed-unit ML2S attempts now return endpoints; %d remain rejected. The NT and DLS comparisons use the same Stage-1 inputs. Separate owning Stage-1/handoff/Stage-2 audits are retained, so backend telemetry cannot supply a composite pass.\n\n",nrow(retained),nrow(losses)))
+  }
+  cat("## Scope and next work\n\nThis banks a start-construction repair and finite NLopt candidate retention. It leaves safeguarded domain recovery, complete fallback histories, uniform backend telemetry and outer-loop stopping open on TASK-33.10.5. Identification, broader starts and numerical/default adoption keep their own cards. The local Newton budget $d\\leq0.01$ remains an explicit diagnostic, rather than a new production acceptance policy; there is no new propagated construction interval or inference/PSD claim. An existing explicit PSD fallback retains its prior original-start behavior after a nonstationary budget/domain stop.\n\nEvery confirmation attempt, loss, cost, caller-control check and independent objective comparison is retained in compact CSVs. Raw observations and fitted objects remain local. The focused native gate passed 201 cases (4,322 assertions); candidate/ownership R tests passed 35 expectations and the existing ML2S audit tests passed 20. Other completed report lanes remain selectable.\n\n")
+  cat("## Reproduce\n\nUse matching isolated-worktree bindings and the optional textbook corpus; choose a fresh run ID.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --optimizer-audit --smoke --run-id optimizer-smoke-new\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --optimizer-audit --reps 2 --seed-base 865081601 --textbook-root /path/to/external/textbook-corpus --run-id optimizer-confirm-new\nquarto render report.qmd -P lane:optimizer_audit -P optimizer_run:optimizer-confirm-new\n```\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "ml2s_audit")) {
   read_ml2s <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))

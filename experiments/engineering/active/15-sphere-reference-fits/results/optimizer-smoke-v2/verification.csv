@@ -1,0 +1,6 @@
+"check","passed"
+"required_endpoints_return",TRUE
+"pinned_reference_optima",TRUE
+"early_candidates_fail",TRUE
+"early_controls_exact",TRUE
+"original_ml_objectives",TRUE

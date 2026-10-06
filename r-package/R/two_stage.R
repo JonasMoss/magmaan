@@ -134,7 +134,10 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
       if (identical(covariance_policy, "ordinary")) "unrestricted" else covariance_policy,
       barrier = if (identical(covariance_policy, "barrier")) barrier else NULL,
       algorithm = optimizer %||% if (identical(covariance_policy, "psd")) "nlopt-slsqp" else "nlopt-lbfgs")
-  if (identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
+  # Use the C++ fit verdict before composing automatic inference. A failed
+  # candidate still owns its moments/weights for explicit numerical auditing;
+  # post-fit tail calculations can be prohibitively costly far from an optimum.
+  if (isTRUE(fit$converged) && identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
     correction <- estimate_two_stage_em_ml_inference(
       fit, raw_data, h_step = h_step,
       stage2_weight = stage2_weight, dls_a = dls_a)

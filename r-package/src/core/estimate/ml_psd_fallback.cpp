@@ -13,6 +13,11 @@ bool accepted(const fit_expected<Estimates>& fit) {
 }
 
 bool usable_start(const Estimates& fit, Eigen::Index n) {
+  // Candidate retention must not silently add a warm-start policy for the
+  // soft exits that previously returned errors. Keep their original x0 path.
+  if (!fit.audit.stationary &&
+      (fit.optimizer_status == optim::OptimStatus::BudgetExhausted ||
+       fit.optimizer_status == optim::OptimStatus::LineSearchFailed)) return false;
   return fit.theta.size() == n && fit.theta.allFinite() &&
       std::isfinite(fit.fmin) && fit.diagnostics.sigma_pd_all &&
       fit.diagnostics.lin_eq_satisfied && fit.diagnostics.nl_eq_satisfied;

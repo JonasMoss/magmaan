@@ -363,17 +363,86 @@ TEST_CASE("NloptOptimizer/LBFGS — solves the Rosenbrock function") {
 // budget/forwarding cases in port_optimizer_test.cpp.
 // ============================================================================
 
-TEST_CASE("NloptOptimizer — evaluation budget exhaustion is an error value") {
+TEST_CASE("NloptOptimizer — evaluation budget exhaustion retains a failed candidate") {
   // max_iter forwards to nlopt_set_maxeval (a function-eval budget). Five evals
   // on Rosenbrock from the canonical far start cannot reach a stationary point,
-  // so the MAXEVAL_REACHED + non-stationary branch must surface a value-typed
-  // OptimizerNonConvergence rather than a salvaged result. Mirrors the PORT
-  // budget-exhaustion case.
+  // The budget stop must retain the evaluable point without promoting it.
   NloptOptimizer opt({/*max_iter=*/5, 1e-12, 1e-8, 10}, NloptAlgorithm::Lbfgs);
   Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
   auto out = opt.minimize(rosenbrock_objective(), x0);
+  REQUIRE(out.has_value());
+  CHECK(out->status == magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK(out->raw_status == 5);
+  CHECK(out->audit.raw_backend_status == 5);
+  CHECK_FALSE(out->audit.stationary);
+  CHECK(out->audit.f_finite);
+  CHECK(out->audit.f_consistent);
+  REQUIRE(out->audit.nlopt_controls.has_value());
+  CHECK(out->audit.nlopt_controls->max_eval == 5);
+  CHECK(out->audit.nlopt_controls->ftol_rel == 1e-12);
+  CHECK(out->audit.nlopt_controls->xtol_rel == 1e-8);
+}
+
+TEST_CASE("NloptOptimizer — domain abort retains the original variance objective") {
+  constexpr double s = 1e-6;
+  auto f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = Eigen::VectorXd::Zero(1);
+    if (x(0) <= 0.0) return std::numeric_limits<double>::infinity();
+    g(0) = 1.0 / x(0) - s / (x(0) * x(0));
+    return std::log(x(0) / s) + s / x(0) - 1.0;
+  };
+  auto out = NloptOptimizer({}, NloptAlgorithm::Lbfgs)
+                 .minimize(f, Eigen::VectorXd::Constant(1, 10.0 * s));
+  REQUIRE(out.has_value());
+  CHECK(out->audit.f_consistent);
+  CHECK(out->theta_hat(0) > 0.0);
+  if (out->raw_status < 0) {
+    CHECK(out->status == magmaan::optim::OptimStatus::LineSearchFailed);
+    CHECK_FALSE(out->audit.stationary);
+  }
+  Eigen::VectorXd g(1);
+  CHECK(out->fmin == f(out->theta_hat, g));
+  // Same objective in variance units; this is a diagnostic coordinate change,
+  // not an adapter retry or a modification of caller stopping controls.
+  auto scaled = [&](const Eigen::VectorXd& z, Eigen::VectorXd& grad) {
+    double value = f(s * z, grad);
+    grad *= s;
+    return value;
+  };
+  auto normalized = NloptOptimizer({}, NloptAlgorithm::Lbfgs)
+      .minimize(scaled, Eigen::VectorXd::Constant(1, 10.0));
+  REQUIRE(normalized.has_value());
+  CHECK(normalized->theta_hat(0) == doctest::Approx(1.0).epsilon(1e-6));
+  CHECK(normalized->audit.stationary);
+}
+
+TEST_CASE("NloptOptimizer — an unevaluable endpoint remains a hard error") {
+  auto invalid = [](const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    grad = Eigen::VectorXd::Zero(x.size());
+    return std::numeric_limits<double>::infinity();
+  };
+  auto out = NloptOptimizer({}, NloptAlgorithm::Lbfgs)
+      .minimize(invalid, Eigen::VectorXd::Ones(1));
   REQUIRE_FALSE(out.has_value());
-  CHECK(out.error().kind == FitError::Kind::OptimizerNonConvergence);
+  CHECK(out.error().kind == FitError::Kind::NonFiniteObjective);
+}
+
+TEST_CASE("NLopt fallback retains a failed candidate and counts both stages") {
+  ScalarProblem prob;
+  prob.n_param = 2;
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.f = rosenbrock_objective();
+  magmaan::optim::OptimOptions opts;
+  opts.nlopt.max_eval = 1;
+  Eigen::VectorXd x0(2); x0 << -1.2, 1.0;
+  auto out = magmaan::optim::nlopt_lbfgs_slsqp_fallback(prob, x0, {}, opts);
+  REQUIRE(out.has_value());
+  CHECK(out->status == magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK(out->f_evals == 2);
+  CHECK(out->g_evals == 2);
+  CHECK_FALSE(out->audit.stationary);
+  CHECK(out->audit.raw_backend_status == 5);
+  CHECK(out->audit.nlopt_controls->max_eval == 1);
 }
 
 TEST_CASE("NloptOptimizer — ftol is forwarded (looser tolerance stops less optimally)") {
@@ -487,9 +556,11 @@ TEST_CASE("NLopt fallback scopes Luksan controls to the first stage") {
   prob.n_param = 2;
   Eigen::VectorXd x0(2); x0 << -1.2, 1;
   auto result = magmaan::optim::nlopt_lbfgs_slsqp_fallback(prob, x0, {}, opts);
-  REQUIRE_FALSE(result.has_value());
-  CHECK(result.error().detail.find("SLSQP fallback") != std::string::npos);
-  CHECK(result.error().detail.find("supported only") == std::string::npos);
+  REQUIRE(result.has_value());
+  CHECK(result->status == magmaan::optim::OptimStatus::BudgetExhausted);
+  CHECK(result->f_evals == 2);
+  CHECK_FALSE(result->audit.nlopt_controls->tolg.has_value());
+  CHECK_FALSE(result->audit.nlopt_controls->vector_storage.has_value());
   opts.nlopt.tolg = -1;
   auto invalid = magmaan::optim::nlopt_lbfgs_slsqp_fallback(prob, x0, {}, opts);
   REQUIRE_FALSE(invalid.has_value());
