@@ -1,5 +1,8 @@
 # magmaan 0.2.0 (in development)
 
+- Test-table `recommended` marks only the primary policy test with its default
+  references. LR rows remain printed by default but are never recommended.
+
 - Ordinary `summary()` and `anova()` now accept `references` for simulation
   studies, reusing the policy statistic and spectrum through lab C++ calibration.
   Test tables have uniform base columns `test`, `statistic`, `df`, `reference`,

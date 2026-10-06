@@ -387,6 +387,11 @@ ordinary API exposes barrier fitting experimentally as
   accepts the shared fixed-name and EBA/pEBA block grammar. Default p-values,
   compatibility metadata and nested recovery are retained.
 
+- [x] **M — primary-policy test recommendations (task-96).**
+  Recommended rows select only the primary policy test and its default laws;
+  LR remains reported with its caveat. Global/nested gates cover ML, FIML,
+  all-ordinal and mixed DWLS, including exact native policy p-values.
+
 #### ML and FIML
 
 - [x] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**

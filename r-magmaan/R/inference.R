@@ -195,7 +195,8 @@ infer <- function(fit, lavaan_compat = NULL) {
     p[known] <- stored[methods[known]]
   }
   out <- data.frame(test = label, statistic = t$statistic, df = t$df,
-    reference = methods, pvalue = unname(p), recommended = methods %in% defaults,
+    reference = methods, pvalue = unname(p), recommended = label %in% c("score", "fit_function", "fit_function_difference") &
+      methods %in% defaults,
     reason = NA_character_, stringsAsFactors = FALSE)
   attr(out, "peba_blocks") <- rep(as.integer(t$peba_blocks %||% 0L), nrow(out))
   out

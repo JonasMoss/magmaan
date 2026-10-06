@@ -247,7 +247,11 @@ print.magmaan <- function(x, ...) {
 #' `score`, `lr`, `fit_function`, `fit_function_difference`. Unavailable tests retain one
 #' row with missing reference and p-value and a typed reason. Select rows by
 #' `test` and `reference`; migrate `p.sb`/`p.peba4` to `pvalue` on the corresponding
-#' rows. `recommended` marks default laws. Requested references are all printed.
+#' rows. `recommended` is TRUE only for the policy's recommended p-values: score
+#' with SB/PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
+#' The likelihood-ratio test is reported because it is the standard statistic,
+#' not recommended; `references = "std"` gives its plain chi-square p-value.
+#' All rows are printed, including LR rows with the small-sample caveat.
 #' EBA/pEBA partition the retained spectrum (including zero eigenvalues) into
 #' blocks of size `ceiling(df / k)`; when `k >= df`, blocks are singletons.
 #' EBA then equals All, and pEBA equals pAll. References cannot be combined
@@ -289,8 +293,6 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   if (!is.null(x$tests)) {
     cat("\nGlobal tests against the saturated model\n")
     t <- x$tests
-    if (is.null(x$references) && is.null(fit$inference$lavaan_compat))
-      t <- t[t$recommended | !is.na(t$reason), , drop = FALSE]
     num <- vapply(t, is.numeric, logical(1))
     t[num] <- lapply(t[num], function(v) round(v, digits))
     .print_test_table(t)
@@ -395,7 +397,11 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' See [summary.magmaan()] for the reference grammar and uniform base columns.
 #' Each available nested test has one row per reference; an unavailable test
 #' retains one row with its typed `reason` and missing `reference`/`pvalue`.
-#' Defaults are SB and PEBA4. `recommended` identifies default laws. Alternatives
+#' Defaults are SB and PEBA4. `recommended` is TRUE only for the policy's
+#' recommended p-values: score with SB/PEBA4 for ML/FIML, or
+#' fit_function_difference with SB/PEBA4 for DWLS. The likelihood-ratio test
+#' is reported because it is the standard statistic, not recommended;
+#' `references = "std"` gives its plain chi-square p-value. Alternatives
 #' use the same policy statistic and retained nested spectrum (`spectra` attribute),
 #' including after recovery. Select by `test` and `reference` rather than position.
 #' References cannot be combined with `lavaan_compat`.
@@ -512,8 +518,6 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
       attr(x, "alternative"), "\n", sep = "")
   if (!is.null(attr(x, "lavaan_compat"))) cat("lavaan compatibility: ", attr(x, "lavaan_compat"), "\n", sep = "")
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
-  if (is.null(attr(x, "references")) && is.null(attr(x, "lavaan_compat")))
-    t <- t[t$recommended | !is.na(t$reason), , drop = FALSE]
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
   .print_test_table(t)

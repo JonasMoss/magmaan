@@ -56,7 +56,11 @@ retry is unsuccessful. An unsuccessful retry retains the failure.
 See \code{\link[=summary.magmaan]{summary.magmaan()}} for the reference grammar and uniform base columns.
 Each available nested test has one row per reference; an unavailable test
 retains one row with its typed \code{reason} and missing \code{reference}/\code{pvalue}.
-Defaults are SB and PEBA4. \code{recommended} identifies default laws. Alternatives
+Defaults are SB and PEBA4. \code{recommended} is TRUE only for the policy's
+recommended p-values: score with SB/PEBA4 for ML/FIML, or
+fit_function_difference with SB/PEBA4 for DWLS. The likelihood-ratio test
+is reported because it is the standard statistic, not recommended;
+\code{references = "std"} gives its plain chi-square p-value. Alternatives
 use the same policy statistic and retained nested spectrum (\code{spectra} attribute),
 including after recovery. Select by \code{test} and \code{reference} rather than position.
 References cannot be combined with \code{lavaan_compat}.

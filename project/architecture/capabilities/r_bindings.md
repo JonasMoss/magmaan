@@ -544,6 +544,10 @@ vector selects std/sb/ss/mv/scaled_f/all/pall or eba<k>/peba<k> through lab
 Test codes are `score`, `lr`, `fit_function`, `fit_function_difference`; print
 methods show readable labels. Defaults
 retain the recorded p-values exactly; unavailable tests keep one typed row.
+`recommended` selects primary policy p-values: ML/FIML score SB/PEBA4, DWLS
+global fit_function All, and DWLS nested fit_function_difference SB/PEBA4.
+LR, compatibility and unavailable rows are never recommended. Default printing
+retains every row, including LR with its small-sample caveat.
 Compatibility appends unscaled.statistic/scale/shift, uses lavaan's method
 name and disallows references. Nested results retain spectra after recovery.
 The reporting-reference gates cover ML, MAR FIML, ordinal and mixed DWLS,

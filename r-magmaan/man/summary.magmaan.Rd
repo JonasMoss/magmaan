@@ -40,7 +40,11 @@ and All for DWLS global tests. The base columns are \code{test}, \code{statistic
 \code{score}, \code{lr}, \code{fit_function}, \code{fit_function_difference}. Unavailable tests retain one
 row with missing reference and p-value and a typed reason. Select rows by
 \code{test} and \code{reference}; migrate \code{p.sb}/\code{p.peba4} to \code{pvalue} on the corresponding
-rows. \code{recommended} marks default laws. Requested references are all printed.
+rows. \code{recommended} is TRUE only for the policy's recommended p-values: score
+with SB/PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
+The likelihood-ratio test is reported because it is the standard statistic,
+not recommended; \code{references = "std"} gives its plain chi-square p-value.
+All rows are printed, including LR rows with the small-sample caveat.
 EBA/pEBA partition the retained spectrum (including zero eigenvalues) into
 blocks of size \code{ceiling(df / k)}; when \code{k >= df}, blocks are singletons.
 EBA then equals All, and pEBA equals pAll. References cannot be combined

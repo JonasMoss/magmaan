@@ -128,7 +128,12 @@ data frame with \code{test}, \code{statistic}, \code{df}, \code{reference}, \cod
 \code{recommended}, and \code{reason}.
 Unavailable tests retain a row with their typed reason. See \code{\link[=summary.magmaan]{summary.magmaan()}}
 for alternative reference laws in simulation studies. The score test is primary
-and comes first; the likelihood-ratio test follows
+and comes first. \code{recommended} is TRUE only for the policy's recommended
+p-values: score with SB/PEBA4 for ML/FIML, fit_function with All for DWLS
+global tests, and fit_function_difference with SB/PEBA4 for DWLS nested tests.
+The likelihood-ratio test is reported because it is the standard statistic,
+not recommended; \code{references = "std"} gives its plain chi-square p-value.
+The likelihood-ratio test follows
 and tends to over-reject when N is small relative to its df.
 Store both package versions with simulation results. Saved fits retain their
 estimates and inference; reusing them with another package version is not a

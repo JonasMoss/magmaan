@@ -59,7 +59,7 @@ test_that("global and nested references reuse policy spectra across regimes and 
       defaults <- if (estimator == "DWLS") "all" else c("sb", "peba4")
       expect_reference_rows(global, native_global$score,
         if (estimator == "DWLS") "fit_function" else "score", defaults)
-      expect_reference_rows(global, native_global$lr, "lr", c("sb", "peba4"))
+      expect_reference_rows(global, native_global$lr, "lr", character())
       default_global <- summary(h0)$tests
       for (component in c("score", "lr")) {
         t <- native_global[[component]]
@@ -77,7 +77,8 @@ test_that("global and nested references reuse policy spectra across regimes and 
       expect_true(native_nested$lr$available, info = native_nested$lr$detail)
       expect_reference_rows(nested, native_nested$score, "score", c("sb", "peba4"))
       expect_reference_rows(nested, native_nested$lr,
-        if (estimator == "DWLS") "fit_function_difference" else "lr", c("sb", "peba4"))
+        if (estimator == "DWLS") "fit_function_difference" else "lr",
+        if (estimator == "DWLS") c("sb", "peba4") else character())
       expect_identical(attr(nested, "spectra"), lapply(native_nested[c("score", "lr")], function(t) t$eigenvalues))
       default_nested <- anova(h1, h0)
       for (component in c("score", "lr")) {
@@ -86,6 +87,26 @@ test_that("global and nested references reuse policy spectra across regimes and 
         label <- if (component == "score") "score" else
           if (estimator == "DWLS") "fit_function_difference" else "lr"
         expect_identical(default_nested$pvalue[default_nested$test == label], c(t$p_sb, t$p_peba4))
+      }
+      for (pair in list(list(global, default_global, native_global,
+                            if (estimator == "DWLS") "fit_function" else "score"),
+                       list(nested, default_nested, native_nested,
+                            if (estimator == "DWLS") "fit_function_difference" else "score"))) {
+        component <- if (pair[[4]] == "fit_function_difference") "lr" else "score"
+        native <- pair[[3]][[component]]
+        laws <- if (identical(native$reference, "all")) "all" else c("sb", "peba4")
+        for (rows in pair[1:2]) {
+          selected <- subset(rows, recommended)
+          expect_identical(selected$test, rep(pair[[4]], length(laws)))
+          expect_identical(selected$reference, laws)
+          expect_identical(selected$pvalue, if (identical(laws, "all")) native$p_all else
+            c(native$p_sb, native$p_peba4))
+          expect_false(any(rows$recommended[rows$test == "lr"]))
+        }
+      }
+      if (estimator != "DWLS") {
+        expect_output(print(summary(h0)), "likelihood ratio")
+        expect_output(print(default_nested), "likelihood ratio")
       }
       bundle <- if (estimator == "DWLS") "WLSMV" else "MLR"
       compat_summary <- summary(h0, lavaan_compat = bundle)
@@ -122,6 +143,7 @@ test_that("references are validated even for unavailable tests and printing show
   z <- summary(saturated, references = reference_names)$tests
   expect_equal(nrow(z), 2L)
   expect_identical(z$reason, rep("saturated", 2L))
+  expect_false(any(z$recommended))
   compat <- summary(saturated, lavaan_compat = "MLR")$tests
   expect_equal(nrow(compat), 1L)
   expect_identical(compat$reason, "saturated")
