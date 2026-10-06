@@ -377,6 +377,9 @@ all-ordinal/mixed DWLS through `api::policy_modification_indices()`, with
 optional `test = "lr"` refits via lab `policy_mi_refit()` and the nested
 policy (TASK-99). ML/FIML candidates whose observed efficient curvature is not
 positive are typed `numeric_failure` until TASK-106; regressions are TASK-105.
+`summary(fit, standardized = TRUE)` adds std.lv/std.all estimates with
+delta-method SEs from the active covariance and an R-squared table (lab
+`standardized_rows()`), lavaan-gated at matching covariance (TASK-98).
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
