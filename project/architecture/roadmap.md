@@ -354,7 +354,9 @@ its retained spectrum, so simulation studies compare tests in `magmaan` alone
 (TASK-95). Default rows and p-values are unchanged. `recommended` marks only
 the policy's primary test (score, or the DWLS fit-function statistic) with its
 default references; the likelihood-ratio rows are reported because they are
-standard, never recommended (TASK-96).
+standard, never recommended (TASK-96). ML and FIML policy tests default to
+PEBA4 alone (user decision 2026-10-06; SB stays a `references` comparator),
+so their default tables hold one row per test (TASK-97).
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
