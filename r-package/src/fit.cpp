@@ -6240,6 +6240,60 @@ Rcpp::List evaluate_at_impl(
   return out;
 }
 
+// Owning pattern artifacts permit checking the observed-data objective without
+// borrowing fit-time external pointers; serialized fits can rebuild the pack.
+// [[Rcpp::export]]
+Rcpp::List frontier_fiml_newton_audit_impl(
+    Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  if (!fit.containsElementNamed("raw_data") ||
+      Rcpp::as<std::string>(fit["estimator"]) != "FIML")
+    Rcpp::stop("requires a direct FIML fit with raw_data");
+  auto raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack) stop_fit(pack.error());
+  const Eigen::VectorXd point = theta.isNull() ? est.theta
+      : Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(theta.get()));
+  auto audit = magmaan::estimate::frontier::audit_newton_fiml(
+      ctx.pt, ctx.rep, raw, *pack, point);
+  if (!audit) stop_fit(audit.error());
+  Rcpp::List patterns(pack->cache.patterns.size());
+  for (std::size_t i = 0; i < pack->cache.patterns.size(); ++i) {
+    const auto& p = pack->cache.patterns[i];
+    Rcpp::IntegerVector observed(p.observed.size());
+    for (std::size_t j = 0; j < p.observed.size(); ++j)
+      observed[j] = static_cast<int>(p.observed[j] + 1);
+    patterns[i] = Rcpp::List::create(
+        Rcpp::_["block"] = static_cast<int>(p.block + 1),
+        Rcpp::_["observed"] = observed,
+        Rcpp::_["n_obs"] = static_cast<double>(p.n_obs),
+        Rcpp::_["mean"] = Rcpp::wrap(p.mean),
+        Rcpp::_["cov"] = Rcpp::wrap(p.cov));
+  }
+  const auto& a = *audit;
+  magmaan::estimate::Estimates at; at.theta = point;
+  const auto native = magmaan::compat::lavaan::to_lavaan_partable(
+      ctx.pt, ctx.names, magmaan::spec::Starts{});
+  // This complete-moment certificate entry point rejects the FIML objective
+  // kind explicitly; pairwise start statistics never stand in for its data.
+  const auto source = magmaan::estimate::frontier::newton_input_error_bounds(
+      ctx.pt, ctx.rep, pack->start_stats, point, a, magmaan::estimate::Estimator::ML);
+  return Rcpp::List::create(
+      Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
+      Rcpp::_["objective"] = a.derivatives.objective,
+      Rcpp::_["n_obs"] = a.derivatives.n_obs,
+      Rcpp::_["gradient"] = Rcpp::wrap(a.derivatives.gradient),
+      Rcpp::_["hessian"] = Rcpp::wrap(a.derivatives.hessian),
+      Rcpp::_["derivative_basis"] = Rcpp::wrap(
+          (a.geometry.equality_basis * a.geometry.tangent_basis).eval()),
+      Rcpp::_["theta"] = Rcpp::wrap(point),
+      Rcpp::_["partable"] = partable_df_from_lavaan(native, &at),
+      Rcpp::_["patterns"] = patterns,
+      Rcpp::_["construction_status"] = std::string(magmaan::estimate::to_string(source.status)),
+      Rcpp::_["construction_detail"] = source.detail);
+}
+
 // Opt-in numerical point audit of the original, unprofiled ordinal LS
 // objective. Prepared model/statistics and analytic derivatives stay in core.
 // [[Rcpp::export]]

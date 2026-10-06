@@ -1,7 +1,10 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: sparse_search
+  lane: fiml_audit
+  fiml_run: fiml-audit-confirm-v2
+  fiml_retained: fiml-audit-retained-v2
+  fiml_challenge: fiml-audit-confirm-v1
   sparse_run: sparse-search-confirm-v2
   sparse_retained: sparse-search-retained-v5
   ordinal_run: ordinal-audit-confirm-v2
@@ -45,6 +48,48 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "fiml_audit")) {
+  read_fiml <- function(run,name) {
+    path <- file.path("results",run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing FIML evidence: ",path,
+      "; run --ordinary --fiml-audit --run-id ",run)
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  for(run in c(params$fiml_run,params$fiml_retained)) {
+    gate <- read_fiml(run,"verification")
+    if(any(gate$failed!=0))stop("FIML verification failed: ",run)
+  }
+  fits <- read_fiml(params$fiml_run,"fits")
+  points <- read_fiml(params$fiml_run,"comparisons")
+  retained <- read_fiml(params$fiml_retained,"fits")
+  old <- read_fiml(params$fiml_challenge,"fits")
+  old_gate <- read_fiml(params$fiml_challenge,"verification")
+  metadata <- read_fiml(params$fiml_run,"metadata")
+  reference <- read_fiml(params$fiml_run,"reference_metadata")
+  ridge <- read_fiml(params$fiml_run,"scale_ridge_checks")
+  normal <- fits[fits$arm!="early",]
+  cat("## Question\n\nDoes ordinary direct FIML evaluate and audit the actual observed-pattern likelihood correctly, including means, missingness, unequal groups and changed units?\n\n")
+  cat(sprintf("## Short answer\n\nBank the numerical likelihood and local-audit integration within the declared identified model scope. All %d fresh point checks and their pattern counts/means/covariances agree with independent 90-digit calculations; eight complete-data checks reduce to ML. All 16 actual-default fits pass, while standalone SLSQP passes 15/16, leaving one mixed-unit endpoint above budget. All eight deliberate early stops return errors without candidate artifacts.\n\n",nrow(points)))
+  cat("This does not bank general fitting reliability. The earlier unit and weak-marker failures remain saved. Releasing the factor marker produces an exact scale ridge that can pass the raw local Newton test; its identification is explicitly unchecked and it supplies no identified-bank pass. Starts, stopping, identification and default adoption retain their own cards.\n\n")
+  cat("## Evidence\n\n")
+  evidence <- do.call(rbind,lapply(split(normal,normal$family),function(x) {
+    result <- function(arm) {z <- x[x$arm==arm,];sprintf("%d/%d",sum(z$returned & z$fit_passed,na.rm=TRUE),nrow(z))}
+    data.frame(Family=x$family[1],`Actual default`=result("default"),SLSQP=result("slsqp"),check.names=FALSE)
+  }))
+  cat(knitr::kable(evidence),sep="\n")
+  cat("\n\nEach family has two fresh draws. Both arms use identical actual public FABIN3 starts; no start tuning or polishing is added. The default uses L-BFGS with its existing SLSQP fallback. The shared 1000-evaluation budget and default tolerances remain fixed. PORT is rejected by this route. All returned fits, failures, backend counts and fit times are retained; these small engineering runs do not rank optimizers or select defaults.\n\n")
+  loss <- points[points$target=="terminal" & points$arm=="slsqp" & points$passed=="FALSE",]
+  cat(sprintf("The sole fresh SLSQP loss is fit %d, mixed-unit case %d, with observed-information Newton distance %.3f versus the native 0.01 budget. The paired default passes. The earlier challenge retains four unit and two weak-marker above-budget endpoints, two weak-marker SLSQP budget errors, and eight early-stop errors. The development replay retains one weak-marker default failure that SLSQP passes. None is discarded because the later draws are easier.\n\n",loss$fit_id,loss$case_id,as.numeric(loss$reference_distance)))
+  cat("Actual raw rows independently reproduce every pattern selection, count, mean and divisor-N covariance, including singleton observations. Reversed named columns preserve the objective. Empty observed rows, nonfinite observed values and missing joint-observation pairs reject explicitly; the latter is a current pack-construction limit. Sparse-information and zero-loading saddle points reject, as does an invalid observed covariance. The focused native tests pass 71 cases/2016 assertions, including 17/17 FIML lavaan goldens; the live R/lavaan FIML example also passes. Serialized fits rebuild the pack, and returned artifacts remain valid after fit removal under a bounded garbage-collection stress check.\n\n")
+  cat(sprintf("The fresh fitting/artifact phase took %.2f seconds and the independent reference %.1f seconds with one math thread. Summed fit time was %.3f seconds across 40 attempts. These short sequential timings do not establish a speed ranking.\n\n",as.numeric(metadata$value[metadata$key=="elapsed_s"]),reference$elapsed_s,sum(fits$seconds)))
+  cat("## Likelihood and audit convention\n\nFor each group-pattern $b$, let $n_b$ be its row count, $C_b$ its divisor-$n_b$ covariance, and $m_b=\\mu_{o_b}-\\bar x_b$. The evaluated per-row objective, omitting the normal constant, is\n\n$$f(\\theta)=\\frac{1}{2N}\\sum_b n_b\\{\\log|\\Sigma_{o_b o_b}|+\\operatorname{tr}(\\Sigma_{o_b o_b}^{-1}C_b)+m_b^\\top\\Sigma_{o_b o_b}^{-1}m_b\\}.$$\n\nThe independent reference rebuilds moments and their analytic first/second derivatives from the prepared model and exact binary64 inputs. Total-likelihood gradient and observed Hessian are reduced by the retained linear-equality basis. The conditional local distance is $\\sqrt{G^\\top H^{-1}G}$ when the reduced observed curvature is positive. This is a numerical endpoint check, not a sampling covariance or a calibrated inferential quantity. Complete-data ML differs by its accounted saturated-objective constant; gradients and observed curvature agree at the same points.\n\n")
+  cat("Pairwise-complete statistics supply starts and existing information-coordinate preconditioning; they never replace the observed-pattern likelihood. Full raw-sample unit normalization is still separate work. This study checks the current unit handling rather than implementing a new normalization or numerical regularization.\n\n")
+  cat("## Caveats\n\nThe bank covers conditional points and bounded ordinary fits for single-level joint normal models with means, linear shared loadings and unequal groups under complete, MCAR and MAR masks. It provides no propagated pattern-construction error interval; construction status remains `unsupported` at every point. Missing fixed-x, multilevel, nonlinear constraints, active bounds, sphere/PSD/barrier geometry and inference calibration inherit no pass. There is no global optimum or broad weak-data reliability claim.\n\n")
+  cat(sprintf("The scale-ridge control retains raw local pass = %s. Independently multiplying all factor loadings by 1.25 and dividing factor variance by $1.25^2$ preserves implied means/covariances to %.2g, and the moment Jacobian annihilates the corresponding scale direction. TASK-33.3 must supply a separate identification gate; this study implements no such guard. The original challenge's negative-control gate failed %d time and remains frozen. The final report scope explicitly excludes this proved unidentified model, without relabeling its raw local verdict.\n\n",ridge$raw_newton_passed,as.numeric(ridge$scale_invariance_error),sum(old_gate$failed)))
+  cat("Before fresh confirmation, the independent reference was corrected to retain second derivatives at zero-loading saddles: zero first derivatives do not imply zero second derivatives. The corrected development replay agrees at all 37 points while preserving its failed fit. Fresh confirmation uses a new seed and the corrected frozen reference. Earlier failed checks remain local or frozen as described; no native audit tolerance or fitting setting was changed to obtain agreement.\n\n")
+  cat("## Reproduce\n\nUse matching isolated-worktree bindings and Python with mpmath 1.3.0; choose fresh run IDs. Compact per-attempt judgments, reference checks and provenance are frozen to retain every failure and the earlier failed identification-control gate. Raw samples, full matrices and serialized fits remain ignored.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --fiml-audit --smoke --run-id fiml-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --fiml-audit --reps 2 --seed-base 865061401 --run-id fiml-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:fiml_audit -P fiml_run:fiml-confirm-new\n```\n\nRecreate the development and earlier challenge inputs with seed bases 865061201 (one replicate) and 865061301 (two), respectively. The retained-v2 bank is a reference-only replay of the development CSV inputs; its metadata preserves the original source fingerprints alongside the corrected reference fingerprint. Reopen integration for a pattern/moment/derivative mismatch, an unexplained local verdict within the declared scope, or a new domain/construction certificate. Next bank ML2S Stage-1/handoff composition; the concrete FIML start/stop and identification witnesses continue on their separate cards. Other report lanes remain selectable.\n\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "sparse_search")) {
   read_sparse <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))

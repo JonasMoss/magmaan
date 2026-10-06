@@ -6,7 +6,10 @@ if ("--ordinary" %in% args) {
   source(file.path(here, "../../../_support/R/helpers.R"))
   set_single_threaded_math()
   for (file in c("designs.R", "fit.R", "ordinary_program.R")) source(file.path(here, "R", file))
-  if ("--ordinal-audit" %in% args) {
+  if ("--fiml-audit" %in% args) {
+    source(file.path(here,"R/fiml_audit.R"))
+    run_fiml_audit(args,here)
+  } else if ("--ordinal-audit" %in% args) {
     source(file.path(here,"R/ordinal_audit.R"))
     run_ordinal_audit(args,here)
   } else if ("--weighted-audit" %in% args) {

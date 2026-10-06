@@ -3078,6 +3078,24 @@ an unconstrained gradient test to constrained solutions.
 ### Continuous FIML
 
 - Direct observed-pattern ML over raw continuous data with missingness masks.
+- Isolated sphere-study numerical banking (2026-10-06, TASK-33.10.3) exposes
+  opt-in `magmaan_core$frontier_fiml_newton_audit()`: it rebuilds the value-based
+  pack from raw data, retaining owning pattern summaries, total gradient,
+  analytic observed Hessian, equality basis and raw local diagnostics. Serialized
+  fits need no live external pointer. Independent 90-digit checks agree at all
+  70 fresh and 37 corrected development points, including actual pattern
+  counts/means/covariances and eight complete-data ML reductions. Fresh default
+  fits pass 16/16; SLSQP passes 15/16 with one above-budget unit endpoint.
+  Earlier unit/weak-marker failures, two SLSQP budget errors and early-stop
+  errors without candidates remain witnesses for starts/stopping work. An exact
+  released-marker scale ridge can pass the raw local check; its independently
+  proved nonidentification remains explicitly unchecked, owned by TASK-33.3.
+  This banks conditional identified-model likelihood/audit integration, with
+  construction bounds explicitly unsupported; it supplies no identification
+  guard, raw-sample normalization extension, inference/default/PSD guarantee.
+  Evidence and reproduction are in
+  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  (`fiml_audit` lane).
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
 - The explicit frontier `fit_fiml_psd()` path evaluates that same cached

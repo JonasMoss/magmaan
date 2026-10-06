@@ -1,0 +1,5 @@
+"control","rejected","message"
+"unsupported_port_backend",TRUE,"magmaan fit error [NumericIssue] after 0 iters, f=0: fit_fiml: requested optimizer backend is not supported; use nlopt-lbfgs, nlopt-lbfgs-slsqp-fallback, nlopt-slsqp, or ipopt"
+"empty_observed_row",TRUE,"magmaan fit error [NumericIssue] after 0 iters, f=0: FIML: block 0 row 0 has no observed values"
+"nonfinite_observed_value",TRUE,"magmaan: raw_data$mask marks a non-finite value as observed in block 1, row 1"
+"no_joint_observations",TRUE,"magmaan fit error [NumericIssue] after 0 iters, f=0: fiml_start_sample_stats: variable pair has no joint observations"

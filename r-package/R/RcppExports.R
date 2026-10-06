@@ -245,6 +245,10 @@ evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL,
     .Call(`_magmaanlab_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
 }
 
+frontier_fiml_newton_audit_impl <- function(fit, theta = NULL) {
+    .Call(`_magmaanlab_frontier_fiml_newton_audit_impl`, fit, theta)
+}
+
 frontier_ordinal_newton_audit_impl <- function(fit, theta = NULL) {
     .Call(`_magmaanlab_frontier_ordinal_newton_audit_impl`, fit, theta)
 }
