@@ -351,7 +351,10 @@ test codes (`score`, `lr`, `fit_function`, `fit_function_difference`) and
 typed rows for unavailable tests; `references =` adds any of std, sb, ss, mv,
 scaled_f, all, pall, peba<k>, eba<k> computed from the policy statistic and
 its retained spectrum, so simulation studies compare tests in `magmaan` alone
-(TASK-95). Default rows and p-values are unchanged.
+(TASK-95). Default rows and p-values are unchanged. `recommended` marks only
+the policy's primary test (score, or the DWLS fit-function statistic) with its
+default references; the likelihood-ratio rows are reported because they are
+standard, never recommended (TASK-96).
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
