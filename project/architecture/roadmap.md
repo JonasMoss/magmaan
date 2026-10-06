@@ -481,7 +481,11 @@ input edit (`x1 x2;` brings every covariate into the joint model, as Mplus 9.1
 does; probe P-MS08b). A data-free output gate (`check_mplus_outputs.R`) checks
 groups, free parameters and df for all 130 accepted inputs among the corpus's
 1,337 Mplus outputs; it found and fixed silent label loss in consecutive
-bracket groups (means, thresholds, scales) and leaves no mismatch.
+bracket groups (means, thresholds, scales) and leaves no mismatch. A
+real-data gate (`check_mplus_real_data.R`) reads all 373 corpus input/data
+pairs with `mplus_data()`: 244 match their references (verified `raw.csv`, N,
+missing patterns, moments) and none mismatch; a terminal DOS end-of-file
+marker is accepted and an embedded one rejected, where Mplus truncates.
 
 2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
 `~*~` row is a live parameter (free, fixed at any value, equal, constrained,
