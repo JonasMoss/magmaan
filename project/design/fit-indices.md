@@ -34,8 +34,15 @@ groups RMSEA uses Steiger's (1998) multigroup definition
 $\sqrt{G\,F_0/\mathrm{df}}$, as lavaan does: the pooled discrepancy averages
 over groups while df adds over them, so without the factor $G$ identical
 groups would shrink RMSEA by $\sqrt{G}$ (found by the TASK-101 lane;
-corrected 2026-10-06). CFI and TLI need no such factor. SRMR and CRMR are
-residual summaries and need no test statistic.
+corrected 2026-10-06). CFI and TLI need no such factor. TLI uses the nominal
+df, as in its population definition; the lab's ordinal interval family uses
+traces as generalized df, which targets a distribution-dependent quantity and
+stays a lab comparator. SRMR and CRMR pool squared residuals with weights
+$n_g/N$ before the root, like the discrepancy, and get the same
+misspecification-robust bias correction,
+$\sqrt{\max(\lVert\hat r\rVert^2-\operatorname{tr}(\widehat{\mathrm{Var}}\,\hat r),0)/k}$
+in the pooled metric; lavaan's average of per-group roots stays in the
+compatibility route (TASK-101 lane questions, answered 2026-10-06).
 
 DWLS indices measure misfit in the DWLS metric. Their population values depend
 on the weight and are not comparable to ML values or to ML-derived cutoffs
