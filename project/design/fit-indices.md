@@ -29,9 +29,12 @@ $$
 \mathrm{TLI}_0=1-\frac{F_0/\mathrm{df}}{F_{0,b}/\mathrm{df}_b},
 $$
 
-with $F_{0,b}$ the population misfit of the independence baseline. (lavaan's
-multigroup RMSEA multiplies by $\sqrt{G}$; the compatibility route keeps that
-convention, and the policy route must state its own.) SRMR and CRMR are
+with $F_{0,b}$ the population misfit of the independence baseline. With $G$
+groups RMSEA uses Steiger's (1998) multigroup definition
+$\sqrt{G\,F_0/\mathrm{df}}$, as lavaan does: the pooled discrepancy averages
+over groups while df adds over them, so without the factor $G$ identical
+groups would shrink RMSEA by $\sqrt{G}$ (found by the TASK-101 lane;
+corrected 2026-10-06). CFI and TLI need no such factor. SRMR and CRMR are
 residual summaries and need no test statistic.
 
 DWLS indices measure misfit in the DWLS metric. Their population values depend
