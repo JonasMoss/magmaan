@@ -31,7 +31,7 @@ A data frame of class \code{magmaan_anova}.
 }
 \description{
 Score and likelihood-ratio tests of the restricted fit against the other,
-each calibrated with SB and PEBA4, as the global tests are. The score test
+each calibrated with PEBA4, as the global tests are. The score test
 is primary and comes first: it calibrates better, especially when N is
 small relative to the df, where the likelihood-ratio test tends to
 over-reject. Select rows by \code{test} rather than position. The restricted
@@ -56,8 +56,8 @@ retry is unsuccessful. An unsuccessful retry retains the failure.
 See \code{\link[=summary.magmaan]{summary.magmaan()}} for the reference grammar and uniform base columns.
 Each available nested test has one row per reference; an unavailable test
 retains one row with its typed \code{reason} and missing \code{reference}/\code{pvalue}.
-Defaults are SB and PEBA4. \code{recommended} is TRUE only for the policy's
-recommended p-values: score with SB/PEBA4 for ML/FIML, or
+Defaults are PEBA4 for ML/FIML and SB/PEBA4 for DWLS. \code{recommended} is TRUE only for the policy's
+recommended p-values: score with PEBA4 for ML/FIML, or
 fit_function_difference with SB/PEBA4 for DWLS. The likelihood-ratio test
 is reported because it is the standard statistic, not recommended;
 \code{references = "std"} gives its plain chi-square p-value. Alternatives

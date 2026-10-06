@@ -129,8 +129,10 @@ data frame with \code{test}, \code{statistic}, \code{df}, \code{reference}, \cod
 Unavailable tests retain a row with their typed reason. See \code{\link[=summary.magmaan]{summary.magmaan()}}
 for alternative reference laws in simulation studies. The score test is primary
 and comes first. \code{recommended} is TRUE only for the policy's recommended
-p-values: score with SB/PEBA4 for ML/FIML, fit_function with All for DWLS
+p-values: score with PEBA4 for ML/FIML, fit_function with All for DWLS
 global tests, and fit_function_difference with SB/PEBA4 for DWLS nested tests.
+Use \code{references = c("sb", "peba4")} in \code{summary()} or \code{anova()} to
+include SB alongside the ML/FIML default.
 The likelihood-ratio test is reported because it is the standard statistic,
 not recommended; \code{references = "std"} gives its plain chi-square p-value.
 The likelihood-ratio test follows

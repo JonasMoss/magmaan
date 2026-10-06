@@ -1057,7 +1057,7 @@ references in `covariance-honest-sem` and `target-specific-distinguishability`.
 `api::policy_inference_dwls` reports n F with its unchanged `robust_ordinal`
 spectrum and the exact weighted chi-square All tail (every positive sample
 eigenvalue), exposed as `reference = "all"` and `p_all`. SB/PEBA4 fields are
-unset for this component; ML/FIML and nested DWLS retain `sb_peba4`. Decision
+unset for this component; ML/FIML select `peba4`; nested DWLS retains `sb_peba4`. Decision
 study 05 compares `policy_all` with its explicit `all` arm at 1e-7 and confirmed
 it on fresh draws (2.9-6.8%).
 

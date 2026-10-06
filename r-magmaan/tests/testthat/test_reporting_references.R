@@ -30,7 +30,7 @@ expect_reference_rows <- function(rows, t, label, defaults) {
 test_that("global and nested references reuse policy spectra across regimes and groups", {
   skip_if_not_installed("lavaan")
   tables <- list()
-  for (regime in c("ML", "FIML", "ordinal", "mixed")) {
+  for (regime in c("ML", "FIML_complete", "FIML", "ordinal", "mixed")) {
     for (grouped in c(FALSE, TRUE)) {
       d <- hs()
       ord <- if (regime == "ordinal") paste0("x", 1:6) else
@@ -48,7 +48,7 @@ test_that("global and nested references reuse policy spectra across regimes and 
       spec <- function(s, null = FALSE) magmaan_model(s, prototype = d, ordered = ord,
         group = if (grouped) "school" else NULL,
         group.equal = if (grouped && null) "loadings" else NULL)
-      estimator <- if (regime %in% c("ordinal", "mixed")) "DWLS" else regime
+      estimator <- if (regime %in% c("ordinal", "mixed")) "DWLS" else if (regime == "FIML_complete") "FIML" else regime
       h1 <- magmaan(spec(syntax), d, estimator = estimator)
       h0 <- magmaan(spec(null_syntax, TRUE), d, estimator = estimator)
       expect_true(h1$lab$converged && h0$lab$converged)
@@ -56,7 +56,7 @@ test_that("global and nested references reuse policy spectra across regimes and 
       expect_identical(names(global), reference_columns)
       expect_identical(unique(global$test), if (estimator == "DWLS") c("fit_function", "lr") else c("score", "lr"))
       native_global <- magmaanlab::policy_inference(h0$lab)
-      defaults <- if (estimator == "DWLS") "all" else c("sb", "peba4")
+      defaults <- if (estimator == "DWLS") "all" else "peba4"
       expect_reference_rows(global, native_global$score,
         if (estimator == "DWLS") "fit_function" else "score", defaults)
       expect_reference_rows(global, native_global$lr, "lr", character())
@@ -67,7 +67,9 @@ test_that("global and nested references reuse policy spectra across regimes and 
         label <- if (component == "lr") "lr" else
           if (estimator == "DWLS") "fit_function" else "score"
         z <- default_global[default_global$test == label, ]
-        expected <- if (identical(t$reference, "all")) t$p_all else c(t$p_sb, t$p_peba4)
+        expected <- unname(c(all = t$p_all, peba4 = t$p_peba4)[t$reference])
+        expect_identical(z$reference, defaults)
+        expect_identical(t$reference, if (estimator == "DWLS" && component == "lr") "sb_peba4" else defaults)
         expect_identical(z$pvalue, expected)
       }
       nested <- anova(h1, h0, references = reference_names)
@@ -75,7 +77,8 @@ test_that("global and nested references reuse policy spectra across regimes and 
       expect_identical(unique(nested$test), if (estimator == "DWLS") c("score", "fit_function_difference") else c("score", "lr"))
       native_nested <- magmaanlab::policy_nested(h1$lab, h0$lab)
       expect_true(native_nested$lr$available, info = native_nested$lr$detail)
-      expect_reference_rows(nested, native_nested$score, "score", c("sb", "peba4"))
+      nested_defaults <- if (estimator == "DWLS") c("sb", "peba4") else "peba4"
+      expect_reference_rows(nested, native_nested$score, "score", nested_defaults)
       expect_reference_rows(nested, native_nested$lr,
         if (estimator == "DWLS") "fit_function_difference" else "lr",
         if (estimator == "DWLS") c("sb", "peba4") else character())
@@ -86,7 +89,10 @@ test_that("global and nested references reuse policy spectra across regimes and 
         if (!isTRUE(t$available)) next
         label <- if (component == "score") "score" else
           if (estimator == "DWLS") "fit_function_difference" else "lr"
-        expect_identical(default_nested$pvalue[default_nested$test == label], c(t$p_sb, t$p_peba4))
+        z <- default_nested[default_nested$test == label, ]
+        expect_identical(z$reference, nested_defaults)
+        expect_identical(t$reference, if (estimator == "DWLS") "sb_peba4" else "peba4")
+        expect_identical(z$pvalue, if (estimator == "DWLS") c(t$p_sb, t$p_peba4) else t$p_peba4)
       }
       for (pair in list(list(global, default_global, native_global,
                             if (estimator == "DWLS") "fit_function" else "score"),
@@ -94,17 +100,23 @@ test_that("global and nested references reuse policy spectra across regimes and 
                             if (estimator == "DWLS") "fit_function_difference" else "score"))) {
         component <- if (pair[[4]] == "fit_function_difference") "lr" else "score"
         native <- pair[[3]][[component]]
-        laws <- if (identical(native$reference, "all")) "all" else c("sb", "peba4")
+        laws <- switch(native$reference, all = "all", peba4 = "peba4", sb_peba4 = c("sb", "peba4"))
         for (rows in pair[1:2]) {
           selected <- subset(rows, recommended)
           expect_identical(selected$test, rep(pair[[4]], length(laws)))
           expect_identical(selected$reference, laws)
-          expect_identical(selected$pvalue, if (identical(laws, "all")) native$p_all else
+          expect_identical(selected$pvalue, if (identical(laws, "all")) native$p_all else if (identical(laws, "peba4")) native$p_peba4 else
             c(native$p_sb, native$p_peba4))
           expect_false(any(rows$recommended[rows$test == "lr"]))
         }
       }
       if (estimator != "DWLS") {
+        for (pair in list(list(summary(h0, references = "sb")$tests, native_global),
+                         list(anova(h1, h0, references = "sb"), native_nested))) {
+          expect_identical(pair[[1]]$pvalue, c(pair[[2]]$score$p_sb, pair[[2]]$lr$p_sb))
+          expect_false(any(pair[[1]]$recommended))
+        }
+        expect_output(print(h0), "score/PEBA4", fixed = TRUE)
         expect_output(print(summary(h0)), "likelihood ratio")
         expect_output(print(default_nested), "likelihood ratio")
       }

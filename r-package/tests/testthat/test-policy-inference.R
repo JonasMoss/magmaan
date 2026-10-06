@@ -15,6 +15,7 @@ test_that("policy_inference() equals the explicit composition of primitives", {
     explicit <- calibrate_quadratic(inference_quadratic(ctx, test), c("sb", "peba4"))
     got <- res[[test]]
     expect_true(got$available)
+    expect_identical(got$reference, "peba4")
     expect_equal(got$statistic, explicit$statistic[1])
     expect_equal(got$df, explicit$df[1])
     expect_equal(got$p_sb, explicit$p_value[explicit$method == "sb"], tolerance = 1e-10)
@@ -81,6 +82,7 @@ test_that("FIML policy uses retained missing-pattern scores for global and neste
     expect_equal(p$covariance, vcov(f1, regime = "robust"), tolerance = 1e-7, ignore_attr = TRUE)
     for (t in list(p$score, p$lr, policy_nested(f1, f0)$score, policy_nested(f1, f0)$lr)) {
       expect_true(t$available, info = t$detail)
+      expect_identical(t$reference, "peba4")
       expect_true(all(is.finite(c(t$statistic, t$p_sb, t$p_peba4))))
       expect_true(all(t$eigenvalues >= 0))
     }

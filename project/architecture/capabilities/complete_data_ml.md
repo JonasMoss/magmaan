@@ -1,5 +1,12 @@
 ### Complete-data ML and inference
 
+- ML global and nested score/LR policy tests select `reference = "peba4"`
+  (TASK-97; decision 2026-10-06). SB p-values/scales remain comparator fields.
+  Ordinary default tables have score/PEBA4 and LR/PEBA4, with only score
+  recommended; explicit `references = c("sb", "peba4")` restores both laws.
+  Evidence and FIML alignment are recorded in the
+  [interface vision](../../design/r-interface-vision.md#inference-policy).
+
 - `policy_score_contracts_test.cpp` gates two-group complete-data covariance
   and nested observed-score reduction from FIML, equivalent label/`==`/
   `group.equal` restrictions at a shared evaluation point (relative 1e-8),

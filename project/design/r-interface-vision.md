@@ -612,9 +612,16 @@ Parameter uncertainty:
 
 Global tests against the saturated model:
 
-- For ML/FIML, the score test and the likelihood-ratio test, each calibrated with SB and
+- For ML/FIML, the score test and the likelihood-ratio test, each calibrated with
   PEBA4. The likelihood-ratio statistic and its df are reported because
   classical readers look for them; the normal-theory p-value is not shown.
+- **PEBA4 is the ML/FIML default (decided 2026-10-06).** The
+  [complete-data geometry study](../../experiments/_archive/complete-ml-global-test-geometry)
+  found expected-information score PEBA4 best calibrated, with 2.0–7.2%
+  rejection in all 32 cells. FIML follows the ML reference choice because its
+  complete-data policy reduces to ML. Global and nested score/LR tables
+  retain only PEBA4 by default; `references = c("sb", "peba4")` includes
+  the stored SB comparator. DWLS global All and nested SB/PEBA4 are unchanged.
 - **The score test is primary (decided 2026-10-02).** It comes first in
   `summary()` and `anova()`, and the likelihood-ratio row follows with a
   printed caveat that it tends to over-reject when N is small relative to its
@@ -689,7 +696,7 @@ Global tests against the saturated model:
 
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)
-tests with SB and PEBA4, score first. The comparison checks that data, estimator and nesting
+tests with PEBA4 by default (SB available explicitly), score first. The comparison checks that data, estimator and nesting
 agree.
 
 Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26;

@@ -436,6 +436,7 @@ static PolicyInference policy_inference_dwls_cached(spec::LatentStructure pt,
   out.score.eigenvalues.tail(fixed->eigvals.size()) = fixed->eigvals;
   std::sort(out.score.eigenvalues.data(), out.score.eigenvalues.data() + out.score.df);
   out.score.label = "fit_function";
+  out.lr.reference = "sb_peba4";
   out.score.reference = "all";
   out.score.p_all = robust::frontier::fmg_test(out.score.statistic, out.score.df,
       out.score.eigenvalues, {robust::frontier::FmgMethod::All, 0.0, true}).p_value;
@@ -590,6 +591,7 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   out.lr.df = static_cast<int>(restriction.rows());
   out.lr.eigenvalues = spectrum->eigenvalues;
   out.lr.label = "fit_function_difference";
+  out.lr.reference = "sb_peba4";
   calibrate_spectrum(out.lr);
   return out;
 }

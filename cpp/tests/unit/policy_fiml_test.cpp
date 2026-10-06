@@ -53,6 +53,7 @@ estimate::Estimates fit(const Model& m, const data::RawData& raw) {
 }
 void available(const api::PolicyTest& t, int df) {
   INFO(t.detail); REQUIRE(t.reason == api::InferenceReason::Available);
+  CHECK(t.reference == "peba4");
   CHECK(t.df == df); CHECK(t.eigenvalues.size() == df);
   CHECK(t.eigenvalues.allFinite()); CHECK(t.eigenvalues.minCoeff() >= 0);
   CHECK(std::isfinite(t.statistic)); CHECK(std::isfinite(t.p_sb)); CHECK(std::isfinite(t.p_peba4));

@@ -1,5 +1,11 @@
 # magmaanlab 0.2.0 (in development)
 
+- ML/FIML global and nested policy tests now default to PEBA4 only. SB no
+  longer appears in default ordinary test tables; use
+  `references = c("sb", "peba4")` to include it. Lab policy results label the
+  default `reference = "peba4"` and retain `p_sb` and `sb_scale` comparators.
+  Only score/PEBA4 is recommended; DWLS defaults are unchanged.
+
 - Ordinary `summary()` and `anova()` now accept `references` for simulation
   studies, reusing the policy statistic and spectrum through lab C++ calibration.
   Test tables have uniform base columns `test`, `statistic`, `df`, `reference`,

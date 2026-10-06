@@ -394,6 +394,12 @@ ordinary API exposes barrier fitting experimentally as
 
 #### ML and FIML
 
+- [x] **S/M — PEBA4-only ML/FIML defaults (TASK-97).** Decision 2026-10-06:
+  global and nested score/LR select PEBA4; SB remains an explicit comparator
+  through `references = c("sb", "peba4")`. Only score/PEBA4 is recommended.
+  Complete-data geometry evidence and the FIML alignment are recorded in the
+  interface vision; DWLS defaults remain unchanged.
+
 - [x] **M — validate remaining likelihood-score component contracts in the primary sampling scope.**
   Retain uncentered score second moments as the baseline for ML/FIML
   parameter sandwiches and global/nested score-test calibration under joint

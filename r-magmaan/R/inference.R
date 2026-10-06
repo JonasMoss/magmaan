@@ -179,19 +179,20 @@ infer <- function(fit, lavaan_compat = NULL) {
     return(data.frame(test = label, statistic = t$statistic, df = t$df,
       reference = NA_character_, pvalue = NA_real_, recommended = FALSE,
       reason = t$reason, stringsAsFactors = FALSE))
-  defaults <- if (identical(t$reference, "all")) "all" else c("sb", "peba4")
+  defaults <- switch(t$reference, peba4 = "peba4", all = "all",
+                     sb_peba4 = c("sb", "peba4"))
+  stored <- c(sb = t$p_sb, peba4 = t$p_peba4, all = t$p_all)
   methods <- references %||% defaults
   if (is.null(references)) {
-    p <- if (identical(defaults, "all")) t$p_all else c(t$p_sb, t$p_peba4)
+    p <- unname(stored[methods])
   } else if (t$df == 0L) {
     # Saturated tests have no positive-df reference law.
     p <- rep(NA_real_, length(methods))
   } else {
     p <- magmaanlab::calibrate_quadratic(
       magmaanlab::quadratic_reference(t$statistic, t$df, t$eigenvalues), methods)$p_value
-    # Preserve the recorded policy values exactly for its recommended laws.
-    stored <- c(sb = t$p_sb, peba4 = t$p_peba4, all = t$p_all)
-    known <- methods %in% defaults
+    # Preserve recorded comparator and default p-values exactly.
+    known <- methods %in% names(stored) & !is.na(stored[methods])
     p[known] <- stored[methods[known]]
   }
   out <- data.frame(test = label, statistic = t$statistic, df = t$df,

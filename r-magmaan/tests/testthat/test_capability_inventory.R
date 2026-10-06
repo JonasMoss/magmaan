@@ -50,8 +50,8 @@ test_that("the inventory's ordinary policy rows match each estimator's component
       expect_true(is.finite(fit$inference$global_score$p_all))
     }
     if (all(r[[4]] == "computed")) {
-      expect_identical(fit$inference$global_score$reference, "sb_peba4")
-      expect_identical(fit$inference$global_lr$reference, "sb_peba4")
+      expect_identical(fit$inference$global_score$reference, "peba4")
+      expect_identical(fit$inference$global_lr$reference, "peba4")
     }
     if (all(r[[4]] == "unsupported_model")) {
       expect_error(vcov(fit), class = "magmaan_inference_unavailable")

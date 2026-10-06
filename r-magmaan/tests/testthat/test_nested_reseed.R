@@ -37,7 +37,7 @@ nested_reseed_data <- function(seed = 726270583L, skewed = FALSE) {
   expect_output(print(out), "covariance-admissible")
   expect_length(attr(out, "unavailable"), 0L)
   expect_true(all(is.finite(out$statistic)))
-  expect_true(all(is.finite(out$pvalue[out$reference %in% "sb"])))
+  expect_true(all(is.finite(out$pvalue[out$reference %in% "peba4"])))
   expect_lt(attr(out, "refit")$objective_after, attr(out, "refit")$objective_before)
   expect_identical(attr(out, "refit")$verdict$status, "passed")
   expect_output(print(out), "larger model refit from the restricted estimate")
@@ -68,8 +68,8 @@ test_that("well behaved nested results are unchanged by recovery", {
   expected <- magmaanlab::policy_nested(h1$lab, h0$lab)
   out <- anova(h1, h0)
   expect_null(attr(out, "refit"))
-  expect_identical(out$statistic, rep(c(expected$score$statistic, expected$lr$statistic), each = 2))
-  expect_identical(out$pvalue[out$reference %in% "sb"], c(expected$score$p_sb, expected$lr$p_sb))
+  expect_identical(out$statistic, c(expected$score$statistic, expected$lr$statistic))
+  expect_identical(out$pvalue[out$reference %in% "peba4"], c(expected$score$p_peba4, expected$lr$p_peba4))
 })
 
 test_that("FIML recovers a deliberately supplied bad basin and DWLS refits a bad start", {
@@ -146,5 +146,5 @@ test_that("an unsuccessful nested retry preserves the original typed failure", {
   expect_null(attr(result, "refit"))
   expect_identical(attr(result, "unavailable")[["lr"]],
     paste0(original$lr$reason, ": ", original$lr$detail))
-  expect_identical(result$statistic, c(rep(original$score$statistic, 2), original$lr$statistic))
+  expect_identical(result$statistic, c(original$score$statistic, original$lr$statistic))
 })

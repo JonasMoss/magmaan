@@ -55,7 +55,10 @@ score meat, reduced by the exact restriction map through
 `compute_satorra2000_from_sandwich`. The lab/compatibility FIML Satorra driver
 remains unchanged: its empirical Magmaan route transports saturated influence
 into the larger fit, which can differ under larger-model misspecification.
-Both tests report SB and PEBA4, with independent typed unavailability reasons.
+Global and nested score/LR tests default to PEBA4 (TASK-97; decision
+2026-10-06), aligned with complete-data ML. SB p-values and scales remain
+comparator fields, available through explicit ordinary `references = "sb"`.
+Only score/PEBA4 is recommended; typed unavailability reasons stay independent.
 Penalty and convergence gates precede computation; saturation suppresses only
 global tests. PSD boundary fits retain the policy's interior-population caveat.
 

@@ -235,10 +235,10 @@ test_that("anova() nests configural, metric and scalar invariance with released 
   reference <- lavaan::lavTestLRT(lav(character()), lav("loadings"), lav(c("loadings", "intercepts")))
   for (pair in list(list(configural, metric, 2L), list(metric, scalar, 3L))) {
     a <- anova(pair[[2]], pair[[1]])
-    expect_equal(a$test, rep(c("score", "lr"), each = 2))
-    expect_equal(a$statistic[3], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
+    expect_equal(a$test, c("score", "lr"))
+    expect_equal(a$statistic[2], reference[pair[[3]], "Chisq diff"], tolerance = 1e-5)
     expect_equal(a$df[2], reference[pair[[3]], "Df diff"])
-    expect_true(is.finite(a$statistic[1]) && is.finite(a$pvalue[a$reference %in% "sb"][1]))
+    expect_true(is.finite(a$statistic[1]) && is.finite(a$pvalue[a$reference %in% "peba4"][1]))
   }
 })
 
@@ -399,10 +399,10 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   m0 <- "visual =~ x1 + a*x2 + a*x3\ntextual =~ x4 + b*x5 + b*x6\nspeed =~ x7 + x8 + x9"
   f1 <- magmaan(m1, d)
   f0 <- magmaan(m0, d)
-  a <- anova(f0, f1)
+  a <- anova(f0, f1, references = c("sb", "peba4"))
   expect_s3_class(a, "magmaan_anova")
   expect_equal(attr(a, "restricted"), "f0")
-  expect_equal(unclass(anova(f1, f0)), unclass(a), ignore_attr = TRUE)
+  expect_equal(unclass(anova(f1, f0, references = c("sb", "peba4"))), unclass(a), ignore_attr = TRUE)
   expect_equal(a$df, rep(2L, 4))
   # Both tests are the lab's hypothesis quadratics in the observed nested
   # geometry, calibrated explicitly.
@@ -444,8 +444,8 @@ test_that("anova() refuses pairs it cannot compare", {
   other <- magmaan("visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ 0*textual", d,
                    inference = FALSE)
   fixed <- anova(f1, other)
-  expect_equal(fixed$df, rep(1L, 4))
-  expect_true(all(is.finite(fixed$pvalue[fixed$reference %in% "sb"])))
+  expect_equal(fixed$df, rep(1L, 2))
+  expect_true(all(is.finite(fixed$pvalue[fixed$reference %in% "peba4"])))
   expect_error(anova(f1, magmaan(cfa, d[-1, ], inference = FALSE)), "same observations")
   expect_error(anova(f1, magmaan(cfa, d, covariance = "psd", inference = FALSE)),
                "covariance policy")
@@ -454,6 +454,6 @@ test_that("anova() refuses pairs it cannot compare", {
   labeled <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nvisual ~~ c*textual"
   zero <- paste(labeled, "c == 0", sep = "\n")
   z <- anova(magmaan(zero, d, inference = FALSE), magmaan(labeled, d, inference = FALSE))
-  expect_equal(z$df, rep(1L, 4))
-  expect_true(all(is.finite(z$pvalue[z$reference %in% "sb"])))
+  expect_equal(z$df, rep(1L, 2))
+  expect_true(all(is.finite(z$pvalue[z$reference %in% "peba4"])))
 })

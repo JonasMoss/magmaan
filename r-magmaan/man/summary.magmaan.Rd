@@ -34,14 +34,15 @@ interval. \code{coef(fit)} stays the vector of free estimates that matches
 \code{all}, \code{pall}, \verb{peba<k>} and \verb{eba<k>} (integer \code{k >= 1}, up to the C++
 integer limit). Output names are lower case. Each available test has one
 row per requested reference, using its policy statistic and stored spectrum;
-covariance and fitting choices stay fixed. Defaults are SB/PEBA4 for ML/FIML
-and All for DWLS global tests. The base columns are \code{test}, \code{statistic}, \code{df},
+covariance and fitting choices stay fixed. Defaults are PEBA4 for ML/FIML
+and All for DWLS global tests. Use \code{references = c("sb", "peba4")}
+to include the SB comparator. The base columns are \code{test}, \code{statistic}, \code{df},
 \code{reference}, \code{pvalue}, \code{recommended}, \code{reason}. \code{test} uses stable codes
 \code{score}, \code{lr}, \code{fit_function}, \code{fit_function_difference}. Unavailable tests retain one
 row with missing reference and p-value and a typed reason. Select rows by
 \code{test} and \code{reference}; migrate \code{p.sb}/\code{p.peba4} to \code{pvalue} on the corresponding
 rows. \code{recommended} is TRUE only for the policy's recommended p-values: score
-with SB/PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
+with PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
 The likelihood-ratio test is reported because it is the standard statistic,
 not recommended; \code{references = "std"} gives its plain chi-square p-value.
 All rows are printed, including LR rows with the small-sample caveat.

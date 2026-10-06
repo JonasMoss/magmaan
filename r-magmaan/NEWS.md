@@ -1,5 +1,11 @@
 # magmaan 0.2.0 (in development)
 
+- ML/FIML global and nested policy tests now default to PEBA4 only. SB no
+  longer appears in default ordinary test tables; use
+  `references = c("sb", "peba4")` to include it. Lab policy results label the
+  default `reference = "peba4"` and retain `p_sb` and `sb_scale` comparators.
+  Only score/PEBA4 is recommended; DWLS defaults are unchanged.
+
 - Test-table `recommended` marks only the primary policy test with its default
   references. LR rows remain printed by default but are never recommended.
 

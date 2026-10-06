@@ -285,6 +285,7 @@ TEST_CASE("policy global tests: shared geometry with SB and PEBA4") {
   for (bool score : {true, false}) {
     const auto& test = score ? out.score : out.lr;
     REQUIRE(test.reason == api::InferenceReason::Available);
+    CHECK(test.reference == "peba4");
     auto quadratic = ntml::ntml_quadratic(*q.fit, score);
     REQUIRE(quadratic.has_value());
     auto spectrum = ntml::ntml_spectrum(**quadratic);
@@ -506,6 +507,7 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
   for (bool score : {true, false}) {
     const auto& test = score ? out.score : out.lr;
     REQUIRE(test.reason == api::InferenceReason::Available);
+    CHECK(test.reference == "peba4");
     auto quadratic = ntml::ntml_quadratic(**h, score, magmaan::robust::Information::Observed);
     REQUIRE(quadratic.has_value());
     auto spectrum = ntml::ntml_spectrum(**quadratic);
@@ -765,6 +767,7 @@ TEST_CASE("policy nested rank checks preserve variable units") {
       INFO("units=", units, ", score=", score, ", reason=", api::reason_name(test.reason));
       REQUIRE(expected.reason == api::InferenceReason::Available);
       REQUIRE(test.reason == api::InferenceReason::Available);
+      CHECK(test.reference == "peba4");
       CHECK(test.statistic == doctest::Approx(expected.statistic).epsilon(1e-8));
       CHECK(test.eigenvalues.isApprox(expected.eigenvalues, 1e-8));
       CHECK(test.p_sb == doctest::Approx(expected.p_sb).epsilon(1e-8));

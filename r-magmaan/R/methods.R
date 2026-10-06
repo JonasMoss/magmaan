@@ -218,6 +218,9 @@ print.magmaan <- function(x, ...) {
   if (identical(t$reference, "all"))
     cat("  global p-value:  ", format(t$p_all),
         " (exact spectrum (All); decisions/05-dwls-policy-calibration)\n", sep = "")
+  if (isTRUE(t$available) && identical(t$reference, "peba4")) {
+    cat("  global p-value:  ", format(t$p_peba4), " (score/PEBA4)\n", sep = "")
+  }
   invisible(x)
 }
 
@@ -241,14 +244,15 @@ print.magmaan <- function(x, ...) {
 #' `all`, `pall`, `peba<k>` and `eba<k>` (integer `k >= 1`, up to the C++
 #' integer limit). Output names are lower case. Each available test has one
 #' row per requested reference, using its policy statistic and stored spectrum;
-#' covariance and fitting choices stay fixed. Defaults are SB/PEBA4 for ML/FIML
-#' and All for DWLS global tests. The base columns are `test`, `statistic`, `df`,
+#' covariance and fitting choices stay fixed. Defaults are PEBA4 for ML/FIML
+#' and All for DWLS global tests. Use `references = c("sb", "peba4")`
+#' to include the SB comparator. The base columns are `test`, `statistic`, `df`,
 #' `reference`, `pvalue`, `recommended`, `reason`. `test` uses stable codes
 #' `score`, `lr`, `fit_function`, `fit_function_difference`. Unavailable tests retain one
 #' row with missing reference and p-value and a typed reason. Select rows by
 #' `test` and `reference`; migrate `p.sb`/`p.peba4` to `pvalue` on the corresponding
 #' rows. `recommended` is TRUE only for the policy's recommended p-values: score
-#' with SB/PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
+#' with PEBA4 for ML/FIML, or fit_function with All for DWLS global tests.
 #' The likelihood-ratio test is reported because it is the standard statistic,
 #' not recommended; `references = "std"` gives its plain chi-square p-value.
 #' All rows are printed, including LR rows with the small-sample caveat.
@@ -365,7 +369,7 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' Compare two nested magmaan fits
 #'
 #' Score and likelihood-ratio tests of the restricted fit against the other,
-#' each calibrated with SB and PEBA4, as the global tests are. The score test
+#' each calibrated with PEBA4, as the global tests are. The score test
 #' is primary and comes first: it calibrates better, especially when N is
 #' small relative to the df, where the likelihood-ratio test tends to
 #' over-reject. Select rows by `test` rather than position. The restricted
@@ -397,8 +401,8 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' See [summary.magmaan()] for the reference grammar and uniform base columns.
 #' Each available nested test has one row per reference; an unavailable test
 #' retains one row with its typed `reason` and missing `reference`/`pvalue`.
-#' Defaults are SB and PEBA4. `recommended` is TRUE only for the policy's
-#' recommended p-values: score with SB/PEBA4 for ML/FIML, or
+#' Defaults are PEBA4 for ML/FIML and SB/PEBA4 for DWLS. `recommended` is TRUE only for the policy's
+#' recommended p-values: score with PEBA4 for ML/FIML, or
 #' fit_function_difference with SB/PEBA4 for DWLS. The likelihood-ratio test
 #' is reported because it is the standard statistic, not recommended;
 #' `references = "std"` gives its plain chi-square p-value. Alternatives

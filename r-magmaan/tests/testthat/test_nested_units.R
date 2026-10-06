@@ -12,7 +12,7 @@ test_that("anova and robust nested LR preserve units in a two-group path model",
                   inference = FALSE)
     f0 <- magmaan(magmaan_model(h0, prototype = changed, group = "group"), changed,
                   inference = FALSE)
-    ordinary <- anova(f0, f1)
+    ordinary <- anova(f0, f1, references = c("sb", "peba4"))
     expect_length(attr(ordinary, "unavailable"), 0L)
     observed <- as_lab_fit(f1)$ov_names
     if (is.list(observed)) observed <- observed[[1L]]
