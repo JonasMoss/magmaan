@@ -261,13 +261,13 @@ static post_expected<NestedEmbedding> embed_key_nested_null(
   } else {
     const auto keys1=row_keys(p1,r1), keys0=row_keys(p0,r0);
     auto factors = [](const std::vector<RowKey>& keys) {
-      std::vector<std::string> out;
+      std::vector<std::string> names;
       for (const auto& key:keys)
         if (std::get<1>(key)==parse::Op::Measurement && !std::get<0>(key).empty())
-          out.push_back(std::get<0>(key));
-      std::sort(out.begin(),out.end());
-      out.erase(std::unique(out.begin(),out.end()),out.end());
-      return out;
+          names.push_back(std::get<0>(key));
+      std::sort(names.begin(),names.end());
+      names.erase(std::unique(names.begin(),names.end()),names.end());
+      return names;
     };
     if (factors(keys1)!=factors(keys0))
       return std::unexpected(make_err(PostError::Kind::UnsupportedNesting,

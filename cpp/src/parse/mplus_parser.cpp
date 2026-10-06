@@ -668,7 +668,8 @@ class Lowerer {
         for(std::size_t begin=0;begin<tokens.size();) {
           auto end=begin;while(end<tokens.size() && tokens[end].text!=";") ++end;
           growth(std::vector<Token>(tokens.begin()+static_cast<std::ptrdiff_t>(begin),tokens.begin()+static_cast<std::ptrdiff_t>(end)));
-          if(error) break;begin=end+1;
+          if(error) break;
+          begin=end+1;
         }
         for (const auto& token:tokens) {if (token.text==";") {statement(current);current.clear();} else current.push_back(token); if(error) break;}
         if (!current.empty()) reject(current.front().span,"MS01","group MODEL statement lacks a terminator; Mplus requires ';'; add ';' instead");
