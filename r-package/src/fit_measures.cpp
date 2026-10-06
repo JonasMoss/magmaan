@@ -246,11 +246,32 @@ Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
        Rcpp::as<bool>(fit["mixed_ordinal"]));
   const bool ordinal_delta_unit =
       is_ordinal && fit.containsElementNamed("partable") &&
-      ordinal_parameterization_attr(fit["partable"]) == "delta";
+      (fit.containsElementNamed("parameterization")
+       ? Rcpp::as<std::string>(fit["parameterization"])
+       : ordinal_parameterization_attr(fit["partable"])) == "delta";
   auto r_or = magmaan::measures::standardize::standardize_all(
       ctx.pt, ctx.rep, est, vcov_m, ordinal_delta_unit);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_to_list(*r_or);
+}
+
+// Row-level report preserves fixed rows and group-specific standardization.
+// [[Rcpp::export]]
+Rcpp::List measures_standardized_rows(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
+  Ctx ctx = ctx_from_fit(fit);
+  // Point transformations remain available when sampling inference is refused.
+  const auto est = est_from_theta(Rcpp::NumericVector(fit["theta"]));
+  const bool delta = (fit.containsElementNamed("parameterization")
+       ? Rcpp::as<std::string>(fit["parameterization"])
+       : ordinal_parameterization_attr(fit["partable"])) == "delta";
+  auto out = magmaan::measures::standardize::standardized_rows(
+      ctx.pt, ctx.rep, est, Rcpp::as<Eigen::MatrixXd>(vcov), delta);
+  if (!out) stop_post(out.error());
+  return Rcpp::List::create(
+      Rcpp::_["std.lv"] = Rcpp::wrap(out->std_lv),
+      Rcpp::_["std.lv.se"] = Rcpp::wrap(out->std_lv_se),
+      Rcpp::_["std.all"] = Rcpp::wrap(out->std_all),
+      Rcpp::_["std.all.se"] = Rcpp::wrap(out->std_all_se));
 }
 
 // measures_composite_weights() — recovered `<~` weights and delta-method SEs.

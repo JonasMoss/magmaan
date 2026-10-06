@@ -32,6 +32,127 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 }  // namespace
 
+post_expected<StandardizedRows>
+standardized_rows(const spec::LatentStructure& pt,
+                  const model::MatrixRep& rep,
+                  const Estimates& est,
+                  const Eigen::MatrixXd& vcov,
+                  bool ordinal_delta) {
+  const Eigen::Index n = est.theta.size();
+  if (vcov.rows() != n || vcov.cols() != n)
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows: covariance shape does not match theta"));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or) return std::unexpected(make_err(PostError::Kind::NumericIssue,
+      "standardized_rows: " + ev_or.error().detail));
+  const auto& ev = *ev_or;
+  const double missing = std::numeric_limits<double>::quiet_NaN();
+  auto values = [&](const Eigen::VectorXd& theta, bool all)
+      -> post_expected<Eigen::VectorXd> {
+    auto assembled = ev.assembled(theta);
+    auto moments = ev.sigma(theta);
+    if (!assembled || !moments)
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardized_rows: model evaluation failed"));
+    auto raw = [&](std::size_t i) {
+      return pt.free[i] > 0 ? theta(pt.free[i] - 1) : pt.fixed_value[i];
+    };
+    Eigen::VectorXd out = Eigen::VectorXd::Constant(static_cast<Eigen::Index>(pt.size()), missing);
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.group[i] <= 0 || pt.lhs_var[i] < 0) continue;
+      const auto b = static_cast<std::size_t>(pt.group[i] - 1);
+      const auto& am = assembled->blocks[b];
+      auto is_ordered = [&](std::int32_t v) {
+        for (std::size_t j = 0; j < pt.size(); ++j)
+          if (pt.group[j] == pt.group[i] && pt.lhs_var[j] == v &&
+              pt.op[j] == parse::Op::Threshold) return true;
+        return false;
+      };
+      auto variance = [&](std::int32_t v) {
+        if (pt.is_user_latent[static_cast<std::size_t>(v)]) return am.Mid(pt.lv_ext_pos[static_cast<std::size_t>(v)], pt.lv_ext_pos[static_cast<std::size_t>(v)]);
+        if (ordinal_delta && is_ordered(v)) {
+          double delta = 1.0;
+          for (std::size_t j = 0; j < pt.size(); ++j)
+            if (pt.group[j] == pt.group[i] && pt.lhs_var[j] == v &&
+                pt.op[j] == parse::Op::ResponseScale) delta = raw(j);
+          return 1.0 / (delta * delta);
+        }
+        return moments->sigma[b](pt.ov_pos[static_cast<std::size_t>(v)], pt.ov_pos[static_cast<std::size_t>(v)]);
+      };
+      auto residual = [&](std::int32_t v) {
+        if (pt.is_user_latent[static_cast<std::size_t>(v)]) return am.Psi(pt.lv_ext_pos[static_cast<std::size_t>(v)], pt.lv_ext_pos[static_cast<std::size_t>(v)]);
+        const auto o = pt.ov_pos[static_cast<std::size_t>(v)];
+        if (ordinal_delta && is_ordered(v))
+          return variance(v) - (am.Lambda.row(o) * am.Mid *
+                                 am.Lambda.row(o).transpose())(0, 0);
+        // Reduced LISREL represents structural observed residuals in Psi.
+        const auto l = pt.lv_ext_pos[static_cast<std::size_t>(v)];
+        return l >= 0 ? am.Psi(l, l) : am.Theta(o, o);
+      };
+      auto scale = [&](std::int32_t v) {
+        if (!all && !pt.is_user_latent[static_cast<std::size_t>(v)]) return 1.0;
+        const double value = variance(v);
+        return value > 0 ? std::sqrt(value) : missing;
+      };
+      const auto l = pt.lhs_var[i], r = pt.rhs_var[i];
+      double value = raw(i);
+      switch (pt.op[i]) {
+        case parse::Op::Measurement:
+          value *= scale(l) / scale(r); break;
+        case parse::Op::Regression:
+          value *= scale(r) / scale(l); break;
+        case parse::Op::Covariance:
+          if (l == r) value = residual(l) / (scale(l) * scale(l));
+          else {
+            // lavaan cov.std scales residual covariances by residual SDs.
+            auto cov_scale = [&](std::int32_t v) {
+              if (!all && !pt.is_user_latent[static_cast<std::size_t>(v)]) return 1.0;
+              return std::sqrt(std::abs(residual(v)));
+            };
+            value /= cov_scale(l) * cov_scale(r);
+          }
+          break;
+        case parse::Op::Intercept:
+        case parse::Op::Threshold:
+          value /= scale(l); break;
+        case parse::Op::ResponseScale:
+          value = all ? 1.0 : (ordinal_delta ? value : 1.0 / std::sqrt(variance(l)));
+          break;
+        default: value = missing; break;
+      }
+      out(static_cast<Eigen::Index>(i)) = value;
+    }
+    return out;
+  };
+  auto lv = values(est.theta, false), all = values(est.theta, true);
+  if (!lv) return std::unexpected(lv.error());
+  if (!all) return std::unexpected(all.error());
+  Eigen::MatrixXd jl(static_cast<Eigen::Index>(pt.size()), n), ja(static_cast<Eigen::Index>(pt.size()), n);
+  for (Eigen::Index k = 0; k < n; ++k) {
+    // Central differences with cube-root epsilon balance rounding and truncation.
+    const double h = std::cbrt(std::numeric_limits<double>::epsilon()) *
+                     (1.0 + std::abs(est.theta(k)));
+    Eigen::VectorXd plus = est.theta, minus = est.theta;
+    plus(k) += h; minus(k) -= h;
+    auto lp = values(plus, false), lm = values(minus, false);
+    auto ap = values(plus, true), a_m = values(minus, true);
+    if (!lp || !lm || !ap || !a_m)
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardized_rows: perturbed model evaluation failed"));
+    jl.col(k) = (*lp - *lm) / (2 * h);
+    ja.col(k) = (*ap - *a_m) / (2 * h);
+  }
+  auto errors = [&](const Eigen::MatrixXd& j) {
+    Eigen::VectorXd se(static_cast<Eigen::Index>(pt.size()));
+    for (Eigen::Index i = 0; i < se.size(); ++i) {
+      const double v = (j.row(i) * vcov * j.row(i).transpose())(0, 0);
+      se(i) = std::isfinite(v) ? std::sqrt(std::max(0.0, v)) : missing;
+    }
+    return se;
+  };
+  return StandardizedRows{*lv, errors(jl), *all, errors(ja)};
+}
+
 post_expected<StandardizedSolution>
 standardize_lv(const spec::LatentStructure& pt,
                const model::MatrixRep&   rep,

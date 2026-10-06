@@ -7,6 +7,13 @@
   regressions remain unsupported (TASK-105). The lab exposes the same C++
   composer as `policy_modification_indices()`; robust MI's estimated-weight
   default is now estimator-aware, so ML/FIML need no explicit FALSE.
+- Ordinary `summary(fit, standardized = TRUE)` adds row-level std.lv/std.all
+  estimates and delta-method SEs with the selected policy or lavaan compatibility
+  covariance, plus endogenous-variable R-squared and SEs. The lab exposes the
+  same C++ map as `standardized_rows(fit, vcov)`, including fixed markers,
+  group-specific scales and ordinal residuals/thresholds. Unavailable covariance
+  retains estimates and typed missing SEs; defined standardized scales are
+  explicitly unsupported.
 
 # magmaan 0.2.0 (in development)
 

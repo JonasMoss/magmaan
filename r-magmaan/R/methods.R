@@ -169,6 +169,43 @@ nobs.magmaan <- function(object, ...) {
   out
 }
 
+.standardized_report <- function(fit) {
+  reason <- NULL
+  V <- tryCatch(.inference_result(fit, "covariance", "summary()"),
+    magmaan_inference_unavailable = function(e) {
+      reason <<- e$reason
+      NULL
+    })
+  available <- !is.null(V)
+  if (!available) V <- matrix(0, length(fit$lab$theta), length(fit$lab$theta))
+  std <- magmaanlab::standardized_rows(fit$lab, V)
+  pt <- fit$lab$partable
+  keep <- !pt$op %in% .constraint_ops
+  columns <- as.data.frame(lapply(std, function(v) as.numeric(v)[keep]))
+  if (!available) {
+    columns$std.lv.se <- NA_real_
+    columns$std.all.se <- NA_real_
+    attr(columns, "inference_reason") <- reason
+  }
+  if (any(pt$op[keep] == ":="))
+    attr(columns, "defined_reason") <- "unsupported_defined_scale"
+  # Every measurement outcome and regression outcome is endogenous. The
+  # diagonal std.all residual row is the unexplained variance fraction.
+  endogenous <- unique(paste(pt$group[pt$op == "=~"], pt$rhs[pt$op == "=~"]))
+  endogenous <- union(endogenous, paste(pt$group[pt$op == "~"], pt$lhs[pt$op == "~"]))
+  rows <- which(pt$op == "~~" & pt$lhs == pt$rhs &
+                  paste(pt$group, pt$lhs) %in% endogenous)
+  r2 <- data.frame(variable = pt$lhs[rows], r2 = 1 - as.numeric(std$std.all)[rows],
+                   r2.se = as.numeric(std$std.all.se)[rows], stringsAsFactors = FALSE)
+  if (length(fit$lab$nobs) > 1L)
+    r2 <- cbind(group = pt$group[rows], r2)
+  if (!available) {
+    r2$r2.se <- NA_real_
+    attr(r2, "inference_reason") <- reason
+  }
+  list(coefficients = columns, r2 = r2)
+}
+
 .estimator_label <- function(fit) {
   paste0(fit$estimator, .covariance_label(fit$covariance))
 }
@@ -236,9 +273,16 @@ print.magmaan <- function(x, ...) {
 #' @param object A [magmaan()] fit.
 #' @param level Confidence level of the intervals.
 #' @param lavaan_compat Inference bundle, as in [vcov.magmaan()].
+#' @param standardized Add std.lv, std.lv.se, std.all and std.all.se columns
+#'   and an R-squared table. Delta-method SEs use the selected covariance.
+#'   Without covariance, estimates remain available and SEs are NA with the
+#'   inference reason attached to the tables. Defined parameters have no
+#'   declared standardized scale and are NA (unsupported_defined_scale).
 #' @param references Character vector of reference laws, or `NULL` for the policy defaults.
 #' @param ... Unused.
-#' @return An object of class `summary.magmaan`.
+#' @return An object of class `summary.magmaan`. With `standardized = TRUE`,
+#'   `r2` is a data frame with variable, r2 and r2.se columns (and group for
+#'   grouped models), covering endogenous observed and latent variables.
 #' @section Simulation studies:
 #' `references` accepts case-insensitive `std`, `sb`, `ss`, `mv`, `scaled_f`,
 #' `all`, `pall`, `peba<k>` and `eba<k>` (integer `k >= 1`, up to the C++
@@ -262,12 +306,23 @@ print.magmaan <- function(x, ...) {
 #' with `lavaan_compat`; compatibility rows append `unscaled.statistic`, `scale`
 #' and `shift` and are never marked recommended.
 #' @export
-summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, references = NULL, ...) {
+summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, references = NULL, standardized = FALSE, ...) {
+  if (!is.logical(standardized) || length(standardized) != 1L || is.na(standardized))
+    stop("summary(): standardized must be TRUE or FALSE", call. = FALSE)
   .check_level(level, "summary()")
   references <- .check_references(references, lavaan_compat, "summary()")
   view <- .with_lavaan_compat(object, lavaan_compat, "summary()")
-  structure(list(fit = object, inference = view$inference,
-                 coefficients = .parameter_table(view, level = level),
+  coefficients <- .parameter_table(view, level = level)
+  r2 <- NULL
+  if (standardized) {
+    report <- .standardized_report(view)
+    coefficients <- cbind(coefficients, report$coefficients)
+    attr(coefficients, "inference_reason") <- attr(report$coefficients, "inference_reason")
+    attr(coefficients, "defined_reason") <- attr(report$coefficients, "defined_reason")
+    r2 <- report$r2
+  }
+  structure(list(fit = object, inference = view$inference, r2 = r2,
+                 coefficients = coefficients,
                  tests = .global_tests(view, references), level = level, references = references),
             class = "summary.magmaan")
 }
@@ -294,6 +349,12 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
   num <- vapply(p, is.numeric, logical(1))
   p[num] <- lapply(p[num], function(v) round(v, digits))
   print(p, row.names = FALSE)
+  if (!is.null(x$r2)) {
+    cat("\nR-squared\n")
+    r <- x$r2
+    r[c("r2", "r2.se")] <- lapply(r[c("r2", "r2.se")], round, digits = digits)
+    print(r, row.names = FALSE)
+  }
   if (!is.null(x$tests)) {
     cat("\nGlobal tests against the saturated model\n")
     t <- x$tests

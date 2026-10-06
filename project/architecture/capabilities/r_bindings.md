@@ -1,5 +1,13 @@
 ### R bindings and public namespace transition
 
+- Ordinary `summary(..., standardized = TRUE)` composes the core row-level
+  LISREL standardization map through `magmaanlab::standardized_rows(fit, vcov)`.
+  Reports include fixed markers, grouped equality transforms, ordinal thresholds
+  and derived residuals, and endogenous observed/latent R-squared. Delta SEs
+  use the active policy or named compatibility covariance. Missing covariance
+  preserves point values with typed missing SEs; defined standardized scales
+  are explicitly unsupported.
+
 - Fitting and post-fit Rcpp glue compiles in topical `fit_*.cpp` files
   (estimation, ordinal, missing data, inference, robust, measures, frontier,
   profile tests, noniterative and prepared interfaces). Shared helper

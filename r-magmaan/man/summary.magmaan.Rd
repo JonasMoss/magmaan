@@ -4,7 +4,7 @@
 \alias{summary.magmaan}
 \title{Summary of a magmaan fit}
 \usage{
-\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, references = NULL, ...)
+\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, references = NULL, standardized = FALSE, ...)
 }
 \arguments{
 \item{object}{A \code{\link[=magmaan]{magmaan()}} fit.}
@@ -15,10 +15,19 @@
 
 \item{references}{Character vector of reference laws, or \code{NULL} for the policy defaults.}
 
+\item{standardized}{Add \code{std.lv}, \code{std.lv.se}, \code{std.all}
+and \code{std.all.se} columns and an R-squared table. Delta-method SEs use
+ the selected covariance. Without covariance estimates remain available and
+SEs are NA with the inference reason attached to both tables. Defined
+parameters have no declared standardized scale and are NA with reason
+\code{unsupported_defined_scale}.}
+
 \item{...}{Unused.}
 }
 \value{
-An object of class \code{summary.magmaan}.
+An object of class \code{summary.magmaan}. With \code{standardized = TRUE},
+\code{r2} is a data frame with variable, r2 and r2.se columns (and group
+for grouped models), covering endogenous observed and latent variables.
 }
 \description{
 The fit, its parameter table and its global tests. \code{coef()} on the summary

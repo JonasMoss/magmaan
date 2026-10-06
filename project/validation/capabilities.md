@@ -262,6 +262,7 @@ reimplementing their algorithms.
 
 | Surface | Existing implementation or evidence | Remaining work and owner |
 | --- | --- | --- |
+| Ordinary standardized summary and R-squared | Core row-level LISREL map; fixed markers, group-specific scales, thresholds and ordinal residuals; delta-method SEs with active covariance | Task-98: ML/FIML, ordinal delta/theta and mixed DWLS gates; defined standardized scales are explicitly unsupported |
 | Ordinary test tables and alternative reference laws | Uniform test/statistic/df/reference/pvalue/recommended/reason base columns; lab C++ FMG grammar; default stored p-values, typed unavailable rows and nested recovery spectra | Task-95; reference gates cover global/nested ML, MAR FIML, ordinal/mixed DWLS in one/two groups. Compatibility retains extra scale/shift columns |
 | Ordinal compatibility `anova()` | Retained-fit C++ composer; installed lavaan 0.7.2 default `satorra.2000`, `A.method="delta"`, `scaled.shifted=TRUE`, larger-model information/Jacobian; n_g−1 objective counts and original n_g/N sandwich fractions | Whole-bundle statistic/df/p/divisor/shift gates at doctest-relative 1e-5 in `test_convention_nested_ordinal.R`; plain DWLS/ULS retain statistic/df without p, WLS uses standard chi-square. Actual nesting, parameterization, convergence and positive-penalty refusals are explicit. Additional ordinal slices require separate gates |
 | FIML compatibility `vcov()`, `confint()`, `summary()`, `anova()` | ML/MLR bundles compose observed-Hessian/Huber–White covariance, standard/YB-Mplus global tests and standard/SB2001 nested tests with explicit trace-based scales; installed-lavaan MCAR/MAR, school invariance, missing random-X and saturated gates | Task-14 complete. Raw/pattern context supports deferred, cached and serialized reporting; policy is separate. Additional regimes need their own evidence |
@@ -279,9 +280,9 @@ The missing parts above must be separated from deliberate interface limits:
 ordinary inference uses random covariates; a report cannot change `fixed.x`,
 deletion, weights or parameterization. Score tests are inapplicable to these
 lavaan bundles, and plain ordinal DWLS/ULS global p-values are absent by recipe.
-Standalone lab fit measures, residual diagnostics and standardized estimates
-are not implicitly promised by `summary()`. Existing two-level, SAM, composite
-and noniterative interfaces retain their gates without an expansion programme.
+Standalone lab fit measures and residual diagnostics are not implicitly promised
+by `summary()`; standardized estimates and R-squared are opt-in. Existing
+two-level, SAM, composite and noniterative interfaces retain their gates without an expansion programme.
 
 Source checks: [`conventions.cpp`](../../cpp/src/api/conventions.cpp),
 [`conventions.R`](../../r-package/R/conventions.R),

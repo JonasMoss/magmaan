@@ -1,3 +1,17 @@
+#' Row-level standardized estimates and delta-method standard errors
+#'
+#' Includes fixed marker rows and group-specific transformations in partable
+#' order. Defined parameters have missing standardized values: their expression
+#' has no declared scale. Covariance must match the fit's free coordinates.
+#' @param fit A lab fit.
+#' @param vcov Explicit free-parameter covariance matrix.
+#' @return A list of std.lv, std.lv.se, std.all and std.all.se vectors.
+#' @export
+standardized_rows <- function(fit, vcov) {
+  if (missing(vcov)) stop("standardized_rows(): `vcov` is required", call. = FALSE)
+  measures_standardized_rows(fit, vcov)
+}
+
 fit_sample_stats <- function(fit) {
   if (inherits(fit, "magmaan_data")) {
     return(list(S = fit$S, nobs = fit$nobs, mean = fit$mean))

@@ -93,6 +93,22 @@ standardize_all(const spec::LatentStructure& pt,
                 const Eigen::MatrixXd&    vcov,
                 bool ordinal_delta_unit = false);
 
+// Row-indexed LISREL report, including fixed markers and derived ordinal
+// residual variances. Unlike theta-indexed reports, group-specific transforms
+// remain distinct under equality constraints. Defined rows are unavailable.
+struct StandardizedRows {
+  Eigen::VectorXd std_lv;
+  Eigen::VectorXd std_lv_se;
+  Eigen::VectorXd std_all;
+  Eigen::VectorXd std_all_se;
+};
+post_expected<StandardizedRows>
+standardized_rows(const spec::LatentStructure& pt,
+                  const model::MatrixRep& rep,
+                  const Estimates& est,
+                  const Eigen::MatrixXd& vcov,
+                  bool ordinal_delta = false);
+
 // Native FC-SEM counterparts. They use the FcSemEvaluator's sample-backed W/T
 // covariance semantics and return values/SEs for free rows in θ order, just as
 // the ordinary LISREL standardizers do.

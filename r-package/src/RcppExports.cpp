@@ -1161,6 +1161,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_standardized_rows
+Rcpp::List measures_standardized_rows(Rcpp::List fit, Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaanlab_measures_standardized_rows(SEXP fitSEXP, SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_standardized_rows(fit, vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_composite_weights
 Rcpp::DataFrame measures_composite_weights(Rcpp::List fit, Rcpp::NumericMatrix vcov);
 RcppExport SEXP _magmaanlab_measures_composite_weights(SEXP fitSEXP, SEXP vcovSEXP) {
@@ -4662,6 +4674,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_measures_fit", (DL_FUNC) &_magmaanlab_measures_fit, 4},
     {"_magmaanlab_measures_standardize_lv", (DL_FUNC) &_magmaanlab_measures_standardize_lv, 2},
     {"_magmaanlab_measures_standardize_all", (DL_FUNC) &_magmaanlab_measures_standardize_all, 2},
+    {"_magmaanlab_measures_standardized_rows", (DL_FUNC) &_magmaanlab_measures_standardized_rows, 2},
     {"_magmaanlab_measures_composite_weights", (DL_FUNC) &_magmaanlab_measures_composite_weights, 2},
     {"_magmaanlab_measures_residuals", (DL_FUNC) &_magmaanlab_measures_residuals, 1},
     {"_magmaanlab_measures_standardized_residuals", (DL_FUNC) &_magmaanlab_measures_standardized_residuals, 1},

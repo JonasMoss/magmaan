@@ -1165,6 +1165,12 @@ ordinary-user default.
 
 ## 0.3.0: magmaan's own fitting, mixed data and barriers
 
+- [x] Ordinary standardized estimates and R-squared (task-98): opt-in summary
+  columns and endogenous-variable table, C++ row-level map and delta SEs with
+  the selected covariance; fixed markers, groups, equality constraints and
+  ordinal latent-response scales. Defined standardized scales remain explicitly
+  unavailable.
+
 Assigned 2026-10-02. Until these land, simulations that need dependable
 fitting can use the lavaan-compatible preset from 0.2.0.
 

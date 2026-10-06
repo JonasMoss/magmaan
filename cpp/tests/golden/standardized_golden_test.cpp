@@ -107,6 +107,23 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
     const auto& slv  = *slv_or;
     const auto& sall = *sall_or;
 
+    // Row reports also include fixed markers; equality-constrained covariance
+    // remains in the original free coordinates.
+    auto rows = magmaan::measures::standardize::standardized_rows(
+        *pt, *mr, est, vcov_m);
+    REQUIRE(rows.has_value());
+    for (std::size_t i = 0; i < pt->size(); ++i) {
+      if (pt->op[i] != magmaan::parse::Op::Measurement) continue;
+      const auto ri = static_cast<Eigen::Index>(i);
+      CHECK(std::isfinite(rows->std_all(ri)));
+      CHECK(rows->std_all_se(ri) > 0.0);
+      if (pt->free[i] > 0) {
+        const auto k = static_cast<Eigen::Index>(pt->free[i] - 1);
+        CHECK(rows->std_all(ri) == doctest::Approx(sall.theta(k)).epsilon(1e-8));
+        CHECK(rows->std_all_se(ri) == doctest::Approx(sall.se(k)).epsilon(1e-6));
+      }
+    }
+
     const auto& lv_est  = exp["std_lv_est"];
     const auto& lv_se   = exp["std_lv_se"];
     const auto& all_est = exp["std_all_est"];
@@ -121,9 +138,9 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
     bool ok = true;
     char buf[256];
     // Value tolerance 1e-4 (smooth in θ̂; θ̂ matches lavaan only to ~few·1e-6
-    // on the flat ML surface). SE tolerance 1e-3 — the delta-method SE rides
-    // on a vcov matched to ~1e-4, and lavaan's standardizedSolution uses the
-    // same delta method.
+    // on the flat ML surface). SE tolerance 1e-5 — the delta-method SE rides
+    // on the convention-matched covariance; the independent row-map gates
+    // also check the active covariance delta transform at relative 1e-6.
     for (std::size_t k = 0; k < n_free && ok; ++k) {
       const auto kk = static_cast<Eigen::Index>(k);
       const std::string tag = id + " [" +
@@ -134,9 +151,9 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
       struct Check { const char* name; double ours; double lavaan; double tol; };
       const Check checks[] = {
           {"std.lv  est", slv.theta(kk),  lv_est[k].get<double>(),  1e-4},
-          {"std.lv  se",  slv.se(kk),     lv_se[k].get<double>(),   1e-3},
+          {"std.lv  se",  slv.se(kk),     lv_se[k].get<double>(),   1e-5},
           {"std.all est", sall.theta(kk), all_est[k].get<double>(), 1e-4},
-          {"std.all se",  sall.se(kk),    all_se[k].get<double>(),  1e-3},
+          {"std.all se",  sall.se(kk),    all_se[k].get<double>(),  1e-5},
       };
       for (const auto& c : checks) {
         if (std::abs(c.ours - c.lavaan) > c.tol) {

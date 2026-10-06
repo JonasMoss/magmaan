@@ -527,7 +527,19 @@ TASK-105 extends variable-table augmentation.
 
 
 Adopted 2026-10-02. Estimation choices stay in `magmaan()` and `options`;
-`vcov()`, `confint()`, `summary()` and `anova()` accept `lavaan_compat = NULL`
+`vcov()`, `confint()`, `summary(fit, standardized = TRUE)` appends `std.lv`, `std.lv.se`,
+`std.all`, `std.all.se` to `coef(summary(...))` and adds `$r2` with
+`variable`, `r2`, `r2.se` (and `group` for grouped fits). The C++ row map
+includes fixed markers, group-specific total variances, ordinal latent-response
+scales and thresholds. Delta-method SEs use the active policy or compatibility
+covariance in the fitted free coordinates; equality constraints are retained
+in that covariance. Without inference, estimates remain available and SEs
+are NA with the covariance's typed reason attached to the tables. Defined
+expressions have no declared standardized scale and are NA with
+`unsupported_defined_scale`. R-squared covers measurement and regression
+outcomes and equals one minus their standardized residual variance.
+
+`summary()` and `anova()` accept `lavaan_compat = NULL`
 by default, or one named lavaan bundle compatible with the fitted estimator and
 data regime. Names select complete recipes, rather than independent ingredient
 switches. `"MLM"`/`"MLR"` require an ML fit; `"ML"`/`"MLR"` are coherent with
