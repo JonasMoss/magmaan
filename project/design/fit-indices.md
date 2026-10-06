@@ -1,10 +1,15 @@
 # Ordinary fit indices
 
-Draft for decision (2026-10-06). It plans `fit_measures()` for the ordinary
+Adopted 2026-10-06 (TASK-100). It plans `fit_measures()` for the ordinary
 package: RMSEA, CFI, TLI, SRMR (CRMR for ordinal data) and, for likelihood
 estimators, the log-likelihood, AIC and BIC. Standardized estimates (TASK-98)
-and modification indices (TASK-99) are separate cards. Nothing here changes
-library behaviour until the decisions below are recorded.
+and modification indices (TASK-99) are separate cards.
+
+**User decisions (2026-10-06).** Misspecification-robust point estimators;
+every estimator's indices use its own discrepancy and its own robust bias
+correction ("DWLS and all other discrepancies in the natural way");
+no intervals until an evaluation study (TASK-103); the interface below.
+Implementation: TASK-101 (C++ composer), TASK-102 (ordinary interface).
 
 ## Targets
 
@@ -84,7 +89,7 @@ noncentral chi-square intervals ignore.
   casewise score rows already exist in the policy nested machinery), and an
   ordinary composer that selects one recipe per estimator.
 
-## Decisions
+## Decisions (adopted as recommended, 2026-10-06)
 
 1. **Point estimator.** Recommended: the misspecification-robust correction for
    every estimator, gated to reduce to lavaan's robust indices at correct
