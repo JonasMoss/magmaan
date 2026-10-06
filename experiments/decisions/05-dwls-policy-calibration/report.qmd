@@ -18,7 +18,7 @@ execute:
 | Global test | $nF$ on the `robust_ordinal` spectrum, exact weighted chi-square tail with every positive eigenvalue (All) | Chosen after exploration (user, 2026-10-03); confirmed on fresh draws | SB and PEBA4 over-reject at df ≥ 53; All 2.9–6.8% at confirmation |
 | Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), All; SB/PEBA4 comparators | All adopted 2026-10-06; comparator arm confirmed on fresh draws | All 3.9–6.9% at N = 400 and 4.3–6.4% at N = 1000 in 32 null cells |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
-| All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmation open | TASK-79 fresh-draw registration and local pricing pilot; production pending merger review |
+| All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmed on fresh draws (production 2026-10-06) | Global All 3.1–6.05% (none outside [3%, 7%] at N ≥ 500); nested All 4.0–7.3%; IJ coverage median 94.85%, converged-draw minimum 92.9% |
 | Latent non-normality | Exact policy versus OPG comparator | Calibration open | TASK-84 registration, bounded million-row targets and local pilot; production pending review |
 | Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global and nested All; SB/PEBA4 nested comparators | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
@@ -36,8 +36,10 @@ criteria are in `criteria/dwls_policy.md`.
 ## Short answer
 
 The all-ordinal findings below are retained **OPG-first-stage** evidence. The
-current exact-first-stage policy has a registered reconfirmation lane; its
-local two-draw-per-cell pilot tests mechanics and price, not calibration. Mixed DWLS has a
+current exact-first-stage policy was reconfirmed on fresh draws (lane A
+production, 2026-10-06): no policy size flag at N ≥ 500 in any global or
+nested null cell, and IJ coverage near nominal except where nonconvergence
+removes draws in the hardest two-group binary cell. Mixed DWLS has a
 registered lane and pricing pilot; its calibration is still open pending
 reviewed production. The latent non-normality lane has a registered paired
 design and a bounded local pilot; it does not yet establish coverage or nested
@@ -367,6 +369,54 @@ R_LIBS=~/.cache/magmaan-rlib/lane-d OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL
 # Only after registration/compute approval and Modal workspace restoration:
 modal run modal/app.py --lane exact-first-stage --mode production --run-id production-fresh
 ```
+
+### Production (2026-10-06)
+
+Production ran the registered 146 cells with seed base 1817000001 on the
+maintainer's simbox workstation (12 single-threaded cells, nice priority),
+from the source snapshot of registration commit 02fd96c8 and a library
+built at f8f342cd, through the per-cell runner and the provenance-checked
+combine. The frozen summaries are in
+`results/exact-first-stage/production-2026-10-05/`; raw draws and the full
+failure rows stay ignored, and `failure_counts.csv` aggregates failures by
+cell, arm and reason.
+
+```{r}
+pr <- file.path('results','exact-first-stage','production-2026-10-05')
+ps <- merge(read.csv(file.path(pr,'summary.csv')), read.csv(file.path(pr,'cells.csv')), by='cell_id')
+band <- function(arm, fam) {
+  x <- ps[ps$family==fam & ps$role=='null' & ps$arm==arm,]; big <- x$n >= 500
+  data.frame(Family=fam, Arm=arm, Cells=nrow(x),
+    `Min %`=round(100*min(x$rate),2), `Median %`=round(100*median(x$rate),2),
+    `Max %`=round(100*max(x$rate),2),
+    `Outside [3,7] at N>=500`=sum(x$rate[big] < .03 | x$rate[big] > .07),
+    check.names=FALSE)
+}
+knitr::kable(rbind(band('policy_all','global'), band('opg_all','global'),
+  band('exact_all','nested'), band('policy_sb','nested'), band('policy_peba4','nested'),
+  band('opg_all','nested')), caption='Null rejection at nominal 5% (attempted denominator)')
+cv <- ps[ps$family=='coverage' & ps$arm %in% c('policy_ij','opg_ij'),]
+knitr::kable(do.call(rbind, lapply(split(cv, cv$arm), function(x) data.frame(Arm=x$arm[1],
+  Rows=nrow(x), `Median %`=round(100*median(x$rate),2),
+  `Below 93% at N>=300`=sum(x$n >= 300 & x$rate < .93),
+  `Converged-draw minimum at N>=300 %`=round(100*min(x$successful_rate[x$n >= 300]),2),
+  check.names=FALSE))), row.names=FALSE, caption='IJ coverage of 95% intervals')
+```
+
+Every policy size criterion holds. Global All on the exact spectrum rejects
+3.1–6.05% (none of the 32 cells at N ≥ 500 outside [3%, 7%]); the nested
+fit-function difference is inside the band at N ≥ 500 for every reference, and
+All, now the policy reference (TASK-81), is the best calibrated (4.0–7.3%,
+median 5.1%; SB reaches 8.25% at N = 400). Coverage has median 94.85%. Four
+rows at N ≥ 300 fall below 93% on the attempted denominator, all in cells
+125–126 (two groups of binary items, N = 300, omitted cross-loading .4), and
+identically for the OPG comparator: cell 125 loses 234 of 2000 draws to
+nonconvergence. On converged draws its coverage is 92.9% (loading), 95.0%
+(threshold) and 93.5% (correlation). The shortfall is a fitting problem for
+the 0.3.0 optimizer track, not a first-stage effect. Paired exact-minus-OPG
+differences have median zero in every family and never exceed 2.4
+percentage points; where they differ, the exact first stage is the better
+calibrated arm.
 
 ## Latent non-normality: exact versus OPG (lane B)
 

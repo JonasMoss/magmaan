@@ -577,7 +577,12 @@ ordinary API exposes barrier fitting experimentally as
   and nested SB/PEBA4 references remain. Earlier decisions/05 calibration
   applies to OPG. TASK-79 supplies a preregistered exact/OPG paired
   reconfirmation runner, full-grid local pricing pilot and preemption-safe
-  Modal support; production awaits merger registration and compute approval.
+  Modal support. Production ran on simbox (2026-10-06, frozen in
+  decisions/05 `results/exact-first-stage/production-2026-10-05`): global All
+  3.1-6.05% and nested All 4.0-7.3% with no size flag at N >= 500; IJ
+  coverage median 94.85%, converged-draw minimum 92.9%; the only coverage
+  shortfall is nonconvergence in the two-group binary N = 300 cell, identical
+  under OPG.
   TASK-84 adds the registered latent non-normality lane, streamed pair-table
   million-row pseudo-targets with independent Monte Carlo checks, exact/OPG
   paired arms and a bounded local pricing pilot; production remains pending. Exact delta/theta covariance transport agrees within 1e-6;

@@ -367,7 +367,10 @@ corrected by its first-order bias (Takeuchi trace difference with the moment
 bias for ML/FIML; exact-first-stage observed-geometry trace for ordinal and
 mixed DWLS), Steiger's multigroup RMSEA, nominal-df truncated TLI and
 bias-corrected pooled SRMR/CRMR; typed refusals elsewhere. Intervals wait
-for the TASK-103 study; the ordinary interface is TASK-102.
+for the TASK-103 study; the ordinary interface is TASK-102. The exact
+first-stage all-ordinal DWLS policy is reconfirmed on fresh draws (TASK-79,
+simbox production): no global or nested size flag at N >= 500, IJ coverage
+near nominal except nonconvergence in the hardest binary two-group cell.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All

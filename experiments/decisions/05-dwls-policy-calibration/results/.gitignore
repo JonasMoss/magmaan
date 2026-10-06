@@ -143,3 +143,13 @@ latent-nonnormal/pilot-verified-2026-10-05/*
 !latent-nonnormal/pilot-verified-2026-10-05/failures.csv
 !latent-nonnormal/pilot-verified-2026-10-05/progress.csv
 !latent-nonnormal/pilot-verified-2026-10-05/checks.csv
+!exact-first-stage/production-2026-10-05/
+exact-first-stage/production-2026-10-05/*
+!exact-first-stage/production-2026-10-05/cells.csv
+!exact-first-stage/production-2026-10-05/cost.csv
+!exact-first-stage/production-2026-10-05/metadata.csv
+!exact-first-stage/production-2026-10-05/paired.csv
+!exact-first-stage/production-2026-10-05/population_targets.csv
+!exact-first-stage/production-2026-10-05/summary.csv
+!exact-first-stage/production-2026-10-05/timing.csv
+!exact-first-stage/production-2026-10-05/failure_counts.csv
