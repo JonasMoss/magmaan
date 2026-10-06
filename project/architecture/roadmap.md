@@ -371,6 +371,12 @@ for the TASK-103 study; the ordinary interface is TASK-102. The exact
 first-stage all-ordinal DWLS policy is reconfirmed on fresh draws (TASK-79,
 simbox production): no global or nested size flag at N >= 500, IJ coverage
 near nominal except nonconvergence in the hardest binary two-group cell.
+Ordinary `modindices()` reports robust one-df score modification indices and
+equality releases (chi-square(1), EPC, standardized EPC) for ML, FIML and
+all-ordinal/mixed DWLS through `api::policy_modification_indices()`, with
+optional `test = "lr"` refits via lab `policy_mi_refit()` and the nested
+policy (TASK-99). ML/FIML candidates whose observed efficient curvature is not
+positive are typed `numeric_failure` until TASK-106; regressions are TASK-105.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
