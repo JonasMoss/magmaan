@@ -1,0 +1,2 @@
+precision_digits,mpmath_version,elapsed_s,source_sha256,convention,limitations
+90,1.3.0,26.028891733998535,32e293daad82305c3d10a30b5275498b025c7578c9ed647567c1f12314c9ba14,exact binary64 raw patterns and retained Stage-2 inputs; independent saturated information/score meat and analytic LISREL derivatives,"conditional local evidence; repaired nonpositive-curvature inversion ACOV unchecked; no propagated input bound, inference or global guarantee"

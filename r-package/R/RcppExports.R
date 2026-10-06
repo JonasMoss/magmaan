@@ -249,6 +249,10 @@ frontier_fiml_newton_audit_impl <- function(fit, theta = NULL) {
     .Call(`_magmaanlab_frontier_fiml_newton_audit_impl`, fit, theta)
 }
 
+frontier_ml2s_convergence_audit_impl <- function(fit, theta = NULL, stage1_point = NULL) {
+    .Call(`_magmaanlab_frontier_ml2s_convergence_audit_impl`, fit, theta, stage1_point)
+}
+
 frontier_ordinal_newton_audit_impl <- function(fit, theta = NULL) {
     .Call(`_magmaanlab_frontier_ordinal_newton_audit_impl`, fit, theta)
 }

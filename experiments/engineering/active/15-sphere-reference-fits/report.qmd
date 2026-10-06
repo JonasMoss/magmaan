@@ -1,7 +1,9 @@
 ---
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
-  lane: fiml_audit
+  lane: ml2s_audit
+  ml2s_run: ml2s-audit-confirm-v1
+  ml2s_development: ml2s-audit-development-v2
   fiml_run: fiml-audit-confirm-v2
   fiml_retained: fiml-audit-retained-v2
   fiml_challenge: fiml-audit-confirm-v1
@@ -48,6 +50,47 @@ execute:
 
 ```{r}
 #| results: asis
+if (identical(params$lane, "ml2s_audit")) {
+  read_ml2s <- function(run,name) {
+    path <- file.path("results",run,paste0(name,".csv"))
+    if(!file.exists(path))stop("Missing ML2S evidence: ",path,
+      "; run --ordinary --ml2s-audit --run-id ",run)
+    read.csv(path,stringsAsFactors=FALSE)
+  }
+  gate <- read_ml2s(params$ml2s_run,"verification")
+  if(any(gate$failed!=0))stop("ML2S verification failed; inspect its frozen checks")
+  fits <- read_ml2s(params$ml2s_run,"fits")
+  audits <- read_ml2s(params$ml2s_run,"audits")
+  points <- read_ml2s(params$ml2s_run,"comparisons")
+  handoffs <- read_ml2s(params$ml2s_run,"handoff_checks")
+  producers <- read_ml2s(params$ml2s_run,"producer_checks")
+  stages <- read_ml2s(params$ml2s_run,"stages")
+  development <- read_ml2s(params$ml2s_development,"fits")
+  metadata <- read_ml2s(params$ml2s_run,"metadata")
+  reference <- read_ml2s(params$ml2s_run,"reference_metadata")
+  normal <- fits[fits$arm!="transformed_nt",]
+  cat("## Question\n\nCan ML2S reuse the ordinary ML and weighted-LS numerical audits while separately verifying its saturated Stage-1 endpoint and the actual inputs handed to Stage 2?\n\n")
+  cat(sprintf("## Short answer\n\nBank the conditional numerical composition. All %d fresh stage-point calculations, %d conditional producer checks and %d handoff checks agree with independent 90-digit calculations. All 12 ordinary Stage-1 endpoints pass. Of 60 ordinary fits, 54 return and pass the composed audit; six mixed-unit ULS/DWLS/ADF attempts end in L-BFGS errors without terminal candidates. Both additional transformed-NT controls return and pass.\n\n",nrow(points),nrow(producers),nrow(handoffs)))
+  cat("A stage pass cannot replace missing or mismatched handoff evidence. Missing records and legacy solver evidence remain unchecked; wrong moments, mixing, weights and required ACOV fail. Early EM stops and a repaired-information point with negative raw curvature fail separately. This banks the numerical integration, while mixed-unit fitting recovery remains open. It supplies no propagated structural-parameter accuracy, inference recommendation or default change.\n\n")
+  cat("## Evidence\n\n")
+  evidence <- do.call(rbind,lapply(split(normal,normal$family),function(x) {
+    result <- function(kind) {z <- x[x$kind==kind,];sprintf("%d/%d",sum(z$returned & z$fit_passed,na.rm=TRUE),nrow(z))}
+    data.frame(Family=x$family[1],NT=result("nt"),ULS=result("uls"),DWLS=result("dwls"),ADF=result("adf"),DLS=result("dls"))
+  }))
+  cat(knitr::kable(evidence),sep="\n")
+  cat("\n\nTwo fresh draws per family use means, a one-factor marker model, and the actual default L-BFGS starts/stopping options for each Stage-2 route. Stage 1 is built once with its public defaults and reused across weights. Unequal groups have 130 and 210 rows; shared loading labels exercise linear equalities. NT uses the original complete-data ML objective, not a quadratic approximation. DLS uses mixing 0.5. The additional complete/MCAR controls apply fixed diagonal covariance shrinkage of 0.25 and retain the original endpoint separately. These are engineering controls, not a regularization decision or an estimator-by-weight simulation programme.\n\n")
+  cat("The six fresh errors are fits 44–46 and 49–51: ULS/DWLS/ADF on both mixed-unit draws. All reach an L-BFGS line-search failure after 12 iterations. Their Stage-1 objects exist and pass; no Stage-2 endpoint is manufactured. The development run also retains three such errors. These witnesses feed shared stopping/domain recovery (TASK-33.10.5), with starts and normalization kept explicit. There is no lost native pass among returned fits.\n\n")
+  cat("Every returned fit has separate Stage-1, handoff, solver-stop and Stage-2 assessments. Twelve displaced Stage-2 points fail without changing their Stage-1 or handoff reports. Ten missing/mismatched/early/repaired controls return the required failed or unchecked result; a strict one-iteration EM call errors explicitly, while its opt-in last iterate retains the iteration-limit and covariance-repair history. That early-source control is evaluated with the original fit and recorded original handoff, so its Stage-2 report is a diagnostic evaluation rather than a newly fitted endpoint.\n\n")
+  cat(sprintf("Fitting and artifact collection took %.2f seconds; independent verification took %.1f seconds on one math thread. Summed Stage-1 build time was %.3f seconds and fit-call time %.3f seconds. The fit calls include their existing post-fit calculations; these short sequential timings do not rank fitting engines.\n\n",as.numeric(metadata$value[metadata$key=="elapsed_s"]),reference$elapsed_s,sum(stages$seconds),sum(fits$seconds)))
+  cat("## What is verified\n\nStage 1 uses the actual raw observed-pattern normal likelihood. Its total gradient and observed Hessian are checked before any inversion safeguard. Literal per-row score outer products independently reconstruct $J$, and applicable ACOV checks use $(H+\\rho I)^{-1}J(H+\\rho I)^{-1}$ with the retained information-repair ridge $\\rho$. The fixed transformation is checked separately in both covariance and ACOV. The deliberately nonpositive-curvature controls' repaired ACOV remains unchecked; their raw curvature already rejects them, and repaired positive information never substitutes for that raw audit.\n\n")
+  cat("Stage 2 retains exact means/covariances/counts, weight recipe, DLS mixing, required ACOV, supplied weights and bounds at fit time. The adapter checks this record against the source/transformation, the fit's caller-unit sample and the produced weight. The independent reference checks the same identities. A supplied record asserts historical input provenance; equality alone cannot reconstruct history for old fits. Serialized fits rebuild their packs and preserve owning reports.\n\n")
+  cat("For NT, Stage-2 distance uses the observed likelihood Hessian. For fixed-weight LS, it uses the normal-theory variance of the total gradient, with the actual frozen fitting weight; observed objective curvature still has to be positive. These are separate conditional local distances. Adding them does not establish a numerical-error bound for the composed structural estimate.\n\n")
+  cat("Native validation passes 72 cases/1783 assertions, including 17/17 FIML goldens and their applicable ML2S comparisons. The eight focused composition/adapter cases pass 197 assertions. Thin R tests pass 20 expectations, including bit-identical no-options versus cached-Stage-1 NT fitting, snapshot ownership, serialized auditing and failed/unchecked handoffs. The live R/lavaan FIML/ML2S example and bounded garbage-collection check also pass.\n\n")
+  cat("## Caveats\n\nThe bank covers single-level joint continuous models with means, supported linear equalities, complete/MCAR/MAR inputs and unequal groups, conditional on actual Stage-1 and weight artifacts. Mixed-unit failures remain visible. The information repair can depend on units and is an existing inversion safeguard, not a statistical regularization choice justified here. There is no propagated construction interval or inference calibration; partial producer evidence cannot supply either. Identification remains a separate gate. Multilevel, missing fixed-x, active-bound/PSD-face/barrier geometry and broader search guarantees inherit no pass. The composed adapter rejects nonordinary covariance policies.\n\n")
+  cat("An early pilot exposed an empty-artifact writer error for the missing-ACOV control. It was fixed before the fresh confirmation; no fitting or acceptance threshold was changed. Before confirmation, the independent ACOV check was also extended to positive raw-curvature endpoints whose inversion information had been repaired. Nonpositive raw-curvature controls keep their explicit unchecked repaired-ACOV limit.\n\n")
+  cat("## Reproduce\n\nUse matching isolated-worktree bindings and Python with mpmath 1.3.0; use fresh run IDs. Compact point judgments, every fitting attempt, handoff/producer checks and provenance are frozen. Raw matrices, observations and serialized fits stay ignored. The earlier development summaries retain all three unit failures.\n\n```sh\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ml2s-audit --smoke --run-id ml2s-smoke-new --python /path/to/python\nOMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --ordinary --ml2s-audit --reps 2 --seed-base 865071301 --run-id ml2s-confirm-new --python /path/to/python\nquarto render report.qmd -P lane:ml2s_audit -P ml2s_run:ml2s-confirm-new\n```\n\nDevelopment inputs use seed 865071201 and one replicate. Reopen composition for a source/weight/derivative mismatch, an unexplained handoff verdict or a new supported transformation/domain. Shared backend/domain/stopping correctness (TASK-33.10.5) is the next integration card; identification, starts and audit-default adoption remain separate. Other report lanes remain selectable.\n\n")
+  knitr::knit_exit()
+}
 if (identical(params$lane, "fiml_audit")) {
   read_fiml <- function(run,name) {
     path <- file.path("results",run,paste0(name,".csv"))

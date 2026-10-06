@@ -3155,6 +3155,24 @@ an unconstrained gradient test to constrained solutions.
   `(H, J, ACOV)` plus casewise saturated-moment influence rows through
   `saturated_em_moment_influence`; Stage 2 runs complete-data ML on those
   saturated moments.
+  Isolated sphere-study numerical composition (2026-10-06, TASK-33.10.4) now
+  retains raw saturated derivatives, information repairs, endpoint value and
+  EM stop/options alongside `(H, J, ACOV)` in R. `fit_ml2s()` captures its exact
+  caller-unit Stage-2 moments/counts, recipe/mixing, required ACOV, supplied
+  weights, bounds and transformation before fitting. Opt-in
+  `magmaan_core$frontier_ml2s_convergence_audit()` exposes the existing core
+  Stage-1, handoff, solver-stop and original Stage-2 reports without refitting;
+  Nt uses ML and other weights their matching fixed quadratics. Serialized
+  fits rebuild packs; legacy/missing records stay unchecked, mismatches fail.
+  Fresh independent 90-digit checks agree at 156 stage points, 210 conditional
+  producer checks and 78 handoffs. All 12 ordinary Stage-1 endpoints and 56
+  returned fits pass; six mixed-unit ULS/DWLS/ADF L-BFGS errors remain, feeding
+  TASK-33.10.5. Negative raw curvature still fails after information repair;
+  its repaired ACOV remains unchecked. Separate stage passes imply no
+  propagated structural-parameter accuracy or inference/default recommendation.
+  Nonordinary covariance policies are explicitly outside this adapter. See
+  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  (`ml2s_audit` lane).
   `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
   returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected

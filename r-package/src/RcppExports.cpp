@@ -1075,6 +1075,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_ml2s_convergence_audit_impl
+Rcpp::List frontier_ml2s_convergence_audit_impl(Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta, Rcpp::Nullable<Rcpp::List> stage1_point);
+RcppExport SEXP _magmaanlab_frontier_ml2s_convergence_audit_impl(SEXP fitSEXP, SEXP thetaSEXP, SEXP stage1_pointSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type stage1_point(stage1_pointSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_ml2s_convergence_audit_impl(fit, theta, stage1_point));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_ordinal_newton_audit_impl
 Rcpp::List frontier_ordinal_newton_audit_impl(Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta);
 RcppExport SEXP _magmaanlab_frontier_ordinal_newton_audit_impl(SEXP fitSEXP, SEXP thetaSEXP) {
@@ -4378,6 +4391,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_dls_weight_impl", (DL_FUNC) &_magmaanlab_frontier_dls_weight_impl, 3},
     {"_magmaanlab_evaluate_at_impl", (DL_FUNC) &_magmaanlab_evaluate_at_impl, 7},
     {"_magmaanlab_frontier_fiml_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_fiml_newton_audit_impl, 2},
+    {"_magmaanlab_frontier_ml2s_convergence_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ml2s_convergence_audit_impl, 3},
     {"_magmaanlab_frontier_ordinal_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ordinal_newton_audit_impl, 2},
     {"_magmaanlab_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaanlab_data_ordinal_stats_from_raw_impl, 2},
     {"_magmaanlab_data_ordinal_stats_observed_from_raw_impl", (DL_FUNC) &_magmaanlab_data_ordinal_stats_observed_from_raw_impl, 3},

@@ -30,6 +30,7 @@
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/frontier/convergence.hpp"
+#include "magmaan/estimate/frontier/ml2s_audit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -2400,7 +2401,8 @@ stage1_regularization_options_from(SEXP arg) {
 
 Rcpp::List saturated_moments_to_r(
     const magmaan::estimate::fiml::SaturatedMoments& out,
-    bool include_information = true) {
+    bool include_information = true,
+    const magmaan::estimate::fiml::FIMLH1* endpoint = nullptr) {
   const R_xlen_t nb = static_cast<R_xlen_t>(out.mean.size());
   Rcpp::List mean_out(nb), cov_out(nb);
   Rcpp::IntegerVector nobs(nb);
@@ -2421,7 +2423,74 @@ Rcpp::List saturated_moments_to_r(
     ans["H"] = Rcpp::wrap(out.H);
     ans["J"] = Rcpp::wrap(out.J);
   }
+  ans["raw_H"] = Rcpp::wrap(out.raw_H);
+  ans["raw_gradient"] = Rcpp::wrap(out.raw_gradient);
+  ans["raw_hessian_analytic"] = out.raw_hessian_analytic;
+  ans["information_repaired"] = out.information_repaired;
+  ans["information_ridge"] = out.information_ridge;
+  ans["information_min_eigen"] = out.information_min_eigen;
+  ans["solver_recorded"] = out.solver_recorded;
+  const auto& o = out.solver_options;
+  ans["solver_options"] = Rcpp::List::create(
+      Rcpp::_["h1_em_max_iter"] = o.max_iter,
+      Rcpp::_["h1_em_param_tol"] = o.parameter_tol,
+      Rcpp::_["h1_em_objective_tol"] = o.objective_tol,
+      Rcpp::_["h1_em_cov_floor"] = o.covariance_floor,
+      Rcpp::_["h1_em_cov_warn"] = o.covariance_warn,
+      Rcpp::_["h1_em_error_on_nonconvergence"] = o.error_on_nonconvergence);
+  Rcpp::List blocks(out.solver_blocks.size());
+  using Stop = magmaan::estimate::fiml::H1StopReason;
+  for (std::size_t b = 0; b < out.solver_blocks.size(); ++b) {
+    const auto& x = out.solver_blocks[b];
+    blocks[b] = Rcpp::List::create(
+        Rcpp::_["stop"] = x.stop == Stop::Direct ? "direct" :
+            x.stop == Stop::ParameterTolerance ? "parameter_tolerance" : "iteration_limit",
+        Rcpp::_["iterations"] = x.iterations,
+        Rcpp::_["parameter_change"] = x.parameter_change,
+        Rcpp::_["objective_change"] = x.objective_change,
+        Rcpp::_["objective_converged"] = x.objective_converged,
+        Rcpp::_["covariance_repairs"] = x.covariance_repairs,
+        Rcpp::_["max_covariance_ridge"] = x.max_covariance_ridge,
+        Rcpp::_["min_covariance_eigen"] = x.min_covariance_eigen);
+  }
+  ans["solver_blocks"] = blocks;
+  if (endpoint) ans["endpoint_value"] = endpoint->value;
   return ans;
+}
+
+// Optional numerical provenance is absent on legacy serialized Stage-1 lists.
+// Preserve that absence; never invent a successful solver history.
+bool saturated_audit_from_list(Rcpp::List st, SaturatedMoments& out) {
+  if (!magmaanr::saturated_from_list(st, out)) return false;
+  if (st.containsElementNamed("raw_H")) out.raw_H = Rcpp::as<Eigen::MatrixXd>(st["raw_H"]);
+  if (st.containsElementNamed("raw_gradient")) out.raw_gradient = Rcpp::as<Eigen::VectorXd>(st["raw_gradient"]);
+  if (st.containsElementNamed("raw_hessian_analytic")) out.raw_hessian_analytic = Rcpp::as<bool>(st["raw_hessian_analytic"]);
+  if (st.containsElementNamed("information_repaired")) out.information_repaired = Rcpp::as<bool>(st["information_repaired"]);
+  if (st.containsElementNamed("information_ridge")) out.information_ridge = Rcpp::as<double>(st["information_ridge"]);
+  if (st.containsElementNamed("information_min_eigen")) out.information_min_eigen = Rcpp::as<double>(st["information_min_eigen"]);
+  if (st.containsElementNamed("solver_recorded")) out.solver_recorded = Rcpp::as<bool>(st["solver_recorded"]);
+  if (st.containsElementNamed("solver_options")) out.solver_options = fiml_h1_opts_from(Rcpp::List(st["solver_options"]));
+  if (st.containsElementNamed("solver_blocks")) {
+    Rcpp::List blocks(st["solver_blocks"]);
+    using Stop = magmaan::estimate::fiml::H1StopReason;
+    for (R_xlen_t b = 0; b < blocks.size(); ++b) {
+      Rcpp::List x(blocks[b]);
+      magmaan::estimate::fiml::H1BlockDiagnostics d;
+      const auto s = Rcpp::as<std::string>(x["stop"]);
+      if (s != "direct" && s != "parameter_tolerance" && s != "iteration_limit")
+        Rcpp::stop("invalid retained Stage-1 stop reason");
+      d.stop = s == "direct" ? Stop::Direct : s == "parameter_tolerance" ? Stop::ParameterTolerance : Stop::IterationLimit;
+      d.iterations = Rcpp::as<int>(x["iterations"]);
+      d.parameter_change = Rcpp::as<double>(x["parameter_change"]);
+      d.objective_change = Rcpp::as<double>(x["objective_change"]);
+      d.objective_converged = Rcpp::as<bool>(x["objective_converged"]);
+      d.covariance_repairs = Rcpp::as<int>(x["covariance_repairs"]);
+      d.max_covariance_ridge = Rcpp::as<double>(x["max_covariance_ridge"]);
+      d.min_covariance_eigen = Rcpp::as<double>(x["min_covariance_eigen"]);
+      out.solver_blocks.push_back(d);
+    }
+  }
+  return true;
 }
 
 Rcpp::List stage1_regularization_diagnostics_to_r(
@@ -5923,10 +5992,15 @@ Rcpp::List saturated_em_moments_impl(
   }
   if (any_missing) raw.mask = std::move(masks);
 
-  auto out_or = magmaan::estimate::fiml::saturated_em_moments(
-      raw, fiml_h1_opts_from(control), h_step);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack) stop_fit(pack.error());
+  auto endpoint = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack, fiml_h1_opts_from(control));
+  if (!endpoint) stop_fit(endpoint.error());
+  // Analytic curvature does not use the retained legacy FD step argument.
+  if (!(h_step > 0.0)) Rcpp::stop("saturated_em_moments: h_step must be > 0");
+  auto out_or = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *endpoint);
   if (!out_or.has_value()) stop_post(out_or.error());
-  return saturated_moments_to_r(*out_or);
+  return saturated_moments_to_r(*out_or, true, &*endpoint);
 }
 
 // regularize_saturated_stage1_impl() — frontier ML2S Stage-1 conditioning.
@@ -6292,6 +6366,147 @@ Rcpp::List frontier_fiml_newton_audit_impl(
       Rcpp::_["patterns"] = patterns,
       Rcpp::_["construction_status"] = std::string(magmaan::estimate::to_string(source.status)),
       Rcpp::_["construction_detail"] = source.detail);
+}
+
+// Original two-stage objectives, with historical evidence kept distinct from
+// a deliberately supplied Stage-1 point. No EM or optimizer is run here.
+// [[Rcpp::export]]
+Rcpp::List frontier_ml2s_convergence_audit_impl(
+    Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> stage1_point = R_NilValue) {
+  namespace af = magmaan::estimate::frontier;
+  namespace ff = magmaan::estimate::fiml;
+  if (!is_ml2s_estimator_label(Rcpp::as<std::string>(fit["estimator"])) ||
+      !fit.containsElementNamed("raw_data") || !fit.containsElementNamed("stage1"))
+    Rcpp::stop("requires an ordinary ML2S fit with raw_data and stage1");
+  if (fit.containsElementNamed("covariance_policy") &&
+      Rcpp::as<std::string>(fit["covariance_policy"]) != "unrestricted")
+    Rcpp::stop("ML2S composition audit supports ordinary Stage 2 only");
+  Ctx ctx = ctx_from_fit(fit);
+  auto raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  auto pack = ff::fiml_pack(raw);
+  if (!pack) stop_fit(pack.error());
+  Rcpp::List source = fit.containsElementNamed("stage1_raw")
+      ? Rcpp::List(fit["stage1_raw"]) : Rcpp::List(fit["stage1"]);
+  ff::SaturatedMoments sm;
+  if (!saturated_audit_from_list(source, sm)) Rcpp::stop("Stage-1 moments/ACOV missing");
+  ff::FIMLH1 endpoint;
+  endpoint.mu = sm.mean; endpoint.sigma = sm.cov;
+  endpoint.solver_recorded = sm.solver_recorded;
+  endpoint.solver_options = sm.solver_options;
+  endpoint.solver_blocks = sm.solver_blocks;
+  bool value_recorded = source.containsElementNamed("endpoint_value") && stage1_point.isNull();
+  if (stage1_point.isNotNull()) {
+    ff::SaturatedMoments at;
+    if (!magmaanr::saturated_target_from_list(Rcpp::List(stage1_point.get()), at))
+      Rcpp::stop("Stage-1 point needs mean/cov/n_obs");
+    endpoint.mu = at.mean; endpoint.sigma = at.cov;
+    endpoint.solver_recorded = false; endpoint.solver_blocks.clear();
+    auto evaluated = ff::saturated_em_moments(raw, *pack, endpoint);
+    if (!evaluated) stop_post(evaluated.error());
+    sm = std::move(*evaluated);
+  }
+  if (value_recorded) endpoint.value = Rcpp::as<double>(source["endpoint_value"]);
+  else {
+    magmaan::model::ImpliedMoments m; m.mu = endpoint.mu; m.sigma = endpoint.sigma;
+    auto v = ff::FIML{}.value(raw, pack->cache, m);
+    if (!v) stop_fit(v.error());
+    endpoint.value = *v;
+  }
+  const auto kind = magmaanr::two_stage_weight_from_arg(Rcpp::as<std::string>(fit["stage2_weight"]));
+  const auto dls = ml2s_dls_options_from_fit(fit);
+  af::Ml2sAuditOptions opts;
+  std::optional<af::Ml2sStage2Input> recorded;
+  Rcpp::List snapshot;
+  if (fit.containsElementNamed("stage2_input") && !Rf_isNull(fit["stage2_input"])) {
+    snapshot = Rcpp::List(fit["stage2_input"]);
+    if (Rcpp::as<std::string>(snapshot["covariance_policy"]) != "ordinary")
+      Rcpp::stop("ML2S composition audit supports ordinary Stage 2 only");
+    af::Ml2sStage2Input input;
+    input.kind = magmaanr::two_stage_weight_from_arg(Rcpp::as<std::string>(snapshot["stage2_weight"]));
+    input.dls.a = Rcpp::as<double>(snapshot["dls_a"]);
+    Rcpp::List captured(snapshot["moments"]);
+    const bool has_acov = magmaanr::saturated_from_list(captured, input.moments);
+    if (!has_acov && !magmaanr::saturated_target_from_list(captured, input.moments))
+      Rcpp::stop("invalid Stage-2 input snapshot");
+    opts.transformation = stage1_regularization_options_from(snapshot["transformation"]);
+    if (snapshot.containsElementNamed("bounds") && !Rf_isNull(snapshot["bounds"]))
+      opts.stage2.bounds = bounds_from_nullable(Rcpp::List(snapshot["bounds"]));
+    if (has_acov || input.kind == ff::TwoStageWeight::Nt || input.kind == ff::TwoStageWeight::Uls)
+      recorded = std::move(input);
+  } else if (fit.containsElementNamed("stage1_raw")) {
+    Rcpp::stop("transformed legacy fit lacks its transformation/input record");
+  }
+  const auto est = est_from_fit(fit);
+  const Eigen::VectorXd point = theta.isNull() ? est.theta
+      : Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(theta.get()));
+  auto r = af::audit_ml2s(ctx.pt, ctx.rep, raw, *pack, endpoint, point, kind, dls, opts,
+      recorded, theta.isNull() ? std::optional<double>(est.fmin) : std::nullopt, &sm);
+  if (!r) stop_fit(r.error());
+  if (!value_recorded) r->stage1.evidence.objective.reported_available = false;
+  // Also verify the captured caller-unit sample and actual supplied W, beyond
+  // the core recipe/moment identity. A missing record cannot be reconstructed
+  // from today's producer and called historical evidence.
+  auto equal = [](const auto& a, const auto& b) {
+    return a.rows() == b.rows() && a.cols() == b.cols() && (a.array() == b.array()).all();
+  };
+  if (recorded) {
+    bool same = ctx.samp.n_obs == recorded->moments.n_obs &&
+        ctx.samp.S.size() == recorded->moments.cov.size() && ctx.samp.mean.size() == recorded->moments.mean.size();
+    for (std::size_t b = 0; same && b < ctx.samp.S.size(); ++b)
+      same = equal(ctx.samp.S[b], recorded->moments.cov[b]) && equal(ctx.samp.mean[b], recorded->moments.mean[b]);
+    if (kind != ff::TwoStageWeight::Nt) {
+      if (!snapshot.containsElementNamed("weight_blocks") || Rf_isNull(snapshot["weight_blocks"]))
+        r->handoff = {magmaan::estimate::FitCheck::Unchecked, true, "actual Stage-2 weight record missing"};
+      else {
+        const auto& weight_source = recorded->kind == ff::TwoStageWeight::Uls
+            ? r->stage2_input.moments : recorded->moments;
+        auto w = ff::two_stage_stage2_weight_blocks(weight_source, recorded->kind, recorded->dls);
+        if (!w) stop_post(w.error());
+        Rcpp::List supplied(snapshot["weight_blocks"]);
+        same = same && supplied.size() == static_cast<R_xlen_t>(w->size());
+        for (R_xlen_t b = 0; same && b < supplied.size(); ++b)
+          same = equal(Rcpp::as<Eigen::MatrixXd>(supplied[b]), (*w)[static_cast<std::size_t>(b)]);
+      }
+    }
+    if (!same) r->handoff = {magmaan::estimate::FitCheck::Failed, true, "captured sample or supplied weight differs from fit/recipe"};
+  }
+  af::Ml2sConvergencePolicy policy;
+  policy.stage1 = af::newton_convergence_policy(); policy.stage2 = af::newton_convergence_policy();
+  policy.stage1.require_objective_consistency = true;
+  policy.stage2.require_objective_consistency = theta.isNull();
+  policy.require_solver_stop = true;
+  const auto assessment = af::assess_convergence(*r, policy);
+  auto check = [](const af::ConvergenceCheck& x) {
+    return Rcpp::List::create(Rcpp::_["status"] = fit_check_to_r(x.status), Rcpp::_["reason"] = x.reason);
+  };
+  const auto& a = r->stage2.computations;
+  magmaan::estimate::Estimates at; at.theta = point;
+  const auto pt = magmaan::compat::lavaan::to_lavaan_partable(ctx.pt, ctx.names, magmaan::spec::Starts{});
+  return Rcpp::List::create(
+      Rcpp::_["status"] = fit_check_to_r(assessment.status),
+      Rcpp::_["stage1_assessment"] = verified_assessment_to_r(assessment.stage1),
+      Rcpp::_["handoff"] = check(assessment.handoff), Rcpp::_["solver_stop"] = check(assessment.solver_stop),
+      Rcpp::_["stage2_assessment"] = verified_assessment_to_r(assessment.stage2),
+      Rcpp::_["source"] = saturated_moments_to_r(r->source),
+      Rcpp::_["stage2_input"] = saturated_moments_to_r(r->stage2_input.moments),
+      Rcpp::_["stage1"] = Rcpp::List::create(
+          Rcpp::_["value_recorded"] = value_recorded,
+          Rcpp::_["objective"] = r->stage1.derivatives.objective,
+          Rcpp::_["theta"] = Rcpp::wrap(r->stage1.derivatives.theta),
+          Rcpp::_["gradient"] = Rcpp::wrap(r->stage1.derivatives.gradient),
+          Rcpp::_["hessian"] = Rcpp::wrap(r->stage1.derivatives.hessian),
+          Rcpp::_["diagnostics"] = newton_accuracy_to_r(r->stage1.evidence.newton_accuracy)),
+      Rcpp::_["stage2"] = Rcpp::List::create(
+          Rcpp::_["objective"] = a.derivatives.objective,
+          Rcpp::_["theta"] = Rcpp::wrap(point),
+          Rcpp::_["gradient"] = Rcpp::wrap(a.derivatives.gradient),
+          Rcpp::_["hessian"] = Rcpp::wrap(a.derivatives.hessian),
+          Rcpp::_["metric_factor"] = Rcpp::wrap(a.derivatives.metric_factor),
+          Rcpp::_["derivative_basis"] = Rcpp::wrap((a.geometry.equality_basis * a.geometry.tangent_basis).eval()),
+          Rcpp::_["retained_ls_weights"] = retained_ls_weights_to_r(a.derivatives),
+          Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics)),
+      Rcpp::_["partable"] = partable_df_from_lavaan(pt, &at));
 }
 
 // Opt-in numerical point audit of the original, unprofiled ordinal LS

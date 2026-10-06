@@ -575,3 +575,25 @@ fiml-audit-confirm-v1/*
 !fiml-audit-confirm-v1/complete_reduction.csv
 !fiml-audit-confirm-v1/verification.csv
 !fiml-audit-confirm-v1/reference_metadata.csv
+
+# Compact ML2S composition judgments and every failed fitting attempt.
+# Raw observations, matrices, RDSs and development reference artifacts ignored.
+!ml2s-audit-confirm-v1/
+ml2s-audit-confirm-v1/*
+!ml2s-audit-confirm-v1/cases.csv
+!ml2s-audit-confirm-v1/fits.csv
+!ml2s-audit-confirm-v1/stages.csv
+!ml2s-audit-confirm-v1/audits.csv
+!ml2s-audit-confirm-v1/controls.csv
+!ml2s-audit-confirm-v1/comparisons.csv
+!ml2s-audit-confirm-v1/producer_checks.csv
+!ml2s-audit-confirm-v1/handoff_checks.csv
+!ml2s-audit-confirm-v1/verification.csv
+!ml2s-audit-confirm-v1/metadata.csv
+!ml2s-audit-confirm-v1/reference_metadata.csv
+!ml2s-audit-development-v2/
+ml2s-audit-development-v2/*
+!ml2s-audit-development-v2/cases.csv
+!ml2s-audit-development-v2/fits.csv
+!ml2s-audit-development-v2/stages.csv
+!ml2s-audit-development-v2/metadata.csv

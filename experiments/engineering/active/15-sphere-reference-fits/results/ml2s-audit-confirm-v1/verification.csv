@@ -1,0 +1,7 @@
+check,tested,failed
+independent_stage_points,156,0
+conditional_producer_checks,210,0
+actual_input_handoff_identity,78,0
+missing_mismatched_early_repaired_controls,10,0
+strict_early_EM_rejects,1,0
+every_returned_fit_audited,62,0

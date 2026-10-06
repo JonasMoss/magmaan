@@ -1,0 +1,2 @@
+"control","case_id","rejected","message"
+"strict_early_EM",3,TRUE,"magmaan fit error [OptimizerNonConvergence] after 1 iters, f=4.93913: FIML H1 EM: block 1 reached the iteration cap (1); final max parameter change = 1.227726e+00, final objective change = inf, objective gate not met"
