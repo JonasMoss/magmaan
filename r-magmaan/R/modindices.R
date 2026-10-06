@@ -46,7 +46,7 @@ modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases
     out$test <- if (fit$estimator == "DWLS") "fit_function_difference" else "lr"
     for (i in seq_len(nrow(out))) {
       if (!out$reason[i] %in% c("available", "numeric_failure") || out$group[i] == 0L && out$kind[i] == "fixed") next
-      augmented <- tryCatch(suppressWarnings(getFromNamespace(".policy_mi_refit", "magmaanlab")(
+      augmented <- tryCatch(suppressWarnings(magmaanlab::policy_mi_refit(
           fit$lab, out[i, , drop = FALSE], rows[i])), error = function(e) e)
       out$statistic[i] <- out$pvalue[i] <- NA_real_
       if (inherits(augmented, "error")) {

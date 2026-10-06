@@ -1,5 +1,8 @@
 # magmaanlab 0.3.0 (in development)
 
+- `policy_mi_refit()` is exported: it refits one modification-index candidate
+  from the embedded null, the step behind `modindices(test = "lr")`.
+
 - Ordinary `modindices()` combines robust one-df score modification indices
   and affine equality releases for ML, FIML and all-ordinal/mixed DWLS.
   `test = "lr"` refits from embedded null starts and uses the nested policy;

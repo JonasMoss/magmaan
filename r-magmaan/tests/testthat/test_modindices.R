@@ -168,7 +168,7 @@ test_that("failed LR refits preserve the candidate and typed reason", {
   d <- hs()
   f <- magmaan(magmaan_model(cfa), d, inference = FALSE)
   row <- data.frame(lhs = "x2", op = "~~", rhs = "x3", group = 1L)
-  testthat::local_mocked_bindings(.policy_mi_refit = function(...) stop("solver failed"),
+  testthat::local_mocked_bindings(policy_mi_refit = function(...) stop("solver failed"),
     .package = "magmaanlab")
   out <- modindices(f, test = "lr", candidates = row, releases = FALSE)
   expect_identical(out$reason, "refit_failed")

@@ -23,9 +23,19 @@ policy_modification_indices <- function(fit, data = NULL, releases = TRUE) {
   policy_modification_indices_impl(fit, state, raw, releases)
 }
 
-# Refit one augmented model directly from the embedded null. The template is
-# an evaluation point for the native embedding map; it is never optimized.
-.policy_mi_refit <- function(fit, row, candidate_row) {
+#' Refit one modification-index candidate from the embedded null
+#'
+#' Frees one candidate (or releases one equality) of a policy
+#' modification-index table and refits from the fitted estimate embedded in
+#' the augmented model, replaying the fit's options. The template is an
+#' evaluation point for the native embedding map; it is never optimized.
+#' @param fit The fitted (restricted) magmaanlab model.
+#' @param row One row of [policy_modification_indices()] output.
+#' @param candidate_row The matching element of that output's
+#'   `candidate_row` attribute.
+#' @return The fitted augmented model, for [policy_nested()].
+#' @export
+policy_mi_refit <- function(fit, row, candidate_row) {
   pt <- policy_mi_alternative_impl(fit, row$kind, candidate_row,
       row$lhs, row$op, row$rhs, row$group)
   spec <- as_magmaan_model_spec(pt)

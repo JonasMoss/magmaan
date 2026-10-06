@@ -166,3 +166,4 @@ export(association_ml_nested_test)
 
 export(policy_fit_measures)
 export(policy_modification_indices)
+export(policy_mi_refit)
