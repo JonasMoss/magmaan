@@ -20,6 +20,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/LU>
 #include <Eigen/Eigenvalues>
 #include <Eigen/SVD>
 
@@ -221,6 +222,20 @@ post_expected<Eigen::MatrixXd> invert_symmetric(const Eigen::MatrixXd& A,
         std::string(what) + " is not positive definite"));
   }
   return Eigen::MatrixXd(ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols())));
+}
+
+// Likelihood sensitivity needs invertibility, including indefinite matrices.
+// LDLT's positive-semidefinite verdict alone does not exclude zero pivots.
+post_expected<Eigen::MatrixXd> invert_likelihood_sensitivity(
+    const Eigen::MatrixXd& A, const char* what) {
+  if (!A.allFinite()) return std::unexpected(make_err(
+      PostError::Kind::NumericIssue, std::string(what) + " is not finite"));
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
+  if (!lu.isInvertible()) return std::unexpected(make_err(
+      PostError::Kind::InfoMatrixSingular, std::string(what) + " is singular"));
+  auto positive = invert_symmetric(A, what);
+  if (positive) return positive;
+  return Eigen::MatrixXd(lu.inverse());
 }
 
 // A Schur complement can be a small difference of large information terms.
@@ -705,6 +720,22 @@ equality_release_tests(spec::LatentStructure pt,
   return out;
 }
 
+// Identified candidates retain their identity when numerical scoring fails.
+void append_robust_result(ScoreTestTable& table, const ScoreCandidate& candidate,
+                          const post_expected<ScoreTestResult>& result) {
+  if (result) {
+    table.rows.push_back(*result);
+    return;
+  }
+  ScoreTestResult row;
+  row.candidate = candidate;
+  row.failure = result.error();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  row.score = row.information = row.mi = row.p_value = row.epc =
+      row.epc_lv = row.epc_all = row.v_eff = row.mi_scaled = row.scaling_factor = nan;
+  table.rows.push_back(std::move(row));
+}
+
 // Robust twins of the two NT sweeps above. The evaluator additionally emits the
 // parameter-space sandwich {A1, B1}; everything else (candidate enumeration,
 // augmentation, K_nuisance) is identical, so each robust row carries both the NT
@@ -714,7 +745,7 @@ post_expected<ScoreTestTable>
 fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
                                         const model::MatrixRep& rep,
                                         const Estimates& est,
-                                        Evaluator eval_robust) {
+                                        Evaluator eval_robust, bool expected_epc = false) {
   ScoreTestTable out;
   auto con0 = build_eq_constraints(pt);
   if (!con0.has_value()) return std::unexpected(con0.error());
@@ -749,11 +780,13 @@ fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
     }
     auto rank = prepare_candidate_rank(eval_robust, aug_pt, aug_est, K_aug);
     if (!rank.has_value()) return std::unexpected(rank.error());
+    if (!*rank) rank = prepare_rank_projection(info_full, K_aug);
+    if (!rank.has_value()) return std::unexpected(rank.error());
     if (!identified_direction(*rank, direction)) continue;
     auto r = frontier::score_for_direction_robust(cand, score_full, info_full,
                                                   A1, B1, K_aug, direction,
-                                                  sensitivity.size() ? &sensitivity : nullptr);
-    if (r.has_value()) out.rows.push_back(*r);
+                                                  sensitivity.size() ? &sensitivity : nullptr, expected_epc);
+    append_robust_result(out, cand, r);
   }
   return out;
 }
@@ -763,7 +796,7 @@ post_expected<ScoreTestTable>
 fixed_parameter_tests_robust(spec::LatentStructure pt,
                              const model::MatrixRep& rep,
                              const Estimates& est,
-                             Evaluator eval_robust) {
+                             Evaluator eval_robust, bool expected_epc = false) {
   auto con0 = build_eq_constraints(pt);
   if (!con0.has_value()) return std::unexpected(con0.error());
   if (est.theta.size() != pt.n_free()) {
@@ -776,13 +809,13 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
   if (candidates.empty()) return ScoreTestTable{};
   if (!candidate_cells_are_unique(rep, candidates)) {
     return fixed_parameter_tests_robust_one_by_one(
-        std::move(pt), rep, est, eval_robust);
+        std::move(pt), rep, est, eval_robust, expected_epc);
   }
 
   auto aug_or = eval_robust.make_augmented(pt, candidates);
   if (!aug_or.has_value()) {
     return fixed_parameter_tests_robust_one_by_one(
-        std::move(pt), rep, est, eval_robust);
+        std::move(pt), rep, est, eval_robust, expected_epc);
   }
   spec::LatentStructure aug_pt = std::move(*aug_or);
   Estimates aug_est{append_thetas(est.theta, candidates), est.fmin,
@@ -794,7 +827,7 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
                                     A1, B1, sensitivity);
       !e.has_value()) {
     return fixed_parameter_tests_robust_one_by_one(
-        std::move(pt), rep, est, eval_robust);
+        std::move(pt), rep, est, eval_robust, expected_epc);
   }
   const Eigen::Index base_q = est.theta.size();
   const Eigen::Index q = score_full.size();
@@ -813,6 +846,8 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
 
   auto rank = prepare_candidate_rank(eval_robust, aug_pt, aug_est, K_aug);
   if (!rank.has_value()) return std::unexpected(rank.error());
+  if (!*rank) rank = prepare_rank_projection(info_full, K_aug);
+  if (!rank.has_value()) return std::unexpected(rank.error());
 
   ScoreTestTable out;
   out.rows.reserve(candidates.size());
@@ -822,10 +857,10 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
     const Eigen::VectorXd direction = Eigen::VectorXd::Unit(q, coord);
     auto r = sensitivity.size()
         ? frontier::score_for_direction_robust(candidates[i].candidate,
-              score_full, info_full, A1, B1, K_aug, direction, &sensitivity)
+              score_full, info_full, A1, B1, K_aug, direction, &sensitivity, expected_epc)
         : score_for_coordinate_robust(candidates[i].candidate, score_full,
               info_full, A1, B1, *nuisance, coord);
-    if (r.has_value()) out.rows.push_back(*r);
+    append_robust_result(out, candidates[i].candidate, r);
   }
   return out;
 }
@@ -835,7 +870,7 @@ post_expected<ScoreTestTable>
 equality_release_tests_robust(spec::LatentStructure pt,
                               const model::MatrixRep& rep,
                               const Estimates& est,
-                              Evaluator eval_robust) {
+                              Evaluator eval_robust, bool expected_epc = false) {
   (void)rep;
   ScoreTestTable out;
   auto con = build_eq_constraints(pt);
@@ -855,6 +890,8 @@ equality_release_tests_robust(spec::LatentStructure pt,
 
   auto rank = prepare_candidate_rank(eval_robust, pt, est, con->K());
   if (!rank.has_value()) return std::unexpected(rank.error());
+  if (!*rank) rank = prepare_rank_projection(info_full, con->K());
+  if (!rank.has_value()) return std::unexpected(rank.error());
 
   for (Eigen::Index r = 0; r < con->A_eq.rows(); ++r) {
     auto d = release_direction(*con, r);
@@ -866,8 +903,8 @@ equality_release_tests_robust(spec::LatentStructure pt,
     cand.op = parse::Op::EqConstraint;
     auto res = frontier::score_for_direction_robust(cand, score_full, info_full,
                                                     A1, B1, con->K(), *d,
-                                                    sensitivity.size() ? &sensitivity : nullptr);
-    if (res.has_value()) out.rows.push_back(*res);
+                                                    sensitivity.size() ? &sensitivity : nullptr, expected_epc);
+    append_robust_result(out, cand, res);
   }
   return out;
 }
@@ -901,9 +938,9 @@ struct ContinuousMlEvaluator {
   }
 };
 
-// ML evaluator that additionally produces the parameter-space sandwich {A1, B1}
-// for the robust score path. The NT score/info match the bread (Expected vs
-// Observed); the sandwich is always built in full θ-space (reparam_constraints =
+// ML evaluator emits expected information for the metric/bread and, for
+// observed-bread requests, the observed Hessian for nuisance projection only.
+// The sandwich is always built in full θ-space (reparam_constraints =
 // false) so the score-test K_nuisance does the constraint projection. The Γ̂
 // source is one of: empirical from `raw`, caller-supplied `gamma_hat`, or
 // model-implied Γ_NT (`spec.cov == ModelImplied`, both pointers null).
@@ -918,9 +955,6 @@ struct RobustMlEvaluator {
 
   post_expected<std::optional<Eigen::MatrixXd>>
   rank_information(const spec::LatentStructure& pt, const Estimates& est) const {
-    if (information == ScoreInformation::Expected) {
-      return std::optional<Eigen::MatrixXd>{};
-    }
     auto info = information_expected(pt, rep, samp, est);
     if (!info.has_value()) return std::unexpected(info.error());
     return std::optional<Eigen::MatrixXd>{std::move(*info)};
@@ -939,16 +973,18 @@ struct RobustMlEvaluator {
 
   post_expected<robust::ParamSpaceSandwich>
   sandwich_for(const spec::LatentStructure& pt, const Estimates& est) const {
+    auto metric_spec = spec;
+    metric_spec.bread = robust::Information::Expected;
     if (spec.cov == robust::ScoreCovariance::ModelImplied) {
-      return robust::param_space_sandwich(pt, rep, samp, est, spec,
+      return robust::param_space_sandwich(pt, rep, samp, est, metric_spec,
                                           /*reparam_constraints=*/false);
     }
     if (gamma_hat != nullptr) {
-      return robust::param_space_sandwich(pt, rep, samp, est, *gamma_hat, spec,
+      return robust::param_space_sandwich(pt, rep, samp, est, *gamma_hat, metric_spec,
                                           /*reparam_constraints=*/false);
     }
     if (raw != nullptr) {
-      return robust::param_space_sandwich(pt, rep, samp, est, *raw, spec,
+      return robust::param_space_sandwich(pt, rep, samp, est, *raw, metric_spec,
                                           /*reparam_constraints=*/false);
     }
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -965,6 +1001,11 @@ struct RobustMlEvaluator {
                                        score_scale, score, info);
         !e.has_value()) {
       return std::unexpected(e.error());
+    }
+    if (spec.bread == robust::Information::Observed) {
+      auto h = information_observed_analytic(pt, rep, samp, est);
+      if (!h) return std::unexpected(h.error());
+      sensitivity = std::move(*h);
     }
     auto sw = sandwich_for(pt, est);
     if (!sw.has_value()) return std::unexpected(sw.error());
@@ -1124,8 +1165,8 @@ struct FimlEvaluator {
   }
 };
 
-// FIML robust evaluator (MLR corner). Bread A1 = info_full = (N/2)·H (the
-// observed information), meat B1 = ¼·scoresᵀscores. The casewise scores are the
+// FIML robust evaluator: expected information is the metric/bread; the
+// observed Hessian projects nuisance scores, and meat B1 = ¼·scoresᵀscores. The casewise scores are the
 // per-observation deviance gradients ∂(deviance_i)/∂θ, so colSums(scores) = N·g
 // and the FIML score is score_full = -½·colSums(scores) — exactly the
 // non-robust `evaluate_augmented_fiml` score, so the unscaled `mi` matches.
@@ -1162,8 +1203,11 @@ struct RobustFimlEvaluator {
     const double n_total = static_cast<double>(pack.cache.n_total);
 
     score = -0.5 * scores.colwise().sum().transpose();
-    info = 0.5 * n_total * parts->hessian;
-    info = 0.5 * (info + info.transpose());
+    sensitivity = 0.5 * n_total * parts->hessian;
+    sensitivity = 0.5 * (sensitivity + sensitivity.transpose());
+    auto expected = estimate::fiml::fiml_expected_information(pt, rep, raw, est, pack);
+    if (!expected) return std::unexpected(expected.error());
+    info = std::move(*expected);
     A1 = info;
     B1 = 0.25 * (scores.transpose() * scores);
     B1 = 0.5 * (B1 + B1.transpose());
@@ -1598,7 +1642,8 @@ score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::MatrixXd& B1,
                            const Eigen::MatrixXd& K_nuisance,
                            const Eigen::VectorXd& direction,
-                           const Eigen::MatrixXd* nuisance_sensitivity) {
+                           const Eigen::MatrixXd* nuisance_sensitivity,
+                           bool expected_metric_epc) {
   if (nuisance_sensitivity != nullptr) {
     // Preserve the expected-metric identification gate before changing the
     // nuisance projection. Residual curvature cannot identify a release whose
@@ -1619,13 +1664,17 @@ score_for_direction_robust(const ScoreCandidate& candidate,
     if (K_nuisance.cols() > 0) {
       const Eigen::MatrixXd Haa = K_nuisance.transpose() *
           (*nuisance_sensitivity) * K_nuisance;
-      auto inv = invert_symmetric(Haa, "robust score tests observed nuisance sensitivity");
+      auto inv = expected_metric_epc
+          ? invert_likelihood_sensitivity(Haa, "robust score tests observed nuisance sensitivity")
+          : invert_symmetric(Haa, "robust score tests observed nuisance sensitivity");
       if (!inv) return std::unexpected(inv.error());
       g.noalias() -= K_nuisance * ((*inv) * (K_nuisance.transpose() *
           (*nuisance_sensitivity) * direction));
     }
-    return score_for_direction_robust(candidate, score_full, info_full,
+    auto result = score_for_direction_robust(candidate, score_full, info_full,
         A1, B1, Eigen::MatrixXd(q, 0), g);
+    if (result && expected_metric_epc) result->epc = identified->epc;
+    return result;
   }
   auto nt = score_for_direction(candidate, score_full, info_full, K_nuisance,
                                 direction);
@@ -1674,7 +1723,8 @@ score_for_subspace_robust_impl(
     const Eigen::MatrixXd& B1,
     const Eigen::MatrixXd& K_nuisance,
     const Eigen::MatrixXd& directions,
-    const Eigen::MatrixXd* nuisance_sensitivity) {
+    const Eigen::MatrixXd* nuisance_sensitivity,
+    bool likelihood_sensitivity = false) {
   const Eigen::Index q = score_full.size();
   const Eigen::Index df = directions.cols();
   if (info_full.rows() != q || info_full.cols() != q || directions.rows() != q ||
@@ -1699,8 +1749,9 @@ score_for_subspace_robust_impl(
     const Eigen::MatrixXd A_d = projection * directions;  // q × df
     const Eigen::MatrixXd A_aa =
         K_nuisance.transpose() * projection * K_nuisance;
-    auto Iaa_inv =
-        invert_symmetric(A_aa, "robust joint score test nuisance sensitivity");
+    auto Iaa_inv = likelihood_sensitivity
+        ? invert_likelihood_sensitivity(A_aa, "robust joint score test nuisance sensitivity")
+        : invert_symmetric(A_aa, "robust joint score test nuisance sensitivity");
     if (!Iaa_inv.has_value()) return std::unexpected(Iaa_inv.error());
     G.noalias() -= K_nuisance *
         ((*Iaa_inv) * (K_nuisance.transpose() * A_d));
@@ -1826,11 +1877,6 @@ score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
 
 namespace {
 
-ScoreInformation info_for_bread(robust::Information bread) {
-  return bread == robust::Information::Observed ? ScoreInformation::Observed
-                                                : ScoreInformation::Expected;
-}
-
 post_expected<void> reject_estimated_weight_ml(const RobustScoreOptions& options) {
   if (options.estimated_weight) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1861,9 +1907,9 @@ modification_indices_robust_impl(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(e.error()));
   }
   RobustMlEvaluator ev{work->rep, samp, options.spec,
-                       info_for_bread(options.spec.bread), 0.5 * *n,
+                       ScoreInformation::Expected, 0.5 * *n,
                        raw, gamma_hat};
-  auto table = fixed_parameter_tests_robust(work->pt, work->rep, est, ev);
+  auto table = fixed_parameter_tests_robust(work->pt, work->rep, est, ev, true);
   if (!table.has_value()) return std::unexpected(table.error());
   if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
       !e.has_value()) {
@@ -1927,9 +1973,9 @@ score_tests_robust_impl(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(e.error()));
   }
   RobustMlEvaluator ev{rep, samp, options.spec,
-                       info_for_bread(options.spec.bread), 0.5 * *n,
+                       ScoreInformation::Expected, 0.5 * *n,
                        raw, gamma_hat};
-  return equality_release_tests_robust(std::move(pt), rep, est, ev);
+  return equality_release_tests_robust(std::move(pt), rep, est, ev, true);
 }
 
 }  // namespace
@@ -1983,7 +2029,7 @@ score_tests_robust_joint_impl(spec::LatentStructure pt,
   }
 
   RobustMlEvaluator ev{rep, samp, options.spec,
-                       info_for_bread(options.spec.bread), 0.5 * *n,
+                       ScoreInformation::Expected, 0.5 * *n,
                        raw, gamma_hat};
   Eigen::VectorXd score_full;
   Eigen::MatrixXd info_full, A1, B1, sensitivity;
@@ -2006,8 +2052,8 @@ score_tests_robust_joint_impl(spec::LatentStructure pt,
     cand.op = parse::Op::EqConstraint;
     candidates.push_back(cand);
   }
-  return score_for_subspace_robust(std::move(candidates), score_full, info_full,
-                                   A1, B1, con->K(), D);
+  return score_for_subspace_robust_impl(std::move(candidates), score_full, info_full,
+                                   A1, B1, con->K(), D, sensitivity.size() ? &sensitivity : nullptr, true);
 }
 
 }  // namespace
@@ -2411,7 +2457,7 @@ modification_indices_fiml_robust_impl(spec::LatentStructure pt,
   }
   RobustFimlEvaluator ev{work->rep, raw, pack};
   auto table =
-      fixed_parameter_tests_robust_one_by_one(work->pt, work->rep, est, ev);
+      fixed_parameter_tests_robust_one_by_one(work->pt, work->rep, est, ev, true);
   if (!table.has_value()) return std::unexpected(table.error());
   if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
       !e.has_value()) {
@@ -2482,7 +2528,7 @@ score_tests_fiml_robust(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(e.error()));
   }
   RobustFimlEvaluator ev{rep, raw, pack};
-  return equality_release_tests_robust(std::move(pt), rep, est, ev);
+  return equality_release_tests_robust(std::move(pt), rep, est, ev, true);
 }
 
 namespace {

@@ -191,3 +191,13 @@ test_that("two-group ML LR refits free only the requested group's parameter", {
   expect_equal(out$statistic, compare$statistic, tolerance = 1e-6)
   expect_equal(out$pvalue, compare$pvalue, tolerance = 1e-6)
 })
+
+
+test_that("HS score modifications retain every saddle-direction candidate", {
+  syntax <- paste(cfa, "speed =~ x7+x8+x9", sep = "\n")
+  fit <- magmaan(magmaan_model(syntax), hs(), inference = FALSE)
+  out <- modindices(fit, releases = FALSE)
+  expect_equal(nrow(out), 54L)
+  expect_true(all(out$reason == "available"))
+  expect_true(all(is.finite(out$statistic)))
+})

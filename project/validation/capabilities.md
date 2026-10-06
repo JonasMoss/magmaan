@@ -316,6 +316,21 @@ equality releases unless its gate explicitly says MI only. Fixed weight uses
 the fitted W; estimated weight adds the influence of that same recorded recipe.
 This is component evidence, not calibration or an ordinary-user recommendation.
 
+TASK-106 changes only ML/FIML observed-bread robust cells: observed Hessian
+sensitivity projects nuisance coordinates, expected information supplies the
+metric/bread and EPC convention, and empirical meat gives the generalized
+statistic. Negative observed release curvature is allowed. Unscaled MI/scales
+change; the one-df scaled statistic agrees with the previous observed/observed
+recipe where that recipe was available. Expected-bread, LS and ordinal values
+are unchanged. `score_robust_test.cpp`, `observed ML/FIML MI: HS and
+PoliticalDemocracy match explicit projected meat`, reconstructs every candidate
+under complete data and MAR (relative 1e-8), with the previous positive-curvature
+statistic gated at 1e-10. Lab/ordinary HS tables retain all 54 available rows;
+zero-meat failures retain candidate identity and typed NA rows. A before/after
+lane comparison confirms bit-identical existing columns in 16 continuous-LS
+and ordinal MI/release tables, covering both sensitivities and fixed/estimated
+weights.
+
 ### Gates
 
 The labels below give a file and the exact test name (or a stated group of
@@ -331,7 +346,7 @@ names); a cell lists its C++ gate first and its R gate second.
 - **C-MIX**: `cpp/tests/unit/score_robust_test.cpp`, `frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected` and `frontier robust mixed ordinal multi-group: WLS reductions cover MI and score`.
 - **C-2S**: `cpp/tests/unit/score_robust_test.cpp`, `frontier ML2S MI and releases reduce to complete-data robust tests` and `frontier ML2S MI: naive statistic plus Stage-1 scaling under missing data`.
 - **R-ML**: `r-package/tests/testthat/test-score-rank.R`, `MI tables exclude identification releases across indicator units`; `test_wls_robust_covariance.R` supplies related weight and covariance guards. `test_weight_recipe_inference.R`, `complete ML MI and equality releases share ordinary and robust coordinates` gates complete-data ordinary/fixed-robust releases and the estimated-weight R refusal.
-- **C-FIML-ROB**: `cpp/tests/unit/score_robust_test.cpp`, `frontier FIML robust MI: unscaled mi matches the non-robust FIML MI`, `frontier FIML robust score test: equality release runs and is finite`, and `frontier FIML robust MI and score tests support multi-group raw blocks`; `cpp/tests/golden/score_robust_golden_test.cpp`, `robust FIML release-score matches the lavaan-internals oracle (MLR)`.
+- **C-FIML-ROB**: `cpp/tests/unit/score_robust_test.cpp`, `frontier FIML robust MI: expected metric and observed sensitivity retain ordinary comparator`, `frontier FIML robust score test: equality release runs and is finite`, and `frontier FIML robust MI and score tests support multi-group raw blocks`; `cpp/tests/golden/score_robust_golden_test.cpp`, `robust FIML release-score matches the lavaan-internals oracle (MLR)`.
 - **R-SUPPLIED**: `r-package/tests/testthat/test_wls_robust_covariance.R`, `WLS robust MI and releases preserve empirical covariance and fitting W` and `WLS covariance choices fail explicitly when unavailable` (single/unequal groups, means, shared labels and supplied diagonal/full W).
 - **R-GAMMA**: `r-package/tests/testthat/test_caller_gamma.R`, `caller Gamma reproduces continuous ML and LS MI and releases`, `caller NACOV preserves ordinal fitting weights`, `caller Gamma validates shape, symmetry, PSD and influence provenance`, `caller Gamma reaches continuous covariance and profile LRT adapters`, `explicit Gamma_NT is available for complete ML releases`, and `caller NACOV reaches supported mixed ordinal LS score routes` (single/unequal groups, means, ML/GLS/DWLS/WLS/ULS/DLS/supplied W, all-ordinal and mixed DWLS/WLS, changed meat with unchanged fitting W).
 - **R-FIML**: `r-package/tests/testthat/test_fiml_robust_score.R`, `FIML robust MI and releases agree across retained and explicit data` and `FIML robust score wrappers reject incompatible conventions`.

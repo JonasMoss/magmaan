@@ -57,7 +57,7 @@ Rcpp::DataFrame score_table_df(
     const magmaan::inference::ScoreTestTable& tab,
     const magmaan::spec::LatentNames& names) {
   const R_xlen_t n = static_cast<R_xlen_t>(tab.rows.size());
-  Rcpp::CharacterVector kind(n), op(n), lhs(n), rhs(n);
+  Rcpp::CharacterVector kind(n), op(n), lhs(n), rhs(n), reason(n), detail(n);
   Rcpp::IntegerVector row(n), group(n), df(n);
   Rcpp::NumericVector score(n), information(n), mi(n), pvalue(n), epc(n),
       epc_lv(n), epc_all(n), v_eff(n), mi_scaled(n), scaling_factor(n);
@@ -84,6 +84,8 @@ Rcpp::DataFrame score_table_df(
     } else {
       rhs[i] = "";
     }
+    reason[i] = r.failure ? "numeric_failure" : "available";
+    detail[i] = r.failure ? r.failure->detail : "";
     score[i] = r.score;
     information[i] = r.information;
     mi[i] = r.mi;
@@ -100,6 +102,8 @@ Rcpp::DataFrame score_table_df(
     scaling_factor[i] = r.scaling_factor;
   }
   return Rcpp::DataFrame::create(
+      Rcpp::_["reason"] = reason,
+      Rcpp::_["detail"] = detail,
       Rcpp::_["kind"] = kind,
       Rcpp::_["row"] = row,
       Rcpp::_["lhs"] = lhs,
@@ -902,11 +906,6 @@ Rcpp::DataFrame inference_modification_indices_robust(
   } else if (estimator == "FIML") {
     validate_fiml_robust_score_options(bread, moments, cov, weight,
                                      estimated_weight);
-    if (information != "observed") {
-      Rcpp::stop("magmaan: FIML robust modification indices require "
-                 "information='observed'; expected-statistic information "
-                 "is unsupported");
-    }
     const auto rd = fiml_raw_from_arg(ctx.rep, fiml_robust_score_data(fit, raw));
     std::unique_ptr<FimlPack> owned_pack;
     const auto& pack = fiml_robust_score_pack(fit, raw, rd, owned_pack);

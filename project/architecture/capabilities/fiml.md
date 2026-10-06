@@ -563,3 +563,13 @@ confirmatory calibration is claimed. FIML lavaan compatibility is composed separ
   Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
   coverage lives in `cpp/tests/unit/ordinal_test.cpp`. The redundant construction
   probe was removed; its smoke outputs were not calibration evidence.
+
+
+### Robust modification indices and releases
+
+TASK-106 uses observed-pattern Hessian sensitivity for nuisance projection,
+pattern-conditional expected information for the metric/bread, and exact
+casewise score cross-products for meat. The one-df generalized statistic does
+not require positive observed release curvature; EPCs use expected information.
+Identified numerical failures remain typed table rows. Ordinary lab FIML MI
+retains its separate observed-information comparator.

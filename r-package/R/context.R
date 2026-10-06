@@ -288,7 +288,6 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices_robust()")
   if (identical(fit$estimator, "FIML")) {
     if (missing(bread)) bread <- "observed"
-    if (missing(information)) information <- "observed"
   }
   automatic_weight <- is.null(estimated_weight)
   if (automatic_weight) estimated_weight <- !toupper(fit$estimator %||% "ML") %in% c("ML", "FIML")

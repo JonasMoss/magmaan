@@ -30,7 +30,10 @@ test_that("FIML robust MI and releases agree across retained and explicit data",
       expect_equal(explicit, robust, tolerance = 1e-10)
       expect_equal(robust[c("kind", "row", "lhs", "op", "rhs", "group")],
                    ordinary[c("kind", "row", "lhs", "op", "rhs", "group")])
-      expect_equal(robust$mi, ordinary$mi, tolerance = 1e-8)
+      # TASK-106: the robust metric is expected, while ordinary FIML stays observed.
+      expect_true(all(robust$reason == "available"))
+      expect_equal(robust$mi, robust$score^2 / robust$information, tolerance = 1e-12)
+      expect_equal(robust$mi.scaled, robust$score^2 / robust$v.eff, tolerance = 1e-12)
       expect_true(all(is.finite(robust$scaling.factor) & robust$scaling.factor > 0))
       expect_equal(robust$mi.scaled, robust$mi / robust$scaling.factor,
                    tolerance = 1e-12)
@@ -97,7 +100,8 @@ test_that("FIML robust MI retains identified fixed loadings", {
   expect_true(fit$converged)
   mi <- modification_indices_robust(fit, estimated_weight = FALSE)
   expect_true(any(mi$lhs == "f" & mi$op == "=~" & mi$rhs == "x1"))
-  expect_equal(mi$mi, modification_indices(fit)$mi, tolerance = 1e-8)
+  expect_true(all(mi$reason == "available"))
+  expect_equal(mi$mi.scaled, mi$score^2 / mi$v.eff, tolerance = 1e-12)
 })
 
 test_that("FIML robust score wrappers reject incompatible conventions", {
@@ -115,8 +119,8 @@ test_that("FIML robust score wrappers reject incompatible conventions", {
     no_data$raw_data <- NULL
     expect_error(worker(no_data, estimated_weight = FALSE), "requires fit\\$raw_data or data=")
   }
-  expect_error(modification_indices_robust(fit, information = "expected", estimated_weight = FALSE),
-               "information='observed'")
+  expect_equal(modification_indices_robust(fit, information = "expected", estimated_weight = FALSE),
+               modification_indices_robust(fit, information = "observed", estimated_weight = FALSE))
   expect_error(modification_indices_robust(fit, information = "invalid", estimated_weight = FALSE),
                "information must be")
 })

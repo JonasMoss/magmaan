@@ -1,5 +1,8 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
+#include "../oracle.hpp"
+#include "magmaan/inference/inference.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "../../src/inference/detail_score_flip.hpp"
 
 #include <array>
@@ -1554,14 +1557,13 @@ TEST_CASE("frontier robust ordinal score test multi-group: DWLS scales finite") 
 }
 
 // ── FIML robust tier ─────────────────────────────────────────────────────────
-// The robust path shares the candidate enumeration and the NT score/information
-// with the non-robust FIML MI, so the unscaled `mi` must match. Both now use
-// analytic observed information. The scale of the sandwich meat
+// Robust FIML uses the expected metric and observed nuisance sensitivity.
+// Ordinary FIML retains its observed-information comparator. The scale of the sandwich meat
 // (B1 = ¼·scoresᵀscores against A1 = (N/2)·H) is
 // pinned by c → 1 on a correctly specified large-n normal model — a wrong
 // constant (2× or ½×) would push c far from 1 — and exactly by golden 0009.
 
-TEST_CASE("frontier FIML robust MI: unscaled mi matches the non-robust FIML MI") {
+TEST_CASE("frontier FIML robust MI: expected metric and observed sensitivity retain ordinary comparator") {
   auto h = build_mean("f =~ x1 + x2 + x3 + x4");
   std::mt19937 rng(20260613u);
   const auto raw = gaussian_cfa_raw(rng, 600, 9);
@@ -1589,8 +1591,8 @@ TEST_CASE("frontier FIML robust MI: unscaled mi matches the non-robust FIML MI")
   REQUIRE_FALSE(invalid_step.has_value());
   CHECK(invalid_step.error().kind == magmaan::PostError::Kind::NumericIssue);
   for (std::size_t i = 0; i < rob->rows.size(); ++i) {
-    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
-          1e-8 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(rob->rows[i].mi == doctest::Approx(
+        rob->rows[i].score * rob->rows[i].score / rob->rows[i].information).epsilon(1e-10));
     CHECK(nt_other_step->rows[i].mi == nt->rows[i].mi);
     CHECK(rob->rows[i].df == 1);
     CHECK(std::isfinite(rob->rows[i].scaling_factor));
@@ -3677,4 +3679,185 @@ TEST_CASE("observed LS score: ordinal model-implied moments reduce to expected f
       CHECK(std::abs(expected->rows[i].mi_scaled - observed->rows[i].mi_scaled) < 1e-10);
     }
   }
+}
+
+TEST_CASE("observed ML/FIML MI: HS and PoliticalDemocracy match explicit projected meat") {
+  for (const std::string id : {"hs_3factor_cfa", "bollen_democracy_sem"}) {
+    CAPTURE(id);
+    const auto base = magmaan::test::fixtures_dir() + "/parity/" + id + "/";
+    auto ref_text = magmaan::test::read_fixture(base + "reference.json");
+    auto data_text = magmaan::test::read_fixture(base + "data.json");
+    REQUIRE(ref_text); REQUIRE(data_text);
+    auto ref = nlohmann::json::parse(*ref_text);
+    auto data = nlohmann::json::parse(*data_text);
+    const std::string syntax = ref["model"];
+    for (bool missing : {false, true}) {
+      CAPTURE(missing);
+      auto parsed = Parser::parse(syntax); REQUIRE(parsed);
+      magmaan::spec::BuildOptions bo;
+      bo.meanstructure = missing;
+      bo.auto_cov_y = ref.value("auto_cov_y", false);
+      magmaan::spec::LatentNames names;
+      auto pt = magmaan::spec::build(*parsed, bo, nullptr, &names); REQUIRE(pt);
+      auto rep = build_matrix_rep(*pt); REQUIRE(rep);
+      magmaan::data::RawData raw;
+      raw.X = {magmaan::test::matrix_from_json(data["raw"][0]["X"])};
+      raw.mask = {Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(raw.X[0].rows(), raw.X[0].cols())};
+      if (missing) {
+        // MAR: delete higher-index indicators according to observed x1.
+        const double median_proxy = raw.X[0].col(0).mean();
+        for (Eigen::Index i = 0; i < raw.X[0].rows(); ++i)
+          if (raw.X[0](i, 0) > median_proxy && i % 3 == 0)
+            for (Eigen::Index j = 1; j < raw.X[0].cols(); j += 3) {
+              raw.mask[0](i, j) = 0;
+              raw.X[0](i, j) = std::numeric_limits<double>::quiet_NaN();
+            }
+      }
+      if (!missing) raw.mask.clear();
+      auto pack = magmaan::estimate::fiml::fiml_pack(raw); REQUIRE(pack);
+      auto sample = pack->start_stats;
+      if (!missing) {
+        auto observed_sample = magmaan::data::sample_stats_from_raw(raw);
+        REQUIRE_MESSAGE(observed_sample.has_value(), (observed_sample ? "" : observed_sample.error().detail));
+        sample = std::move(*observed_sample);
+      }
+      if (!missing) sample.mean.clear();
+      auto fit = missing ? magmaan::test::fit_fiml(*pt, *rep, raw)
+                         : magmaan::test::fit(*pt, *rep, sample);
+      REQUIRE(fit);
+      auto options = robust_opts(rob::Information::Observed, inf::ScoreCandidateSet::WithAbsentRows);
+      options.spec.moments = rob::WeightMoments::Likelihood;
+      options.spec.cov = rob::ScoreCovariance::Empirical;
+      auto table = missing ? inf::frontier::modification_indices_fiml_robust(*pt, *rep, raw, *fit, *pack, options.base)
+                           : inf::frontier::modification_indices_robust(*pt, *rep, sample, raw, *fit, options);
+      REQUIRE(table);
+      if (id == "hs_3factor_cfa") CHECK(table->rows.size() == 54);
+      int negative_curvature = 0;
+      for (const auto& row : table->rows) {
+        REQUIRE_FALSE(row.failure);
+        const auto& c = row.candidate;
+        const std::string lhs = names.var_name[static_cast<std::size_t>(c.lhs_var)], rhs = names.var_name[static_cast<std::size_t>(c.rhs_var)];
+        CAPTURE(lhs); CAPTURE(rhs);
+        const std::string extra = lhs + " " + std::string(magmaan::parse::to_string(c.op)) + " " + rhs;
+        auto aug_parsed = Parser::parse(syntax + "\n" + extra); REQUIRE(aug_parsed);
+        magmaan::spec::LatentNames aug_names;
+        auto aug = magmaan::spec::build(*aug_parsed, bo, nullptr, &aug_names); REQUIRE(aug);
+        auto aug_rep = build_matrix_rep(*aug); REQUIRE(aug_rep);
+        auto evaluation = *fit;
+        evaluation.theta = Eigen::VectorXd::Zero(aug->n_free());
+        Eigen::Index coord = -1;
+        for (std::size_t r = 0; r < aug->size(); ++r) {
+          if (aug->free[r] <= 0) continue;
+          const auto a = aug_names.row_lhs[r], b = aug_names.row_rhs[r];
+          if (aug->op[r] == c.op && ((a == lhs && b == rhs) ||
+              (c.op == magmaan::parse::Op::Covariance && a == rhs && b == lhs))) {
+            coord = aug->free[r] - 1;
+            continue;
+          }
+          bool found = false;
+          for (std::size_t k = 0; k < pt->size(); ++k)
+            if (pt->free[k] > 0 && pt->op[k] == aug->op[r] &&
+                names.row_lhs[k] == a && names.row_rhs[k] == b) {
+              evaluation.theta(aug->free[r] - 1) = fit->theta(pt->free[k] - 1);
+              found = true; break;
+            }
+          REQUIRE(found);
+        }
+        REQUIRE(coord >= 0);
+        const Eigen::Index q = evaluation.theta.size();
+        Eigen::MatrixXd K(q, q - 1);
+        for (Eigen::Index i = 0, k = 0; i < q; ++i)
+          if (i != coord) K.col(k++) = Eigen::VectorXd::Unit(q, i);
+        Eigen::MatrixXd H, I, B;
+        Eigen::VectorXd score;
+        if (missing) {
+          auto parts = magmaan::estimate::fiml::fiml_score_meat_bread(*aug, *aug_rep, raw, *pack, evaluation); REQUIRE(parts);
+          H = 0.5 * static_cast<double>(raw.X[0].rows()) * parts->hessian;
+          B = 0.25 * parts->scores.transpose() * parts->scores;
+          score = -0.5 * parts->scores.colwise().sum().transpose();
+          auto expected = magmaan::estimate::fiml::fiml_expected_information(*aug, *aug_rep, raw, evaluation, *pack); REQUIRE(expected);
+          I = *expected;
+        } else {
+          auto observed = inf::information_observed_analytic(*aug, *aug_rep, sample, evaluation); REQUIRE(observed);
+          auto expected = inf::information_expected(*aug, *aug_rep, sample, evaluation); REQUIRE(expected);
+          H = *observed; I = *expected;
+          auto sw_spec = options.spec; sw_spec.bread = rob::Information::Expected;
+          auto sw = rob::param_space_sandwich(*aug, *aug_rep, sample, evaluation, raw, sw_spec, false); REQUIRE(sw);
+          B = static_cast<double>(raw.X[0].rows()) * sw->B1;
+          auto ev = magmaan::model::ModelEvaluator::build(*aug, *aug_rep); REQUIRE(ev);
+          auto evaluated = ev->evaluate(evaluation.theta, true, true); REQUIRE(evaluated);
+          auto cache = magmaan::estimate::ml_prepare(sample); REQUIRE(cache);
+          auto vg = magmaan::estimate::ml_value_gradient(sample, *cache, evaluated->moments, evaluated->J_sigma, evaluated->J_mu); REQUIRE(vg);
+          score = -0.5 * static_cast<double>(raw.X[0].rows()) * vg->gradient;
+        }
+        const Eigen::VectorXd d = Eigen::VectorXd::Unit(q, coord);
+        const Eigen::MatrixXd Haa = K.transpose() * H * K;
+        const Eigen::VectorXd g = d - K * Haa.fullPivLu().solve(K.transpose() * H * d);
+        const double statistic = std::pow(g.dot(score), 2) / g.dot(B * g);
+        CHECK(row.mi_scaled == doctest::Approx(statistic).scale(0.0).epsilon(1e-8));
+        auto metric = inf::score_for_direction(c, score, I, K, d); REQUIRE(metric);
+        CHECK(row.epc == doctest::Approx(metric->epc).epsilon(1e-8));
+        auto old = inf::frontier::score_for_direction_robust(c, score, H, H, B, K, d);
+        if (g.dot(H * g) > 0) {
+          REQUIRE(old);
+          CHECK(row.mi_scaled == doctest::Approx(old->mi_scaled).scale(0.0).epsilon(1e-10));
+        } else { ++negative_curvature; CHECK_FALSE(old); }
+      }
+      if (id == "hs_3factor_cfa" && !missing) CHECK(negative_curvature == 3);
+    }
+  }
+}
+
+TEST_CASE("observed likelihood score: indefinite nuisance and saddle curvature need only invertibility") {
+  Eigen::Vector2d score(0.0, 3.0), direction(0.0, 1.0);
+  Eigen::Matrix<double, 2, 1> K; K << 1.0, 0.0;
+  Eigen::MatrixXd H(2, 2); H << -2.0, 1.0, 1.0, -3.0;
+  const Eigen::Matrix2d metric = Eigen::Matrix2d::Identity();
+  const Eigen::Matrix2d meat = 2.0 * metric;
+  auto result = inf::frontier::score_for_direction_robust({}, score, metric,
+      metric, meat, K, direction, &H, true);
+  REQUIRE(result);
+  const Eigen::Vector2d g(0.5, 1.0);
+  CHECK(result->mi_scaled == doctest::Approx(std::pow(g.dot(score), 2) / g.dot(meat * g)));
+  CHECK(result->epc == doctest::Approx(3.0));
+  H(0, 0) = 0.0;
+  auto singular = inf::frontier::score_for_direction_robust({}, score, metric,
+      metric, meat, K, direction, &H, true);
+  REQUIRE_FALSE(singular);
+  CHECK(singular.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
+}
+
+TEST_CASE("observed ML release: scalar and joint workers match explicit nuisance projection") {
+  auto h = build_mean("f =~ x1+a*x2+a*x3+x4");
+  std::mt19937 rng(106u);
+  auto raw = gaussian_cfa_raw(rng, 600, 0);
+  raw.mask.clear();
+  auto sample = magmaan::data::sample_stats_from_raw(raw); REQUIRE(sample);
+  auto fit = magmaan::test::fit(h.pt, h.rep, *sample); REQUIRE(fit);
+  auto options = robust_opts(rob::Information::Observed, inf::ScoreCandidateSet::WithAbsentRows);
+  options.spec.moments = rob::WeightMoments::Likelihood;
+  options.spec.cov = rob::ScoreCovariance::Empirical;
+  auto releases = inf::frontier::score_tests_robust(h.pt, h.rep, *sample, raw, *fit, options); REQUIRE(releases);
+  REQUIRE(releases->rows.size() == 1);
+  auto joint = inf::frontier::score_tests_robust_joint(h.pt, h.rep, *sample, raw, *fit, options); REQUIRE(joint);
+  auto H = inf::information_observed_analytic(h.pt, h.rep, *sample, *fit); REQUIRE(H);
+  auto I = inf::information_expected(h.pt, h.rep, *sample, *fit); REQUIRE(I);
+  auto metric_spec = options.spec; metric_spec.bread = rob::Information::Expected;
+  auto sw = rob::param_space_sandwich(h.pt, h.rep, *sample, *fit, raw, metric_spec, false); REQUIRE(sw);
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep); REQUIRE(ev);
+  auto value = ev->evaluate(fit->theta, true, true); REQUIRE(value);
+  auto cache = magmaan::estimate::ml_prepare(*sample); REQUIRE(cache);
+  auto vg = magmaan::estimate::ml_value_gradient(*sample, *cache, value->moments, value->J_sigma, value->J_mu); REQUIRE(vg);
+  const Eigen::VectorXd score = -0.5 * static_cast<double>(raw.X[0].rows()) * vg->gradient;
+  const Eigen::MatrixXd B = static_cast<double>(raw.X[0].rows()) * sw->B1;
+  auto con = magmaan::estimate::build_eq_constraints(h.pt); REQUIRE(con);
+  REQUIRE(con->A_eq.rows() == 1);
+  const Eigen::VectorXd d = con->A_eq.row(0).normalized().transpose();
+  const Eigen::MatrixXd Haa = con->K().transpose() * *H * con->K();
+  const Eigen::VectorXd g = d - con->K() * Haa.fullPivLu().solve(con->K().transpose() * *H * d);
+  const double statistic = std::pow(g.dot(score), 2) / g.dot(B * g);
+  CHECK(releases->rows[0].mi_scaled == doctest::Approx(statistic).scale(0.0).epsilon(1e-10));
+  CHECK(joint->mi_scaled == doctest::Approx(statistic).scale(0.0).epsilon(1e-10));
+  auto previous = inf::frontier::score_for_direction_robust({}, score, *H, *H, B, con->K(), d); REQUIRE(previous);
+  CHECK(releases->rows[0].mi_scaled == doctest::Approx(previous->mi_scaled).scale(0.0).epsilon(1e-10));
 }

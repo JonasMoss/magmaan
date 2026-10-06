@@ -20,7 +20,8 @@ test_that("MI tables exclude identification releases across indicator units", {
       oracle <- lavaan::cfa(syntax, d, meanstructure = TRUE,
                             missing = if (missing) "ml" else "listwise")
       expect_true(lavaan::lavInspect(oracle, "converged"))
-      mi <- modification_indices(fit, data = d, bread = if (missing) "observed" else "expected")
+      mi <- modification_indices(fit, data = d, bread = if (missing) "observed" else "expected",
+                                 cov = "model_implied", estimated_weight = FALSE)
       reference <- lavaan::modindices(oracle,
                                       information = if (missing) "observed" else "expected")
       expect_equal(nrow(mi), 6L)
@@ -29,7 +30,10 @@ test_that("MI tables exclude identification releases across indicator units", {
       expect_equal(mi$mi, reference$mi[match(key(mi), key(reference))], tolerance = 1e-4)
       robust <- modification_indices_robust(fit, data = d, bread = if (missing) "observed" else "expected", estimated_weight = FALSE)
       expect_setequal(key(robust), key(mi))
-      expect_equal(robust$mi, mi$mi, tolerance = 1e-8)
+      if (missing) {
+        expect_true(all(robust$reason == "available"))
+        expect_equal(robust$mi.scaled, robust$score^2 / robust$v.eff, tolerance = 1e-10)
+      } else expect_equal(robust$mi, mi$mi, tolerance = 1e-8)
     }
   }
 })

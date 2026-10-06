@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/LU>
 #include <nlohmann/json.hpp>
 
 #include "magmaan/data/ordinal.hpp"
@@ -255,15 +256,23 @@ TEST_CASE("robust FIML release-score matches the lavaan-internals oracle (MLR)")
   const double c_want = want["scaling_factor"].get<double>();
   const double mis_want = want["mi_scaled"].get<double>();
 
-  // c is the convention-free θ-space ratio; magmaan's analytic observed
-  // information and casewise-deviance meat reproduce lavaan's
-  // information.observed / crossprod(lavScores) at the same FIML θ̂.
-  CHECK(std::abs(got.mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
-  CHECK(std::abs(got.scaling_factor - c_want) <
-        5e-3 * (1.0 + std::abs(c_want)));
-  CHECK(std::abs(got.mi_scaled - mis_want) <
-        5e-3 * (1.0 + std::abs(mis_want)));
-  CHECK(got.scaling_factor > 1.5);  // genuinely non-trivial (c ≈ 2.16)
+  // The frozen oracle uses observed metric/bread. Reconstruct that comparator
+  // independently; the generalized statistic survives the metric change.
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw); REQUIRE(pack);
+  auto parts = magmaan::estimate::fiml::fiml_score_meat_bread(*pt, *rep, raw, *pack, *est); REQUIRE(parts);
+  auto con = magmaan::estimate::build_eq_constraints(*pt); REQUIRE(con);
+  const Eigen::MatrixXd H = 0.5 * static_cast<double>(pack->cache.n_total) * parts->hessian;
+  const Eigen::MatrixXd B = 0.25 * parts->scores.transpose() * parts->scores;
+  const Eigen::VectorXd score = -0.5 * parts->scores.colwise().sum().transpose();
+  REQUIRE(con->A_eq.rows() == 1);
+  const Eigen::VectorXd d = con->A_eq.row(0).normalized().transpose();
+  auto previous = inf::frontier::score_for_direction_robust({}, score, H, H, B, con->K(), d);
+  REQUIRE(previous);
+  CHECK(std::abs(previous->mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
+  CHECK(std::abs(previous->scaling_factor - c_want) < 5e-3 * (1.0 + std::abs(c_want)));
+  CHECK(std::abs(got.mi_scaled - mis_want) < 5e-3 * (1.0 + std::abs(mis_want)));
+  CHECK(got.mi_scaled == doctest::Approx(previous->mi_scaled).epsilon(1e-10));
+
 }
 
 TEST_CASE("robust multi-group release-score matches the lavaan-internals oracle (MLM)") {

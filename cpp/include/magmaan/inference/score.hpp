@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <Eigen/Core>
@@ -66,6 +67,7 @@ struct ScoreTestResult {
   double v_eff = 0.0;          // robust efficient-score variance (NT info units)
   double mi_scaled = 0.0;      // mi / scaling_factor
   double scaling_factor = 1.0; // c = gᵀB1g / gᵀA1g (→ 1 under normality)
+  std::optional<PostError> failure; // identified candidate whose numeric score failed
 };
 
 struct ScoreTestTable {
@@ -214,16 +216,18 @@ score_tests_fiml(spec::LatentStructure pt,
 //
 // Frontier surface: goes beyond lavaan, whose `lavTestScore()` falls back to
 // the ordinary statistic when `se != "standard"`. For every fixed-row
-// / equality-release candidate these report `mi` (the ordinary NT statistic) and
+// / equality-release candidate these report `mi` (the metric statistic) and
 // `mi_scaled = mi / c` with the per-direction scaling `c = gᵀB1g / gᵀA1g`, where
 // A1/B1 are the parameter-space sandwich bread/meat (`robust::param_space_sandwich`)
-// and g is the efficient-score direction. v1 covers continuous ML, both breads
-// (`Information::Expected` ≈ robust.sem/MLM; `Information::Observed` ≈
-// robust.huber.white/MLR). Single-group only.
+// and g is the efficient-score direction. ML/FIML use the expected metric
+// and bread; Observed selects observed nuisance sensitivity. Expected selects
+// expected sensitivity for complete ML. Both single and multiple groups are
+// supported, with full-coordinate affine-constraint projection.
 namespace frontier {
 
 struct RobustScoreOptions {
-  // bread (Expected/Observed) + meat moments + Γ̂ source, shared with `robust_se`.
+  // Sensitivity selector (Expected/Observed) + meat moments + Γ̂ source.
+  // ML always uses the expected metric; base.information does not override it.
   robust::InferenceSpec spec{robust::Information::Expected,
                              robust::WeightMoments::Structured,
                              robust::ScoreCovariance::Empirical};
@@ -446,6 +450,8 @@ score_tests_ml2s(spec::LatentStructure pt,
 // scale as the score/information evaluation (c is not W-scale-invariant).
 // Optional nuisance_sensitivity projects with the supplied exact Hessian while
 // keeping info_full/A1 as the expected quadratic metric and spectrum metric.
+// Likelihood callers set expected_metric_epc to retain the original metric EPC
+// and permit invertible indefinite nuisance sensitivity.
 post_expected<ScoreTestResult>
 score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::VectorXd& score_full,
@@ -454,7 +460,8 @@ score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::MatrixXd& B1,
                            const Eigen::MatrixXd& K_nuisance,
                            const Eigen::VectorXd& direction,
-                           const Eigen::MatrixXd* nuisance_sensitivity = nullptr);
+                           const Eigen::MatrixXd* nuisance_sensitivity = nullptr,
+                           bool expected_metric_epc = false);
 
 // ── df>1 total release ───────────────────────────────────────────────────────
 // Joint release of several equality constraints at once. The NT joint statistic

@@ -1,5 +1,10 @@
 # magmaan 0.3.0 (in development)
 
+- ML/FIML `modindices()` uses observed nuisance sensitivity with an
+  expected-information metric and EPCs. Saddle-direction candidates retain
+  their robust statistic, including all 54 HS three-factor CFA candidates
+  (TASK-106).
+
 - Ordinary `modindices()` combines robust one-df score modification indices
   and affine equality releases for ML, FIML and all-ordinal/mixed DWLS.
   `test = "lr"` refits from embedded null starts and uses the nested policy;

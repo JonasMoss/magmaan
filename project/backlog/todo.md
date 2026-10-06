@@ -790,6 +790,13 @@ The ordinary package does not expose MI in this release; the
   explicitly fixed scale. IJ, RBM/casewise, Satorra-2000 and DWLS policy nesting
   accept fit-time row masks for unprepared inputs (board TASK-37).
 
+- [x] **M — separate ML/FIML robust MI sensitivity and metric (TASK-106).**
+  Observed nuisance sensitivity with expected metric/bread preserves saddle
+  candidates, uses expected-information EPCs, and retains typed numerical
+  failures. HS and PoliticalDemocracy complete/MAR candidates have explicit
+  projected-meat gates; positive observed-curvature statistics reduce to the
+  previous observed/observed result. LS/ordinal numeric recipes are unchanged.
+
 - [x] **M — close the MI/release estimator-by-weight validation matrix.** Gate
   the implemented cells above in C++ and R, including means, unequal groups,
   constraints, absent/fixed candidates and standardized EPCs. **Check:**

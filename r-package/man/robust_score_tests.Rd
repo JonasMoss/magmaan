@@ -24,9 +24,9 @@ their weight in \code{fit$W}, so this is needed only for fits without that
 record; otherwise it must equal the recorded weight or a positive multiple of
 it. Unsupported for FIML and ML2S.}
 \item{bread,information}{Sandwich sensitivity and score-information choices.
-For FIML, omitted arguments select \code{"observed"}; explicitly requesting
-\code{"expected"} is unsupported. Bread defaults to observed for all
-estimators; the complete-data score metric may remain expected.}
+For ML/FIML, bread selects nuisance sensitivity; the metric and EPCs use
+expected information, with either information selector accepted. FIML requires
+\code{bread="observed"}. Bread defaults to observed for all estimators.}
 \item{moments,cov}{Continuous moment and covariance conventions.
 \code{moments="auto"} selects exact likelihood-score meat for empirical
 complete-data ML, including fitted-mean shifts and joint group-score means.
@@ -64,8 +64,11 @@ and DLS weights have no derived influence, so both fail with an
 this option. Supplied Gamma cannot carry casewise weight influence and
 also rejects this option.}
 }
-\details{FIML uses the analytic observed information for both its statistic and
-bread, and the observed-pattern casewise score meat. It needs no saturated-model
+\details{ML/FIML use expected information as the metric and bread, observed
+nuisance sensitivity when \code{bread="observed"}, and empirical score meat
+(FIML uses observed-pattern scores). EPCs use the expected-information
+projection. Negative observed release curvature does not prevent a robust
+statistic. It needs no saturated-model
 EM computation for these tests. Explicit data rebuild their missingness pack;
 omitted data reuse the retained pack when available. Alternative FIML moment or
 covariance recipes and supplied second-stage weights are rejected.
@@ -106,5 +109,6 @@ the matching projected meat. Selecting expected bread or fixed weights requests
 a comparator. At exact fit the observed and expected projections coincide and
 the weight-influence correction vanishes. Observed-sensitivity ML2S score laws
 remain unavailable.}
-\value{A data frame with candidate names and groups, unscaled quadratic \code{mi}, EPCs,
+\value{Tables carry \code{reason} and \code{detail}; identified numerical
+failures retain their candidate rows with NA values. A data frame with candidate names and groups, unscaled quadratic \code{mi}, EPCs,
 \code{mi.scaled}, \code{scaling.factor}, and the robust \code{pvalue}.}

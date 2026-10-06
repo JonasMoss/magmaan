@@ -1,5 +1,13 @@
 # magmaanlab 0.3.0 (in development)
 
+- ML/FIML robust MI and affine releases use observed nuisance sensitivity
+  with expected information as the metric and bread. Negative observed
+  release curvature no longer removes a candidate. Generalized one-df
+  statistics retain their previous values where observed curvature was positive;
+  unscaled statistics/scales use the expected metric and EPCs use expected
+  information. Lab score tables expose `reason` and `detail`, retaining
+  identified numerical failures as NA rows (TASK-106).
+
 - `policy_mi_refit()` is exported: it refits one modification-index candidate
   from the embedded null, the step behind `modindices(test = "lr")`.
 

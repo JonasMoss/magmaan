@@ -40,10 +40,9 @@ PolicyModificationIndices collect(post_expected<inference::ScoreTestTable> fixed
       });
       if (found != fixed->rows.end()) {
         out.table.rows.push_back(*found);
-        out.row_reasons.push_back(InferenceReason::Available);
+        out.row_reasons.push_back(found->failure ? InferenceReason::NumericFailure : InferenceReason::Available);
       } else {
-        // An identified candidate may fail the observed efficient-information
-        // check. Preserve its identity, without reporting a substitute statistic.
+        // Preserve inventory identity if the numerical sweep could not score it.
         inference::ScoreTestResult missing;
         missing.candidate = candidate.candidate;
         missing.mi_scaled = missing.p_value = missing.epc = missing.epc_lv = missing.epc_all =
@@ -59,12 +58,14 @@ PolicyModificationIndices collect(post_expected<inference::ScoreTestTable> fixed
   out.table.rows.insert(out.table.rows.end(), std::make_move_iterator(releases->rows.begin()),
       std::make_move_iterator(releases->rows.end()));
   out.row_reasons.resize(out.table.rows.size(), InferenceReason::Available);
+  for (std::size_t i = 0; i < out.table.rows.size(); ++i)
+    if (out.table.rows[i].failure) out.row_reasons[i] = InferenceReason::NumericFailure;
   return out;
 }
 inference::frontier::RobustScoreOptions ml_options(const PolicyModificationOptions& options) {
   inference::frontier::RobustScoreOptions out;
   out.base = options.candidates;
-  out.base.information = inference::ScoreInformation::Observed;
+  out.base.information = inference::ScoreInformation::Expected;
   out.spec = {robust::Information::Observed, robust::WeightMoments::Likelihood,
       robust::ScoreCovariance::Empirical};
   return out;
@@ -135,7 +136,7 @@ PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
   auto out = gate(pt, state, estimates);
   if (out.reason != InferenceReason::Available) return out;
   auto opts = options.candidates;
-  opts.information = inference::ScoreInformation::Observed;
+  opts.information = inference::ScoreInformation::Expected;
   auto fixed = inference::frontier::modification_indices_fiml_robust(pt, rep, raw, estimates, pack, opts);
   auto releases = options.releases ? inference::frontier::score_tests_fiml_robust(pt, rep, raw, estimates, pack)
       : post_expected<inference::ScoreTestTable>{inference::ScoreTestTable{}};

@@ -1,5 +1,13 @@
 ### Complete-data ML and inference
 
+- TASK-106 separates observed nuisance sensitivity from the expected metric
+  and bread for robust ML modification indices and affine releases. The one-df
+  statistic is `(g_H' score)^2 / (g_H' B g_H)`; positive observed efficient
+  curvature is not required. EPCs use the expected-information projection.
+  Identified numerical failures retain rows with typed errors in C++ and
+  `reason`/`detail` columns in lab tables. Expected-bread, LS and ordinal
+  numerical recipes are unchanged.
+
 - TASK-101 adds the policy point fit-index composer and lab data-frame
   adapter: complete ML uses the observed raw-score Takeuchi trace difference,
   including profiled mean nuisance traces for covariance-only fits. Continuous
