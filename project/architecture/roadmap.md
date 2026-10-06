@@ -342,6 +342,10 @@ nested-law identity (one/two groups, delta/theta). The plain C++
 `api::modification_indices()`/`api::score_tests()` keep the standard statistic
 for every estimator; ULS and absent recipes return `UnsupportedInference`.
 `main` is pushed (no tags); CI's gcc 13 build needed two `-Werror` fixes.
+Seven mixed preset cases keep strict retained WLSMV parity; grouped theta
+configural is gated by objective acceptance and identical-point reporting,
+because BLAS-dependent search paths move lavaan's endpoint in a flat region
+(TASK-94).
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
