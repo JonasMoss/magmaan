@@ -278,6 +278,9 @@ print.magmaan <- function(x, ...) {
 #'   Without covariance, estimates remain available and SEs are NA with the
 #'   inference reason attached to the tables. Defined parameters have no
 #'   declared standardized scale and are NA (unsupported_defined_scale).
+#' @param fit_measures Logical; compute and attach [fit_measures()] on request.
+#'   lavaan-compatible fit measures are not available yet, so a non-NULL
+#'   `lavaan_compat` errors here.
 #' @param references Character vector of reference laws, or `NULL` for the policy defaults.
 #' @param ... Unused.
 #' @return An object of class `summary.magmaan`. With `standardized = TRUE`,
@@ -306,9 +309,13 @@ print.magmaan <- function(x, ...) {
 #' with `lavaan_compat`; compatibility rows append `unscaled.statistic`, `scale`
 #' and `shift` and are never marked recommended.
 #' @export
-summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, references = NULL, standardized = FALSE, ...) {
+summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, references = NULL,
+                            standardized = FALSE, fit_measures = FALSE, ...) {
   if (!is.logical(standardized) || length(standardized) != 1L || is.na(standardized))
     stop("summary(): standardized must be TRUE or FALSE", call. = FALSE)
+  if (!is.logical(fit_measures) || length(fit_measures) != 1L || is.na(fit_measures))
+    stop("summary(): fit_measures must be TRUE or FALSE", call. = FALSE)
+  measures <- if (fit_measures) magmaan::fit_measures(object, lavaan_compat) else NULL
   .check_level(level, "summary()")
   references <- .check_references(references, lavaan_compat, "summary()")
   view <- .with_lavaan_compat(object, lavaan_compat, "summary()")
@@ -323,7 +330,8 @@ summary.magmaan <- function(object, level = 0.95, lavaan_compat = NULL, referenc
   }
   structure(list(fit = object, inference = view$inference, r2 = r2,
                  coefficients = coefficients,
-                 tests = .global_tests(view, references), level = level, references = references),
+                 tests = .global_tests(view, references), fit_measures = measures,
+                 level = level, references = references),
             class = "summary.magmaan")
 }
 
@@ -365,6 +373,12 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
       cat("Reference: exact spectrum (All); decisions/05-dwls-policy-calibration.\n")
     .peba_note(x$tests)
     .lr_note(t)
+  }
+  if (!is.null(x$fit_measures)) {
+    cat("\nPolicy fit measures\n")
+    measures <- x$fit_measures
+    measures$estimate <- round(measures$estimate, digits)
+    print(measures, row.names = FALSE)
   }
   inf <- fit$inference
   if (isTRUE(inf$psd_boundary)) cat("\n", .boundary_note, "\n", sep = "")

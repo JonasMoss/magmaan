@@ -906,11 +906,17 @@ Checked against the source on 2026-09-25.
 | `fmg_tests()` | Fit-function statistic with SB and PEBA4 for ML, FIML, ML2S, continuous LS and ordinal fits, with several default test sets | Supplies the least-squares global tests |
 | Listwise deletion in the data constructors | Applied, but the count of deleted rows is not recorded | Recording is new work |
 
+## Policy fit measures
+
+`fit_measures(fit)` and `summary(fit, fit_measures = TRUE)` expose the
+[adopted point corrections](fit-indices.md) through the lab policy composer.
+They compute the independence baseline on request and retain a fixed row set
+with typed reasons. Compatibility reporting and intervals remain pending.
+
 ## Deferred
 
 These are decided later and are not part of the first release: `ordered =
-TRUE`, `fit_measures()`
-(including which statistic feeds CFI and RMSEA; PEBA4 has no index analogue),
+TRUE`, fit-index intervals and lavaan-compatible fit measures,
 factor scores through `predict()`,
 a `control` option for non-converging fits, and summary-statistic input.
 

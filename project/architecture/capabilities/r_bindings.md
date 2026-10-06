@@ -571,3 +571,11 @@ Compatibility appends unscaled.statistic/scale/shift, uses lavaan's method
 name and disallows references. Nested results retain spectra after recovery.
 The reporting-reference gates cover ML, MAR FIML, ordinal and mixed DWLS,
 one and two groups; no inference ingredients or policy defaults change.
+
+## Ordinary policy fit measures (TASK-102)
+
+`magmaan::fit_measures()` delegates to the lab policy composer, preserving its
+estimates, typed reasons and details; `unrestricted_logl` is the ordinary stable
+code. Each estimator retains its fixed lab row set. Opt-in summary attachment and printing,
+ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
+Compatibility requests error pending TASK-109; intervals await TASK-103.

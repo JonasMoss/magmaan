@@ -19,6 +19,10 @@
   group-specific scales and ordinal residuals/thresholds. Unavailable covariance
   retains estimates and typed missing SEs; defined standardized scales are
   explicitly unsupported.
+- `fit_measures(fit)` exposes policy point indices with misspecification-robust
+  corrections and typed unavailable reasons in a fixed row set per estimator.
+  `summary(fit, fit_measures = TRUE)` attaches and prints them on request.
+  Intervals await evaluation; non-NULL `lavaan_compat` errors until lavaan-compatible fit measures exist.
 
 # magmaan 0.2.0 (in development)
 

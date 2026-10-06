@@ -137,9 +137,10 @@ noncentral chi-square intervals ignore.
 4. **Interface.** Recommended: `fit_measures(fit, lavaan_compat = NULL)`
    returning one row per index (`index`, `estimate`, `reason`; interval
    columns later), computed on request because the baseline is a second fit.
-   `summary(fit, fit_measures = TRUE)` prints them. `lavaan_compat = "MLR"`
-   (and the other bundles) returns lavaan's fitMeasures conventions from the
-   existing gated helpers, for simulations that compare with lavaan.
+   `summary(fit, fit_measures = TRUE)` prints them. TASK-102 implements the
+   policy route. The compatibility composer is split into TASK-109 (decision
+   2026-10-06): non-NULL `lavaan_compat` errors clearly until it is available.
+   It will return lavaan's fitMeasures conventions for simulation comparisons.
 5. **Baseline.** The independence model fitted with the same estimator and
    data treatment (FIML for incomplete data; free thresholds for ordinal
    data), per group and pooled, unconstrained across groups as in lavaan.

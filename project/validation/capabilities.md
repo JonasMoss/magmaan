@@ -565,3 +565,11 @@ metric. Absent regressions remain explicitly unsupported (TASK-105).
 | All-ordinal / mixed DWLS | Exact first-stage, estimated-weight observed trace and corrected residual primitive | Exact primitive agreement; no polychoric/polyserial moment bias derived; TASK-103 pending |
 | ML2S-NT | Stage-1-Gamma natural Stage-2 profile trace | Component profile comparator; EM-moment bias and residual adapter remain unavailable |
 | GLS/WLS, ordinal ULS/WLS, non-NT ML2S | Named typed unavailable ingredient | No policy substitution with a different discrepancy or fixed-weight correction |
+
+## Ordinary policy fit measures (TASK-102)
+
+`magmaan::fit_measures()` delegates to the lab policy composer, preserving its
+estimates, typed reasons and details; `unrestricted_logl` is the ordinary stable
+code. Each estimator retains its fixed lab row set. Opt-in summary attachment and printing,
+ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
+Compatibility requests error pending TASK-109; intervals await TASK-103.

@@ -4,7 +4,15 @@
 \alias{summary.magmaan}
 \title{Summary of a magmaan fit}
 \usage{
-\method{summary}{magmaan}(object, level = 0.95, lavaan_compat = NULL, references = NULL, standardized = FALSE, ...)
+\method{summary}{magmaan}(
+  object,
+  level = 0.95,
+  lavaan_compat = NULL,
+  references = NULL,
+  standardized = FALSE,
+  fit_measures = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{A \code{\link[=magmaan]{magmaan()}} fit.}
@@ -21,6 +29,10 @@ and \code{std.all.se} columns and an R-squared table. Delta-method SEs use
 SEs are NA with the inference reason attached to both tables. Defined
 parameters have no declared standardized scale and are NA with reason
 \code{unsupported_defined_scale}.}
+
+\item{fit_measures}{Logical; compute and attach \code{\link[=fit_measures]{fit_measures()}} on request.
+lavaan-compatible fit measures are not available yet, so a non-NULL
+\code{lavaan_compat} errors here.}
 
 \item{...}{Unused.}
 }
