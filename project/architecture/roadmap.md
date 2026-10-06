@@ -360,6 +360,14 @@ so their default tables hold one row per test (TASK-97). DWLS nested tests
 (all-ordinal and mixed, parameter- and moment-nested) use the All reference
 like the DWLS global test, with SB/PEBA4 as comparators (TASK-81, user
 decision 2026-10-06); decisions/07 is the pending cross-model confirmation.
+`api::policy_fit_measures()` / lab `policy_fit_measures()` give
+misspecification-robust point fit indices (TASK-101; design
+[fit-indices.md](../design/fit-indices.md)): each estimator's own discrepancy
+corrected by its first-order bias (Takeuchi trace difference with the moment
+bias for ML/FIML; exact-first-stage observed-geometry trace for ordinal and
+mixed DWLS), Steiger's multigroup RMSEA, nominal-df truncated TLI and
+bias-corrected pooled SRMR/CRMR; typed refusals elsewhere. Intervals wait
+for the TASK-103 study; the ordinary interface is TASK-102.
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
