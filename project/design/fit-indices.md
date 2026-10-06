@@ -59,8 +59,15 @@ $$
 
 where $Q$ is the profile Hessian of $F$ at the pseudo-true parameter in
 observed geometry and $\Gamma$ the sampling covariance of the moments,
-including the estimated-weight channel for DWLS. Three estimators differ only
-in the trace:
+including the estimated-weight channel for DWLS. Under misspecification a
+second first-order term adds $\nabla_s F^\top b/N$, where $b$ is the
+first-order bias of the moment estimator (for example $-\Sigma$ for the
+$N$-divisor covariance); it vanishes at exact fit. The likelihood (Takeuchi)
+trace difference used for ML and FIML contains it automatically (found by the
+TASK-101 lane). The least-squares tiers add it where $b$ is known in closed
+form (the sample covariance); for polychoric and polyserial moments $b$ is not
+derived, so it is omitted and documented, and TASK-103 measures the remaining
+bias. Three estimators differ in the trace:
 
 | Correction | Trace | Valid when |
 | --- | --- | --- |
