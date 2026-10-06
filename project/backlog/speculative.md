@@ -387,6 +387,21 @@ the consolidated [normal/robust scalar-interval showcase](../../experiments/show
 coverage/failure/cost criteria. Reconcile centering conventions and boundary
 failures before changing defaults; existing studies alone do not adopt a method.
 
+### Small-sample likelihood-ratio corrections
+
+**Gap:** a finite-sample correction for the reported LR statistic (Swain,
+Bartlett or Yuan-type factors), which over-rejects when N is small relative
+to its df. Deferred by the user on 2026-10-06.
+**Available:** the score test is primary and recommended; the LR row is
+reported as the standard statistic with a printed over-rejection caveat
+(task-20), and `references` gives any spectral reference, including `std`,
+for simulation comparisons.
+**Build if:** a consumer needs a calibrated small-N LR (for example LR
+intervals or LR-based modification indices at small N) and a registered
+decision study shows that a correction is calibrated under misspecification
+and non-normality with the robust spectrum, not only for the normal-theory
+statistic the classical factors were derived for.
+
 ### Nonlinear equality constraints in the ordinary inference policy
 
 **Gap:** the misspecification-robust ordinary policy (ML, FIML, LS, DWLS) for
