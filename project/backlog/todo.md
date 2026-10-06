@@ -1540,6 +1540,13 @@ carry the label `mplus`.
   rows. Constraint rank and printed-category fallback complete counting;
   full frontend checks pass. See the test ledger.
 
+- [ ] **M — real Mplus data-file check (TASK-108; Needs decision).** Local
+  gate reads 373 resolvable pairs: 235 reference matches, 129 without printed
+  references, nine failures on two Brown files ending in DOS Ctrl-Z. Demo
+  BASIC accepts those files (N=750/870); decide terminal EOF handling before
+  changing the numeric-file reader contract. Derived summary and evidence
+  are in the test ledger; no reader fix is made.
+
 - [x] **S — ordinary Mplus refusal reporting.** One error lists all needed
   input edits in stable order, with vector reason/edit fields; model printing
   shows fittability and the edits. Full ordinary R suite gates the contract.

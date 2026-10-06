@@ -682,3 +682,17 @@ The previous frontend silently stopped after the first bracket group, losing
 later intercept, threshold and scale labels/modifiers. The canonical parser
 now consumes every group; independent row regressions and the existing TECH1
 partition gate consume the new fixture. LB02/LB03 label ownership is unchanged.
+
+### Real data-file sweep (TASK-108; decision pending)
+
+The local gate scans 2,440 inputs / 621 MODEL acceptances. All files resolve for
+373 pairs: 235 reference matches, 129 reads without a printed reference, nine
+reader failures (two distinct EOF-terminated Brown files). References include
+45 raw.csv comparisons / 34 verified User's Guide samples, 235 N, two missing
+patterns and 89 sample-moment comparisons. The remaining 248 accepted inputs
+lack a complete resolvable file set; one ZIP remains unreadable. CL02/CL03/CL09
+and DA01–DA06 receive real-file evidence without moving DA05 sample rules into
+the reader. Terminal DOS Ctrl-Z handling is a pending DA01 contract decision;
+Demo BASIC accepts the unchanged files with N=750 and 870. The derived summary
+and [ledger](../validation/test_ledger.md#task-108-real-mplus-data-file-gate-decision-pending)
+retain this failing status rather than promote the stability bar.

@@ -795,6 +795,57 @@ retain their existing tolerances. The full installed magmaanlab suite passes
 5,643 expectations (two existing skips and two existing two-level warnings);
 the ordinary R suite passes 1,736 expectations without failures or skips.
 
+### TASK-108 real Mplus data-file gate (decision pending)
+
+`cpp/tests/tools/check_mplus_real_data.R` scans the 2,440 original inputs,
+including ZIP members extracted only under the maintainer cache. The installed
+lane-a opt package accepts 621 inputs. Of these, 373 resolve all DATA FILE
+references within their archive or input directory: 235 match available
+references, 129 read without an available printed reference, and nine fail
+on two distinct real data files. The remaining 248 accepted inputs have no
+resolvable complete file set. `ex11.8imp.zip` remains unreadable. Duplicate
+archives/loose copies are counted as separate input/file pairs, not independent
+datasets. Derived paths, SHA-256 prefixes, group counts and comparisons are in
+`cpp/tests/fixtures/mplus/real_data_summary.json`; originals stay untracked.
+
+The gate applies missing-fixed-X, all-dependent-missing and declared LISTWISE
+sample selection outside the reader. It records 45 raw.csv comparisons covering
+34 distinct verified User's Guide samples, all matching values, missingness,
+row counts and analysis column order; 235 printed N comparisons, two printed
+missing-pattern comparisons and 89 printed sample-moment comparisons match.
+Printed moments use half the last printed unit plus 1e-8 for floating-point
+roundoff. Incomplete-data H1 moments are explicitly marked as requiring
+estimation, never silently passed. Rejected inputs and unavailable references
+are retained separately from matches. This is partial evidence, not completion
+of the real-file stability bar.
+
+Two gate artifacts were corrected: grouped counts have `Group <label>` rows,
+and grouped moments use `SAMPLE STATISTICS FOR <label>` headings; mean rows
+can start with `1`. No comparison tolerance or reader behavior was changed.
+
+The nine reader failures are four copies/inputs using Brown `BINARY.dat`
+(SHA-256 prefix `1907b41d217bbcdf`) and five using `NONML.dat`
+(`ddbc84b438fc77c2`). Each numeric file ends with a single DOS Ctrl-Z byte
+(0x1a) on its final record. The reader treats it as a numeric field or an
+incomplete observation. Independent Mplus 9.1 Demo BASIC probes on the
+unchanged real files accept `BINARY.dat` with `FORMAT=6F1`, N=750, and free
+`NONML.dat`, N=870, with no Mplus errors. Probe inputs use only DATA FILE,
+original NAMES/FORMAT and `ANALYSIS: TYPE=BASIC; OUTPUT:SAMPSTAT;`.
+Probe files and outputs remain in `~/.cache/magmaan-logs/task-108-eof`.
+
+Decision required: should the numeric-file contract recognize a terminal DOS
+EOF marker, with embedded control bytes still rejected? The lane brief requires
+stopping before changing documented reader semantics. No reader fix or synthetic
+regression has been made; the gate intentionally exits 1 on these nine failures.
+
+Verification: lane-a `just jobs=2 r-dev opt` succeeds; the full installed-package
+magmaanlab testthat suite succeeds with the existing two admissibility warnings
+and documented skips. (The first test invocation omitted the installed-package
+namespace, causing missing-internal-function errors; the corrected full run
+passes.) `just check-tracked` and `just check-layering` pass. The real-file
+gate exits 1 intentionally on the nine classified EOF failures. No production
+R/C++ code changed, so no C++ suite or vendor regeneration is needed.
+
 ### TASK-85 output meaning gate
 
 The local `cpp/tests/tools/check_mplus_outputs.R` reads disk outputs and ZIP
