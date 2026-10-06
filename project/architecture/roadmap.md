@@ -333,6 +333,16 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-06: complete mixed DWLS/WLS robust modification indices and equality
+releases include the estimated-weight influence (TASK-92): exact empirical
+first-stage rows, the mixed IJ Gamma channel and observed nuisance sensitivity
+with an expected score metric, gated by explicit H/B Schur reconstruction,
+augmented case-score derivatives, exact-fit cancellation and the one-restriction
+nested-law identity (one/two groups, delta/theta). The plain C++
+`api::modification_indices()`/`api::score_tests()` keep the standard statistic
+for every estimator; ULS and absent recipes return `UnsupportedInference`.
+`main` is pushed (no tags); CI's gcc 13 build needed two `-Werror` fixes.
+
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
 reference on the spectrum from exact sampling rows (OPG NACOV still sets the
