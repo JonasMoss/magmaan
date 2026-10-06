@@ -512,6 +512,20 @@ user chooses what replaces the missing empirical moments.
 
 ## Reporting conventions
 
+`modindices(fit, test = "score", candidates = NULL, releases = TRUE)` reports
+robust one-df score statistics and chi-square(1) limiting p-values, including
+one-at-a-time affine equality releases. The C++ composer selects observed
+sensitivity and empirical likelihood/pattern scores for ML/FIML, or exact
+first-stage rows and estimated-weight influence for all-ordinal/mixed DWLS.
+There is no reference selector. Optional `test = "lr"` refits each augmented
+model from the embedded null and reports the ordinary nested LR/fit-function
+difference with its one-df law; EPCs retain their one-step meaning. Candidate
+order is stable, identified numerical failures retain typed rows, and operator
+codes or explicit rows restrict the set. Loadings and residual/latent
+covariances are supported; absent regressions remain typed unsupported until
+TASK-105 extends variable-table augmentation.
+
+
 Adopted 2026-10-02. Estimation choices stay in `magmaan()` and `options`;
 `vcov()`, `confint()`, `summary()` and `anova()` accept `lavaan_compat = NULL`
 by default, or one named lavaan bundle compatible with the fitted estimator and
@@ -885,7 +899,7 @@ Checked against the source on 2026-09-25.
 These are decided later and are not part of the first release: `ordered =
 TRUE`, `fit_measures()`
 (including which statistic feeds CFI and RMSEA; PEBA4 has no index analogue),
-modification indices under the policy, factor scores through `predict()`,
+factor scores through `predict()`,
 a `control` option for non-converging fits, and summary-statistic input.
 
 ## Implementation sequence

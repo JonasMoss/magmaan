@@ -525,6 +525,20 @@ The lane package was installed by `just jobs=1 r-dev fast` into
 The pinned generator's independent guards, focused recipe gates, layering
 guard and tracked-file checks also passed.
 
+### Ordinary policy MI and equality releases (TASK-99)
+
+`api::policy_modification_indices` / lab `policy_modification_indices` /
+ordinary `modindices` select observed empirical ML/FIML score recipes and
+exact-first-stage estimated-weight all-ordinal/mixed DWLS recipes. Available
+score rows use the robust one-df statistic and chi-square(1) p-value.
+`policy_mi_test.cpp` checks exact ML worker composition and exact ordinal
+sampling-row composition in one/two groups. `test_modindices.R` checks the
+ordinary/lab composer equality, MAR FIML, mixed DWLS worker equality, equality
+releases (shared labels, explicit ==, group.equal), HS one/two-group candidate
+rows against lavaan, optional LR versus anova and typed refusals. Numerical
+score failures preserve identified candidates without substituting another
+metric. Absent regressions remain explicitly unsupported (TASK-105).
+
 ## Policy fit-index points (TASK-101)
 
 | Route | Point correction | Validation and limits |

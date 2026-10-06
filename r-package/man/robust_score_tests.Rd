@@ -8,7 +8,7 @@ equality-release tests, with a direction-specific sandwich correction.}
 modification_indices_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "auto", cov = "empirical",
   candidates = "all", include_loadings = TRUE, include_covariances = TRUE,
-  information = "expected", estimated_weight = TRUE, gamma = NULL)
+  information = "expected", estimated_weight = NULL, gamma = NULL)
 score_tests_robust(fit, data = NULL, weight = NULL,
   bread = "observed", moments = "auto", cov = "empirical",
   estimated_weight = TRUE, gamma = NULL)
@@ -55,7 +55,8 @@ It requires \code{estimated_weight = FALSE} explicitly and
 the usual covariance source. A model-implied Gamma is an explicit choice:
 use \code{cov = "model_implied"} where supported, or supply a normal-theory
 matrix constructed explicitly for the chosen moments.}
-\item{estimated_weight}{Include supported estimated-weight influence terms,
+\item{estimated_weight}{For modification indices, NULL selects FALSE for ML/FIML
+and TRUE for estimators with a second-stage fitting weight. Include supported estimated-weight influence terms,
 following the weight recipe the fit records (NT, ADF, DWLS, or DLS with its
 mixing weight; ULS has none). Supplied weights have no recipe and ordinal NT
 and DLS weights have no derived influence, so both fail with an

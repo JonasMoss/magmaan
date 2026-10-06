@@ -411,7 +411,7 @@ test_that("lab estimated-weight switches default to misspecification-robust weig
     if (!is.function(worker)) next
     args <- formals(worker)
     if (!"estimated_weight" %in% names(args)) next
-    expect_identical(args$estimated_weight, TRUE, info = name)
+    expect_identical(args$estimated_weight, if (name == "modification_indices_robust") NULL else TRUE, info = name)
     checked <- c(checked, name)
   }
   expect_true("frontier_rbm" %in% checked)

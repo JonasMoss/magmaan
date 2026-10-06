@@ -16,3 +16,5 @@ S3method(fitted, magmaan)
 S3method(anova, magmaan)
 S3method(print, magmaan_anova)
 importFrom(stats, coef, vcov, confint, nobs, anova, fitted)
+
+export(modindices)

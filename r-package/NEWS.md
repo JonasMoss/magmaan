@@ -1,3 +1,13 @@
+# magmaanlab 0.3.0 (in development)
+
+- Ordinary `modindices()` combines robust one-df score modification indices
+  and affine equality releases for ML, FIML and all-ordinal/mixed DWLS.
+  `test = "lr"` refits from embedded null starts and uses the nested policy;
+  candidates retain their order and failures retain typed rows. Absent
+  regressions remain unsupported (TASK-105). The lab exposes the same C++
+  composer as `policy_modification_indices()`; robust MI's estimated-weight
+  default is now estimator-aware, so ML/FIML need no explicit FALSE.
+
 # magmaanlab 0.2.0 (in development)
 
 - `mplus_data()` accepts terminal DOS Ctrl-Z EOF markers in numeric files and

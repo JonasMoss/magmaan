@@ -165,3 +165,4 @@ export(association_ml_global_test)
 export(association_ml_nested_test)
 
 export(policy_fit_measures)
+export(policy_modification_indices)

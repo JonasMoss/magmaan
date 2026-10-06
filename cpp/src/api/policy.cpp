@@ -1,4 +1,5 @@
 #include "magmaan/api/policy.hpp"
+#include "policy_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -226,7 +227,7 @@ PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
   return out;
 }
 
-static post_expected<data::MixedOrdinalStats> mixed_policy_stats(
+post_expected<data::MixedOrdinalStats> mixed_policy_stats(
     const data::MixedOrdinalStats& input, MixedDwlsPolicyFit::Impl* cache) {
   auto stats = input;
   const auto blocks = stats.R.size();
@@ -280,7 +281,7 @@ static post_expected<data::MixedOrdinalStats> mixed_policy_stats(
 }
 
 template<class Stats, class Cache>
-static post_expected<Stats> dwls_policy_stats(const Stats& input, Cache* cache) {
+post_expected<Stats> dwls_policy_stats(const Stats& input, Cache* cache) {
   if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>)
     return mixed_policy_stats(input, cache);
   else {
@@ -318,6 +319,12 @@ static post_expected<Stats> dwls_policy_stats(const Stats& input, Cache* cache) 
     return stats;
   }
 }
+
+// External instantiations let other policy composers reuse the same sampling law.
+template post_expected<data::OrdinalStats> dwls_policy_stats(
+    const data::OrdinalStats&, DwlsPolicyFit::Impl*);
+template post_expected<data::MixedOrdinalStats> dwls_policy_stats(
+    const data::MixedOrdinalStats&, MixedDwlsPolicyFit::Impl*);
 
 template<class Stats>
 static auto dwls_policy_ij(spec::LatentStructure pt, const model::MatrixRep& rep,

@@ -145,6 +145,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/inference_test.cpp
   unit/policy_test.cpp
   unit/policy_fit_measures_test.cpp
+  unit/policy_mi_test.cpp
   unit/policy_dwls_test.cpp
   unit/policy_mixed_dwls_test.cpp
   unit/policy_score_contracts_test.cpp

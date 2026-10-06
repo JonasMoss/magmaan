@@ -573,6 +573,14 @@ ordinal_catml_dwls_rmsea_impl <- function(fit, ordinal_stats = NULL) {
     .Call(`_magmaanlab_ordinal_catml_dwls_rmsea_impl`, fit, ordinal_stats)
 }
 
+policy_modification_indices_impl <- function(fit, state, raw = NULL, releases = TRUE) {
+    .Call(`_magmaanlab_policy_modification_indices_impl`, fit, state, raw, releases)
+}
+
+policy_mi_alternative_impl <- function(fit, kind, row, lhs, op, rhs, group) {
+    .Call(`_magmaanlab_policy_mi_alternative_impl`, fit, kind, row, lhs, op, rhs, group)
+}
+
 prepared_model_impl <- function(partable, kind, schema = NULL) {
     .Call(`_magmaanlab_prepared_model_impl`, partable, kind, schema)
 }

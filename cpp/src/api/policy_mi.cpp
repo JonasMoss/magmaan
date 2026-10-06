@@ -1,0 +1,179 @@
+#include "magmaan/api/policy_mi.hpp"
+#include "magmaan/api/sem.hpp"
+#include "policy_internal.hpp"
+#include <algorithm>
+#include <iterator>
+#include <utility>
+namespace magmaan::api {
+namespace {
+PolicyModificationIndices gate(const spec::LatentStructure& pt, const PolicyFitState& state, const estimate::Estimates& estimates) {
+  if (state.penalized) return {InferenceReason::Penalized, std::string(penalized_detail), {}};
+  if (!state.converged) return {InferenceReason::NotConverged,
+      "the fit did not pass its convergence verdict", {}};
+  if (estimates.association.has_value())
+    return {InferenceReason::UnsupportedModel, "association-ML sampling inference is not validated", {}};
+  if (estimates.diagnostics.active_bounds_full.any_active())
+    return {InferenceReason::UnsupportedModel, "active-bound inference is unsupported", {}};
+  if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }) ||
+      pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty() ||
+      !pt.composite_blocks.empty())
+    return {InferenceReason::UnsupportedModel,
+        "modification-index policy requires random x and affine equality constraints", {}};
+  return {};
+}
+PolicyModificationIndices failure(const PostError& error) {
+  return {error.kind == PostError::Kind::UnsupportedInference ?
+      InferenceReason::UnsupportedModel : InferenceReason::NumericFailure, error.detail, {}};
+}
+PolicyModificationIndices collect(post_expected<inference::ScoreTestTable> fixed,
+    post_expected<inference::ScoreTestTable> releases,
+    post_expected<inference::ScoreTestTable> inventory = inference::ScoreTestTable{}) {
+  if (!fixed) return failure(fixed.error());
+  if (!releases) return failure(releases.error());
+  if (!inventory) return failure(inventory.error());
+  PolicyModificationIndices out;
+  if (!inventory->rows.empty()) {
+    for (const auto& candidate : inventory->rows) {
+      const auto found = std::find_if(fixed->rows.begin(), fixed->rows.end(), [&](const auto& scored) {
+        return scored.candidate.row == candidate.candidate.row;
+      });
+      if (found != fixed->rows.end()) {
+        out.table.rows.push_back(*found);
+        out.row_reasons.push_back(InferenceReason::Available);
+      } else {
+        // An identified candidate may fail the observed efficient-information
+        // check. Preserve its identity, without reporting a substitute statistic.
+        inference::ScoreTestResult missing;
+        missing.candidate = candidate.candidate;
+        missing.mi_scaled = missing.p_value = missing.epc = missing.epc_lv = missing.epc_all =
+            std::numeric_limits<double>::quiet_NaN();
+        out.table.rows.push_back(missing);
+        out.row_reasons.push_back(InferenceReason::NumericFailure);
+      }
+    }
+  } else {
+    out.table = std::move(*fixed);
+    out.row_reasons.resize(out.table.rows.size(), InferenceReason::Available);
+  }
+  out.table.rows.insert(out.table.rows.end(), std::make_move_iterator(releases->rows.begin()),
+      std::make_move_iterator(releases->rows.end()));
+  out.row_reasons.resize(out.table.rows.size(), InferenceReason::Available);
+  return out;
+}
+inference::frontier::RobustScoreOptions ml_options(const PolicyModificationOptions& options) {
+  inference::frontier::RobustScoreOptions out;
+  out.base = options.candidates;
+  out.base.information = inference::ScoreInformation::Observed;
+  out.spec = {robust::Information::Observed, robust::WeightMoments::Likelihood,
+      robust::ScoreCovariance::Empirical};
+  return out;
+}
+}
+PolicyModificationIndices policy_modification_indices(const Fit& fit, const data::RawData& raw,
+    const PolicyModificationOptions& options) {
+  const auto& pt = fit.model().structure();
+  const auto& rep = fit.model().matrix_rep();
+  const auto& estimates = fit.estimates();
+  const auto state = policy_fit_state(estimates);
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  if (fit.estimator() == EstimatorKind::ML && fit.data().sample_stats())
+    return policy_modification_indices(pt, rep, *fit.data().sample_stats(), raw, estimates, state, options);
+  if (fit.estimator() == EstimatorKind::FIML && fit.fiml_pack())
+    return policy_modification_indices(pt, rep, raw, *fit.fiml_pack(), estimates, state, options);
+  return {InferenceReason::UnsupportedModel, "raw-data MI overload requires continuous ML or FIML", {}};
+}
+PolicyModificationIndices policy_modification_indices(const Fit& fit,
+    const PolicyModificationOptions& options) {
+  const auto& pt = fit.model().structure();
+  const auto& rep = fit.model().matrix_rep();
+  const auto& estimates = fit.estimates();
+  const auto state = policy_fit_state(estimates);
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  if (fit.estimator_spec().ordinal_moments &&
+      fit.estimator_spec().ordinal_weight == estimate::OrdinalWeightKind::DWLS) {
+    const auto parameterization = fit.estimator_spec().ordinal_parameterization;
+    if (const auto* stats = fit.data().ordinal())
+      return policy_modification_indices(pt, rep, *stats, estimates, parameterization, state, options);
+    if (const auto* stats = fit.data().mixed_ordinal())
+      return policy_modification_indices(pt, rep, *stats, estimates, parameterization, state, options,
+          &fit.model().names().row_user);
+  }
+  const auto* raw = fit.data().raw();
+  if (fit.estimator() == EstimatorKind::FIML && raw && fit.fiml_pack())
+    return policy_modification_indices(pt, rep, *raw, *fit.fiml_pack(), estimates, state, options);
+  if (fit.estimator() == EstimatorKind::ML && raw && !estimates.association) {
+    auto sample = data::sample_stats_from_raw(*raw);
+    if (!sample) return failure(sample.error());
+    if (std::none_of(pt.op.begin(), pt.op.end(), [](auto op) { return op == parse::Op::Intercept; })) sample->mean.clear();
+    return policy_modification_indices(pt, rep, *sample, *raw, estimates, state, options);
+  }
+  return {InferenceReason::UnsupportedModel,
+      "modification-index policy requires retained raw ML/FIML observations or ordinal/mixed DWLS", {}};
+}
+PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::SampleStats& sample, const data::RawData& raw,
+    const estimate::Estimates& estimates, const PolicyFitState& state,
+    const PolicyModificationOptions& options) {
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  const auto opts = ml_options(options);
+  auto fixed = inference::frontier::modification_indices_robust(pt, rep, sample, raw, estimates, opts);
+  auto releases = options.releases ? inference::frontier::score_tests_robust(pt, rep, sample, raw, estimates, opts)
+      : post_expected<inference::ScoreTestTable>{inference::ScoreTestTable{}};
+  auto inventory_options = options.candidates;
+  inventory_options.information = inference::ScoreInformation::Expected;
+  auto inventory = inference::modification_indices(pt, rep, sample, estimates, inventory_options);
+  return collect(std::move(fixed), std::move(releases), std::move(inventory));
+}
+PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw, const estimate::fiml::FIMLPack& pack,
+    const estimate::Estimates& estimates, const PolicyFitState& state,
+    const PolicyModificationOptions& options) {
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  auto opts = options.candidates;
+  opts.information = inference::ScoreInformation::Observed;
+  auto fixed = inference::frontier::modification_indices_fiml_robust(pt, rep, raw, estimates, pack, opts);
+  auto releases = options.releases ? inference::frontier::score_tests_fiml_robust(pt, rep, raw, estimates, pack)
+      : post_expected<inference::ScoreTestTable>{inference::ScoreTestTable{}};
+  auto inventory_options = options.candidates;
+  inventory_options.information = inference::ScoreInformation::Expected;
+  auto sample = pack.start_stats;
+  if (std::none_of(pt.op.begin(), pt.op.end(), [](auto op) { return op == parse::Op::Intercept; })) sample.mean.clear();
+  auto inventory = inference::modification_indices(pt, rep, sample, estimates, inventory_options);
+  return collect(std::move(fixed), std::move(releases), std::move(inventory));
+}
+PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& input, const estimate::Estimates& estimates,
+    estimate::OrdinalParameterization parameterization, const PolicyFitState& state,
+    const PolicyModificationOptions& options) {
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  auto stats = dwls_policy_stats(input, static_cast<DwlsPolicyFit::Impl*>(nullptr));
+  if (!stats) return failure(stats.error());
+  auto fixed = estimate::frontier::modification_indices_ordinal_robust(pt, rep, *stats, estimates,
+      estimate::OrdinalWeightKind::DWLS, options.candidates, parameterization, true, robust::Information::Observed);
+  auto releases = options.releases ? estimate::frontier::score_tests_ordinal_robust(pt, rep, *stats, estimates,
+      estimate::OrdinalWeightKind::DWLS, parameterization, true, robust::Information::Observed)
+      : post_expected<inference::ScoreTestTable>{inference::ScoreTestTable{}};
+  return collect(std::move(fixed), std::move(releases));
+}
+PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::MixedOrdinalStats& input, const estimate::Estimates& estimates,
+    estimate::OrdinalParameterization parameterization, const PolicyFitState& state,
+    const PolicyModificationOptions& options, const std::vector<std::int8_t>* row_user) {
+  auto out = gate(pt, state, estimates);
+  if (out.reason != InferenceReason::Available) return out;
+  auto stats = mixed_policy_stats(input, nullptr);
+  if (!stats) return failure(stats.error());
+  auto fixed = estimate::frontier::modification_indices_mixed_ordinal_robust(pt, rep, *stats, estimates,
+      estimate::OrdinalWeightKind::DWLS, options.candidates, parameterization, true,
+      robust::Information::Observed, row_user);
+  auto releases = options.releases ? estimate::frontier::score_tests_mixed_ordinal_robust(pt, rep, *stats, estimates,
+      estimate::OrdinalWeightKind::DWLS, parameterization, true, robust::Information::Observed, row_user)
+      : post_expected<inference::ScoreTestTable>{inference::ScoreTestTable{}};
+  return collect(std::move(fixed), std::move(releases));
+}
+}

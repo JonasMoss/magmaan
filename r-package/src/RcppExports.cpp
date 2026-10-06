@@ -2086,6 +2086,37 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_modification_indices_impl
+Rcpp::DataFrame policy_modification_indices_impl(Rcpp::List fit, Rcpp::LogicalVector state, SEXP raw, bool releases);
+RcppExport SEXP _magmaanlab_policy_modification_indices_impl(SEXP fitSEXP, SEXP stateSEXP, SEXP rawSEXP, SEXP releasesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< bool >::type releases(releasesSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_modification_indices_impl(fit, state, raw, releases));
+    return rcpp_result_gen;
+END_RCPP
+}
+// policy_mi_alternative_impl
+Rcpp::DataFrame policy_mi_alternative_impl(Rcpp::List fit, std::string kind, int row, std::string lhs, std::string op, std::string rhs, int group);
+RcppExport SEXP _magmaanlab_policy_mi_alternative_impl(SEXP fitSEXP, SEXP kindSEXP, SEXP rowSEXP, SEXP lhsSEXP, SEXP opSEXP, SEXP rhsSEXP, SEXP groupSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< int >::type row(rowSEXP);
+    Rcpp::traits::input_parameter< std::string >::type lhs(lhsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type op(opSEXP);
+    Rcpp::traits::input_parameter< std::string >::type rhs(rhsSEXP);
+    Rcpp::traits::input_parameter< int >::type group(groupSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_mi_alternative_impl(fit, kind, row, lhs, op, rhs, group));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepared_model_impl
 SEXP prepared_model_impl(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema);
 RcppExport SEXP _magmaanlab_prepared_model_impl(SEXP partableSEXP, SEXP kindSEXP, SEXP schemaSEXP) {
@@ -4694,6 +4725,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_mixed_ordinal_impl, 5},
     {"_magmaanlab_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_mixed_ordinal_psd_impl, 8},
     {"_magmaanlab_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaanlab_ordinal_catml_dwls_rmsea_impl, 2},
+    {"_magmaanlab_policy_modification_indices_impl", (DL_FUNC) &_magmaanlab_policy_modification_indices_impl, 4},
+    {"_magmaanlab_policy_mi_alternative_impl", (DL_FUNC) &_magmaanlab_policy_mi_alternative_impl, 7},
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},
     {"_magmaanlab_prepared_data_impl", (DL_FUNC) &_magmaanlab_prepared_data_impl, 4},
     {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 6},

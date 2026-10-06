@@ -710,6 +710,16 @@ required by an all-ordinal primary workflow remain current work.
 With `missing` removed from the ordinary call, pairwise DWLS stays a lab route;
 the capability inventory lists its policy inference as unsupported.
 
+### Ordinary MI reporting (0.3.0)
+
+- [x] **TASK-99 — ordinary modification indices and equality releases.**
+  C++ policy composer and thin lab/ordinary adapters; robust one-df score
+  statistics by default, optional embedded-start nested-policy LR refits;
+  candidate selection/order, standardized EPCs and typed unavailable rows.
+  ML/FIML and all-ordinal/mixed DWLS are covered. Absent regressions remain
+  typed unsupported: **TASK-105** owns variable-table augmentation and the
+  full SEM candidate-set gate.
+
 ### MI and release-score completion (0.2.0)
 
 Adopted 2026-10-01 after assigning mixed continuous/ordered completion to

@@ -171,6 +171,7 @@ add_library(magmaan STATIC
   src/api/sem.cpp
   src/api/policy.cpp
   src/api/policy_fit_measures.cpp
+  src/api/policy_mi.cpp
   src/api/moment_nested.cpp
   src/api/conventions.cpp
   src/inference/inference.cpp

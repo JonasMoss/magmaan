@@ -270,14 +270,17 @@ modification_indices_robust <- function(fit, data = NULL, weight = NULL,
                                         include_loadings = TRUE,
                                         include_covariances = TRUE,
                                         information = "expected",
-                                        estimated_weight = TRUE, gamma = NULL) {
+                                        estimated_weight = NULL, gamma = NULL) {
   if (.is_noniterative(fit)) .guard_noniterative("modification_indices_robust()")
   if (identical(fit$estimator, "FIML")) {
     if (missing(bread)) bread <- "observed"
     if (missing(information)) information <- "observed"
   }
+  automatic_weight <- is.null(estimated_weight)
+  if (automatic_weight) estimated_weight <- !toupper(fit$estimator %||% "ML") %in% c("ML", "FIML")
   is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
   raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
+  if (automatic_weight && identical(fit$estimator, "ML") && is.null(raw)) raw <- fit$raw_data
   magmaan_core$inference_modification_indices_robust(
     fit, raw = raw, weight = weight, bread = bread, moments = moments,
     cov = cov, information = information, candidates = candidates,
