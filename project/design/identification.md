@@ -56,7 +56,8 @@ errors) and is never refused.
 5. **Structural confounding.** Reciprocal paths without instruments, constraint
    systems that leave a direction unpinned.
 
-Types 1-3 are gauge freedoms of the coordinates and have standard fixes.
+Types 1-3 are gauge freedoms of the coordinates and are detected exactly;
+1-2 have standard fixes, 3 needs the analyst's zero pattern.
 Types 4-5 are genuine deficits; no automatic constraint is neutral.
 
 ## Policy
@@ -84,10 +85,16 @@ declared `identification` choice (marker or `std.lv`).
 whether the null space contains the generator of a gauge freedom at the probe
 point: the scale generator of each latent variable (the derivative of
 $\Lambda\to c\Lambda$, $\Psi\to\Psi/c^2$ and the matching regression and mean
-terms at $c=1$) and its location generator. Contained generators produce a
+terms at $c=1$), its location generator, and, for each block of $k$ factors,
+the $k^2$ generators of $\Lambda\to\Lambda T$, $\Psi\to T^{-1}\Psi T^{-\top}$
+at $T=I+\varepsilon E_{ab}$, whose diagonal members are the scale generators.
+Principal angles between the generators' span and the null space give the
+contained freedoms at negligible cost. Scale and location freedoms get a
 standard fix (fix a loading or the variance; fix the latent mean or an
-intercept). Any remaining null dimension is reported as an information deficit
-with the parameters involved, and no automatic fix.
+intercept); rotation freedom between factors $a$ and $b$ is reported with the
+advice to pin their loadings by zero restrictions or fix their covariance, and
+no automatic fix. Any remaining null dimension is reported as an information
+deficit with the parameters involved, and no automatic fix.
 
 **magmaanlab.** Exposes the report on fits and through a standalone check, and
 does not refuse: methods development sometimes fits ridges on purpose. Lab
@@ -128,4 +135,4 @@ hold the contract.
 - TASK-33.3: core check, verdict wiring and R exposure on fits (in progress).
 - TASK-33.3.1: construction-time caching, the ordinary refusal, printing and
   documentation.
-- TASK-33.3.2: gauge classification and suggested fixes.
+- TASK-33.3.2: scale, location and rotation classification and suggested fixes.
