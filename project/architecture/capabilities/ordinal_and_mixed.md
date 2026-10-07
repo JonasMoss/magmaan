@@ -63,8 +63,11 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   awaits merger registration and compute approval. TASK-84 supplies a registered
   latent non-normality lane with streamed million-row pseudo-targets, independent
   Monte Carlo target checks, descriptive globals and paired exact/OPG coverage
-  and identical-group nested tests. Local smoke/pricing evidence is retained;
-  production calibration remains pending. The shared implementation differentiates the
+  and identical-group nested tests. Production ran on simbox (TASK-127, frozen
+  in decisions/05 `results/latent-nonnormal/production-2026-10-05`): binary
+  cells agree exactly; with five skewed categories OPG loading coverage stays
+  near 91% and OPG nested All rejects 11-14% at N up to 4000, while the exact
+  policy gives 94.6-95.2% coverage and 4.3-5.2% size. The shared implementation differentiates the
   empirical score means with relative step 1e-5, then solves the centered
   equations (threshold Hessian and pair-score threshold/rho derivatives).
   Replicated case-weight row errors are below 8e-9 in the registered samples.

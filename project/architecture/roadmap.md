@@ -464,8 +464,9 @@ decision): complete-data exact first-stage rows cached once per fit, the
 estimated-weight IJ covariance and nested meat on those rows, and the global
 spectrum from their Gamma. OPG NACOV still sets the fitting weights, so
 estimates and fit statistics are unchanged; `lavaan_compat` and lab defaults
-keep OPG. decisions/05 validated the OPG version; reconfirmation and the
-latent non-normality study are TASK-79. decisions/06 found SB/PEBA4
+keep OPG. decisions/05 validated the OPG version; TASK-79 reconfirmed the
+exact policy and the TASK-84/127 latent non-normality production shows the
+OPG first stage inconsistent for skewed five-category items. decisions/06 found SB/PEBA4
 over-rejecting for the threshold step with seven categories while All passed
 a fresh-draw confirmation; the nested reference choice is TASK-81.
 Association ML (Gaussian ML on Stage-1 polychorics) has a lab-only

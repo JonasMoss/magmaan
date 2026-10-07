@@ -153,3 +153,15 @@ exact-first-stage/production-2026-10-05/*
 !exact-first-stage/production-2026-10-05/summary.csv
 !exact-first-stage/production-2026-10-05/timing.csv
 !exact-first-stage/production-2026-10-05/failure_counts.csv
+!latent-nonnormal/production-2026-10-05/
+latent-nonnormal/production-2026-10-05/*
+!latent-nonnormal/production-2026-10-05/cells.csv
+!latent-nonnormal/production-2026-10-05/cost.csv
+!latent-nonnormal/production-2026-10-05/failures.csv
+!latent-nonnormal/production-2026-10-05/metadata.csv
+!latent-nonnormal/production-2026-10-05/paired.csv
+!latent-nonnormal/production-2026-10-05/population_targets.csv
+!latent-nonnormal/production-2026-10-05/population_stage1.csv
+!latent-nonnormal/production-2026-10-05/population_uncertainty.csv
+!latent-nonnormal/production-2026-10-05/summary.csv
+!latent-nonnormal/production-2026-10-05/timing.csv

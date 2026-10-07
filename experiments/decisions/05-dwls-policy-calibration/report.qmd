@@ -19,7 +19,7 @@ execute:
 | Nested test | $N(F_{H_0} - F_{H_1})$ with the $r$-term parameter-space law (observed Hessian, estimated-weight IJ meat, exact restriction map), All; SB/PEBA4 comparators | All adopted 2026-10-06; comparator arm confirmed on fresh draws | All 3.9–6.9% at N = 400 and 4.3–6.4% at N = 1000 in 32 null cells |
 | Nested score test | Typed unavailable | Decision D4 | No joint least-squares nested score primitive |
 | All-ordinal exact first stage | Exact sampling rows; unchanged fitting weights and references | Reconfirmed on fresh draws (production 2026-10-06) | Global All 3.1–6.05% (none outside [3%, 7%] at N ≥ 500); nested All 4.0–7.3%; IJ coverage median 94.85%, converged-draw minimum 92.9% |
-| Latent non-normality | Exact policy versus OPG comparator | Calibration open | TASK-84 registration, bounded million-row targets and local pilot; production pending review |
+| Latent non-normality | Exact policy versus OPG comparator | Exact calibrated; OPG inconsistent for 5-category skewed items | TASK-84 registration and pilot; production on simbox (TASK-127) |
 | Mixed continuous/ordinal DWLS | Exact-first-stage IJ; global and nested All; SB/PEBA4 nested comparators | Calibration open | TASK-80 registration and pricing pilot; production pending |
 
 ## Question
@@ -503,3 +503,40 @@ counts and completion. `scripts/validate_latent.R SERIAL_DIR COMBINED_DIR
 CHECKS_CSV` checks population reconstruction and fan-out equivalence. Modal
 support is prepared for review; registration and production approval remain
 separate from this pilot.
+
+### Production (2026-10-07)
+
+The registered 174 cells ran on simbox (348,000 draws, 38 CPU-hours, no failed
+arms) from the snapshot and library recorded in each cell's metadata
+(source `5bcd0fd5`, its matching `magmaanlab` build; the TASK-84 card named an
+earlier pair). Combined summaries are frozen in
+`results/latent-nonnormal/production-2026-10-05`.
+
+```{r}
+prod_dir <- 'results/latent-nonnormal/production-2026-10-05'
+prod <- merge(read.csv(file.path(prod_dir,'summary.csv')),
+  read.csv(file.path(prod_dir,'cells.csv'))[c('cell_id','family','generator','categories','n')],
+  by='cell_id')
+tab <- function(fam, arms, tgt=NULL) {
+  y <- subset(prod, family==fam & arm %in% arms & (is.null(tgt) | target %in% tgt))
+  a <- aggregate(rate ~ generator + categories + n + arm, y, mean)
+  w <- reshape(a, idvar=c('generator','categories','n'), timevar='arm', direction='wide')
+  names(w) <- sub('^rate[.]','',names(w)); w[order(w$generator,w$categories,w$n),]
+}
+knitr::kable(tab('coverage', c('policy_ij','opg_ij'), 'loading'), digits=3,
+  caption='Loading coverage (cell mean), exact policy versus OPG')
+knitr::kable(tab('nested', c('exact_all','opg_all','policy_peba4','policy_sb')), digits=3,
+  caption='Nested size at alpha = .05, identical groups')
+```
+
+The anticipated pattern holds. Binary items give identical exact and OPG
+results in every cell (the pairwise model is saturated), and thresholds agree
+everywhere (the univariate model is saturated). With five categories and
+skewed latent responses the OPG first stage is inconsistent: loading coverage
+stays near 91% for chi-square(2) latents at N = 300, 1000 and 4000 while the
+exact policy gives 94.6-95.2%, and OPG nested All rejects 11-14% against
+4.3-5.2% for the exact policy. Chi-square(8) latents show the same direction
+at smaller size (OPG nested about 7%). Across all coverage cells the exact
+policy ranges 93.75-96.05% (median 94.95%); exact nested All at N >= 500
+ranges 4.15-5.9%. No cell raises the registered finite-sample flags. The
+global test is descriptive under pseudo-targets; it shows the same OPG excess.

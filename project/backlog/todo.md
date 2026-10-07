@@ -613,7 +613,9 @@ ordinary API exposes barrier fitting experimentally as
   under OPG.
   TASK-84 adds the registered latent non-normality lane, streamed pair-table
   million-row pseudo-targets with independent Monte Carlo checks, exact/OPG
-  paired arms and a bounded local pricing pilot; production remains pending. Exact delta/theta covariance transport agrees within 1e-6;
+  paired arms and a bounded local pricing pilot; production ran on simbox and
+  is frozen (TASK-127): OPG inconsistent for skewed five-category items, exact
+  calibrated, binary identical. Exact delta/theta covariance transport agrees within 1e-6;
   tighter delete-one refits leave discrepancies unchanged. The theta jackknife
   design uses N = 2400 (1.32% error), retaining the 4% tolerance; delta designs
   retain N = 600. The N = 600 theta error (5.23%) reflects finite-sample
