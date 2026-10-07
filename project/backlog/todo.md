@@ -50,13 +50,14 @@ packages, which ship together through the vendored core. The former 0.0.1
 label (the C++ project version) is retired. Work proceeded on 0.3.0 items in
 parallel with 0.2.0; on 2026-10-07 the user decided that everything on `main`
 ships as 0.2.0, so the release notes fold the "0.3.0 (in development)" NEWS
-entries into 0.2.0.
+entries into 0.2.0. 0.2.0 was released on 2026-10-07 as tag `v0.2.0`
+(`52471911`); later NEWS entries go under a development heading above it.
 
 | Version | Content |
 | --- | --- |
-| **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
-| **0.2.0, current** | The simulation release. The adopted ordinary API; lavaan-compatible fitting through `options`; ordinary-policy inference for ML, FIML and all-ordinal DWLS (exact first stage, All/PEBA4 references, reconfirmed by decisions/05 and 07); uniform test tables with `references` for comparing tests; MI/release-score completion across weights; and, landed early, standardized estimates, robust `modindices()`, policy and lavaan-compatible `fit_measures()` |
-| **0.3.0, next: feature completeness** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows and their calibration (TASK-80); barrier hardening and inference; association-ML policy calibration (decisions/08) and MI; fit-index intervals (TASK-103); a stable Mplus input frontend for the linear SEM subset; latent non-normality evidence for the DWLS policy (TASK-84) |
+| **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
+| **0.2.0, released 2026-10-07** | The simulation release (tag `v0.2.0`). The adopted ordinary API; lavaan-compatible fitting through `options`; ordinary-policy inference for ML, FIML and all-ordinal DWLS (exact first stage, All/PEBA4 references, reconfirmed by decisions/05 and 07); uniform test tables with `references` for comparing tests; MI/release-score completion across weights; and, landed early, standardized estimates, robust `modindices()`, policy and lavaan-compatible `fit_measures()` |
+| **0.3.0, current: feature completeness** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows and their calibration (TASK-80); barrier hardening and inference; association-ML policy calibration (decisions/08) and MI; fit-index intervals (TASK-103); a stable Mplus input frontend for the linear SEM subset; latent non-normality evidence for the DWLS policy (TASK-84) |
 | **0.4.0: documentation, cleanup and clarity** | User and simulation guides; one decision register that states every default with its evidence; `magmaanlab` export tiering (stable, research, superseded) and retirement of legacy names; consolidated error messages and help; CRAN-readiness checks for both packages |
 | **After 0.4.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md); then 1.0 |
 
@@ -902,11 +903,11 @@ The ordinary package does not expose MI in this release; the
   for ML/FIML and All for DWLS, exact first-stage influence and completed
   reference-law evidence. Policy intervals remain pending evaluation.
 
-- [ ] **S — align versions and publish.** Set the CMake project version
-  (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;
-  push `main` and the tags. As of 2026-10-02 `main` is 74 commits ahead of
-  `origin`, the `v0.1.0` tag and its commit are local only, and CI last ran on
-  2026-09-28. **Check:** a clean install from the pushed tag and green CI.
+- [x] **S — align versions and publish (2026-10-07).** CMake and both
+  DESCRIPTION files at 0.2.0 with consolidated NEWS; `main` and the tags
+  `v0.1.0` and `v0.2.0` (`52471911`) pushed. CI green on the tagged commit;
+  the local release check passed opt ctest including `parity`, the Debug
+  build, both testthat suites, examples and `R CMD check` of both packages.
 
 ## Unscheduled: interfaces, composition and maintenance
 
