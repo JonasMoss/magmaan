@@ -1,3 +1,13 @@
+# magmaan (development version)
+
+- ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
+  within-group observed variances differ by more than a factor of 1000,
+  with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit
+  this advice. The diagnostic is computed by the shared C++ core.
+- A structurally unidentified model is reported as not converged
+  (`fit$inference$convergence$identified` is `FALSE`); it no longer passes on
+  a local Newton check.
+
 # magmaan 0.2.0
 
 ## Ordinary API and migration
@@ -32,10 +42,6 @@ their replacements.
   and category schema through fitting and serialization. Unsupported inputs
   raise `magmaan_mplus_error` with all required edits; model printing shows
   fittability. Plain strings continue to mean lavaan syntax.
-- ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
-  within-group observed variances differ by more than a factor of 1000,
-  with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit
-  this advice. The diagnostic is computed by the shared C++ core.
 
 ## Inference policy and evidence
 
@@ -130,9 +136,6 @@ their replacements.
   counts and sparse Gamma-diagonal derivatives, reducing post-fit cost.
 - Mixed modification indices now share the equality-release criterion scale,
   removing an extra factor two while preserving EPCs and fitting weights.
-- A structurally unidentified model is reported as not converged
-  (`fit$inference$convergence$identified` is `FALSE`); it no longer passes on
-  a local Newton check.
 
 # magmaan 0.1.0
 
