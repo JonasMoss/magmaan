@@ -62,7 +62,7 @@ void available(const api::PolicyTest& t, int df) {
 Eigen::MatrixXd numeric_scores(const Model& m, const data::RawData& raw,
                                const estimate::Estimates& est) {
   auto evaluator = model::ModelEvaluator::build(m.pt, m.rep); REQUIRE(evaluator);
-  int total = 0; for (const auto& X : raw.X) total += X.rows();
+  int total = 0; for (const auto& X : raw.X) total += static_cast<int>(X.rows());
   auto loglik = [&](const Eigen::VectorXd& theta) {
     auto moments = evaluator->sigma(theta); REQUIRE(moments);
     Eigen::VectorXd result(total); int at = 0;
