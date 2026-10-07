@@ -1,343 +1,164 @@
 # magmaanlab 0.2.0
 
-- FIML ML/MLR compatibility fit measures are now validated against lavaan.
-  Compatibility H1 EM moments use 1e-10 stopping precision to avoid amplified
-  errors in MLR scaling, SRMR and robust RMSEA tail probabilities (TASK-110).
+## Lab API and migration
 
-- Modification indices now include absent structural regressions among variables
-  already participating in equations, including reverse paths. Score/EPC and
-  embedded-null LR refits use the existing inference policy; unidentified paths
-  retain typed unavailable rows.
-- ML/FIML robust MI and affine releases use observed nuisance sensitivity
-  with expected information as the metric and bread. Negative observed
-  release curvature no longer removes a candidate. Generalized one-df
-  statistics retain their previous values where observed curvature was positive;
-  unscaled statistics/scales use the expected metric and EPCs use expected
-  information. Lab score tables expose `reason` and `detail`, retaining
-  identified numerical failures as NA rows (TASK-106).
+- U-factor builders require explicit bread; `score_quadratic()` requires an
+  explicit meat matrix. Observed bread supports pseudo-true covariance and
+  nested restrictions; complete-data global GOF can use expected geometry.
+- `frontier_profile_lrt_parameter_gmm()` and
+  `frontier_profile_lrt_ci_parameter_gmm()` remove `ij_weight` and `dls_a`:
+  the weight recipe comes from the fit.
+- Estimated-weight inference follows recorded moment and Stage-2 weight
+  recipes, including continuous DWLS and DLS mixing weights. Supplied-W and
+  ordinal NT/DLS fits without a supported recipe have typed refusals;
+  explicit fixed-weight inference remains available.
+- WLS procedures use recorded `fit$W`; optional `weight` must match it or a
+  positive multiple. ML2S RBM and case influence likewise use recorded Stage-2
+  weights and DLS mixing weights, and validate explicit overrides.
 
-- `policy_mi_refit()` is exported: it refits one modification-index candidate
-  from the embedded null, the step behind `modindices(test = "lr")`.
+## Inference policy and evidence
 
-- Ordinary `modindices()` combines robust one-df score modification indices
-  and affine equality releases for ML, FIML and all-ordinal/mixed DWLS.
-  `test = "lr"` refits from embedded null starts and uses the nested policy;
-  candidates retain their order and failures retain typed rows. Absent
-  regressions remain unsupported (TASK-105). The lab exposes the same C++
-  composer as `policy_modification_indices()`; robust MI's estimated-weight
-  default is now estimator-aware, so ML/FIML need no explicit FALSE.
-- Ordinary `summary(fit, standardized = TRUE)` adds row-level std.lv/std.all
-  estimates and delta-method SEs with the selected policy or lavaan compatibility
-  covariance, plus endogenous-variable R-squared and SEs. The lab exposes the
-  same C++ map as `standardized_rows(fit, vcov)`, including fixed markers,
-  group-specific scales and ordinal residuals/thresholds. Unavailable covariance
-  retains estimates and typed missing SEs; defined standardized scales are
-  explicitly unsupported.
+- `policy_inference()` and `policy_nested()` compose ML/FIML empirical-score,
+  observed-bread inference, with observed score sensitivity and an expected
+  metric. Nested LR calibration handles restricted, misspecified means.
+  Components retain separate typed unavailable reasons.
+- All-ordinal and complete mixed DWLS policy composers use exact empirical
+  first-stage influence, estimated-weight IJ covariance and global/nested
+  fit-function tests. Nested geometry uses the observed Hessian and supports
+  parameter restrictions and moment-nested Wu–Estabrook threshold invariance.
+  Nested DWLS score tests remain unavailable.
+- Policy defaults are PEBA4 for ML/FIML and All for DWLS global/nested tests.
+  SB/PEBA4 DWLS comparators remain available. Exact-first-stage and reference-law
+  studies support the DWLS choice across ordinal, mixed, threshold-invariance
+  and textbook designs; finite-sample size varies across settings.
+- `robust_ordinal_ij(..., first_stage = "exact")` exposes exact empirical
+  sampling rows and Gamma. Its default remains `"opg"`; the ordinary policy
+  selects exact influence, without changing fitting weights.
 
-- Grouped all-ordinal lavaan compatibility covariance preserves n_g/N
-  sandwich geometry with the N-G reporting denominator, correcting unequal-
-  group WLSMV covariance and derived standard errors.
+## Test references
 
-- `mplus_data()` accepts terminal DOS Ctrl-Z EOF markers in numeric files and
-  rejects embedded markers with a DA01 diagnostic rather than truncating data.
+- `calibrate_quadratic()` accepts std/sb/ss/mv/scaled_f/all/pall and eba<k>/peba<k>.
+  Block counts at or above df give singleton blocks. Policy ML/FIML results
+  label `reference = "peba4"` and retain `p_sb`/`sb_scale` comparators.
 
-- `policy_fit_measures()` returns misspecification-robust point indices with
-  per-index reasons and discrepancy/trace/df details for ML, FIML, continuous
-  ULS, ML2S-NT profile indices and ordinal/mixed DWLS. It fits a matching independence baseline;
-  residual points use the corrected pooled metric. No policy intervals yet.
-  Ordinal/mixed misspecification wrappers accept `first_stage = "exact"`;
-  their OPG defaults and generalized-df TLI remain unchanged.
+## Modification indices
 
-- DWLS nested policy tests now default to the exact weighted chi-square All
-  reference for all-ordinal and mixed data, including parameter-nested and
-  moment-nested pairs (decision 2026-10-06). SB/PEBA4 remain comparators;
-  `references = c("sb", "peba4")` reproduces their previous p-values.
+- `policy_modification_indices()` composes robust one-df indices and affine
+  equality releases for ML/FIML and all-ordinal/mixed DWLS, including absent
+  regressions among variables already in equations. `policy_mi_refit()` refits
+  a candidate from its embedded null using the nested policy.
+- ML/FIML robust MI and releases use observed nuisance sensitivity with an
+  expected-information metric and EPCs. Negative observed release curvature
+  alone no longer removes candidates; score tables retain `reason` and `detail`
+  for numerical failures.
+- Robust LS indices and releases support observed sensitivity and estimated
+  weights for continuous ULS/GLS/DWLS/WLS/DLS and ordinal ULS/DWLS/WLS.
+  Complete mixed DWLS/WLS adds exact first-stage estimated-weight influence.
+  Expected sensitivity and fixed weights remain explicit comparators.
+- Validated caller `gamma` or per-group NACOV blocks support complete ML,
+  continuous LS and categorical LS indices/releases. Supplied Gamma requires
+  explicit fixed-weight inference; it cannot provide casewise weight influence.
+  Continuous-LS covariance and ML/LS profile-LRT adapters also accept Gamma.
+- ML2S indices and score tests support every Stage-2 weight. `mi` is the naive
+  Stage-2 statistic (`mi_type = "naive_stage2"`); `mi.scaled` uses Stage-1
+  covariance and, when requested, Stage-2 weight influence.
 
-- ML/FIML global and nested policy tests now default to PEBA4 only. SB no
-  longer appears in default ordinary test tables; use
-  `references = c("sb", "peba4")` to include it. Lab policy results label the
-  default `reference = "peba4"` and retain `p_sb` and `sb_scale` comparators.
-  Only score/PEBA4 is recommended; DWLS defaults are unchanged.
+## Standardized estimates
 
-- Ordinary `summary()` and `anova()` now accept `references` for simulation
-  studies, reusing the policy statistic and spectrum through lab C++ calibration.
-  Test tables have uniform base columns `test`, `statistic`, `df`, `reference`,
-  `pvalue`, `recommended`, `reason`, with stable test codes score/lr/fit_function/
-  fit_function_difference. This breaks the previous wide layout:
-  migrate `p.sb`/`p.peba4` to `pvalue` selected by `reference == "sb"`/`"peba4"`.
-  Unavailable tests retain one typed row. Compatibility tables append their
-  unscaled statistic, scale and shift; `references` with `lavaan_compat` errors.
-  Lab `calibrate_quadratic()` accepts std/sb/ss/mv/scaled_f/all/pall and
-  eba<k>/peba<k>; block counts beyond df use singleton blocks.
+- `standardized_rows(fit, vcov)` provides std.lv/std.all estimates, delta-method
+  SEs and endogenous R-squared, including fixed markers, groups and ordinal
+  parameters. Missing covariance preserves estimates with typed missing SEs;
+  defined standardized scales are unsupported.
 
-- Complete mixed DWLS/WLS modification indices and equality releases now
-  include estimated-weight influence and exact empirical first-stage rows.
-  Lab robust defaults use observed nuisance sensitivity; the plain C++
-  `api::modification_indices()` keeps the standard statistic. Expected
-  sensitivity and
-  fixed weights remain explicit comparators. Missing recipes are typed
-  unavailable. Mixed WLS IJ also uses the exact sampling channel.
+## Fit measures
 
-- The lavaan 0.7.2 fitting preset now supports complete mixed DWLS, including
-  delta/theta and grouped equal loadings. It reproduces lavaan's starts,
-  group weighting and stopping through fresh and prepared fitting. Retained
-  WLSMV covariance/global/nested reporting passes the existing tolerances in
-  all eight mixed parity cases. Native fitting is unchanged; missing mixed
-  observations, nonlinear constraints and finite bounds remain unsupported.
+- `policy_fit_measures()` provides robust point indices and per-index reasons
+  with discrepancy, trace and df details for ML/FIML, continuous ULS, ML2S-NT
+  and ordinal/mixed DWLS. It fits a matching independence baseline and corrects
+  residual points for sampling bias. Policy intervals are not yet provided.
+- Ordinal/mixed misspecification fit-measure wrappers accept exact first-stage
+  influence; OPG remains their default and generalized-df TLI is retained.
+- Lavaan-compatible fit measures include standard, scaled and robust families,
+  intervals and close-fit p-values. FIML ML/MLR uses tighter H1 EM precision
+  and is validated against lavaan.
 
-- Complete mixed DWLS fits support the WLSMV lavaan compatibility bundle for
-  covariance, Wald intervals, scaled-shifted global and Satorra-2000 nested
-  reporting. One/two-group delta/theta reporting is gated at identical parameter
-  points; the fitting preset additionally validates grouped/theta retained
-  endpoints, while native optimizer stopping differs. The ordinary policy is unchanged; missing mixed
-  stats and other mixed bundles retain typed unavailable reasons.
-
-- Pairwise-missing ordinal and mixed DWLS estimated-weight inference evaluates
-  Gamma-diagonal movement with sparse item/pair finite differences, reducing
-  post-fit cost without changing inference.
-
-- Mixed DWLS estimated-weight inference computes diagonal Gamma influence
-  from sparse case blocks, reducing post-fit cost without changing inference.
-
-## Lavaan-compatible fitting preset
+## Lavaan compatibility
 
 - The lavaan 0.7.2 fitting preset supports continuous ML/FIML and all-ordinal
-  DWLS with unrestricted covariance and supported linear equality constraints.
-  Explicit fitting options override the preset; named inference bundles remain
-  separate post-fit choices.
+  or complete mixed DWLS, including delta/theta and grouped equal loadings,
+  unrestricted covariance and supported linear equalities. Prepared `estimate()`
+  accepts DWLS fitting options through the same engine as `fit_model()`.
+- `convention_inference()` and `convention_nested()` compose named bundles on
+  retained fits with component-level unavailable reasons. Fitting presets and
+  reporting bundles remain separate choices. Complete-data MLR uses the
+  H1-minus-H0 trace; ordinal reporting uses per-group n minus one.
+- Complete mixed DWLS supports WLSMV covariance, Wald intervals, scaled-shifted
+  global and Satorra-2000 nested tests. Missing mixed observations, nonlinear
+  constraints and finite bounds remain outside the mixed fitting preset.
 
-- Prepared `estimate()` now accepts all-ordinal DWLS fitting options, including
-  the lavaan preset, through the same configured engine as `fit_model()`.
+## Lab building blocks
 
-- `convention_inference()` and `convention_nested()` expose C++ composers for
-  named lavaan inference bundles on retained estimates, with component-level
-  unavailable reasons. Complete-data MLR uses the H1-minus-H0 trace; ordinal
-  compatibility reporting uses per-group n minus one. Existing lab primitives
-  and the ordinary package's automatic policy retain their recipes.
-
-## Ordinary-policy inference: ML and FIML
-
-- Complete-data ML nested LR calibration now uses exact casewise likelihood
-  scores when the larger model has a restricted, misspecified mean structure.
-  Saturated-mean comparisons retain their calibration.
-
-- FIML fits now receive the ordinary inference policy: observed-bread
-  casewise-score sandwich covariance, global and nested score and LR tests,
-  each calibrated with SB and PEBA4. Score sensitivity is observed with an
-  expected metric; nested LR uses empirical scores at the larger fit.
-  Components fail separately with typed reasons.
-
-- `policy_nested()` uses observed nested geometry (see the interface vision);
-  `inference_quadratic(geometry = "observed")` reproduces it, and the default
-  expected geometry keeps lavaan's Satorra-2000 and `lavTestScore()`.
-
-## Ordinary-policy inference: DWLS
-
-- All-ordinal DWLS ordinary policy now uses exact empirical first-stage
-  influence. Policy SEs and global/nested p-values change; OPG fitting weights
-  and estimates, `lavaan_compat`, and all lab defaults are unchanged. Global
-  All and nested SB/PEBA4 references remain. Exact-first-stage calibration
-  reconfirmation is pending (TASK-79).
-  The global test retains n F and uses every positive robust-ordinal eigenvalue.
-  The nested law has one term per restriction, using the observed Hessian at
-  the larger fit and the exact restriction map. Earlier OPG-first-stage
-  fresh-draw checks gave 2.9–6.8% global and 4.3–7.8% nested rejection at nominal
-  5%; these results do not validate the new exact first stage. The separate-point
-  profile law remains an explicitly named lab comparator.
-
-- Complete mixed continuous/ordinal DWLS now composes the exact first-stage IJ
-  covariance, global fit-function All test, and observed-Hessian parameter-space
-  nested difference test with SB/PEBA4. Fitting keeps OPG NACOV weights; the
-  global spectrum uses exact sampling rows. Validation is limited and calibration
-  is pending. Nested score and mixed lavaan compatibility remain unavailable.
-
-- DWLS nested tests now support moment-nested Wu–Estabrook threshold equality
-  through an implied-moment embedding and null tangent in the larger model.
-  Three-category threshold steps report `equivalent_models`; released-scale
-  thresholds+loadings versus loadings-only stays `not_nested`. Validation is
-  limited to numerical, interface and a 100-replicate mean/variance check;
-  calibration is pending.
-
-- `policy_inference()` covers all-ordinal DWLS fits: the estimated-weight
-  (IJ) covariance and one global test, the fit-function statistic labelled
-  `"fit_function"`, with the likelihood-ratio component `"inapplicable"`.
-
-- `policy_nested()` compares two all-ordinal DWLS fits with the fit-function
-  difference and its parameter-space estimated-weight IJ reference (label
-  `"fit_function_difference"`); the nested score is unavailable.
-
-## Lab API migrations
-
-- U-factor builders require an explicit bread. Observed is needed for
-  pseudo-true covariance/nested restrictions; complete-data global GOF may
-  use expected geometry.
-
-- score_quadratic() requires an explicit meat matrix; its metric is a free choice.
-
-- `frontier_profile_lrt_parameter_gmm()` and
-  `frontier_profile_lrt_ci_parameter_gmm()` drop `ij_weight` and `dls_a`; the
-  recipe comes from the fit.
-
-## Lab changes
-
-- Lab `association_ml_modification_indices()` and `association_ml_score_tests()`
-  add fixed/absent association MI and linear equality releases. Nuisance
-  projection and EPC use observed sensitivity; robust one-df tests use exact
-  empirical Stage-1 projected meat. Candidate refusals stay visible. Ordinary
-  association inference remains guarded pending policy calibration.
-
-- Lab-only `association_ml_global_test()` and `association_ml_nested_test()`
-  report All, SB and PEBA4 references using exact empirical Stage-1 influence.
-  Global tests use the local correlation ML residual metric; nested tests use
-  observed sensitivity and exact parameter restrictions, including grouped
-  pseudo-true restrictions under larger-model misspecification. Zero df and
-  unsupported channels have typed reasons; moment nesting is refused.
-  Ordinary association inference remains gated by policy calibration.
-
-- Lab-only `association_ml_ij()` composes exact empirical first-stage rows
-  with the observed association-ML Hessian and target derivatives. It returns
-  active/full covariance and joint threshold influence; ordinary covariance,
-  tests and modification indices remain unavailable pending MI/releases
-  and policy calibration. Missing data, mixed indicators, nonlinear constraints,
-  covariance boundaries and penalized fits are unsupported.
-
-- `robust_ordinal_ij(..., first_stage = "exact")` provides a complete-data
-  all-ordinal empirical-Jacobian comparator, with sampling influence rows and
-  Gamma. The default remains `"opg"`; fitting weights are unchanged. The ordinary policy now selects exact influence.
-
-- Lab ML robust SEs and score/MI meats now default to exact casewise likelihood
-  projections, including restricted-mean shifts and joint-sampling group score
-  means. `moments="auto"` chooses this empirical recipe; `"structured"` and
-  `"unstructured"` remain explicit weight comparators. Raw, centered Zc and
-  caller Gamma routes agree. Global GOF moment primitives retain their named
-  conventions, including structured/saturated moment comparators; grouped
-  centered LS meats retain their fixed-allocation scope.
-
-- `refit_from_null(fit_H1, fit_H0)` explicitly refits a larger model from the
-  verified embedded restricted estimate with its own estimator and options,
-  returning a new fit with native convergence diagnostics.
-
-- Robust LS modification indices and equality releases now support observed
-  sensitivity with estimated-weight influence for continuous ULS/GLS/DWLS/WLS/DLS
-  and all-ordinal ULS/DWLS/WLS. Lab defaults use this route with the expected
-  quadratic metric; expected sensitivity and fixed weights remain comparators.
-
-- Robust MI and equality-release tests accept validated caller `gamma` matrices
-  or per-group NACOV blocks for complete ML, continuous LS and categorical LS.
-  Fitting weights are preserved; supplied Gamma requires explicit fixed-weight
-  inference and cannot supply casewise weight influence. Continuous-LS robust
-  covariance and ML/LS profile-LRT adapters also accept caller Gamma.
-
-- Scalar profile tests and intervals now default to the misspecification-scaled
-  reference. Empirical laws require raw data; callers can explicitly select
-  ordinary or robust-scaled comparators.
-
-- Global score flips select observed sensitivity for MAR FIML and expected
+- Association-ML covariance, global/nested tests, modification indices and
+  linear releases use exact empirical Stage-1 influence and observed sensitivity.
+  Tests expose All/SB/PEBA4; MI uses robust one-df laws. Ordinary association
+  inference remains gated by policy calibration. Missing data, mixed indicators,
+  nonlinear constraints, covariance boundaries and penalties are unsupported;
+  moment nesting is refused.
+- ML robust SE and score/MI meats default to exact casewise likelihood
+  projections, including restricted means and group score means.
+  `moments = "auto"` selects this recipe; structured/unstructured comparators
+  remain explicit. Global GOF primitives retain their named conventions.
+- `refit_from_null()` returns a new larger-model fit from a verified embedded
+  restricted estimate, with native convergence diagnostics.
+- Robust procedures with estimated-weight channels default to estimated-weight
+  inference; MI selects that default by estimator so ML/FIML need no explicit
+  FALSE. Explicit FALSE retains the fixed-weight comparator.
+- Scalar profile tests and intervals default to the misspecification-scaled
+  reference. Empirical laws require raw data; ordinary and robust-scaled
+  comparators remain selectable.
+- Global score flips use observed sensitivity for MAR FIML and expected
   sensitivity for complete-data correct-model GOF.
-
-- Reliability with NULL Gamma derives empirical Gamma from supplied raw data
-  and errors if no raw data are available.
-
-- SAM and case-influence SE/type defaults are retained as diagnostic conventions.
-
-- parameter_covariance() derives empirical meat from its retained observations;
-  meat = "model" explicitly requests inverse information.
-
-- Generic robust_nested_lrt() composes the ML/DWLS nested policy and raises
-  typed unsupported reasons elsewhere. Explicit methods and Satorra aliases
-  remain compatibility routes.
-
-- FMG/semTests replication routes retain their comparator conventions.
-  infer_continuous_ls_robust() documents its caller-fixed-weight law and
-  rejects recorded data-estimated weights unless fixed_weight = TRUE is explicit.
-
-- All lab `estimated_weight` switches now default to `TRUE`, the
-  misspecification-robust choice: robust modification indices and score tests,
-  residuals, GMM and ML2S profile tests/intervals, ordinal/mixed
-  misspecification fit measures, and `frontier_rbm()`. Explicit `FALSE` remains
-  the fixed-weight comparator, including for supplied-W fits without an
-  estimated-weight recipe. Ordinary inference policy defaults are unchanged.
-
-- Estimated-weight inference follows the weight recipe a fit records
-  (`fit$moment_weight`, `fit$stage2_dls_a`), not its computational estimator
-  label. Continuous DWLS and DLS fits now receive their own weight influence,
-  with the fitted DLS mixing weight; previously they received the ADF influence
-  and DLS assumed a = 0.5. Fits with a supplied W, and ordinal NT/DLS fits,
-  fail with an `UnsupportedInference` error for the estimated-weight channel;
-  fixed-weight inference is unchanged.
-
-- WLS-computed fits use their recorded `fit$W`, so `weight =` is optional in
-  modification indices, score tests, robust sandwiches, profile tests, RBM,
-  residuals and case influence. An explicit `weight` must equal the recorded
-  weight or a positive multiple of it.
-
-- Two-stage (ML2S) fits support `modification_indices()`, `score_tests()` and
-  their `_robust` variants for every Stage-2 weight. `mi` is the naive Stage-2
-  statistic (attribute `mi_type = "naive_stage2"`); `mi.scaled` uses the
-  Stage-1 moment covariance, plus the Stage-2 weight influence with
-  `estimated_weight = TRUE`.
-
-- `frontier_rbm()` and estimated-weight case influence use an ML2S fit's
-  recorded Stage-2 weight and DLS mixing weight; `stage2_weight` and `dls_a`
-  default to the record and must agree with it.
-
-- Modification indices and score tests refuse ordinal association-ML fits in
-  every interface.
-
-- `vcov()` gains `regime = "sandwich_ij"` for all-ordinal fits, the
-  estimated-weight sandwich; the default stays the fixed-weight sandwich.
+- Reliability with NULL Gamma derives empirical Gamma from raw data and errors
+  without them. `parameter_covariance()` derives empirical meat from retained
+  observations; `meat = "model"` requests inverse information.
+- `robust_nested_lrt()` composes ML/DWLS policy tests and refuses unsupported
+  routes. Explicit methods and Satorra aliases retain compatibility conventions.
+- `vcov(regime = "sandwich_ij")` provides all-ordinal estimated-weight
+  covariance; the default remains fixed-weight sandwich covariance.
+- SAM, case-influence and FMG/semTests routes retain diagnostic/comparator
+  conventions. `infer_continuous_ls_robust()` requires explicit
+  `fixed_weight = TRUE` for recorded data-estimated weights.
 
 ## Mplus frontend
 
-- `mplus_model()` accepts complete observed-X moment mentions as joint random-X
-  models; partial mentions name the exact completion statement. Mplus 9.1
-  probes show all X variance mentions suffice without means or WITH.
-
-- Mplus stability closeout replaces generic increment-era rejections with
-  rule-specific Mplus behavior, scope reasons and remedies. A single inventory
-  coverage matrix and expanded `mplus_model()`/`mplus_data()` help document the
-  accepted subset. Optional sanitizer corpus sweeps and seven-family portable,
-  prepared and fresh-process refit gates protect the lab adapter.
-
-- Mplus growth, MODEL CONSTRAINT (NEW, equality equations, DO loops) and
-  MODEL INDIRECT now use the shared model/constraint/defined-parameter core.
-  SQRT, PHI/pnorm and LOG10 extend the shared expression language. Inequalities
-  retain the deliberate boundary.
-  Auxiliary NEW coordinates are safe in barrier gradients and moment curvature;
-  noniterative CFA and profiled SNLLS reject these coordinates explicitly.
-
-- `mplus_model()` imports binary/ordinal outcomes, threshold ranges and labels,
-  DELTA scales (including fixed and equal scales), THETA residuals, and grouped
-  CONFIGURAL/SCALAR models. All-ordinal DWLS uses explicit Mplus defaults;
-  mixed, conditional and categorical ML routes report their boundaries.
-
-- `mplus_data()` reads free/fixed individual and summary data through a typed
-  C++ data plan, including missing flags and FILE/NGROUPS groups. It reports
-  NOBSERVATIONS and dropped GROUPING codes; LISTWISE remains a fitting choice.
-  Summary input covariances use N-1 and are rescaled to N for ML, matching Mplus.
-
-- mplus_model() imports continuous GROUPING models, cumulative group sections,
-  cross-group defaults and one CONFIGURAL/METRIC/SCALAR shortcut. Specs preserve
-  numeric group order and source labels; unlisted data codes require filtering
-  in R. Group-specific variable-role changes remain explicit rejections.
-
-- `mplus_model()` constructs rebuildable single-group continuous SEM specs from whole Mplus inputs, retaining reported input items in `$mplus_notes`.
+- `mplus_model()` imports whole continuous single/grouped inputs, growth models,
+  MODEL CONSTRAINT with NEW/equalities/DO loops, and MODEL INDIRECT. Specs retain
+  source notes, numeric group order, labels and rebuildable model metadata.
+  SQRT, PHI/pnorm and LOG10 extend expressions; inequalities remain unsupported.
+- Binary/ordinal outcomes support threshold ranges/labels, DELTA scales, THETA
+  residuals and grouped CONFIGURAL/SCALAR models. All-ordinal DWLS uses Mplus
+  defaults; mixed, conditional and categorical ML routes report scope refusals.
+- Complete observed-X moment mentions select joint random-X models. Partial
+  mentions give the required completion statement. Group-specific role changes
+  are refused, and unlisted group codes require filtering.
+- `mplus_data()` reads free/fixed individual and summary data, missing flags and
+  FILE/NGROUPS groups. It reports observation counts and dropped grouping codes;
+  summary N-1 covariances are rescaled to N for ML. Terminal DOS Ctrl-Z markers
+  are accepted; embedded markers give a DA01 diagnostic.
+- Unsupported Mplus inputs report specific scope reasons and required edits.
+  Auxiliary NEW coordinates are supported in barrier gradients and moment
+  curvature; noniterative CFA and profiled SNLLS refuse them explicitly.
 
 ## Fixes
 
-- `fit_measures()` now counts equality-reduced ordinal parameters against the
-  categorical moment layout. Grouped threshold/loading and label constraints
-  now give lavaan-compatible df; dependent indices retain native n F reporting.
-
-- Exact ordinal and mixed first-stage sampling influence now differentiates
-  only affected mean-score blocks. Ordinal pairs reuse category-cell counts and
-  bivariate-normal corner grids, reducing inference time while preserving
-  sampling rows, Gamma and policy outputs within 1e-7.
-
-- Mixed ordinal component modification indices now use the same criterion
-  scale as equality releases, removing an extra factor two from ordinary and
-  fixed-weight robust MI. EPC and fitting weights are unchanged; estimated
-  mixed-weight inference remains unsupported.
+- Equality-reduced ordinal parameter counts now give lavaan-compatible df for
+  grouped threshold/loading and label constraints.
+- Unequal-group all-ordinal WLSMV covariance now preserves group-weighted
+  sandwich geometry and the reporting denominator.
+- Exact ordinal/mixed first-stage influence and Gamma-diagonal movement use
+  affected score blocks, category counts and sparse derivatives, reducing cost.
+- Mixed MI now uses the equality-release criterion scale, removing an extra
+  factor two without changing EPCs or fitting weights.
 
 # magmaanlab 0.1.0
 
