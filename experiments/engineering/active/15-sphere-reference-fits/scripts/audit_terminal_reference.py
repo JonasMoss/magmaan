@@ -179,7 +179,29 @@ def main():
             curvature_error=mp.norm(C-exact_curvature)
             if row['estimator']=='ML': matrix_error=curvature_error
         if args.diagnostic_out:
-            eigenvalues=mp.eigsy(exact_curvature,eigvals_only=True)
+            eigenvalues, eigenvectors=mp.eigsy(exact_curvature)
+            # E = stored minus exact, in the SAME retained scaled coordinates.
+            error=C-exact_curvature
+            symmetry_error=mp.norm(C-C.T)
+            exact_symmetry_error=mp.norm(exact_curvature-exact_curvature.T)
+            tolerance=mp.mpf('1e-70')
+            if symmetry_error or exact_symmetry_error>tolerance:
+                raise ValueError('curvature symmetry check failed')
+            rotated=eigenvectors.T*error*eigenvectors
+            inverse_root=mp.diag([1/mp.sqrt(x) for x in eigenvalues])
+            relative=inverse_root*rotated*inverse_root
+            relative_norm=max(abs(x) for x in mp.eigsy(relative,eigvals_only=True))
+            coupling=mp.sqrt(sum(rotated[i,0]**2 for i in range(1,C.rows)))
+            orthogonality=mp.norm(eigenvectors.T*eigenvectors-mp.eye(C.rows))
+            reconstruction=mp.norm(eigenvectors*mp.diag(list(eigenvalues))*eigenvectors.T-exact_curvature)
+            norm_invariance=abs(mp.norm(rotated)-mp.norm(error))
+            # Independent generalized-Rayleigh whitening with H = L L^T.
+            linv=mp.cholesky(exact_curvature)**-1
+            alternative=linv*error*linv.T
+            alternative=(alternative+alternative.T)/2
+            whitening_gap=abs(relative_norm-max(abs(x) for x in mp.eigsy(alternative,eigvals_only=True)))
+            if max(orthogonality,reconstruction,norm_invariance,whitening_gap)>tolerance:
+                raise ValueError('basis/relative-norm sanity check failed')
             # Ideal inverse-Frobenius certificate used by singular_lower(L)^2:
             # ||L^-1||_F^2 = trace(C^-1). Excludes binary64 factor/solve defects.
             ideal_lower=1/trace(C**-1)
@@ -204,7 +226,15 @@ def main():
                 ideal_margin_after_construction=number(ideal_lower-binary(row['curvature_bound'])),
                 construction_bound=row['curvature_bound'],score_bound=row['vector_bound'],
                 retained_lower=row['lower'],retained_upper=row['upper'],retained_curvature_lower=row['curvature_lower'],
-                dimension=C.rows)
+                dimension=C.rows,
+                weak_direction_error=number(rotated[0,0]),
+                weak_direction_relative_error=number(rotated[0,0]/eigenvalues[0]),
+                relative_curvature_operator_norm=number(relative_norm),
+                weak_offdiagonal_coupling_norm=number(coupling),
+                weak_relative_coupling_norm=number(mp.sqrt(sum(relative[i,0]**2 for i in range(1,C.rows)))),
+                stored_symmetry_error=number(symmetry_error),exact_symmetry_error=number(exact_symmetry_error),
+                basis_orthogonality_error=number(orthogonality),basis_reconstruction_error=number(reconstruction),
+                frobenius_invariance_error=number(norm_invariance),cholesky_whitening_norm_gap=number(whitening_gap))
         if pid%8==0: print(f'90-digit terminal case {cid}; {time.monotonic()-start:.1f}s',flush=True)
     write(out/'comparisons.csv',comparisons)
     write(out/'reference_metadata.csv',[dict(digits=90,mpmath=mp.__version__,elapsed_s=time.monotonic()-start,

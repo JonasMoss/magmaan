@@ -680,3 +680,9 @@ port-regression-after/*
 audit-uncertainty-diagnosis-v2/*
 !audit-uncertainty-diagnosis-v2/comparisons.csv
 !audit-uncertainty-diagnosis-v2/reference_metadata.csv
+
+# Frozen stage-2 directional measurements and provenance, not production bounds.
+!audit-directional-diagnosis-v1/
+audit-directional-diagnosis-v1/*
+!audit-directional-diagnosis-v1/comparisons.csv
+!audit-directional-diagnosis-v1/reference_metadata.csv
