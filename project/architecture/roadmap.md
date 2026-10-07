@@ -335,6 +335,10 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+Defined-parameter sqrt has independent algebra, correlated delta-variance,
+domain and Mplus twin semantic gates (TASK-116). Exact ex5.21/ex5.22 source
+inputs remain ungated.
+
 The additive frontier objective-coordinate scale helper is banked and gated by
 independent GN and unit-transport checks (TASK-33.10.5.4.1). It is unwired;
 fit integration and opt-in selection remain in TASK-33.10.5.4, with fitting
