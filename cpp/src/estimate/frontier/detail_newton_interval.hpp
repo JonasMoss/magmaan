@@ -88,7 +88,8 @@ inline IntervalMatrix operator*(const IntervalMatrix& a,const IntervalMatrix& b)
   return out;
 }
 inline IntervalMatrix operator*(Interval a,IntervalMatrix b) {
-  for(auto& x:b.values) x=a*x; return b;
+  for(auto& x:b.values) x=a*x;
+  return b;
 }
 inline Interval trace_product(const IntervalMatrix& a,const IntervalMatrix& b) {
   Interval out;

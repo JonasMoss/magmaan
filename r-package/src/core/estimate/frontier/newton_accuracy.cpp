@@ -18,6 +18,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "detail_stable_norm.hpp"
 
 namespace magmaan::estimate {
 
@@ -217,7 +218,7 @@ NewtonMetricSystem prepare_newton_metric_system(const Eigen::MatrixXd& factor) {
   if (!factor.allFinite() || factor.rows() < q) return out;
   out.scale.resize(q);
   for (Eigen::Index j = 0; j < q; ++j) {
-    const double norm = factor.col(j).stableNorm();
+    const double norm = detail::stable_norm(factor.col(j));
     if (!(norm > 0) || !std::isfinite(norm)) {
       out.status = NewtonAccuracyStatus::IllConditioned;
       return out;
@@ -292,7 +293,7 @@ NewtonSolution solve_newton_metric_system(
     out.status = NewtonAccuracyStatus::SolveUnreliable;
     return out;
   }
-  out.distance = z.stableNorm();
+  out.distance = detail::stable_norm(z);
   out.predicted_gain = 0.5 * out.distance * out.distance;
   return out;
 }

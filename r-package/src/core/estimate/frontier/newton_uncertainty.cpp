@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include "detail_stable_norm.hpp"
 
 namespace magmaan::estimate::frontier {
 namespace {
@@ -128,7 +129,7 @@ NewtonDistanceInterval newton_metric_distance_interval(
   out.rank_margin = std::max(0.0, std::nextafter(static_cast<double>(margin), 0.0));
   if (!(margin > 0)) return out;
   const Eigen::VectorXd projected = Q.transpose() * residual;
-  out.distance = projected.stableNorm();
+  out.distance = detail::stable_norm(projected);
   const Wide bnorm = norm_upper(residual);
   const Wide arithmetic = product_error(Q.transpose(), residual, projected) +
       binary_norm_gamma(q) * norm_upper(projected);
@@ -173,7 +174,7 @@ NewtonDistanceInterval newton_hessian_distance_interval(
   const Eigen::VectorXd b = system.scale.cwiseProduct(gradient);
   const Eigen::VectorXd y = L.triangularView<Eigen::Lower>().solve(b);
   if (!y.allFinite()) return out;
-  out.distance = y.stableNorm();
+  out.distance = detail::stable_norm(y);
   const Wide solve_error = product_error(L, y, b) / minimum +
       binary_norm_gamma(q) * norm_upper(y);
   const Wide b_error = static_cast<Wide>(gradient_error) + product_error(system.scale.asDiagonal().toDenseMatrix(), gradient, b);
