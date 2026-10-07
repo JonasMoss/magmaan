@@ -382,6 +382,11 @@ for the TASK-103 study; the ordinary interface is TASK-102. The exact
 first-stage all-ordinal DWLS policy is reconfirmed on fresh draws (TASK-79,
 simbox production): no global or nested size flag at N >= 500, IJ coverage
 near nominal except nonconvergence in the hardest binary two-group cell.
+decisions/07 (184 cells, eight textbook models) confirms All for DWLS global
+and nested tests: 4 of 138 global and 15 of 120 nested cells outside
+[3%, 7%] at N >= 500 against SB 94/23 and PEBA4 76/20; the shared nested
+failures come from a bifactor null that is not exact under DWLS and Worland
+nonconvergence.
 Ordinary `modindices()` reports robust one-df score modification indices and
 equality releases (chi-square(1), EPC, standardized EPC) for ML, FIML and
 all-ordinal/mixed DWLS through `api::policy_modification_indices()`, with

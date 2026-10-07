@@ -14,8 +14,8 @@ execute:
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Global DWLS policy reference | All | Broader validation open | Earlier calibration; this study has development draws only |
-| Nested DWLS policy reference | SB and PEBA4 | Provisional, TASK-81 | Textbook-model confirmation has not run |
+| Global DWLS policy reference | All | Confirmed across eight textbook models (production 2026-10-07) | 4 of 138 cells outside [3%, 7%] at N >= 500; SB 94, PEBA4 76 |
+| Nested DWLS policy reference | All (adopted 2026-10-06, TASK-81) | Confirmed: tied fewest outside-band cells | 15 of 120 at N >= 500 for All and every competitive reference (SB 23, PEBA4 20); the shared failures are model-level |
 | First-stage influence | Exact | Fixed baseline | Every comparator uses the same retained policy spectrum |
 
 ## Question
@@ -25,13 +25,18 @@ across realistic textbook models?
 
 ## Short answer
 
-The study is ready for production planning, but does not yet answer the
-reference-law question. Eight frozen positive-definite populations cover CFA,
-MTMM, higher-order, bifactor, longitudinal, structural and grouped invariance
-models. Development draws check execution, availability and cost; two draws
-per cell cannot establish calibration or select a default. The original grid projects 72.6 CPU-hours; the registered cost reduction
-omits seven-category cells for the 30-item model, leaving 184 production cells
-and a 44.5 CPU-hour planning estimate. Production has not been launched. Simbox remains unavailable.
+All is confirmed for both DWLS policy tests. Production (184 cells, 1,000
+draws each, eight frozen textbook populations) puts All in the best group for
+every test at N ≥ 500: global 4 of 138 cells outside [3%, 7%] (EBA4/EBA6 3,
+mean-variance and scaled-F 4), nested 15 of 120 (tied fewest), metric and
+threshold invariance steps 0. SB and PEBA4 over-reject badly in global tests
+(94 and 76 of 138 cells outside) and are worse in nested tests (23 and 20).
+The nested cells that fail for every reference come from two models and are
+not a reference-law effect: in the bifactor model rejection grows with N
+(to 12–13% at N = 2000), so its registered restriction is not exactly true
+under DWLS; the Worland model converges in only 45–85% of draws. Both remain
+open for those models. Seven-category long30 cells were omitted by the
+registered cost amendment and stay open.
 
 ## Development evidence
 
@@ -65,6 +70,48 @@ requested candidate list. The All tail truncates negative eigenvalues as in
 the current policy: $T \sim \sum_j \max(\lambda_j,0) Z_j^2$, with independent standard-normal $Z_j$.
 The same library truncation convention is used for the
 comparator calls.
+
+## Production (2026-10-07)
+
+Production ran the 184 registered cells (seed base 1910000001, 1,000 draws
+per cell) on the maintainer's simbox workstation with 12 single-threaded cells
+and the provenance-checked combine, from the source snapshot and library built
+at 5bcd0fd5. A first start on 2026-10-06 was lost to a machine shutdown before
+any cell completed and was restarted unchanged. The frozen summaries are in
+`results/production-2026-10-05/`; raw draws, p-values and per-draw failures stay
+ignored, and `failure_counts.csv` counts failed draws per cell, test and reason.
+
+```{r}
+pr <- file.path("results", "production-2026-10-05")
+rk <- read.csv(file.path(pr, "ranking.csv"))
+ov <- rk[rk$model == "overall" & rk$sample_band == "N>=500", ]
+tab <- do.call(rbind, lapply(split(ov, ov$test), function(x) {
+  x <- x[order(x$outside_band, x$rmse), ]
+  data.frame(Test = x$test, Reference = x$reference, Cells = x$cells,
+    Unavailable = x$unavailable_cells, `Outside [3,7]` = x$outside_band,
+    `RMSE (points)` = round(100 * x$rmse, 2), check.names = FALSE)
+}))
+knitr::kable(tab, row.names = FALSE,
+  caption = "References at N >= 500, ordered by the registered rule (outside-band count, then RMSE)")
+nm <- rk[rk$model != "overall" & rk$test == "nested" & rk$sample_band == "N>=500" &
+  rk$reference %in% c("All", "SB", "PEBA4"), c("model", "reference", "outside_band")]
+knitr::kable(reshape(nm, idvar = "model", timevar = "reference", direction = "wide"),
+  row.names = FALSE, caption = "Nested outside-band cells at N >= 500 by model")
+```
+
+The registered rule prefers the reference with the fewest outside-band
+cells at N ≥ 500, ties broken by RMSE. For global tests EBA4 and EBA6 lead
+with 3 cells and All follows with 4 (RMSE 0.97 against 0.89–0.92 points),
+a difference of one cell in 138; All is retained as the policy reference
+(user decision 2026-10-03) because it uses the exact spectrum rather than a
+block approximation. For nested tests All ties the fewest (15 of 120), and it
+leads the metric step. Every penalized reference (pAll, pEBA, pOLS) and SB
+are dominated. The bifactor nested cells over-reject for every reference and
+increasingly with N, which marks a population restriction that is not exactly
+true under DWLS rather than a reference failure; the Worland cells lose
+15–55% of draws to nonconvergence, so their rates are selected. Both
+limitations leave those models' nested calibration open; they do not change
+the reference choice.
 
 ## Cost and scope
 

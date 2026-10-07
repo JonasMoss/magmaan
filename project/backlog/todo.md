@@ -200,7 +200,10 @@ result under an unstated convention.
   latent-response families, exact null restrictions, 192 cells and fourteen
   references on identical saved policy spectra. Frozen derived populations,
   development smoke/pilot, per-cell completion/provenance checks and pricing
-  support production planning; no production or default change is authorized.
+  support production planning. Production (184 cells, simbox, 2026-10-07)
+  confirms All for global and nested DWLS tests; the bifactor nested null
+  (not exact under DWLS) and Worland nonconvergence stay open for those
+  models; see the decisions/07 report.
 
 - [x] **M — diagnose DWLS nested profile-law excess rank** (task-17.3).
   Three production-seed cells, 100 draws each, isolate separate-point profile
@@ -697,7 +700,8 @@ required by an all-ordinal primary workflow remain current work.
   choice was adopted on 2026-10-06 (TASK-81): All for every DWLS nested
   spectral test, with SB/PEBA4 comparators retained. decisions/05 fresh-draw
   parameter-nested All confirmation gives 3.9–6.9% at N = 400 and 4.3–6.4%
-  at N = 1000; decisions/07 cross-model confirmation remains pending.
+  at N = 1000; decisions/07 confirms it across eight textbook models (15 of
+  120 nested cells outside [3%, 7%] at N >= 500, tied fewest; SB 23).
 
 - [ ] **L — derive a nested DWLS score test, or defer it.** No joint
   least-squares nested score statistic exists; `score_tests_robust_joint` is

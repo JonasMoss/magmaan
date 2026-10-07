@@ -3,3 +3,6 @@
 !pilot-full/
 pilot-full/*
 !pilot-full/*.csv
+!production-2026-10-05/
+production-2026-10-05/*
+!production-2026-10-05/*.csv
