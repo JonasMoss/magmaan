@@ -1,18 +1,20 @@
 # Paired provenance/cost pilot only; no endpoint is reused as a start.
 run_start_portfolio_pilot <- function(args, here) {
+  higher <- '--start-portfolio-higher-order-pilot' %in% args
   if (any(args %in% c('--help','-h'))) {
     cat('Usage: Rscript run_experiment.R --start-portfolio-pilot [--help]\n',
         'Fixed start-portfolio-pilot-v1: seed 202610071, n=200, three-factor CFA.\n',
         'One draw in native/mixed units; precompute FABIN3/layered before four stock ULS fits.\n',
         'Run serially under external timeout 180s; no retries or reference refinement.\n',sep='')
+    cat('Higher-order mode: --start-portfolio-higher-order-pilot; seeds 202610072/073, four inputs, eight fits.\n')
     return(invisible(NULL))
   }
-  stopifnot(all(args %in% '--start-portfolio-pilot'))
+  stopifnot(all(args %in% c('--start-portfolio-pilot','--start-portfolio-higher-order-pilot')))
   library(magmaanlab)
   needed <- c('estimate_start_values','estimate_evaluate_at')
   stopifnot(all(needed %in% names(magmaan_core)))
   `%||%` <- function(x,y) if(is.null(x)||!length(x)) y else x
-  out <- file.path(here,'results/start-portfolio-pilot-v1')
+  out <- file.path(here,if(higher)'results/start-portfolio-higher-order-pilot-v1' else 'results/start-portfolio-pilot-v1')
   if(dir.exists(out)) stop('Preserve existing evidence; run ID already exists')
   dir.create(out,recursive=TRUE)
   write_out <- function(x,name) write.csv(x,file.path(out,paste0(name,'.csv')),row.names=FALSE)
@@ -26,17 +28,29 @@ run_start_portfolio_pilot <- function(args, here) {
          error=if(inherits(value,'error'))conditionMessage(value) else '')
   }
   clock <- elapsed()
-  spec <- model_spec('F1 =~ 1*x1 + x2 + x3\nF2 =~ 1*x4 + x5 + x6\nF3 =~ 1*x7 + x8 + x9',
-                     fixed_x=FALSE,meanstructure=FALSE)
+  model_text <- 'F1 =~ 1*x1 + x2 + x3\nF2 =~ 1*x4 + x5 + x6\nF3 =~ 1*x7 + x8 + x9'
+  if(higher) model_text <- paste(model_text,'G =~ 1*F1 + F2 + F3','F1 ~~ 0*F2 + 0*F3','F2 ~~ 0*F3',sep='\n')
+  spec <- model_spec(model_text,fixed_x=FALSE,meanstructure=FALSE)
   lambda <- matrix(0,9,3)
   for(j in 1:3) lambda[(3*j-2):(3*j),j] <- c(1,.8,.6)
-  phi <- matrix(.25,3,3);diag(phi) <- 1
+  phi <- if(higher) .5*tcrossprod(c(1,.8,.6))+diag(.5,3) else matrix(.25,3,3)
+  if(!higher) diag(phi) <- 1
   sigma <- lambda %*% phi %*% t(lambda)+diag(.6,9)
-  set.seed(202610071);draw <- matrix(rnorm(200*9),200,9) %*% chol(sigma)
-  colnames(draw) <- paste0('x',1:9)
-  samples <- lapply(list(native=rep(1,9),mixed=rep(c(1,.1,10),3)),function(u) {
-    x <- sweep(draw,2,u,'*');list(S=list(cov(x)*199/200),nobs=200L)
-  })
+  seeds <- if(higher)c(202610072L,202610073L) else 202610071L
+  RNGkind('Mersenne-Twister','Inversion','Rejection')
+  samples <- list();draws <- list()
+  for(seed in seeds) {
+    set.seed(seed);draw <- matrix(rnorm(200*9),200,9) %*% chol(sigma)
+    colnames(draw) <- paste0('x',1:9);draws[[as.character(seed)]] <- draw
+    for(unit in c('native','mixed')) {
+      key <- if(higher)paste(seed,unit,sep='_') else unit
+      x <- sweep(draw,2,if(unit=='native')rep(1,9) else rep(c(1,.1,10),3),'*')
+      samples[[key]] <- list(S=list(cov(x)*199/200),nobs=200L)
+    }
+  }
+  saveRDS(list(draws=draws,lambda=lambda,phi=phi,sigma=sigma,model_text=model_text),file.path(out,'population.rds'))
+  writeLines(model_text,file.path(out,'model.txt'))
+  for(nm in c('lambda','phi','sigma')) write_out(as.data.frame(get(nm)),nm)
   saveRDS(list(draw=draw,samples=samples,spec=spec),file.path(out,'inputs.rds'))
   input_rows <- do.call(rbind,lapply(names(samples),function(unit) {
     g <- expand.grid(row=1:9,col=1:9);data.frame(unit=unit,g,value=sprintf('%.17g',as.vector(samples[[unit]]$S[[1]])))
@@ -58,7 +72,7 @@ run_start_portfolio_pilot <- function(args, here) {
   saveRDS(producers,file.path(out,'producers.rds'))
   write_out(do.call(rbind,producer_rows),'producers')
   write_out(data.frame(key=c('seed','n','covariance','rng','package_path','package_version','R','command','source_md5','inputs_md5','native_md5','mixed_md5','identification'),
-    value=c('202610071','200','centered sample covariance with denominator n',paste(RNGkind(),collapse='/'),find.package('magmaanlab'),as.character(packageVersion('magmaanlab')),R.version.string,paste(commandArgs(),collapse=' '),unname(tools::md5sum(file.path(here,'R/start_portfolio_pilot.R'))),unname(tools::md5sum(file.path(out,'inputs.csv'))),hashes$native,hashes$mixed,'not verified by pre-TASK-33.3 runtime')),'metadata')
+    value=c(paste(seeds,collapse='/'),'200','centered sample covariance with denominator n',paste(RNGkind(),collapse='/'),find.package('magmaanlab'),as.character(packageVersion('magmaanlab')),R.version.string,paste(commandArgs(),collapse=' '),unname(tools::md5sum(file.path(here,'R/start_portfolio_pilot.R'))),unname(tools::md5sum(file.path(out,'inputs.csv'))),paste(unlist(hashes)[grepl('native',names(hashes))],collapse='/'),paste(unlist(hashes)[grepl('mixed',names(hashes))],collapse='/'),'not verified by pre-TASK-33.3 runtime')),'metadata')
   rows <- list()
   for(unit in names(samples)) for(arm in c('default','layered')) {
     key <- paste(unit,if(arm=='default')'fabin3' else 'layered',sep='_')
@@ -103,5 +117,5 @@ run_start_portfolio_pilot <- function(args, here) {
     data.frame(unit=x$unit[1],attempts=nrow(x),qualified=length(good),selected=if(length(good))x$arm[good[which.min(x$objective[good])]] else 'no-qualified-endpoint')
   })),'summary')
   write_out(data.frame(total_seconds=elapsed()-clock,construction_seconds=sum(vapply(producers,function(z)z$seconds,0)),fit_seconds=sum(d$fit_seconds),audit_seconds=sum(d$audit_seconds)),'timing')
-  cat('Completed four attempted fits:',out,'elapsed',elapsed()-clock,'s\n')
+  cat('Completed attempted fits:',out,'elapsed',elapsed()-clock,'s\n')
 }

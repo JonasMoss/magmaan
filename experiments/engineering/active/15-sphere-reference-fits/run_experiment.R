@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
-if ("--start-portfolio-pilot" %in% args) {
+if (any(c("--start-portfolio-pilot","--start-portfolio-higher-order-pilot") %in% args)) {
   script <- normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value=TRUE)[1]))
   here <- dirname(script)
   source(file.path(here,"R/start_portfolio_pilot.R"))

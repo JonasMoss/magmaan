@@ -683,3 +683,12 @@ start-portfolio-pilot-v1/*
 !start-portfolio-pilot-v1/summary.csv
 !start-portfolio-pilot-v1/timing.csv
 !start-portfolio-pilot-v1/metadata.csv
+
+# Tiny frozen higher-order provenance/cost evidence; arrays and full attempts stay local.
+!start-portfolio-higher-order-pilot-v1/
+start-portfolio-higher-order-pilot-v1/*
+!start-portfolio-higher-order-pilot-v1/observations.csv
+!start-portfolio-higher-order-pilot-v1/producers.csv
+!start-portfolio-higher-order-pilot-v1/summary.csv
+!start-portfolio-higher-order-pilot-v1/timing.csv
+!start-portfolio-higher-order-pilot-v1/metadata.csv

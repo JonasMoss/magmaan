@@ -1,0 +1,5 @@
+"unit","attempts","qualified","selected"
+"202610072_mixed",2,0,"no-qualified-endpoint"
+"202610072_native",2,2,"default"
+"202610073_mixed",2,0,"no-qualified-endpoint"
+"202610073_native",2,2,"layered"
