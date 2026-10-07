@@ -341,6 +341,11 @@ admissibility separately from implied-Sigma domain and retained convergence
 (TASK-117); its fixed-x NT rank/df question remains separate, with no inference
 or acceptance change.
 
+The Newsom ex9.3 and Little single-indicator at-theta gates now consume
+checked-in pinned-lavaan summaries with keyed parameter alignment (TASK-119);
+their unchanged moment gates run without the optional corpus. Fitted golden
+restoration remains open.
+
 Defined-parameter sqrt has independent algebra, correlated delta-variance,
 domain and Mplus twin semantic gates (TASK-116). Exact ex5.21/ex5.22 source
 inputs remain ungated.
