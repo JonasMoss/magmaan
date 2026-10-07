@@ -36,6 +36,9 @@ if ("--ordinary" %in% args) {
   } else if ("--uls-audit-factor" %in% args) {
     source(file.path(here, "R/uls_audit_factor.R"))
     run_uls_audit_factor(args, here)
+  } else if ("--port-nls-witnesses" %in% args) {
+    source(file.path(here,"R/port_nls_witnesses.R"))
+    run_port_nls_witnesses(args,here)
   } else if ("--uls-study" %in% args) {
     source(file.path(here, "R/uls_reliability_study.R"))
     run_uls_reliability_study(args, here)

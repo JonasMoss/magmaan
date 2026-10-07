@@ -1,0 +1,15 @@
+"key","value"
+"command","--ordinary --port-nls-witnesses --run-id port-nls-endpoint-replay-final --probe /tmp/profile_33_7_final"
+"witnesses","38"
+"input_md5","5302d6f1d549085cbceafce498564937"
+"git_head","8218d6e48c6c32d8755cbd1f051fb67e32c70b5e"
+"source_md5","1b5af9d66bed851515d4b82ce08e84f4;73780e024b5c18ade850b6ec53592c41"
+"probe_md5","ac46408837883f135b7c53ec5c84cf75"
+"threads","1"
+"scope","retained endpoints only; no acceptance/default change"
+"R_version","R version 4.6.1 (2026-06-24)"
+"command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/engineering/active/15-sphere-reference-fits/run_experiment.R --args --ordinary --port-nls-witnesses --run-id port-nls-endpoint-replay-final --probe /tmp/profile_33_7_final"
+"magmaanlab_version","0.1.0"
+cpp/build/opt/libmagmaan.a_sha256,5313e719d84b6591ac548f3e3f5c945c51213fe4f85b5aebf850a5a119e97231
+experiments/engineering/active/15-sphere-reference-fits/results/uls-reliability-final-v2/tasks.csv_sha256,a5763ddfc5974befaaa5f15ede66022c9750e8248dda445f55f154fa61d35322
+experiments/engineering/active/15-sphere-reference-fits/results/uls-unit-final-60/covariances.csv_sha256,8389520c3d65f208278d8dd128004f37938fba9ff369b0ed0d00ff755bd3aa9e

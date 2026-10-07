@@ -147,7 +147,12 @@
   stationarity audit.
 
 - Separable nonlinear least squares profiling exists for LS estimators where
-  conditionally linear parameters can be profiled out.
+  conditionally linear parameters can be profiled out. TASK-33.7's 38 retained
+  PORT-NLS witnesses reproduce a backend stored-objective/returned-coordinate
+  mismatch: recomputed profiles and original expanded objectives agree, while
+  the stored objective belongs to another evaluated point. Singular/noisy stop
+  handling remains a decision; these failures are not certified by local audits.
+  No profile arithmetic repair or default change is claimed.
 
 #### Continuous moment-quadratic weights
 

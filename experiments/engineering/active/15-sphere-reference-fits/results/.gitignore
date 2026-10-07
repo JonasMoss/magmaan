@@ -639,3 +639,9 @@ optimizer-confirm-v5/*
 !optimizer-confirm-v5/corpus_provenance.csv
 !optimizer-confirm-v5/oracle_controls.csv
 !optimizer-confirm-v5/execution_register.csv
+
+# Compact frozen PORT-NLS endpoint/history measurements; raw inputs/fits ignored.
+!port-nls-endpoint-replay-final/
+port-nls-endpoint-replay-final/*
+!port-nls-endpoint-replay-final/comparisons.csv
+!port-nls-endpoint-replay-final/metadata.csv
