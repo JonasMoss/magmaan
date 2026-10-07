@@ -9,9 +9,9 @@ fit_measures(fit, lavaan_compat = NULL)
 \arguments{
 \item{fit}{A \code{\link[=magmaan]{magmaan()}} fit.}
 
-\item{lavaan_compat}{Optional named lavaan inference bundle. Returns lavaan's standard, scaled
-and robust families, intervals and close-fit p-values. Unsupported
-estimator/bundle combinations error. FIML ML/MLR compatibility
+\item{lavaan_compat}{Optional named lavaan inference bundle. Returns lavaan's
+standard, scaled and robust families, intervals and close-fit p-values.
+Unsupported estimator/bundle combinations error. FIML ML/MLR compatibility
 uses saturated H1 EM parameter tolerance 1e-10.}
 }
 \value{
@@ -33,7 +33,9 @@ DWLS indices describe misfit in the DWLS metric: conventional ML cutoffs
 do not transfer (Savalei, 2021; Xia and Yang, 2019). See Brosseau-Liard,
 Savalei and Li (2012) and Savalei (2018, 2021) for robust corrections.
 These component checks do not establish finite-sample bias or coverage.
-Intervals and close-fit p-values await the registered evaluation study.
+Policy intervals and close-fit p-values await evaluation. With
+\code{lavaan_compat}, intervals and close-fit p-values are provided for supported
+bundles, including FIML ML/MLR.
 
 Results have a fixed row set per estimator, including unavailable indices with NA
 estimates and typed reasons. Likelihood criteria appear only for

@@ -1,5 +1,9 @@
 ### R bindings and public namespace transition
 
+- Release help describes PEBA4 ML/FIML and All DWLS policy references, exact
+  first-stage DWLS influence, and lavaan-compatible summary fit measures
+  including FIML. Pending interval evaluation applies to policy measures.
+
 - Ordinary `summary(..., standardized = TRUE)` composes the core row-level
   LISREL standardization map through `magmaanlab::standardized_rows(fit, vcov)`.
   Reports include fixed markers, grouped equality transforms, ordinal thresholds

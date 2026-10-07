@@ -295,7 +295,8 @@ inference_reuse <- function(context) {
 
 # magmaan's default inference policy for one fit, as applied by the
 # ordinary-user package: the observed-information sandwich covariance and the
-# global score and likelihood-ratio tests, each with SB and PEBA4. Ordinal and mixed
+# global score and likelihood-ratio tests with PEBA4 by default (SB is a
+# comparator). All-ordinal and complete mixed
 # DWLS uses the estimated-weight (IJ) sandwich and one global test, the
 # fit-function statistic (labelled "fit_function") with the exact spectrum All
 # reference (reference="all", p_all); its LR is "inapplicable". Components
@@ -350,7 +351,9 @@ policy_inference <- function(fit, data = NULL) {
 
 # magmaan's nested tests of fit_H0 against fit_H1, as applied by the
 # ordinary-user package's anova(): the likelihood-ratio and score statistics,
-# each with SB and PEBA4. fit_H0 may drop, fix or constrain fit_H1's paths,
+# with PEBA4 by default (SB is a comparator). DWLS uses observed-Hessian/IJ
+# fit-function differences with the All reference; nested score is unavailable.
+# fit_H0 may drop, fix or constrain fit_H1's paths,
 # fitted to the same observations; interior moment reparameterizations are
 # evaluated at a common null point.
 policy_nested <- function(fit_H1, fit_H0, data = NULL) {

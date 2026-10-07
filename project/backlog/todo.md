@@ -895,6 +895,11 @@ The ordinary package does not expose MI in this release; the
   52 assertions; stale wording proposals are recorded on the board without
   promoting validation statuses. Versions and publishing remain pending.
 
+- [x] **S/M — refresh release help (task-112).** Summary fit measures now
+  document lavaan-compatible output including FIML; policy help records PEBA4
+  for ML/FIML and All for DWLS, exact first-stage influence and completed
+  reference-law evidence. Policy intervals remain pending evaluation.
+
 - [ ] **S — align versions and publish.** Set the CMake project version
   (currently 0.0.1) and both DESCRIPTION files to 0.2.0 with NEWS entries;
   push `main` and the tags. As of 2026-10-02 `main` is 74 commits ahead of

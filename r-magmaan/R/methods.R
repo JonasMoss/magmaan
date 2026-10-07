@@ -279,8 +279,9 @@ print.magmaan <- function(x, ...) {
 #'   inference reason attached to the tables. Defined parameters have no
 #'   declared standardized scale and are NA (unsupported_defined_scale).
 #' @param fit_measures Logical; compute and attach [fit_measures()] on request.
-#'   lavaan-compatible fit measures are not available yet, so a non-NULL
-#'   `lavaan_compat` errors here.
+#'   With `lavaan_compat`, returns the selected bundle's standard, scaled
+#'   and robust measures, intervals and close-fit p-values, including FIML
+#'   ML/MLR where supported.
 #' @param references Character vector of reference laws, or `NULL` for the policy defaults.
 #' @param ... Unused.
 #' @return An object of class `summary.magmaan`. With `standardized = TRUE`,

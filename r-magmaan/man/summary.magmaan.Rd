@@ -23,23 +23,23 @@
 
 \item{references}{Character vector of reference laws, or \code{NULL} for the policy defaults.}
 
-\item{standardized}{Add \code{std.lv}, \code{std.lv.se}, \code{std.all}
-and \code{std.all.se} columns and an R-squared table. Delta-method SEs use
- the selected covariance. Without covariance estimates remain available and
-SEs are NA with the inference reason attached to both tables. Defined
-parameters have no declared standardized scale and are NA with reason
-\code{unsupported_defined_scale}.}
+\item{standardized}{Add std.lv, std.lv.se, std.all and std.all.se columns
+and an R-squared table. Delta-method SEs use the selected covariance.
+Without covariance, estimates remain available and SEs are NA with the
+inference reason attached to the tables. Defined parameters have no
+declared standardized scale and are NA (unsupported_defined_scale).}
 
 \item{fit_measures}{Logical; compute and attach \code{\link[=fit_measures]{fit_measures()}} on request.
-lavaan-compatible fit measures are not available yet, so a non-NULL
-\code{lavaan_compat} errors here.}
+With \code{lavaan_compat}, returns the selected bundle's standard, scaled
+and robust measures, intervals and close-fit p-values, including FIML
+ML/MLR where supported.}
 
 \item{...}{Unused.}
 }
 \value{
 An object of class \code{summary.magmaan}. With \code{standardized = TRUE},
-\code{r2} is a data frame with variable, r2 and r2.se columns (and group
-for grouped models), covering endogenous observed and latent variables.
+\code{r2} is a data frame with variable, r2 and r2.se columns (and group for
+grouped models), covering endogenous observed and latent variables.
 }
 \description{
 The fit, its parameter table and its global tests. \code{coef()} on the summary
