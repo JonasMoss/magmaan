@@ -12,6 +12,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/compat/mplus/model.hpp"
 #include "magmaan/spec/build.hpp"
 
 #include "../inference_bundle.hpp"
@@ -345,4 +346,98 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   auto defs_or = compute_defined(*fp, *pt, names, est, inf.vcov);
   REQUIRE_FALSE(defs_or.has_value());
   CHECK(defs_or.error().kind == magmaan::PostError::Kind::NumericIssue);
+}
+
+TEST_CASE("Effects: sqrt values and nested delta variance at fixed theta") {
+  auto flat = Parser::parse(
+      "f =~ x1 + a*x2 + b*x3\nroot := sqrt(a)\n"
+      "nested := sqrt(root + b^2)");
+  REQUIRE(flat);
+  magmaan::spec::LatentNames names;
+  auto st = build(*flat, {}, nullptr, &names);
+  REQUIRE(st);
+  Eigen::Index a = -1, b = -1;
+  for (std::size_t i = 0; i < st->size(); ++i) {
+    if (names.row_label[i] == "a") a = st->free[i] - 1;
+    if (names.row_label[i] == "b") b = st->free[i] - 1;
+  }
+  REQUIRE(a >= 0); REQUIRE(b >= 0);
+  magmaan::estimate::Estimates est;
+  est.theta = Eigen::VectorXd::Ones(st->n_free());
+  est.theta[a] = 16.; est.theta[b] = 3.;
+  Eigen::MatrixXd vcov = Eigen::MatrixXd::Zero(st->n_free(), st->n_free());
+  vcov(a,a) = .64; vcov(b,b) = .09;
+  vcov(a,b) = vcov(b,a) = .06;
+  auto defs = compute_defined(*flat, *st, names, est, vcov);
+  REQUIRE(defs); REQUIRE(defs->entries.size() == 2);
+  CHECK(defs->entries[0].value == doctest::Approx(4.));
+  CHECK(defs->entries[0].se * defs->entries[0].se == doctest::Approx(.01));
+  CHECK(defs->entries[1].value == doctest::Approx(std::sqrt(13.)));
+  // For sqrt(sqrt(a)+b²), at (16,3), the gradient is
+  // (1/(16 sqrt(13)), 3/sqrt(13)); include the covariance cross term.
+  const double variance = (.64/256. + 9.*.09 + 2.*3.*.06/16.) / 13.;
+  CHECK(defs->entries[1].se * defs->entries[1].se ==
+        doctest::Approx(variance).epsilon(1e-12));
+}
+
+TEST_CASE("Effects: sqrt domain boundaries retain typed errors") {
+  for (const auto& expression : {"sqrt(a)", "sqrt(sqrt(a))", "sqrt(-1)"}) {
+    auto flat = Parser::parse(std::string("f =~ x1 + a*x2 + x3\nd := ") + expression);
+    REQUIRE(flat);
+    magmaan::spec::LatentNames names;
+    auto st = build(*flat, {}, nullptr, &names); REQUIRE(st);
+    magmaan::estimate::Estimates est;
+    const Eigen::MatrixXd vcov = Eigen::MatrixXd::Identity(st->n_free(), st->n_free());
+    for (double value : {-1., 0.}) {
+      est.theta = Eigen::VectorXd::Constant(st->n_free(), value);
+      auto defs = compute_defined(*flat, *st, names, est, vcov);
+      REQUIRE_FALSE(defs);
+      CHECK(defs.error().kind == magmaan::PostError::Kind::NumericIssue);
+      CHECK(defs.error().detail.find("sqrt") != std::string::npos);
+    }
+  }
+  auto flat = Parser::parse("f =~ x1 + a*x2 + x3\nd := sqrt(0)"); REQUIRE(flat);
+  magmaan::spec::LatentNames names;
+  auto st = build(*flat, {}, nullptr, &names); REQUIRE(st);
+  magmaan::estimate::Estimates est;
+  est.theta = Eigen::VectorXd::Ones(st->n_free());
+  const Eigen::MatrixXd vcov = Eigen::MatrixXd::Identity(st->n_free(), st->n_free());
+  auto defs = compute_defined(*flat, *st, names, est, vcov); REQUIRE(defs);
+  CHECK(defs->entries[0].value == 0.); CHECK(defs->entries[0].se == 0.);
+}
+
+TEST_CASE("Effects: Mplus twin variance-component sqrt semantic construction") {
+  // Independent ACE twin algebra: MZ=A+C, DZ=A/2+C, total=A+C+E=1.
+  // This is a semantic construction, not a source-fidelity ex5.21/ex5.22 fixture.
+  auto parsed = magmaan::parse::MplusParser::parse(
+      "DATA: FILE = unused;\nVARIABLE: NAMES = y1 y2 y3;\nMODEL: y1 WITH y2 (mz); "
+      "y1 WITH y3 (dz);\nMODEL CONSTRAINT: NEW(a c e); "
+      "a=SQRT(2*(mz-dz)); c=SQRT(2*dz-mz); e=SQRT(1-mz);");
+  REQUIRE_MESSAGE(parsed, (parsed ? "" : parsed.error().detail));
+  magmaan::spec::LatentNames names;
+  auto st = build(parsed->flat, magmaan::compat::mplus::build_options(parsed->input),
+                  nullptr, &names);
+  REQUIRE(st);
+  Eigen::Index mz = -1, dz = -1;
+  for (std::size_t i = 0; i < st->size(); ++i) {
+    if (names.row_label[i] == "mz") mz = st->free[i] - 1;
+    if (names.row_label[i] == "dz") dz = st->free[i] - 1;
+  }
+  REQUIRE(mz >= 0); REQUIRE(dz >= 0);
+  magmaan::estimate::Estimates est;
+  est.theta = Eigen::VectorXd::Ones(st->n_free());
+  est.theta[mz] = .75; est.theta[dz] = .5;
+  Eigen::MatrixXd vcov = Eigen::MatrixXd::Zero(st->n_free(), st->n_free());
+  vcov(mz,mz) = .01; vcov(dz,dz) = .02;
+  vcov(mz,dz) = vcov(dz,mz) = .005;
+  auto defs = compute_defined(parsed->flat, *st, names, est, vcov);
+  REQUIRE(defs); REQUIRE(defs->entries.size() == 3);
+  // Gradients at (MZ,DZ)=(.75,.5): (sqrt(2),-sqrt(2)),
+  // (-1,2), (-1,0). The correlated delta variances are .04,.07,.01.
+  const double values[] = {std::sqrt(.5), .5, .5};
+  const double variances[] = {.04, .07, .01};
+  for (std::size_t i = 0; i < 3; ++i) {
+    CHECK(defs->entries[i].value == doctest::Approx(values[i]));
+    CHECK(defs->entries[i].se * defs->entries[i].se == doctest::Approx(variances[i]));
+  }
 }

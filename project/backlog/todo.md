@@ -1196,9 +1196,13 @@ ordinary-user default.
   experiments when their runners next change. **Check:** improper/admissible
   controls with convergence/domain kept separate. Composite attachment is deferred.
 
-- [ ] **S — add `sqrt` to defined parameters.** Edit normative EBNF, parser and
-  derivatives in that order. **Check:** Mplus twin expressions ex5.21/ex5.22,
-  domain errors and derivative propagation.
+- [x] **S — validate `sqrt` in defined parameters.** EBNF, parser and AD
+  already support it. Fixed-theta effects gates check values, correlated delta
+  variance, nested-definition propagation, negative/varying-zero typed errors
+  and constant zero. An independent Mplus ACE twin-expression construction checks
+  SQRT lowering and value/variance semantics; the constraint AD gate checks its
+  Jacobian. This closes the implementation/semantic item, not source-fidelity
+  validation of ex5.21/ex5.22: no checked-in gate for those exact inputs was found.
 
 ### Benchmarks
 

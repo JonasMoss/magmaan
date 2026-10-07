@@ -214,4 +214,8 @@
   constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
   `exp`, `log`, `sqrt`, `pnorm` (Mplus PHI) and `log10`; both the defined-parameter evaluator and the
   nonlinear-constraint evaluator evaluate them with forward-mode AD.
+  Fixed-theta `effects_test.cpp` gates cover sqrt values, correlated delta
+  variances, nested definitions and Mplus ACE twin-expression semantics. Negative
+  and varying-zero arguments return typed `PostError::NumericIssue`; constant
+  zero has zero value and SE. Exact ex5.21/ex5.22 source inputs are not gated.
 - Effect coding for loadings.
