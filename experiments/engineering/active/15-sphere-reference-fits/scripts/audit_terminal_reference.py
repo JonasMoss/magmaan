@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import time
+import sys
 from pathlib import Path
 import mpmath as mp
 from verify_uls_guard import read, write
@@ -84,12 +85,14 @@ def sphere_map(u,artifact):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__); parser.add_argument('--run-dir',type=Path,required=True)
-    args=parser.parse_args(); out=args.run_dir
+    parser.add_argument('--diagnostic-out',type=Path,help='fresh output directory; read only points 64/84/92 from run-dir')
+    args=parser.parse_args(); inputs=args.run_dir; out=args.diagnostic_out or inputs
+    if args.diagnostic_out: out.mkdir(parents=True,exist_ok=False)
     if (out/'comparisons.csv').exists(): raise ValueError('fresh reference output required')
     mp.mp.dps=90; start=time.monotonic()
-    all_points=read(out/'points.csv'); raw=read(out/'artifacts.csv'); intervals=read(out/'intervals.csv')
+    all_points=read(inputs/'points.csv'); raw=read(inputs/'artifacts.csv'); intervals=read(inputs/'intervals.csv')
     samples={}; counts={}
-    for r in read(out/'covariances.csv'):
+    for r in read(inputs/'covariances.csv'):
         key=int(r['case_id']),int(r['block']); counts[key]=int(r['nobs'])
         samples.setdefault(key,mp.matrix(6))[int(r['row'])-1,int(r['col'])-1]=binary(r['value'])
     matrix_rows={}; partables={}
@@ -97,6 +100,7 @@ def main():
     for r in all_points: partables.setdefault(int(r['point_id']),[]).append(r)
     comparisons=[]
     for row in intervals:
+        if args.diagnostic_out and int(row['point_id']) not in (64,84,92): continue
         pid=int(row['point_id']); cid=int(row['case_id']); pt=partables[pid]
         def artifact(name,optional=False):
             data=matrix_rows.get((pid,name))
@@ -174,6 +178,33 @@ def main():
         if C is not None and exact_curvature is not None:
             curvature_error=mp.norm(C-exact_curvature)
             if row['estimator']=='ML': matrix_error=curvature_error
+        if args.diagnostic_out:
+            eigenvalues, eigenvectors=mp.eigsy(exact_curvature)
+            # E = stored minus exact, in the SAME retained scaled coordinates.
+            error=C-exact_curvature
+            symmetry_error=mp.norm(C-C.T)
+            exact_symmetry_error=mp.norm(exact_curvature-exact_curvature.T)
+            tolerance=mp.mpf('1e-70')
+            if symmetry_error or exact_symmetry_error>tolerance:
+                raise ValueError('curvature symmetry check failed')
+            rotated=eigenvectors.T*error*eigenvectors
+            inverse_root=mp.diag([1/mp.sqrt(x) for x in eigenvalues])
+            relative=inverse_root*rotated*inverse_root
+            relative_norm=max(abs(x) for x in mp.eigsy(relative,eigvals_only=True))
+            coupling=mp.sqrt(sum(rotated[i,0]**2 for i in range(1,C.rows)))
+            orthogonality=mp.norm(eigenvectors.T*eigenvectors-mp.eye(C.rows))
+            reconstruction=mp.norm(eigenvectors*mp.diag(list(eigenvalues))*eigenvectors.T-exact_curvature)
+            norm_invariance=abs(mp.norm(rotated)-mp.norm(error))
+            # Independent generalized-Rayleigh whitening with H = L L^T.
+            linv=mp.cholesky(exact_curvature)**-1
+            alternative=linv*error*linv.T
+            alternative=(alternative+alternative.T)/2
+            whitening_gap=abs(relative_norm-max(abs(x) for x in mp.eigsy(alternative,eigvals_only=True)))
+            if max(orthogonality,reconstruction,norm_invariance,whitening_gap)>tolerance:
+                raise ValueError('basis/relative-norm sanity check failed')
+            # Ideal inverse-Frobenius certificate used by singular_lower(L)^2:
+            # ||L^-1||_F^2 = trace(C^-1). Excludes binary64 factor/solve defects.
+            ideal_lower=1/trace(C**-1)
         available=row['source_status']=='available'
         bounds_covers=not available or (matrix_error<=binary(row['matrix_bound']) and
             vector_error<=binary(row['vector_bound']) and curvature_error<=binary(row['curvature_bound']))
@@ -188,11 +219,28 @@ def main():
             interval_covers=not mp.isfinite(target) or binary(row['lower'])<=target<=binary(row['upper']),
             wrong_decision=bool(wrong),decision=decision,selected_status=row['selected_status'],
             legacy_passed=row['legacy_passed'],selected_passed=row['selected_passed']))
+        if args.diagnostic_out:
+            comparisons[-1].update(exact_scaled_min_eigenvalue=number(eigenvalues[0]),
+                stored_scaled_min_eigenvalue=number(mp.eigsy(C,eigvals_only=True)[0]),
+                ideal_inverse_frobenius_lower=number(ideal_lower),
+                ideal_margin_after_construction=number(ideal_lower-binary(row['curvature_bound'])),
+                construction_bound=row['curvature_bound'],score_bound=row['vector_bound'],
+                retained_lower=row['lower'],retained_upper=row['upper'],retained_curvature_lower=row['curvature_lower'],
+                dimension=C.rows,
+                weak_direction_error=number(rotated[0,0]),
+                weak_direction_relative_error=number(rotated[0,0]/eigenvalues[0]),
+                relative_curvature_operator_norm=number(relative_norm),
+                weak_offdiagonal_coupling_norm=number(coupling),
+                weak_relative_coupling_norm=number(mp.sqrt(sum(relative[i,0]**2 for i in range(1,C.rows)))),
+                stored_symmetry_error=number(symmetry_error),exact_symmetry_error=number(exact_symmetry_error),
+                basis_orthogonality_error=number(orthogonality),basis_reconstruction_error=number(reconstruction),
+                frobenius_invariance_error=number(norm_invariance),cholesky_whitening_norm_gap=number(whitening_gap))
         if pid%8==0: print(f'90-digit terminal case {cid}; {time.monotonic()-start:.1f}s',flush=True)
     write(out/'comparisons.csv',comparisons)
     write(out/'reference_metadata.csv',[dict(digits=90,mpmath=mp.__version__,elapsed_s=time.monotonic()-start,
         source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        inputs_sha256=';'.join(hashlib.sha256((out/f).read_bytes()).hexdigest() for f in ('points.csv','artifacts.csv','covariances.csv','intervals.csv')),
+        inputs_sha256=';'.join(hashlib.sha256((inputs/f).read_bytes()).hexdigest() for f in ('points.csv','artifacts.csv','covariances.csv','intervals.csv')),
+        command=' '.join(sys.argv),input_dir=str(inputs.resolve()),diagnostic_points='64;84;92' if args.diagnostic_out else 'all',
         convention='exact binary64 partable/point/sample/map/basis; independent LISREL moments and full normalization chain; total objective')])
 
 
