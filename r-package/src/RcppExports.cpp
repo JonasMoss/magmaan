@@ -3231,6 +3231,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// convention_fit_measures_impl
+Rcpp::DataFrame convention_fit_measures_impl(Rcpp::List fit, std::string convention, Rcpp::LogicalVector state);
+RcppExport SEXP _magmaanlab_convention_fit_measures_impl(SEXP fitSEXP, SEXP conventionSEXP, SEXP stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type convention(conventionSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(convention_fit_measures_impl(fit, convention, state));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_build_u_factor
 Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread, std::string moments);
 RcppExport SEXP _magmaanlab_infer_build_u_factor(SEXP fitSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
@@ -4808,6 +4821,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaanlab_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2010, 8},
     {"_magmaanlab_policy_fit_measures_impl", (DL_FUNC) &_magmaanlab_policy_fit_measures_impl, 2},
+    {"_magmaanlab_convention_fit_measures_impl", (DL_FUNC) &_magmaanlab_convention_fit_measures_impl, 3},
     {"_magmaanlab_infer_build_u_factor", (DL_FUNC) &_magmaanlab_infer_build_u_factor, 3},
     {"_magmaanlab_infer_build_u_factor_parts", (DL_FUNC) &_magmaanlab_infer_build_u_factor_parts, 5},
     {"_magmaanlab_infer_reduced_gamma_nt", (DL_FUNC) &_magmaanlab_infer_reduced_gamma_nt, 1},

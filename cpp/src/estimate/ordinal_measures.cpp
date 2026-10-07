@@ -155,11 +155,15 @@ ordinal_baseline_chi2(const data::OrdinalStats& stats,
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
     const Eigen::Index ncorr = p * (p - 1) / 2;
+    // ULS has no W_wls storage: its metric is the identity.
+    const Eigen::MatrixXd identity = weights == OrdinalWeightKind::ULS ?
+        Eigen::MatrixXd::Identity(nth + ncorr, nth + ncorr).eval() : Eigen::MatrixXd{};
+    const auto& W = weights == OrdinalWeightKind::ULS ? identity : Ws[b];
     Eigen::VectorXd d = Eigen::VectorXd::Zero(nth + ncorr);
     d.tail(ncorr) = -corr_lower(stats.R[b]);
     if (nth > 0 && ncorr > 0) {
-      const Eigen::MatrixXd Wtt = Ws[b].topLeftCorner(nth, nth);
-      const Eigen::MatrixXd Wtc = Ws[b].topRightCorner(nth, ncorr);
+      const Eigen::MatrixXd Wtt = W.topLeftCorner(nth, nth);
+      const Eigen::MatrixXd Wtc = W.topRightCorner(nth, ncorr);
       Eigen::LDLT<Eigen::MatrixXd> ldlt(Wtt);
       if (ldlt.info() != Eigen::Success) {
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -168,7 +172,7 @@ ordinal_baseline_chi2(const data::OrdinalStats& stats,
       d.head(nth) = -ldlt.solve(Wtc * d.tail(ncorr));
     }
     out.chi2 += static_cast<double>(stats.n_obs[b]) *
-                d.dot(Ws[b] * d);
+                d.dot(W * d);
     out.df += static_cast<int>(ncorr);
   }
   return out;

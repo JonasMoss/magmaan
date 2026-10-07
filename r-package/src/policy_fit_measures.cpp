@@ -1,5 +1,6 @@
 #include "glue_internal.h"
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/conventions.hpp"
 // [[Rcpp::depends(RcppEigen)]]
 using namespace magmaanr;
 using namespace magmaanr::fitglue;
@@ -68,5 +69,52 @@ Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector sta
   result.attr("details") = Rcpp::List::create(Rcpp::_["user"] = details(out.user), Rcpp::_["baseline"] = details(out.baseline),
       Rcpp::_["ntotal"] = static_cast<double>(out.ntotal), Rcpp::_["ngroups"] = static_cast<double>(out.n_groups),
       Rcpp::_["srmr_uncorrected"] = out.residual_uncorrected, Rcpp::_["srmr_trace"] = out.residual_trace);
+  return result;
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame convention_fit_measures_impl(Rcpp::List fit, std::string convention,
+    Rcpp::LogicalVector state) {
+  using namespace magmaan::api;
+  LavaanConvention c = LavaanConvention::ML;
+  bool found = false;
+  for (const auto candidate : {LavaanConvention::ML, LavaanConvention::MLM, LavaanConvention::MLR,
+      LavaanConvention::DWLS, LavaanConvention::WLSMV, LavaanConvention::WLSM,
+      LavaanConvention::ULS, LavaanConvention::ULSMV, LavaanConvention::WLS})
+    if (convention_name(candidate) == convention) { c = candidate; found = true; }
+  if (!found) Rcpp::stop("unknown lavaan convention: %s", convention);
+  PolicyFitState s;
+  s.converged = state.size() > 0 && state[0] == TRUE;
+  s.penalized = state.size() > 3 && state[3] == TRUE;
+  auto ctx = ctx_from_fit(fit);
+  auto est = est_from_fit(fit);
+  const std::string estimator = Rcpp::as<std::string>(fit["estimator"]);
+  const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+  const bool mixed = fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]);
+  Result<ConventionFitMeasures> out = std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+      "this lavaan convention is not checked for the fitted model"));
+  if (ordinal && !mixed) {
+    const auto w = ordinal_weight_from_estimator(estimator, "convention_fit_measures");
+    const auto p = ordinal_parameterization_from_string(Rcpp::as<std::string>(fit["parameterization"]));
+    out = convention_fit_measures(ctx.pt, ctx.rep,
+        ordinal_stats_from_arg(stats_from_fit_or_arg(fit, R_NilValue, "ordinal_stats", "convention_fit_measures")),
+        est, w, p, c, s);
+  } else if ((estimator == "ML" || estimator == "FIML") && !mixed &&
+      !fit.containsElementNamed("nclusters") && fit.containsElementNamed("raw_data")) {
+    auto raw = estimator == "FIML" ? fiml_raw_from_arg(ctx.rep, fit["raw_data"]) :
+        complete_raw_from_arg(ctx.rep, fit["raw_data"]);
+    out = convention_fit_measures(ctx.pt, ctx.rep, raw, est, c, s, estimator == "FIML");
+  }
+  if (!out) Rcpp::stop("convention_fit_measures(): %s", out.error().detail);
+  Rcpp::CharacterVector index(out->indices.size()), reason(out->indices.size());
+  Rcpp::NumericVector estimate(out->indices.size());
+  for (std::size_t i = 0; i < out->indices.size(); ++i) {
+    const auto& x = out->indices[i]; index[i] = x.index;
+    estimate[i] = std::isfinite(x.estimate) ? x.estimate : NA_REAL;
+    reason[i] = std::isfinite(x.estimate) ? Rcpp::String(NA_STRING) : Rcpp::String("inapplicable");
+  }
+  auto result = Rcpp::DataFrame::create(Rcpp::_["index"] = index,
+      Rcpp::_["estimate"] = estimate, Rcpp::_["reason"] = reason);
+  result.attr("lavaan_compat") = out->convention;
   return result;
 }

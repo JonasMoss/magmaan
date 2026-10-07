@@ -19,8 +19,9 @@
 #' likelihood estimators; CRMR appears for ordinal and mixed models. Computation includes a second fit and
 #' is performed each time this function is called.
 #' @param fit A [magmaan()] fit.
-#' @param lavaan_compat Reserved for compatibility reporting. Non-NULL values
-#'   error: lavaan-compatible fit measures are not available yet.
+#' @param lavaan_compat Optional named lavaan inference bundle. Returns lavaan's
+#'   standard, scaled and robust families, intervals and close-fit p-values.
+#'   Unsupported estimator/bundle combinations error.
 #' @return A data frame with columns index, estimate and reason. Stable index
 #'   codes are rmsea, cfi, tli, srmr, crmr, logl, unrestricted_logl, aic and bic.
 #'   The details attribute retains the lab composer's diagnostic ingredients.
@@ -29,7 +30,7 @@ fit_measures <- function(fit, lavaan_compat = NULL) {
   if (!inherits(fit, "magmaan"))
     stop("fit_measures(): supply a magmaan() fit", call. = FALSE)
   if (!is.null(lavaan_compat))
-    stop("fit_measures(): lavaan-compatible fit measures are not available yet", call. = FALSE)
+    return(magmaanlab::convention_fit_measures(as_lab_fit(fit), lavaan_compat))
   out <- magmaanlab::policy_fit_measures(as_lab_fit(fit))
   out$index[out$index == "unrestricted.logl"] <- "unrestricted_logl"
   out

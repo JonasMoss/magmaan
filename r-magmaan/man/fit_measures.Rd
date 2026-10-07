@@ -9,8 +9,9 @@ fit_measures(fit, lavaan_compat = NULL)
 \arguments{
 \item{fit}{A \code{\link[=magmaan]{magmaan()}} fit.}
 
-\item{lavaan_compat}{Reserved for compatibility reporting. Non-NULL values
-error: lavaan-compatible fit measures are not available yet.}
+\item{lavaan_compat}{Optional named lavaan inference bundle. Returns lavaan's standard, scaled
+and robust families, intervals and close-fit p-values. Unsupported
+estimator/bundle combinations error.}
 }
 \value{
 A data frame with columns index, estimate and reason. Stable index

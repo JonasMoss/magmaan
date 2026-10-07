@@ -857,6 +857,10 @@ policy_fit_measures_impl <- function(fit, state) {
     .Call(`_magmaanlab_policy_fit_measures_impl`, fit, state)
 }
 
+convention_fit_measures_impl <- function(fit, convention, state) {
+    .Call(`_magmaanlab_convention_fit_measures_impl`, fit, convention, state)
+}
+
 infer_build_u_factor <- function(fit, bread, moments = "structured") {
     .Call(`_magmaanlab_infer_build_u_factor`, fit, bread, moments)
 }

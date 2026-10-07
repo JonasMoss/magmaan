@@ -580,3 +580,14 @@ estimates, typed reasons and details; `unrestricted_logl` is the ordinary stable
 code. Each estimator retains its fixed lab row set. Opt-in summary attachment and printing,
 ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
 Compatibility requests error pending TASK-109; intervals await TASK-103.
+
+
+## Compatibility fit-measures composer (TASK-109, incomplete)
+
+Lane WIP adds `api::convention_fit_measures()`, the thin lab adapter and
+ordinary `lavaan_compat` dispatch. The implementation composes matching
+independence baselines and standard/scaled/robust families, keeping categorical
+N-G reporting separate from CATML's N scaling. This is not a validated release
+capability: the live gate still fails for FIML at identical oracle coefficients
+and an ordinal independence baseline fails convergence. Full CTest, both full
+R suites, examples, R CMD check and structural guards remain outstanding.

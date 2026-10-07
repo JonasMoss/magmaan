@@ -2,6 +2,7 @@
 #pragma once
 
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/sem.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 
 namespace magmaan::api {
@@ -30,6 +31,24 @@ struct ConventionInference {
   ConventionTest test;
   bool psd_boundary = false, verdict_disagreement = false;
 };
+
+// Named lavaan fitMeasures entries. The convention labels the entire result;
+// unavailable components retain their reason rather than changing families.
+struct ConventionFitMeasures {
+  std::string convention;
+  std::vector<PolicyFitIndex> indices;
+};
+Result<ConventionFitMeasures> convention_fit_measures(const Fit& fit,
+    LavaanConvention convention);
+Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::RawData& raw,
+    const estimate::Estimates& estimates, LavaanConvention convention,
+    const PolicyFitState& state, bool fiml = false);
+Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,
+    estimate::OrdinalParameterization parameterization,
+    LavaanConvention convention, const PolicyFitState& state);
 
 ConventionInference convention_unavailable(LavaanConvention convention,
     InferenceReason reason, std::string detail, const PolicyFitState& state = {});

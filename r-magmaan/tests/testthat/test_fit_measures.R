@@ -35,8 +35,20 @@ test_that("summary computes fit measures only on request and prints reasons", {
   expect_true(all(is.na(got$estimate)))
   expect_true(all(grepl("^not_converged:", got$reason)))
   expect_output(print(summary(fit, fit_measures = TRUE)), "not_converged")
-  expect_error(fit_measures(fit, lavaan_compat = "MLR"), "not available yet")
-  expect_error(summary(fit, fit_measures = TRUE, lavaan_compat = "MLR"), "not available yet")
+  expect_error(fit_measures(fit, lavaan_compat = "MLR"), "convergence verdict")
+  expect_error(summary(fit, fit_measures = TRUE, lavaan_compat = "MLR"), "convergence verdict")
   expect_error(fit_measures(list()), "supply a magmaan")
   expect_error(summary(fit, fit_measures = NA), "TRUE or FALSE")
+})
+
+test_that("ordinary compatibility measures preserve lab names and convention", {
+  fit <- magmaan(cfa, hs(), inference=FALSE)
+  for (convention in c("ML", "MLM", "MLR")) {
+    actual <- fit_measures(fit, lavaan_compat=convention)
+    expect_identical(actual, magmaanlab::convention_fit_measures(as_lab_fit(fit), convention))
+    expect_identical(attr(actual,"lavaan_compat"), convention)
+    expect_true("chisq" %in% actual$index)
+    expect_identical(summary(fit, fit_measures=TRUE, lavaan_compat=convention)$fit_measures, actual)
+  }
+  expect_error(fit_measures(fit,lavaan_compat="WLSMV"),"different fitted estimator")
 })
