@@ -8,7 +8,7 @@
 #' @param convention A named lavaan inference bundle.
 #' @return A data frame with index, estimate and reason columns and a
 #'   lavaan_compat attribute naming the convention. Incompatible bundles error.
-#'   FIML ML/MLR rows are unavailable pending lavaan validation (TASK-110).
+#'   FIML ML/MLR use saturated H1 EM parameter tolerance 1e-10.
 #' @export
 convention_fit_measures <- function(fit, convention) {
   if (!inherits(fit, "magmaan_fit")) stop("convention_fit_measures(): supply a fitted model")

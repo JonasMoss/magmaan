@@ -1,5 +1,9 @@
 # magmaan 0.3.0 (in development)
 
+- FIML ML/MLR compatibility fit measures are now validated against lavaan.
+  Compatibility H1 EM moments use 1e-10 stopping precision to avoid amplified
+  errors in MLR scaling, SRMR and robust RMSEA tail probabilities (TASK-110).
+
 - Modification indices now include absent structural regressions among variables
   already participating in equations, including reverse paths. Score/EPC and
   embedded-null LR refits use the existing inference policy; unidentified paths

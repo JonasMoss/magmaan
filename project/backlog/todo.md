@@ -127,8 +127,9 @@ result under an unstated convention.
   standard/scaled/robust families, lab/ordinary compatibility dispatch and
   analytic categorical independence baselines. Complete ML/MLM/MLR and
   ordinal DWLS/WLSMV, ULS/ULSMV and WLS have live same-point 1e-6 gates,
-  including two groups and delta/theta. FIML ML/MLR explicitly return typed
-  unavailable rows pending task-110; no tolerance exemption was introduced.
+  including two groups and delta/theta. FIML ML/MLR are validated by task-110
+  after tightening compatibility H1 moment convergence to 1e-10; MAR and
+  grouped-missingness gates retain 1e-6 without an oracle exemption.
 
 - [x] **M — ordinary policy fit measures** (task-102): fixed index/estimate/reason
   rows and opt-in summary attachment/printing. Compatibility remains task-109;

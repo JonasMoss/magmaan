@@ -101,28 +101,6 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
     return std::unexpected(failure("this convention requires a different fitted estimator"));
   if (missing && c == LavaanConvention::MLM)
     return std::unexpected(failure("FIML compatibility covers ML and MLR"));
-  if (missing) {
-    ConventionFitMeasures out; out.convention = convention_name(c);
-    const double nan = std::numeric_limits<double>::quiet_NaN();
-    for (const auto* name : {"chisq", "df", "pvalue", "baseline.chisq", "baseline.df",
-        "baseline.pvalue", "ntotal", "srmr", "logl", "unrestricted.logl", "aic", "bic", "bic2", "npar"})
-      add(out, name, nan);
-    measures::FitMeasures fm;
-    fm.cfi = fm.tli = fm.rmsea = fm.rmsea_ci_lower = fm.rmsea_ci_upper =
-        fm.rmsea_pvalue = fm.rmsea_close_h0 = fm.rmsea_notclose_pvalue = fm.rmsea_notclose_h0 = nan;
-    family(out, fm);
-    if (c == LavaanConvention::MLR) {
-      for (const auto* name : {"chisq.scaled", "df.scaled", "pvalue.scaled", "chisq.scaling.factor",
-          "baseline.chisq.scaled", "baseline.df.scaled", "baseline.pvalue.scaled", "baseline.chisq.scaling.factor"})
-        add(out, name, nan);
-      family(out, fm, ".scaled"); family(out, fm, ".robust");
-    }
-    for (auto& index : out.indices) {
-      index.reason = InferenceReason::UnsupportedModel;
-      index.detail = "not yet validated against lavaan";
-    }
-    return out;
-  }
   if (raw.X.empty() || std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }))
     return std::unexpected(failure("fit-measures compatibility requires raw observations and random x"));
   auto evaluator = model::ModelEvaluator::build(pt, rep);
@@ -132,7 +110,11 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
   const bool means = eval->J_mu.rows() > 0;
   auto pack = estimate::fiml::fiml_pack(raw);
   if (!pack) return std::unexpected(failure(pack.error().detail));
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack);
+  // Robust traces and tail probabilities require converged H1 moments, even
+  // when the saturated likelihood has already stopped changing visibly.
+  estimate::fiml::FIMLH1Options h1_options;
+  h1_options.parameter_tol = 1e-10;
+  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack, h1_options);
   if (!h1) return std::unexpected(failure(h1.error().detail));
   auto model = independence(raw.X[0].cols(), static_cast<int>(raw.X.size()), means);
   if (!model) return std::unexpected(model.error());

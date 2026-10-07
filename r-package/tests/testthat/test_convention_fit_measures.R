@@ -44,7 +44,7 @@ test_that("complete ML compatibility fit measures match lavaan families", {
       estimator=convention, meanstructure=TRUE), convention)
 })
 
-test_that("FIML compatibility families remain explicitly unavailable pending validation", {
+test_that("FIML compatibility families match lavaan with converged H1 moments", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   vars <- paste0("x",1:6)
@@ -53,11 +53,28 @@ test_that("FIML compatibility families remain explicitly unavailable pending val
   d$x5[runif(nrow(d)) < .2] <- NA
   syntax <- "visual =~ x1+x2+x3\ntextual =~ x4+x5+x6"
   fit <- fit_model(model_spec(syntax, meanstructure=TRUE, fixed_x=FALSE), d, estimator="FIML")
+  # H1 EM updates can be small while their linear effect on robust traces
+  # still exceeds the reporting tolerance. Align both saturated optima.
+  stage1 <- magmaan_core$estimate_saturated_em_moments(
+    as.matrix(d[vars]), control=list(h1_em_param_tol=1e-10))
   for (convention in c("ML", "MLR")) {
-    actual <- convention_fit_measures(fit, convention)
-    expect_identical(attr(actual, "lavaan_compat"), convention)
-    expect_true(all(is.na(actual$estimate)))
-    expect_true(all(actual$reason == "unsupported_model: not yet validated against lavaan"))
+    oracle <- lavaan::cfa(syntax, d, estimator=convention, missing="ml",
+      fixed.x=FALSE, em.h1.args=list(tol=1e-10))
+    h1 <- lavaan::lavInspect(oracle, "h1")
+    expect_equal(unname(stage1$mean[[1]]), unname(h1$mean), tolerance=1e-9)
+    expect_equal(unname(stage1$cov[[1]]), unname(h1$cov), tolerance=1e-9)
+    expect_convention_measures(fit, oracle, convention)
+  }
+  # A second missingness layout also exercises group weights and baselines.
+  d <- lavaan::HolzingerSwineford1939
+  d$x2[seq(1, nrow(d), by=5)] <- NA
+  spec <- model_spec(syntax, meanstructure=TRUE, fixed_x=FALSE,
+    group="school", group_labels=unique(as.character(d$school)))
+  fit <- fit_model(spec, d, estimator="FIML")
+  for (convention in c("ML", "MLR")) {
+    oracle <- lavaan::cfa(syntax, d, estimator=convention, missing="ml",
+      fixed.x=FALSE, group="school", em.h1.args=list(tol=1e-10))
+    expect_convention_measures(fit, oracle, convention)
   }
 })
 

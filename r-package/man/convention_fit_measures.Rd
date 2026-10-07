@@ -5,5 +5,5 @@
 \arguments{
 \item{fit}{A fitted magmaanlab model retaining observations or ordinal stats.}
 \item{convention}{A named lavaan inference bundle.}}
-\value{A data frame with index, estimate and reason columns and a lavaan_compat attribute. Incompatible bundles error. FIML ML/MLR rows are unavailable pending lavaan validation (TASK-110).}
+\value{A data frame with index, estimate and reason columns and a lavaan_compat attribute. Incompatible bundles error. FIML ML/MLR use saturated H1 EM parameter tolerance 1e-10.}
 \description{Composes standard, scaled and robust fit-index families in C++, including a matching independence baseline, noncentral chi-square intervals and close-fit p-values. Estimates are retained.}

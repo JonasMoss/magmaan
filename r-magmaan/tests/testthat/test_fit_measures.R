@@ -54,14 +54,14 @@ test_that("ordinary compatibility measures preserve lab names and convention", {
 })
 
 
-test_that("ordinary FIML compatibility preserves typed unavailable rows", {
+test_that("ordinary FIML compatibility exposes validated fit measures", {
   d <- hs()
   d$x2[seq(1, nrow(d), by=5)] <- NA
   fit <- magmaan(cfa, d, estimator="FIML", inference=FALSE)
   for (convention in c("ML", "MLR")) {
     actual <- fit_measures(fit, lavaan_compat=convention)
     expect_identical(actual, magmaanlab::convention_fit_measures(as_lab_fit(fit), convention))
-    expect_true(all(is.na(actual$estimate)))
-    expect_true(all(actual$reason == "unsupported_model: not yet validated against lavaan"))
+    expect_true(all(is.finite(actual$estimate)))
+    expect_true(all(is.na(actual$reason)))
   }
 })

@@ -153,7 +153,10 @@ ConventionInference lavaan_inference_fiml(spec::LatentStructure pt,
   };
   auto df = inference::df_stat(pt, pack.start_stats, estimates.theta);
   if (!df) return fail(df.error().detail);
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, pack);
+  // H1 moment error propagates linearly into the MLR trace correction.
+  estimate::fiml::FIMLH1Options h1_options;
+  h1_options.parameter_tol = 1e-10;
+  auto h1 = estimate::fiml::fiml_h1_moments(raw, pack, h1_options);
   if (!h1) return fail(h1.error().detail);
   auto extras = estimate::fiml::fiml_extras(pt, rep, raw, estimates, pack, *h1);
   if (!extras) return fail(extras.error().detail);

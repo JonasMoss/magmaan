@@ -595,9 +595,12 @@ N-G scaling for quadratic statistics and N scaling for CATML. Grouped
 categorical incremental indices sum baseline corrections while RMSEA uses the
 pooled CATML correction.
 
-FIML ML/MLR return NA rows with `unsupported_model: not yet validated against
-lavaan`; TASK-110 owns validation. Incompatible bundles and rejected fit states
-error. The live oracle gate covers HS one/two groups, PoliticalDemocracy and
-ordinal delta/theta one/two groups. Composer parity is checked at semantically
-matched oracle coefficients at 1e-6; optimizer coefficient agreement is checked
+FIML ML/MLR are validated (TASK-110): compatibility inference and fit measures
+solve H1 EM moments to absolute parameter-update tolerance 1e-10. The native
+H1 default remains 1e-5. This prevents saturated-moment error from propagating
+into MLR trace corrections, SRMR and robust noncentral tail probabilities.
+Incompatible bundles and rejected fit states error. The live oracle gate covers HS one/two groups, PoliticalDemocracy and
+ordinal delta/theta one/two groups, and FIML MAR plus grouped missingness.
+FIML oracle H1 EM uses the same 1e-10 convergence tolerance. Composer parity
+is checked at semantically matched oracle coefficients at 1e-6; optimizer coefficient agreement is checked
 separately at 1e-4 because tail probabilities amplify small endpoint differences.

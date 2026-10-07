@@ -256,6 +256,36 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### FIML compatibility H1 stopping precision (TASK-110)
+
+The oracle is correct; the discrepancy came from magmaan's H1 EM stopping
+precision. Reproduction: installed lavaan 0.7-2, HS two-factor model on x1:x6,
+random x and means, seed 109; x2 is missing with probability plogis(x1-5),
+x5 with probability .2. At identical lavaan coefficients and oracle H1 EM
+tolerance 1e-10, native H1 default parameter tolerance 1e-5 left maximum mean
+and covariance differences 1.487776e-5 and 1.662576e-5. SRMR differed by
+1.21e-6, MLR scaling by 1.06e-6 relative, and robust not-close p-value by
+1.38e-5 (0.87780826 versus 0.87779442).
+
+A small EM update is not a bound on moment error: a slowly contracting EM
+map can leave a larger distance to its fixed point. Likelihood error is
+second order at the saturated optimum, whereas residuals and information
+traces generally change to first order in those moments. Thus a likelihood
+that appears converged cannot certify SRMR or robust tail precision.
+Tightening magmaan's H1 parameter-update tolerance to 1e-10 reduces the
+maximum mean/covariance gaps to 1.507621e-10 / 1.726832e-10 and removes all
+same-point ML/MLR fit-measure failures at the unchanged 1e-6 gate, including
+baseline, scaled, FIML-C(V3) robust and noncentral tail families. No separate
+observed/expected-information, residual convention or tail formula change
+was needed. Compatibility inference and fit measures now use that tighter
+H1 solve; native H1 defaults remain unchanged.
+
+The live regression in `r-package/tests/testthat/test_convention_fit_measures.R`
+checks H1 moments at 1e-9 and all exposed ML/MLR measures at 1e-6, with both
+oracle and magmaan H1 EM tolerance 1e-10. A grouped missingness gate checks
+baseline composition and group weights. This is a magmaan numerical fix,
+not an oracle exemption; no calibration or tolerance relaxation is claimed.
+
 ### Structural MI inventory and a small-score endpoint (TASK-105)
 
 Lavaan 0.7-2 omits outcome/exogenous-predictor residual covariances, while
