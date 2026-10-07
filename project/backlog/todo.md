@@ -1180,10 +1180,13 @@ ordinary-user default.
   examples and the fitting-options/frontier-fit R tests pass against an
   isolated opt install; no library behavior or fit tolerance changed.
 
-- [ ] **S/M — export named corpus gaps.** Freeze at-theta implied moments for
-  `newsom_2015_ex9_3` and `little_2013_ch3_fig_3_6_1indicator` so their goldens
-  need no optional mount. Restore corrected Little/Newsom fit gates after the
-  documented failures are handled. **Check:** provenance, independent oracle
+- [ ] **S/M — export named corpus gaps.** At-theta implied moments for
+  `newsom_2015_ex9_3` and `little_2013_ch3_fig_3_6_1indicator` are frozen in
+  compact pinned-lavaan fixtures (TASK-119); their 1e-8 gates run without the
+  optional mount and independently check keyed theta alignment. Deterministic
+  export retains source hashes and provenance without observations. Remaining:
+  restore corrected Little/Newsom fit gates after the documented failures are
+  handled. **Check:** provenance, independent oracle
   values, no third-party data and file-size limits. See translation audit and
   [Newsom failures](newsom-corpus-failures.md).
 

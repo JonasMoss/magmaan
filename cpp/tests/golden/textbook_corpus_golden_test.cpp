@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -66,17 +67,6 @@ bool is_numeric_vector_json(const nlohmann::json &j) {
       return false;
   }
   return true;
-}
-
-std::string repo_root_from_fixtures() {
-  const std::string fixtures = magmaan::test::fixtures_dir();
-  const std::string suffix = "/cpp/tests/fixtures";
-  if (fixtures.size() >= suffix.size() &&
-      fixtures.compare(fixtures.size() - suffix.size(), suffix.size(),
-                       suffix) == 0) {
-    return fixtures.substr(0, fixtures.size() - suffix.size());
-  }
-  return fixtures + "/../../..";
 }
 
 nlohmann::json read_json_or_fail(const std::string &path) {
@@ -305,34 +295,44 @@ void check_json_file_exists(const std::string &corpus,
   CHECK_MESSAGE(j.contains("_meta"), corpus << "/" << name << " lacks _meta");
 }
 
-// The two at-theta checks below read case files (model syntax, options, and
-// lavaan's theta and implied moments; no data) from the optional corpus mount
-// at external/textbook-corpus, which a public checkout lacks. They skip without
-// it. Exporting the two cases into tests/fixtures/textbook_corpus (see
-// tests/tools/regen_textbook_case_fixtures.R) would let them always run.
-bool corpus_case_present(std::string_view book, std::string_view case_id) {
-  const std::string path = repo_root_from_fixtures() +
-      "/external/textbook-corpus/cases/" + std::string(book) + "/" +
-      std::string(case_id) + "/model.lav";
-  return magmaan::test::read_fixture(path).has_value();
+// These snapshots carry only syntax, options and retained oracle summaries.
+// Match free rows by semantic keys to audit the existing positional theta contract.
+void check_at_theta_parameter_alignment(
+    const magmaan::spec::LatentStructure &structure,
+    const magmaan::spec::LatentNames &names,
+    const Eigen::VectorXd &theta, const nlohmann::json &ref) {
+  const auto table = magmaan::compat::lavaan::to_lavaan_partable(structure, names);
+  for (std::size_t i = 0; i < table.size(); ++i) {
+    if (table.free[i] <= 0) continue;
+    int matches = 0;
+    for (const auto &row : ref["parameter_table"]) {
+      if (row["lhs"] == table.lhs[i] &&
+          row["op"] == magmaan::parse::to_string(table.op[i]) &&
+          row["rhs"] == table.rhs[i]) {
+        ++matches;
+        CHECK(std::abs(theta[table.free[i] - 1] - row["est"].get<double>()) < 1e-8);
+      }
+    }
+    REQUIRE_MESSAGE(matches == 1, "missing or ambiguous oracle parameter key");
+  }
 }
 
 void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
-  const std::string case_dir = repo_root_from_fixtures() +
-      "/external/textbook-corpus/cases/newsom_2015/" + std::string(case_id);
-  auto model_raw = magmaan::test::read_fixture(case_dir + "/model.lav");
-  REQUIRE_MESSAGE(model_raw.has_value(), "missing model for " << case_id);
-  const auto meta = read_json_or_fail(case_dir + "/meta.json");
-  const auto ref = read_json_or_fail(case_dir + "/expected/lavaan_ml.json");
+  const auto fixture = read_json_or_fail(magmaan::test::fixtures_dir() +
+      "/textbook_corpus/" + std::string(case_id) + ".json");
+  const auto &meta = fixture;
+  const auto &ref = fixture["lavaan"];
+  const auto model_raw = fixture["model"].get<std::string>();
 
-  auto flat = magmaan::parse::Parser::parse(*model_raw);
+  auto flat = magmaan::parse::Parser::parse(model_raw);
   REQUIRE_MESSAGE(flat.has_value(), case_id << ": parse - "
                                             << flat.error().detail);
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = meta["model_options"].value("meanstructure", false);
   opts.fixed_x = meta["model_options"].value("fixed_x", true);
   opts.auto_cov_y = front_end_sets_auto_cov_y(meta.value("lavaan_function", std::string{}));
-  auto pt = magmaan::spec::build(*flat, opts);
+  magmaan::spec::LatentNames names;
+  auto pt = magmaan::spec::build(*flat, opts, nullptr, &names);
   REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
                                           << pt.error().detail);
   auto rep = magmaan::model::build_matrix_rep(*pt);
@@ -346,6 +346,7 @@ void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
   REQUIRE_MESSAGE(static_cast<std::size_t>(theta.size()) == ev->n_free(),
                   case_id << ": theta size " << theta.size()
                           << " != n_free " << ev->n_free());
+  check_at_theta_parameter_alignment(*pt, names, theta, ref);
   auto im = ev->sigma(theta);
   REQUIRE_MESSAGE(im.has_value(), case_id << ": sigma - "
                                           << im.error().detail);
@@ -362,21 +363,21 @@ void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
 void check_little_single_indicator_case_at_lavaan_theta() {
   constexpr std::string_view case_id =
       "little_2013_ch3_fig_3_6_1indicator";
-  const std::string case_dir = repo_root_from_fixtures() +
-      "/external/textbook-corpus/cases/little_2013/" + std::string(case_id);
-  auto model_raw = magmaan::test::read_fixture(case_dir + "/model.lav");
-  REQUIRE_MESSAGE(model_raw.has_value(), "missing model for " << case_id);
-  const auto meta = read_json_or_fail(case_dir + "/meta.json");
-  const auto ref = read_json_or_fail(case_dir + "/expected/lavaan_ml.json");
+  const auto fixture = read_json_or_fail(magmaan::test::fixtures_dir() +
+      "/textbook_corpus/" + std::string(case_id) + ".json");
+  const auto &meta = fixture;
+  const auto &ref = fixture["lavaan"];
+  const auto model_raw = fixture["model"].get<std::string>();
 
-  auto flat = magmaan::parse::Parser::parse(*model_raw);
+  auto flat = magmaan::parse::Parser::parse(model_raw);
   REQUIRE_MESSAGE(flat.has_value(), case_id << ": parse - "
                                             << flat.error().detail);
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = meta["model_options"].value("meanstructure", false);
   opts.fixed_x = meta["model_options"].value("fixed_x", true);
   opts.auto_cov_y = front_end_sets_auto_cov_y(meta.value("lavaan_function", std::string{}));
-  auto pt = magmaan::spec::build(*flat, opts);
+  magmaan::spec::LatentNames names;
+  auto pt = magmaan::spec::build(*flat, opts, nullptr, &names);
   REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
                                           << pt.error().detail);
   auto rep = magmaan::model::build_matrix_rep(*pt);
@@ -390,6 +391,7 @@ void check_little_single_indicator_case_at_lavaan_theta() {
   REQUIRE_MESSAGE(static_cast<std::size_t>(theta.size()) == ev->n_free(),
                   case_id << ": theta size " << theta.size()
                           << " != n_free " << ev->n_free());
+  check_at_theta_parameter_alignment(*pt, names, theta, ref);
   auto im = ev->sigma(theta);
   REQUIRE_MESSAGE(im.has_value(), case_id << ": sigma - "
                                           << im.error().detail);
@@ -601,18 +603,10 @@ TEST_CASE("Textbook corpus Kline Guo invariance ML cases match lavaan") {
 }
 
 TEST_CASE("Newsom LCS promoted-observed implied moments match lavaan at theta") {
-  if (!corpus_case_present("newsom_2015", "newsom_2015_ex9_3")) {
-    MESSAGE("textbook corpus absent; skipping newsom_2015_ex9_3");
-    return;
-  }
   check_newsom_lcs_case_at_lavaan_theta("newsom_2015_ex9_3");
 }
 
 TEST_CASE("Little single-indicator implied moments match lavaan at theta") {
-  if (!corpus_case_present("little_2013", "little_2013_ch3_fig_3_6_1indicator")) {
-    MESSAGE("textbook corpus absent; skipping little_2013_ch3_fig_3_6_1indicator");
-    return;
-  }
   check_little_single_indicator_case_at_lavaan_theta();
 }
 

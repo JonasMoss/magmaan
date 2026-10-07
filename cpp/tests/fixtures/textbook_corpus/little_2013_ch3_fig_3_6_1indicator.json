@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "textbook_corpus.at_theta",
+    "tool": "cpp/tests/tools/export_textbook_at_theta_fixtures.py",
+    "source_case": "cases/little_2013/little_2013_ch3_fig_3_6_1indicator",
+    "source_sha256": {
+      "model.lav": "669fe8f81add734bfd5dce60cc5bc178871cca5fdf16b123668567c04313adcc",
+      "meta.json": "4801fced184fd68286286b1c3db7efb211c7601d396fa566535821629e70156d",
+      "expected/lavaan_ml.json": "cfb341d1cd62d9dff70b6e633a22ebba32403d1809a4b52bd730d81f818bc832"
+    },
+    "lavaan_version": "0.7.2",
+    "lavaan_pin": "0.7-2",
+    "provenance": {
+      "citation": "Little (2013), CH3.Fig.3.6.1indicator.LS8",
+      "title": "Longitudinal Structural Equation Modeling",
+      "edition": "1st",
+      "publisher": "Guilford",
+      "isbn": "9781462510160",
+      "page_ref": [],
+      "table_ref": "CH3.Fig.3.6.1indicator.LS8",
+      "url": "https://www.guilford.com/books/Longitudinal-Structural-Equation-Modeling/Todd-D-Little/9781462510160",
+      "upstream_artifact": "source/original.LS8",
+      "upstream_sha256": "9038c2c558bf0270fff4b63afdb461a521298ac216e543e78dbe696431e5464a"
+    }
+  },
+  "case_id": "little_2013_ch3_fig_3_6_1indicator",
+  "model": "Positive =~ 1*Cheerful\nPositive ~~ Positive\nCheerful ~~ 0.316*Cheerful\n",
+  "model_options": {
+    "meanstructure": false,
+    "fixed_x": false,
+    "ordered": [],
+    "missing": "none"
+  },
+  "lavaan_function": "sem",
+  "lavaan": {
+    "theta": [
+      0.473987408274258
+    ],
+    "implied": {
+      "sigma": [
+        [
+          0.789987408274258
+        ]
+      ],
+      "mu": {}
+    },
+    "parameter_table": [
+      {
+        "lhs": "Positive",
+        "op": "=~",
+        "rhs": "Cheerful",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Positive",
+        "op": "~~",
+        "rhs": "Positive",
+        "est": 0.473987408274258,
+        "se": 0.0384787875882682,
+        "label": ""
+      },
+      {
+        "lhs": "Cheerful",
+        "op": "~~",
+        "rhs": "Cheerful",
+        "est": 0.316,
+        "se": 0,
+        "label": ""
+      }
+    ]
+  }
+}

@@ -1,5 +1,13 @@
 ### Parser, lavaanify, and matrix representation
 
+- The Newsom 2015 ex9.3 promoted-observed LCS and Little 2013 Chapter 3
+  single-indicator at-theta gates consume checked-in lavaan 0.7.2 summaries,
+  independently check parameter keys against positional theta, and retain
+  1e-8 implied-moment tolerances without the optional textbook corpus. Source
+  hashes, syntax, options and provenance support deterministic export; no
+  observations are included. This banks matrix-evaluation parity only; the
+  corresponding fit-gate restoration remains in the backlog.
+
 - EQS model-section frontend (2026-10-01): `parse::EqsParser` and
   `api::model_from_eqs` lower explicit single-group continuous equations,
   variances and covariances into the existing model triple. Fixed/free values,

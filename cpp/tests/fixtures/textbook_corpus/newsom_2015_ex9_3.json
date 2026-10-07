@@ -1,0 +1,463 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "textbook_corpus.at_theta",
+    "tool": "cpp/tests/tools/export_textbook_at_theta_fixtures.py",
+    "source_case": "cases/newsom_2015/newsom_2015_ex9_3",
+    "source_sha256": {
+      "model.lav": "a92fe44bbb1d6317649f76159ccb01ca781886922e9ccac0b9e8d1c87f151214",
+      "meta.json": "73309f558b428e047c00a543c844e93abc5152579e1b96cc3fcd4fc0230c0fb9",
+      "expected/lavaan_ml.json": "2861d5177c83f0fd3ffee30e0f5db6c7815fdc543d67f5f5fe434c3850615e24"
+    },
+    "lavaan_version": "0.7.2",
+    "lavaan_pin": "0.7-2",
+    "provenance": {
+      "citation": "Newsom (2015), Chapter 9, Example 9.3",
+      "title": "Longitudinal Structural Equation Modeling: A Comprehensive Introduction",
+      "edition": "1st",
+      "publisher": "Routledge",
+      "isbn": "9781848726970",
+      "page_ref": [],
+      "table_ref": "ex9-3.R (first-edition R scripts, lsemr.zip)",
+      "url": "https://web.pdx.edu/~newsomj/sem/",
+      "upstream_artifact": "source/original.R",
+      "upstream_sha256": "a8d8201fe50e278f8a4093d7be5eb203607718c3419843a253df19da9eb1f439"
+    }
+  },
+  "case_id": "newsom_2015_ex9_3",
+  "model": "  #define latent difference factors\n\n    Deta2 =~ 1*bmi2\n    Deta3 =~ 1*bmi3\n    Deta4 =~ 1*bmi4\n    Deta5 =~ 1*bmi5\n    Deta6 =~ 1*bmi6\n\n#autoregressive paths set to 1\n    \n    bmi2 ~ 1*bmi1\n    bmi3 ~ 1*bmi2\n    bmi4 ~ 1*bmi3\n    bmi5 ~ 1*bmi4\n    bmi6 ~ 1*bmi5\n    \n#means, intercepts, thresholds\n\nDeta2 ~ 0 \n\nDeta3 ~ 0\nDeta4 ~ 0\nDeta5 ~ 0\nDeta6 ~ 0\n\nbmi1 ~ 0\nbmi2 ~ 0\nbmi3 ~ 0\nbmi4 ~ 0\nbmi5 ~ 0\nbmi6 ~ 0\n\n#add intercept and slope factors;\n\ni =~ 1*bmi1\ns =~ 0*bmi1 + 1*Deta2 + 2*Deta3 + 3*Deta4 + 4*Deta5 + 5*Deta6\ni ~~ i\ns ~~ 1*s #slope variance set for convergence\ni ~ 1\ns ~ 1\ni ~~ s\n\n#estimate exogenous variances\nDeta2 ~~ Deta2\nDeta3 ~~ Deta3\nDeta4 ~~ Deta4\nDeta5 ~~ Deta5\nDeta6 ~~ Deta6\n\n#set all residual covariances to 0\n#    bmi1 ~~ 0*Deta2  + 0*Deta3 + 0*Deta4 + 0*Deta5 + 0*Deta6;\n#    Deta2 ~~ 0*Deta3 + 0*Deta4 + 0*Deta5 + 0*Deta6;\n#    Deta3 ~~ 0*Deta4 + 0*Deta5 + 0*Deta6;\n#    Deta4 ~~ 0*Deta5 + 0*Deta6;\n#    Deta5 ~~ 0*Deta6;\n\n#disturbances set to 0\nbmi1 ~~ 0*bmi1\nbmi2 ~~ 0*bmi2\nbmi3 ~~ 0*bmi3\nbmi4 ~~ 0*bmi4\nbmi5 ~~ 0*bmi5\nbmi6 ~~ 0*bmi6  \n",
+  "model_options": {
+    "meanstructure": true,
+    "fixed_x": false,
+    "ordered": [],
+    "missing": "none"
+  },
+  "lavaan_function": "sem",
+  "lavaan": {
+    "theta": [
+      24.5613486443742,
+      27.1763452378391,
+      0.0303477437749865,
+      -0.778410973881979,
+      3.0832833537649,
+      3.16056099381553,
+      3.89774960038452,
+      4.73457924349371,
+      2.98869559699094
+    ],
+    "implied": {
+      "sigma": [
+        [
+          27.0878100503752,
+          27.5309881026112,
+          28.1957551809653,
+          29.0821112854373,
+          30.1900564160275,
+          23.7829376704922
+        ],
+        [
+          27.5309881026112,
+          35.1347271486628,
+          41.7994942270168,
+          50.6858503314889,
+          61.793795462079,
+          22.2261157227283
+        ],
+        [
+          28.1957551809653,
+          41.7994942270168,
+          61.3620109057554,
+          82.2483670102275,
+          108.356312140818,
+          19.8908828010823
+        ],
+        [
+          29.0821112854373,
+          50.6858503314889,
+          82.2483670102275,
+          123.869302358193,
+          169.977247488783,
+          16.7772389055544
+        ],
+        [
+          30.1900564160275,
+          61.793795462079,
+          108.356312140818,
+          169.977247488783,
+          244.073888216364,
+          12.8851840361445
+        ],
+        [
+          23.7829376704922,
+          22.2261157227283,
+          19.8908828010823,
+          16.7772389055544,
+          12.8851840361445,
+          24.5613486443742
+        ]
+      ],
+      "mu": [
+        27.2066929816141,
+        27.267388469164,
+        27.358431700489,
+        27.4798226755889,
+        27.6315613944639,
+        27.1763452378391
+      ]
+    },
+    "parameter_table": [
+      {
+        "lhs": "Deta2",
+        "op": "=~",
+        "rhs": "bmi2",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta3",
+        "op": "=~",
+        "rhs": "bmi3",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta4",
+        "op": "=~",
+        "rhs": "bmi4",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta5",
+        "op": "=~",
+        "rhs": "bmi5",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta6",
+        "op": "=~",
+        "rhs": "bmi6",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi2",
+        "op": "~",
+        "rhs": "bmi1",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi3",
+        "op": "~",
+        "rhs": "bmi2",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi4",
+        "op": "~",
+        "rhs": "bmi3",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi5",
+        "op": "~",
+        "rhs": "bmi4",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi6",
+        "op": "~",
+        "rhs": "bmi5",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta2",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta3",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta4",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta5",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "Deta6",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi1",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi2",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi3",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi4",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi5",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi6",
+        "op": "~1",
+        "rhs": "",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "i",
+        "op": "=~",
+        "rhs": "bmi1",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "bmi1",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "Deta2",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "Deta3",
+        "est": 2,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "Deta4",
+        "est": 3,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "Deta5",
+        "est": 4,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "=~",
+        "rhs": "Deta6",
+        "est": 5,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "i",
+        "op": "~~",
+        "rhs": "i",
+        "est": 24.5613486443742,
+        "se": 0.475426843036527,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "~~",
+        "rhs": "s",
+        "est": 1,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "i",
+        "op": "~1",
+        "rhs": "",
+        "est": 27.1763452378391,
+        "se": 0.0678514125047465,
+        "label": ""
+      },
+      {
+        "lhs": "s",
+        "op": "~1",
+        "rhs": "",
+        "est": 0.0303477437749865,
+        "se": 0.0141217463677481,
+        "label": ""
+      },
+      {
+        "lhs": "i",
+        "op": "~~",
+        "rhs": "s",
+        "est": -0.778410973881979,
+        "se": 0.0691772028332876,
+        "label": ""
+      },
+      {
+        "lhs": "Deta2",
+        "op": "~~",
+        "rhs": "Deta2",
+        "est": 3.0832833537649,
+        "se": 0.0608950032080061,
+        "label": ""
+      },
+      {
+        "lhs": "Deta3",
+        "op": "~~",
+        "rhs": "Deta3",
+        "est": 3.16056099381553,
+        "se": 0.0664505868446836,
+        "label": ""
+      },
+      {
+        "lhs": "Deta4",
+        "op": "~~",
+        "rhs": "Deta4",
+        "est": 3.89774960038452,
+        "se": 0.0887756352755474,
+        "label": ""
+      },
+      {
+        "lhs": "Deta5",
+        "op": "~~",
+        "rhs": "Deta5",
+        "est": 4.73457924349371,
+        "se": 0.118951332658475,
+        "label": ""
+      },
+      {
+        "lhs": "Deta6",
+        "op": "~~",
+        "rhs": "Deta6",
+        "est": 2.98869559699094,
+        "se": 0.122092884838233,
+        "label": ""
+      },
+      {
+        "lhs": "bmi1",
+        "op": "~~",
+        "rhs": "bmi1",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi2",
+        "op": "~~",
+        "rhs": "bmi2",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi3",
+        "op": "~~",
+        "rhs": "bmi3",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi4",
+        "op": "~~",
+        "rhs": "bmi4",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi5",
+        "op": "~~",
+        "rhs": "bmi5",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      },
+      {
+        "lhs": "bmi6",
+        "op": "~~",
+        "rhs": "bmi6",
+        "est": 0,
+        "se": 0,
+        "label": ""
+      }
+    ]
+  }
+}
