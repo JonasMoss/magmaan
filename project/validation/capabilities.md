@@ -553,7 +553,12 @@ ordinary/lab composer equality, MAR FIML, mixed DWLS worker equality, equality
 releases (shared labels, explicit ==, group.equal), HS one/two-group candidate
 rows against lavaan, optional LR versus anova and typed refusals. Numerical
 score failures preserve identified candidates without substituting another
-metric. Absent regressions remain explicitly unsupported (TASK-105).
+metric. TASK-105 extends the shared candidate generator to absent structural
+regressions, including reverse paths among equation variables. The SEM/path
+checks compare lavaan inventories and expected MI/EPC, explicit fixed-zero
+robust scores, grouped LR/anova and all-ordinal DWLS SEM workers. Locally
+unidentified regression paths remain typed unavailable rows; lavaan inventory
+comparison uses the available rows because lavaan drops unidentified directions.
 
 ## Policy fit-index points (TASK-101)
 

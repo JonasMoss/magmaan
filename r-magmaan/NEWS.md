@@ -1,5 +1,9 @@
 # magmaan 0.3.0 (in development)
 
+- Modification indices now include absent structural regressions among variables
+  already participating in equations, including reverse paths. Score/EPC and
+  embedded-null LR refits use the existing inference policy; unidentified paths
+  retain typed unavailable rows.
 - ML/FIML `modindices()` uses observed nuisance sensitivity with an
   expected-information metric and EPCs. Saddle-direction candidates retain
   their robust statistic, including all 54 HS three-factor CFA candidates

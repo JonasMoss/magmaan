@@ -146,7 +146,7 @@ test_that("unsupported fits and failed refits keep typed rows", {
   expect_identical(modindices(bad)$reason, "unsupported_model")
   bad <- f; bad$lab$estimator <- "association_ml"
   expect_identical(modindices(bad)$reason, "unsupported_model")
-  expect_identical(modindices(f, candidates = "~")$reason, "unsupported_model")
+  expect_identical(nrow(modindices(f, candidates = "~")), 0L)
   expect_error(modindices(f, candidates = "invalid"), "operator")
   expect_true(nrow(magmaanlab::modification_indices_robust(f$lab, data = d)) > 0)
 })
@@ -161,7 +161,8 @@ test_that("PoliticalDemocracy SEM candidate rows agree with lavaan", {
   out <- modindices(fit, releases = FALSE)
   lav <- lavaan::modindices(lavaan::sem(syntax, d, meanstructure = TRUE))
   lav$group <- 1L
-  expect_setequal(.mi_key(out), .mi_key(lav))
+  expect_setequal(.mi_key(out[out$reason == "available", ]), .mi_key(lav))
+  expect_true(all(out$op[out$reason != "available"] == "~"))
 })
 
 test_that("failed LR refits preserve the candidate and typed reason", {
@@ -200,4 +201,117 @@ test_that("HS score modifications retain every saddle-direction candidate", {
   expect_equal(nrow(out), 54L)
   expect_true(all(out$reason == "available"))
   expect_true(all(is.finite(out$statistic)))
+})
+
+.sem_regression_gates <- function(syntax, d, group = NULL, pin_oracle_point = FALSE) {
+  model <- if (is.null(group)) magmaan_model(syntax) else
+    magmaan_model(syntax, prototype = d, group = group)
+  fit <- magmaan(model, d, inference = FALSE)
+  expect_true(fit$lab$converged)
+  out <- modindices(fit, releases = FALSE)
+  lavfit <- lavaan::sem(syntax, d, meanstructure = TRUE, fixed.x = FALSE, group = group,
+    group.label = if (is.null(group)) NULL else fit$lab$group_labels)
+  lav <- lavaan::modindices(lavfit)
+  if (is.null(lav$group)) lav$group <- 1L
+  # Lavaan removes unidentified directions; ordinary output retains typed paths.
+  available <- out[out$reason == "available", ]
+  expect_setequal(.mi_key(available), .mi_key(lav))
+  regressions <- out[out$op == "~", ]
+  expect_gt(nrow(regressions), 0L)
+  expected <- magmaanlab::modification_indices(fit$lab,
+    bread = "expected", cov = "model_implied", estimated_weight = FALSE, candidates = "all")
+  expected <- expected[expected$op == "~" & is.finite(expected$mi), ]
+  target <- lav[match(.mi_key(expected), .mi_key(lav)), ]
+  if (pin_oracle_point) {
+    # This additional model has MI about .0044: default stopping differences
+    # matter at relative 1e-6. Compare the component at exactly the same null.
+    pt <- lavaan::parTable(lavfit)
+    native <- fit$lab$partable
+    pt$ustart <- native$est[match(.mi_key(pt), .mi_key(native))]
+    pt$est <- pt$ustart
+    at_null <- lavaan::sem(syntax, d, meanstructure = TRUE, fixed.x = FALSE,
+      start = pt, do.fit = FALSE)
+    point <- suppressWarnings(lavaan::modindices(at_null))
+    point$group <- 1L
+    target <- point[match(.mi_key(expected), .mi_key(point)), ]
+  }
+  expect_equal(expected$mi, target$mi, tolerance = 1e-6)
+  expect_equal(expected$epc, target$epc, tolerance = 1e-6)
+  for (i in seq_len(nrow(regressions))) {
+    row <- regressions[i, , drop = FALSE]
+    # Construct an explicit fixed-zero row through the public model projection,
+    # retaining the original fitted parameter vector rather than reoptimizing.
+    explicit <- fit$lab
+    pt <- magmaanlab:::policy_mi_alternative_impl(fit$lab, "fixed", 0L,
+      row$lhs, row$op, row$rhs, row$group)
+    added <- which(pt$lhs == row$lhs & pt$op == "~" & pt$rhs == row$rhs & pt$group == row$group)
+    pt$free[added] <- 0L
+    pt$ustart[added] <- 0
+    explicit$partable <- pt
+    worker <- magmaanlab::modification_indices_robust(explicit, data = d,
+      candidates = "fixed", bread = "observed", information = "expected",
+      estimated_weight = FALSE)
+    worker <- worker[.mi_key(worker) == .mi_key(row), ]
+    if (row$reason == "available") {
+      expect_equal(nrow(worker), 1L)
+      expect_equal(row$statistic, worker$mi.scaled, tolerance = 1e-8)
+      expect_equal(row$epc, worker$epc, tolerance = 1e-8)
+    } else {
+      expect_true(is.na(row$statistic))
+    }
+  }
+  fit
+}
+
+test_that("structural regression inventories and statistics match explicit models", {
+  political <- paste("ind60 =~ x1+x2+x3", "dem60 =~ y1+y2+y3+y4",
+    "dem65 =~ y5+y6+y7+y8", "dem60 ~ ind60", "dem65 ~ ind60+dem60",
+    "y1 ~~ y5", "y2 ~~ y4+y6", "y3 ~~ y7", "y4 ~~ y8", "y6 ~~ y8", sep = "\n")
+  .sem_regression_gates(political, lavaan::PoliticalDemocracy)
+  path <- "x2 ~ x1\nx3 ~ x2"
+  .sem_regression_gates(path, hs())
+  .sem_regression_gates(path, hs(), "school")
+  .sem_regression_gates("f =~ x1+x2+x3\ng =~ x4+x5+x6\ng ~ f\nx7 ~ g", hs(), pin_oracle_point = TRUE)
+})
+
+test_that("regression LR rows match explicit augmented anova in one and two groups", {
+  d <- hs()
+  syntax <- "x2 ~ x1\nx3 ~ x2"
+  for (grouped in c(FALSE, TRUE)) {
+    model <- if (grouped) magmaan_model(syntax, prototype = d, group = "school") else magmaan_model(syntax)
+    fit <- magmaan(model, d, inference = FALSE)
+    for (row in list(data.frame(lhs = "x3", op = "~", rhs = "x1", group = 1L),
+                     data.frame(lhs = "x2", op = "~", rhs = "x3", group = 1L))) {
+      out <- modindices(fit, test = "lr", candidates = row, releases = FALSE)
+      path <- paste(row$lhs, "~", if (grouped) "c(NA,0)*" else "", row$rhs)
+      alt_syntax <- paste(syntax, path, sep = "\n")
+      alt_model <- if (grouped) magmaan_model(alt_syntax, prototype = d, group = "school") else magmaan_model(alt_syntax)
+      # Use the same embedded null as the candidate refit. Independent starts
+      # can change a small grouped tail through terminal-rounding differences.
+      starts <- fit$lab$partable[, c("lhs", "op", "rhs", "group", "est")]
+      starts <- rbind(starts, transform(row, est = 0)[, names(starts)])
+      alt <- magmaan(alt_model, d, inference = FALSE, options = list(start = starts))
+      compare <- anova(fit, alt)
+      compare <- compare[compare$test == "lr", ]
+      expect_identical(out$reason, "available")
+      expect_equal(out$statistic, compare$statistic, tolerance = 1e-6)
+      expect_equal(out$pvalue, compare$pvalue, tolerance = 1e-6)
+    }
+  }
+})
+
+test_that("all-ordinal DWLS SEM enumerates structural regression candidates", {
+  d <- hs()
+  vars <- paste0("x", 1:9)
+  for (v in vars) d[[v]] <- ordered(cut(d[[v]], breaks = quantile(d[[v]], c(0,.3,.7,1)), include.lowest = TRUE))
+  syntax <- "f =~ x1+x2+x3\ng =~ x4+x5+x6\nh =~ x7+x8+x9\ng ~ f\nh ~ g"
+  fit <- magmaan(magmaan_model(syntax, prototype = d, ordered = vars), d,
+    estimator = "DWLS", inference = FALSE)
+  out <- modindices(fit, candidates = "~", releases = FALSE)
+  expect_gt(nrow(out), 0L)
+  worker <- magmaanlab::modification_indices_robust(fit$lab,
+    bread = "observed", estimated_weight = TRUE, candidates = "all")
+  worker <- worker[worker$op == "~", ]
+  expect_setequal(.mi_key(out), .mi_key(worker))
+  expect_equal(out$statistic[match(.mi_key(worker), .mi_key(out))], worker$mi.scaled, tolerance = 1e-8)
 })

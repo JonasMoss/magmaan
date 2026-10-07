@@ -18,9 +18,9 @@
 #' @return A data frame with kind, lhs, op, rhs, group, test, statistic, df,
 #'   pvalue, epc, sepc.lv, sepc.all and reason. Unavailable statistics are NA.
 #' @section Candidate scope:
-#' The current generator proposes loadings and residual/latent covariances.
-#' Absent structural regressions require additional variable-table support;
-#' requests for `"~"` carry an unsupported_model row.
+#' The generator proposes loadings, residual/latent covariances and absent
+#' regressions among variables already participating in structural equations,
+#' including reverse paths. Identification failures retain unavailable rows.
 #' @export
 modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases = TRUE) {
   if (!inherits(fit, "magmaan")) stop("modindices(): supply a magmaan() fit", call. = FALSE)
@@ -63,15 +63,6 @@ modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases
         }
       }
     }
-  }
-  request_regressions <- is.character(candidates) && "~" %in% candidates ||
-    is.data.frame(candidates) && any(candidates$op == "~")
-  if (request_regressions && !any(out$op == "~")) {
-    missing <- data.frame(kind = "fixed", lhs = "", op = "~", rhs = "", group = 0L,
-      test = if (test == "score") "score" else if (fit$estimator == "DWLS") "fit_function_difference" else "lr",
-      statistic = NA_real_, df = 1L, pvalue = NA_real_, epc = NA_real_, sepc.lv = NA_real_,
-      sepc.all = NA_real_, reason = "unsupported_model")
-    out <- rbind(out, missing)
   }
   attr(out, "candidate_row") <- NULL
   rownames(out) <- NULL

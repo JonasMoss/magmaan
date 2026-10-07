@@ -720,9 +720,13 @@ the capability inventory lists its policy inference as unsupported.
   C++ policy composer and thin lab/ordinary adapters; robust one-df score
   statistics by default, optional embedded-start nested-policy LR refits;
   candidate selection/order, standardized EPCs and typed unavailable rows.
-  ML/FIML and all-ordinal/mixed DWLS are covered. Absent regressions remain
-  typed unsupported: **TASK-105** owns variable-table augmentation and the
-  full SEM candidate-set gate.
+  ML/FIML and all-ordinal/mixed DWLS are covered.
+- [x] **TASK-105 — absent structural regression candidates.** Shared continuous/
+  ordinal candidate enumeration includes reverse paths among equation variables;
+  augmentation rebuilds structural roles and matrix representation while keeping
+  data and fitted-parameter coordinates. SEM/path/grouped lavaan inventory and
+  normal-theory gates, explicit robust-score gates, LR/anova and ordinal SEM
+  checks cover the unchanged policy. Unidentified paths retain typed rows.
 
 ### MI and release-score completion (0.2.0)
 

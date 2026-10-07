@@ -256,6 +256,18 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### Structural MI inventory and a small-score endpoint (TASK-105)
+
+Lavaan 0.7-2 omits outcome/exogenous-predictor residual covariances, while
+retaining identified reverse regressions. Group numbers follow its supplied
+group labels; the ordinary package uses sorted labels. The task-105 path gates
+match those inventories and labels. In the additional HS model
+`f =~ x1+x2+x3; g =~ x4+x5+x6; g ~ f; x7 ~ g`, MI is about .00439805;
+default optimizer endpoints differ enough to affect relative 1e-6 comparison.
+At the identical native null (set both `ustart` and `est` in lavaan's start
+partable, `do.fit = FALSE`), expected MI agrees within 1.7e-7 relative.
+The gate keeps its 1e-6 tolerance; no oracle exemption or default change.
+
 ### Mixed WLSMV endpoint and reporting-weight conventions (TASK-90)
 
 Installed lavaan 0.7.2, HolzingerSwineford1939, two factors on x1:x3 and x4:x6,

@@ -1,5 +1,9 @@
 # magmaanlab 0.3.0 (in development)
 
+- Modification indices now include absent structural regressions among variables
+  already participating in equations, including reverse paths. Score/EPC and
+  embedded-null LR refits use the existing inference policy; unidentified paths
+  retain typed unavailable rows.
 - ML/FIML robust MI and affine releases use observed nuisance sensitivity
   with expected information as the metric and bread. Negative observed
   release curvature no longer removes a candidate. Generalized one-df

@@ -2,6 +2,7 @@
 #include "../oracle.hpp"
 #include "../test_fit.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -321,4 +322,47 @@ TEST_CASE("modification_indices: include flags scope the candidate set") {
     CHECK(r.candidate.op == magmaan::parse::Op::Measurement);
   }
   CHECK(mi->rows.size() == 6);
+}
+
+TEST_CASE("modification_indices: structural paths equal explicit fixed-zero augmentation") {
+  auto base = build("x2 ~ x1\nx3 ~ x2");
+  SampleStats samp;
+  Eigen::MatrixXd S(3, 3);
+  S << 1.4, .55, .6, .55, 1.3, .3, .6, .3, 1.0;
+  samp.S = {S};
+  samp.n_obs = {500};
+  auto est = magmaan::test::fit(base.pt, base.rep, samp);
+  REQUIRE(est.has_value());
+  inf::ModificationIndexOptions opts;
+  opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto all = inf::modification_indices(base.pt, base.rep, samp, *est, opts);
+  REQUIRE(all.has_value());
+  int paths = 0;
+  for (const auto& r : all->rows) {
+    if (r.candidate.op != magmaan::parse::Op::Regression) continue;
+    ++paths;
+    auto pt = base.pt;
+    pt.op.push_back(r.candidate.op);
+    pt.lhs_var.push_back(r.candidate.lhs_var);
+    pt.rhs_var.push_back(r.candidate.rhs_var);
+    pt.group.push_back(1); pt.free.push_back(0); pt.exo.push_back(0);
+    pt.fixed_value.push_back(0);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    auto explicit_mi = inf::modification_indices(pt, *rep, samp, *est);
+    REQUIRE(explicit_mi.has_value());
+    const auto found = std::find_if(explicit_mi->rows.begin(), explicit_mi->rows.end(),
+      [&](const auto& x) { return x.candidate.row == pt.size() - 1; });
+    REQUIRE(found != explicit_mi->rows.end());
+    CHECK(found->failure.has_value() == r.failure.has_value());
+    if (!r.failure) {
+      CHECK(r.mi == doctest::Approx(found->mi).epsilon(1e-10));
+      CHECK(r.epc == doctest::Approx(found->epc).epsilon(1e-10));
+    }
+  }
+  CHECK(paths == 4); // includes both reverse paths, even if unidentified
+  opts.include_regressions = false;
+  auto no_paths = inf::modification_indices(base.pt, base.rep, samp, *est, opts);
+  REQUIRE(no_paths.has_value());
+  for (const auto& r : no_paths->rows) CHECK(r.candidate.op != magmaan::parse::Op::Regression);
 }

@@ -282,8 +282,9 @@
   ML/FIML. Score p-values use chi-square(1), with no reference selector.
   Optional LR refits start at the native embedded null and report the same
   one-df nested policy as `anova()`. Failed scores/refits retain typed rows;
-  candidates stay in order. Absent regressions are typed unsupported and
-  tracked by TASK-105. The robust lab MI default disables estimated weight
+  candidates stay in order. Absent regressions among equation variables include
+  reverse paths, with model-triple augmentation and rebuilt matrix representation
+  (TASK-105); unidentified paths retain typed unavailable rows. The robust lab MI default disables estimated weight
   for ML/FIML, whose fitting criteria have no second-stage weight.
 - The ordinary-user R package `magmaan` (`r-magmaan/`, pure R, imports
   `magmaanlab`) is a scaffold of the two-package design

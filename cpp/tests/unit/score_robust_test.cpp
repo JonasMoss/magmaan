@@ -3733,8 +3733,8 @@ TEST_CASE("observed ML/FIML MI: HS and PoliticalDemocracy match explicit project
       REQUIRE(table);
       if (id == "hs_3factor_cfa") CHECK(table->rows.size() == 54);
       int negative_curvature = 0;
+      int unidentified_regressions = 0;
       for (const auto& row : table->rows) {
-        REQUIRE_FALSE(row.failure);
         const auto& c = row.candidate;
         const std::string lhs = names.var_name[static_cast<std::size_t>(c.lhs_var)], rhs = names.var_name[static_cast<std::size_t>(c.rhs_var)];
         CAPTURE(lhs); CAPTURE(rhs);
@@ -3791,11 +3791,27 @@ TEST_CASE("observed ML/FIML MI: HS and PoliticalDemocracy match explicit project
           score = -0.5 * static_cast<double>(raw.X[0].rows()) * vg->gradient;
         }
         const Eigen::VectorXd d = Eigen::VectorXd::Unit(q, coord);
+        auto metric = inf::score_for_direction(c, score, I, K, d);
+        if (row.failure) {
+          // A complete three-latent structural DAG already spans every latent
+          // covariance. Its reverse paths have zero information after nuisance
+          // projection and are retained as typed rows rather than discarded.
+          CHECK(c.op == magmaan::parse::Op::Regression);
+          const Eigen::MatrixXd Iaa = K.transpose() * I * K;
+          const Eigen::VectorXd Iab = K.transpose() * I * d;
+          const double efficient = d.dot(I * d) - Iab.dot(Iaa.fullPivLu().solve(Iab));
+          CHECK(std::abs(efficient) <= 1e-10 * std::abs(d.dot(I * d)));
+          CHECK_FALSE(metric);
+          CHECK(std::isnan(row.mi_scaled));
+          CHECK(std::isnan(row.epc));
+          ++unidentified_regressions;
+          continue;
+        }
+        REQUIRE(metric);
         const Eigen::MatrixXd Haa = K.transpose() * H * K;
         const Eigen::VectorXd g = d - K * Haa.fullPivLu().solve(K.transpose() * H * d);
         const double statistic = std::pow(g.dot(score), 2) / g.dot(B * g);
         CHECK(row.mi_scaled == doctest::Approx(statistic).scale(0.0).epsilon(1e-8));
-        auto metric = inf::score_for_direction(c, score, I, K, d); REQUIRE(metric);
         CHECK(row.epc == doctest::Approx(metric->epc).epsilon(1e-8));
         auto old = inf::frontier::score_for_direction_robust(c, score, H, H, B, K, d);
         if (g.dot(H * g) > 0) {
@@ -3803,6 +3819,7 @@ TEST_CASE("observed ML/FIML MI: HS and PoliticalDemocracy match explicit project
           CHECK(row.mi_scaled == doctest::Approx(old->mi_scaled).scale(0.0).epsilon(1e-10));
         } else { ++negative_curvature; CHECK_FALSE(old); }
       }
+      CHECK(unidentified_regressions == (id == "bollen_democracy_sem" ? 3 : 0));
       if (id == "hs_3factor_cfa" && !missing) CHECK(negative_curvature == 3);
     }
   }

@@ -84,13 +84,13 @@ enum class ScoreCandidateSet : std::uint8_t {
 // Controls a modification-index sweep. The default reproduces the legacy
 // `modification_indices(..., ScoreInformation)` behaviour. The absent-row flags
 // scope the enumeration (mirroring lavaan's `modindices()`: cross-loadings and
-// covariances). Structural regressions are not enumerated — adding a `~` row
-// changes the model form, which needs Reduced-LISREL variable-table support.
+// covariances and paths among variables already participating in equations).
 struct ModificationIndexOptions {
   ScoreCandidateSet candidates = ScoreCandidateSet::FixedRowsOnly;
   ScoreInformation  information = ScoreInformation::Expected;
   bool include_loadings = true;     // absent cross-loadings  f =~ x
   bool include_covariances = true;  // absent covariances     x ~~ y
+  bool include_regressions = true;  // absent structural paths y ~ x
 };
 
 // One-direction score projection shared by ML, LS and ordinal MI/release tests.
@@ -114,7 +114,7 @@ modification_indices(spec::LatentStructure pt,
                      ScoreInformation information = ScoreInformation::Expected);
 
 // Normal-theory ML modification indices with explicit options: optionally
-// enumerates absent statements (cross-loadings, covariances) as fixed-at-0
+// enumerates absent statements (cross-loadings, covariances, regressions) as fixed-at-0
 // candidates, and always reports standardized EPC (`epc_lv` / `epc_all`)
 // alongside the raw `epc`.
 post_expected<ScoreTestTable>

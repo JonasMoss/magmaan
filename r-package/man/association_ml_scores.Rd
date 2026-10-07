@@ -9,7 +9,8 @@ association_ml_score_tests(fit, ordinal_stats)
 \arguments{
 \item{fit}{An all-ordinal association-ML lab fit with complete raw rows.}
 \item{ordinal_stats}{The same Stage-1 statistics and integer rows used to fit.}
-\item{absent}{Enumerate absent loadings and covariances in addition to fixed rows.}
+\item{absent}{Enumerate absent loadings, covariances and structural regressions among
+equation variables in addition to fixed rows.}
 }
 \description{One-dimensional score tests using observed sensitivity for nuisance
 projection and exact empirical Stage-1 influence for the score variance.}

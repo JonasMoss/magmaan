@@ -36,7 +36,9 @@ its fitting-weight moment law (fixed group allocation for centered group
 meats). FIML auto selects \code{moments="structured"}, \code{cov="empirical"} combination,
 which selects observed-pattern casewise score covariance.}
 \item{candidates}{\code{"fixed"} for existing fixed parameter rows or
-\code{"all"} to include absent cross-loadings and covariances.}
+\code{"all"} to include absent cross-loadings, covariances and regressions among variables
+already participating in structural equations, including reverse paths.
+Unidentified regression directions retain unavailable rows.}
 \item{include_loadings,include_covariances}{Whether to enumerate absent loading
 and covariance candidates.}
 \item{gamma}{Optional symmetric positive semidefinite caller NACOV: a matrix
