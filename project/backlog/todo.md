@@ -1136,14 +1136,16 @@ ordinary-user default.
   and nested tests now compile separately, sharing a private internal header.
   Public headers and numerical behavior are unchanged; vendors refreshed.
 
-- [ ] **S — revalidate the retained Bell alternative-CFA controls.** The
-  consolidated reliability showcase reproduces generating targets and main
-  one-factor comparisons, but current-package population smoke changes some
-  alternative-CFA solutions/convergence relative to the frozen sensitivity
-  examples. **Check:** separate each model's convergence/admissibility from its
-  objective and reliability target; independently verify any claimed optimum
-  before extending or using model spread as evidence. Keep historical results
-  distinct. See [reliability targets](../../experiments/showcases/08-reliability-targets/report.qmd).
+- [x] **S — revalidate the retained Bell alternative-CFA controls (TASK-115).**
+  The bounded current-package check covers the low-reliability higher-order
+  population's four CFA candidates and the low-reliability one-factor control.
+  All five returned converged, admissible endpoints, with original objectives
+  reproduced on re-evaluation; historical evidence and initial diagnostic
+  lookup failures are retained separately. This closes the selected-control
+  validation, not every historical cell. Reference optima and identification
+  remain unresolved: independently verify any claimed optimum before extending
+  or using model spread as evidence. See
+  [reliability targets](../../experiments/showcases/08-reliability-targets/report.qmd).
 
 - [ ] **S/M — review retained research capabilities one decision at a time.**
   Candidates: continuous/mixed covariance shrinkage; robust ordinal/polyserial
