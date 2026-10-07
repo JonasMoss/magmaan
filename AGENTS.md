@@ -5,6 +5,18 @@ against lavaan. Ordinary users get the opinionated pure-R `magmaan` package;
 methods developers get the compiled `magmaanlab` package and composable C++ API.
 See [the R-interface vision](project/design/r-interface-vision.md).
 
+## Workstation compute
+
+For magmaan, the user's 2026-10-07 instruction raises the background allowance
+to six logical CPUs, overriding the global four-core limit for this repository.
+Keep CPUs 0-5 available for interactive applications; run background lanes and
+the orchestrator in the shared `magmaan-work.slice`, restricted to CPUs 6-11
+with a six-CPU quota and an 18 GiB soft memory limit. This is an aggregate
+allowance, including builds, tests and numerical probes. Use `nice -n 10` and
+pin BLAS/OpenMP to one thread. Budget at most three two-job building lanes,
+reducing parallelism when other compute is active. Agent services must use
+`lane-start` so the shared resource controls apply.
+
 ## Start with the relevant guidance
 
 Read applicable nested `AGENTS.md` files before editing their directories:
