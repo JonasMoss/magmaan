@@ -335,6 +335,21 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: two post-0.2.0 merges. (1) Structural identification (TASK-33.3):
+continuous ML/LS, direct-FIML and ordinal/mixed DELTA/THETA fits carry a
+data-free generic-rank report of the moment Jacobian
+(`FitDiagnostics::identification`), independent of Newton accuracy.
+Structurally unidentified models fail every convergence verdict; unsupported or
+nonlinear routes are Unchecked. The fixture sweep found no ambiguous gaps
+(smallest certifying singular value 1.8e-4, largest null 6e-17; median cost
+0.1 ms) and exposed a binary latent-response scale ridge in
+`newsom_2015_ex9_2`. Pre-fit refusal in the ordinary `magmaan()`, per-model
+caching and suggested fixes are TASK-33.3.1 and 33.3.2
+([design](../design/identification.md)). (2) Continuous unit-dependent LS fits
+(ULS, DWLS, WLS/ADF, including ML2S Stage-2 and mixed continuous moments)
+report the within-block observed-variance spread and warn above 1000
+(TASK-33.10.5.3); NT/DLS, ML/GLS/FIML and ordinal-only routes are exempt.
+
 The complete-data improper/proper ML oracle pair gates keyed endpoint
 admissibility separately from implied-Sigma domain and retained convergence
 (TASK-118). The retained Mplus ex6.10 ULS statistic conventions are explained
@@ -1053,10 +1068,11 @@ stages retain independent optimizer controls. Ordinary ML defaults and the
 separate ordinary L-BFGS-to-SLSQP backend remain unchanged. Focused C++/R
 gates cover skipping, improper warm recovery, ordinary errors, inaccurate
 ordinary returns, and failed recovery; this is not a global-optimality policy.
-Acceptance does not yet certify local identification: the free-marker CFA
-with seven parameters for six moments can pass Newton accuracy and be selected
-by PSD recovery (board TASK-33.3). The R example retains this witness, reports
-that limitation and checks the current verdict/admissibility selection rule.
+Newton accuracy does not certify identification; the separate structural
+check does (TASK-33.3, [identification design](../design/identification.md)).
+The free-marker CFA with seven parameters for six moments, which once passed
+Newton accuracy and was selected by PSD recovery, is now Unidentified and fails
+every verdict; the R example asserts this.
 Complete-data ML fits (ordinary, equality-constrained, PSD, Fisher scoring
 and IRLS; not penalized fits) carry the Newton accuracy check in
 `FitDiagnostics::newton_accuracy` (R `fit$diagnostics$newton_accuracy`):
