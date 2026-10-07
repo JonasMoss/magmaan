@@ -256,6 +256,65 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### Retained Mplus ex6.10 ULS statistic identities (TASK-117)
+
+This resolves a naming/convention discrepancy, not the validity of the
+fixed-x NT reference law. No oracle exemption or comparison change follows.
+The retained `mplus_sem/continuous_reference.json` case `chapter6_ex6_10`
+was generated on 2026-09-24 with lavaan 0.7.2. Its generator calls `sem`
+with ULS, `fixed.x=TRUE`, `meanstructure=TRUE`, and default test options.
+Same local corpus data, model, observed-variable order and N=500 reproduce
+both `fmin=0.0383293433492224` and `fitMeasures()["chisq"] =
+-1.86144433200752e-11` exactly with installed lavaan 0.7.2.
+
+The effective options are `conditional.x=FALSE`,
+`sample.cov.rescale=FALSE`, `test=c("standard","browne.residual.nt")`, and
+`standard.test="browne.residual.nt"`. Thus these are full joint moments
+with fixed exogenous sample means/covariances, not conditional regression
+moments or freely estimated random-x moments. For the retained implied
+moments, the squared lower-triangle covariance residual is
+0.0742214570609371 (YY 0.0403935377309323, YX 0.0338279193300048,
+XX zero). The squared mean residual is 0.00259085426014899, entirely Y.
+Writing their sum as Q gives `Q/2=0.038406155660543` and
+`fmin=(N-1)/N * Q/2`. Consequently `2N*fmin=(N-1)*Q=38.3293433492224`;
+applying another N-1 correction to fmin would incorrectly give
+38.252684662524. The unrescaled covariance uses the N-1 sample convention.
+
+Lavaan retains this 38.329343 value as `test$standard$stat`, with reference
+distribution `unknown`. Its default `fitMeasures()` chi-square instead
+selects the Browne NT residual test. Independently forming the NT metric
+G from the inverse joint sample covariance, with fixed-x rows/columns
+zeroed, and the implied-moment Jacobian D gives
+`(N-1) * [r'G r - (D'G r)'(D'G D)^+ (D'G r)]`.
+The metric and its tangent Gram matrix both have rank 14 (65 joint
+mean/covariance rows, 17 free parameters). The two quadratic terms are
+0.0889442424034885 and 0.0889442424034397: their difference yields
+2.43e-11, agreeing with the retained near-zero value to rounding scale.
+The fixed-x metric discards YX residuals and its supported residual space
+is spanned by the model tangent. Near zero therefore does not mean the
+ULS objective or full joint-moment discrepancy is near zero.
+
+A second same-data call with `test="browne.residual.adf"` leaves fmin
+unchanged, stores ADF statistic 30.69405, and makes `fitMeasures()["chisq"]`
+return the standard 38.329343 value. Explicit test selection matters.
+Both calls converge; neither alters retained evidence or acceptance.
+The earlier backlog statement had reversed objective-derived and reported
+statistics. The distinct question of whether a rank-zero NT residual
+projection should be reported with df=21 is not resolved here; the next
+measurable trigger is a separately scoped fixed-x rank/df investigation
+with independent sampling-law validation before any exemption or policy change.
+
+Reproduction is banked locally in ignored
+`cpp/tests/checks/task_117_uls_statistic/`: `command.sh`, R harnesses,
+metadata, scalar/projection CSVs, complete oracle options/tests and input
+and runtime SHA256 manifests. Source HEAD is
+`919b75f383c59d99e2ec084648caa6217ba48bd2`; runtime lavaan resides at
+`/home/jonas/R/x86_64-pc-linux-gnu-library/4.6/lavaan`.
+Two prespecified serial oracle calls took 0.236 and 0.127 seconds; the
+independent projection was also bounded, under the combined 180-second cap.
+Input hashes remain unchanged. No source build, reinstall or fixture rewrite
+was performed.
+
 ### Structural MI inventory and a small-score endpoint (TASK-105)
 
 Lavaan 0.7-2 omits outcome/exogenous-predictor residual covariances, while

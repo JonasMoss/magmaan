@@ -1187,9 +1187,15 @@ ordinary-user default.
   values, no third-party data and file-size limits. See translation audit and
   [Newsom failures](newsom-corpus-failures.md).
 
-- [ ] **S — explain Mplus `chapter6_ex6_10` ULS statistics.** Distinguish near-zero
-  objective-derived chi-square from lavaan's reported ULS test (38.3).
-  **Check:** identify the convention before gating a comparison.
+- [x] **S — explain Mplus `chapter6_ex6_10` ULS statistics.** Same-data
+  lavaan 0.7.2 reproduces `fmin=0.0383293433492224`, standard ULS
+  `2N*fmin=38.3293433492224`, and the default reported Browne NT statistic
+  `-1.86144433200752e-11`. The former backlog wording reversed the quantities.
+  Fixed-x NT metric and tangent both have rank 14, leaving a zero residual
+  projection despite nonzero full-moment residuals; see the TASK-117 entry in
+  [oracle-defects.md](../validation/oracle-defects.md). **Check:** convention
+  reproduced; any rank/df or inference-policy change needs a separate scoped
+  investigation, without changing this fixture or its acceptance.
 
 - [ ] **S — finish admissibility fixtures/checkpoints.** Add an oracle warning-
   status witness for an improper complete-data fit; carry audit flags into
