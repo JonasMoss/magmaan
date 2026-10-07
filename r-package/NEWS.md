@@ -15,6 +15,11 @@
 - WLS procedures use recorded `fit$W`; optional `weight` must match it or a
   positive multiple. ML2S RBM and case influence likewise use recorded Stage-2
   weights and DLS mixing weights, and validate explicit overrides.
+- Continuous ULS, DWLS and WLS/ADF fits now warn when within-group observed
+  variances differ by more than a factor of 1000, with advice to rescale.
+  The C++ diagnostic also covers ML2S Stage-2 and continuous mixed-LS moments;
+  ML, GLS, FIML, NT/DLS weights and ordinal-only fits do not emit this advice.
+  Lab fits expose `observed_variance_ratio` and `numerical_scaling_message`.
 
 ## Inference policy and evidence
 

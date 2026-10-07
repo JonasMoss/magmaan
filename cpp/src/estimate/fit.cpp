@@ -2149,6 +2149,7 @@ static void attach_newton_accuracy(Estimates& est,
                                    const spec::LatentStructure& pt,
                                    const model::MatrixRep& rep,
                                    const SampleStats& samp) {
+  audit_observed_variances(est.diagnostics, samp.S, false);
   est.diagnostics.newton_accuracy =
       frontier::newton_accuracy_ml(pt, rep, samp, est);
 }
@@ -2157,6 +2158,7 @@ static void attach_newton_accuracy_psd(Estimates& est,
                                        const spec::LatentStructure& pt,
                                        const model::MatrixRep& rep,
                                        const SampleStats& samp) {
+  audit_observed_variances(est.diagnostics, samp.S, false);
   est.diagnostics.newton_accuracy =
       frontier::newton_accuracy_ml_psd(pt, rep, samp, est);
 }
@@ -2171,6 +2173,13 @@ with_newton_accuracy(fit_expected<Estimates> est,
 
 // Least-squares Newton check: exact Hessian of the moment-quadratic
 // objective, step measured by the normal-theory sandwich (diagnostics.hpp).
+static bool unit_dependent_ls_weight(const gmm::Weight& weight) {
+  return weight.empty() || std::any_of(
+      weight.begin(), weight.end(), [](const auto& block) {
+        return !block.cancels_measurement_units();
+      });
+}
+
 static void attach_newton_accuracy_ls(
     Estimates& est,
     const spec::LatentStructure& pt,
@@ -2179,6 +2188,7 @@ static void attach_newton_accuracy_ls(
     const SampleStats& samp,
     const gmm::Weight& weight,
     StationarityDomain domain = StationarityDomain::Ambient) {
+  audit_observed_variances(est.diagnostics, samp.S, unit_dependent_ls_weight(weight));
   est.diagnostics.newton_accuracy = frontier::audit_newton_derivatives(
       pt, rep,
       frontier::evaluate_newton_moment_quadratic(pre.ev, samp, est.theta, weight),
@@ -2192,6 +2202,7 @@ static void attach_newton_accuracy_fiml(
     const model::MatrixRep& rep, const data::RawData& raw,
     const fiml::FIMLPack& pack, const optim::ScalarProblem& full_problem,
     StationarityDomain domain) {
+  audit_observed_variances(est.diagnostics, pack.start_stats.S, false);
   frontier::NewtonDerivatives d;
   d.theta = est.theta;
   d.objective_kind = NewtonObjectiveKind::Fiml;
@@ -2553,6 +2564,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (est) {
       est->theta.array() *= normalized->parameter_units.array();
       est->sample_normalized = true;
+      audit_observed_variances(est->diagnostics, samp.S, false);
     }
     return est;
   }
@@ -2747,6 +2759,7 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
     if (out) {
       out->estimates.theta.array() *= normalized->parameter_units.array();
       out->estimates.sample_normalized = true;
+      audit_observed_variances(out->estimates.diagnostics, samp.S, false);
     }
     return out;
   }
@@ -2830,6 +2843,7 @@ frontier::fit_gmm_multiinfo(spec::LatentStructure pt, const model::MatrixRep& re
     if (out) {
       out->estimates.theta.array() *= normalized->parameter_units.array();
       out->estimates.sample_normalized = true;
+      audit_observed_variances(out->estimates.diagnostics, samp.S, unit_dependent_ls_weight(weight));
     }
     return out;
   }
@@ -2851,6 +2865,7 @@ frontier::fit_gmm_multiinfo(spec::LatentStructure pt, const model::MatrixRep& re
   if (!est) return std::unexpected(est.error());
   attach_diagnostics(*est, pt, *pre, Bounds{});
   attach_geometric_stationarity(*est, pt, *pre, Bounds{}, penalized);
+  audit_observed_variances(est->diagnostics, samp.S, unit_dependent_ls_weight(weight));
   auto hessian = gmm::moment_quadratic_hessian(pre->ev, samp, est->theta, weight);
   post_expected<Eigen::MatrixXd> h = hessian
       ? post_expected<Eigen::MatrixXd>(*hessian)
@@ -2955,6 +2970,7 @@ fiml::frontier::fit_fiml_multiinfo(spec::LatentStructure pt,
     if (out) {
       out->estimates.theta.array() *= normalized->parameter_units.array();
       out->estimates.sample_normalized = true;
+      audit_observed_variances(out->estimates.diagnostics, pack.start_stats.S, false);
       // Raw FIML differs by an observation-pattern Jacobian constant. Report
       // the caller-unit likelihood while retaining normalized optimizer audits.
       auto evaluator = model::ModelEvaluator::build(pt, rep);
@@ -3119,6 +3135,7 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (est) {
       est->theta.array() *= normalized->parameter_units.array();
       est->sample_normalized = true;
+      audit_observed_variances(est->diagnostics, samp.S, false);
     }
     return est;
   }
@@ -3522,6 +3539,7 @@ fit_mixed_ordinal_psd(
             pt, rep, stats, result->theta, weights, parameterization),
         NewtonObjectiveKind::MixedOrdinalLeastSquares, stats.n_obs);
   }
+  audit_observed_variances(result->diagnostics, stats.R, true, stats.ordered);
   result->diagnostics.stationarity_domain = StationarityDomain::Psd;
   return result;
 }

@@ -884,6 +884,8 @@ void attach_ordinal_geometric_diagnostics(
   }
   audit_full_model_fit(est.diagnostics, est.theta, gradient, est.fmin, value,
                        pt, ev, con, nl, bounds);
+  if (newton.mixed != nullptr)
+    audit_observed_variances(est.diagnostics, newton.mixed->R, true, newton.mixed->ordered);
   attach_ordinal_newton_accuracy(est, pt, newton, value, gradient);
 }
 
@@ -922,6 +924,8 @@ void attach_reconstructed_ordinal_diagnostics(
   newton.layout = &layout;
   newton.factors = &factors;
   newton.parameterization = parameterization;
+  if (newton.mixed != nullptr)
+    audit_observed_variances(est.diagnostics, newton.mixed->R, true, newton.mixed->ordered);
   attach_ordinal_newton_accuracy(est, pt, newton, value, gradient);
 }
 

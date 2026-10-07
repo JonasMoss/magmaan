@@ -532,3 +532,62 @@ TEST_CASE("admissibility oracle: keyed complete-data improper and proper endpoin
     }
   }
 }
+
+TEST_CASE("observed variance scaling advice respects blocks, ordinal flags and boundary") {
+  using magmaan::estimate::audit_observed_variances;
+  FitDiagnostics d;
+  Eigen::MatrixXd S = Eigen::MatrixXd::Identity(3, 3);
+  S(2, 2) = 1000.0;
+  audit_observed_variances(d, {S}, true);
+  CHECK(d.observed_variance_ratio == 1000.0);
+  CHECK(d.numerical_scaling_message.empty());
+  S(2, 2) = 1001.0;
+  audit_observed_variances(d, {S}, true);
+  CHECK(d.observed_variance_ratio == 1001.0);
+  CHECK_FALSE(d.numerical_scaling_message.empty());
+  audit_observed_variances(d, {S}, false);
+  CHECK(d.numerical_scaling_message.empty());
+  audit_observed_variances(d, {S}, true, {{0, 0, 1}});
+  CHECK(d.observed_variance_ratio == 1.0);
+  CHECK(d.numerical_scaling_message.empty());
+  audit_observed_variances(d, {S}, true, {{1, 1, 1}});
+  CHECK(d.observed_variance_ratio == 1.0);
+  audit_observed_variances(d, {Eigen::MatrixXd::Identity(2, 2),
+                               1e6 * Eigen::MatrixXd::Identity(2, 2)}, true);
+  CHECK(d.observed_variance_ratio == 1.0);
+  CHECK(d.numerical_scaling_message.empty());
+}
+
+TEST_CASE("continuous fit composers attach LS scaling advice but exempt ML and NT") {
+  using namespace magmaan::estimate;
+  auto bits = build_bits("x ~~ 1*x\ny ~~ 1001*y\nx ~~ 0*y");
+  auto rep = magmaan::model::build_matrix_rep(*bits.pt);
+  REQUIRE(rep.has_value());
+  const Eigen::VectorXd theta(0);
+  auto moments = bits.ev.sigma(theta);
+  REQUIRE(moments.has_value());
+  SampleStats samp;
+  samp.S = moments->sigma;
+  samp.n_obs = {200};
+  const Eigen::Index q = 3;
+  auto dense = gmm::BlockWeight::dense(Eigen::MatrixXd::Identity(q, q),
+                                       magmaan::FitError::Kind::NumericIssue, "test ADF");
+  REQUIRE(dense.has_value());
+  for (const auto& weight : std::vector<gmm::Weight>{
+           {}, {gmm::BlockWeight::diagonal(Eigen::VectorXd::Ones(q))}, {*dense}}) {
+    auto fit = fit_gmm(*bits.pt, *rep, samp, theta, weight);
+    REQUIRE(fit.has_value());
+    CHECK(fit->diagnostics.observed_variance_ratio == 1001.0);
+    CHECK_FALSE(fit->diagnostics.numerical_scaling_message.empty());
+  }
+  auto nt = gmm::BlockWeight::normal_theory(samp.S[0], false,
+                                            magmaan::FitError::Kind::NumericIssue, "test NT");
+  REQUIRE(nt.has_value());
+  auto gls = fit_gmm(*bits.pt, *rep, samp, theta, {*nt});
+  REQUIRE(gls.has_value());
+  CHECK(gls->diagnostics.numerical_scaling_message.empty());
+  auto ml = fit_ml(*bits.pt, *rep, samp, theta);
+  REQUIRE(ml.has_value());
+  CHECK(ml->diagnostics.observed_variance_ratio == 1001.0);
+  CHECK(ml->diagnostics.numerical_scaling_message.empty());
+}

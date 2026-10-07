@@ -2896,6 +2896,9 @@ finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
     fit$partable$est[rows] <- defined$est[match(fit$partable$lhs[rows], defined$lhs)]
   }
   .warn_fit_admissibility(fit)
+  message <- fit$diagnostics$numerical_scaling_message
+  if (is.character(message) && length(message) == 1L && nzchar(message))
+    warning("magmaan: ", message, call. = FALSE)
   fit
 }
 

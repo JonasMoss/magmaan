@@ -1042,6 +1042,9 @@ Rcpp::List two_stage_stage2_weight_blocks_impl(Rcpp::List stage1,
   for (std::size_t b = 0; b < w_or->size(); ++b) {
     out[static_cast<R_xlen_t>(b)] = Rcpp::wrap((*w_or)[b]);
   }
+  out.attr("cancels_measurement_units") =
+      kind == magmaan::estimate::fiml::TwoStageWeight::Nt ||
+      kind == magmaan::estimate::fiml::TwoStageWeight::Dls;
   return out;
 }
 

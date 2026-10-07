@@ -1,5 +1,10 @@
 ### Ordinal and mixed categorical LS
 
+Mixed LS diagnostics compute the sample-variance ratio using continuous columns
+only, within each block. Above 1000, the core supplies rescaling advice for
+ULS/DWLS/WLS, which both R fit finalizers surface as a warning. All-ordinal
+moments retain ratio 1 and no scaling message (TASK-33.10.5.3).
+
 TASK-101 adds policy DWLS fit-index points using exact first-stage rows and
 the estimated-weight observed geometry. The misspecification primitives and
 lab wrappers accept `first_stage = "exact"` while retaining OPG defaults.

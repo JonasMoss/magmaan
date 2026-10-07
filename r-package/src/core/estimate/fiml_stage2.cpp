@@ -605,6 +605,8 @@ two_stage_stage2_weight_structured(const SaturatedMoments& sm,
   if (!w.has_value()) {
     return std::unexpected(fit_to_post(w.error(), "two_stage_stage2_weight"));
   }
+  if (kind == TwoStageWeight::Dls)
+    for (auto& block : *w) block.set_cancels_measurement_units();
   return std::move(*w);
 }
 

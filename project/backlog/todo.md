@@ -1431,6 +1431,13 @@ separate final decision for each explicitly covered scope.
   are separate work. See [sphere implementation](../architecture/roadmap.md)
   and [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
+- [x] **M — warn about continuous LS measurement-unit spread (TASK-33.10.5.3).**
+  Core diagnostics record the maximum within-block continuous variance ratio;
+  ULS/DWLS/WLS/ADF advise rescaling only above 1000. Complete-data, ML2S
+  Stage-2 and mixed LS share the diagnostic, surfaced by both R packages.
+  ML/GLS/FIML, NT/DLS and ordinal-only fits receive no advice. This diagnostic
+  does not change search coordinates or certify numerical accuracy.
+
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
   Assess safeguarded backtracking or adapter recovery while retaining caller

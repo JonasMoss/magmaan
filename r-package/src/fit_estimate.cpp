@@ -349,9 +349,14 @@ Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats,
   if (!weight) stop_fit(weight.error());
   std::vector<Eigen::MatrixXd> blocks;
   for (const auto& block : *weight) blocks.push_back(block.to_dense());
+  Rcpp::List weights = Rcpp::wrap(blocks);
+  weights.attr("cancels_measurement_units") =
+      std::all_of(weight->begin(), weight->end(), [](const auto& block) {
+        return block.cancels_measurement_units();
+      });
   magmaan::estimate::frontier::NewtonDerivatives retained;
   retained.ls_weight=std::move(*weight);
-  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks),
+  return Rcpp::List::create(Rcpp::_["W"] = weights,
       Rcpp::_["retained_ls_weights"]=retained_ls_weights_to_r(retained));
 }
 

@@ -161,6 +161,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
             FitError::Kind::NumericIssue,
             "dls_weight: block " + std::to_string(b));
         if (!bw.has_value()) return std::unexpected(bw.error());
+        bw->set_cancels_measurement_units();
         W.push_back(std::move(*bw));
       }
       continue;
@@ -189,6 +190,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
           FitError::Kind::NumericIssue,
           "dls_weight: block " + std::to_string(b));
       if (!bw.has_value()) return std::unexpected(bw.error());
+      bw->set_cancels_measurement_units();
       W.push_back(std::move(*bw));
     }
   }

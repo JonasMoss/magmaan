@@ -144,6 +144,7 @@ fit_fiml_impl(spec::LatentStructure pt,
     if (map) est.coordinate_scaling = map->kind;
     est.diagnostics = finalize_fit_diagnostics(
         est.theta, pt, ev, con, nl, Bounds{});
+    audit_observed_variances(est.diagnostics, start_samp.S, false);
     if (!extra.active()) {
       Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
       const double value = eval_at(est.theta, gradient);
@@ -347,6 +348,7 @@ fit_expected<Estimates> evaluate_fiml_at(spec::LatentStructure pt,
   est.grad_inf_norm = est.audit.grad_inf_norm;
   est.f_evals = est.g_evals = 1;
   est.diagnostics = finalize_fit_diagnostics(theta, pt, *ev, *con, nl, Bounds{});
+  audit_observed_variances(est.diagnostics, pack.start_stats.S, false);
   audit_full_model_fit(est.diagnostics, theta, gradient, value, value,
                       pt, *ev, *con, nl, Bounds{});
   attach_fiml_newton_accuracy(est, pt, rep, pack.cache, pack.start_stats,

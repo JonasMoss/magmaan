@@ -671,6 +671,8 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
   return Rcpp::List::create(
       Rcpp::_["sigma_pd_per_block"]     = sigma_pd,
       Rcpp::_["sigma_pd_all"]           = d.sigma_pd_all,
+      Rcpp::_["observed_variance_ratio"] = d.observed_variance_ratio,
+      Rcpp::_["numerical_scaling_message"] = d.numerical_scaling_message,
       Rcpp::_["lin_eq_residual_inf"]    = d.lin_eq_residual_inf,
       Rcpp::_["lin_eq_satisfied"]       = d.lin_eq_satisfied,
       Rcpp::_["nl_eq_residual"]         = Rcpp::wrap(d.nl_eq_residual),
@@ -806,8 +808,13 @@ std::vector<Eigen::MatrixXd> wls_dense_from_arg(SEXP W, std::size_t n_blocks) {
 // R supplies a genuinely dense Gamma-hat inverse, so Dense is the right
 // BlockWeight kind here; see internal.h for why the conversion is shared.
 magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
-  return dense_weight_or_stop(wls_dense_from_arg(W, n_blocks),
-                              "magmaan: WLS weights");
+  auto weight = dense_weight_or_stop(wls_dense_from_arg(W, n_blocks),
+                                     "magmaan: WLS weights");
+  Rcpp::RObject source(W);
+  if (source.hasAttribute("cancels_measurement_units") &&
+      Rcpp::as<bool>(source.attr("cancels_measurement_units")))
+    for (auto& block : weight) block.set_cancels_measurement_units();
+  return weight;
 }
 
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {

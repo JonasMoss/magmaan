@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -264,6 +265,11 @@ struct FitVerdict {
 };
 
 struct FitDiagnostics {
+  // Maximum within-block continuous sample-variance ratio; 1 with no pairs.
+  double observed_variance_ratio = 1.0;
+  // Core-owned advice, empty for unit-cancelling weights and ratios <= 1000.
+  std::string numerical_scaling_message;
+
   // Implied Σ Cholesky per group; `sigma_pd_all` is the && over the vector.
   // ML/GLS need PD; ULS only needs finite. Empty when the evaluator could
   // not compute Σ at all (e.g. non-finite θ propagated through model
@@ -371,6 +377,12 @@ audit_geometric_stationarity(
     const NonlinearEqConstraints& nl,
     const Bounds& bounds,
     GeometricStationarityOptions opts = {});
+
+// Audit continuous variances only (ordinal response variances are excluded).
+void audit_observed_variances(FitDiagnostics& diagnostics,
+                              const std::vector<Eigen::MatrixXd>& covariance,
+                              bool unit_dependent_ls,
+                              const std::vector<std::vector<std::int32_t>>& ordered = {});
 
 // Build a FitDiagnostics from an expanded θ and the prelude bits the fit
 // path already carried. Never errors — every check that cannot be performed

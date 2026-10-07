@@ -32,6 +32,10 @@ their replacements.
   and category schema through fitting and serialization. Unsupported inputs
   raise `magmaan_mplus_error` with all required edits; model printing shows
   fittability. Plain strings continue to mean lavaan syntax.
+- ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
+  within-group observed variances differ by more than a factor of 1000,
+  with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit
+  this advice. The diagnostic is computed by the shared C++ core.
 
 ## Inference policy and evidence
 

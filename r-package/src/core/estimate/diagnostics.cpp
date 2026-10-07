@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <sstream>
 #include <utility>
 
 #include <Eigen/Cholesky>
@@ -675,6 +676,37 @@ audit_geometric_stationarity(
       out.cone_residual_l2 >= 0.0 &&
       out.cone_residual_l2 <= opts.stationarity_tol;
   return out;
+}
+
+void audit_observed_variances(
+    FitDiagnostics& diagnostics,
+    const std::vector<Eigen::MatrixXd>& covariance,
+    bool unit_dependent_ls,
+    const std::vector<std::vector<std::int32_t>>& ordered) {
+  double ratio = 1.0;
+  for (std::size_t b = 0; b < covariance.size(); ++b) {
+    double smallest = std::numeric_limits<double>::infinity();
+    double largest = 0.0;
+    for (Eigen::Index j = 0; j < covariance[b].rows(); ++j) {
+      if (!ordered.empty() && b < ordered.size() &&
+          static_cast<std::size_t>(j) < ordered[b].size() &&
+          ordered[b][static_cast<std::size_t>(j)] != 0) continue;
+      const double variance = covariance[b](j, j);
+      // Invalid or constant columns are handled by data validation, not advice.
+      if (!std::isfinite(variance) || variance <= 0.0) continue;
+      smallest = std::min(smallest, variance);
+      largest = std::max(largest, variance);
+    }
+    if (largest > 0.0) ratio = std::max(ratio, largest / smallest);
+  }
+  diagnostics.observed_variance_ratio = ratio;
+  diagnostics.numerical_scaling_message.clear();
+  if (unit_dependent_ls && ratio > 1000.0) {
+    std::ostringstream message;
+    message << "observed variances differ by a factor of " << ratio
+            << "; least-squares fits with this weight can fail numerically in such units; consider rescaling the variables.";
+    diagnostics.numerical_scaling_message = message.str();
+  }
 }
 
 FitDiagnostics

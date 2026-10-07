@@ -151,11 +151,17 @@ class BlockWeight {
     }
     BlockWeight w;
     w.kind_      = Kind::NormalTheory;
+    w.cancels_measurement_units_ = true;
     w.chol_      = Eigen::MatrixXd(llt.matrixL());
     w.has_means_ = has_means;
     w.dim_       = (has_means ? p : 0) + p * (p + 1) / 2;
     return w;
   }
+
+  // Producer metadata: NT and DLS cancel measurement units. Bare caller
+  // matrices conservatively retain the unit-dependent LS diagnostic.
+  bool cancels_measurement_units() const { return cancels_measurement_units_; }
+  void set_cancels_measurement_units() { cancels_measurement_units_ = true; }
 
   Kind kind() const { return kind_; }
   Eigen::Index rows() const { return dim_; }
@@ -321,6 +327,7 @@ class BlockWeight {
     return W;
   }
 
+  bool cancels_measurement_units_ = false;
   Kind kind_ = Kind::Identity;
   Eigen::Index dim_ = 0;
   // Diagonal keeps both forms: it is O(q), so exactness in `to_dense()` is

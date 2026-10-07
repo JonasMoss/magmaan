@@ -11,6 +11,13 @@
   intercept-only constraints stay block-separable instead of being rotated
   together by one global SVD. It is not a general bounded or constrained
   backend.
+- Fit diagnostics expose the maximum within-block continuous observed variance
+  ratio (`observed_variance_ratio`, neutral value 1 when no continuous pair).
+  ULS, DWLS and WLS/ADF attach core-owned rescaling advice above 1000; NT/DLS
+  weight producers retain unit-cancellation metadata, including across the R
+  matrix boundary. ML/GLS/FIML and ordinal-only fits emit no scaling advice.
+  Complete-data, ML2S Stage-2 and mixed continuous-LS fits share this check;
+  both R packages emit the message through the existing fit finalizer.
 - Automatic nonnegative variance bounds.
 - Linear equality constraints on the LS path via the affine α-reparameterization
   (θ = θ₀ + K·α), shared with the ML path — no quadratic penalty.

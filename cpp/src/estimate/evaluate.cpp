@@ -2,6 +2,7 @@
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -157,6 +158,13 @@ evaluate_at(spec::LatentStructure pt, const model::MatrixRep& rep,
   FitDiagnostics diagnostics = finalize_fit_diagnostics(
       theta_full, pt, prelude.ev, prelude.con, prelude.nl, bounds,
       /*snlls_profile_fallback_flag=*/false);
+
+  const bool unit_dependent_ls = estimator == Estimator::ULS ||
+      (estimator == Estimator::WLS && (weight.empty() || std::any_of(
+          weight.begin(), weight.end(), [](const auto& block) {
+            return !block.cancels_measurement_units();
+          })));
+  audit_observed_variances(diagnostics, samp.S, unit_dependent_ls);
 
   audit_full_model_fit(diagnostics, theta_full, grad, f_at, f_at,
                        pt, prelude.ev, prelude.con, prelude.nl, bounds, domain);
