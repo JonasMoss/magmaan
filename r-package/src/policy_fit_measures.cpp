@@ -110,8 +110,10 @@ Rcpp::DataFrame convention_fit_measures_impl(Rcpp::List fit, std::string convent
   Rcpp::NumericVector estimate(out->indices.size());
   for (std::size_t i = 0; i < out->indices.size(); ++i) {
     const auto& x = out->indices[i]; index[i] = x.index;
-    estimate[i] = std::isfinite(x.estimate) ? x.estimate : NA_REAL;
-    reason[i] = std::isfinite(x.estimate) ? Rcpp::String(NA_STRING) : Rcpp::String("inapplicable");
+    estimate[i] = x.reason == InferenceReason::Available && std::isfinite(x.estimate) ? x.estimate : NA_REAL;
+    reason[i] = x.reason != InferenceReason::Available ?
+        Rcpp::String(std::string(reason_name(x.reason)) + ": " + x.detail) :
+        std::isfinite(x.estimate) ? Rcpp::String(NA_STRING) : Rcpp::String("inapplicable");
   }
   auto result = Rcpp::DataFrame::create(Rcpp::_["index"] = index,
       Rcpp::_["estimate"] = estimate, Rcpp::_["reason"] = reason);

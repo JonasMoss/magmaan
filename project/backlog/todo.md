@@ -121,11 +121,12 @@ result under an unstated convention.
 
 ### Ordinary API
 
-- [ ] **L — lavaan-compatible fit-measures composer** (task-109): lane WIP
-  composes standard/scaled/robust families and the lab/ordinary adapters.
-  Completion is blocked by the required 1e-6 FIML gate (including a mismatch
-  at identical oracle coefficients) and an ordinal independence-baseline
-  convergence failure. Do not treat this route as validated or release-ready.
+- [x] **L — lavaan-compatible fit-measures composer** (task-109): C++
+  standard/scaled/robust families, lab/ordinary compatibility dispatch and
+  analytic categorical independence baselines. Complete ML/MLM/MLR and
+  ordinal DWLS/WLSMV, ULS/ULSMV and WLS have live same-point 1e-6 gates,
+  including two groups and delta/theta. FIML ML/MLR explicitly return typed
+  unavailable rows pending task-110; no tolerance exemption was introduced.
 
 - [x] **M — ordinary policy fit measures** (task-102): fixed index/estimate/reason
   rows and opt-in summary attachment/printing. Compatibility remains task-109;

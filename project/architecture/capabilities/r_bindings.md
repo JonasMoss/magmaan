@@ -579,15 +579,25 @@ one and two groups; no inference ingredients or policy defaults change.
 estimates, typed reasons and details; `unrestricted_logl` is the ordinary stable
 code. Each estimator retains its fixed lab row set. Opt-in summary attachment and printing,
 ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
-Compatibility requests error pending TASK-109; intervals await TASK-103.
+Compatibility requests use the separate TASK-109 composer; policy intervals await TASK-103.
 
 
-## Compatibility fit-measures composer (TASK-109, incomplete)
+## Compatibility fit-measures composer (TASK-109)
 
-Lane WIP adds `api::convention_fit_measures()`, the thin lab adapter and
-ordinary `lavaan_compat` dispatch. The implementation composes matching
-independence baselines and standard/scaled/robust families, keeping categorical
-N-G reporting separate from CATML's N scaling. This is not a validated release
-capability: the live gate still fails for FIML at identical oracle coefficients
-and an ordinal independence baseline fails convergence. Full CTest, both full
-R suites, examples, R CMD check and structural guards remain outstanding.
+`api::convention_fit_measures()`, the thin lab adapter and ordinary
+`fit_measures(fit, lavaan_compat = ...)` compose lavaan-named
+standard/scaled/robust families, including noncentral chi-square intervals and
+close-fit p-values. Complete-data ML/MLM/MLR and all-ordinal
+DWLS/WLSMV, ULS/ULSMV and WLS are supported. Categorical independence
+baselines are closed-form: marginal thresholds for diagonal/identity weights,
+and an analytic threshold cross-block solve for full WLS. Reporting retains
+N-G scaling for quadratic statistics and N scaling for CATML. Grouped
+categorical incremental indices sum baseline corrections while RMSEA uses the
+pooled CATML correction.
+
+FIML ML/MLR return NA rows with `unsupported_model: not yet validated against
+lavaan`; TASK-110 owns validation. Incompatible bundles and rejected fit states
+error. The live oracle gate covers HS one/two groups, PoliticalDemocracy and
+ordinal delta/theta one/two groups. Composer parity is checked at semantically
+matched oracle coefficients at 1e-6; optimizer coefficient agreement is checked
+separately at 1e-4 because tail probabilities amplify small endpoint differences.

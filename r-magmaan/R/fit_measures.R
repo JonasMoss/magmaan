@@ -21,7 +21,8 @@
 #' @param fit A [magmaan()] fit.
 #' @param lavaan_compat Optional named lavaan inference bundle. Returns lavaan's
 #'   standard, scaled and robust families, intervals and close-fit p-values.
-#'   Unsupported estimator/bundle combinations error.
+#'   Unsupported estimator/bundle combinations error. FIML ML/MLR compatibility
+#'   rows are unavailable pending validation against lavaan.
 #' @return A data frame with columns index, estimate and reason. Stable index
 #'   codes are rmsea, cfi, tli, srmr, crmr, logl, unrestricted_logl, aic and bic.
 #'   The details attribute retains the lab composer's diagnostic ingredients.

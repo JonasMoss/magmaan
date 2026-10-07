@@ -3,6 +3,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include <cmath>
 #include <numeric>
+#include <Eigen/Cholesky>
 
 namespace magmaan::api {
 namespace {
@@ -100,6 +101,28 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
     return std::unexpected(failure("this convention requires a different fitted estimator"));
   if (missing && c == LavaanConvention::MLM)
     return std::unexpected(failure("FIML compatibility covers ML and MLR"));
+  if (missing) {
+    ConventionFitMeasures out; out.convention = convention_name(c);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    for (const auto* name : {"chisq", "df", "pvalue", "baseline.chisq", "baseline.df",
+        "baseline.pvalue", "ntotal", "srmr", "logl", "unrestricted.logl", "aic", "bic", "bic2", "npar"})
+      add(out, name, nan);
+    measures::FitMeasures fm;
+    fm.cfi = fm.tli = fm.rmsea = fm.rmsea_ci_lower = fm.rmsea_ci_upper =
+        fm.rmsea_pvalue = fm.rmsea_close_h0 = fm.rmsea_notclose_pvalue = fm.rmsea_notclose_h0 = nan;
+    family(out, fm);
+    if (c == LavaanConvention::MLR) {
+      for (const auto* name : {"chisq.scaled", "df.scaled", "pvalue.scaled", "chisq.scaling.factor",
+          "baseline.chisq.scaled", "baseline.df.scaled", "baseline.pvalue.scaled", "baseline.chisq.scaling.factor"})
+        add(out, name, nan);
+      family(out, fm, ".scaled"); family(out, fm, ".robust");
+    }
+    for (auto& index : out.indices) {
+      index.reason = InferenceReason::UnsupportedModel;
+      index.detail = "not yet validated against lavaan";
+    }
+    return out;
+  }
   if (raw.X.empty() || std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }))
     return std::unexpected(failure("fit-measures compatibility requires raw observations and random x"));
   auto evaluator = model::ModelEvaluator::build(pt, rep);
@@ -177,18 +200,45 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
   if (stats.R.empty()) return std::unexpected(failure("empty ordinal moments"));
   auto model = independence(stats.R[0].rows(), static_cast<int>(stats.R.size()), true, &stats.n_levels[0]);
   if (!model) return std::unexpected(model.error());
-  auto data = data_from_ordinal(*model, stats);
-  if (!data) return std::unexpected(data.error());
-  auto estimator = weight == estimate::OrdinalWeightKind::ULS ? ordinal_dwls() :
-      weight == estimate::OrdinalWeightKind::WLS ? ordinal_wls() : ordinal_dwls();
-  estimator.ordinal_weight = weight;
-  estimator = estimator.parameterization(parameterization);
-  auto base = fit(*model, *data, estimator);
-  if (!base) return std::unexpected(base.error());
-  const auto bs = policy_fit_state(base->estimates());
-  if (!bs.converged) return std::unexpected(failure("ordinal independence baseline did not converge"));
-  auto baseline = lavaan_inference_ordinal(model->structure(), model->matrix_rep(), stats,
-      base->estimates(), weight, parameterization, c, bs);
+  auto base_pt = model->structure();
+  auto prepared = estimate::prepare_ordinal_partable(base_pt, stats, parameterization);
+  if (!prepared) return std::unexpected(failure(prepared.error().detail));
+  estimate::Estimates base_est;
+  base_est.theta = Eigen::VectorXd::Zero(base_pt.n_free());
+  // Categorical independence fixes response variances to one and correlations
+  // to zero. Its free thresholds are the marginal sample thresholds, so no
+  // optimizer or convergence tolerance is needed. Full WLS additionally
+  // profiles the threshold/correlation cross block in its quadratic metric.
+  auto base_thresholds = stats.thresholds;
+  if (weight == estimate::OrdinalWeightKind::WLS) {
+    for (std::size_t g = 0; g < stats.R.size(); ++g) {
+      const auto nth = stats.thresholds[g].size();
+      const auto p = stats.R[g].rows();
+      const auto ncorr = p * (p - 1) / 2;
+      Eigen::VectorXd correlations(ncorr);
+      Eigen::Index k = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j + 1; i < p; ++i) correlations(k++) = stats.R[g](i, j);
+      Eigen::LDLT<Eigen::MatrixXd> ldlt(stats.W_wls[g].topLeftCorner(nth, nth));
+      if (ldlt.info() != Eigen::Success || !ldlt.isPositive())
+        return std::unexpected(failure("ordinal baseline threshold metric is not positive definite"));
+      base_thresholds[g] += ldlt.solve(stats.W_wls[g].topRightCorner(nth, ncorr) * correlations);
+    }
+  }
+  std::vector<std::vector<int>> seen(stats.R.size());
+  for (std::size_t g = 0; g < seen.size(); ++g) seen[g].resize(static_cast<std::size_t>(stats.R[g].rows()));
+  for (std::size_t row = 0; row < base_pt.size(); ++row) {
+    if (base_pt.op[row] != parse::Op::Threshold || base_pt.free[row] <= 0) continue;
+    const auto g = static_cast<std::size_t>(base_pt.group[row] - 1);
+    const auto ov = base_pt.ov_pos[static_cast<std::size_t>(base_pt.lhs_var[row])];
+    const auto level = ++seen[g][static_cast<std::size_t>(ov)];
+    for (Eigen::Index k = 0; k < stats.thresholds[g].size(); ++k)
+      if (stats.threshold_ov[g][static_cast<std::size_t>(k)] == ov && stats.threshold_level[g][static_cast<std::size_t>(k)] == level)
+        base_est.theta(base_pt.free[row] - 1) = base_thresholds[g](k);
+  }
+  PolicyFitState bs; bs.converged = true;
+  auto baseline = lavaan_inference_ordinal(base_pt, model->matrix_rep(), stats,
+      base_est, weight, parameterization, c, bs);
   if (baseline.test.reason != InferenceReason::Available) return std::unexpected(failure(baseline.test.detail));
   const auto n = std::accumulate(stats.n_obs.begin(), stats.n_obs.end(), std::int64_t{0});
   ConventionFitMeasures out; out.convention = convention_name(c);
@@ -209,13 +259,16 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
       for (auto& w : cat_stats.W_dwls) w.setIdentity();
     auto cat = estimate::catml_dwls_rmsea_ordinal(pt, rep, cat_stats, est, parameterization);
     if (!cat) return std::unexpected(failure(cat.error().detail));
-    auto cat_base = estimate::catml_dwls_rmsea_ordinal(model->structure(), model->matrix_rep(), cat_stats,
-        base->estimates(), parameterization);
+    auto cat_base = estimate::catml_dwls_rmsea_ordinal(base_pt, model->matrix_rep(), cat_stats,
+        base_est, parameterization);
     if (!cat_base) return std::unexpected(failure(cat_base.error().detail));
     in.n_total = n;
     in.chi2 = cat->xx3; in.df = cat->df3; in.scaling_factor = cat->c_hat3;
     in.chi2_scaled = cat->xx3_scaled; in.baseline_chi2 = cat_base->xx3;
-    in.baseline_df = cat_base->df3; in.baseline_scaling_factor = cat_base->c_hat3;
+    in.baseline_df = cat_base->df3;
+    // lavaan's categorical incremental family sums the group baseline
+    // corrections; CATML's pooled RMSEA correction is their average.
+    in.baseline_scaling_factor = cat_base->c_hat3 * static_cast<double>(stats.R.size());
     in.baseline_chi2_scaled = cat_base->xx3_scaled;
     robust(out, in);
   }

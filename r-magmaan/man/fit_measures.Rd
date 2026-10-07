@@ -11,7 +11,8 @@ fit_measures(fit, lavaan_compat = NULL)
 
 \item{lavaan_compat}{Optional named lavaan inference bundle. Returns lavaan's standard, scaled
 and robust families, intervals and close-fit p-values. Unsupported
-estimator/bundle combinations error.}
+estimator/bundle combinations error. FIML ML/MLR compatibility
+rows are unavailable pending validation against lavaan.}
 }
 \value{
 A data frame with columns index, estimate and reason. Stable index
