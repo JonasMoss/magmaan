@@ -235,6 +235,84 @@ struct NewtonAccuracyDiagnostics {
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
 };
 
+// Structural (generic) identification of the fitted moment model
+// (estimate/frontier/identification.hpp). The check is data-free: it takes
+// the rank of the route's moment Jacobian, in the reduced coordinates of the
+// linear equalities, at seeded pseudo-random parameter points. The moment map
+// is rational in theta, so its rank is constant off a measure-zero set; a
+// deficient rank at random points is deficient everywhere (Rothenberg 1971),
+// and full rank at one point proves generic local identification. Local
+// curvature at the estimate (Hessian positivity, a tiny Newton step, a small
+// condition number) never decides it. Near-singularity at the estimate itself
+// (empirical underidentification) is not this check's concern.
+enum class IdentificationStatus : std::uint8_t {
+  Unchecked,     // no decision; the fit verdict is unchanged
+  Identified,    // full column rank at some point (generically locally identified)
+  Unidentified,  // rank deficient at every point; the fit verdict fails
+};
+// Why the status was reached.
+enum class IdentificationReason : std::uint8_t {
+  NotAttempted,           // the fit path does not run the check
+  Rank,                   // decided by the singular values at the points
+  CountingRule,           // more reduced parameters than moments
+  NoFreeParameters,       // nothing to identify
+  NonlinearConstraints,   // random points cannot be drawn on the manifold
+  UnsupportedModel,       // no moment map for this route (ordinal model on a
+                          // continuous route, two-level, FC-SEM, ...)
+  ConstraintsUnavailable, // linear equalities could not be reduced
+  EvaluationFailed,       // no finite moment Jacobian at the draws
+  AmbiguousGap,           // singular values between the two tolerances
+};
+// The moment map whose Jacobian was ranked.
+enum class IdentificationMap : std::uint8_t {
+  None,
+  Covariance,      // vech(Sigma) per block
+  CovarianceMean,  // vech(Sigma) and mu per block
+  Ordinal,         // thresholds and polychoric correlations per block
+  Mixed,           // ordinal moments plus continuous means and variances
+};
+
+std::string_view to_string(IdentificationStatus s) noexcept;
+std::string_view to_string(IdentificationReason r) noexcept;
+std::string_view to_string(IdentificationMap m) noexcept;
+
+struct IdentificationOptions {
+  std::int32_t n_points = 3;
+  std::uint64_t seed = 0x6d61676d61616eULL;  // "magmaan"
+  // Relative singular values of the column-equilibrated reduced Jacobian.
+  // At or below null_tolerance a direction is null; a smallest value at or
+  // above identified_tolerance certifies full rank; values in between leave
+  // the check unchecked. An exact null direction sits at roundoff (about
+  // 1e-15); project/design/terminal-audit.md records the calibration.
+  double null_tolerance = 1e-10;
+  double identified_tolerance = 1e-7;
+};
+
+struct IdentificationReport {
+  IdentificationStatus status = IdentificationStatus::Unchecked;
+  IdentificationReason reason = IdentificationReason::NotAttempted;
+  IdentificationMap map = IdentificationMap::None;
+  std::int32_t n_parameters = 0;  // q: reduced free coordinates
+  std::int32_t n_moments = 0;     // rows of the moment map (fixed.x rows included)
+  bool counting_rule = true;      // n_parameters <= n_moments
+  std::int32_t rank = -1;         // generic numerical rank; -1 when not computed
+  std::int32_t n_points = 0;      // parameter points evaluated
+  double null_tolerance = 1e-10;
+  double identified_tolerance = 1e-7;
+  std::uint64_t seed = 0;
+  // Smallest relative singular value at each evaluated point.
+  Eigen::VectorXd min_relative_singular_values;
+  // The smallest relative singular values, ascending, at the deciding point.
+  Eigen::VectorXd smallest_singular_values;
+  // Unidentified only: a basis of the null space, one unit column per
+  // direction in full theta coordinates (free-parameter order). Evaluated at
+  // the estimate when one was supplied and its Jacobian was finite, otherwise
+  // at the deciding random point. Moving theta along a column leaves the
+  // implied moments unchanged to first order.
+  Eigen::MatrixXd null_directions;
+  bool directions_at_estimate = false;
+};
+
 // The domain is declared by the fit entry point, never selected by which
 // residual happens to pass. Backend status is not an input to this verdict.
 enum class FitCheck { Unchecked, Passed, Failed };
@@ -263,7 +341,18 @@ struct FitVerdict {
   FitCheck stationarity = FitCheck::Unchecked;
   StationarityDomain domain = StationarityDomain::Ambient;
   StationarityCriterion criterion = StationarityCriterion::FirstOrder;
+  // Structural identification: Passed (identified), Failed (unidentified,
+  // which fails the verdict whatever the numerical checks say) or Unchecked
+  // (no effect on the verdict).
+  FitCheck identification = FitCheck::Unchecked;
 };
+
+// Fold a structural identification report into a verdict: an unidentified
+// model is a definite failure, independent of every numerical check and of a
+// selected compatibility rule. Identified and unchecked reports leave the
+// status unchanged.
+FitVerdict with_identification(FitVerdict verdict,
+                               const IdentificationReport& identification);
 
 struct FitDiagnostics {
   // Maximum within-block continuous sample-variance ratio; 1 with no pairs.
@@ -304,6 +393,10 @@ struct FitDiagnostics {
 
   // Interior accuracy check for complete-data ML fits; unchecked elsewhere.
   NewtonAccuracyDiagnostics newton_accuracy;
+
+  // Structural identification of the fitted moment model. Unchecked
+  // (NotAttempted) on paths that do not run the check.
+  IdentificationReport identification;
 
   // SNLLS-only: did the gp expand take the affine fallback `θ₀ + K_β·β`
   // because `profiled(β)` returned an error? v1 leaves this `false` —

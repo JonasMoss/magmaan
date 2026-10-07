@@ -198,7 +198,48 @@ within and between blocks), FC-SEM, sphere-chart fits (their gauge is a
 nonlinear constraint), RBM, nonlinear or inequality constraints, and FIML with
 caller-supplied extra constraints.
 
-<<SWEEP>>
+**Corpus calibration.** The optimized CTest observer sweep passed all 1,619
+tests (250 seconds at two jobs). It recorded 22,986 checks in 582 tests;
+these are check invocations, including repeated fits, rather than distinct
+models. Tests that do not invoke a covered fitting route produce no report.
+
+| Scope | Identified | Unidentified | Unchecked |
+| --- | ---: | ---: | ---: |
+| Golden fixture tests | 878 | 2 | 41 |
+| Unit tests | 16,679 | 28 | 5,358 |
+
+Every non-Identified golden report belongs to one of these cases:
+
+- `mplus/golden_growth.json`: `nonlinear_explicit` and
+  `nonlinear_implicit` are Unchecked because the affine-space rank check
+  does not sample a nonlinear constraint manifold.
+- `ordinal/nonlinear_equalities.json`: `square_delta`, `square_theta`,
+  `binary`, `product`, `mixed_equalities`, and `cross_group`, across their
+  DWLS/WLSMV/ULS/ULSMV/WLS routes and nested refits, are Unchecked for
+  the same declared nonlinear-constraint limitation.
+- `textbook_ordinal/newsom_2015_ex9_2.json`: the original and endpoint
+  refit are Unidentified, with 19 reduced parameters, 21 moments and rank
+  18. This already-listed delta-to-theta/Heywood-bound known gap is a
+  binary latent-change model with fixed unit measurement and autoregressive
+  paths, zero residuals and zero raw thresholds. Its free latent means can
+  all be multiplied by `c`, and its free latent variances and covariances
+  by `c^2`; the equal innovation-variance constraints remain satisfied.
+  Consequently response means and covariance become `c mu` and
+  `c^2 Sigma`, preserving standardized thresholds and correlations.
+  An independent calculation at the frozen lavaan parameters with `c=1.25`
+  changed those moments by at most 4.4e-16. This explains the structural
+  scale ridge; existing numeric parity checks and their tolerances remain
+  unchanged. Its convergence verdict now fails the identification gate.
+
+There were no ambiguous gaps. The smallest certifying relative singular value
+was 1.79e-4 (the Mplus growth/constraints test, 19 parameters), over 1,700
+times the 1e-7 identified threshold. Among deficient reports the largest null
+value was 6.13e-17 and the smallest adjacent nonnull value was 1.64e-3.
+All full-rank checks certified at the first point. Check cost, excluding
+immediate unsupported/nonlinear returns, was median 0.099 ms, 95th percentile
+0.27 ms, and maximum 52 ms (108 parameters, 324 moments, the Little Table
+10.3 effects-coding unit control). These timings include repeated fits and
+run under the shared workstation resource limits.
 
 **Not implemented: refusal before fitting.** The ordinary `magmaan()` still
 fits an unidentified model and returns it with `converged = FALSE`. Whether it

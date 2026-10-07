@@ -33,6 +33,7 @@
 #include "../oracle.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -214,6 +215,22 @@ TEST_CASE("Textbook categorical (WLSMV) models match lavaan's DWLS estimates") {
     if (!fit.has_value()) {
       fail("fit_ordinal_bounded: " + fit.error().detail);
       continue;
+    }
+    // Zero binary thresholds leave the global latent-response scale free:
+    // means -> c * means, covariances -> c^2 * covariances. The existing
+    // point-estimate parity gate is separate from this convergence refusal.
+    if (id == "newsom_2015_ex9_2") {
+      CHECK(fit->diagnostics.identification.status ==
+            estimate::IdentificationStatus::Unidentified);
+      CHECK(fit->diagnostics.identification.rank == 18);
+      CHECK(estimate::fit_verdict(*fit).status == estimate::FitCheck::Failed);
+    }
+    if (fit->diagnostics.identification.status ==
+        estimate::IdentificationStatus::Unidentified) {
+      const auto labels = estimate::frontier::free_parameter_labels(pt, h.names);
+      for (const auto& direction : estimate::frontier::describe_null_directions(
+               fit->diagnostics.identification, labels))
+        MESSAGE(id << ": structural null direction: " << direction);
     }
 
     std::ostringstream why;

@@ -130,6 +130,9 @@ their replacements.
   counts and sparse Gamma-diagonal derivatives, reducing post-fit cost.
 - Mixed modification indices now share the equality-release criterion scale,
   removing an extra factor two while preserving EPCs and fitting weights.
+- A structurally unidentified model is reported as not converged
+  (`fit$inference$convergence$identified` is `FALSE`); it no longer passes on
+  a local Newton check.
 
 # magmaan 0.1.0
 

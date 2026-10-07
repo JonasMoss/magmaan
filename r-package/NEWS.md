@@ -164,6 +164,10 @@
   affected score blocks, category counts and sparse derivatives, reducing cost.
 - Mixed MI now uses the equality-release criterion scale, removing an extra
   factor two without changing EPCs or fitting weights.
+- A structurally unidentified model is never `converged = TRUE`, under any
+  rule: a data-free rank check of the moment Jacobian
+  (`fit$diagnostics$identification`) fails the verdict and names the null
+  directions. A local Newton pass no longer certifies a scale ridge.
 
 # magmaanlab 0.1.0
 

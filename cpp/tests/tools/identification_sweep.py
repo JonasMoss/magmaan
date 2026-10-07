@@ -89,7 +89,7 @@ def test_name(row):
 
 def is_golden(row):
     name = test_name(row)
-    bare = name.split(': ', 1)[1] if ': ' in name else name
+    bare = name.split(':', 1)[1].lstrip() if ':' in name else name
     return bare in golden
 
 def floats(text):

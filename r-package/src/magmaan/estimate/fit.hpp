@@ -104,8 +104,11 @@ struct Estimates {
 };
 
 // Consumers use the selected verdict; optimizer_status explains termination.
+// A structurally unidentified model fails under every selected rule.
 inline FitVerdict fit_verdict(const Estimates& estimates) {
-  return estimates.selected_verdict.value_or(common_fit_verdict(estimates.diagnostics));
+  return with_identification(
+      estimates.selected_verdict.value_or(common_fit_verdict(estimates.diagnostics)),
+      estimates.diagnostics.identification);
 }
 
 // Optimizer backend selector for the convenience composers below.

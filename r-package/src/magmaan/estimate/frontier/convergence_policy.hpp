@@ -44,6 +44,9 @@ struct ConvergenceAssessment {
   ConvergenceCheck feasibility;
   ConvergenceCheck first_order;
   ConvergenceCheck newton;
+  // Structural identification is never optional evidence: an unidentified
+  // model fails under every policy, and an unchecked report changes nothing.
+  ConvergenceCheck identification;
   // Populated only for Compatibility; preserves the historical FitVerdict ABI.
   FitVerdict compatibility_verdict;
 };
@@ -51,6 +54,8 @@ struct ConvergenceAssessment {
 // Assess already collected summaries. Numeric values are reassessed rather
 // than trusting stored pass/fail flags. No optimizer status participates in
 // either policy. Use an owning report to retain the Hessian and factorization.
+// A structurally unidentified report (`evidence.identification`) fails the
+// assessment whatever the numerical checks say.
 ConvergenceAssessment assess_convergence(
     const FitDiagnostics& evidence, ConvergencePolicy policy = {},
     const NewtonDistanceInterval* interval = nullptr);
