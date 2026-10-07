@@ -1,11 +1,11 @@
 Package: magmaan
 Title: Structural Equation Modeling with One Justified Default Policy
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
 License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: magmaanlab (>= 0.1.0), stats
+Imports: magmaanlab (>= 0.2.0), stats
 Suggests: testthat (>= 3.0.0), lavaan
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)

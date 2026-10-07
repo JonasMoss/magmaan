@@ -1,4 +1,4 @@
-# magmaan 0.3.0 (in development)
+# magmaan 0.2.0
 
 - FIML ML/MLR compatibility fit measures are now validated against lavaan.
   Compatibility H1 EM moments use 1e-10 stopping precision to avoid amplified
@@ -31,8 +31,6 @@
   corrections and typed unavailable reasons in a fixed row set per estimator.
   `summary(fit, fit_measures = TRUE)` attaches and prints them on request.
   Intervals await evaluation; non-NULL `lavaan_compat` errors until lavaan-compatible fit measures exist.
-
-# magmaan 0.2.0 (in development)
 
 - Grouped all-ordinal lavaan compatibility covariance preserves n_g/N
   sandwich geometry with the N-G reporting denominator, correcting unequal-

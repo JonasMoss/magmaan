@@ -1,4 +1,4 @@
-# magmaanlab 0.3.0 (in development)
+# magmaanlab 0.2.0
 
 - FIML ML/MLR compatibility fit measures are now validated against lavaan.
   Compatibility H1 EM moments use 1e-10 stopping precision to avoid amplified
@@ -33,8 +33,6 @@
   group-specific scales and ordinal residuals/thresholds. Unavailable covariance
   retains estimates and typed missing SEs; defined standardized scales are
   explicitly unsupported.
-
-# magmaanlab 0.2.0 (in development)
 
 - Grouped all-ordinal lavaan compatibility covariance preserves n_g/N
   sandwich geometry with the N-G reporting denominator, correcting unequal-
