@@ -1,0 +1,8 @@
+check,result
+five prespecified attempts,passed
+all slots and failed diagnostic lookups preserved,passed
+baseline and input hashes,passed
+installed runtime hashes unchanged,passed
+raw verdict/objective consistency,passed
+fresh-directory guard prevents refits,passed
+HTML MathML without MathJax,passed

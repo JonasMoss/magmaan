@@ -31,13 +31,15 @@ usage <- function() {
     "Options:\n",
     "  --results-dir DIR  Output directory. Default: results.\n",
     "  --smoke            Accepted for experiment harness consistency; same run.\n",
+    "  --bounded-validation  Exactly five task-115 population controls; no retries.\n",
+    "  --endpoint-diagnostics  Complete saved bounded endpoints without fitting.\n",
     "  --help             Show this help.\n",
     sep = ""
   )
 }
 
 parse_args <- function(args) {
-  out <- list(results_dir = "results", smoke = FALSE)
+  out <- list(results_dir = "results", smoke = FALSE, bounded_validation = FALSE, endpoint_diagnostics = FALSE)
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
@@ -50,6 +52,10 @@ parse_args <- function(args) {
       out$results_dir <- args[[i]]
     } else if (startsWith(a, "--results-dir=")) {
       out$results_dir <- sub("^--results-dir=", "", a)
+    } else if (a == "--endpoint-diagnostics") {
+      out$endpoint_diagnostics <- TRUE
+    } else if (a == "--bounded-validation") {
+      out$bounded_validation <- TRUE
     } else if (a == "--smoke") {
       out$smoke <- TRUE
     } else {
@@ -57,6 +63,8 @@ parse_args <- function(args) {
     }
     i <- i + 1L
   }
+  if (out$bounded_validation && out$endpoint_diagnostics)
+    stop("Choose one bounded operation", call. = FALSE)
   out
 }
 
@@ -563,6 +571,132 @@ cfa_sensitivity_rows <- function(pop) {
     )
   })
   do.call(rbind, out)
+}
+
+
+if (cfg$endpoint_diagnostics) {
+  rows <- read.csv(file.path(res_dir, "attempts.csv"))
+  plan <- read.csv(file.path(res_dir, "plan.csv"))
+  stopifnot(nrow(rows) == 5L, nrow(plan) == 5L)
+  pops <- list(higher_order = higher_order_population("low"),
+    one_factor = one_factor_population("low"))
+  t0 <- proc.time()[["elapsed"]]
+  for (i in seq_len(nrow(rows))) {
+    path <- file.path(res_dir, paste0("endpoint-", i, ".rds"))
+    if (!file.exists(path)) next
+    fit <- readRDS(path); pop <- pops[[rows$population[i]]]
+    candidates <- cfa_candidates(pop)
+    candidate <- candidates[[match(rows$model[i], vapply(candidates, `[[`, "", "name"))]]
+    stopifnot(identical(candidate$syntax, plan$syntax[i]))
+    coeff <- main_factor_coefficients(fit, candidate, colnames(pop$Sigma), blocks_for_p(pop$p))
+    rows$omega_main_observed[i] <- sum(coeff)^2 / sum(pop$Sigma)
+    endpoint <- getFromNamespace("evaluate_at", "magmaanlab")(fit$partable,
+      sample_stats_from_cov(pop$Sigma), fit$theta, estimator = "ML")
+    rows$reevaluated_fmin[i] <- endpoint$fmin
+    rows$objective_difference[i] <- endpoint$fmin - fit$fmin
+    rows$error[i] <- ""
+    write_csv(rows, file.path(res_dir, "attempts.csv"))
+  }
+  script <- sub("^--file=", "", grep("^--file=", commandArgs(), value = TRUE)[1L])
+  write_csv(data.frame(key = c("command", "runner_md5", "elapsed_seconds", "recovery"),
+    value = c(paste(commandArgs(), collapse = " "), unname(tools::md5sum(script)),
+      proc.time()[["elapsed"]] - t0,
+      "Export lookup corrected; saved endpoints only; no repeated fits; initial export-lookup failure retained in diagnostic_recovery.csv")),
+    file.path(res_dir, "endpoint_metadata.csv"))
+  quit(save = "no", status = 0L)
+}
+
+# The bounded inventory deliberately keeps failed endpoints and all five slots.
+if (cfg$bounded_validation) {
+  if (length(list.files(res_dir))) stop("Bounded results directory must be fresh")
+  pops <- list(higher_order_population("low"), one_factor_population("low"))
+  controls <- c(lapply(cfa_candidates(pops[[1L]]), function(x)
+    list(pop = pops[[1L]], candidate = x)),
+    list(list(pop = pops[[2L]], candidate = cfa_candidates(pops[[2L]])[[1L]])))
+  stopifnot(length(controls) == 5L)
+  plan <- do.call(rbind, lapply(seq_along(controls), function(i) {
+    x <- controls[[i]]
+    data.frame(attempt = i, population = x$pop$name, model = x$candidate$name,
+      syntax = x$candidate$syntax, nobs = sample_stats_from_cov(x$pop$Sigma)$nobs,
+      std_lv = TRUE, estimator = "ML", fitting_options = "omitted",
+      true_reliability = x$pop$true_reliability)
+  }))
+  write_csv(plan, file.path(res_dir, "plan.csv"))
+  inputs <- do.call(rbind, lapply(pops, function(p) {
+    grid <- expand.grid(row = colnames(p$Sigma), column = colnames(p$Sigma))
+    data.frame(population = p$name, grid, Sigma = as.vector(p$Sigma),
+      common = as.vector(p$common))
+  }))
+  write_csv(inputs, file.path(res_dir, "inputs.csv"))
+  script <- sub("^--file=", "", grep("^--file=", commandArgs(), value = TRUE)[1L])
+  pkg <- find.package("magmaanlab")
+  stopifnot(pkg == "/home/jonas/.cache/magmaan-rlib/lane-e/magmaanlab")
+  files <- c(script, file.path(dirname(script), "../../run_experiment.R"),
+    file.path(res_dir, c("plan.csv", "inputs.csv")),
+    file.path(pkg, c("DESCRIPTION", "libs/magmaanlab.so", "R/magmaanlab.rdb")))
+  write_csv(data.frame(path = files, md5 = unname(tools::md5sum(files))),
+    file.path(res_dir, "hashes.csv"))
+  write_csv(data.frame(key = c("started_utc", "command", "R_version", "package_path",
+    "package_version", "baseline", "cap", "optimum_claim"), value = c(
+    format(Sys.time(), tz = "UTC", usetz = TRUE), paste(commandArgs(), collapse = " "),
+    R.version.string, pkg, as.character(packageVersion("magmaanlab")),
+    "ML; std_lv=TRUE; all fitting options omitted; existing n=1000000 convention",
+    "external timeout 180s; one core; serial; nice10; math threads1",
+    "none; no independent optimum validation")), file.path(res_dir, "metadata.csv"))
+  rows <- data.frame(attempt = plan$attempt, population = plan$population,
+    model = plan$model, state = "not_started", converged = NA, optimizer_status = NA_character_,
+    verdict = NA_character_, f_evals = NA_integer_, g_evals = NA_integer_,
+    fmin = NA_real_, reevaluated_fmin = NA_real_, objective_difference = NA_real_,
+    primitive_psd = NA, implied_pd = NA, admissible = NA,
+    omega_main_observed = NA_real_, true_reliability = plan$true_reliability,
+    elapsed_seconds = NA_real_, error = NA_character_)
+  save_rows <- function() write_csv(rows, file.path(res_dir, "attempts.csv"))
+  save_rows()
+  for (i in seq_along(controls)) {
+    x <- controls[[i]]; pop <- x$pop; candidate <- x$candidate
+    rows$state[i] <- "started"; save_rows()
+    cat("Bounded attempt", i, "of 5:", pop$name, candidate$name, "\n")
+    t0 <- proc.time()[["elapsed"]]
+    warnings <- character()
+    fit <- tryCatch(withCallingHandlers(magmaanlab::fit_model(candidate$syntax,
+      sample_stats_from_cov(pop$Sigma), estimator = "ML", std_lv = TRUE),
+      warning = function(w) { warnings <<- c(warnings, conditionMessage(w));
+        invokeRestart("muffleWarning") }), error = function(e) e)
+    if (inherits(fit, "error")) {
+      rows$state[i] <- "error"; rows$error[i] <- conditionMessage(fit)
+    } else {
+      # Raw endpoints are local; compact diagnostic values are frozen separately.
+      saveRDS(fit, file.path(res_dir, paste0("endpoint-", i, ".rds")))
+      raw <- unlist(list(verdict = fit$verdict, audit = fit$audit,
+        diagnostics = fit$diagnostics), recursive = TRUE)
+      write_csv(data.frame(field = names(raw), value = as.character(raw)),
+        file.path(res_dir, paste0("diagnostics-", i, ".csv")))
+      rows$state[i] <- "returned"
+      for (nm in c("converged", "optimizer_status", "f_evals", "g_evals", "fmin"))
+        if (length(fit[[nm]]) == 1L) rows[i, nm] <- fit[[nm]]
+      rows$verdict[i] <- paste(unlist(fit$verdict), collapse = ";")
+      ad <- fit$diagnostics$admissibility
+      rows$primitive_psd[i] <- ad$covariance_matrices_psd
+      rows$implied_pd[i] <- ad$implied_sigma_pd
+      rows$admissible[i] <- ad$admissible
+      save_rows()
+      diagnostic <- tryCatch({
+        endpoint <- getFromNamespace("evaluate_at", "magmaanlab")(fit$partable, sample_stats_from_cov(pop$Sigma),
+          fit$theta, estimator = "ML")
+        rows$reevaluated_fmin[i] <- endpoint$fmin
+        rows$objective_difference[i] <- endpoint$fmin - fit$fmin
+        coeff <- main_factor_coefficients(fit, candidate, colnames(pop$Sigma),
+          blocks_for_p(pop$p))
+        rows$omega_main_observed[i] <- sum(coeff)^2 / sum(pop$Sigma)
+        NULL
+      }, error = function(e) conditionMessage(e))
+      rows$error[i] <- paste(c(warnings, diagnostic), collapse = "; ")
+    }
+    rows$elapsed_seconds[i] <- proc.time()[["elapsed"]] - t0
+    save_rows()
+  }
+  cat("Bounded inventory written to", res_dir, "\n")
+  quit(save = "no", status = 0L)
 }
 
 populations <- make_populations()

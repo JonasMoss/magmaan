@@ -1,0 +1,5 @@
+"key","value"
+"command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=/home/jonas/Files/research/magmaan-lane-g/experiments/showcases/08-reliability-targets/lanes/bell/run_experiment.R --args --endpoint-diagnostics --results-dir /home/jonas/Files/research/magmaan-lane-g/experiments/showcases/08-reliability-targets/results/verification/task-115-population-v1"
+"runner_md5","02310d80b713e8c32a1b5a394318db6f"
+"elapsed_seconds","0.128"
+"recovery","Export lookup corrected; saved endpoints only; no repeated fits; first diagnostic error retained in numeric log"

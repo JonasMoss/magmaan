@@ -1,0 +1,6 @@
+attempt,population,model,historical_converged,historical_fmin,historical_omega,current_fmin,current_omega
+1,higher_order,one_factor,TRUE,0.4742196680388935,0.766041628953616,0.474219668038861,0.766041739765551
+2,higher_order,one_factor_residual_blocks,TRUE,0.0,0.602209301514094,0,0.602209302364222
+3,higher_order,bifactor_blocks,TRUE,0.0,0.602209299350742,0,0.602209289923328
+4,higher_order,higher_order_blocks,TRUE,0.0,0.602209301356851,0,0.602209302362971
+5,one_factor,one_factor,TRUE,-4.440892098500625e-16,0.600098309684921,0,0.600098311765122

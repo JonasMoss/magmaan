@@ -30,6 +30,9 @@ The broader Bell-inspired population examples demonstrate this distinction
 across misspecified structures and plausible CFA choices. These deterministic
 examples show target differences without finite-sample noise. They do not
 estimate coverage, sampling bias or which model an analyst can identify from data.
+The bounded current-package check of five low-reliability controls returned five
+converged, admissible endpoints with matching re-evaluated objectives. This
+validates those endpoints only; reference optima and identification remain unresolved.
 
 ## Evidence
 
@@ -107,6 +110,48 @@ omega must be distinguished. The `congeneric_diagnostics.csv` controls inspect
 rank-one/tetrad closeness; a small discrepancy or CFA spread alone does not
 identify the desired reliability quantity.
 
+### Bounded current-package control validation
+
+The fresh `verification/task-115-population-v1` inventory fixes the existing
+low-reliability higher-order population and its four CFA candidates, plus the
+low-reliability one-factor population with one-factor CFA. Each uses ML,
+`std_lv=TRUE`, the existing population covariance and nominal n=1,000,000;
+all other fitting options are omitted. No draws, retries or optimum searches
+were performed. All five attempts returned: the primitive covariance blocks
+were PSD, the implied covariance was PD, and the package marked them
+admissible and converged. Endpoint re-evaluation reproduced every reported
+original objective exactly at recorded precision.
+
+```{r}
+v <- read_result("verification/task-115-population-v1", "attempts.csv")
+knitr::kable(data.frame(Population = v$population, Model = v$model,
+  Converged = v$converged, Admissible = v$admissible,
+  `Original objective` = v$fmin, `Main-factor reliability` = v$omega_main_observed,
+  `Generating target` = v$true_reliability, check.names = FALSE),
+  digits = 6, row.names = FALSE)
+```
+
+The one-factor fit to the higher-order covariance has objective 0.474220 and
+main-factor functional 0.766042, versus generating target 0.602209. The other
+three higher-order controls have reported objective zero and functionals near
+0.602209. The correct one-factor control gives 0.600098; its optimizer status
+is `line_search_salvaged`, while its convergence verdict passes. Raw statuses,
+evaluation counts, admissibility diagnostics and the frozen historical
+comparison are retained separately in the CSV inventory. For these five controls,
+the largest historical reliability difference is $1.11 \times 10^{-7}$ and
+the largest objective difference is $3.25 \times 10^{-14}$. Fit calls totalled
+0.392 seconds; the saved-endpoint diagnostic recovery adds the time recorded
+in `endpoint_metadata.csv`, within the external numerical budget.
+
+The initial diagnostic API lookup failed on all five saved endpoints. The
+lookup was corrected and diagnostics completed from those endpoints without
+repeating fits; `diagnostic_recovery.csv` preserves these failures. Pre-fit
+syntax, covariance, source and installed-runtime hashes remain frozen. The
+recovery has its own source hash. These are five selected development controls,
+not a validation of every historical cell. No endpoint is asserted to be an
+independently proved reference optimum, and no identification claim or
+spread-of-models inference follows from this table.
+
 ## Caveats
 
 The Bell lane is a population reconstruction and extension inspired by Bell
@@ -131,6 +176,8 @@ with valid standard errors. Neither lane settles near-boundary interval calibrat
 ```sh
 Rscript run_experiment.R --lane coefficients --smoke
 Rscript run_experiment.R --lane bell --smoke --results-dir /tmp/reliability-bell
+R_LIBS=/home/jonas/.cache/magmaan-rlib/lane-e timeout 180s taskset -c 11 nice -n 10 \
+  Rscript run_experiment.R --lane bell --bounded-validation --results-dir /absolute/fresh/run
 quarto render report.qmd
 ```
 

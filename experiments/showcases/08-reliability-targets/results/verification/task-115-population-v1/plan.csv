@@ -1,0 +1,98 @@
+"attempt","population","model","syntax","nobs","std_lv","estimator","fitting_options","true_reliability"
+1,"higher_order","one_factor","f =~ l1*y1 + l2*y2 + l3*y3 + l4*y4 + l5*y5 + l6*y6 + l7*y7 + l8*y8 + l9*y9 + l10*y10 + l11*y11 + l12*y12
+y1 ~~ e1*y1
+y2 ~~ e2*y2
+y3 ~~ e3*y3
+y4 ~~ e4*y4
+y5 ~~ e5*y5
+y6 ~~ e6*y6
+y7 ~~ e7*y7
+y8 ~~ e8*y8
+y9 ~~ e9*y9
+y10 ~~ e10*y10
+y11 ~~ e11*y11
+y12 ~~ e12*y12",1000000,TRUE,"ML","omitted",0.602209302362972
+2,"higher_order","one_factor_residual_blocks","f =~ l1*y1 + l2*y2 + l3*y3 + l4*y4 + l5*y5 + l6*y6 + l7*y7 + l8*y8 + l9*y9 + l10*y10 + l11*y11 + l12*y12
+y1 ~~ e1*y1
+y2 ~~ e2*y2
+y3 ~~ e3*y3
+y4 ~~ e4*y4
+y5 ~~ e5*y5
+y6 ~~ e6*y6
+y7 ~~ e7*y7
+y8 ~~ e8*y8
+y9 ~~ e9*y9
+y10 ~~ e10*y10
+y11 ~~ e11*y11
+y12 ~~ e12*y12
+y1 ~~ c1_1_2*y2
+y1 ~~ c1_1_3*y3
+y2 ~~ c1_2_3*y3
+y4 ~~ c2_4_5*y5
+y4 ~~ c2_4_6*y6
+y5 ~~ c2_5_6*y6
+y7 ~~ c3_7_8*y8
+y7 ~~ c3_7_9*y9
+y8 ~~ c3_8_9*y9
+y10 ~~ c4_10_11*y11
+y10 ~~ c4_10_12*y12
+y11 ~~ c4_11_12*y12",1000000,TRUE,"ML","omitted",0.602209302362972
+3,"higher_order","bifactor_blocks","g =~ l1*y1 + l2*y2 + l3*y3 + l4*y4 + l5*y5 + l6*y6 + l7*y7 + l8*y8 + l9*y9 + l10*y10 + l11*y11 + l12*y12
+s1 =~ a1_1*y1 + a1_2*y2 + a1_3*y3
+s2 =~ a2_4*y4 + a2_5*y5 + a2_6*y6
+s3 =~ a3_7*y7 + a3_8*y8 + a3_9*y9
+s4 =~ a4_10*y10 + a4_11*y11 + a4_12*y12
+g ~~ 0*s1
+g ~~ 0*s2
+g ~~ 0*s3
+g ~~ 0*s4
+s1 ~~ 0*s2
+s1 ~~ 0*s3
+s1 ~~ 0*s4
+s2 ~~ 0*s3
+s2 ~~ 0*s4
+s3 ~~ 0*s4
+y1 ~~ e1*y1
+y2 ~~ e2*y2
+y3 ~~ e3*y3
+y4 ~~ e4*y4
+y5 ~~ e5*y5
+y6 ~~ e6*y6
+y7 ~~ e7*y7
+y8 ~~ e8*y8
+y9 ~~ e9*y9
+y10 ~~ e10*y10
+y11 ~~ e11*y11
+y12 ~~ e12*y12",1000000,TRUE,"ML","omitted",0.602209302362972
+4,"higher_order","higher_order_blocks","f1 =~ a1*y1 + a2*y2 + a3*y3
+f2 =~ a4*y4 + a5*y5 + a6*y6
+f3 =~ a7*y7 + a8*y8 + a9*y9
+f4 =~ a10*y10 + a11*y11 + a12*y12
+h =~ g1*f1 + g2*f2 + g3*f3 + g4*f4
+f1 ~~ 0*f2
+f1 ~~ 0*f3
+f1 ~~ 0*f4
+f2 ~~ 0*f3
+f2 ~~ 0*f4
+f3 ~~ 0*f4
+y1 ~~ e1*y1
+y2 ~~ e2*y2
+y3 ~~ e3*y3
+y4 ~~ e4*y4
+y5 ~~ e5*y5
+y6 ~~ e6*y6
+y7 ~~ e7*y7
+y8 ~~ e8*y8
+y9 ~~ e9*y9
+y10 ~~ e10*y10
+y11 ~~ e11*y11
+y12 ~~ e12*y12",1000000,TRUE,"ML","omitted",0.602209302362972
+5,"one_factor","one_factor","f =~ l1*y1 + l2*y2 + l3*y3 + l4*y4 + l5*y5 + l6*y6 + l7*y7 + l8*y8
+y1 ~~ e1*y1
+y2 ~~ e2*y2
+y3 ~~ e3*y3
+y4 ~~ e4*y4
+y5 ~~ e5*y5
+y6 ~~ e6*y6
+y7 ~~ e7*y7
+y8 ~~ e8*y8",1000000,TRUE,"ML","omitted",0.60009831119482
