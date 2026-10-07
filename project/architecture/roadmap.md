@@ -400,7 +400,8 @@ policy point indices with fixed row sets per estimator (TASK-102);
 `fit_measures(fit, lavaan_compat = ...)` reproduces lavaan's fitMeasures for
 complete-data ML/MLM/MLR and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS with
 analytic categorical baselines (TASK-109; same-point parity 1e-6); FIML
-bundles are typed unavailable pending TASK-110.
+bundles use 1e-10 H1 EM solves in the compatibility path and match lavaan at
+1e-6 (TASK-110; the native 1e-5 H1 tolerance was the cause).
 
 2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
 (TASK-71): exact first-stage IJ covariance, the global n F test with the All
