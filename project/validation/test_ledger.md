@@ -899,6 +899,20 @@ and the unchanged numerical corpus gate pass. The latter remains 50/68 accepted,
 44 matched, six unsupported fitting routes and zero failures. Tracking, layering
 and whitespace checks pass.
 
+**FIML compatibility fit measures disagreed with lavaan by up to 1.4e-5.**
+Regression: magmaan's saturated H1 EM stopped at a 1e-5 parameter-update
+tolerance, leaving mean/covariance errors near 1.5e-5. Likelihoods were
+converged (second order), but residuals, information traces and robust tails
+move to first order in the moments, so SRMR (1.2e-6), MLR scaling (1.1e-6
+relative) and the robust not-close p-value (1.38e-5) missed lavaan on HS
+x1:x6 with MAR missingness (seed 109). Compatibility inference and fit
+measures now solve H1 to 1e-10 (gaps below 2e-10); native H1 defaults are
+unchanged. The oracle was correct (TASK-110).
+Guard: `r-package/tests/testthat/test_convention_fit_measures.R` checks H1
+moments at 1e-9 and every exposed ML/MLR measure at 1e-6, with both lavaan and
+magmaan H1 EM tolerance 1e-10, plus a grouped-missingness baseline gate.
+Scope: native (policy) FIML still uses the 1e-5 H1 tolerance.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
