@@ -378,7 +378,9 @@ optional `test = "lr"` refits via lab `policy_mi_refit()` and the nested
 policy (TASK-99). ML/FIML robust MI and releases project nuisance scores with
 observed sensitivity and use the expected metric, bread and EPC, so saddle
 directions keep their generalized score statistic (TASK-106; HS reports all
-54 candidates); regressions are TASK-105.
+54 candidates). Candidates include absent structural regressions, reverse
+paths among them as lavaan proposes, through model-triple augmentation with
+typed unidentified rows (TASK-105).
 `summary(fit, standardized = TRUE)` adds std.lv/std.all estimates with
 delta-method SEs from the active covariance and an R-squared table (lab
 `standardized_rows()`), lavaan-gated at matching covariance (TASK-98).
