@@ -38,8 +38,10 @@ and robust test calibration (battery/mechanisms/diagnostics). The finite-sample
 GOF probes share one banked study with distinct DGPs. Redundant ordinal probes
 were removed after naming maintained regression checks; the unrun fixed-rank
 flip harness is replaced by a trigger entry in the speculative backlog.
-The Bell main population targets reproduce, while historical alternative-CFA
-sensitivity fits need convergence/objective revalidation (see the active backlog).
+The Bell main population targets reproduce; the five selected low-reliability
+alternative-CFA/control fits passed bounded convergence, admissibility and
+objective revalidation (TASK-115). Other historical cells, reference optima and
+identification remain unresolved (see the active backlog).
 Dedicated pairwise efficiency/speed/composite probes have been removed at the
 user's request; existing API regression gates remain. FIML global tests now share
 research/active/44 (SEM, geometry and banked legacy lanes), while nested invariance
@@ -332,6 +334,11 @@ consumer/dependency decisions and preserves shared primitives; parking
 SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
+
+The additive frontier objective-coordinate scale helper is banked and gated by
+independent GN and unit-transport checks (TASK-33.10.5.4.1). It is unwired;
+fit integration and opt-in selection remain in TASK-33.10.5.4, with fitting
+ownership reserved for TASK-33.3. Existing fitting defaults are unchanged.
 
 2026-10-07: three lane fixes merged. (1) PORT and PORT-NLS adapters now
 return matching point/objective pairs: they recover the best evaluated point
