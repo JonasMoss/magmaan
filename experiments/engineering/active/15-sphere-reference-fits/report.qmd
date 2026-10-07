@@ -54,7 +54,20 @@ execute:
 
 ```{r}
 #| results: asis
-if (identical(params$lane, "port_nls")) {
+if (identical(params$lane, "start_portfolio")) {
+  cat("## Question\n\nCan two sample-only producers supply reproducible starts for a broader three-factor CFA, and what do native versus mixed units cost?\n\n")
+  cat("## Short answer\n\nAll four stock ULS fits returned finite admissible endpoints with exact start provenance. Both native-unit endpoints passed the default and verified Newton checks; both mixed-unit endpoints failed. Layered reduced the mixed-unit Newton distance from 2.14 to 0.85, still above the unchanged 0.01 budget. This paired pilot establishes construction/provenance feasibility, not reliability or default adoption.\n\n## Evidence\n\n")
+  root <- "results/start-portfolio-pilot-v1"
+  if(!file.exists(file.path(root,"observations.csv"))) stop("Run Rscript run_experiment.R --start-portfolio-pilot under timeout 180s")
+  d <- read.csv(file.path(root,"observations.csv"))
+  print(knitr::kable(data.frame(Units=d$unit,Start=d$arm,Default=d$default_converged,
+    Verified=d$verified_status,Objective=signif(d$objective,7),Distance=signif(d$distance,4),
+    `Fit seconds`=d$fit_seconds,`Audit seconds`=d$audit_seconds),check.names=FALSE))
+  cat("\nConstruction was below the process timer's resolution (recorded as zero); the four-fit serial runner took 0.34 seconds, including 0.304 seconds of fitting. Corrected separate endpoint audits took 0.054 seconds. The original boxed audit calls were unsupported; they remain saved locally, and no endpoint was refitted. The final runner requests unbounded geometry only for the separate audit, preserving the actual fit defaults.\n\n")
+  cat("## Caveats\n\nExactly one n=200 Gaussian draw (seed 202610071) was used twice: unchanged and with indicator multipliers (1, 0.1, 10) repeated per factor. Covariances are centered with denominator $n$. The CFA has three factors, three indicators each, marker loadings one, other population loadings 0.8/0.6, latent variances one/correlations 0.25 and residual variances 0.6. ULS targets retain their original units; objectives across unit transforms are not directly comparable. Native FABIN3 and layered vectors were constructed for both inputs before any fit; there were no duplicate vectors, fallbacks, notes, warnings or errors. All primitive endpoint variances were positive and both primitive covariance matrices were PSD. Optimizer status was converged for all four, but this did not override failed mixed-unit convergence audits. Structural identification is not verified by this pre-TASK-33.3 runtime. No qualified endpoint exists for the mixed input.\n\n")
+  cat("Compact observations, producer attributes, timing, metadata and summary are frozen for this bounded diagnostic; raw arrays, starts, inputs, audits and per-attempt records remain ignored. Input CSV hashes and source fingerprint are in metadata.\n\nThe smallest proposed extension is two prospectively seeded higher-order CFA draws, each paired in native/mixed units, with the same P2 arms: four inputs and eight fits. Twice this pilot's measured total plus corrected audits is about 0.8 seconds; this is a size-based projection, not a higher-order family timing measurement. Allow a 180-second external cap, retain partial rows, and approve the higher-order specification and fresh seeds before launch. No additional run has been launched.\n\n## Reproduce\n\n```sh\nR_LIBS=~/.cache/magmaan-rlib/lane-e OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 timeout 180s Rscript run_experiment.R --start-portfolio-pilot\nquarto render report.qmd -P lane:start_portfolio\n```\n\nRun inside the shared magmaan-work.slice through lane-start. The fixed run ID refuses overwrite; preserve existing evidence before reproducing in a fresh checkout.\n")
+  knitr::knit_exit()
+} else if (identical(params$lane, "port_nls")) {
   read_port <- function(run, file="comparisons.csv") {
     path <- file.path("results",run,file)
     if(!file.exists(path)) stop("Missing endpoint evidence: ",path,"; run --port-nls-witnesses with --probe")

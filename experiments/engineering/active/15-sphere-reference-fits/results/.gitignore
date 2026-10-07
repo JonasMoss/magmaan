@@ -674,3 +674,12 @@ port-regression-before/*
 port-regression-after/*
 !port-regression-after/comparisons.csv
 !port-regression-after/metadata.csv
+
+# Tiny frozen paired producer/cost pilot; raw inputs, starts and attempts ignored.
+!start-portfolio-pilot-v1/
+start-portfolio-pilot-v1/*
+!start-portfolio-pilot-v1/observations.csv
+!start-portfolio-pilot-v1/producers.csv
+!start-portfolio-pilot-v1/summary.csv
+!start-portfolio-pilot-v1/timing.csv
+!start-portfolio-pilot-v1/metadata.csv
