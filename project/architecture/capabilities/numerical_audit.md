@@ -215,3 +215,22 @@ that needs no NACOV, rather than substituting an estimated sampling sandwich.
 The explicit point artifact is ambient; active bounds and nonlinear constraints
 need their applicable route. Thresholds are included in full even when fitting
 profiled them. No new propagated ordinal construction certificate is supplied.
+
+#### Complete-data admissibility oracle validation
+
+`cpp/tests/fixtures/admissibility/reference.json` retains a synthetic marker-CFA
+ML improper fit and proper paired control from pinned lavaan 0.7.2. Both backend
+fits converge and have PD implied covariance; only the improper endpoint has a
+negative residual variance and fails the oracle post-check. Warning messages are
+retained from both fitting and the explicit post-check (hence the repeated
+improper warning). The generator independently verifies sample determinants and
+exact marker implied-moment algebra before fitting and accepts a temporary output
+directory for byte-identical regeneration.
+
+The focused `fit_diagnostics_test.cpp` consumer builds the structure/names/starts
+triple and matrix representation, aligns every oracle row by lhs/op/rhs/group,
+and evaluates `finalize_fit_diagnostics` at retained oracle theta. It checks the
+negative x1 residual row, primitive covariance PSD, implied-Sigma PD and the
+proper control independently of retained convergence. This is an endpoint
+diagnostics gate; C++ optimizer recovery, experiment checkpoint attachment and
+composite attachment remain separate work.

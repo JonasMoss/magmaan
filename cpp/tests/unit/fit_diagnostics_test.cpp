@@ -1,6 +1,10 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <fstream>
+#include <sstream>
+#include <nlohmann/json.hpp>
+#include <Eigen/Cholesky>
 #include <string_view>
 #include <utility>
 
@@ -413,5 +417,118 @@ TEST_CASE("common fit verdict normalizes total objectives and gradients together
     CHECK(total.objective.reported == doctest::Approx(reference.objective.reported));
     CHECK(total.geometric_stationarity.ambient_residual_l2 ==
           doctest::Approx(reference.geometric_stationarity.ambient_residual_l2));
+  }
+}
+
+
+TEST_CASE("admissibility oracle: keyed complete-data improper and proper endpoints") {
+  std::ifstream input(std::string(MAGMAAN_FIXTURES_DIR) +
+                      "/admissibility/reference.json");
+  REQUIRE(input.is_open());
+  std::stringstream buffer;
+  buffer << input.rdbuf();
+  const auto fixture = nlohmann::json::parse(buffer.str(), nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+  CHECK(fixture["provenance"]["lavaan_version"] == "0.7.2");
+  CHECK(fixture["options"]["estimator"] == "ML");
+  CHECK(fixture["options"]["sample.nobs"] == 500);
+  CHECK(fixture["options"]["meanstructure"] == false);
+  CHECK(fixture["options"]["sample.cov.rescale"] == false);
+  CHECK(fixture["options"]["std.lv"] == false);
+  REQUIRE(fixture["cases"].size() == 2u);
+  for (const auto& oracle : fixture["cases"]) {
+    const bool improper = oracle["case_id"] == "improper";
+    CAPTURE(improper);
+    // These are retained lavaan backend statuses, not a C++ optimizer claim.
+    CHECK(oracle["converged"] == true);
+    CHECK(oracle["post_check"] == !improper);
+    CHECK(oracle["warnings"].empty() == !improper);
+    if (improper) {
+      CHECK(oracle["warnings"][0].get<std::string>().find(
+                "estimated ov variances are negative") != std::string::npos);
+    }
+    auto parsed = Parser::parse(oracle["model"].get<std::string>());
+    REQUIRE(parsed.has_value());
+    magmaan::spec::LatentNames names;
+    magmaan::spec::Starts starts;
+    auto structure = build(*parsed, {}, &starts, &names);
+    REQUIRE(structure.has_value());
+    auto rep = magmaan::model::build_matrix_rep(*structure);
+    REQUIRE(rep.has_value());
+    auto evaluator = ModelEvaluator::build(*structure, *rep);
+    REQUIRE(evaluator.has_value());
+    auto constraints = build_eq_constraints(*structure);
+    REQUIRE(constraints.has_value());
+    auto nonlinear = build_nl_constraints(*structure);
+    Eigen::VectorXd theta = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(evaluator->n_free()));
+    std::size_t marker_residual_row = structure->free.size();
+    REQUIRE(oracle["parameters"].size() == structure->free.size());
+    for (std::size_t row = 0; row < structure->free.size(); ++row) {
+      const auto op = magmaan::parse::to_string(structure->op[row]);
+      const nlohmann::json* matched = nullptr;
+      for (const auto& parameter : oracle["parameters"]) {
+        if (parameter["lhs"] == names.row_lhs[row] &&
+            parameter["op"] == op && parameter["rhs"] == names.row_rhs[row] &&
+            parameter["group"] == structure->group[row]) {
+          REQUIRE(matched == nullptr);
+          matched = &parameter;
+        }
+      }
+      REQUIRE(matched != nullptr);
+      const double estimate = (*matched)["est"].get<double>();
+      CHECK(((*matched)["free"].get<int>() > 0) == (structure->free[row] > 0));
+      if (structure->free[row] > 0) {
+        theta(structure->free[row] - 1) = estimate;
+      } else {
+        CHECK(estimate == doctest::Approx(structure->fixed_value[row]));
+      }
+      // Independent analytic expectations by variable identity, never row order.
+      double expected = 0.0;
+      if (op == "=~") {
+        const int index = names.row_rhs[row].back() - '1';
+        expected = oracle["analytic"]["lambda"][static_cast<std::size_t>(index)].get<double>();
+      } else if (names.row_lhs[row] == "f") {
+        expected = oracle["analytic"]["psi"].get<double>();
+      } else {
+        const int index = names.row_lhs[row].back() - '1';
+        expected = oracle["analytic"]["residual"][static_cast<std::size_t>(index)].get<double>();
+      }
+      CHECK(std::abs(estimate - expected) < 2e-7);
+      if (names.row_lhs[row] == "x1" && op == "~~" &&
+          names.row_rhs[row] == "x1") marker_residual_row = row;
+    }
+    REQUIRE(marker_residual_row < structure->free.size());
+    CHECK(theta(structure->free[marker_residual_row] - 1) ==
+          doctest::Approx(improper ? -17.0 / 15.0 : 0.25).epsilon(2e-7));
+    auto implied = evaluator->sigma(theta);
+    REQUIRE(implied.has_value());
+    REQUIRE(implied->sigma.size() == 1u);
+    const auto& sigma = implied->sigma[0];
+    CHECK(Eigen::LLT<Eigen::MatrixXd>(sigma).info() == Eigen::Success);
+    for (Eigen::Index r = 0; r < 3; ++r) {
+      for (Eigen::Index c = 0; c < 3; ++c) {
+        CHECK(std::abs(sigma(r, c) - oracle["implied_cov"][static_cast<std::size_t>(r)][static_cast<std::size_t>(c)].get<double>()) < 1e-12);
+        CHECK(std::abs(sigma(r, c) - oracle["sample_cov"][static_cast<std::size_t>(r)][static_cast<std::size_t>(c)].get<double>()) < 2e-7);
+      }
+    }
+    CHECK(std::abs(oracle["criterion"]["value"].get<double>()) < 1e-12);
+    const auto diagnostics = finalize_fit_diagnostics(
+        theta, *structure, *evaluator, *constraints, nonlinear, Bounds{});
+    CHECK(diagnostics.sigma_pd_all);
+    CHECK(diagnostics.admissibility.checked);
+    CHECK(diagnostics.admissibility.implied_sigma_pd);
+    CHECK(diagnostics.admissibility.admissible == !improper);
+    CHECK(diagnostics.admissibility.covariance_matrices_psd == !improper);
+    REQUIRE(diagnostics.admissibility.theta_blocks.size() == 1u);
+    REQUIRE(diagnostics.admissibility.psi_blocks.size() == 1u);
+    CHECK(diagnostics.admissibility.psi_blocks[0].psd);
+    const auto& residual_block = diagnostics.admissibility.theta_blocks[0];
+    CHECK(residual_block.psd == !improper);
+    if (improper) {
+      REQUIRE(residual_block.negative_variance_rows.size() == 1u);
+      CHECK(residual_block.negative_variance_rows[0] == marker_residual_row);
+    } else {
+      CHECK(residual_block.negative_variance_rows.empty());
+    }
   }
 }

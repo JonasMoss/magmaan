@@ -1197,10 +1197,12 @@ ordinary-user default.
   reproduced; any rank/df or inference-policy change needs a separate scoped
   investigation, without changing this fixture or its acceptance.
 
-- [ ] **S — finish admissibility fixtures/checkpoints.** Add an oracle warning-
-  status witness for an improper complete-data fit; carry audit flags into
-  experiments when their runners next change. **Check:** improper/admissible
-  controls with convergence/domain kept separate. Composite attachment is deferred.
+- [ ] **S — finish admissibility fixtures/checkpoints.** Complete-data oracle
+  warning-status phase is banked: the synthetic three-indicator ML pair retains
+  lavaan convergence, post-check warnings, keyed estimates and implied covariance.
+  At-oracle-theta C++ gates separate negative residual admissibility from PD
+  implied Sigma and retained backend convergence. Carry audit flags into
+  experiments when their runners next change; composite attachment is deferred.
 
 - [x] **S — validate `sqrt` in defined parameters.** EBNF, parser and AD
   already support it. Fixed-theta effects gates check values, correlated delta

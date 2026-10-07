@@ -1,0 +1,202 @@
+{
+  "provenance": {
+    "generator": "cpp/tests/tools/regen_admissibility_fixtures.R",
+    "source": "synthetic complete-data summary covariance",
+    "lavaan_version": "0.7.2"
+  },
+  "options": {
+    "estimator": "ML",
+    "meanstructure": false,
+    "sample.cov.rescale": false,
+    "std.lv": false,
+    "sample.nobs": 500,
+    "se": "none",
+    "test": "none"
+  },
+  "cases": [
+    {
+      "case_id": "improper",
+      "model": "f =~ x1 + x2 + x3",
+      "sample_cov": [
+        [1, 0.8, 0.8],
+        [0.8, 1, 0.3],
+        [0.8, 0.3, 1]
+      ],
+      "analytic": {
+        "determinant": 0.0139999999999996,
+        "lambda": [1, 0.375, 0.375],
+        "psi": 2.13333333333333,
+        "residual": [-1.13333333333333, 0.7, 0.7]
+      },
+      "converged": true,
+      "post_check": false,
+      "warnings": ["lavaan->lav_object_post_check():  \n   some estimated ov variances are negative", "lavaan->lav_object_post_check():  \n   some estimated ov variances are negative"],
+      "parameters": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "group": 1,
+          "free": 0,
+          "start": 1,
+          "est": 1
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "group": 1,
+          "free": 1,
+          "start": 0.375,
+          "est": 0.375000019055361
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "group": 1,
+          "free": 2,
+          "start": 0.375,
+          "est": 0.375000021906325
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "group": 1,
+          "free": 3,
+          "start": 0.5,
+          "est": -1.13333325347832
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "group": 1,
+          "free": 4,
+          "start": 0.5,
+          "est": 0.699999985741291
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "group": 1,
+          "free": 5,
+          "start": 0.5,
+          "est": 0.699999994380147
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "group": 1,
+          "free": 6,
+          "start": 0.05,
+          "est": 2.13333328472448
+        }
+      ],
+      "implied_cov": [
+        [1.00000003124615, 0.800000022423114, 0.800000028505171],
+        [0.800000022423114, 1.00000000939425, 0.300000025933728],
+        [0.800000028505171, 0.300000025933728, 1.00000002259465]
+      ],
+      "criterion": {
+        "name": "lavaan fmin (half ML discrepancy)",
+        "value": 0
+      }
+    },
+    {
+      "case_id": "proper",
+      "model": "f =~ x1 + x2 + x3",
+      "sample_cov": [
+        [1, 0.6, 0.5],
+        [0.6, 1, 0.4],
+        [0.5, 0.4, 1]
+      ],
+      "analytic": {
+        "determinant": 0.47,
+        "lambda": [1, 0.8, 0.666666666666667],
+        "psi": 0.75,
+        "residual": [0.25, 0.52, 0.666666666666667]
+      },
+      "converged": true,
+      "post_check": true,
+      "warnings": [],
+      "parameters": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "group": 1,
+          "free": 0,
+          "start": 1,
+          "est": 1
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "group": 1,
+          "free": 1,
+          "start": 0.8,
+          "est": 0.799999991578657
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "group": 1,
+          "free": 2,
+          "start": 0.666666666666667,
+          "est": 0.666666662050364
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "group": 1,
+          "free": 3,
+          "start": 0.5,
+          "est": 0.249999991757029
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "group": 1,
+          "free": 4,
+          "start": 0.5,
+          "est": 0.519999984347681
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "group": 1,
+          "free": 5,
+          "start": 0.5,
+          "est": 0.666666677080662
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "group": 1,
+          "free": 6,
+          "start": 0.05,
+          "est": 0.749999991970411
+        }
+      ],
+      "implied_cov": [
+        [0.99999998372744, 0.599999987260322, 0.499999991184714],
+        [0.599999987260322, 0.999999969103133, 0.3999999887371],
+        [0.499999991184714, 0.3999999887371, 1.00000000222899]
+      ],
+      "criterion": {
+        "name": "lavaan fmin (half ML discrepancy)",
+        "value": 4.44089209850063e-16
+      }
+    }
+  ]
+}
