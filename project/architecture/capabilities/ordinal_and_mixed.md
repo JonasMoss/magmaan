@@ -390,7 +390,12 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   `ordinal_workspace_from_integer_data()`: fit-only ULS returns
   `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus
   the Gamma diagonal, and WLS/fit-plus-inference still fall back to full
-  `OrdinalStats`/Gamma materialization. `experiments/_archive/ordinal-snlls-speed`
+  `OrdinalStats`/Gamma materialization. Raw all-ordinal DWLS
+  fit-plus-inference retains full Gamma and DWLS weights without requesting
+  the unused full-WLS inverse. Cache conversion marks WLS weights available
+  only for nonempty matrices; skipped or failed inverse placeholders remain
+  unavailable and the existing ensure helper computes or rejects them on demand.
+  `experiments/_archive/ordinal-snlls-speed`
   now includes delta/theta timing rows plus construction-aware raw-to-SNLLS
   rows: the legacy row rebuilds `OrdinalStats`/moments/starts/cache inside the
   timed operation, while the lazy ULS/DWLS row rebuilds `OrdinalWorkspace`,

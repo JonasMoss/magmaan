@@ -1096,6 +1096,14 @@ ordinary-user default.
 
 ### Ordinal weight storage and workspace cleanup
 
+- [x] **TASK-123 — skip unused full-WLS inversion in DWLS inference workspaces.**
+  Raw complete-data `FitPlusInference` DWLS retains full Gamma and DWLS weights
+  without constructing the WLS inverse. Cache WLS availability requires a
+  nonempty payload, including when a requested inverse fails on singular Gamma.
+  Focused workspace gates cover full-Gamma agreement, deferred inverse creation,
+  singular Gamma with valid diagonals, lazy fitting and robust cache reporting.
+  Direct fit-only materialization and diagonal storage remain open below.
+
 - [ ] **M — retain diagonal DWLS storage.** Give `W_dwls` a diagonal type;
   remove unnecessary `Ws`/`factors` from `build_joint_profiled_workspace`.
   **Check:** staged/direct bounded and SNLLS agreement without unnecessary dense

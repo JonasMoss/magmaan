@@ -87,6 +87,19 @@ TEST_CASE("Ordinal workspace adapters split moments from Gamma cache") {
   CHECK(cache.blocks[0].has_wls_weight);
   CHECK(cache.blocks[0].gamma.isApprox(gamma, 0.0));
   CHECK(cache.blocks[0].diagonal.isApprox(gamma.diagonal(), 0.0));
+
+  for (bool placeholder : {false, true}) {
+    CAPTURE(placeholder);
+    stats.W_wls.clear();
+    if (placeholder) stats.W_wls.emplace_back();
+    auto deferred = magmaan::data::ordinal_gamma_cache_from_stats(stats);
+    CHECK_FALSE(deferred.blocks[0].has_wls_weight);
+    CHECK(deferred.blocks[0].w_wls.size() == 0);
+    REQUIRE(magmaan::data::ordinal_gamma_cache_ensure_wls_weights(deferred)
+                .has_value());
+    CHECK(deferred.blocks[0].has_wls_weight);
+    CHECK(deferred.blocks[0].w_wls.isApprox(gamma.inverse(), 1e-12));
+  }
 }
 
 TEST_CASE("OrdinalGammaCache can materialize DWLS without full Gamma") {
@@ -185,6 +198,58 @@ TEST_CASE("Ordinal raw workspace builder honors fit-only materialization") {
   REQUIRE(wls->gamma_cache.block_count() == 1);
   CHECK(wls->gamma_cache.blocks[0].has_full);
   CHECK(wls->gamma_cache.blocks[0].has_wls_weight);
+
+  auto inference_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitPlusInference,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto inference =
+      magmaan::data::ordinal_workspace_from_integer_data({X}, inference_plan);
+  REQUIRE(inference.has_value());
+  const auto& block = inference->gamma_cache.blocks[0];
+  CHECK(block.has_full);
+  CHECK(block.has_diagonal);
+  CHECK(block.has_dwls_weight);
+  CHECK_FALSE(block.has_wls_weight);
+  CHECK(block.w_wls.size() == 0);
+  CHECK(block.gamma.isApprox(legacy->NACOV[0], 0.0));
+  CHECK(block.diagonal.isApprox(legacy->NACOV[0].diagonal(), 0.0));
+  CHECK(block.w_dwls.isApprox(legacy->W_dwls[0], 0.0));
+  CHECK(inference->moments.R[0].isApprox(legacy->R[0], 0.0));
+  CHECK(inference->moments.thresholds[0].isApprox(legacy->thresholds[0], 0.0));
+}
+
+TEST_CASE("Ordinal inference workspace keeps singular Gamma without a WLS weight") {
+  using namespace magmaan::data;
+  // Four cases and six moments give rank-deficient Gamma with valid diagonals.
+  Eigen::MatrixXd X(4, 3);
+  X << 1, 1, 1,
+       1, 2, 2,
+       2, 1, 2,
+       2, 2, 1;
+  auto stats = ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->W_wls[0].size() == 0);
+  CHECK((stats->NACOV[0].diagonal().array() > 0.0).all());
+  auto cache = ordinal_gamma_cache_from_stats(*stats);
+  CHECK_FALSE(cache.blocks[0].has_wls_weight);
+  CHECK_FALSE(ordinal_gamma_cache_ensure_wls_weights(cache).has_value());
+  CHECK_FALSE(cache.blocks[0].has_wls_weight);
+  CHECK(cache.blocks[0].w_wls.size() == 0);
+
+  for (auto estimator : {OrdinalEstimatorKind::DWLS, OrdinalEstimatorKind::WLS}) {
+    auto plan = ordinal_weight_plan(OrdinalWorkspacePurpose::FitPlusInference,
+                                   estimator);
+    auto workspace = ordinal_workspace_from_integer_data({X}, plan);
+    REQUIRE(workspace.has_value());
+    const auto& block = workspace->gamma_cache.blocks[0];
+    CHECK(block.has_full);
+    CHECK(block.has_diagonal);
+    CHECK(block.has_dwls_weight);
+    CHECK_FALSE(block.has_wls_weight);
+    CHECK(block.w_wls.size() == 0);
+    CHECK(block.gamma.isApprox(stats->NACOV[0], 0.0));
+    CHECK(block.w_dwls.isApprox(stats->W_dwls[0], 0.0));
+  }
 }
 
 TEST_CASE("Cached ordinal DWLS fit consumes lazy raw workspace diagonal") {
@@ -336,10 +401,14 @@ TEST_CASE("Cached ordinal DWLS fit-plus-inference reuses Gamma for robust report
   REQUIRE(stats.has_value());
   auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
 
-  magmaan::data::OrdinalGammaCache fit_cache;
-  fit_cache.blocks.resize(1);
-  fit_cache.blocks[0].gamma = stats->NACOV[0];
-  fit_cache.blocks[0].has_full = true;
+  auto workspace = magmaan::data::ordinal_workspace_from_integer_data(
+      {X}, magmaan::data::ordinal_weight_plan(
+               magmaan::data::OrdinalWorkspacePurpose::FitPlusInference,
+               magmaan::data::OrdinalEstimatorKind::DWLS));
+  REQUIRE(workspace.has_value());
+  auto fit_cache = std::move(workspace->gamma_cache);
+  CHECK_FALSE(fit_cache.blocks[0].has_wls_weight);
+  CHECK(fit_cache.blocks[0].w_wls.size() == 0);
 
   const char* syntax =
       "f =~ x1 + x2 + x3 + x4\n"

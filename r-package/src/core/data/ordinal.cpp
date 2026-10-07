@@ -1010,7 +1010,7 @@ OrdinalGammaCache ordinal_gamma_cache_from_stats(const OrdinalStats& stats) {
       block.w_dwls = stats.W_dwls[b];
       block.has_dwls_weight = true;
     }
-    if (b < stats.W_wls.size()) {
+    if (b < stats.W_wls.size() && stats.W_wls[b].size() > 0) {
       block.w_wls = stats.W_wls[b];
       block.has_wls_weight = true;
     }
@@ -1154,7 +1154,11 @@ post_expected<OrdinalWorkspace> ordinal_workspace_from_integer_data(
       plan.estimator == OrdinalEstimatorKind::DWLS &&
       plan.materialization == OrdinalGammaMaterialization::Diagonal;
   if (!lazy_fit_only_uls && !lazy_fit_only_dwls) {
-    auto stats_or = ordinal_stats_from_integer_data(Xs);
+    // DWLS inference consumes full Gamma, but never its full-WLS inverse.
+    const bool full_wls_weight =
+        !(plan.purpose == OrdinalWorkspacePurpose::FitPlusInference &&
+          plan.estimator == OrdinalEstimatorKind::DWLS);
+    auto stats_or = ordinal_stats_from_integer_data(Xs, full_wls_weight);
     if (!stats_or.has_value()) return std::unexpected(stats_or.error());
     return OrdinalWorkspace{
         .moments = ordinal_moments_from_stats(*stats_or),
