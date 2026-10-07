@@ -1561,44 +1561,98 @@ double chi2_pvalue(double chi2, int df) noexcept {
 
 namespace {
 
-double central_chisq_cdf_half(double a, double x) noexcept {
-  if (x <= 0.0) return 0.0;
-  if (x < a + 1.0) return gamma_p_series(a, x);
-  return 1.0 - gamma_q_cfrac(a, x);
+// Bounded, extended-precision kernel for the single mixture anchor. The
+// shared 200-step kernels can truncate the series near a large shape's mode.
+double central_chisq_cdf_half(double shape, double value) noexcept {
+  if (value <= 0.0) return 0.0;
+  if (shape > 1000000.0) return std::numeric_limits<double>::quiet_NaN();
+  const long double a = static_cast<long double>(shape);
+  const long double x = static_cast<long double>(value);
+  const long double factor = std::exp(-x + a * std::log(x) - std::lgamma(a));
+  constexpr int max_steps = 20000;
+  if (x < a + 1.0L) {
+    long double term = 1.0L / a, sum = term;
+    for (int n = 1; n <= max_steps; ++n) {
+      term *= x / (a + n);
+      sum += term;
+      if (term < sum * 1e-18L) return static_cast<double>(sum * factor);
+    }
+  } else {
+    constexpr long double tiny = 1e-300L;
+    long double b = x + 1.0L - a, c = 1.0L / tiny;
+    long double d = 1.0L / b, h = d;
+    for (int n = 1; n <= max_steps; ++n) {
+      const long double an = -static_cast<long double>(n) * (n - a);
+      b += 2.0L;
+      d = an * d + b;
+      if (std::abs(d) < tiny) d = tiny;
+      c = b + an / c;
+      if (std::abs(c) < tiny) c = tiny;
+      d = 1.0L / d;
+      const long double delta = d * c;
+      h *= delta;
+      if (std::abs(delta - 1.0L) < 1e-18L)
+        return static_cast<double>(1.0L - h * factor);
+    }
+  }
+  return std::numeric_limits<double>::quiet_NaN();
 }
 
 }  // namespace
 
 double noncentral_chisq_cdf(double x, double df, double ncp) noexcept {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
   if (!(df > 0.0) || ncp < 0.0 || !std::isfinite(x) || !std::isfinite(df) ||
-      !std::isfinite(ncp)) {
-    return std::numeric_limits<double>::quiet_NaN();
-  }
+      !std::isfinite(ncp)) return nan;
   if (x <= 0.0) return 0.0;
-  const double a0 = 0.5 * df;
-  const double xh = 0.5 * x;
+  const double a0 = 0.5 * df, xh = 0.5 * x;
   if (ncp == 0.0) return std::clamp(central_chisq_cdf_half(a0, xh), 0.0, 1.0);
 
-  const double lh     = 0.5 * ncp;
-  const double log_lh = std::log(lh);
-  const long   j_mode = static_cast<long>(lh);
-  auto log_w = [&](long j) {
-    return -lh + static_cast<double>(j) * log_lh -
-           std::lgamma(static_cast<double>(j) + 1.0);
-  };
-  double sum = 0.0;
-  for (long j = j_mode; ; ++j) {
-    const double w = std::exp(log_w(j));
-    sum += w * central_chisq_cdf_half(a0 + static_cast<double>(j), xh);
-    if (j > j_mode && w < 1e-17) break;
-    if (j - j_mode > 200000) break;
+  const long double lambda = 0.5L * static_cast<long double>(ncp);
+  // Bound both the anchor and mixture work before converting the mode to an
+  // integer. Unsupported extreme noncentralities are explicitly unavailable.
+  if (lambda > 1000000.0L) return nan;
+  const long mode = static_cast<long>(lambda);
+  const long double a_base = static_cast<long double>(a0);
+  const long double x_half = static_cast<long double>(xh);
+  const long double a = a_base + static_cast<long double>(mode);
+  const long double log_x = std::log(static_cast<long double>(xh));
+  const long double w0 = std::exp(-lambda + mode * std::log(lambda) -
+                                std::lgamma(static_cast<long double>(mode) + 1));
+  const long double p0 = static_cast<long double>(
+      central_chisq_cdf_half(static_cast<double>(a), xh));
+  if (!std::isfinite(p0)) return nan;
+  long double sum = w0 * p0;
+  constexpr int max_terms = 20000;
+  constexpr long double error = 2e-16L;
+  int terms = 1;
+  long double w = w0, q = 1.0L - p0;
+  long double log_d = -x_half + a * log_x - std::lgamma(a + 1);
+  // Q(a+1,x) = Q(a,x) + x^a exp(-x)/Gamma(a+1): addition
+  // avoids unstable subtraction in the upper-tail recurrence.
+  for (long j = mode + 1; ; ++j) {
+    if (++terms > max_terms) return nan;
+    q += std::exp(log_d);
+    log_d += log_x - std::log(a_base + static_cast<long double>(j));
+    w *= lambda / j;
+    sum += w * std::clamp(1.0L - q, 0.0L, 1.0L);
+    const long double ratio = lambda / (j + 1);
+    if (w * ratio / (1.0L - ratio) < error) break;
   }
-  for (long j = j_mode - 1; j >= 0; --j) {
-    const double w = std::exp(log_w(j));
-    sum += w * central_chisq_cdf_half(a0 + static_cast<double>(j), xh);
-    if (w < 1e-17) break;
+  w = w0;
+  long double p = p0;
+  log_d = -x_half + a * log_x - std::lgamma(a + 1);
+  // P(a-1,x) = P(a,x) + x^(a-1) exp(-x)/Gamma(a).
+  for (long j = mode - 1; j >= 0; --j) {
+    if (++terms > max_terms) return nan;
+    log_d += std::log(a_base + static_cast<long double>(j + 1)) - log_x;
+    p += std::exp(log_d);
+    w *= (j + 1) / lambda;
+    sum += w * std::clamp(p, 0.0L, 1.0L);
+    const long double ratio = j / lambda;
+    if (w * ratio / (1.0L - ratio) < error) break;
   }
-  return std::clamp(sum, 0.0, 1.0);
+  return static_cast<double>(std::clamp(sum, 0.0L, 1.0L));
 }
 
 }  // namespace magmaan::inference

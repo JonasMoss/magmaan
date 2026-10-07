@@ -258,3 +258,45 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
   CHECK(fx.logl == doctest::Approx(fx.unrestricted_logl).epsilon(1e-9));
   CHECK(fx.aic  == doctest::Approx(-2.0 * fx.logl + 12.0).epsilon(1e-12));
 }
+
+TEST_CASE("fit_measures: retained ML2S tail does not become a zero interval") {
+  constexpr double x = 240687264702045.38;
+  const magmaan::measures::BaselineFit baseline{x, 6};
+  const auto fm = magmaan::measures::fit_measures(x, 2, baseline, 130, 1);
+  CHECK(std::isfinite(fm.rmsea));
+  CHECK(std::isnan(fm.rmsea_ci_lower));
+  CHECK(std::isnan(fm.rmsea_ci_upper));
+  CHECK(std::abs(fm.rmsea_pvalue) <= 1e-15);
+  CHECK(std::abs(fm.rmsea_notclose_pvalue - 1.0) <= 1e-15);
+}
+
+TEST_CASE("robust_fit_measures: unavailable tails survive scaled and robust families") {
+  magmaan::measures::RobustFitMeasureInputs in;
+  in.chi2 = in.chi2_scaled = 240687264702045.38;
+  in.df = 2;
+  in.baseline_chi2 = in.baseline_chi2_scaled = in.chi2;
+  in.baseline_df = 6;
+  in.n_total = 130;
+  const auto fm = magmaan::measures::robust_fit_measures(in);
+  CHECK(std::isnan(fm.rmsea_ci_lower_scaled));
+  CHECK(std::isnan(fm.rmsea_ci_upper_scaled));
+  CHECK(std::isnan(fm.rmsea_ci_lower_robust));
+  CHECK(std::isnan(fm.rmsea_ci_upper_robust));
+}
+
+TEST_CASE("robust_fit_measures: retained ML2S scaled tail parameters") {
+  magmaan::measures::RobustFitMeasureInputs in;
+  in.chi2 = 240687264702045.38;
+  in.chi2_scaled = 28343200981398004.0;
+  in.scaling_factor = 0.0084918871675789698;
+  in.df = 2;
+  in.baseline_chi2 = in.baseline_chi2_scaled = in.chi2;
+  in.baseline_df = 6;
+  in.n_total = 130;
+  const auto fm = magmaan::measures::robust_fit_measures(in);
+  CHECK(std::isnan(fm.rmsea_ci_lower_robust));
+  CHECK(std::isnan(fm.rmsea_ci_upper_robust));
+  // Existing policy does not attempt the scaled CI at df*c < 1.
+  CHECK(fm.rmsea_ci_lower_scaled == 0.0);
+  CHECK(fm.rmsea_ci_upper_scaled == 0.0);
+}

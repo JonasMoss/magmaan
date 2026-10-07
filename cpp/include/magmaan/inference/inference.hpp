@@ -223,13 +223,13 @@ wald_test(const Eigen::MatrixXd& R, const Eigen::VectorXd& q,
 // so we don't drag boost::math in.
 double chi2_pvalue(double chi2, int df) noexcept;
 
-// Noncentral χ²(df, ncp) CDF: P(X ≤ x), X ~ χ²(df, ncp). A Poisson(ncp/2)-
-// weighted mixture of central χ²(df+2j) CDFs, summed outward from the Poisson
-// mode (log-space weights) so it stays accurate for large ncp where the j = 0
-// term would underflow. `ncp == 0` ⇒ the central χ²(df) CDF (`= 1 −
-// chi2_pvalue(x, df)` for integer df). Returns NaN for df ≤ 0 / ncp < 0 /
-// non-finite inputs; result clamped to [0, 1]. (Equivalent to R's
-// `pchisq(x, df, ncp)`.) Used for the RMSEA confidence interval.
+// Noncentral χ²(df, ncp) CDF: P(X ≤ x), X ~ χ²(df, ncp). The Poisson-
+// weighted central-CDF mixture starts at its mode and uses incomplete-gamma
+// recurrences with geometric remaining-mass bounds (2e-16 per direction).
+// `ncp == 0` gives the central CDF. At most 20,000 terms and 20,000 anchor
+// iterations; ncp > 2e6, anchor shape > 1e6, exhausted work, or invalid /
+// non-finite inputs return NaN. Consumers must preserve unavailable results.
+// Finite results are clamped to [0, 1]. Used for RMSEA confidence intervals.
 double noncentral_chisq_cdf(double x, double df, double ncp) noexcept;
 
 // Reweighted least-squares (RLS) chi² — lavaan's

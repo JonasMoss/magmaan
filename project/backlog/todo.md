@@ -1473,15 +1473,16 @@ separate final decision for each explicitly covered scope.
   See terminal audit and
   [Newton rollout](../../experiments/engineering/active/19-newton-verdict-migration/report.qmd).
 
-- [ ] **M — bound noncentral chi-square tail cost in fit-index inference (TASK-107).**
-  A retained rejected mixed-unit ULS ML2S endpoint spent minutes in the
-  RMSEA interval tail calculation (`central_chisq_cdf_half` /
-  `noncentral_chisq_cdf`). Automatic ML2S inference now requires the C++ fit
-  verdict to pass, so failed candidates return promptly. Explicit inference
-  can still enter this costly path. **Check:** retain the numerical witness,
-  independently verify extreme-tail values, and bound work or return a typed
-  unavailable result without degrading ordinary inference. This is separate
-  from optimizer recovery and statistical fit-index calibration.
+- [x] **M — bound noncentral chi-square tail cost in fit-index inference (TASK-107).**
+  Retained the rejected mixed-unit ULS ML2S witness as literal C++ regressions.
+  Mode-centered incomplete-gamma recurrences replace per-term gamma evaluation;
+  geometric Poisson remainder bounds and explicit work limits return NaN when
+  unavailable. RMSEA bisection and standard/scaled/robust consumers preserve
+  unavailable intervals. The 60-digit mpmath grid (df 1..500, ncp 0..1e5,
+  lower through upper tails) has maximum absolute error 8.8e-15. The old first
+  lower-interval midpoint took 15.68 seconds; extreme witness noncentralities
+  now return immediately; the full explicit witness call takes 0.002 seconds.
+  Optimizer recovery and interval policy are unchanged.
 
 - [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
   passes the accuracy budget but differs in raw parameters. **Check:** a

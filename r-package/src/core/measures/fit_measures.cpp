@@ -55,11 +55,14 @@ double log_det_from_llt(const Eigen::LLT<Eigen::MatrixXd>& llt) noexcept {
 template <class F>
 double bisect_zero(F&& f, double lo, double hi) noexcept {
   double flo = f(lo);
+  if (!std::isfinite(flo) || !std::isfinite(f(hi)))
+    return std::numeric_limits<double>::quiet_NaN();
   if (flo == 0.0) return lo;
   for (int it = 0; it < 200; ++it) {
     const double mid = 0.5 * (lo + hi);
     if (mid <= lo || mid >= hi) break;        // adjacent doubles — done
     const double fm = f(mid);
+    if (!std::isfinite(fm)) return std::numeric_limits<double>::quiet_NaN();
     if (fm == 0.0) return mid;
     if ((fm < 0.0) == (flo < 0.0)) { lo = mid; flo = fm; }
     else                           { hi = mid; }
@@ -132,16 +135,24 @@ FitMeasures lavaan_rmsea_family(double x2, double df, std::int64_t n_total,
         const double lam_l = bisect_zero(
             [&](double lam) { return noncentral_chisq_cdf(x2, df, lam) - 0.95; },
             0.0, x2);
-        if (std::isfinite(lam_l) && lam_l > 0.0)
+        if (!std::isfinite(lam_l))
+          out.rmsea_ci_lower = std::numeric_limits<double>::quiet_NaN();
+        else if (lam_l > 0.0)
           out.rmsea_ci_lower = std::sqrt(lam_l * scale) * sqrtG;
       }
       const double n_rmsea = std::max(n, 4.0 * x2);
-      if (cdf0 >= 0.05 &&
-          noncentral_chisq_cdf(x2, df, n_rmsea) <= 0.05) {
+      const double cdf_hi = noncentral_chisq_cdf(x2, df, n_rmsea);
+      if (!std::isfinite(cdf0))
+        out.rmsea_ci_lower = std::numeric_limits<double>::quiet_NaN();
+      if (!std::isfinite(cdf0) || !std::isfinite(cdf_hi))
+        out.rmsea_ci_upper = std::numeric_limits<double>::quiet_NaN();
+      else if (cdf0 >= 0.05 && cdf_hi <= 0.05) {
         const double lam_u = bisect_zero(
             [&](double lam) { return noncentral_chisq_cdf(x2, df, lam) - 0.05; },
             0.0, n_rmsea);
-        if (std::isfinite(lam_u) && lam_u > 0.0)
+        if (!std::isfinite(lam_u))
+          out.rmsea_ci_upper = std::numeric_limits<double>::quiet_NaN();
+        else if (lam_u > 0.0)
           out.rmsea_ci_upper = std::sqrt(lam_u * scale) * sqrtG;
       }
     }
@@ -464,16 +475,25 @@ FitMeasures fit_measures(double             chi2_user,
       const double lam_l = bisect_zero(
           [&](double lam) { return noncentral_chisq_cdf(T_u, df_u, lam) - 0.95; },
           0.0, T_u);
-      if (std::isfinite(lam_l) && lam_l > 0.0)
+      if (!std::isfinite(lam_l))
+        out.rmsea_ci_lower = std::numeric_limits<double>::quiet_NaN();
+      else if (lam_l > 0.0)
         out.rmsea_ci_lower = std::sqrt(lam_l * scale) * sqrtG;
     }
     const double n_rmsea = std::max(static_cast<double>(N_total), 4.0 * T_u);
     // else upper.lambda(0) < 0 (tiny T_u) or upper.lambda(N.RMSEA) > 0  ⇒  0
-    if (cdf0 >= 0.05 && noncentral_chisq_cdf(T_u, df_u, n_rmsea) <= 0.05) {
+    const double cdf_hi = noncentral_chisq_cdf(T_u, df_u, n_rmsea);
+    if (!std::isfinite(cdf0))
+      out.rmsea_ci_lower = std::numeric_limits<double>::quiet_NaN();
+    if (!std::isfinite(cdf0) || !std::isfinite(cdf_hi))
+      out.rmsea_ci_upper = std::numeric_limits<double>::quiet_NaN();
+    else if (cdf0 >= 0.05 && cdf_hi <= 0.05) {
       const double lam_u = bisect_zero(
           [&](double lam) { return noncentral_chisq_cdf(T_u, df_u, lam) - 0.05; },
           0.0, n_rmsea);
-      if (std::isfinite(lam_u) && lam_u > 0.0)
+      if (!std::isfinite(lam_u))
+        out.rmsea_ci_upper = std::numeric_limits<double>::quiet_NaN();
+      else if (lam_u > 0.0)
         out.rmsea_ci_upper = std::sqrt(lam_u * scale) * sqrtG;
     }
   }

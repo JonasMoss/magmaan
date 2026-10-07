@@ -1,5 +1,17 @@
 ### Complete-data ML and inference
 
+- TASK-107 bounds noncentral chi-square CDF work for RMSEA intervals and
+  close/not-close tests. The mode-centered Poisson mixture uses log-space
+  incomplete-gamma recurrences and geometric remaining-mass bounds (2e-16
+  per direction), with at most 20,000 mixture terms and 20,000 anchor steps.
+  Noncentrality above 2e6, anchor shape above 1e6, or exhausted work returns
+  NaN; standard/scaled/robust RMSEA consumers retain unavailable bounds rather
+  than zero intervals. A 280-point, 60-digit mpmath grid covers df 1..500,
+  ncp 0..1e5 and lower/central/upper tails at absolute tolerance 1e-12.
+  The rejected ML2S witness (chi-square 240687264702045.38, df 2, N 130)
+  has explicit unavailable intervals. This changes numerical availability,
+  not interval definitions or inference policy.
+
 - TASK-106 separates observed nuisance sensitivity from the expected metric
   and bread for robust ML modification indices and affine releases. The one-df
   statistic is `(g_H' score)^2 / (g_H' B g_H)`; positive observed efficient
