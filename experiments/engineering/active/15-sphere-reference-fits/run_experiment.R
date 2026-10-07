@@ -1,9 +1,58 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
+if ("--ordinary" %in% args) {
+  script <- normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))
+  here <- dirname(script)
+  source(file.path(here, "../../../_support/R/helpers.R"))
+  set_single_threaded_math()
+  for (file in c("designs.R", "fit.R", "ordinary_program.R")) source(file.path(here, "R", file))
+  if ("--optimizer-audit" %in% args) {
+    source(file.path(here,"R/optimizer_audit.R"))
+    run_optimizer_audit(args,here)
+  } else if ("--ml2s-audit" %in% args) {
+    source(file.path(here,"R/ml2s_audit.R"))
+    run_ml2s_audit(args,here)
+  } else if ("--fiml-audit" %in% args) {
+    source(file.path(here,"R/fiml_audit.R"))
+    run_fiml_audit(args,here)
+  } else if ("--ordinal-audit" %in% args) {
+    source(file.path(here,"R/ordinal_audit.R"))
+    run_ordinal_audit(args,here)
+  } else if ("--weighted-audit" %in% args) {
+    source(file.path(here,"R/weighted_audit.R"))
+    run_weighted_audit(args,here)
+  } else if ("--uls-search" %in% args) {
+    source(file.path(here,"R/uls_search.R"))
+    run_uls_search(args,here)
+  } else if ("--audit-terminal" %in% args) {
+    source(file.path(here,"R/audit_terminal.R"))
+    run_audit_terminal(args,here)
+  } else if ("--audit-uncertainty" %in% args) {
+    source(file.path(here, "R/audit_uncertainty.R"))
+    run_audit_uncertainty(args, here)
+  } else if (any(c("--uls-audit-guard","--uls-audit-curvature") %in% args)) {
+    source(file.path(here, "R/uls_audit_guard.R"))
+    run_uls_audit_guard(args, here)
+  } else if ("--uls-audit-factor" %in% args) {
+    source(file.path(here, "R/uls_audit_factor.R"))
+    run_uls_audit_factor(args, here)
+  } else if ("--uls-study" %in% args) {
+    source(file.path(here, "R/uls_reliability_study.R"))
+    run_uls_reliability_study(args, here)
+  } else if ("--uls-unit-probe" %in% args) {
+    source(file.path(here, "R/uls_unit_probe.R"))
+    run_uls_unit_probe(args, here)
+  } else if ("--witness-audit" %in% args) {
+    source(file.path(here, "R/witness_audit.R"))
+    run_witness_audit(args, here)
+  } else run_ordinary_program(args, here)
+  quit(save = "no")
+}
 usage <- paste(
   "Usage: Rscript run_experiment.R [--smoke|--pilot] [options]",
   "Exploratory sphere multistarts with separate accuracy, chart and extent labels.",
   "No default decision, global-optimum claim or nonexistence classification.",
+  "--ordinary: minimal unrestricted ML/ULS/GLS programme; --ordinary --help for its grid.",
   "--smoke: 1 draw per design/N, 2 random starts. --pilot: 10 draws, 3 random starts.",
   "--reps N --random-starts N --ns 20,100 --designs ernst,weak_marker,high_r2",
   "--transforms native,x0.01,x100 --seed-base N --run-id NAME",

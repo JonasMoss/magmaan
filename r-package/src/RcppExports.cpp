@@ -1492,6 +1492,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_fiml_newton_audit_impl
+Rcpp::List frontier_fiml_newton_audit_impl(Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta);
+RcppExport SEXP _magmaanlab_frontier_fiml_newton_audit_impl(SEXP fitSEXP, SEXP thetaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fiml_newton_audit_impl(fit, theta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_ml2s_convergence_audit_impl
+Rcpp::List frontier_ml2s_convergence_audit_impl(Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta, Rcpp::Nullable<Rcpp::List> stage1_point);
+RcppExport SEXP _magmaanlab_frontier_ml2s_convergence_audit_impl(SEXP fitSEXP, SEXP thetaSEXP, SEXP stage1_pointSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type stage1_point(stage1_pointSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_ml2s_convergence_audit_impl(fit, theta, stage1_point));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_guttman_h_impl
 Rcpp::List frontier_guttman_h_impl(Rcpp::NumericMatrix S, Rcpp::IntegerVector blocks, std::string method);
 RcppExport SEXP _magmaanlab_frontier_guttman_h_impl(SEXP SSEXP, SEXP blocksSEXP, SEXP methodSEXP) {
@@ -2095,6 +2120,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< SEXP >::type ordinal_stats(ordinal_statsSEXP);
     rcpp_result_gen = Rcpp::wrap(ordinal_catml_dwls_rmsea_impl(fit, ordinal_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_ordinal_newton_audit_impl
+Rcpp::List frontier_ordinal_newton_audit_impl(Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta);
+RcppExport SEXP _magmaanlab_frontier_ordinal_newton_audit_impl(SEXP fitSEXP, SEXP thetaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_ordinal_newton_audit_impl(fit, theta));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4712,6 +4749,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_fiml_information_choices_impl", (DL_FUNC) &_magmaanlab_frontier_fiml_information_choices_impl, 3},
     {"_magmaanlab_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaanlab_two_stage_stage2_weight_blocks_impl, 3},
     {"_magmaanlab_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaanlab_infer_fiml_fmg_spectrum, 2},
+    {"_magmaanlab_frontier_fiml_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_fiml_newton_audit_impl, 2},
+    {"_magmaanlab_frontier_ml2s_convergence_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ml2s_convergence_audit_impl, 3},
     {"_magmaanlab_frontier_guttman_h_impl", (DL_FUNC) &_magmaanlab_frontier_guttman_h_impl, 3},
     {"_magmaanlab_noniterative_cfa_fit_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_fit_impl, 14},
     {"_magmaanlab_noniterative_cfa_metric_fit_impl", (DL_FUNC) &_magmaanlab_noniterative_cfa_metric_fit_impl, 14},
@@ -4751,6 +4790,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_mixed_ordinal_impl, 5},
     {"_magmaanlab_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_mixed_ordinal_psd_impl, 8},
     {"_magmaanlab_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaanlab_ordinal_catml_dwls_rmsea_impl, 2},
+    {"_magmaanlab_frontier_ordinal_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ordinal_newton_audit_impl, 2},
     {"_magmaanlab_policy_modification_indices_impl", (DL_FUNC) &_magmaanlab_policy_modification_indices_impl, 4},
     {"_magmaanlab_policy_mi_alternative_impl", (DL_FUNC) &_magmaanlab_policy_mi_alternative_impl, 7},
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},

@@ -1039,3 +1039,290 @@ existing optimizer-control checks, and existing common-verdict checks pass
 against a locally built package. The global layering check still reports
 pre-existing paper-to-test references; no finding concerns the changed files.
 The canonical C++ sources were re-vendored into the portable R package.
+
+
+## Conditional numerical distance intervals (2026-10-03)
+
+The production condition cap and .01 budget remain unchanged. Frontier now
+provides separate conditional interval primitives for retained LS sampling
+factors and likelihood Hessians. Their decisions are `within_budget`,
+`above_budget`, and `unresolved`; an available interval is not a fit verdict.
+Construction errors must be supplied explicitly. Zero bounds concern the
+retained rounded artifacts only, not the exact SEM objective at the point.
+
+The primitives use explicit long-double product/residual accumulations with
+standard gamma allowances, under round-to-nearest arithmetic, ordinary square
+root rounding and gradual underflow. They include conservative scalar margins
+and outward binary64 endpoint conversion. Nonfinite verification arithmetic
+stays unresolved. This is conditional floating-point error analysis, not
+validation of unknown construction errors or a global optimization statement.
+
+For LS, let the retained scaled factor have computed QR factors Q and R.
+Bound the Frobenius reconstruction error by eta and the orthogonality defect
+`||Q'Q-I||` by e < 1. For a computed triangular inverse X, a verified defect
+rho = `||I-XR||` < 1 gives
+
+    sigma_min(R) >= (1-rho)/||X||_F.
+
+Thus `s = sqrt(1-e)*(1-rho)/||X||_F` is a lower bound for the smallest
+singular value of QR. If the supplied scaled-factor construction bound is a,
+use delta = eta+a. When delta < s, the equal-rank projector perturbation is
+at most delta/(s-delta). To see this, apply the complementary projector to
+the perturbed full-rank factor, use its right inverse, and bound its smallest
+singular value by s-delta; equal-rank orthogonal projectors have equal largest
+principal-angle sine. The distance interval around `||Q'b||` includes
+
+    ||b|| * [delta/(s-delta) + e/(1+sqrt(1-e))]
+    + supplied residual construction error + projection arithmetic error.
+
+The second term in brackets accounts for Q being only approximately
+orthogonal. Matrix/vector norms and verification residuals receive their own
+arithmetic allowances. Rank uncertainty gives no finite interval.
+
+For likelihoods, let C be the retained equilibrated Hessian and L its computed
+Cholesky factor. Verify a lower bound l for `sigma_min(L)` by the same
+triangular inverse argument. Let delta bound `||C-L L'||` plus the supplied
+Hessian construction error. If delta < l^2, set alpha = delta/l^2. A verified
+triangular solve gives a distance estimate t and error u for the quadratic
+with matrix L L'. With equilibrated score construction bound v (including
+scaling arithmetic), the target distance lies in
+
+    [max(0, (t-u)/sqrt(1+alpha) - v/sqrt(l^2-delta)),
+            (t+u)/sqrt(1-alpha) + v/sqrt(l^2-delta)].
+
+These inequalities follow from the relative Loewner bounds on C versus L L'
+and the triangle inequality in the inverse-matrix norm. Unresolved positive
+curvature gives no finite interval; a saddle never becomes a pass.
+
+Owning tests exercise bounded input perturbations, near-budget ambiguity,
+rank uncertainty, negative curvature and well-resolved flat likelihood inputs.
+Experiment 15's `audit_uncertainty` lane compares the primitives with independent
+90-digit calculations on retained ULS/NTML points and fresh exact-population
+numerical controls. Dimensional construction allowances in that lane are a
+sensitivity assumption. The calculated producer below now supports a narrower
+covariance-only scope; production adoption remains separate.
+
+## Covariance-only input construction enclosures (2026-10-03)
+
+`newton_input_error_bounds` supplies explicit construction bounds for unboxed
+ambient single-level ULS and complete-data ML. The model, sample, point, free
+parameter order and audit must match. Feasibility and statistical identification
+remain separate checks. Retained equality/tangent bases and coordinate maps
+define the numerical coordinates being bounded; no exact-nullspace claim is
+inferred from their rounded entries. This initial covariance-only scope was
+extended to fixed-weight LS and complete mean blocks below; PSD faces and
+barriers remain unsupported. Native sphere normalization is covered by the
+subsequent extension below.
+
+Primitive Lambda, Psi, Theta and Beta cells come from the owning evaluator's
+direct binary64 write contract, including fixed structural cells and later
+overwrites. The interval evaluator reconstructs their first derivatives from
+the free-cell writes and computes
+
+    A = (I-Beta)^-1, M = Lambda A, Sigma = M Psi M' + Theta,
+    dA_i = A dBeta_i A,
+    dM_i = dLambda_i A + Lambda dA_i,
+    dSigma_i = dM_i Psi M' + M dPsi_i M' + M Psi dM_i' + dTheta_i.
+
+Second derivatives differentiate these expressions analytically, including
+both ordered inverse terms and all product-rule terms. They are evaluated
+per parameter pair, avoiding storage of every second-derivative matrix.
+Multiple sample blocks receive their own exact integer sample sizes.
+
+Every scalar addition, multiplication, division and square root expands its
+computed long-double endpoints by one representable value in each direction.
+Binary64 inputs embed exactly. The arithmetic contract assumes ordinary
+IEEE rounding, correctly rounded basic operations/square roots and gradual
+underflow, without unsafe reassociation/fast-math. Interval Gauss-Jordan pivots
+must exclude zero; interval Cholesky pivots must have positive lower endpoints.
+Exact elimination identities retain zero/one cells without interval dependency.
+Unresolved pivots, nonfinite enclosures or unproved definiteness remain explicit
+failures. No inverse truncation, ridge or guessed epsilon multiplier is used.
+
+For ULS, mirror the sample's lower triangle, enclose its Cholesky root and
+triangular inverse, and construct the full symmetric-tensor sampling factor
+and whitened score residual. Compare those exact target enclosures with the
+retained column-scaled factor and residual. Assemble the observed objective
+curvature as a mapped Jacobian cross-product plus independently differentiated
+correction, in the actual retained QR coordinates. Forming the cross-product
+after applying the map avoids transporting a cancelled Hessian.
+
+For ML, enclose the implied covariance inverse W, K = W S W, score matrix
+(W-K)/2 and its analytic derivatives. Sum the total score and full observed
+Hessian across blocks, then apply the retained reduction/equilibration. The
+score bound compares with the computed scaled score; the interval kernel also
+accounts for its scaling arithmetic, conservatively counting that contribution
+twice. Neither path includes sampling uncertainty in the data themselves.
+
+Subtract each retained artifact from its independent target enclosure and
+bound the Frobenius/Euclidean norm of the difference with outward arithmetic.
+For the observed equilibrated curvature, a verified lower bound l for the
+Cholesky factor's smallest singular value gives
+
+    lambda_min(H_target) >= l^2 - ||H_retained-L L'|| - construction_bound.
+
+`newton_input_distance_interval` requires a positive verified lower bound,
+then composes the projection/quadratic interval with the produced input bounds.
+The bound concerns the exact local diagnostic at the binary64 point; it does
+not prove existence of a nearby optimum, global optimality or identification.
+
+Experiment 15's `audit_construction` lane independently checks all 314 available
+input enclosures and curvature lower bounds among 329 points at 90 digits.
+All 47 numerical minima qualify, including the flat NTML minimum; 250 decisive
+interval classifications agree and 79 remain unresolved. Fifteen perturbed
+NTML points have independently nonpositive curvature and retain that failure.
+The fresh 15 ULS controls are exact-population numerical cases, not sampled
+fitting confirmation. All production-versus-interval disagreements are retained;
+one current raw production pass exceeds the budget by about 1.5e-16 and is
+unresolved under the interval rule. Production guard thresholds are unchanged.
+
+## Opt-in terminal composition and sphere construction (2026-10-03)
+
+`audit_convergence_covariance` composes original-objective and feasibility
+collection with retained ULS/ML Newton computations and calculated input bounds.
+`ConvergencePolicy::require_verified_inputs` changes only the explicit Newton
+check: the complete verified interval must be within the declared budget.
+An interval wholly above it fails; nonpositive curvature fails; unsupported,
+missing or unresolved bounds stay unchecked. There is no fallback to a raw
+condition cutoff, raw distance or weaker first-order criterion. Compatibility
+policy ignores this flag. The other required objective/consistency/feasibility
+checks retain their original semantics.
+
+`SphereOptions::verified_newton` attaches the producer to the native endpoint
+before marker translation or polish. `NewtonSphereMap` records binary64 offset,
+rest basis, unit basis Q, measurement units D, free-cell indices and the driven
+point. For a unit block b, r = ||b||, V = D Q, independently enclose
+
+    loading = V b/r,
+    J = V (I/r - b b'/r^3).
+
+For physical objective gradient g, collect the loading-cell score v using the
+last writer of each free parameter; shared aliases do not duplicate the score.
+Set c = V'v and a = b'c. The second-derivative contraction is
+
+    chain = -(c b' + b c' + a I)/r^3 + 3 a b b'/r^5.
+
+Combine J' H J with this chain, then reduce through the retained tangent and
+QR/equilibration maps. The target uses actual radii and retained Q entries,
+rather than assuming exact unit norm or exact orthogonality. Thus rounding in
+expansion and normalization is part of the construction bound. The sphere
+radial pin objective never enters the audit. Fixed cells keep their owning
+binary64 write contract; later fixed writes replace earlier free enclosures.
+This extends the covariance-only unboxed ambient scope to native sphere ULS/ML;
+means, other weights, active bounds and PSD faces remain unsupported.
+
+The R explicit `evaluate_at` assessment selects TRUE/FALSE/NA and retains
+`converged_compatibility`; `reported_objective` can supply the backend objective
+for an endpoint consistency check. With no supplied reported value it is a
+recomputed point assessment. Native sphere fitting retains both the old full
+native assessment and the new interval assessment; the opt-in selected verdict
+refers to the native point, with translated/polished diagnostics separate.
+
+
+Fresh sampled numerical confirmation in experiment 15's `audit_terminal` lane
+uses 30 problems in six families, with five draws per family and a fresh seed
+base 863261201. The common sample-only layered/native physical start is held
+fixed across marker and sphere fits. PORT-NLS ULS and PORT ML use sample-unit
+scaling and no sphere polish. The 120 endpoints and 120 marker variance
+perturbations yield 216 available construction comparisons and 213 decisive
+interval classifications, all correct against independent 90-digit SEM/map
+calculations. Original objective values agree as well. The remaining 27
+distances include 24 retained nonpositive-curvature failures and three
+unresolved intervals. At endpoints, 106 pass, eight have independently
+nonpositive curvature, three are above budget and three remain unchecked.
+Native mixed-unit ULS gains three passes with no losses. One unresolved
+weak-marker sphere ML endpoint is accurate at .000429; two mixed-unit sphere
+ULS endpoints are inaccurate at .697/.514. No perturbation passes. This is
+numerical confirmation on sampled controls, not a default adoption or
+population-reliability study. It preserves the remaining start/search and
+audit-conservatism questions separately.
+
+## Retained fixed-weight LS and means (2026-10-05)
+
+The isolated sphere-study implementation extends `newton_input_error_bounds`
+to single-level, unboxed ambient fixed-weight moment LS. Estimator labels ULS,
+GLS and WLS dispatch the shared family; the retained `ls_weight`, not the label,
+defines the conditional target. An absent weight is unsupported; a present empty
+weight is implicit identity. Blocks support identity, a nonnegative nominal
+binary64 diagonal, the exact product F F' of the retained binary64 dense factor,
+or the normal-theory operator defined by the retained lower root. Dense/NT
+representations do not retain their original producer matrix. A certificate
+conditional on that representation cannot establish exact inversion of Gamma
+or propagate numerical error from the producer.
+
+Complete sample mean blocks add Nu and Alpha cell writes. With A = (I-Beta)^-1
+and M = Lambda A, the interval evaluator constructs mu = Nu + M Alpha,
+its first derivative dNu + dM Alpha + M dAlpha, and its second derivative
+d2M Alpha + dM_i dAlpha_j + dM_j dAlpha_i. Moment order is
+[mean; lower-vech covariance]. The observed correction sums each weighted
+residual times that moment's second derivative, including nonzero mean terms.
+The Gauss-Newton term is formed after the full equality/sphere/QR coordinate
+map. The sphere normalization correction uses the full weighted total gradient.
+
+The gradient-variance factor still uses normal-theory Gamma constructed from
+the sample covariance: the mean factor is L', and covariance columns are the
+symmetric tensor products of L rows divided by sqrt(2). The score residual is
+sqrt(N) L^-1(mu-m) followed by sqrt(N/2) vec(L^-1 R L^-T), where R mirrors the
+lower-vech residual. These factors define the existing audit's distance metric;
+they do not claim robust sampling calibration for nonnormal data. Interval
+sample roots use that same lower triangle, including any binary64 asymmetry.
+Means must be present in every supplied block; mismatched moment layouts,
+negative diagonal weights, deficient metrics and unresolved sample positivity
+authorize no verified pass. ML remains covariance-only. Boxes, PSD faces,
+ordinal/mixed maps, FIML and ML2S composition require their own supported path.
+
+Continuous WLS/ADF and DLS Gamma inverses now use the existing diagonal
+equilibration before the positive-definiteness/rank gate, then transport the
+inverse to original moment units. Diagnostics describe the scaled gate. This
+retains the 1e-10 eigenvalue-floor policy in dimensionless coordinates without
+changing Gamma, adding a ridge or allowing a pseudoinverse. Regression tests
+verify unit transport with/without means and retain deficient-ADF rejection.
+
+Experiment 15's `weighted_audit` lane separately reconstructs empirical Gamma
+from complete centered observations, normal-theory Gamma, DWLS diagonals and
+DLS mixtures at a = 0, 0.4 and 1. Its producer criterion is relative error below
+1e-9 after congruence by moment units; dense/root reconstruction uses 1e-12.
+This is recipe validation, not a propagated producer-error certificate.
+The fresh confirmation uses two datasets in each of seven families, including
+ties, nonlinear identified feedback, unequal groups and mixed units. The
+advertised complete-data fitting APIs construct named weights automatically;
+custom diagonal/dense inputs and a small supplied-weight sphere subset complete
+the mechanism checks. All 64 producer blocks agree (maximum relative recipe
+error 2.82e-14), all 136 available construction bounds/intervals cover independent
+90-digit derivatives, all 150 original objectives agree, and every decisive
+classification is correct (74 within budget, 62 above, 14 unresolved).
+Two stationary saddle/rank controls reject and four points bracket .01 correctly.
+All 72 cold fits on identified models pass; six intentionally redundant
+feedback fits give four failures and two unchecked assessments. There are no
+legacy losses. Raw matrices/data/fits and failed development pilots remain local;
+compact judgments, all endpoint failures and provenance are frozen.
+The 572-test optimized estimation suite passes. Ordinary acceptance defaults,
+statistical identification, robust inference and best-basin recovery remain
+separate decisions.
+
+### Ordinal/mixed conditional numerical checks
+
+Ordinal/mixed numerical integration (2026-10-05, isolated sphere-study) now
+retains the total-scale whitened Jacobian, score residual, actual fitting factors
+and analytic observed correction before adding Gauss-Newton. Ordinary telemetry
+and explicit original full-threshold audits reuse QR curvature and square-root
+distances with the existing fitting-weight working metric and acceptance policy.
+The opt-in `magmaan_core$frontier_ordinal_newton_audit(fit, theta)` exposes raw
+coordinates, the prepared partable and owning artifacts. Ordinal construction
+bounds remain explicitly unsupported; this is not a sampling-Gamma or inference
+policy change. Experiment 15's fresh confirmation has 160 passing cold fits,
+252 agreeing independent 90-digit points and 46 agreeing empirical-threshold/
+conditional-weight checks in delta/theta, including shared loadings, groups and
+mixed units. All 80 displaced points and 12 saddles remain unaccepted. A corrected
+replay retains six earlier sparse-theta failures at distance 0.44–1.11 (three
+also ill-conditioned), owned by TASK-33.10.6. Existing first-stage and pairwise
+oracle gates pass. Propagated construction bounds, fresh pairwise reliability,
+sphere/PSD/barrier coverage, inference policy, identification/global recovery
+and default adoption remain outside this bank.
+
+The independent reference reconstructs the prepared LISREL model, threshold
+and correlation maps, and their second-order scalar chains at 90 digits from
+retained binary64 primitives. Conditional point agreement and empirical
+threshold/Gamma-to-weight checks are separate from the polychoric/polyserial/
+NACOV oracle gates. They do not enclose first-stage numerical error.
+`newton_input_error_bounds` remains unsupported for ordinal objective kinds.

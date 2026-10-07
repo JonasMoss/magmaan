@@ -1,0 +1,8 @@
+check,tested,failed
+independent_pattern_likelihood_points,68,0
+actual_pattern_selection_counts_and_summaries,68,0
+complete_data_ML_reduction,8,0
+invalid_raw_inputs_reject,4,0
+negative_point_controls_never_pass,4,1
+every_returned_fit_audited,40,0
+unsupported_construction_explicit,68,0

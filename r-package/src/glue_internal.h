@@ -21,6 +21,9 @@
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
+#include "magmaan/estimate/frontier/convergence.hpp"
+#include "magmaan/estimate/frontier/ml2s_audit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -140,6 +143,14 @@ Rcpp::List geometric_stationarity_to_r(
     const magmaan::estimate::GeometricStationarityDiagnostics& d);
 Rcpp::List newton_accuracy_to_r(
     const magmaan::estimate::NewtonAccuracyDiagnostics& a);
+SEXP retained_ls_weights_to_r(
+    const magmaan::estimate::frontier::NewtonDerivatives& d);
+Rcpp::List input_errors_to_r(
+    const magmaan::estimate::frontier::NewtonInputErrorBounds& e);
+Rcpp::List distance_interval_to_r(
+    const magmaan::estimate::frontier::NewtonDistanceInterval& x);
+Rcpp::List verified_assessment_to_r(
+    const magmaan::estimate::frontier::ConvergenceAssessment& a);
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
 Rcpp::List fit_result(Ctx& ctx,
                       const magmaan::estimate::Estimates& est,

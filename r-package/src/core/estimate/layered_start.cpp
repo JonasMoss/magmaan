@@ -84,7 +84,8 @@ void put(Pattern& P, MatId mat, int r, int c, const Slot& s) {
   }
 }
 
-Layout build_layout(const spec::LatentStructure& pt, const model::MatrixRep& rep) {
+Layout build_layout(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                    const EqConstraints* con) {
   Layout out;
   out.blocks.resize(rep.dims.size());
   for (std::size_t b = 0; b < rep.dims.size(); ++b) {
@@ -113,6 +114,14 @@ Layout build_layout(const spec::LatentStructure& pt, const model::MatrixRep& rep
     put(out.blocks[us(b)], c.mat, c.row, c.col, s);
     if (s.free >= 0 && out.loc[us(s.free)].block < 0)
       out.loc[us(s.free)] = Loc{b, c.mat, c.row, c.col};
+    // A full-rank equality component can pin an otherwise free row. Use its
+    // constant in the measurement/scale layers just as for an explicit fixed
+    // row; projecting only the final start is too late to repair its gauge.
+    if (s.is_free() && con && con->Kmat.row(s.free).isZero(0.0)) {
+      s.value = con->theta0(s.free);
+      s.free = -1;
+      put(out.blocks[us(b)], c.mat, c.row, c.col, s);
+    }
   }
   return out;
 }
@@ -1094,7 +1103,8 @@ layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& re
 
   spec::LatentStructure ptr = pt;
   (void)resolve_fixed_x_from_sample(ptr, rep, samp);
-  const Layout lay = build_layout(ptr, rep);
+  auto con = build_eq_constraints(ptr, /*allow_nonlinear=*/true);
+  const Layout lay = build_layout(ptr, rep, con ? &*con : nullptr);
   const std::size_t nb = lay.blocks.size();
   std::vector<Work> works(nb);
   for (std::size_t b = 0; b < nb; ++b) {
@@ -1188,7 +1198,6 @@ layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& re
     if (us(L.block) < samp.n_obs.size() && samp.n_obs[us(L.block)] > 0)
       group_n(k) = static_cast<double>(samp.n_obs[us(L.block)]);
   }
-  auto con = build_eq_constraints(ptr, /*allow_nonlinear=*/true);
   auto project = [&](Eigen::VectorXd& t) {
     if (!con || !con->active()) return;
     const MatrixXd& K = con->Kmat;

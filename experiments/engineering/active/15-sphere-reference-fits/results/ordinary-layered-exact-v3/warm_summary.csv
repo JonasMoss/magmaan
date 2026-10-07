@@ -1,0 +1,13 @@
+"estimator","chart","backend","returned","accepted","ml_witness_match"
+"GLS","marker","nlopt-lbfgs",6,4,0
+"ML","marker","nlopt-lbfgs",7,6,6
+"ULS","marker","nlopt-lbfgs",7,3,0
+"GLS","sphere","nlopt-lbfgs",7,3,0
+"ML","sphere","nlopt-lbfgs",7,6,6
+"ULS","sphere","nlopt-lbfgs",6,4,0
+"GLS","marker","port",7,3,0
+"ML","marker","port",7,6,6
+"ULS","marker","port",7,3,0
+"GLS","sphere","port",7,4,0
+"ML","sphere","port",7,6,6
+"ULS","sphere","port",7,4,0

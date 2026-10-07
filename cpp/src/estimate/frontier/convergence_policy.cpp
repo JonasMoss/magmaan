@@ -1,6 +1,7 @@
 #include "magmaan/estimate/frontier/convergence_policy.hpp"
 
 #include <cmath>
+#include "magmaan/estimate/frontier/newton_accuracy.hpp"
 
 namespace magmaan::estimate::frontier {
 namespace {
@@ -70,7 +71,7 @@ ConvergencePolicy newton_convergence_policy() {
   ConvergencePolicy p; p.stationarity = RequiredStationarity::Newton; return p;
 }
 
-ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePolicy p) {
+ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePolicy p, const NewtonDistanceInterval* interval) {
   ConvergenceAssessment out;
   out.policy = p;
   out.domain = d.stationarity_domain;
@@ -108,6 +109,25 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
   out.newton = check(second, usable, newton_pass,
       "Newton evidence missing, unsupported, or for another domain",
       "Newton budget or curvature/solve guard failed");
+
+  if(p.require_verified_inputs && p.kind==ConvergencePolicyKind::Explicit) {
+    const bool available=interval && domain_matches && !psd &&
+        !d.active_bounds_full.any_active();
+    out.newton={FitCheck::Unchecked,second,"construction-aware Newton interval missing or unresolved"};
+    if(available) {
+      if(interval->status==NewtonAccuracyStatus::NonpositiveCurvature)
+        out.newton={FitCheck::Failed,second,"observed curvature is nonpositive"};
+      else if(interval->status==NewtonAccuracyStatus::Available &&
+          std::isfinite(interval->lower) && interval->lower>=0 && interval->upper>=interval->lower) {
+        // Reassess endpoints against this policy's budget, rather than trusting
+        // a decision that may have been made under another budget.
+        if(interval->upper<=p.newton.budget)
+          out.newton={FitCheck::Passed,second,"entire verified interval is within budget"};
+        else if(interval->lower>p.newton.budget)
+          out.newton={FitCheck::Failed,second,"entire verified interval is above budget"};
+      }
+    }
+  }
 
   if (p.kind == ConvergencePolicyKind::Compatibility) {
     out.compatibility_verdict = compatibility_verdict(d);

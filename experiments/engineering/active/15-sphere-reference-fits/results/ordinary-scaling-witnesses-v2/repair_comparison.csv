@@ -1,0 +1,7 @@
+"transform","estimator","chart","fits","before","after","gains","losses"
+"native","GLS","marker",108,18,18,0,0
+"native","ML","marker",108,32,32,0,0
+"native","ULS","marker",108,55,55,0,0
+"native","GLS","sphere",108,24,24,0,0
+"native","ML","sphere",108,38,38,2,2
+"native","ULS","sphere",108,46,47,1,0

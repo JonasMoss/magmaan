@@ -1,0 +1,6 @@
+"draw_id","design","n","rep","transform","seed","estimator","chart","start_id","profile","before_accepted","after_accepted","gain","loss","before_objective","after_objective","before_newton_status","after_newton_status"
+4,"weak_marker",100,2,"native",202819283,"ML","sphere","shared_fabin3","port",FALSE,TRUE,TRUE,FALSE,0.0246899172838186,0.0246899173177471,"ill_conditioned","available"
+4,"weak_marker",100,2,"native",202819283,"ML","sphere","shared_fabin3","port_tight",FALSE,TRUE,TRUE,FALSE,0.0246899172838186,0.0246899173177471,"ill_conditioned","available"
+6,"weak_marker",20,4,"native",202811285,"ML","sphere","shared_fabin3","port",TRUE,FALSE,FALSE,TRUE,0.13580948011113,0.109437517916173,"available","nonpositive_curvature"
+6,"weak_marker",20,4,"native",202811285,"ML","sphere","shared_fabin3","port_tight",TRUE,FALSE,FALSE,TRUE,0.13580948011113,0.109437517916173,"available","nonpositive_curvature"
+8,"weak_marker",100,4,"native",902819285,"ULS","sphere","native","lbfgs_tight",FALSE,TRUE,TRUE,FALSE,,0.0425815968151528,"unavailable","available"

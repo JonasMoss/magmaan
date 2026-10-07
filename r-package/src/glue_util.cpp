@@ -338,6 +338,7 @@ const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
   using magmaan::optim::OptimStatus;
   return status == OptimStatus::Converged           ? "converged"
        : status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+       : status == OptimStatus::LineSearchFailed   ? "line_search_failed"
        : status == OptimStatus::SingularConvergence ? "singular_convergence"
        : status == OptimStatus::NoisyObjective     ? "noisy_objective"
        : status == OptimStatus::FalseConvergence   ? "false_convergence"
@@ -477,12 +478,23 @@ Rcpp::List stats_from_fit_or_arg(Rcpp::List fit, SEXP arg,
 // from L2's `active_bounds_full` (which indexes the expanded θ).
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
   const char* advisory = optim_status_to_r(a.advisory_status);
+  Rcpp::List controls = Rcpp::List::create();
+  if (a.nlopt_controls) {
+    const auto& c = *a.nlopt_controls;
+    auto real = [&](const char* key, const std::optional<double>& value) { if (value) controls[key] = *value; };
+    real("ftol_rel", c.ftol_rel); real("ftol_abs", c.ftol_abs);
+    real("xtol_rel", c.xtol_rel); real("xtol_abs", c.xtol_abs);
+    real("tolg", c.tolg); real("constraint_tol", c.constraint_tol);
+    if (c.max_eval) controls["max_eval"] = *c.max_eval;
+    if (c.vector_storage) controls["vector_storage"] = *c.vector_storage;
+  }
   Rcpp::IntegerVector active(static_cast<R_xlen_t>(a.active_set.size()));
   for (std::size_t i = 0; i < a.active_set.size(); ++i)
     active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
   return Rcpp::List::create(
       Rcpp::_["stationary"]       = a.stationary,
       Rcpp::_["raw_backend_status"] = a.raw_backend_status,
+      Rcpp::_["nlopt_controls"] = controls,
       Rcpp::_["backend_gradient_max"] = a.backend_gradient_max,
       Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
       Rcpp::_["raw_grad_inf_norm"] = a.raw_grad_inf_norm,
@@ -570,6 +582,23 @@ Rcpp::List geometric_stationarity_to_r(
           d.cone_projection_iterations);
 }
 
+SEXP retained_ls_weights_to_r(const magmaan::estimate::frontier::NewtonDerivatives& d) {
+  if(!d.ls_weight) return R_NilValue;
+  Rcpp::List out(d.ls_weight->size());
+  using Kind=magmaan::estimate::gmm::BlockWeight::Kind;
+  for(std::size_t k=0;k<d.ls_weight->size();++k) {
+    const auto& w=(*d.ls_weight)[k];
+    const char* kind=w.kind()==Kind::Identity ? "identity" :
+        w.kind()==Kind::Diagonal ? "diagonal" : w.kind()==Kind::Dense ? "dense_factor" : "normal_theory_root";
+    out[k]=Rcpp::List::create(Rcpp::_["kind"]=kind,
+        Rcpp::_["diagonal"]=Rcpp::wrap(w.diagonal_values()),
+        Rcpp::_["factor"]=Rcpp::wrap(w.dense_factor()),
+        Rcpp::_["root"]=Rcpp::wrap(w.normal_theory_root()),
+        Rcpp::_["has_means"]=w.has_means());
+  }
+  return out;
+}
+
 Rcpp::List newton_accuracy_to_r(
     const magmaan::estimate::NewtonAccuracyDiagnostics& a) {
   auto num = [](double x) { return std::isfinite(x) ? x : NA_REAL; };
@@ -594,6 +623,28 @@ Rcpp::List newton_accuracy_to_r(
       Rcpp::_["null_directions"] = a.null_directions,
       Rcpp::_["constrained_directions"] = a.constrained_directions,
       Rcpp::_["min_multiplier"] = num(a.min_multiplier));
+}
+
+Rcpp::List input_errors_to_r(const magmaan::estimate::frontier::NewtonInputErrorBounds& e) {
+  return Rcpp::List::create(Rcpp::_["status"]=std::string(magmaan::estimate::to_string(e.status)),
+      Rcpp::_["matrix"]=e.matrix,Rcpp::_["vector"]=e.vector,Rcpp::_["curvature"]=e.curvature,
+      Rcpp::_["curvature_lower_bound"]=e.curvature_lower_bound,Rcpp::_["detail"]=e.detail);
+}
+Rcpp::List distance_interval_to_r(const magmaan::estimate::frontier::NewtonDistanceInterval& x) {
+  return Rcpp::List::create(Rcpp::_["status"]=std::string(magmaan::estimate::to_string(x.status)),
+      Rcpp::_["decision"]=std::string(magmaan::estimate::frontier::to_string(x.decision)),
+      Rcpp::_["distance"]=x.distance,Rcpp::_["lower"]=x.lower,Rcpp::_["upper"]=x.upper,
+      Rcpp::_["rank_margin"]=x.rank_margin,Rcpp::_["factor_error_bound"]=x.factor_error_bound);
+}
+Rcpp::List verified_assessment_to_r(const magmaan::estimate::frontier::ConvergenceAssessment& a) {
+  auto check=[](const magmaan::estimate::frontier::ConvergenceCheck& x) {
+    return Rcpp::List::create(Rcpp::_["status"]=fit_check_to_r(x.status),Rcpp::_["reason"]=x.reason);
+  };
+  Rcpp::LogicalVector passed(1);
+  passed[0]=a.status==magmaan::estimate::FitCheck::Unchecked ? NA_LOGICAL : a.status==magmaan::estimate::FitCheck::Passed;
+  return Rcpp::List::create(Rcpp::_["status"]=fit_check_to_r(a.status),Rcpp::_["converged"]=passed,
+      Rcpp::_["objective"]=check(a.objective),Rcpp::_["objective_consistency"]=check(a.objective_consistency),
+      Rcpp::_["feasibility"]=check(a.feasibility),Rcpp::_["newton"]=check(a.newton));
 }
 
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
@@ -638,7 +689,9 @@ Rcpp::List fit_result(Ctx& ctx,
     Sb.attr("dimnames") = Rcpp::List::create(nm, nm);
     S_out[static_cast<R_xlen_t>(b)] = Sb;
   }
-  SEXP mean_out = R_NilValue;
+  // Keep the means protected after the temporary list leaves its block;
+  // constructing the partable/verdict can trigger GC before out owns them.
+  Rcpp::RObject mean_out = R_NilValue;
   if (!ctx.samp.mean.empty()) {
     Rcpp::List Ml(static_cast<R_xlen_t>(nb));
     for (std::size_t b = 0; b < nb; ++b)

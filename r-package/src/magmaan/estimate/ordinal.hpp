@@ -826,6 +826,13 @@ struct OrdinalNewtonParts {
   spec::LatentStructure pt;
   Eigen::MatrixXd hessian;
   Eigen::MatrixXd gradient_variance;
+  // Total-scale residual curvature, retained before adding Gauss-Newton.
+  Eigen::MatrixXd curvature_correction;
+  // A = stack_b sqrt(n_b) F_b' Delta_b and b = sqrt(n_b) F_b' r_b,
+  // using the actual fitting factors W_b = F_b F_b'. A'A is the metric.
+  Eigen::MatrixXd metric_factor;
+  Eigen::VectorXd metric_score_residual;
+  std::vector<Eigen::MatrixXd> weight_factors;  // actual F_b, W_b = F_b F_b'
 };
 
 fit_expected<OrdinalNewtonParts>

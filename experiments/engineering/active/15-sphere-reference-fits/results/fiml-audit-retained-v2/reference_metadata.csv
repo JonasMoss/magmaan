@@ -1,0 +1,2 @@
+precision_digits,mpmath_version,elapsed_s,source_sha256,convention,limitations
+90,1.3.0,5.959666826998728,6e83506bf6be3ad1d4978061e82137bd21ff6a4dc130c80f3c935f82892b9080,raw observed-row grouping and exact binary64 data/parameters; analytic independent LISREL first/second derivatives and observed-pattern Gaussian likelihood,"conditional numerical point evidence; no propagated construction interval, inference calibration or global optimality"

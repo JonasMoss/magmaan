@@ -76,13 +76,14 @@ TEST_CASE("PSD fallback repairs an accurate improper fit from its estimates") {
   CHECK(policy.psd->value().fmin > policy.ordinary->fmin);
 }
 
-TEST_CASE("PSD fallback recovers an ordinary hard error using the original start") {
+TEST_CASE("PSD fallback retains an ordinary budget stop and uses the original start") {
   auto c = one_factor();
   MlPsdFallbackOptions options;
   options.ordinary.nlopt.max_eval = 1;
   auto policy = fit_ml_psd_fallback(c.pt, c.rep, c.sample, c.start, options);
-  REQUIRE_FALSE(policy.ordinary.has_value());
-  CHECK(policy.reason == PsdFallbackReason::OrdinaryError);
+  REQUIRE(policy.ordinary.has_value());
+  CHECK(fit_verdict(*policy.ordinary).status != FitCheck::Passed);
+  CHECK(policy.reason == PsdFallbackReason::OrdinaryRejected);
   CHECK_FALSE(policy.warm_start_used);
   REQUIRE(policy.psd.has_value());
   REQUIRE(policy.accepted_fit() != nullptr);
@@ -106,15 +107,17 @@ TEST_CASE("PSD fallback rejects an admissible but inaccurate ordinary return") {
   CHECK(policy.accepted_fit() != nullptr);
 }
 
-TEST_CASE("PSD fallback retains both hard errors and reports no accepted fit") {
+TEST_CASE("PSD fallback retains both failed budget candidates without accepting them") {
   auto c = one_factor();
   MlPsdFallbackOptions options;
   options.ordinary.nlopt.max_eval = 1;
   options.psd.nlopt.max_eval = 1;
   auto policy = fit_ml_psd_fallback(c.pt, c.rep, c.sample, c.start, options);
-  CHECK_FALSE(policy.ordinary.has_value());
+  REQUIRE(policy.ordinary.has_value());
+  CHECK(fit_verdict(*policy.ordinary).status != FitCheck::Passed);
   REQUIRE(policy.psd.has_value());
-  CHECK_FALSE(policy.psd->has_value());
+  REQUIRE(policy.psd->has_value());
+  CHECK(fit_verdict(**policy.psd).status != FitCheck::Passed);
   CHECK(policy.accepted_fit() == nullptr);
 }
 

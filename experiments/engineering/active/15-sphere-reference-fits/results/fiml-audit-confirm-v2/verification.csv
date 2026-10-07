@@ -1,0 +1,9 @@
+check,tested,failed
+independent_pattern_likelihood_points,70,0
+actual_pattern_selection_counts_and_summaries,70,0
+complete_data_ML_reduction,8,0
+invalid_raw_inputs_reject,4,0
+invalid_covariance_and_saddle_never_pass,3,0
+known_scale_ridge_explicitly_unchecked,1,0
+every_returned_fit_audited,40,0
+unsupported_construction_explicit,70,0

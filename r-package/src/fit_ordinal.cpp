@@ -691,8 +691,11 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -729,8 +732,11 @@ Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "ULS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "ULS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -767,8 +773,11 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "WLS",
-                            parameterization_name.c_str());
+  Rcpp::List out = ordinal_fit_result(ctx, stats, est, &starts, "WLS",
+                                     parameterization_name.c_str());
+  out["start"] = Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(x0),
+                                    Rcpp::_["method"] = "ordinal-simple");
+  return out;
 }
 
 // All-ordinal ULS/DWLS/WLS with PSD primitive LISREL covariance matrices.
@@ -1237,4 +1246,70 @@ Rcpp::List ordinal_catml_dwls_rmsea_impl(Rcpp::List fit,
       Rcpp::_["c.hat3"] = out.c_hat3,
       Rcpp::_["XX3.scaled"] = out.xx3_scaled,
       Rcpp::_["rmsea.robust"] = out.rmsea_robust);
+}
+
+// Opt-in numerical point audit of the original, unprofiled ordinal LS
+// objective. Prepared model/statistics and analytic derivatives stay in core.
+// [[Rcpp::export]]
+Rcpp::List frontier_ordinal_newton_audit_impl(
+    Rcpp::List fit, Rcpp::Nullable<Rcpp::NumericVector> theta = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const auto est = est_from_fit(fit);
+  const Eigen::VectorXd point = theta.isNull() ? est.theta
+      : Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(theta.get()));
+  const bool mixed = fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  const bool ordinal = fit.containsElementNamed("ordinal") &&
+      Rcpp::as<bool>(fit["ordinal"]);
+  if (!mixed && !ordinal) Rcpp::stop("requires an ordinal or mixed LS fit");
+  const auto param = ordinal_parameterization_from_string(
+      Rcpp::as<std::string>(fit["parameterization"]));
+  const auto weight = ordinal_weight_from_estimator(
+      ordinal_weight_for_postfit(fit, Rcpp::as<std::string>(fit["estimator"])),
+      "frontier_ordinal_newton_audit");
+  auto audit = mixed
+      ? magmaan::estimate::frontier::audit_newton_mixed_ordinal(
+          ctx.pt, ctx.rep, mixed_ordinal_stats_from_arg(fit["mixed_ordinal_stats"]),
+          point, weight, param)
+      : magmaan::estimate::frontier::audit_newton_ordinal(
+          ctx.pt, ctx.rep, ordinal_stats_from_arg(fit["ordinal_stats"]),
+          point, weight, param);
+  if (!audit) stop_fit(audit.error());
+  auto parts = mixed
+      ? magmaan::estimate::frontier::mixed_ordinal_ls_newton_parts_prepared(
+          ctx.pt, ctx.rep, mixed_ordinal_stats_from_arg(fit["mixed_ordinal_stats"]),
+          point, weight, param)
+      : magmaan::estimate::frontier::ordinal_ls_newton_parts_prepared(
+          ctx.pt, ctx.rep, ordinal_stats_from_arg(fit["ordinal_stats"]),
+          point, weight, param);
+  if (!parts) stop_fit(parts.error());
+  const auto& a = *audit;
+  magmaan::estimate::Estimates at;
+  at.theta = point;
+  const auto native = magmaan::compat::lavaan::to_lavaan_partable(
+      parts->pt, ctx.names, magmaan::spec::Starts{});
+  const auto prepared = partable_df_from_lavaan(native, &at);
+  const auto source = magmaan::estimate::frontier::newton_input_error_bounds(
+      ctx.pt, ctx.rep, ctx.samp, point, a, magmaan::estimate::Estimator::WLS);
+  return Rcpp::List::create(
+      Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
+      Rcpp::_["objective"] = a.derivatives.objective,
+      Rcpp::_["n_obs"] = a.derivatives.n_obs,
+      Rcpp::_["gradient"] = Rcpp::wrap(a.derivatives.gradient),
+      Rcpp::_["hessian"] = Rcpp::wrap(a.derivatives.hessian),
+      Rcpp::_["metric"] = Rcpp::wrap(a.derivatives.metric),
+      Rcpp::_["metric_factor"] = Rcpp::wrap(a.derivatives.metric_factor),
+      Rcpp::_["metric_score_residual"] = Rcpp::wrap(a.derivatives.metric_score_residual),
+      Rcpp::_["curvature_correction"] = Rcpp::wrap(a.derivatives.ls_curvature_correction),
+      Rcpp::_["whitened_jacobian"] = Rcpp::wrap(a.derivatives.whitened_jacobian),
+      Rcpp::_["whitened_residual"] = Rcpp::wrap(a.derivatives.whitened_residual),
+      Rcpp::_["derivative_basis"] = Rcpp::wrap(
+          (a.geometry.equality_basis * a.geometry.tangent_basis).eval()),
+      Rcpp::_["newton_step"] = Rcpp::wrap(a.solution.step),
+      Rcpp::_["curvature_status"] = std::string(magmaan::estimate::to_string(a.system.status)),
+      Rcpp::_["weight_factors"] = Rcpp::wrap(parts->weight_factors),
+      Rcpp::_["partable"] = prepared,
+      Rcpp::_["theta"] = Rcpp::wrap(point),
+      Rcpp::_["construction_status"] = std::string(magmaan::estimate::to_string(source.status)),
+      Rcpp::_["construction_detail"] = source.detail);
 }

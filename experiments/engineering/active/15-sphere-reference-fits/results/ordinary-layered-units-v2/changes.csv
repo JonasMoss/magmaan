@@ -1,0 +1,4 @@
+"draw_id","design","n","rep","transform","seed","estimator","chart","start_id","profile","audit_status","newton_status","newton_distance","objective_gap","acceptance_gain","acceptance_loss","recovery_gain","recovery_loss","reference_repeated"
+2,"ernst",100,1,"mixed",620370002,"GLS","sphere","shared_fabin3","port_tight","passed","available",1.50544222424262e-06,1.01585406753202e-14,TRUE,FALSE,TRUE,FALSE,TRUE
+2,"ernst",100,1,"mixed",620370002,"ML","sphere","native","port_tight","passed","available",3.34469315602364e-06,5.59552404411079e-14,TRUE,FALSE,TRUE,FALSE,TRUE
+2,"ernst",100,1,"mixed",620370002,"ML","sphere","shared_fabin3","port_tight","passed","available",1.89038011804562e-06,1.82076576038526e-14,TRUE,FALSE,TRUE,FALSE,TRUE

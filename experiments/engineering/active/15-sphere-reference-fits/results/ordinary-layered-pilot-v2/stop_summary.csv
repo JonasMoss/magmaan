@@ -1,0 +1,13 @@
+"optimizer_status","call_status","accepted","fits"
+"","error",FALSE,38
+"converged","magmaan_sphere_numerical_failure",FALSE,2
+"noisy_objective","magmaan_sphere_numerical_failure",FALSE,2
+"budget_exhausted","returned",FALSE,60
+"converged","returned",FALSE,82
+"line_search_salvaged","returned",FALSE,52
+"noisy_objective","returned",FALSE,47
+"singular_convergence","returned",FALSE,8
+"budget_exhausted","returned",TRUE,6
+"converged","returned",TRUE,391
+"line_search_salvaged","returned",TRUE,4
+"singular_convergence","returned",TRUE,172

@@ -117,6 +117,18 @@ moment_quadratic_hessian(const model::ModelEvaluator& ev,
                          const Eigen::VectorXd& theta,
                          const Weight& weight = {});
 
+// Owning total-scale pieces, assembled independently. Retaining the observed
+// correction avoids recovering it by subtracting a rounded cross-product.
+struct MomentCurvature {
+  Eigen::MatrixXd gauss_newton;
+  Eigen::MatrixXd correction;
+};
+fit_expected<MomentCurvature>
+moment_quadratic_curvature(const model::ModelEvaluator& ev,
+                           const data::SampleStats& samp,
+                           const Eigen::VectorXd& theta,
+                           const Weight& weight = {});
+
 // Normal-theory variance of the total gradient of the same objective,
 // Σ_b n_b J_bᵀ W_b Γ_b W_b J_b with Γ_b the normal-theory asymptotic
 // covariance of the block's [mean ; vech(cov)] moments built from S_b. For the
@@ -128,5 +140,19 @@ moment_quadratic_nt_gradient_variance(const model::ModelEvaluator& ev,
                                       const data::SampleStats& samp,
                                       const Eigen::VectorXd& theta,
                                       const Weight& weight = {});
+
+// Retain Omega = A' A without forming its cross-product. If every sample
+// covariance is PD, also retain b such that the total gradient is A' b.
+// Neither the estimator nor its weight is regularized. Singular samples
+// retain a factor, but cannot supply this whitening of the residual.
+struct MomentGradientFactor {
+  Eigen::MatrixXd factor;
+  Eigen::VectorXd score_residual;
+};
+fit_expected<MomentGradientFactor>
+moment_quadratic_nt_gradient_factor(const model::ModelEvaluator& ev,
+                                    const data::SampleStats& samp,
+                                    const Eigen::VectorXd& theta,
+                                    const Weight& weight = {});
 
 }  // namespace magmaan::estimate::gmm

@@ -1,0 +1,1 @@
+case_id,family,method,fit_id,active_indicator,boundary_objective,outward_derivative,tangent_gradient_max,tangent_hessian_min,delta_max_abs_loading,delta_objective,delta_objective_error,finite_theta_transfer,local_face_verified,scope

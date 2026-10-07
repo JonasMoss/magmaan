@@ -128,6 +128,24 @@ confirmatory calibration is claimed. FIML lavaan compatibility is composed separ
   Native diagnostics remain available alongside the selected preset verdict.
 
 - Direct observed-pattern ML over raw continuous data with missingness masks.
+- Isolated sphere-study numerical banking (2026-10-06, TASK-33.10.3) exposes
+  opt-in `magmaan_core$frontier_fiml_newton_audit()`: it rebuilds the value-based
+  pack from raw data, retaining owning pattern summaries, total gradient,
+  analytic observed Hessian, equality basis and raw local diagnostics. Serialized
+  fits need no live external pointer. Independent 90-digit checks agree at all
+  70 fresh and 37 corrected development points, including actual pattern
+  counts/means/covariances and eight complete-data ML reductions. Fresh default
+  fits pass 16/16; SLSQP passes 15/16 with one above-budget unit endpoint.
+  Earlier unit/weak-marker failures, two SLSQP budget errors and early-stop
+  errors without candidates remain witnesses for starts/stopping work. An exact
+  released-marker scale ridge can pass the raw local check; its independently
+  proved nonidentification remains explicitly unchecked, owned by TASK-33.3.
+  This banks conditional identified-model likelihood/audit integration, with
+  construction bounds explicitly unsupported; it supplies no identification
+  guard, raw-sample normalization extension, inference/default/PSD guarantee.
+  Evidence and reproduction are in
+  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  (`fiml_audit` lane).
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
 - The explicit frontier `fit_fiml_psd()` path evaluates that same cached
@@ -187,6 +205,28 @@ confirmatory calibration is claimed. FIML lavaan compatibility is composed separ
   `(H, J, ACOV)` plus casewise saturated-moment influence rows through
   `saturated_em_moment_influence`; Stage 2 runs complete-data ML on those
   saturated moments.
+  Isolated sphere-study numerical composition (2026-10-06, TASK-33.10.4) now
+  retains raw saturated derivatives, information repairs, endpoint value and
+  EM stop/options alongside `(H, J, ACOV)` in R. `fit_ml2s()` captures its exact
+  caller-unit Stage-2 moments/counts, recipe/mixing, required ACOV, supplied
+  weights, bounds and transformation before fitting. Opt-in
+  `magmaan_core$frontier_ml2s_convergence_audit()` exposes the existing core
+  Stage-1, handoff, solver-stop and original Stage-2 reports without refitting;
+  Nt uses ML and other weights their matching fixed quadratics. Serialized
+  fits rebuild packs; legacy/missing records stay unchecked, mismatches fail.
+  Fresh independent 90-digit checks agree at 156 stage points, 210 conditional
+  producer checks and 78 handoffs. All 12 ordinary Stage-1 endpoints and 56
+  returned fits pass; six mixed-unit ULS/DWLS/ADF L-BFGS errors fed
+  TASK-33.10.5. Its later candidate-retention bank returns these six endpoints
+  with failed Stage-2/composed verdicts; it does not recover their optima.
+  Automatic ordinary ML2S inference now requires the C++ convergence verdict
+  to pass; failed/unchecked fits retain their stage inputs for explicit audits.
+  Extreme-tail inference cost remains a separate backlog item. Negative raw curvature still fails after information repair;
+  its repaired ACOV remains unchecked. Separate stage passes imply no
+  propagated structural-parameter accuracy or inference/default recommendation.
+  Nonordinary covariance policies are explicitly outside this adapter. See
+  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  (`ml2s_audit` lane).
   `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
   returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected

@@ -1,0 +1,17 @@
+family,chart,portfolio,controls,cases,qualified,baseline_qualified,gains,losses,finite_basin_references,basin_matches,total_seconds,median_seconds,negative_residual_winners,indefinite_latent_winners
+weak,marker,api_default,stock,5,2,2,0,0,5,2,0.06900000000000017,0.014000000000000012,1,0
+weak,marker,signed_only,stock,5,3,2,2,1,5,3,0.241,0.04600000000000026,0,2
+weak,marker,default_signed,stock,5,4,2,2,0,5,4,0.31000000000000016,0.060000000000000275,1,2
+weak,marker,all,stock,5,4,2,2,0,5,4,0.48700000000000004,0.07400000000000029,1,2
+weak,sphere,api_default,stock,5,3,3,0,0,5,3,0.08200000000000002,0.01200000000000001,1,0
+weak,sphere,signed_only,stock,5,5,3,2,0,5,5,0.2529999999999998,0.051999999999999935,1,2
+weak,sphere,default_signed,stock,5,5,3,2,0,5,5,0.3349999999999998,0.06400000000000006,1,2
+weak,sphere,all,stock,5,5,3,2,0,5,5,0.4399999999999998,0.08499999999999985,1,2
+mixed,marker,api_default,stock,5,0,0,0,0,5,0,0.06800000000000028,0.013000000000000345,0,0
+mixed,marker,signed_only,stock,5,2,0,2,0,5,2,0.2570000000000001,0.052000000000000046,1,2
+mixed,marker,default_signed,stock,5,2,0,2,0,5,2,0.3250000000000004,0.06600000000000028,1,2
+mixed,marker,all,stock,5,2,0,2,0,5,2,0.38900000000000023,0.07800000000000029,1,2
+mixed,sphere,api_default,stock,5,3,3,0,0,5,3,0.131,0.017999999999999794,1,1
+mixed,sphere,signed_only,stock,5,5,3,2,0,5,5,0.5110000000000006,0.09800000000000031,2,3
+mixed,sphere,default_signed,stock,5,5,3,2,0,5,5,0.6420000000000006,0.12699999999999978,2,3
+mixed,sphere,all,stock,5,5,3,2,0,5,5,0.8670000000000011,0.1589999999999998,2,3

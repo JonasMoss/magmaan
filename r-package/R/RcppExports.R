@@ -421,6 +421,14 @@ infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
     .Call(`_magmaanlab_infer_fiml_fmg_spectrum`, fit, h_step)
 }
 
+frontier_fiml_newton_audit_impl <- function(fit, theta = NULL) {
+    .Call(`_magmaanlab_frontier_fiml_newton_audit_impl`, fit, theta)
+}
+
+frontier_ml2s_convergence_audit_impl <- function(fit, theta = NULL, stage1_point = NULL) {
+    .Call(`_magmaanlab_frontier_ml2s_convergence_audit_impl`, fit, theta, stage1_point)
+}
+
 frontier_guttman_h_impl <- function(S, blocks, method = "triad_ls") {
     .Call(`_magmaanlab_frontier_guttman_h_impl`, S, blocks, method)
 }
@@ -575,6 +583,10 @@ frontier_fit_mixed_ordinal_psd_impl <- function(partable, mixed_stats, estimator
 
 ordinal_catml_dwls_rmsea_impl <- function(fit, ordinal_stats = NULL) {
     .Call(`_magmaanlab_ordinal_catml_dwls_rmsea_impl`, fit, ordinal_stats)
+}
+
+frontier_ordinal_newton_audit_impl <- function(fit, theta = NULL) {
+    .Call(`_magmaanlab_frontier_ordinal_newton_audit_impl`, fit, theta)
 }
 
 policy_modification_indices_impl <- function(fit, state, raw = NULL, releases = TRUE) {

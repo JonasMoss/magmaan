@@ -7,6 +7,8 @@
 
 namespace magmaan::estimate::frontier {
 
+struct NewtonDistanceInterval;
+
 enum class ConvergencePolicyKind { Explicit, Compatibility };
 enum class RequiredStationarity { FirstOrder, Newton, Both };
 
@@ -20,6 +22,9 @@ struct ConvergencePolicy {
   double objective_relative_tol = 1e-6;
   double stationarity_tol = 1e-3;
   NewtonAccuracyOptions newton;
+  // Opt-in: the entire construction-aware interval must be within budget.
+  // Missing or unresolved bounds stay unchecked; no condition-cap fallback.
+  bool require_verified_inputs = false;
 };
 ConvergencePolicy compatibility_convergence_policy();
 ConvergencePolicy first_order_convergence_policy();
@@ -47,6 +52,7 @@ struct ConvergenceAssessment {
 // than trusting stored pass/fail flags. No optimizer status participates in
 // either policy. Use an owning report to retain the Hessian and factorization.
 ConvergenceAssessment assess_convergence(
-    const FitDiagnostics& evidence, ConvergencePolicy policy = {});
+    const FitDiagnostics& evidence, ConvergencePolicy policy = {},
+    const NewtonDistanceInterval* interval = nullptr);
 
 } // namespace magmaan::estimate::frontier

@@ -1,0 +1,3 @@
+"control","rejected","message"
+"unavailable_wls_weight",TRUE,"magmaan fit error [NumericIssue] after 0 iters, f=0: OrdinalStats moment/weight dimension mismatch in block 0"
+"constant_category",TRUE,"magmaan inference error [NumericIssue]: ordinal_stats_from_integer_data: block 0 variable 0 has fewer than 2 levels"

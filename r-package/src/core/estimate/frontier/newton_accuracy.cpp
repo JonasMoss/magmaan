@@ -112,7 +112,8 @@ NewtonSystem prepare_newton_system(const Eigen::MatrixXd& H) {
 }
 
 NewtonSolution solve_newton_system(const NewtonSystem& system,
-                                   const Eigen::VectorXd& gradient) {
+                                   const Eigen::VectorXd& gradient,
+                                   const Eigen::VectorXd& total_ls_residual) {
   NewtonSolution out;
   out.condition = system.condition;
   out.status = system.status;
@@ -124,12 +125,26 @@ NewtonSolution solve_newton_system(const NewtonSystem& system,
     out.distance = out.predicted_gain = out.solve_residual = 0.0;
     return out;
   }
-  const Eigen::VectorXd b = system.scale.asDiagonal() * gradient;
+  const bool mapped = system.coordinate_map.size() != 0;
+  if (mapped && (system.coordinate_map.rows() != gradient.size() ||
+                 system.coordinate_map.cols() != gradient.size() ||
+                 !system.coordinate_map.allFinite())) return out;
+  Eigen::VectorXd b = mapped
+      ? Eigen::VectorXd(system.coordinate_map.transpose() * gradient)
+      : Eigen::VectorXd(system.scale.asDiagonal() * gradient);
+  if (total_ls_residual.size()) {
+    if (system.objective_projection.rows() != gradient.size() ||
+        system.objective_projection.cols() != total_ls_residual.size() ||
+        !total_ls_residual.allFinite()) return out;
+    b = system.objective_projection * total_ls_residual;
+  }
   const Eigen::VectorXd y = system.factorization.solve(b);
   const auto& C = system.equilibrated_hessian;
-  out.step = -(system.scale.asDiagonal() * y);
-  out.solve_residual =
-      (C * y - b).norm() / (C.norm() * y.norm() + b.norm() + 1e-300);
+  out.step = mapped ? Eigen::VectorXd(-system.coordinate_map * y)
+                    : Eigen::VectorXd(-(system.scale.asDiagonal() * y));
+  out.solve_residual = std::max(std::isfinite(system.jacobian_factor_residual)
+      ? system.jacobian_factor_residual : 0.0,
+      (C * y - b).norm() / (C.norm() * y.norm() + b.norm() + 1e-300));
   const double d2 = b.dot(y);
   if (!out.step.allFinite() || !std::isfinite(out.solve_residual) ||
       !std::isfinite(d2)) return out;
@@ -140,6 +155,145 @@ NewtonSolution solve_newton_system(const NewtonSystem& system,
   out.status = NewtonAccuracyStatus::Available;
   out.distance = std::sqrt(d2);
   out.predicted_gain = 0.5 * d2;
+  return out;
+}
+
+NewtonSystem prepare_newton_ls_system(const Eigen::MatrixXd& J,
+                                     const Eigen::MatrixXd& correction) {
+  NewtonSystem out;
+  const Eigen::Index q = J.cols();
+  if (correction.rows() != q || correction.cols() != q ||
+      !correction.allFinite()) return out;
+  auto qr = prepare_newton_metric_system(J);
+  out.status = qr.status;
+  out.jacobian_condition = std::sqrt(qr.condition);
+  out.jacobian_factor_residual = qr.factor_residual;
+  if (qr.status != NewtonAccuracyStatus::Available) {
+    // Rank loss never authorizes a solve. A clearly negative direction in
+    // the observed quadratic can still distinguish a saddle from an
+    // unresolved metric. The cross-product is used only for this failure
+    // witness, with a rounding margin, never to manufacture a passing solve.
+    if (qr.status == NewtonAccuracyStatus::IllConditioned && J.allFinite()) {
+      const Eigen::MatrixXd H = J.transpose() * J + correction;
+      const Eigen::MatrixXd symmetric = 0.5 * (H + H.transpose());
+      if (symmetric.allFinite() && q > 0) {
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(symmetric, Eigen::EigenvaluesOnly);
+        const double margin = 64 * std::numeric_limits<double>::epsilon() *
+            static_cast<double>(q) * symmetric.norm();
+        if (eig.info() == Eigen::Success && eig.eigenvalues().minCoeff() < -margin)
+          out.status = NewtonAccuracyStatus::NonpositiveCurvature;
+      }
+    }
+    return out;
+  }
+  if (q == 0) return prepare_newton_system(Eigen::MatrixXd(0, 0));
+  const Eigen::MatrixXd R = qr.factorization.matrixR().topLeftCorner(q, q)
+      .triangularView<Eigen::Upper>();
+  const auto& P = qr.factorization.colsPermutation();
+  const Eigen::MatrixXd scaled = qr.scale.asDiagonal() * correction * qr.scale.asDiagonal();
+  const Eigen::MatrixXd permuted = P.transpose() * scaled * P;
+  const Eigen::MatrixXd left = R.transpose().triangularView<Eigen::Lower>().solve(permuted);
+  const Eigen::MatrixXd transformed = R.transpose().triangularView<Eigen::Lower>().solve(left.transpose());
+  const Eigen::MatrixXd C = Eigen::MatrixXd::Identity(q, q) +
+      0.5 * (transformed + transformed.transpose());
+  out = prepare_newton_system(C);
+  out.jacobian_condition = std::sqrt(qr.condition);
+  out.jacobian_factor_residual = qr.factor_residual;
+  if (out.status == NewtonAccuracyStatus::Available) {
+    const Eigen::MatrixXd triangular_map = R.triangularView<Eigen::Upper>().solve(
+        Eigen::MatrixXd::Identity(q, q));
+    out.coordinate_map = qr.scale.asDiagonal() * (P * triangular_map) * out.scale.asDiagonal();
+    const Eigen::MatrixXd thin_q = qr.factorization.householderQ() *
+        Eigen::MatrixXd::Identity(J.rows(), q);
+    out.objective_projection = out.scale.asDiagonal() * thin_q.transpose();
+    if (!out.coordinate_map.allFinite()) out.status = NewtonAccuracyStatus::SolveUnreliable;
+  }
+  return out;
+}
+
+NewtonMetricSystem prepare_newton_metric_system(const Eigen::MatrixXd& factor) {
+  NewtonMetricSystem out;
+  const Eigen::Index q = factor.cols();
+  if (!factor.allFinite() || factor.rows() < q) return out;
+  out.scale.resize(q);
+  for (Eigen::Index j = 0; j < q; ++j) {
+    const double norm = factor.col(j).stableNorm();
+    if (!(norm > 0) || !std::isfinite(norm)) {
+      out.status = NewtonAccuracyStatus::IllConditioned;
+      return out;
+    }
+    out.scale[j] = 1 / norm;
+  }
+  out.equilibrated_factor = factor * out.scale.asDiagonal();
+  if (q == 0) {
+    out.condition = 1;
+    out.factor_residual = 0;
+    out.status = NewtonAccuracyStatus::Available;
+    return out;
+  }
+  out.factorization.compute(out.equilibrated_factor);
+  out.rank = out.factorization.rank();
+  const Eigen::MatrixXd thin_q = out.factorization.householderQ() *
+      Eigen::MatrixXd::Identity(factor.rows(), q);
+  const Eigen::MatrixXd R = out.factorization.matrixR().topLeftCorner(q, q)
+      .template triangularView<Eigen::Upper>();
+  out.factor_residual = (out.equilibrated_factor * out.factorization.colsPermutation() -
+      thin_q * R).norm() / out.equilibrated_factor.norm();
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(out.equilibrated_factor);
+  if (svd.info() != Eigen::Success) return out;
+  const auto& singular = svd.singularValues();
+  const double ratio = singular[0] / singular[q - 1];
+  out.condition = ratio * ratio;
+  out.status = out.rank == q && std::isfinite(out.condition)
+      ? NewtonAccuracyStatus::Available : NewtonAccuracyStatus::IllConditioned;
+  return out;
+}
+
+NewtonSolution solve_newton_metric_system(
+    const NewtonMetricSystem& system, const Eigen::VectorXd& gradient,
+    const Eigen::VectorXd& score_residual) {
+  NewtonSolution out;
+  out.status = system.status;
+  out.condition = system.condition;
+  const Eigen::Index q = system.scale.size();
+  if (system.status != NewtonAccuracyStatus::Available) return out;
+  if (gradient.size() != q || !gradient.allFinite() ||
+      (score_residual.size() && (score_residual.size() != system.equilibrated_factor.rows() ||
+                               !score_residual.allFinite()))) {
+    out.status = NewtonAccuracyStatus::Unavailable;
+    return out;
+  }
+  out.step = Eigen::VectorXd::Zero(q);  // metric solves do not replace the Hessian step
+  if (q == 0) {
+    out.distance = 0; out.predicted_gain = 0; out.solve_residual = 0;
+    return out;
+  }
+  const Eigen::VectorXd rhs = system.factorization.colsPermutation().transpose() *
+      system.scale.cwiseProduct(gradient);
+  const Eigen::MatrixXd R = system.factorization.matrixR().topLeftCorner(q, q)
+      .template triangularView<Eigen::Upper>();
+  Eigen::VectorXd z;
+  if (score_residual.size()) {
+    // G = A'b, A_scaled P = QR: G'Omega^-1 G = ||Q'b||^2.
+    // Project the whitened residual instead of first cancelling a large score
+    // and then amplifying its rounding error in R^-T.
+    const Eigen::VectorXd rotated = system.factorization.householderQ().adjoint() * score_residual;
+    z = rotated.head(q);
+  } else {
+    z = R.transpose().triangularView<Eigen::Lower>().solve(rhs);
+  }
+  // Projection's input is b, including its component orthogonal to A. Scale
+  // the score-identity residual by that input, not its near-zero projection;
+  // otherwise harmless cancellation at a stationary fit fails the guard.
+  const double input_norm = score_residual.size() ? score_residual.norm() : z.norm();
+  out.solve_residual = std::max(system.factor_residual,
+      (R.transpose() * z - rhs).norm() / (R.norm() * input_norm + rhs.norm() + 1e-300));
+  if (!z.allFinite() || !std::isfinite(out.solve_residual)) {
+    out.status = NewtonAccuracyStatus::SolveUnreliable;
+    return out;
+  }
+  out.distance = z.stableNorm();
+  out.predicted_gain = 0.5 * out.distance * out.distance;
   return out;
 }
 
@@ -340,9 +494,20 @@ NewtonAudit audit_newton_derivatives(
     out.derivatives.detail = "Newton audit: invalid bounds or point outside the supplied box";
   }
   if (out.geometry.status == NewtonAccuracyStatus::Available) {
-    out.system = prepare_newton_system(out.geometry.reduced_hessian);
+    if (!has_bounds && domain == StationarityDomain::Ambient &&
+        out.derivatives.ls_curvature_correction.size()) {
+      const Eigen::MatrixXd B = out.geometry.equality_basis * out.geometry.tangent_basis;
+      out.system = prepare_newton_ls_system(
+          std::sqrt(out.derivatives.n_obs) * out.derivatives.whitened_jacobian * B,
+          B.transpose() * out.derivatives.ls_curvature_correction * B);
+    } else {
+      out.system = prepare_newton_system(out.geometry.reduced_hessian);
+    }
     if (!has_bounds) {
-      out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient);
+      out.solution = solve_newton_system(out.system, out.geometry.reduced_gradient,
+          out.system.objective_projection.size()
+              ? Eigen::VectorXd(std::sqrt(out.derivatives.n_obs) * out.derivatives.whitened_residual)
+              : Eigen::VectorXd{});
     } else {
       const Eigen::MatrixXd B = out.geometry.equality_basis * out.geometry.tangent_basis;
       std::vector<Eigen::VectorXd> rows;
@@ -400,8 +565,16 @@ NewtonAudit audit_newton_derivatives(
     const Eigen::VectorXd y = out.box.applied
         ? Eigen::VectorXd(out.geometry.reduced_hessian * out.solution.step)
         : Eigen::VectorXd(-out.geometry.reduced_gradient);
-    out.metric_system = prepare_newton_system(out.geometry.reduced_metric);
-    const auto m = solve_newton_system(out.metric_system, y);
+    NewtonSolution m;
+    if (out.geometry.reduced_metric_factor.size()) {
+      out.metric_factor_system = prepare_newton_metric_system(out.geometry.reduced_metric_factor);
+      m = solve_newton_metric_system(out.metric_factor_system,
+          out.box.applied ? y : out.geometry.reduced_gradient,
+          out.box.applied ? Eigen::VectorXd{} : out.derivatives.metric_score_residual);
+    } else {
+      out.metric_system = prepare_newton_system(out.geometry.reduced_metric);
+      m = solve_newton_system(out.metric_system, y);
+    }
     if (m.status != NewtonAccuracyStatus::Available) {
       out.solution.status = NewtonAccuracyStatus::IllConditioned;
     } else {
@@ -553,10 +726,25 @@ NewtonGeometry prepare_newton_geometry(
       !derivatives.theta.allFinite() || !derivatives.gradient.allFinite() ||
       !derivatives.hessian.allFinite() || !std::isfinite(interior_eigen_tol) ||
       interior_eigen_tol < 0.0) return fail;
+  if (derivatives.ls_curvature_correction.size() &&
+      (derivatives.ls_curvature_correction.rows() != pt.n_free() ||
+       derivatives.ls_curvature_correction.cols() != pt.n_free() ||
+       !derivatives.ls_curvature_correction.allFinite() ||
+       derivatives.whitened_jacobian.cols() != pt.n_free() ||
+       !derivatives.whitened_jacobian.allFinite() ||
+       derivatives.whitened_residual.size() != derivatives.whitened_jacobian.rows() ||
+       !derivatives.whitened_residual.allFinite() ||
+       !(derivatives.n_obs > 0) || !std::isfinite(derivatives.n_obs))) return fail;
   const bool sandwich = derivatives.metric_kind == NewtonMetricKind::Sandwich;
   if (sandwich && (derivatives.metric.rows() != pt.n_free() ||
                    derivatives.metric.cols() != pt.n_free() ||
                    !derivatives.metric.allFinite())) return fail;
+  if (derivatives.metric_factor.size() &&
+      (derivatives.metric_factor.cols() != pt.n_free() ||
+       !derivatives.metric_factor.allFinite() ||
+       (derivatives.metric_score_residual.size() &&
+        (derivatives.metric_score_residual.size() != derivatives.metric_factor.rows() ||
+         !derivatives.metric_score_residual.allFinite())))) return fail;
   auto con = build_eq_constraints(pt);
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!con || !ev) return fail;
@@ -585,7 +773,10 @@ NewtonGeometry prepare_newton_geometry(
   if (domain == StationarityDomain::Ambient) {
     out.reduced_gradient = G;
     out.reduced_hessian = I;
-    if (sandwich) out.reduced_metric = K.transpose() * derivatives.metric * K;
+    if (sandwich) {
+      out.reduced_metric = K.transpose() * derivatives.metric * K;
+      if (derivatives.metric_factor.size()) out.reduced_metric_factor = derivatives.metric_factor * K;
+    }
     out.covariance_interior = covariance_blocks_interior(*ev, theta, interior_eigen_tol);
     out.status = NewtonAccuracyStatus::Available;
     return out;
@@ -771,6 +962,7 @@ NewtonGeometry prepare_newton_geometry(
   out.reduced_hessian = Z.transpose() * H * Z;
   if (sandwich) {
     out.reduced_metric = Z.transpose() * (K.transpose() * derivatives.metric * K) * Z;
+    if (derivatives.metric_factor.size()) out.reduced_metric_factor = derivatives.metric_factor * K * Z;
   }
   out.tangent_basis = std::move(Z);
   out.curvature_correction = std::move(Q);

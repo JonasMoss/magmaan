@@ -36,6 +36,38 @@ test_that("sphere ML reproduces the ordinary ML fit", {
   expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
   expect_lt(sph$gauge$pin_residual, 1e-6)
+  expect_identical(sph$gauge$native_audit$status, "passed")
+  expect_true(sph$gauge$native_audit$converged)
+  expect_equal(sph$gauge$native_audit$fmin, sph$gauge$fmin_sphere, tolerance = 1e-10)
+})
+
+test_that('construction-aware terminal assessment is explicit and keeps original evidence', {
+  spec <- model_spec('x ~~ x',fixed_x=FALSE,meanstructure=FALSE)
+  sample <- list(S=list(matrix(1,1,1,dimnames=list('x','x'))),nobs=100L)
+  for(estimator in c('ULS','ML')) {
+    x <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.0001,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE))
+    expect_true(x$converged)
+    expect_identical(x$converged_compatibility,x$diagnostics$newton_accuracy$passed)
+    expect_identical(x$verified_convergence$newton$status,'passed')
+    far <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.1,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE))
+    expect_false(far$converged)
+    expect_identical(far$verified_convergence$newton$status,'failed')
+    inconsistent <- magmaan_core$estimate_evaluate_at(spec$partable,sample,1.0001,estimator=estimator,
+      bounds=list(lower=-Inf,upper=Inf),audit_options=list(verified_newton=TRUE,reported_objective=1))
+    expect_false(inconsistent$converged)
+    expect_identical(inconsistent$verified_convergence$objective_consistency$status,'failed')
+  }
+  fit <- suppressWarnings(frontier_fit_sphere(ernst,ernst_sim(),estimator='ULS',
+    optimizer='port-nls',polish=FALSE,control=list(verified_newton=TRUE)))
+  a <- fit$gauge$native_audit
+  expect_identical(fit$converged,a$converged)
+  expect_true(is.list(a$input_map))
+  expect_identical(a$distance_interval_derived_inputs$decision,'within_budget')
+  expect_equal(a$input_map$rounded_point,fit$gauge$sphere_partable$est[
+    fit$gauge$sphere_partable$free>0][order(fit$gauge$sphere_partable$free[fit$gauge$sphere_partable$free>0])],
+    tolerance=1e-10,ignore_attr=TRUE)
 })
 
 test_that("std.lv and multi-group metric invariance round-trip", {
@@ -61,6 +93,12 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
     ord <- fit_model(ernst, dat, estimator = est)
     sph <- frontier_fit_sphere(ernst, dat, estimator = est)
     expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-5)
+    expect_identical(sph$gauge$native_audit$status, "passed")
+    expect_identical(sph$gauge$native_audit$newton_accuracy$metric, "sandwich")
+    expect_identical(sph$gauge$native_audit$curvature_system$status, "available")
+    expect_identical(sph$gauge$native_audit$accuracy_metric_factor_system$status, "available")
+    expect_true(all(eigen(sph$gauge$native_audit$reduced_metric, symmetric = TRUE,
+                          only.values = TRUE)$values > 0))
   }
   miss <- dat
   miss$x2[seq(3, nrow(miss), by = 7)] <- NA
@@ -69,6 +107,8 @@ test_that("ULS, GLS, FIML and psd = TRUE reproduce their ordinary fits", {
   sph <- frontier_fit_sphere(ernst, miss, estimator = "FIML")
   expect_equal(sph$fmin, ord$fmin, tolerance = 1e-8)
   expect_equal(sph$partable$est, ord$partable$est, tolerance = 1e-4)
+  expect_identical(sph$gauge$native_audit$status, "passed")
+  expect_identical(sph$gauge$native_audit$newton_accuracy$objective, "fiml")
 
   psd <- frontier_fit_ml_psd(ernst, dat, preconditioning = "none")
   sph <- frontier_fit_sphere(ernst, dat, psd = TRUE)
@@ -88,11 +128,39 @@ test_that("a marker at a pole signals a classed condition with the sphere soluti
   expect_s3_class(cond, "magmaan_user_chart_singular")
   expect_true(cond$gauge$units$singular)
   expect_lt(abs(cond$gauge$units$direction_level), 1e-6)
+  expect_identical(cond$gauge$native_audit$status, "passed")
 
   moved <- frontier_reidentify(cond, "f =~ NA*x1 + 1*x2 + x3 + x4")
   expect_true(all(is.finite(moved$theta)))
   expect_error(frontier_reidentify(cond, "f =~ x1 + x2 + x3 + x4"),
                "does not contain")
+})
+
+test_that("an inaccurate driven stop does not claim a chart-singular optimum", {
+  # A large explicit chart tolerance makes translation unavailable at the
+  # prematurely stopped endpoint; it does not make that endpoint an optimum.
+  cond <- tryCatch(frontier_fit_sphere(ernst, ernst_sim(), pole_tol = 2,
+                                      polish = FALSE, control = list(nlopt = list(xtol_rel = 100))),
+                   magmaan_sphere_condition = function(e) e)
+  expect_s3_class(cond, "magmaan_sphere_condition")
+  expect_false(inherits(cond, "magmaan_user_chart_singular"))
+  expect_false(identical(cond$gauge$native_audit$status, "passed"))
+  expect_true(all(is.finite(cond$gauge$sphere_partable$est)))
+})
+
+test_that("an unsupported PSD-face audit does not claim a chart-singular optimum", {
+  lambda <- c(1, 0.8, 0.6, 0.7)
+  # The implied observed covariance is PD, but the unrestricted solution has
+  # a negative first residual variance, giving PSD a strongly active face.
+  S <- 1.2 * outer(lambda, lambda) + diag(c(-0.1, 0.6, 0.7, 0.4))
+  dimnames(S) <- list(paste0("x", 1:4), paste0("x", 1:4))
+  cond <- tryCatch(frontier_fit_sphere("f =~ x1 + x2 + x3 + x4",
+                     list(S = list(S), nobs = 300L), psd = TRUE, pole_tol = 2,
+                     polish = FALSE), magmaan_sphere_condition = function(e) e)
+  expect_s3_class(cond, "magmaan_sphere_audit_unavailable")
+  expect_identical(cond$gauge$native_audit$status, "unchecked")
+  expect_false(inherits(cond, "magmaan_user_chart_singular"))
+  expect_match(cond$gauge$native_audit$detail, "sphere/PSD")
 })
 
 test_that("frontier_reidentify moves a fit between identifications", {
@@ -174,4 +242,70 @@ test_that("the canonical start gives one sphere solution for every identificatio
   hinted <- frontier_fit_sphere("X =~ x1 + start(0.8)*x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X", dat)
   expect_identical(hinted$gauge$start, "user")
   expect_identical(frontier_fit_sphere(ernst, dat, start = "user")$gauge$start, "user")
+})
+
+test_that("LS point auditing retains square-root artifacts only when requested", {
+  S <- matrix(c(1.2,.4,.3,.4,1.1,.2,.3,.2,1.3),3)
+  dimnames(S) <- list(paste0('x',1:3),paste0('x',1:3))
+  spec <- model_spec('f =~ x1 + x2 + x3')
+  sample <- list(S=list(S),nobs=400L)
+  theta <- magmaan_core$estimate_start_values(spec$partable,sample)
+  bounds <- list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta)))
+  plain <- magmaan_core$evaluate_at(spec$partable,sample,theta,'ULS',bounds=bounds)
+  kept <- magmaan_core$evaluate_at(spec$partable,sample,theta,'ULS',bounds=bounds,
+    audit_options=list(retain_newton_artifacts=TRUE))
+  expect_null(plain$newton_audit)
+  expect_equal(kept$diagnostics$newton_accuracy,plain$diagnostics$newton_accuracy)
+  a <- kept$newton_audit
+  expect_equal(crossprod(a$metric_factor),a$metric,tolerance=1e-10)
+  expect_equal(as.numeric(crossprod(a$metric_factor,a$metric_score_residual)),
+    as.numeric(a$gradient),tolerance=1e-10)
+  expect_identical(a$factor_status,'available')
+  expect_identical(a$factor_rank,length(theta))
+  expect_equal(a$hessian,a$n_obs*crossprod(a$whitened_jacobian)+a$ls_curvature_correction,
+    tolerance=1e-10)
+  T <- a$curvature_coordinate_map
+  expect_equal(a$curvature_equilibrated_hessian,crossprod(T,a$hessian%*%T),tolerance=1e-10)
+  expect_equal(as.numeric(a$hessian%*%a$newton_step),-as.numeric(a$gradient),tolerance=1e-8)
+})
+
+test_that("sphere LS transports the observed correction into QR coordinates", {
+  fit <- suppressWarnings(frontier_fit_sphere(ernst,ernst_sim(),estimator='ULS',
+    optimizer='port',polish=FALSE))
+  a <- fit$gauge$native_audit
+  expect_identical(a$curvature_system$status,'available')
+  expect_equal(a$hessian,a$n_obs*crossprod(a$whitened_jacobian)+a$ls_curvature_correction,
+    tolerance=1e-9)
+  T <- a$curvature_system$coordinate_map
+  expect_equal(a$curvature_system$equilibrated_hessian,
+    crossprod(T,a$reduced_hessian%*%T),tolerance=1e-9)
+  expect_equal(as.numeric(a$reduced_hessian%*%a$newton_step),
+    -as.numeric(a$reduced_gradient),tolerance=1e-7)
+})
+
+test_that('conditional distance intervals preserve the stored fit verdict', {
+  S <- matrix(c(1.2,.4,.3,.4,1.1,.2,.3,.2,1.3),3)
+  dimnames(S) <- list(paste0('x',1:3),paste0('x',1:3))
+  sample <- list(S=list(S),nobs=400L)
+  spec <- model_spec('f =~ x1 + x2 + x3')
+  theta <- magmaan_core$estimate_start_values(spec$partable,sample)
+  for (estimator in c('ULS','ML')) {
+    plain <- magmaan_core$estimate_evaluate_at(spec$partable,sample,theta,estimator=estimator,
+      bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))))
+    kept <- magmaan_core$estimate_evaluate_at(spec$partable,sample,theta,estimator=estimator,
+      bounds=list(lower=rep(-Inf,length(theta)),upper=rep(Inf,length(theta))),
+      audit_options=list(retain_newton_artifacts=TRUE,derive_interval_input_errors=TRUE,
+        interval_input_errors=list(matrix=1,vector=1)))
+    expect_equal(kept$diagnostics$newton_accuracy,plain$diagnostics$newton_accuracy)
+    expect_identical(kept$newton_audit$distance_interval_conditional$decision,'unresolved')
+    expect_match(kept$newton_audit$interval_input_scope,'construction errors excluded')
+    bounds <- kept$newton_audit$derived_interval_input_errors
+    expect_identical(bounds$status,'available')
+    expect_true(all(unlist(bounds[c('matrix','vector','curvature')])>=0))
+    expect_true(bounds$curvature_lower_bound>0)
+    expect_true(kept$newton_audit$distance_interval_derived_inputs$decision %in%
+      c('within_budget','above_budget','unresolved'))
+    interval <- kept$newton_audit$distance_interval_retained_inputs
+    expect_true(interval$lower <= interval$distance && interval$distance <= interval$upper)
+  }
 })

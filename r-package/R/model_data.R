@@ -1509,13 +1509,18 @@ frontier_fit_ml_multiinfo <- function(
 # and why, and the sphere-chart solution. When the model's chart does not
 # contain the fitted point (a marker loading of zero, or a non-positive
 # variance for a std.lv latent), the call signals a
-# `magmaan_user_chart_singular` error whose `gauge` field carries the sphere
-# solution; frontier_reidentify() re-expresses it under another
+# `magmaan_user_chart_singular` error only after a passing native audit.
+# Failed or unchecked endpoints signal a distinct `magmaan_sphere_condition`.
+# Their `gauge` field retains the point and audit; frontier_reidentify()
+# re-expresses it under another
 # identification. `psd = TRUE` composes the sphere with the covariance-honest
 # domain of frontier_fit_ml_psd(). With `polish = TRUE` (default) the ordinary
 # fit is restarted from the translated sphere solution, so the reported
 # estimate meets the ordinary convergence criteria in the model's own chart;
 # `fit$gauge$polish` records how far it moved.
+# `control$verified_newton = TRUE` selects construction-aware native terminal
+# assessment for covariance-only, unboxed ULS/ML. Missing bounds give NA.
+# The gauge retains the compatibility assessment and original objective checks.
 frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 ..., cluster = NULL, ordered = NULL,
                                 parameterization = "delta", psd = FALSE,
@@ -1609,6 +1614,20 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
 }
 
 .stop_user_chart_singular <- function(gauge, spec, caller) {
+  audit <- gauge$native_audit
+  if (!identical(audit$status, "passed")) {
+    failed <- identical(audit$status, "failed")
+    msg <- paste0(caller, "(): the requested chart cannot report the returned ",
+                  "endpoint, and the sphere-native audit ",
+                  if (failed) "failed" else "is unchecked",
+                  ". This does not establish a chart-singular optimum. ",
+                  "The endpoint and audit are in the condition's `gauge` field.")
+    cond <- structure(
+      class = c(if (failed) "magmaan_sphere_numerical_failure" else "magmaan_sphere_audit_unavailable",
+                "magmaan_sphere_condition", "error", "condition"),
+      list(message = msg, call = NULL, gauge = gauge, model = spec))
+    stop(cond)
+  }
   units <- gauge$units
   bad <- unique(units$latent[units$singular])
   msg <- paste0(
@@ -1616,11 +1635,12 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
     "for latent(s) ", paste(bad, collapse = ", "), ": a marker loading is ",
     "numerically zero or a fixed-variance latent has a numerically zero or ",
     "negative variance, ",
-    "so estimates in this parameterization do not exist. The sphere-chart ",
-    "solution is in the condition's `gauge` field; frontier_reidentify() ",
+    "so the endpoint cannot be reported reliably in this parameterization ",
+    "at the requested chart tolerance. The audited sphere endpoint ",
+    "is in the condition's `gauge` field; frontier_reidentify() ",
     "re-expresses it under another identification.")
   cond <- structure(
-    class = c("magmaan_user_chart_singular", "error", "condition"),
+    class = c("magmaan_user_chart_singular", "magmaan_sphere_condition", "error", "condition"),
     list(message = msg, call = NULL, gauge = gauge, model = spec))
   stop(cond)
 }
@@ -1632,7 +1652,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
 # (for example `std_lv = TRUE`). Errors when the target identification does
 # not contain the point, or when `model` describes a different model.
 frontier_reidentify <- function(fit, model, ..., pole_tol = 1e-6) {
-  from <- if (inherits(fit, "magmaan_user_chart_singular")) {
+  from <- if (inherits(fit, "magmaan_sphere_condition") || inherits(fit, "magmaan_user_chart_singular")) {
     fit$gauge$sphere_partable
   } else if (is.data.frame(fit)) {
     fit
@@ -2151,6 +2171,30 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
 # names accepted by `fit_*`. `audit_options` accepts the same fields as the
 # C++ `TerminalAuditOptions` struct (e.g.
 # `list(stationarity_mode = "absolute", absolute_tol = 1e-3)`).
+# For complete-data ML/LS, `retain_newton_artifacts = TRUE` additionally returns
+# `newton_audit`: reduced curvature, sampling-metric factor, whitened score
+# residual and factor rank/condition. This recomputes owning C++ artifacts
+# without altering the stored verdict or its acceptance thresholds.
+# Unrestricted complete-data LS also retains the independent observed
+# correction, the QR coordinate map and equilibrated curvature, the Jacobian
+# condition/reconstruction residual and the Newton step in reduced coordinates.
+# ML artifacts are recomputed in the supplied chart with explicit bounds;
+# they may differ numerically from the stored unit-normalized ML audit.
+# `distance_interval_retained_inputs` bounds arithmetic on retained inputs only.
+# Optional `interval_input_errors = list(matrix = ..., vector = ...)` supplies
+# Frobenius/Euclidean construction-error bounds: LS uses the column-scaled
+# factor/residual; ML uses the equilibrated Hessian/scaled score. The conditional
+# interval reports within_budget, above_budget or unresolved; it does not alter
+# fit acceptance. Zero construction bounds do not certify SEM input construction.
+# `derive_interval_input_errors = TRUE` recomputes outward interval bounds in
+# C++ for unboxed ambient covariance-only ULS/ML. It returns explicit status,
+# construction bounds, a verified positive-curvature margin and, when available,
+# `distance_interval_derived_inputs`. Means and other estimators are unsupported.
+# `reported_objective` optionally supplies the backend objective for consistency
+# checking at a fitted endpoint; otherwise the supplied point is recomputed.
+# `verified_newton = TRUE` selects the construction-aware terminal assessment,
+# returning TRUE/FALSE/NA for within/above/unresolved; original acceptance is
+# retained in `converged_compatibility` and diagnostics. No optimizer runs here.
 evaluate_at <- function(model, data, theta,
                         estimator = c("ULS", "GLS", "WLS", "ML"),
                         W = NULL, bounds = NULL, audit_options = NULL) {

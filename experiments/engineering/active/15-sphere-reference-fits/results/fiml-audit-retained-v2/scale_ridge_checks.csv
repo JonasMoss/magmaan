@@ -1,0 +1,2 @@
+point_id,scale_invariance_error,jacobian_null_error,raw_newton_passed,bank_decision,passed
+7,1.22727336632443163827394298874656891074380387812486239127788727929677631368042896411502447e-91,0.0,FALSE,unchecked_identification,True

@@ -75,17 +75,22 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   # lavaan robust.two.stage path.
   weighted_stage2 <- identical(kind, "ml") && !identical(stage2_weight, "nt")
 
+  # Capture caller-unit inputs before fitting; later audits compare this record
+  # with the source/transformation and with the fit's retained sample.
+  W <- if (weighted_stage2) two_stage_stage2_weight_blocks_impl(em,
+    stage2_weight = stage2_weight, dls_a = dls_a) else NULL
+  stage2_input <- list(moments = em[c("mean", "cov", "n_obs", "acov")],
+    stage2_weight = stage2_weight, dls_a = dls_a, weight_blocks = W,
+    covariance_policy = covariance_policy, bounds = b,
+    transformation = stage1_regularization)
+
   fit <- if (identical(covariance_policy, "barrier")) {
     barrier <- .covariance_options("barrier", barrier = barrier)$barrier
-    W <- if (weighted_stage2) two_stage_stage2_weight_blocks_impl(em,
-      stage2_weight = stage2_weight, dls_a = dls_a) else NULL
     fit_moments_barrier_impl(partable, sample_stats,
       estimator = if (weighted_stage2) "WLS" else if (identical(kind, "ml")) "ML" else "GLS",
       W = W, target = barrier$target, weight = barrier$weight,
       optimizer = optimizer, control = control)
   } else if (identical(covariance_policy, "psd") && weighted_stage2) {
-    W <- two_stage_stage2_weight_blocks_impl(em, stage2_weight = stage2_weight,
-                                             dls_a = dls_a)
     frontier_fit_wls_psd_impl(
       partable, sample_stats, W = W, optimizer = optimizer, control = control,
       start_eigen_floor = start_eigen_floor,
@@ -101,8 +106,6 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
       start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol)
   } else if (weighted_stage2) {
-    W <- two_stage_stage2_weight_blocks_impl(em, stage2_weight = stage2_weight,
-                                             dls_a = dls_a)
     fit_wls_impl(partable, sample_stats, W = W, optimizer = optimizer,
                  control = control, bounds = b)
   } else {
@@ -119,6 +122,7 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                    else paste0("ML2S_", toupper(stage2_weight))
   fit$stage2_weight <- stage2_weight
   fit$stage2_dls_a <- dls_a
+  fit$stage2_input <- stage2_input
   if (identical(covariance_policy, "psd")) fit$covariance_policy <- "psd"
   fit$stage1 <- em
   if (!is.null(stage1_raw)) {
@@ -130,7 +134,10 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
       if (identical(covariance_policy, "ordinary")) "unrestricted" else covariance_policy,
       barrier = if (identical(covariance_policy, "barrier")) barrier else NULL,
       algorithm = optimizer %||% if (identical(covariance_policy, "psd")) "nlopt-slsqp" else "nlopt-lbfgs")
-  if (identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
+  # Use the C++ fit verdict before composing automatic inference. A failed
+  # candidate still owns its moments/weights for explicit numerical auditing;
+  # post-fit tail calculations can be prohibitively costly far from an optimum.
+  if (isTRUE(fit$converged) && identical(kind, "ml") && identical(covariance_policy, "ordinary")) {
     correction <- estimate_two_stage_em_ml_inference(
       fit, raw_data, h_step = h_step,
       stage2_weight = stage2_weight, dls_a = dls_a)

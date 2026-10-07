@@ -1,0 +1,10 @@
+"family","chart","fits","returned","legacy_passed","verified_passed","failed","unchecked","legacy_losses","median_fit_seconds"
+"feedback","marker",6,6,6,6,0,0,0,0.00200000000000022
+"feedback_ridge","marker",6,6,0,0,4,2,0,0.002
+"groups","marker",6,6,6,6,0,0,0,0.00250000000000017
+"means","marker",18,18,18,18,0,0,0,0.00199999999999978
+"mixed","marker",6,6,6,6,0,0,0,0.00150000000000006
+"regular","marker",18,18,18,18,0,0,0,0.002
+"shared","marker",6,6,6,6,0,0,0,0.00199999999999978
+"means","sphere",6,6,6,6,0,0,0,0.00500000000000034
+"regular","sphere",6,6,6,6,0,0,0,0.00549999999999995

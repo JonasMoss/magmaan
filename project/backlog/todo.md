@@ -56,7 +56,9 @@ label (the C++ project version) is retired.
 | **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI; a stable Mplus input frontend for the linear SEM subset |
 | **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
 
-Sphere-chart failure handling is deferred to the
+Sphere-chart development remains outside 0.2.0; the minimal unrestricted
+starts/search/audit programme and chart failure handling are high-priority
+[0.3.0 work](#optimization-and-convergence). Broader promotion stays in the
 [trigger register](speculative.md#sphere-chart-development). Existing PSD and
 barrier entry points, inference refusals and regression gates are unchanged in
 0.2.0; PSD inference keeps its current boundary contract. No milestone label
@@ -1214,12 +1216,183 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   reconstructed failing draw, unchanged well-behaved pairs, and ML/FIML/DWLS
   refits with retained data and original fitting options.
 
+#### Numerical banking programme (2026-10-04)
+
+Board TASK-33.10 groups the remaining numerical work by shared objective
+mechanism and route integration. Banking means retained, reproducible evidence
+for a declared numerical scope with failures, unchecked cases and reopening
+triggers. It does not mean ordinary default adoption, statistical calibration,
+global optimality or completion of every constraint/domain combination.
+The sphere-study branch (through 1fe7792f) was merged into main on 2026-10-07
+(TASK-33.11). The merge adds opt-in audits only and changes no default;
+"isolated sphere-study" in the rows below records where each card was banked.
+Existing adapters and regression gates count as evidence;
+new studies fill concrete gaps rather than duplicate an estimator-by-weight grid.
+
+| Card | Remaining outcome | Evidence to share and additional checks |
+| --- | --- | --- |
+| 33.10.1 | Banked 2026-10-05 in isolated sphere-study: fixed-weight LS mechanism and complete-data producers | Identity/diagonal/dense/NT construction bounds cover complete means, unequal groups, linear equalities and sphere maps. Fresh 78-fit/150-point confirmation: all 136 available bounds/intervals and 64 recipe checks agree with 90-digit references; 72 identified fits qualify, six redundant controls remain failed/unchecked. ADF/DLS Gamma inversion now removes moment units before the rank gate; deficient Gamma still rejects. No default adoption, first-stage error propagation or basin guarantee. |
+| 33.10.2 | Banked 2026-10-05 in isolated sphere-study: ordinal/mixed numerical audit integration | Retained whitened Jacobian, actual factors and direct observed correction reuse QR curvature/metric. Fresh 160 fits/252 independent points and 46 threshold/conditional-weight checks agree in delta/theta, including groups, shared loadings and mixed units. All fresh endpoints pass; 80 displaced points and 12 saddles reject. Six earlier sparse-theta failures remain correctly rejected and feed 33.10.6. Existing first-stage/pairwise oracle gates count; propagated construction bounds remain unsupported. No inference/default/sphere/PSD/barrier expansion. |
+| 33.10.3 | Banked 2026-10-06 in isolated sphere-study: direct-FIML numerical integration | Owning observed-pattern artifacts rebuild from serialized raw fits. All 70 fresh and 37 corrected development points agree with independent 90-digit likelihood/gradient/observed-curvature calculations; actual pattern counts/means/covariances and eight complete-data ML reductions agree. Fresh actual-default fits pass 16/16, SLSQP 15/16; one unit endpoint and eight early-stop errors remain recorded. Earlier unit/weak-marker failures and two SLSQP budget errors feed 33.9/33.10.5. The proved scale ridge can pass the raw local test and remains explicitly unchecked for identification (33.3). No propagated construction interval, raw-sample normalization extension, inference/default/PSD claim. |
+| 33.10.4 | Banked 2026-10-06 in isolated sphere-study: conditional ML2S numerical composition | R Stage-1 retains raw derivatives/repair and solver-stop provenance; fits capture caller-unit Stage-2 moments/counts/recipe/mixing/ACOV/supplied weights/bounds/transformation before fitting. The opt-in composed audit preserves separate Stage-1/handoff/Stage-2 reports and unchecked legacy/missing evidence. Fresh 156 stage-point, 210 conditional producer and 78 handoff checks agree at 90 digits; all 12 Stage-1 endpoints and 56 returned fits pass (54/60 ordinary plus two transformed controls). Six mixed-unit ULS/DWLS/ADF L-BFGS errors, three development errors and early/mismatched/repaired controls remain recorded. NT uses ML; other weights use their original quadratics. Repaired ACOV at nonpositive raw curvature stays unchecked and never rescues an audit. No propagated input-error/inference/default/PSD claim; unit recovery feeds 33.10.5. |
+| 33.10.5 | Partially banked 2026-10-06 in isolated sphere-study: pinned starts and NLopt candidate retention | Fresh 51-fit confirmation: 28 equality/fixed fits agree with controlled-unit lavaan and original likelihoods; seven early stops retain failed candidates and exact controls; six ordinary defaults pass. All ten retained mixed-unit ML2S fits return, but six ULS/DWLS/ADF endpoints still fail separate Stage-2/composed audits. R mean ownership and automatic inference gating are repaired. Frozen failed reference/crash/tail runs remain visible. Generic domain recovery, complete fallback/backend histories, outer-loop stopping and broader held-out recovery remain open; no default or PSD/barrier adoption. |
+| 33.10.6 | Banked 2026-10-06 in isolated sphere-study: explicit local theta boundary limit | All six failures reproduce exactly; actual starts are identical across settings. Independent 90-digit Schur-profiled loading coordinates verify three locally optimal faces with strict outward descent and 15 finite approach points. Negative-residual delta solutions have no finite positive-residual theta transport; tighter L-BFGS recovers none. Fresh 324 fits/point checks pass from 18 usable draws, with two singular first-stage sparse draws retained. No global nonattainment theorem, recovery/default promotion or audit relaxation; native distance precision beyond the conditioning guard remains unchecked. |
+| 33.3 | Identification separate from local numerical accuracy | Reject the known scale-free exact-fit ridge; preserve identified/equality/unit-change controls. A tiny Newton correction cannot establish identification. Direct FIML now retains another raw local-pass ridge with independently proved scale invariance and a null moment-Jacobian direction; it is excluded from the identified bank, not repaired by its local audit. |
+| 33.6.7 | Accurate unresolved sphere ML interval | Attribute the conservative numerical term; improve only justified bounds or document why it remains unresolved. Preserve saddle/rank/above-budget failures. |
+| 33.7 | Profiled PORT-NLS original-objective consistency | Replay retained mismatches and correct the owning profile/expanded-endpoint mechanism or state an explicit limit; avoid regenerating the full exploratory grid. |
+| 33.9 | Bounded sample-only starts beyond the two-factor design | Retain API defaults and reuse actual-start comparisons. Include applicable layered/FABIN unit fallbacks, Geiser start loss and reflection traps. The four signed ULS starts are development evidence, not a universal recipe. |
+| 33.6.6 | Scoped audit/default adoption decision | Prespecify supported scope, full no-options baseline, numerical criteria, every loss and cost. A covariance-only ULS/ML decision can precede other families; broader promotion needs its applicable completed gates. |
+
+Use three levels of evidence: independent fixed-point mechanism checks,
+bounded fresh route confirmations, then larger decision studies only for a
+proposed default or concrete failure needing broader diagnosis. Report local
+audit accuracy, objective consistency, chart availability, admissibility,
+identification and best-known basin recovery separately. All decisive audit
+claims must agree with their independent checks; any missed construction bound
+or unexplained verdict blocks banking that claimed verification scope. An
+unresolved accurate endpoint can remain explicitly unchecked rather than force
+a looser acceptance rule. Confirmation retains every baseline loss and cost;
+unsupported regimes inherit no pass. Freeze the confirmation recipe before its
+fresh draws, and use a prespecified decision study for default selection.
+
+Fixed in the fitting parameters is distinct from estimated from a sample.
+Conditional Stage-2 numerical evidence is reusable only with the actual moments,
+weight recipe and factor supplied to that fit. ML2S requires a separately checked
+Stage-1 and handoff; separate stage passes are not a propagated numerical-error
+bound. Ordinal and pairwise moments need their producer/count/weight checks;
+they cannot be treated as a synthetic complete dataset for sampling inference.
+SE/test variants with identical fits share numerical evidence, while TASK-69,
+TASK-71 and the inference backlog retain their own statistical questions.
+
+Primary single-level ML/FIML/all-ordinal DWLS lead. Supported mixed and secondary
+fixed weights enter through inexpensive reuse. This programme does not schedule
+two-level, SAM, FC-SEM or noniterative expansion, or PSD-face/barrier work; their
+existing gates and separately owned scope remain. Work order is shared correctness
+witnesses and weighted-LS verification first, with starts and the ML interval
+investigation independent; ordinal and ML2S then reuse the weighted mechanism,
+while direct FIML follows its pattern-likelihood checks. Adoption remains a
+separate final decision for each explicitly covered scope.
+
+- [ ] **M — complete the minimal ordinary-fit reliability programme.** Start
+  with complete-data unrestricted NTML, ULS and GLS. Pair marker/sphere routes
+  on identical moments; vary route-native versus shared sample-only FABIN3/layered
+  starts, and stock versus tighter L-BFGS/PORT stopping controls. Keep the
+  library's native Newton audit fixed and record failed/unchecked endpoints,
+  chart availability, backend stops, objective and implied-covariance gaps,
+  and cost separately. **Check:** the bounded development pilot in
+  [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd),
+  then targeted failure replays and fresh draws before any default decision.
+  The matched layered replay gains one sphere ULS and one GLS fit in the pilot
+  and recovers 3/6 qualified retained ML minima versus marker's 1/6 with default
+  L-BFGS. Warm diagnostic ML fits recover all six; cold search still misses
+  qualified minima. The sphere sample-unit repair (2026-10-02) clears retained
+  mixed-unit NTML/GLS failures: 12/12 configurations per estimator, with all
+  48/48 paired configurations also passing and matching on four fresh regular
+  draws. The internal gauge latents are dimensionless; LS and PORT now honor
+  requested rest-coordinate scaling. The pilot loses no accepted fits; the
+  hard-case replay retains two shared-FABIN3 PORT ML acceptance gains and two
+  losses, with layered ML target recovery unchanged. The mixed-unit ULS probe
+  independently establishes five finite strict local minima at 60/90 digits;
+  warm diagnostic fits recover all five in both charts, but all ten fail the
+  unchanged sandwich conditioning guard (metric conditions 1e16–1e18, despite
+  Hessian conditions below 1e12). Three implied covariances are indefinite under
+  this unrestricted target. Existing PORT-NLS reaches three references from
+  most cold configurations; two lower signed-variance basins remain missed.
+  The sphere audit now distinguishes failed accuracy-metric factorization from
+  failed Hessian curvature, without changing acceptance. Next study LS
+  preconditioning/damped steps and bounded sample-only signed-basin starts.
+  The 2,400-fit fixed-target follow-up recovers all five retained and 20 fresh
+  regular/weak-marker references with sphere PORT-NLS and four sample-only
+  signed-moment starts (seven gains, no losses against one shared FABIN3 start).
+  Profiling improves L-BFGS but does not outperform that portfolio. All 25
+  exact references and all native fit audits still fail certification; no
+  default follows. Point checks now specify infinite bounds, preventing the
+  evaluator's positive-variance preset from substituting first-order verdicts.
+  The square-root metric implementation now computes all 100 fixed-point
+  distances, including 25/25 minima, versus 48/100 and 12/25 previously.
+  Independent 90-digit point calculations agree within 6.4e-7, with zero
+  .01 distance classification errors on 75 accurate and 25 inaccurate controls.
+  Full-rank QR retains the factor through ordinary and sphere coordinates;
+  singular metrics and objective saddles remain failures. The production
+  1e12 condition guard is unchanged. A diagnostic factor-condition rule
+  retains 23/25 minima without accepting an inaccurate control; two weak-marker
+  minima still exceed the Hessian cap. The 175-point guard follow-up adds
+  75 near-budget controls: raw distance comparison flips 16 nominal threshold
+  decisions, while conditional intervals using independently measured errors
+  decide 140 correctly and leave 35 unresolved. Construction-error allowances
+  remain assumptions; a 64-epsilon sensitivity covers observed input errors
+  but leaves 83 controls unresolved. At 90 digits, objective-Jacobian QR
+  coordinates reduce the two flat Hessian conditions to 1.2/1.6 and preserve
+  all observed curvature. Core now assembles the analytic correction separately
+  and implements the transported full-rank QR Newton solve, including sphere
+  normalization curvature. All 175 fixed-point curvature checks pass against
+  independent 90-digit derivatives; step discrepancy is below 1.94e-11 in
+  objective-curvature units. Owning tests retain saddle and rank-loss failures.
+  The sampling-metric condition guard still rejects every control.
+  Conditional interval kernels now verify projection/solve arithmetic for LS
+  and likelihoods, with 329 independent fixed-point checks including 15 fresh
+  numerical minima and all seven finite NTML witnesses. Dimensional construction
+  sensitivity covers the comparable points, but leaves the flat NTML minimum
+  and many retained ULS controls unresolved; it is not a proved bound or a
+  production policy. The calculated construction producer now independently
+  encloses covariance-only ambient ULS/ML moments, derivatives, sample roots
+  and observed curvature. All 314 available bounds pass 90-digit checks; all
+  47 numerical minima qualify, including every retained ULS minimum and the
+  flat NTML witness. Its 250 decisive distance classifications are correct,
+  with 79 unresolved points including 15 independently nonpositive NTML
+  curvatures. Opt-in terminal integration and native sphere
+  transport now include the normalization's full derivative chain. Fresh sampled
+  confirmation covers six families with 30 problems, 120 fits and 120 variance
+  perturbations: all 216 available bounds cover and all 213 decisive interval
+  classifications agree with 90-digit references. Endpoints yield 106 passes,
+  eight saddles, three above-budget failures and three unresolved assessments.
+  Native mixed-unit ULS gains three passes and loses none. One unresolved
+  weak-marker ML endpoint is locally accurate; two mixed-unit ULS endpoints
+  are above budget. The focused ULS search follow-up (2026-10-03) holds
+  PORT-NLS/sample-unit scaling fixed and uses actual API default starts
+  (FABIN3/native for ULS, not layered). On ten fresh draws per family, the
+  sphere default-plus-four-signed portfolio qualifies all regular, weak-marker
+  and mixed-unit cases and matches every best independently refined local
+  reference. Marker portfolios qualify 10/6/8; tighter controls raise mixed
+  units to 10 but leave weak markers at 6, with greater runtime cost. Keeping
+  the default avoids a signed-only weak-marker loss. All 398 available bounds
+  cover across 1,040 retained/fresh cold fits and 473 selected endpoint checks;
+  no decisive audit classification is wrong. This unrestricted target includes
+  negative residual variances and indefinite latent covariances. The
+  two-factor-specific recipe needs broader-model start construction and cost
+  evidence before adoption. Default acceptance is unchanged. Next prespecify
+  adoption criteria and compare against the full actual-default fitter on
+  held-out models; separately resolve the conservative accurate ML endpoint. This evidence selects no
+  regularization or acceptance default. Retain the PORT curvature
+  failures, investigate the 38 retained profiled PORT-NLS objective inconsistencies,
+  and explain the shared-FABIN3 GLS worse local minimum. Confirm any signed-start
+  sphere candidate on broader populations and ordinary units. Preserve LS-specific
+  warm references without treating a fitted ML point as an LS optimum.
+  PSD/barriers, FIML, ordinal data and broad global-search guarantees are
+  separate extensions, not prerequisites for this programme.
+
+- [ ] **M — complete sphere-native constraint geometry (high priority after
+  0.2.0).** Native unpinned audits now cover ML, FIML, continuous moment-quadratic
+  fitting and PSD interiors before chart translation. Complete joint
+  sphere/PSD curvature at singular faces and validate the requested-chart
+  rejection criterion independently of endpoint accuracy. Active boxes and
+  additional nonlinear equalities currently report unchecked; extend them
+  only with the required feasible Newton/Lagrangian geometry. **Check:**
+  retained pole, finite-improper, boundary and inaccurate-stop witnesses across
+  units and identifications; derivative/retraction checks and explicit
+  failed/unchecked R conditions. Global search and nonattainment classification
+  are separate work. See [sphere implementation](../architecture/roadmap.md)
+  and [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
+
 - [ ] **M — recover from L-BFGS domain aborts across parameter scales.** Limited
   line-search reductions can exhaust infeasible trials at the initial point.
   Assess safeguarded backtracking or adapter recovery while retaining caller
   controls and terminal candidates. **Check:** the
   [domain probe](../../cpp/tests/checks/nlopt_lbfgs_domain.c), corrected corpus
   failures and rescaled fits. A larger evaluation budget alone is insufficient.
+  The isolated shared-adapter repair now retains finite failed candidates,
+  raw NLopt codes and resolved controls; it does not retry or lengthen the
+  line search. The scalar variance witness at $10^{-6}$ remains a domain abort.
   See [corpus recovery](../../experiments/engineering/active/17-corpus-optimizer-recovery/report.qmd).
 
 - [ ] **M — equality constraints that fully determine a block stall the ML fit.**
@@ -1231,6 +1404,12 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   sem-score-tests calibration study, where the case is supplement-only.
   **Check:** that model's restricted fit converges to lavaan's optimum, and the
   constraint projection handles constraints that pin parameters completely.
+  The isolated sphere-study repair recognizes fully pinned parameters as
+  constants in the layered measurement/scale layers, rather than projecting
+  only the final vector. Experiment 15 now checks equivalent fixed/equality
+  formulations on the optional Table 10.3 corpus and fresh rescaled draws.
+  The original supplement's particular draw ($\chi^2=271$) has not been replayed;
+  keep its completion check distinct from the repaired shared mechanism.
 
 - [ ] **M — diagnose the layered-start Geiser latent-AR loss.** The fixture
   `latent_ar_cross_lagged_extended` stalls above the reference objective with
@@ -1272,8 +1451,21 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   Assess ML stopping controls for FIML/DWLS and accuracy-budget sensitivity with
   estimated Gamma. **Check:** corpus near misses/non-minima and consistent R
   TRUE/FALSE/NA projection; preserve failed/unchecked fits and rank diagnostics.
+  Isolated NLopt candidate/raw-control retention is banked, including early
+  stops across complete LS/ML, direct FIML and ordinal routes; complete fallback
+  histories, other backend telemetry and outer-loop evidence remain open.
   See terminal audit and
   [Newton rollout](../../experiments/engineering/active/19-newton-verdict-migration/report.qmd).
+
+- [ ] **M — bound noncentral chi-square tail cost in fit-index inference (TASK-107).**
+  A retained rejected mixed-unit ULS ML2S endpoint spent minutes in the
+  RMSEA interval tail calculation (`central_chisq_cdf_half` /
+  `noncentral_chisq_cdf`). Automatic ML2S inference now requires the C++ fit
+  verdict to pass, so failed candidates return promptly. Explicit inference
+  can still enter this costly path. **Check:** retain the numerical witness,
+  independently verify extreme-tail values, and bound work or return a typed
+  unavailable result without degrading ordinary inference. This is separate
+  from optimizer recovery and statistical fit-index calibration.
 
 - [ ] **S/M — decide the flat-ridge ordinal golden gate.** Newsom 2024 ex1.3c
   passes the accuracy budget but differs in raw parameters. **Check:** a

@@ -224,6 +224,34 @@ TEST_CASE("dls_weight: rejects a rank-deficient ADF Gamma with diagnostics") {
   }
 }
 
+TEST_CASE("fixed continuous weights: unit transport preserves ADF and DLS inverses") {
+  const auto raw=make_raw(400);
+  auto changed=raw;
+  Eigen::VectorXd units(3); units << .01,100,2;
+  changed.X[0]=raw.X[0]*units.asDiagonal();
+  const auto sample=magmaan::data::sample_stats_from_raw(raw);
+  const auto transformed=magmaan::data::sample_stats_from_raw(changed);
+  REQUIRE(sample.has_value()); REQUIRE(transformed.has_value());
+  for(bool means : {false,true}) {
+    auto m=build_model("f =~ x1 + x2 + x3",means);
+    const auto ev=ModelEvaluator::build(m.pt,m.rep); REQUIRE(ev.has_value());
+    const auto initial=est::simple_start_values(m.pt,m.rep,*sample,{}); REQUIRE(initial.has_value());
+    const auto moved=est::simple_start_values(m.pt,m.rep,*transformed,{}); REQUIRE(moved.has_value());
+    Eigen::VectorXd moment_units(6+(means ? 3 : 0));
+    Eigen::Index k=0;
+    if(means) { moment_units.head(3)=units; k=3; }
+    for(Eigen::Index j=0;j<3;++j) for(Eigen::Index i=j;i<3;++i) moment_units[k++]=units[i]*units[j];
+    for(const auto kind : {est::gmm::FixedWeightKind::Wls,est::gmm::FixedWeightKind::Dls})
+      for(double a : {0.,.4,1.}) {
+        const auto base=est::gmm::fixed_moment_weight(*ev,*sample,*initial,kind,&raw,{a});
+        const auto scaled=est::gmm::fixed_moment_weight(*ev,*transformed,*moved,kind,&changed,{a});
+        REQUIRE(base.has_value()); REQUIRE(scaled.has_value());
+        const Eigen::MatrixXd transported=moment_units.asDiagonal()*(*scaled)[0].to_dense()*moment_units.asDiagonal();
+        CHECK((transported-(*base)[0].to_dense()).norm()/(*base)[0].to_dense().norm()<1e-9);
+      }
+  }
+}
+
 // ============================================================================
 // Intermediate a: the covariance block inverts to the convex blend of Γ.
 // ============================================================================

@@ -1,0 +1,2 @@
+fits,identical_search_outcomes,max_objective_difference,scope
+2400,True,0,search/return/objective consistency only; changed audit statuses retained

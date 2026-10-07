@@ -220,3 +220,35 @@ TEST_CASE("Convergence policy: covariance admissibility is domain dependent") {
   CHECK(cf::assess_convergence(*psd).feasibility.status == estimate::FitCheck::Failed);
   CHECK(cf::assess_convergence(*psd).status == estimate::FitCheck::Failed);
 }
+
+TEST_CASE("Construction-aware terminal policy: intervals and missing scope never fall back") {
+  auto m=scalar_model();
+  data::SampleStats sample; sample.S={Eigen::MatrixXd::Ones(1,1)}; sample.n_obs={100};
+  auto policy=cf::newton_convergence_policy(); policy.require_verified_inputs=true;
+  for(const auto estimator:{estimate::Estimator::ULS,estimate::Estimator::ML}) {
+    auto near=cf::audit_convergence_covariance(m.pt,m.rep,sample,
+        Eigen::VectorXd::Constant(1,1.0001),estimator);
+    REQUIRE(near.has_value());
+    CHECK(cf::assess_convergence(*near,policy).status==estimate::FitCheck::Passed);
+    CHECK(near->evidence.newton_accuracy.passed);
+    const auto bounds=*near->computations.input_errors;
+    const auto interval=cf::newton_input_distance_interval(near->computations,bounds);
+    policy.newton.budget=interval.distance;
+    CHECK(cf::assess_convergence(*near,policy).newton.status==estimate::FitCheck::Unchecked);
+    policy.newton.budget=.01;
+    auto far=cf::audit_convergence_covariance(m.pt,m.rep,sample,
+        Eigen::VectorXd::Constant(1,1.1),estimator);
+    REQUIRE(far.has_value());
+    CHECK(cf::assess_convergence(*far,policy).newton.status==estimate::FitCheck::Failed);
+    const auto far_interval=cf::newton_input_distance_interval(far->computations,*far->computations.input_errors);
+    auto wider_policy=policy; wider_policy.newton.budget=100;
+    CHECK(cf::assess_convergence(far->evidence,wider_policy,&far_interval).newton.status==estimate::FitCheck::Passed);
+    near->computations.input_errors.reset();
+    CHECK(cf::assess_convergence(*near,policy).status==estimate::FitCheck::Unchecked);
+    auto with_means=sample; with_means.mean={Eigen::VectorXd::Zero(1)};
+    auto unsupported=cf::audit_convergence_covariance(m.pt,m.rep,with_means,
+        Eigen::VectorXd::Ones(1),estimator);
+    REQUIRE(unsupported.has_value());
+    CHECK(cf::assess_convergence(*unsupported,policy).newton.status==estimate::FitCheck::Unchecked);
+  }
+}

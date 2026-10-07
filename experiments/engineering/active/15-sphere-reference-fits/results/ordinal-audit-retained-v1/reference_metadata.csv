@@ -1,0 +1,2 @@
+precision_digits,mpmath_version,elapsed_s,source_sha256,convention,limitations
+90,1.3.0,65.17566465299751,89f8afee2a6d851dd39eddc08d10e97a9bc3115480fd639888458ede11add246,"exact binary64 prepared partable, raw theta, moments and retained whitening factors; analytic independent LISREL and second-order scalar chain",univariate thresholds and conditional Gamma-to-weight checked; polychoric/polyserial/Gamma construction not independently certified

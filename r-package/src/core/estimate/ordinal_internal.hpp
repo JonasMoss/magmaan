@@ -525,7 +525,8 @@ ordinal_observed_bread_analytic(const spec::LatentStructure& pt,
                                 const ThresholdLayout& layout,
                                 const std::vector<Eigen::MatrixXd>& Ws,
                                 const Eigen::MatrixXd& K,
-                                OrdinalParameterization parameterization);
+                                OrdinalParameterization parameterization,
+                                Eigen::MatrixXd* correction = nullptr);
 post_expected<Eigen::MatrixXd>
 mixed_observed_bread_analytic(const spec::LatentStructure& pt,
                               const model::MatrixRep& rep,
@@ -534,7 +535,8 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
                               const ThresholdLayout& layout,
                               const std::vector<Eigen::MatrixXd>& Ws,
                               const Eigen::MatrixXd& K,
-                              OrdinalParameterization parameterization);
+                              OrdinalParameterization parameterization,
+                              Eigen::MatrixXd* correction = nullptr);
 
 
 // Newton-check parts on a prepared partable, full theta, total scale: the
@@ -545,6 +547,9 @@ mixed_observed_bread_analytic(const spec::LatentStructure& pt,
 struct OrdinalNewtonRaw {
   Eigen::MatrixXd hessian;
   Eigen::MatrixXd metric;
+  Eigen::MatrixXd correction;
+  Eigen::MatrixXd factor;
+  Eigen::VectorXd score_residual;
 };
 std::vector<Eigen::MatrixXd> dense_weights_from_factors(const WhitenFactors& factors);
 post_expected<OrdinalNewtonRaw>
@@ -552,7 +557,7 @@ ordinal_newton_parts_prepared(const spec::LatentStructure& pt,
                               const model::MatrixRep& rep,
                               const data::OrdinalStats& stats,
                               const ThresholdLayout& layout,
-                              const std::vector<Eigen::MatrixXd>& Ws,
+                              const WhitenFactors& factors,
                               const Eigen::VectorXd& theta,
                               OrdinalParameterization parameterization);
 post_expected<OrdinalNewtonRaw>
@@ -560,7 +565,7 @@ mixed_newton_parts_prepared(const spec::LatentStructure& pt,
                             const model::MatrixRep& rep,
                             const data::MixedOrdinalStats& stats,
                             const ThresholdLayout& layout,
-                            const std::vector<Eigen::MatrixXd>& Ws,
+                            const WhitenFactors& factors,
                             const Eigen::VectorXd& theta,
                             OrdinalParameterization parameterization);
 fit_expected<Eigen::VectorXd>

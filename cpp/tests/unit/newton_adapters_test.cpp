@@ -265,6 +265,13 @@ TEST_CASE("Newton adapters: mixed ordinal keeps the complete moment objective") 
     Eigen::VectorXd gradient;
     CHECK(a->derivatives.objective == doctest::Approx(prob.f(*start, gradient)));
     CHECK((a->derivatives.gradient - 240 * gradient).norm() < 1e-8);
+    const auto& d = a->derivatives;
+    REQUIRE(d.metric_factor.cols() == start->size());
+    CHECK((d.metric_factor - std::sqrt(240.0) * d.whitened_jacobian).norm() < 1e-10);
+    CHECK((d.metric_factor.transpose() * d.metric_score_residual - d.gradient).norm() < 1e-8);
+    CHECK((d.hessian - d.metric - d.ls_curvature_correction).norm() < 1e-10);
+    auto fd = nf::evaluate_newton_objective(prob, *start, 240, 240);
+    CHECK((d.hessian - fd.hessian).norm() < 1e-6 * (1 + fd.hessian.norm()));
   }
 }
 
@@ -410,6 +417,10 @@ void check_moment_quadratic_hessian(const Model& m, const data::SampleStats& s,
   REQUIRE(exact.status == estimate::NewtonAccuracyStatus::Available);
   CHECK(exact.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
   CHECK(exact.metric_kind == nf::NewtonMetricKind::Sandwich);
+  CHECK((exact.metric_factor.transpose() * exact.metric_factor - exact.metric).norm() <=
+      1e-12 * (1 + exact.metric.norm()));
+  CHECK((exact.metric_factor.transpose() * exact.metric_score_residual - exact.gradient).norm() <=
+      1e-12 * (1 + exact.gradient.norm()));
   auto problem = estimate::gmm::residuals(*ev, s, x, w);
   REQUIRE(problem.has_value());
   double n = 0; for (auto nb : s.n_obs) n += static_cast<double>(nb);
@@ -419,6 +430,9 @@ void check_moment_quadratic_hessian(const Model& m, const data::SampleStats& s,
   CHECK((exact.hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
   // The Gauss-Newton part alone differs here: the residual term is not zero.
   const Eigen::MatrixXd gn = n * exact.whitened_jacobian.transpose() * exact.whitened_jacobian;
+  CHECK((exact.hessian - gn - exact.ls_curvature_correction).norm() <=
+      1e-12 * (1 + exact.hessian.norm()));
+  CHECK(exact.ls_curvature_correction.isApprox(exact.ls_curvature_correction.transpose(), 1e-12));
   CHECK((exact.hessian - gn).norm() > 1e-4 * gn.norm());
 }
 } // namespace
@@ -565,6 +579,17 @@ void check_ordinal_hessian(const Model& m, const data::OrdinalStats& s,
   REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
   CHECK((parts->hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
   CHECK(parts->gradient_variance.allFinite());
+  const auto& A = parts->metric_factor;
+  const auto& b = parts->metric_score_residual;
+  auto J = original->problem.J(x);
+  auto r = original->problem.r(x);
+  REQUIRE(J.has_value()); REQUIRE(r.has_value());
+  CHECK((A - std::sqrt(n) * (*J)).norm() < 1e-10 * (1 + A.norm()));
+  CHECK((b - std::sqrt(n) * (*r)).norm() < 1e-10 * (1 + b.norm()));
+  CHECK((parts->gradient_variance - A.transpose() * A).norm() < 1e-10);
+  CHECK((parts->hessian - A.transpose() * A - parts->curvature_correction).norm()
+        < 1e-10 * (1 + parts->hessian.norm()));
+  CHECK((A.transpose() * b - fd.gradient).norm() < 1e-9 * (1 + fd.gradient.norm()));
 }
 } // namespace
 
@@ -626,13 +651,15 @@ TEST_CASE("Newton adapters: the analytic ordinal Hessian matches gradient differ
     REQUIRE(fd.status == estimate::NewtonAccuracyStatus::Available);
     CHECK((parts->hessian - fd.hessian).norm() <= 1e-6 * (1 + fd.hessian.norm()));
   }
-  // The audit uses the analytic parts with the estimated-ACOV sandwich metric.
+  // The audit uses analytic curvature and the fitting-weight working metric.
   auto start = estimate::ordinal_start_values(delta.pt, delta.rep, *s, {});
   REQUIRE(start.has_value());
   auto a = nf::audit_newton_ordinal(delta.pt, delta.rep, *s, *start);
   REQUIRE(a.has_value()); check_artifacts(*a);
   CHECK(a->derivatives.curvature_kind == nf::NewtonCurvatureKind::AnalyticObserved);
   CHECK(a->diagnostics.metric == estimate::NewtonMetricKind::Sandwich);
+  CHECK(a->derivatives.metric_factor.rows() == a->derivatives.whitened_jacobian.rows());
+  CHECK(a->derivatives.ls_curvature_correction.rows() == start->size());
 }
 
 TEST_CASE("Newton adapters: the analytic multi-information penalty Hessian matches gradient differences") {

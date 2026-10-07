@@ -11,11 +11,13 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/gauge.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
@@ -423,12 +425,180 @@ void check_same_as_ordinary_ml(const Fitted& f, double tol = 1e-5) {
   CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < tol);
   CHECK(sph->report.residual.fixed_rows < 1e-10);
   CHECK(sph->report.residual.linear_constraints < 1e-10);
+  INFO(sph->report.native_audit.detail);
+  CHECK(sph->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+  CHECK(sph->report.native_audit.computations.geometry.tangent_basis.cols() ==
+        sph->report.driven.size() - static_cast<Eigen::Index>(sph->report.plan.units.size()));
 }
 
 }  // namespace
 
 TEST_CASE("sphere ML: one-factor marker CFA") {
   check_same_as_ordinary_ml(setup("f =~ x1 + x2 + x3 + x4", {one_factor_sigma()}));
+}
+
+TEST_CASE("sphere audit: tangent curvature matches retracted objective differences away from stationarity") {
+  auto f = setup("X =~ x1 + x2 + x3\n Y =~ y1 + y2 + y3\n Y ~ X", {two_factor_sigma()});
+  auto problem = fr::ml_sphere_problem(f.pt, f.rep, f.samp, f.x0);
+  REQUIRE_OK(problem);
+  Eigen::VectorXd point = problem->start;
+  for (Eigen::Index k = 0; k < point.size(); ++k) point(k) += 0.04 * std::sin(static_cast<double>(k + 1));
+  auto audit = fr::audit_ml_sphere(f.pt, f.rep, f.samp, point);
+  REQUIRE_OK(audit);
+  const auto& a = audit->computations;
+  REQUIRE(a.derivatives.status == fr::NewtonAccuracyStatus::Available);
+  const auto& basis = a.geometry.tangent_basis;
+  CHECK((basis.transpose() * basis - Eigen::MatrixXd::Identity(basis.cols(), basis.cols())).cwiseAbs().maxCoeff() < 1e-12);
+  Eigen::VectorXd direction(basis.cols());
+  for (Eigen::Index k = 0; k < direction.size(); ++k) direction(k) = std::cos(0.7 * static_cast<double>(k + 1));
+  direction.normalize();
+  auto value = [&](double step) {
+    Eigen::VectorXd u = a.derivatives.theta + step * basis * direction;
+    Eigen::Index offset = u.size();
+    for (const auto& unit : problem->plan.units) offset -= unit.basis.cols();
+    for (const auto& unit : problem->plan.units) {
+      u.segment(offset, unit.basis.cols()).normalize();
+      offset += unit.basis.cols();
+    }
+    Eigen::VectorXd scratch;
+    return a.derivatives.n_obs * problem->problem.f(u, scratch);
+  };
+  const double h = 1e-4;
+  const double first = (value(h) - value(-h)) / (2 * h);
+  const double second = (value(h) + value(-h) - 2 * value(0)) / (h * h);
+  CHECK(first == doctest::Approx(direction.dot(a.geometry.reduced_gradient)).epsilon(1e-5).scale(1));
+  CHECK(second == doctest::Approx(direction.dot(a.geometry.reduced_hessian * direction)).epsilon(1e-4).scale(1));
+}
+
+TEST_CASE("sphere audit: radial pin and radius do not supply model curvature") {
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {one_factor_sigma()});
+  fr::SphereOptions options;
+  options.polish = false;
+  auto fit = fr::fit_ml_sphere(f.pt, f.rep, f.samp, f.x0, {}, Backend::NloptLbfgs,
+                              magmaan::estimate::ml_optim_options(), options);
+  REQUIRE_OK(fit);
+  const auto& original = fit->report.native_audit.computations;
+  Eigen::VectorXd radial = fit->report.driven;
+  const Eigen::Index dim = fit->report.plan.units.front().basis.cols();
+  radial.tail(dim) *= 7.0;
+  options.pin_weight = 100.0;
+  auto repeated = fr::audit_ml_sphere(f.pt, f.rep, f.samp, radial, {}, options,
+                                     fit->report.fmin_internal);
+  REQUIRE_OK(repeated);
+  CHECK(fr::assess_convergence(*repeated).status == magmaan::estimate::FitCheck::Passed);
+  CHECK(repeated->computations.solution.distance == doctest::Approx(original.solution.distance).epsilon(1e-6).scale(1e-8));
+  CHECK((repeated->computations.geometry.reduced_hessian -
+         original.geometry.reduced_hessian).cwiseAbs().maxCoeff() < 1e-9);
+  auto bad = fr::audit_ml_sphere(f.pt, f.rep, f.samp, radial, {}, options,
+                                fit->report.fmin_internal + 1.0);
+  REQUIRE_OK(bad);
+  auto policy = fr::newton_convergence_policy();
+  policy.require_objective_consistency = true;
+  CHECK(fr::assess_convergence(*bad, policy).objective_consistency.status == magmaan::estimate::FitCheck::Failed);
+  CHECK(fr::assess_convergence(*bad, policy).status == magmaan::estimate::FitCheck::Failed);
+  radial.tail(dim).setZero();
+  auto zero = fr::audit_ml_sphere(f.pt, f.rep, f.samp, radial);
+  REQUIRE_OK(zero);
+  CHECK(fr::assess_convergence(*zero).status == magmaan::estimate::FitCheck::Failed);
+}
+
+TEST_CASE("sphere audit: a stationary zero-variance ridge fails tangent curvature") {
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {Eigen::Matrix4d::Identity()});
+  for (std::size_t row = 0; row < f.pt.size(); ++row) {
+    if (f.pt.free[row] > 0 && f.pt.op[row] == magmaan::parse::Op::Covariance) {
+      const auto var = static_cast<std::size_t>(f.pt.lhs_var[row]);
+      f.x0(f.pt.free[row] - 1) = f.pt.ov_pos[var] < 0 ? 0.0 : 1.0;
+    }
+  }
+  fr::SphereOptions options;
+  options.start = fr::SphereStart::User;
+  auto problem = fr::ml_sphere_problem(f.pt, f.rep, f.samp, f.x0, options);
+  REQUIRE_OK(problem);
+  auto audit = fr::audit_ml_sphere(f.pt, f.rep, f.samp, problem->start);
+  REQUIRE_OK(audit);
+  CHECK(audit->computations.geometry.reduced_gradient.norm() < 1e-10);
+  CHECK(audit->computations.solution.status == fr::NewtonAccuracyStatus::NonpositiveCurvature);
+  CHECK(fr::assess_convergence(*audit).status == magmaan::estimate::FitCheck::Failed);
+}
+
+TEST_CASE("sphere audit: a collapsed loading direction can be a stationary saddle") {
+  Eigen::Matrix4d covariance = Eigen::Matrix4d::Identity();
+  covariance(1, 2) = covariance(2, 1) = 0.8;
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {covariance});
+  for (std::size_t row = 0; row < f.pt.size(); ++row) {
+    if (f.pt.free[row] <= 0) continue;
+    if (f.pt.op[row] == magmaan::parse::Op::Measurement) f.x0(f.pt.free[row] - 1) = 0.0;
+    if (f.pt.op[row] == magmaan::parse::Op::Covariance) {
+      const auto pos = f.pt.ov_pos[static_cast<std::size_t>(f.pt.lhs_var[row])];
+      f.x0(f.pt.free[row] - 1) = pos < 0 ? 0.1 : (pos == 0 ? 0.9 : 1.0);
+    }
+  }
+  fr::SphereOptions options;
+  options.start = fr::SphereStart::User;
+  auto problem = fr::ml_sphere_problem(f.pt, f.rep, f.samp, f.x0, options);
+  REQUIRE_OK(problem);
+  auto audit = fr::audit_ml_sphere(f.pt, f.rep, f.samp, problem->start);
+  REQUIRE_OK(audit);
+  const auto& a = audit->computations;
+  CHECK(a.geometry.reduced_gradient.norm() < 1e-10);
+  // Check the nominated negative-curvature direction against actual objective
+  // values on the sphere, rather than trusting the factorization status alone.
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(a.geometry.reduced_hessian);
+  REQUIRE(eig.info() == Eigen::Success);
+  REQUIRE(eig.eigenvalues()(0) < 0);
+  const Eigen::VectorXd direction = a.geometry.tangent_basis * eig.eigenvectors().col(0);
+  Eigen::VectorXd scratch;
+  double best = problem->problem.f(problem->start, scratch);
+  for (double delta : {-0.001, 0.001}) {
+    Eigen::VectorXd step = a.derivatives.theta + delta * direction;
+    step.tail(4).normalize();
+    best = std::min(best, problem->problem.f(step, scratch));
+  }
+  CHECK(best < problem->problem.f(problem->start, scratch));
+  CHECK(a.solution.status == fr::NewtonAccuracyStatus::NonpositiveCurvature);
+  CHECK(fr::assess_convergence(*audit).status == magmaan::estimate::FitCheck::Failed);
+}
+
+TEST_CASE("sphere audit: active bounds and nonlinear equalities remain explicitly unchecked") {
+  SUBCASE("active box") {
+    auto f = setup("f =~ x1 + x2 + x3 + x4", {one_factor_sigma()});
+    magmaan::estimate::Bounds bounds;
+    bounds.lower = Eigen::VectorXd::Constant(f.pt.n_free(), -std::numeric_limits<double>::infinity());
+    bounds.upper = -bounds.lower;
+    for (std::size_t row = 0; row < f.pt.size(); ++row) {
+      if (f.pt.free[row] > 0 && f.pt.op[row] == magmaan::parse::Op::Covariance &&
+          f.pt.ov_pos[static_cast<std::size_t>(f.pt.lhs_var[row])] >= 0) {
+        const auto index = f.pt.free[row] - 1;
+        bounds.lower(index) = bounds.upper(index) = f.x0(index);
+        break;
+      }
+    }
+    fr::SphereOptions options;
+    options.start = fr::SphereStart::User;
+    auto problem = fr::ml_sphere_problem(f.pt, f.rep, f.samp, f.x0, options);
+    REQUIRE_OK(problem);
+    auto audit = fr::audit_ml_sphere(f.pt, f.rep, f.samp, problem->start, bounds);
+    REQUIRE_OK(audit);
+    CHECK(fr::assess_convergence(*audit).status == magmaan::estimate::FitCheck::Unchecked);
+    CHECK(audit->detail.find("active box") != std::string::npos);
+  }
+  SUBCASE("nonlinear equality") {
+    auto f = setup("f =~ x1 + x2 + x3 + x4\n x1 ~~ a*x1\n x2 ~~ b*x2\n a == b*b", {one_factor_sigma()});
+    // Feasibility is established separately from curvature support.
+    for (std::size_t row = 0; row < f.pt.size(); ++row) {
+      if (f.pt.free[row] > 0 && f.pt.op[row] == magmaan::parse::Op::Covariance &&
+          f.pt.ov_pos[static_cast<std::size_t>(f.pt.lhs_var[row])] >= 0)
+        f.x0(f.pt.free[row] - 1) = 1.0;
+    }
+    fr::SphereOptions options;
+    options.start = fr::SphereStart::User;
+    auto problem = fr::ml_sphere_problem(f.pt, f.rep, f.samp, f.x0, options);
+    REQUIRE_OK(problem);
+    auto audit = fr::audit_ml_sphere(f.pt, f.rep, f.samp, problem->start);
+    REQUIRE_OK(audit);
+    CHECK(fr::assess_convergence(*audit).status == magmaan::estimate::FitCheck::Unchecked);
+    CHECK(audit->detail.find("nonlinear equality") != std::string::npos);
+  }
 }
 
 TEST_CASE("sphere ML: one-factor with a mean structure") {
@@ -458,6 +628,99 @@ TEST_CASE("sphere ML: effect coding") {
   BuildOptions o;
   o.effect_coding = true;
   check_same_as_ordinary_ml(setup("f =~ x1 + x2 + x3 + x4", {one_factor_sigma()}, o));
+}
+
+TEST_CASE("sphere audit: regular ML acceptance survives heterogeneous indicator units") {
+  const auto covariance = one_factor_sigma();
+  Eigen::Vector4d scale(0.01, 100.0, 2.0, 0.3);
+  auto original = setup("f =~ x1 + x2 + x3 + x4", {covariance});
+  auto changed = setup("f =~ x1 + x2 + x3 + x4",
+                       {scale.asDiagonal() * covariance * scale.asDiagonal()});
+  auto first = fr::fit_ml_sphere(original.pt, original.rep, original.samp, original.x0);
+  auto second = fr::fit_ml_sphere(changed.pt, changed.rep, changed.samp, changed.x0);
+  REQUIRE_OK(first);
+  REQUIRE_OK(second);
+  CHECK(first->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+  CHECK(second->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+  CHECK(second->report.fmin_internal == doctest::Approx(first->report.fmin_internal).epsilon(1e-9));
+}
+
+TEST_CASE("sphere LS audit: singular sandwich metric is not negative curvature") {
+  // Exact rank-one covariance: the ULS objective has full local parameter
+  // curvature, while its normal-theory score variance has rank one.
+  auto f = setup("f =~ x1 + x2 + x3 + x4", {Eigen::Matrix4d::Ones()});
+  for (std::size_t i = 0; i < f.pt.size(); ++i) {
+    if (f.pt.free[i] <= 0) continue;
+    const auto cell = f.rep.cell_for_row[i];
+    f.x0(f.pt.free[i] - 1) = cell.mat == magmaan::model::MatId::Lambda ||
+        cell.mat == magmaan::model::MatId::Psi ? 1.0 : 0.0;
+  }
+  fr::SphereOptions sphere;
+  sphere.start = fr::SphereStart::User;
+  sphere.polish = false;
+  auto fit = fr::fit_gmm_sphere(f.pt, f.rep, f.samp, f.x0, {}, {},
+      Backend::NloptLbfgs, {}, sphere);
+  REQUIRE_OK(fit);
+  using Status = magmaan::estimate::frontier::NewtonAccuracyStatus;
+  const auto& audit = fit->report.native_audit;
+  CHECK(fit->report.fmin_internal == doctest::Approx(0).epsilon(1e-12));
+  CHECK(audit.computations.system.status == Status::Available);
+  CHECK(audit.computations.metric_factor_system.status == Status::IllConditioned);
+  CHECK(audit.computations.solution.status == Status::IllConditioned);
+  CHECK(fit->report.native_verdict.status == magmaan::estimate::FitCheck::Failed);
+}
+
+TEST_CASE("sphere ML and GLS: sample-unit scaling uses the internal latent chart") {
+  // Frozen regular N=100 development covariance. With mixed indicator units,
+  // the former released-marker scale stops far from the optimum (or fails
+  // its line search). Both targets are invariant to this change of units.
+  Eigen::Matrix<double, 6, 6> covariance;
+  covariance <<
+    2.118383711263836, .9696068218577427, .4291974363012256, .3123623074203148, .3302763415688515, .2522176722272337,
+    .9696068218577427, 1.923872404396635, .6025127712649045, .008771535716100964, .2645935837282908, .0582359508142738,
+    .4291974363012256, .6025127712649045, 1.296549585945821, .007511998082285165, .1843541227085678, -.1183772846292678,
+    .3123623074203148, .008771535716100964, .007511998082285165, 2.140010405988564, .8881556521407293, .9195580160775313,
+    .3302763415688515, .2645935837282908, .1843541227085678, .8881556521407293, 1.671330543307811, .3823610873140895,
+    .2522176722272337, .0582359508142738, -.1183772846292678, .9195580160775313, .3823610873140895, 1.220635536650093;
+  Eigen::Matrix<double, 6, 1> scale;
+  scale << .01, 100, 2, .3, 10, .1;
+  constexpr const char* syntax = "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nY ~ X";
+  std::vector<Backend> backends{Backend::NloptLbfgs};
+#ifdef MAGMAAN_WITH_PORT
+  backends.push_back(Backend::Port);
+#endif
+  for (const auto backend : backends) {
+    for (const bool gls : {false, true}) {
+      CAPTURE(static_cast<int>(backend));
+      CAPTURE(gls);
+      auto original = setup(syntax, {covariance});
+      auto changed = setup(syntax, {scale.asDiagonal() * covariance * scale.asDiagonal()});
+      original.samp.n_obs[0] = changed.samp.n_obs[0] = 100;
+      auto options = magmaan::estimate::ml_optim_options();
+      options.coordinate_scaling = magmaan::optim::CoordinateScaling::SampleUnits;
+      fr::SphereOptions sphere;
+      sphere.polish = false;
+      sphere.start = fr::SphereStart::User;
+      auto fit = [&](Fitted& f) {
+        auto start = magmaan::estimate::ml_start_values(f.pt, f.rep, f.samp);
+        REQUIRE(start.has_value());
+        return gls ? fr::fit_gls_sphere(f.pt, f.rep, f.samp, start->theta, {}, backend, options, sphere)
+                   : fr::fit_ml_sphere(f.pt, f.rep, f.samp, start->theta, {}, backend, options, sphere);
+      };
+      const auto first = fit(original);
+      const auto second = fit(changed);
+      REQUIRE_OK(first);
+      REQUIRE_OK(second);
+      CHECK(first->report.driven_scaled);
+      CHECK(second->report.driven_scaled);
+      CHECK(first->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+      CHECK(second->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+      CHECK(second->report.fmin_internal == doctest::Approx(first->report.fmin_internal).epsilon(1e-8));
+      const Eigen::MatrixXd restored = scale.cwiseInverse().asDiagonal() *
+          implied(changed.pt, changed.rep, second->estimates.theta) * scale.cwiseInverse().asDiagonal();
+      CHECK((restored - implied(original.pt, original.rep, first->estimates.theta)).cwiseAbs().maxCoeff() < 1e-5);
+    }
+  }
 }
 
 TEST_CASE("sphere ML: fixed loading ratio") {
@@ -613,6 +876,7 @@ TEST_CASE("sphere FIML: reproduces the ordinary FIML estimate with missing data"
   auto sph = fr::fit_fiml_sphere(pt, *rep, raw, *x0);
   REQUIRE_OK(sph);
   REQUIRE(sph->user_chart);
+  CHECK(sph->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
   CHECK(sph->report.plan.units.size() == 1);
   CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-8));
   CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < 1e-4);
@@ -626,6 +890,8 @@ TEST_CASE("sphere PSD-ML: reproduces fit_ml_psd at an interior solution") {
   auto sph = fr::fit_ml_psd_sphere(f.pt, f.rep, f.samp, f.x0);
   REQUIRE_OK(sph);
   REQUIRE(sph->user_chart);
+  CHECK(sph->report.native_verdict.status == magmaan::estimate::FitCheck::Passed);
+  CHECK(sph->report.native_audit.computations.geometry.covariance_interior);
   CHECK(sph->report.pin_residual < 1e-6);
   CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-7));
   CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < 1e-4);
@@ -644,6 +910,8 @@ TEST_CASE("sphere PSD-ML: a Heywood-prone sample stays admissible and bounded") 
   auto sph = fr::fit_ml_psd_sphere(f.pt, f.rep, f.samp, f.x0);
   REQUIRE_OK(sph);
   REQUIRE(sph->user_chart);
+  CHECK(sph->report.native_verdict.status == magmaan::estimate::FitCheck::Unchecked);
+  CHECK(sph->report.native_audit.detail.find("sphere/PSD") != std::string::npos);
   CHECK(sph->estimates.fmin <= ord->fmin + 1e-7);
   CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-5));
   CHECK(sph->report.internal_theta.cwiseAbs().maxCoeff() < 20.0);
@@ -832,5 +1100,24 @@ TEST_CASE("sphere ML: without gauge units the driven run is scaled like fit_ml")
     CHECK(sph->report.driven_audit.stationary);
     CHECK(sph->estimates.fmin == doctest::Approx(ord->fmin).epsilon(1e-9));
     CHECK(max_abs_diff(sph->estimates.theta, ord->theta) < 1e-5 * c * c);
+  }
+}
+
+TEST_CASE("Sphere construction bounds: nonlinear map is retained with the terminal audit") {
+  auto f=setup("f =~ x1 + x2 + x3 + x4",{one_factor_sigma()});
+  fr::SphereOptions options; options.verified_newton=true; options.polish=false;
+  for(const auto estimator:{magmaan::estimate::Estimator::ULS,magmaan::estimate::Estimator::ML}) {
+    auto fit=estimator==magmaan::estimate::Estimator::ML ?
+        fr::fit_ml_sphere(f.pt,f.rep,f.samp,f.x0,{},Backend::Port,{},options) :
+        fr::fit_gmm_sphere(f.pt,f.rep,f.samp,f.x0,{}, {},Backend::PortNls,{},options);
+    REQUIRE_OK(fit);
+    const auto& audit=fit->report.native_audit;
+    REQUIRE(audit.input_map.has_value()); REQUIRE(audit.computations.input_errors.has_value());
+    const auto& errors=*audit.computations.input_errors;
+    REQUIRE_MESSAGE(errors.status==fr::NewtonAccuracyStatus::Available,errors.detail);
+    CHECK(errors.curvature_lower_bound>0);
+    auto policy=fr::newton_convergence_policy(); policy.require_verified_inputs=true;
+    CHECK(fr::assess_convergence(audit,policy).newton.status==magmaan::estimate::FitCheck::Passed);
+    CHECK(audit.input_map->rounded_point.isApprox(fit->report.internal_theta,1e-12));
   }
 }

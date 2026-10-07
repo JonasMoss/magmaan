@@ -1,0 +1,4 @@
+multiplier,points,within,above,unresolved,wrong_decisions,input_allowance_failures,interval_misses,reference_within,reference_curvature_resolved
+8,175,53,53,69,0,7,0,25,25
+64,175,46,46,83,0,0,0,24,24
+3744,175,8,8,159,0,0,0,8,23

@@ -75,6 +75,9 @@ estimate_gls <- fit_gls_impl
 estimate_wls <- fit_wls_impl
 estimate_dwls_ordinal <- fit_dwls_ordinal_impl
 estimate_wls_ordinal <- fit_wls_ordinal_impl
+frontier_ordinal_newton_audit <- frontier_ordinal_newton_audit_impl
+frontier_fiml_newton_audit <- frontier_fiml_newton_audit_impl
+frontier_ml2s_convergence_audit <- frontier_ml2s_convergence_audit_impl
 estimate_uls_ordinal <- fit_uls_ordinal_impl
 estimate_ordinal_stage2 <- fit_ordinal_stage2_impl
 estimate_ordinal_stage2_weight_blocks <- ordinal_stage2_weight_blocks_impl
@@ -577,6 +580,9 @@ magmaan_core <- local({
       "frontier_fit_uls_psd",
       "frontier_fit_gls_psd",
       "frontier_fit_wls_psd",
+      "frontier_ordinal_newton_audit",
+      "frontier_fiml_newton_audit",
+      "frontier_ml2s_convergence_audit",
       "frontier_rbm",
       "frontier_sam",
       "frontier_dls_weight",

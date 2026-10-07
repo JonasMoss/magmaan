@@ -250,9 +250,14 @@ ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
   auto factors = weight_factors(stats, weights);
   if (!factors.has_value()) return std::unexpected(factors.error());
   auto raw = ordinal_newton_parts_prepared(pt, rep, stats, *layout,
-      dense_weights_from_factors(*factors), theta, parameterization);
+      *factors, theta, parameterization);
   if (!raw.has_value()) return std::unexpected(newton_parts_error(who, raw.error().detail));
-  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric)};
+  std::vector<Eigen::MatrixXd> retained;
+  for (const auto& factor : *factors) retained.push_back(factor.to_dense());
+  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric),
+                            std::move(raw->correction), std::move(raw->factor),
+                            std::move(raw->score_residual), std::move(retained)};
+
 }
 
 fit_expected<OrdinalNewtonParts>
@@ -288,9 +293,14 @@ mixed_ordinal_ls_newton_parts_prepared(const spec::LatentStructure& pt,
   auto factors = weight_factors(stats, weights);
   if (!factors.has_value()) return std::unexpected(factors.error());
   auto raw = mixed_newton_parts_prepared(pt, rep, stats, *layout,
-      dense_weights_from_factors(*factors), theta, parameterization);
+      *factors, theta, parameterization);
   if (!raw.has_value()) return std::unexpected(newton_parts_error(who, raw.error().detail));
-  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric)};
+  std::vector<Eigen::MatrixXd> retained;
+  for (const auto& factor : *factors) retained.push_back(factor.to_dense());
+  return OrdinalNewtonParts{pt, std::move(raw->hessian), std::move(raw->metric),
+                            std::move(raw->correction), std::move(raw->factor),
+                            std::move(raw->score_residual), std::move(retained)};
+
 }
 
 post_expected<std::vector<Eigen::MatrixXd>>
@@ -833,15 +843,19 @@ void attach_ordinal_newton_accuracy(Estimates& est,
   d.objective = value;
   d.gradient = n * gradient;
   if (std::isfinite(value) && d.gradient.allFinite()) {
-    const auto Ws = dense_weights_from_factors(*c.factors);
     auto raw = c.stats != nullptr
-        ? ordinal_newton_parts_prepared(pt, *c.rep, *c.stats, *c.layout, Ws,
+        ? ordinal_newton_parts_prepared(pt, *c.rep, *c.stats, *c.layout, *c.factors,
                                         est.theta, c.parameterization)
-        : mixed_newton_parts_prepared(pt, *c.rep, *c.mixed, *c.layout, Ws,
+        : mixed_newton_parts_prepared(pt, *c.rep, *c.mixed, *c.layout, *c.factors,
                                       est.theta, c.parameterization);
     if (raw.has_value() && raw->hessian.allFinite() && raw->metric.allFinite()) {
       d.hessian = std::move(raw->hessian);
       d.metric = std::move(raw->metric);
+      d.ls_curvature_correction = std::move(raw->correction);
+      d.whitened_jacobian = raw->factor / std::sqrt(n);
+      d.whitened_residual = raw->score_residual / std::sqrt(n);
+      d.metric_factor = std::move(raw->factor);
+      d.metric_score_residual = std::move(raw->score_residual);
       d.status = NewtonAccuracyStatus::Available;
     } else {
       d.detail = raw.has_value() ? "non-finite ordinal Hessian" : raw.error().detail;

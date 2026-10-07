@@ -52,6 +52,28 @@ std::optional<std::string> configure_controls(
 
 constexpr double kInvalidConstraintResidual = 1e20;
 
+magmaan::optim::NloptControls effective_controls(
+    nlopt_opt opt, magmaan::optim::NloptAlgorithm algo,
+    const magmaan::optim::OptimOptions& opts, bool constrained) {
+  using magmaan::optim::NloptAlgorithm;
+  magmaan::optim::NloptControls c;
+  c.ftol_rel = nlopt_get_ftol_rel(opt);
+  c.ftol_abs = nlopt_get_ftol_abs(opt);
+  c.xtol_rel = nlopt_get_xtol_rel(opt);
+  Eigen::VectorXd xtol(nlopt_get_dimension(opt));
+  nlopt_get_xtol_abs(opt, xtol.data());
+  if (xtol.size() > 0) c.xtol_abs = xtol(0);
+  c.max_eval = nlopt_get_maxeval(opt);
+  if (algo == NloptAlgorithm::Lbfgs || algo == NloptAlgorithm::Var2 ||
+      algo == NloptAlgorithm::Tnewton) {
+    c.tolg = nlopt_get_param(opt, "tolg", 0.0);
+    c.vector_storage = static_cast<int>(nlopt_get_vector_storage(opt));
+  }
+  if (constrained)
+    c.constraint_tol = opts.nlopt.constraint_tol.value_or(std::max(opts.gtol, 1e-12));
+  return c;
+}
+
 struct NloptConstraintData {
   const magmaan::optim::ConstrainedScalarProblem* prob = nullptr;
 };
@@ -148,7 +170,8 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
                     const ObjectiveFn& f, const Eigen::VectorXd& lower,
                     const Eigen::VectorXd& upper,
                     const std::string& invalid_args_detail,
-                    const ConstrainedScalarProblem* constrained_prob) {
+                    const ConstrainedScalarProblem* constrained_prob,
+                    NloptControls controls) {
   switch (rc) {
     case NLOPT_OUT_OF_MEMORY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -171,6 +194,13 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
           ? audit_equality_constrained_terminal_iterate(
                 *constrained_prob, theta, fmin, lower, upper)
           : audit_terminal_iterate(f, theta, fmin, lower, upper);
+  if (!a.f_finite) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        "nlopt " + algo_name + ": terminal candidate is not evaluable",
+        n_evals, fmin));
+  }
+  a.raw_backend_status = static_cast<int>(rc);
+  a.nlopt_controls = std::move(controls);
 
   OptimStatus opt_status = OptimStatus::Converged;
   switch (rc) {
@@ -187,17 +217,14 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
       if (a.stationary) {
         opt_status = OptimStatus::LineSearchSalvaged;
       } else {
-        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-            "nlopt " + algo_name + ": evaluation budget exhausted without "
-            "convergence", n_evals, fmin));
+        opt_status = OptimStatus::BudgetExhausted;
       }
       break;
     case NLOPT_FORCED_STOP:
       if (a.stationary) {
         opt_status = OptimStatus::LineSearchSalvaged;
       } else {
-        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-            "nlopt " + algo_name + ": forced stop", n_evals, fmin));
+        opt_status = OptimStatus::LineSearchFailed;
       }
       break;
     case NLOPT_FAILURE:
@@ -205,9 +232,7 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
       if (a.stationary) {
         opt_status = OptimStatus::LineSearchSalvaged;
       } else {
-        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-            "nlopt " + algo_name + ": generic solver failure",
-            n_evals, fmin));
+        opt_status = OptimStatus::LineSearchFailed;
       }
       break;
   }
@@ -216,6 +241,7 @@ finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
                   /*f_evals=*/n_evals, /*g_evals=*/n_evals,
                   opt_status, a.grad_inf_norm};
   out.audit = std::move(a);
+  out.raw_status = static_cast<int>(rc);
   return out;
 }
 
@@ -283,13 +309,13 @@ NloptOptimizer::minimize(Objective f,
   const nlopt_result rc = nlopt_optimize(opt, theta.data(), &fmin);
   const int n_evals = nlopt_get_numevals(opt);
   const std::string algo_name = nlopt_algorithm_name(raw_algo);
+  auto controls = effective_controls(opt, algo_, opts_, false);
   nlopt_destroy(opt);
 
   // Classify the NLopt return code by what kind of iterate we have in hand:
   //   - SUCCESS / TOL-reached / ROUNDOFF_LIMITED: usable `theta`, `fmin`
-  //   - MAXEVAL/MAXTIME, FORCED_STOP, generic FAILURE: usable `theta`, `fmin`
-  //     (NLopt writes the best point into `x` even on these failure codes) —
-  //     the audit decides by geometry whether to salvage.
+  //   - MAXEVAL/MAXTIME, FORCED_STOP, generic FAILURE: retain evaluable
+  //     `theta`, `fmin`, and tag the stop separately from the audit verdict.
   //   - OUT_OF_MEMORY / INVALID_ARGS / non-finite `fmin`: no usable iterate;
   //     bail immediately without invoking the audit.
   //
@@ -306,7 +332,7 @@ NloptOptimizer::minimize(Objective f,
       rc, algo_name, n_evals, fmin, std::move(theta), f, lower, upper,
       "invalid arguments (BOBYQA requires finite bounds; check that "
       "lower/upper aren't all ±infinity)",
-      nullptr);
+      nullptr, std::move(controls));
 }
 
 fit_expected<OptimOutput>
@@ -392,13 +418,14 @@ NloptOptimizer::minimize_constrained(const ConstrainedScalarProblem& prob,
   const nlopt_result rc = nlopt_optimize(opt, theta.data(), &fmin);
   const int n_evals = nlopt_get_numevals(opt);
   const std::string algo_name = nlopt_algorithm_name(raw_algo);
+  auto controls = effective_controls(opt, algo_, opts_, true);
   nlopt_destroy(opt);
 
   return finish_nlopt_result(
       rc, algo_name, n_evals, fmin, std::move(theta), prob.objective.f,
       lower, upper, "invalid arguments (check SLSQP constraint dimensions, "
       "constraint tolerances, and bounds)",
-      &prob);
+      &prob, std::move(controls));
 }
 
 fit_expected<OptimOutput>

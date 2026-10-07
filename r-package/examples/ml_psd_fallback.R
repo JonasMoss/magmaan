@@ -24,18 +24,20 @@ stopifnot(b$converged, b$fallback_used, b$warm_start_used,
           identical(b$fit$ml_start_policy, 'ordinary-estimates'),
           identical(b$fit$partable$free, ordinary$partable$free))
 
-# Solver errors remain inspectable; PSD uses the original initializer.
+# A budget stop returns an inspectable failed candidate (TASK-33.10.5.1) that
+# is rejected, not warm-started from; PSD uses the original initializer.
 c <- frontier_fit_ml_psd_fallback(model, interior,
     ordinary_control = list(max_iter = 1L))
 stopifnot(c$converged, c$fallback_used, !c$warm_start_used,
-          identical(c$fallback_reason, 'ordinary-error'),
-          is.null(c$ordinary$fit), nzchar(c$ordinary$error$detail),
-          is.null(c$psd$error))
+          identical(c$fallback_reason, 'ordinary-rejected'),
+          !is.null(c$ordinary$fit), isFALSE(c$ordinary$fit$converged),
+          is.null(c$ordinary$error), is.null(c$psd$error))
 
+# Both budget stops are retained as failed candidates; nothing is accepted.
 d <- frontier_fit_ml_psd_fallback(model, interior,
     ordinary_control = list(max_iter = 1L), psd_control = list(max_iter = 1L))
 stopifnot(!d$converged, is.null(d$fit),
-          nzchar(d$ordinary$error$detail), nzchar(d$psd$error$detail))
+          isFALSE(d$ordinary$fit$converged), isFALSE(d$psd$fit$converged))
 
 # Known limitation (board TASK-33.3): a Newton accuracy pass is not an
 # identification certificate. Freeing every loading and the factor variance
@@ -47,8 +49,8 @@ unidentified <- model_spec('f =~ x1 + x2 + x3', auto_fix_first = FALSE)
 e <- frontier_fit_ml_psd_fallback(unidentified, interior,
     ordinary_control = list(max_iter = 1L))
 stopifnot(e$fallback_used, !e$warm_start_used,
-          identical(e$fallback_reason, 'ordinary-error'),
-          is.null(e$ordinary$fit), nzchar(e$ordinary$error$detail),
+          identical(e$fallback_reason, 'ordinary-rejected'),
+          isFALSE(e$ordinary$fit$converged), is.null(e$ordinary$error),
           !is.null(e$psd$fit), is.null(e$psd$error),
           length(e$psd$fit$theta) == 7L,
           identical(e$converged, isTRUE(e$psd$fit$converged) &&

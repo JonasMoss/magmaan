@@ -1,13 +1,16 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Cholesky>
+#include <Eigen/QR>
 
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/estimate/fit.hpp"  // Estimates
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -40,6 +43,8 @@
 //
 // The conditioning and solve guards are numerical safeguards, not
 // identification tests. This function never errors: failures are statuses.
+
+namespace magmaan::estimate { enum class Estimator; }
 
 namespace magmaan::estimate::frontier {
 
@@ -80,6 +85,14 @@ struct NewtonDerivatives {
   // LS-native whitening, including group weights; gradient = N J' r.
   Eigen::VectorXd whitened_residual;
   Eigen::MatrixXd whitened_jacobian;
+  // H = N J'J + this analytic observed correction (TOTAL scale).
+  // Empty unless independently supplied by the owning LS adapter.
+  Eigen::MatrixXd ls_curvature_correction;
+  // Exact retained fitting-weight representation for analytic moment LS.
+  // Present and empty means identity; absent means the owning weight is
+  // unknown and cannot authorize construction-aware verification.
+  std::optional<gmm::Weight> ls_weight;
+
   // Coordinates absent from the objective, explicitly held fixed by its
   // adapter (CatML's Stage-1 thresholds). Never inferred from Hessian rank.
   std::vector<Eigen::Index> fixed_coordinates;
@@ -87,6 +100,8 @@ struct NewtonDerivatives {
   // in full coordinates. Empty for the Hessian metric.
   NewtonMetricKind metric_kind = NewtonMetricKind::Hessian;
   Eigen::MatrixXd metric;
+  Eigen::MatrixXd metric_factor;  // A with Omega = A' A, if supplied
+  Eigen::VectorXd metric_score_residual;  // b with G = A' b, if supplied
 };
 
 // theta increments = equality_basis * tangent_basis * reduced increments.
@@ -105,19 +120,25 @@ struct NewtonGeometry {
   Eigen::VectorXd reduced_gradient;
   Eigen::MatrixXd reduced_hessian;
   Eigen::MatrixXd reduced_metric;  // B' Omega B for the sandwich metric, else empty
+  Eigen::MatrixXd reduced_metric_factor;  // A B, without a cross-product
   std::int32_t null_directions = 0;
   std::int32_t constrained_directions = 0;
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
 };
 
-// Reusable factorization of C = diag(scale) H diag(scale). No inverse is
-// formed. The retained factorization also supports additional right-hand sides.
+// Reusable factorization of C = T' H T. Ordinary preparation uses diagonal
+// T = diag(scale); LS QR preparation retains a full coordinate_map T.
+// No Hessian inverse is formed. Additional right-hand sides reuse the solve.
 struct NewtonSystem {
   NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
   Eigen::VectorXd scale;
   Eigen::MatrixXd equilibrated_hessian;
   Eigen::LLT<Eigen::MatrixXd> factorization;
   double condition = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd coordinate_map;
+  Eigen::MatrixXd objective_projection;  // diag(scale) Q', LS QR only
+  double jacobian_condition = std::numeric_limits<double>::quiet_NaN();
+  double jacobian_factor_residual = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct NewtonSolution {
@@ -128,6 +149,55 @@ struct NewtonSolution {
   double condition = std::numeric_limits<double>::quiet_NaN();
   double solve_residual = std::numeric_limits<double>::quiet_NaN();
 };
+
+// Column-equilibrated, pivoted QR of a metric factor. The condition remains
+// that of the metric (the squared factor condition), so existing guards keep
+// their meaning. Rank loss fails; no truncated solve or ridge is substituted.
+struct NewtonMetricSystem {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  Eigen::VectorXd scale;
+  Eigen::MatrixXd equilibrated_factor;
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> factorization;
+  Eigen::Index rank = 0;
+  double condition = std::numeric_limits<double>::quiet_NaN();
+  double factor_residual = std::numeric_limits<double>::quiet_NaN();
+};
+NewtonMetricSystem prepare_newton_metric_system(const Eigen::MatrixXd& factor);
+NewtonSolution solve_newton_metric_system(
+    const NewtonMetricSystem& system, const Eigen::VectorXd& gradient,
+    const Eigen::VectorXd& score_residual = {});
+
+// Conditional numerical interval, separate from the ordinary fit verdict.
+// Bounds concern exact target inputs versus retained binary64 inputs in the
+// stated coordinates. Zero bounds certify only the retained inputs, not SEM
+// derivative/factor construction. They never arise from a solve residual.
+enum class NewtonBudgetDecision { Unresolved, WithinBudget, AboveBudget };
+std::string_view to_string(NewtonBudgetDecision decision) noexcept;
+struct NewtonDistanceInterval {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unavailable;
+  NewtonBudgetDecision decision = NewtonBudgetDecision::Unresolved;
+  double distance = std::numeric_limits<double>::quiet_NaN();
+  double lower = 0;
+  double upper = std::numeric_limits<double>::infinity();
+  double error_bound = std::numeric_limits<double>::infinity();
+  double rank_margin = 0;
+  double factor_error_bound = std::numeric_limits<double>::quiet_NaN();
+  double orthogonality_error_bound = std::numeric_limits<double>::quiet_NaN();
+};
+// factor_error is a Frobenius bound AFTER the system's column scaling;
+// residual_error is an absolute Euclidean bound on the supplied residual.
+NewtonDistanceInterval newton_metric_distance_interval(
+    const NewtonMetricSystem& system, const Eigen::VectorXd& residual,
+    double factor_error, double residual_error, double budget = .01);
+// Hessian/score errors are Frobenius/Euclidean bounds in diagonal-equilibrated
+// coordinates. Full QR coordinate maps are unsupported by this likelihood
+// primitive. Cholesky reconstruction and triangular solve error are included.
+NewtonDistanceInterval newton_hessian_distance_interval(
+    const NewtonSystem& system, const Eigen::VectorXd& gradient,
+    double hessian_error, double gradient_error, double budget = .01);
+// Lower bound for target positive curvature in the retained equilibrated
+// coordinates. Zero means unresolved/nonpositive; NaN means unavailable.
+double newton_curvature_lower_bound(const NewtonSystem& system, double error);
 
 // Convex reduced quadratic: min g's + s'Hs/2 subject to normals*s >= lower.
 // Zero must be feasible. The base Hessian must be positive definite. Retains
@@ -161,8 +231,16 @@ NewtonGeometry prepare_newton_geometry(
     double interior_eigen_tol = 1e-8);
 
 NewtonSystem prepare_newton_system(const Eigen::MatrixXd& hessian);
+// J is the TOTAL objective Jacobian, H = J'J + correction. Full-rank,
+// column-equilibrated pivoted QR prepares I + R^-T C R^-1. The observed
+// correction is retained; rank loss fails without truncation or a ridge.
+// This internal coordinate change is currently used for unrestricted LS
+// audits; box and PSD-face solves retain their existing coordinate contract.
+NewtonSystem prepare_newton_ls_system(const Eigen::MatrixXd& total_jacobian,
+                                     const Eigen::MatrixXd& correction);
 NewtonSolution solve_newton_system(const NewtonSystem& system,
-                                   const Eigen::VectorXd& gradient);
+                                   const Eigen::VectorXd& gradient,
+                                   const Eigen::VectorXd& total_ls_residual = {});
 // Reassess numerical guards and acceptance budget without derivatives,
 // geometry reconstruction or factorization. Unavailable evidence stays so.
 NewtonAccuracyDiagnostics assess_newton_accuracy(
@@ -170,7 +248,16 @@ NewtonAccuracyDiagnostics assess_newton_accuracy(
 
 // Convenience composition retaining every stage. Fit wrappers below return
 // only its small diagnostics record; callers wanting reuse own this result.
+struct NewtonInputErrorBounds {
+  NewtonAccuracyStatus status = NewtonAccuracyStatus::Unsupported;
+  double matrix = std::numeric_limits<double>::quiet_NaN();
+  double vector = std::numeric_limits<double>::quiet_NaN();
+  double curvature = std::numeric_limits<double>::quiet_NaN();
+  double curvature_lower_bound = 0;
+  std::string detail;
+};
 struct NewtonAudit {
+  std::optional<NewtonInputErrorBounds> input_errors;
   // Derivatives and full-space geometry maps still use the caller's parameter
   // coordinates; the reduced solve may use normalized internal coordinates.
   bool unit_normalized = false;
@@ -183,8 +270,43 @@ struct NewtonAudit {
   NewtonSolution solution;  // distance in the derivatives' metric
   NewtonBoxSolution box;
   NewtonSystem metric_system;  // factorization of reduced_metric, sandwich only
+  NewtonMetricSystem metric_factor_system;  // preferred when a factor is supplied
   NewtonAccuracyDiagnostics diagnostics;
 };
+
+// The retained binary64 sphere map defines theta = offset + K*u_rest, with
+// each mapped loading row replaced by D*Q*beta/||beta||. The producer bounds
+// expansion, its Jacobian and its full second-derivative chain independently.
+struct NewtonSphereUnit {
+  Eigen::MatrixXd basis;
+  Eigen::VectorXd units;
+  std::vector<std::vector<Eigen::Index>> parameters;
+  Eigen::Index offset = 0;
+};
+struct NewtonSphereMap {
+  Eigen::VectorXd offset;
+  Eigen::MatrixXd rest_basis;
+  Eigen::VectorXd rounded_point;
+  std::vector<NewtonSphereUnit> spheres;
+};
+
+// Independent outward interval evaluation of linear SEM moments/derivatives,
+// retained fitting weights and sample roots at the exact binary64 inputs.
+// Fixed-weight moment LS (including complete mean blocks) or covariance-only
+// ML; ambient, unboxed geometry, matching analytic audit. LS retains its exact
+// weight representation; labels dispatch a family, not a producer recipe.
+// With a sphere map, theta is the retained driven point; normalization, its
+// Jacobian and full second-derivative chain are independently enclosed.
+// Values are in the interval primitives' retained coordinates. Unsupported
+// moment layouts/faces remain explicit; no dimensional allowance is substituted.
+NewtonInputErrorBounds newton_input_error_bounds(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const SampleStats& sample, const Eigen::VectorXd& theta,
+    const NewtonAudit& audit, Estimator estimator,
+    const NewtonSphereMap* sphere_map = nullptr);
+NewtonDistanceInterval newton_input_distance_interval(
+    const NewtonAudit& audit, const NewtonInputErrorBounds& bounds,
+    double budget = .01);
 
 // Preserve geometry metadata when reassessing a retained audit. Only budget,
 // max_condition and max_solve_residual are consulted; interior_eigen_tol is a

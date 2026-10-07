@@ -11,7 +11,9 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
+#include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/inference/inference.hpp"
@@ -41,12 +43,13 @@ struct Model {
 // Builds the model, takes simple start values as the population point (after
 // projecting onto the equality constraints), and sets S to its implied
 // covariance, so theta0 is the exact ML solution.
-Model exact_model(std::string_view syntax, std::int64_t n = 250) {
+Model exact_model(std::string_view syntax, std::int64_t n = 250,bool means = false) {
   Model m;
   auto flat = magmaan::parse::Parser::parse(syntax);
   REQUIRE(flat.has_value());
   magmaan::spec::BuildOptions opts;
   opts.fixed_x = false;
+  opts.meanstructure = means;
   auto pt = magmaan::spec::build(*flat, opts);
   REQUIRE(pt.has_value());
   m.pt = std::move(*pt);
@@ -59,6 +62,7 @@ Model exact_model(std::string_view syntax, std::int64_t n = 250) {
   S0.diagonal().array() = 1.0;
   m.samp.S = {S0};
   m.samp.n_obs = {n};
+  if(means) m.samp.mean={Eigen::VectorXd::Zero(p)};
   auto x0 = magmaan::estimate::simple_start_values(m.pt, m.rep, m.samp, {});
   REQUIRE(x0.has_value());
   auto con = magmaan::estimate::build_eq_constraints(m.pt, /*allow_nonlinear=*/true);
@@ -66,9 +70,10 @@ Model exact_model(std::string_view syntax, std::int64_t n = 250) {
   m.theta0 = con->expand(con->contract(*x0));
   auto ev = ModelEvaluator::build(m.pt, m.rep);
   REQUIRE(ev.has_value());
-  auto e = ev->evaluate(m.theta0, false, false);
+  auto e = ev->evaluate(m.theta0, false, means);
   REQUIRE(e.has_value());
   m.samp.S = {e->moments.sigma[0]};
+  if(means) m.samp.mean=e->moments.mu;
   return m;
 }
 
@@ -200,6 +205,18 @@ TEST_CASE("Newton accuracy: multi-group distance matches the information metric"
   auto e = ev->evaluate(theta0, false, false);
   REQUIRE(e.has_value());
   samp.S = {e->moments.sigma[0], e->moments.sigma[1]};
+
+  // Construction bounds must cover the stacked ULS sampling factors and the
+  // summed ML score/curvature with each group's own sample size and moments.
+  using namespace magmaan::estimate::frontier;
+  for(const auto estimator : {magmaan::estimate::Estimator::ULS,magmaan::estimate::Estimator::ML}) {
+    const auto audit=estimator==magmaan::estimate::Estimator::ML ?
+        audit_newton_ml(*pt,*rep,samp,theta0) : *audit_newton_uls(*pt,*rep,samp,theta0);
+    const auto bounds=newton_input_error_bounds(*pt,*rep,samp,theta0,audit,estimator);
+    REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+    CHECK(bounds.curvature_lower_bound>0);
+    CHECK(newton_input_distance_interval(audit,bounds).decision==NewtonBudgetDecision::WithinBudget);
+  }
 
   const auto exact = newton_accuracy_ml(*pt, *rep, samp, at(theta0));
   REQUIRE(exact.status == NewtonAccuracyStatus::Available);
@@ -696,5 +713,232 @@ TEST_CASE("PSD Newton normalization transports equal labels and affine constrain
       CHECK(b.geometry.reduced_hessian.isApprox(
           B.transpose() * (b.derivatives.hessian + b.geometry.curvature_correction) * B, 1e-8));
     }
+  }
+}
+
+TEST_CASE("Newton metric factor: projection survives a rounded singular cross-product") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 3, 2> A;
+  A << 1, 1, 0, 1e-10, 0, 0;
+  const Eigen::Vector3d b(.005, .002, 7);
+  const Eigen::Vector2d g = A.transpose() * b;
+  const auto old = nf::prepare_newton_system(A.transpose() * A);
+  CHECK(old.status == NewtonAccuracyStatus::NonpositiveCurvature);
+  const auto system = nf::prepare_newton_metric_system(A);
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  CHECK(system.rank == 2);
+  CHECK(system.condition == doctest::Approx(4e20).epsilon(1e-12));
+  const auto solution = nf::solve_newton_metric_system(system, g, b);
+  CHECK(solution.distance == doctest::Approx(std::hypot(.005, .002)).epsilon(1e-12));
+  CHECK(solution.solve_residual < 1e-15);
+  const auto guarded = nf::assess_newton_accuracy(solution);
+  CHECK(guarded.status == NewtonAccuracyStatus::IllConditioned);
+  CHECK_FALSE(guarded.passed);
+  CHECK(guarded.distance == doctest::Approx(solution.distance));
+  nf::NewtonAccuracyOptions diagnostic;
+  diagnostic.max_condition = 1e22;
+  CHECK(nf::assess_newton_accuracy(solution, diagnostic).passed);
+  const Eigen::Vector3d inaccurate(.005, .02, 7);
+  const auto bad = nf::solve_newton_metric_system(system, A.transpose() * inaccurate, inaccurate);
+  CHECK_FALSE(nf::assess_newton_accuracy(bad, diagnostic).passed);
+  // An unresolved metric must never be made to pass by dropping a direction.
+  A.col(1) = A.col(0);
+  const auto singular = nf::prepare_newton_metric_system(A);
+  CHECK(singular.status == NewtonAccuracyStatus::IllConditioned);
+  CHECK(nf::solve_newton_metric_system(singular, g).status == NewtonAccuracyStatus::IllConditioned);
+}
+
+TEST_CASE("Newton metric factor: ordinary triangular solve matches a well-conditioned metric") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 4, 2> A;
+  A << 2, -1, 1, 3, -2, 4, 1, 2;
+  const Eigen::Vector4d b(.01, -.02, .03, -.01);
+  const Eigen::Vector2d g = A.transpose() * b;
+  const auto system = nf::prepare_newton_metric_system(A);
+  const auto old = nf::solve_newton_system(nf::prepare_newton_system(A.transpose() * A), g);
+  const auto triangular = nf::solve_newton_metric_system(system, g);
+  const auto projected = nf::solve_newton_metric_system(system, g, b);
+  REQUIRE(triangular.status == NewtonAccuracyStatus::Available);
+  CHECK(triangular.distance == doctest::Approx(old.distance).epsilon(1e-12));
+  CHECK(projected.distance == doctest::Approx(old.distance).epsilon(1e-12));
+  CHECK(projected.condition == doctest::Approx(old.condition).epsilon(1e-12));
+  CHECK(nf::solve_newton_metric_system(system, Eigen::VectorXd::Ones(3)).status == NewtonAccuracyStatus::Unavailable);
+}
+
+TEST_CASE("Newton LS QR: recover a correction lost by rounded normal equations") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 3, 2> J;
+  J << 1, 1, 0, 1e-10, 0, 0;
+  const Eigen::Vector3d r(.5, .25e-10, .1);
+  const Eigen::Vector2d g = J.transpose() * r;
+  const Eigen::Matrix2d H = J.transpose() * J;
+  CHECK(nf::prepare_newton_system(H).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  const auto system = nf::prepare_newton_ls_system(J, Eigen::Matrix2d::Zero());
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  CHECK(system.condition == doctest::Approx(1));
+  CHECK(system.jacobian_condition > 1e9);
+  CHECK(system.jacobian_factor_residual < 1e-14);
+  const auto solution = nf::solve_newton_system(system, g, r);
+  REQUIRE(solution.status == NewtonAccuracyStatus::Available);
+  CHECK(solution.step.isApprox(Eigen::Vector2d(-.25, -.25), 1e-6));
+  CHECK(solution.distance == doctest::Approx(.5).epsilon(1e-10));
+  CHECK(solution.solve_residual < 1e-14);
+}
+
+TEST_CASE("Newton LS QR: retain observed curvature and transport pivoted scaled steps") {
+  namespace nf = magmaan::estimate::frontier;
+  Eigen::Matrix<double, 4, 2> J;
+  J << .02, 3, -.03, 1, .01, 2, .04, -1;
+  Eigen::Matrix2d correction; correction << .0001, .002, .002, -.5;
+  const Eigen::Matrix2d H = J.transpose()*J + correction;
+  const Eigen::Vector2d g(.01, -.3);
+  const auto system = nf::prepare_newton_ls_system(J, correction);
+  REQUIRE(system.status == NewtonAccuracyStatus::Available);
+  const auto solution = nf::solve_newton_system(system, g);
+  const auto expected = nf::solve_newton_system(nf::prepare_newton_system(H), g);
+  REQUIRE(solution.status == NewtonAccuracyStatus::Available);
+  CHECK(solution.step.isApprox(expected.step, 1e-11));
+  CHECK(solution.distance == doctest::Approx(expected.distance).epsilon(1e-11));
+  CHECK(system.equilibrated_hessian.isApprox(
+      system.coordinate_map.transpose()*H*system.coordinate_map, 1e-11));
+  const Eigen::Matrix2d saddle = -2*(J.transpose()*J);
+  CHECK(nf::prepare_newton_ls_system(J, saddle).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  J.col(1) = 100*J.col(0);
+  CHECK(nf::prepare_newton_ls_system(J, Eigen::Matrix2d::Zero()).status == NewtonAccuracyStatus::IllConditioned);
+  CHECK(nf::prepare_newton_ls_system(J, Eigen::MatrixXd::Zero(3,3)).status == NewtonAccuracyStatus::Unavailable);
+}
+
+TEST_CASE("Newton uncertainty: projector perturbations and budget ambiguity") {
+  using namespace magmaan::estimate::frontier;
+  Eigen::MatrixXd a(3, 2); a << 1, 1, 0, 1e-10, 0, 0;
+  Eigen::VectorXd b(3); b << .003, .004, .02;
+  const auto system = prepare_newton_metric_system(a);
+  const auto exact_inputs = newton_metric_distance_interval(system, b, 0, 0);
+  REQUIRE(exact_inputs.status == NewtonAccuracyStatus::Available);
+  CHECK(exact_inputs.lower <= .005);
+  CHECK(exact_inputs.upper >= .005);
+  CHECK(exact_inputs.decision == NewtonBudgetDecision::WithinBudget);
+  // Perturb the subspace, not just the projected score. The exact two-column
+  // projector has a closed form, independently of this kernel's QR.
+  const double delta = 1e-13;
+  const double bound = delta * system.scale[1];
+  const auto interval = newton_metric_distance_interval(system, b, bound, 1e-6);
+  for (double sign : {-1.0, 1.0}) {
+    const double slope = sign * delta / 1e-10;
+    const double d = std::hypot(b[0], (b[1] + slope * (b[2] + sign * 1e-6)) /
+        std::sqrt(1 + slope * slope));
+    CHECK(interval.lower <= d); CHECK(interval.upper >= d);
+  }
+  b << .006, .008, .02;
+  CHECK(newton_metric_distance_interval(system, b, 0, 0).decision == NewtonBudgetDecision::Unresolved);
+  b << .012, .016, .02;
+  CHECK(newton_metric_distance_interval(system, b, 0, 0).decision == NewtonBudgetDecision::AboveBudget);
+  CHECK(newton_metric_distance_interval(system, b, 1, 0).decision == NewtonBudgetDecision::Unresolved);
+  CHECK(newton_metric_distance_interval(system, b, -1, 0).status == NewtonAccuracyStatus::Unavailable);
+  CHECK(newton_metric_distance_interval(system, b, std::numeric_limits<double>::quiet_NaN(), 0).status == NewtonAccuracyStatus::Unavailable);
+  a.col(1) = a.col(0);
+  CHECK(newton_metric_distance_interval(prepare_newton_metric_system(a), b, 0, 0).decision == NewtonBudgetDecision::Unresolved);
+}
+
+TEST_CASE("Newton uncertainty: likelihood quadratic and construction uncertainty") {
+  using namespace magmaan::estimate::frontier;
+  Eigen::MatrixXd h(2, 2); h << 1, .25, .25, 2;
+  Eigen::VectorXd g(2); g << .003, .004;
+  const auto system = prepare_newton_system(h);
+  const auto interval = newton_hessian_distance_interval(system, g, 1e-5, 1e-5);
+  REQUIRE(interval.status == NewtonAccuracyStatus::Available);
+  for (double sign : {-1.0, 1.0}) {
+    // Exact inverse of a 2x2 symmetric matrix, in the declared scaled inputs.
+    Eigen::MatrixXd c = system.equilibrated_hessian;
+    c(0, 0) += sign * 1e-5;
+    Eigen::VectorXd b = system.scale.cwiseProduct(g); b[1] += sign * 1e-5;
+    const double q = (c(1, 1)*b[0]*b[0] - 2*c(0, 1)*b[0]*b[1] + c(0, 0)*b[1]*b[1]) /
+        (c(0, 0)*c(1, 1) - c(0, 1)*c(0, 1));
+    CHECK(interval.lower <= std::sqrt(q)); CHECK(interval.upper >= std::sqrt(q));
+  }
+  CHECK(newton_hessian_distance_interval(system, g, 1, 0).decision == NewtonBudgetDecision::Unresolved);
+  h(1, 1) = -.1;
+  CHECK(newton_hessian_distance_interval(prepare_newton_system(h), g, 0, 0).status == NewtonAccuracyStatus::NonpositiveCurvature);
+  h << 1, 1-1e-13, 1-1e-13, 1;
+  g.setZero();
+  const auto flat = newton_hessian_distance_interval(prepare_newton_system(h), g, 0, 0);
+  CHECK(flat.decision == NewtonBudgetDecision::WithinBudget);
+  CHECK(newton_hessian_distance_interval(prepare_newton_system(h), g, 1e-12, 0).decision == NewtonBudgetDecision::Unresolved);
+  CHECK(newton_hessian_distance_interval(system, g, 0, std::numeric_limits<double>::infinity()).status == NewtonAccuracyStatus::Unavailable);
+}
+
+TEST_CASE("Newton input enclosures: independently evaluated covariance models") {
+  using namespace magmaan::estimate::frontier;
+  using magmaan::estimate::Estimator;
+  for (const auto syntax : {"f =~ x1 + x2 + x3", "f =~ x1 + a*x2 + a*x3",
+      "f1 =~ x1 + x2 + x3\nf2 =~ y1 + y2 + y3\nf1 ~ .2*f2\nf2 ~ .3*f1"}) {
+    auto m=exact_model(syntax);
+    for (const auto estimator : {Estimator::ULS,Estimator::ML}) {
+      const auto get_audit=[&](const Eigen::VectorXd& theta) {
+        if(estimator==Estimator::ML) return audit_newton_ml(m.pt,m.rep,m.samp,theta);
+        auto x=audit_newton_uls(m.pt,m.rep,m.samp,theta); REQUIRE(x.has_value()); return *x;
+      };
+      const auto a=get_audit(m.theta0);
+      const auto bounds=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,a,estimator);
+      REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+      CHECK(bounds.matrix>=0); CHECK(bounds.vector>=0); CHECK(bounds.curvature>=0);
+      CHECK(bounds.curvature_lower_bound>0);
+      const auto interval=estimator==Estimator::ULS ?
+          newton_metric_distance_interval(a.metric_factor_system,a.derivatives.metric_score_residual,bounds.matrix,bounds.vector) :
+          newton_hessian_distance_interval(a.system,a.geometry.reduced_gradient,bounds.matrix,bounds.vector);
+      CHECK(interval.decision==NewtonBudgetDecision::WithinBudget);
+      auto mismatch=m.theta0; mismatch[0]+=.1;
+      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,mismatch,a,estimator).status==NewtonAccuracyStatus::Unavailable);
+      auto means=m.samp; means.mean={Eigen::VectorXd::Zero(m.samp.S[0].rows())};
+      CHECK(newton_input_error_bounds(m.pt,m.rep,means,m.theta0,a,estimator).status!=NewtonAccuracyStatus::Available);
+      auto unknown=a; unknown.derivatives.ls_weight.reset();
+      if(estimator==Estimator::ULS) CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,unknown,Estimator::WLS).status==NewtonAccuracyStatus::Unsupported);
+    }
+  }
+}
+
+
+TEST_CASE("Newton input enclosures: retained fixed weights and mean coordinates") {
+  using namespace magmaan::estimate;
+  using namespace magmaan::estimate::frontier;
+  for(const auto syntax : {"f =~ x1 + x2 + x3 + x4\nf ~ .2*1",
+      "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nX ~ .2*Y\nY ~ X\nX ~ .2*1\nY ~ -.1*1"})
+    for(bool means : {false,true}) {
+    auto m=exact_model(syntax,250,means);
+    const Eigen::Index p=m.samp.S[0].rows(),r=p*(p+1)/2+(means ? p : 0);
+    Eigen::VectorXd diagonal(r);
+    for(Eigen::Index i=0;i<r;++i) diagonal[i]=std::pow(10.0,-2+4.0*static_cast<double>(i)/static_cast<double>(r-1));
+    Eigen::MatrixXd dense=diagonal.asDiagonal();
+    dense+=.03*diagonal.cwiseSqrt()*diagonal.cwiseSqrt().transpose();
+    auto full=gmm::BlockWeight::dense(dense,magmaan::FitError::Kind::NumericIssue,"test weight"); REQUIRE(full.has_value());
+    auto nt=gmm::BlockWeight::normal_theory(m.samp.S[0],means,magmaan::FitError::Kind::NumericIssue,"test NT"); REQUIRE(nt.has_value());
+    const std::vector<gmm::Weight> weights={{},{gmm::BlockWeight::identity(r)},
+      {gmm::BlockWeight::diagonal(diagonal)},{*full},{*nt}};
+    for(const auto& weight:weights) {
+      auto audit=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,weight); REQUIRE(audit.has_value());
+      REQUIRE(audit->derivatives.ls_weight.has_value());
+      const auto bounds=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*audit,Estimator::WLS);
+      REQUIRE_MESSAGE(bounds.status==NewtonAccuracyStatus::Available,bounds.detail);
+      CHECK(bounds.curvature_lower_bound>0);
+      CHECK(newton_input_distance_interval(*audit,bounds).decision==NewtonBudgetDecision::WithinBudget);
+      auto point=m.theta0; point[0]+=.001;
+      auto changed=audit_newton_gmm(m.pt,m.rep,m.samp,point,weight); REQUIRE(changed.has_value());
+      const auto input=newton_input_error_bounds(m.pt,m.rep,m.samp,point,*changed,Estimator::WLS);
+      REQUIRE_MESSAGE(input.status==NewtonAccuracyStatus::Available,input.detail);
+      const auto interval=newton_input_distance_interval(*changed,input);
+      CHECK(interval.lower<=changed->diagnostics.distance); CHECK(interval.upper>=changed->diagnostics.distance);
+      auto unknown=*changed; unknown.derivatives.ls_weight.reset();
+      CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,point,unknown,Estimator::WLS).status==NewtonAccuracyStatus::Unsupported);
+    }
+    // Negative diagonal weights are not silently clipped into a verified target.
+    auto invalid=weights[2]; diagonal[0]=-1; invalid[0]=gmm::BlockWeight::diagonal(diagonal);
+    auto a=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,weights[0]); REQUIRE(a.has_value());
+    a->derivatives.ls_weight=invalid;
+    CHECK(newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*a,Estimator::WLS).status==NewtonAccuracyStatus::Unavailable);
+    const gmm::Weight singular={gmm::BlockWeight::diagonal(Eigen::VectorXd::Zero(r))};
+    const auto rank_lost=audit_newton_gmm(m.pt,m.rep,m.samp,m.theta0,singular); REQUIRE(rank_lost.has_value());
+    const auto no_bound=newton_input_error_bounds(m.pt,m.rep,m.samp,m.theta0,*rank_lost,Estimator::WLS);
+    CHECK(no_bound.status!=NewtonAccuracyStatus::Available);
+    CHECK(newton_input_distance_interval(*rank_lost,no_bound).decision!=NewtonBudgetDecision::WithinBudget);
   }
 }

@@ -1,0 +1,2 @@
+digits,mpmath,elapsed_s,script_sha256,inputs_sha256,curvature,scope
+60,1.3.0,127.55416886699822,81e0b111ab67567f54ad1bbbaa4bd8504e376e754a221b298c66cd03c9af488d,ecc9936b55e08748c92a791b36fc60292fdc8a85882fc203b224c4fd679e97a0;b33d4483865eaf293c982500e2e8a419e9fe0a55e631c66eb21280dad566c380,exact profile/full Hessian; original-marker regression chart; normal-theory sample Gamma,finite strict local minima only; fixed production conditioning cap retained

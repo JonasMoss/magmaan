@@ -80,10 +80,9 @@ struct ConstrainedScalarProblem {
   Eigen::VectorXd constraint_upper;
 };
 
-// Optimizer termination status. The error path (`fit_expected`'s unexpected
-// branch) already carries hard failures — max-iter, non-finite objective,
-// unrecoverable line-search abort. This enum refines the *success* path so a
-// caller can tell a clean stationary stop from a salvaged or singular one.
+// Optimizer termination status. A returned value can be a failed candidate;
+// its presence never certifies convergence. Hard errors have no evaluable
+// endpoint. Independent fit diagnostics own acceptance.
 //
 // `NoisyObjective` and `BudgetExhausted` return iterates PORT would otherwise
 // refuse (IV(1) = 8, and 9 / 10). Near
@@ -98,6 +97,7 @@ struct ConstrainedScalarProblem {
 enum class OptimStatus {
   Converged,            // clean stop: (projected) gradient norm under tolerance
   LineSearchSalvaged,   // line search aborted, but the iterate was stationary
+  LineSearchFailed,     // finite candidate after an unsuccessful search/stop
   SingularConvergence,  // PORT singular convergence (IV(1)=7): Hessian singular
   NoisyObjective,       // PORT IV(1)=8 (false convergence): predicted vs actual
                         //   reduction disagree; typically floating-point noise
@@ -241,6 +241,9 @@ struct TerminalAuditOptions {
 struct TerminalAudit {
   // Raw backend evidence survives independent re-auditing of coordinates.
   int raw_backend_status = 0;
+  // Resolved adapter controls, including zero sentinels for NLopt defaults.
+  // They describe the search and survive re-auditing in model coordinates.
+  std::optional<NloptControls> nlopt_controls = {};
   double backend_gradient_max = -1.0;
   bool        stationary       = false;
   // Infinity norm used for the stationarity verdict: the box-projected

@@ -1,0 +1,10 @@
+"check","passed"
+"required_endpoints_return",TRUE
+"pinned_reference_optima",TRUE
+"early_candidates_fail",TRUE
+"early_controls_exact",TRUE
+"original_ml_objectives",TRUE
+"oracle_transport_objectives",TRUE
+"ordinary_defaults_pass",TRUE
+"early_evaluation_costs",TRUE
+"retained_composed_verdicts",TRUE

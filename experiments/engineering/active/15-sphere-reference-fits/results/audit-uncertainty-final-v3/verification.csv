@@ -1,0 +1,6 @@
+role,points,cases,actual_passes,retained_within,retained_above,retained_unresolved,conditional_within,conditional_above,conditional_unresolved,construction_comparisons,construction_unavailable,construction_allowance_misses,retained_interval_misses,conditional_interval_misses,conditional_wrong_decisions,conditional_minima_within
+fresh_mixed_units,35,5,0,15,15,5,10,10,15,35,0,0,0,0,0,5
+fresh_regular,35,5,17,16,17,2,15,15,5,35,0,0,0,0,0,5
+fresh_weak,35,5,19,15,15,5,15,15,5,35,0,0,0,0,0,5
+retained_NTML,49,7,24,26,8,15,24,8,17,48,1,0,0,0,0,6
+retained_ULS,175,25,0,69,69,37,8,8,159,175,0,0,0,0,0,8

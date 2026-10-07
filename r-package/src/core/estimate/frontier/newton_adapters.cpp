@@ -145,7 +145,7 @@ NewtonDerivatives evaluate_newton_moment_quadratic(
     }
   }
   d.status = NewtonAccuracyStatus::Unavailable;
-  auto H = gmm::moment_quadratic_hessian(ev, sample, theta, weight);
+  auto H = gmm::moment_quadratic_curvature(ev, sample, theta, weight);
   if (!H) {
     d.detail = H.error().detail;
     return d;
@@ -163,8 +163,21 @@ NewtonDerivatives evaluate_newton_moment_quadratic(
   }
   d.whitened_residual = std::move(*r);
   d.whitened_jacobian = std::move(*J);
-  d.hessian = std::move(*H);
+  d.hessian = H->gauss_newton + H->correction;
+  if (!d.hessian.allFinite()) {
+    d.detail = "non-finite observed LS Hessian";
+    return d;
+  }
+  d.ls_curvature_correction = std::move(H->correction);
   d.metric = std::move(*Omega);
+  auto factor = gmm::moment_quadratic_nt_gradient_factor(ev, sample, theta, weight);
+  if (!factor) {
+    d.detail = factor.error().detail;
+    return d;
+  }
+  d.metric_factor = std::move(factor->factor);
+  d.metric_score_residual = std::move(factor->score_residual);
+  d.ls_weight = weight;
   d.status = NewtonAccuracyStatus::Available;
   return d;
 }
@@ -370,6 +383,9 @@ NewtonDerivatives ordinal_derivatives(const OrdinalLsObjective& original,
   d.whitened_jacobian = std::move(*J);
   d.hessian = parts->hessian;
   d.metric = parts->gradient_variance;
+  d.ls_curvature_correction = parts->curvature_correction;
+  d.metric_factor = parts->metric_factor;
+  d.metric_score_residual = parts->metric_score_residual;
   d.status = NewtonAccuracyStatus::Available;
   return d;
 }

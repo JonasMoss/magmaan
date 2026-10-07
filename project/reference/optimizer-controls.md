@@ -357,6 +357,19 @@ is not a universal BFGS history length. Legacy `history` remains ignored
 by NLopt to preserve old calls; use explicit `vector_storage` instead.
 In the L-BFGS-to-SLSQP fallback policy, `tolg` and `vector_storage` apply
 only to L-BFGS; common f/x/evaluation controls apply to both stages.
+Finite, evaluable NLopt budget and line-search exits now return a candidate
+instead of a fit error. `optimizer_status` records the stop; `converged` still
+comes from the independent fit verdict. `audit$raw_backend_status` retains the
+NLopt code, and `audit$nlopt_controls` records the resolved adapter controls
+(zero `tolg`/storage entries still mean backend defaults). Re-auditing after
+coordinate transport preserves this evidence. The explicit L-BFGS/SLSQP
+fallback keeps the original start for each stage, counts evaluations from
+both stages and retains the lower objective if both candidates fail. It does
+not replace a previously usable first-stage return with a failed second stage.
+IRLS can use a retained inner candidate under its existing true-ML Armijo
+safeguard; the inner stop does not certify outer convergence. Detailed outer
+iteration histories and stopping calibration remain unbanked.
+Invalid controls and endpoints that cannot be evaluated still return errors.
 The ten-reduction L-BFGS backtracking limit is not exposed by NLopt and is
 still a separate recovery task. Constraint tolerance is independent of
 explicit step tolerance and does not change the terminal audit threshold.
@@ -403,8 +416,10 @@ Ceres stopping criteria, not NLopt equivalents.
 Shared optimizer-backed estimator paths receive the backend blocks without
 changing objectives or estimator defaults. Specialized scoring/EM/IRLS outer
 loops retain their own controls; a backend block tunes the inner optimizer
-where one is used, not an outer loop. Effective-control and raw stopping-code
-reporting through every fitted result remains a separate backlog item.
+where one is used, not an outer loop. NLopt now retains raw codes and resolved
+adapter controls through ordinary coordinate transport; uniform reporting for
+other backends, complete fallback histories and outer-loop stopping remain
+backlog work.
 The outer R `control` list also carries estimator-specific options and is
 not globally restricted by the shared optimizer parser.
 

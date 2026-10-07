@@ -1,0 +1,7 @@
+"draw_id","design","n","rep","transform","seed","estimator","best_objective","audited_candidates","best_backends","max_standardized_sigma_gap","reference_repeated"
+1,"ernst",100,1,"native",620370002,"GLS",0.0442352398744195,24,2,4.85350919444046e-07,TRUE
+2,"ernst",100,1,"mixed",620370002,"GLS",0.0442352398744195,13,2,4.85350919409243e-07,TRUE
+1,"ernst",100,1,"native",620370002,"ML",0.0471442043229082,24,2,7.69413900733867e-07,TRUE
+2,"ernst",100,1,"mixed",620370002,"ML",0.0471442043229082,14,2,3.37300470190095e-07,TRUE
+1,"ernst",100,1,"native",620370002,"ULS",0.111538026004817,24,2,3.94512475758296e-07,TRUE
+2,"ernst",100,1,"mixed",620370002,"ULS",,0,0,,FALSE

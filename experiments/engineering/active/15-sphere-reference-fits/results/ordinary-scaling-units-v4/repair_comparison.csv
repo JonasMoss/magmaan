@@ -1,0 +1,13 @@
+"transform","estimator","chart","fits","before","after","gains","losses"
+"mixed","GLS","marker",12,12,12,0,0
+"native","GLS","marker",12,12,12,0,0
+"mixed","ML","marker",12,12,12,0,0
+"native","ML","marker",12,12,12,0,0
+"mixed","ULS","marker",12,0,0,0,0
+"native","ULS","marker",12,12,12,0,0
+"mixed","GLS","sphere",12,1,12,11,0
+"native","GLS","sphere",12,12,12,0,0
+"mixed","ML","sphere",12,2,12,10,0
+"native","ML","sphere",12,12,12,0,0
+"mixed","ULS","sphere",12,0,0,0,0
+"native","ULS","sphere",12,12,12,0,0

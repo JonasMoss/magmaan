@@ -1,0 +1,15 @@
+"optimizer_status","call_status","accepted","fits"
+"","error",FALSE,69
+"converged","magmaan_sphere_numerical_failure",FALSE,1
+"line_search_salvaged","magmaan_sphere_numerical_failure",FALSE,4
+"noisy_objective","magmaan_sphere_numerical_failure",FALSE,6
+"singular_convergence","magmaan_sphere_numerical_failure",FALSE,1
+"budget_exhausted","returned",FALSE,92
+"converged","returned",FALSE,116
+"line_search_salvaged","returned",FALSE,73
+"noisy_objective","returned",FALSE,62
+"singular_convergence","returned",FALSE,11
+"budget_exhausted","returned",TRUE,20
+"converged","returned",TRUE,128
+"line_search_salvaged","returned",TRUE,2
+"singular_convergence","returned",TRUE,63

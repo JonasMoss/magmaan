@@ -349,7 +349,10 @@ Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats,
   if (!weight) stop_fit(weight.error());
   std::vector<Eigen::MatrixXd> blocks;
   for (const auto& block : *weight) blocks.push_back(block.to_dense());
-  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks));
+  magmaan::estimate::frontier::NewtonDerivatives retained;
+  retained.ls_weight=std::move(*weight);
+  return Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(blocks),
+      Rcpp::_["retained_ls_weights"]=retained_ls_weights_to_r(retained));
 }
 
 // Shared non-mixed moment discrepancy plus the model barrier.
@@ -828,7 +831,136 @@ Rcpp::List evaluate_at_impl(
       ctx.pt, ctx.rep, ctx.samp, theta_vec, est_enum, wls,
       bounds_from_nullable(bounds), audit_opts_from(audit_options));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  return fit_result(ctx, *e_or, &starts, estimator.c_str());
+  Rcpp::List out = fit_result(ctx, *e_or, &starts, estimator.c_str());
+  // Optional methods-development artifacts; the core owns every calculation.
+  // Recomputing explicitly requested artifacts leaves the stored verdict intact.
+  const auto audit_flag=[&](const char* name) {
+    if(audit_options.isNull()) return false;
+    Rcpp::List settings(audit_options.get());
+    return settings.containsElementNamed(name) && Rcpp::as<bool>(settings[name]);
+  };
+  if (audit_flag("retain_newton_artifacts") || audit_flag("verified_newton")) {
+    auto weight = wls;
+    if (est_enum == magmaan::estimate::Estimator::GLS) {
+      auto ev = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+      if (!ev) stop_model(ev.error());
+      auto nt = magmaan::estimate::gmm::normal_theory_weight(*ev, ctx.samp, theta_vec);
+      if (!nt) stop_fit(nt.error());
+      weight = std::move(*nt);
+    }
+    magmaan::estimate::frontier::NewtonAdapterOptions opts;
+    opts.active_bound_tol = audit_opts_from(audit_options).active_bound_tol;
+    opts.bounds = bounds_from_nullable(bounds);
+    if (opts.bounds.empty()) {
+      auto preset = magmaan::estimate::variance_bounds(ctx.pt);
+      if (!preset) stop_post(preset.error());
+      opts.bounds = std::move(*preset);
+    }
+    auto audit = est_enum == magmaan::estimate::Estimator::ML
+        ? magmaan::fit_expected<magmaan::estimate::frontier::NewtonAudit>(
+            magmaan::estimate::frontier::audit_newton_derivatives(ctx.pt, ctx.rep,
+                magmaan::estimate::frontier::evaluate_newton_ml(ctx.pt, ctx.rep, ctx.samp, theta_vec),
+                opts.domain, opts.accuracy, opts.bounds, opts.active_bound_tol))
+        : magmaan::estimate::frontier::audit_newton_gmm(
+            ctx.pt, ctx.rep, ctx.samp, theta_vec, weight, opts);
+    if (!audit) stop_fit(audit.error());
+    auto& a = *audit;
+    out["newton_audit"] = Rcpp::List::create(
+        Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
+        Rcpp::_["gradient"] = Rcpp::wrap(a.geometry.reduced_gradient),
+        Rcpp::_["hessian"] = Rcpp::wrap(a.geometry.reduced_hessian),
+        Rcpp::_["metric"] = Rcpp::wrap(a.geometry.reduced_metric),
+        Rcpp::_["metric_factor"] = Rcpp::wrap(a.geometry.reduced_metric_factor),
+        Rcpp::_["metric_score_residual"] = Rcpp::wrap(a.derivatives.metric_score_residual),
+        Rcpp::_["curvature_status"] = std::string(magmaan::estimate::to_string(a.system.status)),
+        Rcpp::_["curvature_condition"] = a.system.condition,
+        Rcpp::_["curvature_coordinate_map"] = Rcpp::wrap(a.system.coordinate_map),
+        Rcpp::_["curvature_equilibrated_hessian"] = Rcpp::wrap(a.system.equilibrated_hessian),
+        Rcpp::_["curvature_jacobian_condition"] = a.system.jacobian_condition,
+        Rcpp::_["curvature_factor_residual"] = a.system.jacobian_factor_residual,
+        Rcpp::_["ls_curvature_correction"] = Rcpp::wrap(a.derivatives.ls_curvature_correction),
+        Rcpp::_["whitened_jacobian"] = Rcpp::wrap(a.derivatives.whitened_jacobian),
+        Rcpp::_["whitened_residual"] = Rcpp::wrap(a.derivatives.whitened_residual),
+        Rcpp::_["n_obs"] = a.derivatives.n_obs,
+        Rcpp::_["newton_step"] = Rcpp::wrap(a.solution.step),
+        Rcpp::_["factor_status"] = std::string(magmaan::estimate::to_string(a.metric_factor_system.status)),
+        Rcpp::_["factor_condition"] = a.metric_factor_system.condition,
+        Rcpp::_["factor_residual"] = a.metric_factor_system.factor_residual,
+        Rcpp::_["factor_rank"] = static_cast<int>(a.metric_factor_system.rank),
+        Rcpp::_["factor_scale"] = Rcpp::wrap(a.metric_factor_system.scale),
+        Rcpp::_["equilibrated_factor"] = Rcpp::wrap(a.metric_factor_system.equilibrated_factor),
+        Rcpp::_["curvature_scale"] = Rcpp::wrap(a.system.scale),
+        Rcpp::_["detail"] = a.derivatives.detail);
+    Rcpp::List artifacts(out["newton_audit"]);
+    artifacts["retained_ls_weights"] = retained_ls_weights_to_r(a.derivatives);
+    artifacts["derivative_basis"] = Rcpp::wrap(
+        (a.geometry.equality_basis * a.geometry.tangent_basis).eval());
+    auto interval_to_r = [](const magmaan::estimate::frontier::NewtonDistanceInterval& x) {
+      return Rcpp::List::create(
+          Rcpp::_["status"] = std::string(magmaan::estimate::to_string(x.status)),
+          Rcpp::_["decision"] = std::string(magmaan::estimate::frontier::to_string(x.decision)),
+          Rcpp::_["distance"] = x.distance, Rcpp::_["lower"] = x.lower,
+          Rcpp::_["upper"] = x.upper, Rcpp::_["error_bound"] = x.error_bound,
+          Rcpp::_["rank_margin"] = x.rank_margin,
+          Rcpp::_["factor_error_bound"] = x.factor_error_bound,
+          Rcpp::_["orthogonality_error_bound"] = x.orthogonality_error_bound);
+    };
+    const bool ls = a.derivatives.metric_kind == magmaan::estimate::NewtonMetricKind::Sandwich;
+    auto interval = [&](double matrix_error, double vector_error) {
+      if (a.box.applied || a.geometry.domain != magmaan::estimate::StationarityDomain::Ambient) {
+        magmaan::estimate::frontier::NewtonDistanceInterval unavailable;
+        unavailable.status = magmaan::estimate::NewtonAccuracyStatus::Unsupported;
+        return unavailable;
+      }
+      return ls ? magmaan::estimate::frontier::newton_metric_distance_interval(
+          a.metric_factor_system, a.derivatives.metric_score_residual, matrix_error, vector_error)
+          : magmaan::estimate::frontier::newton_hessian_distance_interval(
+              a.system, a.geometry.reduced_gradient, matrix_error, vector_error);
+    };
+    artifacts["distance_interval_retained_inputs"] = interval_to_r(interval(0, 0));
+    artifacts["interval_input_scope"] = ls
+        ? "column-scaled retained factor and score residual; construction errors excluded"
+        : "retained equilibrated Hessian and scaled score; construction errors excluded";
+    Rcpp::List settings(audit_options.get());
+    if (settings.containsElementNamed("interval_input_errors")) {
+      Rcpp::List errors(settings["interval_input_errors"]);
+      if (!errors.containsElementNamed("matrix") || !errors.containsElementNamed("vector"))
+        Rcpp::stop("interval_input_errors needs matrix and vector norm bounds");
+      artifacts["distance_interval_conditional"] = interval_to_r(interval(
+          Rcpp::as<double>(errors["matrix"]), Rcpp::as<double>(errors["vector"])));
+    }
+    const bool verified=settings.containsElementNamed("verified_newton") && Rcpp::as<bool>(settings["verified_newton"]);
+    if (verified || (settings.containsElementNamed("derive_interval_input_errors") &&
+        Rcpp::as<bool>(settings["derive_interval_input_errors"]))) {
+      const auto errors = magmaan::estimate::frontier::newton_input_error_bounds(
+          ctx.pt, ctx.rep, ctx.samp, theta_vec, a, est_enum);
+      a.input_errors=errors;
+      artifacts["derived_interval_input_errors"] = Rcpp::List::create(
+          Rcpp::_["status"] = std::string(magmaan::estimate::to_string(errors.status)),
+          Rcpp::_["matrix"] = errors.matrix, Rcpp::_["vector"] = errors.vector,
+          Rcpp::_["curvature"] = errors.curvature,
+          Rcpp::_["curvature_lower_bound"] = errors.curvature_lower_bound,
+          Rcpp::_["detail"] = errors.detail);
+      if (errors.status == magmaan::estimate::NewtonAccuracyStatus::Available) {
+        artifacts["distance_interval_derived_inputs"] = interval_to_r(
+            magmaan::estimate::frontier::newton_input_distance_interval(a, errors));
+      }
+    }
+    if(verified) {
+      const double reported=settings.containsElementNamed("reported_objective")
+          ? Rcpp::as<double>(settings["reported_objective"]) : e_or->fmin;
+      auto report=magmaan::estimate::frontier::audit_convergence(ctx.pt,ctx.rep,a,{}, {},reported);
+      if(!report) stop_fit(report.error());
+      auto policy=magmaan::estimate::frontier::newton_convergence_policy();
+      policy.require_verified_inputs=true; policy.require_objective_consistency=true;
+      auto assessment=verified_assessment_to_r(magmaan::estimate::frontier::assess_convergence(*report,policy));
+      out["verified_convergence"]=assessment;
+      out["converged_compatibility"]=out["converged"];
+      out["converged"]=assessment["converged"];
+    }
+    out["newton_audit"] = artifacts;
+  }
+  return out;
 }
 
 // [[Rcpp::export]]

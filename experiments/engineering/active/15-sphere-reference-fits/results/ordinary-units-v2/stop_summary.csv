@@ -1,0 +1,10 @@
+"optimizer_status","call_status","accepted","fits"
+"","error",FALSE,10
+"budget_exhausted","returned",FALSE,2
+"converged","returned",FALSE,10
+"line_search_salvaged","returned",FALSE,2
+"noisy_objective","returned",FALSE,3
+"singular_convergence","returned",FALSE,2
+"converged","returned",TRUE,46
+"line_search_salvaged","returned",TRUE,3
+"singular_convergence","returned",TRUE,18

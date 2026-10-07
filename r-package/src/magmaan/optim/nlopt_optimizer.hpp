@@ -47,9 +47,10 @@ enum class NloptAlgorithm {
 //
 // Error mapping:
 //   NumericIssue            — lb/ub size mismatch, or nlopt_create failure.
-//   OptimizerNonConvergence — NLopt's evaluation/time budget was exhausted.
-//   LineSearchFailed        — NLOPT_FAILURE / NLOPT_FORCED_STOP.
 //   NonFiniteObjective      — final objective is NaN/Inf.
+// Finite, evaluable soft exits return candidates tagged BudgetExhausted or
+// LineSearchFailed (or LineSearchSalvaged after a stationary stop). Raw codes
+// and resolved controls are retained in the audit; acceptance is independent.
 class NloptOptimizer {
  public:
   static constexpr std::string_view name = "nlopt";

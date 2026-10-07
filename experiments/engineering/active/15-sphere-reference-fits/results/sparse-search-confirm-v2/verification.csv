@@ -1,0 +1,7 @@
+check,tested,failed
+independent_moment_point_agreement,324,0
+retained_weight_and_univariate_threshold,54,0
+unsupported_construction_stays_explicit,324,0
+invalid_first_stage_rejected,2,0
+saddle_never_passes,0,0
+every_returned_fit_audited,324,0
