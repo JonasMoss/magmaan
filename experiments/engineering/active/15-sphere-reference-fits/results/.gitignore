@@ -674,3 +674,9 @@ port-regression-before/*
 port-regression-after/*
 !port-regression-after/comparisons.csv
 !port-regression-after/metadata.csv
+
+# Frozen three-point diagnosis; raw inputs stay in the original retained run.
+!audit-uncertainty-diagnosis-v2/
+audit-uncertainty-diagnosis-v2/*
+!audit-uncertainty-diagnosis-v2/comparisons.csv
+!audit-uncertainty-diagnosis-v2/reference_metadata.csv
