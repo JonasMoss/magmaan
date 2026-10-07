@@ -121,7 +121,12 @@ Reasons include \code{available}, \code{not_converged}, \code{saturated},
 check: \code{"passed"}, \code{"failed"} or \code{"unchecked"}), and \code{disagree}. Under a
 compatibility rule such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \code{TRUE}
 when the rule and magmaan's check reach different verdicts; inference
-follows the rule.
+follows the rule. \code{identified} is \code{TRUE} when the model is structurally
+(generically locally) identified, \code{FALSE} when it is not, and \code{NA} when the
+check does not cover the model. A structurally unidentified fit never has
+\code{converged = TRUE}, under any rule; \code{as_lab_fit(fit)$diagnostics$identification}
+holds the rank report and the parameter combinations that leave the implied
+moments unchanged.
 
 \code{summary(fit)$tests} is \code{NULL} before inference is computed, otherwise a
 data frame with \code{test}, \code{statistic}, \code{df}, \code{reference}, \code{pvalue},

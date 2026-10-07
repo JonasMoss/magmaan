@@ -1284,7 +1284,7 @@ new studies fill concrete gaps rather than duplicate an estimator-by-weight grid
 | 33.10.4 | Banked 2026-10-06 in isolated sphere-study: conditional ML2S numerical composition | R Stage-1 retains raw derivatives/repair and solver-stop provenance; fits capture caller-unit Stage-2 moments/counts/recipe/mixing/ACOV/supplied weights/bounds/transformation before fitting. The opt-in composed audit preserves separate Stage-1/handoff/Stage-2 reports and unchecked legacy/missing evidence. Fresh 156 stage-point, 210 conditional producer and 78 handoff checks agree at 90 digits; all 12 Stage-1 endpoints and 56 returned fits pass (54/60 ordinary plus two transformed controls). Six mixed-unit ULS/DWLS/ADF L-BFGS errors, three development errors and early/mismatched/repaired controls remain recorded. NT uses ML; other weights use their original quadratics. Repaired ACOV at nonpositive raw curvature stays unchecked and never rescues an audit. No propagated input-error/inference/default/PSD claim; unit recovery feeds 33.10.5. |
 | 33.10.5 | Partially banked 2026-10-06 in isolated sphere-study: pinned starts and NLopt candidate retention | Fresh 51-fit confirmation: 28 equality/fixed fits agree with controlled-unit lavaan and original likelihoods; seven early stops retain failed candidates and exact controls; six ordinary defaults pass. All ten retained mixed-unit ML2S fits return, but six ULS/DWLS/ADF endpoints still fail separate Stage-2/composed audits. R mean ownership and automatic inference gating are repaired. Frozen failed reference/crash/tail runs remain visible. Generic domain recovery, complete fallback/backend histories, outer-loop stopping and broader held-out recovery remain open; no default or PSD/barrier adoption. |
 | 33.10.6 | Banked 2026-10-06 in isolated sphere-study: explicit local theta boundary limit | All six failures reproduce exactly; actual starts are identical across settings. Independent 90-digit Schur-profiled loading coordinates verify three locally optimal faces with strict outward descent and 15 finite approach points. Negative-residual delta solutions have no finite positive-residual theta transport; tighter L-BFGS recovers none. Fresh 324 fits/point checks pass from 18 usable draws, with two singular first-stage sparse draws retained. No global nonattainment theorem, recovery/default promotion or audit relaxation; native distance precision beyond the conditioning guard remains unchecked. |
-| 33.3 | Identification separate from local numerical accuracy | Reject the known scale-free exact-fit ridge; preserve identified/equality/unit-change controls. A tiny Newton correction cannot establish identification. Direct FIML now retains another raw local-pass ridge with independently proved scale invariance and a null moment-Jacobian direction; it is excluded from the identified bank, not repaired by its local audit. |
+| 33.3 | Identification separate from local numerical accuracy | Implemented 2026-10-07 in lane/task-33.3: a data-free generic-rank check of the moment Jacobian fails every verdict of a structurally unidentified model and names its null directions. Both witnesses (the PSD-fallback free-marker CFA and the direct-FIML ridge, which passes the counting rule) are rejected; identified/equality/unit-change controls keep their verdicts. Pre-fit refusal in `magmaan()` awaits a user decision. |
 | 33.6.7 | Accurate unresolved sphere ML interval | Attribute the conservative numerical term; improve only justified bounds or document why it remains unresolved. Preserve saddle/rank/above-budget failures. |
 | 33.7 | Banked: PORT/PORT-NLS endpoint consistency recovery | All 38 retained reported/original mismatches are fixed (maximum original-objective gap 2.03e-16 relative to 1+abs(f)); all 38 common/native audits remain failed. Both adapters recompute the returned objective and recover the best evaluated point beyond 1e-14 relative, preserving raw stop/stored/returned-point telemetry without changing verdicts or controls. Twelve fresh endpoints are consistent with zero objective/audit losses; ten unchanged fresh fits and six healthy ULS/GLS/WLS PORT controls retain bit-identical estimates. Scalar bounded/unbounded PORT exposes 32 mismatches among 100 baseline endpoints; all 68 exactly matching endpoints remain bit-identical. Frozen before/after evidence: engineering/active/15-sphere-reference-fits report lane port_nls. No default promotion or basin-success claim. |
 | 33.9 | Bounded sample-only starts beyond the two-factor design | Retain API defaults and reuse actual-start comparisons. Include applicable layered/FABIN unit fallbacks, Geiser start loss and reflection traps. The four signed ULS starts are development evidence, not a universal recipe. |
@@ -1488,16 +1488,21 @@ separate final decision for each explicitly covered scope.
   phantom, second-order and Little Table 7.6 witnesses, retaining user-start
   and intervention reports. Evidence: corpus recovery.
 
-- [ ] **S/M — reject unidentified exact-fit ridges reliably.** The free-marker
-  CFA in `ml_psd_fallback.R` can pass a Newton check with seven parameters for
-  six moments (board TASK-33.3). The 2026-10-02 isolated opt witness is accepted
-  with Newton distance 5.54e-10, condition 8.14e10 and no reported null directions;
-  scaling all loadings by c and the factor variance by 1/c^2 preserves Sigma.
-  The example now retains and reports this limitation while checking selection.
-  Add scale-free identification checking alongside local accuracy.
-  **Check:** the ridge and identified constrained controls under unit changes;
-  avoid tolerance changes that merely move the failure. See
-  [terminal audit](../design/terminal-audit.md).
+- [x] **S/M — reject unidentified exact-fit ridges reliably.** Implemented
+  2026-10-07 (board TASK-33.3, lane/task-33.3): a data-free structural
+  identification check (`estimate/frontier/identification.hpp`) ranks the
+  route's moment Jacobian at seeded random points in linear-equality
+  coordinates; an unidentified model fails every verdict, including selected
+  compatibility rules, and names its null directions. The PSD-fallback and
+  direct-FIML witnesses are rejected; identified, equality-constrained,
+  multi-group, two-indicator, unit-changed and empirically underidentified
+  controls keep their verdicts; no Newton threshold changed. Coverage, gap-rule
+  calibration and the corpus sweep are in the
+  [terminal audit](../design/terminal-audit.md#structural-identification-2026-10-07).
+  Open: ordinal association ML, ordinal/mixed PSD and multi-information,
+  two-level and FC-SEM routes report unchecked; whether the ordinary
+  `magmaan()` refuses an unidentified model before fitting awaits the user's
+  decision on the board card.
 
 - [ ] **M — finish common-verdict and stopping-control integration.** Preserve
   evaluable candidates on soft exits, report effective controls/raw reasons

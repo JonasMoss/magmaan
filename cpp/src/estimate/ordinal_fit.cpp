@@ -2,6 +2,7 @@
 #include <type_traits>
 #include "magmaan/estimate/configured_ml.hpp"
 #include "magmaan/estimate/backend_strings.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 
 namespace magmaan::estimate {
 
@@ -865,6 +866,37 @@ void attach_ordinal_newton_accuracy(Estimates& est,
       pt, *c.rep, std::move(d), StationarityDomain::Ambient).diagnostics;
 }
 
+// Structural identification on the ordinal moment map the fit matches:
+// thresholds and polychoric correlations (plus continuous means and variances
+// for mixed data), in the DELTA or THETA parameterization of the fit. Only
+// the shapes of the Stage-1 statistics are used. Paths without the
+// statistics or the threshold layout report unsupported.
+IdentificationReport ordinal_identification(
+    const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
+    const EqConstraints& con, const NonlinearEqConstraints& nl,
+    const OrdinalNewtonContext& c, const Eigen::VectorXd& theta) {
+  frontier::MomentJacobian jacobian;
+  const bool available = c.layout != nullptr &&
+      (c.stats != nullptr || c.mixed != nullptr);
+  if (available) {
+    jacobian = [&ev, &c](const Eigen::VectorXd& point)
+        -> model_expected<Eigen::MatrixXd> {
+      auto e = ev.evaluate(point, true, true);
+      if (!e.has_value()) return std::unexpected(e.error());
+      if (c.stats != nullptr)
+        return ordinal_moment_jacobian(*c.stats, *c.layout, e->moments,
+                                       e->J_sigma, point, c.parameterization,
+                                       e->J_mu);
+      return mixed_moment_jacobian(*c.mixed, *c.layout, e->moments, e->J_sigma,
+                                   e->J_mu, point, c.parameterization, nullptr);
+    };
+  }
+  return frontier::check_identification_rank(
+      pt, con, nl.active(),
+      c.stats != nullptr ? IdentificationMap::Ordinal : IdentificationMap::Mixed,
+      jacobian, &theta);
+}
+
 void attach_ordinal_geometric_diagnostics(
     Estimates& est,
     const spec::LatentStructure& pt,
@@ -876,6 +908,8 @@ void attach_ordinal_geometric_diagnostics(
   const NonlinearEqConstraints nl = build_nl_constraints(pt);
   est.diagnostics = finalize_fit_diagnostics(
       est.theta, pt, ev, con, nl, bounds);
+  est.diagnostics.identification =
+      ordinal_identification(pt, ev, con, nl, newton, est.theta);
   Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
   const optim::ScalarProblem scalar = optim::scalarize(full_theta_problem);
   const double value = scalar.f(est.theta, gradient);
@@ -902,6 +936,14 @@ void attach_reconstructed_ordinal_diagnostics(
   const auto nl = build_nl_constraints(pt);
   est.diagnostics = finalize_fit_diagnostics(
       est.theta, pt, ev, *con, nl, bounds);
+  {
+    OrdinalNewtonContext moments;
+    moments.stats = &stats;
+    moments.layout = &layout;
+    moments.parameterization = parameterization;
+    est.diagnostics.identification =
+        ordinal_identification(pt, ev, *con, nl, moments, est.theta);
+  }
   Eigen::VectorXd gradient = Eigen::VectorXd::Constant(
       est.theta.size(), std::numeric_limits<double>::quiet_NaN());
   double value = std::numeric_limits<double>::infinity();

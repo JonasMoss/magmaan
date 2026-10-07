@@ -219,6 +219,11 @@ nobs.magmaan <- function(object, ...) {
 }
 
 .converged_label <- function(lab) {
+  # A structurally unidentified model fails under every rule (TASK-33.3).
+  if (identical(lab$diagnostics$identification$status, "unidentified")) {
+    return(paste0("no (structurally unidentified; see ",
+                  "as_lab_fit(fit)$diagnostics$identification)"))
+  }
   rule <- lab$fitting$effective$convergence
   if (!is.null(rule) && !identical(rule, "newton")) {
     return(sprintf("%s, by the %s rule (magmaan's check: %s)",

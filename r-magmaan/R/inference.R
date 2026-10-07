@@ -105,10 +105,13 @@ infer <- function(fit, lavaan_compat = NULL) {
 # disagree. They can disagree only under a compatibility rule such as the
 # lavaan-0.7.2 preset; inference then follows the selected rule.
 .convergence_record <- function(lab, res) {
+  status <- lab$diagnostics$identification$status
   list(rule = lab$fitting$effective$convergence %||% "newton",
        converged = isTRUE(lab$converged),
        magmaan = lab$diagnostics$verdict$status %||% NA_character_,
-       disagree = isTRUE(res$verdict_disagreement))
+       disagree = isTRUE(res$verdict_disagreement),
+       identified = if (identical(status, "identified")) TRUE else
+         if (identical(status, "unidentified")) FALSE else NA)
 }
 
 # Condition raised when a caller asks for an inference result that does not

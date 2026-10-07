@@ -336,7 +336,12 @@ print.magmaan_model <- function(x, ...) {
 #' check: `"passed"`, `"failed"` or `"unchecked"`), and `disagree`. Under a
 #' compatibility rule such as `preset = "lavaan-0.7.2"`, `disagree` is `TRUE`
 #' when the rule and magmaan's check reach different verdicts; inference
-#' follows the rule.
+#' follows the rule. `identified` is `TRUE` when the model is structurally
+#' (generically locally) identified, `FALSE` when it is not, and `NA` when the
+#' check does not cover the model. A structurally unidentified fit never has
+#' `converged = TRUE`, under any rule; `as_lab_fit(fit)$diagnostics$identification`
+#' holds the rank report and the parameter combinations that leave the implied
+#' moments unchanged.
 #'
 #' `summary(fit)$tests` is `NULL` before inference is computed, otherwise a
 #' data frame with `test`, `statistic`, `df`, `reference`, `pvalue`,

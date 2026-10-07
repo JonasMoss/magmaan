@@ -492,6 +492,23 @@ finalize_fit_diagnostics_impl(const Eigen::VectorXd&        theta_full,
 
 }  // namespace
 
+FitVerdict with_identification(FitVerdict verdict,
+                               const IdentificationReport& identification) {
+  switch (identification.status) {
+    case IdentificationStatus::Identified:
+      verdict.identification = FitCheck::Passed;
+      break;
+    case IdentificationStatus::Unidentified:
+      verdict.identification = FitCheck::Failed;
+      verdict.status = FitCheck::Failed;
+      break;
+    case IdentificationStatus::Unchecked:
+      verdict.identification = FitCheck::Unchecked;
+      break;
+  }
+  return verdict;
+}
+
 FitVerdict common_fit_verdict(const FitDiagnostics& d) {
   return frontier::assess_convergence(
       d, frontier::compatibility_convergence_policy()).compatibility_verdict;

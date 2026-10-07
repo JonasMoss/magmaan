@@ -78,7 +78,9 @@ Covariance admissibility is a separate diagnostic for ordinary fits: an
 unconstrained optimum may be numerically converged but inadmissible. Numerical
 convergence also does not establish identification, a local minimum, or the
 validity of a particular standard-error or test formula. Consumers may require
-those properties in addition, with separately reported reasons.
+those properties in addition, with separately reported reasons. Structural
+non-identification is the exception that the verdict itself enforces
+(2026-10-07, below): an unidentified model is a definite failure.
 
 R exposes `fit$verdict` and `fit$diagnostics$verdict`; `fit$converged` is the
 logical projection: TRUE for passed, FALSE for failed, NA for unchecked.
@@ -113,6 +115,94 @@ retention, complete specialized/extra-constraint coverage, and migration of
 research consumers that still read L1/backend flags. This section supersedes
 older statements below that treat the full-model audit as merely additive or
 an optimizer status as the authoritative fit verdict.
+
+## Structural identification (2026-10-07)
+
+A structurally unidentified model is never accepted (board TASK-33.3).
+`FitDiagnostics::identification` holds an `IdentificationReport`
+(`estimate/frontier/identification.hpp`), and `with_identification` folds it
+into every verdict: `common_fit_verdict`, a selected compatibility verdict
+(`fit_verdict`, e.g. the lavaan preset) and explicit `assess_convergence`
+policies. Unidentified sets the status to `Failed` (R `converged = FALSE`)
+with `identification = failed` and, in explicit assessments, the reason
+"structurally unidentified". This is a definite failure in the TRUE/FALSE/NA
+projection, not an unchecked one: the model has a curve of observationally
+equivalent parameters through every point, so no endpoint is a certified
+estimate. Identified marks the component passed; Unchecked leaves the status
+exactly as before.
+
+Local evidence never decides it. The task-28 witness (free-marker
+three-indicator CFA, seven parameters for six moments) was accepted by the PSD
+fallback with Newton distance 5.5e-10, condition 8.1e10 under the 1e12 cap and
+no reported null direction: rounding had made the singular Hessian look
+positive definite. The direct-FIML witness (experiment 15, fiml-audit-confirm-v2
+point 7) passes the counting rule and the raw Newton test. Hessian positivity,
+a tiny Newton step or a moderate condition number are statements about one
+point and one objective; identification is a property of the moment map.
+
+**The check.** Let `m(theta)` be the route's moment map and `theta = theta0 +
+K alpha` the linear equalities. Draw a point on that affine space (SplitMix64
+from a fixed seed, so the report is identical on every platform; loadings in
+[.5, 1.5], variances in [.5, 1.5], covariances and regressions with random
+sign and magnitude in [.05, .3] and [.2, .6], intercepts and thresholds
+centred, response scales in [.6, 1.4], projected onto the equalities). Scale
+every column of `J(theta) K` to unit length, so the decision is invariant to
+parameter units, and take relative singular values `s_i / s_1` by Jacobi SVD.
+A negligible column (below 1e-10 of the largest) is zeroed, not inflated. The
+draws never look at the data, so rescaling observed variables cannot change
+the report; unresolved fixed.x moments get drawn values in the model-only
+entry point.
+
+- Identified: the smallest relative singular value is at least 1e-7 at some
+  point. Full column rank at one point proves the generic rank, so one point
+  usually suffices.
+- Unidentified: at each of three points some value is at most 1e-10, and at
+  the best point the smallest value counted in the rank is at least 1e-7
+  (the gap separates the generic rank from the null values); or the counting
+  rule fails (more reduced parameters than moment rows, so the rank cannot
+  reach `q` whatever the numerics).
+- Unchecked: values between the tolerances (`ambiguous_gap`), nonlinear
+  equality constraints (no random points on the manifold), inequality
+  constraints, routes without a moment map (`unsupported_model`), or no finite
+  Jacobian in five draws per point (`evaluation_failed`).
+
+`m` is rational in `theta`, so `rank J K` is constant off a measure-zero set
+(Rothenberg 1971): a deficient rank at random points is deficient everywhere,
+and by Rothenberg's theorem the model is not locally identified at any regular
+point. Identified means generically locally identified, not globally (sign and
+label switching remain) and not well conditioned at the estimate. Empirical
+underidentification at a particular estimate (for example two two-indicator
+factors whose estimated covariance is zero) is reported Identified and stays a
+matter for the numerical audit, never a refusal.
+
+The report records status, reason, map, `q`, the number of moment rows (fixed.x
+rows included), the counting rule, the generic rank, the smallest relative
+singular value at each point, the smallest values at the deciding point and,
+when unidentified, a unit null-direction basis in full theta coordinates.
+Directions are evaluated at the estimate when its Jacobian is finite, so the
+scale ridge reads `d lambda = lambda, d psi = -2 psi`;
+`describe_null_directions` and R `null_direction_text` name the parameters.
+
+**Coverage.** Continuous map (vech Sigma, plus mu with a mean structure):
+every `fit.cpp` composer through `attach_diagnostics` (ML, GLS, ULS, WLS, DWLS,
+GMM, SNLLS, Fisher/IRLS, constrained, PSD, multi-information, ML2S Stage 2,
+the lavaan preset), direct FIML (ordinary, PSD, penalized, endpoint
+evaluation), `evaluate_at`, `audit_convergence` reports and the R
+`frontier_fiml_newton_audit`. Ordinal map (thresholds and polychoric
+correlations, plus continuous means and variances for mixed data, in DELTA or
+THETA): every ordinal/mixed least-squares finalization that has the Stage-1
+shapes and threshold layout. Unchecked routes: ordinal association ML (CatML),
+ordinal/mixed PSD and multi-information fits (they pass the continuous
+finalizer, which refuses ordinal partables), two-level ML (its moments pair
+within and between blocks), FC-SEM, sphere-chart fits (their gauge is a
+nonlinear constraint), RBM, nonlinear or inequality constraints, and FIML with
+caller-supplied extra constraints.
+
+<<SWEEP>>
+
+**Not implemented: refusal before fitting.** The ordinary `magmaan()` still
+fits an unidentified model and returns it with `converged = FALSE`. Whether it
+should refuse such a model before fitting is a user decision (board TASK-33.3).
 
 ## Reusable Newton computations (2026-09-24)
 
@@ -845,6 +935,15 @@ fit$diagnostics$
     cone_residual_inf     (numeric)
     cone_residual_l2      (numeric)   metric-dual norm; drives verdict
     covariance_nullity    (integer)   summed active null-space dimension
+  identification          (list)      structural identification (2026-10-07)
+    status                (character) "identified" / "unidentified" / "unchecked"
+    reason                (character) "rank", "counting_rule", "unsupported_model", ...
+    map                   (character) "covariance", "covariance_mean", "ordinal", "mixed"
+    n_parameters, n_moments, rank, n_points (integer); counting_rule (logical)
+    min_relative_singular_values, smallest_singular_values (numeric)
+    null_directions       (matrix)    theta x nullity, rows named "lhs op rhs"
+    null_direction_text   (character) one line per null direction
+  verdict$identification  (character) "passed" / "failed" / "unchecked"
   snlls_profile_fallback  (logical)
 ```
 

@@ -17,6 +17,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/evaluate.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 #include "magmaan/estimate/frontier/ml_psd_fallback.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/sphere.hpp"
@@ -151,7 +152,13 @@ Rcpp::List distance_interval_to_r(
     const magmaan::estimate::frontier::NewtonDistanceInterval& x);
 Rcpp::List verified_assessment_to_r(
     const magmaan::estimate::frontier::ConvergenceAssessment& a);
-Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
+// `labels`, when given, names the free parameters (theta order) for the
+// identification null directions.
+Rcpp::List identification_to_r(
+    const magmaan::estimate::IdentificationReport& r,
+    const std::vector<std::string>* labels = nullptr);
+Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d,
+                            const std::vector<std::string>* labels = nullptr);
 Rcpp::List fit_result(Ctx& ctx,
                       const magmaan::estimate::Estimates& est,
                       const magmaan::spec::Starts* starts,

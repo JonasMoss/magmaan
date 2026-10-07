@@ -328,6 +328,7 @@ Rcpp::List common_verdict_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["criterion"] =
           v.criterion == magmaan::estimate::StationarityCriterion::Newton
           ? "newton" : "first_order",
+      Rcpp::_["identification"] = fit_check_to_r(v.identification),
       Rcpp::_["objective_multiplier"] = o.multiplier,
       Rcpp::_["objective_recomputed"] = o.recomputed,
       Rcpp::_["objective_reported"] = o.reported,
@@ -653,10 +654,46 @@ Rcpp::List verified_assessment_to_r(const magmaan::estimate::frontier::Convergen
   passed[0]=a.status==magmaan::estimate::FitCheck::Unchecked ? NA_LOGICAL : a.status==magmaan::estimate::FitCheck::Passed;
   return Rcpp::List::create(Rcpp::_["status"]=fit_check_to_r(a.status),Rcpp::_["converged"]=passed,
       Rcpp::_["objective"]=check(a.objective),Rcpp::_["objective_consistency"]=check(a.objective_consistency),
-      Rcpp::_["feasibility"]=check(a.feasibility),Rcpp::_["newton"]=check(a.newton));
+      Rcpp::_["feasibility"]=check(a.feasibility),Rcpp::_["newton"]=check(a.newton),
+      Rcpp::_["identification"]=check(a.identification));
 }
 
-Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
+Rcpp::List identification_to_r(
+    const magmaan::estimate::IdentificationReport& r,
+    const std::vector<std::string>* labels) {
+  namespace fr = magmaan::estimate::frontier;
+  Rcpp::NumericMatrix directions = Rcpp::wrap(r.null_directions);
+  const std::vector<std::string> names =
+      labels != nullptr &&
+              static_cast<Eigen::Index>(labels->size()) == r.null_directions.rows()
+          ? *labels
+          : std::vector<std::string>{};
+  if (!names.empty() && r.null_directions.rows() > 0)
+    directions.attr("dimnames") = Rcpp::List::create(Rcpp::wrap(names), R_NilValue);
+  Rcpp::IntegerVector rank(1);
+  rank[0] = r.rank < 0 ? NA_INTEGER : r.rank;
+  return Rcpp::List::create(
+      Rcpp::_["status"] = std::string(magmaan::estimate::to_string(r.status)),
+      Rcpp::_["reason"] = std::string(magmaan::estimate::to_string(r.reason)),
+      Rcpp::_["map"] = std::string(magmaan::estimate::to_string(r.map)),
+      Rcpp::_["n_parameters"] = r.n_parameters,
+      Rcpp::_["n_moments"] = r.n_moments,
+      Rcpp::_["counting_rule"] = r.counting_rule,
+      Rcpp::_["rank"] = rank,
+      Rcpp::_["n_points"] = r.n_points,
+      Rcpp::_["null_tolerance"] = r.null_tolerance,
+      Rcpp::_["identified_tolerance"] = r.identified_tolerance,
+      Rcpp::_["min_relative_singular_values"] =
+          Rcpp::wrap(r.min_relative_singular_values),
+      Rcpp::_["smallest_singular_values"] = Rcpp::wrap(r.smallest_singular_values),
+      Rcpp::_["null_directions"] = directions,
+      Rcpp::_["null_direction_text"] =
+          Rcpp::wrap(fr::describe_null_directions(r, names)),
+      Rcpp::_["directions_at_estimate"] = r.directions_at_estimate);
+}
+
+Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d,
+                            const std::vector<std::string>* labels) {
   Rcpp::LogicalVector sigma_pd(static_cast<R_xlen_t>(d.sigma_pd_per_block.size()));
   for (std::size_t b = 0; b < d.sigma_pd_per_block.size(); ++b)
     sigma_pd[static_cast<R_xlen_t>(b)] = d.sigma_pd_per_block[b];
@@ -684,6 +721,7 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
       Rcpp::_["geometric_stationarity"] =
           geometric_stationarity_to_r(d.geometric_stationarity),
       Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.newton_accuracy),
+      Rcpp::_["identification"] = identification_to_r(d.identification, labels),
       Rcpp::_["verdict"] = common_verdict_to_r(d),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
 }
@@ -747,7 +785,9 @@ Rcpp::List fit_result(Ctx& ctx,
   out["optimizer_status"] = opt_status;
   out["grad_norm"]        = est.grad_inf_norm;
   out["audit"]            = audit_to_r(est.audit);
-  out["diagnostics"]      = diagnostics_to_r(est.diagnostics);
+  const std::vector<std::string> labels =
+      magmaan::estimate::frontier::free_parameter_labels(ctx.pt, ctx.names);
+  out["diagnostics"]      = diagnostics_to_r(est.diagnostics, &labels);
   if (est.fitting) {
     out["fitting"] = fitting_report_to_r(*est.fitting);
     Rcpp::List verdict = common_verdict_to_r(est.diagnostics);
@@ -755,6 +795,7 @@ Rcpp::List fit_result(Ctx& ctx,
     verdict["status"] = fit_check_to_r(v.status);
     verdict["stationarity"] = fit_check_to_r(v.stationarity);
     verdict["objective"] = fit_check_to_r(v.objective);
+    verdict["identification"] = fit_check_to_r(v.identification);
     verdict["policy"] = est.fitting->setup.convergence;
     if (est.selected_verdict) verdict["criterion"] = "optimizer_gradient";
     out["verdict"] = verdict;

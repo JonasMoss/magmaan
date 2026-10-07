@@ -1125,8 +1125,16 @@ Rcpp::List frontier_fiml_newton_audit_impl(
   // kind explicitly; pairwise start statistics never stand in for its data.
   const auto source = magmaan::estimate::frontier::newton_input_error_bounds(
       ctx.pt, ctx.rep, pack->start_stats, point, a, magmaan::estimate::Estimator::ML);
+  // Local Newton accuracy never establishes identification; the structural
+  // check is reported beside it (board TASK-33.3).
+  auto identification = magmaan::estimate::frontier::check_structural_identification(
+      ctx.pt, ctx.rep, &point);
+  if (!identification) stop_fit(identification.error());
+  const auto labels =
+      magmaan::estimate::frontier::free_parameter_labels(ctx.pt, ctx.names);
   return Rcpp::List::create(
       Rcpp::_["diagnostics"] = newton_accuracy_to_r(a.diagnostics),
+      Rcpp::_["identification"] = identification_to_r(*identification, &labels),
       Rcpp::_["objective"] = a.derivatives.objective,
       Rcpp::_["n_obs"] = a.derivatives.n_obs,
       Rcpp::_["gradient"] = Rcpp::wrap(a.derivatives.gradient),

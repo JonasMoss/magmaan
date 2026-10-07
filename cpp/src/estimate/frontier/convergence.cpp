@@ -10,6 +10,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/evaluate.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 
 namespace magmaan::estimate::frontier {
 namespace {
@@ -48,6 +49,8 @@ fit_expected<ConvergenceReport> collect(
   report.request = std::move(request);
   report.evidence = finalize_fit_diagnostics(d.theta, pt, *ev, *con, nl,
       report.request.bounds, false, report.request.diagnostics);
+  report.evidence.identification = check_structural_identification(
+      pt, *ev, *con, nl.active(), &d.theta);
   Eigen::VectorXd gradient = d.gradient;
   if (d.n_obs > 0 && std::isfinite(d.n_obs)) gradient /= d.n_obs;
   else gradient = Eigen::VectorXd::Constant(d.theta.size(), std::numeric_limits<double>::quiet_NaN());

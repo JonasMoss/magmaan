@@ -1,6 +1,7 @@
 #include "magmaan/estimate/frontier/convergence_policy.hpp"
 
 #include <cmath>
+#include <string>
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 
 namespace magmaan::estimate::frontier {
@@ -53,7 +54,20 @@ FitVerdict compatibility_verdict(const FitDiagnostics& d) {
              out.stationarity == FitCheck::Passed) {
     out.status = FitCheck::Passed;
   }
-  return out;
+  return with_identification(out, d.identification);
+}
+
+ConvergenceCheck identification_check(const IdentificationReport& r) {
+  switch (r.status) {
+    case IdentificationStatus::Identified:
+      return {FitCheck::Passed, false, "generically locally identified"};
+    case IdentificationStatus::Unidentified:
+      return {FitCheck::Failed, true, "structurally unidentified: the moment "
+              "Jacobian is rank deficient at every random parameter point"};
+    case IdentificationStatus::Unchecked: break;
+  }
+  return {FitCheck::Unchecked, false, std::string("identification unchecked: ") +
+          std::string(to_string(r.reason))};
 }
 
 ConvergenceCheck check(bool required, bool available, bool pass,
@@ -129,6 +143,8 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
     }
   }
 
+  out.identification = identification_check(d.identification);
+
   if (p.kind == ConvergencePolicyKind::Compatibility) {
     out.compatibility_verdict = compatibility_verdict(d);
     out.status = out.compatibility_verdict.status;
@@ -158,7 +174,7 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
   }
   bool missing = false;
   for (const auto* c : {&out.objective, &out.objective_consistency, &out.feasibility,
-                        &out.first_order, &out.newton}) {
+                        &out.first_order, &out.newton, &out.identification}) {
     if (!c->required) continue;
     if (c->status == FitCheck::Failed) { out.status = FitCheck::Failed; return out; }
     missing = missing || c->status == FitCheck::Unchecked;

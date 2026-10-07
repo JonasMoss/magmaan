@@ -21,6 +21,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 #include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
@@ -2123,6 +2124,10 @@ static void attach_diagnostics(Estimates& est,
                                const Bounds& bounds) {
   est.diagnostics = finalize_fit_diagnostics(est.theta, pt, pre.ev, pre.con,
                                              pre.nl, bounds);
+  // The continuous moment map; ordinal partables report unsupported here and
+  // their own routes rank the threshold/correlation map instead.
+  est.diagnostics.identification = frontier::check_structural_identification(
+      pt, pre.ev, pre.con, pre.nl.active(), &est.theta);
 }
 
 static void attach_geometric_stationarity(

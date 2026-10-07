@@ -234,3 +234,34 @@ negative x1 residual row, primitive covariance PSD, implied-Sigma PD and the
 proper control independently of retained convergence. This is an endpoint
 diagnostics gate; C++ optimizer recovery, experiment checkpoint attachment and
 composite attachment remain separate work.
+
+#### Structural identification (always on, TASK-33.3)
+
+Every covered fit carries `FitDiagnostics::identification`, an
+`IdentificationReport` from `estimate/frontier/identification.hpp` (R:
+`fit$diagnostics$identification`, `fit$verdict$identification`; r-magmaan:
+`fit$inference$convergence$identified` and the printed convergence line). The
+check is data-free and independent of the Newton audit: it ranks the route's
+moment Jacobian in linear-equality coordinates at seeded pseudo-random
+parameter points, after scaling each column to unit length. Full rank at one
+point (smallest relative singular value at least 1e-7) is Identified; rank
+deficiency beyond 1e-10 at all three points, with the generic rank clear of
+the gap, or more reduced parameters than moments, is Unidentified; anything in
+between, and every route without a moment map, is Unchecked. An unidentified
+model fails every verdict (common, a selected compatibility rule such as the
+lavaan preset, and explicit policies); unchecked reports change nothing.
+Unidentified reports carry a unit null-direction basis evaluated at the
+estimate, named by free-parameter labels.
+
+Moment maps: vech(Sigma) and mu per block for complete-data ML/LS/GMM/SNLLS,
+Fisher/IRLS, PSD, multi-information, ML2S Stage 2, direct FIML,
+`evaluate_at` and `audit_convergence` reports; thresholds and polychoric
+correlations (plus continuous means and variances) in the fit's DELTA or THETA
+parameterization for ordinal and mixed DWLS/WLS/ULS. Unchecked: ordinal
+association ML, ordinal/mixed PSD and multi-information fits, two-level,
+FC-SEM, sphere-chart fits (their gauge is a nonlinear constraint), RBM,
+nonlinear or inequality constraints, and FIML with caller-supplied extra
+constraints. The calibration sweep, coverage and cost are recorded in the
+[terminal audit](../../design/terminal-audit.md#structural-identification-2026-10-07);
+`cpp/tests/tools/identification_sweep.py` reruns it. Empirical
+underidentification at an estimate remains a diagnostic, never a refusal.

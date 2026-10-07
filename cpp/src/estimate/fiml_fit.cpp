@@ -1,5 +1,7 @@
 #include "fiml_internal.hpp"
 
+#include "magmaan/estimate/frontier/identification.hpp"
+
 namespace magmaan::estimate::fiml {
 namespace internal {
 
@@ -145,6 +147,13 @@ fit_fiml_impl(spec::LatentStructure pt,
     est.diagnostics = finalize_fit_diagnostics(
         est.theta, pt, ev, con, nl, Bounds{});
     audit_observed_variances(est.diagnostics, start_samp.S, false);
+    // Caller-supplied extra constraints are outside the model, so the model's
+    // identification says nothing about the constrained fit: unchecked.
+    if (!extra.active()) {
+      est.diagnostics.identification =
+          ::magmaan::estimate::frontier::check_structural_identification(
+              pt, ev, con, nl.active(), &est.theta);
+    }
     if (!extra.active()) {
       Eigen::VectorXd gradient = Eigen::VectorXd::Zero(est.theta.size());
       const double value = eval_at(est.theta, gradient);
@@ -349,6 +358,9 @@ fit_expected<Estimates> evaluate_fiml_at(spec::LatentStructure pt,
   est.f_evals = est.g_evals = 1;
   est.diagnostics = finalize_fit_diagnostics(theta, pt, *ev, *con, nl, Bounds{});
   audit_observed_variances(est.diagnostics, pack.start_stats.S, false);
+  est.diagnostics.identification =
+      ::magmaan::estimate::frontier::check_structural_identification(
+          pt, *ev, *con, nl.active(), &theta);
   audit_full_model_fit(est.diagnostics, theta, gradient, value, value,
                       pt, *ev, *con, nl, Bounds{});
   attach_fiml_newton_accuracy(est, pt, rep, pack.cache, pack.start_stats,
