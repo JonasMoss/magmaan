@@ -693,3 +693,113 @@ TEST_CASE("SNLLS: shared GP engine rejects nonlinear equality constraints") {
   REQUIRE_FALSE(overridden.has_value());
   CHECK(overridden.error().detail.find("nonlinear equality") != std::string::npos);
 }
+
+#ifdef MAGMAAN_WITH_PORT
+TEST_CASE("SNLLS: retained PORT-NLS endpoint keeps point and objective together") {
+  // Literal standardized signed-negative witness, case 2 of experiment 15.
+  auto h = handles_for("X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nX ~~ Y");
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  const double covariance[] = {
+      0.99999999999999989, 0.49764184681423657, 0.37233770838357161, -0.01673022977936663, -0.029143978499567878, 0.035790502332395994,
+      0.49764184681423657, 1.0000000000000002, 0.26679035903420095, -0.0097761000400810316, 0.065518634680198917, 0.11248895953499291,
+      0.37233770838357161, 0.26679035903420095, 1.0000000000000002, -0.062882935302488563, 0.031811438914974427, -0.065137618237596506,
+      -0.01673022977936663, -0.0097761000400810316, -0.062882935302488563, 1, 0.46357783567976157, 0.33630438417126113,
+      -0.029143978499567812, 0.065518634680198917, 0.031811438914974427, 0.46357783567976157, 1, 0.45911081102000206,
+      0.035790502332395925, 0.11248895953499291, -0.065137618237596506, 0.33630438417126113, 0.45911081102000206, 1
+  };
+  Eigen::MatrixXd S = Eigen::Map<const Eigen::Matrix<double,6,6>>(covariance);
+  Eigen::VectorXd weights(21), start(13);
+  weights <<
+      3.1679977903976483e-08, 2.7644687743622272, 0.00062092358758424266, 2.9328345564974443e-05,
+      0.026125116232557855, 2.3020574055609678e-06, 241233994.15201393, 54183.240731558384,
+      2559.2598506168747, 2279738.5866365964, 200.88289940580455, 12.170024322210555,
+      0.57483188912920713, 512.04899657265878, 0.045120035986716114, 0.027151276941723784,
+      24.185826111242509, 0.0021311736802766524, 21544.260549467988, 1.8984078043423098,
+      0.00016728131296559094;
+  start <<
+      -0.71652790740002403, 0.53610917317769391, -1.3651645135443804, 0.99036402451551786,
+      0.066923800963649402, 1.6945184432801337, 1.3565742711324884, 1.1996136609843939,
+      1.3395765353409115, 1.6328600105357183, 1.3330637633700628, -0.69451844328013379,
+      -0.33957653534091148;
+  SampleStats sample; sample.S = {S}; sample.n_obs = {100};
+  auto block = magmaan::estimate::gmm::BlockWeight::dense(
+      weights.asDiagonal(), magmaan::FitError::Kind::NumericIssue, "endpoint regression");
+  REQUIRE(block.has_value());
+  auto base = magmaan::estimate::gmm::residuals(*ev, sample, start, {*block});
+  REQUIRE(base.has_value());
+  auto profile = magmaan::estimate::gmm::gp(*base, h.pt, *ev, start);
+  REQUIRE(profile.has_value());
+  for (bool combined : {false, true}) {
+    auto problem = profile->problem;
+    if (!combined) problem.eval = {};
+    auto fit = magmaan::optim::port_nls(problem, profile->beta0, {}, {});
+    REQUIRE(fit.has_value());
+    REQUIRE(fit->audit.port_endpoint.has_value());
+    const auto& telemetry = *fit->audit.port_endpoint;
+    CHECK(telemetry.best_point_substituted);
+    CHECK(telemetry.returned_x_objective > telemetry.stored_objective);
+    CHECK(fit->audit.raw_backend_status == 7);
+    auto residual = problem.r(fit->x);
+    auto original = base->r(problem.expand(fit->x));
+    REQUIRE(residual.has_value()); REQUIRE(original.has_value());
+    CHECK(fit->fmin == 0.5 * residual->squaredNorm());
+    CHECK(std::abs(fit->fmin - 0.5 * original->squaredNorm()) <=
+          1e-12 * (1 + std::abs(fit->fmin)));
+    CHECK(fit->fmin <= telemetry.stored_objective * (1 + 1e-14));
+  }
+}
+#endif
+
+#ifdef MAGMAAN_WITH_PORT
+TEST_CASE("SNLLS: scalar PORT restores a matching historical endpoint") {
+  // Literal standardized signed-negative/positive retained witness, case 3.
+  auto h = handles_for("X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nX ~~ Y");
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  const double covariance[] = {
+      1, 0.49311233920713554, 0.30610638208926666, 0.17441481287791163, 0.15674610768104524, 0.21455022649774286,
+      0.49311233920713554, 1, 0.058746344903173611, 0.24533304811313639, 0.12889253045822791, 0.11361620881235483,
+      0.30610638208926666, 0.058746344903173611, 1.0000000000000002, 0.03030139045795267, 0.096484273170979643, 0.13519757002661503,
+      0.17441481287791163, 0.24533304811313639, 0.03030139045795267, 1, 0.40497587647324224, 0.38791244184060608,
+      0.15674610768104524, 0.12889253045822791, 0.096484273170979643, 0.40497587647324224, 1, 0.15900099189222314,
+      0.21455022649774286, 0.11361620881235483, 0.13519757002661503, 0.38791244184060608, 0.15900099189222314, 0.99999999999999989
+  };
+  Eigen::MatrixXd S = Eigen::Map<const Eigen::Matrix<double,6,6>>(covariance);
+  Eigen::VectorXd weights(21), start(13);
+  weights <<
+      5.4977398429813658e-08, 3.0989890998244647, 0.0010943901863442339, 4.0057749846988693e-05,
+      0.03682614689127791, 3.3152071181050679e-06, 174685119.97873735, 61689.045958865696,
+      2257.992078286376, 2075831.7247459406, 186.87298810226562, 21.785131966467738,
+      0.79739692258343275, 733.06804086295801, 0.065993121525831228, 0.029186963527429343,
+      26.832346057308168, 0.0024155333140680815, 24667.684059101357, 2.2206635416226113,
+      0.00019991120987591929;
+  start <<
+      -0.1919147993655422, 0.1191337961601824, 0.40988886857502993, 0.39261842773671657,
+      -1.6357068968164294, 3.5694336280335479, 1.0946355556436107, 1.0364676153271537,
+      0.01198615644008025, 0.83400489619220175, 0.84769842698503062, -2.5694336280335484,
+      0.98801384355991995;
+  SampleStats sample; sample.S = {S}; sample.n_obs = {100};
+  auto block = magmaan::estimate::gmm::BlockWeight::dense(
+      weights.asDiagonal(), magmaan::FitError::Kind::NumericIssue, "scalar endpoint regression");
+  REQUIRE(block.has_value());
+  auto base = magmaan::estimate::gmm::residuals(*ev, sample, start, {*block});
+  REQUIRE(base.has_value());
+  auto profile = magmaan::estimate::gmm::gp(*base, h.pt, *ev, start);
+  REQUIRE(profile.has_value());
+  auto problem = magmaan::optim::scalarize(profile->problem);
+  auto fit = magmaan::optim::port(problem, profile->beta0, {}, {});
+  REQUIRE(fit.has_value());
+  REQUIRE(fit->audit.port_endpoint.has_value());
+  const auto& telemetry = *fit->audit.port_endpoint;
+  CHECK(telemetry.best_point_substituted);
+  CHECK(telemetry.returned_x_objective > telemetry.stored_objective);
+  Eigen::VectorXd gradient(fit->x.size());
+  CHECK(fit->fmin == problem.f(fit->x, gradient));
+  auto original = base->r(problem.expand(fit->x));
+  REQUIRE(original.has_value());
+  CHECK(std::abs(fit->fmin - 0.5 * original->squaredNorm()) <=
+        1e-12 * (1 + std::abs(fit->fmin)));
+  CHECK(fit->fmin <= telemetry.stored_objective * (1 + 1e-14));
+}
+#endif

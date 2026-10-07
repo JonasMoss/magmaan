@@ -2590,6 +2590,7 @@ fit_ordinal_configured_impl(spec::LatentStructure pt,
       selected->g_evals = result->g_evals; selected->optimizer_status = result->status;
       selected->audit.raw_backend_status = attempt.raw_status;
       selected->audit.backend_gradient_max = attempt.gradient_max;
+      selected->audit.port_endpoint = result->audit.port_endpoint;
     }
     if (acceptance) {
       FitVerdict verdict;

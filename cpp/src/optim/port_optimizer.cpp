@@ -137,6 +137,31 @@ std::optional<std::string> configure_controls(
 // PORT's interior arithmetic when it forms (upper - lower).
 constexpr double kPortInf = 1e308;
 
+// Keep the point and value together even when PORT restores only one of them
+// at a singular/noisy stop. This does not certify stationarity or change stops.
+struct BestEvaluatedPoint {
+  Eigen::VectorXd x;
+  double objective = std::numeric_limits<double>::infinity();
+
+  void remember(const Eigen::VectorXd& point, double value) {
+    if (std::isfinite(value) && value < objective) {
+      x = point;
+      objective = value;
+    }
+  }
+
+  bool restore(Eigen::VectorXd& point, double returned_objective) const {
+    if (std::isfinite(objective) &&
+        (!std::isfinite(returned_objective) ||
+         returned_objective - objective >
+             1e-14 * std::max(std::abs(returned_objective), std::abs(objective)))) {
+      point = x;
+      return true;
+    }
+    return false;
+  }
+};
+
 }  // namespace
 
 fit_expected<OptimOutput>
@@ -243,6 +268,7 @@ PortOptimizer::minimize(Objective f,
   // exchange for one Objective contract across all adapters.)
   int n_arg = n;
   Eigen::VectorXd grad_buf(n);
+  BestEvaluatedPoint best;
   // Guard against infinite reverse-communication loops if PORT somehow
   // never signals termination. Each request consumes at most one
   // evaluation, so 100x the documented evaluation cap is comfortably
@@ -272,6 +298,7 @@ PortOptimizer::minimize(Objective f,
     if (status == PORT_REQUEST_F) {
       grad_buf.setZero();
       const double val = f(x, grad_buf);
+      best.remember(x, val);
       if (!std::isfinite(val)) {
         // Tell PORT to back off and try a smaller step. PORT clears this
         // flag on the next call once it has accepted/rejected the step.
@@ -286,6 +313,7 @@ PortOptimizer::minimize(Objective f,
     if (status == PORT_REQUEST_G) {
       grad_buf.setZero();
       const double val = f(x, grad_buf);
+      best.remember(x, val);
       // We've already filled `fx` from the previous PORT_REQUEST_F; PORT
       // is asking for the gradient at the same point, so we discard the
       // returned value (it agrees with `fx`).
@@ -302,7 +330,11 @@ PortOptimizer::minimize(Objective f,
 
   const int    final_status = iv[kIv_Status];
   const int    n_iter       = iv[kIv_NIter];
-  const double f_final      = v[kV_F];  // PORT's recorded final function value
+  const double stored_objective = v[kV_F];
+  grad_buf.setZero();
+  const double returned_objective = f(x, grad_buf);
+  const bool substituted = best.restore(x, returned_objective);
+  const double f_final = substituted ? f(x, grad_buf) : returned_objective;
 
   // Hard failure short-circuit: a non-finite final objective means PORT has
   // no usable iterate. Bail before invoking the audit.
@@ -375,6 +407,8 @@ PortOptimizer::minimize(Objective f,
   out.audit = std::move(a);
   out.raw_status = final_status;
   out.audit.raw_backend_status = final_status;
+  out.audit.port_endpoint = PortEndpointTelemetry{
+      stored_objective, returned_objective, substituted};
   f(out.theta_hat, grad_buf);
   double gradient_max = 0.0;
   for (Eigen::Index j = 0; j < n; ++j) {
@@ -481,6 +515,8 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
   int n2_arg = n;
   int p_arg  = p;
 
+  BestEvaluatedPoint best;
+
   // Helpers for the two LS callbacks. Returning false signals an invalid
   // x — the caller sets PORT's IV(TOOBIG) so the next step is shortened.
   auto fill_residual = [&](const Eigen::VectorXd& xv) -> bool {
@@ -488,6 +524,7 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
     if (!rv.has_value() || rv->size() != n_resid || !rv->allFinite()) {
       return false;
     }
+    best.remember(xv, 0.5 * rv->squaredNorm());
     for (std::size_t i = 0; i < nu; ++i) {
       r[i] = (*rv)[static_cast<Eigen::Index>(i)];
     }
@@ -516,6 +553,7 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
           !ev->jacobian.allFinite()) {
         return false;
       }
+      best.remember(xv, 0.5 * ev->residual.squaredNorm());
       for (std::size_t i = 0; i < nu; ++i) {
         r[i] = ev->residual[static_cast<Eigen::Index>(i)];
       }
@@ -573,7 +611,16 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
 
   const int    final_status = iv[kIv_Status];
   const int    n_iter       = iv[kIv_NIter];
-  const double f_final      = v[kV_F];
+  const double stored_objective = v[kV_F];
+  auto endpoint_objective = [&](const Eigen::VectorXd& point) {
+    auto residual = r_fn(point);
+    if (!residual || residual->size() != n_resid || !residual->allFinite())
+      return std::numeric_limits<double>::infinity();
+    return 0.5 * residual->squaredNorm();
+  };
+  const double returned_objective = endpoint_objective(x);
+  const bool substituted = best.restore(x, returned_objective);
+  const double f_final = substituted ? endpoint_objective(x) : returned_objective;
 
   OptimStatus opt_status = OptimStatus::Converged;
   switch (final_status) {
@@ -614,7 +661,12 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
 
   // NL2SOL drives the residual structure directly; a stationarity norm is not
   // recomputed here (grad_inf_norm left at the -1 "not computed" sentinel).
-  return OptimOutput{std::move(x), f_final, n_iter, 0, 0, opt_status, -1.0};
+  OptimOutput out{std::move(x), f_final, n_iter, 0, 0, opt_status, -1.0};
+  out.raw_status = final_status;
+  out.audit.raw_backend_status = final_status;
+  out.audit.port_endpoint = PortEndpointTelemetry{
+      stored_objective, returned_objective, substituted};
+  return out;
 }
 
 }  // namespace magmaan::optim

@@ -1,0 +1,14 @@
+key,value
+command,--ordinary --port-nls-witnesses --fresh --run-id port-nls-fresh-before
+witnesses,12
+input_md5,5302d6f1d549085cbceafce498564937
+git_head,7f1025ca89d7774cfbfaf701150ef4019fc2ed2d
+source_md5,d5713198065b641badd51445cb9eba17;cf10191edaa742895a1c05d72b78034a
+probe_md5,
+threads,1
+scope,12 fixed-seed fresh fits before endpoint repair; no acceptance/default change
+R_version,R version 4.6.1 (2026-06-24)
+command,/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/engineering/active/15-sphere-reference-fits/run_experiment.R --args --ordinary --port-nls-witnesses --fresh --run-id port-nls-fresh-before
+magmaanlab_version,0.1.0
+installed_library_md5,1985359ce6e4dd5351f47d3f18d3fdbe
+baseline_projection,Removed inherited development-witness verdict fields; retained design identities and actual baseline observations. Scope label corrected to fresh.

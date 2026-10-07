@@ -15,7 +15,7 @@
 #include "magmaan/spec/build.hpp"
 
 int main(int argc, char** argv) {
-  if (argc != 2) return 2;
+  if (argc != 2 && argc != 3) return 2;
   auto parsed = magmaan::parse::Parser::parse(
       "X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nX ~~ Y");
   if (!parsed) return 3;
@@ -65,10 +65,28 @@ int main(int argc, char** argv) {
     if (e) remember(x, e->residual);
     return e;
   };
-  auto fit = magmaan::optim::port_nls(problem, profile->beta0, {}, {});
+  magmaan::optim::OptimOptions options;
+  options.port.unbounded_routine = argc == 3 && std::string(argv[2]) == "unbounded";
+  auto fit = argc == 3
+      ? magmaan::optim::port(magmaan::optim::scalarize(problem), profile->beta0, {}, options)
+      : magmaan::optim::port_nls(problem, profile->beta0, {}, {});
   if (!fit) {
     std::cerr << fit.error().detail;
     return 6;
+  }
+  if (argc == 3) {
+    std::cout << std::setprecision(17) << fit->fmin;
+    for (double coordinate : fit->x) std::cout << ',' << coordinate;
+    const auto& t = *fit->audit.port_endpoint;
+    std::cout << ',' << t.stored_objective << ',' << t.returned_x_objective
+              << ',' << t.best_point_substituted;
+    Eigen::VectorXd gradient(fit->x.size());
+    const double final_objective = magmaan::optim::scalarize(problem).f(fit->x, gradient);
+    auto original = base->r(problem.expand(fit->x));
+    if (!original) return 5;
+    std::cout << ',' << final_objective << ',' << 0.5 * original->squaredNorm()
+              << ',' << fit->audit.raw_backend_status << '\n';
+    return 0;
   }
   auto final_profile = magmaan::estimate::gmm::gp(*base, *pt, *ev, endpoint);
   if (!final_profile) return 5;
@@ -86,7 +104,11 @@ int main(int argc, char** argv) {
   }
   std::cerr << std::setprecision(17) << fit->fmin << ',' << historical_f_gap
             << ',' << historical_x_gap << ',' << last_endpoint_f << ','
-            << (fit->x - final_profile->beta0).norm() << '\n';
+            << (fit->x - final_profile->beta0).norm() << ','
+            << fit->audit.port_endpoint->stored_objective << ','
+            << fit->audit.port_endpoint->returned_x_objective << ','
+            << fit->audit.port_endpoint->best_point_substituted << ','
+            << fit->audit.raw_backend_status << '\n';
   auto r = final_profile->problem.r(final_profile->beta0);
   auto expanded = final_profile->problem.expand(final_profile->beta0);
   auto expanded_r = base->r(expanded);

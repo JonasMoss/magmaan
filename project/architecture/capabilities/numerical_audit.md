@@ -193,8 +193,11 @@ coordinates. Tighter L-BFGS recovers none; no global nonattainment theorem or
 alternate-basin exclusion is claimed. Fresh regular/sparse controls return 324
 passing fits/independent points; two singular first-stage sparse draws reject.
 All-ordinal ULS/DWLS/WLS bindings now retain the actual `start$theta` and producer
-name `ordinal-simple`. PORT-NLS scalar recomputation telemetry remains unavailable,
-so this lane explicitly checks reported versus full-threshold objectives.
+name `ordinal-simple`. At this frozen run, PORT-NLS endpoint recomputation
+telemetry was unavailable, so the lane explicitly checks reported versus
+full-threshold objectives. TASK-33.7 now preserves PORT/PORT-NLS stored and
+backend-returned-point objectives and best-point recovery in `audit.port_endpoint`;
+the frozen ordinal evidence is unchanged.
 The native path scope stops at factor variance 1e6; an ill-conditioned 1e8 probe
 retains a diagnostic-distance precision failure and the correct rejection.
 Existing first-stage and pairwise

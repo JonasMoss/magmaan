@@ -1,0 +1,7 @@
+key,value
+core_commit,7f1025ca
+scope,50 profiles each through bounded drmngb and unbounded drmng; saved before repair
+library_md5,c2944d115fb76dc6fb81315ade898094
+probe,"profile_port_nls.cpp scalar/unbounded mode; prior headers and library; print raw status, stored objective and recomputed objective"
+build,clang++ -O3 -march=native -std=c++23 -fno-exceptions -fno-rtti; EIGEN_MAX_ALIGN_BYTES=64
+threads,1

@@ -628,9 +628,10 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     est->g_evals = result->g_evals;
     est->optimizer_status = result->status;
     // The audit stays in parameter units; PORT's own audit is in the driven
-    // (possibly standardized) coordinates. Only its raw verdict carries over.
+    // (possibly standardized) coordinates. Its raw backend evidence carries over.
     est->audit.raw_backend_status = result->audit.raw_backend_status;
     est->audit.backend_gradient_max = result->audit.backend_gradient_max;
+    est->audit.port_endpoint = result->audit.port_endpoint;
     attempt.raw_status = result->audit.raw_backend_status;
     attempt.gradient_max = result->audit.backend_gradient_max;
     attempt.iterations = result->iterations;

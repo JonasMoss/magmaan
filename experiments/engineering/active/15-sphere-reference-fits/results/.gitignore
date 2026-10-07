@@ -645,3 +645,32 @@ optimizer-confirm-v5/*
 port-nls-endpoint-replay-final/*
 !port-nls-endpoint-replay-final/comparisons.csv
 !port-nls-endpoint-replay-final/metadata.csv
+
+# Frozen endpoint-contract repair evidence, including every audit failure and
+# before/after scalar coordinates. Raw input matrices and fitted RDSs ignored.
+!port-scalar-before/
+port-scalar-before/*
+!port-scalar-before/points.csv
+!port-scalar-before/metadata.csv
+!port-nls-endpoint-repair-v1/
+port-nls-endpoint-repair-v1/*
+!port-nls-endpoint-repair-v1/comparisons.csv
+!port-nls-endpoint-repair-v1/scalar_checks.csv
+!port-nls-endpoint-repair-v1/metadata.csv
+!port-nls-endpoint-fresh-v1/
+port-nls-endpoint-fresh-v1/*
+!port-nls-endpoint-fresh-v1/comparisons.csv
+!port-nls-endpoint-fresh-v1/scalar_checks.csv
+!port-nls-endpoint-fresh-v1/metadata.csv
+!port-nls-fresh-before/
+port-nls-fresh-before/*
+!port-nls-fresh-before/replay.csv
+!port-nls-fresh-before/metadata.csv
+!port-regression-before/
+port-regression-before/*
+!port-regression-before/comparisons.csv
+!port-regression-before/metadata.csv
+!port-regression-after/
+port-regression-after/*
+!port-regression-after/comparisons.csv
+!port-regression-after/metadata.csv

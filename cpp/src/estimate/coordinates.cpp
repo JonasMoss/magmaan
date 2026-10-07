@@ -515,11 +515,13 @@ run_in_coordinates(const optim::ScalarProblem& problem, const CoordinateMap& map
   const int raw_status = out->audit.raw_backend_status;
   const double backend_gradient = out->audit.backend_gradient_max;
   auto controls = std::move(out->audit.nlopt_controls);
+  auto port_endpoint = out->audit.port_endpoint;
   out->audit = optim::audit_terminal_iterate(problem.f, out->x, out->fmin,
                                              box.lower, box.upper);
   out->audit.raw_backend_status = raw_status;
   out->audit.backend_gradient_max = backend_gradient;
   out->audit.nlopt_controls = std::move(controls);
+  out->audit.port_endpoint = port_endpoint;
   out->grad_inf_norm = out->audit.grad_inf_norm;
   return out;
 }
@@ -559,11 +561,13 @@ run_in_coordinates(const optim::ScalarProblem& problem,
   const int raw_status = out->audit.raw_backend_status;
   const double backend_gradient = out->audit.backend_gradient_max;
   auto controls = std::move(out->audit.nlopt_controls);
+  auto port_endpoint = out->audit.port_endpoint;
   out->audit = optim::audit_equality_constrained_terminal_iterate(
       original, out->x, out->fmin, box.lower, box.upper);
   out->audit.raw_backend_status = raw_status;
   out->audit.backend_gradient_max = backend_gradient;
   out->audit.nlopt_controls = std::move(controls);
+  out->audit.port_endpoint = port_endpoint;
   out->grad_inf_norm = out->audit.grad_inf_norm;
   return out;
 }

@@ -2,6 +2,9 @@
 title: "Ordinary fitting: starts, optimizer controls and convergence audits"
 params:
   lane: optimizer_audit
+  port_nls_run: port-nls-endpoint-repair-v1
+  port_nls_fresh: port-nls-endpoint-fresh-v1
+  port_regression: port-regression-after
   optimizer_run: optimizer-confirm-v5
   ml2s_run: ml2s-audit-confirm-v1
   ml2s_development: ml2s-audit-development-v2
@@ -52,12 +55,69 @@ execute:
 ```{r}
 #| results: asis
 if (identical(params$lane, "port_nls")) {
-  path <- "results/port-nls-endpoint-replay-final/comparisons.csv"
-  if(!file.exists(path)) stop("Missing retained replay evidence; run --port-nls-witnesses with --probe")
-  comparisons <- read.csv(path)
-  cat("\n## Retained profiled PORT-NLS endpoint inconsistencies (TASK-33.7)\n\n**Question.** Do the 38 retained objective mismatches arise in profiling,\ncoordinate expansion, or the backend's returned endpoint?\n\n**Short answer.** All 38 mismatches reproduce. At the returned nonlinear\ncoordinates, the recomputed core profile and the original expanded objective\nagree to at most $3.7\\times10^{-15}$ relative to $1+|f|$; re-expansion changes\nno parameter. PORT's stored objective instead matches an earlier residual\nevaluation at different coordinates (relative objective gap below\n$5.1\\times10^{-16}$). Its endpoint matches the R fit exactly. The owning path\nis `PortNlsOptimizer::minimize_ls` returning `x` with `V(F)` after `drn2gb`\ntermination, then `compose_snlls` expanding that `x`. This rules out stale\nprofile expansion and unit transport for these witnesses. It does not prove\nwhich backend restoration or stopping rule should change.\n\n**Evidence.** The frozen `comparisons.csv` retains all 38 failures, the backend\nvalue, recomputed profile value, direct original covariance objective, affine\nresidual cross-check, historical-point gaps and stop status. There are 34\nsingular-convergence and four noisy-objective stops. For the first retained\nwitness (case 2, signed negative/negative, standardized), the backend reports\n1.6512664901058463 while both endpoint objectives are 1930.5154564534566.\nThe historical point differs from the returned nonlinear coordinates by\n0.025227123449448049 in Euclidean norm. Every mismatch remains unfixed;\nno local audit overrides it.\n\n**Caveats and decision.** These endpoints have very large loadings and an\nill-conditioned inner problem. Matching a historical objective identifies the\nendpoint inconsistency, not a trustworthy optimum. No implementation,\ntolerance, acceptance rule or default changes. No fresh confirmation is\nclaimed. The task is **Needs decision**: should a follow-up retain the historical\nbest point with its matching objective, or recompute the returned point's\nobjective and explicitly retain the failed candidate? The brief requires this\nstop for a backend stopping limitation rather than a proved arithmetic repair.\n\n**Reproduce.** From the repository root, build the diagnostic leaf against the\nwarm opt library (use the Eigen include directory from the opt build):\n\n```{.bash}\neigen_include=/home/jonas/Files/research/magmaan/cpp/build-previous/fast/_deps/eigen3-src\nnice -n 10 clang++ -O3 -march=native -std=c++23 -fno-exceptions -fno-rtti \\\n  -DMAGMAAN_WITH_PORT -DEIGEN_NO_EXCEPTIONS -DEIGEN_MAX_ALIGN_BYTES=64 \\\n  -Icpp/include -I\"$eigen_include\" \\\n  experiments/engineering/active/15-sphere-reference-fits/scripts/profile_port_nls.cpp \\\n  cpp/build/opt/libmagmaan.a cpp/build/opt/_deps/nlopt-build/libnlopt.a \\\n  cpp/build/opt/libquadpack.a cpp/build/opt/libport.a -lm -o /tmp/profile_port_nls\nOPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \\\nR_LIBS=\"$HOME/.cache/magmaan-rlib/lane-a\" nice -n 10 Rscript \\\n  experiments/engineering/active/15-sphere-reference-fits/run_experiment.R \\\n  --ordinary --port-nls-witnesses --run-id port-nls-endpoint-replay-final \\\n  --probe /tmp/profile_port_nls\n```\n\nUse a fresh run ID; `--smoke` selects one witness per start/coordinate pair.\nThe replay is serial and takes seconds. Raw inputs and fits remain ignored.\nThe parent regenerates samples and starts; it never reruns the 2400-fit grid.\n")
-  print(knitr::kable(as.data.frame(table(comparisons$optimizer_status)),
-    col.names=c("Backend stop", "Retained failures")))
+  read_port <- function(run, file="comparisons.csv") {
+    path <- file.path("results",run,file)
+    if(!file.exists(path)) stop("Missing endpoint evidence: ",path,"; run --port-nls-witnesses with --probe")
+    read.csv(path)
+  }
+  comparisons <- read_port(params$port_nls_run)
+  fresh <- read_port(params$port_nls_fresh)
+  regression <- read_port(params$port_regression)
+  scalar <- rbind(read_port(params$port_nls_run,"scalar_checks.csv"),
+                  read_port(params$port_nls_fresh,"scalar_checks.csv"))
+  cat("\n## PORT endpoint consistency (TASK-33.7)\n\n",
+    "**Question.** Can the adapter return matching coordinates and objectives\n",
+    "at profiled PORT stops without changing convergence rules?\n\n",
+    "**Short answer.** The adapter now recomputes the objective at the returned\n",
+    "point and retains the best evaluated point when it is better by more than\n",
+    "$10^{-14}$ relative. The raw stop code, stored backend value, backend\n",
+    "returned-point value and substitution flag remain separate telemetry.\n",
+    "The existing audit evaluates the selected endpoint.\n\n",sep="")
+  cat(sprintf("All %d retained witnesses have reported and original expanded ULS objectives agreeing within $10^{-12}$ relative (maximum gap %.3g relative to $1+|f|$). All %d have no loss against the backend historical value. The %d fresh fits retain %d consistent endpoints, %d objective losses and %d audit losses. The six healthy ULS/GLS/WLS PORT and PORT-NLS controls retain bit-identical estimates in %d cases.\n\n",
+    nrow(comparisons),max(comparisons$relative_original_gap),sum(comparisons$no_historical_loss),
+    nrow(fresh),sum(fresh$consistent),sum(fresh$objective_loss),sum(fresh$audit_loss),sum(regression$estimate_bit_identical)))
+  cat(sprintf("The common original-coordinate audit still fails all %d retained and %d fresh endpoints; recovery promotes no audit verdict. Ten unchanged fresh endpoints retain bit-identical estimates. These endpoint checks establish consistency, not successful minimization.\n\n",sum(comparisons$after_audit=="failed"),sum(fresh$after_audit=="failed")))
+  cat("**Evidence.** The earlier `port-nls-endpoint-replay-final/comparisons.csv`\n",
+    "preserves the 38 original failures: profiles and original objectives\n",
+    "agreed at the returned coordinates while stored V(F) belonged to an earlier\n",
+    "evaluation. The repair CSV preserves each before/after objective, normal\n",
+    "audit verdict, raw stop and independent covariance/affine/profile checks.\n\n",sep="")
+  print(knitr::kable(as.data.frame(table(comparisons$before_audit,comparisons$after_audit)),
+    col.names=c("Before audit","After audit","Retained witnesses")))
+  cat(sprintf("\nScalar PORT has the same failure in both bounded `drmngb` and unbounded `drmng`: %d of %d baseline endpoints had a stored/returned-point discrepancy above $10^{-12}$ relative. After repair, %d of %d endpoints agree with independent original-objective recomputation. All %d previously exactly matching endpoints retain bit-identical nonlinear coordinates in %d cases.\n\n",
+    sum(abs(scalar$before_reported-scalar$before_recomputed)>1e-12*(1+abs(scalar$before_recomputed))),nrow(scalar),sum(scalar$objective_consistent),nrow(scalar),sum(scalar$before_consistent),sum(scalar$before_consistent & scalar$estimate_bit_identical)))
+  cat("**Caveats.** Consistency repairs the endpoint contract; it does not establish\n",
+    "a trustworthy optimum or choose a new default. Singular/noisy raw stops\n",
+    "survive recovery. All failed and unresolved audit outcomes remain in the\n",
+    "CSV evidence. The 12 fixed-seed fresh fits are bounded confirmation within\n",
+    "the two-factor study, not a general basin-success claim. No tolerance,\n",
+    "stopping control, verdict rule or default changed.\n\n",
+    "**Reproduce.** Build the optimized core and lane R package, then compile the\n",
+    "diagnostic leaf against that core (use its Eigen include directory):\n\n",
+    "```{.bash}\n",
+    "eigen_include=/home/jonas/Files/research/magmaan/cpp/build-previous/fast/_deps/eigen3-src\n",
+    "nice -n 10 clang++ -O3 -march=native -std=c++23 -fno-exceptions -fno-rtti \\\n",
+    "  -DMAGMAAN_WITH_PORT -DEIGEN_NO_EXCEPTIONS -DEIGEN_MAX_ALIGN_BYTES=64 \\\n",
+    "  -Icpp/include -I\"$eigen_include\" \\\n",
+    "  experiments/engineering/active/15-sphere-reference-fits/scripts/profile_port_nls.cpp \\\n",
+    "  cpp/build/opt/libmagmaan.a cpp/build/opt/_deps/nlopt-build/libnlopt.a \\\n",
+    "  cpp/build/opt/libquadpack.a cpp/build/opt/libport.a -lm -o /tmp/profile_port_nls\n",
+    "export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1\n",
+    "export R_LIBS=\"$HOME/.cache/magmaan-rlib/lane-a\"\n",
+    "nice -n 10 Rscript experiments/engineering/active/15-sphere-reference-fits/run_experiment.R \\\n",
+    "  --ordinary --port-nls-witnesses --run-id port-nls-endpoint-repair-v1 --probe /tmp/profile_port_nls\n",
+    "nice -n 10 Rscript experiments/engineering/active/15-sphere-reference-fits/run_experiment.R \\\n",
+    "  --ordinary --port-nls-witnesses --fresh --run-id port-nls-endpoint-fresh-v1 \\\n",
+    "  --before-run port-nls-fresh-before --probe /tmp/profile_port_nls\n",
+    "```\n\n",
+    "Choose fresh run IDs; `--smoke` selects one witness per start/coordinate pair.\n",
+    "Before/after estimate checks need the ignored baseline RDSs. Reproduce those\n",
+    "with core commit `7f1025ca` and the same fixed-seed runner before installing\n",
+    "the repaired package. `scripts/port_regression_controls.R RUN_ID BEFORE_RUN_ID`\n",
+    "compares the six healthy controls. Frozen scalar baseline coordinates and\n",
+    "objectives are in `port-scalar-before/points.csv`, with provenance alongside.\n",
+    "The probe's `scalar` and `unbounded` modes measure the same profile problems. Raw\n",
+    "inputs and fits remain ignored; the parent never reruns the 2400-fit grid.\n",sep="")
   knitr::knit_exit()
 }
 if (identical(params$lane, "optimizer_audit")) {

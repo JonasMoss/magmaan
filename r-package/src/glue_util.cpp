@@ -491,7 +491,16 @@ Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
   Rcpp::IntegerVector active(static_cast<R_xlen_t>(a.active_set.size()));
   for (std::size_t i = 0; i < a.active_set.size(); ++i)
     active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
+  Rcpp::List port_endpoint;
+  if (a.port_endpoint) {
+    const auto& e = *a.port_endpoint;
+    port_endpoint = Rcpp::List::create(
+        Rcpp::_["stored_objective"] = e.stored_objective,
+        Rcpp::_["returned_x_objective"] = e.returned_x_objective,
+        Rcpp::_["best_point_substituted"] = e.best_point_substituted);
+  }
   return Rcpp::List::create(
+      Rcpp::_["port_endpoint"] = port_endpoint,
       Rcpp::_["stationary"]       = a.stationary,
       Rcpp::_["raw_backend_status"] = a.raw_backend_status,
       Rcpp::_["nlopt_controls"] = controls,

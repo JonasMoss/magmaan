@@ -1,0 +1,9 @@
+"key","value"
+"command","port-regression-before"
+"git_head","7f1025ca89d7774cfbfaf701150ef4019fc2ed2d"
+"source_md5","54d24e28deab86870e8c24f4e078921d"
+"scope","six healthy one-factor PORT/SNLLS controls; exact before/after estimates"
+"R_version","R version 4.6.1 (2026-06-24)"
+"command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/engineering/active/15-sphere-reference-fits/scripts/port_regression_controls.R --args port-regression-before"
+"magmaanlab_version","0.1.0"
+installed_library_md5,1985359ce6e4dd5351f47d3f18d3fdbe

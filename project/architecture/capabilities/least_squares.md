@@ -147,12 +147,20 @@
   stationarity audit.
 
 - Separable nonlinear least squares profiling exists for LS estimators where
-  conditionally linear parameters can be profiled out. TASK-33.7's 38 retained
-  PORT-NLS witnesses reproduce a backend stored-objective/returned-coordinate
-  mismatch: recomputed profiles and original expanded objectives agree, while
-  the stored objective belongs to another evaluated point. Singular/noisy stop
-  handling remains a decision; these failures are not certified by local audits.
-  No profile arithmetic repair or default change is claimed.
+  conditionally linear parameters can be profiled out. PORT and PORT-NLS now
+  recompute the objective at their returned coordinates and recover the best
+  evaluated point when it is better by more than 1e-14 relative. The independent
+  audit judges the recovered point under the existing rules; recovery alone
+  cannot certify a fit. `audit.port_endpoint` preserves the backend stored
+  objective, backend-returned-point objective and substitution flag alongside
+  the raw stop code, including coordinate re-audits and configured PORT routes.
+  TASK-33.7 retains all 38 original profile/endpoint failures and the repair's
+  before/after objectives and verdicts in experiment 15's `port_nls` lane.
+  All 38 repaired endpoints and 12 bounded fresh endpoints are consistent; their
+  common/native audits remain failed. The fresh check loses no objective or
+  audit outcome; six healthy PORT/SNLLS controls retain bit-identical estimates.
+  No profile arithmetic, stopping control, acceptance rule or default changes.
+
 
 #### Continuous moment-quadratic weights
 

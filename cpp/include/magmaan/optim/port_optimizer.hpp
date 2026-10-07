@@ -10,6 +10,10 @@
 
 namespace magmaan::optim {
 
+// Both adapters recompute the returned-point objective and recover the best
+// evaluated point when it is better by more than 1e-14 relative. The raw PORT
+// stop and endpoint evidence live in OptimOutput::audit; recovery does not
+// change the stop classification or certify the returned point.
 // Explicit controls live in OptimOptions::port; see project/reference/optimizer-controls.md.
 // Legacy positive ftol overrides RFCTOL; max_iter sets MXITER and, unless
 // overridden, MXFCAL = 10*max_iter. Legacy gtol/history are unused.

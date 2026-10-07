@@ -236,6 +236,14 @@ struct TerminalAuditOptions {
   double constraint_tol    = 1e-6;
 };
 
+// PORT endpoint evidence is separate from the audit verdict. Values use the
+// optimizer objective scale; the backend stop code remains raw_backend_status.
+struct PortEndpointTelemetry {
+  double stored_objective = std::numeric_limits<double>::quiet_NaN();
+  double returned_x_objective = std::numeric_limits<double>::quiet_NaN();
+  bool best_point_substituted = false;
+};
+
 // What the audit found. Plain struct, carried up via `OptimOutput` /
 // `OptimResult` and surfaced to R as the nested `fit$audit` sub-record. Never
 // produces a `FitError` — observation only.
@@ -245,6 +253,7 @@ struct TerminalAudit {
   // Resolved adapter controls, including zero sentinels for NLopt defaults.
   // They describe the search and survive re-auditing in model coordinates.
   std::optional<NloptControls> nlopt_controls = {};
+  std::optional<PortEndpointTelemetry> port_endpoint = {};
   double backend_gradient_max = -1.0;
   bool        stationary       = false;
   // Infinity norm used for the stationarity verdict: the box-projected
