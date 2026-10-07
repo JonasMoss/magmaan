@@ -333,6 +333,18 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-07: three lane fixes merged. (1) PORT and PORT-NLS adapters now
+return matching point/objective pairs: they recover the best evaluated point
+when the backend restores only its stored value at singular or noisy stops,
+and record raw endpoint telemetry; audit failures remain failures (TASK-33.7;
+38 retained witnesses and 32/100 scalar baseline mismatches). (2) The
+noncentral chi-square CDF uses incomplete-gamma recurrences with Poisson
+remainder bounds and explicit work limits; it now has error <= 8.8e-15 against
+60-digit references (the old code erred by up to 0.035), and unsupported
+extreme tails give NA RMSEA bounds (TASK-107). (3) The all-ordinal named
+compatibility covariance keeps n_g/N sandwich geometry with an N-G reporting
+denominator; unequal-group parity is gated at 1e-5 (TASK-104).
+
 2026-10-07: the isolated sphere-study optimizer audit programme is merged into
 `main` (TASK-33.11, b55a0ea8). It adds opt-in construction-aware Newton audits
 for covariance-only ULS/ML and sphere fits, weighted-LS, ordinal/mixed,
