@@ -45,16 +45,20 @@ check; evidence links own detailed protocols and historical results.
 
 ## Release plan
 
-Revised 2026-10-02. One version number covers the C++ library and both R
+Revised 2026-10-07. One version number covers the C++ library and both R
 packages, which ship together through the vendored core. The former 0.0.1
-label (the C++ project version) is retired.
+label (the C++ project version) is retired. Work proceeded on 0.3.0 items in
+parallel with 0.2.0; on 2026-10-07 the user decided that everything on `main`
+ships as 0.2.0, so the release notes fold the "0.3.0 (in development)" NEWS
+entries into 0.2.0.
 
 | Version | Content |
 | --- | --- |
 | **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (local tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
-| **0.2.0, current** | The adopted ordinary API; lavaan-compatible fitting through `options`, so simulations can rely on lavaan's fitting while magmaan's own optimizer work waits; ordinary-policy inference for ML, FIML and all-ordinal DWLS; MI/release-score completion across weights, including two-stage |
-| **0.3.0, next** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows; barrier hardening and inference; association-ML MI; a stable Mplus input frontend for the linear SEM subset |
-| **After 0.3.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md) |
+| **0.2.0, current** | The simulation release. The adopted ordinary API; lavaan-compatible fitting through `options`; ordinary-policy inference for ML, FIML and all-ordinal DWLS (exact first stage, All/PEBA4 references, reconfirmed by decisions/05 and 07); uniform test tables with `references` for comparing tests; MI/release-score completion across weights; and, landed early, standardized estimates, robust `modindices()`, policy and lavaan-compatible `fit_measures()` |
+| **0.3.0, next: feature completeness** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows and their calibration (TASK-80); barrier hardening and inference; association-ML policy calibration (decisions/08) and MI; fit-index intervals (TASK-103); a stable Mplus input frontend for the linear SEM subset; latent non-normality evidence for the DWLS policy (TASK-84) |
+| **0.4.0: documentation, cleanup and clarity** | User and simulation guides; one decision register that states every default with its evidence; `magmaanlab` export tiering (stable, research, superseded) and retirement of legacy names; consolidated error messages and help; CRAN-readiness checks for both packages |
+| **After 0.4.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md); then 1.0 |
 
 Sphere-chart development remains outside 0.2.0; the minimal unrestricted
 starts/search/audit programme and chart failure handling are high-priority
