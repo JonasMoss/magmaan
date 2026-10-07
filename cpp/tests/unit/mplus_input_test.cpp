@@ -265,7 +265,7 @@ TEST_CASE("Mplus input: aggregate rejection order and arbitrary input stability"
   std::mt19937 random(511);
   for (int n = 0; n < 1000; ++n) {
     std::string source;
-    for (unsigned i = 0, count = random() % 500; i < count; ++i) source += static_cast<char>(random() % 256);
+    for (unsigned i = 0, count = static_cast<unsigned>(random() % 500); i < count; ++i) source += static_cast<char>(random() % 256);
     auto result = MplusParser::read(source);
     if (result) CHECK(result->source == source);
     else CHECK(result.error().span.end <= source.size());

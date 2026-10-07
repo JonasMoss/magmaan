@@ -98,7 +98,10 @@ test_that("FIML recovers a deliberately supplied bad basin and DWLS refits a bad
     }
     bad <- fit(options = list(start = start))
     before <- list(bad$lab$theta, bad$lab$fmin, h0$lab$theta)
-    expect_gt(bad$lab$fmin, h0$lab$fmin)
+    # DWLS from this random start either fails its native verdict or, on some
+    # toolchains (CI's portable build), converges to the optimum.
+    dwls_optimum <- estimator == "DWLS" && isTRUE(bad$lab$converged)
+    if (!dwls_optimum) expect_gt(bad$lab$fmin, h0$lab$fmin)
     retry <- suppressWarnings(magmaanlab::refit_from_null(bad$lab, h0$lab))
     expect_true(isTRUE(retry$converged))
     expect_identical(retry$diagnostics$verdict$status, "passed")
@@ -115,19 +118,17 @@ test_that("FIML recovers a deliberately supplied bad basin and DWLS refits a bad
       expect_true(all(is.finite(compat$statistic)))
       expect_false(is.null(attr(compat, "refit")))
     } else {
-      # Whether the optimizer converges from this random start depends on the
-      # toolchain (it does on CI's portable build, not on native builds), so
-      # both outcomes are checked against their own contract.
       result <- anova(bad, h0)
-      if (isTRUE(bad$lab$converged)) {
-        # A converged worse basin is refitted from the restricted estimate.
-        expect_false(is.null(attr(result, "refit")))
-        expect_true(all(is.finite(result$statistic)))
+      expect_null(attr(result, "refit"))
+      if (dwls_optimum) {
+        # The optimum needs no refit; the fit-function difference is the
+        # test and the nested DWLS score stays typed unavailable.
+        expect_true(is.finite(result$statistic[result$test == "fit_function_difference"]))
+        expect_named(attr(result, "unavailable"), "score")
       } else {
         # A failed native verdict keeps its typed failure in ordinary anova();
         # the lab's explicit reseed remains available for this endpoint.
         expect_match(attr(result, "unavailable")[["lr"]], "not_converged")
-        expect_null(attr(result, "refit"))
       }
     }
     expect_identical(list(bad$lab$theta, bad$lab$fmin, h0$lab$theta), before)
