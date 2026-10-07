@@ -335,6 +335,12 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+The complete-data improper/proper ML oracle pair gates keyed endpoint
+admissibility separately from implied-Sigma domain and retained convergence
+(TASK-118). The retained Mplus ex6.10 ULS statistic conventions are explained
+(TASK-117); its fixed-x NT rank/df question remains separate, with no inference
+or acceptance change.
+
 Defined-parameter sqrt has independent algebra, correlated delta-variance,
 domain and Mplus twin semantic gates (TASK-116). Exact ex5.21/ex5.22 source
 inputs remain ungated.
