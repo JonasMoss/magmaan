@@ -10,6 +10,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/frontier/objective_coordinates.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/layered_start.hpp"
@@ -446,4 +447,79 @@ TEST_CASE("normalized ML preserves boxes together with weighted equalities") {
   REQUIRE(con.has_value());
   CHECK((con->A_eq * result->theta - con->b_eq).norm() < 1e-8);
   CHECK(result->diagnostics.lin_eq_satisfied);
+}
+
+TEST_CASE("objective coordinate scale: independent residual geometry and unit transport") {
+  using magmaan::estimate::frontier::objective_coordinate_scale;
+  Eigen::Matrix<double, 4, 3> jacobian;
+  jacobian << 1, 2, 0, 2, -1, 1, 0, 3, 2, -1, 0, 4;
+  Eigen::Matrix<double, 3, 2> equality;
+  equality << 1, 0, 1, 0, 0, 1;
+  Eigen::Vector4d weights(0.5, 2, 3, 0.25);
+  // f(alpha) = sum_i w_i r_i(alpha)^2: GN = 2 J' W J.
+  Eigen::Matrix<double, 4, 2> reduced = jacobian * equality;
+  Eigen::Matrix2d gn = 2 * reduced.transpose() * weights.asDiagonal() * reduced;
+  Eigen::Vector2d units(2, 0.01);
+  auto scale = objective_coordinate_scale(units, gn.diagonal(), false);
+  REQUIRE(scale);
+  Eigen::Matrix<double, 4, 2> driven = reduced * scale->asDiagonal();
+  for (int j = 0; j < 2; ++j)
+    CHECK((2 * driven.col(j).dot(weights.cwiseProduct(driven.col(j)))) == doctest::Approx(1));
+  Eigen::Vector2d transport(100, 0.03);
+  Eigen::Matrix<double, 4, 2> transported = reduced * transport.cwiseInverse().asDiagonal();
+  Eigen::Vector2d h = (2 * transported.transpose() * weights.asDiagonal() * transported).diagonal();
+  auto moved = objective_coordinate_scale(units.cwiseProduct(transport), h, false);
+  REQUIRE(moved);
+  CHECK(moved->isApprox(scale->cwiseProduct(transport), 1e-12));
+  auto downward = objective_coordinate_scale(units, gn.diagonal(), true);
+  REQUIRE(downward);
+  CHECK((*downward)(0) == doctest::Approx((*scale)(0)));
+  CHECK((*downward)(1) == units(1));
+}
+
+TEST_CASE("objective coordinate scale: clamps fallback and malformed inputs") {
+  using magmaan::estimate::frontier::objective_coordinate_scale;
+  const double inf = std::numeric_limits<double>::infinity();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd units = Eigen::VectorXd::Ones(6);
+  Eigen::VectorXd h(6); h << 1e30, 1e-30, 0, -1, inf, nan;
+  for (bool down : {false, true}) {
+    auto s = objective_coordinate_scale(units, h, down);
+    REQUIRE(s);
+    CHECK((*s)(0) == (down ? 1e-3 : 1e-6));
+    CHECK((*s)(1) == (down ? 1.0 : 1e6));
+    for (int j = 2; j < 6; ++j) CHECK((*s)(j) == 1);
+  }
+  auto empty = objective_coordinate_scale(Eigen::VectorXd{}, Eigen::VectorXd{}, false);
+  REQUIRE(empty);
+  CHECK(empty->size() == 0);
+  CHECK_FALSE(objective_coordinate_scale(units, Eigen::VectorXd{}, false));
+  for (double invalid : {0.0, -1.0, inf, nan}) {
+    units(0) = invalid;
+    auto s = objective_coordinate_scale(units, h, false);
+    REQUIRE_FALSE(s);
+    CHECK(s.error().kind == magmaan::FitError::Kind::NumericIssue);
+  }
+}
+
+TEST_CASE("objective coordinate scale: extreme finite intermediates and outputs") {
+  using magmaan::estimate::frontier::objective_coordinate_scale;
+  Eigen::VectorXd units(1), h(1);
+  units(0) = 1e300; h(0) = 1e300;
+  auto large = objective_coordinate_scale(units, h, false);
+  REQUIRE(large);
+  CHECK((*large)(0) == doctest::Approx(1e294));
+  units(0) = 1e-300; h(0) = 1e-300;
+  auto small = objective_coordinate_scale(units, h, false);
+  REQUIRE(small);
+  CHECK((*small)(0) / 1e-294 == doctest::Approx(1));
+  units(0) = std::numeric_limits<double>::max();
+  h(0) = std::numeric_limits<double>::denorm_min();
+  auto extreme = objective_coordinate_scale(units, h, false);
+  REQUIRE(extreme);
+  CHECK(std::isfinite((*extreme)(0)));
+  CHECK((*extreme)(0) / units(0) == doctest::Approx(1e-6));
+  REQUIRE(objective_coordinate_scale(units, h, true));
+  units(0) = std::numeric_limits<double>::denorm_min(); h(0) = 1;
+  REQUIRE(objective_coordinate_scale(units, h, false));
 }

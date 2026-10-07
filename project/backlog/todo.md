@@ -1239,6 +1239,12 @@ fitting can use the lavaan-compatible preset from 0.2.0.
   reconstructed failing draw, unchanged well-behaved pairs, and ML/FIML/DWLS
   refits with retained data and original fitting options.
 
+- [x] **TASK-33.10.5.4.1 — additive objective-coordinate scale primitive.**
+  Equality-reduced sample units and scalar-objective GN diagonal determine
+  bounded two-sided or downward-only scales, with typed input/output failures.
+  Independent residual geometry and unit transport gates cover the helper;
+  parent TASK-33.10.5.4 retains fit wiring and opt-in selection.
+
 #### Numerical banking programme (2026-10-04)
 
 Board TASK-33.10 groups the remaining numerical work by shared objective

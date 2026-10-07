@@ -132,3 +132,13 @@ the approved endpoint alternative above; the estimate tolerance remains unchange
 and no fitting code was changed.
 Diagnostic scripts and logs are retained under `~/.cache/magmaan-logs/task-59-*`;
 the trace scripts require the temporary callback instrumentation described above.
+
+### Unwired objective-coordinate scale primitive
+
+`estimate::frontier::objective_coordinate_scale()` accepts sample units and
+an actual scalar-objective GN diagonal in matching equality-reduced coordinates.
+It clamps two-sided multipliers to [1e-6, 1e6], or downward-only multipliers to
+[1e-3, 1], and retains sample units for invalid or degenerate diagonal entries.
+Malformed units/sizes and nonfinite or nonpositive outputs are typed failures.
+The helper does not compute NT information. TASK-33.10.5.4 owns subsequent fit
+integration and opt-in selection; this additive primitive changes no defaults.

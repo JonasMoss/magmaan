@@ -1,4 +1,5 @@
 #include "magmaan/estimate/coordinates.hpp"
+#include "magmaan/estimate/frontier/objective_coordinates.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -574,3 +575,33 @@ run_in_coordinates(const optim::ScalarProblem& problem,
 
 }  // namespace driven
 }  // namespace magmaan::estimate
+
+namespace magmaan::estimate::frontier {
+
+fit_expected<Eigen::VectorXd> objective_coordinate_scale(
+    const Eigen::VectorXd& units, const Eigen::VectorXd& objective_diagonal,
+    bool downward_only) {
+  if (units.size() != objective_diagonal.size() || !units.allFinite() ||
+      (units.array() <= 0.0).any())
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "objective coordinate scale requires matching sizes and finite positive units",
+        0, 0.0});
+  Eigen::VectorXd scales = units;
+  const double lower = downward_only ? 1e-3 : 1e-6;
+  const double upper = downward_only ? 1.0 : 1e6;
+  for (Eigen::Index j = 0; j < units.size(); ++j) {
+    const double h = objective_diagonal(j);
+    if (!std::isfinite(h) || h <= 0.0) continue;
+    // Logarithms avoid intermediate overflow/underflow in units * sqrt(h).
+    const double log_multiplier = -std::log(units(j)) - 0.5 * std::log(h);
+    const double multiplier = log_multiplier <= std::log(lower) ? lower :
+        (log_multiplier >= std::log(upper) ? upper : std::exp(log_multiplier));
+    scales(j) = units(j) * multiplier;
+    if (!std::isfinite(scales(j)) || scales(j) <= 0.0)
+      return std::unexpected(FitError{FitError::Kind::NumericIssue,
+          "objective coordinate scale is not finite and positive", 0, 0.0});
+  }
+  return scales;
+}
+
+}  // namespace magmaan::estimate::frontier
