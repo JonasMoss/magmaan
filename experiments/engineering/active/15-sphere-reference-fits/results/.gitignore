@@ -686,3 +686,12 @@ audit-uncertainty-diagnosis-v2/*
 audit-directional-diagnosis-v1/*
 !audit-directional-diagnosis-v1/comparisons.csv
 !audit-directional-diagnosis-v1/reference_metadata.csv
+
+# Tiny frozen paired producer/cost pilot; raw inputs, starts and attempts ignored.
+!start-portfolio-pilot-v1/
+start-portfolio-pilot-v1/*
+!start-portfolio-pilot-v1/observations.csv
+!start-portfolio-pilot-v1/producers.csv
+!start-portfolio-pilot-v1/summary.csv
+!start-portfolio-pilot-v1/timing.csv
+!start-portfolio-pilot-v1/metadata.csv
