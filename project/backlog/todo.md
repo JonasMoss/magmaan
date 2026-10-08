@@ -342,7 +342,10 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   live lavaan at small N (Heywood cases, non-convergence, retries, marker
   switches), structured means with equality constraints, random covariates,
   FIML, DWLS and two groups, with pre-registered classes: no rule differences
-  may remain; floating-point path divergence is reported per cell.
+  may remain; floating-point path divergence is reported per cell. The harness
+  is `r-package/tests/testthat/test_preset_hard_parity.R`; baseline evidence is
+  untracked under `~/.cache/magmaan-logs/task-129.4/`. Final acceptance remains
+  with the merger after TASK-129.1–.3.
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,

@@ -135,6 +135,27 @@ optimum the objective gap is second order in the estimate difference, so it
 is judged on the statistic's scale.
 The default suite skips this opt-in gate.
 
+The hard-case companion
+[`test_preset_hard_parity.R`](../../../r-package/tests/testthat/test_preset_hard_parity.R)
+uses literal populations across 18 small-sample cells: weak markers, regression,
+linear and constrained latent-basis growth, MIMIC, MCAR FIML, ordinal/mixed DWLS,
+and loading-invariant groups. Run with `MAGMAAN_PARITY=1`; lavaan must be exactly
+0.7.2. Both fits use structured means and random covariates; other lavaan options
+retain their defaults. Temporary optimizer-exit instrumentation records starts,
+PORT statuses and retries, excluding the independence model. Per-replicate data,
+class counts and run metadata go to `~/.cache/magmaan-logs/task-129.4/`.
+The gate requests 100 replicates per cell, visits cells round-robin and stops
+starting fits after 29 minutes; `MAGMAAN_HARD_PARITY_REPS` can reduce replication.
+The baseline permits only documented missing marker/post-check features and the
+proved standardized affine-retry defect as separate classes. Rule differences
+fail the gate. The merger sets `MAGMAAN_HARD_PARITY_FINAL=1` after TASK-129.1–.3:
+missing features also fail, and path-divergence rates above 5% require a decision.
+Starts must agree within 1e-9 relative before path divergence is admissible;
+endpoints use the same estimate/gradient/statistic/SE-unit contract above.
+The main baseline (9ad5cb3d, five replicates per cell, 486 seconds) records
+64 agreements, eight pending marker cases and 18 rule differences; acceptance
+remains blocked. The existing 160-fit gate still passes (108 seconds).
+
 Task-59's focused seed 590214 investigation temporarily recorded each preset
 objective callback's coordinates/value/gradient and traced installed lavaan's
 `lav_model_grad` coordinates, with `control = list(trace = 1)` for PORT output.
