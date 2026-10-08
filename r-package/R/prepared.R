@@ -262,7 +262,11 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
 #'   `min_relative_singular_values` (one per evaluated point), and
 #'   `smallest_singular_values` at the deciding point. `null_directions` has
 #'   one column per free direction, with parameter labels as row names;
-#'   `null_direction_text` describes the coefficients. Cached directions are
+#'   `null_direction_text` describes the coefficients. `direction_types` and
+#'   `direction_factors` classify each column as scale, location, rotation or
+#'   deficit; `suggested_fixes` gives matching advice. `gauge_dimension` and
+#'   `deficit_dimension` partition the nullity. Fixed matrix entries and linear
+#'   equalities are enforced before testing gauge membership. Cached directions are
 #'   evaluated at the deciding data-free probe (`directions_at_estimate = FALSE`).
 #'   This checks generic local identification, not global uniqueness or weak
 #'   identification at a fitted point.

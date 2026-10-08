@@ -46,8 +46,9 @@ errors) and is never refused.
 1. **Scale freedom.** $\Lambda\to c\Lambda$, $\psi\to\psi/c^2$ leaves
    $\Lambda\psi\Lambda^\top$ unchanged; cured by a marker, `std.lv` or effects
    coding.
-2. **Location freedom.** $\alpha\to\alpha+a$, $\nu\to\nu-\Lambda a$ leaves
-   $\mu$ unchanged; cured by fixing the latent mean or an intercept, and across
+2. **Location freedom.** $\alpha\to\alpha+(I-B)a$, $\nu\to\nu-\Lambda a$ leaves
+   $\mu=\nu+\Lambda(I-B)^{-1}\alpha$ unchanged (the shift is $\alpha+a$
+   when $B=0$); cured by fixing the latent mean or an intercept, and across
    groups by intercept invariance with a reference group.
 3. **Rotation freedom.** $\Lambda\to\Lambda T$, $\Psi\to T^{-1}\Psi T^{-\top}$;
    removed by the confirmatory zero pattern unless too many loadings are free.
@@ -88,12 +89,24 @@ $\Lambda\to c\Lambda$, $\Psi\to\Psi/c^2$ and the matching regression and mean
 terms at $c=1$), its location generator, and, for each block of $k$ factors,
 the $k^2$ generators of $\Lambda\to\Lambda T$, $\Psi\to T^{-1}\Psi T^{-\top}$
 at $T=I+\varepsilon E_{ab}$, whose diagonal members are the scale generators.
-Principal angles between the generators' span and the null space give the
-contained freedoms at negligible cost. Scale and location freedoms get a
+Fixed and absent matrix entries and linear equalities first restrict the
+generator span. Principal angles between that admissible span and the numerical
+null space, in the same equilibrated reduced coordinates as the rank check,
+give the contained freedoms. Individual contained scale and location generators
+are reported first; remaining contained combinations identify rotation freedom.
+Translations and linear factor transformations are intersected separately, so
+the reported types do not come from a mixture of generator families. Reported
+gauge columns retain their actual generators; an internal orthonormal basis
+in those coordinates gives the information-deficit complement. Ordinal and
+mixed routes test the same generators against their own moment Jacobians,
+with unchanged threshold and response-scale entries included in the reduction.
+Scale and location freedoms get a
 standard fix (fix a loading or the variance; fix the latent mean or an
 intercept); rotation freedom between factors $a$ and $b$ is reported with the
-advice to pin their loadings by zero restrictions or fix their covariance, and
-no automatic fix. Any remaining null dimension is reported as an information
+advice to add independent loading restrictions (each factor needs $k-1$ zeros
+in a non-degenerate pattern). Covariance restrictions can help but are not
+sufficient on their own; recheck identification after editing. No automatic
+fix is applied. Any remaining null dimension is reported as an information
 deficit with the parameters involved, and no automatic fix.
 
 **magmaanlab.** Exposes the report on fits and through a standalone check, and

@@ -322,8 +322,11 @@ print.magmaan_model <- function(x, ...) {
 #' @return An object of class `magmaan`.
 #' @section Identification:
 #' Structurally unidentified models are refused before fitting, including
-#' ordinary refits, with a `magmaan_identification_error` condition. Its fields
-#' are `status`, `reason`, and `directions`: a coefficient matrix with parameter
+#' ordinary refits, with a `magmaan_identification_error` condition. Gauge
+#' freedoms (scale, location and rotation) carry specific suggested fixes;
+#' information deficits name their parameters without an automatic fix. Its fields
+#' are `status`, `reason`, `direction_types`, `direction_factors`,
+#' `suggested_fixes`, and `directions`: a coefficient matrix with parameter
 #' labels as row names and one column per free direction. The message names
 #' these directions. Add identifying restrictions to the model; there is no
 #' ordinary override. Deliberate unidentified fits remain available through
@@ -926,9 +929,14 @@ as_lab_fit <- function(fit) {
   detail <- paste(report$null_direction_text, collapse = "; ")
   message <- paste0("magmaan(): model is structurally unidentified (", report$reason, ").",
                     if (nzchar(detail)) paste0(" Free directions: ", detail, "."),
-                    " Add identifying restrictions to the parameters in these directions; ",
+                    if (length(report$suggested_fixes))
+                      paste0(" Suggested fixes: ", paste(unique(report$suggested_fixes), collapse = " "), " ") else
+                      " Add identifying restrictions to the parameters in these directions; ",
                     "deliberate unidentified fits are available in magmaanlab::fit_model().")
   stop(structure(list(message = message, call = NULL, status = report$status,
-                      directions = directions, reason = report$reason),
+                      directions = directions, reason = report$reason,
+                      direction_types = report$direction_types,
+                      direction_factors = report$direction_factors,
+                      suggested_fixes = report$suggested_fixes),
                  class = c("magmaan_identification_error", "error", "condition")))
 }

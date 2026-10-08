@@ -159,6 +159,14 @@ class Reduction {
     if (identity_) return alpha;
     return con_->Kmat * alpha;
   }
+  Eigen::MatrixXd direction_coordinates(const Eigen::MatrixXd& full) const {
+    if (identity_) return full;
+    return qr_.solve(full);
+  }
+  Eigen::MatrixXd expand_directions(const Eigen::MatrixXd& alpha) const {
+    if (identity_) return alpha;
+    return con_->Kmat * alpha;
+  }
 
  private:
   const EqConstraints* con_ = nullptr;
@@ -238,14 +246,19 @@ Eigen::VectorXd ascending_tail(const Eigen::VectorXd& descending,
   return out;
 }
 
-std::optional<Eigen::MatrixXd> null_basis_at(
+struct NullBasis {
+  Eigen::MatrixXd directions;
+  PointRank point;
+};
+
+std::optional<NullBasis> null_basis_at(
     const Eigen::VectorXd& theta, const Reduction& reduction,
     const MomentJacobian& jacobian, Eigen::Index n, Eigen::Index nullity,
     double null_tolerance) {
   auto J = jacobian(theta);
   if (!J.has_value() || J->cols() != n || J->rows() == 0 || !J->allFinite())
     return std::nullopt;
-  const PointRank point = rank_point(reduction.reduce(*J), null_tolerance, true);
+  PointRank point = rank_point(reduction.reduce(*J), null_tolerance, true);
   const Eigen::Index q = point.V.cols();
   if (q < nullity || nullity <= 0) return std::nullopt;
   Eigen::MatrixXd out(n, nullity);
@@ -261,7 +274,272 @@ std::optional<Eigen::MatrixXd> null_basis_at(
     if (d(largest) < 0.0) d = -d;
     out.col(k) = d;
   }
-  return out;
+  return NullBasis{std::move(out), std::move(point)};
+}
+
+
+// Work in the same equilibrated reduced coordinates as rank_point. A full
+// matrix-cell map also checks fixed/absent entries: dropping those entries
+// would falsely call a pinned marker or a zero cross-loading a gauge.
+void classify_directions(IdentificationReport& report,
+                         const spec::LatentStructure& pt,
+                         const Reduction& reduction,
+                         const PointRank& point,
+                         const Eigen::VectorXd& theta,
+                         const model::ModelEvaluator * ev) {
+  const Eigen::Index d = report.null_directions.cols();
+  if (d == 0) return;
+  report.deficit_dimension = static_cast<std::int32_t>(d);
+  report.direction_types.assign(static_cast<std::size_t>(d), "deficit");
+  report.direction_factors.resize(static_cast<std::size_t>(d));
+  report.suggested_fixes.assign(static_cast<std::size_t>(d),
+      "Information deficit: no automatic fix; add information or independent restrictions to the listed parameters and recheck identification.");
+  if (ev == nullptr) return;
+  auto assembled = ev->assembled(theta);
+  if (!assembled) return;
+  const Eigen::Index q = point.V.cols(), n = theta.size();
+  const Eigen::MatrixXd N = point.V.rightCols(d);
+  struct Layout { Eigen::Index lambda, psi, beta, nu, alpha, theta, p, m; };
+  std::vector<Layout> layouts;
+  Eigen::Index cells = 0;
+  for (const auto& b : assembled->blocks) {
+    const Eigen::Index p = b.Lambda.rows(), m = b.Lambda.cols();
+    Layout l{cells, cells + p * m, cells + p * m + m * m,
+             cells + p * m + 2 * m * m, cells + p * m + 2 * m * m + p,
+             cells + p * m + 2 * m * m + p + m, p, m};
+    cells = l.theta + p * p;
+    layouts.push_back(l);
+  }
+  auto cell_index = [](const Layout& l, model::MatId mat, int row, int col) {
+    switch (mat) {
+      case model::MatId::Lambda: return l.lambda + row + l.p * col;
+      case model::MatId::Psi: return l.psi + row + l.m * col;
+      case model::MatId::Beta: return l.beta + row + l.m * col;
+      case model::MatId::Nu: return l.nu + row;
+      case model::MatId::Alpha: return l.alpha + row;
+      case model::MatId::Theta: return l.theta + row + l.p * col;
+      default: return Eigen::Index(-1);
+    }
+  };
+  const Eigen::Index extra_cells = cells;
+  cells += static_cast<Eigen::Index>(pt.size());
+  std::vector<Eigen::Index> parameter_for_cell(static_cast<std::size_t>(cells), -1);
+  const auto& rep = ev->matrix_rep();
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& c = rep.cell_for_row[i];
+    if (pt.free[i] <= 0) continue;
+    if (!c.used) {
+      // Thresholds and response scales are unchanged by a LISREL gauge.
+      // Keeping their tangent entries also enforces equalities tying them to
+      // matrix parameters, rather than dropping them from the reduction.
+      parameter_for_cell[static_cast<std::size_t>(extra_cells) + i] = pt.free[i]-1;
+      continue;
+    }
+    const auto& l = layouts[static_cast<std::size_t>(c.block)];
+    const auto k = cell_index(l, c.mat, c.row, c.col);
+    if (k < 0) continue;
+    parameter_for_cell[static_cast<std::size_t>(k)] = pt.free[i]-1;
+    if (c.mat == model::MatId::Psi || c.mat == model::MatId::Theta)
+      parameter_for_cell[static_cast<std::size_t>(cell_index(l, c.mat, c.col, c.row))] = pt.free[i]-1;
+  }
+  struct Generator {
+    Eigen::VectorXd cells;
+    std::string type, factors;
+  };
+  std::vector<Generator> generators;
+  for (std::size_t bi = 0; bi < layouts.size(); ++bi) {
+    const auto& l = layouts[bi];
+    const auto& b = assembled->blocks[bi];
+    std::vector<int> factors;
+    for (const auto v : pt.lv_ext_order)
+      if (pt.is_user_latent[static_cast<std::size_t>(v)])
+        factors.push_back(pt.lv_ext_pos[static_cast<std::size_t>(v)]);
+    auto name = [&](int a) {
+      std::string out = rep.lv_names[bi][static_cast<std::size_t>(a)];
+      if (layouts.size() > 1) out += ".g" + std::to_string(bi + 1);
+      return out;
+    };
+    auto pack = [&](const Eigen::MatrixXd& dl, const Eigen::MatrixXd& dp,
+                    const Eigen::MatrixXd& db, const Eigen::VectorXd& dn,
+                    const Eigen::VectorXd& da) {
+      Eigen::VectorXd g = Eigen::VectorXd::Zero(cells);
+      g.segment(l.lambda, l.p * l.m) = Eigen::Map<const Eigen::VectorXd>(dl.data(), dl.size());
+      g.segment(l.psi, l.m * l.m) = Eigen::Map<const Eigen::VectorXd>(dp.data(), dp.size());
+      g.segment(l.beta, l.m * l.m) = Eigen::Map<const Eigen::VectorXd>(db.data(), db.size());
+      g.segment(l.nu, l.p) = dn;
+      g.segment(l.alpha, l.m) = da;
+      return g;
+    };
+    // The diagonal GL(k) generators are the scale transformations.
+    for (int a : factors) for (int z : factors) {
+      Eigen::MatrixXd E = Eigen::MatrixXd::Zero(l.m, l.m);
+      E(a, z) = 1.0;
+      Eigen::VectorXd da = Eigen::VectorXd::Zero(l.m);
+      if (b.Alpha.size() == l.m) da = -E * b.Alpha;
+      generators.push_back({pack(b.Lambda * E, -(E * b.Psi + b.Psi * E.transpose()),
+          b.Beta * E - E * b.Beta, Eigen::VectorXd::Zero(l.p), da),
+          a == z ? "scale" : "rotation", a == z ? name(a) : name(a)+", "+name(z)});
+    }
+    if (b.Nu.size() > 0) for (int a : factors) {
+      Eigen::VectorXd shift = Eigen::VectorXd::Zero(l.m); shift(a) = 1.0;
+      generators.push_back({pack(Eigen::MatrixXd::Zero(l.p, l.m),
+          Eigen::MatrixXd::Zero(l.m, l.m), Eigen::MatrixXd::Zero(l.m, l.m),
+          -b.Lambda * shift, shift - b.Beta * shift), "location", name(a)});
+    }
+  }
+  const Eigen::Index g = static_cast<Eigen::Index>(generators.size());
+  if (g == 0) return;
+  Eigen::MatrixXd G(cells, g);
+  for (Eigen::Index j = 0; j < g; ++j) {
+    G.col(j) = generators[static_cast<std::size_t>(j)].cells;
+    const double norm = G.col(j).norm();
+    if (norm>0) G.col(j) /= norm;
+  }
+  // Every cell has one parameter owner, so C^T C is diagonal. Average
+  // repeated (symmetric or aliased) cells, then reuse K's prepared QR. The
+  // residual below still checks every fixed cell and alias: its kernel is
+  // exactly the admissible generator span. No dense solve over cells is needed.
+  Eigen::MatrixXd raw = Eigen::MatrixXd::Zero(n, g);
+  Eigen::VectorXd counts = Eigen::VectorXd::Zero(n);
+  for (Eigen::Index i = 0; i < cells; ++i) {
+    const auto k = parameter_for_cell[static_cast<std::size_t>(i)];
+    if (k < 0) continue;
+    raw.row(k) += G.row(i);
+    counts(k) += 1.0;
+  }
+  if ((counts.array() <= 0.0).any()) return;
+  raw = counts.cwiseInverse().asDiagonal() * raw;
+  const Eigen::MatrixXd reduced_coordinates = reduction.direction_coordinates(raw);
+  const Eigen::MatrixXd X = point.scale.cwiseInverse().asDiagonal() * reduced_coordinates;
+  const Eigen::MatrixXd expanded = reduction.expand_directions(reduced_coordinates);
+  // The first residual enforces all cell restrictions and linear equalities;
+  // the second enforces membership in the normalized numerical null space.
+  Eigen::MatrixXd residual(cells + q, g);
+  residual.topRows(cells) = G;
+  for (Eigen::Index i = 0; i < cells; ++i) {
+    const auto k = parameter_for_cell[static_cast<std::size_t>(i)];
+    if (k >= 0) residual.row(i) -= expanded.row(k);
+  }
+  residual.bottomRows(q) = X - N * (N.transpose() * X);
+  std::vector<Eigen::VectorXd> directions, reported_directions;
+  std::vector<std::string> types, names;
+  auto append = [&](Eigen::VectorXd v, const std::string& type, const std::string& factors) {
+    const double original = v.norm();
+    const Eigen::VectorXd reported = v;
+    for (const auto& old : directions) v -= old.dot(v) * old;
+    // Reorthogonalize to keep the deficit complement stable.
+    for (const auto& old : directions) v -= old.dot(v) * old;
+    if (!(original > 0.0) || !(v.norm() > report.null_tolerance * original)) return;
+    v.normalize();
+    directions.push_back(v);
+    // Orthogonalize only the internal span. The reported gauge column must
+    // remain the actual generator (subtracting a scale from a translation
+    // would give a mixed direction and invalidate its pure location label).
+    reported_directions.push_back(type == "deficit" ? v : reported.normalized().eval());
+    types.push_back(type);
+    names.push_back(factors);
+  };
+  for (const auto& type : {"scale", "location"})
+    for (Eigen::Index j = 0; j < g; ++j)
+      if (generators[static_cast<std::size_t>(j)].type == type &&
+          X.col(j).norm() > 0.0 &&
+          residual.col(j).head(cells).norm() <= report.null_tolerance &&
+          residual.col(j).tail(q).norm() <= report.null_tolerance * X.col(j).norm())
+        append(N * (N.transpose() * X.col(j)), type, generators[static_cast<std::size_t>(j)].factors);
+  // First restrict the generator span to directions honoring every cell and
+  // linear equality. Then compute principal angles to the numerical null
+  // space in the equilibrated coordinates used by the identification check.
+  // Keep translations separate from GL(k): a mixture of the two must not
+  // receive a pure location or rotation label merely from a large coefficient.
+  for (bool locations : {true, false}) {
+    std::vector<Eigen::Index> selected;
+    for (Eigen::Index j = 0; j < g; ++j)
+      if ((generators[static_cast<std::size_t>(j)].type == "location") == locations)
+        selected.push_back(j);
+    const Eigen::Index count = static_cast<Eigen::Index>(selected.size());
+    if (count == 0) continue;
+    Eigen::MatrixXd cell_residual(cells, count), coordinates(q, count);
+    for (Eigen::Index j = 0; j < count; ++j) {
+      cell_residual.col(j) = residual.col(selected[static_cast<std::size_t>(j)]).head(cells);
+      coordinates.col(j) = X.col(selected[static_cast<std::size_t>(j)]);
+    }
+    Eigen::JacobiSVD<Eigen::MatrixXd> admissible(cell_residual, Eigen::ComputeFullV);
+    Eigen::Index admissible_dim = 0;
+    for (Eigen::Index j = 0; j < count; ++j)
+      if (j >= admissible.singularValues().size() ||
+          admissible.singularValues()(j) <= report.null_tolerance) ++admissible_dim;
+    if (admissible_dim>0) {
+      const Eigen::MatrixXd weights_basis = admissible.matrixV().rightCols(admissible_dim);
+      const Eigen::MatrixXd allowed = coordinates * weights_basis;
+      Eigen::JacobiSVD<Eigen::MatrixXd> span(allowed, Eigen::ComputeThinU | Eigen::ComputeThinV);
+      span.setThreshold(report.null_tolerance);
+      Eigen::Index span_dim = 0;
+      const double largest = span.singularValues().size()>0 ? span.singularValues()(0) : 0.0;
+      for (const double value : span.singularValues())
+        if (value > report.null_tolerance * largest) ++span_dim;
+      if (span_dim>0) {
+        const Eigen::MatrixXd Q_G = span.matrixU().leftCols(span_dim);
+        Eigen::JacobiSVD<Eigen::MatrixXd> angles(Q_G.transpose() * N,
+            Eigen::ComputeThinU | Eigen::ComputeThinV);
+        for (Eigen::Index j = 0; j < angles.singularValues().size(); ++j) {
+          if (1.0 - angles.singularValues()(j)>report.null_tolerance) continue;
+          Eigen::VectorXd v = N * angles.matrixV().col(j);
+          // Recover the actual admissible generator combination. Keep the
+          // reported column in this span; append removes dependent columns.
+          const Eigen::VectorXd weights = weights_basis * span.solve(v);
+          std::string pairs, other;
+          const std::string type = locations ? "location" : "scale";
+          const double max_weight = weights.cwiseAbs().maxCoeff();
+          for (Eigen::Index k = 0; k < count; ++k) {
+            const auto& gen = generators[static_cast<std::size_t>(selected[static_cast<std::size_t>(k)])];
+            if (std::abs(weights(k)) <= report.null_tolerance * max_weight) continue;
+            if (gen.type == "rotation") {
+              if (!pairs.empty()) pairs += "; ";
+              pairs += gen.factors;
+            } else {
+              if (!other.empty()) other += "; ";
+              other += gen.factors;
+            }
+          }
+          append(v, pairs.empty() ? type : "rotation", pairs.empty() ? other : pairs);
+        }
+      }
+    }
+  }
+  report.gauge_dimension = static_cast<std::int32_t>(directions.size());
+  for (Eigen::Index j = 0; j < d; ++j) append(N.col(j), "deficit", "");
+  report.deficit_dimension = static_cast<std::int32_t>(directions.size()) - report.gauge_dimension;
+  report.direction_types = std::move(types);
+  report.direction_factors = std::move(names);
+  report.suggested_fixes.clear();
+  report.null_directions.resize(n, static_cast<Eigen::Index>(directions.size()));
+  for (std::size_t j = 0; j < directions.size(); ++j) {
+    Eigen::VectorXd v = reduction.expand_direction(
+        point.scale.cwiseProduct(reported_directions[j]));
+    v.normalize();
+    Eigen::Index largest = 0;
+    v.cwiseAbs().maxCoeff(&largest);
+    if (v(largest) < 0.0) v = -v;
+    report.null_directions.col(static_cast<Eigen::Index>(j)) = v;
+    const auto& type = report.direction_types[j];
+    const auto& f = report.direction_factors[j];
+    if (type == "scale") {
+      report.suggested_fixes.push_back("Scale freedom of " + f +
+          ": fix one loading to 1, or its variance to 1 (std.lv); recheck identification.");
+    } else if (type == "location") {
+      report.suggested_fixes.push_back("Location freedom of " + f +
+          ": fix its latent mean to 0, or one intercept; recheck identification.");
+    } else if (type == "rotation") {
+      report.suggested_fixes.push_back("Free rotation between factors " + f +
+          ": add independent loading restrictions (each factor needs k - 1 zeros "
+          "in a non-degenerate pattern); covariance restrictions can help but are "
+          "not sufficient on their own; recheck identification after editing.");
+    } else {
+      report.suggested_fixes.push_back("Information deficit: no automatic fix; "
+          "add information or independent restrictions to the listed parameters "
+          "and recheck identification.");
+    }
+  }
 }
 
 IdentificationReport base_report(IdentificationMap map,
@@ -287,7 +565,8 @@ IdentificationReport rank_impl(const spec::LatentStructure& pt,
                                bool nonlinear_constraints, IdentificationMap map,
                                const MomentJacobian& jacobian,
                                const Eigen::VectorXd* estimate,
-                               const IdentificationOptions& options) {
+                               const IdentificationOptions& options,
+                               const model::ModelEvaluator* ev = nullptr) {
   IdentificationReport r = base_report(map, options);
   if (!valid_options(options)) return r;
   // Random points cannot be drawn on a nonlinear constraint manifold.
@@ -391,14 +670,18 @@ IdentificationReport rank_impl(const spec::LatentStructure& pt,
   }
 
   if (nullity > 0) {
-    std::optional<Eigen::MatrixXd> basis;
+    std::optional<NullBasis> basis;
     if (estimate != nullptr && estimate->size() == n && estimate->allFinite()) {
       basis = null_basis_at(*estimate, reduction, jacobian, n, nullity, null_tol);
       r.directions_at_estimate = basis.has_value();
     }
     if (!basis)
       basis = null_basis_at(best_theta, reduction, jacobian, n, nullity, null_tol);
-    if (basis) r.null_directions = std::move(*basis);
+    if (basis) {
+      r.null_directions = std::move(basis->directions);
+      classify_directions(r, pt, reduction, basis->point,
+                          r.directions_at_estimate ? *estimate : best_theta, ev);
+    }
   }
   return r;
 }
@@ -441,10 +724,10 @@ IdentificationReport check_identification_rank(
     const spec::LatentStructure& pt, const EqConstraints& con,
     bool nonlinear_constraints, IdentificationMap map,
     const MomentJacobian& jacobian, const Eigen::VectorXd* estimate,
-    IdentificationOptions options) {
+    IdentificationOptions options, const model::ModelEvaluator* evaluator) {
   const Timer timer{};
   return observed(rank_impl(pt, con, nonlinear_constraints, map, jacobian,
-                            estimate, options), timer);
+                            estimate, options, evaluator), timer);
 }
 
 IdentificationReport check_structural_identification(
@@ -483,7 +766,7 @@ IdentificationReport check_structural_identification(
     };
   }
   return observed(rank_impl(pt, con, nonlinear_constraints, map, jacobian,
-                            estimate, options), timer);
+                            estimate, options, &ev), timer);
 }
 
 fit_expected<IdentificationReport> check_structural_identification(

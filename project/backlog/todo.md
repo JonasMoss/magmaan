@@ -1533,7 +1533,10 @@ separate final decision for each explicitly covered scope.
   two-level and FC-SEM routes report unchecked. TASK-33.3.1 adds immutable-model
   construction caching, the standalone lab report and ordinary refusal before
   fitting with `magmaan_identification_error`; unchecked models fit normally.
-  Gauge classification and specific suggested fixes remain in TASK-33.3.2.
+  TASK-33.3.2 adds generator-membership classification of scale, location and
+  rotation freedom, respecting fixed cells and equality constraints, with
+  specific suggested fixes in lab reports and ordinary refusals. Remaining
+  null dimensions are information deficits without an automatic fix.
 
 - [ ] **M — finish common-verdict and stopping-control integration.** Preserve
   evaluable candidates on soft exits, report effective controls/raw reasons

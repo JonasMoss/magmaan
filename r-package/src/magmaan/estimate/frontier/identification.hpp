@@ -65,12 +65,14 @@ using MomentJacobian =
 // only used to express the null directions of an unidentified model at the
 // fitted point; it never affects the status. Nonlinear equality constraints,
 // inequality constraints, two-level models and an empty `jacobian` (a route
-// without a moment map) are reported Unchecked.
+// without a moment map) are reported Unchecked. An optional matching LISREL
+// evaluator enables gauge classification against the supplied moment map.
 IdentificationReport check_identification_rank(
     const spec::LatentStructure& pt, const EqConstraints& con,
     bool nonlinear_constraints, IdentificationMap map,
     const MomentJacobian& jacobian, const Eigen::VectorXd* estimate = nullptr,
-    IdentificationOptions options = {});
+    IdentificationOptions options = {},
+    const model::ModelEvaluator* evaluator = nullptr);
 
 // Immutable prepared owners attach their default-options report to MatrixRep;
 // this overload reuses it, retaining directions at the data-free probe. Clear

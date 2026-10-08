@@ -86,8 +86,11 @@ and optimization details to \code{options}.
 \section{Identification}{
 
 Structurally unidentified models are refused before fitting, including
-ordinary refits, with a \code{magmaan_identification_error} condition. Its fields
-are \code{status}, \code{reason}, and \code{directions}: a coefficient matrix with parameter
+ordinary refits, with a \code{magmaan_identification_error} condition. Gauge
+freedoms (scale, location and rotation) carry specific suggested fixes;
+information deficits name their parameters without an automatic fix. Its fields
+are \code{status}, \code{reason}, \code{direction_types}, \code{direction_factors},
+\code{suggested_fixes}, and \code{directions}: a coefficient matrix with parameter
 labels as row names and one column per free direction. The message names
 these directions. Add identifying restrictions to the model; there is no
 ordinary override. Deliberate unidentified fits remain available through

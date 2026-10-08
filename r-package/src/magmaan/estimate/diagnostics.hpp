@@ -311,6 +311,13 @@ struct IdentificationReport {
   // implied moments unchanged to first order.
   Eigen::MatrixXd null_directions;
   bool directions_at_estimate = false;
+  // Aligned with null_directions: scale, location, rotation, or deficit.
+  // Gauge columns precede an orthogonal complement of information deficits.
+  std::vector<std::string> direction_types;
+  std::vector<std::string> direction_factors;
+  std::vector<std::string> suggested_fixes;
+  std::int32_t gauge_dimension = 0;
+  std::int32_t deficit_dimension = 0;
 };
 
 // The domain is declared by the fit entry point, never selected by which

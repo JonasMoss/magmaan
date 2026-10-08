@@ -1,5 +1,9 @@
 # magmaanlab (development version)
 
+- Identification reports classify scale, location and rotation freedoms, enforce
+  fixed entries and linear equalities, and expose per-direction suggested fixes.
+  Remaining null dimensions are reported as information deficits.
+
 - `structural_identification()` checks a specification or reuses a prepared
   model's data-free report. Prepared fits reuse construction-time identification
   and express cached null directions at the deciding probe point. Lab fits

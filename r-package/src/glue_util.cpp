@@ -689,7 +689,12 @@ Rcpp::List identification_to_r(
       Rcpp::_["null_directions"] = directions,
       Rcpp::_["null_direction_text"] =
           Rcpp::wrap(fr::describe_null_directions(r, names)),
-      Rcpp::_["directions_at_estimate"] = r.directions_at_estimate);
+      Rcpp::_["directions_at_estimate"] = r.directions_at_estimate,
+      Rcpp::_["direction_types"] = Rcpp::wrap(r.direction_types),
+      Rcpp::_["direction_factors"] = Rcpp::wrap(r.direction_factors),
+      Rcpp::_["suggested_fixes"] = Rcpp::wrap(r.suggested_fixes),
+      Rcpp::_["gauge_dimension"] = r.gauge_dimension,
+      Rcpp::_["deficit_dimension"] = r.deficit_dimension);
 }
 
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d,

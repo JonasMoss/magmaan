@@ -18,7 +18,11 @@ A list with \code{status} (\code{identified}, \code{unidentified}, \code{uncheck
 \code{min_relative_singular_values} (one per evaluated point), and
 \code{smallest_singular_values} at the deciding point. \code{null_directions} has
 one column per free direction, with parameter labels as row names;
-\code{null_direction_text} describes the coefficients. Cached directions are
+\code{null_direction_text} describes the coefficients. \code{direction_types} and
+\code{direction_factors} classify each column as scale, location, rotation or
+deficit; \code{suggested_fixes} gives matching advice. \code{gauge_dimension} and
+\code{deficit_dimension} partition the nullity. Fixed matrix entries and linear
+equalities are enforced before testing gauge membership. Cached directions are
 evaluated at the deciding data-free probe (\code{directions_at_estimate = FALSE}).
 This checks generic local identification, not global uniqueness or weak
 identification at a fitted point.

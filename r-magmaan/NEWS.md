@@ -1,5 +1,9 @@
 # magmaan (development version)
 
+- Identification refusals now suggest specific scale, location and rotation
+  restrictions. Information deficits name affected parameters without suggesting
+  an automatic fix; no identifying constraints are added.
+
 - `magmaan_model()` now caches and prints structural identification.
   `magmaan()` refuses unidentified models before fitting with
   `magmaan_identification_error`, naming the free parameter directions.

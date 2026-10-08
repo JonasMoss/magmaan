@@ -260,7 +260,15 @@ specification or retrieves the prepared report without refusing lab fits.
 Ordinary `magmaan_model()` stores and prints the report; `magmaan()` and ordinary
 refits refuse Unidentified models before estimation with
 `magmaan_identification_error` (status, reason, labelled direction coefficients).
-Unchecked models fit normally; there is no ordinary override.
+Unchecked models fit normally; there is no ordinary override. TASK-33.3.2
+partitions the reported directions into scale, location, rotation and remaining
+information deficits, with `direction_types`, `direction_factors`,
+`suggested_fixes`, `gauge_dimension` and `deficit_dimension`. Generator
+membership uses the same equilibrated equality coordinates as the rank check;
+fixed and absent matrix entries are enforced before principal-angle testing.
+Location shifts use $d\alpha=(I-B)a$ with latent regressions. Rotation advice
+requires independent loading restrictions; covariance restrictions alone need
+not suffice. Deficits list parameter coefficients without an automatic fix.
 
 Moment maps: vech(Sigma) and mu per block for complete-data ML/LS/GMM/SNLLS,
 Fisher/IRLS, PSD, multi-information, ML2S Stage 2, direct FIML,

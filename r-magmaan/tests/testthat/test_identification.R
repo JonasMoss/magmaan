@@ -70,3 +70,28 @@ test_that("ordinary recovery refuses an unidentified saved alternative before re
   expect_error(magmaan:::.nested_recovery(result, alternative, NULL, NULL, "score"),
                class = "magmaan_identification_error")
 })
+
+test_that("ordinary refusal carries classified freedoms and specific fixes", {
+  for (case in list(
+      list(syntax = "f =~ NA*x1 + x2 + x3", type = "scale", advice = "std.lv"),
+      list(syntax = "f =~ x1 + x2 + x3 + x4\nf ~ NA*1", type = "location", advice = "latent mean to 0"),
+      list(syntax = "f =~ x1 + x2", type = "deficit", advice = "no automatic fix"),
+      list(syntax = paste("f1 =~ x1 + x2 + x3 + x4 + x5 + x6",
+                         "f2 =~ x1 + x2 + x3 + x4 + x5 + x6", sep = "\n"),
+           type = "rotation", advice = "not sufficient on their own"))) {
+    m <- magmaan_model(case$syntax)
+    err <- tryCatch(magmaan(m, data.frame(), inference = FALSE),
+                    magmaan_identification_error = identity)
+    expect_s3_class(err, "magmaan_identification_error")
+    expect_true(all(err$direction_types == case$type))
+    if (case$type %in% c("scale", "location"))
+      expect_identical(err$direction_factors, "f")
+    if (case$type == "rotation") {
+      expect_true(all(grepl("f1", err$direction_factors)))
+      expect_true(all(grepl("f2", err$direction_factors)))
+    }
+    expect_identical(err$suggested_fixes, m$identification_report$suggested_fixes)
+    expect_match(conditionMessage(err), case$advice, fixed = TRUE)
+    if (case$type == "deficit") expect_false(grepl("std.lv", conditionMessage(err), fixed = TRUE))
+  }
+})

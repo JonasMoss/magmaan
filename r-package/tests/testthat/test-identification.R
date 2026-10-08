@@ -129,4 +129,35 @@ testthat::test_that("ordinal construction uses category schema without prototype
   expect_identical(structural_identification(spec, prototype = d), report)
   fit <- estimate(m, prepare_data(m, d), estimator = "DWLS")
   expect_identical(fit$diagnostics$identification, report)
+  ridge <- prepare_model(model_spec("f =~ x1 + x2 + x3", ordered = vars,
+                                    auto_fix_first = FALSE), prototype = d[0, vars])
+  ridge_report <- structural_identification(ridge)
+  expect_identical(ridge_report$status, "unidentified")
+  expect_true("scale" %in% ridge_report$direction_types)
+  expect_true(any(grepl("std.lv", ridge_report$suggested_fixes, fixed = TRUE)))
+})
+
+test_that("gauge classification and suggestions are exposed by the lab", {
+  scale <- structural_identification(model_spec("f =~ x1 + x2 + x3", auto_fix_first = FALSE))
+  expect_identical(scale$direction_types, "scale")
+  expect_identical(scale$direction_factors, "f")
+  expect_identical(scale$gauge_dimension, 1L)
+  expect_identical(scale$deficit_dimension, 0L)
+  expect_match(scale$suggested_fixes, "std.lv", fixed = TRUE)
+  location <- structural_identification("f =~ x1 + x2 + x3 + x4\nf ~ NA*1")
+  expect_identical(location$direction_types, "location")
+  combined <- structural_identification(model_spec(
+    "f =~ x1 + x2 + x3 + x4\nf ~ NA*1", auto_fix_first = FALSE))
+  expect_identical(combined$direction_types, c("scale", "location"))
+  deficit <- structural_identification("f =~ x1 + x2")
+  expect_identical(deficit$direction_types, "deficit")
+  expect_identical(deficit$gauge_dimension, 0L)
+  expect_match(deficit$suggested_fixes, "no automatic fix", fixed = TRUE)
+  rotation <- structural_identification(paste(
+    "f1 =~ x1 + x2 + x3 + x4 + x5 + x6",
+    "f2 =~ x1 + x2 + x3 + x4 + x5 + x6", sep = "\n"))
+  expect_identical(rotation$direction_types, c("rotation", "rotation"))
+  expect_true(all(grepl("f1", rotation$direction_factors)))
+  expect_true(all(grepl("f2", rotation$direction_factors)))
+  expect_true(all(grepl("not sufficient on their own", rotation$suggested_fixes, fixed = TRUE)))
 })

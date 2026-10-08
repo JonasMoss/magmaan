@@ -211,6 +211,16 @@ TEST_CASE("Identification: the null direction is the loading/variance rescaling"
   CHECK(text[0].find("f~~f") != std::string::npos);
   CHECK(text[0].find("x1~1") == std::string::npos);
   CHECK(text[0].find("x1~~x1") == std::string::npos);
+  for (double unit : {1e-3, 1e3}) {
+    Eigen::VectorXd rescaled = theta;
+    for (int k : loading_index) rescaled(k) *= unit;
+    rescaled(psi_index[0]) /= unit * unit;
+    const auto units = fr::check_structural_identification(m.pt, *ev, *con, false, &rescaled);
+    REQUIRE(units.direction_types.size() == 1);
+    CHECK(units.direction_types[0] == "scale");
+    CHECK(units.deficit_dimension == 0);
+  }
+
 }
 
 TEST_CASE("Identification: marker, std.lv, effects coding and tau-equivalence are identified") {
@@ -612,3 +622,105 @@ TEST_CASE("Identification: prepared ordinal structures reuse one schema-only ran
   CHECK(identification_checks == 2);
 }
 #endif
+
+TEST_CASE("Identification classification: scale location combined and deficit witnesses") {
+  const auto scale = check(model("f =~ x1 + x2 + x3", free_marker()));
+  REQUIRE(scale.direction_types.size() == 1);
+  CHECK(scale.direction_types[0] == "scale");
+  CHECK(scale.gauge_dimension == 1);
+  CHECK(scale.deficit_dimension == 0);
+  CHECK(scale.suggested_fixes[0].find("std.lv") != std::string::npos);
+
+  const std::string means = "f =~ x1 + x2 + x3 + x4\nf ~ NA*1";
+  magmaan::spec::BuildOptions mean_options;
+  mean_options.meanstructure = true;
+  const auto location = check(model(means, mean_options));
+  REQUIRE(location.direction_types.size() == 1);
+  CHECK(location.direction_types[0] == "location");
+  CHECK(location.suggested_fixes[0].find("latent mean to 0") != std::string::npos);
+  auto combined_options = free_marker();
+  combined_options.meanstructure = true;
+  const auto combined = check(model(means, combined_options));
+  CHECK(combined.gauge_dimension == 2);
+  CHECK(combined.deficit_dimension == 0);
+  REQUIRE(combined.direction_types.size() == 2);
+  CHECK(combined.direction_types[0] == "scale");
+  CHECK(combined.direction_types[1] == "location");
+  const auto combined_model = model(means, combined_options);
+  for (std::size_t i = 0; i < combined_model.pt.size(); ++i) {
+    if (combined_model.pt.free[i] <= 0) continue;
+    if (combined_model.pt.op[i] != magmaan::parse::Op::Intercept)
+      CHECK(std::abs(combined.null_directions(combined_model.pt.free[i]-1, 1)) < 1e-10);
+  }
+
+  const auto deficit = check(model("f =~ x1 + x2"));
+  CHECK(deficit.gauge_dimension == 0);
+  CHECK(deficit.deficit_dimension == 1);
+  REQUIRE(deficit.direction_types.size() == 1);
+  CHECK(deficit.direction_types[0] == "deficit");
+  CHECK(deficit.suggested_fixes[0].find("no automatic fix") != std::string::npos);
+}
+
+TEST_CASE("Identification classification: latent regression location shift preserves means") {
+  magmaan::spec::BuildOptions options;
+  options.meanstructure = true;
+  const auto m = model("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\n"
+                       "f2 ~ f1\nf1 ~ NA*1\nf2 ~ NA*1\nx4 ~ 0*1", options);
+  const auto r = check(m);
+  CHECK(r.status == IdentificationStatus::Unidentified);
+  CHECK(r.gauge_dimension == 1);
+  CHECK(r.deficit_dimension == 0);
+  REQUIRE(r.direction_types.size() == 1);
+  CHECK(r.direction_types[0] == "location");
+  // Pinning x4's intercept removes f2's location freedom. The remaining f1
+  // shift must move both structural means: d alpha = (I-B) e1.
+  int a1=-1, a2=-1;
+  for (std::size_t i=0; i<m.pt.size(); ++i) {
+    if (m.pt.op[i] != magmaan::parse::Op::Intercept || m.pt.free[i]<=0) continue;
+    if (m.names.row_lhs[i]=="f1") a1=m.pt.free[i]-1;
+    if (m.names.row_lhs[i]=="f2") a2=m.pt.free[i]-1;
+  }
+  REQUIRE(a1>=0); REQUIRE(a2>=0);
+  CHECK(std::abs(r.null_directions(a1,0))>1e-3);
+  CHECK(std::abs(r.null_directions(a2,0))>1e-3);
+  auto ev = magmaan::model::ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto con = magmaan::estimate::build_eq_constraints(m.pt);
+  REQUIRE(con.has_value());
+  const Eigen::VectorXd theta = Eigen::VectorXd::Constant(m.pt.n_free(), 0.5);
+  auto at = fr::check_structural_identification(m.pt, *ev, *con, false, &theta);
+  REQUIRE(at.direction_types.size() == 1);
+  CHECK(at.direction_types[0] == "location");
+  auto evaluation = ev->evaluate(theta, true, true);
+  REQUIRE(evaluation.has_value());
+  const Eigen::VectorXd direction = at.null_directions.col(0);
+  CHECK((evaluation->J_mu * direction).norm() < 1e-10);
+  CHECK((evaluation->J_sigma * direction).norm() < 1e-10);
+  // The originally prescribed d alpha = e1 misses the induced shift of f2.
+  Eigen::VectorXd uncorrected = direction;
+  uncorrected(a2) = 0.0;
+  CHECK((evaluation->J_mu * uncorrected).norm() > 0.1);
+
+}
+
+TEST_CASE("Identification classification: free cross loadings retain rotation with fixed markers") {
+  const std::string syntax="f1 =~ x1 + x2 + x3 + x4 + x5 + x6\n"
+                           "f2 =~ x1 + x2 + x3 + x4 + x5 + x6";
+  for (bool markers : {false, true}) {
+    const auto r=check(model(syntax, markers ? magmaan::spec::BuildOptions{} : free_marker()));
+    CHECK(r.status==IdentificationStatus::Unidentified);
+    CHECK(r.deficit_dimension==0);
+    CHECK(r.gauge_dimension==(markers ? 2 : 4));
+    int rotations=0;
+    for (std::size_t j=0; j<r.direction_types.size(); ++j) {
+      if (r.direction_types[j]!="rotation") continue;
+      ++rotations;
+      CHECK_FALSE(r.direction_factors[j].empty());
+      CHECK(r.suggested_fixes[j].find("not sufficient on their own")!=std::string::npos);
+    }
+    CHECK(rotations==2);
+  }
+  const auto simple=check(model("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6"));
+  CHECK(simple.status==IdentificationStatus::Identified);
+  CHECK(simple.direction_types.empty());
+}

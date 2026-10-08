@@ -50,7 +50,8 @@ fit_expected<IdentificationReport> schema_identification(
       return mixed_moment_jacobian(schema, *layout, e->moments, e->J_sigma,
                                   e->J_mu, point, parameterization, nullptr);
   };
-  return check_identification_rank(pt, *con, !pt.nonlinear_eq_rows.empty(), map, jacobian);
+  return check_identification_rank(pt, *con, !pt.nonlinear_eq_rows.empty(), map,
+                                   jacobian, nullptr, {}, &*ev);
 }
 }  // namespace
 
@@ -957,7 +958,7 @@ IdentificationReport ordinal_identification(
   return frontier::check_identification_rank(
       pt, con, nl.active(),
       c.stats != nullptr ? IdentificationMap::Ordinal : IdentificationMap::Mixed,
-      jacobian, &theta);
+      jacobian, &theta, {}, &ev);
 }
 
 void attach_ordinal_geometric_diagnostics(
