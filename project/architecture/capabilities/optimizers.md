@@ -173,38 +173,48 @@ reported decisions, `both_failed` counts as agreement and is reported separately
 failed endpoints are not evidence of a fitting-rule difference.
 
 Per-replicate data, class counts, design timing and maximum start/first-stage
-gaps go to `~/.cache/magmaan-logs/task-129.4/`. DWLS first-stage gaps compare
-thresholds and ordinal/mixed sample matrices; FIML compares saturated h1 means
-and covariances. The baseline's opaque FIML h1 pointer requires a read-only
-accessor supplied through `options(magmaan.hard.h1_accessor = function(pointer))`,
-returning `mean` and `cov`; unavailable diagnostics are explicit in the CSV and
-fail final acceptance. The measurement helper and runner are retained beside
-the untracked evidence, without changing fitting code.
+gaps are written to the configured untracked output directory. DWLS first-stage
+gaps compare thresholds and ordinal/mixed sample matrices. FIML uses the internal
+`prepared_fiml_h1_impl` accessor: converged oracle H1 moments must agree at
+1e-10 relative and starts at 1e-6. Oracle EM nonconvergence is recorded as
+`h1_nonconverged` agreement only when the preset also reports nonconvergence,
+uses the oracle ridge rule and records covariance repairs; moments, starts and
+endpoints are excluded in that class (TASK-129.7). The fit's H1 update and repair
+counts, marker-switch table and `post_check$ok` verdict are recorded directly.
+Read-only marker-refit exit instrumentation retains candidate and reverted-fit
+attempts, including their first-start parameter keys.
 
 The gate requests 100 replicates per cell in complete rounds;
 `MAGMAAN_HARD_PARITY_REPS` reduces replication and
 `MAGMAAN_HARD_PARITY_WORKERS` selects one or two workers. It stops starting
 rounds after 28 minutes, reserving time to finish the current round.
-The baseline permits documented missing marker/post-check features and the
-proved standardized affine-retry defect as separate classes. The approved
-TASK-129.7 amendment also classifies FIML start gaps above 1e-6 accompanied by
-h1 gaps within a factor of ten as `pending_feature` in the baseline only.
-Rule differences fail the gate. The merger sets `MAGMAAN_HARD_PARITY_FINAL=1`
-after TASK-129.1–.3 and .7:
-missing features also fail, and path-divergence rates above 5% require a decision.
-Endpoints use the existing estimate/gradient/statistic/SE-unit contract above.
+`MAGMAAN_HARD_PARITY_FINAL=1` requires zero `rule_difference` and zero
+`pending_feature`. The endpoint contract remains unchanged. Post-check verdicts
+are compared when endpoints agree. Marker decisions must agree except within
+1e-8 of the deciding correlation threshold .1, or for nonconverged H1.
+The approved TASK-129.4 amendment includes attempt-level `path_divergence`:
+matching first starts and rule-consistent acceptance on every attempt permit
+different retry counts with agreeing final verdicts. Rates above 5% require a
+recorded diagnosis. D7 is covered by TASK-129.8: identical-point objective gaps
+below 7.1e-15 relative and gradient gaps below 1e-12 absolute, with verified PORT
+path divergence on very flat endpoints (smallest Hessian eigenvalue about 7e-8).
+No exact arithmetic-order parity is required.
 
-The completed main baseline (9ad5cb3d) uses 20 replicates per cell, two workers,
-and 909.690 seconds: 279 agree, 35 both_failed, 44 pending_feature, one
-path_divergence and one rule_difference. Evidence is in the `completed/`
-subdirectory. D7 N=30/group seed 12958009 has matching starts (5.079077e-16),
-but lavaan rejects its first attempt (gradient .001185135) and accepts a
-standardized retry, while magmaan accepts one attempt (gradient .000148144).
-Both final fits converge; the endpoint contract fails, so the registered
-classification requires a decision. D7 seed 12958008 is path_divergence
-(5% of that cell). Maximum FIML start/h1 gaps are 9.438837e-4/1.080801e-3;
-these remain TASK-129.7 pending features. No final acceptance is implied.
-The existing 160-fit gate still passes.
+The final TASK-129.12 run on main `2d683e63` completed 20 replicates per
+cell (360 total), two workers, in 701.366 seconds: 297 `agree`, 52 `both_failed`,
+two `h1_nonconverged`, three `path_divergence`, zero `known_defect` or
+`pending_feature`, and six `rule_difference`. D7 has two path divergences (10%,
+covered by TASK-129.8); D1 N=15 has one (5%). Marker decisions agree on all
+360 pairs (358 required comparisons excluding stalled H1); post-check agrees
+on all 302 compared endpoints and all 360 raw verdict pairs.
+
+Acceptance remains blocked: D5 N=20 seeds 12953001, 12953007, 12953014,
+12953017, 12953018 and 12953019 have converged H1 moment gaps above 1e-10
+relative (6.48e-9 to 3.33e-6). Seed 12953019 also exceeds the 1e-6 start
+threshold (1.33e-6). No tolerance or class was changed to exempt them.
+Evidence is retained under `~/.cache/magmaan-logs/task-129.12/`;
+baseline evidence remains under `~/.cache/magmaan-logs/task-129.4/completed/`.
+The existing 160-fit gate and full magmaanlab testthat suite pass.
 
 Task-59's focused seed 590214 investigation temporarily recorded each preset
 objective callback's coordinates/value/gradient and traced installed lavaan's

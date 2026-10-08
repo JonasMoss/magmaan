@@ -113,6 +113,30 @@
   result$reason <- if (result$ok) "endpoint contract" else "endpoint difference"
   result
 }
+# The public marker table rounds correlations to three decimals. Evaluate the
+# oracle item-rest correlation before rounding for the narrow boundary exception.
+.hard_switch_boundary <- function(oracle, case) {
+  pt <- lavaan::lavaanify(case$model,auto=TRUE,meanstructure=TRUE,fixed.x=FALSE)
+  covariance <- oracle@h1$implied$cov
+  if(is.null(covariance)) return(FALSE)
+  for(lv in unique(pt$lhs[pt$op=="=~"])) {
+    rows <- pt[pt$op=="=~" & pt$lhs==lv,]
+    if(sum(rows$free==0L)!=1L || rows$free[1]!=0L || rows$ustart[1]!=1) next
+    correlations <- lapply(seq_along(covariance),function(b) {
+      names <- rownames(covariance[[b]])
+      if(is.null(names)) names <- oracle@Data@ov.names[[b]]
+      if(!all(rows$rhs %in% names)) return(NULL)
+      c <- covariance[[b]][match(rows$rhs,names),match(rows$rhs,names),drop=FALSE]
+      d <- diag(c); r <- rowSums(c)
+      (r-d)/sqrt(d*(sum(c)-2*r+d))
+    })
+    correlations <- Filter(Negate(is.null),correlations)
+    if(!length(correlations)) next
+    r <- colMeans(do.call(rbind,correlations),na.rm=TRUE)
+    if(any(abs(abs(r[c(1L,which.max(abs(r)))])-.1)<1e-8,na.rm=TRUE)) return(TRUE)
+  }
+  FALSE
+}
 .hard_replicate <- function(design,n,seed,trace_state,final) {
   tick <- proc.time()[["elapsed"]]
   set.seed(seed); case <- .hard_design(design,n)
@@ -126,36 +150,53 @@
     args$groups <- la$group <- "g"; args$group_equal <- la$group.equal <- "loadings"
   }
   trace_state$attempts <- list()
+  trace_state$h1 <- NULL
   oracle <- .hard_capture(function() do.call(lavaan::sem,la))
   attempts <- trace_state$attempts
+  trace_state$m_runs <- list()
   actual <- .hard_capture(function() do.call(magmaanlab::fit_model,args))
   m <- actual$value; l <- oracle$value
   me <- nzchar(actual$error); le <- nzchar(oracle$error)
   ma <- if (!me) m$fitting$attempts else list()
+  first_m <- m
   selected <- if (!me) m$fitting$selected_attempt else NA_integer_
+  if(!me && length(trace_state$m_runs)) {
+    runs <- trace_state$m_runs
+    first_m <- runs[[1]]
+    ma <- unlist(lapply(runs,function(r) r$fitting$attempts),recursive=FALSE)
+    selected <- sum(vapply(head(runs,-1L),function(r) length(r$fitting$attempts),integer(1))) +
+      tail(runs,1L)[[1]]$fitting$selected_attempt
+  }
   ms <- if(length(ma)) ma[[selected]] else list()
   ls <- if(length(attempts)) attempts[[length(attempts)]] else list()
   mc <- if(me) NA else m$converged
   lc <- if(le) NA else lavaan::lavInspect(l,"converged")
   mg <- if(me) NA_real_ else ms$gradient_max
   lg <- if(le || !length(ls$gradient)) NA_real_ else max(abs(ls$gradient))
-  post_m <- if(!me && !is.null(m$fitting$post_check)) m$fitting$post_check else NA
+  post_m <- if(!me && !is.null(m$fitting$post_check)) m$fitting$post_check$ok else NA
   post_l <- if(le) NA else suppressWarnings(lavaan::lavInspect(l,"post.check"))
   switch_l <- if(le) NA else any(grepl("marker",oracle$warnings,ignore.case=TRUE))
   if (!le && design %in% c("D1","D2","D5","D6","D6b","D7","D4")) {
     pt <- lavaan::parTable(l); markers <- pt[pt$op=="=~" & pt$rhs %in% c("y1","x1"),]
     switch_l <- switch_l || any(markers$free>0 | abs(markers$est-1)>1e-8)
   }
-  switch_m <- if(!me && !is.null(m$fitting$marker_switch)) m$fitting$marker_switch else NA
-  # Missing baseline marker metadata corresponds to main's keep-marker behavior.
-  decision_m <- if(is.na(switch_m)) FALSE else isTRUE(switch_m)
+  marker_info <- if(!me) m$fitting$marker_switch else NULL
+  switch_m <- if(is.null(marker_info)) NA else nrow(marker_info)>0L
+  decision_m <- isTRUE(switch_m)
+  switch_boundary <- !me && !le && !is.na(switch_l) && decision_m!=switch_l &&
+    .hard_switch_boundary(l,case)
+  h1_l <- if(case$estimator=="FIML") trace_state$h1 else NULL
+  h1_m <- if(!me && case$estimator=="FIML") m$fitting$h1 else NULL
+  h1_nonconverged <- !is.null(h1_l) && identical(h1_l$converged,FALSE)
+  h1_contract <- !is.null(h1_m) && all(!h1_m$converged) &&
+    isTRUE(h1_m$lavaan_covariance_ridge) && all(h1_m$covariance_repairs>0L)
   starts_m <- if(length(ma)) ma[[1]]$start else numeric()
   starts_l <- if(length(attempts)) attempts[[1]]$theta_start else numeric()
   # Compare original free parameters by partable identity, since ordinal and
   # constrained optimizer coordinates have different storage orders.
   start_gap <- NA_real_
   if (!me && length(attempts) && length(starts_m)>0) {
-    mp <- m$partable[m$partable$free>0,]
+    mp <- first_m$partable[first_m$partable$free>0,]
     lp <- attempts[[1]]$partable
     lk <- .hard_key(lp); mk <- .hard_key(mp)
     if(setequal(mk,lk) && !anyDuplicated(mk) && !anyDuplicated(lk)) {
@@ -170,10 +211,12 @@
   if (!me && !le && case$estimator %in% c("FIML","DWLS")) {
     stage <- tryCatch({
       if(case$estimator=="FIML") {
-        accessor <- getOption("magmaan.hard.h1_accessor")
-        if(!is.function(accessor)) stop("FIML h1 accessor unavailable")
-        h <- accessor(m$fiml_h1); ref <- lavaan::lavInspect(l,"h1")
-        max(abs(c(h$mean-ref$mean,h$cov-ref$cov)))
+        prepared <- magmaanlab::prepare_model(case$model,meanstructure=TRUE,fixed_x=FALSE)
+        data <- magmaanlab::prepare_data(prepared,case$data,kind="raw")
+        h <- getFromNamespace("prepared_fiml_h1_impl","magmaanlab")(prepared$native,data$native)
+        ref <- lavaan::lavInspect(l,"h1")
+        a <- c(h$mean[[1]],h$cov[[1]]); b <- c(ref$mean,ref$cov)
+        max(abs(a-b)/pmax(1,abs(a),abs(b)))
       } else {
         st <- if(isTRUE(m$mixed_ordinal)) m$mixed_ordinal_stats else m$ordinal_stats
         ref <- lavaan::lavInspect(l,"sampstat")
@@ -185,7 +228,7 @@
   }
   endpoint <- list(ok=FALSE,estimate_gap=NA_real_,chisq_gap=NA_real_,
                    endpoint_gradient=NA_real_,se_units=NA_real_,reason="fit error")
-  if (!me && !le && !(identical(mc,FALSE) && identical(lc,FALSE))) endpoint <- tryCatch(.hard_endpoint(m,l),error=function(e) {
+  if (!me && !le && !h1_nonconverged && !(identical(mc,FALSE) && identical(lc,FALSE))) endpoint <- tryCatch(.hard_endpoint(m,l),error=function(e) {
     endpoint$reason <- conditionMessage(e); endpoint
   })
   reason <- endpoint$reason; class <- "rule_difference"
@@ -193,11 +236,20 @@
   defect <- me && !le && isTRUE(lc) && design=="D3b" &&
     grepl("standardized|affine RHS|constraint surface",actual$error) &&
     any(vapply(attempts,function(a) identical(a$parscale,"standardized"),logical(1)))
-  switch_diff <- !is.na(switch_l) && decision_m!=switch_l
+  switch_diff <- !is.na(switch_l) && decision_m!=switch_l && !switch_boundary && !h1_nonconverged
   post_diff <- !is.na(post_m) && !is.na(post_l) && post_m!=post_l
   own_rule <- function(conv,status,grad) !is.na(conv) && !is.null(status) &&
     is.finite(grad) && identical(isTRUE(conv),status %in% 3:6 && grad<=1e-3)
-  if (defect) { class <- "known_defect"; reason <- actual$error
+  attempts_rule <- function(attempts,oracle=FALSE) length(attempts)>0L && all(vapply(attempts,function(a) {
+    status <- if(oracle) a$status else a$raw_status
+    grad <- if(oracle) max(abs(a$gradient)) else a$gradient_max
+    own_rule(if(oracle) a$converged else a$accepted,status,grad)
+  },logical(1)))
+  stage_agree <- case$estimator!="FIML" ||
+    (is.finite(first_stage_gap) && first_stage_gap<=1e-10)
+  if (!me && !le && h1_nonconverged && h1_contract) {
+    class <- "h1_nonconverged"; reason <- "oracle H1 stalled; preset nonconvergence and ridge agree"
+  } else if (defect) { class <- "known_defect"; reason <- actual$error
   } else if (!final && switch_diff && is.na(switch_m)) {
     class <- "pending_feature"; reason <- "baseline marker switch absent"
   } else if (!final && case$estimator=="FIML" && is.finite(start_gap) &&
@@ -205,22 +257,24 @@
              first_stage_gap/start_gap>=.1 && first_stage_gap/start_gap<=10) {
     # Planner amendment: comparable h1/start gaps belong to TASK-129.7.
     class <- "pending_feature"; reason <- "TASK-129.7 FIML h1/start parity pending"
-  } else if (!me && !le && starts_agree && !switch_diff && !post_diff &&
+  } else if (!me && !le && starts_agree && stage_agree && !switch_diff && (!post_diff || !endpoint$ok) &&
              identical(mc,FALSE) && identical(lc,FALSE) && length(ma)==length(attempts)) {
     class <- "both_failed"; reason <- "both searches failed; equal attempt counts"
-  } else if (!me && !le && starts_agree && !switch_diff && !post_diff && endpoint$ok &&
+  } else if (!me && !le && starts_agree && stage_agree && !switch_diff && !post_diff && endpoint$ok &&
              identical(mc,lc) && length(ma)==length(attempts)) {
     class <- "agree"
-  } else if (!me && !le && starts_agree && !switch_diff && !post_diff && !endpoint$ok &&
-             !identical(mc,lc) && own_rule(mc,ms$raw_status,mg) && own_rule(lc,ls$status,lg)) {
+  } else if (!me && !le && starts_agree && stage_agree && !switch_diff && (!post_diff || !endpoint$ok) &&
+             attempts_rule(ma) && attempts_rule(attempts,TRUE) &&
+             ((!endpoint$ok && !identical(mc,lc)) ||
+              (length(ma)!=length(attempts) && identical(mc,lc)))) {
     class <- "path_divergence"
   } else {
     reason <- paste(c(if(me) actual$error,if(le) oracle$error,
-      if(!starts_agree) "first starts differ/unavailable",if(switch_diff) "marker decision differs",
+      if(!starts_agree) "first starts differ/unavailable",if(!stage_agree) "converged H1 moments differ/unavailable",if(switch_diff) "marker decision differs",
       if(post_diff) "post.check differs",if(!identical(mc,lc)) "convergence differs",
       if(length(ma)!=length(attempts)) "attempt counts differ",endpoint$reason),collapse="; ")
   }
-  if (final && class=="agree" && (is.na(post_m)||is.na(switch_m))) {
+  if (final && !me && !le && (is.na(post_m)||is.na(switch_m))) {
     class <- "pending_feature"; reason <- "required final metadata absent"
   }
   data.frame(design=design,n=n,seed=seed,class=class,reason=reason,
@@ -230,6 +284,12 @@
     m_gradient=mg,l_gradient=lg,m_status=if(is.null(ms$raw_status)) NA else ms$raw_status,
     l_status=if(is.null(ls$status)) NA else ls$status,
     m_post_check=post_m,l_post_check=post_l,m_marker_switch=switch_m,l_marker_switch=switch_l,
+    switch_boundary=switch_boundary,h1_nonconverged=h1_nonconverged,
+    m_h1_converged=if(is.null(h1_m)) NA else all(h1_m$converged),
+    l_h1_converged=if(is.null(h1_l)) NA else h1_l$converged,
+    m_h1_iterations=.hard_text(if(is.null(h1_m)) NULL else h1_m$iterations),
+    m_h1_repairs=.hard_text(if(is.null(h1_m)) NULL else h1_m$covariance_repairs),
+    m_h1_ridge=if(is.null(h1_m)) NA else h1_m$lavaan_covariance_ridge,
     m_attempt_count=length(ma),l_attempt_count=length(attempts),m_selected=selected,
     l_selected=if(length(attempts)) length(attempts) else NA_integer_,
     seconds=proc.time()[["elapsed"]]-tick,start_gap=start_gap,
@@ -274,7 +334,13 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
         fmin=attr(returnValue(),"fx"),iterations=attr(returnValue(),"iterations"))
     }
   }))
-  on.exit({untrace("lav_model_est",where=asNamespace("lavaan")); options(old)},add=TRUE)
+  trace("lav_em_squarem",where=asNamespace("lavaan"),print=FALSE,
+    exit=quote({recorder <- getOption("magmaan.hard.trace"); recorder$h1 <- returnValue()}))
+  trace(".marker_run",where=asNamespace("magmaanlab"),print=FALSE,
+    exit=quote({recorder <- getOption("magmaan.hard.trace");
+      recorder$m_runs[[length(recorder$m_runs)+1L]] <- returnValue()}))
+  on.exit({untrace(".marker_run",where=asNamespace("magmaanlab")); untrace("lav_model_est",where=asNamespace("lavaan"));
+    untrace("lav_em_squarem",where=asNamespace("lavaan")); options(old)},add=TRUE)
   # Each fork has its own trace recorder. Only the parent writes evidence.
   workers <- as.integer(Sys.getenv("MAGMAAN_HARD_PARITY_WORKERS","1"))
   stopifnot(workers %in% 1:2)
@@ -285,6 +351,8 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
       .hard_replicate(cells$design[cell],cells$n[cell],
         12940000L+1000L*cell+replicate,state,final)
     },mc.cores=workers,mc.set.seed=FALSE,mc.preschedule=FALSE)
+    errors <- vapply(batch,inherits,logical(1),"try-error")
+    if(any(errors)) stop(paste(unlist(batch[errors]),collapse="\n"))
     for(row in batch) {
       rows[[length(rows)+1L]] <- row
       utils::write.table(row,file=file.path(directory,"replicates.csv"),sep=",",
@@ -293,7 +361,7 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
     cat(sprintf("\nhard parity round %d: %.1f seconds\n",replicate,proc.time()[["elapsed"]]-started))
   }
   results <- do.call(rbind,rows)
-  classes <- c("agree","both_failed","path_divergence","known_defect","pending_feature","rule_difference")
+  classes <- c("agree","both_failed","h1_nonconverged","path_divergence","known_defect","pending_feature","rule_difference")
   summary <- as.data.frame(table(factor(paste(results$design,results$n),
     levels=paste(cells$design,cells$n)),factor(results$class,levels=classes)))
   names(summary) <- c("cell","class","count")
@@ -315,10 +383,13 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
   if(final) {
     expect_equal(sum(results$class=="pending_feature"),0L)
     stage_rows <- results$design %in% c("D5","D6","D6b") &
-      !nzchar(results$m_error) & !nzchar(results$l_error)
+      !results$h1_nonconverged & !nzchar(results$m_error) & !nzchar(results$l_error)
     expect_true(all(is.finite(results$first_stage_gap[stage_rows])),
                 info="first-stage diagnostics must be available for final acceptance")
     rates <- tapply(results$class=="path_divergence",paste(results$design,results$n),mean)
-    expect_true(all(rates<=.05),info=paste(names(rates)[rates>.05],collapse=", "))
+    diagnoses <- c("D7 30"="TASK-129.8: identical-point parity; flat-surface PORT path sensitivity")
+    flagged <- names(rates)[rates>.05]
+    writeLines(paste(flagged,diagnoses[flagged],sep=": "),file.path(directory,"path_diagnoses.txt"))
+    expect_true(all(flagged %in% names(diagnoses)),info=paste(flagged,collapse=", "))
   }
 })

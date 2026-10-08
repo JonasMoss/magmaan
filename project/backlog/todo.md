@@ -354,23 +354,21 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   H1 endpoints are outside the compatibility contract; non-convergence and
   the repair rule are tested, with update/repair diagnostics recorded in
   `fit$fitting$h1`. Native H1 is unchanged.
-- [ ] **0.2.1 — hard-case parity gate (TASK-129.4).** Opt-in comparison with
-  live lavaan at small N (Heywood cases, non-convergence, retries, marker
-  switches), structured means with equality constraints, random covariates,
-  FIML, DWLS and two groups, with pre-registered classes: no rule differences
-  may remain; floating-point path divergence is reported per cell. The planner's
-  amendment compares starts by parameter key at 1e-6 relative, records first-stage
-  gaps and timing, and reports equal-attempt non-converged pairs as `both_failed`
-  agreement without comparing their failed endpoints. The harness
-  is `r-package/tests/testthat/test_preset_hard_parity.R`; baseline evidence is
-  untracked under `~/.cache/magmaan-logs/task-129.4/`. Final acceptance remains
-  with the merger after TASK-129.1–.3 and .7. The approved baseline treats
-  comparable FIML h1/start gaps as TASK-129.7 pending features. The completed
-  360-replicate baseline (20/cell, two workers, 909.690 seconds) has 279 agree,
-  35 both_failed, 44 pending_feature, one path_divergence and one rule_difference.
-  D7 N=30/group seed 12958009 needs a decision: matching starts, both final
-  fits converged, but lavaan retries after first-attempt rejection and magmaan
-  accepts one attempt; endpoints exceed the contract. Evidence: `completed/`.
+- [ ] **0.2.1 — final hard-case parity gate (TASK-129.12; baseline TASK-129.4).**
+  The opt-in live-lavaan gate covers 18 small-N ML/FIML/DWLS cells, structured
+  means, equality constraints, random covariates and groups. The final harness
+  consumes marker/post-check/H1 diagnostics, includes marker reversion attempts,
+  and applies the approved attempt-level path-divergence and nonconverged-H1
+  classes. Converged H1 moments require 1e-10 relative agreement; starts require
+  1e-6. Zero rule differences and pending features are required; rates above 5%
+  need a recorded diagnosis (D7: TASK-129.8). Final 20/cell evidence is retained
+  untracked under `~/.cache/magmaan-logs/task-129.12/`. The final run completed
+  360 replicates in 701.366 seconds: 297 agree, 52 both_failed, two
+  h1_nonconverged, three path_divergence, zero pending features, six rule
+  differences. D7's 10% path divergence is diagnosed by TASK-129.8. Acceptance
+  is blocked on six D5 N=20 converged-H1 moment gaps above 1e-10; seed 12953019
+  also exceeds the first-start tolerance. TASK-129.12 needs a decision. The
+  existing 160-fit gate and full lab testthat suite pass.
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,
