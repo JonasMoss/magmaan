@@ -13,6 +13,7 @@
 #include <Eigen/Cholesky>
 
 #include "magmaan/estimate/ml_numerics.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
 
@@ -393,11 +394,35 @@ reduced_information_diagonal(const model::ModelEvaluator& ev,
   return sample;
 }
 
+bool objective_coordinate_scaling(optim::CoordinateScaling kind) noexcept {
+  return kind == optim::CoordinateScaling::Objective ||
+         kind == optim::CoordinateScaling::ObjectiveDownward;
+}
+
+fit_expected<Eigen::VectorXd>
+reduced_objective_diagonal(const model::ModelEvaluator& ev, const EqConstraints& con,
+                          const data::SampleStats& samp, const Eigen::VectorXd& alpha0,
+                          const gmm::Weight& weight) {
+  if (alpha0.size() != con.n_alpha)
+    return std::unexpected(numeric("objective coordinate diagonal: start has the wrong size"));
+  const Eigen::VectorXd theta = con.expand(alpha0);
+  auto problem = gmm::residuals(ev, samp, theta, weight);
+  if (!problem) return std::unexpected(problem.error());
+  auto jacobian = problem->J(theta);
+  if (!jacobian) return std::unexpected(jacobian.error());
+  const Eigen::MatrixXd reduced = *jacobian * con.K();
+  return Eigen::VectorXd(reduced.array().square().colwise().sum().transpose());
+}
+
 fit_expected<CoordinateMap>
 coordinate_map(optim::CoordinateScaling kind, bool center_locations,
                const spec::LatentStructure& pt, const model::MatrixRep& rep,
                const model::ModelEvaluator& ev, const EqConstraints& con,
-               const data::SampleStats& samp, const Eigen::VectorXd& alpha0) {
+               const data::SampleStats& samp, const Eigen::VectorXd& alpha0,
+               const Eigen::VectorXd* objective_diagonal) {
+  if (objective_coordinate_scaling(kind) && !objective_diagonal)
+    return std::unexpected(FitError{FitError::Kind::Unsupported,
+        "objective coordinate scaling requires a fixed-weight least-squares route", 0, 0.0});
   const Eigen::Index n = con.n_alpha;
   if (alpha0.size() != n)
     return std::unexpected(numeric("coordinate map: start has the wrong size"));
@@ -428,6 +453,12 @@ coordinate_map(optim::CoordinateScaling kind, bool center_locations,
       }
     }
   }
+  if (objective_coordinate_scaling(kind)) {
+    auto scale = frontier::objective_coordinate_scale(*reduced, *objective_diagonal,
+        kind == optim::CoordinateScaling::ObjectiveDownward);
+    if (!scale) return std::unexpected(scale.error());
+    out.scale = std::move(*scale);
+  }
   if (center_locations) {
     std::vector<bool> location(ix(pt.n_free()), false);
     for (std::size_t i = 0; i < pt.size(); ++i) {
@@ -455,6 +486,8 @@ const char* coordinate_scaling_name(optim::CoordinateScaling kind) noexcept {
     case optim::CoordinateScaling::None:        return "none";
     case optim::CoordinateScaling::SampleUnits: return "sample_units";
     case optim::CoordinateScaling::Information: return "information";
+    case optim::CoordinateScaling::Objective: return "objective";
+    case optim::CoordinateScaling::ObjectiveDownward: return "objective_downward";
   }
   return "none";
 }

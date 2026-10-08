@@ -205,6 +205,14 @@ coordinate_scaling` selects $s$:
   loadings information-free), not a safe large step. The start-weighted term
   keeps a start near a singular implied covariance from receiving a first
   step its own curvature does not allow.
+- `Objective` (opt-in): continuous fixed-weight LS uses the exact fitting
+  Gauss–Newton diagonal $h_j = \operatorname{diag}(K^T J^T W J K)_j$ at
+  the start, including group $n_b/N$ factors for the scalar $\frac12 r^TWr$.
+  With sample unit $u_j$, the scale is
+  $u_j\,\operatorname{clamp}(1/(u_j\sqrt{h_j}),10^{-6},10^6)$.
+- `ObjectiveDownward` (opt-in): the same fitting diagonal with multipliers
+  clamped to $[10^{-3},1]$. Both objective modes retain the sample unit when
+  $h_j$ is nonfinite or nonpositive; location centering is unchanged.
 - `None`: raw coordinates.
 
 With `center_locations` (default on), coordinates that act only on means and
@@ -235,9 +243,19 @@ each observed variable multiplied by a power of ten between $10^{-2}$ and
 $10^{2}$, it is the best or tied rule for L-BFGS and PORT from the layered start
 and for L-BFGS from the current start; PORT from the current start loses a few
 pairs to path sensitivity from far starts). In R, `control$coordinate_scaling`
-is `"none"`, `"sample_units"` or `"information"`, and `control$center_locations`
+is `"none"`, `"sample_units"`, `"information"`, `"objective"` or
+`"objective_downward"`, and `control$center_locations`
 a logical. The legacy `ml_sample_scaling = TRUE/FALSE` maps to
 `"sample_units"`/`"none"`.
+
+The objective modes cover continuous ULS, DWLS, WLS/ADF, scalar GLS and
+ML2S fixed-weight Stage-2 fits. ML and direct FIML, and residual backends
+(Ceres and PORT-NLS), reject them with `FitError::Kind::Unsupported`. Routes
+without this coordinate layer retain their existing behavior: ordinal and
+mixed fits currently ignore `coordinate_scaling` for every mode. Their
+objective-coordinate wiring is tracked by TASK-33.10.5.6. NT ML2S uses ML
+and therefore rejects the objective modes. Defaults and acceptance rules
+are unchanged; later adoption requires TASK-33.10.5.5 evidence.
 
 ## Composable starting values
 

@@ -4,6 +4,7 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/gmm/weight.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -68,19 +69,31 @@ reduced_information_diagonal(const model::ModelEvaluator& ev,
                              const data::SampleStats& samp,
                              const Eigen::VectorXd& alpha0);
 
+// GN diagonal of the exact 1/2 weighted residual objective in alpha coordinates.
+// Includes block n_b/N factors through the fitting residual adapter.
+fit_expected<Eigen::VectorXd>
+reduced_objective_diagonal(const model::ModelEvaluator& ev, const EqConstraints& con,
+                          const data::SampleStats& samp, const Eigen::VectorXd& alpha0,
+                          const gmm::Weight& weight);
+
+bool objective_coordinate_scaling(optim::CoordinateScaling kind) noexcept;
+
 // The coordinate map for `kind` at the start `alpha0`. Information scaling
 // takes 1/sqrt(information) (reduced_information_diagonal) where that is finer
 // than the sample unit, down to
 // 1e-3 of the unit, and otherwise keeps the unit: low information at a start
 // signals a degeneracy (a collapsed variance, zero loadings), not a safe large
 // step. It falls back to the units where the information cannot be evaluated.
+// Objective modes require the actual fitting GN diagonal; absent weights are
+// Unsupported. Their primitive retains units for invalid/degenerate diagonals.
 // With `center_locations`, coordinates acting only on means and intercepts are
 // centered at alpha0. `kind == None` gives the identity map.
 fit_expected<CoordinateMap>
 coordinate_map(optim::CoordinateScaling kind, bool center_locations,
                const spec::LatentStructure& pt, const model::MatrixRep& rep,
                const model::ModelEvaluator& ev, const EqConstraints& con,
-               const data::SampleStats& samp, const Eigen::VectorXd& alpha0);
+               const data::SampleStats& samp, const Eigen::VectorXd& alpha0,
+               const Eigen::VectorXd* objective_diagonal = nullptr);
 
 const char* coordinate_scaling_name(optim::CoordinateScaling kind) noexcept;
 

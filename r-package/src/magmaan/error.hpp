@@ -66,6 +66,7 @@ struct FitError {
     LineSearchFailed,
     InvalidStartValues,
     NumericIssue,
+    Unsupported, // A requested option is unsupported on this route; nothing was fitted.
   };
   Kind         kind        = Kind::OptimizerNonConvergence;
   std::string  detail      = {};

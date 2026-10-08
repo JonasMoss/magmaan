@@ -1514,6 +1514,12 @@ separate final decision for each explicitly covered scope.
   are separate work. See [sphere implementation](../architecture/roadmap.md)
   and [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
+- [x] **M — opt-in objective-aware continuous LS coordinates (TASK-33.10.5.4).**
+  Actual fixed-weight GN diagonal drives two-sided/downward maps; defaults
+  and audit rules stay unchanged. See optimizer controls and LS capability.
+  Ordinal/mixed wiring remains TASK-33.10.5.6; adoption requires the
+  pre-registered TASK-33.10.5.5 decision study.
+
 - [x] **M — warn about continuous LS measurement-unit spread (TASK-33.10.5.3).**
   Core diagnostics record the maximum within-block continuous variance ratio;
   ULS/DWLS/WLS/ADF advise rescaling only above 1000. Complete-data, ML2S

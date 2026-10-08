@@ -141,6 +141,8 @@ fit_fiml_impl(spec::LatentStructure pt,
     if (auto m = coordinate_map(opts.coordinate_scaling, opts.center_locations, pt,
                                 rep, ev, con, start_samp, con.contract(x0)))
       map = std::move(*m);
+    else if (objective_coordinate_scaling(opts.coordinate_scaling))
+      return std::unexpected(m.error());
   }
 
   auto finalize = [&](Estimates est) {

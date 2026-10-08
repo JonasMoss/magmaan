@@ -24,7 +24,16 @@ fit_model(model, data, estimator = "ML", groups = NULL, ..., cluster = NULL, ord
 \item{test}{Test convention. fit_model is estimate-only and accepts only "none".}
 \item{W}{Fixed fitting-weight matrix, or a per-group list in model moment order.}
 \item{optimizer}{Native optimizer name; NULL uses the route default.}
-\item{control}{Named optimizer control list, including iteration limits, tolerances and optional starts.}
+\item{control}{Named optimizer control list, including iteration limits,
+tolerances and optional starts. \code{coordinate_scaling} accepts
+\code{"none"}, \code{"sample_units"}, \code{"information"} (default),
+\code{"objective"}, and \code{"objective_downward"}. The last two use the
+actual fixed-weight least-squares Gauss--Newton diagonal at the start, with
+sample-unit multipliers clamped to [1e-6, 1e6] or [1e-3, 1], respectively.
+Invalid or nonpositive diagonal entries retain the sample unit. They support
+continuous fixed-weight LS and ML2S Stage-2 LS with scalar backends; ML,
+direct FIML and residual backends reject them as Unsupported. Ordinal and
+mixed routes currently ignore all coordinate scaling modes.}
 \item{bounds}{Lower and upper parameter-bound vectors or a named bounds preset; NULL leaves the route default.}
 \item{stage2_weight}{Two-stage fitting weight selector, such as nt or adf.}
 \item{dls_a}{DLS mixing scalar in [0, 1]: zero is normal theory and one is ADF.}

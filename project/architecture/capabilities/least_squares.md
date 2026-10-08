@@ -1,5 +1,13 @@
 ### Least-squares estimators
 
+- Opt-in `objective` and `objective_downward` search coordinates use the actual
+  fixed-weight GN diagonal at the start, after equality reduction and group
+  weighting. Continuous ULS/DWLS/WLS/ADF, scalar GLS and ML2S Stage-2 LS
+  share the map and telemetry. Defaults and terminal audits are unchanged.
+  ML/direct FIML and residual backends return typed `Unsupported` errors.
+  Ordinal and mixed routes currently ignore all coordinate scaling modes;
+  TASK-33.10.5.6 owns their wiring and rejection.
+
 - ULS, GLS, and explicit-weight WLS discrepancies with scalar
   value/gradient and residual/Jacobian interfaces.
 - Bounded LS fitting through scalar NLopt L-BFGS and optional Ceres.

@@ -144,6 +144,7 @@ inline const char* fit_error_kind(lv::FitError::Kind k) {
     case K::LineSearchFailed:         return "LineSearchFailed";
     case K::InvalidStartValues:       return "InvalidStartValues";
     case K::NumericIssue:             return "NumericIssue";
+    case K::Unsupported:              return "Unsupported";
   }
   return "Unknown";
 }
@@ -476,7 +477,9 @@ inline magmaan::optim::OptimOptions optim_opts_from(
       if (kind == "none") o.coordinate_scaling = magmaan::optim::CoordinateScaling::None;
       else if (kind == "sample_units") o.coordinate_scaling = magmaan::optim::CoordinateScaling::SampleUnits;
       else if (kind == "information") o.coordinate_scaling = magmaan::optim::CoordinateScaling::Information;
-      else Rcpp::stop("control$coordinate_scaling must be \"none\", \"sample_units\" or \"information\"");
+      else if (kind == "objective") o.coordinate_scaling = magmaan::optim::CoordinateScaling::Objective;
+      else if (kind == "objective_downward") o.coordinate_scaling = magmaan::optim::CoordinateScaling::ObjectiveDownward;
+      else Rcpp::stop("control$coordinate_scaling must be \"none\", \"sample_units\", \"information\", \"objective\" or \"objective_downward\"");
     }
     if (l.containsElementNamed("normalize_sample"))
       o.normalize_sample = Rcpp::as<bool>(l["normalize_sample"]);

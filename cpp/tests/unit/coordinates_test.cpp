@@ -16,6 +16,7 @@
 #include "magmaan/estimate/layered_start.hpp"
 #include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/estimate/nt.hpp"
+#include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -522,4 +523,155 @@ TEST_CASE("objective coordinate scale: extreme finite intermediates and outputs"
   REQUIRE(objective_coordinate_scale(units, h, true));
   units(0) = std::numeric_limits<double>::denorm_min(); h(0) = 1;
   REQUIRE(objective_coordinate_scale(units, h, false));
+}
+
+TEST_CASE("Objective coordinate GN diagonal matches independent weighted moments") {
+  using namespace magmaan::estimate;
+  BuildOptions options;
+  options.n_groups = 2;
+  options.meanstructure = true;
+  options.group_equal = {magmaan::spec::GroupEqual::Loadings};
+  const auto b = build("f =~ x1 + x2 + x3 + x4", options);
+  auto sample = population(b, truth(b), true);
+  sample.n_obs = {100, 300};
+  auto ev = ModelEvaluator::build(b.pt, b.rep);
+  auto con = build_eq_constraints(b.pt);
+  REQUIRE(ev); REQUIRE(con);
+  const auto alpha = con->contract(truth(b));
+  auto evaluation = ev->evaluate(con->expand(alpha), true, true);
+  REQUIRE(evaluation);
+  gmm::Weight weight;
+  Eigen::VectorXd expected = Eigen::VectorXd::Zero(con->n_alpha);
+  for (int block = 0; block < 2; ++block) {
+    Eigen::MatrixXd J(14, b.pt.n_free());
+    J.topRows(4) = evaluation->J_mu.middleRows(4 * block, 4);
+    J.bottomRows(10) = evaluation->J_sigma.middleRows(10 * block, 10);
+    Eigen::MatrixXd W = Eigen::MatrixXd::Identity(14, 14);
+    W.diagonal().array() += Eigen::ArrayXd::LinSpaced(14, .1, 1.4);
+    W(0, 4) = W(4, 0) = .15;
+    auto w = gmm::BlockWeight::dense(W, magmaan::FitError::Kind::NumericIssue, "test");
+    REQUIRE(w); weight.push_back(*w);
+    const Eigen::MatrixXd reduced = J * con->K();
+    expected += (block == 0 ? .25 : .75) *
+        (reduced.transpose() * W * reduced).diagonal();
+  }
+  auto h = reduced_objective_diagonal(*ev, *con, sample, alpha, weight);
+  REQUIRE(h);
+  CHECK(h->isApprox(expected, 1e-12));
+  for (auto kind : {CoordinateScaling::Objective, CoordinateScaling::ObjectiveDownward}) {
+    auto map = coordinate_map(kind, true, b.pt, b.rep, *ev, *con, sample, alpha, &*h);
+    REQUIRE(map);
+    auto units = parameter_units(b.pt, b.rep, sample);
+    REQUIRE(units);
+    auto u = reduced_units(*units, *con);
+    REQUIRE(u);
+    auto scales = frontier::objective_coordinate_scale(*u, expected,
+        kind == CoordinateScaling::ObjectiveDownward);
+    REQUIRE(scales);
+    CHECK(map->scale.isApprox(*scales, 1e-12));
+    auto unsupported = coordinate_map(kind, true, b.pt, b.rep, *ev, *con, sample, alpha);
+    REQUIRE_FALSE(unsupported);
+    CHECK(unsupported.error().kind == magmaan::FitError::Kind::Unsupported);
+  }
+}
+
+TEST_CASE("Objective DWLS and WLS search is equivariant across observed units") {
+  using namespace magmaan::estimate;
+  const auto b = build("f =~ x1 + x2 + x3 + x4");
+  const auto sample = population(b, truth(b), false, .01);
+  Eigen::Vector4d d;
+  d << 1.0 / 1024, 1024, .125, 8;
+  const auto other = rescale(sample, d);
+  auto u = parameter_units(b.pt, b.rep, sample);
+  auto v = parameter_units(b.pt, b.rep, other);
+  REQUIRE(u); REQUIRE(v);
+  const Eigen::VectorXd ratio = v->cwiseQuotient(*u);
+  Eigen::VectorXd start = truth(b) * .9;
+  Eigen::VectorXd moment_units(10);
+  int k = 0;
+  for (int col = 0; col < 4; ++col)
+    for (int row = col; row < 4; ++row) moment_units(k++) = d(row) * d(col);
+  for (bool diagonal : {true, false}) {
+    Eigen::MatrixXd W = Eigen::MatrixXd::Identity(10, 10);
+    W.diagonal().array() += Eigen::ArrayXd::LinSpaced(10, .1, 1);
+    if (!diagonal) W(0, 3) = W(3, 0) = .2;
+    const Eigen::MatrixXd moved = moment_units.cwiseInverse().asDiagonal() * W *
+                                 moment_units.cwiseInverse().asDiagonal();
+    auto make_weight = [&](const Eigen::MatrixXd& matrix) {
+      if (diagonal) return gmm::BlockWeight::diagonal(matrix.diagonal());
+      auto w = gmm::BlockWeight::dense(matrix, magmaan::FitError::Kind::NumericIssue, "test");
+      REQUIRE(w); return *w;
+    };
+    auto opts = ml_optim_options();
+    opts.coordinate_scaling = CoordinateScaling::Objective;
+    auto a = fit_gmm(b.pt, b.rep, sample, start, {make_weight(W)}, {}, Backend::NloptLbfgs, opts);
+    auto c = fit_gmm(b.pt, b.rep, other, start.cwiseProduct(ratio), {make_weight(moved)}, {}, Backend::NloptLbfgs, opts);
+    REQUIRE(a); REQUIRE(c);
+    MESSAGE("objective ", std::string_view(diagonal ? "DWLS" : "WLS"),
+        " evaluations: native=", a->f_evals, ", transported=", c->f_evals);
+    CHECK(a->iterations == c->iterations);
+    CHECK(a->f_evals == c->f_evals);
+    CHECK(c->theta.cwiseQuotient(ratio).isApprox(a->theta, 1e-8));
+    CHECK(c->fmin == doctest::Approx(a->fmin).epsilon(1e-8));
+    const Eigen::MatrixXd no_vcov = Eigen::MatrixXd::Zero(b.pt.n_free(), b.pt.n_free());
+    auto std_a = magmaan::measures::standardize::standardize_all(b.pt, b.rep, *a, no_vcov);
+    auto std_c = magmaan::measures::standardize::standardize_all(b.pt, b.rep, *c, no_vcov);
+    REQUIRE(std_a); REQUIRE(std_c);
+    for (Eigen::Index j = 0; j < std_a->theta.size(); ++j)
+      CHECK(std::abs(std_c->theta(j) - std_a->theta(j)) <=
+            1e-8 * std::abs(std_a->theta(j)));
+
+    opts.coordinate_scaling = CoordinateScaling::Information;
+    auto explicit_default = fit_gmm(b.pt, b.rep, sample, start, {make_weight(W)}, {}, Backend::NloptLbfgs, opts);
+    auto omitted = fit_gmm(b.pt, b.rep, sample, start, {make_weight(W)}, {}, Backend::NloptLbfgs, ml_optim_options());
+    REQUIRE(explicit_default); REQUIRE(omitted);
+    CHECK(explicit_default->theta == omitted->theta);
+    CHECK(explicit_default->fmin == omitted->fmin);
+    CHECK(explicit_default->f_evals == omitted->f_evals);
+    auto moved_default = fit_gmm(b.pt, b.rep, other, start.cwiseProduct(ratio),
+        {make_weight(moved)}, {}, Backend::NloptLbfgs, ml_optim_options());
+    REQUIRE(moved_default);
+    auto std_default = magmaan::measures::standardize::standardize_all(
+        b.pt, b.rep, *omitted, no_vcov);
+    auto std_moved = magmaan::measures::standardize::standardize_all(
+        b.pt, b.rep, *moved_default, no_vcov);
+    REQUIRE(std_default); REQUIRE(std_moved);
+    bool same_standardized = true;
+    for (Eigen::Index j = 0; j < std_default->theta.size(); ++j)
+      same_standardized = same_standardized &&
+          std::abs(std_moved->theta(j) - std_default->theta(j)) <=
+          1e-8 * std::abs(std_default->theta(j));
+
+    MESSAGE("default ", std::string_view(diagonal ? "DWLS" : "WLS"), " evaluations: native=",
+        omitted->f_evals, ", transported=", moved_default->f_evals,
+        "; iterations: native=", omitted->iterations,
+        ", transported=", moved_default->iterations,
+        "; transported parameters agree at 1e-8: ",
+        moved_default->theta.cwiseQuotient(ratio).isApprox(omitted->theta, 1e-8),
+        "; standardized estimates agree at 1e-8: ", same_standardized);
+
+  }
+}
+
+TEST_CASE("Objective coordinates reject ML and residual backends as Unsupported") {
+  using namespace magmaan::estimate;
+  const auto b = build("f =~ x1 + x2 + x3 + x4");
+  const auto sample = population(b, truth(b), false);
+  for (auto kind : {CoordinateScaling::Objective, CoordinateScaling::ObjectiveDownward}) {
+    auto opts = ml_optim_options();
+    opts.coordinate_scaling = kind;
+    auto ml = fit_ml(b.pt, b.rep, sample, truth(b), {}, Backend::NloptLbfgs, opts);
+    REQUIRE_FALSE(ml);
+    CHECK(ml.error().kind == magmaan::FitError::Kind::Unsupported);
+    for (auto backend : {Backend::Ceres, Backend::CeresBfgs, Backend::PortNls}) {
+      auto ls = fit_gmm(b.pt, b.rep, sample, truth(b), {}, {}, backend, opts);
+      REQUIRE_FALSE(ls);
+      CHECK(ls.error().kind == magmaan::FitError::Kind::Unsupported);
+    }
+    auto ls = fit_gmm(b.pt, b.rep, sample, truth(b), {}, {}, Backend::NloptLbfgs, opts);
+    REQUIRE(ls);
+    CHECK(ls->coordinate_scaling == kind);
+    CHECK(std::string_view(coordinate_scaling_name(kind)) ==
+        (kind == CoordinateScaling::Objective ? "objective" : "objective_downward"));
+  }
 }

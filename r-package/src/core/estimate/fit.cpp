@@ -1195,19 +1195,36 @@ prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
 // options ask for none, nothing is free, the backend drives the least-squares
 // form (it scales itself), or the map cannot be formed; the fit then runs in
 // raw coordinates, since coordinates never change the problem being solved.
-std::optional<CoordinateMap>
+// Explicit objective modes instead propagate errors and reject unsupported routes.
+fit_expected<std::optional<CoordinateMap>>
 optimizer_coordinates(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep, const Prelude& pre,
                       const SampleStats& samp, const Eigen::VectorXd& x0,
-                      Backend backend, const OptimOptions& opts) {
+                      Backend backend, const OptimOptions& opts,
+                      const gmm::Weight* weight = nullptr) {
+  const bool objective = objective_coordinate_scaling(opts.coordinate_scaling);
+  if (objective && (!weight || backend == Backend::Ceres ||
+                    backend == Backend::CeresBfgs || backend == Backend::PortNls))
+    return std::unexpected(fit_err(FitError::Kind::Unsupported,
+        "objective coordinates require fixed-weight LS with a scalar backend"));
   if (opts.coordinate_scaling == optim::CoordinateScaling::None ||
       pre.con.n_alpha == 0 || backend == Backend::Ceres ||
       backend == Backend::CeresBfgs || backend == Backend::PortNls)
-    return std::nullopt;
+    return std::optional<CoordinateMap>{};
+  Eigen::VectorXd diagonal;
+  if (objective) {
+    auto h = reduced_objective_diagonal(pre.ev, pre.con, samp, pre.con.contract(x0), *weight);
+    if (!h) return std::unexpected(h.error());
+    diagonal = std::move(*h);
+  }
   auto map = coordinate_map(opts.coordinate_scaling, opts.center_locations, pt,
-                            rep, pre.ev, pre.con, samp, pre.con.contract(x0));
-  if (!map) return std::nullopt;
-  return std::move(*map);
+                            rep, pre.ev, pre.con, samp, pre.con.contract(x0),
+                            objective ? &diagonal : nullptr);
+  if (!map) {
+    if (objective) return std::unexpected(map.error());
+    return std::optional<CoordinateMap>{};
+  }
+  return std::optional<CoordinateMap>{std::move(*map)};
 }
 
 // Records the coordinates a successful composer ran in.
@@ -2469,7 +2486,9 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto map_or = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts, &weight);
+  if (!map_or) return std::unexpected(map_or.error());
+  const auto& map = *map_or;
   auto est = record_coordinates(
       compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds, backend,
                   opts, map ? &*map : nullptr),
@@ -2502,7 +2521,16 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
     auto obj_or = gmm::normal_theory_objective(pre->ev, samp, x0);
     if (!obj_or.has_value()) return std::unexpected(obj_or.error());
     const optim::ScalarProblem prob = std::move(*obj_or);
-    const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+    gmm::Weight coordinate_weight;
+    if (objective_coordinate_scaling(opts.coordinate_scaling)) {
+      auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
+      if (!W) return std::unexpected(W.error());
+      coordinate_weight = std::move(*W);
+    }
+    auto map_or = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts,
+        objective_coordinate_scaling(opts.coordinate_scaling) ? &coordinate_weight : nullptr);
+    if (!map_or) return std::unexpected(map_or.error());
+    const auto& map = *map_or;
     auto est = record_coordinates(
         compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend, opts,
                           "fit_gls", map ? &*map : nullptr),
@@ -2540,7 +2568,9 @@ drive_ml_scalar(const spec::LatentStructure& pt, const model::MatrixRep& rep,
                 const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
                 const Bounds& bounds, Backend backend, const OptimOptions& opts,
                 const char* who) {
-  const auto map = optimizer_coordinates(pt, rep, pre, samp, x0, backend, opts);
+  auto map_or = optimizer_coordinates(pt, rep, pre, samp, x0, backend, opts);
+  if (!map_or) return std::unexpected(map_or.error());
+  const auto& map = *map_or;
   return record_coordinates(
       compose_scalar_ml(prob, pre.con, pre.nl, x0, bounds, backend, opts, who,
                         map ? &*map : nullptr),
@@ -3186,7 +3216,9 @@ fit_ml_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto map_or = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  if (!map_or) return std::unexpected(map_or.error());
+  const auto& map = *map_or;
   auto est = record_coordinates(
       compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0, bounds,
                               backend, opts, "fit_ml_constrained",
@@ -3656,7 +3688,9 @@ fit_gmm_constrained(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto prob_or = gmm::residuals(pre->ev, samp, x0, weight);
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::ScalarProblem prob = optim::scalarize(*prob_or);
-  const auto map = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts);
+  auto map_or = optimizer_coordinates(pt, rep, *pre, samp, x0, backend, opts, &weight);
+  if (!map_or) return std::unexpected(map_or.error());
+  const auto& map = *map_or;
   auto est = record_coordinates(
       compose_scalar_ml_extra(prob, pre->con, pre->nl, extra, x0, bounds,
                               backend, opts, "fit_gmm_constrained",

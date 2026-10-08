@@ -147,7 +147,7 @@ struct CeresControls {
   std::optional<double> parameter_tolerance = {};
 };
 
-// Optimizer coordinate systems. Neither changes the model or its solutions.
+// Optimizer coordinate systems. None changes the model or its solutions.
 //   None        — raw equality-reduced coordinates.
 //   SampleUnits — each coordinate in the unit its parameter carries under the
 //                 sample standard deviations and each latent's identification.
@@ -155,7 +155,9 @@ struct CeresControls {
 //                 (the larger of its S- and Sigma(start)-weighted values): a
 //                 coordinate shrinks to 1/sqrt(information) where that is finer
 //                 than its unit, and never grows beyond it.
-enum class CoordinateScaling : std::uint8_t { None, SampleUnits, Information };
+//   Objective   — fixed-weight LS GN diagonal, with unit multipliers in [1e-6, 1e6].
+//   ObjectiveDownward — the same diagonal, with multipliers in [1e-3, 1].
+enum class CoordinateScaling : std::uint8_t { None, SampleUnits, Information, Objective, ObjectiveDownward };
 
 struct OptimOptions {
   int    max_iter = 1000; // legacy NLopt evaluation budget; iterations otherwise

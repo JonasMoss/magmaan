@@ -152,6 +152,7 @@ const char* err_kind(FitError::Kind k) {
     case FitError::Kind::NonPositiveDefiniteSample:return "NonPositiveDefiniteSample";
     case FitError::Kind::LineSearchFailed:         return "LineSearchFailed";
     case FitError::Kind::InvalidStartValues:       return "InvalidStartValues";
+    case FitError::Kind::Unsupported:              return "Unsupported";
     case FitError::Kind::NumericIssue:             return "NumericIssue";
   }
   return "?";

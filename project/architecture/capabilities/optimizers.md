@@ -280,15 +280,21 @@ Switch parity requires converged H1 EM on both sides; stalled endpoints retain
 the TASK-129.7 boundary. Conditional-x residual H1 and composite adaptation
 are unsupported.
 
-### Unwired objective-coordinate scale primitive
+### Objective-coordinate scale primitive and opt-in fitting
 
 `estimate::frontier::objective_coordinate_scale()` accepts sample units and
 an actual scalar-objective GN diagonal in matching equality-reduced coordinates.
+Continuous fixed-weight LS and ML2S Stage-2 LS now build that diagonal through
+the fitting residual Jacobian and expose `objective` / `objective_downward`
+via the shared coordinate map. Scalar GLS supplies its frozen NT weight.
+ML/direct FIML and residual backends reject these settings as `Unsupported`;
+ordinal and mixed routes ignore every mode pending TASK-33.10.5.6.
 It clamps two-sided multipliers to [1e-6, 1e6], or downward-only multipliers to
 [1e-3, 1], and retains sample units for invalid or degenerate diagonal entries.
 Malformed units/sizes and nonfinite or nonpositive outputs are typed failures.
-The helper does not compute NT information. TASK-33.10.5.4 owns subsequent fit
-integration and opt-in selection; this additive primitive changes no defaults.
+The helper does not compute NT information. TASK-33.10.5.4 integrates the
+opt-in selection without changing defaults, budgets or acceptance rules.
+Default adoption remains the pre-registered TASK-33.10.5.5 decision study.
 
 ### Layered starts with overlapping measurement blocks
 

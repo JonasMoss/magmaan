@@ -41,6 +41,13 @@
   oracle agreement; stalled H1 endpoints are outside the compatibility
   contract. Native FIML H1 defaults are unchanged.
 
+- Lab optimizer controls now accept opt-in `objective` and
+  `objective_downward` scaling for continuous fixed-weight LS and ML2S Stage-2
+  LS, using the fitting GN diagonal. Defaults and audit rules are unchanged.
+  ML/direct FIML and residual backends reject these modes as `Unsupported`.
+  Ordinal and mixed routes currently ignore all coordinate scaling modes
+  pending TASK-33.10.5.6.
+
 - `magmaan_model()` now caches and prints structural identification.
   `magmaan()` refuses unidentified models before fitting with
   `magmaan_identification_error`, naming the free parameter directions.
