@@ -4305,9 +4305,12 @@ mixed_observed_gamma_jacobian_fd(
       X, ordered, levels, thresholds, mean, R, h_rel, false, true);
 }
 
+namespace {
+
 post_expected<PairwiseOrdinalStats>
-pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
-                                         bool full_wls_weight) {
+complete_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
+                                         bool full_wls_weight,
+                                         bool collect_diagnostics) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ordinal_stats_from_integer_data: no data blocks"));
@@ -4323,7 +4326,7 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
   out.stats.W_wls.reserve(Xs.size());
   out.stats.n_obs.reserve(Xs.size());
   out.stats.n_levels.reserve(Xs.size());
-  out.block_diagnostics.reserve(Xs.size());
+  if (collect_diagnostics) out.block_diagnostics.reserve(Xs.size());
 
   for (std::size_t b = 0; b < Xs.size(); ++b) {
     const auto& X = Xs[b];
@@ -4424,7 +4427,9 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
     Eigen::MatrixXd SC_COR = Eigen::MatrixXd::Zero(n, ncorr);
     Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(ncorr, nth);
     PairwiseOrdinalBlockDiagnostics block_diag;
-    block_diag.pair_diagnostics.reserve(static_cast<std::size_t>(ncorr));
+    if (collect_diagnostics) {
+      block_diag.pair_diagnostics.reserve(static_cast<std::size_t>(ncorr));
+    }
     Eigen::Index corr_idx = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
@@ -4439,48 +4444,50 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
             th_by_var[static_cast<std::size_t>(j)]);
         if (!rho_or.has_value()) return std::unexpected(rho_or.error());
         const double rho = rho_or->rho;
-        Eigen::MatrixXd expected = expected_pair_counts(
-            rho_or->adjusted_counts.sum(),
-            th_by_var[static_cast<std::size_t>(i)],
-            th_by_var[static_cast<std::size_t>(j)],
-            rho);
-        Eigen::MatrixXd residual = rho_or->adjusted_counts - expected;
-        Eigen::MatrixXd pearson = Eigen::MatrixXd::Zero(
-            residual.rows(), residual.cols());
-        for (Eigen::Index pr = 0; pr < residual.rows(); ++pr) {
-          for (Eigen::Index pc = 0; pc < residual.cols(); ++pc) {
-            pearson(pr, pc) = residual(pr, pc) /
-                std::sqrt(std::max(kProbFloor, expected(pr, pc)));
+        if (collect_diagnostics) {
+          Eigen::MatrixXd expected = expected_pair_counts(
+              rho_or->adjusted_counts.sum(),
+              th_by_var[static_cast<std::size_t>(i)],
+              th_by_var[static_cast<std::size_t>(j)],
+              rho);
+          Eigen::MatrixXd residual = rho_or->adjusted_counts - expected;
+          Eigen::MatrixXd pearson = Eigen::MatrixXd::Zero(
+              residual.rows(), residual.cols());
+          for (Eigen::Index pr = 0; pr < residual.rows(); ++pr) {
+            for (Eigen::Index pc = 0; pc < residual.cols(); ++pc) {
+              pearson(pr, pc) = residual(pr, pc) /
+                  std::sqrt(std::max(kProbFloor, expected(pr, pc)));
+            }
           }
+          block_diag.pair_diagnostics.push_back(OrdinalPairDiagnostics{
+              .label = OrdinalPairLabel{
+                  .block = static_cast<std::int32_t>(b),
+                  .i = static_cast<std::int32_t>(i),
+                  .j = static_cast<std::int32_t>(j),
+                  .n_levels_i = levels[static_cast<std::size_t>(i)],
+                  .n_levels_j = levels[static_cast<std::size_t>(j)]},
+              .rho = rho,
+              .negloglik = rho_or->negloglik,
+              .objective = rho_or->negloglik,
+              .score = 0.0,
+              .iterations = rho_or->iterations,
+              .h_weighted = false,
+              .converged = true,
+              .hit_lower = rho_or->hit_lower,
+              .hit_upper = rho_or->hit_upper,
+              .n_obs = static_cast<std::int64_t>(tab_or->sum()),
+              .n_missing = 0,
+              .ridge_applied = false,
+              .ridge = 0.0,
+              .shrinkage_applied = false,
+              .shrinkage_intensity = 0.0,
+              .counts = *tab_or,
+              .adjusted_counts = rho_or->adjusted_counts,
+              .expected_counts = std::move(expected),
+              .residual_counts = std::move(residual),
+              .pearson_residuals = std::move(pearson),
+              .weights = Eigen::MatrixXd::Ones(tab_or->rows(), tab_or->cols())});
         }
-        block_diag.pair_diagnostics.push_back(OrdinalPairDiagnostics{
-            .label = OrdinalPairLabel{
-                .block = static_cast<std::int32_t>(b),
-                .i = static_cast<std::int32_t>(i),
-                .j = static_cast<std::int32_t>(j),
-                .n_levels_i = levels[static_cast<std::size_t>(i)],
-                .n_levels_j = levels[static_cast<std::size_t>(j)]},
-            .rho = rho,
-            .negloglik = rho_or->negloglik,
-            .objective = rho_or->negloglik,
-            .score = 0.0,
-            .iterations = rho_or->iterations,
-            .h_weighted = false,
-            .converged = true,
-            .hit_lower = rho_or->hit_lower,
-            .hit_upper = rho_or->hit_upper,
-            .n_obs = static_cast<std::int64_t>(tab_or->sum()),
-            .n_missing = 0,
-            .ridge_applied = false,
-            .ridge = 0.0,
-            .shrinkage_applied = false,
-            .shrinkage_intensity = 0.0,
-            .counts = *tab_or,
-            .adjusted_counts = rho_or->adjusted_counts,
-            .expected_counts = std::move(expected),
-            .residual_counts = std::move(residual),
-            .pearson_residuals = std::move(pearson),
-            .weights = Eigen::MatrixXd::Ones(tab_or->rows(), tab_or->cols())});
         R(i, j) = R(j, i) = rho;
         auto ps_or = ordinal_pair_scores(
             xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],
@@ -4569,8 +4576,10 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
         W_wls = std::move(*W_wls_or);
       }
     }
-    block_diag.moment_influence = IF;
-    block_diag.gamma = NACOV;
+    if (collect_diagnostics) {
+      block_diag.moment_influence = IF;
+      block_diag.gamma = NACOV;
+    }
 
     out.stats.R.push_back(std::move(R));
     out.stats.thresholds.push_back(std::move(th));
@@ -4584,15 +4593,26 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
     out.stats.W_wls.push_back(std::move(W_wls));
     out.stats.n_obs.push_back(static_cast<std::int64_t>(n));
     out.stats.n_levels.push_back(std::move(levels));
-    out.block_diagnostics.push_back(std::move(block_diag));
+    if (collect_diagnostics) {
+      out.block_diagnostics.push_back(std::move(block_diag));
+    }
   }
   return out;
+}
+
+}  // namespace
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
+                                         bool full_wls_weight) {
+  return complete_ordinal_stats_from_integer_data(Xs, full_wls_weight, true);
 }
 
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
                                 bool full_wls_weight) {
-  auto out = pairwise_ordinal_stats_from_integer_data(Xs, full_wls_weight);
+  // Preserve the full statistical payload without retaining unused diagnostics.
+  auto out = complete_ordinal_stats_from_integer_data(Xs, full_wls_weight, false);
   if (!out.has_value()) return std::unexpected(out.error());
   return std::move(out->stats);
 }

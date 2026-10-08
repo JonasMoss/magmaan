@@ -591,3 +591,111 @@ TEST_CASE("Ordinal FMG transforms consume the robust_ordinal UGamma spectrum") {
     CHECK(r.p_value <= 1.0);
   }
 }
+
+TEST_CASE("Complete ordinal plain and diagnostic routes preserve every Stats field") {
+  Eigen::MatrixXd x(36, 3);
+  for (Eigen::Index r = 0; r < x.rows(); ++r) {
+    x(r, 0) = static_cast<double>(1 + r % 2);
+    x(r, 1) = static_cast<double>(1 + (r / 2) % 3);
+    x(r, 2) = static_cast<double>(1 + (r / 6) % 3);
+  }
+  for (bool full_wls_weight : {false, true}) {
+    CAPTURE(full_wls_weight);
+    auto plain = magmaan::data::ordinal_stats_from_integer_data({x, x}, full_wls_weight);
+    auto diagnostic = magmaan::data::pairwise_ordinal_stats_from_integer_data(
+        {x, x}, full_wls_weight);
+    REQUIRE(plain.has_value());
+    REQUIRE(diagnostic.has_value());
+    const auto& stats = diagnostic->stats;
+    REQUIRE(plain->R.size() == stats.R.size());
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      CHECK(plain->R[b].rows() == stats.R[b].rows());
+      CHECK(plain->R[b].cols() == stats.R[b].cols());
+      CHECK((plain->R[b].array() == stats.R[b].array()).all());
+    }
+    REQUIRE(plain->thresholds.size() == stats.thresholds.size());
+    for (std::size_t b = 0; b < stats.thresholds.size(); ++b) {
+      CHECK(plain->thresholds[b].rows() == stats.thresholds[b].rows());
+      CHECK(plain->thresholds[b].cols() == stats.thresholds[b].cols());
+      CHECK((plain->thresholds[b].array() == stats.thresholds[b].array()).all());
+    }
+    REQUIRE(plain->NACOV.size() == stats.NACOV.size());
+    for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+      CHECK(plain->NACOV[b].rows() == stats.NACOV[b].rows());
+      CHECK(plain->NACOV[b].cols() == stats.NACOV[b].cols());
+      CHECK((plain->NACOV[b].array() == stats.NACOV[b].array()).all());
+    }
+    REQUIRE(plain->W_dwls.size() == stats.W_dwls.size());
+    for (std::size_t b = 0; b < stats.W_dwls.size(); ++b) {
+      CHECK(plain->W_dwls[b].rows() == stats.W_dwls[b].rows());
+      CHECK(plain->W_dwls[b].cols() == stats.W_dwls[b].cols());
+      CHECK((plain->W_dwls[b].array() == stats.W_dwls[b].array()).all());
+    }
+    REQUIRE(plain->W_wls.size() == stats.W_wls.size());
+    for (std::size_t b = 0; b < stats.W_wls.size(); ++b) {
+      CHECK(plain->W_wls[b].rows() == stats.W_wls[b].rows());
+      CHECK(plain->W_wls[b].cols() == stats.W_wls[b].cols());
+      CHECK((plain->W_wls[b].array() == stats.W_wls[b].array()).all());
+    }
+    REQUIRE(plain->moment_influence.size() == stats.moment_influence.size());
+    for (std::size_t b = 0; b < stats.moment_influence.size(); ++b) {
+      CHECK(plain->moment_influence[b].rows() == stats.moment_influence[b].rows());
+      CHECK(plain->moment_influence[b].cols() == stats.moment_influence[b].cols());
+      CHECK((plain->moment_influence[b].array() == stats.moment_influence[b].array()).all());
+    }
+    REQUIRE(plain->sampling_moment_influence.size() == stats.sampling_moment_influence.size());
+    for (std::size_t b = 0; b < stats.sampling_moment_influence.size(); ++b) {
+      CHECK(plain->sampling_moment_influence[b].rows() == stats.sampling_moment_influence[b].rows());
+      CHECK(plain->sampling_moment_influence[b].cols() == stats.sampling_moment_influence[b].cols());
+      CHECK((plain->sampling_moment_influence[b].array() == stats.sampling_moment_influence[b].array()).all());
+    }
+    REQUIRE(plain->int_data.size() == stats.int_data.size());
+    for (std::size_t b = 0; b < stats.int_data.size(); ++b) {
+      CHECK(plain->int_data[b].rows() == stats.int_data[b].rows());
+      CHECK(plain->int_data[b].cols() == stats.int_data[b].cols());
+      CHECK((plain->int_data[b].array() == stats.int_data[b].array()).all());
+    }
+    REQUIRE(plain->moment_bread.size() == stats.moment_bread.size());
+    for (std::size_t b = 0; b < stats.moment_bread.size(); ++b) {
+      CHECK(plain->moment_bread[b].rows() == stats.moment_bread[b].rows());
+      CHECK(plain->moment_bread[b].cols() == stats.moment_bread[b].cols());
+      CHECK((plain->moment_bread[b].array() == stats.moment_bread[b].array()).all());
+    }
+    REQUIRE(plain->moment_overlap_n_obs.size() == stats.moment_overlap_n_obs.size());
+    for (std::size_t b = 0; b < stats.moment_overlap_n_obs.size(); ++b) {
+      CHECK(plain->moment_overlap_n_obs[b].rows() == stats.moment_overlap_n_obs[b].rows());
+      CHECK(plain->moment_overlap_n_obs[b].cols() == stats.moment_overlap_n_obs[b].cols());
+      CHECK((plain->moment_overlap_n_obs[b].array() == stats.moment_overlap_n_obs[b].array()).all());
+    }
+    CHECK(plain->threshold_ov == stats.threshold_ov);
+    CHECK(plain->threshold_level == stats.threshold_level);
+    CHECK(plain->n_obs == stats.n_obs);
+    CHECK(plain->n_levels == stats.n_levels);
+    CHECK(plain->ov_names == stats.ov_names);
+    CHECK(plain->moment_support_i == stats.moment_support_i);
+    CHECK(plain->moment_support_j == stats.moment_support_j);
+    CHECK(plain->moment_n_obs == stats.moment_n_obs);
+    CHECK(plain->pairwise_gamma == stats.pairwise_gamma);
+    REQUIRE(diagnostic->block_diagnostics.size() == 2);
+    for (std::size_t b = 0; b < 2; ++b) {
+      const auto& diag = diagnostic->block_diagnostics[b];
+      CHECK(diag.pair_diagnostics.size() == 3);
+      CHECK(diag.moment_influence.isApprox(stats.moment_influence[b], 0.0));
+      CHECK(diag.gamma.isApprox(stats.NACOV[b], 0.0));
+      CHECK((stats.W_wls[b].size() > 0) == full_wls_weight);
+    }
+  }
+  std::vector<std::vector<Eigen::MatrixXd>> invalid = {
+      {}, {Eigen::MatrixXd::Ones(1, 2)}, {Eigen::MatrixXd::Ones(3, 2)}};
+  auto malformed = x;
+  malformed(0, 0) = 1.5;
+  invalid.push_back({x, malformed});
+  for (const auto& blocks : invalid) {
+    auto plain = magmaan::data::ordinal_stats_from_integer_data(blocks);
+    auto diagnostic = magmaan::data::pairwise_ordinal_stats_from_integer_data(blocks);
+    REQUIRE_FALSE(plain.has_value());
+    REQUIRE_FALSE(diagnostic.has_value());
+    CHECK(plain.error().kind == diagnostic.error().kind);
+    CHECK(plain.error().detail == diagnostic.error().detail);
+  }
+}

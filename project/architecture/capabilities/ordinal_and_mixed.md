@@ -939,6 +939,13 @@ threshold/correlation coupling once and skips its products. Remaining weight
 storage and workspace cleanup lives in the
 [backlog](../../backlog/todo.md#ordinal-weight-storage-and-workspace-cleanup).
 
+Complete-data plain and pairwise diagnostic constructors share a private builder
+(TASK-124). Plain preparation skips diagnostic pair-count, expected-count, residual,
+Pearson and weight retention and diagnostic IF/Gamma copies. It retains full Stats,
+including Gamma, influence, bread, integer data and requested weights; diagnostic
+preparation retains its existing payload. Exact all-field parity covers both
+full-WLS weight settings; this does not reduce fit-only Gamma materialization.
+
 #### Cross-products (OPG) information performance
 
 `inference::casewise_scores` / `information_cross_products` no longer form the

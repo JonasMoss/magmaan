@@ -1126,6 +1126,12 @@ ordinary-user default.
   singular Gamma with valid diagonals, lazy fitting and robust cache reporting.
   Direct fit-only materialization and diagonal storage remain open below.
 
+- [x] **TASK-124 — avoid discarded complete-data ordinal diagnostics.**
+  Plain and diagnostic constructors share a private builder; the plain route
+  skips pair diagnostic tables and IF/Gamma diagnostic copies while retaining
+  every Stats field and existing error/inversion semantics. Full/diagonal weight
+  requests have exact field parity gates. Direct fit-only Gamma remains open.
+
 - [ ] **M — retain diagonal DWLS storage.** Give `W_dwls` a diagonal type;
   remove unnecessary `Ws`/`factors` from `build_joint_profiled_workspace`.
   **Check:** staged/direct bounded and SNLLS agreement without unnecessary dense
