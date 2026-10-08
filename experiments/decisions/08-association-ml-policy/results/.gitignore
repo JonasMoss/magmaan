@@ -21,3 +21,5 @@ production-2026-10-05/*
 !production-2026-10-05/population_uncertainty.csv
 !production-2026-10-05/failure_counts.csv
 !production-2026-10-05/timing_summary.csv
+# Derived MI population approximation check (TASK-128.3).
+!production-2026-10-05/mi_population_check.csv

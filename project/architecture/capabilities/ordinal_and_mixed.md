@@ -1154,8 +1154,10 @@ Schur, augmented gradient/curvature, released-refit and grouped gates are in
 `test_association_ml_scores.R`. No policy guard is removed. TASK-32.5
 registers [decisions/08](../../../experiments/decisions/08-association-ml-policy/report.qmd)
 for covariance/global/nested/MI calibration, with bounded smoke/pilot evidence
-and provenance-checked per-cell execution; production and ordinary exposure
-remain pending.
+and provenance-checked per-cell execution. Production is frozen and reported;
+TASK-128.3 passes the approved post-hoc MI population approximation criterion
+(maximum implied size 5.364183% across 96 cells, limit 5.5%). Ordinary MI
+exposure remains an implementation follow-up; no policy guard is removed here.
 
 ### Mixed DWLS ordinary policy
 

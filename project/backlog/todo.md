@@ -1647,7 +1647,9 @@ release, including dependencies otherwise shared with the primary programme.
   [decisions/08](../../experiments/decisions/08-association-ml-policy/report.qmd)
   with exact-IJ coverage, global/nested references and robust MI panels;
   production is frozen at `b37ebefb` under `results/production-2026-10-05/`;
-  TASK-128.1 completes the report against the registered criteria. Ordinary
+  TASK-128.1 completes the report against the registered criteria. TASK-128.3
+  passes the post-hoc MI population approximation check: maximum implied size
+  5.364183% across 96 cells, below 5.5%; MI exposure is the next implementation step. Ordinary
   exposure and global/nested reference decisions remain pending user review.
   Ordinary association-ML components retain typed
   refusal until those contracts and their calibration pass.

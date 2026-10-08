@@ -32,7 +32,7 @@ Does the lab association-ML recipe calibrate well enough for ordinary exposure?
 Production is complete: 192 cells with 2,000 draws each, frozen at `b37ebefb`.
 Association ML has no coverage flags, seven global size flags and one nested
 size flag; DWLS has one correlation-coverage flag. No MI size cell is flagged,
-subject to the population approximation caveat below. Sparse ordinal samples
+and the population approximation check passes the post-hoc 5.5% criterion below. Sparse ordinal samples
 cause substantial unavailability. The production tables below
 retain cell denominators and uncertainty. Ordinary exposure and the global and
 nested reference choices remain user decisions.
@@ -158,14 +158,40 @@ show(do.call(rbind,lapply(split(pu,list(pu$estimator,pu$target),drop=TRUE),funct
     `Largest absolute target shift`=signif(max(abs(d$target_difference)),3),check.names=FALSE))))
 ```
 
-These are finite population approximations, including for Gaussian correct
-models. Population loading shifts can perturb the fixed-loading MI null.
-The frozen summaries do not contain replicate standard errors or MI null
-sensitivity, and population `se_first` is absent: they cannot establish that
-this perturbation is negligible relative to sampling interval widths or MI
-size. MI flags below are therefore measured against the registered approximate
-null, with this unresolved uncertainty. Group symmetry supplies the nested
-pseudo-true null without fixing a numerically approximated loading.
+### MI population approximation check (post-hoc amendment)
+
+The user-approved criterion dated 2026-10-08 was written after seeing production
+results. It requires maximum implied size at most 5.5%. For each single-group
+MI size cell, let $\Delta=|\lambda_1-\lambda_2|$ be the absolute difference
+between the two population loading targets, treated as a conservative bound
+on draw-1 approximation error. Using the median loading SE among successful
+association-IJ rows, compute $\mathrm{ncp}=(\Delta/\mathrm{SE})^2$ and
+$P\{\chi^2_1(\mathrm{ncp})>\chi^2_{1,.95}\}$.
+
+```{r}
+mi_check <- read_production('mi_population_check')
+stopifnot(nrow(mi_check)==sum(cells$groups==1),
+          setequal(mi_check$cell_id,cells$cell_id[cells$groups==1]),
+          all(is.finite(mi_check$implied_size)))
+mi_worst <- mi_check[which.max(mi_check$implied_size),]
+mi_pass <- max(mi_check$implied_size)<=.055
+show(data.frame(Cells=nrow(mi_check),
+  `Median implied size (%)`=sprintf('%.6f',100*median(mi_check$implied_size)),
+  `Maximum implied size (%)`=sprintf('%.6f',100*mi_worst$implied_size),
+  `Limit (%)`=5.5,`Maximum cell`=mi_worst$cell_id,
+  Verdict=ifelse(mi_pass,'Pass','Fail'),check.names=FALSE))
+```
+
+The maximum is **`r sprintf('%.6f',100*mi_worst$implied_size)`%**, in
+cell **`r mi_worst$cell_id`** (`r mi_worst$key`, N=`r mi_worst$n`).
+The check **`r ifelse(mi_pass,'passes','fails')`** the 5.5% criterion.
+The per-cell targets, shifts, median SEs, noncentralities and implied sizes are
+frozen in `mi_population_check.csv`, derived from the production frozen at
+`b37ebefb` and its local raw replicate SEs. This is a noncentral chi-square
+approximation using a median SE, not a confidence bound on population error
+or a finite-sample calibration guarantee. It resolves the specified population
+approximation prerequisite for MI exposure. Group symmetry supplies the nested
+pseudo-true null without fixing an approximated loading.
 
 ::: {.callout-note collapse="true" title="Population uncertainty and descriptive global rejection, per cell"}
 ```{r}
@@ -339,6 +365,7 @@ Rscript run_experiment.R --smoke --out-dir results/smoke-new
 Rscript run_experiment.R --pilot --workers 2 --out-dir results/pilot-new
 bash scripts/run_cells.sh "$PWD" "$R_LIBS" results/fanout-new 2 smoke 1 97
 Rscript run_experiment.R --combine results/fanout-new/cells/cell_001,results/fanout-new/cells/cell_097 --out-dir results/combined-new
+Rscript scripts/mi_population_check.R results/production-2026-10-05
 quarto render report.qmd
 ```
 
@@ -359,8 +386,7 @@ size flags across target/reference cells; DWLS has
 `r sum(z$flag[z$family=='DWLS' & !z$coverage])` size flags. The flag table
 separates global, nested and MI rules and identifies uncertainty at each boundary.
 Sparse-sample non-positive-definiteness and the other listed failures limit
-availability. Population approximation uncertainty remains unresolved for MI
-null interpretation. These facts request finite-sample and availability review;
+availability. The MI population approximation check passes the approved post-hoc criterion. These facts request finite-sample and availability review;
 flags never justify OPG, expected bread or another inconsistent recipe.
 
 Production reporting is complete. The user decision remains: should ordinary

@@ -96,3 +96,18 @@ quantity. Production runs with seed base 2117000001 and 2,000 replicates per
 cell on the maintainer's simbox workstation after the queued decisions/05 and
 decisions/07 runs, with single-threaded cells, the study's per-cell runner and
 its provenance-checked combine; the executor is recorded in the metadata.
+
+## Post-hoc amendment, 2026-10-08: MI population approximation
+
+Written after seeing the production results; approved by the user on
+2026-10-08 (TASK-128.3). The registered rules above remain unchanged.
+For every single-group MI size cell, use the ML loading targets from population
+draws 1 and 2 and set Delta = |lambda1 - lambda2|, treated as a conservative
+bound on draw-1 approximation error. Divide Delta by the median loading SE
+among successful association_ij loading rows in that cell. With
+ncp = (Delta / SE)^2, compute the upper-tail probability above the nominal
+5% central chi-square threshold for a one-df noncentral chi-square.
+The approximation is negligible for this check if the maximum implied size
+across these cells is at most 5.5%. Ordinary association-ML MIs may be exposed
+only after this check passes. This approximation check does not replace the
+registered empirical size, availability or Monte Carlo uncertainty review.
