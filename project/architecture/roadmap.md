@@ -335,6 +335,14 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: structural identification reports classify each null direction
+as a scale, location or rotation freedom by membership in the constrained
+generator span (fixed and absent cells and linear equalities enforced first),
+and report the rest as information deficits with their parameters. Lab
+reports and the ordinary `magmaan_identification_error` carry the types, the
+factors involved and suggested fixes; rotation advice asks for independent
+loading restrictions, and deficits get no automatic fix (TASK-33.3.2).
+
 2026-10-08: model construction caches the data-free structural identification
 report once per model (api::Model and native prepared handles); fits and
 refits reuse it. Ordinary `magmaan()` refuses a structurally unidentified
