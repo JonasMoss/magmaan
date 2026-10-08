@@ -335,6 +335,13 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: model construction caches the data-free structural identification
+report once per model (api::Model and native prepared handles); fits and
+refits reuse it. Ordinary `magmaan()` refuses a structurally unidentified
+model before fitting with `magmaan_identification_error`, naming the free
+directions by parameter label; Unchecked models fit, and magmaanlab exposes
+`structural_identification()` while lab fits stay permissive (TASK-33.3.1).
+
 2026-10-08: the decisions/08 population-approximation prerequisite for
 association-ML MIs passes (TASK-128.3): over 96 single-group cells the largest
 implied one-df MI size from draw-to-draw target error is 5.36% (limit 5.5%,
