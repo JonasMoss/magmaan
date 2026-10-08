@@ -157,6 +157,24 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
     if (pt.op[i] == parse::Op::Intercept && pt.user[i] == 0) continue;
     formula_rows.push_back(ClassRow{pt.op[i], pt.lhs[i], pt.rhs[i]});
   }
+  const auto classified = detail::classify_vars(formula_rows);
+  // Mplus lowering can introduce an otherwise unused analysis variable with
+  // generated moments before build() classifies it; provenance marks those
+  // rows auto afterward. Preserve that intercept's endogenous role, but do
+  // not change any variable already introduced by syntax or another role.
+  for (const auto i : keep) {
+    if (pt.op[i] != parse::Op::Intercept || pt.user[i] != 0) continue;
+    const auto& name = pt.lhs[i];
+    if (classified.lv.contains(name) || classified.ov_ind.contains(name) ||
+        classified.ov_y.contains(name) || classified.ov_x.contains(name)) continue;
+    bool user_mentioned = false;
+    for (const auto j : keep) {
+      if (pt.user[j] == 0 || is_constraint_op(pt.op[j])) continue;
+      if (pt.lhs[j] == name || pt.rhs[j] == name) { user_mentioned = true; break; }
+    }
+    if (!user_mentioned)
+      formula_rows.push_back(ClassRow{pt.op[i], name, pt.rhs[i]});
+  }
   const detail::VarSets      vsets = detail::classify_vars(formula_rows);
   const detail::VarInventory inv   = detail::build_var_inventory(vsets, reduced);
 

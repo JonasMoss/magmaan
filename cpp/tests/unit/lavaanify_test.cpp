@@ -11,6 +11,8 @@
 #include "magmaan/error.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/mplus_parser.hpp"
+#include "magmaan/compat/mplus/model.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -1057,7 +1059,8 @@ TEST_CASE("lavaanify: std.lv applies per level in a two-level model") {
 TEST_CASE("lavaanify: round trip preserves variable inventory and block dimensions") {
   auto check = [](std::string_view syntax, BuildOptions opts) {
     auto parsed = Parser::parse(syntax);
-    REQUIRE(parsed.has_value());
+    REQUIRE_MESSAGE(parsed.has_value(), (parsed ? "" : parsed.error().detail));
+    if (!parsed) return;
     Starts starts;
     LatentNames names;
     auto direct = build(*parsed, opts, &starts, &names);
@@ -1072,6 +1075,7 @@ TEST_CASE("lavaanify: round trip preserves variable inventory and block dimensio
     auto b = magmaan::model::build_matrix_rep(imported.structure, &imported.names);
     REQUIRE(a.has_value());
     REQUIRE(b.has_value());
+    if (!a || !b) return;
     REQUIRE(a->dims.size() == b->dims.size());
     for (std::size_t k = 0; k < a->dims.size(); ++k) {
       CHECK(a->dims[k].n_observed == b->dims[k].n_observed);
@@ -1095,6 +1099,7 @@ TEST_CASE("lavaanify: round trip preserves variable inventory and block dimensio
   opts.meanstructure = true;
   for (const auto syntax : {
       "f =~ d1 + d2 + d3",
+      "f =~ d1 + d2 + d3\nz ~~ z",
       "y ~ x",
       "f =~ d1 + d2 + d3\nd1 ~ 1\nf ~ x",
       "f =~ d1 + d2 + d3\nd1 ~ x",
@@ -1107,4 +1112,35 @@ TEST_CASE("lavaanify: round trip preserves variable inventory and block dimensio
   check("f =~ d1 + d2 + d3\nf ~ x", opts);
   check("f =~ d1 + d2 + d3\nd1 ~ 1", opts);
   check("f =~ d1 + d2 + d3\nd1 | t1 + t2\nd2 | t1 + t2\nd3 | t1 + t2", {});
+}
+
+TEST_CASE("lavaanify: Mplus auto-only outcomes preserve direct inventory") {
+  for (const auto input : {
+      "VARIABLE: NAMES=y1 y2 y3 x1;\nMODEL: y1 ON x1 (p1); y2 ON x1 (q1);\nMODEL CONSTRAINT: NEW(r); r=p1/q1;",
+      "VARIABLE: NAMES=y1 y2 y3 y4 y5;\nMODEL: i s | y1@0 y2@1 y3@2 y4@3 y5@4;"}) {
+    auto parsed = magmaan::parse::MplusParser::parse(std::string("DATA: FILE=golden.dat;\n") + input);
+    REQUIRE_MESSAGE(parsed.has_value(), (parsed ? "" : parsed.error().detail));
+    if (!parsed) return;
+    Starts starts;
+    LatentNames names;
+    auto direct = build(parsed->flat, magmaan::compat::mplus::build_options(parsed->input), &starts, &names);
+    REQUIRE(direct.has_value());
+    magmaan::compat::mplus::apply_provenance(*parsed, *direct, names);
+    auto pt = to_lavaan_partable(*direct, names, starts);
+    auto imported = magmaan::compat::lavaan::from_lavaan_partable(pt);
+    CHECK(names.var_name == imported.names.var_name);
+    CHECK(direct->var_role == imported.structure.var_role);
+    CHECK(direct->ov_order == imported.structure.ov_order);
+    CHECK(direct->lv_ext_order == imported.structure.lv_ext_order);
+    CHECK(direct->is_user_latent == imported.structure.is_user_latent);
+    auto a = magmaan::model::build_matrix_rep(*direct, &names);
+    auto b = magmaan::model::build_matrix_rep(imported.structure, &imported.names);
+    REQUIRE(a.has_value()); REQUIRE(b.has_value());
+    if (!a || !b) return;
+    REQUIRE(a->dims.size() == b->dims.size());
+    for (std::size_t k = 0; k < a->dims.size(); ++k) {
+      CHECK(a->dims[k].n_observed == b->dims[k].n_observed);
+      CHECK(a->dims[k].n_latent == b->dims[k].n_latent);
+    }
+  }
 }
