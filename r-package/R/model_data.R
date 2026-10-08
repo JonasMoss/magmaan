@@ -718,6 +718,90 @@ data_mixed_ordinal_stats_hybrid_fiml_from_df <- function(x, model, ordered = NUL
   .stamp_mixed_ordinal_stats(out, ctx)
 }
 
+# A specification augmented from declared categories (augment_model_spec())
+# fits only data with those category counts; name a mismatch instead of
+# failing inside the fit. Threshold rows written in syntax keep their own
+# checks.
+.check_declared_categories <- function(model, ov_by_group, n_levels, ordered_mask = NULL) {
+  categories <- if (inherits(model, "magmaan_model_spec")) model$categories else NULL
+  if (is.null(categories)) return(invisible(NULL))
+  for (b in seq_along(ov_by_group)) {
+    for (j in seq_along(ov_by_group[[b]])) {
+      if (!is.null(ordered_mask) && !ordered_mask[[b]][[j]]) next
+      v <- ov_by_group[[b]][[j]]
+      declared <- length(categories[[v]])
+      observed <- as.integer(n_levels[[b]][[j]])
+      if (declared != observed) {
+        stop(sprintf(paste0(
+          "ordinal model: the model declares %d categories for %s, but the data ",
+          "have %d%s; construct the model with the data's categories"),
+          declared, v, observed, if (length(ov_by_group) > 1L) paste0(" in group ", b) else ""),
+          call. = FALSE)
+      }
+    }
+  }
+  invisible(NULL)
+}
+
+# The rows ordinal augmentation adds: per group and ordered variable, in
+# variable order, one free threshold row per category boundary and then one
+# fixed scale row. Unset columns copy the table's first row. Columns are
+# filled whole, because inserting rows one at a time dominated ordinal fit time.
+.ordinal_rows <- function(pt, ov_by_group, n_thresholds, thresholds,
+                          release_thresholds, preserve_scales = FALSE) {
+  per_variable <- lapply(n_thresholds, function(k) as.integer(k) + 1L)
+  n_new <- sum(unlist(per_variable))
+  rows <- pt[rep(NA_integer_, n_new), names(pt), drop = FALSE]
+  if (!n_new) return(rows)
+  for (column in names(pt)) rows[[column]] <- rep(pt[[column]][1L], n_new)
+  level <- unlist(lapply(n_thresholds, function(k)
+    lapply(k, function(n) c(seq_len(n), 0L))), use.names = FALSE)
+  is_threshold <- level > 0L
+  starts <- unlist(thresholds, use.names = FALSE)
+  if (length(starts) != sum(is_threshold)) {
+    stop("ordinal augmentation: ", length(starts), " threshold values for ",
+         sum(is_threshold), " category boundaries", call. = FALSE)
+  }
+  group <- rep(seq_along(ov_by_group), vapply(per_variable, sum, integer(1)))
+  lhs <- unlist(Map(rep, ov_by_group, per_variable), use.names = FALSE)
+  next_free <- if (length(pt$free)) max(pt$free, na.rm = TRUE) else 0L
+  existing_scale <- !is_threshold & paste(lhs, group) %in%
+    paste(pt$lhs[pt$op == "~*~" & pt$lhs == pt$rhs],
+          pt$group[pt$op == "~*~" & pt$lhs == pt$rhs])
+  # Only the all-ordinal route historically preserves source scale rows.
+  if (preserve_scales && any(existing_scale)) {
+    keep <- !existing_scale
+    rows <- rows[seq_len(sum(keep)), , drop = FALSE]
+    level <- level[keep]
+    lhs <- lhs[keep]
+    group <- group[keep]
+    is_threshold <- is_threshold[keep]
+    n_new <- sum(keep)
+  }
+  rows$id <- nrow(pt) + seq_len(n_new)
+  rows$lhs <- lhs
+  rows$op <- ifelse(is_threshold, "|", "~*~")
+  rows$rhs <- ifelse(is_threshold, paste0("t", level), lhs)
+  rows$user <- 0L
+  rows$block <- group
+  rows$group <- group
+  rows$free <- 0L
+  rows$free[is_threshold] <- next_free + seq_len(sum(is_threshold))
+  rows$exo <- 0L
+  rows$ustart <- 1.0
+  rows$ustart[is_threshold] <- starts
+  # Equated thresholds: a shared label across groups ties (variable, level)
+  # the way build ties loadings, so from_lavaan_partable emits the cross-group
+  # `==` constraints lavaan's group.equal = "thresholds" does.
+  rows$label <- ""
+  if (release_thresholds) {
+    rows$label[is_threshold] <- paste0(".theq.", lhs[is_threshold], ".t", level[is_threshold])
+  }
+  rows$plabel <- ""
+  rows$plabel[is_threshold] <- paste0(".p", rows$id[is_threshold], ".")
+  rows
+}
+
 augment_ordinal_partable <- function(model, ordinal_stats) {
   if (!is.null(model$mplus_source) && length(model$ordered)) {
     ov <- ordinal_stats$ov_names
@@ -785,60 +869,14 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
   ov_by_group <- ordinal_stats$ov_names
   if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
   pt <- fix_delta_variances(pt, ov_by_group, ordinal_stats$n_levels)
-  if (any(pt$op == "|")) return(reorder_delta_free(pt))
-  required <- names(pt)
-  n_new <- sum(vapply(ordinal_stats$n_levels, function(z) sum(as.integer(z) - 1L) + length(z), integer(1)))
-  rows <- pt[rep(NA_integer_, n_new), required, drop = FALSE]
-  n0 <- nrow(pt)
-  next_free <- if (length(pt$free)) max(pt$free, na.rm = TRUE) else 0L
-  rr <- 0L
-  for (b in seq_along(ov_by_group)) {
-    ov <- ov_by_group[[b]]
-    th <- ordinal_stats$thresholds[[b]]
-    th_pos <- 1L
-    for (j in seq_along(ov)) {
-      for (lev in seq_len(ordinal_stats$n_levels[[b]][[j]] - 1L)) {
-        rr <- rr + 1L
-        next_free <- next_free + 1L
-        rows[rr, ] <- pt[1L, required, drop = FALSE]
-        rows$id[rr] <- n0 + rr
-        rows$lhs[rr] <- ov[[j]]
-        rows$op[rr] <- "|"
-        rows$rhs[rr] <- paste0("t", lev)
-        rows$user[rr] <- 0L
-        rows$block[rr] <- b
-        rows$group[rr] <- b
-        rows$free[rr] <- next_free
-        rows$exo[rr] <- 0L
-        rows$ustart[rr] <- th[[th_pos]]
-        # Equated thresholds: a shared label across groups ties (var, level) the
-        # same way build ties loadings, so from_lavaan_partable emits the
-        # cross-group `==` constraints lavaan's group.equal = "thresholds" does.
-        rows$label[rr] <- if (release_thresholds) {
-          paste0(".theq.", ov[[j]], ".t", lev)
-        } else ""
-        rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
-        th_pos <- th_pos + 1L
-      }
-      # Preserve an existing source scale row when supplying the category schema.
-      if (any(pt$op == "~*~" & pt$lhs == ov[[j]] & pt$rhs == ov[[j]] & pt$group == b)) next
-      rr <- rr + 1L
-      rows[rr, ] <- pt[1L, required, drop = FALSE]
-      rows$id[rr] <- n0 + rr
-      rows$lhs[rr] <- ov[[j]]
-      rows$op[rr] <- "~*~"
-      rows$rhs[rr] <- ov[[j]]
-      rows$user[rr] <- 0L
-      rows$block[rr] <- b
-      rows$group[rr] <- b
-      rows$free[rr] <- 0L
-      rows$exo[rr] <- 0L
-      rows$ustart[rr] <- 1.0
-      rows$label[rr] <- ""
-      rows$plabel[rr] <- ""
-    }
+  if (any(pt$op == "|")) {
+    .check_declared_categories(model, ov_by_group, ordinal_stats$n_levels)
+    return(reorder_delta_free(pt))
   }
-  out <- reorder_delta_free(rbind(pt, rows[seq_len(rr), , drop = FALSE]))
+  rows <- .ordinal_rows(pt, ov_by_group,
+                        lapply(ordinal_stats$n_levels, function(z) as.integer(z) - 1L),
+                        ordinal_stats$thresholds, release_thresholds, preserve_scales = TRUE)
+  out <- reorder_delta_free(rbind(pt, rows))
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered
@@ -909,58 +947,15 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
     pt
   }
   pt <- fix_delta_variances(pt)
-  if (any(pt$op == "|")) return(reorder_delta_free(pt))
-  required <- names(pt)
-  n_new <- sum(vapply(seq_along(ov_by_group), function(b) {
-    sum(as.integer(mixed_stats$n_levels[[b]][mixed_stats$ordered_mask[[b]] != 0L]) - 1L) +
-      sum(mixed_stats$ordered_mask[[b]] != 0L)
-  }, integer(1)))
-  rows <- pt[rep(NA_integer_, n_new), required, drop = FALSE]
-  n0 <- nrow(pt)
-  next_free <- if (length(pt$free)) max(pt$free, na.rm = TRUE) else 0L
-  rr <- 0L
-  for (b in seq_along(ov_by_group)) {
-    ov <- ov_by_group[[b]]
-    th <- mixed_stats$thresholds[[b]]
-    th_pos <- 1L
-    for (j in seq_along(ov)) {
-      if (!mixed_stats$ordered_mask[[b]][[j]]) next
-      for (lev in seq_len(mixed_stats$n_levels[[b]][[j]] - 1L)) {
-        rr <- rr + 1L
-        next_free <- next_free + 1L
-        rows[rr, ] <- pt[1L, required, drop = FALSE]
-        rows$id[rr] <- n0 + rr
-        rows$lhs[rr] <- ov[[j]]
-        rows$op[rr] <- "|"
-        rows$rhs[rr] <- paste0("t", lev)
-        rows$user[rr] <- 0L
-        rows$block[rr] <- b
-        rows$group[rr] <- b
-        rows$free[rr] <- next_free
-        rows$exo[rr] <- 0L
-        rows$ustart[rr] <- th[[th_pos]]
-        rows$label[rr] <- if (release_thresholds) {
-          paste0(".theq.", ov[[j]], ".t", lev)
-        } else ""
-        rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
-        th_pos <- th_pos + 1L
-      }
-      rr <- rr + 1L
-      rows[rr, ] <- pt[1L, required, drop = FALSE]
-      rows$id[rr] <- n0 + rr
-      rows$lhs[rr] <- ov[[j]]
-      rows$op[rr] <- "~*~"
-      rows$rhs[rr] <- ov[[j]]
-      rows$user[rr] <- 0L
-      rows$block[rr] <- b
-      rows$group[rr] <- b
-      rows$free[rr] <- 0L
-      rows$exo[rr] <- 0L
-      rows$ustart[rr] <- 1.0
-      rows$label[rr] <- ""
-      rows$plabel[rr] <- ""
-    }
+  if (any(pt$op == "|")) {
+    .check_declared_categories(model, ov_by_group, mixed_stats$n_levels, mixed_stats$ordered_mask)
+    return(reorder_delta_free(pt))
   }
+  ordinal <- lapply(mixed_stats$ordered_mask, function(mask) mask != 0L)
+  rows <- .ordinal_rows(pt, Map(`[`, ov_by_group, ordinal),
+                        Map(function(z, keep) as.integer(z[keep]) - 1L,
+                            mixed_stats$n_levels, ordinal),
+                        mixed_stats$thresholds, release_thresholds)
   out <- reorder_delta_free(rbind(pt, rows))
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
@@ -968,6 +963,48 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   attr(out, "magmaan.parameterization") <- parameterization
   attr(out, "magmaan.group_equal") <- attr(pt, "magmaan.group_equal", exact = TRUE)
   out
+}
+
+# The category schema augmentation reads: per group, each observed variable's
+# number of categories (0 for continuous ones) and missing threshold values.
+.category_schema <- function(ov, ordered, categories) {
+  n_levels <- lapply(ov, function(x) vapply(x, function(v)
+    if (v %in% ordered) length(categories[[v]]) else 0L, integer(1)))
+  list(ov_names = ov, ordered = ordered, n_levels = n_levels,
+       thresholds = lapply(n_levels, function(x) rep(NA_real_, sum(pmax(x - 1L, 0L)))))
+}
+
+# Add the threshold and scale rows of ordered variables from declared
+# categories, as ordinal fits otherwise do from each dataset. The rows depend
+# only on category counts, and fits start thresholds from their own data, so
+# fitting the result gives the same estimates. Threshold starts stay missing.
+augment_model_spec <- function(model, categories) {
+  spec <- as_magmaan_model_spec(model)
+  ordered <- as.character(spec$ordered)
+  if (!length(ordered)) {
+    stop("augment_model_spec(): the specification has no ordered variables", call. = FALSE)
+  }
+  if (!is.list(categories) || is.null(names(categories)) || anyDuplicated(names(categories)) ||
+      !setequal(names(categories), ordered)) {
+    stop("augment_model_spec(): `categories` must be a list named by the ordered variables",
+         call. = FALSE)
+  }
+  categories <- lapply(categories[ordered], as.character)
+  if (any(lengths(categories) < 2L)) {
+    stop("augment_model_spec(): each ordered variable needs at least two categories", call. = FALSE)
+  }
+  ov <- model_matrix_rep(spec$partable)$ov_names
+  if (!is.list(ov)) ov <- list(ov)
+  if (length(setdiff(ordered, unique(unlist(ov))))) {
+    stop("augment_model_spec(): ordered variables must occur in the model", call. = FALSE)
+  }
+  schema <- .category_schema(ov, ordered, categories)
+  schema$ordered_mask <- lapply(ov, function(x) as.integer(x %in% ordered))
+  all_ordinal <- all(vapply(ov, function(x) setequal(x, ordered), logical(1)))
+  spec$partable <- if (all_ordinal) augment_ordinal_partable(spec, schema) else
+    augment_mixed_ordinal_partable(spec, schema)
+  spec$categories <- categories
+  spec
 }
 
 shrink_mixed_ordinal_stats <- function(x, kind = "diagonal", intensity = 0,

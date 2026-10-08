@@ -1,5 +1,6 @@
 \name{prepare_model}
 \alias{prepare_model}
+\alias{augment_model_spec}
 \alias{prepare_data}
 \alias{prepare_weight}
 \alias{estimate}
@@ -8,6 +9,7 @@
 estimation weights and estimation. Inference is requested separately.}
 \usage{
 prepare_model(model, ..., prototype = NULL)
+augment_model_spec(model, categories)
 prepare_data(model, data, kind = NULL, missing = c("error", "listwise"))
 prepare_weight(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
                W = NULL, full = TRUE, dls_a = 0.5)
@@ -18,10 +20,14 @@ estimate(model, data, estimator = NULL, weight = NULL,
 }
 \arguments{
 \item{model}{Model syntax or a model specification for \code{prepare_model};
-a prepared model for the other functions.}
+a specification for \code{augment_model_spec}; a prepared model for the other functions.}
 \item{...}{Options passed to \code{model_spec} when model is syntax.}
 \item{prototype}{Data frame or named matrix supplying categorical levels and
 order. No empirical moments or starts are retained from it.}
+\item{categories}{For \code{augment_model_spec}, a list named by the ordered
+variables giving each variable's categories in order. Only category counts
+enter augmentation. Threshold starts remain missing and are initialized from
+each fitted dataset. The returned specification records the categories.}
 \item{data}{A data frame, named matrix or sample-moment list for
 \code{prepare_data}; a prepared dataset for the other functions.}
 \item{kind}{\code{"moments"}, \code{"raw"} (FIML), \code{"ordinal"} or
@@ -60,7 +66,8 @@ contradictory requests are rejected.}
 (\code{"joint"} or \code{"determinacy"}) and \code{weight} (default 0.25).
 The weight is finite and non-negative; zero disables the penalty.}
 }
-\value{Preparation returns immutable, process-local handles. A prepared model
+\value{\code{augment_model_spec} returns a model specification with threshold
+and scale rows added once. Preparation returns immutable, process-local handles. A prepared model
 exposes its specification; a weight exposes \code{W} for continuous data and
 \code{stats} for categorical inference. Estimation returns the existing
 \code{magmaan_fit} list with convergence and admissibility diagnostics.}

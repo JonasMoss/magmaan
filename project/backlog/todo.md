@@ -159,6 +159,12 @@ result under an unstated convention.
   `fit_model()` on the constructed specification. See the
   [implementation record](../design/r-interface-vision.md#implementation-and-remaining-decisions).
 
+- [x] **S — rescue lab ordinal augmentation (TASK-130; LAB half of TASK-46).**
+  `augment_model_spec()` declares category counts once with missing threshold
+  starts; `prepare_model()` composes it. Vectorized ordinal/mixed augmentation
+  preserves current Mplus and source-scale behavior. Ordinary construction
+  already augments through its cached native prepared handle.
+
 - [x] **S — prepared-path fitting options for all-ordinal DWLS.** Prepared
   `estimate()` reuses the fresh fitter's configured ordinal engine for presets,
   starts, optimizer and convergence choices. `magmaan()` uses prepared handles

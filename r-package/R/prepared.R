@@ -45,13 +45,9 @@ prepare_model <- function(model, ..., prototype = NULL) {
       as.character(levels)
     })
     # Augmentation uses schema only, never empirical prototype thresholds.
-    schema <- list(ov_names = ov, ordered = ordered,
-                   n_levels = lapply(ov, function(x) vapply(x, function(v)
-                     if (v %in% ordered) length(categories[[v]]) else 0L, integer(1))))
+    spec <- augment_model_spec(spec, categories)
+    schema <- .category_schema(ov, ordered, categories)
     schema$ordered_mask <- masks
-    schema$thresholds <- lapply(schema$n_levels, function(x) rep(NA_real_, sum(pmax(x - 1L, 0L))))
-    spec$partable <- if (kind == "ordinal") augment_ordinal_partable(spec, schema) else
-      augment_mixed_ordinal_partable(spec, schema)
     # Native preparation consumes moment metadata, not empirical values.
     schema$R <- lapply(ov, function(x) diag(length(x)))
     schema$nobs <- rep(2L, length(ov))

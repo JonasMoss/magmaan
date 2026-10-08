@@ -4,6 +4,10 @@
   fixed entries and linear equalities, and expose per-direction suggested fixes.
   Remaining null dimensions are reported as information deficits.
 
+- `augment_model_spec(model, categories)` augments ordinal specifications from
+  declared category counts with missing threshold starts. Ordinal and mixed
+  augmentation now builds rows column by column; prepared models use this helper.
+
 - `structural_identification()` checks a specification or reuses a prepared
   model's data-free report. Prepared fits reuse construction-time identification
   and express cached null directions at the deciding probe point. Lab fits

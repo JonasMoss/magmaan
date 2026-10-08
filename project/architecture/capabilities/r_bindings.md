@@ -27,6 +27,11 @@
 - **Prepared R interface:** `prepare_model`, `prepare_data`, `prepare_weight`
   and `estimate` retain separate, immutable process-local native handles for
   continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS.
+  Lab `augment_model_spec(model, categories)` adds threshold and scale rows
+  from declared category counts, retains missing threshold starts, and records
+  the schema. `prepare_model()` uses the same helper; dataset category-count
+  mismatches name the variable. Ordinal/mixed row construction is vectorized,
+  preserving the Mplus projection and existing all-ordinal source scale rows.
   Ordinal schema augmentation and native matrix representation are prepared
   once; each dataset refreshes moments/patterns/starts. Weights are dataset-bound,
   and full categorical Gamma is optional. New FIML estimation does not compute
