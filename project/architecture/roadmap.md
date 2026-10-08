@@ -352,6 +352,16 @@ constants scale with the data (a normalizer refusal keeps the plain fallback).
 Three retained x0.01 barrier failures from decisions/02 now certify; native and
 x100 controls are unchanged (TASK-131). Near-pole barrier verdicts are TASK-137.
 
+2026-10-08: nested inference assumes an interior population, not an interior
+fitted factor covariance (user decision). Improper unrestricted null fits and
+PSD-boundary fits now get nested tests when the required tangents have full
+rank; tangent rank loss still returns `boundary_nesting`, and a PSD-boundary
+input carries the global tests' interior-population flag. The SB nested
+statistic at an improper null matches lavaan 0.7.2's `satorra.2000`; a
+weak-factor interior population (factor correlation .9, N = 100/200, 500
+draws each, 10%/1.8% improper nulls) rejects at 5.6-7.0% over all draws and
+at the same rates over proper nulls only (TASK-129.13, 0.2.1).
+
 2026-10-08: model-contract repair. `from_lavaan_partable()` now rebuilds the
 same variable inventory as the direct syntax build: synthesized intercept rows
 no longer promote indicators to `ov.y` (which, with any regression, added
