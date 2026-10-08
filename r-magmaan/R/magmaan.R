@@ -306,7 +306,7 @@ print.magmaan_model <- function(x, ...) {
 #'   * `convergence`: `"default"` or `"newton"` (magmaan's convergence check)
 #'     or `"lavaan-0.7.2"` (lavaan 0.7.2's acceptance rule).
 #'   * `marker`: `"default"` keeps requested markers; `"lavaan-0.7.2"` applies
-#'     lavaan's weak-marker rule for complete continuous ML, including its
+#'     lavaan's weak-marker rule for continuous ML, FIML and ordinal/mixed DWLS, including its
 #'     original-model retry when the switched fit is rejected.
 #'   * `preset`: `"lavaan-0.7.2"` selects lavaan 0.7.2's marker, start, search and
 #'     acceptance rule; explicit entries override it.
@@ -314,9 +314,9 @@ print.magmaan_model <- function(x, ...) {
 #'   `optimizer`, `convergence`, `preset` and `start = "lavaan-0.7.2"` are
 #'   available for continuous ML or FIML, or ordinal or complete mixed DWLS, with unrestricted covariance and
 #'   supported linear equality constraints. Inspect `as_lab_fit(fit)$fitting`
-#'   for the resolved settings, attempts and `marker_switch` table. FIML and DWLS
-#'   currently resolve the preset marker to `"default"`; explicitly requesting
-#'   `marker = "lavaan-0.7.2"` on those routes is unsupported. Fitting computes magmaan's inference policy;
+#'   for the resolved settings, attempts and `marker_switch` table. The marker rule
+#'   reads each route's saturated H1 covariance. Conditional-x residual H1 and
+#'   composite adaptation are unsupported. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
 #'   The policy covers complete-data ML, observed-data FIML and ordinal or mixed DWLS. DWLS
 #'   reports one global test, the fit-function statistic (equal to its score

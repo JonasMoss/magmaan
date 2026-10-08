@@ -44,11 +44,33 @@
   candidate$fitting$marker_switch <- info
   candidate
 }
-.marker_fit_spec <- function(spec, data, options, run) {
+.marker_fit_spec <- function(spec, data, options, run, kind = NULL) {
   if (is.null(options) || isTRUE(attr(options, "magmaan.marker_evaluated"))) return(NULL)
   if (!.marker_requested(options)) return(NULL)
-  model <- prepare_model(spec)
-  prepared <- prepare_data(model, if (is.data.frame(data)) data else sample_stats_arg(data), missing = "listwise")
+  categorical <- inherits(data, "magmaan_ordinal_data") || inherits(data, "magmaan_mixed_ordinal_data")
+  if (length(spec$ordered) && any(spec$partable$exo != 0L))
+    .marker_boundary(function() stop("unsupported_model: marker adaptation lacks conditional.x residual H1 covariance"))
+  if (categorical) {
+    # The rule needs only the supplied H1 moments. The replay still uses the
+    # original categorical specification and the same first-stage statistics.
+    moments <- spec
+    moments$ordered <- character()
+    metadata <- as.list.environment(prepare_model(moments))
+    metadata$input_spec <- spec
+    metadata$categories <- setNames(lapply(spec$ordered, function(v) {
+      j <- match(v, data$ov_names[[1L]])
+      as.character(seq_len(data$n_levels[[1L]][j]))
+    }), spec$ordered)
+    model <- do.call(.prepared_object, c(metadata, list(class = "magmaan_prepared_model")))
+    prepared <- prepare_data(model, list(S = data$R, nobs = data$nobs))
+  } else if (identical(kind, "raw") && !is.data.frame(data) && !is.matrix(data)) {
+    model <- prepare_model(spec)
+    prepared <- .prepared_object(native = prepared_data_impl(model$native,
+      fiml_data_arg(data), "raw", model$masks), class = "magmaan_prepared_data")
+  } else {
+    model <- prepare_model(spec, prototype = if (length(spec$ordered)) data else NULL)
+    prepared <- prepare_data(model, if (is.data.frame(data)) data else if (identical(kind, "raw")) data else sample_stats_arg(data), kind = kind, missing = "listwise")
+  }
   .marker_fit(model, prepared, options, function(m, o) run(m$input_spec, o))
 }
 
@@ -73,7 +95,7 @@
 }
 
 # Reconstruct categorical schema from the original handle, without borrowing
-# empirical thresholds or starts. The h1 inputs for those routes are deferred.
+# empirical thresholds or starts.
 .marker_prepare <- function(spec, original) {
   prototype <- if (length(original$categories)) as.data.frame(lapply(original$categories,
     function(levels) factor(character(), levels = levels, ordered = TRUE))) else NULL

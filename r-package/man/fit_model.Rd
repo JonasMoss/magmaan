@@ -36,11 +36,11 @@ fit_model(model, data, estimator = "ML", groups = NULL, ..., cluster = NULL, ord
 \item{options}{Named fitting-options list: preset, starts, optimizer, convergence and marker.
 The lavaan-0.7.2 preset selects all four components. marker = "default" keeps
 requested markers; marker = "lavaan-0.7.2" applies the weak-marker rule for
-complete continuous ML and retries the original model if the switched fit is
+continuous ML, FIML and ordinal/mixed DWLS and retries the original model if the switched fit is
 rejected. The fit retains the actual model and fitting$marker_switch (lv, old,
-new, signed r_old and r_new rounded to three decimals, reverted). FIML and DWLS
-currently resolve the preset marker to "default"; explicit adaptation there is
-unsupported. Nested inference and refit_from_null explicitly refuse switched
+new, signed r_old and r_new rounded to three decimals, reverted). The rule
+reads each route's saturated H1 covariance. Conditional-x residual H1 and
+composite adaptation are unsupported. Nested inference and refit_from_null explicitly refuse switched
 marker coordinates. Components may also be supplied in control$fitting_options.}
 }
 \value{A magmaan_fit list with parameter estimates, fitting options, convergence and admissibility diagnostics.}

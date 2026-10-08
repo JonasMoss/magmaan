@@ -214,7 +214,7 @@ and no fitting code was changed.
 Diagnostic scripts and logs are retained under `~/.cache/magmaan-logs/task-59-*`;
 the trace scripts require the temporary callback instrumentation described above.
 
-### lavaan marker component (complete-data ML)
+### lavaan marker component (ML, FIML and ordinal/mixed DWLS)
 
 `FittingOptions::marker` resolves to `default` or `lavaan-0.7.2`; the preset
 selects the latter and explicit component overrides mark it modified. The
@@ -230,8 +230,12 @@ Inference/reporting consume the fitted partable; nested inference and
 implemented. Casewise contrasts also refuse automatic adaptation because a
 changed marker changes the parameter metric. Ordinary fitting calls rerun the
 rule on each dataset.
-FIML and DWLS preset reports currently resolve marker to `default`; explicit
-adaptation on those routes and composite adaptation are unsupported.
+FIML reads the preset EM H1 covariance; ordinal DWLS reads polychoric
+correlations, and mixed DWLS reads the polychoric/polyserial/Pearson H1
+covariance. Prepared and ordinary fits replay the same route after switching.
+Switch parity requires converged H1 EM on both sides; stalled endpoints retain
+the TASK-129.7 boundary. Conditional-x residual H1 and composite adaptation
+are unsupported.
 
 ### Unwired objective-coordinate scale primitive
 

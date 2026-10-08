@@ -380,12 +380,6 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     const Eigen::VectorXd& explicit_start, Bounds bounds, const FimlInput* missing) {
   auto setup = resolve_fitting_options(options);
   if (!setup) return std::unexpected(setup.error());
-  if (missing) {
-    if (options.marker && *options.marker == lavaan_version)
-      return std::unexpected(invalid("unsupported_model: marker = lavaan-0.7.2 is not yet supported for FIML; use marker = default"));
-    setup->marker = "default";
-    setup->modified_preset = options.preset.has_value();
-  }
   if (auto ok = supported(pt); !ok) return std::unexpected(ok.error());
   const bool lavaan_search = setup->optimizer == lavaan_version;
   const bool lavaan_convergence = setup->convergence == lavaan_version;

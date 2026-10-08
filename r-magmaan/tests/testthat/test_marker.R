@@ -26,7 +26,26 @@ test_that("ordinary switched fits report and infer from their fitted partable", 
   expect_output(print(summary(fit)),"Marker switched as lavaan 0.7.2 does")
   expect_error(anova(fit,fit),class="magmaan_unsupported_model")
   expect_error(magmaan(model,d,options=list(marker="bad")),"options\\$marker")
-  expect_error(magmaan(model,d,estimator="FIML",options=list(marker="lavaan-0.7.2")),"unsupported_model")
   off <- magmaan(model,d,inference=FALSE,options=list(preset="lavaan-0.7.2",marker="default"))
   expect_equal(nrow(off$lab$fitting$marker_switch),0L)
+})
+
+test_that("ordinary FIML and categorical DWLS retain the switched specification", {
+  skip_if_not_installed("lavaan")
+  skip_if(as.character(packageVersion("lavaan")) != "0.7.2")
+  for (route in c("FIML", "ordinal", "mixed")) {
+    d <- .marker_sample()
+    ordered <- if (route == "ordinal") names(d) else if (route == "mixed") names(d)[1:3] else character()
+    for (v in ordered) d[[v]] <- ordered(cut(d[[v]], c(-Inf, -.4, .4, Inf)))
+    if (route == "FIML") d[seq(1L, 600L, 10L), "x4"] <- NA_real_
+    model <- magmaan_model("f =~ x1+x2+x3+x4", prototype = d, ordered = ordered)
+    fit <- suppressWarnings(magmaan(model, d, estimator = if (route == "FIML") "FIML" else "DWLS",
+      inference = FALSE, options = list(preset = "lavaan-0.7.2")))
+    lab <- as_lab_fit(fit)
+    info <- lab$fitting$marker_switch
+    expect_equal(info$old, "x1"); expect_false(info$reverted)
+    expect_equal(fit$model$spec$options$marker, setNames(info$new, "f"))
+    expect_identical(fit$fitting, lab$fitting)
+    expect_output(print(fit), "Marker switched as lavaan 0.7.2 does")
+  }
 })

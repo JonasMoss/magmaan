@@ -794,19 +794,29 @@ Rcpp::List prepared_marker_adapt_impl(SEXP model, SEXP data, Rcpp::List options,
         }))
       Rcpp::stop("magmaan fit error [unsupported_model]: lavaan marker adaptation excludes composites; use options$marker = default");
   }
-  if (setup->marker == "lavaan-0.7.2" && d.kind == "moments" && m.kind == "moments") {
+  if (setup->marker == "lavaan-0.7.2") {
     if (m.ctx.pt.composite_mode != magmaan::spec::CompositeMode::None)
       Rcpp::stop("magmaan fit error [unsupported_model]: lavaan marker adaptation excludes composites; use options$marker = default");
+    if ((d.kind == "ordinal" || d.kind == "mixed") &&
+        std::any_of(m.ctx.pt.exo.begin(), m.ctx.pt.exo.end(), [](auto x) { return x != 0; }))
+      Rcpp::stop("magmaan fit error [unsupported_model]: marker adaptation lacks conditional.x residual H1 covariance");
     auto pt = magmaan::compat::lavaan::to_lavaan_partable(m.ctx.pt, m.ctx.names, m.starts);
-    auto result = magmaan::estimate::lavaan_marker_adapt(pt, d.sample.S, m.ctx.rep.ov_names);
+    std::vector<Eigen::MatrixXd> cov;
+    if (d.kind == "moments") cov = d.sample.S;
+    else if (d.kind == "raw") {
+      auto h1 = magmaan::estimate::lavaan_fiml_h1(d.raw, *d.pack);
+      if (!h1) stop_fit(h1.error());
+      cov = std::move(h1->sigma);
+    } else if (d.kind == "ordinal") cov = d.ordinal.R;
+    else if (d.kind == "mixed") cov = d.mixed.R;
+    else Rcpp::stop("magmaan fit error [unsupported_model]: marker adaptation lacks this route's H1 covariance");
+    auto result = magmaan::estimate::lavaan_marker_adapt(pt, cov, m.ctx.rep.ov_names);
     if (!result) stop_fit(result.error());
     for (const auto& item : result->info) {
       lv.push_back(item.lv); old.push_back(item.old_marker); next.push_back(item.new_marker);
       r_old.push_back(item.r_old); r_new.push_back(item.r_new);
       marker.push_back(item.new_marker, item.lv);
     }
-  } else if (setup->marker == "lavaan-0.7.2" && request.marker) {
-    Rcpp::stop("magmaan fit error [unsupported_model]: marker = lavaan-0.7.2 is not yet supported on this route; use options$marker = default");
   }
   return Rcpp::List::create(Rcpp::_["marker"] = marker,
       Rcpp::_["info"] = Rcpp::DataFrame::create(Rcpp::_["lv"] = lv, Rcpp::_["old"] = old,

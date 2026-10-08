@@ -615,11 +615,13 @@ TEST_CASE("configured FIML matches pinned MCAR MAR starts coordinates gradients 
     auto pack=estimate::fiml::fiml_pack(raw); REQUIRE_OR_RETURN(pack);
     auto h1=estimate::lavaan_fiml_h1(raw,*pack); REQUIRE_OR_RETURN(h1);
     estimate::FittingOptions options; options.preset="lavaan-0.7.2";
+    options.marker="lavaan-0.7.2";
     Eigen::VectorXd start;
     if(c.value("invalid_start",false)) start=Eigen::VectorXd::Zero(pt->n_free());
     auto est=estimate::fit_fiml_configured(*pt,*rep,raw,*pack,*h1,options,{},start);
     if(!est) CAPTURE(est.error().detail);
     REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    CHECK(est->fitting->setup.marker == "lavaan-0.7.2");
     const auto& attempts=est->fitting->attempts;
     REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
     for(std::size_t i=0;i<pt->size();++i) if(pt->free[i]>0) {
@@ -736,6 +738,7 @@ TEST_CASE("configured ordinal DWLS matches lavaan starts coordinates gradients r
     }
     const auto param=c["parameterization"]=="theta"?estimate::OrdinalParameterization::Theta:estimate::OrdinalParameterization::Delta;
     estimate::FittingOptions options; options.preset="lavaan-0.7.2";
+    options.marker="lavaan-0.7.2";
     Eigen::VectorXd explicit_start;
     if(!c["explicit_start"].empty()) explicit_start=vector(c["explicit_start"]);
     auto est=estimate::fit_ordinal_configured(pt,*rep,stats,options,{},explicit_start,{},
@@ -743,6 +746,7 @@ TEST_CASE("configured ordinal DWLS matches lavaan starts coordinates gradients r
     const std::string fit_error=est ? "" : est.error().detail;
     CAPTURE(fit_error);
     REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    CHECK(est->fitting->setup.marker == "lavaan-0.7.2");
     const auto& attempts=est->fitting->attempts;
     REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
     CHECK((estimate::fit_verdict(*est).status==estimate::FitCheck::Passed)==c["converged"].get<bool>());
@@ -858,6 +862,7 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
     }
     const auto param=c["parameterization"]=="theta"?estimate::OrdinalParameterization::Theta:estimate::OrdinalParameterization::Delta;
     estimate::FittingOptions options; options.preset="lavaan-0.7.2";
+    options.marker="lavaan-0.7.2";
     Eigen::VectorXd explicit_start;
     if(!c["explicit_start"].empty()) explicit_start=vector(c["explicit_start"]);
     auto est=estimate::fit_ordinal_configured(pt,*rep,stats,options,{},explicit_start,{},
@@ -865,6 +870,7 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
     const std::string fit_error=est ? "" : est.error().detail;
     CAPTURE(fit_error);
     REQUIRE_OR_RETURN(est); REQUIRE_OR_RETURN(est->fitting);
+    CHECK(est->fitting->setup.marker == "lavaan-0.7.2");
     const auto& attempts=est->fitting->attempts;
     REQUIRE_OR_RETURN(attempts.size()==c["attempts"].size());
     CHECK((estimate::fit_verdict(*est).status==estimate::FitCheck::Passed)==c["converged"].get<bool>());

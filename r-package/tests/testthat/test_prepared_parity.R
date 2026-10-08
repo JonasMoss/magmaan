@@ -19,8 +19,9 @@
                        missing = "listwise")
   count <- prepared_structure_count_impl()
   fresh <- suppressWarnings(do.call(fit_model, c(list(model = spec, data = d, estimator = estimator), args)))
-  # A fresh marker-enabled ML fit prepares a temporary handle for h1 preflight.
-  marker_preflight <- estimator == "ML" && !length(spec$ordered) &&
+  # A fresh marker-enabled fit prepares a temporary handle for h1 preflight.
+  marker_preflight <- ((estimator %in% c("ML", "FIML") && !length(spec$ordered)) ||
+    (estimator == "DWLS" && length(spec$ordered))) &&
     .marker_requested(args$options %||% args$control$fitting_options)
   expect_equal(prepared_structure_count_impl(), count + as.integer(marker_preflight))
   count <- prepared_structure_count_impl()

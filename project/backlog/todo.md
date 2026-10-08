@@ -330,8 +330,12 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   checker reports the six flags for every configured ML, FIML and ordinal/mixed
   DWLS fit using lavaan acceptance, independently of `converged`, inference
   gating and admissibility. Literal edge cases and live lavaan 0.7.2 gates pass.
-- [ ] **0.2.1 — marker switch for FIML and ordinal/mixed DWLS (TASK-129.3)**,
-  reading lavaan's saturated (h1) covariance of each route.
+- [x] **0.2.1 — marker switch for FIML and ordinal/mixed DWLS (TASK-129.3).**
+  The shared rule reads preset EM H1 covariance, polychoric correlations or
+  mixed polychoric/polyserial/Pearson covariance; fresh, prepared and direct
+  fits replay switching/reversion. Live 0.7.2 gates cover weak markers, marker
+  off, unchanged controls and grouped ordinal switching. Conditional-x residual
+  H1 remains typed unsupported; stalled FIML H1 retains the TASK-129.7 boundary.
 - [x] **0.2.1 — FIML preset H1 moments (TASK-129.7).** Preset-only
   scale-dependent covariance ridge and retained nonconverged H1 moments;
   strict `1e-10` moment/first-start gates for converged lavaan H1. Stalled

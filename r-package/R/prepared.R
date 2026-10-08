@@ -186,7 +186,8 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   covariance <- covariance_options$covariance
   barrier <- covariance_options$barrier
   marker_options <- options %||% control$fitting_options
-  if (!is.null(marker_options) && estimator == "ML" && model$kind == "moments" && covariance == "unrestricted") {
+  if (!is.null(marker_options) && ((estimator == "ML" && data$kind == "moments") || estimator == "FIML" ||
+      (estimator == "DWLS" && data$kind %in% c("ordinal", "mixed"))) && covariance == "unrestricted") {
     switched <- .marker_fit(model, data, marker_options, function(m, o) {
       ctl <- control
       if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL

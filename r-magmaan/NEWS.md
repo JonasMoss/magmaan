@@ -1,5 +1,10 @@
 # magmaan (development version)
 
+- The `lavaan-0.7.2` marker component now also covers FIML and ordinal/mixed
+  DWLS, using each route's saturated H1 covariance. Switched fits replay the
+  selected fitting attempts and revert when rejected; `marker = "default"`
+  keeps the requested markers.
+
 - Identification refusals now suggest specific scale, location and rotation
   restrictions. Information deficits name affected parameters without suggesting
   an automatic fix; no identifying constraints are added.

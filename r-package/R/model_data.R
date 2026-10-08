@@ -1930,6 +1930,18 @@ sam <- function(model, data,
 fit_fiml <- function(model, data,
                      optimizer = "nlopt-lbfgs-slsqp-fallback",
                      control = NULL, options = NULL) {
+  optimizer_missing <- missing(optimizer)
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options)) {
+    switched <- .marker_fit_spec(as_magmaan_model_spec(model), data, marker_options, function(m, o) {
+      ctl <- control
+      if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
+      if (!length(ctl)) ctl <- NULL
+      if (optimizer_missing) fit_fiml(m, data, control = ctl, options = o)
+      else fit_fiml(m, data, optimizer = optimizer, control = ctl, options = o)
+    }, kind = "raw")
+    if (!is.null(switched)) return(switched)
+  }
   if (!is.null(options)) {
     control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
     optimizer <- NULL
@@ -2292,6 +2304,18 @@ fcsem_standardized_rows <- function(fit, vcov = NULL) {
 
 fit_dwls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                              control = NULL, bounds = NULL, options = NULL) {
+  optimizer_missing <- missing(optimizer)
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options)) {
+    switched <- .marker_fit_spec(as_magmaan_model_spec(model), data, marker_options, function(m, o) {
+      ctl <- control
+      if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
+      if (!length(ctl)) ctl <- NULL
+      if (optimizer_missing) fit_dwls_ordinal(m, data, control = ctl, bounds = bounds, options = o)
+      else fit_dwls_ordinal(m, data, optimizer = optimizer, control = ctl, bounds = bounds, options = o)
+    })
+    if (!is.null(switched)) return(switched)
+  }
   if (!is.null(options)) {
     control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
     optimizer <- NULL
@@ -2398,6 +2422,18 @@ fit_ordinal_stage2 <- function(model, data,
 
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                    control = NULL, bounds = NULL, options = NULL) {
+  optimizer_missing <- missing(optimizer)
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options)) {
+    switched <- .marker_fit_spec(as_magmaan_model_spec(model), data, marker_options, function(m, o) {
+      ctl <- control
+      if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
+      if (!length(ctl)) ctl <- NULL
+      if (optimizer_missing) fit_dwls_mixed_ordinal(m, data, control = ctl, bounds = bounds, options = o)
+      else fit_dwls_mixed_ordinal(m, data, optimizer = optimizer, control = ctl, bounds = bounds, options = o)
+    })
+    if (!is.null(switched)) return(switched)
+  }
   if (!is.null(options)) {
     control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
     optimizer <- NULL
@@ -2631,14 +2667,15 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
   group_var <- prep$group_var
   marker_options <- options %||% control$fitting_options
-  if (!is.null(marker_options) && estimator == "ML" && !length(spec$ordered) &&
+  if (!is.null(marker_options) && ((estimator %in% c("ML", "FIML") && !length(spec$ordered)) ||
+      (estimator == "DWLS" && length(spec$ordered))) &&
       covariance == "unrestricted" && is.null(cluster) && missing != "pairwise") {
     switched <- .marker_fit_spec(spec, data, marker_options, function(m, o) {
       args <- route_args
       args$options <- o
       if (!is.null(args$control$fitting_options)) args$control$fitting_options <- NULL
       do.call(fit_model, c(list(model = m, data = data), args))
-    })
+    }, kind = if (estimator == "FIML" || missing == "fiml") "raw" else NULL)
     if (!is.null(switched)) {
       switched$options$route <- list(fitter = "fit_model", args = route_args)
       return(switched)

@@ -1,6 +1,10 @@
 expect_prepared_parity <- function(model, data, estimator = "ML", covariance = "unrestricted",
                                    options = NULL) {
+  force(model)
+  count <- magmaanlab:::prepared_structure_count_impl
+  before <- count()
   prepared <- magmaan(model, data, estimator, covariance, options = options)
+  expect_identical(count(), before)
   # Compare the public composition with its previous estimation boundary.
   reference <- prepared
   args <- list(model = model$spec, data = magmaan:::.fit_data(model, data), estimator = estimator)
@@ -9,7 +13,7 @@ expect_prepared_parity <- function(model, data, estimator = "ML", covariance = "
   args$covariance <- effective
   if (effective == "barrier") args$barrier <- list(target = "joint", weight = policy$lambda)
   opts <- magmaan:::.check_options(options)
-  engine <- opts[intersect(c("preset", "optimizer", "convergence"), names(opts))]
+  engine <- opts[intersect(c("preset", "optimizer", "convergence", "marker"), names(opts))]
   start <- magmaan:::.start_inputs(opts$start, estimator, effective, model$ordered, length(engine) > 0L)
   engine$starts <- start$starts
   if (length(engine)) args$options <- engine
@@ -112,7 +116,8 @@ test_that("ordinal DWLS fitting options reuse prepared handles and ML2S retains 
   n <- count()
   for (opts in list(list(preset = "lavaan-0.7.2"), list(start = "lavaan-0.7.2")))
     expect_prepared_parity(model, d, "DWLS", options = opts)
-  expect_identical(count(), n)
+  # Only the fresh reference fit with the preset prepares an H1 preflight handle.
+  expect_identical(count(), n + 1)
   expect_s3_class(model$prepared_cache$handle, "magmaan_prepared_model")
   n <- count()
   model <- magmaan_model(cfa, prototype = hs())
