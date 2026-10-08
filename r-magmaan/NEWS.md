@@ -1,4 +1,4 @@
-# magmaan (development version)
+# magmaan 0.2.1
 
 - Supplied start tables and previous fits now appear as `requested$starts =
   "table"` and `effective$starts = "<resolved convention>+table"` in fitting

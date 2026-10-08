@@ -1,4 +1,4 @@
-# magmaanlab (development version)
+# magmaanlab 0.2.1
 
 - Imported lavaan tables now reproduce the syntax-built variable inventory.
   This may change starts and iteration counts for models with regressions and

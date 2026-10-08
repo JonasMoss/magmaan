@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(magmaan
-  VERSION      0.2.0
+  VERSION      0.2.1
   DESCRIPTION  "C++23 toolkit for linear SEM (lavaan-equivalent core)"
   LANGUAGES    CXX C)
 # C is enabled for the vendored PORT (Bell Labs) optimizer routines under
