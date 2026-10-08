@@ -141,10 +141,10 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
     if (!is_auto_equality_row(pt, i)) keep.push_back(i);
   const std::size_t n = keep.size();
 
-  // Re-derive the variable inventory from the formula rows. `~` anywhere ⇒
-  // Reduced LISREL form (ov.y / ov.x promoted to phantom latents). (Constraint
-  // rows — including the dropped auto-equality ones — never carry a formula op,
-  // so scanning the whole table is equivalent here.)
+  // Reconstruct the syntax inventory, before build() synthesizes parameter
+  // defaults. Auto intercepts must not promote indicators/exogenous covariates
+  // into ov.y (and phantom latents in reduced form). Keep user intercepts and
+  // retain every auto intercept below as a parameter row.
   bool reduced = false;
   for (std::size_t i = 0; i < n_in; ++i)
     if (pt.op[i] == parse::Op::Regression) { reduced = true; break; }
@@ -154,6 +154,7 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
   for (std::size_t j = 0; j < n; ++j) {
     const std::size_t i = keep[j];
     if (is_constraint_op(pt.op[i])) continue;
+    if (pt.op[i] == parse::Op::Intercept && pt.user[i] == 0) continue;
     formula_rows.push_back(ClassRow{pt.op[i], pt.lhs[i], pt.rhs[i]});
   }
   const detail::VarSets      vsets = detail::classify_vars(formula_rows);

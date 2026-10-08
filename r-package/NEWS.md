@@ -1,5 +1,9 @@
 # magmaanlab (development version)
 
+- Imported lavaan tables now reproduce the syntax-built variable inventory.
+  This may change starts and iteration counts for models with regressions and
+  mean structure.
+
 - The `lavaan-0.7.2` marker component now also covers FIML and ordinal/mixed
   DWLS, using each route's saturated H1 covariance. Switched fits replay the
   selected fitting attempts and revert when rejected; `marker = "default"`

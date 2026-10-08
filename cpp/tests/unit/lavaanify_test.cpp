@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 
+#include "../oracle.hpp"
+#include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -1049,4 +1051,60 @@ TEST_CASE("lavaanify: std.lv applies per level in a two-level model") {
   CHECK(pt_s.free[find_row(pt_s, "fb", Op::Measurement, "y1")] != 0);
 
   CHECK(npar(pt_m) == npar(pt_s));   // exact reparameterization
+}
+
+// TASK-133: importing parameter rows must preserve the syntax-built inventory.
+TEST_CASE("lavaanify: round trip preserves variable inventory and block dimensions") {
+  auto check = [](std::string_view syntax, BuildOptions opts) {
+    auto parsed = Parser::parse(syntax);
+    REQUIRE(parsed.has_value());
+    Starts starts;
+    LatentNames names;
+    auto direct = build(*parsed, opts, &starts, &names);
+    REQUIRE(direct.has_value());
+    auto imported = magmaan::compat::lavaan::from_lavaan_partable(
+        to_lavaan_partable(*direct, names, starts));
+    CHECK(direct->var_role == imported.structure.var_role);
+    CHECK(direct->ov_order == imported.structure.ov_order);
+    CHECK(direct->lv_ext_order == imported.structure.lv_ext_order);
+    CHECK(direct->is_user_latent == imported.structure.is_user_latent);
+    auto a = magmaan::model::build_matrix_rep(*direct, &names);
+    auto b = magmaan::model::build_matrix_rep(imported.structure, &imported.names);
+    REQUIRE(a.has_value());
+    REQUIRE(b.has_value());
+    REQUIRE(a->dims.size() == b->dims.size());
+    for (std::size_t k = 0; k < a->dims.size(); ++k) {
+      CHECK(a->dims[k].n_observed == b->dims[k].n_observed);
+      CHECK(a->dims[k].n_latent == b->dims[k].n_latent);
+    }
+  };
+  auto raw = magmaan::test::read_fixture(
+      magmaan::test::fixtures_dir() + "/geiser/gls_reference.json");
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+  REQUIRE(fixture["cases"].size() == 28);
+  for (const auto& c : fixture["cases"]) {
+    INFO(c["id"].get<std::string>());
+    BuildOptions opts;
+    opts.meanstructure = c["meanstructure"].get<bool>();
+    opts.fixed_x = c["fixed_x"].get<bool>();
+    check(c["model"].get<std::string>(), opts);
+  }
+  BuildOptions opts;
+  opts.meanstructure = true;
+  for (const auto syntax : {
+      "f =~ d1 + d2 + d3",
+      "y ~ x",
+      "f =~ d1 + d2 + d3\nd1 ~ 1\nf ~ x",
+      "f =~ d1 + d2 + d3\nd1 ~ x",
+      "f =~ d1 + d2 + d3\nf ~ x"}) {
+    INFO(syntax);
+    check(syntax, opts);
+  }
+  opts.n_groups = 2;
+  opts.group_equal = {magmaan::spec::GroupEqual::Intercepts};
+  check("f =~ d1 + d2 + d3\nf ~ x", opts);
+  check("f =~ d1 + d2 + d3\nd1 ~ 1", opts);
+  check("f =~ d1 + d2 + d3\nd1 | t1 + t2\nd2 | t1 + t2\nd3 | t1 + t2", {});
 }

@@ -1535,7 +1535,10 @@ separate final decision for each explicitly covered scope.
   `latent_ar_cross_lagged_extended` stalls above the reference objective with
   L-BFGS and PORT; FABIN3 and std.lv succeed. **Check:** explain the valley/start
   failure, preserve a regression and verify corpus/held-out behavior before
-  changing defaults. Evidence: corpus recovery.
+  changing defaults. Evidence: corpus recovery. TASK-132 traced the R route's
+  apparent success to phantom latents introduced by auto intercept rows during
+  table import; TASK-133 repairs that inventory mismatch. The layered-start
+  loss remains real on the direct inventory.
 
 - [ ] **M — finish unit-equivariant starts and optimizer coordinates.** Remove
   unit-dependent FABIN/layered fallback steps; extend supported start selections

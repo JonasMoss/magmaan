@@ -1,5 +1,11 @@
 ### Parser, lavaanify, and matrix representation
 
+- Lavaan-table import excludes synthesized intercepts from variable
+  classification while retaining their parameter rows and explicit user
+  intercepts. TASK-133 gates the syntax/import inventory and per-block matrix
+  dimensions across all 28 Geiser GLS models and mean, regression, fixed-x,
+  grouped-intercept and ordinal threshold cases.
+
 - The Newsom 2015 ex9.3 promoted-observed LCS and Little 2013 Chapter 3
   single-indicator at-theta gates consume checked-in lavaan 0.7.2 summaries,
   independently check parameter keys against positional theta, and retain
